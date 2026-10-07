@@ -37,18 +37,18 @@ stock Bootstrap utility classes, not Quarto CSS.
 ## Work items
 
 - [x] Reproduce: confirm the markup/CSS asymmetry at current `main`, not just
-      at the 0.27.0 release build
+  at the 0.27.0 release build
 - [x] Extend the `repo_actions_pipeline` harness to expose the `_site` root so
-      a test can read the compiled theme CSS
+  a test can read the compiled theme CSS
 - [x] **Failing test first**: `footer_repo_actions_ship_their_css` asserts each
-      of the eight rules reaches the rendered CSS; a second test asserts the
-      sidebar rules are undisturbed and that no footer rule leaks into `.sidebar`
+  of the eight rules reaches the rendered CSS; a second test asserts the
+  sidebar rules are undisturbed and that no footer rule leaks into `.sidebar`
 - [x] Verify the tests fail at HEAD for the right reason
 - [x] Port `quarto-nav.scss:770-802` verbatim into the page-footer section of
-      `resources/scss/bootstrap/_bootstrap-rules.scss`
+  `resources/scss/bootstrap/_bootstrap-rules.scss`
 - [x] Verify the tests pass
 - [x] End-to-end: render the strand's repro website with `q2 render` and inspect
-      the emitted CSS and the rendered page
+  the emitted CSS and the rendered page
 - [x] Workspace verify (`cargo xtask verify --skip-hub-build --skip-hub-tests`)
 - [x] Re-capture the `phase5-single-doc-baseline` styles.css hash (see below)
 

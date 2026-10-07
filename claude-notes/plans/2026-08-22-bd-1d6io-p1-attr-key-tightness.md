@@ -118,46 +118,46 @@ key-value pairs," but **no test in it touches a kv key**. That is the coverage
 gap that let this live for a year.
 
 - [x] Add kv-key P1 tests to `test_attr_source_parsing.rs` (no new file, so no
-      `main.rs` change): 1st key tight; 2nd and 3rd keys tight (the failing
-      case); `k = v` spacing around `=`; multi-line attr list keys tight
-      (guards the currently-correct path against regression); values keep
-      their quotes; ids/classes unaffected.
-      → 5 tests added, all in the new "Key-Value Attribute P1 Tightness"
-      section, sharing a `kv_sources(attr_source, i)` accessor.
+  `main.rs` change): 1st key tight; 2nd and 3rd keys tight (the failing
+  case); `k = v` spacing around `=`; multi-line attr list keys tight
+  (guards the currently-correct path against regression); values keep
+  their quotes; ids/classes unaffected.
+  → 5 tests added, all in the new "Key-Value Attribute P1 Tightness"
+  section, sharing a `kv_sources(attr_source, i)` accessor.
 - [x] Run them and record the failures. Expect the 2nd/3rd-key cases to fail
-      with a leading space and everything else to pass.
-      → **42 tests run: 38 passed, 4 failed**, exactly as predicted:
+  with a leading space and everything else to pass.
+  → **42 tests run: 38 passed, 4 failed**, exactly as predicted:
 
-      ```
-      test_div_kv_keys_have_tight_source                'custom-key' vs ' custom-key' (27-38)
-      test_span_kv_keys_have_tight_source               'k2'         vs ' k2'         (22-25)
-      test_kv_key_with_spaces_around_equals_...         'bb'         vs ' bb'         (10-13)
-      test_third_kv_key_has_tight_source                'bb'         vs ' bb'         ( 8-11)
-      PASS test_multiline_attr_list_kv_keys_have_tight_source
-      ```
+  ```
+  test_div_kv_keys_have_tight_source                'custom-key' vs ' custom-key' (27-38)
+  test_span_kv_keys_have_tight_source               'k2'         vs ' k2'         (22-25)
+  test_kv_key_with_spaces_around_equals_...         'bb'         vs ' bb'         (10-13)
+  test_third_kv_key_has_tight_source                'bb'         vs ' bb'         ( 8-11)
+  PASS test_multiline_attr_list_kv_keys_have_tight_source
+  ```
 
 ### Phase 2 — The P1 conversion
 
 - [x] Narrow the recorded range in the `"key_value_key"` arm
-      (`treesitter.rs:1205`) to the trimmed key bytes, in lockstep with the
-      `.trim()` already applied to the text. Per §P3 trim **both** ends.
-      → Added `tight_node_location(node, input_bytes) -> Range` to
-      `location.rs` (the `Range` counterpart of `tight_source_info_for_node`),
-      plus a private `advance_location` that carries row/column across the
-      trimmed prefix (tree-sitter's `Point::column` is a byte offset, and a
-      trimmed `\n` must bump the row). It trims with `str::trim` semantics so
-      it agrees exactly with the caller's `.trim()`. Falls back to the
-      untrimmed range on invalid UTF-8 or an all-whitespace slice.
+  (`treesitter.rs:1205`) to the trimmed key bytes, in lockstep with the
+  `.trim()` already applied to the text. Per §P3 trim **both** ends.
+  → Added `tight_node_location(node, input_bytes) -> Range` to
+  `location.rs` (the `Range` counterpart of `tight_source_info_for_node`),
+  plus a private `advance_location` that carries row/column across the
+  trimmed prefix (tree-sitter's `Point::column` is a byte offset, and a
+  trimmed `\n` must bump the row). It trims with `str::trim` semantics so
+  it agrees exactly with the caller's `.trim()`. Falls back to the
+  untrimmed range on invalid UTF-8 or an all-whitespace slice.
 - [x] Phase 1 tests green. → **42/42**.
 - [x] `cargo clippy -p pampa --all-targets -- -D warnings` (clean) +
-      `cargo nextest run -p pampa` → **4516 passed, 0 failed**. No pampa
-      insta snapshot needed updating, which independently confirms June's
-      finding that no CI-resident snapshot covered a multi-kv attribute.
+  `cargo nextest run -p pampa` → **4516 passed, 0 failed**. No pampa
+  insta snapshot needed updating, which independently confirms June's
+  finding that no CI-resident snapshot covered a multi-kv attribute.
 - [x] Add the attribute path to §P1's "Implemented" list in
-      `provenance-contract.md`, with the new helper. (This item originally
-      added a note claiming **P1 is not auditor-enforced**. That was wrong —
-      see Phase 6. The contract now says the opposite; the line is corrected
-      rather than deleted so the mistaken inference stays visible.)
+  `provenance-contract.md`, with the new helper. (This item originally
+  added a note claiming **P1 is not auditor-enforced**. That was wrong —
+  see Phase 6. The contract now says the opposite; the line is corrected
+  rather than deleted so the mistaken inference stays visible.)
 
 ### Phase 3 — Fixture regeneration
 
@@ -168,10 +168,10 @@ attributes at all — the fixtures had drifted on three independent axes since
 guard unwireable.
 
 - [x] Regenerate **all 20** fixtures from the repo root (the fixtures embed the
-      input path in `astContext.files[].name`, so the relative path matters):
-      `for f in ts-packages/annotated-qmd/examples/*.qmd; do target/debug/pampa -t json -i "$f" > "${f%.qmd}.json"; done`
+  input path in `astContext.files[].name`, so the relative path matters):
+  `for f in ts-packages/annotated-qmd/examples/*.qmd; do target/debug/pampa -t json -i "$f" > "${f%.qmd}.json"; done`
 - [x] `cd ts-packages/annotated-qmd && npm test` → **156 passed, 0 failed**
-      (was 154/2). bd-1d6io's original symptom is fully resolved.
+  (was 154/2). bd-1d6io's original symptom is fully resolved.
 - [x] Report the full fixture diff, per fixture and per category.
 
 ### Fixture diff, categorized
@@ -245,80 +245,80 @@ static, hand-regenerated, and inert to `cargo nextest`. The guard converts
 them into a CI-resident artifact.
 
 - [x] Added `crates/pampa/tests/integration/annotated_qmd_fixture_guard.rs`
-      (registered in `main.rs`), comparing live writer output to every
-      committed fixture. It compares in memory and never writes the fixtures.
-      Two tests:
-      - `annotated_qmd_example_fixtures_match_live_writer` — invokes the real
-        binary via `env!("CARGO_BIN_EXE_pampa")` with `current_dir(repo_root)`
-        and the repo-relative path, because the fixtures embed that path in
-        `astContext.files[].name`. Collects **all** mismatches before failing,
-        names them, and prints the regeneration loop plus a warning to review
-        the diff rather than rubber-stamp it. Also fails on a `.qmd` with no
-        committed `.json`.
-      - `annotated_qmd_examples_use_lf_line_endings` — see the cross-platform
-        note below.
+  (registered in `main.rs`), comparing live writer output to every
+  committed fixture. It compares in memory and never writes the fixtures.
+  Two tests:
+  - `annotated_qmd_example_fixtures_match_live_writer` — invokes the real
+    binary via `env!("CARGO_BIN_EXE_pampa")` with `current_dir(repo_root)`
+    and the repo-relative path, because the fixtures embed that path in
+    `astContext.files[].name`. Collects **all** mismatches before failing,
+    names them, and prints the regeneration loop plus a warning to review
+    the diff rather than rubber-stamp it. Also fails on a `.qmd` with no
+    committed `.json`.
+  - `annotated_qmd_examples_use_lf_line_endings` — see the cross-platform
+    note below.
 - [x] Home decided: **a `pampa` integration test**, not an xtask lane. It is
-      CI-resident under plain `cargo nextest` with no JS toolchain, and
-      driving the binary (rather than the library) guarantees it compares
-      against exactly what the documented regeneration command produces.
+  CI-resident under plain `cargo nextest` with no JS toolchain, and
+  driving the binary (rather than the library) guarantees it compares
+  against exactly what the documented regeneration command produces.
 - [x] Proved the guard bites. Reverted Phase 2's one expression, re-ran:
-      the guard failed naming `div-attrs` (and the 4 Phase 1 tests failed);
-      restored, all 44 green. The guard is bound to the fix, not decorative.
+  the guard failed naming `div-attrs` (and the 4 Phase 1 tests failed);
+  restored, all 44 green. The guard is bound to the fix, not decorative.
 - [x] **Cross-platform**: these fixtures record byte offsets *and*
-      `astContext.files[].line_breaks`, so a CRLF checkout shifts everything
-      and the guard would fail as \~20 opaque mismatches on Windows. Pinned the
-      sources with `ts-packages/annotated-qmd/examples/*.qmd text eol=lf` in
-      `.gitattributes`, and added the LF assertion above so the pin failing is
-      reported as itself rather than as fixture drift.
+  `astContext.files[].line_breaks`, so a CRLF checkout shifts everything
+  and the guard would fail as \~20 opaque mismatches on Windows. Pinned the
+  sources with `ts-packages/annotated-qmd/examples/*.qmd text eol=lf` in
+  `.gitattributes`, and added the LF assertion above so the pin failing is
+  reported as itself rather than as fixture drift.
 
 ### Phase 5 — Wrap up
 
 - [x] `cargo nextest run --workspace`. **Superseded twice — the figure below is
-      the live one at the branch tip, not a number copied forward.** The
-      first-commit reading (13006, +7) and the second (13014, +15) are kept in
-      the table so the arithmetic is checkable.
+  the live one at the branch tip, not a number copied forward.** The
+  first-commit reading (13006, +7) and the second (13014, +15) are kept in
+  the table so the arithmetic is checkable.
 
-      | at | runs | skipped | delta vs 12999 baseline |
-      | --- | --: | --: | --: |
-      | commit 1 `541e3838e` | 13006 | 198 | +7 |
-      | commit 2 `aac9174a6` | 13014 | 198 | +15 |
-      | **branch tip (review fixes)** | **13028** | **198** | **+29** |
+  | at | runs | skipped | delta vs 12999 baseline |
+  | --- | --: | --: | --: |
+  | commit 1 `541e3838e` | 13006 | 198 | +7 |
+  | commit 2 `aac9174a6` | 13014 | 198 | +15 |
+  | **branch tip (review fixes)** | **13028** | **198** | **+29** |
 
-      Full accounting of +29, **+0 failures and +0 skips** throughout:
+  Full accounting of +29, **+0 failures and +0 skips** throughout:
 
-      | source | test fns | runs |
-      | --- | --: | --: |
-      | kv-key P1 tests, `test_attr_source_parsing.rs` | 5 | 5 |
-      | `annotated_qmd_fixture_guard.rs` | 2 | 2 |
-      | `tiling_corpus_tests.rs` | 1 | 1 |
-      | abbreviation test, `tiling_phase3_tests.rs` | 1 | 1 |
-      | `tiling_auditor_tests` in `incremental.rs` | 3 | **6** |
-      | `advance_location` + `trim_whitespace_range` in `location.rs` | 7 | **14** |
-      | | 19 | **29** |
+  | source | test fns | runs |
+  | --- | --: | --: |
+  | kv-key P1 tests, `test_attr_source_parsing.rs` | 5 | 5 |
+  | `annotated_qmd_fixture_guard.rs` | 2 | 2 |
+  | `tiling_corpus_tests.rs` | 1 | 1 |
+  | abbreviation test, `tiling_phase3_tests.rs` | 1 | 1 |
+  | `tiling_auditor_tests` in `incremental.rs` | 3 | **6** |
+  | `advance_location` + `trim_whitespace_range` in `location.rs` | 7 | **14** |
+  | | 19 | **29** |
 
-      **The ×2 on in-module tests is real and worth knowing:** pampa's
-      `#[cfg(test)]` tests are enumerated under both the `pampa` lib target and
-      `pampa::bin/pampa`, so every in-module test costs two runs. Verified with
-      `cargo nextest list -p pampa`, not assumed. Pre-existing behavior, not
-      introduced here — but it means an in-module test's contribution to the
-      workspace count is double its function count.
+  **The ×2 on in-module tests is real and worth knowing:** pampa's
+  `#[cfg(test)]` tests are enumerated under both the `pampa` lib target and
+  `pampa::bin/pampa`, so every in-module test costs two runs. Verified with
+  `cargo nextest list -p pampa`, not assumed. Pre-existing behavior, not
+  introduced here — but it means an in-module test's contribution to the
+  workspace count is double its function count.
 - [x] `cargo xtask lint` → **all checks passed (1037 files checked)**.
 - [x] `cd ts-packages/annotated-qmd && npm test` → **156/156**.
 - [x] `cargo xtask verify` (full, WASM rebuilt, so the preview-renderer leg
-      actually runs) → exits 1 on **exactly** the known bd-s36g9dav failure
-      and nothing else:
+  actually runs) → exits 1 on **exactly** the known bd-s36g9dav failure
+  and nothing else:
 
-      | leg | result |
-      | --- | --- |
-      | `cargo nextest run --workspace` | 13006 passed, 198 skipped |
-      | ts-packages builds + MCP smoke | pass |
-      | hub-client build + tests | 131 passed (22 files) |
-      | trace-viewer | 10 passed |
-      | preview-runtime | 549 passed, 36 skipped |
-      | preview-renderer integration | 578 passed, **1 failed** — `Equation > appends \tag{N}` |
+  | leg | result |
+  | --- | --- |
+  | `cargo nextest run --workspace` | 13006 passed, 198 skipped |
+  | ts-packages builds + MCP smoke | pass |
+  | hub-client build + tests | 131 passed (22 files) |
+  | trace-viewer | 10 passed |
+  | preview-runtime | 549 passed, 36 skipped |
+  | preview-renderer integration | 578 passed, **1 failed** — `Equation > appends \tag{N}` |
 
-      Byte-identical to the baseline for that leg (578/1 before and after), so
-      the delta introduced by this branch is **zero new failures**.
+  Byte-identical to the baseline for that leg (578/1 before and after), so
+  the delta introduced by this branch is **zero new failures**.
 - [x] Reconcile this checklist against reality, commit, then ask before pushing.
 
 ### Phase 6 — The corpus auditor (added after review; commit 2)
@@ -341,38 +341,38 @@ documents** — its only caller was 11 hand-written snippets in
 function call away.
 
 - [x] Added `tests/integration/tiling_corpus_tests.rs`: runs the auditor over
-      \~170 documents (annotated-qmd examples, pandoc-match-corpus, smoke,
-      writers, claude-examples), asserting zero findings. Guards against a
-      vacuous pass (corpus size and parsed-count floors). `KNOWN` list requires
-      a strand per entry; it has exactly **one**: an `AttrAlignmentSkipped`
-      census finding on an autolink's synthesized class (bd-3aolj / bd-1e6a5).
+  \~170 documents (annotated-qmd examples, pandoc-match-corpus, smoke,
+  writers, claude-examples), asserting zero findings. Guards against a
+  vacuous pass (corpus size and parsed-count floors). `KNOWN` list requires
+  a strand per entry; it has exactly **one**: an `AttrAlignmentSkipped`
+  census finding on an autolink's synthesized class (bd-3aolj / bd-1e6a5).
 - [x] Proved it binds: reverting the Phase 2 fix makes it fail naming **4**
-      documents — `div-attrs.qmd` plus three in `tests/writers/ansi/` that the
-      Phase 4 fixture guard could not see. Strictly better coverage.
+  documents — `div-attrs.qmd` plus three in `tests/writers/ansi/` that the
+  Phase 4 fixture guard could not see. Strictly better coverage.
 - [x] Refined `check_tightness` with a `retained: Option<&str>` parameter. The
-      corpus probe surfaced one false positive: `e.g. \`code\`` gives
-      `Str [0..5]` a trailing source space, because the abbreviation handler
-      substitutes NBSP and **keeps it in the node's text** — those 5 bytes are
-      exactly what produced the node. Attr keys/values pass `None` and stay
-      strict, since weakening them is precisely what bd-1d6io must not do.
-      **This edits the auditor Plan 7g shipped — flagged for review.**
-      **Correction (review):** I described this as *generalizing* the existing
-      `Space`/`SoftBreak`/`LineBreak` exclusion. It does not — that wholesale
-      type skip is still at `incremental.rs:1367`, so there are now **two**
-      mechanisms, applying in different places. The seam leaves a pre-existing
-      gap (a `Space` in a single-`Inline` CustomNode slot is still flagged: that
-      arm has no type skip and `inline_retained_text` returns `None` for
-      `Space`). Unifying them is **bd-89jcn0uv**, and it is not mechanical —
-      the wholesale skip is deliberately blind to a `Space` claiming
-      *non*-whitespace bytes.
+  corpus probe surfaced one false positive: `e.g. \`code\`` gives
+  `Str [0..5]` a trailing source space, because the abbreviation handler
+  substitutes NBSP and **keeps it in the node's text** — those 5 bytes are
+  exactly what produced the node. Attr keys/values pass `None` and stay
+  strict, since weakening them is precisely what bd-1d6io must not do.
+  **This edits the auditor Plan 7g shipped — flagged for review.**
+  **Correction (review):** I described this as *generalizing* the existing
+  `Space`/`SoftBreak`/`LineBreak` exclusion. It does not — that wholesale
+  type skip is still at `incremental.rs:1367`, so there are now **two**
+  mechanisms, applying in different places. The seam leaves a pre-existing
+  gap (a `Space` in a single-`Inline` CustomNode slot is still flagged: that
+  arm has no type skip and `inline_retained_text` returns `None` for
+  `Space`). Unifying them is **bd-89jcn0uv**, and it is not mechanical —
+  the wholesale skip is deliberately blind to a `Space` claiming
+  *non*-whitespace bytes.
 - [x] Three in-module unit tests pin the exclusion to the node's *text*, not its
-      type, so it cannot degrade into "`Str` is exempt" and blind the auditor to
-      that whole family. Plus one end-to-end test in `tiling_phase3_tests.rs`.
+  type, so it cannot degrade into "`Str` is exempt" and blind the auditor to
+  that whole family. Plus one end-to-end test in `tiling_phase3_tests.rs`.
 - [x] Demoted the Phase 4 fixture guard in its own docs. It compares against a
-      snapshot, so regeneration launders a violation past it; the corpus auditor
-      asserts a property and cannot be laundered. The fixture guard is kept for
-      what the auditor cannot see — wire-format changes (pool packing, key
-      renames) that preserve the invariants but still want human eyes.
+  snapshot, so regeneration launders a violation past it; the corpus auditor
+  asserts a property and cannot be laundered. The fixture guard is kept for
+  what the auditor cannot see — wire-format changes (pool packing, key
+  renames) that preserve the invariants but still want human eyes.
 
 **A correction to my own earlier proposal, recorded because it was nearly
 built.** I had offered an exhaustive `source[range] == text` assertion. That is
@@ -404,47 +404,47 @@ confirmed test binding empirically by reverting each change in isolation, and
 independently re-derived the fixture categorization.
 
 - [x] **Windows breakage in the corpus test (blocking).** `is_known` matched
-      `KNOWN`'s forward-slashed suffixes against a `Path::display()` string,
-      which is backslashed on Windows — so the one legitimate finding would be
-      reported as a violation and the test was red for Windows developers only
-      (CI is ubuntu + macOS, so CI would never have caught it). Normalized to
-      forward slashes. The *fixture* guard is Windows-safe by construction:
-      `astContext.files[].name` stores the argument verbatim and Windows accepts
-      forward slashes, so the round-trip matches.
+  `KNOWN`'s forward-slashed suffixes against a `Path::display()` string,
+  which is backslashed on Windows — so the one legitimate finding would be
+  reported as a violation and the test was red for Windows developers only
+  (CI is ubuntu + macOS, so CI would never have caught it). Normalized to
+  forward slashes. The *fixture* guard is Windows-safe by construction:
+  `astContext.files[].name` stores the argument verbatim and Windows accepts
+  forward slashes, so the round-trip matches.
 - [x] **Vacuity guards were looser than they looked.** Replaced the `> 100`
-      floors with (a) a per-root non-emptiness assertion — losing the
-      annotated-qmd root entirely still left \~155 files, comfortably over any
-      total floor, and `collect_qmd` skips an unreadable directory silently —
-      and (b) an exact `EXPECTED_UNPARSEABLE` set instead of a count, so a new
-      unparseable or panicking document names itself.
-      **This immediately earned its keep:** the reviewer's list of 7 unparseable
-      files was wrong — `smoke/011.qmd` parses fine. The assertion caught it on
-      first run and printed the real set of 6.
+  floors with (a) a per-root non-emptiness assertion — losing the
+  annotated-qmd root entirely still left \~155 files, comfortably over any
+  total floor, and `collect_qmd` skips an unreadable directory silently —
+  and (b) an exact `EXPECTED_UNPARSEABLE` set instead of a count, so a new
+  unparseable or panicking document names itself.
+  **This immediately earned its keep:** the reviewer's list of 7 unparseable
+  files was wrong — `smoke/011.qmd` parses fine. The assertion caught it on
+  first run and printed the real set of 6.
 - [x] **Corrected the bd-mxa44voa claim** and recorded the `ast.meta` scope gap
-      in the corpus test's doc comment. Filed **bd-riu2dvcf**.
+  in the corpus test's doc comment. Filed **bd-riu2dvcf**.
 - [x] **Corrected the "generalizes" claim.** Filed **bd-89jcn0uv** for unifying
-      the two exclusion mechanisms, with the caution that it is not mechanical.
+  the two exclusion mechanisms, with the caution that it is not mechanical.
 - [x] **All-whitespace fallback (#5).** Extracted `trim_whitespace_range` from
-      `tight_node_location` so it is directly testable, and collapsed the
-      all-whitespace case to a zero-length range at the start. Previously it
-      returned the *untrimmed* range, contradicting the helper's own documented
-      invariant (the caller records `""`) and inviting the auditor to report a
-      bogus boundary-space finding on a node with no content. Now consistent
-      with the sibling `utils::trim_source_location::trim_whitespace`. Answering
-      the "should it fail louder?" question: no — "louder" here means a false
-      auditor finding. Unreachable at the current call site; this is about not
-      seeding drift between two helpers that must agree.
+  `tight_node_location` so it is directly testable, and collapsed the
+  all-whitespace case to a zero-length range at the start. Previously it
+  returned the *untrimmed* range, contradicting the helper's own documented
+  invariant (the caller records `""`) and inviting the auditor to report a
+  bogus boundary-space finding on a node with no content. Now consistent
+  with the sibling `utils::trim_source_location::trim_whitespace`. Answering
+  the "should it fail louder?" question: no — "louder" here means a false
+  auditor finding. Unreachable at the current call site; this is about not
+  seeding drift between two helpers that must agree.
 - [x] **`advance_location` coverage (#6).** Its newline and multi-byte branches
-      were never exercised — every in-tree path trims a single ASCII space. Four
-      unit tests now pin ASCII, `\n`, `\r\n`, and byte-vs-char column counting.
-      The function is `pub` and documented as general, so the next caller may
-      well hit a newline prefix.
+  were never exercised — every in-tree path trims a single ASCII space. Four
+  unit tests now pin ASCII, `\n`, `\r\n`, and byte-vs-char column counting.
+  The function is `pub` and documented as general, so the next caller may
+  well hit a newline prefix.
 - [x] **`.gitattributes` widened** from `examples/*.qmd` to `examples/*`. The
-      JSON fixtures contain no newlines today, so `core.autocrlf` cannot corrupt
-      them — but the guard byte-compares them, so a future multi-line writer
-      would break on Windows in exactly the way the pin exists to prevent.
+  JSON fixtures contain no newlines today, so `core.autocrlf` cannot corrupt
+  them — but the guard byte-compares them, so a future multi-line writer
+  would break on Windows in exactly the way the pin exists to prevent.
 - [x] Fixed the stale Phase 2 checklist note (#9) and the `yaml-tags` category
-      label (#10) — a provenance *gain*, not `meta-truncation`.
+  label (#10) — a provenance *gain*, not `meta-truncation`.
 
 **Accepted as follow-ups, not fixed here:** bd-89jcn0uv (unify the exclusions),
 bd-riu2dvcf (walk `ast.meta`), and the reviewer's #8 — `check_tightness` tests
@@ -471,24 +471,24 @@ bytes `"e.g. "`. The `\<space>` escape in `text_helpers.rs` does the same
 substitution.
 
 - [x] Re-keyed the exclusion from "the text has boundary whitespace" to
-      **exactly the NBSP substitution**: the text's boundary characters must be
-      U+00A0, **in matching quantity** with the source space/tab bytes.
-      `retained` → `own_text`, `inline_retained_text` → `inline_own_text`.
+  **exactly the NBSP substitution**: the text's boundary characters must be
+  U+00A0, **in matching quantity** with the source space/tab bytes.
+  `retained` → `own_text`, `inline_retained_text` → `inline_own_text`.
 - [x] **This also closes reviewer finding #8** (presence vs amount) rather than
-      deferring it: a range absorbing two trailing spaces against one NBSP is
-      now reported, where the loose rule forgave it. So the tighter exclusion
-      *removes* a filed follow-up instead of adding one — dropped from
-      bd-89jcn0uv's scope.
+  deferring it: a range absorbing two trailing spaces against one NBSP is
+  now reported, where the loose rule forgave it. So the tighter exclusion
+  *removes* a filed follow-up instead of adding one — dropped from
+  bd-89jcn0uv's scope.
 - [x] Three new tests, two of which were **red under the loose rule**: a `Str`
-      retaining a *plain* space is still flagged (no producer does that); a
-      range absorbing 2 spaces against 1 NBSP is still flagged; a source *tab*
-      is accepted, since a Pandoc `Space` can come from either.
+  retaining a *plain* space is still flagged (no producer does that); a
+  range absorbing 2 spaces against 1 NBSP is still flagged; a source *tab*
+  is accepted, since a Pandoc `Space` can come from either.
 - [x] Checked for other producers first: the only other whitespace-into-text
-      path is `code_span_helpers.rs`, which writes `Code`'s text, and `Code`
-      passes `None`. Both NBSP producers are covered; nothing retains a plain
-      boundary space.
+  path is `code_span_helpers.rs`, which writes `Code`'s text, and `Code`
+  passes `None`. Both NBSP producers are covered; nothing retains a plain
+  boundary space.
 - [x] Binding re-verified after tightening: reverting the attr-key fix still
-      fails the corpus test naming the same 4 documents.
+  fails the corpus test naming the same 4 documents.
 
 Why this is better than the general rule: it is a claim a reader can check
 against `postprocess.rs` in one hop, and a *different* producer that starts

@@ -341,18 +341,18 @@ Implementation started 2026-07-27. Phases run in order; each ends green
 Tests 40–46 in `crates/quarto-core/tests/integration/website_post_render.rs`.
 
 - [x] Test 40 — brand `logo.small` → `<link rel="icon">` when `website.favicon`
-      is unset, correct page-relative href on a nested page — **fails at HEAD**
+  is unset, correct page-relative href on a nested page — **fails at HEAD**
 - [x] Test 41 — the logo file is copied into `_site/` — **fails at HEAD**
 - [x] Test 42 — brand in a subdirectory (`brand: _brand/_brand.yml`), the
-      rebasing case — **fails at HEAD**
+  rebasing case — **fails at HEAD**
 - [x] Test 45 — external `logo.small` URL → `<link>` emitted verbatim, **no**
-      copy attempted — **fails at HEAD**
+  copy attempted — **fails at HEAD**
 - [x] Test 43 — explicit `website.favicon` still wins over the brand logo —
-      *passes at HEAD* (guard: must keep passing)
+  *passes at HEAD* (guard: must keep passing)
 - [x] Test 44 — `logo.small` as a light/dark pair → no favicon, no diagnostic
-      (deferred to bd-v5z8w) — *passes vacuously at HEAD* (guard)
+  (deferred to bd-v5z8w) — *passes vacuously at HEAD* (guard)
 - [x] Test 46 — no `brand:` key → unchanged behavior — *passes vacuously at
-      HEAD* (guard)
+  HEAD* (guard)
 
 **Baseline run** (`cargo nextest run -p quarto-core -E 'binary(integration) &
 test(website_post_render::)'`): `20 tests run: 16 passed, 4 failed`. All four
@@ -392,16 +392,16 @@ explicit-`website.favicon` external case in Phase 3.
 
 - [x] Add `quarto-brand` as a dependency of `quarto-core`.
 - [x] `ResolvedBrand { brand, dir }` in **`quarto-brand`**
-      (`crates/quarto-brand/src/resolved.rs`).
+  (`crates/quarto-brand/src/resolved.rs`).
 - [x] `quarto_sass::resolve_brand(config, runtime, base_dir)` — one entry point
-      for "what brand does this config name?", reusing the existing
-      `extract_brand_ref` rules; `resolve_brand_layers` refactored onto it.
+  for "what brand does this config name?", reusing the existing
+  `extract_brand_ref` rules; `resolve_brand_layers` refactored onto it.
 - [x] `ProjectConfig::brand: Option<ResolvedBrand>`, resolved in `parse_config`.
 - [x] Failure is silent here; the theme stage keeps the diagnostic (note 1).
 - [x] Unit tests (`project::tests::project_brand`, 5/5 pass): no key → `None`;
-      root brand → `dir` = project root; subdirectory brand → `dir` =
-      the subdirectory; inline block → `dir` = `None`; unresolvable brand →
-      `discover` succeeds with `None`.
+  root brand → `dir` = project root; subdirectory brand → `dir` =
+  the subdirectory; inline block → `dir` = `None`; unresolvable brand →
+  `discover` succeeds with `None`.
 
 **Two design choices worth recording.**
 
@@ -435,15 +435,15 @@ Flagged in Phase 5 rather than assumed.
 
 - [x] `quarto_util::is_external_url` — one shared predicate (6 unit tests).
 - [x] `ResolvedBrand::path_prefix_relative_to` /
-      `logo_resource_relative_to` / `favicon_relative_to`.
+  `logo_resource_relative_to` / `favicon_relative_to`.
 - [x] `LogoEntry::single()` exposed so a rebased logo keeps its alt text;
-      `single_path()` reimplemented on top of it.
+  `single_path()` reimplemented on top of it.
 - [x] 18 unit tests in `crates/quarto-brand/tests/integration/resolved_test.rs`
-      (50/50 in the crate pass): root, subdirectory, nested subdirectory,
-      logo path with its own subdirectory, sibling directory (upward `..`),
-      inline brand, external URL, protocol-relative URL, rooted path, no small
-      logo, light/dark pair, named logo with alt, `logo.images.*`, unknown
-      name, and the three prefix cases.
+  (50/50 in the crate pass): root, subdirectory, nested subdirectory,
+  logo path with its own subdirectory, sibling directory (upward `..`),
+  inline brand, external URL, protocol-relative URL, rooted path, no small
+  logo, light/dark pair, named logo with alt, `logo.images.*`, unknown
+  name, and the three prefix cases.
 
 **Built on what was already there, rather than beside it.** Two discoveries
 changed the shape of this phase:
@@ -487,18 +487,18 @@ Pinned by `light_dark_named_size_does_not_fall_through_to_images`.
 ### Phase 3 — The fallback itself ✅
 
 - [x] `website_config::resolved_website_favicon(meta, project)` — the single
-      answer to "what is this site's favicon", covering precedence, the brand
-      fallback, leading-slash normalization, URL passthrough, and project-kind
-      gating.
+  answer to "what is this site's favicon", covering precedence, the brand
+  fallback, leading-slash normalization, URL passthrough, and project-kind
+  gating.
 - [x] `WebsiteFaviconTransform` consumes it; `apply_favicon` now takes the
-      resolved value instead of re-reading the key.
+  resolved value instead of re-reading the key.
 - [x] `copy_favicon` consumes it, with an external-URL guard.
 - [x] 14 unit tests for `resolved_website_favicon`; the 11
-      `apply_favicon` unit tests reworked to be about link *emission* only,
-      plus 2 new URL cases.
+  `apply_favicon` unit tests reworked to be about link *emission* only,
+  plus 2 new URL cases.
 - [x] **Test 47** (new): a *default* project with a brand emits no favicon.
 - [x] `cargo nextest run --workspace`: **10577 passed, 0 failed**. All four
-      Phase 0 failures now pass.
+  Phase 0 failures now pass.
 
 **One function, not two edits.** `website_config.rs` was already documented as
 the one place `website.*` keys are read (Phase 7 Decision 7). Adding
@@ -539,30 +539,30 @@ from being flattened into the site-rooted `/host/f.ico`.
 ### Phase 4 — Docs ✅
 
 - [x] New "Brand logo as favicon" section (`#brand-favicon`) in
-      `docs/guides/authoring/brand.qmd`: the fallback, `website.favicon`
-      precedence, brand-relative paths, URLs, and the two no-favicon cases
-      (light/dark pair, non-website project).
+  `docs/guides/authoring/brand.qmd`: the fallback, `website.favicon`
+  precedence, brand-relative paths, URLs, and the two no-favicon cases
+  (light/dark pair, non-website project).
 - [x] Corrected the logo-preference table row from `website`/`book` to
-      `website`. Q2's fallback gates on `ProjectKind::Website`, and the book
-      project type is explicitly out of the websites-epic MVP — the row
-      described Q1. This one line is in scope because it documents *this*
-      feature; the page-wide "Q1 or Q2?" audit is bd-qnylgu69.
+  `website`. Q2's fallback gates on `ProjectKind::Website`, and the book
+  project type is explicitly out of the websites-epic MVP — the row
+  described Q1. This one line is in scope because it documents *this*
+  feature; the page-wide "Q1 or Q2?" audit is bd-qnylgu69.
 - [x] Rendered with Q2 (`cargo run --bin q2 -- render docs/guides/authoring/brand.qmd`)
-      and the output inspected: section renders, `#brand-favicon` anchor
-      exists, and the cross-link to `#light-and-dark-logos` resolves. The two
-      `Q-13-4` warnings on that page are pre-existing broken links at lines 977
-      and 1036, unrelated to this change.
+  and the output inspected: section renders, `#brand-favicon` anchor
+  exists, and the cross-link to `#light-and-dark-logos` resolves. The two
+  `Q-13-4` warnings on that page are pre-existing broken links at lines 977
+  and 1036, unrelated to this change.
 
 ### Phase 5 — Verification
 
 - [x] E2E through `cargo run --bin q2 -- render` on three fixtures; output
-      inspected and recorded in `repro-output.md`.
+  inspected and recorded in `repro-output.md`.
 - [x] `cargo nextest run --workspace`: **10577 passed, 0 failed**.
 - [x] Full `cargo xtask verify` (**not** `--skip-hub-build`): **all 14 steps
-      passed**, including the WASM rebuild and the hub-client build + tests.
-      This is the step that matters for the WASM risk below — `quarto-brand`
-      and the new `ProjectConfig` field both compile for
-      `wasm32-unknown-unknown`.
+  passed**, including the WASM rebuild and the hub-client build + tests.
+  This is the step that matters for the WASM risk below — `quarto-brand`
+  and the new `ProjectConfig` field both compile for
+  `wasm32-unknown-unknown`.
 - [x] `cargo xtask lint`: all checks passed (883 files).
 - [x] `cargo fmt --check`: clean.
 

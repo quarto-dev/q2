@@ -82,7 +82,7 @@ breadcrumb-visual-design (prereq, ~done)
 §7  expand-on-edit                  (independent editor state; any time)
 ```
 
-Load-bearing edges: **§0 → {§1, §2, §6}** and **§4 → §6**; §3 and §7 float.
+Load-bearing edges: **§0 → \{§1, §2, §6\}** and **§4 → §6**; §3 and §7 float.
 
 **A6 — emptied items are "not their own surface," not "non-refillable" (corrects §6 Consequences).**
 Parsed `- foo\n-\n- bar`: the empty item is `[]` with no node, no `s`, and no pool entry on the bare
@@ -237,7 +237,7 @@ For navigation and roving we need "the surface that owns visible line L." Define
 > `surfaceAtLine(set, L)` = among surfaces in `set` whose **trimmed line-span**
 > (`surfaceLineSpan`, `nestingNav.ts:287`) contains L, the one of **greatest containment depth**
 > (`depthOfSurface`, `nestingNav.ts:169`). **(Amendment A2)** If that surface is a *container* (it has
-> a descendant surface) and L lies in **none** of its descendant surfaces' spans, L is a
+> a descendant surface) and L lies in **none** of its descendant surfaces\' spans, L is a
 > *container-gap* line (inter-item marker, empty item, blank-in-container, `<dt>` term) — return
 > `null` so §1 skips it. Only a **leaf for L** is a valid landing.
 
@@ -274,7 +274,7 @@ when `item[0]` is editable), making the existing element the leading block's DOM
 > - Single-block item → that extent *is* the whole `<li>` → measure the element (today's
 >   `measureBlockBox`).
 > - Text-with-sublist item → that extent is the leading text run, ending where the sublist begins →
->   a DOM **`Range`** from the `<li>`'s start to its first child carrying a block pool-id.
+>   a DOM **`Range`** from the `<li>`\'s start to its first child carrying a block pool-id.
 
 **Governing invariant:** *for an `<li>`/`<dd>` proxy, the leading block's visual extent is the
 Range, not the element box.* **(Amendment A4 — preferred wiring: put this detection *inside*
@@ -311,7 +311,7 @@ their **own** items (precedent: their existing incremental-revealjs branches alr
   whole list render; empty items already exist in authored source (`- ` with nothing) and **§6's
   uniform-delete makes them routine** (every "delete a bullet's text"). This must not regress the
   framework walk's current empty-item handling.
-- `DefinitionList.tsx`: add the same borrow to each `<dd>`'s leading block. `<dt>` (terms are
+- `DefinitionList.tsx`: add the same borrow to each `<dd>`\'s leading block. `<dt>` (terms are
   *inlines*, not block nodes) stays out — definitions are editable, terms are not (documented
   asymmetry).
 
@@ -319,7 +319,7 @@ their **own** items (precedent: their existing incremental-revealjs branches alr
 - `snapshotOuterBlockGeometry` (`outerBlocks.ts:506`) and the snapshot-miss fallback must, for an
   `<li>`/`<dd>` proxy, measure the **leading-block extent** (Range when the element has a nested
   block child; whole element otherwise), keyed by the borrowed pool-id's range. Add a `Range`-aware
-  measure helper beside `measureBlockBox` (a `Plain`'s box model is empty → `contentHeight` = rect
+  measure helper beside `measureBlockBox` (a `Plain`\'s box model is empty → `contentHeight` = rect
   height, trivial `boxStyle`).
 - Snapshot keys are unchanged (block-relative `(r0−topR0, r1−topR0)`); the leading block's range is
   the borrowed pool-id's range, so nest-in to that block hits the snapshot. The §1 key-uniqueness
@@ -341,7 +341,7 @@ their **own** items (precedent: their existing incremental-revealjs branches alr
 - [x] **0.b** Integration (jsdom): a tight single-block list renders `<li data-block-pool-id>`;
   `snapshotOuterBlockGeometry` keys the item by its leading block's range; a click in unlock mode
   activates the item (editTarget = the `Plain`), and locked mode still activates the whole list.
-- [x] **0.c** Integration: a text-with-sublist item — the `<li>` borrows the leading `Plain`'s
+- [x] **0.c** Integration: a text-with-sublist item — the `<li>` borrows the leading `Plain`\'s
   pool-id; the leading-block Range measure excludes the sublist height (assert the measured height
   < the full `<li>` height when the element has a sublist child). → plus a **wiring-proof** `0.c-wiring`
   test driving `snapshotOuterBlockGeometry` (the production path), which caught a dead-code A4 gap (now fixed, commit `8486b4c1`).
@@ -390,7 +390,7 @@ line-based rule is "deepest visible surface at the adjacent line." (Full example
 decisions* below.)
 
 ### Implementation
-Generalize `resolveLanding`'s `outerByLine` kind (`PreviewRoot.tsx:554-587`) into a
+Generalize `resolveLanding`\'s `outerByLine` kind (`PreviewRoot.tsx:554-587`) into a
 `lineSurface` resolver parameterized by the surface set:
 - **Locked** passes `enumerateOuterBlocks` → behavior-preserving (the up/down edge asymmetry pinned
   by prior-plan Reflection #21 is just "exit from bottom edge / top edge" and survives).
@@ -498,7 +498,7 @@ clean vs dirty in/out can differ by a column.
 - [x] **4.a** TDD: dirty nest-in/out lands on the same column as the equivalent clean move (assert
   caret column after a dirty round-trip). → `s4-dirty-caret-col.integration.test.tsx` (col 5→3, binds). Commit `2efb0bde`.
 - [x] **4.b** Route the dirty path's column through `prefixWidth` like the clean path. → dirty reland now
-  shares `cleanCaretHint`'s `(bufferCol→Cs→destCol)` projection (var names aligned for §6 reuse). Commits `2efb0bde`, `d009fff5`.
+  shares `cleanCaretHint`\'s `(bufferCol→Cs→destCol)` projection (var names aligned for §6 reuse). Commits `2efb0bde`, `d009fff5`.
 
 ---
 

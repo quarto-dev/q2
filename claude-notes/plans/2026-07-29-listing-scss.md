@@ -63,51 +63,51 @@ classes).
 ### Phase 1: tests first (TDD)
 
 - [x] T1 `quarto-sass` unit tests (mirror the highlight/copy-code
-      regression pattern at `compile.rs:857-876`): compiled theme CSS
-      contains `.quarto-listing` and listing-category rules for (a) the
-      default-css path and (b) the themed/doc-vars path. One assertion
-      per assembly path touched.
+  regression pattern at `compile.rs:857-876`): compiled theme CSS
+  contains `.quarto-listing` and listing-category rules for (a) the
+  default-css path and (b) the themed/doc-vars path. One assertion
+  per assembly path touched.
 - [x] T2 e2e integration test (brand_render.rs shape, using
-      `listing_pipeline.rs`\'s `render_project` harness): render a
-      website with a listing page → concatenated `.css` under the
-      output tree contains `.quarto-listing` / `listing-category`
-      selectors.
+  `listing_pipeline.rs`\'s `render_project` harness): render a
+  website with a listing page → concatenated `.css` under the
+  output tree contains `.quarto-listing` / `listing-category`
+  selectors.
 - [x] T3 ($theme-name, if implemented) unit test: compiling theme
-      `darkly` yields the darkly category-chip override (border color
-      `$gray-600`) rather than the default.
+  `darkly` yields the darkly category-chip override (border color
+  `$gray-600`) rather than the default.
 - [x] T4 run tests, record expected failures.
 
 ### Phase 2: implementation
 
 - [x] I1 copy `external-sources/quarto-cli/src/resources/projects/
-      website/listing/quarto-listing.scss` →
-      `resources/scss/html/templates/quarto-listing.scss` (verbatim);
-      update `resources/scss/README.md`\'s vendored list.
+  website/listing/quarto-listing.scss` →
+  `resources/scss/html/templates/quarto-listing.scss` (verbatim);
+  update `resources/scss/README.md`\'s vendored list.
 - [x] I2 `load_listing_layer()` in `quarto-sass/src/bundle.rs` next to
-      `load_copy_code_layer`; push at the HTML assembly sites
-      (`compile.rs:88-98`, `:226-243`, `:359-370`, wasm `:498-515` and
-      wasm `compile_default_css`).
+  `load_copy_code_layer`; push at the HTML assembly sites
+  (`compile.rs:88-98`, `:226-243`, `:359-370`, wasm `:498-515` and
+  wasm `compile_default_css`).
 - [x] I3 ($theme-name) emit `$theme-name: "<name>" !default;` into the
-      defaults band for built-in bootstrap themes.
+  defaults band for built-in bootstrap themes.
 - [x] I4 make Phase-1 tests green; full `-p quarto-sass` +
-      `-p quarto-core` suites (preview/render CSS parity tests must
-      stay green — the layer is unconditional so fingerprints move
-      uniformly).
+  `-p quarto-core` suites (preview/render CSS parity tests must
+  stay green — the layer is unconditional so fingerprints move
+  uniformly).
 
 ### Phase 3: verification + handoff
 
 - [x] V1 `cargo build --workspace` + `cargo nextest run --workspace`.
 - [x] V2 full `cargo xtask verify` (quarto-sass feeds the WASM leg; the
-      hub preview compiles SCSS through the dart-sass JS bridge — the
-      layer must ride the assembled string, which SassLayer composition
-      guarantees).
+  hub preview compiles SCSS through the dart-sass JS bridge — the
+  layer must ride the assembled string, which SassLayer composition
+  guarantees).
 - [x] V3 e2e: `q2 create project blog myblog && q2 render myblog`,
-      inspect `_site/` theme CSS for `.quarto-listing` rules and load
-      the listing page to confirm card layout (image-right float,
-      category chips, pagination styling); check a dark theme (darkly)
-      if T3/I3 landed.
+  inspect `_site/` theme CSS for `.quarto-listing` rules and load
+  the listing page to confirm card layout (image-right float,
+  category chips, pagination styling); check a dark theme (darkly)
+  if T3/I3 landed.
 - [x] V4 update this plan, close bd-57y4 (note the unconditional-layer
-      deviation in the close reason), report.
+  deviation in the close reason), report.
 
 ## Implementation record (2026-07-29)
 

@@ -81,71 +81,71 @@ Because both `q2 render` and `q2 preview` consume the same compiled bundle from
 ### Phase 1 — Test first (TDD)
 
 - [x] Add a compile-output assertion in `crates/quarto-sass`
-      (`test_compile_default_css` in `src/compile.rs`) that the compiled
-      default-theme CSS contains `#title-block-header{margin-block-end:1rem` —
-      the `1rem` value uniquely distinguishes the base rule from the
-      `body.nav-sidebar` responsive override (`…margin-block-end:0`). Confirmed
-      it **failed** against current `main` for the right reason (panic at the
-      new assertion).
+  (`test_compile_default_css` in `src/compile.rs`) that the compiled
+  default-theme CSS contains `#title-block-header{margin-block-end:1rem` —
+  the `1rem` value uniquely distinguishes the base rule from the
+  `body.nav-sidebar` responsive override (`…margin-block-end:0`). Confirmed
+  it **failed** against current `main` for the right reason (panic at the
+  new assertion).
 
 ### Phase 2 — Implement
 
 - [x] Added the base rule to the `/*-- scss:rules --*/` section of
-      `resources/scss/html/templates/title-block.scss`, immediately before the
-      `#title-block-header.quarto-title-block.default` block:
-      ```scss
-      #title-block-header {
-        margin-block-end: 1rem;
-        position: relative;
-        margin-top: -1px;
-      }
-      ```
-      Unconditional (not nested under `.quarto-title-block.default`), mirroring
-      TS Quarto's `_quarto-rules.scss` ordering (base rule → variant styling).
+  `resources/scss/html/templates/title-block.scss`, immediately before the
+  `#title-block-header.quarto-title-block.default` block:
+  ```scss
+  #title-block-header {
+    margin-block-end: 1rem;
+    position: relative;
+    margin-top: -1px;
+  }
+  ```
+  Unconditional (not nested under `.quarto-title-block.default`), mirroring
+  TS Quarto's `_quarto-rules.scss` ordering (base rule → variant styling).
 - [x] Phase 1 test now passes; all 207 `quarto-sass` tests pass.
 - [x] Updated the byte-identity baseline
-      `crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/expected_hashes.txt`:
-      the `doc_files/styles.css` hash shifted (the compiled CSS gained the
-      rule). `doc.html` hash is unchanged — the change is CSS-only and the
-      fixture's `#title-block-header` element already existed. Added a
-      `# Re-captured 2026-07-21 (bd-btjkyylx …)` comment per the file's
-      convention. This was the only test in the full workspace run affected by
-      the CSS change.
+  `crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/expected_hashes.txt`:
+  the `doc_files/styles.css` hash shifted (the compiled CSS gained the
+  rule). `doc.html` hash is unchanged — the change is CSS-only and the
+  fixture's `#title-block-header` element already existed. Added a
+  `# Re-captured 2026-07-21 (bd-btjkyylx …)` comment per the file's
+  convention. This was the only test in the full workspace run affected by
+  the CSS change.
 
 ### Phase 3 — Verify
 
 - [x] `cargo nextest run -p quarto-sass` — 207/207 pass.
 - [ ] Full workspace: `cargo nextest run --workspace`.
 - [x] End-to-end (render path): `cargo run --bin q2 -- render <fixture>.qmd`.
-      The emitted `test_files/styles.css` contains the exact rule
-      `#title-block-header{margin-block-end:1rem;position:relative;margin-top:-1px}`
-      — grep-verified from real binary output, byte-for-byte matching Q1's
-      compiled rule. Combined with (a) the rendered DOM being structurally
-      identical to Q1 and (b) the same rule injected into the identical live
-      DOM producing a 0→17px gap earlier this session, this confirms the render
-      output now matches Q1's spacing.
-      *Note: a fresh in-browser screenshot of the served render was blocked by
-      the Chrome extension disconnecting mid-session; the emitted-CSS grep plus
-      the earlier injection measurement are conclusive without it.*
+  The emitted `test_files/styles.css` contains the exact rule
+  `#title-block-header{margin-block-end:1rem;position:relative;margin-top:-1px}`
+  — grep-verified from real binary output, byte-for-byte matching Q1's
+  compiled rule. Combined with (a) the rendered DOM being structurally
+  identical to Q1 and (b) the same rule injected into the identical live
+  DOM producing a 0→17px gap earlier this session, this confirms the render
+  output now matches Q1's spacing.
+  *Note: a fresh in-browser screenshot of the served render was blocked by
+  the Chrome extension disconnecting mid-session; the emitted-CSS grep plus
+  the earlier injection measurement are conclusive without it.*
 - [x] `q2 preview` check: the running preview embeds a separately-built WASM
-      image, so it won't reflect this SCSS change until the WASM chain is
-      rebuilt + the preview server is restarted (documented stale-WASM
-      behavior). Confirmed the WASM CSS path is identical to render
-      (`compile_default_bootstrap_css` → `compile_theme_css` →
-      `compile_default_css` → `load_title_block_layer`), and that
-      `load_title_block_layer` embeds this exact file via a target-agnostic
-      `include_dir!(".../resources/scss/html/templates")`. After rebuilding
-      (`npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
-      `cargo build --bin q2`), verified by `strings` that the ported rule is
-      literally embedded in both the freshly-built WASM and the SPA-bundled
-      WASM the `q2` binary carries. **Not** visually re-measured in a browser —
-      the Chrome extension disconnected mid-session; the embed check +
-      native-compile test are the substitute evidence.
+  image, so it won't reflect this SCSS change until the WASM chain is
+  rebuilt + the preview server is restarted (documented stale-WASM
+  behavior). Confirmed the WASM CSS path is identical to render
+  (`compile_default_bootstrap_css` → `compile_theme_css` →
+  `compile_default_css` → `load_title_block_layer`), and that
+  `load_title_block_layer` embeds this exact file via a target-agnostic
+  `include_dir!(".../resources/scss/html/templates")`. After rebuilding
+  (`npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
+  `cargo build --bin q2`), verified by `strings` that the ported rule is
+  literally embedded in both the freshly-built WASM and the SPA-bundled
+  WASM the `q2` binary carries. **Not** visually re-measured in a browser —
+  the Chrome extension disconnected mid-session; the embed check +
+  native-compile test are the substitute evidence.
 - [x] `cargo xtask verify` (full): Rust build ✓, workspace tests ✓ (10346),
-      WASM build ✓, SPA dist ✓, hub-mcp non-live tests ✓. The 20 `live:`
-      hub-mcp failures are environmental (no `wss://sync.automerge.org`
-      connectivity in this sandbox — `braid` reported the same) and unrelated
-      to this CSS change.
+  WASM build ✓, SPA dist ✓, hub-mcp non-live tests ✓. The 20 `live:`
+  hub-mcp failures are environmental (no `wss://sync.automerge.org`
+  connectivity in this sandbox — `braid` reported the same) and unrelated
+  to this CSS change.
 
 ## Status
 

@@ -422,12 +422,12 @@ greenlit** — awaiting user go-ahead._
 - [x] reveal.js 5 vs 6 theming differences
 - [x] Quarto 1's revealjs theme adaptation + SCSS layers
 - [x] **Empirically confirmed** Q2's current centered-bullets + uppercase-headings
-      via a real `q2 render` + Chrome computed-style inspection (2026-06-16).
-      Deck: two H2 slides with bullet lists. Findings on the first slide:
-      `h2` → `text-transform: uppercase`, `text-align: center`, `font-size: 67px`;
-      `.reveal .slides` → `text-align: center` (the `ul` is `display:inline-block;
-      text-align:left`, so it centers as a block → classic reveal centered look).
-      Confirms §4: both differences are reveal defaults Q2 doesn't override.
+  via a real `q2 render` + Chrome computed-style inspection (2026-06-16).
+  Deck: two H2 slides with bullet lists. Findings on the first slide:
+  `h2` → `text-transform: uppercase`, `text-align: center`, `font-size: 67px`;
+  `.reveal .slides` → `text-align: center` (the `ul` is `display:inline-block;
+  text-align:left`, so it centers as a block → classic reveal centered look).
+  Confirms §4: both differences are reveal defaults Q2 doesn't override.
 
 ### Stage A — Quarto reveal layer (branch `beads/bd-r9mkybwl-reveal-scss-layer`)
 
@@ -455,64 +455,64 @@ instead of Bootstrap. Layers, assembled with the existing 5-region order
 
 Sub-steps (TDD — test first each time):
 - [x] **A1.** Vendored reveal-6 theme template SCSS locally under
-      `resources/scss/revealjs/reveal-template/` (settings split into
-      `_settings-vars.scss` + `_expose.scss` `:root` emitter, `_theme.scss`,
-      `_mixins.scss`). Provenance in `resources/scss/revealjs/README.md`.
-      (Landed under `resources/scss/revealjs/`, alongside the crate's other
-      embedded SCSS, rather than the originally-noted `resources/revealjs/scss/`.)
+  `resources/scss/revealjs/reveal-template/` (settings split into
+  `_settings-vars.scss` + `_expose.scss` `:root` emitter, `_theme.scss`,
+  `_mixins.scss`). Provenance in `resources/scss/revealjs/README.md`.
+  (Landed under `resources/scss/revealjs/`, alongside the crate's other
+  embedded SCSS, rather than the originally-noted `resources/revealjs/scss/`.)
 - [x] **A2.** `quarto-sass`: `load_reveal_framework` + `load_quarto_reveal_layer` +
-      `assemble_reveal_scss()` (reuses the shared `assemble_scss` ordering).
-      7 unit/integration tests in `reveal_theme_test.rs` — all green: layer load;
-      grass compile; `--r-main-color:#222`, `--r-background-color:#fff`,
-      `--r-link-color:#2a76dd` (collision case); `--r-heading-text-transform:none`
-      + no `uppercase`; `text-align:left`; `#title-slide` centered.
+  `assemble_reveal_scss()` (reuses the shared `assemble_scss` ordering).
+  7 unit/integration tests in `reveal_theme_test.rs` — all green: layer load;
+  grass compile; `--r-main-color:#222`, `--r-background-color:#fff`,
+  `--r-link-color:#2a76dd` (collision case); `--r-heading-text-transform:none`
+  + no `uppercase`; `text-align:left`; `#title-slide` centered.
 - [x] **A3.** Authored `resources/scss/revealjs/quarto-revealjs.scss`. Discovered
-      a useful simplification: in reveal 6 `$link-color`/`$link-color-hover`/
-      `$selection-color` coincide with reveal's own kebab names, so those need no
-      mapping line — set the Quarto default once and it feeds the `:root` emitter.
+  a useful simplification: in reveal 6 `$link-color`/`$link-color-hover`/
+  `$selection-color` coincide with reveal's own kebab names, so those need no
+  mapping line — set the Quarto default once and it feeds the `:root` emitter.
 - [x] **A4.** `compile_reveal_theme_css()` in `quarto-sass/compile.rs`
-      (native `grass`, WASM dart-sass). Self-contained: no embedded load paths
-      (only built-in `sass:color`/`sass:meta`).
+  (native `grass`, WASM dart-sass). Self-contained: no embedded load paths
+  (only built-in `sass:color`/`sass:meta`).
 - [x] **A5.** Wired `CompileThemeCssStage` reveal branch via a cfg-split
-      `compile_reveal` helper; `register_reveal_assets` now takes
-      `compiled_theme_css: Option<&str>` (`Some` = compiled theme in the
-      `3-theme-*` slot; `None` = vendored stock fallback on compile failure).
-      `RevealAsset.content` is now `Cow<'static, str>`. `reset.css` + core
-      `reveal.css` stay vendored; **`quarto-reveal.css` kept separate** (it's
-      columns/aside/footnotes, orthogonal to theming). Integration test
-      `revealjs_theme_slot_is_compiled_quarto_theme` (reads the flushed theme).
+  `compile_reveal` helper; `register_reveal_assets` now takes
+  `compiled_theme_css: Option<&str>` (`Some` = compiled theme in the
+  `3-theme-*` slot; `None` = vendored stock fallback on compile failure).
+  `RevealAsset.content` is now `Cow<'static, str>`. `reset.css` + core
+  `reveal.css` stay vendored; **`quarto-reveal.css` kept separate** (it's
+  columns/aside/footnotes, orthogonal to theming). Integration test
+  `revealjs_theme_slot_is_compiled_quarto_theme` (reads the flushed theme).
 - [x] **A6.** E2E verified through `q2 render` + Chrome computed styles:
-      content slide `h2` → `text-transform:none`, `text-align:left`; `.reveal
-      .slides` → `text-align:left`; title slide centered, title h1 → 1.6em (h2
-      size). Screenshots confirm the Quarto-1 feel (mixed-case left-aligned
-      content; centered h2-sized title). Font falls back to system Helvetica
-      (Source Sans Pro bundling is the Stage B item).
+  content slide `h2` → `text-transform:none`, `text-align:left`; `.reveal
+  .slides` → `text-align:left`; title slide centered, title h1 → 1.6em (h2
+  size). Screenshots confirm the Quarto-1 feel (mixed-case left-aligned
+  content; centered h2-sized title). Font falls back to system Helvetica
+  (Source Sans Pro bundling is the Stage B item).
 - [x] **A7.** `q2 preview` parity assessed. **Stage A converges the render path
-      ONLY.** The reveal branch keys on `FormatIdentifier::Revealjs`; the preview
-      pseudo-format `q2-slides` is `(Html, preview)` and never enters it. The SPA
-      (`hub-client/.../RevealjsReactAstSlideRenderer.tsx`, `q2-debug/entry.tsx`)
-      **statically imports the vendored stock `resources/revealjs/theme/white.css`**
-      at build time, so preview still shows the centered/uppercase reveal look.
-      ⚠ **This re-introduces a render/preview divergence that bd-4b7f1hr7
-      deliberately removed** by pointing both at the same vendored files. The
-      divergence is intentional + temporary for staged delivery (D3). Converging
-      preview (Stage C) means feeding the *compiled* Quarto reveal theme to the
-      SPA — likely by precompiling the default Quarto reveal theme to a committed
-      static CSS asset that both the render default and the SPA import, with the
-      runtime compile reserved for non-default themes/brand/user vars. Tracked on
-      Stage C (bd-j8qoyc0s). No automated parity test breaks (the hub-client
-      parity test mocks the CSS imports; `preview_render_css_parity.rs` covers
-      Bootstrap, not reveal).
+  ONLY.** The reveal branch keys on `FormatIdentifier::Revealjs`; the preview
+  pseudo-format `q2-slides` is `(Html, preview)` and never enters it. The SPA
+  (`hub-client/.../RevealjsReactAstSlideRenderer.tsx`, `q2-debug/entry.tsx`)
+  **statically imports the vendored stock `resources/revealjs/theme/white.css`**
+  at build time, so preview still shows the centered/uppercase reveal look.
+  ⚠ **This re-introduces a render/preview divergence that bd-4b7f1hr7
+  deliberately removed** by pointing both at the same vendored files. The
+  divergence is intentional + temporary for staged delivery (D3). Converging
+  preview (Stage C) means feeding the *compiled* Quarto reveal theme to the
+  SPA — likely by precompiling the default Quarto reveal theme to a committed
+  static CSS asset that both the render default and the SPA import, with the
+  runtime compile reserved for non-default themes/brand/user vars. Tracked on
+  Stage C (bd-j8qoyc0s). No automated parity test breaks (the hub-client
+  parity test mocks the CSS imports; `preview_render_css_parity.rs` covers
+  Bootstrap, not reveal).
 - [x] **A8.** Vertical alignment parity (found during user experimentation).
-      Q1 defaults reveal `center: false` (slides top-align; reveal's own default
-      is `true`) and re-centers the title slide via a per-slide `.center` class
-      (`format-reveal.ts`). Q2 wrongly defaulted `center: true`. Fixed:
-      `reveal_config_json` now defaults `center: false`; `build_title_slide`
-      adds the `center` class to the title-slide section. TDD (config test +
-      title-slide-class test); E2E + Chrome confirmed body slides top-align
-      (`top:18`, no inline offset) while the title slide stays centered (reveal
-      applies `top` from the `.center` class). `.reveal` carries no global
-      `center` class.
+  Q1 defaults reveal `center: false` (slides top-align; reveal's own default
+  is `true`) and re-centers the title slide via a per-slide `.center` class
+  (`format-reveal.ts`). Q2 wrongly defaulted `center: true`. Fixed:
+  `reveal_config_json` now defaults `center: false`; `build_title_slide`
+  adds the `center` class to the title-slide section. TDD (config test +
+  title-slide-class test); E2E + Chrome confirmed body slides top-align
+  (`top:18`, no inline offset) while the title slide stays centered (reveal
+  applies `top` from the `.center` class). `.reveal` carries no global
+  `center` class.
 
 ### Stage B — theme set + selection (own branch)
 
@@ -527,38 +527,38 @@ do the same. (An earlier note here wrongly claimed reveal cross-links decks; tha
 was a wrong mental model — `ctx.artifacts` is per-document, not project-wide.)
 
 - [x] **Theme artifact keyed by content fingerprint**: `css:revealjs:3-theme-<hash>`
-      → `theme-<hash>.css` (replaced the fixed `3-theme-white`, reusing
-      `theme_fingerprint`). `3-theme-` prefix keeps cascade order. Same theme →
-      one shared file; different themes → distinct files; each deck links its own
-      (per-document `ctx.artifacts`). Matches HTML; future-proof for Stage-C
-      brand/per-deck vars. Tests: `register_reveal_assets_keys_theme_by_content_fingerprint`,
-      and the two-deck website test now asserts exactly one shared `theme-<hash>.css`.
+  → `theme-<hash>.css` (replaced the fixed `3-theme-white`, reusing
+  `theme_fingerprint`). `3-theme-` prefix keeps cascade order. Same theme →
+  one shared file; different themes → distinct files; each deck links its own
+  (per-document `ctx.artifacts`). Matches HTML; future-proof for Stage-C
+  brand/per-deck vars. Tests: `register_reveal_assets_keys_theme_by_content_fingerprint`,
+  and the two-deck website test now asserts exactly one shared `theme-<hash>.css`.
 - [x] Adapted the 12 themes → `resources/scss/revealjs/themes/*.scss`: kebab-case
-      for direct reveal-var sets (`$overlayElementBgColor` →
-      `$overlay-element-bg-color`); `bodyBackground()`/`radial-gradient` →
-      `$background: radial-gradient(...)`. Renamed dracula's local `$background`
-      palette var → `$drac-background` (collides with reveal-6's `$background`).
+  for direct reveal-var sets (`$overlayElementBgColor` →
+  `$overlay-element-bg-color`); `bodyBackground()`/`radial-gradient` →
+  `$background: radial-gradient(...)`. Renamed dracula's local `$background`
+  palette var → `$drac-background` (collides with reveal-6's `$background`).
 - [x] Reveal theme resolution (`crates/quarto-core/src/revealjs/theme.rs`):
-      parse `theme:` (string|array|absent→`default`); built-in (12 names +
-      `white→default`/`black→dark` via `quarto_sass::resolve_reveal_theme_name`)
-      vs user `.scss` (reuse `load_custom_theme`). Unknown/missing → loud stage
-      error. `resolve_reveal_theme_name`/`load_reveal_theme_layer` added to
-      quarto-sass; `resolve_theme_name`/`theme_css` removed.
+  parse `theme:` (string|array|absent→`default`); built-in (12 names +
+  `white→default`/`black→dark` via `quarto_sass::resolve_reveal_theme_name`)
+  vs user `.scss` (reuse `load_custom_theme`). Unknown/missing → loud stage
+  error. `resolve_reveal_theme_name`/`load_reveal_theme_layer` added to
+  quarto-sass; `resolve_theme_name`/`theme_css` removed.
 - [x] `assemble_reveal_scss(&[SassLayer])` merges theme layers via `merge_layers`;
-      `compile_reveal_theme_css(runtime, minified, &[layer], &[load_path])`;
-      stage `compile_reveal` helper + reveal branch updated to resolve→compile→
-      register.
+  `compile_reveal_theme_css(runtime, minified, &[layer], &[load_path])`;
+  stage `compile_reveal` helper + reveal branch updated to resolve→compile→
+  register.
 - [x] Tests: 6 per-theme/alias/unknown tests in `reveal_theme_test.rs`; resolution
-      unit tests in `theme.rs`; integration `revealjs_named_theme_is_compiled_and_selected`
-      (`theme: dark`). Full quarto-sass+quarto-core suites + `cargo xtask verify`
-      (incl. WASM) green.
+  unit tests in `theme.rs`; integration `revealjs_named_theme_is_compiled_and_selected`
+  (`theme: dark`). Full quarto-sass+quarto-core suites + `cargo xtask verify`
+  (incl. WASM) green.
 - [x] **Font handling (B7 decision):** kept Q1's Google-CDN `@import`s; converted
-      local `./fonts/league-gothic/…` → League Gothic Google-Fonts CDN; default
-      theme stays system-font (Helvetica). Offline/self-contained font bundling
-      deferred to Stage C.
+  local `./fonts/league-gothic/…` → League Gothic Google-Fonts CDN; default
+  theme stays system-font (Helvetica). Offline/self-contained font bundling
+  deferred to Stage C.
 - [x] E2E + Chrome: `theme: dark` (#191919 bg, white text, blue links) and
-      `theme: dracula` (#282a36 bg, purple headings, cyan bullets, orange bold,
-      yellow italic) render faithfully, top-aligned/left-aligned.
+  `theme: dracula` (#282a36 bg, purple headings, cyan bullets, orange bold,
+  yellow italic) render faithfully, top-aligned/left-aligned.
 
 ### Stage C — config defaults + Sass-helper foundation + SCSS quick-wins (bd-jxyqjf15)
 
@@ -568,37 +568,37 @@ _Inserted before the brand/callouts/docs stage per the 2026-06-16 audit decision
 TDD; commit per increment._
 
 - [x] **C1. Reveal config defaults.** Ported Q1's opinionated block into
-      `reveal_config_json` (transition/backgroundTransition:none, center:false,
-      1050×700, margin:0.1, navigationMode:linear, controlsLayout:edges,
-      controlsTutorial:false, history:true, fragmentInURL/pdfSeparateFragments/
-      hashOneBasedIndex:false) — each front-matter-overridable. `slideNumber`
-      true→`c/t`(linear)/`h.v`(vertical); width/height accept `%` strings. Fixed
-      preview parity in **both** `RevealDeck.tsx` and `RevealjsReactAstSlideRenderer.tsx`
-      (center:false, transition:none, margin:0.1, linear nav, edge controls).
-      TDD: `config_defaults_match_quarto1` + vertical-nav/override tests;
-      integration `slideNumber` assertion. E2E: `q2 render` + Chrome
-      `Reveal.getConfig()` confirmed. Full verify (incl. hub build) green.
-      Commits 37061765 (code) + 3cea68ce (hub changelog).
+  `reveal_config_json` (transition/backgroundTransition:none, center:false,
+  1050×700, margin:0.1, navigationMode:linear, controlsLayout:edges,
+  controlsTutorial:false, history:true, fragmentInURL/pdfSeparateFragments/
+  hashOneBasedIndex:false) — each front-matter-overridable. `slideNumber`
+  true→`c/t`(linear)/`h.v`(vertical); width/height accept `%` strings. Fixed
+  preview parity in **both** `RevealDeck.tsx` and `RevealjsReactAstSlideRenderer.tsx`
+  (center:false, transition:none, margin:0.1, linear nav, edge controls).
+  TDD: `config_defaults_match_quarto1` + vertical-nav/override tests;
+  integration `slideNumber` assertion. E2E: `q2 render` + Chrome
+  `Reveal.getConfig()` confirmed. Full verify (incl. hub build) green.
+  Commits 37061765 (code) + 3cea68ce (hub changelog).
 - [x] **C2. Sass-helper foundation.** Ported into the Quarto reveal layer:
-      `colorToRGB`/`tint`/`shade`/`shift-color` functions; `shift_to_dark`
-      (kebab `$background-color` + `quarto-color.blackness`),
-      `make/undo-smaller-font-size` (`quarto-math.pow`). Added the
-      `quarto-color`/`quarto-math` `@use`s + supporting defaults
-      (`$code-block-theme-dark-threshhold`, border/gray vars). Probed `grass`
-      first — it supports `color.blackness`/`color.scale`/`math.pow`/`mix`.
+  `colorToRGB`/`tint`/`shade`/`shift-color` functions; `shift_to_dark`
+  (kebab `$background-color` + `quarto-color.blackness`),
+  `make/undo-smaller-font-size` (`quarto-math.pow`). Added the
+  `quarto-color`/`quarto-math` `@use`s + supporting defaults
+  (`$code-block-theme-dark-threshhold`, border/gray vars). Probed `grass`
+  first — it supports `color.blackness`/`color.scale`/`math.pow`/`mix`.
 - [x] **C3. SCSS quick-wins** ported from `quarto.scss`: `.has-light/dark-background`
-      text+link+code recoloring; code-block border + full-width + scrollable
-      `max-height`; `.smaller` system (global + per-slide, headings keep size via
-      `undo-smaller-font-size`); blockquote restyle (left accent border, not
-      italic-centered); kbd keycaps (`shift_to_dark` background); slide-number
-      (muted, bg-aware); figure captions; multi-column gutters; ordered-list
-      `type=` + task-list checkboxes; edge nav-control spacing; link
-      weight/decoration; `--r-*` code-font custom properties. Tests:
-      `quick_wins_compile_and_emit`, `shift_to_dark_picks_dark_value_on_dark_theme`.
-      E2E + Chrome: code block, blockquote, kbd, `.smaller`, and dark-background
-      legibility all render faithfully. Full `cargo xtask verify` (incl. WASM)
-      green. **Deferred to Stage D** (need markup/consumer/plugins): light/dark
-      sentinel, footer/logo, panels/tabsets, callouts, code-annotation, tippy.
+  text+link+code recoloring; code-block border + full-width + scrollable
+  `max-height`; `.smaller` system (global + per-slide, headings keep size via
+  `undo-smaller-font-size`); blockquote restyle (left accent border, not
+  italic-centered); kbd keycaps (`shift_to_dark` background); slide-number
+  (muted, bg-aware); figure captions; multi-column gutters; ordered-list
+  `type=` + task-list checkboxes; edge nav-control spacing; link
+  weight/decoration; `--r-*` code-font custom properties. Tests:
+  `quick_wins_compile_and_emit`, `shift_to_dark_picks_dark_value_on_dark_theme`.
+  E2E + Chrome: code block, blockquote, kbd, `.smaller`, and dark-background
+  legibility all render faithfully. Full `cargo xtask verify` (incl. WASM)
+  green. **Deferred to Stage D** (need markup/consumer/plugins): light/dark
+  sentinel, footer/logo, panels/tabsets, callouts, code-annotation, tippy.
 
 ### Stage D — brand + callouts + title/footer/logo + docs (bd-j8qoyc0s)
 
@@ -621,138 +621,138 @@ Stage D branch: `beads/bd-j8qoyc0s-reveal-brand-callouts` off `feature/revealjs-
 Increments (by value × unblocked-ness; TDD; commit per increment):
 
 - [x] **D1. Callouts (pure SCSS).** Ported Q1 `quarto.scss:873-1116` (base rules,
-      simple/default layouts, the `$callouts` map with per-type accent + inlined
-      recolored Bootstrap-icon SVGs, default-title `shift_to_dark` bg) into
-      `quarto-revealjs.scss`. Added `$callout-*`/`$table-border-color` defaults,
-      `sass:map` use, and a local `str-replace` fn. Q2 already emits identical
-      `.callout` markup for reveal — pure SCSS, no AST work. TDD +
-      E2E (Chrome: note/tip/warning render with colored borders, recolored icons,
-      titled vs simple). Commit ebbdd732.
+  simple/default layouts, the `$callouts` map with per-type accent + inlined
+  recolored Bootstrap-icon SVGs, default-title `shift_to_dark` bg) into
+  `quarto-revealjs.scss`. Added `$callout-*`/`$table-border-color` defaults,
+  `sass:map` use, and a local `str-replace` fn. Q2 already emits identical
+  `.callout` markup for reveal — pure SCSS, no AST work. TDD +
+  E2E (Chrome: note/tip/warning render with colored borders, recolored icons,
+  titled vs simple). Commit ebbdd732.
 - [x] **D2. `_brand.yml` integration (config plumbing).** New
-      `quarto_sass::resolve_brand_layers` (extract `brand:` → typed Brand →
-      layers, independent of Bootstrap theme parsing); reveal branch resolves it
-      against the project dir and appends brand layers LAST (highest priority).
-      Fixed brand's reveal base-font mapping `$mainFont`→`$main-font` (reveal-6
-      kebab). TDD: `revealjs_brand_yml_flows_into_theme`. E2E confirmed
-      `--r-link-color:#c00` + `--r-main-font:Georgia`. Commit a80b28de.
+  `quarto_sass::resolve_brand_layers` (extract `brand:` → typed Brand →
+  layers, independent of Bootstrap theme parsing); reveal branch resolves it
+  against the project dir and appends brand layers LAST (highest priority).
+  Fixed brand's reveal base-font mapping `$mainFont`→`$main-font` (reveal-6
+  kebab). TDD: `revealjs_brand_yml_flows_into_theme`. E2E confirmed
+  `--r-link-color:#c00` + `--r-main-font:Georgia`. Commit a80b28de.
 - [x] **D3. `footer:` / `logo:` (generate-reuse + reveal render + slot + scaffold).**
-      **DONE 2026-06-16 (this session).** Implemented as designed below; full
-      `cargo xtask verify --skip-hub-tests` (incl. WASM build) green; E2E through
-      `q2 render` + Chrome confirmed footer/logo are `position: fixed`, direct
-      children of `.reveal` outside `.slides`, footer link rendered, `has-logo`
-      set. Files: `crates/quarto-core/src/revealjs/footer_logo.rs` (alias + render
-      transforms, 12 unit tests), `pipeline.rs` (`footer_render_stage` selector +
-      reveal alias registration), `revealjs/assemble.rs` (scaffold reads slots),
-      `resources/scss/revealjs/quarto-revealjs.scss` (SCSS). Integration:
-      `revealjs_footer_and_logo_render_outside_slides` (via `footer:` alias) +
-      `revealjs_page_footer_key_drives_footer` (canonical key). SCSS:
-      `footer_and_logo_compile_and_emit`.
+  **DONE 2026-06-16 (this session).** Implemented as designed below; full
+  `cargo xtask verify --skip-hub-tests` (incl. WASM build) green; E2E through
+  `q2 render` + Chrome confirmed footer/logo are `position: fixed`, direct
+  children of `.reveal` outside `.slides`, footer link rendered, `has-logo`
+  set. Files: `crates/quarto-core/src/revealjs/footer_logo.rs` (alias + render
+  transforms, 12 unit tests), `pipeline.rs` (`footer_render_stage` selector +
+  reveal alias registration), `revealjs/assemble.rs` (scaffold reads slots),
+  `resources/scss/revealjs/quarto-revealjs.scss` (SCSS). Integration:
+  `revealjs_footer_and_logo_render_outside_slides` (via `footer:` alias) +
+  `revealjs_page_footer_key_drives_footer` (canonical key). SCSS:
+  `footer_and_logo_compile_and_emit`.
 
-      **Design settled with the user 2026-06-16 (this session); supersedes both the
-      original "AST transform into `ast.blocks`" sketch AND this session's first
-      "scaffold reads raw meta" pass.**
+  **Design settled with the user 2026-06-16 (this session); supersedes both the
+  original "AST transform into `ast.blocks`" sketch AND this session's first
+  "scaffold reads raw meta" pass.**
 
-      *Why not inject into `ast.blocks`:* reveal.js applies CSS `transform` to
-      `.slides` and every `<section>` (verified in vendored `reveal.css`), so a
-      `position: fixed` element nested there resolves against the transformed
-      ancestor, not the viewport — it would NOT stay fixed. The deck-level footer/
-      logo must be **direct children of `.reveal`, outside `.slides`** (where Q1's
-      quarto-support *plugin* relocates them at runtime; Q2 ships no plugin so the
-      scaffold places them statically).
+  *Why not inject into `ast.blocks`:* reveal.js applies CSS `transform` to
+  `.slides` and every `<section>` (verified in vendored `reveal.css`), so a
+  `position: fixed` element nested there resolves against the transformed
+  ancestor, not the viewport — it would NOT stay fixed. The deck-level footer/
+  logo must be **direct children of `.reveal`, outside `.slides`** (where Q1's
+  quarto-support *plugin* relocates them at runtime; Q2 ships no plugin so the
+  scaffold places them statically).
 
-      *Why a transform + meta-slot rather than the scaffold reading `footer:`/`logo:`
-      directly:* user-defined filters must be able to manipulate these entries the
-      same way they manipulate navbar/sidebar/TOC/footer in `format: html`. That
-      contract lives in the **generate → `rendered.*` slot → template** flow, not in
-      late scaffold reads. The pipeline already runs user filters around the AST
-      transforms (`UserFiltersStage::pre` → `AstTransformsStage` → `…::post`,
-      pipeline.rs:318-320), so routing footer/logo through that machinery makes the
-      contract real.
+  *Why a transform + meta-slot rather than the scaffold reading `footer:`/`logo:`
+  directly:* user-defined filters must be able to manipulate these entries the
+  same way they manipulate navbar/sidebar/TOC/footer in `format: html`. That
+  contract lives in the **generate → `rendered.*` slot → template** flow, not in
+  late scaffold reads. The pipeline already runs user filters around the AST
+  transforms (`UserFiltersStage::pre` → `AstTransformsStage` → `…::post`,
+  pipeline.rs:318-320), so routing footer/logo through that machinery makes the
+  contract real.
 
-      *Architecture (generate = format-agnostic, render = format-specific):*
-      - **Reuse** the format-agnostic `FooterGenerateTransform` (`page-footer:` →
-        `navigation.footer`, already registered unconditionally → already runs for
-        reveal). A small reveal-scoped **alias** transform maps Q1's `footer:` →
-        `page-footer:` (when `page-footer:` absent) *before* generate, so a bare Q1
-        `footer:` flows through the same generate (string → `center` region).
-      - A reveal-specific **render** transform reads `navigation.footer` (the
-        `center` region; left/right deferred per decision) → reveal `.footer
-        .footer-default` markup → slot `rendered.reveal.footer`; and reads `logo:`
-        (no format-agnostic logo-generate exists — logo is reveal-specific) →
-        `<img class="slide-logo">` → slot `rendered.reveal.logo`. Each render is
-        skipped if its slot is already populated (override hook). Footer inline
-        content (links/emphasis) renders via the pampa HTML writer; `.qmd` hrefs in
-        a Text-region footer pass through unrewritten (parity with html's
-        FooterRender, which defers Text-region rewriting).
-      - **Gate** the html `FooterRenderTransform` off for reveal via a localized
-        format→stage selection helper (`footer_render_stage(format)`), chosen so the
-        reveal render writes its own `rendered.reveal.*` slot without colliding with
-        html's `rendered.navigation.footer` skip-hook. This helper is the first small
-        step toward format-driven pipeline composition (vs. scattering `is_revealjs`
-        checks) — intentionally localized, not a framework.
-      - **Scaffold** (`render_revealjs_document`) reads `rendered.reveal.footer`/
-        `rendered.reveal.logo` and places them outside `.slides`; `.reveal` gains
-        `has-logo` when the logo slot is present (drives slide-number repositioning,
-        matching Q1).
-      - **SCSS** (done): footer colors (muted + `.has-dark/light-background`
-        variants, `quarto.scss`:570-592) + footer/logo positioning + responsive
-        sizing (`plugins/support/footer.css`) in `quarto-revealjs.scss`. The
-        `.has-dark/light-background` recoloring is **dormant without a plugin** (Q1
-        toggles those classes per-slide); ported for forward-compat with bd-buwhvpc2.
-      _(Out of scope, plugin/other-strand territory: per-slide footers,
-      `data-footer="false"` overrides, runtime relocation, brand/object-form logos,
-      left/right footer regions for reveal.)_
+  *Architecture (generate = format-agnostic, render = format-specific):*
+  - **Reuse** the format-agnostic `FooterGenerateTransform` (`page-footer:` →
+    `navigation.footer`, already registered unconditionally → already runs for
+    reveal). A small reveal-scoped **alias** transform maps Q1's `footer:` →
+    `page-footer:` (when `page-footer:` absent) *before* generate, so a bare Q1
+    `footer:` flows through the same generate (string → `center` region).
+  - A reveal-specific **render** transform reads `navigation.footer` (the
+    `center` region; left/right deferred per decision) → reveal `.footer
+    .footer-default` markup → slot `rendered.reveal.footer`; and reads `logo:`
+    (no format-agnostic logo-generate exists — logo is reveal-specific) →
+    `<img class="slide-logo">` → slot `rendered.reveal.logo`. Each render is
+    skipped if its slot is already populated (override hook). Footer inline
+    content (links/emphasis) renders via the pampa HTML writer; `.qmd` hrefs in
+    a Text-region footer pass through unrewritten (parity with html's
+    FooterRender, which defers Text-region rewriting).
+  - **Gate** the html `FooterRenderTransform` off for reveal via a localized
+    format→stage selection helper (`footer_render_stage(format)`), chosen so the
+    reveal render writes its own `rendered.reveal.*` slot without colliding with
+    html's `rendered.navigation.footer` skip-hook. This helper is the first small
+    step toward format-driven pipeline composition (vs. scattering `is_revealjs`
+    checks) — intentionally localized, not a framework.
+  - **Scaffold** (`render_revealjs_document`) reads `rendered.reveal.footer`/
+    `rendered.reveal.logo` and places them outside `.slides`; `.reveal` gains
+    `has-logo` when the logo slot is present (drives slide-number repositioning,
+    matching Q1).
+  - **SCSS** (done): footer colors (muted + `.has-dark/light-background`
+    variants, `quarto.scss`:570-592) + footer/logo positioning + responsive
+    sizing (`plugins/support/footer.css`) in `quarto-revealjs.scss`. The
+    `.has-dark/light-background` recoloring is **dormant without a plugin** (Q1
+    toggles those classes per-slide); ported for forward-compat with bd-buwhvpc2.
+  _(Out of scope, plugin/other-strand territory: per-slide footers,
+  `data-footer="false"` overrides, runtime relocation, brand/object-form logos,
+  left/right footer regions for reveal.)_
 - [ ] **D3-Lua. User Lua filters in revealjs (own phase / strand — bd-ocxnva1f).** General goal:
-      Lua filters should work for reveal decks (the footer/logo slot design above
-      *enables* this, but end-to-end filter support may be harder than it looks).
-      Confirm `UserFiltersStage` runs filters for reveal and add a test exercising a
-      filter that manipulates footer/logo (or meta generally) on a reveal deck. Open
-      a strand; do NOT block D3 on it.
+  Lua filters should work for reveal decks (the footer/logo slot design above
+  *enables* this, but end-to-end filter support may be harder than it looks).
+  Confirm `UserFiltersStage` runs filters for reveal and add a test exercising a
+  filter that manipulates footer/logo (or meta generally) on a reveal deck. Open
+  a strand; do NOT block D3 on it.
 - [x] **D4. `auto-stretch` (new AST transform). DONE 2026-06-16 (this session).**
-      `RevealAutoStretchTransform` (`crates/quarto-core/src/revealjs/auto_stretch.rs`,
-      registered in the reveal branch after `RevealFootnotesTransform`) adds reveal's
-      core `.r-stretch` class to single-image slides. Default-on; `auto-stretch: false`
-      opt-out. Pure AST (no Quarto SCSS — `.r-stretch` is reveal-core).
-      **Scope matches Q1's `applyStretch`** (refined during D5 — the first cut was
-      over-conservative; the auto-stretch example's natural "heading + a sentence +
-      a diagram" slide didn't stretch, which Q1 does). Stretches when a slide holds
-      exactly ONE image (peripheral `.notes`/`.aside` aside), carries no `.aside`, and
-      that image sits in a *standalone* top-level block (a `Paragraph` whose only
-      inline is the image, or a `Figure`). Sibling blocks (heading, explanatory
-      paragraphs) are allowed — reveal sizes the image to the space they leave. An
-      image among inline text, nested in a `.column`/layout/fragment div, or a
-      multi-image slide is skipped. We do NOT do Q1's DOM hoisting (`<img>` → section
-      child + caption re-insert); Chrome E2E confirmed reveal sizes the nested
-      `<p><img class=r-stretch>` / figure image correctly without it. Opt-outs ported:
-      `.nostretch` on slide or image (image class consumed), `.absolute`, already
-      `.stretch`/`.r-stretch`, and explicit sizing (Q1 guards only `height`; we also
-      guard `width` — conservative). 14 unit tests + integration
-      `revealjs_auto_stretch_single_image_slides` (lone / amid-text / sized / inline /
-      opt-out). E2E: `q2 render` + Chrome confirmed the lone image fills the slide
-      (350px of an 816px container) while a `width=200` image stays small. Full verify
-      incl. WASM green.
-      _(Preview-parity caveat: the transform runs only in the `is_revealjs` branch,
-      which the `q2-slides` preview pseudo-format does not enter, so preview does not
-      auto-stretch. Same gap class as D3.)_
+  `RevealAutoStretchTransform` (`crates/quarto-core/src/revealjs/auto_stretch.rs`,
+  registered in the reveal branch after `RevealFootnotesTransform`) adds reveal's
+  core `.r-stretch` class to single-image slides. Default-on; `auto-stretch: false`
+  opt-out. Pure AST (no Quarto SCSS — `.r-stretch` is reveal-core).
+  **Scope matches Q1's `applyStretch`** (refined during D5 — the first cut was
+  over-conservative; the auto-stretch example's natural "heading + a sentence +
+  a diagram" slide didn't stretch, which Q1 does). Stretches when a slide holds
+  exactly ONE image (peripheral `.notes`/`.aside` aside), carries no `.aside`, and
+  that image sits in a *standalone* top-level block (a `Paragraph` whose only
+  inline is the image, or a `Figure`). Sibling blocks (heading, explanatory
+  paragraphs) are allowed — reveal sizes the image to the space they leave. An
+  image among inline text, nested in a `.column`/layout/fragment div, or a
+  multi-image slide is skipped. We do NOT do Q1's DOM hoisting (`<img>` → section
+  child + caption re-insert); Chrome E2E confirmed reveal sizes the nested
+  `<p><img class=r-stretch>` / figure image correctly without it. Opt-outs ported:
+  `.nostretch` on slide or image (image class consumed), `.absolute`, already
+  `.stretch`/`.r-stretch`, and explicit sizing (Q1 guards only `height`; we also
+  guard `width` — conservative). 14 unit tests + integration
+  `revealjs_auto_stretch_single_image_slides` (lone / amid-text / sized / inline /
+  opt-out). E2E: `q2 render` + Chrome confirmed the lone image fills the slide
+  (350px of an 816px container) while a `width=200` image stays small. Full verify
+  incl. WASM green.
+  _(Preview-parity caveat: the transform runs only in the `is_revealjs` branch,
+  which the `q2-slides` preview pseudo-format does not enter, so preview does not
+  auto-stretch. Same gap class as D3.)_
 - [x] **D5. Docs (partial — feature docs done; deep theming guide deferred).**
-      **DONE 2026-06-16 (this session)** for the agreed scope: documented theme
-      selection, footer/logo (D3), and auto-stretch (D4) in
-      `docs/presentations/revealjs/index.qmd`, each with prose + a minimal runnable
-      example (`examples/presentations/09-themes`, `10-footer-logo`, `11-auto-stretch`)
-      embedded via `.embed-example-iframe` (the established pattern). Registered the
-      three in `examples/manifest.yml` + the examples `README.md` table; fixed the
-      page's stale "themes/transitions not available" callout. Extended
-      `cargo xtask stage-doc-examples` to stage top-level **image** assets (so
-      image-using examples' logos/figures resolve in the embed). Prose written with
-      the reader-expectations methodology (Gopen & Swan). E2E: `q2 render docs/`
-      (165/166; the 1 error is a pre-existing broken link in `brand.qmd`, unrelated)
-      + Chrome confirmed the new sections render and the footer/logo demo iframe shows
-      the live deck with footer + logo. Full verify incl. WASM green.
-      **Deferred (separate page + own pass): the deep theming-variables guide**
-      (`$presentation-*`/`$body-*`, custom themes, `_brand.yml`, the `--r-*` runtime
-      escape hatch) + the "migrating a Quarto-1 revealjs theme to Q2" how-to. Per the
-      user, this goes on a dedicated `docs/presentations/revealjs/theming.qmd` page.
-      Open a doc strand for it.
+  **DONE 2026-06-16 (this session)** for the agreed scope: documented theme
+  selection, footer/logo (D3), and auto-stretch (D4) in
+  `docs/presentations/revealjs/index.qmd`, each with prose + a minimal runnable
+  example (`examples/presentations/09-themes`, `10-footer-logo`, `11-auto-stretch`)
+  embedded via `.embed-example-iframe` (the established pattern). Registered the
+  three in `examples/manifest.yml` + the examples `README.md` table; fixed the
+  page's stale "themes/transitions not available" callout. Extended
+  `cargo xtask stage-doc-examples` to stage top-level **image** assets (so
+  image-using examples\' logos/figures resolve in the embed). Prose written with
+  the reader-expectations methodology (Gopen & Swan). E2E: `q2 render docs/`
+  (165/166; the 1 error is a pre-existing broken link in `brand.qmd`, unrelated)
+  + Chrome confirmed the new sections render and the footer/logo demo iframe shows
+  the live deck with footer + logo. Full verify incl. WASM green.
+  **Deferred (separate page + own pass): the deep theming-variables guide**
+  (`$presentation-*`/`$body-*`, custom themes, `_brand.yml`, the `--r-*` runtime
+  escape hatch) + the "migrating a Quarto-1 revealjs theme to Q2" how-to. Per the
+  user, this goes on a dedicated `docs/presentations/revealjs/theming.qmd` page.
+  Open a doc strand for it.
 
 **Preview-parity caveat (carry to Stage E / a parity pass):** SCSS-only features
 (callouts, brand) render correctly via `q2 render` but NOT in the `q2-slides`

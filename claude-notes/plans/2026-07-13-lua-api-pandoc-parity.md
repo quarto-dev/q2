@@ -385,151 +385,151 @@ List noise is gone.
 ### Phase 0 — infrastructure spike (first steps)
 
 - [x] 0.1 Vendor pandoc-lua-marshal test suite + record upstream
-      commit; get the suite executing under pampa with a pass/fail
-      report. (Done 2026-07-13: vendored `test-{attr,inline,block}.lua`
-      @ c2dc4e11 into `crates/pampa/tests/lua-conformance/upstream/`;
-      no shim needed — hslua's `tasty.lua` is pure Lua and was
-      vendored verbatim @ 82c983a9. `prelude.lua` replicates the
-      upstream driver env: constructors as bare globals + enum
-      constants as strings. Refactored `filter.rs` to extract
-      `create_filter_environment()` so conformance runs against the
-      production filter environment; all 4048 pampa tests pass after
-      the refactor.)
+  commit; get the suite executing under pampa with a pass/fail
+  report. (Done 2026-07-13: vendored `test-{attr,inline,block}.lua`
+  @ c2dc4e11 into `crates/pampa/tests/lua-conformance/upstream/`;
+  no shim needed — hslua's `tasty.lua` is pure Lua and was
+  vendored verbatim @ 82c983a9. `prelude.lua` replicates the
+  upstream driver env: constructors as bare globals + enum
+  constants as strings. Refactored `filter.rs` to extract
+  `create_filter_environment()` so conformance runs against the
+  production filter environment; all 4048 pampa tests pass after
+  the refactor.)
 - [x] 0.2 Wire as `tests/integration/lua_conformance.rs` with
-      xfail list + ratchet (unexpected pass/fail both fail CI;
-      both directions verified by fault injection). Plain-text
-      `xfail.txt` (id `# comment` format), not toml — simpler and
-      diff-friendlier.
+  xfail list + ratchet (unexpected pass/fail both fail CI;
+  both directions verified by fault injection). Plain-text
+  `xfail.txt` (id `# comment` format), not toml — simpler and
+  diff-friendlier.
 - [x] 0.3 Initial xfail baseline committed: **133 cases, 11 pass,
-      122 xfail** (attr 4/18, inline 4/54, block 3/61). The xfail
-      file is the empirical catalog baseline. Scope per Decision 3:
-      inline/block/attr now, more files later.
+  122 xfail** (attr 4/18, inline 4/54, block 3/61). The xfail
+  file is the empirical catalog baseline. Scope per Decision 3:
+  inline/block/attr now, more files later.
 - [x] 0.4 Track-2 skeleton built (2026-07-13):
-      `tests/lua-conformance/differential/cases/<name>/{input.md,
-      filter.lua, oracle.json}`, `regen-oracles.sh` (refuses non-pinned
-      pandoc; pin in `ORACLE_VERSION` = 3.9.0.2), normalizer strips
-      q2 source extensions (`astContext`, node `s`/`a`,
-      api-version[3]), runner drives the **real pampa binary**
-      (`CARGO_BIN_EXE_pampa … -F … -t json`), xfail ratchet verified
-      by fault injection. Seeded with 8 cases — baseline 2 pass
-      (reassignment control, all-5-fuzzy-Div-forms guard), 6 xfail
-      each empirically confirming a catalog class: A1 (bare-string
-      return ignored), A2 (bare `'y'` dropped from returned table),
-      B1/B2 (both Pandoc attr shapes → empty attr), C1 (ListAttributes
-      discarded), D0 (in-place `:insert` discarded).
+  `tests/lua-conformance/differential/cases/<name>/{input.md,
+  filter.lua, oracle.json}`, `regen-oracles.sh` (refuses non-pinned
+  pandoc; pin in `ORACLE_VERSION` = 3.9.0.2), normalizer strips
+  q2 source extensions (`astContext`, node `s`/`a`,
+  api-version[3]), runner drives the **real pampa binary**
+  (`CARGO_BIN_EXE_pampa … -F … -t json`), xfail ratchet verified
+  by fault injection. Seeded with 8 cases — baseline 2 pass
+  (reassignment control, all-5-fuzzy-Div-forms guard), 6 xfail
+  each empirically confirming a catalog class: A1 (bare-string
+  return ignored), A2 (bare `'y'` dropped from returned table),
+  B1/B2 (both Pandoc attr shapes → empty attr), C1 (ListAttributes
+  discarded), D0 (in-place `:insert` discarded).
 
 ### Phase 1 — catalog consolidation
 
 - [x] 1.1 Structured catalog written:
-      `claude-notes/research/2026-07-13-lua-api-mismatch-catalog.md`
-      — 12 root-cause clusters covering all 128 baseline xfails, each
-      with evidence, class, disposition, and strand.
+  `claude-notes/research/2026-07-13-lua-api-mismatch-catalog.md`
+  — 12 root-cause clusters covering all 128 baseline xfails, each
+  with evidence, class, disposition, and strand.
 - [x] 1.2 Ten child strands filed under bd-grkrb9nj (see
-      `braid dep tree bd-grkrb9nj`): bd-55mb0rjz (E: __eq/tostring),
-      bd-23yvjfmm (A: filter returns), bd-tzwcof0n (B: attr shapes),
-      bd-hitjclzp (D0: content mutation; related bd-195t),
-      bd-0g2yp61w (D1: setters), bd-1fjtodu8 (E2: List module),
-      bd-sgfiiktn (C: missing constructors + misc peekers),
-      bd-0xghpvij (C1: OrderedList), bd-olz91r4v (G: metamethods),
-      bd-9p2686pc (H: error contract + divergence registry).
+  `braid dep tree bd-grkrb9nj`): bd-55mb0rjz (E: __eq/tostring),
+  bd-23yvjfmm (A: filter returns), bd-tzwcof0n (B: attr shapes),
+  bd-hitjclzp (D0: content mutation; related bd-195t),
+  bd-0g2yp61w (D1: setters), bd-1fjtodu8 (E2: List module),
+  bd-sgfiiktn (C: missing constructors + misc peekers),
+  bd-0xghpvij (C1: OrderedList), bd-olz91r4v (G: metamethods),
+  bd-9p2686pc (H: error contract + divergence registry).
 - [ ] 1.3 Review disposition decisions with Carlos. Only one
-      genuinely open call: catalog cluster 12 (upstream tests
-      pattern-match pandoc's error *strings*; proposed: keep q2's
-      richer messages, register as permanent divergence). Everything
-      else is "match Pandoc" per Decision 1.
+  genuinely open call: catalog cluster 12 (upstream tests
+  pattern-match pandoc's error *strings*; proposed: keep q2's
+  richer messages, register as permanent divergence). Everything
+  else is "match Pandoc" per Decision 1.
 
 ### Phase 2 — high-impact fixes (order by silent-error severity)
 
 - [x] 2.0 (pulled forward per Carlos, 2026-07-13) bd-55mb0rjz:
-      element/list `__eq` + Haskell-show `tostring`
-      (`crates/pampa/src/lua/show.rs`; formats probed against pandoc
-      3.9.0.2; structural equality ignores source info via the JSON
-      writer's source-free serialization). Track-1 xfail 122 → 64,
-      zero new failures; e2e verified against the real pandoc binary.
+  element/list `__eq` + Haskell-show `tostring`
+  (`crates/pampa/src/lua/show.rs`; formats probed against pandoc
+  3.9.0.2; structural equality ignores source info via the JSON
+  writer's source-free serialization). Track-1 xfail 122 → 64,
+  zero new failures; e2e verified against the real pandoc binary.
 - [x] 2.1 Class D0: content-mutation persistence — DONE 2026-07-13
-      (bd-hitjclzp closed). hslua-style `PropertyCache` on
-      LuaInline/LuaBlock (types.rs): cacheable properties (`content`,
-      `citations`, `caption`) alias the same Lua table across reads;
-      every marshal-out path (fuzzy peekers, FromLua, all six
-      filter-return handlers, shortcode extraction, clone/walk/
-      __pairs/__eq/__tostring) flushes the cache back through
-      set_field first. Added the missing set_field arms flush needs:
-      BulletList/OrderedList/DefinitionList/LineBlock `content`,
-      Figure/Table `caption` (part of D1). 9 new integration tests
-      (test_lua_content_mutation.rs) incl. nil-return-discards and
-      aliasing; worked example verified byte-identical to pandoc
-      through the real binary. Track-1 xfail 64 → 60; differential
-      5 → 4 (content-insert-inplace passes). bd-195t residue noted:
-      `classes:insert` still detached (bd-tzwcof0n).
+  (bd-hitjclzp closed). hslua-style `PropertyCache` on
+  LuaInline/LuaBlock (types.rs): cacheable properties (`content`,
+  `citations`, `caption`) alias the same Lua table across reads;
+  every marshal-out path (fuzzy peekers, FromLua, all six
+  filter-return handlers, shortcode extraction, clone/walk/
+  __pairs/__eq/__tostring) flushes the cache back through
+  set_field first. Added the missing set_field arms flush needs:
+  BulletList/OrderedList/DefinitionList/LineBlock `content`,
+  Figure/Table `caption` (part of D1). 9 new integration tests
+  (test_lua_content_mutation.rs) incl. nil-return-discards and
+  aliasing; worked example verified byte-identical to pandoc
+  through the real binary. Track-1 xfail 64 → 60; differential
+  5 → 4 (content-insert-inplace passes). bd-195t residue noted:
+  `classes:insert` still detached (bd-tzwcof0n).
 - [x] 2.2 Class A: filter-return values through fuzzy peekers — DONE
-      2026-07-13 (bd-23yvjfmm closed). All six filter.rs return
-      handlers (element + list + the four `*_with_control`) now route
-      non-nil returns through `peek_inlines_fuzzy`/`peek_blocks_fuzzy`;
-      the two ad-hoc typewise list-splice sites (`apply_inlines_filter`,
-      `walk_blocks_straight`) delegate to shared `handle_inlines_return`
-      / `handle_blocks_return`. Contract oracle-probed against pandoc
-      3.9.0.2 (probes P1–P13): bare string → word-split (Plain-wrapped
-      for block positions); table → element-wise coercion (string entry
-      → single Str, NO word-split; number/nested-table entry → error);
-      single Inline userdata from a Block filter → Plain-wrapped;
-      number/boolean returns → error (pandoc errors too; ours names the
-      filter function + got-type; Q-coding later under bd-9p2686pc).
-      Invariants kept: nil → keep original, empty table → delete,
-      second return `false` → stop traversal. A3 audit: shortcode.rs
-      `classify_table_result` fixed the same way (inlines-first, then
-      blocks classification via the peekers); dead
-      `extract_lua_{inlines,blocks}_from_table` helpers deleted;
-      doc-level filter gap (Pandoc/Doc collected but never invoked, no
-      Meta) filed as bd-a9g50za2. Differential 8 → **15/15 passing, 0
-      xfail** (7 new oracle cases); Track-1 unchanged (cluster was
-      Track-2-only, as predicted). E2e: `pampa doc.md -F f.lua -t html`
-      byte-identical to pandoc for A1/A2 cases; `return 5` exits 1 with
-      the actionable message.
+  2026-07-13 (bd-23yvjfmm closed). All six filter.rs return
+  handlers (element + list + the four `*_with_control`) now route
+  non-nil returns through `peek_inlines_fuzzy`/`peek_blocks_fuzzy`;
+  the two ad-hoc typewise list-splice sites (`apply_inlines_filter`,
+  `walk_blocks_straight`) delegate to shared `handle_inlines_return`
+  / `handle_blocks_return`. Contract oracle-probed against pandoc
+  3.9.0.2 (probes P1–P13): bare string → word-split (Plain-wrapped
+  for block positions); table → element-wise coercion (string entry
+  → single Str, NO word-split; number/nested-table entry → error);
+  single Inline userdata from a Block filter → Plain-wrapped;
+  number/boolean returns → error (pandoc errors too; ours names the
+  filter function + got-type; Q-coding later under bd-9p2686pc).
+  Invariants kept: nil → keep original, empty table → delete,
+  second return `false` → stop traversal. A3 audit: shortcode.rs
+  `classify_table_result` fixed the same way (inlines-first, then
+  blocks classification via the peekers); dead
+  `extract_lua_{inlines,blocks}_from_table` helpers deleted;
+  doc-level filter gap (Pandoc/Doc collected but never invoked, no
+  Meta) filed as bd-a9g50za2. Differential 8 → **15/15 passing, 0
+  xfail** (7 new oracle cases); Track-1 unchanged (cluster was
+  Track-2-only, as predicted). E2e: `pampa doc.md -F f.lua -t html`
+  byte-identical to pandoc for A1/A2 cases; `return 5` exits 1 with
+  the actionable message.
 - [x] 2.3 Class B — DONE 2026-07-13 (bd-tzwcof0n closed): `parse_attr`
-      accepts every Pandoc shape (positional triple, HTML-like map
-      with class splitting, list-of-pairs / map / AttributeList
-      attributes) plus the kept q2 named-key form, with loud errors
-      for rejects; `pandoc.Attr` dispatches on its first argument like
-      mkAttr; new `pandoc.AttributeList` constructor; AttributeList
-      proxy gained integer pair indexing (read/replace/delete) and
-      `__eq`; `attr.classes`/element `.classes` now return pandoc-List
-      tables with cache+readback persistence (also completes bd-195t:
-      `cb.attr.classes:insert` persists, verified byte-identical to
-      pandoc e2e). LuaAttr refactored enum→struct with its own
-      PropertyCache; elements cache the `attr` userdata (aliased
-      reads, recursive flush). Track-1 xfail 60 → 43; differential
-      4 → 2 (both attr cases match the oracle).
+  accepts every Pandoc shape (positional triple, HTML-like map
+  with class splitting, list-of-pairs / map / AttributeList
+  attributes) plus the kept q2 named-key form, with loud errors
+  for rejects; `pandoc.Attr` dispatches on its first argument like
+  mkAttr; new `pandoc.AttributeList` constructor; AttributeList
+  proxy gained integer pair indexing (read/replace/delete) and
+  `__eq`; `attr.classes`/element `.classes` now return pandoc-List
+  tables with cache+readback persistence (also completes bd-195t:
+  `cb.attr.classes:insert` persists, verified byte-identical to
+  pandoc e2e). LuaAttr refactored enum→struct with its own
+  PropertyCache; elements cache the `attr` userdata (aliased
+  reads, recursive flush). Track-1 xfail 60 → 43; differential
+  4 → 2 (both attr cases match the oracle).
 - [x] 2.4 C1: OrderedList listAttributes honored (bd-0xghpvij closed
-      2026-07-13; first ratchet burn-down — differential xfail 6→5).
+  2026-07-13; first ratchet burn-down — differential xfail 6→5).
 - [x] 2.5 Class D1 remainder — DONE 2026-07-13 (bd-0g2yp61w closed).
-      Element `attr` assignment now re-runs `parse_attr` (Pandoc's
-      assignment-re-runs-the-peeker rule): bare string → identifier,
-      positional triple, HTML-like map, Attr/AttributeList userdata
-      (flushed) — `lua_value_to_attr` delegates to `parse_attr`
-      instead of its weaker ad-hoc parser. Added the missing
-      `quoted.quotetype` and `math.mathtype` setters with eager loud
-      validation. Track-1 xfail 30 → **25** (5 flips: Header/Span/
-      Code attr, quotetype, mathtype; zero new failures);
-      differential 22 → **23/23** (new case setter-repeek-attr-enums).
-      E2e: HTML identical to pandoc for all five behaviors through
-      the real binary. D2 was completed by bd-tzwcof0n/bd-hitjclzp;
-      D3 (inapplicable-property semantics) folded into bd-9p2686pc's
-      error-contract work.
+  Element `attr` assignment now re-runs `parse_attr` (Pandoc's
+  assignment-re-runs-the-peeker rule): bare string → identifier,
+  positional triple, HTML-like map, Attr/AttributeList userdata
+  (flushed) — `lua_value_to_attr` delegates to `parse_attr`
+  instead of its weaker ad-hoc parser. Added the missing
+  `quoted.quotetype` and `math.mathtype` setters with eager loud
+  validation. Track-1 xfail 30 → **25** (5 flips: Header/Span/
+  Code attr, quotetype, mathtype; zero new failures);
+  differential 22 → **23/23** (new case setter-repeek-attr-enums).
+  E2e: HTML identical to pandoc for all five behaviors through
+  the real binary. D2 was completed by bd-tzwcof0n/bd-hitjclzp;
+  D3 (inapplicable-property semantics) folded into bd-9p2686pc's
+  error-contract work.
 - [x] 2.6 Class E2 (pulled forward per priority order): pandoc.List
-      module parity — DONE 2026-07-13 (bd-1fjtodu8 closed). The List
-      module table now carries its own metatable with `__call`
-      (hslua-list semantics, oracle-probed: `List(t)`/`List{…}` attach
-      the metatable IN PLACE and return the same table; `List()` makes
-      an empty list; non-table arg → "table expected, got X" error).
-      Removed the stray `__call` field from the instance metatable —
-      list instances are NOT callable in pandoc. `Inlines:clone` /
-      `Blocks:clone` are now deep (fresh userdata per entry, flushing
-      property caches; generic `List:clone` stays shallow, also
-      oracle-confirmed). Track-1 xfail 43 → **35** (8 flipped: 5
-      BulletList-content tests, both deep-clone tests, 1 AttributeList
-      test); differential 15 → **17/17** (new cases
-      list-module-callable, list-clone-deep). E2e byte-identical to
-      pandoc through the real binary.
+  module parity — DONE 2026-07-13 (bd-1fjtodu8 closed). The List
+  module table now carries its own metatable with `__call`
+  (hslua-list semantics, oracle-probed: `List(t)`/`List{…}` attach
+  the metatable IN PLACE and return the same table; `List()` makes
+  an empty list; non-table arg → "table expected, got X" error).
+  Removed the stray `__call` field from the instance metatable —
+  list instances are NOT callable in pandoc. `Inlines:clone` /
+  `Blocks:clone` are now deep (fresh userdata per entry, flushing
+  property caches; generic `List:clone` stays shallow, also
+  oracle-confirmed). Track-1 xfail 43 → **35** (8 flipped: 5
+  BulletList-content tests, both deep-clone tests, 1 AttributeList
+  test); differential 15 → **17/17** (new cases
+  list-module-callable, list-clone-deep). E2e byte-identical to
+  pandoc through the real binary.
 
 ### Phase 2b — walk semantics (bd-2j048yfm, in progress 2026-07-13)
 
@@ -551,127 +551,127 @@ over any q2 test that pinned self-inclusive `elem:walk`. If such a
 test exists and breaks, STOP and show it before deleting/updating.
 
 - [x] W1. Failing-test inventory: 6 Rust integration tests in
-      `tests/integration/test_lua_walk.rs` (subtree rule inline+block,
-      no synthetic singleton list, Note descent, typewise order,
-      `i:walk(filter), false` no-overflow), all failing pre-fix.
+  `tests/integration/test_lua_walk.rs` (subtree rule inline+block,
+  no synthetic singleton list, Note descent, typewise order,
+  `i:walk(filter), false` no-overflow), all failing pre-fix.
 - [x] W2–W5. DONE as one coherent rewrite (2026-07-13): new module
-      `crates/pampa/src/lua/walk.rs` mirrors pandoc-lua-marshal — the
-      AST children map is written ONCE (`walk_{inline,block}_children`,
-      generic over a `LuaWalker` trait), with `TypewisePass` (four
-      sequential bottom-up passes, splicing children-before-element)
-      and `TopdownWalk` (single pre-order traversal; list fn → element
-      fn → children of the *replaced* elements; element-level `false`
-      skips children, list-level `false` halts the list) built on it.
-      Entry points: element roots start at the children map (subtree
-      rule — kills the C-stack overflow); list roots offer the top
-      list to `Inlines`/`Blocks`. The old \~900 lines of four drifting
-      hand-rolled recursions in filter.rs (which skipped Table /
-      DefinitionList / Figure-caption inline content and Citation
-      prefix/suffix entirely) were deleted; `apply_typewise_filter` /
-      `apply_topdown_filter` / types.rs walk entry points now delegate.
-      Also fixed by the unified children map: block filters now reach
-      Table cell/caption content in every pass. One pre-existing test
-      updated per Carlos's normative call (see below):
-      `test_elem_walk_typewise_traversal_order` pinned the synthetic
-      `[Div]` wrapper-list `Blocks` visit; expectation changed to the
-      pandoc contract (single `Blocks` for `Div.content`).
+  `crates/pampa/src/lua/walk.rs` mirrors pandoc-lua-marshal — the
+  AST children map is written ONCE (`walk_{inline,block}_children`,
+  generic over a `LuaWalker` trait), with `TypewisePass` (four
+  sequential bottom-up passes, splicing children-before-element)
+  and `TopdownWalk` (single pre-order traversal; list fn → element
+  fn → children of the *replaced* elements; element-level `false`
+  skips children, list-level `false` halts the list) built on it.
+  Entry points: element roots start at the children map (subtree
+  rule — kills the C-stack overflow); list roots offer the top
+  list to `Inlines`/`Blocks`. The old \~900 lines of four drifting
+  hand-rolled recursions in filter.rs (which skipped Table /
+  DefinitionList / Figure-caption inline content and Citation
+  prefix/suffix entirely) were deleted; `apply_typewise_filter` /
+  `apply_topdown_filter` / types.rs walk entry points now delegate.
+  Also fixed by the unified children map: block filters now reach
+  Table cell/caption content in every pass. One pre-existing test
+  updated per Carlos's normative call (see below):
+  `test_elem_walk_typewise_traversal_order` pinned the synthetic
+  `[Div]` wrapper-list `Blocks` visit; expectation changed to the
+  pandoc contract (single `Blocks` for `Div.content`).
 - [x] W6. Scoreboard: Track-1 xfail 35 → **23** (all 12 walk xfails
-      flipped, zero new failures); differential 17 → **19/19** (new
-      cases walk-elem-subtree, walk-topdown-truncate). Full pampa
-      suite 4100/4100; e2e byte-identical to pandoc incl. the
-      truncation subtlety. `cargo xtask verify` run before commit.
+  flipped, zero new failures); differential 17 → **19/19** (new
+  cases walk-elem-subtree, walk-topdown-truncate). Full pampa
+  suite 4100/4100; e2e byte-identical to pandoc incl. the
+  truncation subtlety. `cargo xtask verify` run before commit.
 
 ### Phase 2c — missing constructors + userdata-ness (bd-sgfiiktn, in progress 2026-07-13)
 
 - [x] S0. Grow Track-1 coverage (Decision 3's "later" is now): vendored
-      the remaining 7 upstream files (test-{citation,listattributes,
-      metavalue,pandoc,simpletable,table,cell}.lua @ the same
-      c2dc4e11 commit); runner gained per-file case-count floors.
-      Corpus 133 → **203 cases; baseline 122 pass / 81 xfail** —
-      the 58 new xfails are the empirical spec for this strand:
-      Citation/ListAttributes as plain tables (18), Cell/TableBody
-      not property-indexable + no walk (21), pandoc.Pandoc/Meta*
-      missing (17), SimpleTable missing (2).
+  the remaining 7 upstream files (test-{citation,listattributes,
+  metavalue,pandoc,simpletable,table,cell}.lua @ the same
+  c2dc4e11 commit); runner gained per-file case-count floors.
+  Corpus 133 → **203 cases; baseline 122 pass / 81 xfail** —
+  the 58 new xfails are the empirical spec for this strand:
+  Citation/ListAttributes as plain tables (18), Cell/TableBody
+  not property-indexable + no walk (21), pandoc.Pandoc/Meta*
+  missing (17), SimpleTable missing (2).
 - [x] S1. Citation as userdata + Cite peekers — DONE 2026-07-13.
-      New `LuaCitation` (types.rs): Rc<RefCell<Citation>> cell +
-      PropertyCache on the Inlines-valued `prefix`/`suffix` (aliased
-      reads, `:insert` persists), eager typed setters (id/mode/
-      prefix/suffix/note_num/hash), structural `__eq` via the
-      source-free JSON compare (wrapped in a synthetic Cite),
-      `__tostring` via show_citation, deep `:clone`.
-      `pandoc.Citation` validates id/mode eagerly (loud error on a
-      garbage mode — pandoc defers the same error to marshal-out;
-      timing-only divergence, noted for the bd-9p2686pc registry).
-      **`pandoc.Cite` argument order flipped to Pandoc's
-      `(content, citations)`** (mkCite is `flip Cite`; comment
-      c-inqf5qlb); citations peeker is strict `peekList peekCitation`
-      ("table expected, got Citation" / "Citation expected, got X").
-      `cite.citations` reads as an aliased pandoc-List of Citation
-      userdata (cache+readback; in-place `c.mode = …` and
-      `citations:insert` persist). CitationMode constants added to
-      the conformance prelude (upstream registerConstants parity).
-      Differential normalizer now strips q2's `citationIdS` source
-      extension. 4 q2 test sites updated to the flipped Cite order.
-      Track-1 xfail 81 → **72** (all 7 test-citation + 2 Cite
-      test-inline xfails flipped, zero new failures); differential
-      19 → **20/20** (new case cite-construct-userdata). E2e:
-      normalized JSON byte-identical to pandoc 3.9.0.2; HTML matches.
+  New `LuaCitation` (types.rs): Rc<RefCell<Citation>> cell +
+  PropertyCache on the Inlines-valued `prefix`/`suffix` (aliased
+  reads, `:insert` persists), eager typed setters (id/mode/
+  prefix/suffix/note_num/hash), structural `__eq` via the
+  source-free JSON compare (wrapped in a synthetic Cite),
+  `__tostring` via show_citation, deep `:clone`.
+  `pandoc.Citation` validates id/mode eagerly (loud error on a
+  garbage mode — pandoc defers the same error to marshal-out;
+  timing-only divergence, noted for the bd-9p2686pc registry).
+  **`pandoc.Cite` argument order flipped to Pandoc's
+  `(content, citations)`** (mkCite is `flip Cite`; comment
+  c-inqf5qlb); citations peeker is strict `peekList peekCitation`
+  ("table expected, got Citation" / "Citation expected, got X").
+  `cite.citations` reads as an aliased pandoc-List of Citation
+  userdata (cache+readback; in-place `c.mode = …` and
+  `citations:insert` persist). CitationMode constants added to
+  the conformance prelude (upstream registerConstants parity).
+  Differential normalizer now strips q2's `citationIdS` source
+  extension. 4 q2 test sites updated to the flipped Cite order.
+  Track-1 xfail 81 → **72** (all 7 test-citation + 2 Cite
+  test-inline xfails flipped, zero new failures); differential
+  19 → **20/20** (new case cite-construct-userdata). E2e:
+  normalized JSON byte-identical to pandoc 3.9.0.2; HTML matches.
 - [x] S2. ListAttributes as userdata + OrderedList aliases — DONE
-      2026-07-13. `LuaListAttributes` rebuilt as typed userdata
-      (Rc<RefCell<triple>> cell, start/style/delimiter properties
-      with eager validated setters, structural `__eq`, `:clone`; no
-      `__tostring` — pandoc has none either). `pandoc.ListAttributes`
-      returns userdata with Pandoc defaults; garbage style/delim is a
-      loud error (old code silently defaulted). `parse_list_attributes`
-      matches `peekListAttributes`: userdata or FULL positional
-      triple; a partial triple (`{3}`) errors like pandoc's
-      peekTriple; garbage anywhere errors. OrderedList gained
-      `listAttributes` (cached userdata — aliased reads, nested
-      mutation persists via flush) and `delimiter`; `start`/`style`/
-      `delimiter` are true hslua-style aliases that read/write
-      THROUGH the cached listAttributes value (including the pandoc
-      quirk that a raw-triple assignment makes aliases read nil until
-      flush re-peeks — oracle-probed). Track-1 xfail 72 → **59**
-      (11 test-listattributes + 2 test-block flips, zero new
-      failures); differential 20 → **21/21** (new case
-      orderedlist-la-userdata-mutation pins in-place style mutation +
-      alias writes: (7, UpperRoman, TwoParens)). E2e: JSON
-      byte-identical to pandoc 3.9.0.2, HTML `<ol start="7"
-      type="I">` matches.
+  2026-07-13. `LuaListAttributes` rebuilt as typed userdata
+  (Rc<RefCell<triple>> cell, start/style/delimiter properties
+  with eager validated setters, structural `__eq`, `:clone`; no
+  `__tostring` — pandoc has none either). `pandoc.ListAttributes`
+  returns userdata with Pandoc defaults; garbage style/delim is a
+  loud error (old code silently defaulted). `parse_list_attributes`
+  matches `peekListAttributes`: userdata or FULL positional
+  triple; a partial triple (`{3}`) errors like pandoc's
+  peekTriple; garbage anywhere errors. OrderedList gained
+  `listAttributes` (cached userdata — aliased reads, nested
+  mutation persists via flush) and `delimiter`; `start`/`style`/
+  `delimiter` are true hslua-style aliases that read/write
+  THROUGH the cached listAttributes value (including the pandoc
+  quirk that a raw-triple assignment makes aliases read nil until
+  flush re-peeks — oracle-probed). Track-1 xfail 72 → **59**
+  (11 test-listattributes + 2 test-block flips, zero new
+  failures); differential 20 → **21/21** (new case
+  orderedlist-la-userdata-mutation pins in-place style mutation +
+  alias writes: (7, UpperRoman, TwoParens)). E2e: JSON
+  byte-identical to pandoc 3.9.0.2, HTML `<ol start="7"
+  type="I">` matches.
 - [x] S3. Cell/Row/TableHead/TableFoot/TableBody + Caption — DONE
-      2026-07-13. All six table-part wrappers rebuilt as cache-backed
-      userdata (Rc<RefCell<T>> + PropertyCache, shared
-      `table_part_userdata!` skeleton in constructors.rs): typed
-      properties with eager validated setters, attr +
-      identifier/classes/attributes aliases routed through a cached
-      LuaAttr handle (nested `cell.attributes.k = v` persists),
-      structural `__eq` via synthetic-Table source-free JSON compare,
-      Haskell-show `__tostring`, deep `:clone`, and `Cell:walk`/
-      `Row:walk` via new walk.rs entry points (typewise_cell/row,
-      topdown_cell/row on the existing LuaWalker children map).
-      Fuzzy peekers match pandoc: `peekRowFuzzy` ({attr,cells} pair
-      or bare cell list), `peekCellFuzzy` (named contents/content or
-      bare blocks), strict loud errors elsewhere (non-table row/cell
-      lists, garbage alignments — previously silent defaults).
-      **Two more Pandoc arg-order fixes**: `pandoc.TableBody(body,
-      head, row_head_columns, attr)` (q2 had attr second) and
-      `pandoc.Caption(long, short)` (q2 had short first). Caption is
-      now typed userdata; Table gained head/foot/bodies/colspecs
-      round-trips (cached, nested mutation persists incl. the raw
-      colspecs pairs table); Table bodies accepts a single TableBody;
-      caption accepts bare block lists; Image gained the `caption`
-      alias for content. Version-skew note: pandoc 3.9.0.2 exports
-      neither pandoc.TableBody nor Cell:clone — the contract is
-      pandoc-lua-marshal @ c2dc4e11 (the vendored suite); the
-      differential case only uses binary-supported behaviors.
-      Track-1 xfail 59 → **30** (21 S3a flips + 8 S3b flips, zero new
-      failures; test-cell and test-table now 15/15 and 12/12);
-      differential 21 → **22/22** (new case
-      table-parts-nested-mutation; normalizer strips the `…S`
-      source-info companions on tagged nodes). E2e: normalized JSON
-      byte-identical to pandoc 3.9.0.2 through the real binary; HTML
-      shows all four nested mutations (caption, colspec alignment,
-      head cell, body cell).
+  2026-07-13. All six table-part wrappers rebuilt as cache-backed
+  userdata (Rc<RefCell<T>> + PropertyCache, shared
+  `table_part_userdata!` skeleton in constructors.rs): typed
+  properties with eager validated setters, attr +
+  identifier/classes/attributes aliases routed through a cached
+  LuaAttr handle (nested `cell.attributes.k = v` persists),
+  structural `__eq` via synthetic-Table source-free JSON compare,
+  Haskell-show `__tostring`, deep `:clone`, and `Cell:walk`/
+  `Row:walk` via new walk.rs entry points (typewise_cell/row,
+  topdown_cell/row on the existing LuaWalker children map).
+  Fuzzy peekers match pandoc: `peekRowFuzzy` ({attr,cells} pair
+  or bare cell list), `peekCellFuzzy` (named contents/content or
+  bare blocks), strict loud errors elsewhere (non-table row/cell
+  lists, garbage alignments — previously silent defaults).
+  **Two more Pandoc arg-order fixes**: `pandoc.TableBody(body,
+  head, row_head_columns, attr)` (q2 had attr second) and
+  `pandoc.Caption(long, short)` (q2 had short first). Caption is
+  now typed userdata; Table gained head/foot/bodies/colspecs
+  round-trips (cached, nested mutation persists incl. the raw
+  colspecs pairs table); Table bodies accepts a single TableBody;
+  caption accepts bare block lists; Image gained the `caption`
+  alias for content. Version-skew note: pandoc 3.9.0.2 exports
+  neither pandoc.TableBody nor Cell:clone — the contract is
+  pandoc-lua-marshal @ c2dc4e11 (the vendored suite); the
+  differential case only uses binary-supported behaviors.
+  Track-1 xfail 59 → **30** (21 S3a flips + 8 S3b flips, zero new
+  failures; test-cell and test-table now 15/15 and 12/12);
+  differential 21 → **22/22** (new case
+  table-parts-nested-mutation; normalizer strips the `…S`
+  source-info companions on tagged nodes). E2e: normalized JSON
+  byte-identical to pandoc 3.9.0.2 through the real binary; HTML
+  shows all four nested mutations (caption, colspec alignment,
+  head cell, body cell).
 - [x] S4/S5 split into their own strands (Carlos, 2026-07-13):
       bd-sgfiiktn's remaining scope moved out; S0–S3 complete.
   - S4 → **bd-2llqjsms**: pandoc.Pandoc + pandoc.Meta* (needs the
@@ -686,75 +686,75 @@ test exists and breaks, STOP and show it before deleting/updating.
 ### Phase 2d — small parity strands (2026-07-13, second session)
 
 - [x] Class G (bd-olz91r4v closed): `__toinline`/`__toblock`
-      metamethod hooks consulted by all four fuzzy peekers
-      (`call_element_metamethod` + `peek_{inline,block}_via_metamethod`
-      in types.rs), with hslua's recoverable-failure semantics: hook
-      absent / non-function metafield / call error / wrong return
-      type all fall through to normal coercion (pinned by the
-      "ignored" upstream tests). Ordering mirrors the Haskell:
-      inline tables try the hook first; block singletons try the
-      hook before list interpretation; strict element peeks come
-      before hooks on userdata. Since bd-23yvjfmm routed all filter
-      returns through these peekers, the hooks work in returns and
-      constructor args alike. Track-1 xfail 25 → **21** (all 4
-      metamethod tests); differential 23 → **24/24** (new case
-      toinline-toblock-hooks). E2e byte-identical to pandoc 3.9.0.2.
+  metamethod hooks consulted by all four fuzzy peekers
+  (`call_element_metamethod` + `peek_{inline,block}_via_metamethod`
+  in types.rs), with hslua's recoverable-failure semantics: hook
+  absent / non-function metafield / call error / wrong return
+  type all fall through to normal coercion (pinned by the
+  "ignored" upstream tests). Ordering mirrors the Haskell:
+  inline tables try the hook first; block singletons try the
+  hook before list interpretation; strict element peeks come
+  before hooks on userdata. Since bd-23yvjfmm routed all filter
+  returns through these peekers, the hooks work in returns and
+  constructor args alike. Track-1 xfail 25 → **21** (all 4
+  metamethod tests); differential 23 → **24/24** (new case
+  toinline-toblock-hooks). E2e byte-identical to pandoc 3.9.0.2.
 - [x] S5 (bd-d4wd6r3i closed 2026-07-14): SimpleTable deliberate
-      divergence shipped per Decision 6. `pandoc.SimpleTable` +
-      `pandoc.utils.to_simple_table`/`from_simple_table` (added as
-      stubs — they didn't exist) all raise the shared **Q-11-2**
-      error (`simpletable_divergence_error` in constructors.rs;
-      catalog entry in quarto-error-catalog) pointing at
-      `pandoc.Table`. Seeded the divergence registry at
-      `crates/pampa/tests/lua-conformance/divergences.md` — first
-      entry SimpleTable; bd-9p2686pc should extend this file (and
-      formalize the `# DIVERGENCE` xfail marker, today a comment
-      convention) rather than invent a parallel mechanism. The 2
-      test-simpletable.lua xfails are now permanent `# DIVERGENCE`
-      entries (Track-1 stays 21 xfail — 2 of them permanent; 182
-      pass). New integration tests: test_simpletable_constructor_ /
-      test_utils_{to,from}_simple_table_raises_divergence_error.
-      E2e: `q2 render` with a SimpleTable-calling filter fails with
-      the Q-11-2 message + filter stack traceback (both entry-point
-      shapes exercised through the real binary).
+  divergence shipped per Decision 6. `pandoc.SimpleTable` +
+  `pandoc.utils.to_simple_table`/`from_simple_table` (added as
+  stubs — they didn't exist) all raise the shared **Q-11-2**
+  error (`simpletable_divergence_error` in constructors.rs;
+  catalog entry in quarto-error-catalog) pointing at
+  `pandoc.Table`. Seeded the divergence registry at
+  `crates/pampa/tests/lua-conformance/divergences.md` — first
+  entry SimpleTable; bd-9p2686pc should extend this file (and
+  formalize the `# DIVERGENCE` xfail marker, today a comment
+  convention) rather than invent a parallel mechanism. The 2
+  test-simpletable.lua xfails are now permanent `# DIVERGENCE`
+  entries (Track-1 stays 21 xfail — 2 of them permanent; 182
+  pass). New integration tests: test_simpletable_constructor_ /
+  test_utils_{to,from}_simple_table_raises_divergence_error.
+  E2e: `q2 render` with a SimpleTable-calling filter fails with
+  the Q-11-2 message + filter stack traceback (both entry-point
+  shapes exercised through the real binary).
 - [x] Class H core (bd-9p2686pc closed 2026-07-14): marshaling error
-      contract + divergence-registry formalization. Decisions
-      (Carlos): Inlines/Blocks ERROR on nil/no-arg like pandoc (the
-      permissive empty-list read was ambiguous: nil = keep vs {} =
-      remove); granular Q-codes over a catch-all. Q-11-3 invalid
-      argument (`"<expected> expected, got <type>"`, hslua shape, via
-      `type_mismatch_error` in types.rs), Q-11-4 invalid filter
-      return (wraps the Q-11-3 detail without duplicating it),
-      Q-11-5 invalid property assignment (read-only tag / unknown
-      field) — adopted in the four fuzzy peekers, filter_return_error,
-      both element __newindex fallbacks, and the Inlines/Blocks
-      constructors. Ratchets: xfail parsing returns divergence flags;
-      a passing `# DIVERGENCE` entry is reported as a stale registry
-      entry; `divergence_xfails_are_registered` ties both xfail files
-      to divergences.md. The 2 upstream error-contract tests FLIPPED
-      (Track-1 184 pass / 19 xfail; differential stays 24/24). E2e:
-      all three Q-codes observed through `q2 render`. Remaining \~85
-      bare Error::runtime sites → Phase 3.3 rollout strand.
+  contract + divergence-registry formalization. Decisions
+  (Carlos): Inlines/Blocks ERROR on nil/no-arg like pandoc (the
+  permissive empty-list read was ambiguous: nil = keep vs {} =
+  remove); granular Q-codes over a catch-all. Q-11-3 invalid
+  argument (`"<expected> expected, got <type>"`, hslua shape, via
+  `type_mismatch_error` in types.rs), Q-11-4 invalid filter
+  return (wraps the Q-11-3 detail without duplicating it),
+  Q-11-5 invalid property assignment (read-only tag / unknown
+  field) — adopted in the four fuzzy peekers, filter_return_error,
+  both element __newindex fallbacks, and the Inlines/Blocks
+  constructors. Ratchets: xfail parsing returns divergence flags;
+  a passing `# DIVERGENCE` entry is reported as a stale registry
+  entry; `divergence_xfails_are_registered` ties both xfail files
+  to divergences.md. The 2 upstream error-contract tests FLIPPED
+  (Track-1 184 pass / 19 xfail; differential stays 24/24). E2e:
+  all three Q-codes observed through `q2 render`. Remaining \~85
+  bare Error::runtime sites → Phase 3.3 rollout strand.
 
 ### Phase 3 — breadth
 
 - [ ] 3.1 C2/C3: missing constructors; Citation/ListAttributes as
-      proper userdata.
+  proper userdata.
 - [ ] 3.2 Classes E, F, G per catalog priorities.
 - [x] 3.3 H2 error contract rollout across the marshaling layer —
-      contract + core adoption done (bd-9p2686pc: Q-11-3/4/5);
-      remaining bare Error::runtime sites in types.rs /
-      constructors.rs / list.rs swept onto Q-11-3/5 by
-      **bd-ixnp4uqj** (closed, commit f79fbf22). Stdlib/system shims
-      (readwrite/system/io_wasm/…) deliberately out of scope — not
-      the marshaling contract.
+  contract + core adoption done (bd-9p2686pc: Q-11-3/4/5);
+  remaining bare Error::runtime sites in types.rs /
+  constructors.rs / list.rs swept onto Q-11-3/5 by
+  **bd-ixnp4uqj** (closed, commit f79fbf22). Stdlib/system shims
+  (readwrite/system/io_wasm/…) deliberately out of scope — not
+  the marshaling contract.
 
 ### Phase 4 — steady state
 
 - [ ] 4.1 Divergence registry complete; docs/ page on Lua API
-      compatibility.
+  compatibility.
 - [ ] 4.2 Oracle-bump procedure documented (new pandoc release →
-      regenerate snapshots → triage diffs).
+  regenerate snapshots → triage diffs).
 
 ## Decisions (Carlos, 2026-07-13 review)
 

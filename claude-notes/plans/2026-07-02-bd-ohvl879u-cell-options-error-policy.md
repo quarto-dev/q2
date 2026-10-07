@@ -304,161 +304,161 @@ unchanged mechanism, not a redesign.
 ### Phase 1 — investigation + tests first (TDD)
 
 - [x] Decision-3 implementation questions settled (2026-07-02, probes in
-      the bd-gthycd33 worktree, deleted after):
-      * `_quarto.yml` `execute: error: true` **does** appear in the
-        capture's `input_qmd` front matter (observed directly) — the
-        engine sees fully merged metadata.
-      * `InterpretationContext::DocumentMetadata` for cell options
-        (booleans stay `Yaml::Boolean` in any context; markdown-bearing
-        string values match front-matter semantics).
-      * Bool read: `merged.get("error").and_then(|v| v.as_bool())` —
-        `ConfigValue::as_bool` (config_value.rs:652) matches
-        `Scalar(Yaml::Boolean)` only, which is what quarto-yaml produces
-        for `true`/`false`; not metadata-as-str-lint territory.
-      * Merge: follow the in-tree precedent
-        (`build_extension_metadata_layer`, metadata_merge.rs:109) —
-        `MergedConfig::new(vec![&lower, &higher])` + `.materialize()`;
-        **later layer wins**. (`merge_with_diagnostics` is a validating
-        wrapper around the same; use it for the diagnostics.)
+  the bd-gthycd33 worktree, deleted after):
+  * `_quarto.yml` `execute: error: true` **does** appear in the
+    capture's `input_qmd` front matter (observed directly) — the
+    engine sees fully merged metadata.
+  * `InterpretationContext::DocumentMetadata` for cell options
+    (booleans stay `Yaml::Boolean` in any context; markdown-bearing
+    string values match front-matter semantics).
+  * Bool read: `merged.get("error").and_then(|v| v.as_bool())` —
+    `ConfigValue::as_bool` (config_value.rs:652) matches
+    `Scalar(Yaml::Boolean)` only, which is what quarto-yaml produces
+    for `true`/`false`; not metadata-as-str-lint territory.
+  * Merge: follow the in-tree precedent
+    (`build_extension_metadata_layer`, metadata_merge.rs:109) —
+    `MergedConfig::new(vec![&lower, &higher])` + `.materialize()`;
+    **later layer wins**. (`merge_with_diagnostics` is a validating
+    wrapper around the same; use it for the diagnostics.)
 - [x] knitr's echoed `.cell-code` for a `#| error: true` cell contains
-      **only** `stop("boom")` — the directive line is stripped, and the
-      output is an embedded `::: {.cell-output .cell-output-error}` div
-      (observed directly). Jupyter must strip too; no discrepancy-log
-      entry needed.
+  **only** `stop("boom")` — the directive line is stripped, and the
+  output is an embedded `::: {.cell-output .cell-output-error}` div
+  (observed directly). Jupyter must strip too; no discrepancy-log
+  entry needed.
 - [x] Unit tests, registry (4 tests in `cell_options/mod.rs`): line-comment
-      languages incl. `⍝`, block-comment suffix languages, unknown → `#`,
-      case-insensitive lookup.
+  languages incl. `⍝`, block-comment suffix languages, unknown → `#`,
+  case-insensitive lookup.
 - [x] Unit tests, partition (12 tests): leading-run detection; no-options;
-      options-only; blank `#|` run ⇒ no options but still consumed;
-      marker spacing variants; indented marker rejected; block-scalar
-      reassembly; lua `--|` / js `//|` / c `/*|…*/` markers; wrong-language
-      marker rejected; suffix-less block-comment line rejected; malformed
-      YAML ⇒ `CellOptionsError::InvalidYaml`.
+  options-only; blank `#|` run ⇒ no options but still consumed;
+  marker spacing variants; indented marker rejected; block-scalar
+  reassembly; lua `--|` / js `//|` / c `/*|…*/` markers; wrong-language
+  marker rejected; suffix-less block-comment line rejected; malformed
+  YAML ⇒ `CellOptionsError::InvalidYaml`.
 - [x] Unit tests, source mapping (3 tests): `true` node maps to the byte of
-      `t` in the body (via `SourceContext` + `map_offset`, following
-      attribution_chain_resolution.rs); second-line option value maps;
-      `code_source` maps to the first code byte.
+  `t` in the body (via `SourceContext` + `map_offset`, following
+  attribution_chain_resolution.rs); second-line option value maps;
+  `code_source` maps to the first code byte.
 - [x] Engine decision logic is covered by the scoped-resolution unit tests
-      (the allow/deny ladder IS the merge) + the kernel-gated integration
-      assertions (kernel input / echo stripping observable only through a
-      real run — see below).
+  (the allow/deny ladder IS the merge) + the kernel-gated integration
+  assertions (kernel input / echo stripping observable only through a
+  real run — see below).
 - [x] Unit tests, scoped resolution (6 tests): the 4-case matrix + both
-      override directions + non-`error` keys don't grant + scope keys
-      survive the merge. **All 6 pass immediately** — `options_to_config`
-      (pampa `yaml_to_config_value`) and `merge_cell_over_scope`
-      (`MergedConfig::new` + `materialize`, later-layer-wins) are thin
-      compositions of existing infrastructure, which validates the
-      decision-3 design end to end before any engine code exists.
+  override directions + non-`error` keys don't grant + scope keys
+  survive the merge. **All 6 pass immediately** — `options_to_config`
+  (pampa `yaml_to_config_value`) and `merge_cell_over_scope`
+  (`MergedConfig::new` + `materialize`, later-layer-wins) are thin
+  compositions of existing infrastructure, which validates the
+  decision-3 design end to end before any engine code exists.
 - [x] Kernel-gated integration tests: `engine_error_policy.rs` (7 tests:
-      plain-error-fails, error-true-embeds-and-strips, doc-level allow,
-      cell-false-overrides-doc-true, failing-cell-stops-subsequent-cells,
-      malformed-options-fail, healthy-cells-unaffected) +
-      `parity_error_policy_behavior` in engine_output_parity.rs (both
-      engines must fail for un-annotated error). Also updated the stale
-      `parity_error_output` doc comment.
+  plain-error-fails, error-true-embeds-and-strips, doc-level allow,
+  cell-false-overrides-doc-true, failing-cell-stops-subsequent-cells,
+  malformed-options-fail, healthy-cells-unaffected) +
+  `parity_error_policy_behavior` in engine_output_parity.rs (both
+  engines must fail for un-annotated error). Also updated the stale
+  `parity_error_output` doc comment.
 - [x] Run everything; reds confirmed 2026-07-02: 15 registry/partition
-      unit tests fail on `todo!()` stubs; 6 scoped tests pass (see above);
-      7 integration tests fail for the expected reasons; 2 pass as
-      expected (`parity_error_output` shape — unchanged behavior — and
-      `document_execute_error_true_allows…`, vacuously green today since
-      jupyter never aborts; it becomes the over-aborting guard once the
-      policy lands).
+  unit tests fail on `todo!()` stubs; 6 scoped tests pass (see above);
+  7 integration tests fail for the expected reasons; 2 pass as
+  expected (`parity_error_output` shape — unchanged behavior — and
+  `document_execute_error_true_allows…`, vacuously green today since
+  jupyter never aborts; it becomes the over-aborting guard once the
+  policy lands).
 
 ### Phase 2 — implement the facility
 
 - [x] `crates/quarto-core/src/cell_options/mod.rs`: registry (Q1 table
-      ported, provenance comment, case-insensitive, unknown → `#`),
-      `option_content_ranges` matcher (prefix + ws + `|` + one optional
-      space, column-0 anchored; suffix languages require + elide the
-      terminator, their newline carried as its own piece),
-      `partition_cell_options` with `SourceInfo::concat` of per-line
-      substrings feeding `quarto_yaml::parse_with_parent`, plus
-      `options_to_config` / `merge_cell_over_scope` (decision-3 helpers)
-      and `CellOptionsError::location()`. Design win over the plan: for
-      prefix-only languages the content ranges run *through each line's
-      newline*, so every byte of the reassembled YAML is a real source
-      byte — no synthetic seams at all.
+  ported, provenance comment, case-insensitive, unknown → `#`),
+  `option_content_ranges` matcher (prefix + ws + `|` + one optional
+  space, column-0 anchored; suffix languages require + elide the
+  terminator, their newline carried as its own piece),
+  `partition_cell_options` with `SourceInfo::concat` of per-line
+  substrings feeding `quarto_yaml::parse_with_parent`, plus
+  `options_to_config` / `merge_cell_over_scope` (decision-3 helpers)
+  and `CellOptionsError::location()`. Design win over the plan: for
+  prefix-only languages the content ranges run *through each line's
+  newline*, so every byte of the reassembled YAML is a real source
+  byte — no synthetic seams at all.
 - [x] Module docs: contract + provenance + scoped-resolution rationale.
 - [x] All 28 unit tests green after implementation (registry 4,
-      partition 12, mapping 3, scoped 6, + error-path 3). ✅ 2026-07-02.
+  partition 12, mapping 3, scoped 6, + error-path 3). ✅ 2026-07-02.
 
 ### Phase 3 — wire the jupyter engine
 
 - [x] text_execute.rs rewired: per-cell `partition_cell_options`; kernel
-      input and echoed `.cell-code` fence use the **partitioned** code
-      (`render_cell`/`echoed_source_fence` now take `(language, code)`);
-      `document_execute_scope` extracts the front matter's `execute` map
-      once per document (parsed with a `Substring` parent over
-      `ctx.source_info`); `resolve_allow_errors` = decision-3 merge;
-      abort-on-disallowed-error via new `JupyterError::CellExecutionFailed`
-      (halts before any later cell runs); malformed options via new
-      `JupyterError::InvalidCellOptions`. **Location fidelity came out
-      better than planned**: `ExecutionContext` already carries
-      `source_info` (a `Concat` from `write_with_source_info` mapping
-      engine-input offsets back to the ORIGINAL files, through includes)
-      plus a shared `SourceContext` — so diagnostics render
-      `path:line:col` in original-file coordinates via `describe_location`,
-      and the plan's ephemeral-file fallback was never needed. (This
-      confirms the decision-4 note's framing: the infrastructure was
-      already there.)
+  input and echoed `.cell-code` fence use the **partitioned** code
+  (`render_cell`/`echoed_source_fence` now take `(language, code)`);
+  `document_execute_scope` extracts the front matter's `execute` map
+  once per document (parsed with a `Substring` parent over
+  `ctx.source_info`); `resolve_allow_errors` = decision-3 merge;
+  abort-on-disallowed-error via new `JupyterError::CellExecutionFailed`
+  (halts before any later cell runs); malformed options via new
+  `JupyterError::InvalidCellOptions`. **Location fidelity came out
+  better than planned**: `ExecutionContext` already carries
+  `source_info` (a `Concat` from `write_with_source_info` mapping
+  engine-input offsets back to the ORIGINAL files, through includes)
+  plus a shared `SourceContext` — so diagnostics render
+  `path:line:col` in original-file coordinates via `describe_location`,
+  and the plan's ephemeral-file fallback was never needed. (This
+  confirms the decision-4 note's framing: the infrastructure was
+  already there.)
 - [x] All Phase 1 tests green with real kernels ✅ 2026-07-02: 48 lib
-      tests (cell_options + text_execute), 15/15 engine integration tests
-      (7 error-policy + behavior-parity + all pre-existing fences —
-      splice pair, 5 shape-parity cases — unchanged).
+  tests (cell_options + text_execute), 15/15 engine integration tests
+  (7 error-policy + behavior-parity + all pre-existing fences —
+  splice pair, 5 shape-parity cases — unchanged).
 
 ### Phase 4 — regression sweep
 
 - [x] `cargo nextest run --workspace` ✅ **10217/10217 passed** (run twice:
-      before and after the clippy shape fixes; identical results,
-      2026-07-02). `cargo clippy -p quarto-core --all-targets` 0 warnings;
-      `cargo xtask lint` clean; `cargo fmt --check` clean.
+  before and after the clippy shape fixes; identical results,
+  2026-07-02). `cargo clippy -p quarto-core --all-targets` 0 warnings;
+  `cargo xtask lint` clean; `cargo fmt --check` clean.
 - [x] `cargo xtask verify` (full, WASM leg) ✅ "All verification steps
-      passed!" (2026-07-02, fresh-worktree npm install + cold WASM build).
+  passed!" (2026-07-02, fresh-worktree npm install + cold WASM build).
 - [x] Existing parity suite + splice pair still green (all 8 bd-gthycd33
-      fences pass unchanged; non-error-cell emission byte-identical).
+  fences pass unchanged; non-error-cell emission byte-identical).
 
 ### Phase 5 — end-to-end (per CLAUDE.md)
 
 - [x] CLI e2e through the real binary ✅ 2026-07-02 (worktree-built
-      `./target/debug/q2`, scratch fixtures; all outputs inspected):
-      * `q2 render fail.qmd` (plain `raise Exception("boom-e2e")`) ⇒
-        **exit 1** with:
-        `Error: Execution failed in jupyter: code cell at
-        …/fail.qmd:9:2 raised Exception: boom-e2e` + the
-        `Use `#| error: true` …` hint. Line 9 is exactly the `raise`
-        line **in the user's original file** — the `ExecutionContext`
-        source-map chain resolves through the serialized engine input
-        as designed (decision-4 note vindicated).
-      * `q2 render allowed.qmd` (`#| error: true`) ⇒ renders;
-        `allowed.html` contains `class="cell-output cell-output-error"`
-        and **zero** `#|` occurrences (directive stripped from echo).
-      * `q2 render doc-allowed.qmd` (front-matter `execute: error: true`,
-        un-annotated failing cell) ⇒ renders;
-        `<div class="cell-output cell-output-error">…<code>Exception:
-        boom-doc-allowed` present (decision-3 path end to end).
+  `./target/debug/q2`, scratch fixtures; all outputs inspected):
+  * `q2 render fail.qmd` (plain `raise Exception("boom-e2e")`) ⇒
+    **exit 1** with:
+    `Error: Execution failed in jupyter: code cell at
+    …/fail.qmd:9:2 raised Exception: boom-e2e` + the
+    `Use `#| error: true` …` hint. Line 9 is exactly the `raise`
+    line **in the user's original file** — the `ExecutionContext`
+    source-map chain resolves through the serialized engine input
+    as designed (decision-4 note vindicated).
+  * `q2 render allowed.qmd` (`#| error: true`) ⇒ renders;
+    `allowed.html` contains `class="cell-output cell-output-error"`
+    and **zero** `#|` occurrences (directive stripped from echo).
+  * `q2 render doc-allowed.qmd` (front-matter `execute: error: true`,
+    un-annotated failing cell) ⇒ renders;
+    `<div class="cell-output cell-output-error">…<code>Exception:
+    boom-doc-allowed` present (decision-3 path end to end).
 - [x] `q2 preview` spot-check ✅ (2026-07-02, after
-      `cargo xtask build-q2-preview-spa` + `cargo build --bin q2`):
-      healthy jupyter doc with a `#| echo: true` directive, inspected the
-      preview iframe DOM in a real Chrome tab — 1 `div.cell`, echoed
-      `.cell-code` text is exactly `2 + 3` (directive stripped through
-      the capture path too), output `5` spliced, no `#|` anywhere in the
-      rendered body.
+  `cargo xtask build-q2-preview-spa` + `cargo build --bin q2`):
+  healthy jupyter doc with a `#| echo: true` directive, inspected the
+  preview iframe DOM in a real Chrome tab — 1 `div.cell`, echoed
+  `.cell-code` text is exactly `2 + 3` (directive stripped through
+  the capture path too), output `5` spliced, no `#|` anywhere in the
+  rendered body.
 
 ### Phase 6 — close out
 
 - [ ] Update this plan with evidence; `braid close bd-ohvl879u`.
 - [x] Follow-up strands filed (all `discovered-from: bd-ohvl879u`):
-      **bd-eizgnxlx** crossref-shorthand migration (D7);
-      **bd-1gty7f7o** LSP `directive_tokens` reuse;
-      **bd-2xkpy5ra** body-only `SourceInfo` on `CodeBlock`;
-      **bd-moef1ec4** `eval` option (D2);
-      **bd-2lc8qu6e** port `guessChunkOptionsFormat` when a shared
-      consumer handles r cells.
-      The planned "re-express engine diagnostics in original-file
-      coordinates" follow-up was NOT filed — it turned out to already
-      work: `ExecutionContext.source_info` maps engine-input offsets to
-      original files, and the e2e diagnostic pointed at `fail.qmd:9:2`
-      out of the box.
+  **bd-eizgnxlx** crossref-shorthand migration (D7);
+  **bd-1gty7f7o** LSP `directive_tokens` reuse;
+  **bd-2xkpy5ra** body-only `SourceInfo` on `CodeBlock`;
+  **bd-moef1ec4** `eval` option (D2);
+  **bd-2lc8qu6e** port `guessChunkOptionsFormat` when a shared
+  consumer handles r cells.
+  The planned "re-express engine diagnostics in original-file
+  coordinates" follow-up was NOT filed — it turned out to already
+  work: `ExecutionContext.source_info` maps engine-input offsets to
+  original files, and the e2e diagnostic pointed at `fail.qmd:9:2`
+  out of the box.
 
 ## References
 

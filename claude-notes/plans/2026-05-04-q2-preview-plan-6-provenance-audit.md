@@ -254,8 +254,8 @@ with the correct provenance:
       `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
       through from call sites at lines 665 and 920, and use it as the
       Str's `source_info`. This is required to satisfy the
-      "Escaped-shortcode regression test" (line 453: "its source_info
-      stays Original (not Generated)") — without this fix, the
+      "Escaped-shortcode regression test" (line 453: \"its source_info
+      stays Original (not Generated)\") — without this fix, the
       regression test would fail on Plan 6's own implementation.
 - **`TitleBlockTransform`** (line 183-185): synthesizes a level-1 Header
   from `title:` metadata. Fix: emit `Generated { by: By::title_block(), from: smallvec![] }`

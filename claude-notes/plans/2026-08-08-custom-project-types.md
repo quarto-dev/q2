@@ -376,20 +376,20 @@ this plan before closing.
 
 ### Phase 1 — kill the silent fallback (standalone value) ✅ 2026-08-08
 - [x] Tests: unknown `project: type:` → error diagnostic; built-in
-      `book`/`manuscript` → "not yet supported" warning
-      (`tests/integration/project_type_parsing.rs`, 8 tests, written
-      first and observed failing)
+  `book`/`manuscript` → "not yet supported" warning
+  (`tests/integration/project_type_parsing.rs`, 8 tests, written
+  first and observed failing)
 - [x] Error-catalog entries — **Q-5-17** (Unknown Project Type, error)
-      and **Q-5-18** (Project Type Not Yet Implemented, warning); the
-      project subsystem is Q-5, not Q-16 as originally guessed. Wired
-      into `parse_config` via `extract_project_kind` /
-      `project_type_error`; Q-5-18 via `project_kind_diagnostics`,
-      printed next to the `underscore_typo_diagnostics` precedent in
-      `quarto/src/commands/render.rs` and `quarto-preview/src/lib.rs`.
+  and **Q-5-18** (Project Type Not Yet Implemented, warning); the
+  project subsystem is Q-5, not Q-16 as originally guessed. Wired
+  into `parse_config` via `extract_project_kind` /
+  `project_type_error`; Q-5-18 via `project_kind_diagnostics`,
+  printed next to the `underscore_typo_diagnostics` precedent in
+  `quarto/src/commands/render.rs` and `quarto-preview/src/lib.rs`.
 - [x] `q2 render` banner accuracy: banner still prints the parsed
-      kind; the Q-5-18 warning directly above it explains the
-      book→default behavior. Custom-name display (`posit-docs
-      (website)`) lands with Phase 3.
+  kind; the Q-5-18 warning directly above it explains the
+  book→default behavior. Custom-name display (`posit-docs
+  (website)`) lands with Phase 3.
 
 Phase 1 end-to-end evidence (2026-08-08, output inspected):
 
@@ -413,29 +413,29 @@ clean on quarto-core/quarto/quarto-preview.
 
 ### Phase 2 — project-scoped extension discovery (shared substrate) ✅ 2026-08-08
 - [x] Tests: discovery from project root `_extensions/` + embedded
-      built-ins at project-config time (4 unit tests in
-      `extension::discover`; subdirectory `_extensions/` deliberately
-      excluded at project scope)
+  built-ins at project-config time (4 unit tests in
+  `extension::discover`; subdirectory `_extensions/` deliberately
+  excluded at project scope)
 - [x] Reusable `discover_project_extensions(project_dir, builtin_dir,
-      runtime)`; `builtin_extensions_path` hoisted from
-      `stage/context.rs` to `extension::`; no change to per-document
-      discovery (commit e15f173c)
+  runtime)`; `builtin_extensions_path` hoisted from
+  `stage/context.rs` to `extension::`; no change to per-document
+  discovery (commit e15f173c)
 
 ### Phase 3 — resolution + merge (the core) ✅ 2026-08-08
 - [x] Tests: `tests/integration/custom_project_type.rs` (14 tests,
-      written first, observed failing) — resolution, user-wins /
-      concat merge, `!prefer`, render-glob concat, `detect` stripping,
-      Q-5-17 candidate listing, Q-16-7 base-type errors, Q-16-8
-      ambiguity, Q-16-9 missing base
+  written first, observed failing) — resolution, user-wins /
+  concat merge, `!prefer`, render-glob concat, `detect` stripping,
+  Q-5-17 candidate listing, Q-16-7 base-type errors, Q-16-8
+  ambiguity, Q-16-9 missing base
 - [x] `CustomProjectType` + `config_diagnostics` on `ProjectConfig`;
-      `resolve_project_type` / `resolve_custom_project_type` in
-      `parse_config`; `project_type_label()` drives the render banner
-      (`type: fancy-docs (website)`); config diagnostics printed at
-      the render + preview sites; catalog entries Q-16-7/8/9 and
-      updated Q-5-17
+  `resolve_project_type` / `resolve_custom_project_type` in
+  `parse_config`; `project_type_label()` drives the render banner
+  (`type: fancy-docs (website)`); config diagnostics printed at
+  the render + preview sites; catalog entries Q-16-7/8/9 and
+  updated Q-5-17
 - [x] Fragment validation: non-map fragment and non-string/chained/
-      book/manuscript base → Q-16-7 error; missing base → Q-16-9
-      warning + `default`
+  book/manuscript base → Q-16-7 error; missing base → Q-16-9
+  warning + `default`
 
 **Discovered (bd-43lc07w1, P1):** `quarto-yaml` 0.1.1 only captures
 YAML tags on *scalars* — `Event::SequenceStart`/`MappingStart` discard
@@ -464,23 +464,23 @@ Full workspace suite: 11,094 passed (1 ignored pending bd-43lc07w1).
 
 ### Phase 4 — path rebasing + real-world verification ✅ 2026-08-08
 - [x] Tests: 5 new rebasing tests in `custom_project_type.rs` (written
-      first, observed failing) — favicon/logo, theme map form with
-      builtin-name passthrough, css exists/missing/URL, user entries
-      untouched, pre-render script paths vs command lines
+  first, observed failing) — favicon/logo, theme map form with
+  builtin-name passthrough, css exists/missing/URL, user entries
+  untouched, pre-render script paths vs command lines
 - [x] Rebase implementation: `FRAGMENT_PATH_PATTERNS` +
-      `rebase_fragment_paths` in `project/mod.rs`. Key-path table
-      narrows *where*; an existence check under the extension dir
-      decides *whether* (builtin theme names, command lines, and
-      project-relative refs pass through). Rebased values become
-      `Path` kind so per-document merging keeps adjusting them.
-      Layer-2 gap confirmed real and pre-existing: format-extension
-      `contributes.formats.html.theme` silently drops bundled SCSS →
-      **bd-of20unsb** (P2, discovered-from).
+  `rebase_fragment_paths` in `project/mod.rs`. Key-path table
+  narrows *where*; an existence check under the extension dir
+  decides *whether* (builtin theme names, command lines, and
+  project-relative refs pass through). Rebased values become
+  `Path` kind so per-document merging keeps adjusting them.
+  Layer-2 gap confirmed real and pre-existing: format-extension
+  `contributes.formats.html.theme` silently drops bundled SCSS →
+  **bd-of20unsb** (P2, discovered-from).
 - [x] End-to-end (evidence below): fixture render with SCSS `@import`;
-      **real q2-connect-docs render** on a scratch copy
+  **real q2-connect-docs render** on a scratch copy
 - [x] Full `cargo xtask verify` (WASM leg) — passed 2026-08-08
-      (all 14 steps incl. hub-client/WASM build + tests; one strict-
-      clippy fix in a test: `sort` → `sort_unstable`)
+  (all 14 steps incl. hub-client/WASM build + tests; one strict-
+  clippy fix in a test: `sort` → `sort_unstable`)
 
 Phase 4 end-to-end evidence (2026-08-08, output inspected):
 
@@ -516,40 +516,40 @@ Full workspace suite: 11,099 passed.
 
 ### Phase 5 — `contributes.metadata` (absorbed bd-zb2tod5f) ✅ 2026-08-08
 - [x] Tests: 6 project-level integration tests
-      (`extension_metadata.rs`) + 4 doc-level unit tests in
-      `metadata_merge.rs` (written first, observed failing)
+  (`extension_metadata.rs`) + 4 doc-level unit tests in
+  `metadata_merge.rs` (written first, observed failing)
 - [x] Project-level merge (D6.1):
-      `apply_metadata_project_contributions` in `parse_config` —
-      applies from **all** discovered extensions (discovery now runs
-      once in `parse_config`, shared with type resolution), user wins,
-      bundled paths rebase via the Phase-4 machinery
+  `apply_metadata_project_contributions` in `parse_config` —
+  applies from **all** discovered extensions (discovery now runs
+  once in `parse_config`, shared with type resolution), user wins,
+  bundled paths rebase via the Phase-4 machinery
 - [x] Document-level layer (D6.2):
-      `build_metadata_contribution_layers` — non-`project` keys of
-      `contributes.metadata`, one layer per extension, format-
-      flattened, Path-kind values rebased ext→doc dir, inserted at
-      the **bottom** of the merge stack (below project config)
+  `build_metadata_contribution_layers` — non-`project` keys of
+  `contributes.metadata`, one layer per extension, format-
+  flattened, Path-kind values rebased ext→doc dir, inserted at
+  the **bottom** of the merge stack (below project config)
 - [x] End-to-end: real Connect docs copy with scripts enabled prints
-      `Running pre-render script:
-      \_extensions/posit-dev/quarto-openapi/openapi-to-markdown.ts` —
-      the contribution lands in project config and drives execution;
-      the script then fails on Deno-style imports under Node, which is
-      the separate `.ts`-runtime gap (bd-wch2dotq)
+  `Running pre-render script:
+  \_extensions/posit-dev/quarto-openapi/openapi-to-markdown.ts` —
+  the contribution lands in project config and drives execution;
+  the script then fails on Deno-style imports under Node, which is
+  the separate `.ts`-runtime gap (bd-wch2dotq)
 - [x] Close bd-zb2tod5f pointing here
 
 Full workspace suite: 11,109 passed.
 
 ### Phase 6 — docs + follow-ups ✅ 2026-08-08
 - [x] `docs/guides/authoring/extensions.qmd`: replaced `TBD.` with
-      user-facing sections on custom project types (usage, merge
-      rules incl. `!prefer`, bundled files, Q-5-17/Q-16-7 errors) and
-      metadata contributions. Verified: `q2 render docs/` — 188/188
-      files, no warnings attributed to the page.
+  user-facing sections on custom project types (usage, merge
+  rules incl. `!prefer`, bundled files, Q-5-17/Q-16-7 errors) and
+  metadata contributions. Verified: `q2 render docs/` — 188/188
+  files, no warnings attributed to the page.
 - [x] Follow-up strands filed: **bd-0dtv2nhe** (`detect` bootstrap,
-      P4), **bd-nmawh9vj** (`preview.serve`, P4), **bd-m1fzvpov**
-      (book/manuscript bases, P4, conceptually blocked on those base
-      types existing). Array-dedup parity: not filed — the Connect
-      docs testbed surfaced no duplicate-entry problems; revisit only
-      if one appears.
+  P4), **bd-nmawh9vj** (`preview.serve`, P4), **bd-m1fzvpov**
+  (book/manuscript bases, P4, conceptually blocked on those base
+  types existing). Array-dedup parity: not filed — the Connect
+  docs testbed surfaced no duplicate-entry problems; revisit only
+  if one appears.
 
 ## Design decisions (resolved 2026-08-08 with Carlos)
 

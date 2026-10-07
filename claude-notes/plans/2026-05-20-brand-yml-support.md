@@ -328,84 +328,84 @@ only is the schema validator's regex (already cross-platform in
 ### Phase 0: fixtures (no schema yet — see "Schema work — light-touch")
 
 - [x] One-shot copy `external-sources/quarto-cli/tests/docs/brand-yaml/`
-      into `crates/quarto-brand/tests/fixtures/brand-yaml/`
-      (kitchen-sink, monospace-colors, palette-colors at minimum).
-      These become tracked test data; the original copy in
-      external-sources is reference-only and never touched at build
-      or test time.
+  into `crates/quarto-brand/tests/fixtures/brand-yaml/`
+  (kitchen-sink, monospace-colors, palette-colors at minimum).
+  These become tracked test data; the original copy in
+  external-sources is reference-only and never touched at build
+  or test time.
 - [x] One-shot copy
-      `external-sources/quarto-cli/tests/smoke/use-brand/{basic,nested,multi-file}-brand/`
-      → `crates/quarto-brand/tests/fixtures/use-brand/`.
+  `external-sources/quarto-cli/tests/smoke/use-brand/{basic,nested,multi-file}-brand/`
+  → `crates/quarto-brand/tests/fixtures/use-brand/`.
 - [ ] (Deferred to Phase 4) Generate Q1 reference SCSS for each
-      fixture. Approach: rather than running TS Quarto once, port
-      Q1's `brandColorLayer` etc. by hand and write expected SCSS
-      by-construction. Q1 logic is deterministic and small enough to
-      port without a reference oracle; Phase 4 will commit expected
-      outputs derived from a careful read of Q1's `brand.ts`.
+  fixture. Approach: rather than running TS Quarto once, port
+  Q1's `brandColorLayer` etc. by hand and write expected SCSS
+  by-construction. Q1 logic is deterministic and small enough to
+  port without a reference oracle; Phase 4 will commit expected
+  outputs derived from a careful read of Q1's `brand.ts`.
 
 ### Phase 1: `quarto-brand` crate scaffolding (data model only)
 
 - [x] `cargo new --lib crates/quarto-brand`; add to workspace.
 - [x] Define types: `Brand`, `BrandColor`, `BrandTypography`,
-      `BrandLogo`, `BrandFont` (Google/Bunny/File/System variants),
-      `BrandRef`.
+  `BrandLogo`, `BrandFont` (Google/Bunny/File/System variants),
+  `BrandRef`.
 - [x] Tests for serde deserialization of all 6 committed fixtures
-      (kitchen-sink, monospace-colors, palette-colors, basic-brand,
-      multi-file-brand, nested-brand).
+  (kitchen-sink, monospace-colors, palette-colors, basic-brand,
+  multi-file-brand, nested-brand).
 - [x] **Tests first**: wrote `parse_kitchen_sink` against an empty
-      `Brand` type before filling in fields; iterated until green.
+  `Brand` type before filling in fields; iterated until green.
 - [x] Bonus: `unknown_top_level_key_is_rejected` regression test
-      confirms `deny_unknown_fields` is wired.
+  confirms `deny_unknown_fields` is wired.
 
 ### Phase 2: color resolution
 
 - [x] Port `Brand::getColor` — palette aliasing, named-theme-color
-      lookup, cycle detection (Q1's seen-set with 100-step cap).
+  lookup, cycle detection (Q1's seen-set with 100-step cap).
 - [x] Tests: palette alias, theme color → palette, cycle detection,
-      raw CSS color passthrough, multi-step aliasing, empty config,
-      quiet variant.
+  raw CSS color passthrough, multi-step aliasing, empty config,
+  quiet variant.
 
 ### Phase 3: typography + logo resolution
 
 - [x] Port `getFont` as `Brand::font_slot(name)`,
-      `effective_monospace_inline`, `effective_monospace_block` with
-      Q1's `{ ...monospace, ...monospace-inline }` spread semantics.
+  `effective_monospace_inline`, `effective_monospace_block` with
+  Q1's `{ ...monospace, ...monospace-inline }` spread semantics.
 - [x] Port `getLogo` (`Brand::logo`), `logo_image`, `resolvePath`
-      (`BrandLogoResource::with_path_relative_to`),
-      `getFavicon` (`Brand::favicon`).
-- [x] Tests: font slot lookup (base/headings/link/monospace/{inline,block}),
-      monospace merge semantics, logo path resolution relative to
-      brand file dir, external-URL passthrough, alt preservation.
+  (`BrandLogoResource::with_path_relative_to`),
+  `getFavicon` (`Brand::favicon`).
+- [x] Tests: font slot lookup (base/headings/link/monospace/\{inline,block\}),
+  monospace merge semantics, logo path resolution relative to
+  brand file dir, external-URL passthrough, alt preservation.
 
 ### Phase 4: SCSS layer generation in `quarto-sass`
 
 - [x] New module `crates/quarto-sass/src/brand_layer.rs`.
 - [x] Port `brandColorLayer`, `brandDefaultsBootstrapLayer`,
-      `brandTypographyLayer` as
-      `brand_to_layers(&Brand, font_path_prefix) -> Vec<SassLayer>`.
+  `brandTypographyLayer` as
+  `brand_to_layers(&Brand, font_path_prefix) -> Vec<SassLayer>`.
 - [x] **Tests first**: 14 string-search tests in
-      `tests/brand_layer_test.rs` verifying each layer's content.
+  `tests/brand_layer_test.rs` verifying each layer's content.
 - [x] Bonus: 6 compile-time parity tests in
-      `tests/brand_compile_test.rs` that flatten the layers and run
-      them through grass — guarantees the generated SCSS is
-      syntactically valid for every committed fixture.
+  `tests/brand_compile_test.rs` that flatten the layers and run
+  them through grass — guarantees the generated SCSS is
+  syntactically valid for every committed fixture.
 - [x] One intentional improvement over Q1: font-family values are
-      double-quoted (Q1 emits them bare, which is fragile for
-      multi-word names like "EB Garamond"). Documented in the module
-      docstring.
+  double-quoted (Q1 emits them bare, which is fragile for
+  multi-word names like "EB Garamond"). Documented in the module
+  docstring.
 - [x] Q1's `quarto-scss-analysis-annotation` comments are omitted (no
-      Q2 analyzer reads them); tracked as Phase 8 follow-up.
+  Q2 analyzer reads them); tracked as Phase 8 follow-up.
 
 ### Phase 5: `ThemeSpec` and `ThemeConfig` extensions
 
 - [x] Add `ThemeSpec::Brand` variant in `crates/quarto-sass/src/themes.rs`;
-      update `parse`, `is_*`, `as_*`, `Display`. `"brand"` parses to
-      `ThemeSpec::Brand`; preserve the path interpretation for
-      `"brand.scss"`.
+  update `parse`, `is_*`, `as_*`, `Display`. `"brand"` parses to
+  `ThemeSpec::Brand`; preserve the path interpretation for
+  `"brand.scss"`.
 - [x] Add `BrandRef` enum to `quarto-brand` (`Path(PathBuf)`,
-      `Inline(serde_yaml::Value)`).
+  `Inline(serde_yaml::Value)`).
 - [x] Extend `ThemeConfig` with `brand_ref: Option<BrandRef>` (pure,
-      no I/O).
+  no I/O).
 - [x] Extend `ThemeConfig::from_config_value` to read the `brand:`
       key:
   - String → `BrandRef::Path`.
@@ -415,36 +415,36 @@ only is the schema validator's regex (already cross-platform in
     `brand_ref` is `Some` and theme list doesn't already mention it.
 - [x] Hard error if `theme: [brand, ...]` but no `brand_ref`.
 - [x] Add `ResolvedThemeConfig` + sync `ThemeConfig::resolve(&dyn
-      SystemRuntime, base_dir)` that reads the brand file and
-      constructs the typed `Brand`. (Sync — `SystemRuntime::file_read`
-      is sync; matches the design's parity-with-hub-client
-      goal.)
+  SystemRuntime, base_dir)` that reads the brand file and
+  constructs the typed `Brand`. (Sync — `SystemRuntime::file_read`
+  is sync; matches the design's parity-with-hub-client
+  goal.)
 - [x] Tests: theme array with `brand` token, bare `brand:` key, both
-      together, neither, error cases — 12 tests in
-      `tests/brand_config_test.rs`.
+  together, neither, error cases — 12 tests in
+  `tests/brand_config_test.rs`.
 
 ### Phase 6: layer expansion + pipeline wiring
 
 - [x] Update `process_theme_specs` to expand `ThemeSpec::Brand` via
-      `brand_to_layers`, reading the brand from `ThemeContext`. The
-      brand-not-set case errors with a clear message.
+  `brand_to_layers`, reading the brand from `ThemeContext`. The
+  brand-not-set case errors with a clear message.
 - [x] `compile_theme_css` and `compile_with_doc_vars` keep their
-      signature (taking `&ThemeConfig`). The resolved brand flows
-      via `ThemeContext::with_brand`, so the existing entry points
-      get brand support for free.
+  signature (taking `&ThemeConfig`). The resolved brand flows
+  via `ThemeContext::with_brand`, so the existing entry points
+  get brand support for free.
 - [x] Update `CompileThemeCssStage::run` to call
-      `theme_config.resolve(runtime, project_dir)` and attach the
-      resulting `Brand` to `ThemeContext` via `with_brand`. All
-      brand I/O lives at this one site.
+  `theme_config.resolve(runtime, project_dir)` and attach the
+  resulting `Brand` to `ThemeContext` via `with_brand`. All
+  brand I/O lives at this one site.
 - [x] Update `cache_key` in
-      `crates/quarto-core/src/stage/stages/compile_theme_css.rs` to
-      hash the brand's YAML serialization (via
-      `theme_context.brand()`) so brand changes invalidate the
-      cache.
+  `crates/quarto-core/src/stage/stages/compile_theme_css.rs` to
+  hash the brand's YAML serialization (via
+  `theme_context.brand()`) so brand changes invalidate the
+  cache.
 - [x] `bootstrap_js.rs` `suppress_bootstrap` logic still works
-      correctly for brand-only projects: `from_config_value`
-      auto-injects `ThemeSpec::Brand` into the theme list, so
-      `suppress_bootstrap` stays `false` and Bootstrap JS ships.
+  correctly for brand-only projects: `from_config_value`
+  auto-injects `ThemeSpec::Brand` into the theme list, so
+  `suppress_bootstrap` stays `false` and Bootstrap JS ships.
 - [x] Full workspace tests pass (9290/9290).
 
 ### Phase 7: end-to-end testing
@@ -464,21 +464,21 @@ only is the schema validator's regex (already cross-platform in
     via the single-file render path. Filed as a follow-up; the
     project-level mode is the supported path for v1.
 - [x] Committed regression test at
-      `crates/quarto-core/tests/brand_render.rs` that drives
-      `render_to_file` against the first two cases above (project +
-      brand, brand-only). Catches the
-      `CompileThemeCssStage`-doesn't-fire incident pattern for
-      brand-yml.
+  `crates/quarto-core/tests/brand_render.rs` that drives
+  `render_to_file` against the first two cases above (project +
+  brand, brand-only). Catches the
+  `CompileThemeCssStage`-doesn't-fire incident pattern for
+  brand-yml.
 - [x] `cargo xtask verify --skip-hub-build` passes all steps
-      (9292/9292 tests + lint + scss-build).
+  (9292/9292 tests + lint + scss-build).
 - [ ] Browser verification in hub-client `q2 preview` — deferred
-      to a follow-up beads issue; the WASM build chain still needs
-      one final native-WASM resync, which is out of scope here.
+  to a follow-up beads issue; the WASM build chain still needs
+  one final native-WASM resync, which is out of scope here.
 
 ### Phase 8: docs + follow-ups
 
 - [x] User-facing docs page: `docs/guide/themes/brand.qmd`,
-      linked from `docs/guide/index.qmd`.
+  linked from `docs/guide/index.qmd`.
 - [x] File follow-up beads issues:
   - `bd-v5z8w` — Light/dark brand variant pairs.
   - `bd-1elkd` — Brand-aware favicon (related to `bd-97yc`).

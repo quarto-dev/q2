@@ -205,19 +205,19 @@ a phase so findings land as fixtures/strands rather than ad-hoc notes.
 - **Phase 4 — E2E verification.** Per the end-to-end verification policy:
   - [x] Real `q2 render` through the binary, output inspected:
 
-        ```
-        $ cargo run --bin q2 -- render \
-            claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd
-        $ grep -o 'https://cdn.jsdelivr.net/npm/katex[^"]*' math-katex.html | sort -u
-        https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/contrib/auto-render.min.js
-        https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.css
-        https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.js
-        ```
+    ```
+    $ cargo run --bin q2 -- render \
+        claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd
+    $ grep -o 'https://cdn.jsdelivr.net/npm/katex[^"]*' math-katex.html | sort -u
+    https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/contrib/auto-render.min.js
+    https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.css
+    https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.js
+    ```
 
-        All three emitted KaTeX URLs carry the exact pin; no `@latest`.
-        Fixture committed at
-        `claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd`
-        (generated outputs removed).
+    All three emitted KaTeX URLs carry the exact pin; no `@latest`.
+    Fixture committed at
+    `claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd`
+    (generated outputs removed).
   - [x] Full `cargo xtask verify` (hub build leg included — hub-client
         files changed): **all steps passed** (2026-06-10, branch
         `beads/bd-4b7f1hr7-q2-preview-audit-html`).

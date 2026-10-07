@@ -249,15 +249,15 @@ verification scaffolding next to the interface itself.
 TDD ordering: write the context test first, then implement.
 
 - [x] `src/auth/types.ts` declares `AuthProvider`,
-      `SignInButtonProps`, `SilentRenewalOpts` exactly as specified
-      above.
+  `SignInButtonProps`, `SilentRenewalOpts` exactly as specified
+  above.
 - [x] `src/auth/AuthProviderContext.tsx` provides `AuthProviderRoot` +
-      `useAuthProvider`.
+  `useAuthProvider`.
 - [x] `src/auth/MockAuthProvider.tsx` exposes `createMockAuthProvider()`
-      returning `{ provider, lastSilentRenewalOpts,
-      signInButtonClicks, lastLoginUri, signOutCalls, reset() }`.
-      The captured `lastSilentRenewalOpts` lets tests synchronously
-      trigger `onCredential` / `onError` to simulate IdP responses.
+  returning `{ provider, lastSilentRenewalOpts,
+  signInButtonClicks, lastLoginUri, signOutCalls, reset() }`.
+  The captured `lastSilentRenewalOpts` lets tests synchronously
+  trigger `onCredential` / `onError` to simulate IdP responses.
 - [x] `src/auth/AuthProviderContext.test.tsx` covers three cases:
   - `useAuthProvider returns null when no AuthProviderRoot is mounted`
   - `useAuthProvider returns the provided value inside AuthProviderRoot`
@@ -291,12 +291,12 @@ then implement.
   - `signOut() calls googleLogout()`
 
 - [x] `src/auth/GoogleAuthProvider.tsx` exports
-      `createGoogleAuthProvider(): AuthProvider` — no parameters.
-      `<GoogleOAuthProvider clientId={...}>` lives in `main.tsx`
-      (the wrap-once decision below), and GIS hooks/components read
-      `clientId` from React context. The factory therefore has no
-      use for it and does not produce its own provider scope. Future
-      config (scopes, prompt mode) can be added when actually needed.
+  `createGoogleAuthProvider(): AuthProvider` — no parameters.
+  `<GoogleOAuthProvider clientId={...}>` lives in `main.tsx`
+  (the wrap-once decision below), and GIS hooks/components read
+  `clientId` from React context. The factory therefore has no
+  use for it and does not produce its own provider scope. Future
+  config (scopes, prompt mode) can be added when actually needed.
 
 Implementation constraint: `useGoogleOneTapLogin` requires
 `<GoogleOAuthProvider>` in the React tree above it. The migration in
@@ -306,26 +306,26 @@ not moved inside `GoogleAuthProvider`.
 ### Phase 3 — Migrate `main.tsx`
 
 - [x] Construct the provider:
-      ```tsx
-      const authProvider = GOOGLE_CLIENT_ID ? createGoogleAuthProvider() : null;
-      ```
+  ```tsx
+  const authProvider = GOOGLE_CLIENT_ID ? createGoogleAuthProvider() : null;
+  ```
 - [x] Wrap the tree:
-      ```tsx
-      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || 'disabled'}>
-        <AuthProviderRoot provider={authProvider}>
-          {root}
-        </AuthProviderRoot>
-      </GoogleOAuthProvider>
-      ```
-      `<GoogleOAuthProvider>` remains the outermost wrap because
-      `useGoogleOneTapLogin` (called from
-      `GoogleAuthProvider.useSilentRenewal` in Phase 5) needs it in
-      tree.
+  ```tsx
+  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID || 'disabled'}>
+    <AuthProviderRoot provider={authProvider}>
+      {root}
+    </AuthProviderRoot>
+  </GoogleOAuthProvider>
+  ```
+  `<GoogleOAuthProvider>` remains the outermost wrap because
+  `useGoogleOneTapLogin` (called from
+  `GoogleAuthProvider.useSilentRenewal` in Phase 5) needs it in
+  tree.
 - [x] Unit-verify: full test suite green; `tsc` reports 0 errors in
-      `src/auth/` + `src/main.tsx`.
+  `src/auth/` + `src/main.tsx`.
 - [ ] **e2e/dev-server boot test punted to Phase 7.** `main.tsx` is
-      the entry point — changes here are only meaningfully validated
-      by booting the app. Phase 7 owns that walkthrough.
+  the entry point — changes here are only meaningfully validated
+  by booting the app. Phase 7 owns that walkthrough.
 
 ### Phase 4 — Migrate `LoginScreen.tsx`
 
@@ -343,19 +343,19 @@ not moved inside `GoogleAuthProvider`.
   - `renders the error copy when error={true}` — regression-guards
     the pre-existing `error` prop UI branch.
 - [x] Replaced the direct `<GoogleLogin>` JSX with
-      `{provider && <provider.SignInButton loginUri={...} />}`. The
-      surrounding modal chrome (logo, title, copy) is unchanged; only
-      the button itself moves behind the provider boundary.
+  `{provider && <provider.SignInButton loginUri={...} />}`. The
+  surrounding modal chrome (logo, title, copy) is unchanged; only
+  the button itself moves behind the provider boundary.
 - [x] Removed `import { GoogleLogin } from '@react-oauth/google'`.
 
 ### Phase 5 — Migrate `useAuth.ts`
 
 - [x] Renamed test file `src/hooks/useAuth.test.ts` →
-      `useAuth.test.tsx` because the `AuthProviderRoot` wrapper
-      requires JSX.
+  `useAuth.test.tsx` because the `AuthProviderRoot` wrapper
+  requires JSX.
 - [x] Replaced `vi.mock('@react-oauth/google', ...)` with a
       `MockAuthProvider` mounted via `AuthProviderRoot` in
-      `renderHook`'s `wrapper` option. The mechanical translations:
+      `renderHook`\'s `wrapper` option. The mechanical translations:
   - `oneTapCallbacks.onSuccess?.({ credential: 'foo' })` →
     `mockProvider.lastSilentRenewalOpts?.onCredential('foo')`
   - `oneTapCallbacks.onError?.()` →
@@ -447,20 +447,20 @@ removal.
 ### Phase 7 — Verification and dependency audit
 
 - [x] **`@react-oauth/google` production-import audit.** Grep
-      against `hub-client/src/` excluding `*.test.{ts,tsx}` returns
-      exactly:
-      ```
-      src/main.tsx
-      src/auth/GoogleAuthProvider.tsx
-      ```
-      Both are intended targets — `main.tsx` for the
-      `<GoogleOAuthProvider>` SDK wrap, `auth/GoogleAuthProvider.tsx`
-      for the wrapper. Test-file imports: only
-      `auth/GoogleAuthProvider.test.tsx` (mocking the lib to
-      unit-test the wrapper — appropriate).
-      `useAuth.test.tsx:5` mentions `@react-oauth/google` in a JSDoc
-      comment ("MockAuthProvider in place of `@react-oauth/google`")
-      — documentation, not coupling.
+  against `hub-client/src/` excluding `*.test.{ts,tsx}` returns
+  exactly:
+  ```
+  src/main.tsx
+  src/auth/GoogleAuthProvider.tsx
+  ```
+  Both are intended targets — `main.tsx` for the
+  `<GoogleOAuthProvider>` SDK wrap, `auth/GoogleAuthProvider.tsx`
+  for the wrapper. Test-file imports: only
+  `auth/GoogleAuthProvider.test.tsx` (mocking the lib to
+  unit-test the wrapper — appropriate).
+  `useAuth.test.tsx:5` mentions `@react-oauth/google` in a JSDoc
+  comment ("MockAuthProvider in place of `@react-oauth/google`")
+  — documentation, not coupling.
 - [x] **Test verify (this session).** `npm run test:ci` from
       `hub-client/` runs three suites, all green:
   - Unit (`vitest run`): **38 test files, 554 tests** passing.
@@ -525,7 +525,7 @@ removal.
      `useAuth` returns `auth=null` with no console errors; no
      login screen rendered. (Phase 1 null-provider path.)
 - [x] **Workspace verify:** not needed — no Rust changed.
-      `cargo xtask verify` is irrelevant to this refactor.
+  `cargo xtask verify` is irrelevant to this refactor.
 
 ### Phase 8 — Post-implementation simplification
 
@@ -582,7 +582,7 @@ Unit suite: 554 → 549. Integration and WASM unchanged.
 - The server endpoints `/auth/callback`, `/auth/refresh`, `/auth/me`,
   `/auth/logout`, `/auth/actor` are unchanged.
 - The cookie shape and validator are unchanged.
-- `useAuth`'s public API (`{ auth, loading, logout, triggerRefresh }`)
+- `useAuth`\'s public API (`{ auth, loading, logout, triggerRefresh }`)
   is unchanged; only its internal mechanism for silent renewal moves
   behind the interface.
 - The GIS One Tap silent-refresh behaviour is preserved.

@@ -308,98 +308,98 @@ incremental gating — scripts that care use the env var, exactly as in Q1.
 
 ### Phase 0 — design sign-off
 - [x] Resolve open questions 1–6 with Carlos; update this plan
-      (resolved 2026-07-29; see "Resolved design questions" above)
+  (resolved 2026-07-29; see "Resolved design questions" above)
 - [x] Explicit go-ahead from Carlos to begin execution (2026-07-31)
 
 ### Phase 1 — tests first (TDD)
 - [x] CLI e2e integration tests in
-      `crates/quarto/tests/integration/render_scripts_cli.rs` (14 tests;
-      verified failing before implementation, 13/14 red on 2026-07-31):
-      pre-render creates input; post-render OUTPUT_FILES; env contract
-      full vs subset; failing script aborts (exit code, stderr
-      pass-through, later scripts skipped); output-dir + type mutation
-      guards; string/list forms + ordering; explicit-interpreter command
-      line with quoted args; `--no-render-scripts`; escape hatch;
-      underscore typo warning; no-project render
+  `crates/quarto/tests/integration/render_scripts_cli.rs` (14 tests;
+  verified failing before implementation, 13/14 red on 2026-07-31):
+  pre-render creates input; post-render OUTPUT_FILES; env contract
+  full vs subset; failing script aborts (exit code, stderr
+  pass-through, later scripts skipped); output-dir + type mutation
+  guards; string/list forms + ordering; explicit-interpreter command
+  line with quoted args; `--no-render-scripts`; escape hatch;
+  underscore typo warning; no-project render
 - [x] Cross-platform fixture strategy: Python with graceful skip
-      (`require_python!`), `#[cfg(unix)]` shell + `#[cfg(windows)]`
-      batch variants for direct-exec
+  (`require_python!`), `#[cfg(unix)]` shell + `#[cfg(windows)]`
+  batch variants for direct-exec
 - [x] Unit tests for command-line parsing (quote handling), extraction,
-      typo guard, mutation guard, catalog registration (17 tests in
-      `render_scripts.rs`)
+  typo guard, mutation guard, catalog registration (17 tests in
+  `render_scripts.rs`)
 
 ### Phase 2 — config parsing
 - [x] `RenderScript` type with `source_info`; `ProjectConfig::pre_render_scripts`
-      / `post_render_scripts`; extraction in `parse_config`
-      (`crates/quarto-core/src/project/mod.rs`)
+  / `post_render_scripts`; extraction in `parse_config`
+  (`crates/quarto-core/src/project/mod.rs`)
 - [x] String-or-list normalization; underscore-typo diagnostic (Q-5-11,
-      emitted by `underscore_typo_diagnostics`, printed by the render
-      driver)
+  emitted by `underscore_typo_diagnostics`, printed by the render
+  driver)
 
 ### Phase 3 — script runner
 - [x] `crates/quarto-core/src/project/render_scripts.rs`: command-line
-      parser + config extraction (target-agnostic), exec half native-gated
-      (`#[cfg(not(target_arch = "wasm32"))] mod exec`); extension dispatch
-      (.py → QUARTO_PYTHON/python3, .r → knitr `find_rscript`, .ts/.js →
-      QUARTO_NODE/node, else direct exec resolved against project dir);
-      env assembly; catalog entries Q-5-8 (script failed), Q-5-9
-      (forbidden mutation), Q-5-10 (launch failure), Q-5-11 (typo)
+  parser + config extraction (target-agnostic), exec half native-gated
+  (`#[cfg(not(target_arch = "wasm32"))] mod exec`); extension dispatch
+  (.py → QUARTO_PYTHON/python3, .r → knitr `find_rscript`, .ts/.js →
+  QUARTO_NODE/node, else direct exec resolved against project dir);
+  env assembly; catalog entries Q-5-8 (script failed), Q-5-9
+  (forbidden mutation), Q-5-10 (launch failure), Q-5-11 (typo)
 - [x] `QUARTO_USE_FILE_FOR_PROJECT_{INPUT,OUTPUT}_FILES` escape hatch
 
 ### Phase 4 — driver wiring
 - [x] `execute_project` in `crates/quarto/src/commands/render.rs`:
-      discover → run pre-render → re-discover → mutation guard →
-      pipeline → post-render (fresh env from `summary.outputs`,
-      post-render only after a successful render, Q1-compatible).
-      `execute_single_doc` needs no wiring — `RenderTarget::SingleDoc`
-      only fires with no surrounding `_quarto.yml`, so no scripts exist.
+  discover → run pre-render → re-discover → mutation guard →
+  pipeline → post-render (fresh env from `summary.outputs`,
+  post-render only after a successful render, Q1-compatible).
+  `execute_single_doc` needs no wiring — `RenderTarget::SingleDoc`
+  only fires with no surrounding `_quarto.yml`, so no scripts exist.
 - [x] Same bracket in `crates/quarto/src/commands/publish.rs`
-      (`ProjectPublishRenderer::render`; post-render runs before the
-      sidecar walk so script-added output files get published)
+  (`ProjectPublishRenderer::render`; post-render runs before the
+  sidecar walk so script-added output files get published)
 - [x] `--no-render-scripts` flag on `q2 render`
 
 ### Phase 5 — preview + WASM
 - [x] Native preview: pre-render at boot only, inside the on-ready
-      spawn_blocking *before* `record_eager_captures` (scripts may
-      generate data the engines read); failure is reported but the
-      preview keeps serving. TDD test
-      `quarto-preview::integration render_scripts_boot` (verified red
-      first) also pins "no re-run on file change".
+  spawn_blocking *before* `record_eager_captures` (scripts may
+  generate data the engines read); failure is reported but the
+  preview keeps serving. TDD test
+  `quarto-preview::integration render_scripts_boot` (verified red
+  first) also pins "no re-run on file change".
 - [x] WASM/hub-client: one-time (AtomicBool) Q-5-12 warning pushed
-      into the `warnings` channel of
-      `render_project_active_page_to_response` when scripts are
-      configured
+  into the `warnings` channel of
+  `render_project_active_page_to_response` when scripts are
+  configured
 - [x] Full `cargo xtask verify` (WASM leg touched via quarto-core) —
-      all 14 steps green 2026-07-31 (first run flagged clippy
-      `map_unwrap_or` / unnested-or-patterns, fixed; second run
-      failed on a stale `node_modules` unrelated to this feature,
-      fixed with `npm install` from the repo root)
+  all 14 steps green 2026-07-31 (first run flagged clippy
+  `map_unwrap_or` / unnested-or-patterns, fixed; second run
+  failed on a stale `node_modules` unrelated to this feature,
+  fixed with `npm install` from the repo root)
 
 ### Phase 6 — verification + docs
 - [x] End-to-end verification per CLAUDE.md (2026-07-31, output
-      inspected): fixture with `pre-render: gen_news.py` (creates
-      `news.qmd` from `QUARTO_PROJECT_INPUT_FILES`) and
-      `post-render: python3 report.py --label "site build"`.
-      `q2 render` printed:
-      ```
-      Running pre-render script: gen_news.py
-      Rendering project: …/e2e-scripts (type: website)
-      Rendered 2 of 2 files to …/e2e-scripts/_site
-      Running post-render script: python3 report.py --label "site build"
-      ```
-      `_site/news.html` contains "Generated from 1 inputs.";
-      `report.txt` contains `label=site build`, `render_all=1`, and
-      both `_site/*.html` paths. A failing script produces the Q-5-8
-      ariadne diagnostic pointing at `_quarto.yml:4:15`
-      (`pre-render: gen_news.py`) with the exit status.
+  inspected): fixture with `pre-render: gen_news.py` (creates
+  `news.qmd` from `QUARTO_PROJECT_INPUT_FILES`) and
+  `post-render: python3 report.py --label "site build"`.
+  `q2 render` printed:
+  ```
+  Running pre-render script: gen_news.py
+  Rendering project: …/e2e-scripts (type: website)
+  Rendered 2 of 2 files to …/e2e-scripts/_site
+  Running post-render script: python3 report.py --label "site build"
+  ```
+  `_site/news.html` contains "Generated from 1 inputs.";
+  `report.txt` contains `label=site build`, `render_all=1`, and
+  both `_site/*.html` paths. A failing script produces the Q-5-8
+  ariadne diagnostic pointing at `_quarto.yml:4:15`
+  (`pre-render: gen_news.py`) with the exit status.
 - [x] User-facing docs page `docs/guides/projects/scripts.qmd`
-      (sidebar-linked; rendered cleanly with
-      `cargo run --bin q2 -- render docs/guides/projects/scripts.qmd`
-      after `cargo xtask stage-doc-examples`)
+  (sidebar-linked; rendered cleanly with
+  `cargo run --bin q2 -- render docs/guides/projects/scripts.qmd`
+  after `cargo xtask stage-doc-examples`)
 - [x] Close out: `cargo build --workspace` clean;
-      `cargo nextest run --workspace` 10806 passed / 0 failed;
-      `cargo xtask verify` all steps passed; `cargo xtask lint` clean
-      (all 2026-07-31)
+  `cargo nextest run --workspace` 10806 passed / 0 failed;
+  `cargo xtask verify` all steps passed; `cargo xtask lint` clean
+  (all 2026-07-31)
 
 ## Q1 → Q2 behavior differences (running list for docs)
 

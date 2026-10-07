@@ -837,208 +837,208 @@ regressions.
 
 ### Preparation
 - [x] Re-read `claude-notes/instructions/testing.md`, `coding.md`,
-      `review.md`.
+  `review.md`.
 - [x] Confirm user agreement with Decisions 1–10. **DONE
-      2026-04-24** — D2/D3/D4/D7/D9 revised mid-conversation
-      based on user feedback; user approved revisions.
+  2026-04-24** — D2/D3/D4/D7/D9 revised mid-conversation
+  based on user feedback; user approved revisions.
 - [x] Create `bd` issue `Phase 5 — Scoped artifact store +
-      site_libs/`, parent `bd-0tr6`, parent-child dependency
-      linked. (`bd-u5pr`.)
+  site_libs/`, parent `bd-0tr6`, parent-child dependency
+  linked. (`bd-u5pr`.)
 - [x] Commit directly on `feature/websites` (Phase 1/2/3/4
-      precedent).
+  precedent).
 
 ### Baseline capture (before any code change)
 - [x] Add single-doc fixture under
-      `crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/`
-      + `expected_hashes.txt` capturing the pre-refactor sha256s
-      (commit `7881178e`).
+  `crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/`
+  + `expected_hashes.txt` capturing the pre-refactor sha256s
+  (commit `7881178e`).
 - [x] Add website fixture
-      `crates/quarto-core/tests/fixtures/phase5-website-baseline/`
-      with `_quarto.yml` + 3 pages + `PRE_PHASE5_OUTPUT.md`
-      documenting the pre-/post-refactor layout shift.
+  `crates/quarto-core/tests/fixtures/phase5-website-baseline/`
+  with `_quarto.yml` + 3 pages + `PRE_PHASE5_OUTPUT.md`
+  documenting the pre-/post-refactor layout shift.
 
 ### Data model (`quarto-core/src/artifact.rs`)
 - [x] `pub enum ArtifactScope { Page, Project }` + `Default`.
 - [x] `Artifact.scope: ArtifactScope` field + `with_scope()`
-      builder.
+  builder.
 - [x] `ArtifactStore` helpers: `project_scoped_keys()`,
-      `page_scoped_keys()`, `drain_project_scoped() -> ArtifactStore`,
-      `merge_into_project(other) -> Result<MergeStats, ArtifactMergeConflict>`.
+  `page_scoped_keys()`, `drain_project_scoped() -> ArtifactStore`,
+  `merge_into_project(other) -> Result<MergeStats, ArtifactMergeConflict>`.
 - [x] Tests 1–3, 11–14 (all 7 passing).
 
 ### Resource resolver (`quarto-core/src/resource_resolver.rs` — NEW)
 - [x] `ResourceResolverContext` struct + `html_url_for` /
-      `on_disk_path_for` methods.
+  `on_disk_path_for` methods.
 - [x] `single_doc(output_path, stem)` convenience constructor.
 - [x] `website(site_root, page_output, lib_dir, page_stem)`
-      constructor.
+  constructor.
 - [x] **Bonus** `vfs_root(root)` constructor for the WASM
-      hub-client's synthetic-VFS-path convention (added during
-      task #13).
+  hub-client's synthetic-VFS-path convention (added during
+  task #13).
 - [x] Tests 4–10 + 2 vfs_root tests (11 passing).
 
 ### ProjectType extension (`quarto-core/src/project/orchestrator.rs`)
 - [x] Add `fn lib_dir(&self) -> String` to trait (Decision 4).
-      Owned `String` per D4 revision (so the future user-config
-      override doesn't churn the trait signature).
+  Owned `String` per D4 revision (so the future user-config
+  override doesn't churn the trait signature).
 - [x] `WebsiteProjectType::lib_dir` returns `"site_libs"`.
 - [x] `DefaultProjectType::lib_dir` returns `""`.
 - [x] Tests 15–16 (passing).
 
 ### Project artifact store ownership
 - [x] Add `project_artifacts: ArtifactStore` field on
-      `ProjectPipeline` (revised during implementation —
-      originally planned for `ProjectContext` but moved to the
-      orchestrator to keep `ProjectContext` immutable across
-      Pass-2 and avoid a 130-site mechanical refactor of struct
-      literals; matches D2's parallelism contract).
+  `ProjectPipeline` (revised during implementation —
+  originally planned for `ProjectContext` but moved to the
+  orchestrator to keep `ProjectContext` immutable across
+  Pass-2 and avoid a 130-site mechanical refactor of struct
+  literals; matches D2's parallelism contract).
 - [x] Drain from per-doc into project store in `pass_two`. The
-      per-doc `render_document_to_file` accepts an
-      `Option<&mut ArtifactStore>` argument: when `Some` AND the
-      project type has a non-empty `lib_dir()`, it merges drained
-      Project-scoped artifacts into the orchestrator's
-      accumulator; otherwise it flushes them via the resolver
-      (default-project / standalone-call paths).
+  per-doc `render_document_to_file` accepts an
+  `Option<&mut ArtifactStore>` argument: when `Some` AND the
+  project type has a non-empty `lib_dir()`, it merges drained
+  Project-scoped artifacts into the orchestrator's
+  accumulator; otherwise it flushes them via the resolver
+  (default-project / standalone-call paths).
 
 ### Producer flips
 - [x] `CompileThemeCssStage`: switch to fingerprinted key
-      `css:theme:<fingerprint>` (16-hex truncation of SHA-256
-      over the compiled CSS bytes), scope `Project`. Path is
-      `quarto/quarto-theme-<fingerprint>.css` for multi-doc
-      projects and bare `styles.css` for single-doc (per
-      Decision 10's byte-identity requirement).
+  `css:theme:<fingerprint>` (16-hex truncation of SHA-256
+  over the compiled CSS bytes), scope `Project`. Path is
+  `quarto/quarto-theme-<fingerprint>.css` for multi-doc
+  projects and bare `styles.css` for single-doc (per
+  Decision 10's byte-identity requirement).
 - [x] Hash function: SHA-256 (already a workspace dep via
-      `sha2`); 16 hex char truncation. No xxh3/blake3 needed.
+  `sha2`); 16 hex char truncation. No xxh3/blake3 needed.
 - [x] `store_html_dependencies`: scope `Project`, path
-      unchanged (`libs/<name>/<file>`). Keys retain the
-      `css:<name>:<file>` / `js:<name>:<file>` shape from
-      Phase 4 — Phase 5 didn't need to renamespace them since
-      they don't collide with theme keys.
+  unchanged (`libs/<name>/<file>`). Keys retain the
+  `css:<name>:<file>` / `js:<name>:<file>` shape from
+  Phase 4 — Phase 5 didn't need to renamespace them since
+  they don't collide with theme keys.
 - [x] `DEFAULT_CSS_ARTIFACT_PATH` constant — kept (still used
-      by hub-client's vfs_root resolver argument). Retiring it
-      entirely would force a hub-client convention break that
-      isn't worth Phase-5 scope.
+  by hub-client's vfs_root resolver argument). Retiring it
+  entirely would force a hub-client convention break that
+  isn't worth Phase-5 scope.
 
 ### Consumer flip (`ApplyTemplateStage`)
 - [x] Replaced `config.resource_prefix: String` /
-      `config.css_paths: Vec<String>` with
-      `config.resolver: Option<ResourceResolverContext>`.
+  `config.css_paths: Vec<String>` with
+  `config.resolver: Option<ResourceResolverContext>`.
 - [x] Iterate artifacts, call `resolver.html_url_for(artifact.scope,
-      path)` for each. No `css:default` skip — the only theme
-      CSS keys are `css:theme:*` and they flow through the same
-      resolver path.
+  path)` for each. No `css:default` skip — the only theme
+  CSS keys are `css:theme:*` and they flow through the same
+  resolver path.
 - [x] Sorted-key iteration so `<link>` / `<script>` order is
-      deterministic across runs.
+  deterministic across runs.
 
 ### Writer refactor (`render_to_file.rs`)
 - [x] Dropped the special-case write of `css:default` (subsumed
-      into the general artifact loop via `write_artifacts`).
+  into the general artifact loop via `write_artifacts`).
 - [x] Per-doc render writes only Page-scoped artifacts via the
-      resolver.
+  resolver.
 - [x] Project-scoped artifacts are drained out of the per-doc
-      store and either: (a) merged into the orchestrator's
-      accumulator (real multi-doc projects), or (b) flushed
-      in-place via the resolver (default project / standalone
-      call). Branch chosen by `project_type.lib_dir().is_empty()`.
+  store and either: (a) merged into the orchestrator's
+  accumulator (real multi-doc projects), or (b) flushed
+  in-place via the resolver (default project / standalone
+  call). Branch chosen by `project_type.lib_dir().is_empty()`.
 
 ### Orchestrator plumbing (`project/orchestrator.rs`)
 - [x] After each per-doc Pass-2 render, the orchestrator's
-      accumulator receives the drained store via
-      `render_document_to_file`\'s `Option<&mut ArtifactStore>`
-      parameter (cleaner than tuple-return; same effect).
+  accumulator receives the drained store via
+  `render_document_to_file`\'s `Option<&mut ArtifactStore>`
+  parameter (cleaner than tuple-return; same effect).
 - [x] Byte-mismatch produces an error naming the conflicting
-      key + lengths via `ArtifactMergeConflict`. The error
-      message is composed at the orchestrator boundary so the
-      user sees `"Project-scoped artifact merge failed for
-      <doc>: ..."`.
+  key + lengths via `ArtifactMergeConflict`. The error
+  message is composed at the orchestrator boundary so the
+  user sees `"Project-scoped artifact merge failed for
+  <doc>: ..."`.
 - [x] Sequential merge confirmed: no `Mutex`, no `Arc`, no
-      shared mutable state during Pass-2 — ready for future
-      rayon-per-worker (D2 contract holds).
+  shared mutable state during Pass-2 — ready for future
+  rayon-per-worker (D2 contract holds).
 
 ### Website post_render
 - [x] `WebsiteProjectType::post_render` walks
-      `project_artifacts`, writes each to
-      `{output_dir}/{lib_dir}/{artifact.path}` via
-      `SystemRuntime::file_write`. Sorted-key iteration so the
-      on-disk write order is deterministic.
+  `project_artifacts`, writes each to
+  `{output_dir}/{lib_dir}/{artifact.path}` via
+  `SystemRuntime::file_write`. Sorted-key iteration so the
+  on-disk write order is deterministic.
 - [x] `DefaultProjectType::post_render` stays no-op. The
-      branching in `render_document_to_file` (driven by
-      `lib_dir().is_empty()`) ensures Project-scoped artifacts
-      get flushed via the resolver per-doc when no shared lib
-      dir exists, so post_render has nothing to do for default
-      projects. (Confirmed by `single_doc_render_unchanged...`
-      regression test.)
+  branching in `render_document_to_file` (driven by
+  `lib_dir().is_empty()`) ensures Project-scoped artifacts
+  get flushed via the resolver per-doc when no shared lib
+  dir exists, so post_render has nothing to do for default
+  projects. (Confirmed by `single_doc_render_unchanged...`
+  regression test.)
 
 ### WASM / hub-client impact check
 - [x] Audited `crates/wasm-quarto-hub-client/src/lib.rs` (two
-      callsites of `render_qmd_to_html`) and
-      `hub-client/src/services/wasmRenderer.ts` (the only
-      JavaScript consumer of `/.quarto/project-artifacts/styles.css`).
+  callsites of `render_qmd_to_html`) and
+  `hub-client/src/services/wasmRenderer.ts` (the only
+  JavaScript consumer of `/.quarto/project-artifacts/styles.css`).
 - [x] Hub-client now constructs `ResourceResolverContext::vfs_root("/.quarto/project-artifacts")`
-      and passes it via `HtmlRenderConfig::with_resolver`. The
-      browser-side TypeScript continues to read from
-      `/.quarto/project-artifacts/styles.css` because the WASM
-      writer routes every artifact through the same resolver
-      (path-on-disk == URL-in-HTML).
+  and passes it via `HtmlRenderConfig::with_resolver`. The
+  browser-side TypeScript continues to read from
+  `/.quarto/project-artifacts/styles.css` because the WASM
+  writer routes every artifact through the same resolver
+  (path-on-disk == URL-in-HTML).
 - [x] `cargo xtask verify` full (Rust build + tests + fmt +
-      clippy + lint + hub-client build incl. WASM + hub-client
-      tests + trace-viewer build/tests) — all 9 steps green.
+  clippy + lint + hub-client build incl. WASM + hub-client
+  tests + trace-viewer build/tests) — all 9 steps green.
 
 ### Integration tests (`quarto-core/tests/artifact_scoping_pipeline.rs`)
 - [x] Tests 17, 18, 19b, 20, 21 written and passing on first
-      run. Test 19 (extension-dep dedup) deferred — needs an
-      extension fixture that emits `css:libs:*` artifacts;
-      shape covered by the producer flip + drain unit tests.
-      Tests 22 (byte-mismatch hard error) and 23 (empty
-      `{stem}_files/` cleanup) deferred to follow-ups (see
-      §"Follow-up beads").
+  run. Test 19 (extension-dep dedup) deferred — needs an
+  extension fixture that emits `css:libs:*` artifacts;
+  shape covered by the producer flip + drain unit tests.
+  Tests 22 (byte-mismatch hard error) and 23 (empty
+  `{stem}_files/` cleanup) deferred to follow-ups (see
+  §"Follow-up beads").
 
 ### CLI end-to-end + regression
 - [x] Single-doc smoke at `/tmp/q2-phase5-singledoc-test/`
-      against the captured baseline:
-      * `doc.html` sha256 = `7026c8c5...` ✓ (matches baseline)
-      * `doc_files/styles.css` sha256 = `3536a93e...` ✓ (matches
-        baseline)
+  against the captured baseline:
+  * `doc.html` sha256 = `7026c8c5...` ✓ (matches baseline)
+  * `doc_files/styles.css` sha256 = `3536a93e...` ✓ (matches
+    baseline)
 - [x] Website smoke at `/tmp/q2-phase5-website-test/`
-      (3-page fixture, root + 1 nested):
-      * Single shared `_site/site_libs/quarto/quarto-theme-3536a93eba680c9b.css`
-        (no per-page duplicates).
-      * `<link>` hrefs:
-        - `index.html` → `site_libs/quarto/quarto-theme-….css`
-        - `about.html` → `site_libs/quarto/quarto-theme-….css`
-        - `docs/api.html` → `../site_libs/quarto/quarto-theme-….css`
-        (correct relative depth)
+  (3-page fixture, root + 1 nested):
+  * Single shared `_site/site_libs/quarto/quarto-theme-3536a93eba680c9b.css`
+    (no per-page duplicates).
+  * `<link>` hrefs:
+    - `index.html` → `site_libs/quarto/quarto-theme-….css`
+    - `about.html` → `site_libs/quarto/quarto-theme-….css`
+    - `docs/api.html` → `../site_libs/quarto/quarto-theme-….css`
+    (correct relative depth)
 - [x] Regression smokes: Phase 2 (`/tmp/q2-phase2-smoke/`),
-      Phase 3 (`/tmp/q2-phase3-smoke/`), Phase 4
-      (`/tmp/q2-phase4-smoke/`) — sidebar / navbar / page-nav
-      output preserved; only the `<link>` href moved from
-      `<page>_files/styles.css` to
-      `site_libs/quarto/quarto-theme-….css`, exactly as
-      planned.
+  Phase 3 (`/tmp/q2-phase3-smoke/`), Phase 4
+  (`/tmp/q2-phase4-smoke/`) — sidebar / navbar / page-nav
+  output preserved; only the `<link>` href moved from
+  `<page>_files/styles.css` to
+  `site_libs/quarto/quarto-theme-….css`, exactly as
+  planned.
 
 ### Verification and close-out
 - [x] `cargo build --workspace` clean.
 - [x] `cargo nextest run --workspace` — **7827 tests pass** (up
-      from 7820 pre-Phase-5; net +7 from Phase-5 work).
+  from 7820 pre-Phase-5; net +7 from Phase-5 work).
 - [x] `cargo xtask lint` passes (part of `cargo xtask verify`).
 - [x] `cargo xtask verify` (full, incl. WASM) — all 9 steps
-      green.
+  green.
 - [x] No snapshot files added or modified.
 - [x] **Follow-ups filed** (each `discovered-from:bd-u5pr`):
-      * `bd-b9za` — Extension-dep `site_libs/` dedup
-        integration test (Phase-5 plan tests 19 / 22 deferred).
-      * `bd-78ud` — Empty `{stem}_files/` cleanup for pages
-        with no Page-scoped artifacts (Open question 5).
-      * `bd-apvo` — `project.lib-dir:` user-config override
-        (Decision 4 future-proofing pays off).
-      * `bd-vdl8` — Retire `DEFAULT_CSS_ARTIFACT_PATH` once
-        hub-client (Phase 9) moves off synthetic VFS paths.
+  * `bd-b9za` — Extension-dep `site_libs/` dedup
+    integration test (Phase-5 plan tests 19 / 22 deferred).
+  * `bd-78ud` — Empty `{stem}_files/` cleanup for pages
+    with no Page-scoped artifacts (Open question 5).
+  * `bd-apvo` — `project.lib-dir:` user-config override
+    (Decision 4 future-proofing pays off).
+  * `bd-vdl8` — Retire `DEFAULT_CSS_ARTIFACT_PATH` once
+    hub-client (Phase 9) moves off synthetic VFS paths.
 - [x] Updated the epic plan's "Work items" checklist —
-      Phase 5 marked done, sub-plan linked, `bd-u5pr`
-      referenced; follow-up beads logged in the running
-      report section.
+  Phase 5 marked done, sub-plan linked, `bd-u5pr`
+  referenced; follow-up beads logged in the running
+  report section.
 - [x] `br close bd-u5pr` with reason citing the commit
-      (commit hash to be filled in at commit time).
+  (commit hash to be filled in at commit time).
 - [ ] `br sync --flush-only && git add .beads/ && git commit`.
 - [ ] Ask user permission before pushing.
 
@@ -1095,7 +1095,7 @@ regressions.
   key and fail the byte-equality merge check. *Mitigation:* the
   failing merge is the diagnostic — better than silently
   producing wrong CSS. Phase-5 implementation pins the input
-  set against `CompileThemeCssStage`'s actual reads.
+  set against `CompileThemeCssStage`\'s actual reads.
 
 ## Explicit non-goals for this phase
 

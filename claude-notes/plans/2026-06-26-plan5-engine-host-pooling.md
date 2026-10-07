@@ -106,7 +106,7 @@ jitter. Plan 5 keeps the host warm across re-computes.
 ## Open before writing (research)
 
 1. **MEASURE FIRST — the win is bounded.** The *kernel* (Julia control server / Jupyter kernel —
-   the *seconds*-scale cost) **already survives a subprocess respawn** because it's transport-file
+   the *seconds*-scale cost) **already survives a subprocess respawn** because it\'s transport-file
    keyed. So pooling saves only **Deno-spawn + module-`import()`** (\~hundreds of ms), not the kernel
    rewarm. Measure the real re-compute respawn cost first; if it's small relative to the engine run,
    the complexity isn't justified. **This gates the plan.**

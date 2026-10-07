@@ -1212,8 +1212,8 @@ Visual colour correctness is still verified in Phase 8.
     - the `code.*` legend is expanded to **all 24 CSS roots** (done in the Unified
       token model legend) — every `hl-<root>` has a `code.<root>` twin;
     - add a test (`code_legend_covers_render_css`, Rust, reading
-      `resources/scss/html/templates/highlight.scss`) asserting `{`code.*` legend
-      roots`} == {`.hl-*` selectors`}` — a mismatch in **either** direction fails
+      `resources/scss/html/templates/highlight.scss`) asserting `\{`code.\*` legend
+      roots`\} == \{`.hl-*` selectors`\}` — a mismatch in **either** direction fails
       (a CSS colour with no legend twin → uncoloured in editor; a legend twin with
       no CSS colour → coloured in editor only). This keeps the two colour tables
       locked together when someone later adds an `hl-foo` rule.

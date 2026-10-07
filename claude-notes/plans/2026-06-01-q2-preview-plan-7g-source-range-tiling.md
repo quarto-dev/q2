@@ -237,8 +237,8 @@ earlier draft lumped both as "blessed same-preimage groups," which conflated an
    with no notion of edits or emission order, so it would flag this group as
    N−1 overlaps unless the exception is encoded. The auditor must therefore
    **partition siblings by `Invocation`-anchor identity, collapse each
-   same-`Invocation` group to its shared range, and check disjointness *between
-   units*** — exactly as `Concat` pieces are one unit to siblings. This keeps
+   same-`Invocation` group to its shared range, and check disjointness _between
+   units_** — exactly as `Concat` pieces are one unit to siblings. This keeps
    the auditor, the writer, and the contract agreeing on what "one claim" means.
 
 **Scope boundary — do NOT pursue gap-free partition.** BP requires non-overlap +
@@ -314,79 +314,79 @@ tightness. This artifact is *both* the measurement tool and the permanent CI
 property test (the thing whose absence let this hide).
 
 - [x] Write the auditor as a Rust function over a parsed AST that, for each node,
-      resolves its `SourceInfo` to a concrete source range via the **same** path
-      as `preimage_in` (do not reimplement — call/share it) for **all four
-      variants**: `Original`, `Substring`, `Concat` (union of pieces), **and
-      `Generated`** (walks the `Invocation` anchor). `Generated` was omitted from
-      the earlier draft's "three shapes"; it must be resolved because (a) skipping
-      it makes the auditor *unsound* — two unrelated `Generated` nodes mapping to
-      overlapping ranges would be a real tiling bug the auditor would never see —
-      and (b) it carries the same-`Invocation` groups that P4's inter-node
-      exception (refinement 2) turns on (next item).
+  resolves its `SourceInfo` to a concrete source range via the **same** path
+  as `preimage_in` (do not reimplement — call/share it) for **all four
+  variants**: `Original`, `Substring`, `Concat` (union of pieces), **and
+  `Generated`** (walks the `Invocation` anchor). `Generated` was omitted from
+  the earlier draft's "three shapes"; it must be resolved because (a) skipping
+  it makes the auditor *unsound* — two unrelated `Generated` nodes mapping to
+  overlapping ranges would be a real tiling bug the auditor would never see —
+  and (b) it carries the same-`Invocation` groups that P4's inter-node
+  exception (refinement 2) turns on (next item).
 - [ ] **Same-`Invocation` unit grouping (encodes P4 refinement 2).** Before the
-      sibling-disjointness check, partition siblings by `Invocation`-anchor
-      identity; collapse each maximal same-`Invocation` group to its single shared
-      range and check disjointness *between units*, not between raw nodes. **Use
-      the *same* grouping predicate the writer uses — `PartialEq`-equality on the
-      `Invocation` anchor `SourceInfo`** (the writer's multi-inline dedupe at
-      `crates/pampa/src/writers/incremental.rs` \~1357 compares `Invocation`
-      anchors with `PartialEq`). Do **not** invent a separate notion of "identity"
-      (Arc-pointer equality, or resolved-range equality): the whole point of this
-      grouping is that the auditor, the writer, and the contract agree on what
-      "one claim" means, so the auditor must use the writer's predicate — ideally
-      factor a shared helper so the two cannot drift. This is the static-checker
-      analogue of the writer's same-`Invocation` coalescing, and it mirrors how
-      `Concat` pieces are treated as one unit to siblings. Without it the auditor
-      false-positives on every block-shortcode expansion and would fail CI
-      (Phase 7) on any corpus file containing one.
+  sibling-disjointness check, partition siblings by `Invocation`-anchor
+  identity; collapse each maximal same-`Invocation` group to its single shared
+  range and check disjointness *between units*, not between raw nodes. **Use
+  the *same* grouping predicate the writer uses — `PartialEq`-equality on the
+  `Invocation` anchor `SourceInfo`** (the writer's multi-inline dedupe at
+  `crates/pampa/src/writers/incremental.rs` \~1357 compares `Invocation`
+  anchors with `PartialEq`). Do **not** invent a separate notion of "identity"
+  (Arc-pointer equality, or resolved-range equality): the whole point of this
+  grouping is that the auditor, the writer, and the contract agree on what
+  "one claim" means, so the auditor must use the writer's predicate — ideally
+  factor a shared helper so the two cannot drift. This is the static-checker
+  analogue of the writer's same-`Invocation` coalescing, and it mirrors how
+  `Concat` pieces are treated as one unit to siblings. Without it the auditor
+  false-positives on every block-shortcode expansion and would fail CI
+  (Phase 7) on any corpus file containing one.
 - [ ] **`None`-preimage rule (with the semantic-ownership split).** A node whose
-      `SourceInfo` resolves to `None` makes *no contiguous source claim*, so it
-      cannot overlap, cannot violate containment, and has no boundary to test —
-      **it is excluded from the three tiling checks (a)/(b)/(c).** But `None` is
-      not monolithic; the auditor must sort it:
-      - **`Generated` with no resolvable `Invocation`** → skip + low-severity
-        census tally. No contiguous claim is recoverable.
-      - **Non-contiguous `Concat`** → **descend into `pieces`** and resolve each
-        piece via `preimage_in`, then inspect the inter-piece gaps in the source
-        text (the auditor already holds the source bytes for the tightness
-        predicate). **All** pieces must resolve and **every** gap is examined (a
-        `Concat` can have >2 pieces). Two outcomes:
-        - **all pieces resolve AND every gap is whitespace-only** (space/tab; a
-          newline disqualifies → next bullet) → **flag as a `whitespace-gap-concat`
-          finding** (a producer bug whose fix is a contiguous hull — Phase 4b's
-          template). This is the class that was previously invisible to *both* the
-          auditor and the violation census; surfacing it is the R1 repercussion.
-        - **any gap holds non-whitespace/newline, OR any piece fails to resolve**
-          (nested non-contiguous `Concat`, `Generated` piece) → **do NOT auto-bless
-          as "scattered."** Emit a `scattered-concat` census row for **Phase 2's
-          World 1 / World 2 triage gate.** A content gap can still be a *producer
-          bug*: `combine` keeps only the first/last token, so the 3-token
-          `Dr. Smith Jr.` stores a 2-piece `Concat` whose gap holds the owned word
-          "Smith" — a bug, not a genuine scatter. Only a *confirmed* genuine
-          scatter is blessed; the rest become Phase 4b-class fixes. (Phase 2's gate
-          **always stops and reports to the user** after classification — in *both*
-          worlds — and only resumes on the user's go-ahead; never a bead.)
-      Keep **both** the `whitespace-gap-concat` and `scattered-concat` rows **out of
-      the initial gate** (count unknown until Phase 2; treat like the
-      leading-whitespace family — report first, gate after the fixes drive it to
-      zero). (A node that *ought* to carry a tight `Original`/`Substring` but
-      resolves `None` is a missing-source-info defect — Plan 7f's domain, not 7g's
-      tiling gate.)
+  `SourceInfo` resolves to `None` makes *no contiguous source claim*, so it
+  cannot overlap, cannot violate containment, and has no boundary to test —
+  **it is excluded from the three tiling checks (a)/(b)/(c).** But `None` is
+  not monolithic; the auditor must sort it:
+  - **`Generated` with no resolvable `Invocation`** → skip + low-severity
+    census tally. No contiguous claim is recoverable.
+  - **Non-contiguous `Concat`** → **descend into `pieces`** and resolve each
+    piece via `preimage_in`, then inspect the inter-piece gaps in the source
+    text (the auditor already holds the source bytes for the tightness
+    predicate). **All** pieces must resolve and **every** gap is examined (a
+    `Concat` can have >2 pieces). Two outcomes:
+    - **all pieces resolve AND every gap is whitespace-only** (space/tab; a
+      newline disqualifies → next bullet) → **flag as a `whitespace-gap-concat`
+      finding** (a producer bug whose fix is a contiguous hull — Phase 4b's
+      template). This is the class that was previously invisible to *both* the
+      auditor and the violation census; surfacing it is the R1 repercussion.
+    - **any gap holds non-whitespace/newline, OR any piece fails to resolve**
+      (nested non-contiguous `Concat`, `Generated` piece) → **do NOT auto-bless
+      as "scattered."** Emit a `scattered-concat` census row for **Phase 2's
+      World 1 / World 2 triage gate.** A content gap can still be a *producer
+      bug*: `combine` keeps only the first/last token, so the 3-token
+      `Dr. Smith Jr.` stores a 2-piece `Concat` whose gap holds the owned word
+      "Smith" — a bug, not a genuine scatter. Only a *confirmed* genuine
+      scatter is blessed; the rest become Phase 4b-class fixes. (Phase 2's gate
+      **always stops and reports to the user** after classification — in *both*
+      worlds — and only resumes on the user's go-ahead; never a bead.)
+  Keep **both** the `whitespace-gap-concat` and `scattered-concat` rows **out of
+  the initial gate** (count unknown until Phase 2; treat like the
+  leading-whitespace family — report first, gate after the fixes drive it to
+  zero). (A node that *ought* to carry a tight `Original`/`Substring` but
+  resolves `None` is a missing-source-info defect — Plan 7f's domain, not 7g's
+  tiling gate.)
 - [ ] Walk the full AST including `Attr` kvs key **and** value ranges (the floor
-      audit never walked attributes, which is why `div-attrs.qmd` read "clean"
-      despite the known `custom-key` defect). The per-kv ranges live in
-      `AttrSourceInfo.attributes: Vec<(Option<SourceInfo>, Option<SourceInfo>)>`
-      (`quarto-pandoc-types/src/attr.rs:55`), a **positionally-keyed sidecar** to
-      the `kvs` map. **Apply the alignment guard the type's own doc prescribes
-      (`attr.rs:44-48`):** before zipping, assert
-      `kvs.len() == attr_source.attributes.len()` and `attr.1.len() ==
-      attr_source.classes.len()` (where `attr.1` is the `Vec<String>` classes
-      from the `Attr` tuple);
-      on mismatch, **skip attr-range auditing for that node and emit a census row
-      `attr-alignment-skipped (bd-3aolj/bd-1e6a5)`** rather than passing silently
-      or fabricating an overlap. Treat a per-kv `None` `SourceInfo` as "no claim"
-      (skip). Do **not** try to re-derive the kv→range mapping — that is
-      bd-3aolj/bd-1e6a5's job, not the auditor's.
+  audit never walked attributes, which is why `div-attrs.qmd` read "clean"
+  despite the known `custom-key` defect). The per-kv ranges live in
+  `AttrSourceInfo.attributes: Vec<(Option<SourceInfo>, Option<SourceInfo>)>`
+  (`quarto-pandoc-types/src/attr.rs:55`), a **positionally-keyed sidecar** to
+  the `kvs` map. **Apply the alignment guard the type's own doc prescribes
+  (`attr.rs:44-48`):** before zipping, assert
+  `kvs.len() == attr_source.attributes.len()` and `attr.1.len() ==
+  attr_source.classes.len()` (where `attr.1` is the `Vec<String>` classes
+  from the `Attr` tuple);
+  on mismatch, **skip attr-range auditing for that node and emit a census row
+  `attr-alignment-skipped (bd-3aolj/bd-1e6a5)`** rather than passing silently
+  or fabricating an overlap. Treat a per-kv `None` `SourceInfo` as "no claim"
+  (skip). Do **not** try to re-derive the kv→range mapping — that is
+  bd-3aolj/bd-1e6a5's job, not the auditor's.
 
 **Per-level check matrix (which check runs at which AST level):** (a) and (b) run
 at **every** level (block siblings *and* inline siblings; block→inline and
@@ -396,42 +396,42 @@ runs at the **inline-leaf level only** (block ranges legitimately abut
 newlines/blank lines). State this matrix explicitly in the auditor's doc comment.
 
 - [ ] Assert (a) sibling non-overlap (between *units*, per the grouping rule), at
-      **all** levels (block and inline siblings).
+  **all** levels (block and inline siblings).
 - [ ] Assert (b) parent ⊇ child as an **independent containment check**, at all
-      levels — compute parent and child ranges separately and assert
-      `child ⊆ parent`. **`⊆` is non-strict** (equality is allowed): a
-      same-`Invocation` child's resolved range *equals* its parent block's range,
-      and a single-child container's range may equal its child's — both satisfy
-      containment. Do **not** assume `preimage_in` enforces it. (`preimage_in`'s
-      `Substring` arm composes offsets *without clamping* to the parent — Phase 6
-      Hole β, `source_info.rs:448-449` — so a runaway `Substring` yields a
-      silently-too-large range, not `None`; only a real containment assert catches
-      it.)
+  levels — compute parent and child ranges separately and assert
+  `child ⊆ parent`. **`⊆` is non-strict** (equality is allowed): a
+  same-`Invocation` child's resolved range *equals* its parent block's range,
+  and a single-child container's range may equal its child's — both satisfy
+  containment. Do **not** assume `preimage_in` enforces it. (`preimage_in`\'s
+  `Substring` arm composes offsets *without clamping* to the parent — Phase 6
+  Hole β, `source_info.rs:448-449` — so a runaway `Substring` yields a
+  silently-too-large range, not `None`; only a real containment assert catches
+  it.)
 - [ ] (c) **Tightness as a boundary-byte predicate on the source text** (P1/P3),
-      **inline-leaf level only**. For an inline-leaf node with non-empty resolved
-      range `[s, e)` in file `F`: **violation iff `source[s]` is `' '`/`'\t'` OR
-      `source[e-1]` is `' '`/`'\t'`.** **Whitespace for this check is space/tab
-      only — a newline at a boundary is *not* a violation** (decided 2026-06-03,
-      round-2 review; matches the hull-gap "owned whitespace" rule in Phase 4b so
-      the two cannot drift). Do **not** compare the range's bytes against the
-      node's *text* — normalization (smart quotes, entity/escape decoding) makes
-      source bytes legitimately differ from node text, so a text-equality check
-      would false-fail on every normalized node. Caveats to honor: empty ranges
-      (`s == e`) are vacuously tight; skip the predicate where the range is `None`
-      and for same-`Invocation` groups.
+  **inline-leaf level only**. For an inline-leaf node with non-empty resolved
+  range `[s, e)` in file `F`: **violation iff `source[s]` is `' '`/`'\t'` OR
+  `source[e-1]` is `' '`/`'\t'`.** **Whitespace for this check is space/tab
+  only — a newline at a boundary is *not* a violation** (decided 2026-06-03,
+  round-2 review; matches the hull-gap "owned whitespace" rule in Phase 4b so
+  the two cannot drift). Do **not** compare the range's bytes against the
+  node's *text* — normalization (smart quotes, entity/escape decoding) makes
+  source bytes legitimately differ from node text, so a text-equality check
+  would false-fail on every normalized node. Caveats to honor: empty ranges
+  (`s == e`) are vacuously tight; skip the predicate where the range is `None`
+  and for same-`Invocation` groups.
 - [ ] Emit, on violation, a structured report: file, node type, both ranges, the
-      overlapping bytes — usable both as a census row and as a test-failure message.
+  overlapping bytes — usable both as a census row and as a test-failure message.
 - [ ] Before running the corpus census, verify the auditor's grouping and descent
-      logic on hand-crafted `SourceInfo` fixture cases: write a small test
-      exercising (a) a same-`Invocation` sibling pair (must be collapsed to one
-      unit — no false-positive overlap), (b) a whitespace-gap `None`-`Concat`
-      (must emit a `whitespace-gap-concat` finding), (c) a non-resolvable piece
-      `None`-`Concat` (must emit a `scattered-concat` row), and (d) a plain
-      `Original` sibling pair with a gap (must pass the non-overlap check). This
-      is a logic check on the grouping and None-Concat descent code paths — not a
-      cross-check against `preimage_in` itself (the auditor calls `preimage_in`
-      directly; there is nothing to cross-check on that axis). Fidelity risk is in
-      *how the auditor uses the output*, not in the preimage resolver.
+  logic on hand-crafted `SourceInfo` fixture cases: write a small test
+  exercising (a) a same-`Invocation` sibling pair (must be collapsed to one
+  unit — no false-positive overlap), (b) a whitespace-gap `None`-`Concat`
+  (must emit a `whitespace-gap-concat` finding), (c) a non-resolvable piece
+  `None`-`Concat` (must emit a `scattered-concat` row), and (d) a plain
+  `Original` sibling pair with a gap (must pass the non-overlap check). This
+  is a logic check on the grouping and None-Concat descent code paths — not a
+  cross-check against `preimage_in` itself (the auditor calls `preimage_in`
+  directly; there is nothing to cross-check on that axis). Fidelity risk is in
+  *how the auditor uses the output*, not in the preimage resolver.
 
 ### Phase 2 — Census + Concat decision
 
@@ -499,11 +499,11 @@ is an intra-node definition (not a sibling-disjointness exception) as stated in 
 - [x] Produce violation census grouped by node type / originating handler.
 - [x] Confirm the leading-whitespace family is the bulk and Figure `Plain∩Plain` is distinct.
 - [x] Surface `Substring` / `attrS` violations — none found for `Substring`; `attrS`
-      shows 56 alignment skips (bd-3aolj/bd-1e6a5, not in scope).
+  shows 56 alignment skips (bd-3aolj/bd-1e6a5, not in scope).
 - [x] Attr coverage: 56 `AttrAlignmentSkipped` rows — expected misalignment per
-      the known bugs; does not affect census confidence for the tiling violations.
+  the known bugs; does not affect census confidence for the tiling violations.
 - [x] `scattered-concat` triage: all 5 rows classified as dropped-middle producer
-      bugs (math-with-attr Span). World 1.
+  bugs (math-with-attr Span). World 1.
 - [x] MANDATORY STOP — reported to user; World 1 confirmed by user; go-ahead given.
 - [x] `Concat` exception documented above.
 - [x] Handler-fix list frozen from the census (see Phase 3 below).
@@ -517,7 +517,7 @@ the failing test first, fix the handler, re-run the auditor.
 
 **Auditor fix (pre-Phase-3 correction, decided 2026-06-03):** Before fixing handlers,
 patch the tightness check in `audit_source_range_tiling` to **exclude `Space`,
-`SoftBreak`, and `LineBreak` nodes** from check (c). These nodes' ranges are correct
+`SoftBreak`, and `LineBreak` nodes** from check (c). These nodes\' ranges are correct
 when they contain whitespace (a `Space` node IS a space character); the 52,833 false
 positives swamp the real findings. The overlap check (a) already catches the case
 where a `Space` node wrongly absorbs non-whitespace bytes. This patch must land
@@ -562,14 +562,14 @@ from two distinct idioms:
 Write byte-offset regression tests *first* for all sites.
 
 - [x] **Patch the tightness check first:** exclude `Space`, `SoftBreak`, `LineBreak`
-      from check (c). False-positive count dropped from 52,833 to 28.
+  from check (c). False-positive count dropped from 52,833 to 28.
 - [x] Add shared helpers in `location.rs`: `tight_source_info_for_node`
-      (wraps `node_source_info_with_options` with `trim_all`) and
-      `leading_whitespace_source_info` (derives Space SI from whole vs. tight SI).
+  (wraps `node_source_info_with_options` with `trim_all`) and
+  `leading_whitespace_source_info` (derives Space SI from whole vs. tight SI).
 - [x] Write failing TDD tests in `tiling_phase3_tests.rs` first, then fix each handler.
-      Handlers fixed: `code_span_helpers.rs`, `citation.rs`, `quote_helpers.rs`,
-      `postprocess.rs:1277` (math-with-attr hull), `postprocess.rs:385`
-      (list-table cell hull).
+  Handlers fixed: `code_span_helpers.rs`, `citation.rs`, `quote_helpers.rs`,
+  `postprocess.rs:1277` (math-with-attr hull), `postprocess.rs:385`
+  (list-table cell hull).
 - [x] Re-run the corpus: **SiblingOverlap 0, ScatteredConcat 0, ContainmentViolation 0.**
 
 **Residual TightnessViolation (28 — not gated in Phase 7):**
@@ -584,7 +584,7 @@ real input — an 802-file identity sweep through `incremental_write` fired that
 branch on every adjacent top-level block pair with **0 panics** (top-level blocks
 tile positionally). P4 closes it by construction; no dedicated test needed beyond
 the corpus sweep. The *reachable* reversed-slice bug was a different site —
-`assemble_inline_splice`'s prefix on a `Concat`-led inline — now fixed under
+`assemble_inline_splice`\'s prefix on a `Concat`-led inline — now fixed under
 **Phase 8** below. **Decided (2026-06-03): handler-only.** Code spans are a
 *scanner* regression, but the handler re-derives the correct tight range
 regardless of the loose token (the whole "decouple source-info from lexing"
@@ -607,7 +607,7 @@ overlap.
 **Why "give each its own tight range" does not work.** The alt-text bytes
 (`[alt text]`) are a substring of the image bytes (`![alt text](url)`). Any tight
 source range for the caption `Plain` would therefore overlap with the content
-`Plain`'s range — the overlap is intrinsic to the syntax and cannot be eliminated
+`Plain`\'s range — the overlap is intrinsic to the syntax and cannot be eliminated
 by range adjustment alone.
 
 **The correct fix: caption `Plain` → `Generated` (no contiguous source claim).**
@@ -622,11 +622,11 @@ The content `Plain` keeps `image.source_info` unchanged.
 
 - [ ] Locate the Figure synthesis in `postprocess.rs:933-954`.
 - [ ] Write a failing tiling-auditor test: parse a single-image paragraph, run the
-      auditor, assert no overlap violation is reported. Confirm red before the fix.
+  auditor, assert no overlap violation is reported. Confirm red before the fix.
 - [ ] In the synthesis: replace `source_info: image.source_info.clone()` on the
-      caption `Plain` (line \~940) with
-      `source_info: SourceInfo::generated(By::tree_sitter_postprocess())`. Leave
-      the content `Plain`'s `source_info` unchanged.
+  caption `Plain` (line \~940) with
+  `source_info: SourceInfo::generated(By::tree_sitter_postprocess())`. Leave
+  the content `Plain`\'s `source_info` unchanged.
 - [ ] Re-run the auditor (and the failing test); confirm green.
 
 ### Phase 4b — Faithful range for whitespace-gap `None`-Concats (abbreviation-coalesce is the first instance)
@@ -706,14 +706,14 @@ hull but not to *prove* it owns the interior; the intermediate ranges are what r
 out a reordering/foreign-content producer. (The Phase 1 auditor's whitespace-only-
 gap heuristic is a *detection* signal for finding candidate sites — it is
 deliberately *not* the producer's emission guard, because the producer knows the
-full run and the auditor only sees `combine`'s lossy 2-piece residue.)
+full run and the auditor only sees `combine`\'s lossy 2-piece residue.)
 
 **Soundness vs. completeness of the guard, and the backstop (state this; do not
 over-engineer past it).** The contiguity check is **sound unconditionally** — it
 emits a hull only when the merged ranges actually tile a span densely (modulo
 whitespace), so it can never *introduce* a new overlap. Its **completeness** ("the
 hull fully and exclusively owns its span") rests on a premise: that the merged
-inlines' inputs already **tile** (P4). `coalesce_abbreviations` gets this by
+inlines\' inputs already **tile** (P4). `coalesce_abbreviations` gets this by
 construction (it merges *consecutive sibling* inlines, and siblings tile
 disjointly), so the guard is both sound and complete there. For the *general*
 class of producers Phase 2 may surface, input-tiling is not proven a priori —
@@ -739,69 +739,69 @@ coalesce can only consume a `Space` *inline*, never a blank line / `> ` gutter /
 list indentation).
 
 - [ ] Write a failing byte-offset test first: real parse of `"Dr. Smith wrote…"`,
-      assert the merged `Str`'s `preimage_in(file)` returns `Some(start..end)`
-      (the full `Dr. Smith` hull), **not** `None`. Confirm red before the fix.
+  assert the merged `Str`\'s `preimage_in(file)` returns `Some(start..end)`
+  (the full `Dr. Smith` hull), **not** `None`. Confirm red before the fix.
 - [ ] Add a **3-token** test (`"Dr. Smith Jr. wrote…"`): assert the merged `Str`
-      hulls to the full `Dr. Smith Jr.` span — this is the case the naive
-      "stored-piece-gap whitespace-only" check would get wrong (the gap holds the
-      owned word "Smith"), so it pins the source-contiguity guard.
+  hulls to the full `Dr. Smith Jr.` span — this is the case the naive
+  "stored-piece-gap whitespace-only" check would get wrong (the gap holds the
+  owned word "Smith"), so it pins the source-contiguity guard.
 - [ ] Factor the hull computation as a **reusable helper**. Signature:
-      ```rust
-      // crates/pampa/src/pandoc/treesitter_utils/postprocess.rs (private)
-      fn contiguous_hull_for_run(run: &[Inline]) -> SourceInfo
-      ```
-      `run` is the full slice of merged inlines (e.g. `inlines[i..j]`), which
-      includes the intermediate `Space` nodes — not just the two endpoints.
-      Algorithm: call `inline.source_info().resolve_byte_range()` on each element
-      → (a) all must return `Some((file_id, start, end))` with the same `file_id`,
-      (b) consecutive ranges must be byte-adjacent (`ranges[k].end ==
-      ranges[k+1].start`) → on success return
-      `SourceInfo::Original { file_id: FileId(first_file_id), start_offset:
-      ranges[0].start, end_offset: ranges.last().end }`, else fall back to
-      `run[0].source_info().combine(run.last().unwrap().source_info())`.
-      `coalesce_abbreviations` (`:656-661`) is its first caller; replace
-      `start_info.combine(&end_info)` with `contiguous_hull_for_run(&inlines[i..j])`.
+  ```rust
+  // crates/pampa/src/pandoc/treesitter_utils/postprocess.rs (private)
+  fn contiguous_hull_for_run(run: &[Inline]) -> SourceInfo
+  ```
+  `run` is the full slice of merged inlines (e.g. `inlines[i..j]`), which
+  includes the intermediate `Space` nodes — not just the two endpoints.
+  Algorithm: call `inline.source_info().resolve_byte_range()` on each element
+  → (a) all must return `Some((file_id, start, end))` with the same `file_id`,
+  (b) consecutive ranges must be byte-adjacent (`ranges[k].end ==
+  ranges[k+1].start`) → on success return
+  `SourceInfo::Original { file_id: FileId(first_file_id), start_offset:
+  ranges[0].start, end_offset: ranges.last().end }`, else fall back to
+  `run[0].source_info().combine(run.last().unwrap().source_info())`.
+  `coalesce_abbreviations` (`:656-661`) is its first caller; replace
+  `start_info.combine(&end_info)` with `contiguous_hull_for_run(&inlines[i..j])`.
 - [ ] Add a failing test for the safety guard: a run that is **not** source-
-      contiguous (another node's bytes between the coalesced inlines) must **not**
-      be hulled (helper returns `combine`/`None`). Confirms the hull can never
-      swallow content the node does not own.
+  contiguous (another node's bytes between the coalesced inlines) must **not**
+  be hulled (helper returns `combine`/`None`). Confirms the hull can never
+  swallow content the node does not own.
 - [ ] Add a round-trip test: editing a paragraph containing "Dr. Smith" no longer
-      forces the `Rewrite` fallback (the token is Verbatim-copyable), and the
-      emitted source contains the **original regular space**, not the nbsp.
+  forces the `Rewrite` fallback (the token is Verbatim-copyable), and the
+  emitted source contains the **original regular space**, not the nbsp.
 - [ ] Apply the helper to every other `whitespace-gap-concat` site the Phase 2
-      census surfaces (abbreviation-coalesce is the worked example; the census is
-      the authoritative list, exactly as for the Phase 3 leading-whitespace family).
+  census surfaces (abbreviation-coalesce is the worked example; the census is
+  the authoritative list, exactly as for the Phase 3 leading-whitespace family).
 - [ ] Re-run the Phase 1 auditor over the corpus to confirm these tokens now
-      resolve to `Some(hull)` and pass tightness/tiling (rather than appearing as
-      `whitespace-gap-concat` or `scattered-concat` rows). Expect snapshot churn;
-      review as corrections.
+  resolve to `Some(hull)` and pass tightness/tiling (rather than appearing as
+  `whitespace-gap-concat` or `scattered-concat` rows). Expect snapshot churn;
+  review as corrections.
 
 ### Phase 5 — Producer contract
 - Add P1–P4 to `provenance-contract.md` as a **stated BP precondition**, with
   the Concat exception and the explicit "non-overlap, not gap-free" boundary.
 
 - [ ] Add P1 (tight ranges), P2 (whitespace ownership), P3 (symmetry), P4 (tiling)
-      to `provenance-contract.md` as a stated BP precondition. State P4's two
-      qualifiers as **distinct categories, not one lumped "exception" list**: the
-      `Concat` hull is **intra-node** (it *defines* what one sibling's claim is
-      when that sibling is a `Concat`; it is **not** a sibling-disjointness
-      exception), while the atomic N-to-1 same-`Invocation` group is the **only
-      genuine inter-node** overlap exception. Do *not* restate the earlier,
-      strictly-stronger "no source byte is claimed by two sibling nodes," and do
-      not conflate the two qualifiers. Note P2 as a **producer obligation
-      discharged by the Phase 3 helper, not an auditor check** (the auditor
-      enforces its consequence, P3).
+  to `provenance-contract.md` as a stated BP precondition. State P4's two
+  qualifiers as **distinct categories, not one lumped "exception" list**: the
+  `Concat` hull is **intra-node** (it *defines* what one sibling's claim is
+  when that sibling is a `Concat`; it is **not** a sibling-disjointness
+  exception), while the atomic N-to-1 same-`Invocation` group is the **only
+  genuine inter-node** overlap exception. Do *not* restate the earlier,
+  strictly-stronger "no source byte is claimed by two sibling nodes," and do
+  not conflate the two qualifiers. Note P2 as a **producer obligation
+  discharged by the Phase 3 helper, not an auditor check** (the auditor
+  enforces its consequence, P3).
 - [ ] Document the **semantic-ownership rule** for `None`-resolving `Concat`s:
-      whitespace-only inter-piece gap → producer bug, fix with a contiguous hull
-      (Phase 4b); gap with other content/newline, or an unresolvable piece → a
-      `scattered-concat` row for Phase 2's World 1 / World 2 gate (a dropped-middle
-      bug like the 3-token coalesce, or — only when confirmed — genuine scatter →
-      blessed `None`). State the **source-contiguity** guard on hull emission (NOT a
-      stored-piece-gap check — they diverge for N≥3).
+  whitespace-only inter-piece gap → producer bug, fix with a contiguous hull
+  (Phase 4b); gap with other content/newline, or an unresolvable piece → a
+  `scattered-concat` row for Phase 2's World 1 / World 2 gate (a dropped-middle
+  bug like the 3-token coalesce, or — only when confirmed — genuine scatter →
+  blessed `None`). State the **source-contiguity** guard on hull emission (NOT a
+  stored-piece-gap check — they diverge for N≥3).
 - [ ] Document the "non-overlap, not gap-free" scope boundary (blank lines,
-      `> ` gutters, list indentation are legitimately unowned) and note it is
-      **disjoint from** the hull-owned-whitespace population (a coalesce/merge can
-      only consume a `Space` *inline*, never structural whitespace).
+  `> ` gutters, list indentation are legitimately unowned) and note it is
+  **disjoint from** the hull-owned-whitespace population (a coalesce/merge can
+  only consume a `Space` *inline*, never structural whitespace).
 
 ### Phase 6 — Audit BP + completeness (THE GATE — do this first)
 
@@ -859,13 +859,13 @@ lane) so future range drift fails at the introducing PR. This is what would have
 caught bd-1d6io, A, B, and the citation case at introduction.
 
 - [ ] Land the Phase 1 auditor as a `cargo nextest` property test over a corpus
-      (extend the existing `incremental_write_never_panics_on_pampa_corpus` pattern
-      from Phase 8 — that one only catches panics, not tiling violations).
+  (extend the existing `incremental_write_never_panics_on_pampa_corpus` pattern
+  from Phase 8 — that one only catches panics, not tiling violations).
 - [x] **Decided (2026-06-03):** land as a `cargo nextest` property test only — no
-      separate repo-wide `cargo xtask verify` lane, unless the corpus sweep proves
-      too slow for default nextest (one enforcement path, not two that drift).
+  separate repo-wide `cargo xtask verify` lane, unless the corpus sweep proves
+  too slow for default nextest (one enforcement path, not two that drift).
 - [ ] Confirm the test fails on a reverted Phase 3 handler fix (proves it would have
-      caught the original drift) before declaring CI enforcement done.
+  caught the original drift) before declaring CI enforcement done.
 
 **Why CI enforcement matters:** the tiling property must stay green over time —
 the auditor is the producer-side guarantee the incremental writer's BP property

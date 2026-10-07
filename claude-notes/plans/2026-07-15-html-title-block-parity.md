@@ -289,20 +289,20 @@ screenshots for banner/visual phases) before any phase is declared done.
 ### Phase 0 — Test harness + fixtures (bd-xj96vafq) — DONE 2026-07-15
 
 - [x] Commit title-block fixtures: smoke-all corpus at
-      `crates/quarto/tests/smoke-all/title-block/` (simple-default,
-      rich-authors, metadata-grid, banner-true, label-overrides,
-      style-plain, style-none) with current-truth `ensureHtmlElements`
-      assertions, strengthened per phase. (banner-color/banner-image
-      fixtures arrive with P5, where their behavior first exists.)
-      Harness validity proven: a deliberately-wrong selector fails.
+  `crates/quarto/tests/smoke-all/title-block/` (simple-default,
+  rich-authors, metadata-grid, banner-true, label-overrides,
+  style-plain, style-none) with current-truth `ensureHtmlElements`
+  assertions, strengthened per phase. (banner-color/banner-image
+  fixtures arrive with P5, where their behavior first exists.)
+  Harness validity proven: a deliberately-wrong selector fails.
 - [x] Snapshot tests of the `#title-block-header` subtree:
-      `crates/quarto-core/tests/integration/title_block_pipeline.rs`
-      drives `ProjectPipeline`/`RenderToFileOptions` (the `q2 render`
-      orchestrator path, not `HtmlRenderConfig::default()`); 8 insta
-      baselines incl. the `<main>` open tag for banner. Verified the
-      real binary's output matches the baseline byte-for-byte.
+  `crates/quarto-core/tests/integration/title_block_pipeline.rs`
+  drives `ProjectPipeline`/`RenderToFileOptions` (the `q2 render`
+  orchestrator path, not `HtmlRenderConfig::default()`); 8 insta
+  baselines incl. the `<main>` open tag for banner. Verified the
+  real binary's output matches the baseline byte-for-byte.
 - [x] Q1-vs-Q2 comparison procedure + DOM diff tables:
-      `claude-notes/research/2026-07-15-title-block-q1-q2-dom-diff.md`
+  `claude-notes/research/2026-07-15-title-block-q1-q2-dom-diff.md`
 - Note: existing `smoke-all/q2-preview/title-block-*.qmd` fixtures cover
   the preview React title block under the JS runners — the Q9 lockstep
   guard; extend those alongside each phase.
@@ -310,27 +310,27 @@ screenshots for banner/visual phases) before any phase is declared done.
 ### Phase 1 — DOM parity for the existing surface (bd-tezzk9vp) — DONE 2026-07-15
 
 - [x] `p.subtitle.lead`; author/date wrapped in `<p>`/`<p class="date">`;
-      abstract as `div > div.abstract > div.block-title` with paragraph
-      content; bare-div meta entries (dropped `quarto-title-meta-author/
-      -date` classes — the former is reserved for the P2 affiliations
-      grid); `quarto-title-meta` grid emitted whenever the title block
-      renders (Q1 parity, empty grid allowed)
+  abstract as `div > div.abstract > div.block-title` with paragraph
+  content; bare-div meta entries (dropped `quarto-title-meta-author/
+  -date` classes — the former is reserved for the P2 affiliations
+  grid); `quarto-title-meta` grid emitted whenever the title block
+  renders (Q1 parity, empty grid allowed)
 - [x] Author/Authors pluralization + `author-title`/`published-title`/
-      `abstract-title`/`modified-title`/`doi-title`/`description-title`
-      overrides, via new `AuthorsNormalizeTransform` (authors.lua-style:
-      writes `by-author`, `labels`, `author-meta`, and
-      `rendered.has-title-block` into meta; typed name parsing in new
-      `quarto-core/src/metadata/authors.rs`). English defaults per Q3.
+  `abstract-title`/`modified-title`/`doi-title`/`description-title`
+  overrides, via new `AuthorsNormalizeTransform` (authors.lua-style:
+  writes `by-author`, `labels`, `author-meta`, and
+  `rendered.has-title-block` into meta; typed name parsing in new
+  `quarto-core/src/metadata/authors.rs`). English defaults per Q3.
 - [x] Converted the inline title block in `FULL_HTML_TEMPLATE` into
-      built-in doctemplate partials (`title-block` / `title-metadata`,
-      each also registered under the `.html` alias), user
-      `template-partials` shadow them Q1-style; custom templates also
-      resolve the built-ins as a final fallback
+  built-in doctemplate partials (`title-block` / `title-metadata`,
+  each also registered under the `.html` alias), user
+  `template-partials` shadow them Q1-style; custom templates also
+  resolve the built-ins as a final fallback
 - [x] Lockstep: `PreviewTitleBlock.tsx` rewritten to the new markup,
-      consuming the same derived meta (`by-author`/`labels`/
-      `rendered.has-title-block`); its vitest integration suite and the
-      five `smoke-all/q2-preview/title-block-*` fixtures updated;
-      verified via Playwright smoke-all sweep (14 title-block tests)
+  consuming the same derived meta (`by-author`/`labels`/
+  `rendered.has-title-block`); its vitest integration suite and the
+  five `smoke-all/q2-preview/title-block-*` fixtures updated;
+  verified via Playwright smoke-all sweep (14 title-block tests)
 - Bonus fixes landed here: bd-8v34zny5 (`truetrue`) fixed by the
   normalized author names (full model still P2); Q1-parity fixes for
   date-without-author (Published cell now renders) and
@@ -344,47 +344,47 @@ screenshots for banner/visual phases) before any phase is declared done.
 ### Phase 2 — Structured author/affiliation model (bd-ez0hiowa) — DONE 2026-07-15
 
 - [x] Ported authors.lua normalization to typed structs in
-      `quarto-core/src/metadata/authors.rs`: full author schema
-      (structured name with particles, degrees, orcid, email, phone,
-      fax, url, acknowledgements, note with global numbering,
-      attribute flags incl. `attributes:` list/map form, CRediT roles
-      with alias + vocab decoration, metadata bucket), affiliation
-      schema (all Q1 fields, `state`→`region` and
-      `affiliation-url`→`url` aliases, metadata bucket), inline +
-      `ref:` + top-level `affiliations:` block with dedup/remap,
-      `funding` normalization (schema only, Q7). Documented
-      deviations (in the module doc): BibTeX-heuristic name split
-      instead of Q1's bibtex round-trip; literals include particles;
-      proper base-26 letters; undefined `ref:` → warning + drop
-      instead of Q1's abort; roles-map takes all entries.
+  `quarto-core/src/metadata/authors.rs`: full author schema
+  (structured name with particles, degrees, orcid, email, phone,
+  fax, url, acknowledgements, note with global numbering,
+  attribute flags incl. `attributes:` list/map form, CRediT roles
+  with alias + vocab decoration, metadata bucket), affiliation
+  schema (all Q1 fields, `state`→`region` and
+  `affiliation-url`→`url` aliases, metadata bucket), inline +
+  `ref:` + top-level `affiliations:` block with dedup/remap,
+  `funding` normalization (schema only, Q7). Documented
+  deviations (in the module doc): BibTeX-heuristic name split
+  instead of Q1's bibtex round-trip; literals include particles;
+  proper base-26 letters; undefined `ref:` → warning + drop
+  instead of Q1's abort; roles-map takes all entries.
 - [x] `AuthorsNormalizeTransform` emits `authors` (refs),
-      `affiliations`, `by-author` (denormalized), `by-affiliation`,
-      `funding`, extended `labels` (+ `affiliations`
-      single/plural + `affiliation-title` override), `author-meta`,
-      `rendered.has-title-block`; surfaces normalization issues as
-      render diagnostics.
+  `affiliations`, `by-author` (denormalized), `by-affiliation`,
+  `funding`, extended `labels` (+ `affiliations`
+  single/plural + `affiliation-title` override), `author-meta`,
+  `rendered.has-title-block`; surfaces normalization issues as
+  render diagnostics.
 - [x] Two-column authors/affiliations grid in the built-in
-      `title-metadata` partial (Q1's `$if(by-affiliation)$` /
-      `$elseif(by-author)$` split; `/first` pipe not needed since the
-      key is only written when non-empty).
+  `title-metadata` partial (Q1's `$if(by-affiliation)$` /
+  `$elseif(by-author)$` split; `/first` pipe not needed since the
+  key is only written when non-empty).
 - [x] New `_title-meta-author` built-in partial: url link with
-      degrees inside the anchor, email icon, ORCID badge — both
-      inline SVGs (Q8; envelope from bootstrap-icons upstream, ORCID
-      glyph in brand green #A6CE39). SCSS deviation documented in
-      `title-block.scss`: `svg` joined `img` in the orcid rule +
-      email svg sizing. **Doctemplate fix that fell out**: the
-      bare-partial external scanner now accepts underscore-leading
-      names (`$_title-meta-author()$` — Q1 template-partials
-      compatibility), `crates/tree-sitter-doctemplate/grammar/src/scanner.c`.
+  degrees inside the anchor, email icon, ORCID badge — both
+  inline SVGs (Q8; envelope from bootstrap-icons upstream, ORCID
+  glyph in brand green #A6CE39). SCSS deviation documented in
+  `title-block.scss`: `svg` joined `img` in the orcid rule +
+  email svg sizing. **Doctemplate fix that fell out**: the
+  bare-partial external scanner now accepts underscore-leading
+  names (`$_title-meta-author()$` — Q1 template-partials
+  compatibility), `crates/tree-sitter-doctemplate/grammar/src/scanner.c`.
 - [x] `DocumentProfile` v7: `authors_structured: Vec<ProfileAuthor>`
-      (+ `ProfileAffiliation`), flat `authors` now derives from the
-      same model; contract doc change log updated (incl. retroactive
-      v6 entry).
+  (+ `ProfileAffiliation`), flat `authors` now derives from the
+  same model; contract doc change log updated (incl. retroactive
+  v6 entry).
 - [x] Lockstep: `PreviewTitleBlock.tsx` renders the two-column grid +
-      decorations from the same derived meta; also fixed the P1-noted
-      multi-paragraph-abstract fidelity gap (one `<p>` per paragraph).
-      New q2-preview smoke fixture `title-block-rich-authors.qmd`;
-      vitest suite grown to 26 tests.
+  decorations from the same derived meta; also fixed the P1-noted
+  multi-paragraph-abstract fidelity gap (one `<p>` per paragraph).
+  New q2-preview smoke fixture `title-block-rich-authors.qmd`;
+  vitest suite grown to 26 tests.
 - Snapshot/baseline changes: `title_block_rich_authors` insta
   snapshot re-captured (the intended new DOM); phase5 byte-identity
   `styles.css` hash re-captured (SCSS svg rules, entry documented in
@@ -393,50 +393,50 @@ screenshots for banner/visual phases) before any phase is declared done.
 ### Phase 3 — Metadata grid completeness (bd-j6huijli) — DONE 2026-07-16
 
 - [x] TDD red: strengthened `smoke-all/title-block/metadata-grid.qmd`
-      assertions (p.date-modified, p.doi > a[href doi.org],
-      div.keywords > div.block-title, div.description,
-      div.quarto-categories > div.quarto-category; 6 checks red before
-      the fix); new `categories-disabled.qmd` fixture
-      (`title-block-categories: false` must NOT emit
-      .quarto-categories); new insta case
-      `title_block_metadata_grid_no_categories` in
-      `title_block_pipeline.rs`
+  assertions (p.date-modified, p.doi > a[href doi.org],
+  div.keywords > div.block-title, div.description,
+  div.quarto-categories > div.quarto-category; 6 checks red before
+  the fix); new `categories-disabled.qmd` fixture
+  (`title-block-categories: false` must NOT emit
+  .quarto-categories); new insta case
+  `title_block_metadata_grid_no_categories` in
+  `title_block_pipeline.rs`
 - [x] `date-modified` (Modified), `doi` (linked to doi.org) grid cells +
-      `keywords` block in `TITLE_METADATA_PARTIAL`
+  `keywords` block in `TITLE_METADATA_PARTIAL`
 - [x] `description` block + `hide-description` gate (ported verbatim;
-      nothing sets the flag in Q2 yet, per Q11) and category chips
-      (`div.quarto-categories > div.quarto-category`) in
-      `TITLE_BLOCK_PARTIAL`; `AuthorsNormalizeTransform` writes
-      `quarto-template-params.title-block-categories` (bool true,
-      Q1's exact key so Q1-ported custom partials keep working;
-      omitted when the document sets `title-block-categories: false`)
+  nothing sets the flag in Q2 yet, per Q11) and category chips
+  (`div.quarto-categories > div.quarto-category`) in
+  `TITLE_BLOCK_PARTIAL`; `AuthorsNormalizeTransform` writes
+  `quarto-template-params.title-block-categories` (bool true,
+  Q1's exact key so Q1-ported custom partials keep working;
+  omitted when the document sets `title-block-categories: false`)
 - [x] `description` joined `RICH_TITLE_BLOCK_FIELDS` (inline HTML in the
-      title block); head `<meta name="description">` switched to the
-      plain-text `description-meta` derived by
-      `MetadataNormalizeTransform` (the Pandoc/Q1 head contract,
-      explicit value wins); head keywords meta joins list values with
-      `, ` ($for/$sep$)
+  title block); head `<meta name="description">` switched to the
+  plain-text `description-meta` derived by
+  `MetadataNormalizeTransform` (the Pandoc/Q1 head contract,
+  explicit value wins); head keywords meta joins list values with
+  `, ` ($for/$sep$)
 - [x] `has_title_block_content` extended with description / doi /
-      date-modified / keywords / categories
+  date-modified / keywords / categories
 - [x] Lockstep: `PreviewTitleBlock.tsx` metadata grid additions (Q9):
-      categories chips, description (+hide-description),
-      Modified/Doi cells, keywords block; vitest integration suite
-      grown by 7 tests (547 pass); new q2-preview smoke fixture
-      `title-block-metadata-grid.qmd`; Playwright title-block sweep
-      green (17 tests, after `npm run build:wasm` + `VITE_E2E=1
-      npm run build`)
+  categories chips, description (+hide-description),
+  Modified/Doi cells, keywords block; vitest integration suite
+  grown by 7 tests (547 pass); new q2-preview smoke fixture
+  `title-block-metadata-grid.qmd`; Playwright title-block sweep
+  green (17 tests, after `npm run build:wasm` + `VITE_E2E=1
+  npm run build`)
 - [x] End-to-end (2026-07-16): rendered the metadata-grid fixture
-      (description changed to `A *fine* one-line description.` to
-      prove rich rendering) via
-      `cargo run --bin q2 -- render <scratch>/doc.qmd` and inspected
-      `doc.html`: title block contains
-      `<div class="quarto-category">analysis</div>`,
-      `<div class="description">\nA <em>fine</em> one-line
-      description.`, `<p class="date-modified">2026-07-10</p>`,
-      `<p class="doi"><a href="https://doi.org/10.1234/example.5678">`,
-      and `<div class="keywords">…<p>music, texas</p>`; head has
-      `<meta name="description" content="A fine one-line description.">`
-      (plain text) and `<meta name="keywords" content="music, texas">`
+  (description changed to `A *fine* one-line description.` to
+  prove rich rendering) via
+  `cargo run --bin q2 -- render <scratch>/doc.qmd` and inspected
+  `doc.html`: title block contains
+  `<div class="quarto-category">analysis</div>`,
+  `<div class="description">\nA <em>fine</em> one-line
+  description.`, `<p class="date-modified">2026-07-10</p>`,
+  `<p class="doi"><a href="https://doi.org/10.1234/example.5678">`,
+  and `<div class="keywords">…<p>music, texas</p>`; head has
+  `<meta name="description" content="A fine one-line description.">`
+  (plain text) and `<meta name="keywords" content="music, texas">`
 - Snapshot changes: `title_block_metadata_grid.snap` updated (the
   intended new grid markup), `title_block_metadata_grid_no_categories.snap`
   added. Phase5 `expected_hashes.txt` NOT re-captured: its fixture doc
@@ -451,34 +451,34 @@ original Q4 "helper only" sketch with Carlos's approval (all tokens
 without i18n/localization design cost). Delivered:
 
 - [x] `crates/quarto-core/src/dates.rs`: Q1's parse-form list (no
-      guessing tail — diagnostic instead), named styles
-      full/long/medium/short/iso (English, Q3 deferral), day.js token
-      formatter with `[...]` escapes incl. ISO-week tokens; deferred
-      locale-week (`w ww wo gggg`) + named-tz (`z zzz`) tokens warn.
-      Unit matrix mirrors the Q1 docs-page examples.
+  guessing tail — diagnostic instead), named styles
+  full/long/medium/short/iso (English, Q3 deferral), day.js token
+  formatter with `[...]` escapes incl. ISO-week tokens; deferred
+  locale-week (`w ww wo gggg`) + named-tz (`z zzz`) tokens warn.
+  Unit matrix mirrors the Q1 docs-page examples.
 - [x] `DateNormalizeTransform`: keywords (`today`/`now` via UTC
-      runtime clock — `SystemRuntime::unix_timestamp`, WASM-safe —
-      and `last-modified` via VFS-aware mtime), ISO
-      `date-meta`/`date-modified-meta` (head dcterms switched to it —
-      deliberate deviation, the machine slot stays ISO), in-place
-      formatted `date`/`date-modified`, Q1's precedence (field
-      `{value,format}` > `date-format` > forced `long` for the styled
-      HTML title block, `iso` otherwise and for all other formats).
+  runtime clock — `SystemRuntime::unix_timestamp`, WASM-safe —
+  and `last-modified` via VFS-aware mtime), ISO
+  `date-meta`/`date-modified-meta` (head dcterms switched to it —
+  deliberate deviation, the machine slot stays ISO), in-place
+  formatted `date`/`date-modified`, Q1's precedence (field
+  `{value,format}` > `date-format` > forced `long` for the styled
+  HTML title block, `iso` otherwise and for all other formats).
 - [x] Listings format date fields at record-build (finally consuming
-      `ListingConfig::date_format`; doc `date-format` fallback;
-      `medium` default) — the same pre-template position as Q1's EJS
-      records; feeds parse via the shared module.
+  `ListingConfig::date_format`; doc `date-format` fallback;
+  `medium` default) — the same pre-template position as Q1's EJS
+  records; feeds parse via the shared module.
 - [x] TDD: new smoke fixtures `date-format.qmd` +
-      `date-default-long.qmd` (red first: 5 regex checks); insta
-      re-baselines (4 snapshots: `2026-07-01` → `July 1, 2026` etc.,
-      matching the P0 research doc's Q1 extracts); listing test pins
-      updated to `Jan 15, 2026`; 8 transform unit tests + 9 dates
-      module tests. Playwright title-block sweep green (23 tests —
-      the date fixtures run under the WASM runner).
+  `date-default-long.qmd` (red first: 5 regex checks); insta
+  re-baselines (4 snapshots: `2026-07-01` → `July 1, 2026` etc.,
+  matching the P0 research doc's Q1 extracts); listing test pins
+  updated to `Jan 15, 2026`; 8 transform unit tests + 9 dates
+  module tests. Playwright title-block sweep green (23 tests —
+  the date fixtures run under the WASM runner).
 - [x] E2E (2026-07-17): `date: today` + `date-format: "dddd MMM Do,
-      YYYY"` renders `<p class="date">Friday Jul 17th, 2026</p>` with
-      `<meta name="dcterms.date" content="2026-07-17T00:00:00+00:00">`;
-      output inspected.
+  YYYY"` renders `<p class="date">Friday Jul 17th, 2026</p>` with
+  `<meta name="dcterms.date" content="2026-07-17T00:00:00+00:00">`;
+  output inspected.
 - Preview lockstep (Q9): no TSX changes by design — the preview
   pipeline runs the transform, so formatted dates flow through the
   existing meta reads.
@@ -496,14 +496,14 @@ without i18n/localization design cost). Delivered:
 > supersedes them once the design is approved.
 
 - [ ] Create one shared date module (parse ISO-ish inputs via the `time`
-      crate; render a default human display format) and consume it from the
-      title block
+  crate; render a default human display format) and consume it from the
+  title block
 - [ ] Point listings/feeds at the same module (listing `$date$` display and
-      the existing `format_pub_date_rfc822` seam) so the future
-      `date-format` design lands in one place; the parsed-but-unused
-      `ListingConfig::date_format` stays unused until that design
+  the existing `format_pub_date_rfc822` seam) so the future
+  `date-format` design lands in one place; the parsed-but-unused
+  `ListingConfig::date_format` stays unused until that design
 - [ ] Module doc note pointing at Q1's `date-format` token/locale/keyword
-      surface as the future design target
+  surface as the future design target
 
 ### Phase 5 — Banner mode (bd-364ol5lu) — DONE 2026-07-16
 
@@ -554,57 +554,57 @@ Design notes (scoped 2026-07-16):
 Work items:
 
 - [x] TDD red: strengthened `smoke-all/title-block/banner-true.qmd`
-      (body > header.page-columns.page-full, banner div >
-      quarto-title.column-body > h1, main.quarto-banner-title-block,
-      header NOT inside main — 5 checks red before the fix); new
-      fixtures banner-color.qmd + banner-image.qmd (+ committed 1x1
-      banner.png); insta cases banner_color (header + generated style
-      block), banner_image_style, plus `header_precedes_quarto_content`
-      positional asserts and a non-banner stays-in-main guard
+  (body > header.page-columns.page-full, banner div >
+  quarto-title.column-body > h1, main.quarto-banner-title-block,
+  header NOT inside main — 5 checks red before the fix); new
+  fixtures banner-color.qmd + banner-image.qmd (+ committed 1x1
+  banner.png); insta cases banner_color (header + generated style
+  block), banner_image_style, plus `header_precedes_quarto_content`
+  positional asserts and a non-banner stays-in-main guard
 - [x] `TitleBannerTransform` (new, Normalization phase, HTML-format
-      only — deliberately NOT revealjs): derives
-      `rendered.title-block-banner`, classifies bool/color/image,
-      generates the Q5 `<style>` appended to the canonical
-      `rendered.includes.header` list (shared
-      `append_to_rendered_header` with the favicon transform — reaches
-      both the native `$header-includes$` and the q2-preview head
-      injector), pushes the image `ResourceCopyIntent`; 9 unit tests
-      for the classification matrix. **WASM note:** the image-vs-color
-      existence probe goes through the injected `SystemRuntime`
-      (`ShortcodeResolveTransform` pattern) — a bare `Path::is_file()`
-      can't see `/project/` VFS files, which the Playwright sweep
-      caught (banner-image.qmd failed under the WASM runner until the
-      runtime probe landed)
+  only — deliberately NOT revealjs): derives
+  `rendered.title-block-banner`, classifies bool/color/image,
+  generates the Q5 `<style>` appended to the canonical
+  `rendered.includes.header` list (shared
+  `append_to_rendered_header` with the favicon transform — reaches
+  both the native `$header-includes$` and the q2-preview head
+  injector), pushes the image `ResourceCopyIntent`; 9 unit tests
+  for the classification matrix. **WASM note:** the image-vs-color
+  existence probe goes through the injected `SystemRuntime`
+  (`ShortcodeResolveTransform` pattern) — a bare `Path::is_file()`
+  can't see `/project/` VFS files, which the Playwright sweep
+  caught (banner-image.qmd failed under the WASM runner until the
+  runtime probe landed)
 - [x] `TITLE_BLOCK_PARTIAL` banner branch (Q1-verbatim, incl.
-      description/categories inside the banner and no hide-description
-      gate in banner mode); skeleton emits the partial above
-      `#quarto-content` when the flag is set, `<main>` conditionally
-      gains `quarto-banner-title-block`. Non-banner output is
-      byte-identical (phase5 hash test passed unchanged).
+  description/categories inside the banner and no hide-description
+  gate in banner mode); skeleton emits the partial above
+  `#quarto-content` when the flag is set, `<main>` conditionally
+  gains `quarto-banner-title-block`. Non-banner output is
+  byte-identical (phase5 hash test passed unchanged).
 - [x] Banner SCSS confirmed live: compiled theme CSS carries
-      `.quarto-title-banner{...color:#fdfefe;background:#517699}`
-      (theme-derived via bannerBg()/bannerColor())
+  `.quarto-title-banner{...color:#fdfefe;background:#517699}`
+  (theme-derived via bannerBg()/bannerColor())
 - [x] Browser screenshot verification against Q1 (chrome-devtools MCP,
-      Q1 = system `quarto` dev binary, 2026-07-16): banner-true doc
-      renders visually identically (same slate banner, chips,
-      grid-below layout); only expected deltas are the unformatted
-      date (P4) and a few px of section-heading margin. Explicit-color
-      doc verified: #FFDDFF banner + #111111 title beat the theme.
+  Q1 = system `quarto` dev binary, 2026-07-16): banner-true doc
+  renders visually identically (same slate banner, chips,
+  grid-below layout); only expected deltas are the unformatted
+  date (P4) and a few px of section-heading margin. Explicit-color
+  doc verified: #FFDDFF banner + #111111 title beat the theme.
 - [x] Lockstep (Q9): `PreviewTitleBlock.tsx` banner branch (shared
-      `TitleMetaGrids` fragment mirrors Q1's shared title-metadata
-      partial); `PreviewDocument.tsx` hoists the title block above
-      `#quarto-content` + `<main>` class, mirroring the skeleton
-      conditionals; +6 vitest cases (553 pass); new q2-preview smoke
-      fixture `title-block-banner.qmd`; Playwright title-block sweep
-      green (20 tests)
+  `TitleMetaGrids` fragment mirrors Q1's shared title-metadata
+  partial); `PreviewDocument.tsx` hoists the title block above
+  `#quarto-content` + `<main>` class, mirroring the skeleton
+  conditionals; +6 vitest cases (553 pass); new q2-preview smoke
+  fixture `title-block-banner.qmd`; Playwright title-block sweep
+  green (20 tests)
 - [x] End-to-end (2026-07-16): `cargo run --bin q2 -- render` on an
-      output-dir project with `title-block-banner: banner.png` +
-      `title-block-banner-color: "#FFFFFF"`: `_site/banner.png` copied
-      (ResourceCopyIntent), head `<style>` has
-      `background-image: url(banner.png); background-size: cover;`,
-      header before `#quarto-content`,
-      `<main class="content quarto-banner-title-block">`; output
-      inspected
+  output-dir project with `title-block-banner: banner.png` +
+  `title-block-banner-color: "#FFFFFF"`: `_site/banner.png` copied
+  (ResourceCopyIntent), head `<style>` has
+  `background-image: url(banner.png); background-size: cover;`,
+  header before `#quarto-content`,
+  `<main class="content quarto-banner-title-block">`; output
+  inspected
 
 Deferred (documented in the transform module doc + above):
 `#quarto-header.quarto-banner`, `toc-left` producer.
@@ -647,68 +647,68 @@ Design notes (scoped 2026-07-17):
 Work items:
 
 - [x] TDD red: strengthened `style-none.qmd` (bare header, no
-      `.quarto-title-block` class, `p.author`; 5 checks red) and
-      `style-plain.qmd` (styled DOM + CSS negatives); insta
-      `title_block_style_none` re-baselined to the Pandoc fallback.
-      **Found while testing**: one responsive `.quarto-title-banner`
-      margin rule lives in the *bootstrap* layer (in Q1 too —
-      `_bootstrap-rules.scss:1916`), so it correctly survives
-      plain/none; the CSS negatives target layer-only selectors
-      (`.quarto-title-meta-heading`, `.quarto-title-author-orcid`)
+  `.quarto-title-block` class, `p.author`; 5 checks red) and
+  `style-plain.qmd` (styled DOM + CSS negatives); insta
+  `title_block_style_none` re-baselined to the Pandoc fallback.
+  **Found while testing**: one responsive `.quarto-title-banner`
+  margin rule lives in the *bootstrap* layer (in Q1 too —
+  `_bootstrap-rules.scss:1916`), so it correctly survives
+  plain/none; the CSS negatives target layer-only selectors
+  (`.quarto-title-meta-heading`, `.quarto-title-author-orcid`)
 - [x] `TitleBlockStyle` enum in `transforms/config.rs`
-      (`AppendixStyle` pattern; `false` = none, `manuscript`/unknown →
-      silent Default per Q6); `AuthorsNormalizeTransform` derives
-      `rendered.title-block-none`; `TitleBannerTransform` skips when
-      none (new pipeline test: none + banner → header stays in main,
-      no banner markup)
+  (`AppendixStyle` pattern; `false` = none, `manuscript`/unknown →
+  silent Default per Q6); `AuthorsNormalizeTransform` derives
+  `rendered.title-block-none`; `TitleBannerTransform` skips when
+  none (new pipeline test: none + banner → header stays in main,
+  no banner markup)
 - [x] `TITLE_BLOCK_PARTIAL` Pandoc-fallback branch
-      (`$if(rendered.title-block-none)$`; iterates `by-author` names;
-      `$labels.abstract$` where Pandoc uses `$abstract-title$` —
-      documented deviation, override still honored)
+  (`$if(rendered.title-block-none)$`; iterates `by-author` names;
+  `$labels.abstract$` where Pandoc uses `$abstract-title$` —
+  documented deviation, override still honored)
 - [x] `ThemeConfig.title_block_layer` (from `title-block-style`,
-      duplicated reader documented) honored in `assemble_theme_scss` +
-      both native and WASM `compile_with_doc_vars`; stage fast path
-      requires the flag, cache key includes it; unit-test matrices in
-      quarto-sass and quarto-core
+  duplicated reader documented) honored in `assemble_theme_scss` +
+  both native and WASM `compile_with_doc_vars`; stage fast path
+  requires the flag, cache key includes it; unit-test matrices in
+  quarto-sass and quarto-core
 - [x] Lockstep: `PreviewTitleBlock.tsx` none-branch (Q9); +2 vitest
-      (555 pass); new q2-preview fixture `title-block-style-none.qmd`;
-      Playwright title-block sweep green (21 tests, incl. the html
-      style fixtures under the WASM runner — proving the WASM
-      dart-sass path honors the flag)
+  (555 pass); new q2-preview fixture `title-block-style-none.qmd`;
+  Playwright title-block sweep green (21 tests, incl. the html
+  style fixtures under the WASM runner — proving the WASM
+  dart-sass path honors the flag)
 - [x] End-to-end (2026-07-17): `cargo run --bin q2 -- render` of
-      none/plain/default docs: none emits
-      `<header id="title-block-header"><h1 class="title">…<p
-      class="author">` (Pandoc fallback, no quarto classes); plain
-      and none CSS contain 0 `quarto-title-meta-heading` rules vs 1
-      in the default control; outputs inspected
+  none/plain/default docs: none emits
+  `<header id="title-block-header"><h1 class="title">…<p
+  class="author">` (Pandoc fallback, no quarto classes); plain
+  and none CSS contain 0 `quarto-title-meta-heading` rules vs 1
+  in the default control; outputs inspected
 
 ### Phase 7 — Docs + wrap-up (bd-y71ga2l8) — DONE 2026-07-17
 
 - [x] Two docs/ pages, rendered with q2 and structurally/stylistically
-      modeled on quarto-web (per Carlos's brief; prose written with
-      the reader-expectations methodology):
-      `docs/guides/authoring/title-blocks.qmd` (overview, styles incl.
-      the manuscript-unsupported callout, structured authors +
-      `ref:` affiliations, banners + custom background/foreground,
-      categories, dates, label-override table with Q2's actual
-      defaults, template-partials pointer) and
-      `docs/guides/authoring/dates.qmd` (parse forms + no-guessing
-      warning, keywords + UTC callout, named styles, the supported
-      token table — deferred tokens called out — escaping, and a
-      "Where Formatting Applies" section covering listings and the
-      ISO machine slots). Both registered in the sidebar; rendered
-      with zero warnings from the new pages; visually inspected in
-      the browser (they dogfood the title-block features they
-      document). Note: Q1's definition-list syntax is unsupported in
-      qmd — the style list uses bullets instead.
+  modeled on quarto-web (per Carlos's brief; prose written with
+  the reader-expectations methodology):
+  `docs/guides/authoring/title-blocks.qmd` (overview, styles incl.
+  the manuscript-unsupported callout, structured authors +
+  `ref:` affiliations, banners + custom background/foreground,
+  categories, dates, label-override table with Q2's actual
+  defaults, template-partials pointer) and
+  `docs/guides/authoring/dates.qmd` (parse forms + no-guessing
+  warning, keywords + UTC callout, named styles, the supported
+  token table — deferred tokens called out — escaping, and a
+  "Where Formatting Applies" section covering listings and the
+  ISO machine slots). Both registered in the sidebar; rendered
+  with zero warnings from the new pages; visually inspected in
+  the browser (they dogfood the title-block features they
+  document). Note: Q1's definition-list syntax is unsupported in
+  qmd — the style list uses bullets instead.
 - [x] Follow-up strands filed (all discovered-from bd-y71ga2l8):
-      bd-45tfp790 (localization design: labels + date locales +
-      locale-week tokens + local-tz keywords), bd-4j4okt4o
-      (manuscript style, Q6), bd-e2kpwy7n (toc-location; unlocks the
-      inert banner toc-left hook), bd-xva3f8uy
-      (#quarto-header.quarto-banner when secondary-nav lands),
-      bd-6reut449 (citation/scholar meta tags, Q10), bd-a949e2zu
-      (editable React title block, Q9).
+  bd-45tfp790 (localization design: labels + date locales +
+  locale-week tokens + local-tz keywords), bd-4j4okt4o
+  (manuscript style, Q6), bd-e2kpwy7n (toc-location; unlocks the
+  inert banner toc-left hook), bd-xva3f8uy
+  (#quarto-header.quarto-banner when secondary-nav lands),
+  bd-6reut449 (citation/scholar meta tags, Q10), bd-a949e2zu
+  (editable React title block, Q9).
 
 ## References
 

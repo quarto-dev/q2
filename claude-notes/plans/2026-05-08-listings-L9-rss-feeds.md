@@ -1701,7 +1701,7 @@ scopes. The transforms read from `RenderContext` and
   2026-05-08. Mirrors Q1's preamble/item/postamble
   layout; user-readable for future docs.
 - **D10 (full-reader transforms in v1: urls-to-absolute
-  + anchor-strip only):** user-confirmed 2026-05-08.
+  \+ anchor-strip only):** user-confirmed 2026-05-08.
   Math + syntax-highlight class maps deferred.
 - **D11 (`reader_ext.rs` lives under `feed/`, not
   extending L7's `reader.rs`):** user-confirmed
@@ -1725,51 +1725,51 @@ watch pass.
 ### Preparation
 
 - [x] Re-read `claude-notes/instructions/testing.md` and
-      `claude-notes/instructions/coding.md`.
+  `claude-notes/instructions/coding.md`.
 - [x] Re-read `.claude/rules/wasm.md` (cfg gating; `?Send`
-      on async traits).
+  on async traits).
 - [x] Re-read the L7 sub-plan §"scraper dep gating" and
-      L8 sub-plan §"WASM behavior" — L9 follows both
-      precedents.
+  L8 sub-plan §"WASM behavior" — L9 follows both
+  precedents.
 - [x] Confirm `feature/listings` head is the post-L8
-      merge. Verified at impl-start: branch tip is
-      `b8c9b8b5` (this plan-doc commit on top of the
-      `cd2410fa` L8 merge).
+  merge. Verified at impl-start: branch tip is
+  `b8c9b8b5` (this plan-doc commit on top of the
+  `cd2410fa` L8 merge).
 - [x] Create the worktree at
-      `.worktrees/bd-o90m-listings-rss-feeds/` per
-      §"Branch / worktree". Branch
-      `beads/bd-o90m-listings-rss-feeds`.
+  `.worktrees/bd-o90m-listings-rss-feeds/` per
+  §"Branch / worktree". Branch
+  `beads/bd-o90m-listings-rss-feeds`.
 - [x] `npm install` in the worktree.
 - [x] Add `.beads/redirect` per worktree rules.
 - [x] Baseline: `cargo xtask verify --skip-hub-build
-      --skip-hub-tests` clean; recorded **8907 workspace
-      tests** as the baseline (via
-      `cargo nextest list --workspace --message-format=json`).
+  --skip-hub-tests` clean; recorded **8907 workspace
+  tests** as the baseline (via
+  `cargo nextest list --workspace --message-format=json`).
 
 ### TDD phase 1 — diagnostics + dep edit (module skeleton deferred)
 
 - [x] Write test #1 (`error_catalog_has_q_12_15_and_q_12_16`
-      in `crates/quarto-error-reporting/src/catalog.rs`).
+  in `crates/quarto-error-reporting/src/catalog.rs`).
 - [x] Test #2 is a build-system check, not a Rust test:
-      verified manually via
-      `cargo tree --target wasm32-unknown-unknown -p wasm-quarto-hub-client | grep imagesize`
-      (empty output) and a successful
-      `cargo build --target wasm32-unknown-unknown -p wasm-quarto-hub-client`.
-      Recorded in `claude-notes/plans/...`.
+  verified manually via
+  `cargo tree --target wasm32-unknown-unknown -p wasm-quarto-hub-client | grep imagesize`
+  (empty output) and a successful
+  `cargo build --target wasm32-unknown-unknown -p wasm-quarto-hub-client`.
+  Recorded in `claude-notes/plans/...`.
 - [x] Add `Q-12-15` and `Q-12-16` to `error_catalog.json`.
 - [x] Add `imagesize = "0.13"` to
-      `crates/quarto-core/Cargo.toml` under
-      `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`.
+  `crates/quarto-core/Cargo.toml` under
+  `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]`.
 - [ ] ~~Create `feed/` skeleton with empty files~~ —
-      deferred. Phase 1's goal is "the dep + diagnostic
-      edits land cleanly without breaking WASM"; the
-      empty-stub scaffold would create half-finished
-      files. Each subsequent phase creates its own
-      `feed/<file>.rs` when the test for it is written.
+  deferred. Phase 1's goal is "the dep + diagnostic
+  edits land cleanly without breaking WASM"; the
+  empty-stub scaffold would create half-finished
+  files. Each subsequent phase creates its own
+  `feed/<file>.rs` when the test for it is written.
 - [x] Confirm WASM build succeeds and `cargo tree` shows
-      `imagesize` is NOT pulled into the WASM build.
+  `imagesize` is NOT pulled into the WASM build.
 - [x] Tests pass: `cargo nextest run -p quarto-error-reporting`
-      → 45 passed, 0 failed.
+  → 45 passed, 0 failed.
 
 ### TDD phase 2 — *(deferred)* `date_format` pipe
 
@@ -1782,163 +1782,163 @@ RFC 822 `pubDate` formatting L9 needs is server-side in
 ### TDD phase 3 — feed binding
 
 - [x] Write tests #7–15. Implementation landed alongside
-      tests in `feed/binding.rs`: 32 unit tests cover XML
-      escaping (text + attr forms), URL joining, RFC 2822
-      / RFC 3339 / date-only parsing, image dimension
-      scaling, MIME mapping, channel-builder cascade
-      (feed.* → website.* → empty), per-item description-
-      element shape (CDATA for metadata feeds; placeholder
-      envelope for partial/full), local-PNG imagesize
-      integration with synthetic 100x100 and 4000x3000
-      fixture headers, absolute-URL / data-URI / unreadable-
-      file fallback to empty `attrs`, and `xml-stylesheet`
-      plumbing.
+  tests in `feed/binding.rs`: 32 unit tests cover XML
+  escaping (text + attr forms), URL joining, RFC 2822
+  / RFC 3339 / date-only parsing, image dimension
+  scaling, MIME mapping, channel-builder cascade
+  (feed.* → website.* → empty), per-item description-
+  element shape (CDATA for metadata feeds; placeholder
+  envelope for partial/full), local-PNG imagesize
+  integration with synthetic 100x100 and 4000x3000
+  fixture headers, absolute-URL / data-URI / unreadable-
+  file fallback to empty `attrs`, and `xml-stylesheet`
+  plumbing.
 - [x] Implement `feed/binding.rs` as `build_feed_channel`
-      (channel-level) and `build_feed_item` (per-item)
-      returning typed `FeedChannel` / `FeedItem` structs
-      (ergonomic for the upcoming stage transform — the
-      template-context conversion will be a thin wrapper
-      built in phase 4 alongside the templates). Server-
-      side XML escaping via small inline `xml_escape_text`
-      / `xml_escape_attr` helpers (no new dep).
+  (channel-level) and `build_feed_item` (per-item)
+  returning typed `FeedChannel` / `FeedItem` structs
+  (ergonomic for the upcoming stage transform — the
+  template-context conversion will be a thin wrapper
+  built in phase 4 alongside the templates). Server-
+  side XML escaping via small inline `xml_escape_text`
+  / `xml_escape_attr` helpers (no new dep).
 - [x] Implement `build_item_image` with `imagesize` lookup
-      + scaling. The scaling helper `scale_to_feed_dimensions`
-      mirrors Q1's `feedImageSize` exactly (max 400h × 144w,
-      bottleneck on the smaller axis ratio).
+  + scaling. The scaling helper `scale_to_feed_dimensions`
+  mirrors Q1's `feedImageSize` exactly (max 400h × 144w,
+  bottleneck on the smaller axis ratio).
 - [x] Tests pass: `cargo nextest run -p quarto-core
-      'project::listing::feed::binding::tests'` →
-      32 passed, 0 failed.
+  'project::listing::feed::binding::tests'` →
+  32 passed, 0 failed.
 - [x] Added `parsing` feature to the `time` crate in
-      `quarto-core`'s `Cargo.toml` (already had
-      `formatting` + `macros`); needed for
-      `OffsetDateTime::parse` / `Date::parse`.
+  `quarto-core`\'s `Cargo.toml` (already had
+  `formatting` + `macros`); needed for
+  `OffsetDateTime::parse` / `Date::parse`.
 
 ### TDD phase 4 — staged-file write transform
 
 - [x] Write tests #16–24 plus an extra
-      `stage_qualifies_filename_for_multi_feed_hosts` for D7.
+  `stage_qualifies_filename_for_multi_feed_hosts` for D7.
 - [x] Embed the three `.template` files via `include_str!`
-      (in `feed/stage.rs`, not `feed/mod.rs` — keeps the
-      template constants alongside the transform that
-      consumes them; same outcome). Templates files live
-      under `feed/templates/{preamble,item,postamble}.template`.
+  (in `feed/stage.rs`, not `feed/mod.rs` — keeps the
+  template constants alongside the transform that
+  consumes them; same outcome). Templates files live
+  under `feed/templates/{preamble,item,postamble}.template`.
 - [x] Implement `feed/stage.rs::ListingFeedStageTransform`.
-      Includes typed `FeedChannel`/`FeedItem` →
-      `TemplateContext` lifters, item-truncation logic
-      (default 20; `feed.items: 0` treated as missing),
-      a `most_recent_item_date` helper for `lastBuildDate`,
-      and Q-12-15 emission when `website.site-url` is
-      missing (once per transform invocation).
+  Includes typed `FeedChannel`/`FeedItem` →
+  `TemplateContext` lifters, item-truncation logic
+  (default 20; `feed.items: 0` treated as missing),
+  a `most_recent_item_date` helper for `lastBuildDate`,
+  and Q-12-15 emission when `website.site-url` is
+  missing (once per transform invocation).
 - [x] Register the transform in the Pass-2 transform list,
-      after `CategoriesSidebarTransform` in
-      `pipeline.rs:build_html_pipeline_stages_with_apply_config`.
-      Native-only registration (gated with
-      `#[cfg(not(target_arch = "wasm32"))]` at the push
-      site, mirroring the cfg gate in `feed/mod.rs`).
+  after `CategoriesSidebarTransform` in
+  `pipeline.rs:build_html_pipeline_stages_with_apply_config`.
+  Native-only registration (gated with
+  `#[cfg(not(target_arch = "wasm32"))]` at the push
+  site, mirroring the cfg gate in `feed/mod.rs`).
 - [x] Tests pass: `cargo nextest run -p quarto-core
-      'project::listing::feed'` → 42 passed
-      (32 binding + 10 stage). Full workspace
-      `cargo nextest run --workspace` → 8755 passed.
-      `cargo xtask lint` clean. `npm run build:wasm`
-      (hub-client) clean.
+  'project::listing::feed'` → 42 passed
+  (32 binding + 10 stage). Full workspace
+  `cargo nextest run --workspace` → 8755 passed.
+  `cargo xtask lint` clean. `npm run build:wasm`
+  (hub-client) clean.
 
 ### TDD phase 5 — link injection transform
 
 - [x] Write tests #25–29 plus an extra
-      `link_inject_multi_listing_emits_qualified_hrefs` for D7.
+  `link_inject_multi_listing_emits_qualified_hrefs` for D7.
 - [x] Implement `feed/link_inject.rs::ListingFeedLinkTransform`.
-      Appends to `rendered.includes.header` (the slot
-      `WebsiteFaviconTransform::apply_favicon` writes to
-      via `append_to_rendered_header` —
-      `crates/quarto-core/src/transforms/website_favicon.rs:74`).
-      The helper is duplicated locally for now; a follow-up
-      bd at close-out hoists it to a shared util once a
-      third caller appears.
+  Appends to `rendered.includes.header` (the slot
+  `WebsiteFaviconTransform::apply_favicon` writes to
+  via `append_to_rendered_header` —
+  `crates/quarto-core/src/transforms/website_favicon.rs:74`).
+  The helper is duplicated locally for now; a follow-up
+  bd at close-out hoists it to a shared util once a
+  third caller appears.
 - [x] Register in the Pass-2 transform list. Sits unconditionally
-      in `build_transform_pipeline` after the stage-transform
-      registration; both native and WASM pipelines reach it
-      through `AstTransformsStage::new()` (which JIT-builds
-      via `build_transform_pipeline`). Verified
-      `npm run build:wasm` clean.
+  in `build_transform_pipeline` after the stage-transform
+  registration; both native and WASM pipelines reach it
+  through `AstTransformsStage::new()` (which JIT-builds
+  via `build_transform_pipeline`). Verified
+  `npm run build:wasm` clean.
 - [x] Tests pass: `cargo nextest run -p quarto-core
-      'project::listing::feed::link_inject'` → 6 passed.
-      Wider `cargo nextest run -p quarto-core` → 1869 passed
-      (was 1863 before phase 4; +6 new).
+  'project::listing::feed::link_inject'` → 6 passed.
+  Wider `cargo nextest run -p quarto-core` → 1869 passed
+  (was 1863 before phase 4; +6 new).
 
 ### TDD phase 6 — reader extension
 
 - [x] Write tests #30–36 plus a handful of helper unit tests
-      (`collapse_relative_strips_dotdot`,
-      `parent_href_string_handles_root_and_nested`,
-      `visible_text_drops_tags_and_decodes_entities`,
-      `extract_first_para_html_strips_anchors_with_inline_children`,
-      `extract_first_para_html_returns_none_when_no_main`,
-      `extract_first_para_html_skips_empty_p`,
-      `extract_first_para_html_no_truncate_when_max_zero`,
-      `extract_full_contents_rewrites_image_src`,
-      `extract_full_contents_passes_external_url_through`,
-      `extract_full_contents_resolves_site_rooted_path`,
-      `extract_full_contents_keeps_external_anchors_intact`).
+  (`collapse_relative_strips_dotdot`,
+  `parent_href_string_handles_root_and_nested`,
+  `visible_text_drops_tags_and_decodes_entities`,
+  `extract_first_para_html_strips_anchors_with_inline_children`,
+  `extract_first_para_html_returns_none_when_no_main`,
+  `extract_first_para_html_skips_empty_p`,
+  `extract_first_para_html_no_truncate_when_max_zero`,
+  `extract_full_contents_rewrites_image_src`,
+  `extract_full_contents_passes_external_url_through`,
+  `extract_full_contents_resolves_site_rooted_path`,
+  `extract_full_contents_keeps_external_anchors_intact`).
 - [x] Implement `feed/reader_ext.rs::extract_first_para_html`.
-      HTML-preserving when the para fits under `max_length`;
-      degrades to plain-text + word-boundary truncation
-      otherwise (see file-level "Limitations" note —
-      truncation under `max_length` is a v1 follow-up). Anchor
-      tags are unwrapped (Q1 partial-mode behavior).
+  HTML-preserving when the para fits under `max_length`;
+  degrades to plain-text + word-boundary truncation
+  otherwise (see file-level "Limitations" note —
+  truncation under `max_length` is a v1 follow-up). Anchor
+  tags are unwrapped (Q1 partial-mode behavior).
 - [x] Implement `feed/reader_ext.rs::extract_full_contents`
-      with `urls-to-absolute` (a/link href + img/source/video/audio
-      src), `<header id="title-block-header">` removal, and
-      `a[href^="#"]` unwrap. External / data / mailto /
-      javascript / scheme-relative URLs pass through unchanged.
-      Site-rooted paths (`/about.html`) resolve against the
-      site URL.
+  with `urls-to-absolute` (a/link href + img/source/video/audio
+  src), `<header id="title-block-header">` removal, and
+  `a[href^="#"]` unwrap. External / data / mailto /
+  javascript / scheme-relative URLs pass through unchanged.
+  Site-rooted paths (`/about.html`) resolve against the
+  site URL.
 - [x] Tests pass: `cargo nextest run -p quarto-core
-      'project::listing::feed::reader_ext'` → 18 passed.
-      Wider `cargo nextest run -p quarto-core` → 1887 passed
-      (was 1869 before phase 5; +18 new).
+  'project::listing::feed::reader_ext'` → 18 passed.
+  Wider `cargo nextest run -p quarto-core` → 1887 passed
+  (was 1869 before phase 5; +18 new).
 
 ### TDD phase 7 — post-render completion
 
 - [x] Write tests #37–43 plus an extra
-      `complete_walks_nested_directories` (recursive walk
-      catches `_site/posts/index.feed-...`) and a
-      `staged_type_from_filename` unit test.
+  `complete_walks_nested_directories` (recursive walk
+  catches `_site/posts/index.feed-...`) and a
+  `staged_type_from_filename` unit test.
 - [x] Implement `feed/complete.rs::complete_staged_feeds`.
-      Per-call HashMap cache (`HashMap<PathBuf, Option<String>>`)
-      avoids re-reading siblings shared across multiple
-      feeds (e.g. the main feed and per-category sub-feeds
-      on the same host). Recursive `std::fs::read_dir` walk
-      filters strictly on the three staged extensions.
-      Errors during one feed are reported as warnings and
-      don't abort the whole step.
+  Per-call HashMap cache (`HashMap<PathBuf, Option<String>>`)
+  avoids re-reading siblings shared across multiple
+  feeds (e.g. the main feed and per-category sub-feeds
+  on the same host). Recursive `std::fs::read_dir` walk
+  filters strictly on the three staged extensions.
+  Errors during one feed are reported as warnings and
+  don't abort the whole step.
 - [x] Wire the call into `WebsiteProjectType::post_render`
-      after L7's `substitute_listing_placeholders`. The
-      L9 reader extractors then see fully-finalized
-      sibling HTML.
+  after L7's `substitute_listing_placeholders`. The
+  L9 reader extractors then see fully-finalized
+  sibling HTML.
 - [x] Tests pass: `cargo nextest run -p quarto-core
-      'project::listing::feed::complete'` → 9 passed.
-      Wider `cargo nextest run -p quarto-core` → 1896
-      passed (was 1887 before phase 6).
+  'project::listing::feed::complete'` → 9 passed.
+  Wider `cargo nextest run -p quarto-core` → 1896
+  passed (was 1887 before phase 6).
 - [x] WASM build still clean (`npm run build:wasm`) —
-      orchestrator.rs's `complete_staged_feeds` call sits
-      inside the existing `cfg(not(target_arch = "wasm32"))`
-      block in `WebsiteProjectType::post_render`.
+  orchestrator.rs's `complete_staged_feeds` call sits
+  inside the existing `cfg(not(target_arch = "wasm32"))`
+  block in `WebsiteProjectType::post_render`.
 
 ### TDD phase 8 — End-to-end CLI
 
 - [x] Built three real-binary fixtures
-      (`/tmp/l9-fixture-metadata`,
-      `/tmp/l9-fixture-partial`,
-      `/tmp/l9-fixture-full-categories`) plus a no-url
-      negative-case fixture (`/tmp/l9-fixture-no-url`).
-      Rendered each via `cargo run --bin q2 -- render`.
-      Inspected output by hand: well-formed XML, has
-      `<rss>`, `<channel>`, ≥ 1 `<item>` (or zero items
-      with a Q-12-15 warning, for the no-url case).
+  (`/tmp/l9-fixture-metadata`,
+  `/tmp/l9-fixture-partial`,
+  `/tmp/l9-fixture-full-categories`) plus a no-url
+  negative-case fixture (`/tmp/l9-fixture-no-url`).
+  Rendered each via `cargo run --bin q2 -- render`.
+  Inspected output by hand: well-formed XML, has
+  `<rss>`, `<channel>`, ≥ 1 `<item>` (or zero items
+  with a Q-12-15 warning, for the no-url case).
 - [x] Recorded the verification in §"End-to-end CLI
-      verification record" above. Each fixture has its
-      layout, invocation, output snippets, and a list of
-      verified properties.
+  verification record" above. Each fixture has its
+  layout, invocation, output snippets, and a list of
+  verified properties.
 
 Findings:
 
@@ -1963,21 +1963,21 @@ Findings:
 
 - [ ] `cargo build --workspace` clean (no warnings).
 - [ ] `cargo nextest run --workspace` — count delta
-      ≥ +35 new tests added.
+  ≥ +35 new tests added.
 - [ ] `cargo xtask lint` clean.
 - [ ] `cargo xtask verify` (full, including hub-client
-      + WASM build).
+  + WASM build).
 - [ ] Hub-client browser smoke recorded in close-out
-      (per CLAUDE.md §"End-to-end verification" — the
-      smoke is a confirmation, not a blocker).
+  (per CLAUDE.md §"End-to-end verification" — the
+  smoke is a confirmation, not a blocker).
 - [ ] Stop and request user permission before any push
-      (per CLAUDE.md §"GIT PUSH POLICY").
+  (per CLAUDE.md §"GIT PUSH POLICY").
 - [ ] After user approval: `br update bd-o90m
-      --status closed`.
+  --status closed`.
 - [ ] `br sync --flush-only && git add .beads/ &&
-      git commit` from the **main repo**.
+  git commit` from the **main repo**.
 - [ ] Update the listings epic table to mark L9 closed
-      with the merge commit hash.
+  with the merge commit hash.
 
 ### Filed follow-up bd issues
 

@@ -127,7 +127,7 @@ stress payoff):
    Placeholder → `08`.
 
 Each feature section: 1–2 sentences of *what it is / when to use it*,
-a fenced ```markdown code block of the minimal source, then the
+a fenced \`\`\`markdown code block of the minimal source, then the
 `.q2-website-example-iframe` placeholder. Document **only implemented
 features** — no backgrounds, code-line highlighting, transitions,
 footer/logo, theme authoring (later phases). Where a feature has an

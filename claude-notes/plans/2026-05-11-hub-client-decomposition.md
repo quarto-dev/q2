@@ -505,21 +505,21 @@ services move, so any regression surfaces immediately.
 ### Phase 0 — Pre-flight (no code changes)
 
 - [x] Verify the starting workspace builds clean.
-      `cd hub-client && npm run build:all && npm run test:ci`.
-      *(2026-05-13: build green; 84/84 tests pass across
-      `test`, `test:integration`, `test:wasm`.)*
+  `cd hub-client && npm run build:all && npm run test:ci`.
+  *(2026-05-13: build green; 84/84 tests pass across
+  `test`, `test:integration`, `test:wasm`.)*
 - [x] Confirm the file lists in "File-move catalogue" against
-      current `git ls-files`. Patch the plan with any drift.
-      *(2026-05-13: added `customRegistry`, `atomicCustomNodes`,
-      `utils/sourceInfo` to renderer moves; documented colocated
-      tests inline; flagged q2-debug's reverse import of
-      `customRegistry` after the move.)*
+  current `git ls-files`. Patch the plan with any drift.
+  *(2026-05-13: added `customRegistry`, `atomicCustomNodes`,
+  `utils/sourceInfo` to renderer moves; documented colocated
+  tests inline; flagged q2-debug's reverse import of
+  `customRegistry` after the move.)*
 - [x] Decide on the test-helper / mock files under
-      `src/test-utils/` and `src/__mocks__/`: which move with
-      `preview-renderer`, which with `preview-runtime`, which
-      stay in hub-client. Update catalogue.
-      *(2026-05-13: dispositions recorded in §Test-helper
-      placement below.)*
+  `src/test-utils/` and `src/__mocks__/`: which move with
+  `preview-renderer`, which with `preview-runtime`, which
+  stay in hub-client. Update catalogue.
+  *(2026-05-13: dispositions recorded in §Test-helper
+  placement below.)*
 
 **Acceptance:** workspace builds and tests pass on the current
 branch; catalogue is final. ✓
@@ -545,30 +545,30 @@ hub-client — those files are not imported by the build.
 ### Phase 1 — Empty workspace packages
 
 - [x] Create `ts-packages/preview-renderer/` with `package.json`,
-      `tsconfig.json`, `vitest.config.ts`,
-      `vitest.integration.config.ts`, empty `src/index.ts`
-      exporting nothing.
+  `tsconfig.json`, `vitest.config.ts`,
+  `vitest.integration.config.ts`, empty `src/index.ts`
+  exporting nothing.
 - [x] Create `ts-packages/preview-runtime/` with the same
-      skeleton, including the WASM alias in `vitest.config.ts`
-      and `vitest.integration.config.ts`.
+  skeleton, including the WASM alias in `vitest.config.ts`
+  and `vitest.integration.config.ts`.
 - [x] Run `npm install` from repo root. Confirm new workspaces
-      register (`npm ls @quarto/preview-renderer @quarto/preview-runtime`).
-      *(2026-05-13: both registered as workspace symlinks.)*
+  register (`npm ls @quarto/preview-renderer @quarto/preview-runtime`).
+  *(2026-05-13: both registered as workspace symlinks.)*
 - [x] Add a placeholder `test.ts` in each `src/` that runs a
-      trivial assertion; confirm `npm test --workspace
-      @quarto/preview-renderer` (and runtime) pass.
-      *(2026-05-13: 1 test/package, both green; typecheck + build
-      also succeed.)*
+  trivial assertion; confirm `npm test --workspace
+  @quarto/preview-renderer` (and runtime) pass.
+  *(2026-05-13: 1 test/package, both green; typecheck + build
+  also succeed.)*
 - [x] Confirm hub-client can `import '@quarto/preview-renderer'`
-      and `import '@quarto/preview-runtime'`. Update
-      `tsconfig.app.json` references if hub-client uses project
-      references for workspace deps.
-      *(2026-05-13: temporary probe imports in `main.tsx` compiled
-      cleanly through `tsc --noEmit` and `vite build`. Reverted
-      after verification. tsconfig.app.json needed no changes —
-      hub-client doesn't use TS project references for workspace
-      deps; it relies on npm's `node_modules/@quarto/...` symlinks
-      + tsc's "bundler" `moduleResolution`.)*
+  and `import '@quarto/preview-runtime'`. Update
+  `tsconfig.app.json` references if hub-client uses project
+  references for workspace deps.
+  *(2026-05-13: temporary probe imports in `main.tsx` compiled
+  cleanly through `tsc --noEmit` and `vite build`. Reverted
+  after verification. tsconfig.app.json needed no changes —
+  hub-client doesn't use TS project references for workspace
+  deps; it relies on npm\'s `node_modules/@quarto/...` symlinks
+  + tsc\'s "bundler" `moduleResolution`.)*
 
 **Acceptance:** both new packages exist, are recognized by npm
 workspaces, have passing test commands, and are importable from
@@ -579,35 +579,35 @@ hub-client (even though they export nothing yet). ✓
 The lowest-risk moves. Pure data + pure functions; no React tree.
 
 - [x] Move the five `types/` files to
-      `ts-packages/preview-renderer/src/types/`.
-      *(2026-05-13: project + project.test, diagnostic,
-      artifactPaths, sourceInfo, intelligence moved with `git mv`.)*
+  `ts-packages/preview-renderer/src/types/`.
+  *(2026-05-13: project + project.test, diagnostic,
+  artifactPaths, sourceInfo, intelligence moved with `git mv`.)*
 - [x] **Deferred** `ThemeContext.tsx` — see §contexts/ above.
-      Tracked as `bd-hfjj-fu-theme`.
+  Tracked as `bd-hfjj-fu-theme`.
 - [x] Move the `utils/` files to
-      `ts-packages/preview-renderer/src/utils/`.
-      *(2026-05-13: 7 of 8 moved — vfsPaths, iframeLinkHandlers,
-      componentPath, stripAnsi, customRegistry, atomicCustomNodes,
-      sourceInfo. iframePostProcessor deferred to Phase 5 because
-      it imports from services/wasmRenderer.)*
+  `ts-packages/preview-renderer/src/utils/`.
+  *(2026-05-13: 7 of 8 moved — vfsPaths, iframeLinkHandlers,
+  componentPath, stripAnsi, customRegistry, atomicCustomNodes,
+  sourceInfo. iframePostProcessor deferred to Phase 5 because
+  it imports from services/wasmRenderer.)*
 - [x] Add re-exports to `ts-packages/preview-renderer/src/index.ts`.
-      *(2026-05-13: minimal — only a design comment for now.
-      Sub-path exports in package.json handle the Phase-2 surface;
-      barrel exports grow with Phases 3–4.)*
+  *(2026-05-13: minimal — only a design comment for now.
+  Sub-path exports in package.json handle the Phase-2 surface;
+  barrel exports grow with Phases 3–4.)*
 - [x] Update every importer in hub-client.
-      *(2026-05-13: 64 imports across 44 files rewritten to
-      `@quarto/preview-renderer/types/<m>` and `/utils/<m>` via
-      `/tmp/rewrite-imports.py`. Required adding a
-      `@quarto/preview-renderer` alias to hub-client's three
-      vitest configs — vitest's exports resolution doesn't honor
-      the `source` condition the way Vite's prod build does, so
-      we follow the existing sync-client/automerge-schema
-      alias convention.)*
+  *(2026-05-13: 64 imports across 44 files rewritten to
+  `@quarto/preview-renderer/types/<m>` and `/utils/<m>` via
+  `/tmp/rewrite-imports.py`. Required adding a
+  `@quarto/preview-renderer` alias to hub-client's three
+  vitest configs — vitest's exports resolution doesn't honor
+  the `source` condition the way Vite's prod build does, so
+  we follow the existing sync-client/automerge-schema
+  alias convention.)*
 - [x] Audit types/utils for editor-only fields.
-      *(2026-05-13: no splits needed. `project.ts` mentions
-      "hub-client" in a docstring but the IndexedDB-stored
-      `ProjectEntry` type is generic enough that the SPA can
-      consume or ignore it.)*
+  *(2026-05-13: no splits needed. `project.ts` mentions
+  "hub-client" in a docstring but the IndexedDB-stored
+  `ProjectEntry` type is generic enough that the SPA can
+  consume or ignore it.)*
 
 **Acceptance:**
 - `cd hub-client && npm run typecheck && npm run test:ci &&
@@ -619,29 +619,29 @@ The lowest-risk moves. Pure data + pure functions; no React tree.
 ### Phase 3 — Move framework/
 
 - [x] Move `components/render/framework/` entire subtree to
-      `ts-packages/preview-renderer/src/framework/`.
-      *(2026-05-13.)*
+  `ts-packages/preview-renderer/src/framework/`.
+  *(2026-05-13.)*
 - [x] Expose as a single barrel via `package.json` exports
-      `./framework`. Wildcards rejected because the subtree mixes
-      `.tsx` (Ast, dispatch, RegistryContext) and `.ts` (the rest)
-      and Node's exports map can't pattern-match both extensions
-      cleanly. Every framework symbol re-exports through
-      `framework/index.ts`, so sub-file imports are not needed.
+  `./framework`. Wildcards rejected because the subtree mixes
+  `.tsx` (Ast, dispatch, RegistryContext) and `.ts` (the rest)
+  and Node's exports map can't pattern-match both extensions
+  cleanly. Every framework symbol re-exports through
+  `framework/index.ts`, so sub-file imports are not needed.
 - [x] Update import paths in everything that imports from
-      `components/render/framework/...`.
-      *(2026-05-13: 107 imports across 60 hub-client files
-      rewritten to `from '@quarto/preview-renderer/framework'`.
-      Also caught one dynamic `await import('./framework')` in
-      `parity.integration.test.tsx`.)*
+  `components/render/framework/...`.
+  *(2026-05-13: 107 imports across 60 hub-client files
+  rewritten to `from '@quarto/preview-renderer/framework'`.
+  Also caught one dynamic `await import('./framework')` in
+  `parity.integration.test.tsx`.)*
 - [x] Convert framework's internal cross-dir imports (Phase 2
-      Phase-2-style `@quarto/preview-renderer/...` self-imports
-      from Ast/RegistryContext/dispatch) to relative paths
-      (`../types/sourceInfo`, `../utils/sourceInfo`, etc.).
-      Self-package imports work but are unidiomatic.
+  Phase-2-style `@quarto/preview-renderer/...` self-imports
+  from Ast/RegistryContext/dispatch) to relative paths
+  (`../types/sourceInfo`, `../utils/sourceInfo`, etc.).
+  Self-package imports work but are unidiomatic.
 - [x] Framework tests run via
-      `npm test --workspace @quarto/preview-renderer`.
-      *(2026-05-13: 133 tests / 10 files including the moved
-      `customNode.test.ts`, `meta.test.ts`, `plainText.test.ts`.)*
+  `npm test --workspace @quarto/preview-renderer`.
+  *(2026-05-13: 133 tests / 10 files including the moved
+  `customNode.test.ts`, `meta.test.ts`, `plainText.test.ts`.)*
 
 **Acceptance:** same as Phase 2. ✓
 - hub-client `typecheck`, `test:ci`, `build:all` all green.
@@ -656,73 +656,73 @@ phase so the q2-preview registry, dispatchers, and components stay
 internally consistent.
 
 - [x] Move `components/render/q2-preview/` (entire subtree, 50+
-      files) → `preview-renderer/src/q2-preview/`.
+  files) → `preview-renderer/src/q2-preview/`.
 - [x] Move `Q2PreviewIframe.tsx` (out of `q2-preview/`),
-      `MorphIframe.tsx`, `DoubleBufferedIframe.tsx` →
-      `preview-renderer/src/iframe/`. The q2-preview barrel
-      re-exports `Q2PreviewIframe` for back-compat.
+  `MorphIframe.tsx`, `DoubleBufferedIframe.tsx` →
+  `preview-renderer/src/iframe/`. The q2-preview barrel
+  re-exports `Q2PreviewIframe` for back-compat.
 - [x] Move `PreviewErrorOverlay.tsx`,
-      `PreviewStaticInfoViews.tsx` → `preview-renderer/src/overlays/`.
+  `PreviewStaticInfoViews.tsx` → `preview-renderer/src/overlays/`.
 - [x] Move colocated tests including the integration tests:
-      `Q2PreviewIframe.integration.test.tsx`,
-      `q2-preview.integration.test.tsx`,
-      `PreviewDocument.integration.test.tsx`,
-      `custom-components.integration.test.tsx`,
-      `entry.integration.test.tsx`,
-      `PreviewErrorOverlay.integration.test.tsx`,
-      `custom/PreviewTitleBlock.integration.test.tsx`.
+  `Q2PreviewIframe.integration.test.tsx`,
+  `q2-preview.integration.test.tsx`,
+  `PreviewDocument.integration.test.tsx`,
+  `custom-components.integration.test.tsx`,
+  `entry.integration.test.tsx`,
+  `PreviewErrorOverlay.integration.test.tsx`,
+  `custom/PreviewTitleBlock.integration.test.tsx`.
 - [x] **DI refactor `PreviewErrorOverlay`.** Replaced
-      `usePreference('errorOverlayCollapsed')` with optional
-      `collapsed` + `onToggleCollapsed` props. Uncontrolled
-      fallback uses `useState(true)`. Hub-client's two call sites
-      (`ReactPreview.tsx`, `Preview.tsx`) wrap with
-      `usePreference`. The SPA can pass any state or omit.
-      *(2026-05-13: integration tests rewritten to pass
-      `collapsed={false}` for expanded-mode assertions.)*
+  `usePreference('errorOverlayCollapsed')` with optional
+  `collapsed` + `onToggleCollapsed` props. Uncontrolled
+  fallback uses `useState(true)`. Hub-client's two call sites
+  (`ReactPreview.tsx`, `Preview.tsx`) wrap with
+  `usePreference`. The SPA can pass any state or omit.
+  *(2026-05-13: integration tests rewritten to pass
+  `collapsed={false}` for expanded-mode assertions.)*
 - [x] Convert self-package imports in the moved subtree to
-      relative paths via `/tmp/relativize-self-imports.py`
-      (100 rewrites across 55 files). Pattern matches
-      `@quarto/preview-renderer/<X>` → depth-aware relative.
+  relative paths via `/tmp/relativize-self-imports.py`
+  (100 rewrites across 55 files). Pattern matches
+  `@quarto/preview-renderer/<X>` → depth-aware relative.
 - [x] Wire `preview-renderer/package.json` exports map with new
-      sub-paths: `./q2-preview` (barrel), `./q2-preview/entry`
-      (specific — needed for hub-client's stub re-import; see
-      below), `./iframe/*` (wildcard, `.tsx`), `./overlays/*`
-      (wildcard, `.tsx`). Top-level `src/index.ts` grows a
-      proper public-API barrel:
-      `Q2PreviewIframe`, `MorphIframe`/`DoubleBufferedIframe`
-      (+ Handle types), `PreviewErrorOverlay`, `ErrorView` /
-      `FallbackView` / `NonQmdPlaceholderView`, plus re-exports
-      from the q2-preview sub-barrel (Block, Inline,
-      PreviewDocument, previewRegistry, PreviewContext,
-      AssetManifestContext, buildAssetManifest).
+  sub-paths: `./q2-preview` (barrel), `./q2-preview/entry`
+  (specific — needed for hub-client's stub re-import; see
+  below), `./iframe/*` (wildcard, `.tsx`), `./overlays/*`
+  (wildcard, `.tsx`). Top-level `src/index.ts` grows a
+  proper public-API barrel:
+  `Q2PreviewIframe`, `MorphIframe`/`DoubleBufferedIframe`
+  (+ Handle types), `PreviewErrorOverlay`, `ErrorView` /
+  `FallbackView` / `NonQmdPlaceholderView`, plus re-exports
+  from the q2-preview sub-barrel (Block, Inline,
+  PreviewDocument, previewRegistry, PreviewContext,
+  AssetManifestContext, buildAssetManifest).
 - [x] Update hub-client imports of moved files via
-      `/tmp/rewrite-phase4-imports.py` (9 rewrites across 6 files).
-      Manually caught two extra patterns the regex missed:
-      `import type { ... } from '../components/render/<Iframe>'`
-      (had a `components/render/` segment) and the
-      `vi.mock('./q2-preview/Q2PreviewIframe', ...)` in
-      `ReactRenderer.integration.test.tsx`.
+  `/tmp/rewrite-phase4-imports.py` (9 rewrites across 6 files).
+  Manually caught two extra patterns the regex missed:
+  `import type { ... } from '../components/render/<Iframe>'`
+  (had a `components/render/` segment) and the
+  `vi.mock('./q2-preview/Q2PreviewIframe', ...)` in
+  `ReactRenderer.integration.test.tsx`.
 - [x] **Stub file for the iframe HTML entry.** `hub-client/q2-preview.html`
-      contains `<script type="module" src="/src/components/render/q2-preview/entry.tsx">`,
-      which Vite resolves relative to hub-client's project root.
-      The real entry is now under `@quarto/preview-renderer`;
-      we keep the original path stable by recreating a one-line
-      stub at `hub-client/src/components/render/q2-preview/entry.tsx`
-      that simply re-imports from the workspace package. The
-      `parity.integration.test.tsx`\'s dynamic `import('./q2-preview/entry')`
-      also goes through this stub.
+  contains `<script type="module" src="/src/components/render/q2-preview/entry.tsx">`,
+  which Vite resolves relative to hub-client's project root.
+  The real entry is now under `@quarto/preview-renderer`;
+  we keep the original path stable by recreating a one-line
+  stub at `hub-client/src/components/render/q2-preview/entry.tsx`
+  that simply re-imports from the workspace package. The
+  `parity.integration.test.tsx`\'s dynamic `import('./q2-preview/entry')`
+  also goes through this stub.
 - [x] `parity.integration.test.tsx` **stays in hub-client** —
-      compares the HTML iframe path (`Preview.tsx` — hub-client)
-      against the React path (`@quarto/preview-renderer` —
-      moved). Hub-client is the only place that reaches both.
+  compares the HTML iframe path (`Preview.tsx` — hub-client)
+  against the React path (`@quarto/preview-renderer` —
+  moved). Hub-client is the only place that reaches both.
 - [x] Test-config plumbing in preview-renderer's
-      `vitest.integration.config.ts`: add aliases for
-      `@quarto/quarto-sync-client`, `@quarto/preview-runtime`,
-      `wasm-quarto-hub-client` (points at hub-client's symlink so
-      the JS shim loads; tests don't invoke WASM), and
-      `/src/wasm-js-bridge` (so the lazy
-      `import('/src/wasm-js-bridge/sass.js')` in `wasmRenderer.ts`
-      resolves at transform time).
+  `vitest.integration.config.ts`: add aliases for
+  `@quarto/quarto-sync-client`, `@quarto/preview-runtime`,
+  `wasm-quarto-hub-client` (points at hub-client's symlink so
+  the JS shim loads; tests don't invoke WASM), and
+  `/src/wasm-js-bridge` (so the lazy
+  `import('/src/wasm-js-bridge/sass.js')` in `wasmRenderer.ts`
+  resolves at transform time).
 
 **Acceptance:**
 - Same as Phase 2.
@@ -748,59 +748,59 @@ internally consistent.
 - [x] Move `wasmRenderer.ts` (+ test) → `preview-runtime/src/`.
 - [x] Move `automergeSync.ts` (+ test) → `preview-runtime/src/`.
 - [x] ~~Move `assetWalker.ts` (from `q2-preview/`) →
-      `preview-runtime/src/assetWalker.ts`.~~
-      *Re-decided 2026-05-13 (see §"Moving to preview-runtime"
-      note): assetWalker stays with `q2-preview/` and moves in
-      Phase 4. Rationale there.*
+  `preview-runtime/src/assetWalker.ts`.~~
+  *Re-decided 2026-05-13 (see §"Moving to preview-runtime"
+  note): assetWalker stays with `q2-preview/` and moves in
+  Phase 4. Rationale there.*
 - [x] Move `iframePostProcessor.ts` (+ `.test.ts`,
-      `.integration.test.ts`) from hub-client to
-      `preview-renderer/src/utils/` — deferred from Phase 2
-      because it imports `vfsReadFile`/`vfsReadBinaryFile` from
-      `wasmRenderer`. After this phase the import resolves via
-      `@quarto/preview-runtime`.
+  `.integration.test.ts`) from hub-client to
+  `preview-renderer/src/utils/` — deferred from Phase 2
+  because it imports `vfsReadFile`/`vfsReadBinaryFile` from
+  `wasmRenderer`. After this phase the import resolves via
+  `@quarto/preview-runtime`.
 - [x] Move the three `userGrammar*` files →
-      `preview-runtime/src/userGrammar/` (renamed: `Discovery.ts`,
-      `Cache.ts`, `Highlight.ts`).
+  `preview-runtime/src/userGrammar/` (renamed: `Discovery.ts`,
+  `Cache.ts`, `Highlight.ts`).
 - [x] Move colocated tests (Discovery.test, Cache.test,
-      Highlight.wasm.test). Updated `Highlight.wasm.test.ts`\'s
-      `repoRoot` computation from `../../..` (relative to
-      `hub-client/src/services/`) to `../../../..` (relative to
-      `ts-packages/preview-runtime/src/userGrammar/`).
+  Highlight.wasm.test). Updated `Highlight.wasm.test.ts`\'s
+  `repoRoot` computation from `../../..` (relative to
+  `hub-client/src/services/`) to `../../../..` (relative to
+  `ts-packages/preview-runtime/src/userGrammar/`).
 - [x] `iframePostProcessor`'s consumers (now in preview-renderer)
-      import from `@quarto/preview-runtime`. This is a
-      renderer→runtime dependency — declared in
-      `preview-renderer/package.json`'s `dependencies` (workspace `*`).
+  import from `@quarto/preview-runtime`. This is a
+  renderer→runtime dependency — declared in
+  `preview-renderer/package.json`'s `dependencies` (workspace `*`).
 
-      Tradeoff to note: this means preview-renderer is no longer
-      "pure React with no WASM transitive." It pulls in
-      preview-runtime, which pulls in the WASM module. That's
-      acceptable because (a) the WASM module is lazy-loaded at
-      runtime via `initWasm()`, (b) Vite can tree-shake unused
-      runtime exports for SPA consumers that don't call them.
-      The "renderer is purely React" framing in Decision 1 was
-      aspirational; the practical split is "renderer = React
-      components that drive a render, runtime = the things they
-      call out to." That's still useful as a split.
+  Tradeoff to note: this means preview-renderer is no longer
+  "pure React with no WASM transitive." It pulls in
+  preview-runtime, which pulls in the WASM module. That's
+  acceptable because (a) the WASM module is lazy-loaded at
+  runtime via `initWasm()`, (b) Vite can tree-shake unused
+  runtime exports for SPA consumers that don't call them.
+  The "renderer is purely React" framing in Decision 1 was
+  aspirational; the practical split is "renderer = React
+  components that drive a render, runtime = the things they
+  call out to." That's still useful as a split.
 
 - [x] Update every hub-client import of these services to
-      `@quarto/preview-runtime`.
-      *(38 imports across 31 files via `/tmp/rewrite-phase5-imports.py`,
-      including short-form intra-`services/` imports — the script ran in
-      two passes. Caught the unusual cases manually: `vi.mock('./...')`
-      and inline `import('...').T` type imports.)*
+  `@quarto/preview-runtime`.
+  *(38 imports across 31 files via `/tmp/rewrite-phase5-imports.py`,
+  including short-form intra-`services/` imports — the script ran in
+  two passes. Caught the unusual cases manually: `vi.mock('./...')`
+  and inline `import('...').T` type imports.)*
 - [x] Configure `preview-runtime/vitest.config.ts` (and
-      `vitest.integration.config.ts`) with the WASM alias plus
-      workspace-package aliases (mirrors hub-client's pattern).
+  `vitest.integration.config.ts`) with the WASM alias plus
+  workspace-package aliases (mirrors hub-client's pattern).
 - [x] Set up the type plumbing so both tsc (per-package build) and
-      hub-client's transitive compilation see ambient module
-      declarations: `vite-shims.d.ts` for the `*.wasm?url` and
-      `/src/wasm-js-bridge/*.js` paths, plus `wasm-quarto-hub-client.d.ts`
-      copied alongside it. Pulled in by triple-slash references at the
-      top of `preview-runtime/src/index.ts`.
+  hub-client's transitive compilation see ambient module
+  declarations: `vite-shims.d.ts` for the `*.wasm?url` and
+  `/src/wasm-js-bridge/*.js` paths, plus `wasm-quarto-hub-client.d.ts`
+  copied alongside it. Pulled in by triple-slash references at the
+  top of `preview-runtime/src/index.ts`.
 - [x] Update hub-client's three vitest configs to alias
-      `@quarto/preview-runtime` to `ts-packages/preview-runtime/src`
-      (Vite resolves through the `source` condition; vitest needs the
-      explicit alias on fresh clones).
+  `@quarto/preview-runtime` to `ts-packages/preview-runtime/src`
+  (Vite resolves through the `source` condition; vitest needs the
+  explicit alias on fresh clones).
 
 **Acceptance:**
 - Same as Phase 4, plus:
@@ -820,16 +820,16 @@ internally consistent.
 - [x] Create the directory + files per "skeleton" section above.
 - [x] Add `"q2-preview-spa"` to root `package.json` `workspaces`.
 - [x] `npm install` from root; confirm vite picks up the new
-      workspace.
+  workspace.
 - [x] `cd q2-preview-spa && npm run build`. Confirms `dist/`
-      contains `index.html` + a bundled JS file.
+  contains `index.html` + a bundled JS file.
 - [x] Inspected the bundle: 196K total, 30 modules. Greped for
-      editor-only symbols (Monaco, GoogleOAuthProvider,
-      FileSidebar, ProjectSelector, automergeSync,
-      createSyncClient, monaco-editor) — *all zero*. PreviewErrorOverlay
-      CSS classes present. The §invariant is enforced by
-      construction: the SPA imports only from shared packages,
-      so editor code *cannot* be transitively pulled in.
+  editor-only symbols (Monaco, GoogleOAuthProvider,
+  FileSidebar, ProjectSelector, automergeSync,
+  createSyncClient, monaco-editor) — *all zero*. PreviewErrorOverlay
+  CSS classes present. The §invariant is enforced by
+  construction: the SPA imports only from shared packages,
+  so editor code *cannot* be transitively pulled in.
 
 **Caveat:** Browser smoke-test deferred. The current placeholder
 imports through the *sub-path* `@quarto/preview-renderer/overlays/PreviewErrorOverlay`
@@ -849,28 +849,28 @@ works; it doesn't yet prove the full WASM-bridge setup.
 ### Phase 7 — `cargo xtask verify` integration, cleanup, docs
 
 - [x] Extend `cargo xtask verify` so it also runs
-      preview-renderer + preview-runtime tests and the
-      q2-preview-spa build. Implemented as new steps 10 and 11
-      (TOTAL_STEPS bumped 9 → 11). Skip flags added:
-      `--skip-shared-package-tests`, `--skip-q2-preview-spa-build`.
+  preview-renderer + preview-runtime tests and the
+  q2-preview-spa build. Implemented as new steps 10 and 11
+  (TOTAL_STEPS bumped 9 → 11). Skip flags added:
+  `--skip-shared-package-tests`, `--skip-q2-preview-spa-build`.
 - [x] Verified `cargo xtask verify --skip-rust-tests`: all 11
-      steps pass (build + tests for Rust workspace, tree-sitter,
-      hub-client, trace-viewer, shared preview-\* packages, SPA).
+  steps pass (build + tests for Rust workspace, tree-sitter,
+  hub-client, trace-viewer, shared preview-\* packages, SPA).
 - [x] Cleanup audit on `hub-client/src/`:
-      - No empty directories.
-      - `components/render/q2-preview/` holds only the one-line
-        `entry.tsx` stub (needed by `q2-preview.html` and
-        `parity.integration.test.tsx`; documented in the file).
-      - `test-utils/index.ts` simplified — used to re-export
-        `mockSyncClient` / `mockWasm`, which moved to
-        preview-runtime in Phase 5. Now only re-exports
-        `@testing-library/react` helpers and `visibility.ts`.
+  - No empty directories.
+  - `components/render/q2-preview/` holds only the one-line
+    `entry.tsx` stub (needed by `q2-preview.html` and
+    `parity.integration.test.tsx`; documented in the file).
+  - `test-utils/index.ts` simplified — used to re-export
+    `mockSyncClient` / `mockWasm`, which moved to
+    preview-runtime in Phase 5. Now only re-exports
+    `@testing-library/react` helpers and `visibility.ts`.
 - [x] Update `hub-client/changelog.md` per the project's
-      hub-client commit convention. (One entry per phase commit.)
+  hub-client commit convention. (One entry per phase commit.)
 - [ ] Optional: update `CLAUDE.md`\'s "Workspace structure"
-      section to reflect the two new packages and the SPA.
-      *(Deferred — not blocking the sub-epic. File a follow-up
-      if needed.)*
+  section to reflect the two new packages and the SPA.
+  *(Deferred — not blocking the sub-epic. File a follow-up
+  if needed.)*
 
 **Acceptance:**
 - `cargo xtask verify` succeeds. ✓

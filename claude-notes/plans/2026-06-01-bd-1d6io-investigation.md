@@ -265,8 +265,8 @@ a temp path and `diff`, not overwrite the committed fixtures.)
 - [x] Identify root cause + fix side for each (scanner; writers are correct).
 - [x] Explain the snapshot/CI-coverage gap.
 - [ ] (fix, separate work) Add CI-resident byte-offset regression tests
-      (inline-code-in-prose, multi-kv attr) — TDD, before the scanner fixes.
+  (inline-code-in-prose, multi-kv attr) — TDD, before the scanner fixes.
 - [ ] (fix, separate work) Scanner fix #1: code-span token starts at backtick.
 - [ ] (fix, separate work) Scanner fix #2: key token starts at key char.
 - [ ] (fix, separate work) CI guard: diff live writer vs committed
-      annotated-qmd example JSON in `cargo xtask verify`.
+  annotated-qmd example JSON in `cargo xtask verify`.

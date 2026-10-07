@@ -81,7 +81,7 @@ characters.
 | `` `code\n```python\nx=1\n```\nspan` `` (triple fence)   | one `Code "code \`\`\`python x=1 \`\`\` span"` — even triple-backtick fences are absorbed |
 | `` `code\n\n---\n\nspan` `` (blank-line + thematic break) | code span is **not formed**; opener is literal `` `code ``, then a `HorizontalRule`, then `Para [ Str "span\`" ... ]` |
 | ``No close: `open\nthen text\n\nnew paragraph``          | `` `open `` literal; paragraph continues across the soft break with `SoftBreak`, then a new `Para` |
-| `` ``two backticks\nwith newline`` ``                     | one `Code "two backticks with newline"` (level-2 delimiter) |
+| ``` ``two backticks\nwith newline`` ```                     | one `Code "two backticks with newline"` (level-2 delimiter) |
 
 **Additional block-context cases probed during plan review (all pandoc-accepted):**
 
@@ -550,106 +550,106 @@ verbose-trace run after Phase 2 lands, before declaring done.
 
 **Code spans:**
 - [x] Phase 1: tree-sitter corpus tests for multi-line code span added
-      to `code_span.txt` (cases 6–10: plain paragraph, three lines,
-      blockquote, lazy blockquote, list item).
+  to `code_span.txt` (cases 6–10: plain paragraph, three lines,
+  blockquote, lazy blockquote, list item).
 - [x] Phase 1: scanner look-ahead extracted into shared helper
-      `code_span_close_exists_ahead` in `scanner.c`, now called from
-      both `parse_code_span` (mid-paragraph) and
-      `parse_fenced_code_block` (start-of-paragraph emission). The
-      latter was the source of the blank-line / no-close ERROR before
-      the fix — its old unconditional `EMIT_TOKEN(CODE_SPAN_START)`
-      bypassed any close check.
+  `code_span_close_exists_ahead` in `scanner.c`, now called from
+  both `parse_code_span` (mid-paragraph) and
+  `parse_fenced_code_block` (start-of-paragraph emission). The
+  latter was the source of the blank-line / no-close ERROR before
+  the fix — its old unconditional `EMIT_TOKEN(CODE_SPAN_START)`
+  bypassed any close check.
 - [x] Phase 1 (extra): the first/second SOFT_LINE_ENDING gates in the
-      line-break dispatcher (\~scanner.c:2666 / :2799) now bypass the
-      paragraph-interruption character checks (`#`, `*`, `-`, fence,
-      etc.) when `s->code_span_delimiter_length > 0` so pandoc-style
-      "absorb everything except a blank line" behavior holds. `>` is
-      deliberately *not* bypassed in the first gate — that lets
-      match_line consume the `> ` gutter and the second gate fold it
-      into the SOFT_LINE_ENDING token range.
+  line-break dispatcher (\~scanner.c:2666 / :2799) now bypass the
+  paragraph-interruption character checks (`#`, `*`, `-`, fence,
+  etc.) when `s->code_span_delimiter_length > 0` so pandoc-style
+  "absorb everything except a blank line" behavior holds. `>` is
+  deliberately *not* bypassed in the first gate — that lets
+  match_line consume the `> ` gutter and the second gate fold it
+  into the SOFT_LINE_ENDING token range.
 - [x] Phase 2: `pandoc_code_span` content rule now accepts
-      `alias($._soft_line_break, $.pandoc_soft_break)` alongside text
-      regexes (the alias makes the break visible to the post-processor).
-      Existing test 91 (CommonMark GFM) updated to reflect the new
-      content structure (previously had an empty `(content)` — the
-      multi-line case was silently flat).
+  `alias($._soft_line_break, $.pandoc_soft_break)` alongside text
+  regexes (the alias makes the break visible to the post-processor).
+  Existing test 91 (CommonMark GFM) updated to reflect the new
+  content structure (previously had an empty `(content)` — the
+  multi-line case was silently flat).
 - [x] Phase 3: pampa fixtures
-      `tests/pandoc-match-corpus/markdown/inline-code-multiline-*.qmd`
-      (simple, three-line, blockquote, blockquote-nested,
-      blockquote-lazy, list, list-nested, list-loose, doubled-space,
-      absorbs-blocks) — each asserted to match pandoc's `markdown`
-      reader output verbatim by `unit_test_corpus_matches_pandoc_markdown`.
+  `tests/pandoc-match-corpus/markdown/inline-code-multiline-*.qmd`
+  (simple, three-line, blockquote, blockquote-nested,
+  blockquote-lazy, list, list-nested, list-loose, doubled-space,
+  absorbs-blocks) — each asserted to match pandoc's `markdown`
+  reader output verbatim by `unit_test_corpus_matches_pandoc_markdown`.
 - [x] Phase 3: `process_pandoc_code_span` switched from raw byte-range
-      read to a typed-child walk (`extract_code_span_text`). Each
-      `pandoc_soft_break` child range collapses to a single space (the
-      `> ` / list-indent gutter is inside that range because
-      `_soft_line_break` is `_soft_line_ending + optional(block_continuation)`),
-      preserving doubled content spaces.
+  read to a typed-child walk (`extract_code_span_text`). Each
+  `pandoc_soft_break` child range collapses to a single space (the
+  `> ` / list-indent gutter is inside that range because
+  `_soft_line_break` is `_soft_line_ending + optional(block_continuation)`),
+  preserving doubled content spaces.
 
 **Math spans (sibling):**
 - [x] Phase 1b: ~~scanner change~~ — not needed; `parse_latex_span` is
-      dead code for inline math.
+  dead code for inline math.
 - [x] Phase 2b: `pandoc_math` regex restructured as
-      `first-segment (_soft_line_break next-segment)* '$'`; aliased
-      soft_line_break to `pandoc_soft_break` for post-processor
-      visibility; pre-existing CRLF omission fixed in the segment
-      regex. Math corpus tests 6–8 added.
+  `first-segment (_soft_line_break next-segment)* '$'`; aliased
+  soft_line_break to `pandoc_soft_break` for post-processor
+  visibility; pre-existing CRLF omission fixed in the segment
+  regex. Math corpus tests 6–8 added.
 - [x] Phase 3b: `process_pandoc_math` switched to
-      `extract_inline_math_text` helper (sibling of the code-span
-      walk) — `pandoc_soft_break` → literal `"\n"` (math preserves
-      `\n` whereas code folds to space). Pampa fixtures
-      `inline-math-multiline-{simple,blockquote,list}.qmd` verified
-      against pandoc.
+  `extract_inline_math_text` helper (sibling of the code-span
+  walk) — `pandoc_soft_break` → literal `"\n"` (math preserves
+  `\n` whereas code folds to space). Pampa fixtures
+  `inline-math-multiline-{simple,blockquote,list}.qmd` verified
+  against pandoc.
 
 **Negative / regression:**
 - [x] Blank-line aborts opener: the shared
-      `code_span_close_exists_ahead` look-ahead returns false on
-      blank-line / EOF, so the opener is treated as literal `` ` ``.
-      Pampa then surfaces it as a parse error (consistent with the
-      existing Q-2-24 philosophy: pampa is more aggressive than
-      pandoc about unclosed delimiters).
+  `code_span_close_exists_ahead` look-ahead returns false on
+  blank-line / EOF, so the opener is treated as literal `` ` ``.
+  Pampa then surfaces it as a parse error (consistent with the
+  existing Q-2-24 philosophy: pampa is more aggressive than
+  pandoc about unclosed delimiters).
 - [x] `Q-2-24` (Unclosed Code Span) post-lift behavior recorded:
-      bare `` ` `` no longer produces a `code_span_delimiter` token,
-      so the (state, sym) capture pattern the build script relied on
-      disappears. Per the user's pre-implementation review, dormant
-      Q codes are acceptable. Kept the diagnostic metadata in
-      `Q-2-24.json` with an explanatory `_note` and dropped the
-      `cases` array; `build_error_table.ts` skips the file gracefully.
+  bare `` ` `` no longer produces a `code_span_delimiter` token,
+  so the (state, sym) capture pattern the build script relied on
+  disappears. Per the user's pre-implementation review, dormant
+  Q codes are acceptable. Kept the diagnostic metadata in
+  `Q-2-24.json` with an explanatory `_note` and dropped the
+  `cases` array; `build_error_table.ts` skips the file gracefully.
 - [x] No `pandoc_code_span_token2` verbose-trace audit needed: the
-      unified `code_span_close_exists_ahead` helper is the single
-      decision point for emitting `CODE_SPAN_START`. The token2
-      fallback no longer applies in the no-close path because
-      `CODE_SPAN_START` is never emitted there, so the parser cleanly
-      reaches the generic-error fallback that matches Q-2-24's
-      historical outcome.
+  unified `code_span_close_exists_ahead` helper is the single
+  decision point for emitting `CODE_SPAN_START`. The token2
+  fallback no longer applies in the no-close path because
+  `CODE_SPAN_START` is never emitted there, so the parser cleanly
+  reaches the generic-error fallback that matches Q-2-24's
+  historical outcome.
 
 **Closeout:**
 - [x] Regenerated `_autogen-table.json` via
-      `crates/pampa/scripts/build_error_table.ts` — required whenever
-      `grammar.js` changes (parser state numbers shift; the
-      (state, sym) → Q-code map is rebuilt by running each Q-corpus
-      fixture through the new parser). Without this step, 14
-      error-code-asserting tests fail because the parser hits a
-      different state at error and no Q-code is attached. Calling
-      this out explicitly: I initially mis-diagnosed those failures
-      as pre-existing on main and had to be corrected by the user.
+  `crates/pampa/scripts/build_error_table.ts` — required whenever
+  `grammar.js` changes (parser state numbers shift; the
+  (state, sym) → Q-code map is rebuilt by running each Q-corpus
+  fixture through the new parser). Without this step, 14
+  error-code-asserting tests fail because the parser hits a
+  different state at error and no Q-code is attached. Calling
+  this out explicitly: I initially mis-diagnosed those failures
+  as pre-existing on main and had to be corrected by the user.
 - [x] End-to-end verification against pandoc for all
-      `/tmp/q2-codespan-test/` fixtures: 8 code-span + 3 math, all
-      MATCH pandoc's `markdown` reader output verbatim modulo
-      native-format whitespace.
+  `/tmp/q2-codespan-test/` fixtures: 8 code-span + 3 math, all
+  MATCH pandoc's `markdown` reader output verbatim modulo
+  native-format whitespace.
 - [x] `cargo nextest run -p pampa`: 3775 / 3775 passing, 2 skipped.
 - [x] `cargo nextest run --workspace`: 9425 / 9425 passing, 196
-      skipped (long-running e2e cases, unrelated).
+  skipped (long-running e2e cases, unrelated).
 - [x] `cargo xtask verify` (full): all 12 steps passed (Rust build,
-      Rust tests, WASM build via wasm-pack, hub-client build,
-      hub-client vitest, q2-preview-spa build). Exit code 0.
+  Rust tests, WASM build via wasm-pack, hub-client build,
+  hub-client vitest, q2-preview-spa build). Exit code 0.
 - [x] Beads issue title updated to "tree-sitter qmd: allow line breaks
-      inside inline code spans and inline math".
+  inside inline code spans and inline math".
 - [x] Docs audit: Q-2-24 user-facing page (`docs/errors/markdown/Q-2-24.qmd`)
-      is already marked `status: stub` and its description ("opens
-      with a backtick run but no matching backtick run appears before
-      the end of the block") remains accurate for the new behavior —
-      pampa still errors on unclosed code spans, even if the specific
-      Q-2-24 code no longer attaches to the parser state. No general
-      qmd-dialect doc page claims single-line code spans, so no other
-      doc updates needed.
+  is already marked `status: stub` and its description ("opens
+  with a backtick run but no matching backtick run appears before
+  the end of the block") remains accurate for the new behavior —
+  pampa still errors on unclosed code spans, even if the specific
+  Q-2-24 code no longer attaches to the parser state. No general
+  qmd-dialect doc page claims single-line code spans, so no other
+  doc updates needed.

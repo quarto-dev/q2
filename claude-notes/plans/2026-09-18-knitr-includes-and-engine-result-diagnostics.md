@@ -249,7 +249,7 @@ and q2's Rust struct. The diagnostic should say so, and say what to do
 2. **Accept both shapes.** `KnitrIncludes` slots become `Vec<PathBuf>`
    deserialized from either a string or an array (Q1's TS is `string[]`,
    R always sends an array; accepting a bare string costs nothing and
-   keeps the tests' single-path fixtures meaningful).
+   keeps the tests\' single-path fixtures meaningful).
 3. **Preserve the raw result on parse failure only.** `NamedTempFile::keep()`
    in the error branch; the diagnostic names the path. No new
    directory convention; the pipeline temp dir already outlives the
@@ -292,118 +292,118 @@ renders; the content is what matters.)
 ### Phase 0 — tests first (all must fail before Phase A/B code)
 
 - [x] **T1** `types.rs` unit test: the verbatim captured results JSON
-      (markdown elided) deserializes; `include_in_header == vec![<path>]`.
-      Fails today with `invalid type: sequence`.
+  (markdown elided) deserializes; `include_in_header == vec![<path>]`.
+  Fails today with `invalid type: sequence`.
 - [x] **T2** `types.rs` unit tests: a slot given as a bare string, as a
-      two-element array, and as `[]`; top-level `includes: []` and
-      `includes: {}` still yield `None`. Rewrite the existing tests at
-      `types.rs:327-362` and the module doc at `:39` to the real shape.
+  two-element array, and as `[]`; top-level `includes: []` and
+  `includes: {}` still yield `None`. Rewrite the existing tests at
+  `types.rs:327-362` and the module doc at `:39` to the real shape.
 - [x] **T3** `knitr/mod.rs` unit test: `convert_includes` with two
-      header paths yields two `header_includes` entries in order.
+  header paths yields two `header_includes` entries in order.
 - [x] **T4** New R-gated e2e test
-      `crates/quarto-core/tests/integration/knitr_html_dependency.rs`
-      (register in `main.rs`, alphabetized; gate copied from
-      `nested_cell_mask_render.rs:63-85`): render the htmltools fixture
-      through `render_document_to_file`; assert the render succeeds, the
-      HTML contains `<script src="htmldep_files/q2dep-1.0/q2dep.js">`
-      (confirm the exact `_files/<name>-<version>/` layout against real
-      output when writing the test), and that file exists on disk.
-      Fails today with the parse error.
+  `crates/quarto-core/tests/integration/knitr_html_dependency.rs`
+  (register in `main.rs`, alphabetized; gate copied from
+  `nested_cell_mask_render.rs:63-85`): render the htmltools fixture
+  through `render_document_to_file`; assert the render succeeds, the
+  HTML contains `<script src="htmldep_files/q2dep-1.0/q2dep.js">`
+  (confirm the exact `_files/<name>-<version>/` layout against real
+  output when writing the test), and that file exists on disk.
+  Fails today with the parse error.
 - [x] **T5** Phase B unit test on the new parse helper (see A/B below):
-      malformed JSON → `ExecutionError::MalformedResult` carrying engine
-      name, field path `includes.include-in-header`, serde message, and
-      the preserved path; the preserved file exists and equals the input.
+  malformed JSON → `ExecutionError::MalformedResult` carrying engine
+  name, field path `includes.include-in-header`, serde message, and
+  the preserved path; the preserved file exists and equals the input.
 - [x] **T6** Phase B diagnostic test: the `ExecutionError → DiagnosticMessage`
-      conversion yields code `Q-18-1`, error severity, the field path in
-      the problem line, the preserved path in a detail, the report hint.
+  conversion yields code `Q-18-1`, error severity, the field path in
+  the problem line, the preserved path in a detail, the report hint.
 - [x] **T7** `convert_includes` with an unreadable path returns a
-      `Q-18-2` warning and drops the entry (plus: readable siblings in
-      the same slot still land, one warning per bad file).
+  `Q-18-2` warning and drops the entry (plus: readable siblings in
+  the same slot still land, one warning per bad file).
 - [x] **T9** (added) `engine_execution.rs`: warnings on
-      `ExecuteResult::warnings` drain into `ctx.diagnostics` exactly once.
+  `ExecuteResult::warnings` drain into `ctx.diagnostics` exactly once.
 - [x] **T8** Moot: `truncate_for_error` and its test were deleted with
-      the JSON dump (decision 5); no byte-slicing of the results file
-      remains.
+  the JSON dump (decision 5); no byte-slicing of the results file
+  remains.
 
 ### Phase A — fix the wire type
 
 - [x] `KnitrIncludes` slots → `Vec<PathBuf>` with a
-      `deserialize_string_or_seq` helper; `deserialize_includes` keeps
-      the `[]`/`{}`/`null` → `None` handling and returns `None` when all
-      slots are empty.
+  `deserialize_string_or_seq` helper; `deserialize_includes` keeps
+  the `[]`/`{}`/`null` → `None` handling and returns `None` when all
+  slots are empty.
 - [ ] `convert_includes` iterates each slot (and, per decision 6,
-      collects warnings — signature grows a `&mut Vec<DiagnosticMessage>`
-      or returns them; pick whichever the stage's existing
-      `ctx.add_diagnostics` seam prefers).
+  collects warnings — signature grows a `&mut Vec<DiagnosticMessage>`
+  or returns them; pick whichever the stage's existing
+  `ctx.add_diagnostics` seam prefers).
 - [x] Update the module doc example in `types.rs`.
 - [x] Run T1–T4 green (358 knitr/include-filtered tests, both R-gated e2e tests ran on this machine); workspace gate via `cargo xtask verify --skip-hub-build`.
 - [x] **End-to-end (2026-09-18):**
-      `cargo run --bin q2 -- render <scratch>/repro/q2-issue-683.qmd`
-      exits 0 with only knitr's `processing file:` / `output file:` lines.
-      Output inspected: the HTML carries
-      `<script src="q2-issue-683_files/reactable-binding-0.4.5/reactable.js">`,
-      `<div class="reactable html-widget html-fill-item">`, and the
-      `application/json` payload; `q2-issue-683_files/` holds
-      `core-js-2.5.3 htmltools-fill-0.5.9 htmlwidgets-1.6.4 react-18.2.0
-      reactable-0.4.5 reactable-binding-0.4.5 reactwidget-2.0.0`. Opened
-      in Chrome via file://: the widget hydrated — header cells
-      `["", "mpg", "cyl"]`, body cells `Mazda RX4 / 21 / 6`,
-      `Mazda RX4 Wag / 21 / 6`, three sortable column headers, no JS
-      errors; screenshot showed the rendered table.
+  `cargo run --bin q2 -- render <scratch>/repro/q2-issue-683.qmd`
+  exits 0 with only knitr's `processing file:` / `output file:` lines.
+  Output inspected: the HTML carries
+  `<script src="q2-issue-683_files/reactable-binding-0.4.5/reactable.js">`,
+  `<div class="reactable html-widget html-fill-item">`, and the
+  `application/json` payload; `q2-issue-683_files/` holds
+  `core-js-2.5.3 htmltools-fill-0.5.9 htmlwidgets-1.6.4 react-18.2.0
+  reactable-0.4.5 reactable-binding-0.4.5 reactwidget-2.0.0`. Opened
+  in Chrome via file://: the widget hydrated — header cells
+  `["", "mpg", "cyl"]`, body cells `Mazda RX4 / 21 / 6`,
+  `Mazda RX4 Wag / 21 / 6`, three sortable column headers, no JS
+  errors; screenshot showed the rendered table.
 
 ### Phase B — malformed-result diagnostic
 
 - [x] Added `ExecutionError::MalformedResult { engine, field_path: String, detail, preserved: Option<PathBuf> }`
-      (`field_path` is never absent: `serde_path_to_error` renders the
-      root as `.`).
+  (`field_path` is never absent: `serde_path_to_error` renders the
+  root as `.`).
 - [x] `call_r` ends in `parse_results::<R>(results_file, "knitr")`:
-      `serde_path_to_error` names the field (down to the element index,
-      e.g. `includes.include-in-header[0]`), `NamedTempFile::keep()` on
-      failure, trailing-garbage caught via `Deserializer::end()`.
-      `truncate_for_error` deleted.
+  `serde_path_to_error` names the field (down to the element index,
+  e.g. `includes.include-in-header[0]`), `NamedTempFile::keep()` on
+  failure, trailing-garbage caught via `Deserializer::end()`.
+  `truncate_for_error` deleted.
 - [x] `serde_path_to_error = "0.1.20"` as a workspace dep, used by `quarto-core`.
 - [x] Catalog entries `Q-18-1` and `Q-18-2` (`engine` subsystem,
-      `99.9.9`); pages `docs/errors/engine/Q-18-{1,2}.qmd` (status
-      `stub`); `- section: "engine"` appended to the errors sidebar.
+  `99.9.9`); pages `docs/errors/engine/Q-18-{1,2}.qmd` (status
+  `stub`); `- section: "engine"` appended to the errors sidebar.
 - [x] New module `crates/quarto-core/src/engine/diagnostics.rs` with
-      `engine_error_diagnostic` (the seam; `MalformedResult` → `Q-18-1`,
-      everything else falls through to `DiagnosticMessage::error(e.to_string())`)
-      and `unreadable_include_diagnostic` (`Q-18-2`). The stage's
-      `map_err` now goes through the seam. `ExecuteResult` gained
-      `warnings: Vec<DiagnosticMessage>` (`#[serde(default)]`, so stored
-      captures still load; a replayed trace re-raises them), drained into
-      `ctx.diagnostics` right after the capture emit.
+  `engine_error_diagnostic` (the seam; `MalformedResult` → `Q-18-1`,
+  everything else falls through to `DiagnosticMessage::error(e.to_string())`)
+  and `unreadable_include_diagnostic` (`Q-18-2`). The stage's
+  `map_err` now goes through the seam. `ExecuteResult` gained
+  `warnings: Vec<DiagnosticMessage>` (`#[serde(default)]`, so stored
+  captures still load; a replayed trace re-raises them), drained into
+  `ctx.diagnostics` right after the capture emit.
 - [x] Full `cargo xtask verify` green (2026-09-18): lints + clippy,
-      workspace build, Rust tests, ts-packages, WASM + hub-client build
-      and tests. (Local prerequisites that bit along the way: the shell's
-      Node must come from fnm, and a stale `node_modules`/WASM artifact
-      after main's automerge upgrade needed `npm install` + the full
-      hub-build leg.)
+  workspace build, Rust tests, ts-packages, WASM + hub-client build
+  and tests. (Local prerequisites that bit along the way: the shell's
+  Node must come from fnm, and a stale `node_modules`/WASM artifact
+  after main's automerge upgrade needed `npm install` + the full
+  hub-build leg.)
 - [x] **End-to-end (2026-09-18), via throwaway local patches, reverted,
-      not committed** — neither code can be reached from a real document
-      any more, which is the point. `cargo run --bin q2 -- render <repro>`:
+  not committed** — neither code can be reached from a real document
+  any more, which is the point. `cargo run --bin q2 -- render <repro>`:
 
-      Patch A (slot visitor rejects arrays) → exit 1:
-      ```
-      error: while rendering <scratch>/repro/q2-issue-683.qmd
-      Error [Q-18-1]: Engine Returned an Unreadable Result
-      the `knitr` engine ran, but the result it returned is not in the shape Quarto expects — at `includes.include-in-header`: invalid type: sequence, expected a path string or a list of path strings at line 1 column 5789.
-      ✖ The engine's raw result was preserved at /var/folders/.../quarto-pipeline_De6x8V/.tmpTOm78b.
-      ℹ This is a bug in Quarto's integration with the `knitr` engine, not a problem in your document. Please report it at https://github.com/quarto-dev/q2/issues, including this message and the preserved file.
-      1 error
-      ```
-      The preserved file existed and began with the engine's JSON.
+  Patch A (slot visitor rejects arrays) → exit 1:
+  ```
+  error: while rendering <scratch>/repro/q2-issue-683.qmd
+  Error [Q-18-1]: Engine Returned an Unreadable Result
+  the `knitr` engine ran, but the result it returned is not in the shape Quarto expects — at `includes.include-in-header`: invalid type: sequence, expected a path string or a list of path strings at line 1 column 5789.
+  ✖ The engine's raw result was preserved at /var/folders/.../quarto-pipeline_De6x8V/.tmpTOm78b.
+  ℹ This is a bug in Quarto's integration with the `knitr` engine, not a problem in your document. Please report it at https://github.com/quarto-dev/q2/issues, including this message and the preserved file.
+  1 error
+  ```
+  The preserved file existed and began with the engine's JSON.
 
-      Patch B (a nonexistent path injected into `include-in-header`) → exit 0,
-      widget still rendered:
-      ```
-      Warning [Q-18-2]: Engine Include File Could Not Be Read
-      the `knitr` engine asked for the contents of /nonexistent/q2-dep-header.html to be placed in `include-in-header`, but the file could not be read: No such file or directory (os error 2).
-      ✖ The page was rendered without it, so content the engine expected there (typically an HTML dependency's scripts and stylesheets) is missing.
-      ℹ Re-run the render; if it recurs, check that the path exists and is readable, or report it at https://github.com/quarto-dev/q2/issues. Use `--strict` to make this stop the render.
-      1 warning
-      ```
-      With `--strict` the same run exits 1 (`1 error`).
+  Patch B (a nonexistent path injected into `include-in-header`) → exit 0,
+  widget still rendered:
+  ```
+  Warning [Q-18-2]: Engine Include File Could Not Be Read
+  the `knitr` engine asked for the contents of /nonexistent/q2-dep-header.html to be placed in `include-in-header`, but the file could not be read: No such file or directory (os error 2).
+  ✖ The page was rendered without it, so content the engine expected there (typically an HTML dependency's scripts and stylesheets) is missing.
+  ℹ Re-run the render; if it recurs, check that the path exists and is readable, or report it at https://github.com/quarto-dev/q2/issues. Use `--strict` to make this stop the render.
+  1 warning
+  ```
+  With `--strict` the same run exits 1 (`1 error`).
 
 ### Wrap-up
 

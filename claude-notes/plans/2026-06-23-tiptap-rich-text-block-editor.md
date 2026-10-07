@@ -246,33 +246,33 @@ qmd fixture → pampa parse → AST_in → [AST→PM bridge] → PM doc
 **Tasks (TDD — tests first):**
 
 - [x] Pick a home for the spike: `ts-packages/preview-renderer/src/q2-preview/`
-      `tiptap-roundtrip-spike/` (vitest, node env). **Oracle = native `pampa`**
-      (`-t json --json-source-location full`) shelled out via `child_process` —
-      gives the source-tracked untransformed AST with **no WASM init**.
+  `tiptap-roundtrip-spike/` (vitest, node env). **Oracle = native `pampa`**
+  (`-t json --json-source-location full`) shelled out via `child_process` —
+  gives the source-tracked untransformed AST with **no WASM init**.
 - [x] Assemble a **fixture corpus** (16 fixtures, `fixtures.ts`): plain para,
-      inline formatting, ATX heading, bullet/ordered/nested lists, blockquote,
-      plain + `{python}` code blocks, shortcode, inline/display math, crossref,
-      citation, callout div, raw HTML inline.
+  inline formatting, ATX heading, bullet/ordered/nested lists, blockquote,
+  plain + `{python}` code blocks, shortcode, inline/display math, crossref,
+  citation, callout div, raw HTML inline.
 - [x] Write the **acceptance oracle** (`roundtrip.test.ts` + `canonical.ts`):
-      buckets each fixture `exact` / `equivalent` (reformatted) / `broken` by
-      comparing source-stripped ASTs (exact) and whitespace-normalized ASTs
-      (equivalent). Fails the suite only on `broken`.
+  buckets each fixture `exact` / `equivalent` (reformatted) / `broken` by
+  comparing source-stripped ASTs (exact) and whitespace-normalized ASTs
+  (equivalent). Fails the suite only on `broken`.
 - [x] Define the **ProseMirror schema** (`schema.ts`): `prosemirror-markdown`\'s
-      schema + an atomic inline `chip` node (attrs `{src, kind}`).
+  schema + an atomic inline `chip` node (attrs `{src, kind}`).
 - [x] Implement **AST → PM doc** (`astToPm.ts`): walks the Pandoc AST; opaque
-      node types (`Math`/`Cite`/`Span.quarto-shortcode__`/`RawInline`, plus
-      block `Div`/`RawBlock`/`Table` for the spike) become chips carrying their
-      verbatim source slice (C2, refinement 1).
+  node types (`Math`/`Cite`/`Span.quarto-shortcode__`/`RawInline`, plus
+  block `Div`/`RawBlock`/`Table` for the spike) become chips carrying their
+  verbatim source slice (C2, refinement 1).
 - [x] Implement the **chip** (atomic, verbatim serialize via `state.text(src,
-      false)` — no markdown escaping).
+  false)` — no markdown escaping).
 - [x] Implement **PM doc → markdown** (`pmToMarkdown.ts`): default
-      `prosemirror-markdown` serializer + the chip rule. **Zero custom node/mark
-      overrides were needed beyond the chip** (C1 — see verdict).
+  `prosemirror-markdown` serializer + the chip rule. **Zero custom node/mark
+  overrides were needed beyond the chip** (C1 — see verdict).
 - [ ] Demonstrate the **dirty/no-op signal** off `doc.eq(initialDoc)` (C3) —
-      *deferred to Phase 1*; the spike validated the static round-trip, which is
-      the harder unknown. C3 is a small, well-understood addition at integration.
+  *deferred to Phase 1*; the spike validated the static round-trip, which is
+  the harder unknown. C3 is a small, well-understood addition at integration.
 - [x] Produce a **findings table** + written verdict (below; `RESULTS.md` holds
-      per-fixture `qmd → md_out` evidence).
+  per-fixture `qmd → md_out` evidence).
 
 **Exit criteria:** ✅ met — see verdict below.
 
@@ -298,7 +298,7 @@ Byte-exact passthrough confirmed in `RESULTS.md`, e.g.:
 - `::: {.callout-note}\nThis is a note.\n:::` → identical out
 
 **What this proves.** The core unknown — *can we faithfully round-trip prose-rich
-+ Quarto-opaque qmd through a ProseMirror document?* — is answered **yes**, with
+\+ Quarto-opaque qmd through a ProseMirror document?* — is answered **yes**, with
 evidence. The AST-driven seed (refinement 1) means chip detection is a trivial,
 authoritative typed-AST walk, and `prosemirror-markdown`\'s **stock serializer
 needed no per-node overrides** beyond the one chip rule. That resolves the
@@ -471,10 +471,10 @@ interactive structural-edit round-trip tests).
         URL when the paragraph has another link — filed **bd-3zp3z4jx** (shared
         text-channel bug, affects the textarea editor too; single-link edits fine).
 - [ ] **1c — Lists / blockquotes, incl. interactive structural edits** (Enter
-      split, new item, backspace-merge) with round-trip tests for *interactive*
-      edits (new surface beyond the spike's static round-trip).
+  split, new item, backspace-merge) with round-trip tests for *interactive*
+  edits (new surface beyond the spike's static round-trip).
 - [ ] **1d — Chip UX** (pills; read-only in v1) and the first seam toward the
-      Phase-2 textarea fallback.
+  Phase-2 textarea fallback.
 
 **Risks / open tensions for Phase 1:**
 

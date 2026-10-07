@@ -153,13 +153,13 @@ matches the "orchestrator is the only mutator" invariant). Chosen over
   the project-level speedup tracks the per-doc render speedup minus the
   serial post-render tail (sitemap/favicon/site_libs flush).
 - Measure with the same median-of-5 methodology, `QUARTO_JOBS` ∈
-  {1, 2, 4, 8, 16}, to confirm the scaling curve and find the knee.
+  \{1, 2, 4, 8, 16\}, to confirm the scaling curve and find the knee.
 
 ## Work items
 
 - [x] Generalize `pass1_worker_count` → `worker_count` (shared; +wasm stub)
 - [x] Add `Pass2Renderer::render_batch` with default **serial** impl;
-      rewrite `pass_two` to filter → `render_batch` (behavior identical)
+  rewrite `pass_two` to filter → `render_batch` (behavior identical)
 - [x] Add `ProjectPipeline::with_jobs(n)` + `jobs` field; wire worker count
 - [x] TDD tests (green on serial baseline AND parallel path):
   - [x] `pass_two_preserves_input_order`
@@ -169,13 +169,13 @@ matches the "orchestrator is the only mutator" invariant). Chosen over
         hard to construct (parse errors fail in Pass 1). The `AtomicBool`
         fail-fast + `catch_unwind` logic mirrors Pass 1's tested pattern.
 - [x] Override `render_batch` in `RenderToFileRenderer` — rayon fan-out,
-      **per-document** `ArtifactStore` (refined from per-worker for exact
-      serial conflict-attribution parity), `collect_into_vec` ordering,
-      `AtomicBool` fail-fast, `catch_unwind` isolation, serial degrade
+  **per-document** `ArtifactStore` (refined from per-worker for exact
+  serial conflict-attribution parity), `collect_into_vec` ordering,
+  `AtomicBool` fail-fast, `catch_unwind` isolation, serial degrade
 - [x] Sanity: deliberate output-reverse break → `pass_two_preserves_input_order`
-      caught it (FAIL); reverted, green again
+  caught it (FAIL); reverted, green again
 - [x] `perf.pass2` gauge (docs / threads_used / wall_ms), mirror `perf.pass1`,
-      wired into `q2 render` alongside `perf.pass1`
+  wired into `q2 render` alongside `perf.pass1`
 - [x] Workspace tests + `cargo xtask verify` — all green (incl. WASM leg)
 - [x] End-to-end byte-equivalence (serial vs parallel) + scaling table
 

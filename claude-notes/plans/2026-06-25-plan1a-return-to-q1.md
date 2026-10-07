@@ -449,11 +449,11 @@ These review items were **documentation bookkeeping** (edit a sibling plan/desig
 They have been folded into their target docs — by the 2026-06-29 consolidation pass and the folds
 below — so they are **no longer execution items** in this plan. RTQ's remaining checkboxes are
 code-only. The item IDs are retained here so existing `RTQ §<ID>` references (e.g. from the 1a/2a
-plans' correction notes) still resolve.
+plans\' correction notes) still resolve.
 
 | ID | What | Target doc | Status |
 |---|---|---|---|
-| PROTO-1 | `TsExecuteResult` field disposition — the dropped Q1 fields are now **carried** (`#[serde(default)]`); the `ts_protocol.rs` doc-comment is documented as part of **FC-1**'s code change | FC-1 (below) | folded → FC-1 |
+| PROTO-1 | `TsExecuteResult` field disposition — the dropped Q1 fields are now **carried** (`#[serde(default)]`); the `ts_protocol.rs` doc-comment is documented as part of **FC-1**\'s code change | FC-1 (below) | folded → FC-1 |
 | PROTO-2 / ENG-3 | `quarto.htmlDependency()` is a per-`Execute` value-constructor returned on `html_dependencies`, not a "registration API" | plan1a-protocol / plan1a-engine correction notes | done (consolidation) |
 | PROTO-3 | `TsHtmlDependency` (3 fields) mirrors q2's own `HtmlDependency` (`pampa/src/lua/quarto_doc.rs`), not Q1 `FormatDependency` (\~10). A parity pass is a q2-side `pampa::lua` `HtmlDependency` widening, **not** this epic. | (recorded here) | record-only |
 | HOST-3 | cached launched-instance is stateless (cache invariant) | `engine-host-concurrency.md` | folded |
@@ -501,20 +501,20 @@ can_freeze }`.
 - [x] Move `generates_figures` from `LaunchEngineResult` → `LoadEngineResult` in `ts_protocol.rs`.
 - [x] **Add `can_freeze` to `LoadEngineResult`** (keeping it on `LaunchEngineResult` — Q1 has both).
 - [x] **Add `quarto_required: Option<String>` to `LoadEngineResult`** (`#[serde(default)]`, optional
-      to match Q1's `quartoRequired?`). Field only — gate deferred to Phase 12.
+  to match Q1's `quartoRequired?`). Field only — gate deferred to Phase 12.
 - **plan1b (harness) — owned by plan1b, not RTQ:** the harness reads `discovery.generatesFigures`,
       `discovery.canFreeze`, **and `discovery.quartoRequired`** into the `loaded` response (static
       fields on the constructed discovery object). Already a plan1b work item (discovery emission);
       RTQ only moves the Rust wire fields.
 - [x] Update the `ts_engine.rs` `launched_response()` test helper (currently constructs
-      `LaunchEngineResult { can_freeze, generates_figures }`) to drop the moved `generates_figures`
-      field (keeps `can_freeze`); update the `loaded`/`LoadEngineResult` test helper to include
-      `generates_figures`, `can_freeze`, **and `quarto_required`**.
+  `LaunchEngineResult { can_freeze, generates_figures }`) to drop the moved `generates_figures`
+  field (keeps `can_freeze`); update the `loaded`/`LoadEngineResult` test helper to include
+  `generates_figures`, `can_freeze`, **and `quarto_required`**.
 - [x] **Test seam:** protocol round-trip — assert `generatesFigures`, `canFreeze`, **and
-      `quartoRequired`** ride `loaded` (`LoadEngineResult`), and `canFreeze` is also present on
-      `launched` (`LaunchEngineResult`) while `generatesFigures` is absent there. *Named revert:* move
-      `generates_figures` back onto `LaunchEngineResult` (and/or drop `can_freeze` from
-      `LoadEngineResult`) → RED.
+  `quartoRequired`** ride `loaded` (`LoadEngineResult`), and `canFreeze` is also present on
+  `launched` (`LaunchEngineResult`) while `generatesFigures` is absent there. *Named revert:* move
+  `generates_figures` back onto `LaunchEngineResult` (and/or drop `can_freeze` from
+  `LoadEngineResult`) → RED.
 
 ### ENG-2 — dedup content-check + warning are q2 additions, doc'd as Q1 parity
 
@@ -607,23 +607,23 @@ a typed `FormatPandoc`) — so **the SDK needs no change; the gap is Rust/harnes
 PROTO-1 row).
 
 - [x] **plan1a-protocol (`ts_protocol.rs`):** add to `TsExecuteResult`, all `#[serde(default)]`:
-      `metadata: Option<HashMap<String, TsMetadataValue>>`, `pandoc: Option<HashMap<String,
-      TsMetadataValue>>` (**loose JSON map — the SDK's `pandoc?` is `Record<string, unknown>`; do not
-      over-type as `FormatPandoc`**), `resource_files: Vec<String>`, `preserve: HashMap<String,
-      String>`, `post_process: bool`.
+  `metadata: Option<HashMap<String, TsMetadataValue>>`, `pandoc: Option<HashMap<String,
+  TsMetadataValue>>` (**loose JSON map — the SDK's `pandoc?` is `Record<string, unknown>`; do not
+  over-type as `FormatPandoc`**), `resource_files: Vec<String>`, `preserve: HashMap<String,
+  String>`, `post_process: bool`.
 - [x] **plan1a-engine (`context.rs` + `ts_engine.rs`):** add the matching fields to internal
-      `ExecuteResult` (`#[serde(default)]`); in the `ts_engine.rs:489-505` mapping **carry
-      `post_process` instead of hardcoding `false`** (wire-feed the existing `needs_postprocess`).
-      Values are carried and ignored until a feature consumes them.
+  `ExecuteResult` (`#[serde(default)]`); in the `ts_engine.rs:489-505` mapping **carry
+  `post_process` instead of hardcoding `false`** (wire-feed the existing `needs_postprocess`).
+  Values are carried and ignored until a feature consumes them.
 - **plan1b (harness) — owned by plan1b, not RTQ:** forward these from the engine's returned
       `ExecuteResult` when building the wire frame (greenfield — the execute-dispatch must forward
       **all** fields when first written). Already a plan1b work item (the carried-but-inert FC-1
       fields, with `post_process` wire-fed, are enumerated in plan1b's execute-dispatch step).
 - [x] **Test seam (F1, frozen):** carried fields round-trip **and** `post_process` is wire-fed (not
-      hardcoded). *Named revert:* re-hardcode `needs_postprocess: false` in the `ts_engine.rs` mapping
-      → the `needs_postprocess==true` assertion RED. See the Test Seam Spec.
+  hardcoded). *Named revert:* re-hardcode `needs_postprocess: false` in the `ts_engine.rs` mapping
+  → the `needs_postprocess==true` assertion RED. See the Test Seam Spec.
 - [x] **Additive-compatibility:** `#[serde(default)]` throughout (precedent: `html_dependencies`,
-      `context.rs:248`) — existing engines / stored capture fixtures omitting these still deserialize.
+  `context.rs:248`) — existing engines / stored capture fixtures omitting these still deserialize.
 
 ### FC-2 — the `dependencies()` round-trip has no wire verb (deferred-deps path)
 
@@ -656,46 +656,46 @@ caller sends `false`; the path is present-but-unexercised, inert for real engine
 `quarto.jupyter.widgetDependencyIncludes`.
 
 - [x] **`ts_protocol.rs` (landed code — RTQ-tracked, *not* a `plan1a-protocol.md` edit):** all additive
-      (`#[serde(default)]`):
-      - `TsExecuteOptions.dependencies: bool` (**default `true`** — match Q1's `resolveDependencies`).
-      - `TsExecuteResult.engineDependencies: Option<HashMap<String, Vec<TsMetadataValue>>>` — the deferred
-        map, **forwarded** to q2 (*not* resolved in the harness).
-      - a new verb **`ToEngine::Dependencies { engine, options: TsDependenciesOptions }`** + result
-        **`FromEngine::DependenciesResult { includes: TsPandocIncludes }`** — the symmetric sibling of
-        `IntermediateFiles`/`IntermediateFilesResult`. **`output` lives on this options struct**
-        (supplied at the call = the final/merged output), *not* on `TsExecuteOptions`. Two q2-shape
-        reconciliations vs Q1's `DependenciesOptions` (`:201-211`): **(DQ-3)** there is no
-        `ExecutionTarget` cookie — carry the **same flattened target fields** as `TsExecuteOptions`
-        (`input`/`source_path`/`source_map`), not a Q1 `target`; and **(Item A)** `resource_dir` is
-        **omitted** — it is ambient via `Init.global` (`path.resource`), exactly as `TsExecuteOptions`
-        omits it. Resulting struct:
+  (`#[serde(default)]`):
+  - `TsExecuteOptions.dependencies: bool` (**default `true`** — match Q1's `resolveDependencies`).
+  - `TsExecuteResult.engineDependencies: Option<HashMap<String, Vec<TsMetadataValue>>>` — the deferred
+    map, **forwarded** to q2 (*not* resolved in the harness).
+  - a new verb **`ToEngine::Dependencies { engine, options: TsDependenciesOptions }`** + result
+    **`FromEngine::DependenciesResult { includes: TsPandocIncludes }`** — the symmetric sibling of
+    `IntermediateFiles`/`IntermediateFilesResult`. **`output` lives on this options struct**
+    (supplied at the call = the final/merged output), *not* on `TsExecuteOptions`. Two q2-shape
+    reconciliations vs Q1's `DependenciesOptions` (`:201-211`): **(DQ-3)** there is no
+    `ExecutionTarget` cookie — carry the **same flattened target fields** as `TsExecuteOptions`
+    (`input`/`source_path`/`source_map`), not a Q1 `target`; and **(Item A)** `resource_dir` is
+    **omitted** — it is ambient via `Init.global` (`path.resource`), exactly as `TsExecuteOptions`
+    omits it. Resulting struct:
 
-        ```rust
-        #[serde(rename_all = "camelCase")]
-        pub struct TsDependenciesOptions {
-            // flattened target (DQ-3 — no ExecutionTarget cookie), mirroring TsExecuteOptions
-            pub input: String,
-            pub source_path: String,
-            pub source_map: Vec<TsSourceMapEntry>,
-            pub format: TsFormatInfo,
-            pub output: String,                     // final/merged output — supplied at the call
-            pub temp_dir: String,                   // per-render scratch (NOT resource_dir — ambient)
-            pub lib_dir: Option<String>,
-            pub project_dir: Option<String>,
-            pub dependencies: Vec<TsMetadataValue>, // the deferred deps for this engine
-                                                    // (= engineDependencies[<engine>])
-            pub quiet: bool,
-        }
-        ```
+    ```rust
+    #[serde(rename_all = "camelCase")]
+    pub struct TsDependenciesOptions {
+        // flattened target (DQ-3 — no ExecutionTarget cookie), mirroring TsExecuteOptions
+        pub input: String,
+        pub source_path: String,
+        pub source_map: Vec<TsSourceMapEntry>,
+        pub format: TsFormatInfo,
+        pub output: String,                     // final/merged output — supplied at the call
+        pub temp_dir: String,                   // per-render scratch (NOT resource_dir — ambient)
+        pub lib_dir: Option<String>,
+        pub project_dir: Option<String>,
+        pub dependencies: Vec<TsMetadataValue>, // the deferred deps for this engine
+                                                // (= engineDependencies[<engine>])
+        pub quiet: bool,
+    }
+    ```
 - **plan1b (harness) — owned by plan1b, not RTQ:** handle the `dependencies` verb as a **thin
       pass-through** to `instance.dependencies(opts)` (reply `dependenciesResult { includes }`);
       **forward** `engineDependencies` on the execute reply; **no harness-internal fold**. Already
       done in plan1b's reworked execute-dispatch flow + the new `dependencies` message arm.
 - [ ] **q2 render orchestrator (plan1a-engine / plan1c render path — deferred consumer):** when an `execute`
-      reply carries `engineDependencies`, iterate by engine name and send a `dependencies` message per key
-      (`output` = the render recipe's output), merging each `DependenciesResult.includes`. Mirrors
-      `render.ts:90-109`. Lands with the book feature — the verb existing now means **no protocol surgery
-      then**.
+  reply carries `engineDependencies`, iterate by engine name and send a `dependencies` message per key
+  (`output` = the render recipe's output), merging each `DependenciesResult.includes`. Mirrors
+  `render.ts:90-109`. Lands with the book feature — the verb existing now means **no protocol surgery
+  then**.
 - **Cross-plan dependency (note, not an execution item) → Plan 3E:** the jupyter `dependencies()` body
       calls `quarto.jupyter.widgetDependencyIncludes` (`jupyter.ts:609-611`), provided only at 3E. Until
       then the verb is plumbed-but-inert for real engines.
@@ -703,8 +703,8 @@ caller sends `false`; the path is present-but-unexercised, inert for real engine
       must be captured/replayed alongside `execute` so a frozen render reproduces deps deterministically.
       Already flagged in `claude-notes/plans/2026-05-03-replay-engine.md` (future, with the book feature).
 - [x] **Test seam (frozen, RTQ):** **F2a** (Rust serde) — `dependencies` defaults `true`, the
-      `Dependencies` verb + `engineDependencies` round-trip; *named revert:* flip the `dependencies`
-      default `true→false` → "absent→true" RED. See the Test Seam Spec.
+  `Dependencies` verb + `engineDependencies` round-trip; *named revert:* flip the `dependencies`
+  default `true→false` → "absent→true" RED. See the Test Seam Spec.
 - **Test seam (owned by plan1b):** **F2b** (TS/vitest, 1b harness, **fake** engine) — `execute` with
       `false` forwards `engineDependencies` verbatim and the harness does **not** call
       `dependencies()`; `true` → empty/absent; a `dependencies` message → `instance.dependencies(opts)`

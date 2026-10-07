@@ -316,347 +316,347 @@ once per phase boundary.
 ### Phase 1 — plumbing prerequisites (wrinkles 1–6)
 
 - [ ] **Test spec first:** unit tests pinning the re-keyed tables
-      keyed by the *existing* variants (Docx/Pptx rows + the
-      no-op-default loop over Html/Pdf/Epub/Typst/Revealjs/Gfm/CommonMark
-      — the mechanism Phase 2's rows plug into); gate predicate test
-      (`is_pandoc_hybrid()` true for variants with writer-name arms, false
-      for Html/Pdf/Revealjs); `format-identifier` param test
-      asserting canonical-name semantics (typst sends `"typst"`, not
-      `"pdf"` — regression test for the latent bug).
-      **Deferred to Phase 2's test spec** (the variants don't exist
-      until then, so a Phase 1 red state is impossible to construct):
-      the docbook-vs-opendocument discrimination test (different
-      defaults despite sharing ext `xml`) and the params-blob test
-      asserting `crossref-numbering: external` for Odt. Phase 2 must
-      write both tests *first* (red on the missing variants/default
-      rows), then add the variants.
+  keyed by the *existing* variants (Docx/Pptx rows + the
+  no-op-default loop over Html/Pdf/Epub/Typst/Revealjs/Gfm/CommonMark
+  — the mechanism Phase 2's rows plug into); gate predicate test
+  (`is_pandoc_hybrid()` true for variants with writer-name arms, false
+  for Html/Pdf/Revealjs); `format-identifier` param test
+  asserting canonical-name semantics (typst sends `"typst"`, not
+  `"pdf"` — regression test for the latent bug).
+  **Deferred to Phase 2's test spec** (the variants don't exist
+  until then, so a Phase 1 red state is impossible to construct):
+  the docbook-vs-opendocument discrimination test (different
+  defaults despite sharing ext `xml`) and the params-blob test
+  asserting `crossref-numbering: external` for Odt. Phase 2 must
+  write both tests *first* (red on the missing variants/default
+  rows), then add the variants.
 - [x] Add `FormatIdentifier::is_pandoc_hybrid()`; replace the `render.rs`
-      gate's `matches!` clause; update the not-yet-supported error text.
-      **Correction (Phase 6 session):** Phase 1 replaced the predicate
-      but left the text stale — still claiming "Only HTML and revealjs
-      are available" (byte-identical to the branch parent). Fixed in
-      commit `7e86f0c63`: the message now says only "not yet supported"
-      (the refused set is pdf + future additions, so no enumeration that
-      rots), and the gate comment's stale variant list is gone.
+  gate's `matches!` clause; update the not-yet-supported error text.
+  **Correction (Phase 6 session):** Phase 1 replaced the predicate
+  but left the text stale — still claiming "Only HTML and revealjs
+  are available" (byte-identical to the branch parent). Fixed in
+  commit `7e86f0c63`: the message now says only "not yet supported"
+  (the refused set is pdf + future additions, so no enumeration that
+  rots), and the gate comment's stale variant list is gone.
 - [x] Re-key `format_pandoc_defaults`, `format_execute_defaults`,
-      `insert_active_filters` to `FormatIdentifier`; unify the two
-      `format_pandoc_defaults` call sites (extension at `params.rs:172`,
-      writer name at `format_defaults.rs:204`); review
-      `build_forwarded_args`\' format gates per variant.
+  `insert_active_filters` to `FormatIdentifier`; unify the two
+  `format_pandoc_defaults` call sites (extension at `params.rs:172`,
+  writer name at `format_defaults.rs:204`); review
+  `build_forwarded_args`\' format gates per variant.
 - [x] Add `FormatIdentifier::canonical_name()`; send it as
-      `format-identifier.base-format`.
+  `format-identifier.base-format`.
 - [x] Add `pandoc_writer_name_for` arms for `Gfm` → `"gfm"` and
-      `CommonMark` → `"commonmark"` (final per D7, 2026-09-24 — bare
-      `gfm`, no suffix mechanism needed).
+  `CommonMark` → `"commonmark"` (final per D7, 2026-09-24 — bare
+  `gfm`, no suffix mechanism needed).
 - [ ] Add `crossref-numbering: external` for `Odt` in
-      `insert_crossref_numbering_mode`. **Moved to Phase 2** with its
-      test (see the deferral note above): `insert_crossref_numbering_mode`
-      currently matches `Docx | Pptx`, and the `Odt` variant it needs
-      doesn't exist until Phase 2 — TDD there: the red test names Odt,
-      then the variant + arm land together.
+  `insert_crossref_numbering_mode`. **Moved to Phase 2** with its
+  test (see the deferral note above): `insert_crossref_numbering_mode`
+  currently matches `Docx | Pptx`, and the `Odt` variant it needs
+  doesn't exist until Phase 2 — TDD there: the red test names Odt,
+  then the variant + arm land together.
 - [x] Add pptx (missing today) to `KNOWN_BASE_FORMATS`.
 - [x] **Gate-reachability e2e (added during execution):** since Phase 1's
-      gate change admits Gfm/CommonMark (wrinkle 4's warning), Phase 1
-      carries the minimal proof they reach the *right* writers:
-      `e2e_render_gfm`/`e2e_render_commonmark` in
-      `crates/quarto/tests/integration/render_pandoc_formats_e2e.rs`
-      (`--to gfm`/`--to commonmark` exit 0, output is markdown, no
-      `<h1`). Phase 3 remains responsible for their *content*
-      completion (external numbering, output-divs).
+  gate change admits Gfm/CommonMark (wrinkle 4's warning), Phase 1
+  carries the minimal proof they reach the *right* writers:
+  `e2e_render_gfm`/`e2e_render_commonmark` in
+  `crates/quarto/tests/integration/render_pandoc_formats_e2e.rs`
+  (`--to gfm`/`--to commonmark` exit 0, output is markdown, no
+  `<h1`). Phase 3 remains responsible for their *content*
+  completion (external numbering, output-divs).
 - [x] Workspace nextest; commit. (14,740 run / 14,740 passed / 200
-      skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
-      parent `c24355329` = the 8 new tests enumerated above plus the
-      in-place gfm→pdf conversion of
-      `unsupported_format_aborts_before_any_render`.)
+  skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
+  parent `c24355329` = the 8 new tests enumerated above plus the
+  in-place gfm→pdf conversion of
+  `unsupported_format_aborts_before_any_render`.)
 
 ### Phase 2 — Tier A bulk tail (25 variants)
 
 - [x] **Test spec first:** one golden/smoke fixture per *family*
-      (wordprocessor/ebook/plaintext) asserting defaults reach the right
-      sinks (execute scope, params blob, CLI args); a parametrized
-      per-variant render smoke test through `render_document_to_file`
-      (output file exists, non-empty, extension correct; **zip magic for
-      odt only — fb2 is plain XML** (`<?xml …><FictionBook`), assert
-      that instead). Textile gets a *fresh-baseline* snapshot (no Q1
-      parity claim). e2e test in `render_pandoc_formats_e2e.rs` driving
-      `--to odt` through the real binary.
+  (wordprocessor/ebook/plaintext) asserting defaults reach the right
+  sinks (execute scope, params blob, CLI args); a parametrized
+  per-variant render smoke test through `render_document_to_file`
+  (output file exists, non-empty, extension correct; **zip magic for
+  odt only — fb2 is plain XML** (`<?xml …><FictionBook`), assert
+  that instead). Textile gets a *fresh-baseline* snapshot (no Q1
+  parity claim). e2e test in `render_pandoc_formats_e2e.rs` driving
+  `--to odt` through the real binary.
 - [x] Enum variants + `TryFrom<&str>`/display names +
-      `output_extension_for` + `pandoc_writer_name_for` arms.
+  `output_extension_for` + `pandoc_writer_name_for` arms.
 - [x] Defaults rows: `format_pandoc_defaults` (page-width/png — the
-      single sink for `--default-image-extension`; do **not** also put
-      it in `pandoc_invocation_args_for`), `format_execute_defaults`
-      (fig 5×4 wordprocessor/ebook), `pandoc_invocation_args_for`
-      (`--standalone` for the plaintext family and rtf only).
+  single sink for `--default-image-extension`; do **not** also put
+  it in `pandoc_invocation_args_for`), `format_execute_defaults`
+  (fig 5×4 wordprocessor/ebook), `pandoc_invocation_args_for`
+  (`--standalone` for the plaintext family and rtf only).
 - [x] `KNOWN_BASE_FORMATS`: add the Tier A bases.
 - [x] E2E per CLAUDE.md: `cargo run --bin q2 -- render <fixture> --to
-      <fmt>` for at least one variant per family; inspect output bytes;
-      record invocation + observed snippet in this file.
+  <fmt>` for at least one variant per family; inspect output bytes;
+  record invocation + observed snippet in this file.
 
-      Recorded 2026-09-24, fixture `target/e2e-longtail/f.qmd`
-      (title `F`, `# Head`, `HelloLongTail _emph_ body.`, numbered
-      list), binary `./target/debug/q2` at branch tip:
+  Recorded 2026-09-24, fixture `target/e2e-longtail/f.qmd`
+  (title `F`, `# Head`, `HelloLongTail _emph_ body.`, numbered
+  list), binary `./target/debug/q2` at branch tip:
 
-      - **odt** (wordprocessor): `./target/debug/q2 render
-        target/e2e-longtail/f.qmd --to odt` → `f.odt`. `unzip -p f.odt
-        mimetype` → `application/vnd.oasis.opendocument.text`;
-        `unzip -p f.odt content.xml | grep -o HelloLongTail` →
-        `HelloLongTail`.
-      - **fb2** (ebook): `… --to fb2` → `f.fb2`. `head -c 300` →
-        `<?xml version="1.0" encoding="UTF-8"?>` then
-        `<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" …><description><title-info><genre>unrecognised</genre><book-title>F</book-title>…`
-      - **plain** (plaintext): `… --to plain` → `f.txt`, body:
-        `Head` / `HelloLongTail emph body.` / `1.  one` / `2.  two`.
+  - **odt** (wordprocessor): `./target/debug/q2 render
+    target/e2e-longtail/f.qmd --to odt` → `f.odt`. `unzip -p f.odt
+    mimetype` → `application/vnd.oasis.opendocument.text`;
+    `unzip -p f.odt content.xml | grep -o HelloLongTail` →
+    `HelloLongTail`.
+  - **fb2** (ebook): `… --to fb2` → `f.fb2`. `head -c 300` →
+    `<?xml version="1.0" encoding="UTF-8"?>` then
+    `<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" …><description><title-info><genre>unrecognised</genre><book-title>F</book-title>…`
+  - **plain** (plaintext): `… --to plain` → `f.txt`, body:
+    `Head` / `HelloLongTail emph body.` / `1.  one` / `2.  two`.
 
-      All three outputs inspected by hand (not inferred from exit
-      codes). The initial fixture's `{python}` cell failed with the
-      expected jupyter-unavailable error — re-run without it.
+  All three outputs inspected by hand (not inferred from exit
+  codes). The initial fixture's `{python}` cell failed with the
+  expected jupyter-unavailable error — re-run without it.
 - [x] Workspace nextest; commit. (14,762 run / 14,762 passed / 200
-      skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
-      parent `ccba0fb4c` = +22 tests: 20 `#[test]` in tracked diffs
-      (`format_defaults.rs`, `params.rs`, `pandoc_execute_defaults.rs`,
-      `discover.rs`, `engine_execution.rs`, e2e file) + 2 in the new
-      `pandoc_long_tail_formats.rs`.)
+  skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
+  parent `ccba0fb4c` = +22 tests: 20 `#[test]` in tracked diffs
+  (`format_defaults.rs`, `params.rs`, `pandoc_execute_defaults.rs`,
+  `discover.rs`, `engine_execution.rs`, e2e file) + 2 in the new
+  `pandoc_long_tail_formats.rs`.)
 
 ### Phase 3 — Tier B markdown family (7 new variants + gfm/commonmark completion)
 
 - [x] **Test spec first:** `output-divs: false` asserted in the params
-      blob for every Tier B variant **except `Markdown`** (Q1 parity:
-      true) — `test_tier_b_output_divs_per_format` (params.rs) +
-      `test_format_defaults_table` rows (format_defaults.rs);
-      shortcode round-trip test — P7 check done: q2 shipped **no**
-      shortcode-unescape postprocessor at all (zero hits in Rust; the
-      hybrid path had no output postprocessing), so it was filed as its
-      own fix and applied uniformly: `FormatIdentifier::is_markdown_output()`
-      + `unescape_shortcodes_in_output` in `pandoc_write.rs`, called
-      after a successful pandoc invocation for markdown-family formats,
-      gated on the written file containing `{{\<`/`\>}}`
-      (commit `cb9a00733`). Red-first: both the integration test and
-      the real-binary e2e failed with output `{{\< meta title \>}}`.
+  blob for every Tier B variant **except `Markdown`** (Q1 parity:
+  true) — `test_tier_b_output_divs_per_format` (params.rs) +
+  `test_format_defaults_table` rows (format_defaults.rs);
+  shortcode round-trip test — P7 check done: q2 shipped **no**
+  shortcode-unescape postprocessor at all (zero hits in Rust; the
+  hybrid path had no output postprocessing), so it was filed as its
+  own fix and applied uniformly: `FormatIdentifier::is_markdown_output()`
+  + `unescape_shortcodes_in_output` in `pandoc_write.rs`, called
+  after a successful pandoc invocation for markdown-family formats,
+  gated on the written file containing `{{\<`/`\>}}`
+  (commit `cb9a00733`). Red-first: both the integration test and
+  the real-binary e2e failed with output `{{\< meta title \>}}`.
 - [x] New variants + mappings + `output_divs: Some(false)` rows
-      (`Markdown` excepted): 7 variants (Markdown, MarkdownStrict,
-      MarkdownPhpExtra, MarkdownGithub, MarkdownMmd, Markua,
-      CommonmarkX) with all seams; writer names are explicit arms —
-      the extension fall-through would send `-t md` (pandoc's plain
-      markdown writer) for every flavor.
+  (`Markdown` excepted): 7 variants (Markdown, MarkdownStrict,
+  MarkdownPhpExtra, MarkdownGithub, MarkdownMmd, Markua,
+  CommonmarkX) with all seams; writer names are explicit arms —
+  the extension fall-through would send `-t md` (pandoc's plain
+  markdown writer) for every flavor.
 - [x] **gfm/commonmark completion:** e2e *reachability* tests for
-      `--to gfm` / `--to commonmark` already landed in Phase 1 (see the
-      Phase 1 checklist); content completion: D7 resolved 2026-09-24 —
-      kept the Phase 1 bare `-t gfm` arm (no variant-string mechanism;
-      see the D7 decision entry for the archaeology);
-      `crossref-numbering: external` set for Gfm
-      (`insert_crossref_numbering_mode`; renderer at
-      `floatreftarget.lua:1191`; bare markdown/commonmark stay unset —
-      placeholder float renderer — and the vendored `main.lua:737-752`
-      fail-fast guard only rejects LaTeX/Typst targets, so no guard
-      accommodation needed).
+  `--to gfm` / `--to commonmark` already landed in Phase 1 (see the
+  Phase 1 checklist); content completion: D7 resolved 2026-09-24 —
+  kept the Phase 1 bare `-t gfm` arm (no variant-string mechanism;
+  see the D7 decision entry for the archaeology);
+  `crossref-numbering: external` set for Gfm
+  (`insert_crossref_numbering_mode`; renderer at
+  `floatreftarget.lua:1191`; bare markdown/commonmark stay unset —
+  placeholder float renderer — and the vendored `main.lua:737-752`
+  fail-fast guard only rejects LaTeX/Typst targets, so no guard
+  accommodation needed).
 - [x] `KNOWN_BASE_FORMATS`: added the 7 Tier B bases (gfm/commonmark
-      were already present).
+  were already present).
 - [x] E2E at least `markdown_strict` and `commonmark_x`; inspected.
-      Invocation: `cargo run --bin q2 -- render target/tmp-tierb/f.qmd
-      --to <fmt> --output-dir target/tmp-tierb/out-<fmt>` for **all
-      nine** flavors (fixture: heading + emphasis + code + escaped
-      shortcode; no code cells). Snippets (Escaped line): markdown,
-      markdown_github, markdown_mmd, markua, gfm, commonmark,
-      commonmark_x → `{{< meta title >}}` (postprocessor active);
-      markdown_strict, markdown_phpextra → `{{&lt; meta title &gt;}}`
-      (those two writers HTML-entity-escape; measured Q1 parity — its
-      postprocessor does not rewrite them either). All nine produced
-      non-empty `f.md`. Also committed as `e2e_render_markdown_strict` /
-      `e2e_render_commonmark_x` (commit `4859efa60`).
+  Invocation: `cargo run --bin q2 -- render target/tmp-tierb/f.qmd
+  --to <fmt> --output-dir target/tmp-tierb/out-<fmt>` for **all
+  nine** flavors (fixture: heading + emphasis + code + escaped
+  shortcode; no code cells). Snippets (Escaped line): markdown,
+  markdown_github, markdown_mmd, markua, gfm, commonmark,
+  commonmark_x → `{{< meta title >}}` (postprocessor active);
+  markdown_strict, markdown_phpextra → `{{&lt; meta title &gt;}}`
+  (those two writers HTML-entity-escape; measured Q1 parity — its
+  postprocessor does not rewrite them either). All nine produced
+  non-empty `f.md`. Also committed as `e2e_render_markdown_strict` /
+  `e2e_render_commonmark_x` (commit `4859efa60`).
 - [x] Workspace nextest; commit. (commits `cb9a00733` Phase 3a +
-      `4859efa60` Phase 3b.) Measured 2026-09-24 on this branch after
-      both commits: 14,776 run / 14,776 passed / 200 skipped / 0
-      failed. Delta vs the Phase 2 baseline (14,762 run) = **+14**, all
-      accounted for by this phase's new `#[test]` fns: 7 in format.rs
-      (`test_tier_b_*` × 6 + `test_is_markdown_output_negatives`), 3 in
-      params.rs, 1 in pandoc_long_tail_formats.rs, 3 in the e2e file.
-      Skipped unchanged.
+  `4859efa60` Phase 3b.) Measured 2026-09-24 on this branch after
+  both commits: 14,776 run / 14,776 passed / 200 skipped / 0
+  failed. Delta vs the Phase 2 baseline (14,762 run) = **+14**, all
+  accounted for by this phase's new `#[test]` fns: 7 in format.rs
+  (`test_tier_b_*` × 6 + `test_is_markdown_output_negatives`), 3 in
+  params.rs, 1 in pandoc_long_tail_formats.rs, 3 in the e2e file.
+  Skipped unchanged.
 
 ### Phase 4 — Tier C stretch (12 variants)
 
 - [x] **Test spec first:** parametrized render smoke per variant
-      (`tier_c_smoke_all_variants`, `pandoc_long_tail_formats.rs`);
-      chunkedhtml asserts a valid zip whose `index.html` shell is backed
-      by a chapter entry carrying the body text (**correction during
-      execution:** the chunked writer splits content into numbered
-      `1-<slug>.html` files — `index.html` is only the shell, so the
-      first draft's "body inside index.html" assertion was wrong and
-      was fixed against measured output); ansi asserts `\x1b[` escape
-      bytes; **bare invocation asserted at three sinks** —
-      `test_tier_c_invocation_args_empty` (no CLI flags),
-      `test_tier_c_pandoc_defaults_noop` (`format_pandoc_defaults`
-      returns the no-op default for all 12, pinning "no defaults rows"
-      at the sink), and an *output-level* title-marker check (fixture
-      title `TierCMarkerTitle` must not appear in the 10 text writers'
-      output — measured pandoc 3.11: `pandoc -t djot --standalone`
-      prepends `# <title>`; the AST-dump `xml` writer legitimately
-      echoes metadata so it's exempt). Red-first: all 11 new tests
-      failed with `Unknown format: djot` before the variants landed
-      (/tmp/tc-red.log).
+  (`tier_c_smoke_all_variants`, `pandoc_long_tail_formats.rs`);
+  chunkedhtml asserts a valid zip whose `index.html` shell is backed
+  by a chapter entry carrying the body text (**correction during
+  execution:** the chunked writer splits content into numbered
+  `1-<slug>.html` files — `index.html` is only the shell, so the
+  first draft's "body inside index.html" assertion was wrong and
+  was fixed against measured output); ansi asserts `\x1b[` escape
+  bytes; **bare invocation asserted at three sinks** —
+  `test_tier_c_invocation_args_empty` (no CLI flags),
+  `test_tier_c_pandoc_defaults_noop` (`format_pandoc_defaults`
+  returns the no-op default for all 12, pinning "no defaults rows"
+  at the sink), and an *output-level* title-marker check (fixture
+  title `TierCMarkerTitle` must not appear in the 10 text writers\'
+  output — measured pandoc 3.11: `pandoc -t djot --standalone`
+  prepends `# <title>`; the AST-dump `xml` writer legitimately
+  echoes metadata so it's exempt). Red-first: all 11 new tests
+  failed with `Unknown format: djot` before the variants landed
+  (/tmp/tc-red.log).
 - [x] Variants + mappings: 12 variants (Djot, T2t, Xml, Ansi, Vimdoc,
-      Bbcode, BbcodeSteam, BbcodePhpbb, BbcodeFluxbb, BbcodeHubzilla,
-      BbcodeXenforo, Chunkedhtml) with as_str/TryFrom/is_pandoc_hybrid/
-      output_extension_for/pandoc_writer_name_for arms — all explicit,
-      the extension fall-through would send `-t txt`/`-t dj`/`-t zip`.
-      **No defaults rows anywhere** (bare invocation): none in
-      `format_pandoc_defaults`, `format_execute_defaults`,
-      `pandoc_invocation_args_for`, or `insert_crossref_numbering_mode`
-      (placeholder float renderer — same polarity as the plaintext
-      tail).
+  Bbcode, BbcodeSteam, BbcodePhpbb, BbcodeFluxbb, BbcodeHubzilla,
+  BbcodeXenforo, Chunkedhtml) with as_str/TryFrom/is_pandoc_hybrid/
+  output_extension_for/pandoc_writer_name_for arms — all explicit,
+  the extension fall-through would send `-t txt`/`-t dj`/`-t zip`.
+  **No defaults rows anywhere** (bare invocation): none in
+  `format_pandoc_defaults`, `format_execute_defaults`,
+  `pandoc_invocation_args_for`, or `insert_crossref_numbering_mode`
+  (placeholder float renderer — same polarity as the plaintext
+  tail).
 - [x] `KNOWN_BASE_FORMATS`: added the 12 Tier C bases (+1 unit test:
-      `test_parse_format_descriptor_tier_c_bases`, incl. an
-      underscore flavor through the last-hyphen split,
-      `acm-bbcode_steam` → base `bbcode_steam`).
+  `test_parse_format_descriptor_tier_c_bases`, incl. an
+  underscore flavor through the last-hyphen split,
+  `acm-bbcode_steam` → base `bbcode_steam`).
 - [x] E2E djot + chunkedhtml through the real binary; inspected.
 
-      Recorded 2026-09-24, fixture `target/e2e-tierc/f.qmd` (title
-      `Tier C Fixture`, `# Head`, `HelloTierCBody with *emphasis*.`,
-      2-item list), binary `./target/debug/q2` at branch tip:
+  Recorded 2026-09-24, fixture `target/e2e-tierc/f.qmd` (title
+  `Tier C Fixture`, `# Head`, `HelloTierCBody with *emphasis*.`,
+  2-item list), binary `./target/debug/q2` at branch tip:
 
-      - **djot**: `cargo run --bin q2 -- render
-        target/e2e-tierc/f.qmd --to djot --output-dir
-        target/e2e-tierc/out-djot` → `f.dj`, body:
-        `{#head}` / `# Head` / `HelloTierCBody with _emphasis_.` /
-        `- one` / `- two`. No title chrome (bare invocation) — the
-        standalone template would have prepended `# Tier C Fixture`.
-      - **chunkedhtml**: `… --to chunkedhtml --output-dir
-        target/e2e-tierc/out-chunked` → `f.zip` (3,629 bytes).
-        `unzip -l`: `sitemap.json` (217 B), `index.html` (4,384 B),
-        `1-head.html` (4,638 B). `unzip -p … 1-head.html` carries
-        `<h1 data-number="1" id="head">` and `HelloTierCBody with
-        <em>emphasis</em>` — the body lives in the chapter file, the
-        shell in `index.html`.
+  - **djot**: `cargo run --bin q2 -- render
+    target/e2e-tierc/f.qmd --to djot --output-dir
+    target/e2e-tierc/out-djot` → `f.dj`, body:
+    `{#head}` / `# Head` / `HelloTierCBody with _emphasis_.` /
+    `- one` / `- two`. No title chrome (bare invocation) — the
+    standalone template would have prepended `# Tier C Fixture`.
+  - **chunkedhtml**: `… --to chunkedhtml --output-dir
+    target/e2e-tierc/out-chunked` → `f.zip` (3,629 bytes).
+    `unzip -l`: `sitemap.json` (217 B), `index.html` (4,384 B),
+    `1-head.html` (4,638 B). `unzip -p … 1-head.html` carries
+    `<h1 data-number="1" id="head">` and `HelloTierCBody with
+    <em>emphasis</em>` — the body lives in the chapter file, the
+    shell in `index.html`.
 
-      Both outputs inspected by hand. Also committed as
-      `e2e_render_djot` / `e2e_render_chunkedhtml`.
+  Both outputs inspected by hand. Also committed as
+  `e2e_render_djot` / `e2e_render_chunkedhtml`.
 - [x] Workspace nextest; commit. (14,786 run / 14,786 passed / 200
-      skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
-      the Phase 3 baseline (14,776 run) = **+10**, all accounted for by
-      this phase's new `#[test]` fns: 6 in format.rs (`test_tier_c_*`),
-      1 in discover.rs, 1 in pandoc_long_tail_formats.rs, 2 in the e2e
-      file. Skipped unchanged.)
+  skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
+  the Phase 3 baseline (14,776 run) = **+10**, all accounted for by
+  this phase's new `#[test]` fns: 6 in format.rs (`test_tier_c_*`),
+  1 in discover.rs, 1 in pandoc_long_tail_formats.rs, 2 in the e2e
+  file. Skipped unchanged.)
 
 ### Phase 5 — Tier D JS slide formats (4 variants)
 
 - [x] **Test spec first:** per-variant test asserting the standalone
-      deck references the format's JS asset and has `class="slide…"`
-      structure; execute-scope test pinning echo/warning false + fig
-      9.5×6.5; params-blob test asserting `crossref-numbering: external`.
-      Written as 12 red tests (all failing `Unknown format: s5`), then
-      made green: `test_tier_d_*` ×6 in `format.rs` (parse/canonical,
-      ext `html` ×4, writer names, hybrid/not-markdown, invocation args
-      `["--standalone","--wrap","none"]` exact, png defaults row),
-      `test_tier_d_sets_external_crossref_numbering` in `params.rs`,
-      `tier_d_execute_defaults_reach_engine` in
-      `pandoc_execute_defaults.rs` (probe engine observes fig 9.5×6.5 +
-      echo/warning false through the real stage merge),
-      `tier_d_smoke_all_variants` in `pandoc_long_tail_formats.rs`,
-      `e2e_render_slidy` + `e2e_render_s5` in
-      `render_pandoc_formats_e2e.rs`, and
-      `test_parse_format_descriptor_tier_d_bases` in `discover.rs`.
-      **Correction to this checklist's expectations, from measuring
-      pandoc 3.11 standalone output:** s5's assets live under
-      `s5/default/` (`slides.css`/`slides.js`, matching Phase 0), and
-      **dzslides has no external asset at all** — its template inlines
-      the whole shim (the plan's "reveal.js shim" guess was wrong), so
-      the per-format marker is the literal `dzslides` string in the
-      inlined template. slidy → W3C CDN `slidy.js`; slideous →
-      `slideous/slideous.js`. All decks carry `class="slide` structure
-      and the body text.
+  deck references the format's JS asset and has `class="slide…"`
+  structure; execute-scope test pinning echo/warning false + fig
+  9.5×6.5; params-blob test asserting `crossref-numbering: external`.
+  Written as 12 red tests (all failing `Unknown format: s5`), then
+  made green: `test_tier_d_*` ×6 in `format.rs` (parse/canonical,
+  ext `html` ×4, writer names, hybrid/not-markdown, invocation args
+  `["--standalone","--wrap","none"]` exact, png defaults row),
+  `test_tier_d_sets_external_crossref_numbering` in `params.rs`,
+  `tier_d_execute_defaults_reach_engine` in
+  `pandoc_execute_defaults.rs` (probe engine observes fig 9.5×6.5 +
+  echo/warning false through the real stage merge),
+  `tier_d_smoke_all_variants` in `pandoc_long_tail_formats.rs`,
+  `e2e_render_slidy` + `e2e_render_s5` in
+  `render_pandoc_formats_e2e.rs`, and
+  `test_parse_format_descriptor_tier_d_bases` in `discover.rs`.
+  **Correction to this checklist's expectations, from measuring
+  pandoc 3.11 standalone output:** s5's assets live under
+  `s5/default/` (`slides.css`/`slides.js`, matching Phase 0), and
+  **dzslides has no external asset at all** — its template inlines
+  the whole shim (the plan's "reveal.js shim" guess was wrong), so
+  the per-format marker is the literal `dzslides` string in the
+  inlined template. slidy → W3C CDN `slidy.js`; slideous →
+  `slideous/slideous.js`. All decks carry `class="slide` structure
+  and the body text.
 - [x] Variants + mappings; `format_execute_defaults` presentation rows;
-      `pandoc_invocation_args_for` `--standalone --wrap none`
-      (`--default-image-extension png` comes from
-      `format_pandoc_defaults`, single sink); `crossref-numbering:
-      external` for all four. Landed: `S5`/`Dzslides`/`Slidy`/`Slideous`
-      variants with explicit arms in `as_str`/`TryFrom`/
-      `is_pandoc_hybrid`/`output_extension_for` (all `html`)/
-      `pandoc_writer_name_for` (all explicit — the extension fall-through
-      would send `-t html`, a plain non-deck document); pptx-shaped
-      execute rows (fig 9.5×6.5, echo/warning false); Tier D arm in
-      `insert_crossref_numbering_mode`; png-only row in
-      `format_pandoc_defaults`.
+  `pandoc_invocation_args_for` `--standalone --wrap none`
+  (`--default-image-extension png` comes from
+  `format_pandoc_defaults`, single sink); `crossref-numbering:
+  external` for all four. Landed: `S5`/`Dzslides`/`Slidy`/`Slideous`
+  variants with explicit arms in `as_str`/`TryFrom`/
+  `is_pandoc_hybrid`/`output_extension_for` (all `html`)/
+  `pandoc_writer_name_for` (all explicit — the extension fall-through
+  would send `-t html`, a plain non-deck document); pptx-shaped
+  execute rows (fig 9.5×6.5, echo/warning false); Tier D arm in
+  `insert_crossref_numbering_mode`; png-only row in
+  `format_pandoc_defaults`.
 - [x] `KNOWN_BASE_FORMATS`: added `s5`/`dzslides`/`slidy`/`slideous`
-      (+ descriptor test; `acm-slidy` → base `slidy`).
+  (+ descriptor test; `acm-slidy` → base `slidy`).
 - [x] **Live verification through the real binary** (CLAUDE.md e2e
-      rule): `cargo run --bin q2 -- render target/e2e-tierd/deck.qmd
-      --to slidy` and `--to s5` (deck fixture: title + two `#` sections
-      + a knitr `{r}` cell — knitr *is* available in this environment,
-      and executed end-to-end). Output inspected (no browser opened —
-      HTML inspection only):
-      - slidy → `deck.html`, 2 × `class="slide` (`slide titlepage` +
-        `slide section level1`), `<title>TierDLiveDeck</title>`, W3C CDN
-        `w3.org/Talks/Tools/Slidy2/scripts/slidy.js` + `styles/slidy.css`.
-      - s5 → bundled `s5/default/slides.css` ×4 + `s5/default/slides.js`,
-        `class="slide section level1"`.
-      - **execute defaults confirmed live:** the s5 deck's cell shows
-        only `<pre class="code-with-copy"><code>[1] 2</code></pre>` —
-        knitr output with **no source block** — proving the Tier D
-        `echo: false` default reached the engine through the real
-        pipeline.
+  rule): `cargo run --bin q2 -- render target/e2e-tierd/deck.qmd
+  --to slidy` and `--to s5` (deck fixture: title + two `#` sections
+  + a knitr `{r}` cell — knitr *is* available in this environment,
+  and executed end-to-end). Output inspected (no browser opened —
+  HTML inspection only):
+  - slidy → `deck.html`, 2 × `class="slide` (`slide titlepage` +
+    `slide section level1`), `<title>TierDLiveDeck</title>`, W3C CDN
+    `w3.org/Talks/Tools/Slidy2/scripts/slidy.js` + `styles/slidy.css`.
+  - s5 → bundled `s5/default/slides.css` ×4 + `s5/default/slides.js`,
+    `class="slide section level1"`.
+  - **execute defaults confirmed live:** the s5 deck's cell shows
+    only `<pre class="code-with-copy"><code>[1] 2</code></pre>` —
+    knitr output with **no source block** — proving the Tier D
+    `echo: false` default reached the engine through the real
+    pipeline.
 - [x] Workspace nextest; commit. (14,798 run / 14,798 passed / 200
-      skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
-      the Phase 4 baseline (14,786 run) = **+12**, all accounted for by
-      this phase's new `#[test]` fns: 6 in format.rs, 1 in params.rs,
-      1 in discover.rs, 1 in pandoc_execute_defaults.rs, 1 in
-      pandoc_long_tail_formats.rs, 2 in the e2e file. Skipped
-      unchanged, no snapshot changes. Commit `ff2de1f3a`.)
+  skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
+  the Phase 4 baseline (14,786 run) = **+12**, all accounted for by
+  this phase's new `#[test]` fns: 6 in format.rs, 1 in params.rs,
+  1 in discover.rs, 1 in pandoc_execute_defaults.rs, 1 in
+  pandoc_long_tail_formats.rs, 2 in the e2e file. Skipped
+  unchanged, no snapshot changes. Commit `ff2de1f3a`.)
 
 ### Phase 6 — docs + wrap-up
 
 - [x] `docs/` format reference: `docs/guides/formats/pandoc/index.qmd`
-      ("Other output formats") + sidebar entry in `docs/_quarto.yml`
-      after the typst entry. User-facing framing (no tier jargon):
-      pandoc prerequisite (3.11 floor, `QUARTO_PANDOC`), grouped format
-      tables with extensions, slide-show asset notes (dzslides inline,
-      slidy W3C CDN), chunkedhtml zip structure, ansi terminal-escape
-      note, AST-dump formats, float-placeholder degradation (full
-      numbering only for odt/gfm/slides; chunkedhtml called out as
-      placeholder despite HTML), callout/theorem chrome dropped except
-      slides, mermaid/OJS unsupported, Q1-migrant notes (Tier C
-      filename changes, gfm superset incl. GH alerts/`$` math/YAML
-      block/auto identifiers, `number-sections` not forwarded to
-      markdown writers). **Verified through the real binary**:
-      `cargo run --bin q2 -- render docs/guides/formats/pandoc/index.qmd`
-      → exit 0; built `docs/_site/guides/formats/pandoc/index.html`
-      inspected (title, all sections, sidebar EPUB→Typst→Other active).
-      Correction found while writing: pandoc's bare `docbook` writer is
-      an alias of `docbook5` (namespaced DocBook 5) — measured via
-      `pandoc -t docbook` vs `-t docbook4`/`-t docbook5` root elements;
-      the docs table states the alias. (Note for future sessions:
-      `cargo xtask stage-doc-examples` resolves `repo_root()` via
-      `--git-common-dir`, which from a worktree is the *main* repo —
-      don't run it from a worktree to satisfy the docs project's
-      `resources:` check; `mkdir -p docs/examples` suffices.)
+  ("Other output formats") + sidebar entry in `docs/_quarto.yml`
+  after the typst entry. User-facing framing (no tier jargon):
+  pandoc prerequisite (3.11 floor, `QUARTO_PANDOC`), grouped format
+  tables with extensions, slide-show asset notes (dzslides inline,
+  slidy W3C CDN), chunkedhtml zip structure, ansi terminal-escape
+  note, AST-dump formats, float-placeholder degradation (full
+  numbering only for odt/gfm/slides; chunkedhtml called out as
+  placeholder despite HTML), callout/theorem chrome dropped except
+  slides, mermaid/OJS unsupported, Q1-migrant notes (Tier C
+  filename changes, gfm superset incl. GH alerts/`$` math/YAML
+  block/auto identifiers, `number-sections` not forwarded to
+  markdown writers). **Verified through the real binary**:
+  `cargo run --bin q2 -- render docs/guides/formats/pandoc/index.qmd`
+  → exit 0; built `docs/_site/guides/formats/pandoc/index.html`
+  inspected (title, all sections, sidebar EPUB→Typst→Other active).
+  Correction found while writing: pandoc's bare `docbook` writer is
+  an alias of `docbook5` (namespaced DocBook 5) — measured via
+  `pandoc -t docbook` vs `-t docbook4`/`-t docbook5` root elements;
+  the docs table states the alias. (Note for future sessions:
+  `cargo xtask stage-doc-examples` resolves `repo_root()` via
+  `--git-common-dir`, which from a worktree is the *main* repo —
+  don't run it from a worktree to satisfy the docs project's
+  `resources:` check; `mkdir -p docs/examples` suffices.)
 - [ ] Optionally file Q1's `"texttile"` typo upstream at quarto-cli.
 - [x] Reconcile this checklist with reality (per global rule), commit
-      the plan file. Reconciled 2026-09-24 (Phase 6 session): every
-      code claim re-checked against the shipped tree — CLI gate uses
-      `is_pandoc_hybrid()` (`quarto/src/commands/render.rs:938`),
-      `canonical_name()` feeds `base-format` (`params.rs:159`),
-      `KNOWN_BASE_FORMATS` holds pptx + all tier bases
-      (`discover.rs:249-312`), shortcode unescape postprocessor in
-      `pandoc_write.rs:814`, odt/gfm/docx/typst-negative + s5
-      external-numbering tests in `params.rs`, per-variant extension
-      table matches `output_extension_for`. Corrections made: Phase 5
-      test count ×7 → ×6 in format.rs (12 total across files); Phase 1's
-      "error text updated" claim was false — the stale text slipped
-      through, fixed in `7e86f0c63` (see the Phase 1 correction note).
-      Remaining open item: the optional upstream `texttile` issue
-      (Gordon's call — needs his approval to file on quarto-cli).
+  the plan file. Reconciled 2026-09-24 (Phase 6 session): every
+  code claim re-checked against the shipped tree — CLI gate uses
+  `is_pandoc_hybrid()` (`quarto/src/commands/render.rs:938`),
+  `canonical_name()` feeds `base-format` (`params.rs:159`),
+  `KNOWN_BASE_FORMATS` holds pptx + all tier bases
+  (`discover.rs:249-312`), shortcode unescape postprocessor in
+  `pandoc_write.rs:814`, odt/gfm/docx/typst-negative + s5
+  external-numbering tests in `params.rs`, per-variant extension
+  table matches `output_extension_for`. Corrections made: Phase 5
+  test count ×7 → ×6 in format.rs (12 total across files); Phase 1's
+  "error text updated" claim was false — the stale text slipped
+  through, fixed in `7e86f0c63` (see the Phase 1 correction note).
+  Remaining open item: the optional upstream `texttile` issue
+  (Gordon's call — needs his approval to file on quarto-cli).
 - [x] **Full `cargo xtask verify`** green before asking to push — repo
-      policy requires the WASM leg for any change under `quarto-core`,
-      and this plan adds 48 enum variants there. Green on 2026-09-24:
-      all 14 steps, `exit=0`; Rust 14,798 run / 14,798 passed / 200
-      skipped; ts-packages, hub-client build:all (WASM), and hub-client
-      tests all passed. First attempt failed the ts-packages leg with
-      errors in packages this branch never touches (`hephaestus-svg-wasm`
-      TS2307, `FindProgress.peek` TS2339): the repurposed worktree's
-      `node_modules` predated those deps (automerge 3.4.1 installed vs
-      3.5.0 locked). Fixed with `npm install` from the worktree root;
-      main's ts-test-suite CI was green throughout, confirming the
-      source tree was never at fault. npm's concurrent package-lock.json
-      rewrite (platform-optional esbuild pruning) was reverted — it
-      would have broken Linux `npm ci`.
+  policy requires the WASM leg for any change under `quarto-core`,
+  and this plan adds 48 enum variants there. Green on 2026-09-24:
+  all 14 steps, `exit=0`; Rust 14,798 run / 14,798 passed / 200
+  skipped; ts-packages, hub-client build:all (WASM), and hub-client
+  tests all passed. First attempt failed the ts-packages leg with
+  errors in packages this branch never touches (`hephaestus-svg-wasm`
+  TS2307, `FindProgress.peek` TS2339): the repurposed worktree's
+  `node_modules` predated those deps (automerge 3.4.1 installed vs
+  3.5.0 locked). Fixed with `npm install` from the worktree root;
+  main's ts-test-suite CI was green throughout, confirming the
+  source tree was never at fault. npm's concurrent package-lock.json
+  rewrite (platform-optional esbuild pruning) was reverted — it
+  would have broken Linux `npm ci`.
 
 ## Decisions (resolved)
 

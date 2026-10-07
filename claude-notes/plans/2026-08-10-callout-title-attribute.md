@@ -272,7 +272,7 @@ attribute is not inline content). Highest existing is Q-2-42.
 ### Phase 0 — Tests first (TDD)
 
 - [x] Real-source test helper (`parse_and_transform`) — parses qmd and returns
-      the parse's own `SourceContext`, so span assertions are meaningful
+  the parse's own `SourceContext`, so span assertions are meaningful
 - [x] Unit test: attribute-only title populates the title slot
 - [x] Unit test: heading-only title still works (regression — passes today)
 - [x] Unit test: both present → Q-2-43 warning, exactly one consumed
@@ -283,12 +283,12 @@ attribute is not inline content). Highest existing is Q-2-42.
 - [x] Span test: exact mapping for a quoted, escape-free value
 - [x] Span test: exact mapping for a bare, unquoted value
 - [x] Span test: escaped value takes the bounded fallback, stays inside the
-      attribute extent
+  attribute extent
 - [x] Confirm every new test fails for the expected reason — 8 fail (empty
-      title slot / H1 ignored / no warning), 2 pass as intended regressions.
-      No compile or setup artifacts.
+  title slot / H1 ignored / no warning), 2 pass as intended regressions.
+  No compile or setup artifacts.
 - [x] HTML fixture: attribute title renders with the `screen-reader-only` span
-      (`crates/quarto/tests/smoke-all/quarto-test/callout-title-attribute.qmd`)
+  (`crates/quarto/tests/smoke-all/quarto-test/callout-title-attribute.qmd`)
 
 ### Phase 1 — Title source selection
 
@@ -296,40 +296,40 @@ attribute is not inline content). Highest existing is Q-2-42.
 - [x] Move the header removal into the fallback branch only
 - [x] Drop the `level >= 2` check
 - [x] Emit Q-2-43 when both are present (plus diagnostics threading through
-      `transform_blocks`/`transform_block`, which had no sink before)
+  `transform_blocks`/`transform_block`, which had no sink before)
 
 ### Phase 2 — Parse + source mapping
 
 - [x] Length-derived parent `SourceInfo` (exact / exact / bounded-fallback) —
-      `attribute_value_source`
+  `attribute_value_source`
 - [x] `parse_config_string_as_markdown`; `PandocInlines` through,
-      single-paragraph `PandocBlocks` unwrapped, else Q-2-44
+  single-paragraph `PandocBlocks` unwrapped, else Q-2-44
 - [x] Guarded `theorem.rs:336-360` index lookup for the value span
 
 ### Phase 3 — Diagnostics
 
 - [x] Register Q-2-43 and Q-2-44 in `quarto-error-catalog`
 - [x] Verify wording and spans against the fixture — Q-2-43 renders with a
-      caret on the offending callout (repro.qmd:38)
+  caret on the offending callout (repro.qmd:38)
 
 ### Phase 4 — Verification
 
 - [x] `cargo nextest run --workspace` green — 11471/11471 passed (exit 0).
-      A first fail-fast run tripped `quarto-hub …collect_lifecycle_quarantine_restore_purge`;
-      that is the known flake bd-u0tldu4z (passes in isolation, green on the
-      complete rerun of the identical tree). Recurrence recorded on the strand.
+  A first fail-fast run tripped `quarto-hub …collect_lifecycle_quarantine_restore_purge`;
+  that is the known flake bd-u0tldu4z (passes in isolation, green on the
+  complete rerun of the identical tree). Recurrence recorded on the strand.
 - [ ] `cargo xtask verify` (WASM leg — quarto-core is in hub-client's closure)
 - [x] End-to-end `q2 render` of the fixture; record invocation + output
-      (see `observed-output.md`, "After" section)
+  (see `observed-output.md`, "After" section)
 - [ ] Review snapshot churn; count and summarize in the commit message
 
 ### Phase 5 — Docs
 
 - [x] Error pages `docs/errors/markdown/Q-2-43.qmd` and `Q-2-44.qmd` (the
-      catalog's `docs_url` points at them; note Q-2-42 shipped without one, so
-      the convention is manual and unenforced)
+  catalog's `docs_url` points at them; note Q-2-42 shipped without one, so
+  the convention is manual and unenforced)
 - [ ] No callouts *feature* page exists under `docs/` at all — `title=` has no
-      home to be documented in. Out of scope here; worth its own strand.
+  home to be documented in. Out of scope here; worth its own strand.
 
 ## Risks / tradeoffs
 

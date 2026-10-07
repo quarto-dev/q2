@@ -175,10 +175,10 @@ Implementation (branch `braid/bd-9fwn1504-quarto-ast-reconcile-proptest`):
 - [x] Phase 2: `cargo nextest run --workspace` — 10508/10508 passed, 0 regressions
 - [x] Phase 2: full `cargo xtask verify` (WASM closure) — all steps passed
 - [x] Pre-commit review checklist (`claude-notes/instructions/review.md`):
-      HashMap greps clean, clippy clean, fmt via hook, TDD fail-first
-      verified for all 8 tests, no TODOs added
+  HashMap greps clean, clippy clean, fmt via hook, TDD fail-first
+  verified for all 8 tests, no TODOs added
 - [x] Committed (804a1b38), pushed as
-      `bugfix/bd-9fwn1504-quarto-ast-reconcile-proptest`, PR #422 opened
+  `bugfix/bd-9fwn1504-quarto-ast-reconcile-proptest`, PR #422 opened
 - [ ] CI green on PR #422, then merge (close strand on merge)
 
 Note on end-to-end verification: this fix is library-internal (the

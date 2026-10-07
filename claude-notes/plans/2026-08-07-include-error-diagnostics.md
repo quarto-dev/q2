@@ -144,52 +144,52 @@ the real HTML pipeline over temp-dir fixtures (same pattern as
 failing before any fix:
 
 - [x] T1: parse-error include → diagnostics contain the Q-17-3 wrapper
-      **and** the inner parse diagnostic (assert its code, e.g.
-      Q-2-10, and that its location resolves to the *included* file's
-      path/line via the returned `SourceContext`).
+  **and** the inner parse diagnostic (assert its code, e.g.
+  Q-2-10, and that its location resolves to the *included* file's
+  path/line via the returned `SourceContext`).
 - [x] T2: parse-error include → **no** Q-16-3 anywhere in the
-      collected diagnostics (regression for the spurious warning).
-      Must run the pipeline through the shortcode-resolve transform,
-      not just the include stage.
+  collected diagnostics (regression for the spurious warning).
+  Must run the pipeline through the shortcode-resolve transform,
+  not just the include stage.
 - [x] T3: file-not-found include → Q-17-2 present, no Q-16-3.
 - [x] T4: circular include → Q-17-1 present, no Q-16-3.
 - [x] T5 (unit, in `include_expansion.rs` tests): failed include block
-      is removed from the AST; surrounding blocks intact.
+  is removed from the AST; surrounding blocks intact.
 - [x] End-to-end check per CLAUDE.md: run the real binary on the repro
-      fixture and inspect stderr — see "End-to-end verification record"
-      below.
+  fixture and inspect stderr — see "End-to-end verification record"
+  below.
 
 ### Phase 2 — surface the inner diagnostics (bug 1)
 
 In the `Err(diagnostics)` arm of `include_expansion.rs`:
 
 - [x] Register the included file's content in **both**
-      `doc.ast_context.source_context` and `doc.source_context`,
-      exactly as the success path does (the two contexts must grow in
-      lockstep — the success path `debug_assert_eq!`s their new
-      `FileId`s, and skipping registration on the error path would
-      desynchronize any *later* successful include in the same
-      document).
+  `doc.ast_context.source_context` and `doc.source_context`,
+  exactly as the success path does (the two contexts must grow in
+  lockstep — the success path `debug_assert_eq!`s their new
+  `FileId`s, and skipping registration on the error path would
+  desynchronize any *later* successful include in the same
+  document).
 - [x] Remap each inner diagnostic's `location` and every
-      `details[i].location` from `FileId(0)` to the newly registered
-      id via `SourceInfo::remap_file_ids` (public method on
-      `quarto_source_map::SourceInfo`; already used by
-      `quarto-ast-reconcile/src/remap.rs:55`).
+  `details[i].location` from `FileId(0)` to the newly registered
+  id via `SourceInfo::remap_file_ids` (public method on
+  `quarto_source_map::SourceInfo`; already used by
+  `quarto-ast-reconcile/src/remap.rs:55`).
 - [x] Push the Q-17-3 wrapper (still anchored at the include site — it
-      correctly answers "why is my content missing here?") followed by
-      the remapped inner diagnostics into `ctx.diagnostics`. Reword
-      the wrapper problem from `… : N error(s)` to something like
-      `Included file '…' has N parse error(s), reported below` so the
-      wrapper and the inner reports read as one story.
+  correctly answers "why is my content missing here?") followed by
+  the remapped inner diagnostics into `ctx.diagnostics`. Reword
+  the wrapper problem from `… : N error(s)` to something like
+  `Included file '…' has N parse error(s), reported below` so the
+  wrapper and the inner reports read as one story.
 
 ### Phase 3 — remove the failed include block (bug 2)
 
 - [x] On all three failure paths (Q-17-1 / Q-17-2 / Q-17-3), replace
-      `i += 1; continue` with `doc.ast.blocks.remove(i); continue`
-      (no increment). The diagnostic has already been emitted; the
-      shortcode must not leak into transforms that will misreport it.
-      Content loss is not a concern — the include already contributed
-      nothing, and for Q-5-3 the render fails anyway.
+  `i += 1; continue` with `doc.ast.blocks.remove(i); continue`
+  (no increment). The diagnostic has already been emitted; the
+  shortcode must not leak into transforms that will misreport it.
+  Content loss is not a concern — the include already contributed
+  nothing, and for Q-5-3 the render fails anyway.
 
 ### Phase 4 — accurate message for leftover `include` shortcodes
 
@@ -200,26 +200,26 @@ inside a container (until the discovered strand fixes that). The
 "unknown shortcode / check for typos" message is wrong for these.
 
 - [x] Special-case `shortcode.name == "include"` at the
-      unknown-shortcode fallback in `shortcode_resolve.rs`: emit a
-      dedicated warning under a **new `Q-17-4` catalog entry** (see the
-      subsystem-17 note above) saying the shortcode
-      *is* known but was not expanded, e.g. "The `include` shortcode
-      is only expanded when it is the only content of a top-level
-      paragraph", with a hint about moving it to its own line. Exact
-      wording to be settled during implementation review.
+  unknown-shortcode fallback in `shortcode_resolve.rs`: emit a
+  dedicated warning under a **new `Q-17-4` catalog entry** (see the
+  subsystem-17 note above) saying the shortcode
+  *is* known but was not expanded, e.g. "The `include` shortcode
+  is only expanded when it is the only content of a top-level
+  paragraph", with a hint about moving it to its own line. Exact
+  wording to be settled during implementation review.
 - [x] Test: inline include produces the dedicated message, not
-      "Shortcode `include` is not recognized".
+  "Shortcode `include` is not recognized".
 
 ### Phase 5 — verification & bookkeeping
 
 - [x] `cargo nextest run --workspace` (11005 passed) and full
-      `cargo xtask verify` including the WASM/hub-client legs — all
-      green (2026-08-07).
+  `cargo xtask verify` including the WASM/hub-client legs — all
+  green (2026-08-07).
 - [x] Re-render the Connect docs page
-      (`admin/authentication/oauth2-openid-based/entra-id-openid-connect/index.qmd`)
-      and confirm the output now names `_common.qmd:383` and emits no
-      Q-16-3 (codes read Q-17-3 + inner Q-2-10) — done; see the
-      verification record above.
+  (`admin/authentication/oauth2-openid-based/entra-id-openid-connect/index.qmd`)
+  and confirm the output now names `_common.qmd:383` and emits no
+  Q-16-3 (codes read Q-17-3 + inner Q-2-10) — done; see the
+  verification record above.
 - [ ] Close strand; update this plan's checklist.
 
 ## End-to-end verification record (2026-08-07)

@@ -328,8 +328,8 @@ Test matrix:
 - [x] v1 plan written
 - [x] PR #238 surfaced; v2 revision applied
 - [x] Decisions locked: A1 (engine impl), B1 (direct RawBlock HTML
-      emission with bd-mqk49 follow-up TODO), C1 (inline script
-      RawBlock), D=bd-iq0hp closure
+  emission with bd-mqk49 follow-up TODO), C1 (inline script
+  RawBlock), D=bd-iq0hp closure
 - [x] User ratified plan v2.1 (2026-05-28); bd-c6h96 closed
 
 ### Phase 1 — multi-engine current-state audit
@@ -342,9 +342,9 @@ Test matrix:
   - [x] That `result.markdown` is QMD-text re-parsed for the next
         engine
 - [x] Re-verify `capture_splice.rs` drops aux fields — confirmed
-      against `feature/multi-engine` (bd-cp3em remains valid)
+  against `feature/multi-engine` (bd-cp3em remains valid)
 - [ ] If PR #238's review surfaces design changes that affect mermaid,
-      reflect them here (deferred until #238 merges or stabilizes)
+  reflect them here (deferred until #238 merges or stabilizes)
 
 #### Phase 1 findings (2026-05-28)
 
@@ -500,15 +500,15 @@ to `KNOWN_ENGINES`.
     helpers if they get factored out, or inline the same logic
     (small enough).
 - [ ] Register in `EngineRegistry::new`
-      (`crates/quarto-core/src/engine/registry.rs:48-66`) in the
-      always-block:
-      `registry.register(Arc::new(MermaidEngine::new()));`
+  (`crates/quarto-core/src/engine/registry.rs:48-66`) in the
+  always-block:
+  `registry.register(Arc::new(MermaidEngine::new()));`
 - [ ] Add `"mermaidjs"` to `KNOWN_ENGINES`
-      (`crates/quarto-core/src/engine/detection.rs:31`) so the
-      top-level `mermaidjs:` shortcut is recognized.
+  (`crates/quarto-core/src/engine/detection.rs:31`) so the
+  top-level `mermaidjs:` shortcut is recognized.
 - [ ] Module wiring: export `MermaidEngine` from
-      `crates/quarto-core/src/engine/mod.rs` (mirror how
-      `MarkdownEngine` is re-exported).
+  `crates/quarto-core/src/engine/mod.rs` (mirror how
+  `MarkdownEngine` is re-exported).
 - [ ] Tests in `crates/quarto-core/src/engine/mermaid.rs`:
   - Single-cell case: input with one `{mermaid}` cell produces the
     `<pre class="mermaid">` wrapper + the script tag.
@@ -522,31 +522,31 @@ to `KNOWN_ENGINES`.
   - HTML-escaping: source containing `<`, `>`, `&` in the diagram
     is escaped in the output.
 - [ ] Integration test in `crates/quarto-core/tests/`:
-      render a fixture qmd with `engine: mermaidjs` (or
-      `engine: [mermaidjs]`) through the full HTML pipeline;
-      assert the rendered HTML contains `<pre class="mermaid">`
-      and the script tag.
+  render a fixture qmd with `engine: mermaidjs` (or
+  `engine: [mermaidjs]`) through the full HTML pipeline;
+  assert the rendered HTML contains `<pre class="mermaid">`
+  and the script tag.
 - [ ] Multi-engine integration: a fixture with `engine: [knitr,
-      mermaidjs]` containing one `{r}` cell and one `{mermaid}`
-      cell — both render correctly (gated on the knitr R runtime
-      being available, or use the FixtureEngine pattern from PR #238
-      to substitute).
+  mermaidjs]` containing one `{r}` cell and one `{mermaid}`
+  cell — both render correctly (gated on the knitr R runtime
+  being available, or use the FixtureEngine pattern from PR #238
+  to substitute).
 - [ ] **End-to-end per CLAUDE.md**:
-      `cargo run --bin q2 -- render fixture.qmd`, grep the actual
-      output for `<pre class="mermaid">` and the script tag,
-      record invocation + observed output in this plan before
-      claiming done.
+  `cargo run --bin q2 -- render fixture.qmd`, grep the actual
+  output for `<pre class="mermaid">` and the script tag,
+  record invocation + observed output in this plan before
+  claiming done.
 
 ### Phase 3 — q2-preview verification (closes bd-iq0hp)
 
 - [ ] Per the Q-D test matrix above. The fact that mermaid+knitr is
-      the first cleanly-composing real-engine pair makes this work
-      the canonical multi-engine browser preview E2E.
+  the first cleanly-composing real-engine pair makes this work
+  the canonical multi-engine browser preview E2E.
 
 ### Phase 4 — documentation
 
 - [ ] User-facing docs page under `docs/`. Render with
-      `cargo run --bin q2 -- render docs/` (Q2, not Q1).
+  `cargo run --bin q2 -- render docs/` (Q2, not Q1).
 
 ### Follow-up issues (separate beads — not blockers for shipping
 mermaid via A1/B2c/C1)

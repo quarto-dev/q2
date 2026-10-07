@@ -222,65 +222,65 @@ fails today starts passing. Phase 1 pins it with a boundary test.
         boundary test fails.
   - [x] Message test: fails on `main` as expected ("max depth: 101 > 100").
 - [x] `quarto-treesitter-ast` unit tests (dev-dep `tree-sitter-qmd`): exact
-      boundary accept/reject, visitor never runs on a node past the limit,
-      result identical to the unlimited traversal. Fail to compile (API
-      missing) as expected.
+  boundary accept/reject, visitor never runs on a node past the limit,
+  result identical to the unlimited traversal. Fail to compile (API
+  missing) as expected.
 - [x] `crates/pampa/tests/integration/test_concrete_tree_dump.rs`: `read`
-      leaves the verbose stream empty (fails on `main`: it contains the dump);
-      `dump_concrete_tree` output is exact (API missing); `pampa -v` shows the
-      dump and plain `pampa` doesn't (both pass on `main`, pinning the CLI).
+  leaves the verbose stream empty (fails on `main`: it contains the dump);
+  `dump_concrete_tree` output is exact (API missing); `pampa -v` shows the
+  dump and plain `pampa` doesn't (both pass on `main`, pinning the CLI).
 
 ### Phase 2 — commit 1: fuse the depth guard (bd-t7i6oanu)
 - [x] Limited traversal in `quarto-treesitter-ast`, plus the pampa wrapper.
-      The unlimited `bottomup_traverse_concrete_tree` now delegates with
-      `usize::MAX`, so there is one implementation. The pampa-side unlimited
-      wrapper had a single caller and was replaced by the limited one.
+  The unlimited `bottomup_traverse_concrete_tree` now delegates with
+  `usize::MAX`, so there is one implementation. The pampa-side unlimited
+  wrapper had a single caller and was replaced by the limited one.
 - [x] Guard inside `treesitter_to_pandoc` (`MAX_CONCRETE_TREE_DEPTH = 99`);
-      removed the check from `read`.
+  removed the check from `read`.
 - [x] Deleted `crates/pampa/src/utils/concrete_tree_depth.rs` and its `mod`.
 - [x] Tests green (workspace: 13961 passed), fmt, clippy/lints via verify
-      step 1, commit `40eadc50`. `verify --skip-hub-build` still runs hub-client's
-      `*.wasm.test.ts` against the existing WASM artifact, which was built
-      Sep 11 (stale), and those fail. The full `verify` in Phase 4 rebuilds
-      WASM and is the real gate.
+  step 1, commit `40eadc50`. `verify --skip-hub-build` still runs hub-client's
+  `*.wasm.test.ts` against the existing WASM artifact, which was built
+  Sep 11 (stale), and those fail. The full `verify` in Phase 4 rebuilds
+  WASM and is the real gate.
 
 ### Phase 3 — commit 2: stop dumping the tree in `read` (bd-khect2gq)
 - [x] Add `dump_concrete_tree`, remove the call from `read`, wire `pampa -v`,
-      delete the dead copy in `main.rs`. (The copy was never flagged because
-      `main.rs` has `#![allow(dead_code)]`; removing it made `io::Write`
-      unused there, so the import went too.)
+  delete the dead copy in `main.rs`. (The copy was never flagged because
+  `main.rs` has `#![allow(dead_code)]`; removing it made `io::Write`
+  unused there, so the import went too.)
 - [x] Tests green (workspace: 13965 passed), clippy `-D warnings` clean on
-      pampa and quarto-treesitter-ast, commit. Nothing else in the repo
-      matched the dump text (`{Node ` / `print_whole_tree`).
+  pampa and quarto-treesitter-ast, commit. Nothing else in the repo
+  matched the dump text (`{Node ` / `print_whole_tree`).
 
 ### Phase 4 — measure and verify
 - [x] Re-profiled the same fixture with the same command (after `6ea8cf1d`).
-      Direct callees of `pampa::readers::qmd::read`, as a share of all samples:
+  Direct callees of `pampa::readers::qmd::read`, as a share of all samples:
 
-      | callee                          | before | after  |
-      | ------------------------------- | -----: | -----: |
-      | `treesitter_to_pandoc`          | 23.61% | 22.70% |
-      | `MarkdownParser::parse`         | 12.93% | 12.43% |
-      | `filters::topdown_traverse`     |  3.00% |  2.63% |
-      | `print_whole_tree` (sink)       |  2.44% |   —    |
-      | `concrete_tree_depth`           |  1.63% |   —    |
-      | `ts_tree_delete`                |  1.11% |  1.06% |
-      | **`read` total**                | **45.01%** | **38.95%** |
+  | callee                          | before | after  |
+  | ------------------------------- | -----: | -----: |
+  | `treesitter_to_pandoc`          | 23.61% | 22.70% |
+  | `MarkdownParser::parse`         | 12.93% | 12.43% |
+  | `filters::topdown_traverse`     |  3.00% |  2.63% |
+  | `print_whole_tree` (sink)       |  2.44% |   —    |
+  | `concrete_tree_depth`           |  1.63% |   —    |
+  | `ts_tree_delete`                |  1.11% |  1.06% |
+  | **`read` total**                | **45.01%** | **38.95%** |
 
-      Both extra walks are gone. `treesitter_to_pandoc`, which now carries the
-      depth check, did not grow.
+  Both extra walks are gone. `treesitter_to_pandoc`, which now carries the
+  depth check, did not grow.
 - [x] `cargo nextest run --workspace`: 13965 passed.
 - [x] Full `cargo xtask verify --skip-rust-tests` (Rust tests had just run on
-      the same tree): all 14 steps pass, including the WASM rebuild and
-      hub-client `test:ci`, whose `*.wasm.test.ts` failures in Phase 2 are
-      thereby confirmed as stale-artifact noise.
+  the same tree): all 14 steps pass, including the WASM rebuild and
+  hub-client `test:ci`, whose `*.wasm.test.ts` failures in Phase 2 are
+  thereby confirmed as stale-artifact noise.
 - [x] End-to-end with `target/debug/q2 render` and the output inspected: 95
-      nested blockquotes render (`edge2.html` has exactly 95
-      `<blockquote>`), 96 fail with `Error [Q-0-99]: The input document is too
-      deeply nested (more than 99 levels).`, and 300 nested spans fail with
-      the same error (no crash). The fixture renders (`_site/api/index.html`,
-      2.0 MB, 36 `<h2>`). `pampa -v` on `Hello *x*` still prints the tree
-      (`document: {Node document (0, 0) - (1, 0)}` …) to stderr.
+  nested blockquotes render (`edge2.html` has exactly 95
+  `<blockquote>`), 96 fail with `Error [Q-0-99]: The input document is too
+  deeply nested (more than 99 levels).`, and 300 nested spans fail with
+  the same error (no crash). The fixture renders (`_site/api/index.html`,
+  2.0 MB, 36 `<h2>`). `pampa -v` on `Hello *x*` still prints the tree
+  (`document: {Node document (0, 0) - (1, 0)}` …) to stderr.
 
 ## Side observation (not filed)
 

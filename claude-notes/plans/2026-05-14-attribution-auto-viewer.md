@@ -135,192 +135,192 @@ implementation lands.
 ### Phase A: transform-level tests
 
 - [ ] `attribution_viewer_emits_includes_when_active`:
-      build a `RenderContext` with `format_options.html.attribution_by_node =
-      Some(...)` and `format_options.html.attribution_viewer_enabled = true`;
-      run the transform; assert `ast.meta.rendered.includes.header` contains
-      a `<style>` block matching `q2-attr-badge` and
-      `rendered.includes.after-body` contains a `<script>` block matching
-      `data-attr-actor`. Mirrors `website_favicon.rs` test shape.
+  build a `RenderContext` with `format_options.html.attribution_by_node =
+  Some(...)` and `format_options.html.attribution_viewer_enabled = true`;
+  run the transform; assert `ast.meta.rendered.includes.header` contains
+  a `<style>` block matching `q2-attr-badge` and
+  `rendered.includes.after-body` contains a `<script>` block matching
+  `data-attr-actor`. Mirrors `website_favicon.rs` test shape.
 - [ ] `attribution_viewer_skips_when_attribution_off`:
-      `format_options.html.attribution_by_node = None` (the unflagged path)
-      → the include arrays are unchanged (no `<style>` / `<script>` added).
+  `format_options.html.attribution_by_node = None` (the unflagged path)
+  → the include arrays are unchanged (no `<style>` / `<script>` added).
 - [ ] `attribution_viewer_skips_when_viewer_disabled`:
-      `attribution_by_node = Some(...)` (render transform ran) but
-      `attribution_viewer_enabled = false` (YAML opt-out) → the include
-      arrays are unchanged. Pins the YAML opt-out path.
+  `attribution_by_node = Some(...)` (render transform ran) but
+  `attribution_viewer_enabled = false` (YAML opt-out) → the include
+  arrays are unchanged. Pins the YAML opt-out path.
 - [ ] `attribution_viewer_emits_when_no_matches`:
-      `attribution_by_node = Some(empty HashMap)` (attribution on but
-      no body nodes matched runs) → CSS/JS still injected. Pins the
-      "feature feels alive on empty docs" decision against future
-      "only inject when non-empty" drift.
+  `attribution_by_node = Some(empty HashMap)` (attribution on but
+  no body nodes matched runs) → CSS/JS still injected. Pins the
+  "feature feels alive on empty docs" decision against future
+  "only inject when non-empty" drift.
 - [ ] `attribution_viewer_idempotent_on_rerun`:
-      running the transform twice on the same `ast.meta` does **not**
-      double-inject. Requires the transform body to check for the
-      sentinel comment (`<!-- quarto-attribution-viewer-css -->`) in
-      the existing `rendered.includes.header` strings before appending;
-      Phase 3 spells out this dedup logic.
+  running the transform twice on the same `ast.meta` does **not**
+  double-inject. Requires the transform body to check for the
+  sentinel comment (`<!-- quarto-attribution-viewer-css -->`) in
+  the existing `rendered.includes.header` strings before appending;
+  Phase 3 spells out this dedup logic.
 
 ### Phase B: end-to-end render tests
 
 - [ ] `attribution_cli_e2e_viewer_default_on`:
-      extend `crates/quarto/tests/attribution_cli_e2e.rs` — render a small
-      fixture with `--attribution=git`, grep the produced HTML for
-      `q2-attr-badge` (CSS class) and `data-attr-actor` references inside a
-      `<script>` block. Both must be present.
+  extend `crates/quarto/tests/attribution_cli_e2e.rs` — render a small
+  fixture with `--attribution=git`, grep the produced HTML for
+  `q2-attr-badge` (CSS class) and `data-attr-actor` references inside a
+  `<script>` block. Both must be present.
 - [ ] `attribution_cli_e2e_viewer_opt_out`:
-      same fixture with YAML `attribution: { source: git, viewer: false }` and
-      no CLI override → wrappers present, no `q2-attr-badge` substring.
+  same fixture with YAML `attribution: { source: git, viewer: false }` and
+  no CLI override → wrappers present, no `q2-attr-badge` substring.
 - [ ] `attribution_cli_e2e_off_byte_identical`:
-      render twice with `attribution: off` (or unset) and confirm output is
-      byte-identical to a baseline snapshot — no incidental whitespace from
-      the new transform leaking through the off path.
+  render twice with `attribution: off` (or unset) and confirm output is
+  byte-identical to a baseline snapshot — no incidental whitespace from
+  the new transform leaking through the off path.
 - [ ] Snapshot survey before implementation: run
-      `rg -l 'q2-attr-badge|attribution-viewer' crates/*/tests/snapshots`
-      to enumerate existing attribution snapshots. **Expect** the on-path
-      ones to grow the `<style>`/`<script>` block; off-path ones to be
-      byte-identical. If no on-path snapshot exists today, this item
-      becomes "add an on-path snapshot capturing the new injection";
-      otherwise it's "update and document the diff in the commit message
-      per the CLAUDE.md snapshot policy".
+  `rg -l 'q2-attr-badge|attribution-viewer' crates/*/tests/snapshots`
+  to enumerate existing attribution snapshots. **Expect** the on-path
+  ones to grow the `<style>`/`<script>` block; off-path ones to be
+  byte-identical. If no on-path snapshot exists today, this item
+  becomes "add an on-path snapshot capturing the new injection";
+  otherwise it's "update and document the diff in the commit message
+  per the CLAUDE.md snapshot policy".
 
 ### Phase C: asset-content invariants
 
 - [ ] Compile-time check: `include_str!` of `viewer.css` and `viewer.js`
-      compiles (no rename / file-removed regression).
+  compiles (no rename / file-removed regression).
 - [ ] `viewer_js_does_not_recolor_body`: the embedded `viewer.js` string does
-      not contain `el.style.color = ` against a wrapper — pin the
-      "neutral by default" decision against future drift. The only color
-      assignment in the file should be against the floating badge.
+  not contain `el.style.color = ` against a wrapper — pin the
+  "neutral by default" decision against future drift. The only color
+  assignment in the file should be against the floating badge.
 - [ ] `viewer_css_matches_hub_client_classes`: the embedded `viewer.css`
-      mentions `q2-attr-badge`, `q2-attr-badge-dot`, `q2-attr-badge-time` —
-      pin the shared-class-name contract with hub-client.
+  mentions `q2-attr-badge`, `q2-attr-badge-dot`, `q2-attr-badge-time` —
+  pin the shared-class-name contract with hub-client.
 
 ### Phase D: hub-client tests against the shared asset + neutral wrapper
 
 All tests in `hub-client/src/components/render/framework/`.
 
 - [ ] `attribution_styles_matches_shared_file`: import the shared CSS via
-      `?raw` in a new unit test and assert `attributionStyles` exports it
-      verbatim. Guards against a future refactor that silently breaks the
-      import while leaving an old hard-coded fallback in place.
+  `?raw` in a new unit test and assert `attributionStyles` exports it
+  verbatim. Guards against a future refactor that silently breaks the
+  import while leaving an old hard-coded fallback in place.
 - [ ] `attribution_wrap_does_not_recolor_body`: render an `AttributionWrap`
-      with a populated lookup and assert the resulting element has **no**
-      inline `color` style. Pins the neutral default against re-introduction
-      of the line-114 repaint. The badge (`AttributionBadge`) is unaffected
-      and continues to render `record.color`.
+  with a populated lookup and assert the resulting element has **no**
+  inline `color` style. Pins the neutral default against re-introduction
+  of the line-114 repaint. The badge (`AttributionBadge`) is unaffected
+  and continues to render `record.color`.
 - [ ] Existing `attribution.integration.test.tsx` (both `q2-debug` and
-      `q2-preview` copies) — **expect updates**. The wrapper-level inline
-      `color` goes away; assertions / DOM snapshots that depend on it
-      need to be updated to match the neutral state. Treat any
-      "wrapper has color X" assertion as load-bearing on the old
-      behaviour and revise it to "badge has color X" instead.
+  `q2-preview` copies) — **expect updates**. The wrapper-level inline
+  `color` goes away; assertions / DOM snapshots that depend on it
+  need to be updated to match the neutral state. Treat any
+  "wrapper has color X" assertion as load-bearing on the old
+  behaviour and revise it to "badge has color X" instead.
 - [ ] `npm run build:all` from `hub-client/` succeeds — per CLAUDE.md
-      this is the production-build invariant that `tsc --noEmit` and
-      `vitest` don't catch.
+  this is the production-build invariant that `tsc --noEmit` and
+  `vitest` don't catch.
 
 ### Phase E: documentation update
 
 - [ ] Render `docs/authoring/attribution.qmd` locally and confirm the
-      revised section reads coherently. Verify by **end-to-end** render of a
-      fixture with `attribution: git` (no `css:`/`include-after-body:` YAML),
-      open in a browser, hover an attributed run, see the badge. Record the
-      invocation + screenshot evidence in this plan's "Verification log"
-      section at the bottom.
+  revised section reads coherently. Verify by **end-to-end** render of a
+  fixture with `attribution: git` (no `css:`/`include-after-body:` YAML),
+  open in a browser, hover an attributed run, see the badge. Record the
+  invocation + screenshot evidence in this plan's "Verification log"
+  section at the bottom.
 
 ## Work items
 
 ### Phase 1 — schema + types
 
 - [ ] Extend the rich-form YAML parser to accept
-      `attribution.viewer: bool`. Today the parser reads `source` and
-      `identities`; the new key is the third recognized field. Default
-      `true` when effective mode is `git` (covers both short form
-      `attribution: git` and rich form `attribution: { source: git }`);
-      ignored when effective mode is `off`. Touchpoints:
-      `crates/quarto-core/src/attribution/types.rs` (`identity_map_from_meta`
-      at line 196 is the nearby precedent — add a sibling
-      `attribution_viewer_enabled_from_meta` reader that returns `bool`
-      with `true` as the default).
+  `attribution.viewer: bool`. Today the parser reads `source` and
+  `identities`; the new key is the third recognized field. Default
+  `true` when effective mode is `git` (covers both short form
+  `attribution: git` and rich form `attribution: { source: git }`);
+  ignored when effective mode is `off`. Touchpoints:
+  `crates/quarto-core/src/attribution/types.rs` (`identity_map_from_meta`
+  at line 196 is the nearby precedent — add a sibling
+  `attribution_viewer_enabled_from_meta` reader that returns `bool`
+  with `true` as the default).
 - [ ] Pre-implementation check: confirm no current YAML schema entry for
-      `attribution` exists in `crates/quarto-yaml-validation` (the
-      pre-implementation grep on 2026-05-14 returned no hits). If one
-      surfaces during implementation, extend it to accept `viewer:
-      boolean`; otherwise no schema work is required.
+  `attribution` exists in `crates/quarto-yaml-validation` (the
+  pre-implementation grep on 2026-05-14 returned no hits). If one
+  surfaces during implementation, extend it to accept `viewer:
+  boolean`; otherwise no schema work is required.
 - [ ] Add `attribution_viewer_enabled: bool` to `HtmlConfig` in
-      `crates/pampa/src/writers/html.rs` (or the equivalent
-      `FormatOptions.html` struct in quarto-core if that's the layering)
-      — it lives next to `attribution_by_node` / `attribution_identities`
-      so transforms can read it without re-parsing metadata. **HTML-only**;
-      the JSON writer ignores it. The viewer transform consults
-      `ctx.format_options.html.attribution_viewer_enabled` as its second
-      gating signal.
+  `crates/pampa/src/writers/html.rs` (or the equivalent
+  `FormatOptions.html` struct in quarto-core if that's the layering)
+  — it lives next to `attribution_by_node` / `attribution_identities`
+  so transforms can read it without re-parsing metadata. **HTML-only**;
+  the JSON writer ignores it. The viewer transform consults
+  `ctx.format_options.html.attribution_viewer_enabled` as its second
+  gating signal.
 - [ ] Populate `attribution_viewer_enabled` from merged metadata inside
-      `AttributionRenderTransform` (same place that sets the other
-      `format_options.html.*` fields, after the mode-resolution and
-      identity-merge steps). Mirrors how identities are read once and
-      threaded through.
+  `AttributionRenderTransform` (same place that sets the other
+  `format_options.html.*` fields, after the mode-resolution and
+  identity-merge steps). Mirrors how identities are read once and
+  threaded through.
 
 ### Phase 2 — embedded assets
 
 - [ ] Create repo-root directory `resources/attribution/` with a short
-      `README.md` (one paragraph: "Shared viewer CSS/JS, consumed by both
-      `quarto-core`'s `AttributionViewerTransform` via `include_str!` and
-      hub-client via Vite's `?raw` import. Edit this single source; both
-      surfaces re-pick it up.") Matches the layout/voice of
-      `resources/scss/README.md`.
+  `README.md` (one paragraph: "Shared viewer CSS/JS, consumed by both
+  `quarto-core`'s `AttributionViewerTransform` via `include_str!` and
+  hub-client via Vite's `?raw` import. Edit this single source; both
+  surfaces re-pick it up.") Matches the layout/voice of
+  `resources/scss/README.md`.
 - [ ] Create `resources/attribution/viewer.css`. Content: dotted
-      underline on `[data-attr-actor]`, badge classes (`.q2-attr-badge`,
-      `.q2-attr-badge-dot`, `.q2-attr-badge-time`) lifted verbatim from
-      `hub-client/.../framework/attribution.tsx` lines 55–82. **Omit**
-      any rule that sets `color` on a wrapper — the underline announces
-      attribution; the body colour stays theme-controlled.
+  underline on `[data-attr-actor]`, badge classes (`.q2-attr-badge`,
+  `.q2-attr-badge-dot`, `.q2-attr-badge-time`) lifted verbatim from
+  `hub-client/.../framework/attribution.tsx` lines 55–82. **Omit**
+  any rule that sets `color` on a wrapper — the underline announces
+  attribution; the body colour stays theme-controlled.
 - [ ] Create `resources/attribution/viewer.js`. Content: the
-      `formatRelativeTime`, `buildBadge`, `mouseover`, and `mouseout`
-      blocks from the doc snippet (`attribution.qmd:182-262`). **Delete**
-      the `forEach` block at lines 200-206 that paints wrappers with
-      `el.style.color`; that's the "neutral by default" decision.
+  `formatRelativeTime`, `buildBadge`, `mouseover`, and `mouseout`
+  blocks from the doc snippet (`attribution.qmd:182-262`). **Delete**
+  the `forEach` block at lines 200-206 that paints wrappers with
+  `el.style.color`; that's the "neutral by default" decision.
 - [ ] Module wiring: `crates/quarto-core/src/attribution/mod.rs` exports
-      two `pub(crate) const`s holding the file contents, loaded with
-      `include_str!("../../../../resources/attribution/viewer.css")`
-      and `viewer.js` (verify the `..` count during implementation —
-      from `crates/quarto-core/src/attribution/mod.rs` to repo root is
-      four `..`s; adjust if the module ends up elsewhere). Tests in
-      Phase C grep against these constants.
+  two `pub(crate) const`s holding the file contents, loaded with
+  `include_str!("../../../../resources/attribution/viewer.css")`
+  and `viewer.js` (verify the `..` count during implementation —
+  from `crates/quarto-core/src/attribution/mod.rs` to repo root is
+  four `..`s; adjust if the module ends up elsewhere). Tests in
+  Phase C grep against these constants.
 
 ### Phase 3 — transform implementation
 
 - [ ] Add `crates/quarto-core/src/transforms/attribution_viewer.rs`
-      implementing `AttributionViewerTransform`. Follow the
-      `WebsiteFaviconTransform` shape (lines 43–116 of `website_favicon.rs`):
-      gate inside `transform()`, append two `ConfigValue::new_string` HTML
-      literals to `rendered.includes.header` and
-      `rendered.includes.after-body` respectively. The gating check reads
-      `ctx.format_options.html.attribution_by_node.is_some()` **and**
-      `ctx.format_options.html.attribution_viewer_enabled` (defaults `true`).
+  implementing `AttributionViewerTransform`. Follow the
+  `WebsiteFaviconTransform` shape (lines 43–116 of `website_favicon.rs`):
+  gate inside `transform()`, append two `ConfigValue::new_string` HTML
+  literals to `rendered.includes.header` and
+  `rendered.includes.after-body` respectively. The gating check reads
+  `ctx.format_options.html.attribution_by_node.is_some()` **and**
+  `ctx.format_options.html.attribution_viewer_enabled` (defaults `true`).
 - [ ] Wrap the `<style>` / `<script>` payloads in fixed sentinels
-      (`<!-- quarto-attribution-viewer-css -->` and
-      `<!-- quarto-attribution-viewer-js -->`).
+  (`<!-- quarto-attribution-viewer-css -->` and
+  `<!-- quarto-attribution-viewer-js -->`).
 - [ ] Implement dedup explicitly: before pushing, scan the existing
-      `rendered.includes.header` (resp. `rendered.includes.after-body`)
-      array for any string containing the matching sentinel; if found,
-      skip the push. This is what the Phase A idempotency test
-      verifies — without this dedup the test fails. Two cheap helper
-      `fn has_sentinel(items: &[ConfigValue], sentinel: &str) -> bool`
-      keeps the transform body legible.
+  `rendered.includes.header` (resp. `rendered.includes.after-body`)
+  array for any string containing the matching sentinel; if found,
+  skip the push. This is what the Phase A idempotency test
+  verifies — without this dedup the test fails. Two cheap helper
+  `fn has_sentinel(items: &[ConfigValue], sentinel: &str) -> bool`
+  keeps the transform body legible.
 - [ ] Register the transform in `crates/quarto-core/src/pipeline.rs`
-      inside `build_transform_pipeline`, immediately after the
-      `AttributionRenderTransform::new()` push at line 1069. (NOT
-      `stage/stages/ast_transforms.rs` — that file is the stage
-      wrapper; transform registration lives in `pipeline.rs`.)
+  inside `build_transform_pipeline`, immediately after the
+  `AttributionRenderTransform::new()` push at line 1069. (NOT
+  `stage/stages/ast_transforms.rs` — that file is the stage
+  wrapper; transform registration lives in `pipeline.rs`.)
 - [ ] Add `"attribution-viewer"` to `Q2_PREVIEW_TRANSFORM_EXCLUDED`
-      (pipeline.rs:1102-1125) under the **"HTML-pipeline-specific outputs"**
-      comment, alongside `"website-favicon"`. Without this addition, the
-      transform runs in the q2-preview pipeline too — harmless because
-      hub-client ignores `rendered.includes.*`, but it violates the
-      "CLI-only by design" decision and the deny-list inversion
-      defaults new transforms to *included*. The
-      `q2_preview_transform_excluded_names_exist_in_html_pipeline` test
-      verifies the name is real.
+  (pipeline.rs:1102-1125) under the **"HTML-pipeline-specific outputs"**
+  comment, alongside `"website-favicon"`. Without this addition, the
+  transform runs in the q2-preview pipeline too — harmless because
+  hub-client ignores `rendered.includes.*`, but it violates the
+  "CLI-only by design" decision and the deny-list inversion
+  defaults new transforms to *included*. The
+  `q2_preview_transform_excluded_names_exist_in_html_pipeline` test
+  verifies the name is real.
 
 ### Phase 4 — hub-client converges with the CLI
 
@@ -330,70 +330,70 @@ shared CSS, and drop the wrapper-level recolouring so the visible
 behaviour matches the CLI.
 
 - [ ] Replace the `attributionStyles` const (current lines 54-82) with a
-      `?raw` import of the shared file:
-      ```ts
-      import viewerCss from '../../../../../resources/attribution/viewer.css?raw';
-      export const attributionStyles = viewerCss;
-      ```
-      Verify the relative path during implementation — five `..` segments
-      from `hub-client/src/components/render/framework/` to repo root,
-      then down into `resources/attribution/`. Adjust to whatever the
-      filesystem actually requires. Keep the named export so call sites
-      in `q2-debug` `AstRenderer` and `q2-preview` `PreviewDocument` need
-      no edits.
+  `?raw` import of the shared file:
+  ```ts
+  import viewerCss from '../../../../../resources/attribution/viewer.css?raw';
+  export const attributionStyles = viewerCss;
+  ```
+  Verify the relative path during implementation — five `..` segments
+  from `hub-client/src/components/render/framework/` to repo root,
+  then down into `resources/attribution/`. Adjust to whatever the
+  filesystem actually requires. Keep the named export so call sites
+  in `q2-debug` `AstRenderer` and `q2-preview` `PreviewDocument` need
+  no edits.
 - [ ] In the same file, remove the inline-colour repaint on
-      `AttributionWrap` (current line 114: `const style = { color: attribution.color };`
-      and its two consumers on lines 117 and 123). The two return
-      branches simplify to:
-      ```tsx
-      if (as === 'div') {
-          return (
-              <div className="q2-attr-wrap" data-sid={sid}>
-                  {children}
-              </div>
-          );
-      }
+  `AttributionWrap` (current line 114: `const style = { color: attribution.color };`
+  and its two consumers on lines 117 and 123). The two return
+  branches simplify to:
+  ```tsx
+  if (as === 'div') {
       return (
-          <span className="q2-attr-wrap" data-sid={sid}>
+          <div className="q2-attr-wrap" data-sid={sid}>
               {children}
-          </span>
+          </div>
       );
-      ```
-      The badge component (`AttributionBadge`) is untouched and still
-      uses `record.color` — author colour shows only on hover, matching
-      the CLI default.
+  }
+  return (
+      <span className="q2-attr-wrap" data-sid={sid}>
+          {children}
+      </span>
+  );
+  ```
+  The badge component (`AttributionBadge`) is untouched and still
+  uses `record.color` — author colour shows only on hover, matching
+  the CLI default.
 - [ ] Update the JSDoc on `AttributionWrap` to drop the now-stale "inline
-      `color` payload" sentence and note that wrappers are neutral; colour
-      lives on the hover badge.
+  `color` payload" sentence and note that wrappers are neutral; colour
+  lives on the hover badge.
 - [ ] **Widen Vite's filesystem allow-list** (required, not optional —
-      the asset lives outside hub-client's project root). In
-      `hub-client/vite.config.ts`, set
-      `server: { fs: { allow: ['..', resolve(__dirname, '../resources')] } }`
-      (or just `['..']` to allow the whole monorepo parent, mirroring
-      common practice). The TS declaration side is fine —
-      `hub-client/src/vite-env.d.ts` already pulls in `vite/client`, which
-      types `*?raw` imports. The precedents (`changelog.md?raw`,
-      `more-info.md?raw` in `AboutTab.tsx:12-13`) all live *inside*
-      hub-client, so they don't exercise the fs.strict path. Without this
-      change, `vite build` fails with a `Restricted` error.
+  the asset lives outside hub-client's project root). In
+  `hub-client/vite.config.ts`, set
+  `server: { fs: { allow: ['..', resolve(__dirname, '../resources')] } }`
+  (or just `['..']` to allow the whole monorepo parent, mirroring
+  common practice). The TS declaration side is fine —
+  `hub-client/src/vite-env.d.ts` already pulls in `vite/client`, which
+  types `*?raw` imports. The precedents (`changelog.md?raw`,
+  `more-info.md?raw` in `AboutTab.tsx:12-13`) all live *inside*
+  hub-client, so they don't exercise the fs.strict path. Without this
+  change, `vite build` fails with a `Restricted` error.
 - [ ] Optional polish (not required for correctness): also define a
-      Vite alias such as
-      `'@quarto-resources': resolve(__dirname, '../resources')` and
-      import as `@quarto-resources/attribution/viewer.css?raw`. Shorter
-      and renames-tolerant.
+  Vite alias such as
+  `'@quarto-resources': resolve(__dirname, '../resources')` and
+  import as `@quarto-resources/attribution/viewer.css?raw`. Shorter
+  and renames-tolerant.
 - [ ] Run the Phase D tests: hub-client unit suite + `npm run build:all`
-      from `hub-client/`. The latter is the only check that catches
-      vite-resolution failures of an out-of-tree path.
+  from `hub-client/`. The latter is the only check that catches
+  vite-resolution failures of an out-of-tree path.
 - [ ] Add a `hub-client/changelog.md` entry (second commit, per
-      CLAUDE.md two-commit workflow) calling out the visible change:
-      attribution wrappers no longer repaint body text; author colour
-      appears on the hover badge only.
+  CLAUDE.md two-commit workflow) calling out the visible change:
+  attribution wrappers no longer repaint body text; author colour
+  appears on the hover badge only.
 
 ### Phase 5 — documentation
 
 - [ ] In `docs/authoring/attribution.qmd`, **delete** the "Adding a viewer
-      overlay" section (lines 129–288 — heading, two code blocks, wiring
-      YAML, closing prose).
+  overlay" section (lines 129–288 — heading, two code blocks, wiring
+  YAML, closing prose).
 - [ ] Insert a shorter "Default viewer" section in its place, covering:
     - The underline + hover badge ship automatically with
       `attribution: git`.
@@ -408,7 +408,7 @@ behaviour matches the CLI.
     - (Optional) one sentence linking to a future "Customizing attribution
       colours" appendix once one exists.
 - [ ] Verify locally per the Phase E test plan (browser inspection of a
-      rendered fixture), record evidence in the Verification log below.
+  rendered fixture), record evidence in the Verification log below.
 
 ### Phase 6 — verification + commit
 
@@ -416,16 +416,16 @@ behaviour matches the CLI.
 - [ ] `cargo nextest run --workspace` — no regressions in downstream crates.
 - [ ] `cargo xtask verify --skip-hub-build` — Rust-strict CI parity.
 - [ ] `cargo xtask verify` — full run including hub-client build.
-      **Non-optional this time**, for two reasons:
-      (1) hub-client now imports the shared CSS via `?raw` — only the
-      vite build catches an out-of-tree resolution failure;
-      (2) `FormatOptions` gains an `attribution_viewer_enabled` field that
-      the WASM build will pull in.
+  **Non-optional this time**, for two reasons:
+  (1) hub-client now imports the shared CSS via `?raw` — only the
+  vite build catches an out-of-tree resolution failure;
+  (2) `FormatOptions` gains an `attribution_viewer_enabled` field that
+  the WASM build will pull in.
 - [ ] Stage, summarize snapshot changes per the CLAUDE.md snapshot policy
-      (expect on-path snapshots to drop the manual CSS/JS scaffolding from
-      any fixtures that had it, and to grow the auto-injected
-      `<style>`/`<script>` blocks). Commit and wait for explicit push
-      approval.
+  (expect on-path snapshots to drop the manual CSS/JS scaffolding from
+  any fixtures that had it, and to grow the auto-injected
+  `<style>`/`<script>` blocks). Commit and wait for explicit push
+  approval.
 
 ## Pre-implementation verification
 

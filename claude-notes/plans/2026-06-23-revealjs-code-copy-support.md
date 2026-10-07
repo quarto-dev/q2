@@ -150,35 +150,35 @@ The bd-fu1a5g6l suppression is lifted: reveal honors
 ### Phase 1 — Extract the shared `copy-code` SCSS layer (no behavior change yet) ✅
 
 - [x] **Test first:** added `.code-copy-button` / `.code-copy-outer-scaffold`
-      assertions to `test_compile_default_css` — extraction is behavior-preserving
-      for HTML. (Green at baseline and after; the 204-test `quarto-sass` suite,
-      incl. Bootstrap parity tests, stays green.)
+  assertions to `test_compile_default_css` — extraction is behavior-preserving
+  for HTML. (Green at baseline and after; the 204-test `quarto-sass` suite,
+  incl. Bootstrap parity tests, stays green.)
 - [x] Created `resources/scss/html/templates/copy-code.scss` (self-contained,
-      `/*-- scss:rules --*/`), moving the core copy rules from
-      `_bootstrap-rules.scss:1185-1261`. **Risk #1 resolved cleanly:** the only
-      undefined-in-reveal var was `$gray-900` in the *never-taken* inner fallback
-      of `$btn-code-copy-color`; swapped it for the literal `#212529` (Bootstrap's
-      own `$gray-900` value). The `variable-exists()` guards then compile in both
-      contexts unchanged — reveal's `quarto-revealjs.scss` already defines
-      `$text-muted`/`$body-color`/`$link-color`/`colorToRGB`. **HTML output
-      byte-identical** (the swapped branch is never selected and the literal
-      equals the old value).
+  `/*-- scss:rules --*/`), moving the core copy rules from
+  `_bootstrap-rules.scss:1185-1261`. **Risk #1 resolved cleanly:** the only
+  undefined-in-reveal var was `$gray-900` in the *never-taken* inner fallback
+  of `$btn-code-copy-color`; swapped it for the literal `#212529` (Bootstrap's
+  own `$gray-900` value). The `variable-exists()` guards then compile in both
+  contexts unchanged — reveal's `quarto-revealjs.scss` already defines
+  `$text-muted`/`$body-color`/`$link-color`/`colorToRGB`. **HTML output
+  byte-identical** (the swapped branch is never selected and the literal
+  equals the old value).
 - [x] Added `load_copy_code_layer()` in `bundle.rs` (mirrors `load_highlight_layer`).
 - [x] Wired into all 5 HTML compile sites in `compile.rs` (the `vec!` and inline
-      `&[…]` forms) as a built-in user layer alongside highlight/title-block/embed.
-      Left the modal + `.code-annotated` overrides in `_bootstrap-rules.scss`
-      (they reference `$text-muted` directly, not the moved vars).
+  `&[…]` forms) as a built-in user layer alongside highlight/title-block/embed.
+  Left the modal + `.code-annotated` overrides in `_bootstrap-rules.scss`
+  (they reference `$text-muted` directly, not the moved vars).
 - [x] Full `quarto-sass` suite green (204/204), incl. parity + all reveal-theme tests.
 
 ### Phase 2 — Bundle the copy-code layer into reveal (CSS only) ✅
 
 - [x] **Test first:** added `test_compile_reveal_theme_includes_copy_code_rules`
-      asserting reveal CSS contains `.code-copy-button` + `.code-copy-outer-scaffold`.
-      **Verified red** by toggling off the wiring (panics: "must contain
-      .code-copy-button"), then green with it restored.
+  asserting reveal CSS contains `.code-copy-button` + `.code-copy-outer-scaffold`.
+  **Verified red** by toggling off the wiring (panics: "must contain
+  .code-copy-button"), then green with it restored.
 - [x] Added `load_copy_code_layer()` to `assemble_reveal_scss()` (theme slot,
-      after highlight, before user theme layers). No `.reveal` scoping needed yet
-      — Risk #2 (specificity) to be confirmed empirically in Phase 4 E2E.
+  after highlight, before user theme layers). No `.reveal` scoping needed yet
+  — Risk #2 (specificity) to be confirmed empirically in Phase 4 E2E.
 - [x] Reveal compile does not error on undefined SCSS variables (Risk #1 closed).
 
 > **Note:** Phases 1+2 were implemented together (tightly-coupled shared layer);
@@ -187,29 +187,29 @@ The bd-fu1a5g6l suppression is lifted: reveal honors
 ### Phase 3 — Lift the suppression + wire functional JS for native render ✅
 
 - [x] **Test first (suppression):** rewrote the reveal test →
-      `generate_emits_code_with_copy_class_for_revealjs` (gets `code-with-copy`
-      under default + explicit `true`) plus new
-      `generate_honors_code_copy_false_for_revealjs`. Verified red.
+  `generate_emits_code_with_copy_class_for_revealjs` (gets `code-with-copy`
+  under default + explicit `true`) plus new
+  `generate_honors_code_copy_false_for_revealjs`. Verified red.
 - [x] Removed the `is_revealjs_target → CopyMode::Off` branch in
-      `code_block_generate.rs`; reveal now uses `resolve_default_copy_mode(&ast.meta)`.
-      Updated the module comment. All 23 generate tests green.
+  `code_block_generate.rs`; reveal now uses `resolve_default_copy_mode(&ast.meta)`.
+  Updated the module comment. All 23 generate tests green.
 - [x] **Test first (JS artifacts):** extended
-      `register_reveal_assets_stores_linkable_project_artifacts` to expect
-      `js:revealjs:clipboard` + `js:revealjs:code-copy-init` (+ asset bytes/paths).
-      Verified red.
+  `register_reveal_assets_stores_linkable_project_artifacts` to expect
+  `js:revealjs:clipboard` + `js:revealjs:code-copy-init` (+ asset bytes/paths).
+  Verified red.
 - [x] Registered clipboard.min.js + code-copy-init.js as `js:revealjs:*` assets in
-      `reveal_assets()`, reusing the embedded consts (re-exported `pub(crate)` from
-      `clipboard_js.rs`; no byte duplication). Sorted keys load clipboard →
-      code-copy-init → reveal. **Native-only (`#[cfg(not(target_arch = "wasm32"))]`)**
-      to honor Decision #1 — preview/hub-client stay styled-but-inert.
+  `reveal_assets()`, reusing the embedded consts (re-exported `pub(crate)` from
+  `clipboard_js.rs`; no byte duplication). Sorted keys load clipboard →
+  code-copy-init → reveal. **Native-only (`#[cfg(not(target_arch = "wasm32"))]`)**
+  to honor Decision #1 — preview/hub-client stay styled-but-inert.
 - [x] **Risk #3 resolved:** `code-copy-init.js` already guards
-      `if (window.bootstrap && window.bootstrap.Tooltip)`, so copy works without
-      Bootstrap JS (v1 ships none); the icon still flashes to the checkmark via
-      copy-code.scss's `.code-copy-button-checked` state. No tooltip popover in v1.
+  `if (window.bootstrap && window.bootstrap.Tooltip)`, so copy works without
+  Bootstrap JS (v1 ships none); the icon still flashes to the checkmark via
+  copy-code.scss's `.code-copy-button-checked` state. No tooltip popover in v1.
 - [x] **Baseline re-capture (snapshot policy):** `phase5-single-doc-baseline`
-      `styles.css` hash updated (53eb1e60→2d130440) — **proven a pure rule
-      reorder**: both files are 317278 bytes and identical after sorting rules;
-      `doc.html` byte-identical. Documented in `expected_hashes.txt` with a dated note.
+  `styles.css` hash updated (53eb1e60→2d130440) — **proven a pure rule
+  reorder**: both files are 317278 bytes and identical after sorting rules;
+  `doc.html` byte-identical. Documented in `expected_hashes.txt` with a dated note.
 - [x] Full `quarto-core` suite green (2405/2405); full `quarto-sass` green (204/204).
 
 ### Phase 4 — End-to-end verification (required before "done")

@@ -1897,33 +1897,33 @@ reverting a hunk stops changing the outcome. See § Risks cost (c) — those tes
 need re-anchoring regardless.
 
 - [x] Confirm the repro panics on stock `main`, with the released binary:
-      `cd .scratch/ariadne-emoji-panic/repro && q2 render` → exit 101
-      (recorded in § Evidence)
+  `cd .scratch/ariadne-emoji-panic/repro && q2 render` → exit 101
+  (recorded in § Evidence)
 - [x] With the `[patch.crates-io]` override active, run
-      `cargo run --bin q2 -- render` in the same directory → exit 0 with both
-      `Q-2-9` warnings printed
+  `cargo run --bin q2 -- render` in the same directory → exit 0 with both
+  `Q-2-9` warnings printed
 - [x] **(expires when error-reporting takes 0.1.2)** Revert only the
-      `Report::build` anchor hunk of `4da3385` → confirm
-      `ariadne_span_starting_inside_multibyte_char_does_not_panic`
-      (`diagnostic.rs:1601`) goes red. The commit message predicts a panic at
-      `write.rs:267`; **that is a prediction, not an observation** — the only
-      recorded panic is `write.rs:84:59`. A different line still proves the hunk
-      load-bearing; record whatever you observe.
+  `Report::build` anchor hunk of `4da3385` → confirm
+  `ariadne_span_starting_inside_multibyte_char_does_not_panic`
+  (`diagnostic.rs:1601`) goes red. The commit message predicts a panic at
+  `write.rs:267`; **that is a prediction, not an observation** — the only
+  recorded panic is `write.rs:84:59`. A different line still proves the hunk
+  load-bearing; record whatever you observe.
 - [x] **(same expiry)** Revert only the **ariadne main-label** hunk — the
-      `write.rs:84` site, and the only panic ever actually observed. With the
-      anchor still snapped, this should panic at `write.rs:84` on its own.
-      `4da3385` snaps at four sites; this bullet and the next two cover the
-      other three.
+  `write.rs:84` site, and the only panic ever actually observed. With the
+  anchor still snapped, this should panic at `write.rs:84` on its own.
+  `4da3385` snaps at four sites; this bullet and the next two cover the
+  other three.
 - [x] **(same expiry)** Revert only the **ariadne detail-label** hunk — the
-      fourth and last of `4da3385`'s snap sites. **Result: not attributed.**
-      Reverting it left both regression tests green (§ Evidence) — neither
-      target test's fixture builds a `DetailItem` with a location, so neither
-      reaches the detail-label path. Three of the four hunks are attributed,
-      by this phase's other three bullets; this one is a real gap in
-      coverage, not a discharge of the bullet's original "attributes all
-      four" framing, which this checkbox retracts.
+  fourth and last of `4da3385`'s snap sites. **Result: not attributed.**
+  Reverting it left both regression tests green (§ Evidence) — neither
+  target test's fixture builds a `DetailItem` with a location, so neither
+  reaches the detail-label path. Three of the four hunks are attributed,
+  by this phase's other three bullets; this one is a real gap in
+  coverage, not a discharge of the bullet's original "attributes all
+  four" framing, which this checkbox retracts.
 - [x] **(same expiry)** Revert only the annotate-snippets clamp hunk
-      (`diagnostic.rs:1031`) → confirm its twin at `:1635` goes red
+  (`diagnostic.rs:1031`) → confirm its twin at `:1635` goes red
 - [x] Paste all observations into § Evidence
 
 **Overlap with Plan 2, acknowledged in one direction only so far.** Plan 2's
@@ -1936,28 +1936,28 @@ its actual delta — that the *ariadne* test goes red, which these bullets bind
 only by panic location — and sequenced it to run in the same sitting as this
 phase rather than as a second expedition. Do not drop either.
 - [x] Publishing mechanism — **verified 2026-08-21, no human step exists.**
-      Both repos carry a byte-identical `release.yml` that publishes to
-      crates.io via **Trusted Publishing (OIDC)**, with no stored token and no
-      approval gate (`release` environment, zero protection rules in both).
-      It triggers on **any push to `main` whose workspace version is ahead of
-      the registry** — so "release" means *merge a version-bump PR*, and there
-      is no `cargo publish` for a human to run. Confirmed working: successful
-      Release runs on `main` (2026-07-30 for `quarto-source-map`, 2026-08-08 for
-      `quarto-yaml`) with tags `v0.1.1` and `v0.1.2`.
-      Two consequences the checklists depend on: the workflow **hard-fails if
-      the publishable workspace crates disagree on a version**, which is why
-      `quarto-yaml` and `quarto-yaml-validation` must bump together; and it runs
-      `cargo publish --locked`, so a committed, current lockfile is a release
-      prerequisite, not a nicety.
+  Both repos carry a byte-identical `release.yml` that publishes to
+  crates.io via **Trusted Publishing (OIDC)**, with no stored token and no
+  approval gate (`release` environment, zero protection rules in both).
+  It triggers on **any push to `main` whose workspace version is ahead of
+  the registry** — so "release" means *merge a version-bump PR*, and there
+  is no `cargo publish` for a human to run. Confirmed working: successful
+  Release runs on `main` (2026-07-30 for `quarto-source-map`, 2026-08-08 for
+  `quarto-yaml`) with tags `v0.1.1` and `v0.1.2`.
+  Two consequences the checklists depend on: the workflow **hard-fails if
+  the publishable workspace crates disagree on a version**, which is why
+  `quarto-yaml` and `quarto-yaml-validation` must bump together; and it runs
+  `cargo publish --locked`, so a committed, current lockfile is a release
+  prerequisite, not a nicety.
 - [x] **Remove the three added `[patch.crates-io]` lines** (the comment and the
-      `quarto-error-reporting` path entry — *not* the section header or the
-      `lua-src` entry), and confirm `git diff Cargo.toml Cargo.lock` is empty.
-      Note the scope honestly: the override is an **uncommitted edit in
-      the worktree it was made in**, so this cleans *that* worktree. It does not gate
-      Plan 2, which runs on a different branch that is already clean — an
-      earlier draft claimed the causal link "so Plan 2 starts from a clean
-      manifest", which was illusory. Plan 2's matching item is a confirmation,
-      not a dependency.
+  `quarto-error-reporting` path entry — *not* the section header or the
+  `lua-src` entry), and confirm `git diff Cargo.toml Cargo.lock` is empty.
+  Note the scope honestly: the override is an **uncommitted edit in
+  the worktree it was made in**, so this cleans *that* worktree. It does not gate
+  Plan 2, which runs on a different branch that is already clean — an
+  earlier draft claimed the causal link "so Plan 2 starts from a clean
+  manifest", which was illusory. Plan 2's matching item is a confirmation,
+  not a dependency.
 
 ### Phase 1 — `quarto-source-map` 0.1.2
 
@@ -1985,166 +1985,166 @@ CLAUDE.md mandate does not apply outside q2, and neither crate has nextest
 configured.
 
 - [x] **Design-review `ProvenanceBuilder` against all three decoders on paper
-      before writing it.** The question to answer per decoder is *which side of
-      the oracle boundary it sits on* (§ The shared builder), then walk a YAML
-      break region, a `\t` escape, a `''` escape, the EOF-synthesis case, the
-      zero-piece empty-scalar case, a `\*` attribute escape, and an `&amp;`
-      entity through the proposed API. If any needs an API the others don't,
-      resolve it now — shipping a YAML-shaped builder means the other two
-      hand-roll their own, which is the status quo with extra steps.
-      **Done when the outcome is written back into § The shared builder** — one
-      paragraph per walkthrough, seven in total, so the item has an artifact
-      rather than a feeling;
-      three later things (this phase's builder tests, Phase 2's walker, and the
-      committed fixtures) assume the `verbatim`/`replacement`/`finish` shape and
-      go stale silently if it changes.
+  before writing it.** The question to answer per decoder is *which side of
+  the oracle boundary it sits on* (§ The shared builder), then walk a YAML
+  break region, a `\t` escape, a `''` escape, the EOF-synthesis case, the
+  zero-piece empty-scalar case, a `\*` attribute escape, and an `&amp;`
+  entity through the proposed API. If any needs an API the others don't,
+  resolve it now — shipping a YAML-shaped builder means the other two
+  hand-roll their own, which is the status quo with extra steps.
+  **Done when the outcome is written back into § The shared builder** — one
+  paragraph per walkthrough, seven in total, so the item has an artifact
+  rather than a feeling;
+  three later things (this phase's builder tests, Phase 2's walker, and the
+  committed fixtures) assume the `verbatim`/`replacement`/`finish` shape and
+  go stale silently if it changes.
 - [x] Failing test first: **`FileInformation::offset_to_location`** (there are
-      three implementations and they disagree — § Findings) with a mid-char offset must
-      return a `Location` whose `offset` and `column` describe the **same**
-      position. Observe red. — Done in T3 (`test_offset_to_location_floors_offset_field_too`,
-      RED: `left: 7, right: 6`, per task-3-report.md).
+  three implementations and they disagree — § Findings) with a mid-char offset must
+  return a `Location` whose `offset` and `column` describe the **same**
+  position. Observe red. — Done in T3 (`test_offset_to_location_floors_offset_field_too`,
+  RED: `left: 7, right: 6`, per task-3-report.md).
 - [x] Fix: `offset: safe_offset` (the floor loop already exists at
-      `file_info.rs:116-120`; it currently floors `column` only) — Done in T3
-      (commit `8e07717`).
+  `file_info.rs:116-120`; it currently floors `column` only) — Done in T3
+  (commit `8e07717`).
 - [x] Fix `Concat`'s exclusive-end branch (`mapping.rs:64-70`) to use the last
-      piece's **source** length, not its content length (§ Design, with the
-      three measured terminal shapes). Test all three: verbatim unchanged,
-      replacement-terminated now reaching the true source end, and
-      synthesis-terminated returning `Some(eof)` where it returns `None` today.
-      — Done in T3 (commit `0c65d52`); all three RED values matched the brief
-      exactly (`Some(8)`→`Some(9)`, `None`→`Some(11)`, gating row unchanged at
-      `Some(9)`).
+  piece's **source** length, not its content length (§ Design, with the
+  three measured terminal shapes). Test all three: verbatim unchanged,
+  replacement-terminated now reaching the true source end, and
+  synthesis-terminated returning `Some(eof)` where it returns `None` today.
+  — Done in T3 (commit `0c65d52`); all three RED values matched the brief
+  exactly (`Some(8)`→`Some(9)`, `None`→`Some(11)`, gating row unchanged at
+  `Some(9)`).
 - [x] Fix `preimage_in`'s `Substring` arm (`source_info.rs:453-456`) to return
-      `None` when the parent is a `Concat` (§ `preimage_in` composes affinely).
-      Test the measured fixture: a gap-free `Concat` whose content is 4 bytes
-      over source 1..6 yields `Some(1..6)` bare, and must yield `None` — not
-      `Some(1..5)` — through a `substring(_, 0, 4)`. — Done in T3 (commit
-      `0e900e2`); RED matched exactly (`Some(1..5)`→`None`).
+  `None` when the parent is a `Concat` (§ `preimage_in` composes affinely).
+  Test the measured fixture: a gap-free `Concat` whose content is 4 bytes
+  over source 1..6 yields `Some(1..6)` bare, and must yield `None` — not
+  `Some(1..5)` — through a `substring(_, 0, 4)`. — Done in T3 (commit
+  `0e900e2`); RED matched exactly (`Some(1..5)`→`None`).
 - [x] **Rewrite `preimage_in`'s doc comment** (`source_info.rs:410-413`), whose
-      "this is the writer's can-I-Verbatim-copy check" sentence is exactly the
-      claim the byte-identity finding retracts. Wording is in § `preimage_in`
-      composes affinely; Plan 3's consumer audit cites it, so get it in before
-      the release rather than after. — Done in T3, alongside the Fix 4 commit
-      (`0e900e2`).
+  "this is the writer's can-I-Verbatim-copy check" sentence is exactly the
+  claim the byte-identity finding retracts. Wording is in § `preimage_in`
+  composes affinely; Plan 3's consumer audit cites it, so get it in before
+  the release rather than after. — Done in T3, alongside the Fix 4 commit
+  (`0e900e2`).
 - [x] Test the `cell_options` **shapes** — hand-modelled `Concat`s of the same
-      geometry, not calls into `quarto-core`, since this phase's PR is in the
-      `quarto-source-map` repo. Two cases, and note *which* call changes: a
-      multi-option cell (pieces separated by `#| ` prefixes, so gappy) is `None`
-      before and after; a single-option cell is one gap-free piece, so
-      `concat.preimage_in()` still returns `Some` — **the change is only through
-      the `Substring` composition**, `substring(concat, 0, n).preimage_in()`,
-      which goes from a wrong answer to `None`. That single shape is the whole
-      documented behavior change, and testing it is what stops the reachability
-      inspection above from being load-bearing. — Done in T3
-      (`test_preimage_in_cell_options_multi_option_shape_is_gating` and
-      `..._single_option_shape_through_substring_returns_none`; the
-      single-option RED was `Some(5..8)`, matching the brief's measured
-      before-value).
+  geometry, not calls into `quarto-core`, since this phase's PR is in the
+  `quarto-source-map` repo. Two cases, and note *which* call changes: a
+  multi-option cell (pieces separated by `#| ` prefixes, so gappy) is `None`
+  before and after; a single-option cell is one gap-free piece, so
+  `concat.preimage_in()` still returns `Some` — **the change is only through
+  the `Substring` composition**, `substring(concat, 0, n).preimage_in()`,
+  which goes from a wrong answer to `None`. That single shape is the whole
+  documented behavior change, and testing it is what stops the reachability
+  inspection above from being load-bearing. — Done in T3
+  (`test_preimage_in_cell_options_multi_option_shape_is_gating` and
+  `..._single_option_shape_through_substring_returns_none`; the
+  single-option RED was `Some(5..8)`, matching the brief's measured
+  before-value).
 - [x] Test that a piece list tiles its source **contiguously**, so
-      `preimage_in` yields a hull: assert `Some` for the escaped-break shape
-      (verbatim 4..7, stored zero-content 7..11, verbatim 11..14) and `None`
-      when a piece is omitted. This is the test that stops a future
-      "simplification" from re-dropping zero-content pieces. — Done in T3
-      (`test_preimage_in_concat_contiguous_hull_with_zero_content_piece`); this
-      one is not itself red under Fix 4's hunk (it guards a different,
-      pre-existing invariant, per the T3 report), which is expected and noted
-      there.
+  `preimage_in` yields a hull: assert `Some` for the escaped-break shape
+  (verbatim 4..7, stored zero-content 7..11, verbatim 11..14) and `None`
+  when a piece is omitted. This is the test that stops a future
+  "simplification" from re-dropping zero-content pieces. — Done in T3
+  (`test_preimage_in_concat_contiguous_hull_with_zero_content_piece`); this
+  one is not itself red under Fix 4's hunk (it guards a different,
+  pre-existing invariant, per the T3 report), which is expected and noted
+  there.
 - [x] Apply the **floor fix** to the free `utils::offset_to_location`
-      (`src/utils.rs:8`) too — failing test first, as above, since CLAUDE.md's
-      TDD mandate applies to both: **floor, matching `FileInformation`** — return the
-      floored offset, and stop the column loop *before* counting the character
-      that contains a mid-char offset, so both functions agree. Only mid-char
-      inputs change behavior; boundary offsets are already identical. Live
-      production callers are `pampa/src/pandoc/treesitter.rs:1463-1464`,
-      `:1485-1486` and `quarto-config/src/span_assert.rs:188`, and
-      `pampa/tests/integration/test_location_health.rs:448` asserts the two
-      agree. Whether it moves depends on where those `Location`s' row/column
-      came from, which this plan has not established — so treat red *or* green
-      there as **unknown until the smoke runs**, and record which you get
-      rather than assuming either is the bug. — Done in T3 (commit `022f489`);
-      RED matched exactly (offset 7 vs 6, the `.offset` assertion firing
-      before the `.column` one). Whether it moved anything in q2: **green**,
-      per Phase 1's q2 smoke evidence below — not evidence of general
-      agreement, only that this suite's own `Location`s already sit on char
-      boundaries.
+  (`src/utils.rs:8`) too — failing test first, as above, since CLAUDE.md's
+  TDD mandate applies to both: **floor, matching `FileInformation`** — return the
+  floored offset, and stop the column loop *before* counting the character
+  that contains a mid-char offset, so both functions agree. Only mid-char
+  inputs change behavior; boundary offsets are already identical. Live
+  production callers are `pampa/src/pandoc/treesitter.rs:1463-1464`,
+  `:1485-1486` and `quarto-config/src/span_assert.rs:188`, and
+  `pampa/tests/integration/test_location_health.rs:448` asserts the two
+  agree. Whether it moves depends on where those `Location`s' row/column
+  came from, which this plan has not established — so treat red *or* green
+  there as **unknown until the smoke runs**, and record which you get
+  rather than assuming either is the bug. — Done in T3 (commit `022f489`);
+  RED matched exactly (offset 7 vs 6, the `.offset` assertion firing
+  before the `.column` one). Whether it moved anything in q2: **green**,
+  per Phase 1's q2 smoke evidence below — not evidence of general
+  agreement, only that this suite's own `Location`s already sit on char
+  boundaries.
 - [x] Audit — **read-only, bounded, output goes in § Evidence.** The scope is
-      "sites that can hand a non-boundary offset to a `Location`", not every
-      construction site: there are \~155 `Location {` literals in q2's non-test
-      sources and enumerating them is not this phase's job. Concretely: the
-      third implementation `offset_to_location_bytes`
-      (q2 `quarto-parse-errors/src/error_generation.rs:330`, whose mid-char
-      behavior this plan has **not** examined), and `quarto-yaml`'s own
-      `Location` uses. **Fixes outside `quarto-source-map` do not ship in this
-      phase's PR** — record them and hand them to Plan 3's audit.
+  "sites that can hand a non-boundary offset to a `Location`", not every
+  construction site: there are \~155 `Location {` literals in q2's non-test
+  sources and enumerating them is not this phase's job. Concretely: the
+  third implementation `offset_to_location_bytes`
+  (q2 `quarto-parse-errors/src/error_generation.rs:330`, whose mid-char
+  behavior this plan has **not** examined), and `quarto-yaml`'s own
+  `Location` uses. **Fixes outside `quarto-source-map` do not ship in this
+  phase's PR** — record them and hand them to Plan 3's audit.
 - [x] **(after the 0.1.2 bump below — on a branch off the 0.1.2 line, held for
-      0.1.3)** Implement `ProvenanceBuilder` with `in_file(file_id, anchor)` and
-      `in_parent(parent, anchor)`. **Tests and their named revert hunks are
-      frozen in § Test seam spec** — do not invent a harness; the cases are: all-verbatim (must produce a
-      contiguous `SourceInfo`, not a 1-piece `Concat`, which requires the
-      coalescing contract), **zero pieces (must produce a zero-length
-      `SourceInfo` at the anchor)**, one replacement, one deletion
-      (`out_len == 0`, **stored**, so the source tiling stays gap-free),
-      synthesis (empty src range, `out_len > 0`),
-      adjacent replacements, replacement at offset 0, at the end, **the fold
-      shape** (verbatim / 1→1 replacement / verbatim, which must stay a 3-piece
-      `Concat` and must *not* collapse — see § The shared builder), and
-      **`in_parent` over a real `Concat` parent**, since "the builder must never
-      resolve absolute positions" is a stated contract and the only production
-      caller of `parse_with_parent` hands it a `Concat`
-      (`quarto-core/src/cell_options/mod.rs:227-229`). Without that last one a
-      `finish()` reaching for `resolve_byte_range` passes every other test. —
-      Done in T7 (branch `provenance-builder`, commit `545f50d`, cut from the
-      0.1.2 line at `318ed77`): 124 tests (114 + 10 new), all five frozen rows
-      individually revert-hunk-verified RED-then-GREEN, plus the five named
-      extra cases (one replacement, synthesis, adjacent replacements,
-      replacement at offset 0, at the end). Review clean, zero
-      Critical/Important findings.
+  0.1.3)** Implement `ProvenanceBuilder` with `in_file(file_id, anchor)` and
+  `in_parent(parent, anchor)`. **Tests and their named revert hunks are
+  frozen in § Test seam spec** — do not invent a harness; the cases are: all-verbatim (must produce a
+  contiguous `SourceInfo`, not a 1-piece `Concat`, which requires the
+  coalescing contract), **zero pieces (must produce a zero-length
+  `SourceInfo` at the anchor)**, one replacement, one deletion
+  (`out_len == 0`, **stored**, so the source tiling stays gap-free),
+  synthesis (empty src range, `out_len > 0`),
+  adjacent replacements, replacement at offset 0, at the end, **the fold
+  shape** (verbatim / 1→1 replacement / verbatim, which must stay a 3-piece
+  `Concat` and must *not* collapse — see § The shared builder), and
+  **`in_parent` over a real `Concat` parent**, since "the builder must never
+  resolve absolute positions" is a stated contract and the only production
+  caller of `parse_with_parent` hands it a `Concat`
+  (`quarto-core/src/cell_options/mod.rs:227-229`). Without that last one a
+  `finish()` reaching for `resolve_byte_range` passes every other test. —
+  Done in T7 (branch `provenance-builder`, commit `545f50d`, cut from the
+  0.1.2 line at `318ed77`): 124 tests (114 + 10 new), all five frozen rows
+  individually revert-hunk-verified RED-then-GREEN, plus the five named
+  extra cases (one replacement, synthesis, adjacent replacements,
+  replacement at offset 0, at the end). Review clean, zero
+  Critical/Important findings.
 
 - [x] **Smoke the four behavior changes against q2 before releasing.** This
-      phase's `PR → CI green` is *quarto-source-map's* CI, which cannot see the
-      consumers; § Risks predicts JSON-writer snapshot churn and a caret
-      regression, and the affected code is in q2 and
-      `quarto-error-reporting`. In q2, add
-      ```toml
-      [patch.crates-io]  # LOCAL DEV ONLY — do not commit
-      quarto-source-map = { path = "/Users/gordon/src/quarto-source-map" }
-      ```
-      **against the 0.1.2 branch** — smoking a tree that carries unreleased API
-      is not smoking what ships — then `cargo nextest run --workspace` and
-      **record what moved** in
-      § Evidence. **A green run is not evidence of safety.** No existing q2 test
-      reacts to the `Concat` exclusive-end change: the only production consumer
-      of the QMD writer's provenance `Concat` is
-      `quarto-core/src/stage/stages/engine_execution.rs:733`, and
-      `crates/pampa/tests/integration/qmd_writer_source_info.rs` exercises only
-      interior offsets — `concat_piece_lengths_sum_to_buffer_length` checks
-      lengths, every `map_offset` call uses an interior position. Plan 2's
-      Phase 2 adds an exclusive-end assertion there before the lock refresh, so
-      the change is observed rather than asserted. Expect silence here on that
-      change, and do not read it as coverage. Remove the patch afterwards. **Do not fix anything here**:
-      Phase 1 works in the `quarto-source-map` repo and cannot touch a q2 test
-      or snapshot. The two predicted reactions —
-      `pampa/tests/integration/test_location_health.rs:448` and the JSON-writer
-      snapshots — are Plan 2 hand-offs (§ Hand-off to Plan 2), and the snapshot
-      one needs CLAUDE.md's count-summary-file-list treatment rather than a
-      green checkmark.
+  phase's `PR → CI green` is *quarto-source-map's* CI, which cannot see the
+  consumers; § Risks predicts JSON-writer snapshot churn and a caret
+  regression, and the affected code is in q2 and
+  `quarto-error-reporting`. In q2, add
+  ```toml
+  [patch.crates-io]  # LOCAL DEV ONLY — do not commit
+  quarto-source-map = { path = "/Users/gordon/src/quarto-source-map" }
+  ```
+  **against the 0.1.2 branch** — smoking a tree that carries unreleased API
+  is not smoking what ships — then `cargo nextest run --workspace` and
+  **record what moved** in
+  § Evidence. **A green run is not evidence of safety.** No existing q2 test
+  reacts to the `Concat` exclusive-end change: the only production consumer
+  of the QMD writer's provenance `Concat` is
+  `quarto-core/src/stage/stages/engine_execution.rs:733`, and
+  `crates/pampa/tests/integration/qmd_writer_source_info.rs` exercises only
+  interior offsets — `concat_piece_lengths_sum_to_buffer_length` checks
+  lengths, every `map_offset` call uses an interior position. Plan 2's
+  Phase 2 adds an exclusive-end assertion there before the lock refresh, so
+  the change is observed rather than asserted. Expect silence here on that
+  change, and do not read it as coverage. Remove the patch afterwards. **Do not fix anything here**:
+  Phase 1 works in the `quarto-source-map` repo and cannot touch a q2 test
+  or snapshot. The two predicted reactions —
+  `pampa/tests/integration/test_location_health.rs:448` and the JSON-writer
+  snapshots — are Plan 2 hand-offs (§ Hand-off to Plan 2), and the snapshot
+  one needs CLAUDE.md's count-summary-file-list treatment rather than a
+  green checkmark.
 - [x] **Write release notes enumerating all four behavior changes** and their
-      known consequences (the table in § Both crates ship as patches). This is
-      the mitigation the versioning decision rests on: three behaviors change in
-      one patch that three crates pick up under `^0.1.0` with no manifest edit,
-      so the notes are the only signal a consumer gets. — Done in T5 (commit
-      `a097908`, amended to `e6a2394` then `318ed77` across two fix rounds: the
-      first added the dropped "caret narrows for mid-char spans" clause, the
-      second corrected "narrows" to the accurate zero-width case). Notes live
-      in the commit message (no `CHANGELOG.md` in this repo).
+  known consequences (the table in § Both crates ship as patches). This is
+  the mitigation the versioning decision rests on: three behaviors change in
+  one patch that three crates pick up under `^0.1.0` with no manifest edit,
+  so the notes are the only signal a consumer gets. — Done in T5 (commit
+  `a097908`, amended to `e6a2394` then `318ed77` across two fix rounds: the
+  first added the dropped "caret narrows for mid-char spans" clause, the
+  second corrected "narrows" to the accurate zero-width case). Notes live
+  in the commit message (no `CHANGELOG.md` in this repo).
 - [x] Bump to `0.1.2` **with the four behavior fixes only — hold
-      `ProvenanceBuilder` out of this release** (§ Both crates ship as patches).
-      PR → CI green → **merge to `main`, which is what publishes** (Trusted
-      Publishing fires on the version being ahead of the registry — see
-      Phase 0). Plan 2 unblocks here. — Done: pushed, PR
-      posit-dev/quarto-source-map#3, CI green on all four checks, **merged and
-      published 2026-08-21T21:28:48Z, tag `v0.1.2`** (Gordon's explicit
-      approval, "Push, PR, and merge now").
+  `ProvenanceBuilder` out of this release** (§ Both crates ship as patches).
+  PR → CI green → **merge to `main`, which is what publishes** (Trusted
+  Publishing fires on the version being ahead of the registry — see
+  Phase 0). Plan 2 unblocks here. — Done: pushed, PR
+  posit-dev/quarto-source-map#3, CI green on all four checks, **merged and
+  published 2026-08-21T21:28:48Z, tag `v0.1.2`** (Gordon's explicit
+  approval, "Push, PR, and merge now").
 (The builder item above lands here in execution order: on a branch off the
 0.1.2 line, unpublished until Phase 2's walker has driven it. Its unit tests run
 locally; the release is Phase 2's last act, as `0.1.3`. Phase 2 **may revise**
@@ -2174,12 +2174,12 @@ quarto-source-map = { path = "/Users/gordon/src/quarto-source-map" }
 ```
 
 - [x] Add that `[patch.crates-io]` block to `~/src/quarto-yaml/Cargo.toml` before
-      the walker item below — the stub item compiles without it, the walker does
-      not, and a compile error is not a red test — Done (T8 onward; present and
-      uncommitted throughout Phase 2, confirmed at each task boundary).
+  the walker item below — the stub item compiles without it, the walker does
+  not, and a compile error is not a red test — Done (T8 onward; present and
+  uncommitted throughout Phase 2, confirmed at each task boundary).
 - [x] Drop the patch before opening the PR — Done in T15, step 1: the first
-      build of the branch against the real registry rather than the local path
-      checkout, after `quarto-source-map` 0.1.3 published.
+  build of the branch against the real registry rather than the local path
+  checkout, after `quarto-source-map` 0.1.3 published.
 
 When the walker is green, publish `quarto-source-map` **0.1.3** from its branch
 (merge to `main`), then drop this patch, declare
@@ -2214,240 +2214,240 @@ carries this phase's § Evidence entry**, so the rows and the run that produced
 them land together.
 
 - [x] **First, land the API surface as a stub** so the tests below can compile
-      and go *red* rather than failing to build: rename `Children::None` to
-      `Children::Scalar { content_source_info: Option<SourceInfo> }`, add
-      `with_content_provenance` and `content_source_info()`, and leave the
-      parser attaching nothing yet (so every scalar reads `None`). Phase 1's
-      "observe red" idiom worked because
-      `offset_to_location` already existed; here the method does not, and a
-      compile error is not a red test. — Done in T8 (commit `da2c560`), one
-      file changed, no call site outside `yaml_with_source_info.rs` needed
-      editing. Review Approved with one Important (a stub test's comment
-      claimed a behavior the test can't exercise) and one deferred Minor
-      (`with_content_provenance` silently no-ops on a non-`Scalar` node);
-      both folded into T10 per Ruling R-F rather than run as a separate fix
-      round, and both landed there.
+  and go *red* rather than failing to build: rename `Children::None` to
+  `Children::Scalar { content_source_info: Option<SourceInfo> }`, add
+  `with_content_provenance` and `content_source_info()`, and leave the
+  parser attaching nothing yet (so every scalar reads `None`). Phase 1's
+  "observe red" idiom worked because
+  `offset_to_location` already existed; here the method does not, and a
+  compile error is not a red test. — Done in T8 (commit `da2c560`), one
+  file changed, no call site outside `yaml_with_source_info.rs` needed
+  editing. Review Approved with one Important (a stub test's comment
+  claimed a behavior the test can't exercise) and one deferred Minor
+  (`with_content_provenance` silently no-ops on a non-`Scalar` node);
+  both folded into T10 per Ruling R-F rather than run as a separate fix
+  round, and both landed there.
 - [x] Failing tests next, one per scalar style. **Assert the piece list, not
-      `map_offset`, for the bulk of them.** `map_offset` needs a
-      `&SourceContext`, and `quarto-yaml` has no `tests/` directory and
-      constructs a `SourceContext` nowhere in `src/` — so routing 30 fixtures
-      through one means writing an unbudgeted helper and registering each
-      fixture's text as the context's first file. `SourceInfo::Concat`'s and
-      `SourcePiece`'s fields are all public (`source_info.rs:128-138`), and the
-      fixtures note records `content <- source` per piece, so asserting the piece
-      list needs no context and matches the committed data's shape. Keep two or
-      three `map_offset` tests for the contract itself. Every shape must also
-      assert `content_source_info()` is `Some`. The shapes:
+  `map_offset`, for the bulk of them.** `map_offset` needs a
+  `&SourceContext`, and `quarto-yaml` has no `tests/` directory and
+  constructs a `SourceContext` nowhere in `src/` — so routing 30 fixtures
+  through one means writing an unbudgeted helper and registering each
+  fixture's text as the context's first file. `SourceInfo::Concat`'s and
+  `SourcePiece`'s fields are all public (`source_info.rs:128-138`), and the
+  fixtures note records `content <- source` per piece, so asserting the piece
+  list needs no context and matches the committed data's shape. Keep two or
+  three `map_offset` tests for the contract itself. Every shape must also
+  assert `content_source_info()` is `Some`. The shapes:
 
-      | style | shape |
-      |---|---|
-      | plain, single-line | contiguous |
-      | **plain, multi-line** | `Concat` (fold per break) |
-      | single-quoted | contiguous, excludes quotes |
-      | single-quoted with `''` | `Concat` |
-      | single-quoted with a **trailing** `''` | `Concat`, exercises the end-offset contract |
-      | double-quoted | contiguous, excludes quotes |
-      | double-quoted with `\t`, `\"`, `\\`, `\uXXXX` | `Concat` |
-      | double-quoted with `\n` | `Concat` — **no fixture row yet**, add it to the known-missing list below |
-      | **double-quoted, multi-line** | `Concat` (fold per break) |
-      | **double-quoted with an escaped break** (`\`+newline) | 3-piece `Concat` — the `out_len == 0` piece is **stored**, keeping the source tiling gap-free so `preimage_in` yields a hull (§ The shared builder) |
-      | block `\|`, single-line | contiguous |
-      | block `\|`, multi-line | `Concat`, one piece per line |
-      | block `\|` with a **blank line inside** | `Concat`, break region spans both newlines |
-      | block `\|` with a **more-indented line** | `Concat`, content-leading spaces preserved |
-      | block `\|` with **trailing spaces on the last line** | `Concat` reaching past `end_offset` |
-      | block `\|` with **no final newline at EOF** | `Concat` ending in a synthesized piece |
-      | block `>`, multi-line, with a blank line | `Concat`, folds and breaks distinguished |
-      | block `>` with a more-indented line | `Concat`, not folded |
-      | chomping `\|-`, `\|+` | `Concat`, trailing-newline count correct |
-      | **indentation indicator** `\|2` | `Concat`; `marker.col()` already yields the right per-line strip |
-      | **CRLF** variants of the block and plain multi-line cases | `Concat`; the `\r` is **absorbed into the break replacement**, not a separate deletion — see the measured `block \| CRLF` row |
-      | **empty value** (`k:`), **empty quoted** (`k: ''`) | `Some` of a zero-length `SourceInfo` at the anchor — **not `None`**; "empty but derived" must be distinguishable from "could not derive" |
-      | **`k: ~`**, **`k: true`** | one piece; content is the event's value string (`~`, `true`) |
-      | **empty block scalar** (`k: \|` alone) | one verbatim piece `0..1`←`4..5`, via the header-skip rule |
-      | **block `\|` whose content starts with `\|`** | derives normally — the header-skip predicate must **not** fire (measured; it desyncs under a byte-only predicate) |
-      | **all-escape scalar** (`k: ''''`) | one replacement piece; must **not** collapse to a contiguous `SourceInfo`, or the length invariant breaks |
-      | **root plain scalar, column-0 continuation** (`aaa`⏎`bbb`) | 3 pieces, middle one a **replacement** — the case that proves the verbatim tag must key on bytes, not length |
+  | style | shape |
+  |---|---|
+  | plain, single-line | contiguous |
+  | **plain, multi-line** | `Concat` (fold per break) |
+  | single-quoted | contiguous, excludes quotes |
+  | single-quoted with `''` | `Concat` |
+  | single-quoted with a **trailing** `''` | `Concat`, exercises the end-offset contract |
+  | double-quoted | contiguous, excludes quotes |
+  | double-quoted with `\t`, `\"`, `\\`, `\uXXXX` | `Concat` |
+  | double-quoted with `\n` | `Concat` — **no fixture row yet**, add it to the known-missing list below |
+  | **double-quoted, multi-line** | `Concat` (fold per break) |
+  | **double-quoted with an escaped break** (`\`+newline) | 3-piece `Concat` — the `out_len == 0` piece is **stored**, keeping the source tiling gap-free so `preimage_in` yields a hull (§ The shared builder) |
+  | block `\|`, single-line | contiguous |
+  | block `\|`, multi-line | `Concat`, one piece per line |
+  | block `\|` with a **blank line inside** | `Concat`, break region spans both newlines |
+  | block `\|` with a **more-indented line** | `Concat`, content-leading spaces preserved |
+  | block `\|` with **trailing spaces on the last line** | `Concat` reaching past `end_offset` |
+  | block `\|` with **no final newline at EOF** | `Concat` ending in a synthesized piece |
+  | block `>`, multi-line, with a blank line | `Concat`, folds and breaks distinguished |
+  | block `>` with a more-indented line | `Concat`, not folded |
+  | chomping `\|-`, `\|+` | `Concat`, trailing-newline count correct |
+  | **indentation indicator** `\|2` | `Concat`; `marker.col()` already yields the right per-line strip |
+  | **CRLF** variants of the block and plain multi-line cases | `Concat`; the `\r` is **absorbed into the break replacement**, not a separate deletion — see the measured `block \| CRLF` row |
+  | **empty value** (`k:`), **empty quoted** (`k: ''`) | `Some` of a zero-length `SourceInfo` at the anchor — **not `None`**; "empty but derived" must be distinguishable from "could not derive" |
+  | **`k: ~`**, **`k: true`** | one piece; content is the event's value string (`~`, `true`) |
+  | **empty block scalar** (`k: \|` alone) | one verbatim piece `0..1`←`4..5`, via the header-skip rule |
+  | **block `\|` whose content starts with `\|`** | derives normally — the header-skip predicate must **not** fire (measured; it desyncs under a byte-only predicate) |
+  | **all-escape scalar** (`k: ''''`) | one replacement piece; must **not** collapse to a contiguous `SourceInfo`, or the length invariant breaks |
+  | **root plain scalar, column-0 continuation** (`aaa`⏎`bbb`) | 3 pieces, middle one a **replacement** — the case that proves the verbatim tag must key on bytes, not length |
 
-      Done in T9 (quarto-yaml `9452e18`, 42 tests, all RED on `None`-vs-`Some`;
-      73 pre-existing tests still pass): every named shape above got its own
-      test. Two declared omissions, both judged acceptable in review: the
-      break-region "value at a tab" entry sub-case (optional per the brief;
-      recorded below and in the design-review walkthrough), and
-      `empty block scalar, next key follows` (its span defect is out of
-      scope; the empty→`Some` rule is exercised by `empty_value` and
-      `empty_single_quoted` instead).
+  Done in T9 (quarto-yaml `9452e18`, 42 tests, all RED on `None`-vs-`Some`;
+  73 pre-existing tests still pass): every named shape above got its own
+  test. Two declared omissions, both judged acceptable in review: the
+  break-region "value at a tab" entry sub-case (optional per the brief;
+  recorded below and in the design-review walkthrough), and
+  `empty block scalar, next key follows` (its span defect is out of
+  scope; the empty→`Some` rule is exercised by `empty_value` and
+  `empty_single_quoted` instead).
 - [x] Cover every scalar **position**, not just block-mapping values:
-      values, **keys** (`key_span` has the identical defect — verified:
-      `'quoted key': v` yields `key_span` 0..12, quotes included), **flow
-      collections** (verified: `k: ['a b', "c\td"]` yields spans `'a b'` and
-      `"c\td"`, brackets excluded, quotes included), and **tagged scalars**
-      (`!path 'x'`). Verified empirically: the node marker points at the
-      VALUE, not the tag — `k: !path 'x/y'` gives span 9..14 = `'x/y'`
-      (`parser.rs:405`, `:499`) — and anchors are excluded for the same
-      reason, so tags need no extra arithmetic. — Done in T9: `quoted_key`,
-      `flow_collection_item_0`/`_1`, and `tagged_scalar`, each its own test,
-      plus the seven previously-missing fixture rows derived and recorded in
-      the q2 fixtures note (commit `528038877`).
+  values, **keys** (`key_span` has the identical defect — verified:
+  `'quoted key': v` yields `key_span` 0..12, quotes included), **flow
+  collections** (verified: `k: ['a b', "c\td"]` yields spans `'a b'` and
+  `"c\td"`, brackets excluded, quotes included), and **tagged scalars**
+  (`!path 'x'`). Verified empirically: the node marker points at the
+  VALUE, not the tag — `k: !path 'x/y'` gives span 9..14 = `'x/y'`
+  (`parser.rs:405`, `:499`) — and anchors are excluded for the same
+  reason, so tags need no extra arithmetic. — Done in T9: `quoted_key`,
+  `flow_collection_item_0`/`_1`, and `tagged_scalar`, each its own test,
+  plus the seven previously-missing fixture rows derived and recorded in
+  the q2 fixtures note (commit `528038877`).
 - [x] Implement the lockstep walker (§ How the pieces are derived), starting
-      from the **committed** prototype at
-      `claude-notes/research/yaml-content-provenance-walker/walker.rs` — it
-      implements both corrected rules and generated the fixtures. Do not start
-      from a code block in this plan; there no longer is one, for that reason. **The walk is bounded by the value and
-      reads source past `end_offset`** — do not slice the span and walk the
-      slice.
+  from the **committed** prototype at
+  `claude-notes/research/yaml-content-provenance-walker/walker.rs` — it
+  implements both corrected rules and generated the fixtures. Do not start
+  from a code block in this plan; there no longer is one, for that reason. **The walk is bounded by the value and
+  reads source past `end_offset`** — do not slice the span and walk the
+  slice.
 
-      **The node span is unchanged, and the walker is purely additive.** Do not
-      delete or rewrite `plain_scalar_len` / `quoted_scalar_len` /
-      `block_scalar_len`: all three still feed `compute_scalar_len` (`parser.rs:384-400`), which produces the
-      node's `source_info`, and this plan guarantees that span keeps its
-      current meaning ("`self.source_info` describes the node's *source
-      text* — including delimiters"). The walker is **purely additive**. The
-      natural shape is to widen the existing function rather than add a second
-      traversal:
+  **The node span is unchanged, and the walker is purely additive.** Do not
+  delete or rewrite `plain_scalar_len` / `quoted_scalar_len` /
+  `block_scalar_len`: all three still feed `compute_scalar_len` (`parser.rs:384-400`), which produces the
+  node's `source_info`, and this plan guarantees that span keeps its
+  current meaning ("`self.source_info` describes the node's *source
+  text* — including delimiters"). The walker is **purely additive**. The
+  natural shape is to widen the existing function rather than add a second
+  traversal:
 
-      ```rust
-      fn compute_scalar_provenance(&self, marker: &Marker, value: &str,
-                                   style: TScalarStyle)
-          -> (usize, Option<SourceInfo>)
-      //      span len ──┘    content provenance ──┘  (None iff the walk desynced)
-      ```
+  ```rust
+  fn compute_scalar_provenance(&self, marker: &Marker, value: &str,
+                               style: TScalarStyle)
+      -> (usize, Option<SourceInfo>)
+  //      span len ──┘    content provenance ──┘  (None iff the walk desynced)
+  ```
 
-      called from the `Event::Scalar` arm (`parser.rs:499-516`), which is where
-      yaml-rust2's `value: String` is in scope. — Done in T10 (commit
-      `8b8c05e`): `compute_scalar_provenance` widened as specified,
-      `walk_scalar_provenance` feeding a `ProvenanceBuilder` directly (the
-      builder's own coalescing replaces the prototype's hand-rolled merge
-      step). 42/42 previously-red tests green; full workspace green; review
-      confirmed no test expectation was edited and no branch keys on style
-      rather than the four general rules. **Superseded in part**: rule 1's
-      entry condition, ported unchanged from the prototype at this commit,
-      was later found to desync a trivially valid shape and was corrected —
-      see the style-conditional rewrite in § How the pieces are derived and
-      the fix-round history below.
+  called from the `Event::Scalar` arm (`parser.rs:499-516`), which is where
+  yaml-rust2's `value: String` is in scope. — Done in T10 (commit
+  `8b8c05e`): `compute_scalar_provenance` widened as specified,
+  `walk_scalar_provenance` feeding a `ProvenanceBuilder` directly (the
+  builder's own coalescing replaces the prototype's hand-rolled merge
+  step). 42/42 previously-red tests green; full workspace green; review
+  confirmed no test expectation was edited and no branch keys on style
+  rather than the four general rules. **Superseded in part**: rule 1's
+  entry condition, ported unchanged from the prototype at this commit,
+  was later found to desync a trivially valid shape and was corrected —
+  see the style-conditional rewrite in § How the pieces are derived and
+  the fix-round history below.
 - [x] **Attach provenance at the two production construction sites** —
-      `parser.rs:513` (scalars) and the `Event::Alias` arm at `:634` — now that
-      the walker exists to compute it. **No constructor signature changes**
-      (§ `quarto-yaml`'s API). The alias arm needs nothing beyond the default
-      `None` (§ Out of scope). This item, the walker above and the header-skip
-      rule below are **one change**: attaching without the walker is impossible,
-      and the walker desyncs without the rule. — Done in T10: attached at the
-      `Event::Scalar` arm only; `Event::Alias` needed no change (already
-      constructs via bare `new_scalar`, defaulting to `None`).
+  `parser.rs:513` (scalars) and the `Event::Alias` arm at `:634` — now that
+  the walker exists to compute it. **No constructor signature changes**
+  (§ `quarto-yaml`'s API). The alias arm needs nothing beyond the default
+  `None` (§ Out of scope). This item, the walker above and the header-skip
+  rule below are **one change**: attaching without the walker is impossible,
+  and the walker desyncs without the rule. — Done in T10: attached at the
+  `Event::Scalar` arm only; `Event::Alias` needed no change (already
+  constructs via bare `new_scalar`, defaulting to `None`).
 - [x] **Implement the header-skip rule** (§ How the pieces are derived, "Where
-      the walk starts"): begin the walk at the newline ending the header line
-      when a block scalar's span starts on `\|` or `>` **and** its decoded value
-      is empty or consists only of newlines. **Both** clauses — the bare byte
-      test alone is unsound and desyncs on a block scalar whose *content* starts
-      with a pipe, which is valid YAML and measured. This is what makes `k: \|`
-      alone work — it is otherwise a desync on trivially valid YAML, and under
-      `strict-provenance` that is a CI panic. **No span is changed.** Measured:
-      the rule fixes `k: \|` and leaves every other shape at zero desyncs.
-      The sibling defect — an empty block scalar followed by another key spans
-      *that key* — is explicitly out of scope (§ Empty and degenerate scalars).
-      — Done in T10 (`at_empty_block_header`, both clauses); review confirmed
-      the predicate is correctly **suppressed** on the two
-      content-starts-with-pipe shapes.
+  the walk starts"): begin the walk at the newline ending the header line
+  when a block scalar's span starts on `\|` or `>` **and** its decoded value
+  is empty or consists only of newlines. **Both** clauses — the bare byte
+  test alone is unsound and desyncs on a block scalar whose *content* starts
+  with a pipe, which is valid YAML and measured. This is what makes `k: \|`
+  alone work — it is otherwise a desync on trivially valid YAML, and under
+  `strict-provenance` that is a CI panic. **No span is changed.** Measured:
+  the rule fixes `k: \|` and leaves every other shape at zero desyncs.
+  The sibling defect — an empty block scalar followed by another key spans
+  *that key* — is explicitly out of scope (§ Empty and degenerate scalars).
+  — Done in T10 (`at_empty_block_header`, both clauses); review confirmed
+  the predicate is correctly **suppressed** on the two
+  content-starts-with-pipe shapes.
 - [x] **Fix the misleading doc comments** on `value_span` **and `key_span`**
-      (`yaml_with_source_info.rs:90-96`) — they carry the same sentence and the
-      same defect. "Source location of just the value" is what invited the
-      misuse; say each covers the source text *including delimiters* and point
-      at `content_source_info`. Both fields are literally
-      `key.source_info.clone()` / `value.source_info.clone()`
-      (`parser.rs:581-582`), so this item is documentation only; no field is
-      added (§ Third-party exposure). — Done in T11+12 (commit `d046467`).
+  (`yaml_with_source_info.rs:90-96`) — they carry the same sentence and the
+  same defect. "Source location of just the value" is what invited the
+  misuse; say each covers the source text *including delimiters* and point
+  at `content_source_info`. Both fields are literally
+  `key.source_info.clone()` / `value.source_info.clone()`
+  (`parser.rs:581-582`), so this item is documentation only; no field is
+  added (§ Third-party exposure). — Done in T11+12 (commit `d046467`).
 - [x] Document that aliases read as scalars with **no** content provenance
-      (`None`, not a zero-length `Some` — § Out of scope) — Done in T11+12:
-      replaced the stub-sounding TODO on the `Event::Alias` arm with the
-      design rationale (two defensible answers, neither implemented; no code
-      change, `new_scalar` already defaults to `None`).
+  (`None`, not a zero-length `Some` — § Out of scope) — Done in T11+12:
+  replaced the stub-sounding TODO on the `Event::Alias` arm with the
+  design rationale (two defensible answers, neither implemented; no code
+  change, `new_scalar` already defaults to `None`).
 - [x] Return `None` from the walker on desync, and panic instead under
-      `strict-provenance` (§ Desync policy). There is **no `exact` flag** — if
-      you find yourself adding one, re-read that section. — Done in T11+12:
-      the two asserts (unconditional length tripwire, feature-gated desync
-      panic naming both cursor offsets) landed in the `Event::Scalar` arm.
-      **This is also what surfaced the walker desync bug** fixed by the
-      style-conditional rule-1 entry — see § How the pieces are derived and
-      § Evidence, Phase 2.
+  `strict-provenance` (§ Desync policy). There is **no `exact` flag** — if
+  you find yourself adding one, re-read that section. — Done in T11+12:
+  the two asserts (unconditional length tripwire, feature-gated desync
+  panic naming both cursor offsets) landed in the `Event::Scalar` arm.
+  **This is also what surfaced the walker desync bug** fixed by the
+  style-conditional rule-1 entry — see § How the pieces are derived and
+  § Evidence, Phase 2.
 - [x] Add the `strict-provenance` feature (off by default).
-      **`crates/quarto-yaml/Cargo.toml` has no `[features]` table today**, so
-      this creates one. No passthrough feature is needed in
-      `quarto-yaml-validation`: it depends on `quarto-yaml` via
-      `{ workspace = true }`, and `--features quarto-yaml/strict-provenance`
-      from the virtual root enables it graph-wide. The feature gates the
-      **desync response** (panic with both cursor offsets vs. contiguous
-      fallback) and two asserts: `debug_assert_eq!(si.length(), decoded.len())`
-      — now **unconditional**, since a `Some` is always byte-exact — and that
-      any scalar whose derivation ran is `Some`, which is what replaces the
-      compiler enforcement the additive design gave up. Both live in the
-      `Event::Scalar` arm, where yaml-rust2's `value: String` is in scope;
-      `new_scalar` only ever sees the resolved `Yaml` and cannot check either.
-      — Done in T11+12.
+  **`crates/quarto-yaml/Cargo.toml` has no `[features]` table today**, so
+  this creates one. No passthrough feature is needed in
+  `quarto-yaml-validation`: it depends on `quarto-yaml` via
+  `{ workspace = true }`, and `--features quarto-yaml/strict-provenance`
+  from the virtual root enables it graph-wide. The feature gates the
+  **desync response** (panic with both cursor offsets vs. contiguous
+  fallback) and two asserts: `debug_assert_eq!(si.length(), decoded.len())`
+  — now **unconditional**, since a `Some` is always byte-exact — and that
+  any scalar whose derivation ran is `Some`, which is what replaces the
+  compiler enforcement the additive design gave up. Both live in the
+  `Event::Scalar` arm, where yaml-rust2's `value: String` is in scope;
+  `new_scalar` only ever sees the resolved `Yaml` and cannot check either.
+  — Done in T11+12.
 - [x] **Add the CI step** — the feature alone is inert, because `ci.yml` runs
-      no `--all-features` (verified: the `test` job runs
-      `cargo test --workspace --locked` at `ci.yml:34`):
-      ```yaml
-      - name: Test with provenance invariant enforced
-        run: cargo test --workspace --locked --features quarto-yaml/strict-provenance
-      ```
-      A new **step** in the existing `test` job (not a new job): the VM is
-      already warm, and it inherits the OS matrix
-      (`ubuntu`/`macos`/`windows`, `ci.yml:19`) — which matters, because CRLF
-      handling makes this exactly the kind of invariant that catches a
-      Windows-specific provenance bug. Confirm the
-      `--features <pkg>/<feat>` form resolves from the virtual workspace root.
-      Document in the code that the length half is a **tripwire, not a
-      proof**: a `Concat` can tile the right total while pointing at wrong
-      ranges, and under the lockstep derivation the length check is nearly
-      tautological — desync detection is the load-bearing check. — Done in
-      T11+12: a new step in the existing `test` job (inherits the OS matrix),
-      wired in **while red** (Ruling R-H) — see § Evidence, Phase 2 for why
-      that was the right call rather than holding the step back.
+  no `--all-features` (verified: the `test` job runs
+  `cargo test --workspace --locked` at `ci.yml:34`):
+  ```yaml
+  - name: Test with provenance invariant enforced
+    run: cargo test --workspace --locked --features quarto-yaml/strict-provenance
+  ```
+  A new **step** in the existing `test` job (not a new job): the VM is
+  already warm, and it inherits the OS matrix
+  (`ubuntu`/`macos`/`windows`, `ci.yml:19`) — which matters, because CRLF
+  handling makes this exactly the kind of invariant that catches a
+  Windows-specific provenance bug. Confirm the
+  `--features <pkg>/<feat>` form resolves from the virtual workspace root.
+  Document in the code that the length half is a **tripwire, not a
+  proof**: a `Concat` can tile the right total while pointing at wrong
+  ranges, and under the lockstep derivation the length check is nearly
+  tautological — desync detection is the load-bearing check. — Done in
+  T11+12: a new step in the existing `test` job (inherits the OS matrix),
+  wired in **while red** (Ruling R-H) — see § Evidence, Phase 2 for why
+  that was the right call rather than holding the step back.
 - [x] Add `--features quarto-yaml/strict-provenance` to the **clippy**
-      invocation too (`ci.yml:54` is
-      `cargo clippy --workspace --all-targets --locked -- -D warnings`), or the
-      desync-panic branch ships unlinted — Done in T11+12.
+  invocation too (`ci.yml:54` is
+  `cargo clippy --workspace --all-targets --locked -- -D warnings`), or the
+  desync-panic branch ships unlinted — Done in T11+12.
 - [x] **No call-site updates are needed** — `quarto-yaml-validation`'s 22 test
-      sites, q2's 15 and `quarto-yaml`'s own 5 all compile untouched under the
-      additive design (§ Third-party exposure). If you find yourself editing
-      them, the design has drifted back to the breaking variant; stop and
-      re-read that section. — Confirmed: no call-site edits anywhere, across
-      T8, T9, T10 and T11+12; each task's review independently re-checked
-      this by grep/diff, not by trusting the report.
+  sites, q2's 15 and `quarto-yaml`'s own 5 all compile untouched under the
+  additive design (§ Third-party exposure). If you find yourself editing
+  them, the design has drifted back to the breaking variant; stop and
+  re-read that section. — Confirmed: no call-site edits anywhere, across
+  T8, T9, T10 and T11+12; each task's review independently re-checked
+  this by grep/diff, not by trusting the report.
 - [x] **Reconcile Plan 2** — *discharged 2026-08-21.* Plan 2's owner rewrote it
-      on what was then `review/provenance-plan-2` (now merged into
-      `feature/yaml-provenance`) and confirmed taking the obligations then
-      listed (eight at the time) and all three corrections. **The list has since
-      grown to ten** — obligation 8 (`qmd-syntax-helper`) and obligation 10 (the
-      q2 lock refresh) postdate that confirmation, so do not read this checkbox
-      as "the hand-off is settled"; read it as "the reconcile pass happened".
-      Reconcile the count against Plan 2's receipt table, not against this box (the `quarto-yaml 0.2.0` lock refresh, the
-      15-call-site item, and the gate). Do **not** re-apply those edits from the
-      line numbers an earlier draft of this item cited — they were read against
-      the pre-rewrite file and now point at unrelated text. Verify against Plan
-      2's current ref rather than a diff from `816f4ed47`.
+  on what was then `review/provenance-plan-2` (now merged into
+  `feature/yaml-provenance`) and confirmed taking the obligations then
+  listed (eight at the time) and all three corrections. **The list has since
+  grown to ten** — obligation 8 (`qmd-syntax-helper`) and obligation 10 (the
+  q2 lock refresh) postdate that confirmation, so do not read this checkbox
+  as "the hand-off is settled"; read it as "the reconcile pass happened".
+  Reconcile the count against Plan 2's receipt table, not against this box (the `quarto-yaml 0.2.0` lock refresh, the
+  15-call-site item, and the gate). Do **not** re-apply those edits from the
+  line numbers an earlier draft of this item cited — they were read against
+  the pre-rewrite file and now point at unrelated text. Verify against Plan
+  2's current ref rather than a diff from `816f4ed47`.
 - [x] Publish `quarto-source-map` **0.1.3** (the builder) first — it is this
-      phase's dependency and Phase 1 deliberately held it back — Done in T14
-      (commit `4ec38a4`, amended to `09ec6d1` for a wording fix): pushed
-      `provenance-builder`, PR posit-dev/quarto-source-map#4, CI green,
-      **merged and published 2026-08-21T22:57:16Z, tag `v0.1.3`** (Gordon's
-      approval, "Do both releases now").
+  phase's dependency and Phase 1 deliberately held it back — Done in T14
+  (commit `4ec38a4`, amended to `09ec6d1` for a wording fix): pushed
+  `provenance-builder`, PR posit-dev/quarto-source-map#4, CI green,
+  **merged and published 2026-08-21T22:57:16Z, tag `v0.1.3`** (Gordon's
+  approval, "Do both releases now").
 - [x] Declare `quarto-source-map = "0.1.3"` in `~/src/quarto-yaml/Cargo.toml`
-      (not `"0.1.0"` — see § Both crates ship as patches; a published crate must
-      require the version its code needs), then bump the shared workspace
-      version to `0.1.3` for **both** publishable crates, since the release
-      workflow hard-fails when they disagree; `cargo update -p quarto-source-map`
-      and commit the lockfile (the workflow runs `cargo publish --locked`);
-      **no q2 `quarto-yaml` edit** — `^0.1.2` already accepts it;
-      PR → CI green → **merge to `main`, which is what publishes** — Done in
-      T15 (commit `4734b46`): all five steps verified by the controller
-      independently (not just the report) against the manifests themselves;
-      `cargo package --workspace --locked` clean; pushed `content-provenance`,
-      PR posit-dev/quarto-yaml#18, CI green (Windows run time consistent with
-      the suite running twice — normal + `strict-provenance` — across the
-      matrix), **merged at 2026-08-21T23:04:45Z**. Published: `quarto-yaml`
-      0.1.3 (2026-08-21T23:05:40Z) and `quarto-yaml-validation` 0.1.3
-      (23:05:44Z), tag `v0.1.3`. All three releases of this plan are live.
+  (not `"0.1.0"` — see § Both crates ship as patches; a published crate must
+  require the version its code needs), then bump the shared workspace
+  version to `0.1.3` for **both** publishable crates, since the release
+  workflow hard-fails when they disagree; `cargo update -p quarto-source-map`
+  and commit the lockfile (the workflow runs `cargo publish --locked`);
+  **no q2 `quarto-yaml` edit** — `^0.1.2` already accepts it;
+  PR → CI green → **merge to `main`, which is what publishes** — Done in
+  T15 (commit `4734b46`): all five steps verified by the controller
+  independently (not just the report) against the manifests themselves;
+  `cargo package --workspace --locked` clean; pushed `content-provenance`,
+  PR posit-dev/quarto-yaml#18, CI green (Windows run time consistent with
+  the suite running twice — normal + `strict-provenance` — across the
+  matrix), **merged at 2026-08-21T23:04:45Z**. Published: `quarto-yaml`
+  0.1.3 (2026-08-21T23:05:40Z) and `quarto-yaml-validation` 0.1.3
+  (23:05:44Z), tag `v0.1.3`. All three releases of this plan are live.
 
 ## Evidence
 

@@ -584,7 +584,7 @@ first run in both applicable modes.
 
 **New fixtures (gap audit):**
 
-- [x] `code-block-fenced` — fenced ``` ```python ``` block with content
+- [x] `code-block-fenced` — fenced ```` ```python ```` block with content
   → code-block-generate, code-block-render, code-highlight stage.
 - [x] `lua-shortcode-version` — `{{< version >}}` → shortcode-resolve
   (Lua-loaded handler path; simplest deterministic case — returns

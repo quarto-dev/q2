@@ -39,78 +39,78 @@ can be fixed under TDD without re-litigating the design.
 ## Glitch index (checklist)
 
 - [x] **G1 — Breadcrumb collapses to a single crumb when the indent gutter is
-      narrow** (code-block-in-blockquote shows only `❝` or only `Cd`, never
-      both). Fix: pivot-pinned **left-spill** into the margin + comfortable
-      per-crumb width (`CRUMB_W=22`); at the left page edge, **spill right** past
-      the pivot instead of ellipsizing. **DONE: Geometry + T17 + T18 (jsdom) + T19 (Playwright) all green.**
+  narrow** (code-block-in-blockquote shows only `❝` or only `Cd`, never
+  both). Fix: pivot-pinned **left-spill** into the margin + comfortable
+  per-crumb width (`CRUMB_W=22`); at the left page edge, **spill right** past
+  the pivot instead of ellipsizing. **DONE: Geometry + T17 + T18 (jsdom) + T19 (Playwright) all green.**
 - [x] **G2 — `Plain` crumb wears the paragraph pilcrow `¶`** (a tight list item's
-      leading block is a `Plain`, not a `Para`). Fix: `Plain → "Pl"`, `Para → ¶`.
-      *Deterministic; no live test needed.*
+  leading block is a `Plain`, not a `Para`). Fix: `Plain → "Pl"`, `Para → ¶`.
+  *Deterministic; no live test needed.*
 - [x] **G3 — single-line ArrowDown/Up never steps off the surface** (the down
-      arrow is eaten on any single-line block — surfaced via tight list items).
-      Fix: `isOnLastVisualLine` must exclude `paddingBottom` from `fullHeight`.
-      **DONE: fix applied + T21a/T21b Playwright green.**
+  arrow is eaten on any single-line block — surfaced via tight list items).
+  Fix: `isOnLastVisualLine` must exclude `paddingBottom` from `fullHeight`.
+  **DONE: fix applied + T21a/T21b Playwright green.**
 - [x] **G4 — bare modifier keydowns trigger expand-on-edit** (pressing ⌘/⌃/⌥ to
-      start a nest/commit chord wrongly expands). Fix: exclude bare-modifier keys
-      from the §7 expand guard (`!isBareModifier`). *Implemented; T12 RED→GREEN proven.*
+  start a nest/commit chord wrongly expands). Fix: exclude bare-modifier keys
+  from the §7 expand guard (`!isBareModifier`). *Implemented; T12 RED→GREEN proven.*
 - [x] **G5 — nesting cursor doesn't carry the surface's expansion state.** Fix:
-      `keepExpanded` through `openEditTarget`; clean path via `applyNestingRetarget`
-      (gated per-caller), dirty path via `executeLanding`→`openFromResolved`. **Carry
-      on nest-in/nest-out moves ONLY** (`spec.kind === 'nest'`); crumb jumps and arrow
-      step-off do **not** carry — only nest moves keep you "looking at the same thing".
-      *Design validated live 2026-06-16 (incl. the dirty path, once G6+G7 was fixed);
-      nest-only scope decided 2026-06-16 by user; to implement.*
+  `keepExpanded` through `openEditTarget`; clean path via `applyNestingRetarget`
+  (gated per-caller), dirty path via `executeLanding`→`openFromResolved`. **Carry
+  on nest-in/nest-out moves ONLY** (`spec.kind === 'nest'`); crumb jumps and arrow
+  step-off do **not** carry — only nest moves keep you "looking at the same thing".
+  *Design validated live 2026-06-16 (incl. the dirty path, once G6+G7 was fixed);
+  nest-only scope decided 2026-06-16 by user; to implement.*
 - [x] **G6 + G7 — dirty reland drops the editor / shows stale text. RESOLVED via
-      the settle-gate.** Single root cause: the reland landed *early* (250ms
-      backstop timer beat the slower async re-render), capturing a stale
-      `anchorSlice`/seed — which both (G7) showed stale text and (G6) made
-      self-heal byte-verify fail → DROP. Fix: gate the landing on the render
-      reflecting the commit (`renderedContent` is the render identity); the
-      `relandSettlingRef` guard is **removed**. *Implemented commit c6ccf715;
-      448 integration + 445 unit tests green; fail-on-revert verified.*
+  the settle-gate.** Single root cause: the reland landed *early* (250ms
+  backstop timer beat the slower async re-render), capturing a stale
+  `anchorSlice`/seed — which both (G7) showed stale text and (G6) made
+  self-heal byte-verify fail → DROP. Fix: gate the landing on the render
+  reflecting the commit (`renderedContent` is the render identity); the
+  `relandSettlingRef` guard is **removed**. *Implemented commit c6ccf715;
+  448 integration + 445 unit tests green; fail-on-revert verified.*
 - [ ] **G8 — list marker/number hover+click highlights the displaced item, and
-      the parent is hard to click.** ~~Fix: in unlock mode, a hover/click whose
-      `e.target` is the tight `<li>` resolves to the parent list surface.~~
-      **REVERTED 2026-06-17 — the fix had a serious regression.** The `leaf ===
-      target` discriminator was false: a tight item's text is a bare text node
-      directly in the `<li>` (`Plain` renders as a fragment, `Str` as bare text),
-      so a TEXT click *also* reports `e.target === <li>`. The branch therefore
-      hijacked **every** tight-item click/hover to the parent list, making
-      per-item editing impossible. The jsdom T4 test masked this by hand-building
-      `<li><div>text</div></li>` — an inner `<div>` the renderer never produces;
-      the e2e then asserted the broken behavior as correct. Reverted
-      `findEditTarget`, deleted the g8 jsdom + marker-hit-test e2e, restored
-      `s2-mode-aware-roving`. **Re-do (separate task):** the marker→parent-list
-      affordance needs the marker in the `<ul>` gutter (CSS, so a bullet click is
-      `e.target === <ul>` → list) or a coordinate check — not a DOM-identity test.
-      Pre-G8 behavior (tight item → item editor) is the current, correct state.
+  the parent is hard to click.** ~~Fix: in unlock mode, a hover/click whose
+  `e.target` is the tight `<li>` resolves to the parent list surface.~~
+  **REVERTED 2026-06-17 — the fix had a serious regression.** The `leaf ===
+  target` discriminator was false: a tight item's text is a bare text node
+  directly in the `<li>` (`Plain` renders as a fragment, `Str` as bare text),
+  so a TEXT click *also* reports `e.target === <li>`. The branch therefore
+  hijacked **every** tight-item click/hover to the parent list, making
+  per-item editing impossible. The jsdom T4 test masked this by hand-building
+  `<li><div>text</div></li>` — an inner `<div>` the renderer never produces;
+  the e2e then asserted the broken behavior as correct. Reverted
+  `findEditTarget`, deleted the g8 jsdom + marker-hit-test e2e, restored
+  `s2-mode-aware-roving`. **Re-do (separate task):** the marker→parent-list
+  affordance needs the marker in the `<ul>` gutter (CSS, so a bullet click is
+  `e.target === <ul>` → list) or a coordinate check — not a DOM-identity test.
+  Pre-G8 behavior (tight item → item editor) is the current, correct state.
 - [x] **G9 — flash of stale content during the (now deterministic) reland gap.**
-      Fix: blur the cell we left (`q2-reland-fade`, \~0.1s ease-out) from the
-      editor-close render until the destination editor opens. *Implemented;
-      T7 RED→GREEN; fadeSourceR0Ref + useLayoutEffect + clearRelandFade.*
+  Fix: blur the cell we left (`q2-reland-fade`, \~0.1s ease-out) from the
+  editor-close render until the destination editor opens. *Implemented;
+  T7 RED→GREEN; fadeSourceR0Ref + useLayoutEffect + clearRelandFade.*
 - [x] **G10 — editing a tight list item's text turns the list loose.** Regression
-      from Plan 3 (`58470cc1`). The text channel re-parses the item's inline text
-      standalone → `Para`; `apply_node_edit` spliced it in with no coercion →
-      loose. Fix: `preserve_leaf_variant` coerces a single-`Para` replacement back
-      to `Plain` when the original was `Plain`. *T8/T9/T10 implemented RED→GREEN
-      on lane/g10-tightness (2026-06-16). T11 DONE 2026-06-18: single-item edit
-      bound through the real WASM build — fail-on-revert proven (revert the call
-      site + rebuild WASM → both T11 tests RED with `['Para','Para']`; restore +
-      rebuild → GREEN, 26 passed).*
+  from Plan 3 (`58470cc1`). The text channel re-parses the item's inline text
+  standalone → `Para`; `apply_node_edit` spliced it in with no coercion →
+  loose. Fix: `preserve_leaf_variant` coerces a single-`Para` replacement back
+  to `Plain` when the original was `Plain`. *T8/T9/T10 implemented RED→GREEN
+  on lane/g10-tightness (2026-06-16). T11 DONE 2026-06-18: single-item edit
+  bound through the real WASM build — fail-on-revert proven (revert the call
+  site + rebuild WASM → both T11 tests RED with `['Para','Para']`; restore +
+  rebuild → GREEN, 26 passed).*
 - [x] **G11 — "expand on interest" via a second click.** A click *inside* an
-      already-open editor (to place the caret where you want to read/edit) should
-      expand the surface, like an in-surface keystroke (§7). Fix: textarea
-      `onClick` → `setExpanded(true)`. *Implemented 2026-06-17; T14 RED→GREEN proven.*
+  already-open editor (to place the caret where you want to read/edit) should
+  expand the surface, like an in-surface keystroke (§7). Fix: textarea
+  `onClick` → `setExpanded(true)`. *Implemented 2026-06-17; T14 RED→GREEN proven.*
 - [x] **G12 — expanded / already-fitting editors scrolljack.** A textarea should
-      capture the wheel ONLY when its content is genuinely clipped. Fix: set
-      `overflow-y: auto` iff `scrollHeight > clientHeight + 6px`, else `hidden`
-      (expanded + 1-liners + any fitting surface stop jacking; collapsed-spilling
-      still scrolls its clipped window). *Implemented 2026-06-17; T15 Playwright GREEN proven (fail-on-revert also confirmed RED).*
+  capture the wheel ONLY when its content is genuinely clipped. Fix: set
+  `overflow-y: auto` iff `scrollHeight > clientHeight + 6px`, else `hidden`
+  (expanded + 1-liners + any fitting surface stop jacking; collapsed-spilling
+  still scrolls its clipped window). *Implemented 2026-06-17; T15 Playwright GREEN proven (fail-on-revert also confirmed RED).*
 - [x] **G13 (polish) — breadcrumb pill looks murky.** The translucent
-      `rgba(255,255,255,0.85)` scrim read as murky over occluded content. Fix:
-      opaque `rgb(243, 247, 250)` (very faint cool blue-grey, tiniest green);
-      dropped the now-redundant `backdrop-filter`. *Design validated live
-      2026-06-16; to implement.*
+  `rgba(255,255,255,0.85)` scrim read as murky over occluded content. Fix:
+  opaque `rgb(243, 247, 250)` (very faint cool blue-grey, tiniest green);
+  dropped the now-redundant `backdrop-filter`. *Design validated live
+  2026-06-16; to implement.*
 
 ---
 
@@ -415,7 +415,7 @@ expand.
 
 In `dispatchers.tsx` the §7 expand guard `if (!isLeaveKey && !expanded)
 setExpanded(true)` fires on the **bare modifier keydowns** (`e.key` ∈
-{Meta,Control,Alt,Shift}) that precede the full chord. The full chords are already
+\{Meta,Control,Alt,Shift\}) that precede the full chord. The full chords are already
 excluded (nest chords `return` early; commit/Esc/edge-arrow are leave keys) — only
 the leading modifier keydowns leak through.
 
@@ -728,13 +728,13 @@ the cross-iframe-boundary plumbing until something else needs it (YAGNI).
 
 Hovering a tight list item's **bullet/number** highlighted the *item* with the
 box-shadow drawn beside the cursor, and there was no easy spot to target the parent
-list. A tight `<li>` **borrows the leading `Plain`'s `data-block-pool-id`** — emitted
+list. A tight `<li>` **borrows the leading `Plain`\'s `data-block-pool-id`** — emitted
 in `blocks/BulletList.tsx`, `blocks/OrderedList.tsx`, and `blocks/DefinitionList.tsx`
 (the `<dd>` case), gated by the tight/loose predicate in `blocks/listBorrow.ts`
 (`block.t !== 'Plain'` ⇒ no borrow). (Earlier drafts cited `outerBlocks.ts:333`, which
 is only a *doc comment* describing the borrow, not its emission site.) So a tight item's
 `<li>` *is* the leaf surface; `list-style: outside` puts the
-marker in the `<li>`'s margin gutter, *outside* the border-box the box-shadow draws
+marker in the `<li>`\'s margin gutter, *outside* the border-box the box-shadow draws
 on. The `[Q2-DIAG G8]` logs showed the structural signal: hovering the marker gives
 `e.target === <li>` (`eTargetIsLi: true`), hovering the text gives an inner `<div>`.
 

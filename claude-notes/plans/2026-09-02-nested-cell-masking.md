@@ -815,13 +815,13 @@ surrounding context), not inferred from a clean exit code.
 
 - [x] `cargo nextest run --workspace`, delta accounted for against the live baseline
 - [x] `cargo xtask verify` (full, no skip flags — **corrected from an earlier
-      draft of this item that read `--skip-hub-build --skip-hub-tests`**; per
-      CLAUDE.md's Git Push Policy, the full run is required "when the WASM leg
-      could be affected (any change under `quarto-core`, `quarto-pandoc-types`,
-      or anything else hub-client depends on)", and this plan's entire
-      implementation is in `quarto-core`. The skip-flag form would never have
-      compiled `quarto-core` to `wasm32-unknown-unknown` and would have shipped
-      a broken hub build undetected — see Phase 7 findings below)
+  draft of this item that read `--skip-hub-build --skip-hub-tests`**; per
+  CLAUDE.md's Git Push Policy, the full run is required "when the WASM leg
+  could be affected (any change under `quarto-core`, `quarto-pandoc-types`,
+  or anything else hub-client depends on)", and this plan's entire
+  implementation is in `quarto-core`. The skip-flag form would never have
+  compiled `quarto-core` to `wasm32-unknown-unknown` and would have shipped
+  a broken hub build undetected — see Phase 7 findings below)
 - [x] Reconcile this checklist against what landed; commit
 - [x] Comment the outcome on the strand
 

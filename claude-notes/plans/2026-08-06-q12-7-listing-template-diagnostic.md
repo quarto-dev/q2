@@ -166,47 +166,47 @@ helper is worth having independently of both fixes (it is what would catch a
 regression from a future quarto-yaml/quarto-source-map bump).
 
 - [x] Add a test helper that resolves a `DiagnosticMessage`\'s `SourceInfo`
-      to a concrete `(file, line, column, underlined text)` and asserts on
-      it. → `crates/quarto-config/src/span_assert.rs`, behind a
-      `span-assert` cargo feature that `quarto-core` enables as a
-      dev-dependency.
-      **Not `quarto-test`** as the plan guessed: that crate is a
-      document-level `_quarto.tests` smoke runner and *depends on*
-      `quarto-core`, so it sits above both consumers. `quarto-config` is
-      the lowest crate in the graph carrying both `quarto-source-map` and
-      `quarto-error-reporting`.
+  to a concrete `(file, line, column, underlined text)` and asserts on
+  it. → `crates/quarto-config/src/span_assert.rs`, behind a
+  `span-assert` cargo feature that `quarto-core` enables as a
+  dev-dependency.
+  **Not `quarto-test`** as the plan guessed: that crate is a
+  document-level `_quarto.tests` smoke runner and *depends on*
+  `quarto-core`, so it sits above both consumers. `quarto-config` is
+  the lowest crate in the graph carrying both `quarto-source-map` and
+  `quarto-error-reporting`.
 - [x] Make the helper fail loudly on a defaulted/sentinel span rather than
-      reporting it as `file 0, line 1`. → `SpanProblem` enumerates each
-      distinct failure (`SuspiciousDefault`, `Generated`, `Concat`,
-      `UnknownFile`, `NoContent`, `OutOfBounds`) so a failing assertion
-      says *why*. `resolve_span` checks for `Original { FileId(0), 0..0 }`
-      before resolving, and a unit test pins that behavior so the helper
-      can't silently regress into leniency.
+  reporting it as `file 0, line 1`. → `SpanProblem` enumerates each
+  distinct failure (`SuspiciousDefault`, `Generated`, `Concat`,
+  `UnknownFile`, `NoContent`, `OutOfBounds`) so a failing assertion
+  says *why*. `resolve_span` checks for `Original { FileId(0), 0..0 }`
+  before resolving, and a unit test pins that behavior so the helper
+  can't silently regress into leniency.
 - [x] Add a minimal in-repo fixture. → Inline in the test rather than
-      on-disk: `parse_from_yaml` in `config.rs`\'s test module drives the
-      **real** path (YAML → `yaml_to_config_value` → `MergedConfig` →
-      `materialize` → `parse_listings`), matching what
-      `transforms/listing_generate.rs:72` reads at render time. Going
-      through `materialize` is the point — skipping it skips the defect.
+  on-disk: `parse_from_yaml` in `config.rs`\'s test module drives the
+  **real** path (YAML → `yaml_to_config_value` → `MergedConfig` →
+  `materialize` → `parse_listings`), matching what
+  `transforms/listing_generate.rs:72` reads at render time. Going
+  through `materialize` is the point — skipping it skips the defect.
 - [x] Failing test confirmed: `q_12_7_underlines_the_template_key_not_a_sibling`
 
-      ```
-      diagnostic [Q-12-7] underlines the wrong text
-        expected: "../template.ejs"
-        actual:   "false"
-        at:       index.qmd:3:11
-      ```
+  ```
+  diagnostic [Q-12-7] underlines the wrong text
+    expected: "../template.ejs"
+    actual:   "false"
+    at:       index.qmd:3:11
+  ```
 
-      This is the user-reported bug reproduced in-process, down to the
-      underlined text. Note the pre-existing `template_with_non_custom_type_emits_q_12_7`
-      test passes against the same broken behavior — the code-only
-      assertion cannot see it.
+  This is the user-reported bug reproduced in-process, down to the
+  underlined text. Note the pre-existing `template_with_non_custom_type_emits_q_12_7`
+  test passes against the same broken behavior — the code-only
+  assertion cannot see it.
 
 ### Phase A — Blame the right key (listing call sites)
 
 - [x] In `parse_one_listing`, capture the `template:` entry's `ConfigValue`
-      while walking the map (`template_source`), and blame it in the Q-12-7
-      `push_diag`.
+  while walking the map (`template_source`), and blame it in the Q-12-7
+  `push_diag`.
 - [x] Phase 0's test passes.
 - [x] Audit the other map-blaming `push_diag` sites in the same file.
 
@@ -226,7 +226,7 @@ handles "blaming the right node, which carries a wrong *span*".
 
 **Correction to this audit (found during Phase B verification).** The audit
 assumed every container carried a synthesized span. It does not:
-`materialize_cursor`'s Array arm **clones array items verbatim**
+`materialize_cursor`\'s Array arm **clones array items verbatim**
 (`item.value.value.clone()`, `item.value.source_info.clone()`) rather than
 recursing through the cursor, because array items have no path to navigate
 to. So **any container nested inside an array kept its original, correct
@@ -242,89 +242,89 @@ empirically by running each test against a stashed working tree rather than
 by re-reading the code.
 
 - [x] Span assertions added for both changed sites
-      (`q_12_7_underlines_the_template_key_not_a_sibling`,
-      `q_12_4_underlines_the_duplicate_id_not_a_sibling`), each confirmed to
-      fail before its fix.
+  (`q_12_7_underlines_the_template_key_not_a_sibling`,
+  `q_12_4_underlines_the_duplicate_id_not_a_sibling`), each confirmed to
+  fail before its fix.
 
 ### Phase B — Preserve real spans through materialization (bd-2mxo)
 
-- [x] Failing tests first, in `materialize.rs`'s new `tests::spans` module,
-      parsing real YAML so the spans mean something. All four failed with
-      the predicted diagnosis — map container = `"false"` (first entry's
-      value), array container = `"./b.qmd"` (last item), nested-map
-      container and every `key_source` = `Generated` sentinel. A fifth test
-      (winning layer supplies the span) **passed from the start**, which
-      usefully bounds the defect: scalar spans always survived
-      materialization.
+- [x] Failing tests first, in `materialize.rs`\'s new `tests::spans` module,
+  parsing real YAML so the spans mean something. All four failed with
+  the predicted diagnosis — map container = `"false"` (first entry's
+  value), array container = `"./b.qmd"` (last item), nested-map
+  container and every `key_source` = `Generated` sentinel. A fifth test
+  (winning layer supplies the span) **passed from the start**, which
+  usefully bounds the defect: scalar spans always survived
+  materialization.
 - [x] Add accessors on `MergedCursor`: `container_source()` and
-      `key_source(key)`, both walking `config.layers` in reverse so the span
-      follows the same highest-priority layer that `as_value`/`as_scalar`
-      already pick for the winning value. They return the layer's span
-      verbatim — a programmatically-built layer keeps saying it was
-      generated instead of borrowing a neighbour's location.
-- [x] Rewire `materialize_cursor`'s Map and Array arms to use them.
+  `key_source(key)`, both walking `config.layers` in reverse so the span
+  follows the same highest-priority layer that `as_value`/`as_scalar`
+  already pick for the winning value. They return the layer's span
+  verbatim — a programmatically-built layer keeps saying it was
+  generated instead of borrowing a neighbour's location.
+- [x] Rewire `materialize_cursor`\'s Map and Array arms to use them.
 - [x] Replace the `unwrap_or_default()` fallbacks with
-      `SourceInfo::generated(By::unknown())`, via a `container_source`
-      helper documenting why. `By::unknown()` is the contract's sanctioned
-      "we don't know" marker; `Default` would fabricate
-      `Original { FileId(0), 0..0 }` — the plausible-looking lie that hid
-      this bug in the first place.
+  `SourceInfo::generated(By::unknown())`, via a `container_source`
+  helper documenting why. `By::unknown()` is the contract's sanctioned
+  "we don't know" marker; `Default` would fabricate
+  `Original { FileId(0), 0..0 }` — the plausible-looking lie that hid
+  this bug in the first place.
 - [x] The nested-map sentinel case is gone: with a real container span
-      available there is nothing left to special-case, so that branch was
-      deleted rather than re-decided.
+  available there is nothing left to special-case, so that branch was
+  deleted rather than re-decided.
 - [x] L5's `categories_source` **was inert**, as suspected. Confirmed
-      empirically: against a stashed tree the new test fails with
-      "categories_source should be a real key span, not a sentinel:
-      Generated". It now resolves to the `categories` key itself. This is a
-      latent feature bug (Q-12-12 could never anchor anywhere) fixed as a
-      side effect.
+  empirically: against a stashed tree the new test fails with
+  "categories_source should be a real key span, not a sentinel:
+  Generated". It now resolves to the `categories` key itself. This is a
+  latent feature bug (Q-12-12 could never anchor anywhere) fixed as a
+  side effect.
 - [ ] Consider an xtask lint for `unwrap_or_default()` on `SourceInfo`-typed
-      expressions — the crate's own doc comment promises "separate grep
-      tooling" that does not exist (`crates/xtask/src/lint/` has only
-      `external_sources.rs` and `metadata_as_str.rs`). **Deferred**: doing
-      this accurately needs type information a grep-level rule lacks, and
-      the in-tree `SourceInfo` `unwrap_or_default` sites are now gone.
-      Filing separately rather than half-doing it here.
+  expressions — the crate's own doc comment promises "separate grep
+  tooling" that does not exist (`crates/xtask/src/lint/` has only
+  `external_sources.rs` and `metadata_as_str.rs`). **Deferred**: doing
+  this accurately needs type information a grep-level rule lacks, and
+  the in-tree `SourceInfo` `unwrap_or_default` sites are now gone.
+  Filing separately rather than half-doing it here.
 
 ### Phase C — Verification
 
 - [x] `cargo nextest run --workspace` — **10877 passed, 197 skipped**, zero
-      failures.
+  failures.
 - [x] `cargo xtask verify --skip-hub-build` clean (full verify pending, see
-      below).
+  below).
 - [x] End-to-end through the real binary. Invocation:
 
-      ```
-      cargo run --bin q2 -- render .tmp-e2e/index.qmd
-      ```
+  ```
+  cargo run --bin q2 -- render .tmp-e2e/index.qmd
+  ```
 
-      on a fixture reproducing the report (`sort:` before `template:`).
-      Output inspected in the terminal; the caret moved from `sort: false`
-      to the template path:
+  on a fixture reproducing the report (`sort:` before `template:`).
+  Output inspected in the terminal; the caret moved from `sort: false`
+  to the template path:
 
-      ```
-      Warning: [Q-12-7] `template:` was set but `type:` is not `custom`; …
-         ╭─[ …/.tmp-e2e/index.qmd:5:15 ]
-       5 │     template: ../template.ejs
-         │               ───────┬───────
-      ```
+  ```
+  Warning: [Q-12-7] `template:` was set but `type:` is not `custom`; …
+     ╭─[ …/.tmp-e2e/index.qmd:5:15 ]
+   5 │     template: ../template.ejs
+     │               ───────┬───────
+  ```
 
 - [x] Connect docs re-rendered
-      (`cargo run --bin q2 -- render .` in `docs-quarto-2`). **All 15
-      Q-12-7 instances** now point at `template: ../template.ejs`,
-      including the originally-reported `cookbook/vanities/index.qmd`,
-      which moved from `4:11` (`sort: false`) to `5:15`. Full run: 186 of
-      186 files rendered, 9 errors / 310 warnings — still poor, as expected;
-      bd-oywyaouf and bd-lu16jgxq address the rest. Spot-checked Q-16-3 and
-      Q-5-3 spans in the same run: both point at real shortcode
-      invocations, so nothing was collaterally moved.
+  (`cargo run --bin q2 -- render .` in `docs-quarto-2`). **All 15
+  Q-12-7 instances** now point at `template: ../template.ejs`,
+  including the originally-reported `cookbook/vanities/index.qmd`,
+  which moved from `4:11` (`sort: false`) to `5:15`. Full run: 186 of
+  186 files rendered, 9 errors / 310 warnings — still poor, as expected;
+  bd-oywyaouf and bd-lu16jgxq address the rest. Spot-checked Q-16-3 and
+  Q-5-3 spans in the same run: both point at real shortcode
+  invocations, so nothing was collaterally moved.
 - [x] **Snapshot report: zero `.snap` files changed.** This contradicts the
-      plan's prediction of tree-wide churn, and the reason is worth
-      recording: no existing snapshot ever captured a materialized
-      *container* span. The 154-vs-12 assertion imbalance that hid the bug
-      is the same thing that made the fix invisible to the suite. Scalar
-      spans — the ones snapshots do capture — were never affected, which
-      the Phase B "winning layer" test independently confirms.
+  plan's prediction of tree-wide churn, and the reason is worth
+  recording: no existing snapshot ever captured a materialized
+  *container* span. The 154-vs-12 assertion imbalance that hid the bug
+  is the same thing that made the fix invisible to the suite. Scalar
+  spans — the ones snapshots do capture — were never affected, which
+  the Phase B "winning layer" test independently confirms.
 
 ## Key references
 

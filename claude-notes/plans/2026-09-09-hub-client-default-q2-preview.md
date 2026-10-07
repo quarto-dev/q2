@@ -287,53 +287,53 @@ change) at each phase boundary; commit at each clean boundary.
 ### Phase 1 — Register `q2-html-render` (Rust)
 
 - [x] Tests, `crates/quarto-core/src/format.rs`: `test_from_format_string_q2_html_render`
-      (identifier `Html`, `target_format` preserved, `pipeline_kind: None`,
-      `output_extension: "html"`); extend `test_lua_format_for_maps_preview_pseudo_formats`,
-      `test_format_lua_format_canonicalizes`, and
-      `test_lua_format_helpers_agree_on_shared_cases` with the new name.
+  (identifier `Html`, `target_format` preserved, `pipeline_kind: None`,
+  `output_extension: "html"`); extend `test_lua_format_for_maps_preview_pseudo_formats`,
+  `test_format_lua_format_canonicalizes`, and
+  `test_lua_format_helpers_agree_on_shared_cases` with the new name.
 - [x] Add `"q2-html-render" => Some(("html", None))` to `builtin_pseudo_format`
-      and the name to `lua_format_for`; update both doc comments and the
-      `from_format_string` doc list.
+  and the name to `lua_format_for`; update both doc comments and the
+  `from_format_string` doc list.
 - [x] `crates/wasm-quarto-hub-client/src/lib.rs`: add `q2-html-render` to
-      `coerce_format_for_print` (printable version is plain HTML). Check
-      `map_format_for_preview` needs nothing (falls into `other`).
+  `coerce_format_for_print` (printable version is plain HTML). Check
+  `map_format_for_preview` needs nothing (falls into `other`).
 - [x] Grep for other exhaustive pseudo-format lists (`q2-sandboxed-preview`
-      is the tracer: `grep -rn 'q2-sandboxed-preview' crates ts-packages hub-client q2-preview-spa`)
-      and add the new name wherever the list is meant to be exhaustive.
+  is the tracer: `grep -rn 'q2-sandboxed-preview' crates ts-packages hub-client q2-preview-spa`)
+  and add the new name wherever the list is meant to be exhaustive.
 - [x] End-to-end (2026-09-09): `cargo run --bin q2 -- render <scratch>/fmt/htmlrender.qmd`
-      on a document whose front matter is `format: q2-html-render` wrote
-      `htmlrender.html` + `htmlrender_files/`; inspected output contains
-      `<title>Full DOM opt-out</title>`, `<main class="content" id="quarto-document-content">`
-      and `<p>Hello <em>world</em>.</p>`. Before Phase 1 the same command
-      failed with `Error: Unknown format: q2-html-render`.
+  on a document whose front matter is `format: q2-html-render` wrote
+  `htmlrender.html` + `htmlrender_files/`; inspected output contains
+  `<title>Full DOM opt-out</title>`, `<main class="content" id="quarto-document-content">`
+  and `<p>Hello <em>world</em>.</p>`. Before Phase 1 the same command
+  failed with `Error: Unknown format: q2-html-render`.
 
 ### Phase 2 — `prefer_preview_format` on the hub-client WASM entry point
 
 - [x] Tests, hub-client WASM tier (`hub-client/src/services/*.wasm.test.ts`,
-      new file `previewFormatSubstitution.wasm.test.ts`; 7 cases, ran red
-      against the pre-knob WASM: a/e/f failed with no `ast_json`, b/b\'/c/d passed): through
-      `renderPageInProjectWithAttribution` on a VFS project,
-      (a) no-`format:` doc with `preferPreviewFormat=true` → `ast_json` set,
-      `html` absent; (b) same doc with the flag omitted → `html` set,
-      `ast_json` absent (today's contract, pinned); (c) `format: q2-html-render`
-      with `true` → `html`; (d) `format: q2-preview` with either → `ast_json`;
-      (e) `format: revealjs` with `true` → `ast_json` and `is_slides: true`;
-      (f) the Q-5-12 warning still appears for a project with
-      `pre-render:` when the flag is `true` (host stays `HubClient` — this is
-      the reason D3 rejects `render_page_for_preview`).
+  new file `previewFormatSubstitution.wasm.test.ts`; 7 cases, ran red
+  against the pre-knob WASM: a/e/f failed with no `ast_json`, b/b\'/c/d passed): through
+  `renderPageInProjectWithAttribution` on a VFS project,
+  (a) no-`format:` doc with `preferPreviewFormat=true` → `ast_json` set,
+  `html` absent; (b) same doc with the flag omitted → `html` set,
+  `ast_json` absent (today's contract, pinned); (c) `format: q2-html-render`
+  with `true` → `html`; (d) `format: q2-preview` with either → `ast_json`;
+  (e) `format: revealjs` with `true` → `ast_json` and `is_slides: true`;
+  (f) the Q-5-12 warning still appears for a project with
+  `pre-render:` when the flag is `true` (host stays `HubClient` — this is
+  the reason D3 rejects `render_page_for_preview`).
 - [x] `lib.rs`: add `prefer_preview_format: Option<bool>` (explicit `None` for an omitted JS arg) as the last parameter of
-      `render_page_in_project_with_attribution`, threaded into its two
-      `render_single_doc_to_response` / `render_project_active_page_to_response`
-      calls (`lib.rs:1260`, `:1285`) in place of the literal `false`; update its doc
-      comment (the "hub-client keeps using `render_page_in_project` so its
-      existing format dispatch is unchanged" sentence at `lib.rs:1303` and
-      the matching one in `wasmRenderer.ts:552` are now false — rewrite them).
+  `render_page_in_project_with_attribution`, threaded into its two
+  `render_single_doc_to_response` / `render_project_active_page_to_response`
+  calls (`lib.rs:1260`, `:1285`) in place of the literal `false`; update its doc
+  comment (the "hub-client keeps using `render_page_in_project` so its
+  existing format dispatch is unchanged" sentence at `lib.rs:1303` and
+  the matching one in `wasmRenderer.ts:552` are now false — rewrite them).
 - [x] `ts-packages/preview-runtime/src/wasmRenderer.ts` (the `.d.ts` does not
-      declare this entry point, nothing to add there): add the optional `preferPreviewFormat?: boolean`
-      parameter to `renderPageInProjectWithAttribution`; document that
-      omitting it preserves the old behaviour.
+  declare this entry point, nothing to add there): add the optional `preferPreviewFormat?: boolean`
+  parameter to `renderPageInProjectWithAttribution`; document that
+  omitting it preserves the old behaviour.
 - [x] `cd hub-client && npm run build:wasm`; the new file + `renderScriptsWarning` +
-      `formatDetection` WASM tiers: 20/20 green.
+  `formatDetection` WASM tiers: 20/20 green.
 
 ### Phase 3 — hub-client routing and chrome
 
@@ -356,56 +356,56 @@ change) at each phase boundary; commit at each clean boundary.
     `Preview` and reports `null`.
 - [x] `getQ2Format.ts`: implement D2; update the file comment.
 - [x] `ReactPreview.tsx`: `doRender` uses `renderPageInProjectWithAttribution(…, true)`
-      for every `usesPreviewPipeline` format; delete the `revealjs`-only
-      `renderPageForPreview` branch (`ReactPreview.tsx:263-`); keep
-      `isSlidesPreview` for the slide-shell props. Check `handleSetAst`
-      (`:820`) needs no change (it dispatches on the format string, which is
-      `q2-preview` for html docs).
+  for every `usesPreviewPipeline` format; delete the `revealjs`-only
+  `renderPageForPreview` branch (`ReactPreview.tsx:263-`); keep
+  `isSlidesPreview` for the slide-shell props. Check `handleSetAst`
+  (`:820`) needs no change (it dispatches on the format string, which is
+  `q2-preview` for html docs).
 - [x] `Editor.tsx` gates (`:392`, `:1444`, `:1448`) and
-      `FileSidebar.tsx:187-195` need no code change — verify with the router
-      test that `currentFormat` is `q2-preview` for a plain document, so the
-      Edit and Authors pills enable and the printable affordance appears.
+  `FileSidebar.tsx:187-195` need no code change — verify with the router
+  test that `currentFormat` is `q2-preview` for a plain document, so the
+  Edit and Authors pills enable and the printable affordance appears.
 - [x] `ReactRenderer.tsx:218` render-components gate: unchanged
-      (`q2-preview` is already in it).
+  (`q2-preview` is already in it).
 - [x] `Preview.tsx` header comment and `PreviewRouter.tsx:57-65,170-180`
-      comments: rewrite "default html preview" wording to "`q2-html-render`
-      / non-html fallback".
+  comments: rewrite "default html preview" wording to "`q2-html-render`
+  / non-html fallback".
 - [x] Vitest tier green under the pinned Node 24 (`fnm exec --using=24`; Node 26
-      makes \~23 localStorage tests fail spuriously): unit 1102, integration 128,
-      WASM 140; typecheck clean; production build: see Phase 7 log.
+  makes \~23 localStorage tests fail spuriously): unit 1102, integration 128,
+  WASM 140; typecheck clean; production build: see Phase 7 log.
 
 ### Phase 4 — e2e suite
 
 - [x] `previewExtraction.ts`: rename kind `'html'` → `'q2-html-render'` (D7),
-      selector unchanged; **remove the `?? 'html'` defaults** in
-      `waitForPreviewRender` and `runAssertions` (a default kind hides
-      wrong assumptions — make every caller explicit).
+  selector unchanged; **remove the `?? 'html'` defaults** in
+  `waitForPreviewRender` and `runAssertions` (a default kind hides
+  wrong assumptions — make every caller explicit).
 - [x] `smoke-all.spec.ts:126-132`: kind = `q2-debug` for q2-debug specs,
-      `q2-html-render` when the fixture's *own front matter* declares
-      `format: q2-html-render`, else `q2-preview`. `smokeAllDiscovery.ts`
-      already exposes the front matter; add `documentFormat` to
-      `DiscoveredTest` if it is not there.
+  `q2-html-render` when the fixture's *own front matter* declares
+  `format: q2-html-render`, else `q2-preview`. `smokeAllDiscovery.ts`
+  already exposes the front matter; add `documentFormat` to
+  `DiscoveredTest` if it is not there.
 - [x] `search.spec.ts:53`, `import-zip.spec.ts:113`, `project-loading.spec.ts:51` (and `preview-extraction.spec.ts:51`, which passed no kind):
-      switch to the q2-preview iframe selector (they test default behaviour).
+  switch to the q2-preview iframe selector (they test default behaviour).
 - [x] `q2-preview-click-to-editor-scroll.spec.ts`: the html-kind fixture
-      (`:375`) declares `format: q2-html-render` explicitly; kind
-      `'q2-html-render'`.
+  (`:375`) declares `format: q2-html-render` explicitly; kind
+  `'q2-html-render'`.
 - [x] First smoke-all run (2026-09-09, `playwright.smoke-all.config.ts`, 157
-      tests): 121 passed, 35 failed, 1 skipped. Triage:
-      - **24 harness failures**, all `getPreviewCss` throwing "No active
-        preview iframe found": the CSS assertion read `<link>` tags from the
-        MorphIframe DOM. Fixed properly — it now parses the render string
-        `renderForAssertions` already produces (the same HTML the regex
-        assertions match), so the CSS assertions are renderer-independent.
-      - **11 DOM failures** (`ensureHtmlElements` against the q2-preview
-        iframe), all page chrome or known component gaps — listed as the
-        skip-list below. The skip is *per assertion type*: the fixture still
-        renders in the default iframe and its regex / CSS / diagnostics
-        assertions still run; only the DOM selectors are skipped, with a
-        `[smoke-diag] dom-assertions-skipped strand=…` line.
-      The list lives in `DOM_ASSERTIONS_PENDING_PARITY` (`e2e/helpers/smokeAllDiscovery.ts`)
-      rather than `HTML_RENDER_ONLY`, since nothing is forced onto the
-      full-DOM renderer.
+  tests): 121 passed, 35 failed, 1 skipped. Triage:
+  - **24 harness failures**, all `getPreviewCss` throwing "No active
+    preview iframe found": the CSS assertion read `<link>` tags from the
+    MorphIframe DOM. Fixed properly — it now parses the render string
+    `renderForAssertions` already produces (the same HTML the regex
+    assertions match), so the CSS assertions are renderer-independent.
+  - **11 DOM failures** (`ensureHtmlElements` against the q2-preview
+    iframe), all page chrome or known component gaps — listed as the
+    skip-list below. The skip is *per assertion type*: the fixture still
+    renders in the default iframe and its regex / CSS / diagnostics
+    assertions still run; only the DOM selectors are skipped, with a
+    `[smoke-diag] dom-assertions-skipped strand=…` line.
+  The list lives in `DOM_ASSERTIONS_PENDING_PARITY` (`e2e/helpers/smokeAllDiscovery.ts`)
+  rather than `HTML_RENDER_ONLY`, since nothing is forced onto the
+  full-DOM renderer.
 
 ### Phase 4b — work the skip-list back down (same PR, follow-up commits)
 
@@ -436,84 +436,84 @@ selector can only be "equivalent" if it holds in both DOMs; chrome selectors
 therefore resolve only by closing the parity gap, not by rewording.
 
 - [ ] For each `HTML_RENDER_ONLY` entry, classify: (a) the selector is
-      HTML-writer-specific and q2-preview has an obvious equivalent → add
-      the equivalent selector to the fixture's `ensureHtmlElements` and
-      remove the entry; (b) a genuine parity gap with a small fix → fix it
-      in `ts-packages/preview-renderer` (with its own unit test) and remove
-      the entry; (c) a genuine gap that is real work → leave the entry, but
-      the strand it cites must be P2 or higher and linked to bd-j3764r9a.
+  HTML-writer-specific and q2-preview has an obvious equivalent → add
+  the equivalent selector to the fixture's `ensureHtmlElements` and
+  remove the entry; (b) a genuine parity gap with a small fix → fix it
+  in `ts-packages/preview-renderer` (with its own unit test) and remove
+  the entry; (c) a genuine gap that is real work → leave the entry, but
+  the strand it cites must be P2 or higher and linked to bd-j3764r9a.
 - [ ] Target: the PR merges with the list empty; any remainder is listed
-      here by fixture and strand so the reviewer sees exactly what coverage
-      is still deferred.
+  here by fixture and strand so the reviewer sees exactly what coverage
+  is still deferred.
 
 ### Phase 5 — `q2 preview` SPA message (D5)
 
 - [x] Test, `q2-preview-spa/src/PreviewApp.integration.test.tsx`: a render
-      result `{success: true, html: '…', format: 'q2-html-render'}` with no
-      `ast_json` renders the "no live preview" message naming the format; no
-      `console.error`. Ran red first (boot screen, no message).
+  result `{success: true, html: '…', format: 'q2-html-render'}` with no
+  `ast_json` renders the "no live preview" message naming the format; no
+  `console.error`. Ran red first (boot screen, no message).
 - [x] Implement in the else-branch at `PreviewApp.tsx:1195` (`noLivePreviewMessage`).
-      The format name comes from a new `format` field on the WASM
-      `RenderResponse` — the resolved `Format::target_format` after any
-      preview substitution — rather than re-parsing front matter in JS;
-      `previewFormatSubstitution.wasm.test.ts` pins it (`q2-preview`,
-      `q2-html-render`, `q2-slides`). Error responses omit the field.
+  The format name comes from a new `format` field on the WASM
+  `RenderResponse` — the resolved `Format::target_format` after any
+  preview substitution — rather than re-parsing front matter in JS;
+  `previewFormatSubstitution.wasm.test.ts` pins it (`q2-preview`,
+  `q2-html-render`, `q2-slides`). Error responses omit the field.
 
 ### Phase 6 — docs, changelog, strands
 
 - [x] `hub-client/changelog.md` entry (commit 001cc47d, two-commit workflow) describing the
-      default switch and the `format: q2-html-render` opt-out.
+  default switch and the `format: q2-html-render` opt-out.
 - [x] `claude-notes/plans/2026-07-01-html-format-capture-display.md`
-      and `2026-09-09-q2-preview-edit-toggle.md`: add a one-line note that
-      the "plain html preview" mode is now `q2-html-render` (they describe
-      it as the default).
+  and `2026-09-09-q2-preview-edit-toggle.md`: add a one-line note that
+  the "plain html preview" mode is now `q2-html-render` (they describe
+  it as the default).
 - [x] Closed bd-zvh2p (attribution now reaches reveal decks via D3). No
-      follow-up strand filed for D2's alternative (Rust single-source router
-      probe) — say the word if you want one.
+  follow-up strand filed for D2's alternative (Rust single-source router
+  probe) — say the word if you want one.
 
 ### Phase 7 — end-to-end verification (before declaring done)
 
 - [x] Rebuilt the whole chain: `cd hub-client && npm run build:wasm`,
-      `cargo xtask build-q2-preview-spa`, `cargo build --bin q2` (2026-09-09).
+  `cargo xtask build-q2-preview-spa`, `cargo build --bin q2` (2026-09-09).
 - [x] hub-client in a real browser (2026-09-09; `q2 preview <scratch>/verify-proj --ui editor --port 4322`,
-      i.e. the embedded hub-client bundle rebuilt with `cargo xtask build-hub-client-embed`,
-      driven through the Chrome DevTools MCP). Project: `_quarto.yml` + four docs.
-      - (a) `plain.qmd`, no front matter: `iframe[src*="q2-preview.html"]` mounted,
-        body "Plain document / No front matter at all. A link and emphasis. / Second
-        section / More text here."; bottom bar: `Editing on` (pressed), `Authors overlay off`
-        (enabled), Expand/Show/Hide comments. Screenshot:
-        `claude-notes/plans/bd-kltzdhle-plain-doc-q2-preview.png`.
-      - (b) `htmlmap.qmd`, `format: html: toc: true`: q2-preview iframe, TOC present
-        (`#TOC`), Edit + Authors enabled.
-      - (c) `optout.qmd`, `format: q2-html-render`: `iframe.preview-active` (MorphIframe),
-        no q2-preview iframe; pills read "Editing unavailable for this format" /
-        "Authors overlay unavailable for this format" (disabled).
-      - (d) `deck.qmd`, `format: revealjs`: q2-preview iframe with the reveal shell
-        (`.reveal .slides`), both slides present. The Authors pill is disabled for
-        revealjs — the existing `Editor.tsx` gate, untouched here; the data path is
-        threaded, enabling the pill is bd-jx8b0ax9.
-      - Comments (plain.qmd, q2-preview iframe): hovering the right half of the
-        "More text here." paragraph showed the "+" bubble; clicking it opened the
-        inline input; entering "Verified from the preview (bd-kltzdhle)" produced
-        a bubble with that text and the Monaco source line became
-        `More text here.[>> Verified from the preview (bd-kltzdhle)]` — a comment
-        added from the preview on a document with no `format:` key, which was
-        the point of the change.
+  i.e. the embedded hub-client bundle rebuilt with `cargo xtask build-hub-client-embed`,
+  driven through the Chrome DevTools MCP). Project: `_quarto.yml` + four docs.
+  - (a) `plain.qmd`, no front matter: `iframe[src*="q2-preview.html"]` mounted,
+    body "Plain document / No front matter at all. A link and emphasis. / Second
+    section / More text here."; bottom bar: `Editing on` (pressed), `Authors overlay off`
+    (enabled), Expand/Show/Hide comments. Screenshot:
+    `claude-notes/plans/bd-kltzdhle-plain-doc-q2-preview.png`.
+  - (b) `htmlmap.qmd`, `format: html: toc: true`: q2-preview iframe, TOC present
+    (`#TOC`), Edit + Authors enabled.
+  - (c) `optout.qmd`, `format: q2-html-render`: `iframe.preview-active` (MorphIframe),
+    no q2-preview iframe; pills read "Editing unavailable for this format" /
+    "Authors overlay unavailable for this format" (disabled).
+  - (d) `deck.qmd`, `format: revealjs`: q2-preview iframe with the reveal shell
+    (`.reveal .slides`), both slides present. The Authors pill is disabled for
+    revealjs — the existing `Editor.tsx` gate, untouched here; the data path is
+    threaded, enabling the pill is bd-jx8b0ax9.
+  - Comments (plain.qmd, q2-preview iframe): hovering the right half of the
+    "More text here." paragraph showed the "+" bubble; clicking it opened the
+    inline input; entering "Verified from the preview (bd-kltzdhle)" produced
+    a bubble with that text and the Monaco source line became
+    `More text here.[>> Verified from the preview (bd-kltzdhle)]` — a comment
+    added from the preview on a document with no `format:` key, which was
+    the point of the change.
 - [x] `q2 preview --ui editor <project>` *is* the hub-client bundle; the
-      browser verification above ran through it.
+  browser verification above ran through it.
 - [x] `q2 preview <scratch>/verify-proj/optout.qmd --port 4321 --no-browser`
-      (front matter `format: q2-html-render`), opened in Chrome via the
-      DevTools MCP: the page shows the render overlay with the text
-      "`format: q2-html-render` has no live preview in q2 preview: it renders
-      as a full HTML page, which this viewer does not display. Run `q2 render`
-      to produce it, or switch the document to an html-family format (or
-      remove `format:`) to preview it here." Same server, `?page=plain.qmd`
-      (no front matter): the `q2-preview.html` iframe body reads "Plain
-      document / No front matter at all. A link and emphasis. / Second
-      section / More text here." `q2 render` on the opt-out doc: see Phase 1.
+  (front matter `format: q2-html-render`), opened in Chrome via the
+  DevTools MCP: the page shows the render overlay with the text
+  "`format: q2-html-render` has no live preview in q2 preview: it renders
+  as a full HTML page, which this viewer does not display. Run `q2 render`
+  to produce it, or switch the document to an html-family format (or
+  remove `format:`) to preview it here." Same server, `?page=plain.qmd`
+  (no front matter): the `q2-preview.html` iframe body reads "Plain
+  document / No front matter at all. A link and emphasis. / Second
+  section / More text here." `q2 render` on the opt-out doc: see Phase 1.
 - [x] Full `cargo xtask verify` (with the hub build) green 2026-09-09, after
-      `cargo xtask verify --skip-hub-build` also passed. Push still awaits
-      approval.
+  `cargo xtask verify --skip-hub-build` also passed. Push still awaits
+  approval.
 
 ## Open questions
 

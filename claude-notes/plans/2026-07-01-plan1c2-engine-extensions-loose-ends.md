@@ -134,7 +134,7 @@ threading (Corollary 0).
   **flat**; the Deno host (`quarto-engine-host-deno/src/host.ts`, `reconstructRichProject`) rebuilds the
   nested `config.project.outputDir` the engine sees. `ensure_launched` reads `self.project`
   (`ts_engine.rs:364`). Bound by echo E2E (`echo_engine_e2e::p1_1_*`) + unit tests. Reconciles plan-1c
-  SC "LaunchEngine { project } populated" and DQ-5.
+  SC "LaunchEngine \{ project \} populated" and DQ-5.
 - **P1.1b — merged document metadata into `TsFormatInfo.metadata`.** `build_execute_options` threads
   `metadata: ctx.metadata.clone()` (`ts_engine.rs:394`) from the merged document metadata (no
   re-merge). The Deno host's `metadataAsFormat` partitions it into Q1's `Format` (five bins:
@@ -222,7 +222,7 @@ which stays valid). (Note: this `render.rs` is in the **`quarto`** crate, not `q
   `a.echo` and `EngineClaimsFileStage` claiming it must be driven by the same declared data through the
   same match rule. **Decision: a single free `pub fn` helper, co-located with `lookup_static_claim`**
   (`extension/types.rs`, next to the declared data and the existing claim helpers) that takes an
-  `&EngineContribution` and returns the normalized claimed extensions (each `FileClaim`'s `extension`).
+  `&EngineContribution` and returns the normalized claimed extensions (each `FileClaim`\'s `extension`).
   A **free fn, not a method** — every claim helper in that file is a free `pub fn`
   (`lookup_static_claim`, `static_claim_to_language_claim`, `combine_claims`,
   `engine_contribution_missing_fields_warning`); match the style. **Name it off the `static_claim`
@@ -232,7 +232,7 @@ which stays valid). (Note: this `render.rs` is in the **`quarto`** crate, not `q
   `External { claims_files: None }` (the "fall back to dynamic" case) — such engine files are simply not
   discovered, which is correct under non-enforcement (do **not** invent a discovery-time fallback-load
   path). The caller (`project/mod.rs`) uses it to build the discovery set (keeping `discovery.rs`
-  engine-ignorant); `TsEngine::claims_file`'s static path (`ts_engine.rs:718`) consults the same
+  engine-ignorant); `TsEngine::claims_file`\'s static path (`ts_engine.rs:718`) consults the same
   normalized `claims_files`. The admission axis is **`claims-files`** (definitively owns), not
   `file-extensions` (can-handle). Divergence needs no new error surface: an admitted-but-unclaimed
   non-qmd file hits the existing §10 case-1 loud failure ("can't determine execution engine" —
@@ -246,8 +246,8 @@ which stays valid). (Note: this `render.rs` is in the **`quarto`** crate, not `q
   is an unconditional extension set (match `ext ∈ list`, `ts_engine.rs:718`). The content axis (percent
   scripts `# %%`, R spin) is a **static content pattern** — its "sniff-at-discovery decision," deferred
   in the original draft, is **answered by Plan 7a**: yes, statically, via a native regex evaluated at
-  Pass-1 with zero engine load. **Plan 7 owns the *conversion*** (`markdown_for_file`); **Plan 7a owns
-  the *claim*** (the pattern). 1c.2 lands the unconditional-extension tier the pattern tier extends.
+  Pass-1 with zero engine load. **Plan 7 owns the _conversion_** (`markdown_for_file`); **Plan 7a owns
+  the _claim_** (the pattern). 1c.2 lands the unconditional-extension tier the pattern tier extends.
 - **Corollary 5 — extension overlap is a downstream claim concern.** If an engine declares `.qmd` (or a
   `.md` that `FIXED` also holds), the set dedups and discovery admits once; *which* engine owns the file
   is decided downstream by claim + engine resolution. Discovery is purely additive to the admission set.
@@ -312,7 +312,7 @@ valid unchanged. (Plan 7a grows `FileClaim` to `{ extension, content_pattern: Op
 **no case-folding in `read.rs` at all**; only the *candidate* (per-file) side is lowercased downstream
 (in the claim/resolution path, not here), so a declared `file-extensions: [".Echo"]` silently never
 matches. Fix at parse time
-for **both** `file-extensions` and the `claims-files` entries' `extension`: accept dotted or undotted
+for **both** `file-extensions` and the `claims-files` entries\' `extension`: accept dotted or undotted
 input, store canonical **undotted lowercase**.
 
 **Dots are a wire-only detail — one adapter.** The canonical Rust-side form is undotted (it agrees with
@@ -424,7 +424,7 @@ to execute (order T9–T11 → T6/T6b/T7/T7b/T8/T8b → T12 → optional T13, pe
 | T5 | P1.2 | unit | ✅ landed | `tier4_materializes_embedded_shipped_config` (`:549`); all tiers absent → tier 4 selected. Revert the `include_str!` embed → tier 4 yields error → RED. Asserts content == embedded `deno.json` + parses as JSON (no `deno bundle`) |
 | T14 | P1.1b | e2e | ✅ landed | extends T1: frontmatter `execute: {daemon: false}` + a custom top-level key; echo's `execute` emits `FORMAT_JSON_START{…}FORMAT_JSON_END` echoing `options.format.execute` + the `format.metadata` key. Revert `metadata` threading (`ts_engine.rs:394`) → empty execute / no custom key → RED |
 | T6 | P2 | unit | ▶ to do | `discover_project_files` with `renderable_extensions: {qmd, echo}` **and empty `render_patterns`** (walk path) over `a.echo`, `_draft.echo`, `.hidden.echo`, `out/b.echo`, `notebook.ipynb`. Revert `ext_in_set` threading (restore `has_qmd_extension`) → `a.echo` excluded → RED. Positive invariant (same run): `_draft.echo` / `.hidden.echo` / `out/b.echo` stay EXCLUDED, `notebook.ipynb` stays excluded (not in set) — binds that engine extensions flow through the *same* exclusion predicate, not a bypass branch |
-| T6b | P2 | unit | ▶ to do | **pattern path:** same as T6 but `render_patterns: ["*.echo"]` (or `["a.echo"]`) → `a.echo` admitted via `expand_patterns`. **Shares T6's revert hunk** — reverting the `ext_in_set` threading reddens *both* paths (each seeds via `walk_qmd`→`walk_rec:329` and post-filters via `is_renderable_qmd:84`); there is no independent `expand_patterns` hunk today (the compiler forces the forward when `walk_qmd` gains the set param). T6b's distinct role is **path coverage + a forward-guard**: a *future* extension-filter added inside `expand_patterns`'s glob layer would redden here while T6 stayed green |
+| T6b | P2 | unit | ▶ to do | **pattern path:** same as T6 but `render_patterns: ["*.echo"]` (or `["a.echo"]`) → `a.echo` admitted via `expand_patterns`. **Shares T6's revert hunk** — reverting the `ext_in_set` threading reddens *both* paths (each seeds via `walk_qmd`→`walk_rec:329` and post-filters via `is_renderable_qmd:84`); there is no independent `expand_patterns` hunk today (the compiler forces the forward when `walk_qmd` gains the set param). T6b's distinct role is **path coverage + a forward-guard**: a *future* extension-filter added inside `expand_patterns`\'s glob layer would redden here while T6 stayed green |
 | T7 | P2 | unit | ▶ to do | `RenderableExtensions` newtype: build from canonical `["echo"]`; candidates `A.ECHO`, `a.echo`. Revert candidate lowercasing → `A.ECHO` rejected → RED |
 | T7b | P2 | unit | ▶ to do | **`claimed_file_extensions` coherence — the axis contract (Corollary 3).** Three synthetic `EngineContribution`s: (a) `External { file_extensions: Some([".jl"]), claims_files: None }` → `[]`; (b) `External { file_extensions: Some([".py"]), claims_files: Some([{extension:"echo"}]) }` → `["echo"]` (reads `claims-files`, ignores the *disagreeing* `file-extensions`); (c) `Reorder { name }` → `[]`. Revert the helper to read `file_extensions` (or union both axes) → (a) returns `["jl"]` and (b) returns `["py","echo"]` → RED. **The one seam that catches a wrong-field helper:** echo's fixture declares the *same* value (`.echo`) on both axes, so T6/T7/T8/T8b cannot distinguish `claims-files` from `file-extensions` — only these disagreeing synthetic inputs bind that the admission axis is `claims-files` |
 | T8 | P2 | e2e | ▶ to do | temp project + `a.echo` (echo's `markdownForFile` prepends `# Echoed: <basename>`); full render; assert `ProjectIndex` entry has title `Echoed: a.echo`. **Two named reverts:** (1) revert the discovery-set union → no index entry → RED (not *discovered*); (2) revert echo's `markdownForFile` heading → entry exists but title ≠ `Echoed: a.echo` → RED (discovered but not *converted*). Fixture body has NO heading, so raw fall-through can't fake the title — title discriminates conversion, entry-existence discriminates discovery |

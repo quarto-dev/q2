@@ -331,7 +331,7 @@ Same revert hunks as Test 1 (settle gate + preCommitContentRef snapshot). Withou
 
 ### (a) Tier Justification
 
-The G8 branch in `findEditTarget` (useBlockEditHover.tsx lines 127–141) fires when `e.target === <li>` and the event target is a tight `<li>`. The condition `leaf === target` is true only when the pointer directly hit the `<li>` element itself (the list-item box, which the browser uses as the hit target for the marker/number area in the left gutter). In jsdom, `e.target` is set manually; jsdom has no CSS layout engine so there is no "marker gutter" — all clicks on `<li>` text produce `e.target = <span>` or similar inline elements, never the bare `<li>`. The actual fact "clicking the marker hits the `<li>` as a direct target because the marker lives in the `<li>`'s margin box, not any descendant" is a browser layout and hit-testing fact. jsdom cannot fake this reliably without constructing the exact event that the production guard tests for.
+The G8 branch in `findEditTarget` (useBlockEditHover.tsx lines 127–141) fires when `e.target === <li>` and the event target is a tight `<li>`. The condition `leaf === target` is true only when the pointer directly hit the `<li>` element itself (the list-item box, which the browser uses as the hit target for the marker/number area in the left gutter). In jsdom, `e.target` is set manually; jsdom has no CSS layout engine so there is no "marker gutter" — all clicks on `<li>` text produce `e.target = <span>` or similar inline elements, never the bare `<li>`. The actual fact "clicking the marker hits the `<li>` as a direct target because the marker lives in the `<li>`\'s margin box, not any descendant" is a browser layout and hit-testing fact. jsdom cannot fake this reliably without constructing the exact event that the production guard tests for.
 
 ### (b) Fixture QMD
 
@@ -579,7 +579,7 @@ await iframe.locator('textarea').first().press('Escape');
 
 ### (f) Fail-on-Revert
 
-**Revert hunk:** In `PreviewRoot.tsx`, change `executeLanding`'s `carryExpanded` computation (line 784):
+**Revert hunk:** In `PreviewRoot.tsx`, change `executeLanding`\'s `carryExpanded` computation (line 784):
 
 ```ts
 // CURRENT (correct):
@@ -802,7 +802,7 @@ cd hub-client && npm run test:e2e
 
 4. **Test 5 — CSS animation and `getComputedStyle`:** In some Chromium configurations, `getComputedStyle(el).filter` may return `'none'` during the first animation frame even when the animation is running, because `forwards` fill-mode only applies after the animation completes. The writer should test this empirically. If `filter` is unreliable, the assertion may be weakened to just the class presence (`classList.has('q2-reland-fade')`), which is a synchronous production signal.
 
-5. **Test 5 — `commitAndArmReland` vs. `requestMove` dirty path:** The test uses the breadcrumb ◀ button (nest-out) to trigger `commitAndArmReland`. An alternative trigger is a dirty Arrow-step-off (Test 2 scenario), which triggers `requestMove`'s dirty path. The requestMove dirty path does NOT call `commitAndArmReland` — it sets `fadeSourceR0Ref.current` via the same pattern (check line 940 and 1091 vs. 1211 in PreviewRoot.tsx). Verify that BOTH dirty-commit paths set `fadeSourceR0Ref.current` — or limit the test to the nest-out path which has been confirmed.
+5. **Test 5 — `commitAndArmReland` vs. `requestMove` dirty path:** The test uses the breadcrumb ◀ button (nest-out) to trigger `commitAndArmReland`. An alternative trigger is a dirty Arrow-step-off (Test 2 scenario), which triggers `requestMove`\'s dirty path. The requestMove dirty path does NOT call `commitAndArmReland` — it sets `fadeSourceR0Ref.current` via the same pattern (check line 940 and 1091 vs. 1211 in PreviewRoot.tsx). Verify that BOTH dirty-commit paths set `fadeSourceR0Ref.current` — or limit the test to the nest-out path which has been confirmed.
 
 ---
 
@@ -819,7 +819,7 @@ Reviewed against the test-integrity protocol. Verdicts + required changes:
 
 **Test 3 (G8 marker hit-test) — APPROVED, conditional.** The buffer/height assertions are real production signals — good. The negative-x marker click is the execution risk: the writer MUST empirically confirm the click opens the **parent-list** editor (buffer contains `beta`+`gamma`) and, if Playwright clips negative-x, fall back to absolute `page.mouse.click(...)` at the computed gutter coordinate. The assertion is ALWAYS the real buffer/height — never a synthesized `e.target`.
 
-**Test 4 (T13(c) crumb-no-carry) — APPROVED with a committed path.** Resolve the dirty-vs-clean ambiguity: implement the **DIRTY** path only (the `press('x')` both expands and dirties → crumb-jump exercises `executeLanding`'s `carryExpanded = pl.spec.kind === 'nest'`; fail-on-revert = set that to `true` at PreviewRoot line \~784). The sole gate is **ASSERTION A** (`data-expanded` absent); height stays a soft log. Validate the Div crumb `title` empirically (console.log titles, fall back to `.q2-crumb` outermost). **Residual (document, do not block):** the *clean* crumb path's per-caller `applyNestingRetarget` gating is not bound by this test — note it as a follow-up (a clean variant would expand via G11 second-click, which expands without dirtying).
+**Test 4 (T13(c) crumb-no-carry) — APPROVED with a committed path.** Resolve the dirty-vs-clean ambiguity: implement the **DIRTY** path only (the `press('x')` both expands and dirties → crumb-jump exercises `executeLanding`\'s `carryExpanded = pl.spec.kind === 'nest'`; fail-on-revert = set that to `true` at PreviewRoot line \~784). The sole gate is **ASSERTION A** (`data-expanded` absent); height stays a soft log. Validate the Div crumb `title` empirically (console.log titles, fall back to `.q2-crumb` outermost). **Residual (document, do not block):** the *clean* crumb path's per-caller `applyNestingRetarget` gating is not bound by this test — note it as a follow-up (a clean variant would expand via G11 second-click, which expands without dirtying).
 
 **Test 5 (G9 fade) — DEFER, do not write now.** It's optional and timing-flaky, and it conflates tiers: the class-apply *logic* is jsdom-testable (already covered by the cluster's T7) and only the CSS `filter` is browser-only. Do not pollute the suite with a 20ms-poll flaky gate. Document it as a follow-up: if implemented later, it must be `test.fixme` asserting ONLY `getComputedStyle(el).filter !== 'none'` (the browser-only fact), never the class presence.
 

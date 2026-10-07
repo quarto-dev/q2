@@ -87,9 +87,9 @@ q2 work branch: `braid/marimo-multi-engine-cooperation` (off
 - [x] Empirical gate: resolution-tier tests (seams #1, #2) — q2 commit `17a2f61f2`
 - [x] Seam #3: deno `claimsFile` test (RED-first proven) — marimo `a0dcf30`
 - [x] Seam #4: sew-back — no change needed (isMarimoCell/cellOwnedByMarimo
-      passthrough already leaves `{r}` verbatim; coincides exactly with the
-      handledLanguages leave-alone set — proven by case analysis). Covered by
-      proxy: is-marimo-cell.test.ts + the post-sync render test below.
+  passthrough already leaves `{r}` verbatim; coincides exactly with the
+  handledLanguages leave-alone set — proven by case analysis). Covered by
+  proxy: is-marimo-cell.test.ts + the post-sync render test below.
 - [x] Implement: `claimsFile → false` for `.qmd`/`.md` in marimo `main` `src/marimo-engine.ts`
 - [x] marimo deno suite green (67/67); q2 `engine::resolution` green (36/36)
 - [\~] Seam #5 (mixed fixture + e2e): **deferred to Gordon** — ready-to-add
@@ -98,7 +98,7 @@ q2 work branch: `braid/marimo-multi-engine-cooperation` (off
 - [\~] End-to-end real `q2 render`/`q2 preview`: **deferred to Gordon** (fixture
       re-sync gates it). Native resolution + deno unit tiers verified.
 - [ ] Gordon: merge `main`→`q2-bare-sql-interop`, rebuild+re-sync fixture, add
-      the render test below, run `QUARTO_SC21_LIVE=1` marimo preview e2e.
+  the render test below, run `QUARTO_SC21_LIVE=1` marimo preview e2e.
 
 ## For Gordon — merge + re-sync recipe
 

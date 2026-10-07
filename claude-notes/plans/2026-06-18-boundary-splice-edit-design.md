@@ -41,12 +41,12 @@ that lowers to a `{ from, to, content }` triple.
 
 ## The unifying primitive
 
-All operations are one splice over a half-open gap range of one container's
+All operations are one splice over a half-open gap range of one container\'s
 child `Blocks` slice:
 
 | Operation | `from .. to` | `replacement` |
 |---|---|---|
-| replace-1 (today) | one block's two boundaries | N blocks |
+| replace-1 (today) | one block\'s two boundaries | N blocks |
 | insert (0→N) | a single gap (`from == to`) | N blocks |
 | range (M→N) | first..last span | N blocks |
 | delete | any span | `[]` |
@@ -55,7 +55,7 @@ child `Blocks` slice:
 
 ## `Boundary` vs `SourceInfo` (the core distinction)
 
-- **`SourceInfo` names an existing *node*** — a byte range into the source; every
+- **`SourceInfo` names an existing _node_** — a byte range into the source; every
   AST node has exactly one. N blocks → N source infos. Answers *"which block?"*.
   This is all `apply_node_edit` ever needed, because replace-1 only points at the
   block it replaces. It is matched **by exact byte-range value** against `A_u`,
@@ -68,7 +68,7 @@ child `Blocks` slice:
   `Boundary` is the thin layer that can.
 
 `Boundary` is the richer concept; `SourceInfo` is one of its ingredients. The two
-node-relative boundary kinds keep `SourceInfo`'s exact-match robustness;
+node-relative boundary kinds keep `SourceInfo`\'s exact-match robustness;
 `startOf`/`endOf` resolve to gap `0` / `len` of a resolved container — no index
 arithmetic anywhere (that was the rejected "anchor + delta" alternative; see
 Non-goals).
@@ -336,15 +336,15 @@ The `usePreviewEdit` surface is a small experiment with exactly three consumers
 ### Phase 1 — backend (TDD)
 
 - [ ] `splice_range` for insert (`from==to`), range (M→N), delete, replace-1
-      (parity with `apply_node_edit`) — top level **and** nested (a block inside a
-      div / blockquote / list item / def body, addressed by the block's own `si`;
-      `lookup_block` already descends `ListItem`/`DefBody` steps).
+  (parity with `apply_node_edit`) — top level **and** nested (a block inside a
+  div / blockquote / list item / def body, addressed by the block's own `si`;
+  `lookup_block` already descends `ListItem`/`DefBody` steps).
 - [ ] Boundary resolution — `beforeNode`/`afterNode` (node-relative) and
-      `startOf`/`endOf` for `ContainerRef = DocRoot | Node(si)` only
-      (append-to-doc, append-to-empty-div). No list/def container resolver in v1.
+  `startOf`/`endOf` for `ContainerRef = DocRoot | Node(si)` only
+  (append-to-doc, append-to-empty-div). No list/def container resolver in v1.
 - [ ] Stale-AST degrade (unresolvable boundary, cross-container, `from > to`).
 - [ ] `preserve_leaf_variant` fires for single-block Plain→Para replace, NOT for
-      inserts or multi-block spans.
+  inserts or multi-block spans.
 - [ ] Implement `apply_node_splice` + `splice_range`; make `apply_node_edit` a shim.
 - [ ] WASM export `apply_node_splice`; keep `apply_node_edit` export during migration.
 
@@ -353,10 +353,10 @@ The `usePreviewEdit` surface is a small experiment with exactly three consumers
 - [ ] Unit-test the verb builders (pure; assert exact `{ from, to, content }`).
 - [ ] `Content` (`md`/`ast`), `Boundary`, `ContainerRef`, `Splice` wire types.
 - [ ] Parent (`ReactPreview.tsx`): normalize `Content` → blocks, call
-      `apply_node_splice`; type the `setAst` prop properly.
+  `apply_node_splice`; type the `setAst` prop properly.
 - [ ] `usePreviewEdit` → `{ resolveSource, commit }`; **remove**
-      `commitTextEdit`/`commitSubtreeEdit`; port `EditTextarea` + delete-by-emptying.
+  `commitTextEdit`/`commitSubtreeEdit`; port `EditTextarea` + delete-by-emptying.
 - [ ] Update the three demo components + re-run their e2e specs (back-compat-free).
 - [ ] End-to-end: exercise insert + range through a harness driving the new
-      `commit` path; inspect the resulting qmd diff (minimal, as for replace today).
+  `commit` path; inspect the resulting qmd diff (minimal, as for replace today).
 ```

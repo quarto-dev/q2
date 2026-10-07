@@ -125,7 +125,7 @@ reusing `quarto_ast_reconcile::compute_block_hash_fresh`. Rust returns **hash re
     - **duplicate subtrees** → returns the match **nearest** `|r0 − hint|`;
     - **trivial-content node** (empty paragraph / `HorizontalRule`, huge hash class) → nearest-by-hint
       is the sole disambiguator (documented);
-    - **non-local parse change** (an unclosed ``` fence typed above swallows the node) → the node's
+    - **non-local parse change** (an unclosed \`\`\` fence typed above swallows the node) → the node's
       subtree hash changes → `None` (conservative drop).
 - [ ] `pub fn subtree_hash_at(untransformed_ast_json: &str, r0: usize, r1: usize) -> Option<u64>`.
 - [ ] `pub fn locate_subtrees(untransformed_ast_json: &str, targets: &[(u64 /*hash*/, usize /*hint_r0*/)])

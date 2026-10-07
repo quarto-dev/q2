@@ -277,26 +277,26 @@ T-E1–E3 discriminate on the *mapped line equalling BOOM's actual line*, with t
 ## 7. Checklist (TDD order)
 
 - [ ] **Caller audit:** grep every `write_with_source_info` use; confirm the engine
-      path is the only consumer; record findings.
+  path is the only consumer; record findings.
 - [ ] **Sink + ctx plumbing:** counting bottom-sink adapter + `ctx.out_pos()` /
-      `record_leaf` accumulator on `QmdWriterContext` (qmd.rs:39); no-op on the
-      untracked path. Build only.
+  `record_leaf` accumulator on `QmdWriterContext` (qmd.rs:39); no-op on the
+  untracked path. Build only.
 - [ ] **T-N-parity / text-parity** RED→GREEN: stand up `write_block_with_line_spans`
-      returning `(bytes, vec![])`; assert byte-parity with `write_single_block`.
+  returning `(bytes, vec![])`; assert byte-parity with `write_single_block`.
 - [ ] **T-N1** RED → instrument `Paragraph`/`Plain` leaves → GREEN.
 - [ ] **T-N2/T-N3** RED → recurse instrumentation through list/quote containers +
-      gap→synthesized assembly → GREEN. *(Headline nest-in bug.)*
+  gap→synthesized assembly → GREEN. *(Headline nest-in bug.)*
 - [ ] **T-N-multiline / T-N-coverage** RED→GREEN.
 - [ ] **Recursive `SourceInfo` core:** assemble `Concat` (leaf `Original` + glue
-      `Generated`); **reimplement `write_with_source_info`** on it.
+  `Generated`); **reimplement `write_with_source_info`** on it.
 - [ ] **T-ENG-compat** GREEN first (update the stale last-byte assertion), to prove
-      top-level engine mapping is preserved.
+  top-level engine mapping is preserved.
 - [ ] **T-E1/T-E2/T-E3** RED→GREEN (nested code now maps to the right line).
 - [ ] **T-E-glue / T-E-tiling** RED→GREEN.
 - [ ] **T-classify / T-table** per §4/§6.1.
 - [ ] Full pampa suite: `cargo nextest run -p pampa`.
 - [ ] **quarto-core engine tests:** `cargo nextest run -p quarto-core`
-      (the `engine_execution` map_offset tests are the live consumers).
+  (the `engine_execution` map_offset tests are the live consumers).
 - [ ] Workspace regression: `cargo nextest run --workspace`.
 - [ ] `cargo xtask verify --skip-hub-build` (`-D warnings`).
 

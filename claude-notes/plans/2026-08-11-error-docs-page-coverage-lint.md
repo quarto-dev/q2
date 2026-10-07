@@ -203,27 +203,27 @@ Ordered so every commit leaves `cargo xtask verify` green — the gate goes on
 only after the tree it guards is clean.
 
 - [x] **Phase 0 — Test plan (TDD).** Unit tests over synthetic
-      catalog/docs-tree fixtures: a code with a page, a code without, a
-      `docs_url` that skips the subsystem, a `docs_url` that is entirely
-      wrong. The check takes catalog path + docs root as parameters so tests
-      never touch the real tree.
+  catalog/docs-tree fixtures: a code with a page, a code without, a
+  `docs_url` that skips the subsystem, a `docs_url` that is entirely
+  wrong. The check takes catalog path + docs root as parameters so tests
+  never touch the real tree.
 - [x] **Phase 1 — The check.** `crates/xtask/src/lint/error_docs.rs`, plus a
-      repo-level-check seam in `lint/mod.rs` (existing rules are all
-      per-Rust-file). Violations anchor at the offending entry's line in
-      `error_catalog.json` — that is where the declaration that promises the
-      page actually lives. Not yet wired into `run_check`.
+  repo-level-check seam in `lint/mod.rs` (existing rules are all
+  per-Rust-file). Violations anchor at the offending entry's line in
+  `error_catalog.json` — that is where the declaration that promises the
+  page actually lives. Not yet wired into `run_check`.
 - [x] **Phase 2 — Fix `Q-3-42` / `Q-3-43` `docs_url`.** Two-line catalog
-      edit; independent of everything else.
+  edit; independent of everything else.
 - [x] **Phase 3 — Backfill the 28 missing pages.** `extension` (9, new
-      directory), `project` (11), `lua` (4), `writer` (2), `theme` (1),
-      `markdown` (1). Front-matter from the catalog; body follows the
-      README's template; `status: stub`.
+  directory), `project` (11), `lua` (4), `writer` (2), `theme` (1),
+  `markdown` (1). Front-matter from the catalog; body follows the
+  README's template; `status: stub`.
 - [x] **Phase 4 — Turn the gate on.** Call the check from
-      `lint::run_check`, so it reaches `cargo xtask lint`, `cargo xtask
-      verify` step 1, and CI in one move.
+  `lint::run_check`, so it reaches `cargo xtask lint`, `cargo xtask
+  verify` step 1, and CI in one move.
 - [x] **Phase 5 — Docs.** `docs/errors/README.md` and
-      `crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`: adding a code
-      now *requires* adding a page, and the lint says so.
+  `crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`: adding a code
+  now *requires* adding a page, and the lint says so.
 
 ## Open design questions for the user
 

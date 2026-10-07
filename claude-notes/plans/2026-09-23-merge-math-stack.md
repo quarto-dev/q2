@@ -47,26 +47,26 @@ Parent plans: `2026-09-21-quarto-math-and-native-docx.md`,
 ## Merge order and checklist
 
 - [x] **#705** — merged main (`cb0fccde`, artifacts regenerated), 9,803
-      pampa/quarto-core/pandoc-types tests green locally, CI green,
-      merged 2026-09-23 (`5fcafab3`).
+  pampa/quarto-core/pandoc-types tests green locally, CI green,
+  merged 2026-09-23 (`5fcafab3`).
 - [x] **#706** — merged the #705 tip (`c84dfcee`: catalog + sidebar
-      union, `Cargo.lock` refreshed from main), workspace build + lint +
-      9,723 tests green locally, CI green, merged 2026-09-23 (`e276f50c`).
+  union, `Cargo.lock` refreshed from main), workspace build + lint +
+  9,723 tests green locally, CI green, merged 2026-09-23 (`e276f50c`).
 - [x] **#708** — merged the #705 tip taking #710's `crossref_render.rs`
-      (`1999946d`) and lifted `append_to_tex` into `equation_number.rs`;
-      the Pandoc exact stage-list assertion gains `equation-number`
-      (`d0cf22d6`). Clippy + 9,645 tests green locally, CI green, merged
-      2026-09-23 (`2bcd922a`).
+  (`1999946d`) and lifted `append_to_tex` into `equation_number.rs`;
+  the Pandoc exact stage-list assertion gains `equation-number`
+  (`d0cf22d6`). Clippy + 9,645 tests green locally, CI green, merged
+  2026-09-23 (`2bcd922a`).
 - [x] **#709** — GitHub's stack auto-rebased the branch onto main after
-      #706; merged main again after #708 (`cb8132ee`, plan doc from the
-      Phase 3 branch). Merged after CI.
+  #706; merged main again after #708 (`cb8132ee`, plan doc from the
+  Phase 3 branch). Merged after CI.
 - [x] **#710 → re-opened as #714** — the stack refused a base change and
-      would have rebased this branch's merge history when #709 landed, so
-      the same branch was re-opened against `main`. Carries the
-      `MathMlStage` fix (`56b93af7`: `applies_to` gate, `math-ml` on
-      `PANDOC_STAGE_EXCLUDED`, docx end-to-end test) — the new tests were
-      confirmed failing without the fix, then 9,777 quarto-core /
-      quarto-math / pampa tests green with it. Merged after CI.
+  would have rebased this branch's merge history when #709 landed, so
+  the same branch was re-opened against `main`. Carries the
+  `MathMlStage` fix (`56b93af7`: `applies_to` gate, `math-ml` on
+  `PANDOC_STAGE_EXCLUDED`, docx end-to-end test) — the new tests were
+  confirmed failing without the fix, then 9,777 quarto-core /
+  quarto-math / pampa tests green with it. Merged after CI.
 
 ## Verification log
 

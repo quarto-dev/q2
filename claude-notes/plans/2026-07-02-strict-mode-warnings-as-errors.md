@@ -179,56 +179,56 @@ Nothing in `quarto-error-reporting` (external crate) changes.
 ### Phase 1 — tests first
 
 - [x] Pick/build a fixture with a stable, successful-render warning:
-      an unresolved crossref (`@fig-nonexistent`) — confirmed empirically
-      to render successfully with one warning, exit 0.
+  an unresolved crossref (`@fig-nonexistent`) — confirmed empirically
+  to render successfully with one warning, exit 0.
 - [x] CLI integration tests:
-      `crates/quarto/tests/integration/strict_mode.rs` (7 tests).
-      Verified failing first: 6 failed with clap's
-      `unexpected argument '--strict'`, baseline test passed.
+  `crates/quarto/tests/integration/strict_mode.rs` (7 tests).
+  Verified failing first: 6 failed with clap's
+  `unexpected argument '--strict'`, baseline test passed.
 - [x] Unit tests for `promote_warnings_to_errors` covering all four
-      summary sources; `Info`/`Note` untouched (orchestrator.rs tests).
+  summary sources; `Info`/`Note` untouched (orchestrator.rs tests).
 - [x] Unit tests for the `should_exit_nonzero` strict arm (render.rs
-      tests: warning-only, promoted, clean, info-only).
+  tests: warning-only, promoted, clean, info-only).
 - [x] `--json-errors --strict` test: emitted JSON `kind` is `"error"`.
 - [x] Project-render variant (multi-file, warning in one file).
 
 ### Phase 2 — implementation
 
 - [x] `RenderArgs.strict` + clap wiring (`--strict`, global to the render
-      subcommand, modeled on `--fail-fast`) + `--help` text.
+  subcommand, modeled on `--fail-fast`) + `--help` text.
 - [x] `OutputDiagnostics::diagnostics_mut` (native + wasm impls) +
-      `ProjectRenderSummary::promote_warnings_to_errors`.
+  `ProjectRenderSummary::promote_warnings_to_errors`.
 - [x] Promotion call + `should_exit_nonzero(summary, strict)` in both
-      execute paths. The strict arm defensively checks `warnings > 0` too,
-      so the gate stays correct even if a caller forgets to promote.
+  execute paths. The strict arm defensively checks `warnings > 0` too,
+  so the gate stays correct even if a caller forgets to promote.
 - [x] `cargo build --workspace` clean; `cargo nextest run --workspace`:
-      9884 passed. Full `cargo xtask verify` (WASM leg) run as well.
+  9884 passed. Full `cargo xtask verify` (WASM leg) run as well.
 
 ### Phase 3 — end-to-end + docs
 
 - [x] End-to-end verification (2026-07-02, real binary, output inspected):
 
-      ```
-      $ q2 render warn.qmd --strict        # warn.qmd contains @fig-nonexistent
-      Error: unresolved crossref `@fig-nonexistent`: no target with this identifier was found.
-      1 error
-      EXIT: 1                              # warn.html still written (905 bytes)
+  ```
+  $ q2 render warn.qmd --strict        # warn.qmd contains @fig-nonexistent
+  Error: unresolved crossref `@fig-nonexistent`: no target with this identifier was found.
+  1 error
+  EXIT: 1                              # warn.html still written (905 bytes)
 
-      $ q2 render warn.qmd                 # without --strict: unchanged
-      Warning: unresolved crossref `@fig-nonexistent`: ...
-      1 warning
-      EXIT: 0
+  $ q2 render warn.qmd                 # without --strict: unchanged
+  Warning: unresolved crossref `@fig-nonexistent`: ...
+  1 warning
+  EXIT: 0
 
-      $ q2 render warn.qmd --strict --json-errors
-      {"$schema":".../json-diagnostic.json","kind":"error","title":"unresolved crossref ..."}
-      ```
+  $ q2 render warn.qmd --strict --json-errors
+  {"$schema":".../json-diagnostic.json","kind":"error","title":"unresolved crossref ..."}
+  ```
 
 - [x] User-facing docs: "Rendering in CI" section in
-      `docs/guides/publishing/index.qmd`; page verified to render via
-      `q2 render docs/guides/publishing/index.qmd`.
+  `docs/guides/publishing/index.qmd`; page verified to render via
+  `q2 render docs/guides/publishing/index.qmd`.
 - [x] Close the loop on GH #220: PR
-      https://github.com/quarto-dev/q2/pull/362 closes it on merge and
-      links this plan + strand bd-yjs54ptg.
+  https://github.com/quarto-dev/q2/pull/362 closes it on merge and
+  links this plan + strand bd-yjs54ptg.
 
 ## Decisions (Carlos, 2026-07-02)
 

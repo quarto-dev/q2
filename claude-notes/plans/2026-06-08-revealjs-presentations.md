@@ -262,99 +262,99 @@ output recorded here.
 
 **1.1 — Test fixtures & specification (TDD first).** ✅ tests written & confirmed RED
 - [x] Fixture decks inline in the tests (`FLAT_DECK` = title + 3 H2;
-      `RICH_DECK` = section header + vertical subslide + code + inline math).
+  `RICH_DECK` = section header + vertical subslide + code + inline math).
 - [x] Golden-output strategy: whitespace-insensitive structural string
-      assertions on the `.reveal/.slides/section` tree + `Reveal.initialize`
-      config; integration-test layout used (no top-level `tests/<name>.rs`).
+  assertions on the `.reveal/.slides/section` tree + `Reveal.initialize`
+  config; integration-test layout used (no top-level `tests/<name>.rs`).
 - [x] Pipeline-level failing tests in
-      `crates/quarto-core/tests/integration/revealjs_format.rs` (6 tests, all
-      RED): scaffold, title slide, exact section count, init options, theme
-      stylesheet, rich-deck structure. Route through `render_to_file(_,
-      "revealjs", _, _)`.
+  `crates/quarto-core/tests/integration/revealjs_format.rs` (6 tests, all
+  RED): scaffold, title slide, exact section count, init options, theme
+  stylesheet, rich-deck structure. Route through `render_to_file(_,
+  "revealjs", _, _)`.
 - [x] CLI-level failing tests in
-      `crates/quarto/tests/integration/revealjs_cli.rs` (2 tests, RED, via
-      `CARGO_BIN_EXE_q2`): front-matter `format: revealjs` with no `--to`
-      (root-cause regression) + explicit `--to revealjs`. Confirmed the
-      no-`--to` case currently emits 974 bytes of plain HTML.
+  `crates/quarto/tests/integration/revealjs_cli.rs` (2 tests, RED, via
+  `CARGO_BIN_EXE_q2`): front-matter `format: revealjs` with no `--to`
+  (root-cause regression) + explicit `--to revealjs`. Confirmed the
+  no-`--to` case currently emits 974 bytes of plain HTML.
 
 **1.2 — Vendor reveal.js 6 assets.** ✅ done
 - [x] Vendored reveal.js 6.0.0 (MIT) into `resources/revealjs/`
-      (`reset.css`, `reveal.css`, `reveal.js`, `theme/white.css`, `LICENSE`) +
-      `README.md` documenting source/version. Copied from `node_modules/`.
+  (`reset.css`, `reveal.css`, `reveal.js`, `theme/white.css`, `LICENSE`) +
+  `README.md` documenting source/version. Copied from `node_modules/`.
 - [x] Embedded via `include_str!` (binary stays single; output is a
-      self-contained file). `cargo xtask lint` green.
+  self-contained file). `cargo xtask lint` green.
 
 **1.3 — Slide-construction transform (`RevealSlidesTransform`).** ✅ done
 - [x] `crates/quarto-core/src/revealjs/slides.rs` — `build_reveal_slides(blocks,
-      slide_level)` implements Pandoc's slide-level algorithm: `< N` →
-      section-divider stack, `== N` → slide (vertical if in a stack), `> N` →
-      in-slide heading, `HorizontalRule` → break. Emits `Div(.section)` (writer
-      serializes `<section>`); header id/classes/attrs hoisted onto the
-      section. WASM-safe (pure AST, no native deps). Implemented as an
-      `AstTransform` (not a separate stage) replacing `TitleBlockTransform` +
-      `SectionizeTransform` for revealjs in `build_transform_pipeline`.
+  slide_level)` implements Pandoc's slide-level algorithm: `< N` →
+  section-divider stack, `== N` → slide (vertical if in a stack), `> N` →
+  in-slide heading, `HorizontalRule` → break. Emits `Div(.section)` (writer
+  serializes `<section>`); header id/classes/attrs hoisted onto the
+  section. WASM-safe (pure AST, no native deps). Implemented as an
+  `AstTransform` (not a separate stage) replacing `TitleBlockTransform` +
+  `SectionizeTransform` for revealjs in `build_transform_pipeline`.
 - [x] `transform.rs` also synthesizes the `<section id="title-slide">` from
-      metadata (title/subtitle/author/date).
+  metadata (title/subtitle/author/date).
 - [x] 11 unit tests covering every split boundary (flat, divider/vertical,
-      deep-heading-in-slide, HR, preamble, no-headers, empty, class hoisting,
-      slide-level 3).
+  deep-heading-in-slide, HR, preamble, no-headers, empty, class hoisting,
+  slide-level 3).
 
 **1.4 — Reveal config from metadata.** ✅ done (revised approach)
 - [x] `crates/quarto-core/src/revealjs/assemble.rs` `reveal_config_json()`
-      reads the merged/flattened metadata (`format.revealjs.*` → top level via
-      `resolve_format_config`, keyed on `identifier.as_str()`) and maps to
-      `Reveal.initialize` camelCase keys: `controls`/`progress`/`center`/`hash`
-      (default true), `transition` (default "slide"), `transitionSpeed`,
-      `slideNumber`, `width`, `height`. **Note:** read via `as_plain_text()`
-      (YAML scalars are `PandocInlines`; `as_str()` misses them).
+  reads the merged/flattened metadata (`format.revealjs.*` → top level via
+  `resolve_format_config`, keyed on `identifier.as_str()`) and maps to
+  `Reveal.initialize` camelCase keys: `controls`/`progress`/`center`/`hash`
+  (default true), `transition` (default "slide"), `transitionSpeed`,
+  `slideNumber`, `width`, `height`. **Note:** read via `as_plain_text()`
+  (YAML scalars are `PandocInlines`; `as_str()` misses them).
 - [x] **Deviation from sketch:** no typed `RevealjsFormatOptions` in
-      `FormatOptions` yet — reading from flattened metadata at assembly time is
-      simpler and sound for Tier-1. Promote to a typed struct when the preview
-      (Phase 1P) needs the shared contract in code. _Tracked as a follow-up._
+  `FormatOptions` yet — reading from flattened metadata at assembly time is
+  simpler and sound for Tier-1. Promote to a typed struct when the preview
+  (Phase 1P) needs the shared contract in code. _Tracked as a follow-up._
 - [x] Unit tests: defaults + YAML→reveal-key mapping.
 
 **1.5 — Reveal document assembly + template fork.** ✅ done (revised approach)
 - [x] `assemble.rs` `render_revealjs_document(body, meta)` wraps the slide body
-      in the reveal scaffold (`.reveal > .slides`) with **inlined** reset/
-      reveal/theme CSS + reveal.js + `Reveal.initialize({…})`. Self-contained
-      single file. **Deviation:** direct string assembly, not the
-      `quarto-doctemplate` engine (avoids `$`-collision with rendered body and
-      keeps reveal asset inlining self-contained; revisit if partials needed).
+  in the reveal scaffold (`.reveal > .slides`) with **inlined** reset/
+  reveal/theme CSS + reveal.js + `Reveal.initialize({…})`. Self-contained
+  single file. **Deviation:** direct string assembly, not the
+  `quarto-doctemplate` engine (avoids `$`-collision with rendered body and
+  keeps reveal asset inlining self-contained; revisit if partials needed).
 - [x] Forked `apply_template.rs` on `FormatIdentifier::Revealjs` (new `None if
-      …Revealjs` arm) → calls the reveal assembler, bypassing Bootstrap
-      templates.
+  …Revealjs` arm) → calls the reveal assembler, bypassing Bootstrap
+  templates.
 - [x] Body serializes as `<section>` via the existing HTML writer (no writer
-      change needed — `RevealSlidesTransform` produces `.section` Divs).
+  change needed — `RevealSlidesTransform` produces `.section` Divs).
 - [x] **Also fixed:** `CompileThemeCssStage` now skips revealjs (reveal `theme:`
-      is not a Bootswatch name; the stage would mis-validate `theme: white`).
-      Caught by end-to-end verification, not unit tests.
+  is not a Bootswatch name; the stage would mis-validate `theme: white`).
+  Caught by end-to-end verification, not unit tests.
 - [x] Asset default: **inlined/self-contained** for Tier-1 (binary stays single
-      via `include_str!`). Linked-assets + `embed-resources` is a later phase.
+  via `include_str!`). Linked-assets + `embed-resources` is a later phase.
 
 **1.6 — CLI gate + front-matter format resolution.** ✅ done
 - [x] revealjs already passes the `is_native()` gate; widened the
-      not-yet-supported message to mention revealjs.
+  not-yet-supported message to mention revealjs.
 - [x] **Resolved the target format from front-matter when `--to` is absent**
-      (root-cause fix): `detect_single_input_format()` /
-      `format_key_from_frontmatter()` in `render.rs` read the document's
-      front-matter `format:` (scalar, or first key of a `format:` map) for a
-      single `.qmd` input. `--to` stays an explicit override. Best-effort
-      (parse failure → `"html"`). Single-format-per-render; project/per-file is
-      Phase 8 (decision 5).
+  (root-cause fix): `detect_single_input_format()` /
+  `format_key_from_frontmatter()` in `render.rs` read the document's
+  front-matter `format:` (scalar, or first key of a `format:` map) for a
+  single `.qmd` input. `--to` stays an explicit override. Best-effort
+  (parse failure → `"html"`). Single-format-per-render; project/per-file is
+  Phase 8 (decision 5).
 
 **1.7 — Title slide.** ✅ done (folded into 1.3)
 - [x] `build_title_slide()` in `transform.rs` emits `<section id="title-slide">`
-      with `<h1 class="title">` + classed subtitle/author/date paras from
-      metadata. (Plain-text extraction for Tier-1; rich-inline titles a later
-      refinement.)
+  with `<h1 class="title">` + classed subtitle/author/date paras from
+  metadata. (Plain-text extraction for Tier-1; rich-inline titles a later
+  refinement.)
 
 **1.8 — End-to-end verification (mandatory).** ✅ done
 - [x] `cargo build --workspace` clean.
 - [x] `cargo nextest run --workspace` green — **9565 passed, 0 failed** (no
-      regressions from the pipeline/apply_template/compile_theme_css changes).
+  regressions from the pipeline/apply_template/compile_theme_css changes).
 - [x] `cargo xtask lint` green; clippy clean on touched files.
 - [ ] Full `cargo xtask verify` (WASM leg) — deferred to just before requesting
-      push (expensive; reveal module is WASM-safe by construction). _Pending._
+  push (expensive; reveal module is WASM-safe by construction). _Pending._
 - [x] **E2E through the binary** (recorded below).
 
 #### Phase 1 end-to-end record (2026-06-08)
@@ -415,7 +415,7 @@ doing before the epic lands).
   into `resources/revealjs/` and embed via `include_dir!`/`include_str!` so `q2`
   stays a **single self-contained binary** — no copy-to-output dependency, no
   runtime path to `external-sources/`. Keep `cargo xtask lint`
-  (external-sources-in-macro) green. _Not self-containment of the **output
+  (external-sources-in-macro) green. \_Not self-containment of the **output
   HTML** — the deck may still link its assets; this is about the binary.
 
 ### Resource embedding vs. output self-containment (clarified)
@@ -587,40 +587,40 @@ this is in parity.
 ### Phase 1P work items — core WORKING (verified in Chrome 2026-06-08)
 
 - [x] **WASM foundation.** `q2-slides` pseudo-format (`format.rs` → `("html",
-      Some("preview"))`) carries the AST/preview path; `is_revealjs_target()`
-      generalizes the reveal transform check to `{revealjs, q2-slides}` (so the
-      shared `RevealSlidesTransform` fires in the preview AST pipeline, which is
-      `build_transform_pipeline` minus exclusions); `map_format_for_preview`
-      maps `revealjs → q2-slides`; `RenderResponse.is_slides` flag added. Native
-      test `render_qmd_to_preview_ast_builds_reveal_slides_for_q2_slides`.
+  Some("preview"))`) carries the AST/preview path; `is_revealjs_target()`
+  generalizes the reveal transform check to `{revealjs, q2-slides}` (so the
+  shared `RevealSlidesTransform` fires in the preview AST pipeline, which is
+  `build_transform_pipeline` minus exclusions); `map_format_for_preview`
+  maps `revealjs → q2-slides`; `RenderResponse.is_slides` flag added. Native
+  test `render_qmd_to_preview_ast_builds_reveal_slides_for_q2_slides`.
 - [x] **Shared split, single source.** The q2-preview AST path consumes the
-      **same Rust `RevealSlidesTransform`** as `q2 render` — slide construction
-      lives once, in Rust. (The hub-client *editor*'s old TS `parseSlides`
-      still exists but is no longer used by the `q2 preview` path; fully
-      deleting it from the editor is a separable cleanup — see follow-ups.)
+  **same Rust `RevealSlidesTransform`** as `q2 render` — slide construction
+  lives once, in Rust. (The hub-client *editor*\'s old TS `parseSlides`
+  still exists but is no longer used by the `q2 preview` path; fully
+  deleting it from the editor is a separable cleanup — see follow-ups.)
 - [x] **Preview routing.** `entry.tsx` `PreviewRoot` branches to `RevealDeck`
-      when `meta.format` is `q2-slides`/`revealjs` (the target format is written
-      into `meta.format` by `MetadataMergeStage`) — so **no cross-package
-      `is_slides` postMessage plumbing** was needed for the render branch.
+  when `meta.format` is `q2-slides`/`revealjs` (the target format is written
+  into `meta.format` by `MetadataMergeStage`) — so **no cross-package
+  `is_slides` postMessage plumbing** was needed for the render branch.
 - [x] **Reveal renderer = previewRegistry + reveal shell (B1a).** New
-      `ts-packages/preview-renderer/src/q2-preview/RevealDeck.tsx`: maps the
-      shared-split `Div.section` AST onto `@revealjs/react`
-      `<Deck>/<Slide>/<Stack>` (chosen over raw `Reveal.initialize` for robust
-      live-edit lifecycle — the wrapper is a thin layer over reveal.js core),
-      and renders slide **content** via the framework `<Node>` dispatcher (the
-      shared `previewRegistry` mirror → code highlighting, KaTeX, etc. for
-      free). `@revealjs/react` + `reveal.js` added to the package.
+  `ts-packages/preview-renderer/src/q2-preview/RevealDeck.tsx`: maps the
+  shared-split `Div.section` AST onto `@revealjs/react`
+  `<Deck>/<Slide>/<Stack>` (chosen over raw `Reveal.initialize` for robust
+  live-edit lifecycle — the wrapper is a thin layer over reveal.js core),
+  and renders slide **content** via the framework `<Node>` dispatcher (the
+  shared `previewRegistry` mirror → code highlighting, KaTeX, etc. for
+  free). `@revealjs/react` + `reveal.js` added to the package.
 - [ ] **Parity tests.** _Follow-up._ Verified manually (Chrome) + the Rust
-      foundation test, but no automated TS golden render↔preview parity test
-      yet. Establish the slides analogue of `/preview-render-parity`.
+  foundation test, but no automated TS golden render↔preview parity test
+  yet. Establish the slides analogue of `/preview-render-parity`.
 - [x] **E2E both paths.** `q2 render` verified (Phase 1 record above). `q2
-      preview /tmp/.../talk.qmd` verified live in Chrome (DevTools MCP):
-      `.reveal/.slides` present, **4 top-level sections matching render**
-      (title, Why Quarto 2?, Some Code, and `Section: Details` as a **stack with
-      2 vertical sub-slides**), reveal root `…has-vertical-slides
-      has-horizontal-slides ready`, controls+progress, syntax-highlighted code +
-      KaTeX in slides, keyboard/control nav advances slides, **no console
-      errors**. Screenshot of the title slide inspected.
+  preview /tmp/.../talk.qmd` verified live in Chrome (DevTools MCP):
+  `.reveal/.slides` present, **4 top-level sections matching render**
+  (title, Why Quarto 2?, Some Code, and `Section: Details` as a **stack with
+  2 vertical sub-slides**), reveal root `…has-vertical-slides
+  has-horizontal-slides ready`, controls+progress, syntax-highlighted code +
+  KaTeX in slides, keyboard/control nav advances slides, **no console
+  errors**. Screenshot of the title slide inspected.
 
 ### Phase 1P follow-ups (tracked, not GA-blocking for the basic experience)
 
@@ -632,7 +632,7 @@ this is in parity.
   read `meta.format.revealjs.*` (or flatten for `q2-slides`) to match. Minor;
   defaults align for the common case.
 - Automated TS golden render↔preview parity test (above).
-- Retire the hub-client *editor*'s `parseSlides`/`RevealjsReactAstSlideRenderer`
+- Retire the hub-client *editor*\'s `parseSlides`/`RevealjsReactAstSlideRenderer`
   in favor of `RevealDeck` (separable from the `q2 preview` path).
 
 ## References

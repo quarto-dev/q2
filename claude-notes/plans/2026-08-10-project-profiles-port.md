@@ -253,47 +253,47 @@ waits; nothing else blocks.
 ### Phase 0 — resolution core (pure logic + tests first)
 
 - [x] Write failing unit tests for `project_profile` module:
-      profile-string parsing (`[ ,]+`, trim, empty-drop, colon is
-      not a separator), activation precedence (CLI replaces env
-      replaces dotenv replaces local-default replaces base-default),
-      group expansion (first-member default, append-after-explicit,
-      multiple groups, flat vs nested list shape), strict shape
-      errors (Q-5-20/21 cases), first-listed-wins ordering contract
-      *(41 tests written first, observed failing on stubs, then pass)*
+  profile-string parsing (`[ ,]+`, trim, empty-drop, colon is
+  not a separator), activation precedence (CLI replaces env
+  replaces dotenv replaces local-default replaces base-default),
+  group expansion (first-member default, append-after-explicit,
+  multiple groups, flat vs nested list shape), strict shape
+  errors (Q-5-20/21 cases), first-listed-wins ordering contract
+  *(41 tests written first, observed failing on stubs, then pass)*
 - [x] Implement `crates/quarto-core/src/project/project_profile.rs`:
-      `ProjectProfileConfig` + `extract_profile_config` (extraction
-      +strip, site-aware: BaseConfig/LocalConfig/Overlay),
-      `resolve_active_profiles(inputs, &mut diags) ->
-      Vec<ActiveProfile>` (name + `ProfileSource` provenance)
+  `ProjectProfileConfig` + `extract_profile_config` (extraction
+  +strip, site-aware: BaseConfig/LocalConfig/Overlay),
+  `resolve_active_profiles(inputs, &mut diags) ->
+  Vec<ActiveProfile>` (name + `ProfileSource` provenance)
 - [x] Add Q-5-19..22 entries to
-      `crates/quarto-error-catalog/error_catalog.json` (docs_url
-      suffix rule; catalog audit test green)
+  `crates/quarto-error-catalog/error_catalog.json` (docs_url
+  suffix rule; catalog audit test green)
 
 ### Phase 1 — config overlays
 
 - [x] Failing integration tests (quarto-core `tests/integration/`):
-      overlay merge (scalar override, map deep-merge, array concat,
-      `!prefer`), first-listed-wins with two profiles,
-      `_quarto.yml.local` over profiles, `.yml` over `.yaml`,
-      `profile:`-in-overlay warning, unknown-profile warning,
-      span integrity of a diagnostic pointing into an overlay file
-      *(25 tests in `project_profile_overlays.rs`, written first,
-      observed failing on the delegating stub)*
+  overlay merge (scalar override, map deep-merge, array concat,
+  `!prefer`), first-listed-wins with two profiles,
+  `_quarto.yml.local` over profiles, `.yml` over `.yaml`,
+  `profile:`-in-overlay warning, unknown-profile warning,
+  span integrity of a diagnostic pointing into an overlay file
+  *(25 tests in `project_profile_overlays.rs`, written first,
+  observed failing on the delegating stub)*
 - [x] Implement overlay discovery + merge in `parse_config`
-      (`apply_project_profiles`); `active_config_profiles` +
-      `profile_config_paths` on `ProjectConfig`;
-      `discover_with_profile` entry point (`discover` delegates with
-      `None` and reads `QUARTO_PROFILE` via `runtime.env_get`)
+  (`apply_project_profiles`); `active_config_profiles` +
+  `profile_config_paths` on `ProjectConfig`;
+  `discover_with_profile` entry point (`discover` delegates with
+  `None` and reads `QUARTO_PROFILE` via `runtime.env_get`)
 - [x] `_quarto.yml.local` early parse (profile.default) + final layer
-      (`.yml.local` preferred over `.yaml.local`)
+  (`.yml.local` preferred over `.yaml.local`)
 - [x] Register overlay files everywhere merged-value FileIds can
-      surface: `MetadataMergeStage` register closure, render.rs
-      config-sources (×2), `RenderScriptsContext` (+5 construction
-      sites in render/publish/preview), `project_resources` (×2),
-      `compile_theme_css::theme_error_candidates`
+  surface: `MetadataMergeStage` register closure, render.rs
+  config-sources (×2), `RenderScriptsContext` (+5 construction
+  sites in render/publish/preview), `project_resources` (×2),
+  `compile_theme_css::theme_error_candidates`
 - [x] Verify: profile-aware `output-dir` / `render:` lists /
-      pre-render scripts / resolved `ProjectContext.output_dir` via
-      tests
+  pre-render scripts / resolved `ProjectContext.output_dir` via
+  tests
 - Note: the `QUARTO_PROFILE`-env-var glue through `runtime.env_get`
   is exercised end-to-end in Phase 2 (real process env through the
   binary); unit-testing it would need a mock-env `SystemRuntime`
@@ -302,47 +302,47 @@ waits; nothing else blocks.
 ### Phase 2 — CLI + cache + subprocess env var
 
 - [x] Failing tests first: 14 binary-driven tests in
-      `crates/quarto/tests/integration/project_profile_cli.rs`
-      (comma + repeated flags, `--profile` replaces
-      `QUARTO_PROFILE`, get-config overlay values, Q-5-19/21 through
-      the binary, single-file strictness, `-v` echo, help presence)
+  `crates/quarto/tests/integration/project_profile_cli.rs`
+  (comma + repeated flags, `--profile` replaces
+  `QUARTO_PROFILE`, get-config overlay values, Q-5-19/21 through
+  the binary, single-file strictness, `-v` echo, help presence)
 - [x] Wire `--profile` into `RenderArgs` + all render/classify
-      discover sites (incl. the post-pre-render-script re-discovery)
-      + get-config + publish (threaded through
-      `ProjectPublishRenderer` so publish's render-time re-discovery
-      matches). **Preview: deferred to bd-pfgc273f** —
-      `QUARTO_PROFILE=x q2 preview` already works end-to-end (all
-      its discovers read the env via runtime); the flag form needs
-      HubContext threading, not rushed here.
+  discover sites (incl. the post-pre-render-script re-discovery)
+  + get-config + publish (threaded through
+  `ProjectPublishRenderer` so publish's render-time re-discovery
+  matches). **Preview: deferred to bd-pfgc273f** —
+  `QUARTO_PROFILE=x q2 preview` already works end-to-end (all
+  its discovers read the env via runtime); the flag form needs
+  HubContext threading, not rushed here.
 - [x] Project-less discovery also resolves + validates the selection
-      (bad names abort even without `_quarto.yml`; no Q-5-19 there)
+  (bad names abort even without `_quarto.yml`; no Q-5-19 there)
 - [x] `-v` echo with per-profile provenance (`echo_active_profiles`
-      in commands/render.rs). Found + fixed two latent gaps:
-      `verbose_to_filter` never matched the `q2` bin crate's targets
-      (added `q2=` directives), and the tracing fmt layer wrote to
-      stdout (now stderr, where all q2 diagnostics live).
+  in commands/render.rs). Found + fixed two latent gaps:
+  `verbose_to_filter` never matched the `q2` bin crate's targets
+  (added `q2=` directives), and the tracing fmt layer wrote to
+  stdout (now stderr, where all q2 diagnostics live).
 - [x] `Pass1KeyInputs` + `pass1_key`: active names (count-prefixed,
-      order-sensitive — first-listed-wins makes order semantic) +
-      overlay bytes; `PROFILE_KEY_VERSION` bumped to 2; orchestrator
-      fills from `profile_config_paths`; 4 new key tests incl. a
-      domain-separation test
+  order-sensitive — first-listed-wins makes order semantic) +
+  overlay bytes; `PROFILE_KEY_VERSION` bumped to 2; orchestrator
+  fills from `profile_config_paths`; 4 new key tests incl. a
+  domain-separation test
 - [x] `QUARTO_PROFILE` on child processes **unconditionally**
-      (override-inherited is the one exception to #486's
-      real-env-wins rule): engines via `EngineContext.project_env`
-      pair injection in `EngineExecutionStage`, render scripts via
-      `RenderScriptsContext.quarto_profile` (+real-spawn unix test);
-      `{{< env QUARTO_PROFILE >}}` special-cased in
-      `EnvShortcodeHandler` to beat the real env (unit-tested)
+  (override-inherited is the one exception to #486's
+  real-env-wins rule): engines via `EngineContext.project_env`
+  pair injection in `EngineExecutionStage`, render scripts via
+  `RenderScriptsContext.quarto_profile` (+real-spawn unix test);
+  `{{< env QUARTO_PROFILE >}}` special-cased in
+  `EnvShortcodeHandler` to beat the real env (unit-tested)
 - [x] E2E (2026-08-10, recorded): fixture with
-      `profile: group: [draft, final]` + `_quarto-prod.yml` setting
-      `title`; `q2 render index.qmd --profile prod` →
-      `<title>Production Title</title>`; body
-      `{{< env QUARTO_PROFILE none >}}` → `Active profiles:
-      prod,draft` (normalized + group-expanded); `q2 get-config
-      index.qmd title --profile prod` → `"Production Title"` (and
-      `"Base Title"` without); `-v` echoes `active project profiles:
-      prod (from --profile), draft (from profile.group default)`.
-      Output inspected by grep on the rendered HTML.
+  `profile: group: [draft, final]` + `_quarto-prod.yml` setting
+  `title`; `q2 render index.qmd --profile prod` →
+  `<title>Production Title</title>`; body
+  `{{< env QUARTO_PROFILE none >}}` → `Active profiles:
+  prod,draft` (normalized + group-expanded); `q2 get-config
+  index.qmd title --profile prod` → `"Production Title"` (and
+  `"Base Title"` without); `-v` echoes `active project profiles:
+  prod (from --profile), draft (from profile.group default)`.
+  Output inspected by grep on the rendered HTML.
 - Note: real-engine (jupyter/knitr) visibility of `QUARTO_PROFILE`
   is exercised manually in Phase 5 alongside the docs fixtures, same
   policy as PR #486's engine-env verification.
@@ -350,91 +350,91 @@ waits; nothing else blocks.
 ### Phase 3 — environment integration (after PR #486 merges)
 
 - [x] Rebased over #486 (merged 2026-08-10 15:38). Failing tests
-      first: 6 binary-driven tests (bootstrap activation, `.local`
-      bootstrap wins, real-env/CLI beat bootstrap, `_environment-<p>`
-      layering first-listed-wins via `{{< env >}}` in rendered HTML,
-      `.local` beats profile env files, no bootstrap recursion from
-      `_environment-<p>`) — 3 observed failing pre-implementation
+  first: 6 binary-driven tests (bootstrap activation, `.local`
+  bootstrap wins, real-env/CLI beat bootstrap, `_environment-<p>`
+  layering first-listed-wins via `{{< env >}}` in rendered HTML,
+  `.local` beats profile env files, no bootstrap recursion from
+  `_environment-<p>`) — 3 observed failing pre-implementation
 - [x] `dotenv_quarto_profile` in `project/environment.rs`
-      (`.local` then `_environment`, never profile variants) feeds
-      `ProfileResolutionInputs.env_file`; the `&[]` seam in
-      `StageContext::new` and `subprocess_env_for_project` now pass
-      the active names (Q-5-19's env-file clause was already live
-      since Phase 1)
+  (`.local` then `_environment`, never profile variants) feeds
+  `ProfileResolutionInputs.env_file`; the `&[]` seam in
+  `StageContext::new` and `subprocess_env_for_project` now pass
+  the active names (Q-5-19's env-file clause was already live
+  since Phase 1)
 - [x] Closed bd-ev8mk1rp (implemented; preview flag split off as
-      bd-pfgc273f)
+  bd-pfgc273f)
 
 ### Phase 4 — conditional content (full trio)
 
 - [x] Failing tests first: 15 binary-driven tests in
-      `conditional_content_cli.rs` (14 observed failing) — div/span
-      visibility for when/unless × format/profile/meta,
-      AND-across-kinds, comma-OR-within-values, bare
-      `.content-hidden`, attribute stripping, nested conditionals,
-      when-meta reading profile-overlay metadata, crossref
-      renumbering (hidden `#fig-` float does not consume a number),
-      Q-2-42 typo warning — plus 11 unit tests on the pure walker
+  `conditional_content_cli.rs` (14 observed failing) — div/span
+  visibility for when/unless × format/profile/meta,
+  AND-across-kinds, comma-OR-within-values, bare
+  `.content-hidden`, attribute stripping, nested conditionals,
+  when-meta reading profile-overlay metadata, crossref
+  renumbering (hidden `#fig-` float does not consume a number),
+  Q-2-42 typo warning — plus 11 unit tests on the pure walker
 - [x] Implemented `transforms/conditional_content.rs`
-      (`ConditionalContentTransform`), registered **first in the
-      Normalization phase** of `build_transform_pipeline`
-      (format-agnostic; preview pipeline inherits it): hidden
-      content disappears before callouts/shortcodes/crossrefs.
-      Engine cells inside hidden blocks still execute (Q1 parity —
-      engines run in an earlier stage).
+  (`ConditionalContentTransform`), registered **first in the
+  Normalization phase** of `build_transform_pipeline`
+  (format-agnostic; preview pipeline inherits it): hidden
+  content disappears before callouts/shortcodes/crossrefs.
+  Engine cells inside hidden blocks still execute (Q1 parity —
+  engines run in an earlier stage).
 - [x] Format-alias matching: reuses pampa's
-      `lua::quarto_doc::is_format_match` (made pub), matched against
-      `lua_format_for(target_format)` — the attribute syntax and
-      Lua's `quarto.doc.is_format` can never disagree, and preview
-      pseudo-formats behave like render
+  `lua::quarto_doc::is_format_match` (made pub), matched against
+  `lua_format_for(target_format)` — the attribute syntax and
+  Lua's `quarto.doc.is_format` can never disagree, and preview
+  pseudo-formats behave like render
 - [x] Divergences settled in-code (module docs): comma/space OR
-      within one condition value (q2 extension; Q1 matches
-      literally — its repeated-attribute OR is unrepresentable in
-      q2's map-shaped Attr); Q-2-42 warnings for unknown `when-*`/
-      `unless-*` spellings and for both-marker elements (hidden
-      wins); new catalog entry Q-2-42
+  within one condition value (q2 extension; Q1 matches
+  literally — its repeated-attribute OR is unrepresentable in
+  q2's map-shaped Attr); Q-2-42 warnings for unknown `when-*`/
+  `unless-*` spellings and for both-marker elements (hidden
+  wins); new catalog entry Q-2-42
 - [x] E2E (recorded): doc with visible/hidden/inline conditions;
-      `q2 render doc.qmd` → basic text only; `--profile advanced` →
-      advanced text + inline span, basic text gone (grep-verified
-      both ways). Bonus: the run exercised Q-5-19's hint for
-      conditional-content-only profiles exactly as designed.
+  `q2 render doc.qmd` → basic text only; `--profile advanced` →
+  advanced text + inline span, basic text gone (grep-verified
+  both ways). Bonus: the run exercised Q-5-19's hint for
+  conditional-content-only profiles exactly as designed.
 
 ### Phase 5 — docs, fixtures, wrap-up
 
 - [x] `docs/guides/projects/profiles.qmd` written (activation,
-      merging, defaults/groups, conditional content, code
-      visibility, "Differences from Quarto 1" section mirroring the
-      divergence table); `environment.qmd` gained the
-      `_environment-<profile>` file row, precedence entry, and a
-      "Profile environments" section (incl. secrets callout and the
-      no-recursion rule). Rendered with
-      `cargo run --bin q2 -- render docs/` and inspected (titles,
-      literal shortcode escape, cross-links all correct).
+  merging, defaults/groups, conditional content, code
+  visibility, "Differences from Quarto 1" section mirroring the
+  divergence table); `environment.qmd` gained the
+  `_environment-<profile>` file row, precedence entry, and a
+  "Profile environments" section (incl. secrets callout and the
+  no-recursion rule). Rendered with
+  `cargo run --bin q2 -- render docs/` and inspected (titles,
+  literal shortcode escape, cross-links all correct).
 - [x] smoke-all fixture `metadata/project-profiles/`: activation via
-      `profile.default` (no CLI flags needed, so all three runners
-      exercise it — including the WASM runner, our only WASM-path
-      coverage), overlay title + when-profile visible/hidden +
-      when-meta-from-overlay assertions; native runner green, WASM
-      runner exercised by `cargo xtask verify`\'s hub leg.
+  `profile.default` (no CLI flags needed, so all three runners
+  exercise it — including the WASM runner, our only WASM-path
+  coverage), overlay title + when-profile visible/hidden +
+  when-meta-from-overlay assertions; native runner green, WASM
+  runner exercised by `cargo xtask verify`\'s hub leg.
 - [x] Engine E2E (recorded): jupyter cell
-      `os.environ.get("QUARTO_PROFILE")` printed
-      `advanced,production` under
-      `q2 render doc.qmd --profile advanced,production` with a real
-      python kernel.
+  `os.environ.get("QUARTO_PROFILE")` printed
+  `advanced,production` under
+  `q2 render doc.qmd --profile advanced,production` with a real
+  python kernel.
 - [x] Deferred-work strands filed: bd-pfgc273f (preview --profile
-      threading), bd-spb7mobo (metadata-files decision),
-      bd-ip1lrgra (Lua quarto.project.profile), bd-kzwt3xcu
-      (preview watch/restart on profile-config change),
-      bd-47hhbmaj (auto-gitignore /_*.local). bd-mlj6 and
-      bd-ev8mk1rp closed as implemented.
+  threading), bd-spb7mobo (metadata-files decision),
+  bd-ip1lrgra (Lua quarto.project.profile), bd-kzwt3xcu
+  (preview watch/restart on profile-config change),
+  bd-47hhbmaj (auto-gitignore /_*.local). bd-mlj6 and
+  bd-ev8mk1rp closed as implemented.
 - [x] Full gates: `cargo xtask verify` (full, WASM leg) green;
-      PR #492 opened (label `feature-port`), CI green after one
-      rebase-fallout fix (semantic conflict with a concurrently
-      landed test), merged as 73064984. Strand bd-fu16z22k closed.
+  PR #492 opened (label `feature-port`), CI green after one
+  rebase-fallout fix (semantic conflict with a concurrently
+  landed test), merged as 73064984. Strand bd-fu16z22k closed.
 - [x] "Feature porting" process doc written:
-      `claude-notes/instructions/feature-porting.md` (two-phase
-      contract) + `feature-porting-lessons.md` (append-only
-      pitfalls-and-lessons file, 12 entries seeded from this
-      session)
+  `claude-notes/instructions/feature-porting.md` (two-phase
+  contract) + `feature-porting-lessons.md` (append-only
+  pitfalls-and-lessons file, 12 entries seeded from this
+  session)
 
 ## Open questions for plan iteration
 

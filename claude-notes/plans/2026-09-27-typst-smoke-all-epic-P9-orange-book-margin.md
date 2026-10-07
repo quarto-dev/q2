@@ -238,42 +238,42 @@ position assertions pass.
 ## Checklist
 
 - [x] Spike: render `orange-book-margin` with today's (post-P8) harness. Two things
-      to specifically check, not just "does it render": (a) does `reference-location`
-      margin placement work as the code-reading above predicts (should — treat a
-      failure here as a real finding) — **confirmed working**; (b) does
-      `citation-location: margin`/`suppress-bibliography: true`/
-      `grid.margin-width`/`grid.gutter-width` actually reach the merged document's
-      Typst template context — **`citation-location`/`suppress-bibliography` did
-      not work; found and fixed, see "First bug" above.** `grid.margin-width`/
-      `grid.gutter-width` confirmed working.
+  to specifically check, not just "does it render": (a) does `reference-location`
+  margin placement work as the code-reading above predicts (should — treat a
+  failure here as a real finding) — **confirmed working**; (b) does
+  `citation-location: margin`/`suppress-bibliography: true`/
+  `grid.margin-width`/`grid.gutter-width` actually reach the merged document's
+  Typst template context — **`citation-location`/`suppress-bibliography` did
+  not work; found and fixed, see "First bug" above.** `grid.margin-width`/
+  `grid.gutter-width` confirmed working.
 - [x] Copy the fixture directory's **tracked source files** into
-      `crates/quarto/tests/smoke-all/typst/orange-book-margin/` — done (commit
-      `21c29365e`), `smoke_all` auto-discovers it (directory-based, no
-      registration step needed — confirmed).
+  `crates/quarto/tests/smoke-all/typst/orange-book-margin/` — done (commit
+  `21c29365e`), `smoke_all` auto-discovers it (directory-based, no
+  registration step needed — confirmed).
 - [x] Confirm recto/verso-labeled position assertions (24 total, all plain
-      `rightOf`/`leftOf`, no new relation types) are correctly resolved by P3's
-      `/StructTreeRoot` page-scoping work — **confirmed working**, P3's
-      page-keyed map has no bug here. 2 of the 24 (`Ankylosaura`/`Thyreophora`,
-      `Orbitsolva`/`Orbitcode`) initially failed, but root-caused to
-      bd-gak8uiza (missing `{{< embed >}}` figure shifting the whole book by
-      one page, flipping recto/verso parity for content that crosses that
-      boundary) — not a P3/P9 bug. Fixed in place (commit `21c29365e`),
-      commented to revert once bd-gak8uiza lands. Confirmed P1/P3's assertion
-      parser tolerates the decorative `page: N` sibling key on every one of
-      the 24 — none were rejected as malformed.
+  `rightOf`/`leftOf`, no new relation types) are correctly resolved by P3's
+  `/StructTreeRoot` page-scoping work — **confirmed working**, P3's
+  page-keyed map has no bug here. 2 of the 24 (`Ankylosaura`/`Thyreophora`,
+  `Orbitsolva`/`Orbitcode`) initially failed, but root-caused to
+  bd-gak8uiza (missing `{{< embed >}}` figure shifting the whole book by
+  one page, flipping recto/verso parity for content that crosses that
+  boundary) — not a P3/P9 bug. Fixed in place (commit `21c29365e`),
+  commented to revert once bd-gak8uiza lands. Confirmed P1/P3's assertion
+  parser tolerates the decorative `page: N` sibling key on every one of
+  the 24 — none were rejected as malformed.
 - [x] Confirm the one `granularity`-based assertion (object form
-      `{text, granularity: "Div"|"P"}`, the `Alignmark`/`Listbody` pair) round-trips
-      correctly through P1's assertion parser — **confirmed working**, passed in
-      every run, never appeared in any failure list.
+  `{text, granularity: "Div"|"P"}`, the `Alignmark`/`Listbody` pair) round-trips
+  correctly through P1's assertion parser — **confirmed working**, passed in
+  every run, never appeared in any failure list.
 - [x] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
-      -p quarto`. Run 2026-09-29: clippy clean (only the pre-existing
-      `agents-docs-dist/llms.txt not found` placeholder warning, not a lint).
-      nextest: 601 passed, 1 failed (`smoke_all::smoke_all`, an aggregate
-      test), 2 skipped — the failure's 6 sub-failures are exactly the known
-      set: the 5 pre-existing P5 `#notefigure\(` margin-layout misses plus the
-      bd-gak8uiza-blocked `{{< embed >}}` content (missing
-      `fig-visualization` crossref/caption/warning), both already understood
-      and out of P9's scope. No new regressions.
+  -p quarto`. Run 2026-09-29: clippy clean (only the pre-existing
+  `agents-docs-dist/llms.txt not found` placeholder warning, not a lint).
+  nextest: 601 passed, 1 failed (`smoke_all::smoke_all`, an aggregate
+  test), 2 skipped — the failure's 6 sub-failures are exactly the known
+  set: the 5 pre-existing P5 `#notefigure\(` margin-layout misses plus the
+  bd-gak8uiza-blocked `{{< embed >}}` content (missing
+  `fig-visualization` crossref/caption/warning), both already understood
+  and out of P9's scope. No new regressions.
 
 ## Status
 

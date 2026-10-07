@@ -86,25 +86,25 @@ seeded first-run samples, revocable/role-scoped links, sender UI redesign
 ## Phase 1 — Test specifications (write first, red)
 
 - [x] `routing.test.ts` additions: parse/build round-trips for `from=`,
-      `preview=`, `start=` on both routes; legacy URLs (no new params) parse
-      to the same route objects as today; malformed/oversized `preview=`
-      degrades to `undefined`; payload encoder caps at 3 projects × 2 files.
+  `preview=`, `start=` on both routes; legacy URLs (no new params) parse
+  to the same route objects as today; malformed/oversized `preview=`
+  degrades to `undefined`; payload encoder caps at 3 projects × 2 files.
 - [x] New `invitePreview.test.ts`: base64url JSON encode/decode unit tests
-      (pure functions, no DOM).
+  (pure functions, no DOM).
 - [x] `InviteLanding.test.tsx` (jsdom pragma): renders both `kind`s ×
-      {signed-in, signed-out}; exact kicker/CTA copy per matrix (incl.
-      "Join and open <start name>" / generic legacy text); payload block
-      skipped when preview absent; no name input, no color swatches, no
-      footnote below CTA; CTA busy state while joining.
+  {signed-in, signed-out}; exact kicker/CTA copy per matrix (incl.
+  "Join and open <start name>" / generic legacy text); payload block
+  skipped when preview absent; no name input, no color swatches, no
+  footnote below CTA; CTA busy state while joining.
 - [x] `App`-level "share does not connect on load, connects on CTA" —
-      **deferred to a Phase 4 harness e2e**: App's initial-navigation effect
-      is too entangled for a unit test; the harness route + Playwright spec is
-      the honest surface for it.
+  **deferred to a Phase 4 harness e2e**: App's initial-navigation effect
+  is too entangled for a unit test; the harness route + Playwright spec is
+  the honest surface for it.
 - [x] Welcome banner test: shows once, dismissal persists per id, "Change
-      name" invokes the rename affordance callback.
+  name" invokes the rename affordance callback.
 - [x] Run all new tests, confirm they fail for the right reason before Phase 2.
-      (2026-09-01: 4 files red — 3 missing-module import failures, 2 routing
-      round-trip assertion failures; all 95 pre-existing routing tests green.)
+  (2026-09-01: 4 files red — 3 missing-module import failures, 2 routing
+  round-trip assertion failures; all 95 pre-existing routing tests green.)
 
 `start=` encoding note: the start target is `{d: indexDocId, f: filePath}`
 base64url JSON — a doc id is acceptable here (unlike `preview=`, which stays
@@ -114,96 +114,96 @@ entry via the collection doc; name-based matching would break on renames.
 ## Phase 2 — Routing + payload plumbing
 
 - [x] `routing.ts`: extend `ShareRoute` (`from?`, `preview?`) and
-      `JoinCollectionRoute` (`preview?`, `start?`); parse + build; keep all
-      params optional.
+  `JoinCollectionRoute` (`preview?`, `start?`); parse + build; keep all
+  params optional.
 - [x] New `src/utils/invitePreview.ts`: payload types, base64url
-      encode/decode, size cap, version check.
+  encode/decode, size cap, version check.
 - [x] Phase 1 routing/payload tests green (106/106 incl. all pre-existing).
 
 ## Phase 3 — InviteLanding component
 
 - [x] New `src/components/InviteLanding.tsx` (+ `InviteLanding.css`): props
-      `{kind, inviter, title, preview, signedIn, startName, joinState,
-      ctaDisabled, error, onCta}`; card anatomy per handoff §"Shared Card
-      Anatomy"; base styles adapted from `.qh-join-card`; quarto icon from
-      `/quarto-icon.svg` (with `--logo-filter`); CSS lint clean (logical
-      box props).
+  `{kind, inviter, title, preview, signedIn, startName, joinState,
+  ctaDisabled, error, onCta}`; card anatomy per handoff §"Shared Card
+  Anatomy"; base styles adapted from `.qh-join-card`; quarto icon from
+  `/quarto-icon.svg` (with `--logo-filter`); CSS lint clean (logical
+  box props).
 - [x] Google CTA — **decision 4 revised (Andrew, 2026-09-01)**: the hub's
-      /auth/callback (crates/quarto-hub/src/auth.rs) only accepts GIS-minted
-      `credential=` form POSTs, so a custom button cannot legitimately drive
-      the flow. Resolution: the provider's own `<GoogleLogin>` with
-      `text="continue_with"` ("Continue with Google"), passed into
-      InviteLanding as the `signInCta` node; `SignInButtonProps` gained a
-      `text` variant. The "to join"/"to open" suffix from the mock is
-      dropped (GIS controls the label).
+  /auth/callback (crates/quarto-hub/src/auth.rs) only accepts GIS-minted
+  `credential=` form POSTs, so a custom button cannot legitimately drive
+  the flow. Resolution: the provider's own `<GoogleLogin>` with
+  `text="continue_with"` ("Continue with Google"), passed into
+  InviteLanding as the `signInCta` node; `SignInButtonProps` gained a
+  `text` variant. The "to join"/"to open" suffix from the mock is
+  dropped (GIS controls the label).
 - [x] Dev harness pages: `invite-landing-collection{,-signed-in,-legacy}`,
-      `invite-landing-document{,-signed-in}`, `invite-welcome-banner`.
+  `invite-landing-document{,-signed-in}`, `invite-welcome-banner`.
 - [x] Component tests green (17/17); harness pages visually checked against
-      `3a-unified-invite-landings.png` in the dev server (collection,
-      document, and signed-in variants all faithful).
+  `3a-unified-invite-landings.png` in the dev server (collection,
+  document, and signed-in variants all faithful).
 
 ## Phase 4 — App wiring
 
 - [x] Signed-out invite routes render InviteLanding above the LoginScreen
-      gate; the GIS CTA round-trips via pre-auth hash save/restore (share
-      hashes re-saved explicitly since the URL is scrubbed on mount —
-      `savePreAuthHash` gained an optional hash param).
+  gate; the GIS CTA round-trips via pre-auth hash save/restore (share
+  hashes re-saved explicitly since the URL is scrubbed on mount —
+  `savePreAuthHash` gained an optional hash param).
 - [x] Share arm: auto-connect removed for non-ephemeral links (hash still
-      scrubbed on mount; route captured into `pendingShare` at boot);
-      `connectToSharedProject` hoisted to component scope with
-      `{quiet, addToSet}` opts; ephemeral preview boot/reload keep eager
-      connect.
+  scrubbed on mount; route captured into `pendingShare` at boot);
+  `connectToSharedProject` hoisted to component scope with
+  `{quiet, addToSet}` opts; ephemeral preview boot/reload keep eager
+  connect.
 - [x] Collection CTA: `subscribeCollection` with account identity (no form) →
-      `start` target opened via `connectToSharedProject` (addToSet: false) →
-      editor on file, else home. `JoinCollectionLanding` deleted (component,
-      test, and its `.qh-join*` CSS). The invite-first silent root creation
-      effect now also covers share invitees. Known trade-off: the
-      auth-expired "Sign in again" secondary action from the old landing is
-      not carried over (error text still shows).
+  `start` target opened via `connectToSharedProject` (addToSet: false) →
+  editor on file, else home. `JoinCollectionLanding` deleted (component,
+  test, and its `.qh-join*` CSS). The invite-first silent root creation
+  effect now also covers share invitees. Known trade-off: the
+  auth-expired "Sign in again" secondary action from the old landing is
+  not carried over (error text still shows).
 - [x] Broken/incomplete links: error copy rendered inside the landing card,
-      CTA disabled.
+  CTA disabled.
 - [x] Integration tests green (118/118); `share-link-project-set.spec.ts`
-      updated to click through the landing (this is the "no connect on load,
-      connect on CTA" e2e coverage).
+  updated to click through the landing (this is the "no connect on load,
+  connect on CTA" e2e coverage).
 
 ## Phase 5 — Welcome banner
 
 - [x] `src/components/EditorWelcomeBanner.tsx`: tinted bar rendered via a new
-      optional `banner` prop on Editor (next to EphemeralSessionBanner);
-      collection + document copy variants; × dismiss persists per decision 7.
-      **Deviation from handoff**: there is no existing in-editor rename
-      affordance (the avatar menu lives on the home screen), so "Change name"
-      opens a small inline rename in the banner itself (input + Save →
-      `updateUserName`). Flagged for Andrew's review.
+  optional `banner` prop on Editor (next to EphemeralSessionBanner);
+  collection + document copy variants; × dismiss persists per decision 7.
+  **Deviation from handoff**: there is no existing in-editor rename
+  affordance (the avatar menu lives on the home screen), so "Change name"
+  opens a small inline rename in the banner itself (input + Save →
+  `updateUserName`). Flagged for Andrew's review.
 - [x] Banner tests green (8/8).
 
 ## Phase 6 — Sender side
 
 - [x] `buildInviteUrl` (`ProjectsHome.tsx`): embeds `preview=` from cached
-      peek summaries (3 projects × 1 file + facepile initials + member first
-      names) and `start=` = first project + its first cached top file (per
-      Andrew's default-to-first decision).
+  peek summaries (3 projects × 1 file + facepile initials + member first
+  names) and `start=` = first project + its first cached top file (per
+  Andrew's default-to-first decision).
 - [x] `buildShareableUrl` gained `opts {from, preview}`; both call sites
-      embed them (ProjectsHome card menu from the peek summary; Editor's
-      ShareDialog from live files + identities, via a new `userName` prop on
-      Editor). `initialsFor` promoted to `utils/facepile.ts`.
+  embed them (ProjectsHome card menu from the peek summary; Editor's
+  ShareDialog from live files + identities, via a new `userName` prop on
+  Editor). `initialsFor` promoted to `utils/facepile.ts`.
 - [x] URL-length sanity test with max payload (maximal invite hash < 1500
-      chars, round-trips).
+  chars, round-trips).
 
 ## Phase 7 — Verification + ship prep
 
 - [ ] `cd hub-client && npm run preflight` and `npm run test:ci`.
 - [ ] `npm run build:all` (stricter than typecheck — required for hub-client).
 - [ ] End-to-end per CLAUDE.md: real browser against a running hub — generate
-      an invite link from one profile, open signed-out in another, complete
-      Google round-trip (or `--allow-insecure-auth` local equivalent), verify
-      landing → join → editor-on-file → banner → dismissal. Record invocation
-      + observed output here.
+  an invite link from one profile, open signed-out in another, complete
+  Google round-trip (or `--allow-insecure-auth` local equivalent), verify
+  landing → join → editor-on-file → banner → dismissal. Record invocation
+  + observed output here.
 - [ ] Legacy-link e2e: pre-change share + join-collection URLs still work
-      (`e2e/share-link-project-set.spec.ts` still green).
+  (`e2e/share-link-project-set.spec.ts` still green).
 - [ ] Two-commit changelog workflow (`hub-client/changelog.md`).
 - [ ] Review checklist (`claude-notes/instructions/review.md`) before each
-      commit; no push without Andrew's approval.
+  commit; no push without Andrew's approval.
 
 ## Resolved questions (Andrew, 2026-09-01)
 
@@ -217,6 +217,6 @@ entry via the collection doc; name-based matching would break on renames.
 
 - Test files are excluded from `tsconfig.app.json`; route-type tightening only
   surfaces in vitest, not the app build.
-- `JoinCollectionLanding.test.tsx`'s route literal omits `entries` — dies with
+- `JoinCollectionLanding.test.tsx`\'s route literal omits `entries` — dies with
   the component in Phase 4.
 - CSS is linted for token usage (`scripts/lint-css.mjs`); no new alpha colors.

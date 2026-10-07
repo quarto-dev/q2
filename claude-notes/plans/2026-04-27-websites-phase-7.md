@@ -744,7 +744,7 @@ robots.txt cover the vocabulary. Consistent with Phases 2–6.
 
 ### Preparation
 - [ ] Re-read `claude-notes/instructions/testing.md`,
-      `coding.md`, `review.md`.
+  `coding.md`, `review.md`.
 - [ ] Confirm user agreement with Decisions 1–12.
 - [ ] Resolve open questions §"Open questions" below.
 - [x] File `bd` issue under parent `bd-0tr6`. (`bd-b9mz`)
@@ -752,7 +752,7 @@ robots.txt cover the vocabulary. Consistent with Phases 2–6.
 
 ### `website_config` helper (`quarto-core/src/project/website_config.rs`)
 - [x] New module: `website_title`, `website_site_url`, `website_favicon`,
-      plus `normalize_favicon_path` (Open Question 4).
+  plus `normalize_favicon_path` (Open Question 4).
 - [x] Re-export from `project/mod.rs`.
 - [x] Tests 1–6 + 2 normalization tests (8 total, all passing).
 
@@ -760,187 +760,187 @@ robots.txt cover the vocabulary. Consistent with Phases 2–6.
 - [x] New module per Decision 4. En-dash separator (U+2013).
 - [x] `mod.rs` re-export.
 - [x] Tests 7–12 + 2 extras (idempotency, non-map meta defensive). 8
-      total, all passing.
+  total, all passing.
 
 ### `WebsiteFaviconTransform` (`transforms/website_favicon.rs`)
 - [x] New module per Decision 5. Promotes scalar `header-includes`
-      to array on append; preserves Pandoc-inline / unknown shapes
-      defensively.
+  to array on append; preserves Pandoc-inline / unknown shapes
+  defensively.
 - [x] Inline MIME-type helper + HTML-attr escape.
 - [x] Tests 13–18 + 4 extras (leading-slash normalize, ampersand
-      escape, MIME table, mod re-export). 10 total, all passing.
+  escape, MIME table, mod re-export). 10 total, all passing.
 
 ### `WebsiteCanonicalUrlTransform` (`transforms/website_canonical_url.rs`) — Decision 6 confirmed
 - [x] New module per Decision 6. Pure helper `apply_canonical_url`
-      decouples site-url + output-href composition from
-      `RenderContext` lookup so the pure-helper unit tests cover
-      the no-op branches.
+  decouples site-url + output-href composition from
+  `RenderContext` lookup so the pure-helper unit tests cover
+  the no-op branches.
 - [x] `mod.rs` re-export.
 - [x] Tests 19–22 + 5 helper/setter extras (sub-path site URL,
-      leading-slash normalization, insert-vs-replace, non-map
-      defensive). 9 total, all passing.
+  leading-slash normalization, insert-vs-replace, non-map
+  defensive). 9 total, all passing.
 
 ### Pipeline wiring (`pipeline.rs`)
 - [x] Insert the three new transforms after
-      `MetadataNormalizeTransform` per Decision 3 (steps 4a, 4b, 4c).
+  `MetadataNormalizeTransform` per Decision 3 (steps 4a, 4b, 4c).
 - [x] Doc-block update enumerating the new pre-engine transforms.
 - [x] Full quarto-core test suite green (1275 tests pass) — no
-      regressions in existing transforms or integration tests.
+  regressions in existing transforms or integration tests.
 
 ### `website_post_render.rs` (`quarto-core/src/project/website_post_render.rs`)
 - [x] New module containing `flush_site_libs` (extracted from
-      orchestrator.rs:186-228), `copy_favicon`, `write_sitemap`,
-      `write_robots_txt` per Decision 11. Module is
-      `cfg(not(target_arch = "wasm32"))`-gated.
+  orchestrator.rs:186-228), `copy_favicon`, `write_sitemap`,
+  `write_robots_txt` per Decision 11. Module is
+  `cfg(not(target_arch = "wasm32"))`-gated.
 - [x] Inline `escape_xml_text` helper for sitemap.
 - [x] Inline `format_iso8601_utc` helper (Howard Hinnant
-      civil-date arithmetic, no `chrono` dependency).
+  civil-date arithmetic, no `chrono` dependency).
 - [x] Tests 23–29 + 5 extras (XML escape table, ISO-8601 unit
-      tests for epoch / known timestamp / end-of-year / leap day).
-      12 total, all passing.
+  tests for epoch / known timestamp / end-of-year / leap day).
+  12 total, all passing.
 
 ### Orchestrator wiring (`project/orchestrator.rs`)
 - [x] Refactor `WebsiteProjectType::post_render` to call
-      `flush_site_libs`, `copy_favicon`, `write_sitemap`,
-      `write_robots_txt` in order. Body is now a four-line
-      composition.
+  `flush_site_libs`, `copy_favicon`, `write_sitemap`,
+  `write_robots_txt` in order. Body is now a four-line
+  composition.
 - [x] **Trait signature extension:** `post_render` gained a
-      `&mut Vec<DiagnosticMessage>` parameter so non-fatal
-      warnings (missing favicon source) reach the user.
-      `DefaultProjectType` still uses the default no-op impl.
-      `ProjectRenderSummary` gained
-      `pub project_diagnostics: Vec<DiagnosticMessage>`.
+  `&mut Vec<DiagnosticMessage>` parameter so non-fatal
+  warnings (missing favicon source) reach the user.
+  `DefaultProjectType` still uses the default no-op impl.
+  `ProjectRenderSummary` gained
+  `pub project_diagnostics: Vec<DiagnosticMessage>`.
 - [x] CLI surface: `quarto/src/commands/render.rs` prints
-      `summary.project_diagnostics` after the per-doc
-      diagnostics.
+  `summary.project_diagnostics` after the per-doc
+  diagnostics.
 - [x] Updated the in-test `CountingProjectType` /
-      `CountingProjectTypeWrapper` in
-      `crates/quarto-core/tests/project_pipeline.rs` to the new
-      signature.
+  `CountingProjectTypeWrapper` in
+  `crates/quarto-core/tests/project_pipeline.rs` to the new
+  signature.
 - [x] Full workspace nextest green (7922 tests pass) — no
-      regressions.
+  regressions.
 
 ### Integration tests (`quarto-core/tests/website_post_render.rs`)
 - [x] Tests 30–39 (all 10 passing).
 - [x] Use `NativeRuntime` and a temp project directory.
 - [x] Test 39 reframed to use `output-dir: _out` so a default
-      project actually renders files (the existing default-kind
-      output-dir-equals-project-dir overlap collides with file
-      discovery; not a Phase 7 concern but worth a note for the
-      epic close-out).
+  project actually renders files (the existing default-kind
+  output-dir-equals-project-dir overlap collides with file
+  discovery; not a Phase 7 concern but worth a note for the
+  epic close-out).
 
 ### Regression check
 - [x] Re-ran `/tmp/q2-phase2-smoke/`, `/tmp/q2-phase3-smoke/`,
-      `/tmp/q2-phase4-smoke/`, `/tmp/q2-phase5-website-test/`,
-      `/tmp/q2-phase6-smoke/`. All render cleanly with no
-      errors or warnings. Phase 3's fixture sets
-      `website.title: "Phase 3 smoke"`, so Phase 7's
-      title-prefix transform activated there: `<title>Home –
-      Phase 3 smoke</title>` and `<title>About – Phase 3
-      smoke</title>` are the new title strings. No favicon /
-      canonical-url / sitemap / robots.txt emitted in any
-      regression fixture (none set the relevant keys), as
-      intended.
+  `/tmp/q2-phase4-smoke/`, `/tmp/q2-phase5-website-test/`,
+  `/tmp/q2-phase6-smoke/`. All render cleanly with no
+  errors or warnings. Phase 3's fixture sets
+  `website.title: "Phase 3 smoke"`, so Phase 7's
+  title-prefix transform activated there: `<title>Home –
+  Phase 3 smoke</title>` and `<title>About – Phase 3
+  smoke</title>` are the new title strings. No favicon /
+  canonical-url / sitemap / robots.txt emitted in any
+  regression fixture (none set the relevant keys), as
+  intended.
 - [x] Test 39 in the integration suite (default-project
-      no-Phase-7-outputs) locks in the no-op contract.
+  no-Phase-7-outputs) locks in the no-op contract.
 
 ### CLI end-to-end + verification
 - [x] Smoke fixture at `/tmp/q2-phase7-smoke/` (test 40):
-      3 pages (`index`, `about`, `docs/api`), `website.title`,
-      `website.site-url`, `website.favicon`. Inspection results:
-      * `_site/sitemap.xml` lists all 3 URLs prefixed with
-        `https://example.com/site/...` and per-page
-        ISO-8601 lastmods.
-      * `_site/robots.txt`: `Sitemap: https://example.com/site/sitemap.xml`.
-      * `_site/favicon.ico` exists (4-byte placeholder copied
-        verbatim).
-      * `_site/index.html`: `<title>Home – Phase 7 Test
-        Site</title>`, `<link rel="icon" href="favicon.ico"
-        type="image/x-icon">`, `<link rel="canonical"
-        href="https://example.com/site/index.html">`.
-      * `_site/docs/api.html`: `<title>API – Phase 7 Test
-        Site</title>`, `<link rel="icon" href="../favicon.ico"
-        type="image/x-icon">`, `<link rel="canonical"
-        href="https://example.com/site/docs/api.html">`.
-      Matches the plan example table 1:1.
+  3 pages (`index`, `about`, `docs/api`), `website.title`,
+  `website.site-url`, `website.favicon`. Inspection results:
+  * `_site/sitemap.xml` lists all 3 URLs prefixed with
+    `https://example.com/site/...` and per-page
+    ISO-8601 lastmods.
+  * `_site/robots.txt`: `Sitemap: https://example.com/site/sitemap.xml`.
+  * `_site/favicon.ico` exists (4-byte placeholder copied
+    verbatim).
+  * `_site/index.html`: `<title>Home – Phase 7 Test
+    Site</title>`, `<link rel="icon" href="favicon.ico"
+    type="image/x-icon">`, `<link rel="canonical"
+    href="https://example.com/site/index.html">`.
+  * `_site/docs/api.html`: `<title>API – Phase 7 Test
+    Site</title>`, `<link rel="icon" href="../favicon.ico"
+    type="image/x-icon">`, `<link rel="canonical"
+    href="https://example.com/site/docs/api.html">`.
+  Matches the plan example table 1:1.
 - [x] Broken-favicon smoke at `/tmp/q2-phase7-broken-smoke/`:
-      stderr printed `Warning: website.favicon refers to missing
-      file 'nope.ico'`, `\_site/index.html` still has
-      `<link rel="icon" href="nope.ico">`, `_site/nope.ico`
-      does not exist.
+  stderr printed `Warning: website.favicon refers to missing
+  file 'nope.ico'`, `\_site/index.html` still has
+  `<link rel="icon" href="nope.ico">`, `_site/nope.ico`
+  does not exist.
 - [ ] `cargo build --workspace`.
 - [ ] `cargo nextest run --workspace`.
 - [ ] `cargo xtask lint`.
 - [ ] `cargo fmt --check`.
 - [ ] `cargo xtask verify` (full, including WASM build) — Phase 7
-      touches `quarto-core` types accessible from
-      `wasm-quarto-hub-client` indirectly; full verify is the
-      safety net.
+  touches `quarto-core` types accessible from
+  `wasm-quarto-hub-client` indirectly; full verify is the
+  safety net.
 
 ### Hub-client / WASM impact check
 - [x] Audited `crates/wasm-quarto-hub-client/src/`: no references
-      to `post_render`, `WebsiteProjectType`, `ProjectPipeline`,
-      or `website_post_render`. The WASM path goes through
-      `render_qmd_to_html` for single-doc renders only.
-      Phase 7's `post_render` is `cfg(not(target_arch =
-      "wasm32"))` — it never compiles into WASM. Phase 9 adds the
-      multi-doc orchestration flow.
+  to `post_render`, `WebsiteProjectType`, `ProjectPipeline`,
+  or `website_post_render`. The WASM path goes through
+  `render_qmd_to_html` for single-doc renders only.
+  Phase 7's `post_render` is `cfg(not(target_arch =
+  "wasm32"))` — it never compiles into WASM. Phase 9 adds the
+  multi-doc orchestration flow.
 - [x] Per-page transforms (title prefix, favicon, canonical URL)
-      compile under WASM — they're pure `quarto-core` metadata
-      transforms with no platform-specific code. Confirmed by
-      successful `npm run build:wasm` (release build of
-      `wasm-quarto-hub-client` target wasm32-unknown-unknown
-      includes Phase 7's modules). In single-doc WASM renders,
-      the title-prefix and favicon transforms still activate
-      when the user's qmd has `website.*` keys at the top level;
-      the canonical URL transform short-circuits because there's
-      no `project_index`. Behavior is correct for the Phase 9
-      project-aware path; today's single-doc preview is
-      unaffected unless the user explicitly sets `website.*`.
+  compile under WASM — they're pure `quarto-core` metadata
+  transforms with no platform-specific code. Confirmed by
+  successful `npm run build:wasm` (release build of
+  `wasm-quarto-hub-client` target wasm32-unknown-unknown
+  includes Phase 7's modules). In single-doc WASM renders,
+  the title-prefix and favicon transforms still activate
+  when the user's qmd has `website.*` keys at the top level;
+  the canonical URL transform short-circuits because there's
+  no `project_index`. Behavior is correct for the Phase 9
+  project-aware path; today's single-doc preview is
+  unaffected unless the user explicitly sets `website.*`.
 
 ### Verification and close-out
 - [x] `cargo build --workspace` clean.
 - [x] `cargo nextest run --workspace` — **7922 tests pass** (up
-      from 7876 pre-Phase-7; net +46 tests across the four new
-      modules, the integration suite, and the orchestrator
-      diagnostic-channel test).
+  from 7876 pre-Phase-7; net +46 tests across the four new
+  modules, the integration suite, and the orchestrator
+  diagnostic-channel test).
 - [x] `cargo xtask lint` passes (638 files checked).
 - [x] `cargo fmt --all -- --check` clean.
 - [x] `cargo xtask verify` (full, including WASM build,
-      hub-client `npm run build:all`, hub-client tests, and
-      trace-viewer build/tests) — all 9 steps green.
+  hub-client `npm run build:all`, hub-client tests, and
+  trace-viewer build/tests) — all 9 steps green.
 - [x] No snapshot drift.
 - [x] Follow-ups filed (each `discovered-from:bd-b9mz`,
-      parent-child to `bd-0tr6`, with extra `related` links
-      where noted):
-      * **`bd-7h6a`** — Per-page favicon override
-        (`meta.favicon` beats `website.favicon`). User flagged
-        2026-04-27 as expected-soon. P3.
-      * **`bd-pphv`** — Sitemap incremental merge
-        (read-existing/update/write). Loops with Phase 8. P3.
-      * **`bd-tyvt`** — Open Graph / Twitter card / social meta
-        tags (Q1 `metadataHtmlPostProcessor` parity). P3.
-      * **`bd-ochm`** — Brand-aware favicon fallback (once Q2
-        brand support lands). P4.
-      * **`bd-4zdf`** — Multi-format favicon variants
-        (apple-touch-icon, sizes). P4.
-      * **`bd-1hdz`** — Draft-mode interaction with sitemap.
-        Coordinate with `bd-p4sc` from Phase 6. P3.
-      * **`bd-97yc`** — Title-prefix home-page carve-out
-        (Q1 `stem == "index"` parity). P4.
-      * **`bd-82dn`** — Empty-`index.html` filter in sitemap.
-        Coordinate with `bd-r82e` (`DocumentProfile.includes`
-        enrichment is the natural place to add `is_empty`). P4.
+  parent-child to `bd-0tr6`, with extra `related` links
+  where noted):
+  * **`bd-7h6a`** — Per-page favicon override
+    (`meta.favicon` beats `website.favicon`). User flagged
+    2026-04-27 as expected-soon. P3.
+  * **`bd-pphv`** — Sitemap incremental merge
+    (read-existing/update/write). Loops with Phase 8. P3.
+  * **`bd-tyvt`** — Open Graph / Twitter card / social meta
+    tags (Q1 `metadataHtmlPostProcessor` parity). P3.
+  * **`bd-ochm`** — Brand-aware favicon fallback (once Q2
+    brand support lands). P4.
+  * **`bd-4zdf`** — Multi-format favicon variants
+    (apple-touch-icon, sizes). P4.
+  * **`bd-1hdz`** — Draft-mode interaction with sitemap.
+    Coordinate with `bd-p4sc` from Phase 6. P3.
+  * **`bd-97yc`** — Title-prefix home-page carve-out
+    (Q1 `stem == "index"` parity). P4.
+  * **`bd-82dn`** — Empty-`index.html` filter in sitemap.
+    Coordinate with `bd-r82e` (`DocumentProfile.includes`
+    enrichment is the natural place to add `is_empty`). P4.
 - [x] Updated epic plan §"Work items" — Phase 7 marked done with
-      sub-plan link, `bd-b9mz` reference, and full follow-up
-      list.
+  sub-plan link, `bd-b9mz` reference, and full follow-up
+  list.
 - [x] Updated §"Follow-up beads report (running log)" with the
-      eight filed bd issues.
+  eight filed bd issues.
 - [x] `br close bd-b9mz` (reason cites commit `78aa80cc`).
 - [x] All Phase-7 changes committed in commit `78aa80cc`
-      ("Phase 7: post-render (sitemap, favicon, site-url/title
-      prefix)") on `feature/websites`. The single commit
-      includes the .beads/issues.jsonl flush (br auto-flushed).
+  ("Phase 7: post-render (sitemap, favicon, site-url/title
+  prefix)") on `feature/websites`. The single commit
+  includes the .beads/issues.jsonl flush (br auto-flushed).
 - [ ] Ask user permission before pushing.
 
 ## Risks and mitigations

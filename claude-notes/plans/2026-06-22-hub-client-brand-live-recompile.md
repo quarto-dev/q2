@@ -128,7 +128,7 @@ Add `fileContents` to `ReactPreview`\'s re-render effect dependency array
 
 ### Optional follow-up (not required): fine-grained dependency tracking
 
-The user framed it as "know that `slides.qmd`'s style depends on `_brand.yml`
+The user framed it as "know that `slides.qmd`\'s style depends on `_brand.yml`
 and recompile when *that* changes." That's a real optimization — re-render only
 when a file the active doc actually depends on (config/brand siblings, included
 files) changes, rather than on every sibling keystroke. But it adds a
@@ -140,17 +140,17 @@ extra deck re-renders matter. File as a separate optimization strand if desired.
 ## Verification plan (TDD) — DONE
 
 - [x] Integration test `ReactPreview.rerender.integration.test.tsx`: rendering
-      `ReactPreview` (format: revealjs) and swapping `fileContents` to a new Map
-      identity (a `_brand.yml` edit) must re-invoke `renderPageForPreview`. Red
-      before the one-line fix, green after. (commit `f4e2c25e`)
+  `ReactPreview` (format: revealjs) and swapping `fileContents` to a new Map
+  identity (a `_brand.yml` edit) must re-invoke `renderPageForPreview`. Red
+  before the one-line fix, green after. (commit `f4e2c25e`)
 - [x] **Live two-window check** on the running hub-client (the user's own two
-      windows on project `8e957fe2`): edited `_brand.yml`'s `palette.blue`
-      `#447099`→`#00cc00` in window B; window A's deck headings recompiled
-      `rgb(68,112,153)`→`rgb(0,204,0)` with **no reload**, theme blob URL
-      refreshed (`69cec62d…`→`96bc445d…`); reverted → headings back to blue
-      immediately. Project restored to original.
+  windows on project `8e957fe2`): edited `_brand.yml`\'s `palette.blue`
+  `#447099`→`#00cc00` in window B; window A's deck headings recompiled
+  `rgb(68,112,153)`→`rgb(0,204,0)` with **no reload**, theme blob URL
+  refreshed (`69cec62d…`→`96bc445d…`); reverted → headings back to blue
+  immediately. Project restored to original.
 - [x] hub-client `tsc -b`, `npm run test` (614), `npm run test:integration`
-      (75), `npm run build` (production) — all green. No regressions.
+  (75), `npm run build` (production) — all green. No regressions.
 - [x] No Rust/WASM change — pure TS.
 
 ## References

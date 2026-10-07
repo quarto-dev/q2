@@ -220,8 +220,8 @@ against real systems, not as a precondition for starting work.
       shorter deadline (e.g. 60 s) the listener and browser are
       torn down mid-flow and the single-tool surface is unviable.
       Test both hosts against a stub MCP server whose tool handler
-      sleeps for N seconds before responding, sweep N ∈ {30, 60,
-      90, 120, 300}, and record the timeout floor each host
+      sleeps for N seconds before responding, sweep N ∈ \{30, 60,
+      90, 120, 300\}, and record the timeout floor each host
       enforces. Run on:
   - Claude Code (latest stable),
   - Cursor (latest stable),
@@ -275,16 +275,16 @@ Verified (`grep` over `src/`) that `buildAuthorizationServer` /
 go with the file, not into `oauth-config.ts`.
 
 - [x] Create `src/auth/oauth-config.ts` containing
-      `loadOAuthConfigFromEnv`, `OAuthEnvConfig`,
-      `MissingOAuthConfigError`, `discoverAuthorizationServer`,
-      and `_resetDiscoveryCache`.
+  `loadOAuthConfigFromEnv`, `OAuthEnvConfig`,
+  `MissingOAuthConfigError`, `discoverAuthorizationServer`,
+  and `_resetDiscoveryCache`.
 - [x] Create `src/auth/redact.ts` with `redactTokens` and its
-      `TOKEN_PATTERN` regex (small, no deps).
+  `TOKEN_PATTERN` regex (small, no deps).
 - [x] Update imports in `src/index.ts`, `src/tools.ts`,
-      `src/auth/auth-tools.ts`, and any other in-tree caller so they
-      point at the new modules. After this pre-work,
-      `device-flow.ts` exports *only* device-flow-specific symbols;
-      Phase 3 then `rm`s the file with no dangling references.
+  `src/auth/auth-tools.ts`, and any other in-tree caller so they
+  point at the new modules. After this pre-work,
+  `device-flow.ts` exports *only* device-flow-specific symbols;
+  Phase 3 then `rm`s the file with no dangling references.
 
 ### Implementation
 
@@ -295,12 +295,12 @@ spikes as validation during this phase or before merge; revisit the
 relevant item only if a spike contradicts an assumption.
 
 - [x] PKCE primitives. Reuse `oauth4webapi` (already a project dep):
-      `generateRandomCodeVerifier()`, `calculatePKCECodeChallenge()`,
-      `generateRandomState()`. Rationale: the rest of the auth code
-      already routes through `oauth4webapi`; rolling our own \~20-line
-      version with Node `crypto` would diverge from the established
-      pattern for no gain. Wrap in a thin `src/auth/pkce.ts` only if
-      a stable surface is needed for tests.
+  `generateRandomCodeVerifier()`, `calculatePKCECodeChallenge()`,
+  `generateRandomState()`. Rationale: the rest of the auth code
+  already routes through `oauth4webapi`; rolling our own \~20-line
+  version with Node `crypto` would diverge from the established
+  pattern for no gain. Wrap in a thin `src/auth/pkce.ts` only if
+  a stable surface is needed for tests.
 - [x] Local HTTP listener in `src/auth/loopback.ts`:
   - Bind to the **literal** `127.0.0.1`, not `localhost`. `localhost`
     resolves via DNS / `/etc/hosts` and has historically been
@@ -358,7 +358,7 @@ relevant item only if a spike contradicts an assumption.
     1. `cmd.exe` treats `&` as a statement separator, and OAuth
        authorization URLs are dense with `&` (`response_type=code&client_id=…&redirect_uri=…&state=…`).
        Quoting the URL prevents that interpretation.
-    2. `start`'s first quoted argument is the *window title*, not the
+    2. `start`\'s first quoted argument is the *window title*, not the
        URL. The empty `""` is a placeholder title so the quoted URL
        is parsed as the target. Without it, `start "https://accounts.google.com/…"`
        opens an empty CMD window titled with the URL and never
@@ -443,7 +443,7 @@ relevant item only if a spike contradicts an assumption.
     `scope=openid email profile`, `code_challenge`,
     `code_challenge_method=S256`,
     `state` from `oauth4webapi.generateRandomState()` (≥128 bits of
-    entropy, base64url-encoded; per `oauth4webapi`'s implementation
+    entropy, base64url-encoded; per `oauth4webapi`\'s implementation
     this draws from `crypto.getRandomValues`).
   - **`access_type=offline` — required.** Google only issues a
     `refresh_token` when this is set; the default (`online`) returns
@@ -482,16 +482,16 @@ relevant item only if a spike contradicts an assumption.
   - Returns the same JSON shape as the old device-flow token
     response → existing keyring storage code reused unchanged.
 - [x] Refresh-token handling: **unchanged** (Amendment 2026-05-28).
-      `src/auth/refresh-manager.ts` keeps calling
-      `oauth.ClientSecretPost(this.deps.config.clientSecret)` at
-      line \~127 — the Desktop-app client is confidential to Google
-      and the secret is required on the refresh grant, same as today.
-      `clientSecret` stays in `RefreshClientConfig`
-      (refresh-manager.ts:49) and in `AuthFlowConfig`
-      (auth-tools.ts:60). The refresh request stays
-      `grant_type=refresh_token` + `client_id` + `client_secret` +
-      `refresh_token`. (The original draft swapped this to a
-      public-client `oauth.None()` construct; that change is dropped.)
+  `src/auth/refresh-manager.ts` keeps calling
+  `oauth.ClientSecretPost(this.deps.config.clientSecret)` at
+  line \~127 — the Desktop-app client is confidential to Google
+  and the secret is required on the refresh grant, same as today.
+  `clientSecret` stays in `RefreshClientConfig`
+  (refresh-manager.ts:49) and in `AuthFlowConfig`
+  (auth-tools.ts:60). The refresh request stays
+  `grant_type=refresh_token` + `client_id` + `client_secret` +
+  `refresh_token`. (The original draft swapped this to a
+  public-client `oauth.None()` construct; that change is dropped.)
 - [x] Update the `refresh-manager.ts` top-of-file doc-comment
       (currently lines 19–26, the **"Refresh-token persistence rule"**
       paragraph). It documents an empirical 2026-05-19 finding that
@@ -610,8 +610,8 @@ relevant item only if a spike contradicts an assumption.
     don't pass them in). Add a Phase 1 review-checklist note for
     this; mechanical enforcement is out of scope.
 - [x] Remove `authenticate_start` and `authenticate_finish` MCP tools.
-      Keep `authenticate_clear` on the MCP surface (see next item
-      for its one behavioural change).
+  Keep `authenticate_clear` on the MCP surface (see next item
+  for its one behavioural change).
 - [x] **`authenticate_clear` revocation.** Today's `handleClear`
       (`ts-packages/quarto-hub-mcp/src/auth/auth-tools.ts:272`)
       clears the in-memory cache and the keyring entry; its tool
@@ -695,7 +695,7 @@ relevant item only if a spike contradicts an assumption.
     Add to the in-tree sweep checklist for completeness.
 - [x] Sweep in-tree references to the old tool names. Known sites
       (verified by `grep` 2026-05-28):
-  - `src/tools.ts:46` — `connect_project`'s description text
+  - `src/tools.ts:46` — `connect_project`\'s description text
     embeds `"call authenticate_start to begin the device-flow"`;
     rewrite to name `authenticate` and drop "device-flow".
   - `src/tools.ts:386–393` — the dispatcher branch matches
@@ -719,26 +719,26 @@ relevant item only if a spike contradicts an assumption.
   - `README.md` and `claude-notes/instructions/hub-mcp-operator-runbook.md`
     are covered separately under Phase 2.
 - [x] **Keep** `QUARTO_HUB_MCP_CLIENT_SECRET` (Amendment 2026-05-28).
-      `loadOAuthConfigFromEnv` still requires both `CLIENT_ID` and
-      `CLIENT_SECRET`; a partial config (one set, the other not) fails
-      with the existing `MissingOAuthConfigError` naming the missing
-      var. No removal, no migration-pointer error for the secret.
+  `loadOAuthConfigFromEnv` still requires both `CLIENT_ID` and
+  `CLIENT_SECRET`; a partial config (one set, the other not) fails
+  with the existing `MissingOAuthConfigError` naming the missing
+  var. No removal, no migration-pointer error for the secret.
 - [x] Leave `hasAuthEnv` in `src/index.ts` (currently
-      `CLIENT_ID || CLIENT_SECRET` at line \~99) **as-is** — both vars
-      still participate. The "either var present → attempt auth
-      bootstrap; neither present → run no-auth" behaviour is
-      unchanged, and `loadOAuthConfigFromEnv` remains the single point
-      that rejects a partial config. Preserve the "no-auth hubs still
-      work" path explicitly.
+  `CLIENT_ID || CLIENT_SECRET` at line \~99) **as-is** — both vars
+  still participate. The "either var present → attempt auth
+  bootstrap; neither present → run no-auth" behaviour is
+  unchanged, and `loadOAuthConfigFromEnv` remains the single point
+  that rejects a partial config. Preserve the "no-auth hubs still
+  work" path explicitly.
 - [x] Add `--redirect-port <N>` CLI flag in `src/index.ts`
-      alongside `--server` / `--read-only`. Validates as a TCP
-      port (`1..=65535`), defaults to `0` (kernel-picks) when
-      absent, threads through to the loopback listener and into
-      `redirect_uri`. This is the bridge that makes the SSH
-      port-forwarding story in Phase 3 actually work — without a
-      known port, `ssh -L <port>:127.0.0.1:<port>` has nothing to
-      point at. Implementing it in Phase 1 keeps the Phase 3
-      headless documentation accurate when it ships.
+  alongside `--server` / `--read-only`. Validates as a TCP
+  port (`1..=65535`), defaults to `0` (kernel-picks) when
+  absent, threads through to the loopback listener and into
+  `redirect_uri`. This is the bridge that makes the SSH
+  port-forwarding story in Phase 3 actually work — without a
+  known port, `ssh -L <port>:127.0.0.1:<port>` has nothing to
+  point at. Implementing it in Phase 1 keeps the Phase 3
+  headless documentation accurate when it ships.
 - [x] Existing tests that need to be torn down or rewritten before
       new tests land — this is **not** a touch-up, the device-flow
       assumptions are baked in deeply:
@@ -855,14 +855,14 @@ relevant item only if a spike contradicts an assumption.
   - App name: "Quarto Hub MCP" (or similar)
   - Icon + support URL pointing at canonical Quarto documentation
 - [ ] Add the canonical `client_id` to the canonical hub's audience
-      allowlist (`--additional-audiences`).
+  allowlist (`--additional-audiences`).
 - [ ] Document the canonical `client_id` **and** `client_secret` in
-      the canonical hub's end-user onboarding (quarto.org / handbook /
-      wherever the hub WebSocket URL is published). Per Amendment
-      2026-05-28 the Desktop-app `client_secret` is required;
-      Google's own docs note it is "not treated as a secret" for
-      installed apps, but it must still be distributed and set in the
-      env — keep the existing secret-handling guidance.
+  the canonical hub's end-user onboarding (quarto.org / handbook /
+  wherever the hub WebSocket URL is published). Per Amendment
+  2026-05-28 the Desktop-app `client_secret` is required;
+  Google's own docs note it is "not treated as a secret" for
+  installed apps, but it must still be distributed and set in the
+  env — keep the existing secret-handling guidance.
 - [x] README updates:
   - **Keep** the `QUARTO_HUB_MCP_CLIENT_SECRET` row in Setup
     (Amendment 2026-05-28).
@@ -893,19 +893,19 @@ relevant item only if a spike contradicts an assumption.
   - Note: the canonical-hub operator follows the same steps as
     private operators (no bundled-default special case for v1)
 - [x] Migration for existing users: their refresh tokens were issued
-      against the device-flow client. After upgrading and switching
-      `QUARTO_HUB_MCP_CLIENT_ID` (and `QUARTO_HUB_MCP_CLIENT_SECRET`)
-      to the new Desktop-app values, the credential
-      store keys by `(issuer, clientId)`, so the old entry is simply
-      invisible to the new lookup — `getValidIdToken` throws
-      `ReauthRequired` on first call and the normal sign-in prompt
-      fires. No detection code, no migration warning; the old
-      keyring entry becomes unreachable garbage that can sit until
-      the user runs the documented keyring-clear command for
-      housekeeping. Document this in the README's upgrade section
-      ("on first run after upgrading, you'll be prompted to sign in
-      once; the old credentials are stranded under the previous
-      `client_id` and can be cleared at leisure") and move on.
+  against the device-flow client. After upgrading and switching
+  `QUARTO_HUB_MCP_CLIENT_ID` (and `QUARTO_HUB_MCP_CLIENT_SECRET`)
+  to the new Desktop-app values, the credential
+  store keys by `(issuer, clientId)`, so the old entry is simply
+  invisible to the new lookup — `getValidIdToken` throws
+  `ReauthRequired` on first call and the normal sign-in prompt
+  fires. No detection code, no migration warning; the old
+  keyring entry becomes unreachable garbage that can sit until
+  the user runs the documented keyring-clear command for
+  housekeeping. Document this in the README's upgrade section
+  ("on first run after upgrading, you'll be prompted to sign in
+  once; the old credentials are stranded under the previous
+  `client_id` and can be cleared at leisure") and move on.
 
 ## Phase 3 — device-flow removal
 
@@ -914,10 +914,10 @@ relevant item only if a spike contradicts an assumption.
   - `authenticate_start` / `authenticate_finish` tool registrations
   - Device-flow-specific tests
 - [x] Delete or archive the device-flow section of the operator
-      runbook. Done by rewriting the runbook in place — the
-      device-flow / "TV and Limited Input devices" content is replaced
-      with the Desktop-app + loopback flow (no separate archived
-      appendix; the device-flow plan remains the historical record).
+  runbook. Done by rewriting the runbook in place — the
+  device-flow / "TV and Limited Input devices" content is replaced
+  with the Desktop-app + loopback flow (no separate archived
+  appendix; the device-flow plan remains the historical record).
 - [ ] After a migration grace period (typically one release):
   - Decommission the device-flow Google OAuth client (canonical
     hub) or document the decommissioning step for private operators
@@ -937,94 +937,94 @@ relevant item only if a spike contradicts an assumption.
 ## Phase 4 — threat-model documentation
 
 - [x] New threat-model section in this plan (or update of the
-      existing device-flow plan's threat-model) covering the loopback
-      analysis. The load-bearing argument:
+  existing device-flow plan's threat-model) covering the loopback
+  analysis. The load-bearing argument:
 
-      **Device flow uniquely enables no-malware remote phishing.**
-      The user-facing leg ("enter `WXYZ-ABCD` at google.com/device,
-      sign in, approve consent") is decoupled from the device
-      process. An attacker on the other side of the internet, holding
-      only the `client_id` (and historically the `client_secret`),
-      can:
-      1. Initiate a device flow from their own server.
-      2. Email the victim with a plausible cover story asking them to
-         enter the `user_code`.
-      3. Victim signs in to Google with their own credentials and
-         approves a genuine, verified-publisher consent screen
-         showing the legitimate app name. There is nothing on the
-         consent screen identifying the *initiator* of the flow.
-      4. Attacker polls `/token` and receives tokens minted under the
-         victim's identity. Hub accepts them — correct audience, real
-         Google signature, real `sub`.
+  **Device flow uniquely enables no-malware remote phishing.**
+  The user-facing leg ("enter `WXYZ-ABCD` at google.com/device,
+  sign in, approve consent") is decoupled from the device
+  process. An attacker on the other side of the internet, holding
+  only the `client_id` (and historically the `client_secret`),
+  can:
+  1. Initiate a device flow from their own server.
+  2. Email the victim with a plausible cover story asking them to
+     enter the `user_code`.
+  3. Victim signs in to Google with their own credentials and
+     approves a genuine, verified-publisher consent screen
+     showing the legitimate app name. There is nothing on the
+     consent screen identifying the *initiator* of the flow.
+  4. Attacker polls `/token` and receives tokens minted under the
+     victim's identity. Hub accepts them — correct audience, real
+     Google signature, real `sub`.
 
-      The trust model assumed by RFC 8628 ("the user trusts the
-      device they are standing in front of") collapses when the
-      device is an attacker's server and the only binding is an
-      eight-character code. This attack class is well documented in
-      the wild against Microsoft 365 device-flow clients (Storm-2372
-      and related campaigns).
+  The trust model assumed by RFC 8628 ("the user trusts the
+  device they are standing in front of") collapses when the
+  device is an attacker's server and the only binding is an
+  eight-character code. This attack class is well documented in
+  the wild against Microsoft 365 device-flow clients (Storm-2372
+  and related campaigns).
 
-      **Loopback structurally cannot be phished the same way.** The
-      user-facing leg embeds `redirect_uri=http://127.0.0.1:<port>`.
-      The redirect after consent lands on the victim's own loopback
-      interface, unreachable from any remote network. An attacker
-      who only has the `client_id` cannot construct a flow that
-      delivers tokens to themselves without first achieving code
-      execution on the victim's machine — at which point the OAuth
-      design is moot (keyring is already accessible). The remote
-      no-malware attack mode is closed.
+  **Loopback structurally cannot be phished the same way.** The
+  user-facing leg embeds `redirect_uri=http://127.0.0.1:<port>`.
+  The redirect after consent lands on the victim's own loopback
+  interface, unreachable from any remote network. An attacker
+  who only has the `client_id` cannot construct a flow that
+  delivers tokens to themselves without first achieving code
+  execution on the victim's machine — at which point the OAuth
+  design is moot (keyring is already accessible). The remote
+  no-malware attack mode is closed.
 
-      **Other deltas vs device flow:**
-      - **Unchanged:** secret-in-distribution-channel threat. Per
-        Amendment 2026-05-28 the `client_secret` is retained
-        (Google's Desktop-app client requires it), so the operator
-        still distributes it and the same channel-exposure
-        consideration as device flow applies. This is *not* a benefit
-        of the switch; the switch is justified by the
-        no-malware-remote-phishing closure below. Note Google
-        documents the installed-app secret as not truly confidential,
-        so its exposure is low-severity — but it is not eliminated.
-      - **Reduced:** auth-code interception. PKCE binds the code to
-        the originating process's `code_verifier`; even if the code
-        leaked (browser history, referer, local log scraping), it is
-        useless without the verifier in process memory.
-      - **Strengthened:** CSRF defence. The `state` parameter binds
-        the callback to the originating flow; mismatched `state`
-        rejects.
-      - **Unchanged:** stolen ID/refresh tokens authenticate to the
-        hub for up to ≤1 h (ID) / indefinitely (refresh, until user
-        revokes grant). Closing the ID-token window still requires
-        the hub-side `sub_denylist` deferred from v1.
-        *(2026-08-03 update: the ID-token window is now closed for
-        hub-side events — bans and logout-everywhere gate the Bearer
-        path (bd-jkih1ql7). The refresh-token residual stands; see
-        `2026-08-03-bearer-revocation-and-mcp-auth-followups.md` F1.)*
-      - **Unchanged:** brand-confusion residual. If an attacker
-        already has code execution on the victim's machine, they can
-        drive a real loopback flow under our `client_id` and capture
-        tokens via their own local listener. Same residual as bundled
-        defaults; documented as accepted per RFC 8252. Dynamic client
-        registration (RFC 7591) is the deeper fix; out of scope.
+  **Other deltas vs device flow:**
+  - **Unchanged:** secret-in-distribution-channel threat. Per
+    Amendment 2026-05-28 the `client_secret` is retained
+    (Google's Desktop-app client requires it), so the operator
+    still distributes it and the same channel-exposure
+    consideration as device flow applies. This is *not* a benefit
+    of the switch; the switch is justified by the
+    no-malware-remote-phishing closure below. Note Google
+    documents the installed-app secret as not truly confidential,
+    so its exposure is low-severity — but it is not eliminated.
+  - **Reduced:** auth-code interception. PKCE binds the code to
+    the originating process's `code_verifier`; even if the code
+    leaked (browser history, referer, local log scraping), it is
+    useless without the verifier in process memory.
+  - **Strengthened:** CSRF defence. The `state` parameter binds
+    the callback to the originating flow; mismatched `state`
+    rejects.
+  - **Unchanged:** stolen ID/refresh tokens authenticate to the
+    hub for up to ≤1 h (ID) / indefinitely (refresh, until user
+    revokes grant). Closing the ID-token window still requires
+    the hub-side `sub_denylist` deferred from v1.
+    *(2026-08-03 update: the ID-token window is now closed for
+    hub-side events — bans and logout-everywhere gate the Bearer
+    path (bd-jkih1ql7). The refresh-token residual stands; see
+    `2026-08-03-bearer-revocation-and-mcp-auth-followups.md` F1.)*
+  - **Unchanged:** brand-confusion residual. If an attacker
+    already has code execution on the victim's machine, they can
+    drive a real loopback flow under our `client_id` and capture
+    tokens via their own local listener. Same residual as bundled
+    defaults; documented as accepted per RFC 8252. Dynamic client
+    registration (RFC 7591) is the deeper fix; out of scope.
 
-      **Loopback-specific threat: DNS-rebinding via the user's
-      browser.** Binding to the IP literal `127.0.0.1` closes
-      *outbound* rebinding (we never resolve `localhost`), but the
-      listener is still reachable from any page open in the user's
-      browser during the auth window — including via a hostname that
-      a malicious DNS server has rebound to `127.0.0.1` after its
-      initial resolution. Without a defence, an attacker page could
-      forge a `/callback?code=…&state=…` request to our port. The
-      Phase 1 listener mitigates this by rejecting any request whose
-      `Host` header is not exactly `127.0.0.1:<port>` (RFC 8252 §8.4),
-      with the rejection happening *before* `state` validation so
-      timing cannot leak whether a flow is in progress. Residual:
-      attacker still needs to learn the listener port — a non-issue
-      for `port=0` (entropy from kernel choice) but worth flagging
-      when `--redirect-port` is set to a stable value (the port name
-      itself is operationally public, e.g. for SSH-tunnel users).
-      The `Host`-check, the CSRF `state`, and PKCE all have to fail
-      simultaneously for token capture; that's acceptable defence in
-      depth for the residual.
+  **Loopback-specific threat: DNS-rebinding via the user's
+  browser.** Binding to the IP literal `127.0.0.1` closes
+  *outbound* rebinding (we never resolve `localhost`), but the
+  listener is still reachable from any page open in the user's
+  browser during the auth window — including via a hostname that
+  a malicious DNS server has rebound to `127.0.0.1` after its
+  initial resolution. Without a defence, an attacker page could
+  forge a `/callback?code=…&state=…` request to our port. The
+  Phase 1 listener mitigates this by rejecting any request whose
+  `Host` header is not exactly `127.0.0.1:<port>` (RFC 8252 §8.4),
+  with the rejection happening *before* `state` validation so
+  timing cannot leak whether a flow is in progress. Residual:
+  attacker still needs to learn the listener port — a non-issue
+  for `port=0` (entropy from kernel choice) but worth flagging
+  when `--redirect-port` is set to a stable value (the port name
+  itself is operationally public, e.g. for SSH-tunnel users).
+  The `Host`-check, the CSRF `state`, and PKCE all have to fail
+  simultaneously for token capture; that's acceptable defence in
+  depth for the residual.
 
 ## Open questions
 

@@ -255,122 +255,122 @@ Same races, same semantics as hub-client today.
 ### Phase 1 — Tests first (TDD)
 
 - [x] Rust unit tests in `quarto-hub` for ReadOnly sync semantics
-      (doc-only change → no disk write; disk change still syncs disk→doc;
-      checkpoint stays stable across repeated syncs; disk edit converges doc
-      to disk; binary doc-only change reverts to fs content). 5 tests in
-      `sync.rs::tests`, written first and verified red (file was written
-      despite ReadOnly), then green after gating.
+  (doc-only change → no disk write; disk change still syncs disk→doc;
+  checkpoint stays stable across repeated syncs; disk edit converges doc
+  to disk; binary doc-only change reverts to fs content). 5 tests in
+  `sync.rs::tests`, written first and verified red (file was written
+  despite ReadOnly), then green after gating.
 - [x] Rust test for `GET /api/preview/config` reflecting the flag
-      (`quarto-preview`): `tests/integration/config_endpoint.rs` boots a real
-      server each way and asserts both the JSON wire shape **and** the disk
-      behavior (doc-side edit + `sync_file` reaches disk only with
-      `allow_edit`). Verified red (SPA fallback served HTML) before the
-      endpoint existed.
+  (`quarto-preview`): `tests/integration/config_endpoint.rs` boots a real
+  server each way and asserts both the JSON wire shape **and** the disk
+  behavior (doc-side edit + `sync_file` reaches disk only with
+  `allow_edit`). Verified red (SPA fallback served HTML) before the
+  endpoint existed.
 - [x] TS unit tests for `diffToEditorChanges` in
-      `ts-packages/preview-runtime` (7 tests — exact splice offsets plus
-      apply-the-ops round-trip property, incl. unicode/emoji). Note: the
-      hub-client test file only covered `diffToMonacoEdits`; these are new
-      tests, not relocated ones.
+  `ts-packages/preview-runtime` (7 tests — exact splice offsets plus
+  apply-the-ops round-trip property, incl. unicode/emoji). Note: the
+  hub-client test file only covered `diffToMonacoEdits`; these are new
+  tests, not relocated ones.
 - [x] TS test for the SPA edit path
-      (`q2-preview-spa/src/channelRouting.integration.test.tsx`, 5 new cases,
-      verified red first): with allowEdit on, `handleSetAst` calls
-      `applyEditorOperations(activeFile, diffToEditorChanges(getFileContent,
-      newQmd))` plus the optimistic `vfsAddFile`; with allowEdit off the
-      payload is dropped entirely; a missing config endpoint fails closed;
-      `editingDisabled={!allowEdit}` reaches the iframe both ways.
+  (`q2-preview-spa/src/channelRouting.integration.test.tsx`, 5 new cases,
+  verified red first): with allowEdit on, `handleSetAst` calls
+  `applyEditorOperations(activeFile, diffToEditorChanges(getFileContent,
+  newQmd))` plus the optimistic `vfsAddFile`; with allowEdit off the
+  payload is dropped entirely; a missing config endpoint fails closed;
+  `editingDisabled={!allowEdit}` reaches the iframe both ways.
 - [x] TS test for read-only mode: with `editingDisabled` set, `Para`/`Header`
-      render without `data-block-pool-id` and `useBlockEditHover` does not
-      activate (no `setEditTarget` call, no hover outline, no affordance
-      stylesheet) — 7 new cases across `q2-preview.integration.test.tsx` and
-      `useBlockEditHover.integration.test.tsx`, verified red first.
+  render without `data-block-pool-id` and `useBlockEditHover` does not
+  activate (no `setEditTarget` call, no hover outline, no affordance
+  stylesheet) — 7 new cases across `q2-preview.integration.test.tsx` and
+  `useBlockEditHover.integration.test.tsx`, verified red first.
 
 ### Phase 2 — Implementation
 
 - [x] Move `diffToEditorChanges` to `ts-packages/preview-runtime`
-      (`src/diffToEditorChanges.ts`, exported from index; `fast-diff` added to
-      package deps); hub-client now imports it from `@quarto/preview-runtime`
-      (`useAutomergeSync.ts` + test mocks updated; `diffToMonacoEdits` stays
-      hub-client-local).
+  (`src/diffToEditorChanges.ts`, exported from index; `fast-diff` added to
+  package deps); hub-client now imports it from `@quarto/preview-runtime`
+  (`useAutomergeSync.ts` + test mocks updated; `diffToMonacoEdits` stays
+  hub-client-local).
 - [x] `--allow-edit` flag in `crates/quarto/src/main.rs` (clap) →
-      `PreviewArgs` → `PreviewConfig.allow_edit` → `build_hub_config`
-      (`disk_write_policy = WriteBack` iff allow_edit). Verified in
-      `q2 preview --help`.
+  `PreviewArgs` → `PreviewConfig.allow_edit` → `build_hub_config`
+  (`disk_write_policy = WriteBack` iff allow_edit). Verified in
+  `q2 preview --help`.
 - [x] `HubConfig.disk_write_policy` (`DiskWritePolicy::{WriteBack, ReadOnly}`
-      enum — richer than the planned bool) + gating in `sync_document` and
-      `sync_binary_document`; threaded through `sync_document_auto`,
-      `sync_file_by_path`, `sync_all_documents`, and `HubContext` (initial,
-      periodic, and watcher syncs). `quarto-preview` sets `ReadOnly`
-      unconditionally for now (flag wiring is the next item); `hub` binary and
-      `quarto hub` stay `WriteBack`. ReadOnly semantics: disk authoritative —
-      text docs keep doc-side changes merged until the next disk edit
-      converges the doc back to disk content; binary docs revert immediately.
+  enum — richer than the planned bool) + gating in `sync_document` and
+  `sync_binary_document`; threaded through `sync_document_auto`,
+  `sync_file_by_path`, `sync_all_documents`, and `HubContext` (initial,
+  periodic, and watcher syncs). `quarto-preview` sets `ReadOnly`
+  unconditionally for now (flag wiring is the next item); `hub` binary and
+  `quarto hub` stay `WriteBack`. ReadOnly semantics: disk authoritative —
+  text docs keep doc-side changes merged until the next disk edit
+  converges the doc back to disk content; binary docs revert immediately.
 - [x] `GET /api/preview/config` endpoint in `extend_with_preview`, returning
-      `{ "allowEdit": bool }` from an `ALLOW_EDIT` OnceLock (same pattern as
-      the other preview handler state).
+  `{ "allowEdit": bool }` from an `ALLOW_EDIT` OnceLock (same pattern as
+  the other preview handler state).
 - [x] Read-only plumbing in `preview-renderer`: `editingDisabled` through
-      `Q2PreviewIframe` props → `UPDATE_AST` payload → `PreviewRoot` →
-      `PreviewContext`; guards in `Para.tsx`, `Header.tsx`,
-      `useBlockEditHover.tsx` (§3). Hosts that pass nothing (hub-client)
-      keep today's always-editable behavior.
+  `Q2PreviewIframe` props → `UPDATE_AST` payload → `PreviewRoot` →
+  `PreviewContext`; guards in `Para.tsx`, `Header.tsx`,
+  `useBlockEditHover.tsx` (§3). Hosts that pass nothing (hub-client)
+  keep today's always-editable behavior.
 - [x] SPA: `fetchAllowEdit()` at boot (fail-closed); `allowEdit` in
-      `PreviewAppState`; `editingDisabled={!allowEdit}` on the iframe;
-      `handleSetAst` routes the new QMD into Automerge via
-      `diffToEditorChanges` + `applyEditorOperations` (diff base =
-      `getFileContent`, hub-client's `handleContentRewrite` pattern), keeps
-      the optimistic VFS update, and early-returns when read-only.
+  `PreviewAppState`; `editingDisabled={!allowEdit}` on the iframe;
+  `handleSetAst` routes the new QMD into Automerge via
+  `diffToEditorChanges` + `applyEditorOperations` (diff base =
+  `getFileContent`, hub-client's `handleContentRewrite` pattern), keeps
+  the optimistic VFS update, and early-returns when read-only.
 
 ### Phase 3 — Verification (all done 2026-06-10; output inspected)
 
 - [x] `cargo xtask verify` (full, all 12 steps): **"✓ All verification steps
-      passed!"** (includes `npm run build:all` + hub-client `test:ci`).
+  passed!"** (includes `npm run build:all` + hub-client `test:ci`).
 - [x] End-to-end positive case. Chain rebuilt
-      (`cargo xtask build-q2-preview-spa` → `cargo build --bin q2`), then:
-      ```
-      cargo run --bin q2 -- preview tmp-e2e-allow-edit/doc.qmd --allow-edit --no-browser --port 7341
-      ```
-      `GET /api/preview/config` → `{"allowEdit": true}`. Clicked the paragraph
-      in Chrome (real PointerEvents), edited the textarea, committed via blur;
-      the file on disk read back as:
-      ```
-      ---
-      title: Edit write-back e2e
-      ---
+  (`cargo xtask build-q2-preview-spa` → `cargo build --bin q2`), then:
+  ```
+  cargo run --bin q2 -- preview tmp-e2e-allow-edit/doc.qmd --allow-edit --no-browser --port 7341
+  ```
+  `GET /api/preview/config` → `{"allowEdit": true}`. Clicked the paragraph
+  in Chrome (real PointerEvents), edited the textarea, committed via blur;
+  the file on disk read back as:
+  ```
+  ---
+  title: Edit write-back e2e
+  ---
 
-      This paragraph was EDITED IN THE BROWSER and must reach disk.
+  This paragraph was EDITED IN THE BROWSER and must reach disk.
 
-      A second paragraph that must stay untouched.
-      ```
-      Frontmatter and the sibling paragraph were untouched. Output inspected
-      directly (`cat`).
+  A second paragraph that must stay untouched.
+  ```
+  Frontmatter and the sibling paragraph were untouched. Output inspected
+  directly (`cat`).
 - [x] E2e negative case. Same fixture, **without** `--allow-edit`:
-      `GET /api/preview/config` → `{"allowEdit": false}`; in the browser,
-      zero `[data-block-pool-id]` elements, no affordance stylesheet, cursor
-      stays `auto`, and clicking the paragraph produces no edit surface. After
-      several sync cycles + SIGINT shutdown, the file's SHA-1
-      (`68bf80bd8be8…`) was byte-identical to the pre-session content.
+  `GET /api/preview/config` → `{"allowEdit": false}`; in the browser,
+  zero `[data-block-pool-id]` elements, no affordance stylesheet, cursor
+  stays `auto`, and clicking the paragraph produces no edit surface. After
+  several sync cycles + SIGINT shutdown, the file's SHA-1
+  (`68bf80bd8be8…`) was byte-identical to the pre-session content.
 - [x] E2e SIGINT flush. With `RUST_LOG=quarto_hub=debug`: commit edit →
-      `kill -INT` \~6 s later → log shows `Performing final filesystem sync
-      before shutdown…` / `Final filesystem sync complete synced=1 errors=0`
-      and the file contains the edit. **Measured residual race:** in one run
-      the SIGINT landed \~1.5 s after commit and the edit was lost — the WS
-      frame had not yet reached the server when shutdown began, so there was
-      nothing to flush. This is the accepted best-effort window from §6, but
-      it is wider than "milliseconds"; the eager-sync follow-up strand should
-      close it (SPA could also flush on `visibilitychange`).
+  `kill -INT` \~6 s later → log shows `Performing final filesystem sync
+  before shutdown…` / `Final filesystem sync complete synced=1 errors=0`
+  and the file contains the edit. **Measured residual race:** in one run
+  the SIGINT landed \~1.5 s after commit and the edit was lost — the WS
+  frame had not yet reached the server when shutdown began, so there was
+  nothing to flush. This is the accepted best-effort window from §6, but
+  it is wider than "milliseconds"; the eager-sync follow-up strand should
+  close it (SPA could also flush on `visibilitychange`).
 - [x] Automated e2e harness: not added in this strand — filed as a follow-up
-      strand (Playwright spec driving the real `q2 preview` binary).
+  strand (Playwright spec driving the real `q2 preview` binary).
 
 ### Phase 4 — Bookkeeping
 
 - [x] hub-client changelog: deliberately **no entry**. The only
-      hub-client-touching commit (`0072c42f`) is a pure refactor (import of
-      `diffToEditorChanges` repointed to `@quarto/preview-runtime`; no
-      behavior change), and the changelog header excludes refactors.
+  hub-client-touching commit (`0072c42f`) is a pure refactor (import of
+  `diffToEditorChanges` repointed to `@quarto/preview-runtime`; no
+  behavior change), and the changelog header excludes refactors.
 - [x] Follow-ups filed as discovered-from strands:
-      - bd-g4uw7d8g — eager sync trigger (`POST /api/preview/sync-file` +
-        SPA flush on visibilitychange) to close the ≤5 s latency and the
-        measured \~1.5 s SIGINT race.
-      - bd-f8d753iq — automated Playwright e2e for the `--allow-edit`
-        round-trip against the real binary.
+  - bd-g4uw7d8g — eager sync trigger (`POST /api/preview/sync-file` +
+    SPA flush on visibilitychange) to close the ≤5 s latency and the
+    measured \~1.5 s SIGINT race.
+  - bd-f8d753iq — automated Playwright e2e for the `--allow-edit`
+    round-trip against the real binary.
 - [x] Merge topic branch + close strand (Carlos tested and approved,
-      2026-06-10).
+  2026-06-10).

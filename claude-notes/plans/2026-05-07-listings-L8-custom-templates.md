@@ -880,7 +880,7 @@ These were once likely "open questions" but are pre-resolved:
 - **D2 (host-page-directory only for path resolution):**
   user-confirmed 2026-05-07. Q1-parity. The user noted a
   broader future direction: the planned **`!path` YAML tag
-  + Q2 metadata-merging design** could unify path
+  \+ Q2 metadata-merging design** could unify path
   resolution for all YAML-declared paths. L8 is not the
   place to design that; a follow-up bd captures the linkage
   so when the broader design lands, listing template paths
@@ -933,142 +933,142 @@ watch pass.
 ### Preparation
 
 - [x] Re-read `claude-notes/instructions/testing.md` and
-      `claude-notes/instructions/coding.md`.
+  `claude-notes/instructions/coding.md`.
 - [x] Re-read `.claude/rules/wasm.md` (`?Send`, WASM-cfg
-      gating). L8 is std::fs-only on native and gracefully
-      degrades on WASM, so no WASM-cfg gating is needed; just
-      verify behavior.
+  gating). L8 is std::fs-only on native and gracefully
+  degrades on WASM, so no WASM-cfg gating is needed; just
+  verify behavior.
 - [x] Confirm `feature/listings` head is the post-L7 merge
-      (`52944cf2` confirmed; baseline 8697 tests pass).
+  (`52944cf2` confirmed; baseline 8697 tests pass).
 - [x] Create the worktree at
-      `.worktrees/bd-rqgx-listings-custom-templates/` per
-      §"Branch / worktree". Branch
-      `beads/bd-rqgx-listings-custom-templates`.
+  `.worktrees/bd-rqgx-listings-custom-templates/` per
+  §"Branch / worktree". Branch
+  `beads/bd-rqgx-listings-custom-templates`.
 - [x] `npm install` in the worktree.
 - [x] Add `.beads/redirect` per worktree rules.
 - [x] Baseline: `cargo xtask verify --skip-hub-build
-      --skip-hub-tests`; recorded 8697 Rust tests passing.
+  --skip-hub-tests`; recorded 8697 Rust tests passing.
 
 ### TDD phase 1 — diagnostics + scaffolding
 
 - [x] Write tests #1–4. They fail (Q-12-14 missing from
-      catalog; Q-12-1 still emitted; Q-12-8/Q-12-14 not
-      emitted).
+  catalog; Q-12-1 still emitted; Q-12-8/Q-12-14 not
+  emitted).
 - [x] Add `Q-12-14` to `error_catalog.json`.
 - [x] Remove the L8-deferral block in
-      `transforms/listing_render.rs`. Replace with a stub
-      that branches on `ListingType::Custom` and falls back
-      to default + emits the new diagnostics.
+  `transforms/listing_render.rs`. Replace with a stub
+  that branches on `ListingType::Custom` and falls back
+  to default + emits the new diagnostics.
 - [x] Tests pass.
 
 ### TDD phase 2 — happy-path custom render
 
 - [x] Write tests #5–7. Implementation already in place from
-      phase 1, so they passed on first run rather than after
-      a deliberate red-green cycle. Tests verify (a) custom
-      template renders against the standard binding, (b)
-      `$items:item-default()$` resolves to the built-in
-      partial, (c) a same-named neighboring file shadows the
-      built-in via the `FileSystemResolver` primary.
+  phase 1, so they passed on first run rather than after
+  a deliberate red-green cycle. Tests verify (a) custom
+  template renders against the standard binding, (b)
+  `$items:item-default()$` resolves to the built-in
+  partial, (c) a same-named neighboring file shadows the
+  built-in via the `FileSystemResolver` primary.
 - [x] Implement `load_custom_template` (inlined in
-      `listing_render.rs`; under 80 LOC including doc-comment
-      and `LoadedCustomTemplate` struct). Wired the
-      branch-on-`Custom` path to use the loader's triple.
+  `listing_render.rs`; under 80 LOC including doc-comment
+  and `LoadedCustomTemplate` struct). Wired the
+  branch-on-`Custom` path to use the loader's triple.
 - [x] Use `project_listing_resolver(builtins_resolver())` so
-      the custom template can call built-in partials and have
-      its own neighboring partial files.
+  the custom template can call built-in partials and have
+  its own neighboring partial files.
 - [x] Tests pass.
 
 ### TDD phase 3 — binding pass-through
 
 - [x] Write tests #8–10. The binding work is unchanged from
-      L3+L4 and these tests confirm it carries through to
-      custom templates as expected. Test #10's first draft
-      used bare `$it.show.author$` (which fires Undefined-
-      variable since the `show` map only carries entries for
-      fields in `listing.fields`); rewritten to use the real
-      `$if(it.show.<field>)$` idiom that the built-in
-      templates and Q1's custom templates use.
+  L3+L4 and these tests confirm it carries through to
+  custom templates as expected. Test #10's first draft
+  used bare `$it.show.author$` (which fires Undefined-
+  variable since the `show` map only carries entries for
+  fields in `listing.fields`); rewritten to use the real
+  `$if(it.show.<field>)$` idiom that the built-in
+  templates and Q1's custom templates use.
 - [x] Tests pass.
 
 ### TDD phase 4 — error & fallback edges
 
 - [x] Wrote tests #11–14. They passed on the first run since
-      the loader and compile-error path were already wired in
-      phase 1 / 2.
+  the loader and compile-error path were already wired in
+  phase 1 / 2.
 - [x] Confirmed the `Q-12-10` compile-error path catches
-      custom templates uniformly (compile failure ⇒ skip the
-      listing, no default fallback for compile errors —
-      symmetric with how built-ins behave on bad source).
+  custom templates uniformly (compile failure ⇒ skip the
+  listing, no default fallback for compile errors —
+  symmetric with how built-ins behave on bad source).
 - [x] Verified absolute-path branch (test #12), host-dir-not-
-      project-root resolution (test #13, with a project-root
-      decoy that must NOT win), and `.ejs.md` compile-error
-      path (test #14).
+  project-root resolution (test #13, with a project-root
+  decoy that must NOT win), and `.ejs.md` compile-error
+  path (test #14).
 - [x] Tests pass.
 
 ### TDD phase 5 — L7 envelope inheritance
 
 - [x] Wrote tests #15–16. They pass without any L8-specific
-      envelope work, confirming the binding from L3+L7 is
-      transparent to template-source choice. Test #16 verifies
-      the L1 safeguard contract for custom-templates that
-      ignore the envelope bindings — the listing still renders
-      correctly via the static `description` / `title` tokens.
+  envelope work, confirming the binding from L3+L7 is
+  transparent to template-source choice. Test #16 verifies
+  the L1 safeguard contract for custom-templates that
+  ignore the envelope bindings — the listing still renders
+  correctly via the static `description` / `title` tokens.
 
 ### TDD phase 6 — End-to-end CLI
 
 - [x] Built two real-binary fixtures (`/tmp/l8-fixture-custom`
-      and `/tmp/l8-fixture-missing`); rendered both via
-      `cargo run --bin q2 --quiet -- render`; inspected
-      output by hand. Both behave as designed: custom
-      template drives the render and surfaces
-      `it.extra.status`; missing-template falls back to
-      the default with `Q-12-8` carrying the absolute
-      attempted-path.
+  and `/tmp/l8-fixture-missing`); rendered both via
+  `cargo run --bin q2 --quiet -- render`; inspected
+  output by hand. Both behave as designed: custom
+  template drives the render and surfaces
+  `it.extra.status`; missing-template falls back to
+  the default with `Q-12-8` carrying the absolute
+  attempted-path.
 - [x] Recorded the verification in §"End-to-end CLI
-      verification record" above.
+  verification record" above.
 
 ### Verification and close-out
 
 - [x] Updated doc comment in `templates.rs::top_level_template_source`
-      per D10. The stale "Q-12-1 + downgrade" claim is gone;
-      the new comment names the L8 fork point (`load_custom_template`)
-      and explicitly labels the `Custom` arm as a defensive
-      fallback rather than the active path.
+  per D10. The stale "Q-12-1 + downgrade" claim is gone;
+  the new comment names the L8 fork point (`load_custom_template`)
+  and explicitly labels the `Custom` arm as a defensive
+  fallback rather than the active path.
 - [x] `cargo build --workspace` clean (no warnings).
 - [x] `cargo nextest run --workspace` — 8712 tests pass
-      (baseline 8697 → +15 new tests added by L8: 1 catalog
-      test + 14 in `transforms::listing_render::tests`).
+  (baseline 8697 → +15 new tests added by L8: 1 catalog
+  test + 14 in `transforms::listing_render::tests`).
 - [x] `cargo xtask lint` clean (696 files checked, no
-      violations).
+  violations).
 - [x] `cargo xtask verify` (full, including hub-client +
-      WASM build) — all 9 steps green. The `std::fs` calls
-      in the listing transform compile to wasm32 unchanged;
-      runtime fallback to default with Q-12-8 is the
-      expected behavior in WASM contexts.
+  WASM build) — all 9 steps green. The `std::fs` calls
+  in the listing transform compile to wasm32 unchanged;
+  runtime fallback to default with Q-12-8 is the
+  expected behavior in WASM contexts.
 - [ ] **Hub-client browser smoke unrun in this session.**
-      A real-browser session is required to confirm the
-      hub-client preview surfaces Q-12-8 in its diagnostics
-      panel for a `type: custom` fixture; `cargo xtask verify`
-      already exercises the WASM build + the existing
-      hub-client vitest suite, but the listings-specific
-      smoke is browser-dependent. Recording this gap
-      explicitly per CLAUDE.md §"End-to-end verification".
+  A real-browser session is required to confirm the
+  hub-client preview surfaces Q-12-8 in its diagnostics
+  panel for a `type: custom` fixture; `cargo xtask verify`
+  already exercises the WASM build + the existing
+  hub-client vitest suite, but the listings-specific
+  smoke is browser-dependent. Recording this gap
+  explicitly per CLAUDE.md §"End-to-end verification".
 - [x] End-to-end CLI verification fixtures rendered; output
-      inspected; recorded above in
-      §"End-to-end CLI verification record".
+  inspected; recorded above in
+  §"End-to-end CLI verification record".
 - [x] User-facing `docs/` callout deferred per D11; follow-up
-      filed as **bd-u4ow** (docs/ page for custom listing
-      templates) so the docs work picks it up when the
-      website comes online.
+  filed as **bd-u4ow** (docs/ page for custom listing
+  templates) so the docs work picks it up when the
+  website comes online.
 - [ ] Stop and request user permission before any push (per
-      CLAUDE.md §"GIT PUSH POLICY").
+  CLAUDE.md §"GIT PUSH POLICY").
 - [ ] After user approval: `br update bd-rqgx --status closed`.
 - [ ] `br sync --flush-only && git add .beads/ && git commit`
-      from the **main repo** (per `.claude/rules/worktrees.md`).
+  from the **main repo** (per `.claude/rules/worktrees.md`).
 - [ ] Update the listings epic table
-      (`claude-notes/plans/2026-05-05-listings-epic.md`) to
-      mark L8 closed with the merge commit hash.
+  (`claude-notes/plans/2026-05-05-listings-epic.md`) to
+  mark L8 closed with the merge commit hash.
 
 ### Filed follow-up bd issues
 

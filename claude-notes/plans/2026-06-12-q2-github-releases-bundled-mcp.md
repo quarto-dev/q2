@@ -207,7 +207,7 @@ release `v0.1.0`, marked pre-release.
 ### Phase 0 — Spikes (timeboxed)
 
 - [x] S1: darwin_amd64 keyring cross-target strategy (D3); record the
-      chosen mechanism + exact commands here
+  chosen mechanism + exact commands here
 - [x] S2: musl build spike for `-p quarto` (D4); record outcome here
 - [x] Operator setup complete (secrets + variable + keypair)
 
@@ -267,19 +267,19 @@ manager and delete locally.
 ### Phase 1 — Bundled defaults in the launcher (TDD)
 
 - [x] Tests first: env-merge tests — user-env wins; empty/whitespace env
-      treated as unset (mirror `readNonEmpty`); absent bundled → variable
-      not injected; values never printed (sources only). Pure-logic tests
-      live in `src/defaults.rs` `#[cfg(test)]` (the crate's precedent —
-      `bundle.rs`); the un-exec-able delegation path is covered via a
-      `build_command` seam with `get_envs()` assertions in `delegate.rs`.
+  treated as unset (mirror `readNonEmpty`); absent bundled → variable
+  not injected; values never printed (sources only). Pure-logic tests
+  live in `src/defaults.rs` `#[cfg(test)]` (the crate's precedent —
+  `bundle.rs`); the un-exec-able delegation path is covered via a
+  `build_command` seam with `get_envs()` assertions in `delegate.rs`.
 - [x] `option_env!` plumbing for `QUARTO_HUB_BUNDLED_{CLIENT_ID,CLIENT_SECRET,SERVER}`
-      (`src/defaults.rs`) + injection via `delegate::build_command`
-      (single point ahead of the Unix-exec/Windows-spawn split)
+  (`src/defaults.rs`) + injection via `delegate::build_command`
+  (single point ahead of the Unix-exec/Windows-spawn split)
 - [x] `--launcher-info` reports `default <VAR>: env|bundled|absent`
-      (also for placeholder builds — defaults are a property of the
-      binary, not the bundle; values uniformly elided)
+  (also for placeholder builds — defaults are a property of the
+  binary, not the bundle; values uniformly elided)
 - [x] End-to-end check vs a local build with TEST values baked
-      (real secret never touches a local build)
+  (real secret never touches a local build)
 
 **Phase 1 end-to-end record (2026-06-12).** Built with
 `QUARTO_HUB_BUNDLED_CLIENT_ID=test-client-id.apps.googleusercontent.com
@@ -308,12 +308,12 @@ same code path with the same mechanism).
 ### Phase 2 — Installer scripts + offline tests
 
 - [x] Adapt `install.sh` from braid (OWNER/REPO/BINARY_NAME=q2, new
-      pinned pubkey); keep `--print-platform`, refusal paths, atomic
-      install, trusted-comment check
+  pinned pubkey); keep `--print-platform`, refusal paths, atomic
+  install, trusted-comment check
 - [x] Adapt `install.ps1` (checksum-only, matching braid's Windows story
-      — note the signature gap)
+  — note the signature gap)
 - [x] Port braid's `bootstrap_sh.rs` offline test (`--artifact-url
-      file://` + `--checksum`) into a workspace integration test
+  file://` + `--checksum`) into a workspace integration test
 - [x] README install section + manual-verification instructions
 
 **Phase 2 record (2026-06-12).** Decisions made during the port:
@@ -341,35 +341,35 @@ same code path with the same mechanism).
 ### Phase 3 — Release workflow
 
 - [x] `.github/workflows/release.yml` adapted from braid: preflight
-      tag/version check; matrix (linux_amd64, linux_arm64, darwin_amd64,
-      darwin_arm64, windows_amd64); Defender exclusion on Windows;
-      archive + sha256; minisign (trusted comment = filename) +
-      self-verify vs install.sh pin; combined checksums.sha256;
-      `gh release create` (actionlint-clean)
+  tag/version check; matrix (linux_amd64, linux_arm64, darwin_amd64,
+  darwin_arm64, windows_amd64); Defender exclusion on Windows;
+  archive + sha256; minisign (trusted comment = filename) +
+  self-verify vs install.sh pin; combined checksums.sha256;
+  `gh release create` (actionlint-clean)
 - [x] Bundle-before-build ordering per D2 — **expanded**: a functional
-      q2 embeds THREE payloads (MCP bundle, preview SPA, trace viewer).
-      New `web-payloads` job builds the target-independent ones once
-      (WASM toolchain mirrors hub-client-e2e.yml: nightly + rust-src +
-      clang + lockfile-pinned wasm-bindgen-cli) and the matrix downloads
-      them; the MCP bundle builds per target with `KEYRING_PLATFORMS`
+  q2 embeds THREE payloads (MCP bundle, preview SPA, trace viewer).
+  New `web-payloads` job builds the target-independent ones once
+  (WASM toolchain mirrors hub-client-e2e.yml: nightly + rust-src +
+  clang + lockfile-pinned wasm-bindgen-cli) and the matrix downloads
+  them; the MCP bundle builds per target with `KEYRING_PLATFORMS`
 - [x] Bundled-defaults injection from secrets/vars in the release
-      workflow only, with a fail-fast guard if any value is empty
+  workflow only, with a fail-fast guard if any value is empty
 - [x] Per-platform workflow assertions: binary `--version` equals the
-      tag version; `q2 mcp --launcher-info` shows non-placeholder
-      bundle, `default …: bundled` ×3, and a keyring addon per entry in
-      the target's KEYRING_PLATFORMS list
+  tag version; `q2 mcp --launcher-info` shows non-placeholder
+  bundle, `default …: bundled` ×3, and a keyring addon per entry in
+  the target's KEYRING_PLATFORMS list
 - [x] Release-notes generation (braid's table, experimental banner,
-      node-24 note for `q2 mcp`, pubkey extracted from install.sh)
+  node-24 note for `q2 mcp`, pubkey extracted from install.sh)
 - [x] musl TLS: `[target.'cfg(target_env = "musl")']`
-      `openssl-sys = { features = ["vendored"] }` in crates/quarto
-      (Cargo.lock updated — release builds are `--locked`)
+  `openssl-sys = { features = ["vendored"] }` in crates/quarto
+  (Cargo.lock updated — release builds are `--locked`)
 
 **Phase 3 decision record (2026-06-12).**
 - **CLI version contract changed** (Carlos, in-session): `q2 --version`
   now reports the real workspace version (`quarto 0.1.0`) instead of
   the `99.9.9-dev` extension-compatibility placeholder — release
   artifacts must be verifiable against their tag, and Lua-side
-  `quarto.version` already reported {0,1,0}. TDD'd in
+  `quarto.version` already reported \{0,1,0\}. TDD'd in
   `quarto-util/src/version.rs` (red first). Consequence: extension
   minimum-quarto-version checks will see 0.1.0; accepted for now.
 - The `99.9.9` strings in `error_catalog.json` / `docs/errors/` are
@@ -378,7 +378,7 @@ same code path with the same mechanism).
 ### Phase 4 — End-to-end verification (per CLAUDE.md, before declaring done)
 
 - [x] Dry-run the workflow (workflow_dispatch on a test tag or fork);
-      download artifacts for all five platforms
+  download artifacts for all five platforms
 
 **Phase 4 log.** PR #278 (all 5 CI checks green) squash-merged to main
 by Carlos as `31222946` on 2026-06-12. Tag `v0.1.0` pushed at that
@@ -428,12 +428,12 @@ keyring bundle still ships musl addons for users running musl node
 against a gcompat'd q2 — 500 KB of insurance).
 - [x] `install.sh` one-liner on a clean machine/container → `q2 --version`
 - [x] `q2 mcp` with **no env vars set** connects to quarto-hub.com:
-      browser consent → token → `connect_project` + `read_file` against a
-      real project from an MCP client config with no `env` block
+  browser consent → token → `connect_project` + `read_file` against a
+  real project from an MCP client config with no `env` block
 - [x] Env-override check: `QUARTO_HUB_SERVER=ws://localhost:…` against a
-      local hub still works (private-operator path unbroken)
+  local hub still works (private-operator path unbroken)
 - [x] darwin_amd64 artifact specifically: keyring loads on an x86_64 mac
-      (or under Rosetta `arch -x86_64 node`) — the D3 cross case
+  (or under Rosetta `arch -x86_64 node`) — the D3 cross case
 - [x] Record invocations + observed output in this plan
 
 *Iteration 3 (run 27450999322):* linux gnu legs built the ENTIRE

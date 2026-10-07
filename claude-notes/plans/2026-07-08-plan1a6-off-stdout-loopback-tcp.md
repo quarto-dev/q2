@@ -790,14 +790,14 @@ is **done** (PASS). Remaining is the staged build.
 
 ### Phase 0 — spike (de-risk before TDD)
 - [x] Prototype the dial-back end-to-end on macOS: q2 binds, spawns `deno …
-      --control/--token`, child dials back and round-trips over TCP using the
-      **real `framing.ts`** primitives. **PASS 2026-07-08** (deno 2.9.0;
-      \~75 ms cold / \~27 ms warm; child-death + wrong-token failure modes clean;
-      reader-handoff byte-loss hazard folded into step 6 — **but note (2026-07-22)
-      the spike's throwaway child sent an eager frame and never blocked its pipes;
-      the real host does neither**, which is why the drain-before-accept and
-      crash-reap requirements were added after the spike, not during it). Files
-      were throwaway (scratch dir); repo untouched.
+  --control/--token`, child dials back and round-trips over TCP using the
+  **real `framing.ts`** primitives. **PASS 2026-07-08** (deno 2.9.0;
+  \~75 ms cold / \~27 ms warm; child-death + wrong-token failure modes clean;
+  reader-handoff byte-loss hazard folded into step 6 — **but note (2026-07-22)
+  the spike's throwaway child sent an eager frame and never blocked its pipes;
+  the real host does neither**, which is why the drain-before-accept and
+  crash-reap requirements were added after the spike, not during it). Files
+  were throwaway (scratch dir); repo untouched.
 
 The **Test Seam Spec is frozen** (2026-07-08) — every test bound to a named
 revert hunk.
@@ -809,29 +809,29 @@ revert hunk.
 
 ### Phase 1 — build both transports; **production stays stdio** (plan1a-host)
 - [x] Seam rows **#1–#5, #2c, #5r, #10** (all in-proc, in-test peers — no Deno side
-      needed), each through the fail-on-revert cycle above (#2c is an invariant,
-      no revert hunk — see vacuity guards). *(Rust TDD note: a seam naming
-      `TcpTransport`/`accept_and_handshake` cannot compile until the item-2/3
-      skeletons exist — so land the type/fn **skeletons** first (`todo!()` bodies),
-      then write each seam so it is **RED on its assertion**, not on a missing
-      symbol, then implement the hunk. #10 also needs `socket2` added as a
-      `quarto-core` **dev-dependency**.)*
+  needed), each through the fail-on-revert cycle above (#2c is an invariant,
+  no revert hunk — see vacuity guards). *(Rust TDD note: a seam naming
+  `TcpTransport`/`accept_and_handshake` cannot compile until the item-2/3
+  skeletons exist — so land the type/fn **skeletons** first (`todo!()` bodies),
+  then write each seam so it is **RED on its assertion**, not on a missing
+  symbol, then implement the hunk. #10 also needs `socket2` added as a
+  `quarto-core` **dev-dependency**.)*
 - [x] `TcpTransport`/`TcpReadHalf` (H-FRAME/H-READER) + `accept_and_handshake`
-      (H-ACCEPT/H-TOKEN; listener closed structurally by move-by-value) in
-      `ts_process.rs`.
+  (H-ACCEPT/H-TOKEN; listener closed structurally by move-by-value) in
+  `ts_process.rs`.
 - [x] `spawn_into_tcp`: all-three-piped spawn → **write `<tok>\n` to child stdin**
-      (H-SPAWN's delivery half, bound by seam #4) → **spawn stderr+stdout drains BEFORE accept**
-      (H-DRAIN) → `accept_and_handshake` → on error, kill+join own drains and
-      enrich with `recent_stderr`.
+  (H-SPAWN's delivery half, bound by seam #4) → **spawn stderr+stdout drains BEFORE accept**
+  (H-DRAIN) → `accept_and_handshake` → on error, kill+join own drains and
+  enrich with `recent_stderr`.
 - [x] Grow the `init`-closure return to the `StartedDrains` enum (`Stdio(ChildStderr)`
-      vs `Tcp { stderr, stdout }`); add the `stdout_reader` field + both join sites
-      (`shutdown()`, `Drop`); `stdout_loop` (H-STDOUT) **TCP-path only**;
-      shutdown/Drop parity (H-SHUTDOWN — `Shutdown` frame then `Shutdown::Write`).
+  vs `Tcp { stderr, stdout }`); add the `stdout_reader` field + both join sites
+  (`shutdown()`, `Drop`); `stdout_loop` (H-STDOUT) **TCP-path only**;
+  shutdown/Drop parity (H-SHUTDOWN — `Shutdown` frame then `Shutdown::Write`).
 - [x] **H-CRASH-REAP (global):** add `child.kill()` before `wait()` in
-      `handle_crash`. Verify no existing stdio test reddens (it is harmless there).
+  `handle_crash`. Verify no existing stdio test reddens (it is harmless there).
 - [x] **Do NOT flip production.** `ensure_started` still spawns without
-      `--control`; the TCP path is exercised only by the tests above. Every
-      existing deno-gated e2e test must stay green at this HEAD.
+  `--control`; the TCP path is exercised only by the tests above. Every
+  existing deno-gated e2e test must stay green at this HEAD.
 - [x] **Not in this phase:** H-MALFORMED and seam #6b (global switch — Phase 4).
 
 > **Phase 1 status (2026-07-22 impl):** COMPLETE — commits `5acbef437`
@@ -852,18 +852,18 @@ revert hunk.
 
 ### Phase 2 — Deno dial-back (Plan 1b) — still no production flip
 - [x] Seam row **#8** (`connectControl` over a **real** loopback socket in a
-      `.deno-test.ts`) via the fail-on-revert cycle. **Not a vitest test** — see
-      Coverage honesty. Added a `deno test` step to the `ts-test-suite` CI
-      workflow (not `cargo xtask verify`, per Coverage honesty) — CI-gated,
-      as documented.
+  `.deno-test.ts`) via the fail-on-revert cycle. **Not a vitest test** — see
+  Coverage honesty. Added a `deno test` step to the `ts-test-suite` CI
+  workflow (not `cargo xtask verify`, per Coverage honesty) — CI-gated,
+  as documented.
 - [x] Write `connectControl()` in a **new Deno-only module `control-transport.ts`**
-      (from scratch; D-CONNECT) — **added to `tsconfig.json`'s `exclude`** (NOT in
-      `framing.ts`); it reads the token from **stdin** (only `--control` from
-      `Deno.args`), dials, `setNoDelay`, `writeAll` the token pre-line on the
-      socket. `main.ts` channel selection wires it into `runHost` (D-MAIN). (No
-      vitest for either module — both reference `Deno.*`.)
+  (from scratch; D-CONNECT) — **added to `tsconfig.json`'s `exclude`** (NOT in
+  `framing.ts`); it reads the token from **stdin** (only `--control` from
+  `Deno.args`), dials, `setNoDelay`, `writeAll` the token pre-line on the
+  socket. `main.ts` channel selection wires it into `runHost` (D-MAIN). (No
+  vitest for either module — both reference `Deno.*`.)
 - [x] Rebuild the embedded bundle (`cargo xtask build-engine-host-bundle`) +
-      `cargo build`. The bundle now *understands* `--control` but never gets it.
+  `cargo build`. The bundle now *understands* `--control` but never gets it.
 
 > **Phase 2 status (2026-07-23 impl):** COMPLETE — commit `3e45f8c1a`.
 > `connectControl` (D-CONNECT) written from scratch in a new Deno-only
@@ -889,57 +889,57 @@ revert hunk.
 
 ### Phase 3 — flip production to TCP, then validate (incl. Windows)
 - [x] **FIRST — capture the stdio byte-parity baseline, BEFORE the flip.** DONE on the
-      pre-flip HEAD (`aa8c314f1`): rendered a minimal `engine: julia` doc (`1 + 1`,
-      `daemon: false`) via `cargo run --bin q2 -- render` with
-      `QUARTO_JULIA_PROJECT=$HOME/Library/Caches/quarto/julia`. Golden saved to scratch
-      (`seam9-stdio-baseline.html`, sha256 `809099c1…`; contains `cell-output` +
-      `<code>2</code>` — julia executed over stdio). Confirmed DETERMINISTIC (identical
-      sha on re-render), so byte-parity is a sound seam-#9 assertion.
+  pre-flip HEAD (`aa8c314f1`): rendered a minimal `engine: julia` doc (`1 + 1`,
+  `daemon: false`) via `cargo run --bin q2 -- render` with
+  `QUARTO_JULIA_PROJECT=$HOME/Library/Caches/quarto/julia`. Golden saved to scratch
+  (`seam9-stdio-baseline.html`, sha256 `809099c1…`; contains `cell-output` +
+  `<code>2</code>` — julia executed over stdio). Confirmed DETERMINISTIC (identical
+  sha on re-render), so byte-parity is a sound seam-#9 assertion.
 - [x] **Flip:** DONE (commit `ee5c312c5`). `ensure_started`'s init closure now binds an
-      ephemeral loopback `TcpListener`, generates a uuid token, passes
-      `--control 127.0.0.1:<port>` on argv, and routes through `spawn_into_tcp` (token
-      delivered on stdin). `StartedDrains::Tcp` is now the live production variant;
-      dead-code comment updated (`::None`/`::Stdio` now the test-only variants).
-      **Event-collision fix (commit `3cfe190a7`, per Gordon's AskUserQuestion decision):**
-      each spawn now fires two `target:"engine_host"` events (`"engine-host spawned"` +
-      the `"engine-host connected over loopback TCP"` marker); the 3 pre-existing
-      count-by-target tests (echo `j9`, julia `j6`×2) were fixed to count only the
-      `"engine-host spawned"` **message** (via a `MsgVisitor`) — production marker
-      target kept as `"engine_host"` (plan step-7 literal preserved).
+  ephemeral loopback `TcpListener`, generates a uuid token, passes
+  `--control 127.0.0.1:<port>` on argv, and routes through `spawn_into_tcp` (token
+  delivered on stdin). `StartedDrains::Tcp` is now the live production variant;
+  dead-code comment updated (`::None`/`::Stdio` now the test-only variants).
+  **Event-collision fix (commit `3cfe190a7`, per Gordon's AskUserQuestion decision):**
+  each spawn now fires two `target:"engine_host"` events (`"engine-host spawned"` +
+  the `"engine-host connected over loopback TCP"` marker); the 3 pre-existing
+  count-by-target tests (echo `j9`, julia `j6`×2) were fixed to count only the
+  `"engine-host spawned"` **message** (via a `MsgVisitor`) — production marker
+  target kept as `"engine_host"` (plan step-7 literal preserved).
 - [x] Integration seam rows **#6a** (stdout garbage harmless) + **#7**
-      (console.log harmless, with the exercised-guard) green. DONE — commit
-      `7245b8595` (impl by sonnet; both fail-on-revert bindings COLD-VERIFIED by
-      the orchestrator — see the Phase-3 status note). Tests
-      `p3_6a_stdout_garbage_harmless` + `p3_7_console_log_harmless` in
-      `echo_engine_e2e.rs`; sentinel-gated 20-line stdout bursts in
-      `echo-engine.ts` (`QUARTO_ECHO_STDOUT_GARBAGE` / `QUARTO_ECHO_CONSOLE_LOG`,
-      sized above `MAX_CONSECUTIVE_MALFORMED_LINES=5` so a stdio revert
-      escalates→kills), observed on the `stdout_loop` drain via
-      `set_global_default`.
+  (console.log harmless, with the exercised-guard) green. DONE — commit
+  `7245b8595` (impl by sonnet; both fail-on-revert bindings COLD-VERIFIED by
+  the orchestrator — see the Phase-3 status note). Tests
+  `p3_6a_stdout_garbage_harmless` + `p3_7_console_log_harmless` in
+  `echo_engine_e2e.rs`; sentinel-gated 20-line stdout bursts in
+  `echo-engine.ts` (`QUARTO_ECHO_STDOUT_GARBAGE` / `QUARTO_ECHO_CONSOLE_LOG`,
+  sized above `MAX_CONSECUTIVE_MALFORMED_LINES=5` so a stdio revert
+  escalates→kills), observed on the `stdout_loop` drain via
+  `set_global_default`.
 - [x] Delete the two obsolete `ts_process_framing_probe.rs` stdout-contamination
-      probes (`pc_c_b*`). DONE — commit `21df9d612` (also dropped the now-unused
-      `RecvError` import and cleared the stale `#[allow(dead_code)]`/"not yet
-      called" comment on `stdout_loop`, live production since the flip).
-      **`pc_c_a` left in place** — it still uses `spawn_into` and is migrated at
-      Phase 4 (see Probe-file disposition).
+  probes (`pc_c_b*`). DONE — commit `21df9d612` (also dropped the now-unused
+  `RecvError` import and cleared the stale `#[allow(dead_code)]`/"not yet
+  called" comment on `stdout_loop`, live production since the flip).
+  **`pc_c_a` left in place** — it still uses `spawn_into` and is migrated at
+  Phase 4 (see Probe-file disposition).
 - [x] E2E seam row **#9**: DONE (orchestrator, manual + recorded). Re-rendered the SAME
-      julia project over the flipped TCP path (`RUST_LOG=engine_host=info`):
-      `RENDER_EXIT=0`; the TCP marker fired —
-      `INFO engine_host: engine-host connected over loopback TCP port=62760` (proves TCP
-      was used, not a stdio fallback); output **byte-identical** to the stdio golden
-      (same sha256 `809099c1…`). Revert binding cold-verified: removing the `--control`
-      args → rebuild → render FAILS in 9s (`engine-host child exited before dialing back
-      over loopback TCP`) → restore → green.
+  julia project over the flipped TCP path (`RUST_LOG=engine_host=info`):
+  `RENDER_EXIT=0`; the TCP marker fired —
+  `INFO engine_host: engine-host connected over loopback TCP port=62760` (proves TCP
+  was used, not a stdio fallback); output **byte-identical** to the stdio golden
+  (same sha256 `809099c1…`). Revert binding cold-verified: removing the `--control`
+  args → rebuild → render FAILS in 9s (`engine-host child exited before dialing back
+  over loopback TCP`) → restore → green.
 - [ ] **Windows CI** exercises the loopback + accept-poll + token path. **REMAINING**
-      (cannot validate on macOS — the `set_nonblocking(false)` accepted-socket trap is
-      Windows-only; runs when CI picks up the branch).
+  (cannot validate on macOS — the `set_nonblocking(false)` accepted-socket trap is
+  Windows-only; runs when CI picks up the branch).
 - [x] `cargo xtask verify` green (WASM-GATE: `ts_process.rs` stays wasm-gated).
-      DONE at Phase-3 HEAD `21df9d612`: full `cargo xtask verify` (Rust build +
-      workspace nextest + ts-packages + hub-client build/tests + WASM) →
-      **"✓ All verification steps passed!"**, exit 0. WASM-GATE holds (`stdout_loop`
-      is not flagged dead — it is live production; the only "never used" warnings
-      are pre-existing `pass2_*` helpers, untouched by this phase). Log:
-      `.superpowers/sdd/p3c-verify.log`.
+  DONE at Phase-3 HEAD `21df9d612`: full `cargo xtask verify` (Rust build +
+  workspace nextest + ts-packages + hub-client build/tests + WASM) →
+  **"✓ All verification steps passed!"**, exit 0. WASM-GATE holds (`stdout_loop`
+  is not flagged dead — it is live production; the only "never used" warnings
+  are pre-existing `pass2_*` helpers, untouched by this phase). Log:
+  `.superpowers/sdd/p3c-verify.log`.
 
 > **Phase 3 status (2026-07-23): COMPLETE except the Windows platform gate.** The
 > production flip (`ee5c312c5`), event-collision fix (`3cfe190a7`), byte-parity
@@ -984,57 +984,57 @@ revert hunk.
 
 ### Phase 4 — hard-swap cutover (delete stdio + make malformed fatal)
 - [x] Seam row **#6b** (malformed socket frame fatal) via the fail-on-revert cycle.
-      DONE — commit `bd1af5c55` (`test_malformed_frame_is_fatal`, MockTransport +
-      one malformed line → `Err(Other)` + `shutting_down`). Binding COLD-VERIFIED
-      by the orchestrator: re-adding the log-and-skip `continue` → the in-flight
-      request hangs → `watchdog` DEADLOCK at 10.4s → RED; restored → green.
+  DONE — commit `bd1af5c55` (`test_malformed_frame_is_fatal`, MockTransport +
+  one malformed line → `Err(Other)` + `shutting_down`). Binding COLD-VERIFIED
+  by the orchestrator: re-adding the log-and-skip `continue` → the in-flight
+  request hangs → `watchdog` DEADLOCK at 10.4s → RED; restored → green.
 - [x] H-MALFORMED: delete the `MAX_CONSECUTIVE_MALFORMED_LINES` leniency **and**
-      the two `#[cfg(test)]` tests that bind it
-      (`test_stray_lines_below_bound_are_skipped_not_fatal`,
-      `test_malformed_beyond_bound_escalates_distinct_from_crash`). DONE — commit
-      `bd1af5c55`. `reader_loop`'s `Malformed` arm is now immediately fatal (a
-      single malformed frame on the private control socket → broadcast+kill); the
-      counter + constant are gone (only prose-comment mentions remain); message
-      reworded to name the control socket. `ts_process` module 40/40 green;
-      `echo_engine_e2e` unchanged 13/13.
+  the two `#[cfg(test)]` tests that bind it
+  (`test_stray_lines_below_bound_are_skipped_not_fatal`,
+  `test_malformed_beyond_bound_escalates_distinct_from_crash`). DONE — commit
+  `bd1af5c55`. `reader_loop`'s `Malformed` arm is now immediately fatal (a
+  single malformed frame on the private control socket → broadcast+kill); the
+  counter + constant are gone (only prose-comment mentions remain); message
+  reworded to name the control socket. `ts_process` module 40/40 green;
+  `echo_engine_e2e` unchanged 13/13.
 - [x] **Migrated `pc_c_a` to the TCP path** — commit `a66b7f12b`. Moved
-      in-crate as `tests::test_large_single_line_frame_parses_over_tcp` (a >1 MB
-      frame over `accept_and_handshake` + a dialer thread; recv-before-join since
-      a >1 MB write blocks the dialer until the reader drains). Standing property
-      test, no named revert hunk (like #10). `ts_process_framing_probe.rs` deleted
-      (its last probe migrated in-crate; `TcpReadHalf`'s field + `accept_and_handshake`
-      are private, so an external integration test cannot construct the read half).
+  in-crate as `tests::test_large_single_line_frame_parses_over_tcp` (a >1 MB
+  frame over `accept_and_handshake` + a dialer thread; recv-before-join since
+  a >1 MB write blocks the dialer until the reader drains). Standing property
+  test, no named revert hunk (like #10). `ts_process_framing_probe.rs` deleted
+  (its last probe migrated in-crate; `TcpReadHalf`'s field + `accept_and_handshake`
+  are private, so an external integration test cannot construct the read half).
 - [x] Deleted `StdioWriteHalf`/`StdioReadHalf`/`spawn_into` — commit `a66b7f12b`.
-      - Production (`ensure_started`) was already on `spawn_into_tcp` (Phase 3).
-      - `TsEngineHost::start_with_command` (`#[cfg(test)]`) ported to the
-        loopback-TCP handshake (bind listener + uuid token + append
-        `--control 127.0.0.1:<port>` + `spawn_into_tcp`). Its **7** call sites in
-        `ts_process.rs` + `registry.rs` now use the new `#[cfg(test)]`
-        `deno_dialback_child` helper (a `deno run <tempfile>` child that reads the
-        token off stdin, `Deno.connect`s, presents the token pre-line, then runs a
-        per-test body). `deno eval` does NOT forward `--control` to `Deno.args`
-        (verified empirically) — hence `deno run <tempfile>`, with the tempfile
-        kept alive until `start_with_command` returns. The five previously-non-deno
-        children (sh/sleep) became deno dial-back children + gained an
-        `is_available()` gate and 30s watchdog; CI always installs deno for this
-        suite so no coverage is lost. `behave_engine_e2e.rs` needed no work
-        (production `ensure_started`, flipped at Phase 3).
-      - `StartedDrains::Stdio` removed; `::None` now `#[cfg(test)]`-gated, so the
-        non-test lib build has only the live `::Tcp` variant and needs no
-        `#[allow(dead_code)]` — the `-D warnings` leg is green.
+  - Production (`ensure_started`) was already on `spawn_into_tcp` (Phase 3).
+  - `TsEngineHost::start_with_command` (`#[cfg(test)]`) ported to the
+    loopback-TCP handshake (bind listener + uuid token + append
+    `--control 127.0.0.1:<port>` + `spawn_into_tcp`). Its **7** call sites in
+    `ts_process.rs` + `registry.rs` now use the new `#[cfg(test)]`
+    `deno_dialback_child` helper (a `deno run <tempfile>` child that reads the
+    token off stdin, `Deno.connect`s, presents the token pre-line, then runs a
+    per-test body). `deno eval` does NOT forward `--control` to `Deno.args`
+    (verified empirically) — hence `deno run <tempfile>`, with the tempfile
+    kept alive until `start_with_command` returns. The five previously-non-deno
+    children (sh/sleep) became deno dial-back children + gained an
+    `is_available()` gate and 30s watchdog; CI always installs deno for this
+    suite so no coverage is lost. `behave_engine_e2e.rs` needed no work
+    (production `ensure_started`, flipped at Phase 3).
+  - `StartedDrains::Stdio` removed; `::None` now `#[cfg(test)]`-gated, so the
+    non-test lib build has only the live `::Tcp` variant and needs no
+    `#[allow(dead_code)]` — the `-D warnings` leg is green.
 - [x] Delete the stdout-contract language across plan1a-host / plan1b /
-      `engine-host-concurrency.md` — commit `a10e64174` (Task 4-C). The
-      grand-plan overview needed no change (verified: no engine-host
-      stdout/protocol-channel content there). engine-host-concurrency.md's
-      "Deferred: Phase 1.6" section renamed + marked LANDED; the
-      console.log-corrupts / stdout-is-the-channel contract retired across all
-      three docs (past-tense framing for the historical v1 design).
+  `engine-host-concurrency.md` — commit `a10e64174` (Task 4-C). The
+  grand-plan overview needed no change (verified: no engine-host
+  stdout/protocol-channel content there). engine-host-concurrency.md's
+  "Deferred: Phase 1.6" section renamed + marked LANDED; the
+  console.log-corrupts / stdout-is-the-channel contract retired across all
+  three docs (past-tense framing for the historical v1 design).
 - [x] Re-run `cargo xtask verify` (final gate) — **GREEN** at HEAD `a10e64174`
-      ("All verification steps passed!", exit 0): workspace nextest 10751
-      passed / 198 skipped; ts-packages built; hub-client WASM build + all
-      vitest suites green (WASM-GATE holds — `ts_process.rs` is
-      `cfg(not wasm32)`, so the WASM leg is structurally unaffected).
-      **Windows CI is the only remaining gate** (platform gate, fires on CI).
+  ("All verification steps passed!", exit 0): workspace nextest 10751
+  passed / 198 skipped; ts-packages built; hub-client WASM build + all
+  vitest suites green (WASM-GATE holds — `ts_process.rs` is
+  `cfg(not wasm32)`, so the WASM leg is structurally unaffected).
+  **Windows CI is the only remaining gate** (platform gate, fires on CI).
 
 ## Open questions (remaining)
 
