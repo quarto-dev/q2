@@ -232,7 +232,7 @@ note.
 - [x] Run `cargo nextest run -p quarto` — 100/100 pass.
 - [x] Run `cargo xtask verify --skip-hub-build` — all 12 steps
       green (lint, fmt, Rust build with `-D warnings`, tree-sitter,
-      Rust tests, hub-client tests, trace-viewer, preview-*,
+      Rust tests, hub-client tests, trace-viewer, preview-\*,
       q2-preview-spa build).
 - [x] End-to-end verify (warm cache, debug build, this machine):
 

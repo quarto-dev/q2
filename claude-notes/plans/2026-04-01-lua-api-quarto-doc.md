@@ -368,7 +368,7 @@ registration time. We match this behavior. This keeps
 
 TS Quarto's `is_format` uses a hardcoded if/else chain mapping format
 names to groups. `is_format("html")` doesn't do string prefix matching
-— it checks if FORMAT is in a specific set (html, html4, html5, epub*,
+— it checks if FORMAT is in a specific set (html, html4, html5, epub\*,
 slide formats). `"html:js"` is a special alias meaning "HTML that
 supports JavaScript" (HTML minus epub), not a prefix:variant syntax.
 

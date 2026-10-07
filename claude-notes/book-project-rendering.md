@@ -1402,6 +1402,6 @@ Book projects are **website projects with extensions**:
 - Chapter manager with automatic numbering
 - Custom Pandoc renderer with mode selection
 - HTML post-processing for cross-reference and bibliography fixups
-- Config translation (book.* → website.*)
+- Config translation (book.* → website.\*)
 
 Book projects demonstrate Quarto's extensibility: new project types can build on existing ones while adding specialized behavior.

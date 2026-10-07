@@ -4,7 +4,10 @@
 # further, which exposes more of the others, so they must be iterated jointly.
 # Star rules escape only clearly literal stars; the rest need manual review.
 cd "$(git rev-parse --show-toplevel)"
-STAR='\*{1,2}(?=\s)|(?<=/)\*|\*{1,2}(?=/)|\*(?=\.\w)'
+# Clearly literal stars: whitespace-flanked, glob (/* */ *.rs), trailing
+# wildcard (Q-2-*, epub_*, website.*), raw pointer (*const), a star before a
+# digit ((*50.6), and the keycap emoji *⃣.
+STAR='\*{1,2}(?=\s)|(?<=/)\*|\*{1,2}(?=/)|\*(?=\.\w)|(?<=[\w.-])\*(?=[\s),;:\]]|$)|(?<=<)\*(?=const|mut)|\*(?=\d)|\*(?=\uFE0F)'
 run() { scripts/q2-escape-openers.py claude-notes "$@" --max-rounds 20 2>&1 | awk '/^total/{print $3}'; }
 for i in 1 2 3 4 5 6 7 8; do
   a=$(run Q-2-17 --block-pattern '~')

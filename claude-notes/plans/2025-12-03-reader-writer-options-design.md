@@ -671,7 +671,7 @@ When this is implemented, we should document:
 | `variables` | table | {} |
 | `wrap_text` | string | "wrap-auto" |
 
-(Plus many format-specific fields: epub_*, cite_method, etc.)
+(Plus many format-specific fields: epub_\*, cite_method, etc.)
 
 ---
 

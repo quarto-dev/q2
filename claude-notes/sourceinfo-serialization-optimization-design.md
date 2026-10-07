@@ -447,7 +447,7 @@ cargo test -p quarto-markdown-pandoc -- --ignored
 
 ### Memory Overhead
 
-**Writer**: HashMap<*const SourceInfo, usize>
+**Writer**: HashMap<\*const SourceInfo, usize>
 - Pointer = 8 bytes
 - usize = 8 bytes
 - \~16 bytes per unique SourceInfo

@@ -218,7 +218,7 @@ Raw output preserved at
 | skip | 3,677,492 | 69.8 | 0 | 3,677,492 | 51.3* |
 | skip | 6,954,292 | 131.2 | 0 | 6,954,292 | 52.8 |
 
-(*50.6 measured; table shows medians of independent runs — render time
+(\*50.6 measured; table shows medians of independent runs — render time
 is flat \~51 ms throughout, as expected.)
 
 Conclusions:

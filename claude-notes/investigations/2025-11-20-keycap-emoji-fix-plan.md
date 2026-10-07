@@ -21,7 +21,7 @@ This correctly handles:
 
 ### What Fails
 
-**Keycap emojis** like 1️⃣ 2️⃣ 3️⃣ #️⃣ *️⃣ fail because:
+**Keycap emojis** like 1️⃣ 2️⃣ 3️⃣ #️⃣ \*️⃣ fail because:
 
 1. Base character is ASCII (`0-9`, `#`, `*`) - NOT in `\p{Extended_Pictographic}`
 2. Structure: `[0-9#*] + U+FE0F + U+20E3`
@@ -71,7 +71,7 @@ According to Unicode TR51 (Unicode Emoji):
 This is:
 - **Precise**: Only matches the 12 valid keycap emoji sequences
 - **Safe**: Doesn't add broad Unicode categories
-- **Complete**: Covers all keycap emojis (0️⃣-9️⃣, #️⃣, *️⃣)
+- **Complete**: Covers all keycap emojis (0️⃣-9️⃣, #️⃣, \*️⃣)
 
 ### Implementation
 
@@ -199,7 +199,7 @@ Expected impact:
 \u20E3     // Required Combining Enclosing Keycap
 ```
 
-Matches exactly: 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ #️⃣ *️⃣
+Matches exactly: 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ #️⃣ \*️⃣
 
 And their variants without U+FE0F (rare but valid): 0⃣ 1⃣ 2⃣ etc.
 

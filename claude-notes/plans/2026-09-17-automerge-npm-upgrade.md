@@ -151,7 +151,7 @@ step for this port).
       eslint clean on touched files (repo-wide eslint baseline unchanged)
 - [x] Full gate: `cargo xtask verify` — all 14 steps passed (Rust: 13924
       tests, 199 skipped; hub-client build:all incl. WASM; test:ci;
-      trace-viewer; preview-*; hub MCP; q2-preview-spa build)
+      trace-viewer; preview-\*; hub MCP; q2-preview-spa build)
 - [x] `hub-client/changelog.md` entry (two-commit workflow) — `4084897a9`
 - [x] Commits `07b211229`, `d0b399460`, `4084897a9` pushed to
       `origin/chore/bd-d08gpqvu-automerge-npm-upgrade`; PR #685 opened

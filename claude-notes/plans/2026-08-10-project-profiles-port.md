@@ -182,7 +182,7 @@ QUARTO_PROFILE >}}` resolves.
 - Profile resolution diagnostics go to
   `ProjectConfig.config_diagnostics` (printed once per run).
 
-### New error-catalog codes (subsystem `project`, Q-5-*)
+### New error-catalog codes (subsystem `project`, Q-5-\*)
 
 | Code | Severity | Meaning |
 |---|---|---|
@@ -414,7 +414,7 @@ waits; nothing else blocks.
       exercise it — including the WASM runner, our only WASM-path
       coverage), overlay title + when-profile visible/hidden +
       when-meta-from-overlay assertions; native runner green, WASM
-      runner exercised by `cargo xtask verify`'s hub leg.
+      runner exercised by `cargo xtask verify`\'s hub leg.
 - [x] Engine E2E (recorded): jupyter cell
       `os.environ.get("QUARTO_PROFILE")` printed
       `advanced,production` under

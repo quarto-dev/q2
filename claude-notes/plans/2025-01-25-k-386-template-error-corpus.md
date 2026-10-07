@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plan adds structured error reporting infrastructure to quarto-doctemplate, using the Q-10-* error code range for template-related errors. The implementation follows the pattern established by quarto-markdown-pandoc for markdown errors (Q-2-*).
+This plan adds structured error reporting infrastructure to quarto-doctemplate, using the Q-10-* error code range for template-related errors. The implementation follows the pattern established by quarto-markdown-pandoc for markdown errors (Q-2-\*).
 
 ## Current State Analysis
 

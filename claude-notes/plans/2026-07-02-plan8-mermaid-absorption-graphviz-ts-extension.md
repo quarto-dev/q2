@@ -45,7 +45,7 @@ extension stack for Part B). Part A (mermaid) is independent of the TS-engine
 subprocess and can land first; Part B (graphviz) needs Plans 1a–c + 1b + 2A.
 **Depends on:** Part A — `claims_language` / `LanguageClaim` + `resolve_engines`
 (plan1a-engine, landed) and PR **#241** (`feature/mermaid-engine`). Part B — the
-full TS-engine extension path (plan1a-*, 1b, 1c, 2A) + `q2 build-ts-extension`.
+full TS-engine extension path (plan1a-\*, 1b, 1c, 2A) + `q2 build-ts-extension`.
 **Enables:** Plan 6 Q4 (draining `HANDLED_LANGUAGES` so languages are not
 hard-coded).
 

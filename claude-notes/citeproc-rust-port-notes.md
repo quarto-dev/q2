@@ -378,7 +378,7 @@ pub struct NameFormat {
 **Important Implementation Notes**:
 1. Particles (van, de, von, etc.) must be extracted during parsing
 2. Name initialization requires Unicode-aware character handling
-3. Et al. cascades must be handled carefully (et al., et al.*, et al.+)
+3. Et al. cascades must be handled carefully (et al., et al.\*, et al.+)
 4. Name sorting differs from name display
 
 ### 10. Date Handling
