@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-10-07
+
+- [`75eb053bc`](https://github.com/quarto-dev/q2/commits/75eb053bc): Share links produced by the Quarto Hub MCP server (for example by create_project) now always carry the sync server, file, and project name the app requires, so opening one shows the invite page instead of the "This share link is incomplete" error.
+
 ### 2026-10-06
 
 - [`b151baf25`](https://github.com/quarto-dev/q2/commits/b151baf25): In the rich-text editor, the highlight, delete and insert buttons are disabled until text is selected; selecting exactly a marked stretch enables only its own button, and pressing it removes the mark.
