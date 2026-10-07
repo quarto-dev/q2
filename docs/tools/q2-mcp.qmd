@@ -53,6 +53,46 @@ To use a different Quarto Hub server than the default
 "args": ["mcp", "--server", "wss://your-hub.example/ws"]
 ```
 
+## Other ways to run the server
+
+`q2 mcp` is the recommended path — it embeds the server and signs you
+in with the same credentials as the web client. Two alternatives exist
+for setups where `q2` is not installed:
+
+**npm.** The server is published as
+[`@quarto/hub-mcp`](https://www.npmjs.com/package/@quarto/hub-mcp) and
+listed in the [MCP Registry](https://registry.modelcontextprotocol.io)
+as `io.github.quarto-dev/hub-mcp`. It requires Node.js 24 or newer:
+
+```json
+{
+  "mcpServers": {
+    "quarto-hub": {
+      "command": "npx",
+      "args": ["@quarto/hub-mcp"]
+    }
+  }
+}
+```
+
+Unlike `q2 mcp`, the npm package does not carry built-in OAuth client
+credentials. For hubs that require sign-in, supply your hub operator's
+client credentials as environment variables
+(`QUARTO_HUB_MCP_CLIENT_ID`, `QUARTO_HUB_MCP_CLIENT_SECRET`); on
+no-auth hubs nothing further is needed.
+
+**Claude Desktop one-click.** Each release also ships a
+`quarto-hub-mcp-<version>.mcpb` bundle: download it from the release
+page and open it with Claude Desktop. The install dialog shows the
+exact command it will run (`node …/dist-bundle/index.mjs`) and asks
+for the sync server URL and optional OAuth credentials before
+enabling anything.
+
+**Remote access (planned).** A hub-served remote MCP endpoint (agents
+connecting over HTTP instead of stdio, so browser-hosted assistants
+like Claude.ai connectors can use the server) is designed but not yet
+available; see the Phase 6 design doc in the repository for the plan.
+
 ## Signing in
 
 Projects on hubs that require authentication need a one-time sign-in
