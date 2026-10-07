@@ -27,9 +27,10 @@
  *      record when installed from npm.
  * 3. `npm pack` the staging dir into `<out>`.
  *
- * The workspace `dist-bundle/` is left in its dev state (host-platform
- * keyring only) — only the staged copy is rewritten, so a subsequent
- * `cargo build --bin q2` never embeds an npm-shaped bundle.
+ * The workspace `dist-bundle/` is never touched: the bundle builds
+ * straight into the staging dir (`HUB_MCP_BUNDLE_OUT`), so packaging
+ * can run concurrently with anything that spawns or embeds the
+ * workspace bundle.
  *
  * When `server.json` exists next to this script (registry listing,
  * CAP-15), its `version` and npm-package entry are checked against the
@@ -105,16 +106,24 @@ if (existsSync(serverJsonPath)) {
   }
 }
 
-// --- 1. clean rebuild ---------------------------------------------------
-console.log('building bundle (npm run bundle)…');
-execFileSync('npm', ['run', 'bundle'], { cwd: pkgRoot, stdio: 'inherit' });
-
-// --- 2. stage -----------------------------------------------------------
+// --- 1. clean rebuild, straight into the staging dir -------------------
+// Building into a private dir (not the workspace dist-bundle) is what
+// makes this safe to run concurrently with tests that spawn the
+// workspace bundle (see HUB_MCP_BUNDLE_OUT in scripts/bundle.mjs).
 const stage = join(out, 'stage');
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 
-cpSync(join(pkgRoot, 'dist-bundle'), join(stage, 'dist-bundle'), { recursive: true });
+console.log('building bundle (npm run bundle)…');
+execFileSync('npm', ['run', 'bundle'], {
+  cwd: pkgRoot,
+  stdio: 'inherit',
+  env: { ...process.env, HUB_MCP_BUNDLE_OUT: join(stage, 'dist-bundle') },
+});
+
+// --- 2. stage -----------------------------------------------------------
+// npm delivers the keyring addon per platform; the vendored copy in a
+// dev bundle would only bloat the tarball.
 rmSync(join(stage, 'dist-bundle', 'node_modules', '@napi-rs'), {
   recursive: true,
   force: true,
