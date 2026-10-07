@@ -34,6 +34,9 @@ import { setSyncLogger } from '@quarto/quarto-sync-client';
 
 import { ConnectionManager } from './connection-manager.js';
 import { registerTools } from './tools.js';
+import { registerResources } from './resources.js';
+import { registerPrompts } from './prompts.js';
+import { QUARTO_ICON } from './icon.js';
 import { AuthToolsState } from './auth/auth-tools.js';
 import { CredentialStore } from './auth/credential-store.js';
 import {
@@ -125,6 +128,15 @@ export interface CreateServerOptions {
   readonly authToolsState?: AuthToolsState;
   /** CAP-12: expose the `render` tool (code execution — opt-in only). */
   readonly allowRender?: boolean;
+  /**
+   * The protocol era this instance will serve (BP-5): `serveStdio`
+   * learns it from the opening exchange and hands it to the factory;
+   * the in-process fixture is always a bare legacy pair. The resource
+   * bridge gates `resources/updated` by it — legacy deliveries respect
+   * the client's `resources/subscribe` set; modern deliveries are
+   * filtered by the entry's `subscriptions/listen` router.
+   */
+  readonly era?: 'modern' | 'legacy';
 }
 
 /**
@@ -228,6 +240,13 @@ function buildInstructions(readOnly: boolean, allowRender: boolean): string {
     'manage folders; disconnect_project releases a connection you no longer need. docs ' +
     'answers Quarto usage questions from the embedded Quarto 2 documentation (query to ' +
     'search, page to read).' +
+    '\n8. Resources and prompts: every file of a connected project is also an MCP resource ' +
+    '(`hub://project/<id>/<path>`) — in hosts that support resources you can attach files ' +
+    'as context and subscribe to their changes. The prompts (review-draft, ' +
+    'collaborate-with-human' +
+    (readOnly ? '' : ', safe-edit-workflow') +
+    (allowRender && !readOnly ? ', fix-render-errors' : '') +
+    ') walk through the standard workflows step by step.' +
     '\n\nAuth: if a call fails with AuthRequiredError/ReauthRequired, call `authenticate` — ' +
     'it opens the user\'s browser once and caches credentials in the OS keyring; ' +
     '`authenticate_clear` removes them.' +
@@ -238,22 +257,38 @@ function buildInstructions(readOnly: boolean, allowRender: boolean): string {
 }
 
 export function createServer(options: CreateServerOptions): McpServer {
-  const { manager, readOnly, authToolsState, allowRender } = options;
+  const { manager, readOnly, authToolsState, allowRender, era } = options;
   const server = new McpServer(
     {
       name: 'quarto-hub',
       version: resolveServerVersion(),
       description: SERVER_DESCRIPTION,
       websiteUrl: SERVER_WEBSITE_URL,
+      icons: [QUARTO_ICON],
     },
     {
       instructions: buildInstructions(readOnly, allowRender ?? false),
+      // Declared up front so the SDK's registration-time `?? true`
+      // defaults don't claim `listChanged` for surfaces whose list is
+      // fixed at construction (tools, prompts). The resources
+      // capability is registered separately by registerResources —
+      // declaring it here would install the SDK's non-paginating
+      // resources/list handler.
+      capabilities: {
+        tools: { listChanged: false },
+        prompts: { listChanged: false },
+      },
       cacheHints: {
         // The tool list is fixed at construction for the life of the
         // process (read-only mode and auth state included), so a long
         // TTL is honest; per-client because it rides the client's
-        // negotiated era and auth surface.
+        // negotiated era and auth surface. Same for the prompt list
+        // (BP-6) and the resource template (BP-5) — both static.
+        // resources/list and resources/read keep the no-cache default:
+        // files are live-edited data.
         'tools/list': { ttlMs: 3_600_000, cacheScope: 'private' },
+        'prompts/list': { ttlMs: 3_600_000, cacheScope: 'private' },
+        'resources/templates/list': { ttlMs: 3_600_000, cacheScope: 'private' },
       },
       // Dual-era opt-in (BP-16): the default supported list is
       // legacy-only, and a hand-constructed server answers
@@ -264,6 +299,11 @@ export function createServer(options: CreateServerOptions): McpServer {
   );
 
   registerTools(server, manager, readOnly, authToolsState, allowRender ?? false);
+  registerResources(server, manager, { era: era ?? 'legacy' });
+  registerPrompts(server, manager, {
+    readOnly,
+    allowRender: allowRender ?? false,
+  });
   return server;
 }
 
@@ -439,10 +479,12 @@ async function main(): Promise<void> {
   // serveStdio owns the era decision for the connection (BP-16 dual-era):
   // it classifies the opening message, pins one server instance for the
   // connection's lifetime, and installs the modern-only handlers
-  // (server/discover) itself when the opening claims 2026-07-28. The
-  // factory serves both eras — registration is era-agnostic.
-  const handle = serveStdio(() =>
-    createServer({ manager, readOnly, allowRender, authToolsState }),
+  // (server/discover, subscriptions/listen) itself when the opening
+  // claims 2026-07-28. The factory serves both eras — registration is
+  // the same either way, but the resource bridge needs to know which
+  // subscription model the pinned connection will use (BP-5).
+  const handle = serveStdio((ctx) =>
+    createServer({ manager, readOnly, allowRender, authToolsState, era: ctx.era }),
   );
 
   // Outbound-sync drain budget at shutdown (bd-10deu8h4): created

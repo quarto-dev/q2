@@ -46,6 +46,7 @@ import {
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
 import { buildShareUrl, parseProjectRef, serversMatch } from './share-url.js';
+import { buildFileResourceUri } from './resources.js';
 import { loadQmdParser } from './qmd-parser.js';
 import {
   extractOutline,
@@ -96,6 +97,26 @@ function structured(
     content: [{ type: 'text', text: JSON.stringify(textOverride ?? payload, null, 2) }],
     structuredContent: payload,
   };
+}
+
+/**
+ * Append a `resource_link` block pointing at the file's `hub://`
+ * resource URI (BP-5): hosts that understand resources can then
+ * attach, subscribe, or navigate to the file a write just touched.
+ * The link supplements — never replaces — the text/structured payload.
+ */
+function withResourceLink(
+  result: CallToolResult,
+  project: string,
+  path: string,
+  args: ToolArgs,
+): CallToolResult {
+  result.content.push({
+    type: 'resource_link',
+    uri: buildFileResourceUri(project, path, routedServer(args)),
+    name: path,
+  });
+  return result;
 }
 
 /**
@@ -1233,9 +1254,8 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
   if (payload.type === 'binary') {
     // CAP-4: binary rides read_file (no sibling tool, ERG-5 rule (a)).
     // Image MIME types come back as an `image` block a multimodal host
-    // can render; anything else as an embedded blob resource (base64).
-    // The URI is this server's own ephemeral reference for the blob —
-    // Phase 5's Q-2 decides the public hub:// resources contract.
+    // can render; anything else as an embedded blob resource (base64)
+    // whose URI is the file's hub:// resource (the Q-2 contract, BP-5).
     const meta = binaryMeta(path, payload.data, payload.mimeType);
     if (metadataOnly) {
       return structured(meta);
@@ -1245,7 +1265,11 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
       ? { type: 'image', data, mimeType: payload.mimeType }
       : {
           type: 'resource',
-          resource: { uri: `hub://${project}/${path}`, mimeType: payload.mimeType, blob: data },
+          resource: {
+            uri: buildFileResourceUri(project, path, routedServer(args)),
+            mimeType: payload.mimeType,
+            blob: data,
+          },
         };
     return {
       content: [blob, { type: 'text', text: JSON.stringify(meta, null, 2) }],
@@ -1567,12 +1591,17 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
       );
     }
     await state.client.createFile(path, content);
-    return structured({
+    return withResourceLink(
+      structured({
+        path,
+        hash: hashPayload({ type: 'text', text: content }),
+        created: true,
+        ...(await syncField(args, manager, project, [path])),
+      }),
+      project,
       path,
-      hash: hashPayload({ type: 'text', text: content }),
-      created: true,
-      ...(await syncField(args, manager, project, [path])),
-    });
+      args,
+    );
   }
   if (existing.type === 'binary') {
     return error(
@@ -1585,11 +1614,16 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   }
 
   state.client.updateFileContent(path, content);
-  return structured({
+  return withResourceLink(
+    structured({
+      path,
+      hash: hashPayload({ type: 'text', text: content }),
+      ...(await syncField(args, manager, project, [path])),
+    }),
+    project,
     path,
-    hash: hashPayload({ type: 'text', text: content }),
-    ...(await syncField(args, manager, project, [path])),
-  });
+    args,
+  );
 }
 
 /**
@@ -1628,11 +1662,16 @@ async function handleWriteFileBinary(
       );
     }
     const created = await state.client.createBinaryFile(path, decoded, mimeType);
-    return structured({
-      ...binaryWriteMeta(created.path, decoded, mimeType),
-      created: true,
-      ...(await syncField(args, manager, project, [created.path])),
-    });
+    return withResourceLink(
+      structured({
+        ...binaryWriteMeta(created.path, decoded, mimeType),
+        created: true,
+        ...(await syncField(args, manager, project, [created.path])),
+      }),
+      project,
+      created.path,
+      args,
+    );
   }
   if (existing.type === 'text') {
     return error(
@@ -1645,10 +1684,15 @@ async function handleWriteFileBinary(
   }
 
   await state.client.updateBinaryFileContent(path, decoded, mimeType);
-  return structured({
-    ...binaryWriteMeta(path, decoded, mimeType),
-    ...(await syncField(args, manager, project, [path])),
-  });
+  return withResourceLink(
+    structured({
+      ...binaryWriteMeta(path, decoded, mimeType),
+      ...(await syncField(args, manager, project, [path])),
+    }),
+    project,
+    path,
+    args,
+  );
 }
 
 async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -1697,12 +1741,17 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     if (!resolved.ok) return resolved.result;
     const newContent = replaceSection(currentContent, resolved.section, newString);
     state.client.updateFileContent(path, newContent);
-    return structured({
+    return withResourceLink(
+      structured({
+        path,
+        hash: hashPayload({ type: 'text', text: newContent }),
+        section: sectionInfo(resolved.section),
+        ...(await syncField(args, manager, project, [path])),
+      }),
+      project,
       path,
-      hash: hashPayload({ type: 'text', text: newContent }),
-      section: sectionInfo(resolved.section),
-      ...(await syncField(args, manager, project, [path])),
-    });
+      args,
+    );
   }
 
   // The guards above establish old_string is present whenever section is
@@ -1727,11 +1776,16 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     currentContent.slice(index + old.length);
 
   state.client.updateFileContent(path, newContent);
-  return structured({
+  return withResourceLink(
+    structured({
+      path,
+      hash: hashPayload({ type: 'text', text: newContent }),
+      ...(await syncField(args, manager, project, [path])),
+    }),
+    project,
     path,
-    hash: hashPayload({ type: 'text', text: newContent }),
-    ...(await syncField(args, manager, project, [path])),
-  });
+    args,
+  );
 }
 
 async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -1757,20 +1811,30 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
         ? args.mime_type
         : inferMimeType(path);
     const created = await state.client.createBinaryFile(path, decoded, mimeType);
-    return structured({
-      ...binaryWriteMeta(created.path, decoded, mimeType),
-      created: true,
-      ...(await syncField(args, manager, project, [created.path])),
-    });
+    return withResourceLink(
+      structured({
+        ...binaryWriteMeta(created.path, decoded, mimeType),
+        created: true,
+        ...(await syncField(args, manager, project, [created.path])),
+      }),
+      project,
+      created.path,
+      args,
+    );
   }
 
   await state.client.createFile(path, content);
-  return structured({
+  return withResourceLink(
+    structured({
+      path,
+      hash: hashPayload({ type: 'text', text: content }),
+      created: true,
+      ...(await syncField(args, manager, project, [path])),
+    }),
+    project,
     path,
-    hash: hashPayload({ type: 'text', text: content }),
-    created: true,
-    ...(await syncField(args, manager, project, [path])),
-  });
+    args,
+  );
 }
 
 async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -1812,12 +1876,17 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   state.client.renameFile(oldPath, newPath);
-  return structured({
-    old_path: oldPath,
-    new_path: newPath,
-    renamed: true,
-    ...(await syncField(args, manager, project, [])),
-  });
+  return withResourceLink(
+    structured({
+      old_path: oldPath,
+      new_path: newPath,
+      renamed: true,
+      ...(await syncField(args, manager, project, [])),
+    }),
+    project,
+    newPath,
+    args,
+  );
 }
 
 /**
@@ -1954,25 +2023,35 @@ async function handleRestoreFileVersion(args: ToolArgs, manager: ConnectionManag
   // Restoring the current state is an honest no-op — writing would mint
   // an empty change that litters the history.
   if (payload.text === historicalText) {
-    return structured({
+    return withResourceLink(
+      structured({
+        path,
+        restored_from: targetHead,
+        already_current: true,
+        pre_restore_hash: preRestoreHash,
+        pre_restore_heads: preRestoreHeads,
+        hash: preRestoreHash,
+      }),
+      project,
       path,
-      restored_from: targetHead,
-      already_current: true,
-      pre_restore_hash: preRestoreHash,
-      pre_restore_heads: preRestoreHeads,
-      hash: preRestoreHash,
-    });
+      args,
+    );
   }
 
   state.client.updateFileContent(path, historicalText);
-  return structured({
+  return withResourceLink(
+    structured({
+      path,
+      restored_from: targetHead,
+      pre_restore_hash: preRestoreHash,
+      pre_restore_heads: preRestoreHeads,
+      hash: hashPayload({ type: 'text', text: historicalText }),
+      ...(await syncField(args, manager, project, [path])),
+    }),
+    project,
     path,
-    restored_from: targetHead,
-    pre_restore_hash: preRestoreHash,
-    pre_restore_heads: preRestoreHeads,
-    hash: hashPayload({ type: 'text', text: historicalText }),
-    ...(await syncField(args, manager, project, [path])),
-  });
+    args,
+  );
 }
 
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
