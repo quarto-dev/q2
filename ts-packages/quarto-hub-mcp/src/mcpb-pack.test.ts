@@ -12,6 +12,11 @@
  * - all-platforms: needs network for the `npm pack` fallback that
  *   fetches the non-host addons (the same mechanism the release
  *   workflow uses); skipped loudly when the registry is unreachable.
+ *
+ * The pack rebuilds the bundle, which stages the wasm-qmd-parser pkg —
+ * so on toolchain-less legs (PARSER_UNAVAILABLE, e.g. CI's
+ * workspace-ts-suites) the whole file skips, like bundle.test.ts, and
+ * runs in the test-suite job's parser tier instead.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -21,6 +26,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { PARSER_UNAVAILABLE } from './test-setup.js';
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -82,7 +89,7 @@ function hostPlatformKeyringDir(unpacked: string): string {
   return join(unpacked, 'dist-bundle', 'node_modules', '@napi-rs');
 }
 
-describe('mcpb packaging (CAP-15)', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('mcpb packaging (CAP-15)', () => {
   let tmp: string;
   const host = hostKeyringPlatform();
 
