@@ -20,7 +20,15 @@ import type {
   McpServer,
   ToolAnnotations,
 } from '@modelcontextprotocol/server';
-import { fileUnavailableMessage, type SyncClient } from '@quarto/quarto-sync-client';
+import {
+  fileUnavailableMessage,
+  getCapturesFromIndex,
+  getIdentitiesFromIndex,
+  inferMimeType,
+  normalizeProjectPath,
+  type FilePayload,
+  type SyncClient,
+} from '@quarto/quarto-sync-client';
 import { ConnectionManager, hashPayload } from './connection-manager.js';
 import {
   AUTH_TOOL_DEFINITIONS,
@@ -28,7 +36,7 @@ import {
   extractAuthContext,
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
-import { parseProjectRef, serversMatch } from './share-url.js';
+import { buildShareUrl, parseProjectRef, serversMatch } from './share-url.js';
 
 function text(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }] };
@@ -69,6 +77,24 @@ const PROJECT_PARAM_DESC =
 
 const projectParam = z.string().describe(PROJECT_PARAM_DESC);
 const pathParam = z.string().describe('The file path within the project');
+
+/** Shared `encoding` parameter for the write verbs (CAP-5). */
+const encodingParam = z
+  .enum(['utf8', 'base64'])
+  .optional()
+  .describe(
+    '"utf8" (default) writes text. "base64" writes binary: `content` is the file bytes ' +
+      'base64-encoded — use it for images, PDFs, and other non-text files.',
+  );
+
+/** Shared `mime_type` parameter for the binary write arm (CAP-5). */
+const mimeTypeParam = z
+  .string()
+  .optional()
+  .describe(
+    'MIME type for `encoding: "base64"` writes. Defaults to the type inferred from the ' +
+      'path extension (e.g. .png → image/png).',
+  );
 
 const ANNOT_READ: ToolAnnotations = {
   readOnlyHint: true,
@@ -161,18 +187,34 @@ interface ListedFile {
   type?: string;
   status?: 'unavailable';
   docId?: string;
+  /** ERG-3 listing metadata: byte size always; mimeType always; lines for text. */
+  size?: number;
+  mimeType?: string;
+  lines?: number;
 }
 
 /** Project state as exposed by {@link ConnectionManager.connect}. */
 type ProjectState = Awaited<ReturnType<ConnectionManager['connect']>>;
 
 function buildFileList(state: ProjectState): ListedFile[] {
-  const fileList: ListedFile[] = Array.from(state.files.keys()).map((path) => ({
-    path,
-    type: state.files.get(path)!.type,
-  }));
+  const fileList: ListedFile[] = Array.from(state.files.entries()).map(([path, payload]) =>
+    payload.type === 'binary'
+      ? { path, type: 'binary', size: payload.data.byteLength, mimeType: payload.mimeType }
+      : {
+          path,
+          type: 'text',
+          size: Buffer.byteLength(payload.text, 'utf8'),
+          mimeType: textMimeType(path),
+          lines: splitLines(payload.text).length,
+        },
+  );
   for (const ghost of state.client.getUnavailableFiles()) {
     fileList.push({ path: ghost.path, status: 'unavailable', docId: ghost.docId });
+  }
+  // Explicit folder markers (CAP-6). Folders file paths merely imply are
+  // not listed — an empty folder exists only once created.
+  for (const folder of state.client.getFolderPaths()) {
+    fileList.push({ path: folder, type: 'folder' });
   }
   fileList.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return fileList;
@@ -244,17 +286,168 @@ function fileNotFoundError(path: string, state: ProjectState): CallToolResult {
   return error(msg);
 }
 
+// ---------------------------------------------------------------------------
+// ERG-3: read ranges and truncation
+// ---------------------------------------------------------------------------
+
+/** Default byte cap on a read_file response body (the "sensible default" truncation). */
+const DEFAULT_MAX_BYTES = 65536;
+/** Hard ceiling for `max_bytes` — large enough to refuse politely instead of paging forever. */
+const MAX_BYTES_CAP = 1048576;
+
+/**
+ * Split text into lines, treating a trailing newline as the terminator
+ * of the last line rather than the start of an empty one: "a\n" is one
+ * line, "a\n\n" is two, "" is zero.
+ */
+function splitLines(text: string): string[] {
+  if (text === '') return [];
+  const lines = text.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
+
+/** Cut `text` to at most `maxBytes` UTF-8 bytes without splitting a multi-byte character. */
+function cutToBytes(text: string, maxBytes: number): string {
+  const buf = Buffer.from(text, 'utf8');
+  if (buf.byteLength <= maxBytes) return text;
+  let end = maxBytes;
+  // Back off a UTF-8 continuation byte (10xxxxxx) to the sequence start.
+  while (end > 0 && (buf[end] & 0xc0) === 0x80) end--;
+  return buf.subarray(0, end).toString('utf8');
+}
+
+interface LineWindow {
+  content: string;
+  totalLines: number;
+  truncated: boolean;
+  nextOffset: number | null;
+  hint?: string;
+}
+
+/**
+ * The line-window/byte-cap engine behind read_file (ERG-3). Windows are
+ * line-aligned and byte-exact: concatenating the pages `next_offset`
+ * walks through reassembles the original text. `truncated` means the
+ * returned window does not extend to EOF; a single line that alone
+ * exceeds the byte cap is byte-cut with no line-aligned continuation
+ * (`nextOffset: null` + an explanatory hint).
+ */
+function windowLines(
+  text: string,
+  offset: number,
+  limit: number | undefined,
+  maxBytes: number,
+): LineWindow {
+  const lines = splitLines(text);
+  const totalLines = lines.length;
+  const start = offset - 1;
+  let end = limit === undefined ? totalLines : Math.min(start + limit, totalLines);
+
+  let windowed: string;
+  if (start === 0 && end === totalLines) {
+    windowed = text; // whole file: return verbatim, no rejoin loss
+  } else {
+    windowed = lines.slice(start, end).join('\n');
+    // Lines in a window were terminated in the original (only the file's
+    // very last line may lack a newline).
+    if (end < totalLines || text.endsWith('\n')) windowed += '\n';
+  }
+
+  if (Buffer.byteLength(windowed, 'utf8') <= maxBytes) {
+    const truncated = end < totalLines;
+    return {
+      content: windowed,
+      totalLines,
+      truncated,
+      nextOffset: truncated ? end + 1 : null,
+      ...(truncated
+        ? {
+            hint:
+              `Returned lines ${offset}-${end} of ${totalLines}. ` +
+              `Call read_file with offset=${end + 1} to continue.`,
+          }
+        : {}),
+    };
+  }
+
+  // Byte cap bites: re-cut at a line boundary where possible.
+  const pageLines: string[] = [];
+  let bytes = 0;
+  let cutAt = start;
+  for (let i = start; i < end; i++) {
+    const lineBytes = Buffer.byteLength(lines[i], 'utf8') + 1; // +1 for the terminator
+    if (bytes + lineBytes > maxBytes) break;
+    pageLines.push(lines[i]);
+    bytes += lineBytes;
+    cutAt = i + 1;
+  }
+  if (pageLines.length > 0) {
+    end = cutAt;
+    return {
+      content: pageLines.join('\n') + '\n',
+      totalLines,
+      truncated: true,
+      nextOffset: end + 1,
+      hint:
+        `Returned lines ${offset}-${end} of ${totalLines} (max_bytes=${maxBytes}). ` +
+        `Call read_file with offset=${end + 1} to continue.`,
+    };
+  }
+  // Pathological: a single line exceeds the byte cap (minified assets,
+  // one-line data files). Byte-cut it; there is no line-aligned
+  // continuation, so next_offset is null and the hint says why.
+  const content = cutToBytes(lines[start], maxBytes);
+  return {
+    content,
+    totalLines,
+    truncated: true,
+    nextOffset: null,
+    hint:
+      `Line ${offset} alone exceeds max_bytes=${maxBytes}; returned its first ` +
+      `${Buffer.byteLength(content, 'utf8')} bytes. Raise max_bytes (up to ${MAX_BYTES_CAP}) ` +
+      'to see more of it.',
+  };
+}
+
+/** Display MIME type for a text file (listings only — inferMimeType covers binaries). */
+function textMimeType(path: string): string {
+  const ext = path.includes('.') ? path.slice(path.lastIndexOf('.') + 1).toLowerCase() : '';
+  const textTypes: Record<string, string> = {
+    qmd: 'text/markdown',
+    md: 'text/markdown',
+    html: 'text/html',
+    css: 'text/css',
+    js: 'text/javascript',
+    mjs: 'text/javascript',
+    ts: 'text/typescript',
+    json: 'application/json',
+    yml: 'application/yaml',
+    yaml: 'application/yaml',
+    csv: 'text/csv',
+    txt: 'text/plain',
+    xml: 'application/xml',
+  };
+  return textTypes[ext] ?? 'text/plain';
+}
+
 /** The data tools (everything except the auth tools). */
 type DataToolName =
   | 'connect_project'
+  | 'disconnect_project'
+  | 'get_project_info'
+  | 'list_projects'
   | 'list_files'
   | 'read_file'
+  | 'search_files'
   | 'wait_for_change'
   | 'write_file'
   | 'patch_file'
   | 'create_file'
   | 'delete_file'
   | 'rename_file'
+  | 'create_folder'
+  | 'delete_folder'
   | 'create_project';
 
 /**
@@ -295,10 +488,18 @@ async function handleTool(
   switch (name) {
     case 'connect_project':
       return handleConnectProject(args, manager);
+    case 'disconnect_project':
+      return handleDisconnectProject(args, manager);
+    case 'get_project_info':
+      return handleGetProjectInfo(args, manager);
+    case 'list_projects':
+      return handleListProjects(args, manager);
     case 'list_files':
       return handleListFiles(args, manager);
     case 'read_file':
       return handleReadFile(args, manager);
+    case 'search_files':
+      return handleSearchFiles(args, manager);
     case 'wait_for_change':
       return handleWaitForChange(args, manager, extras);
     case 'write_file':
@@ -311,6 +512,10 @@ async function handleTool(
       return handleDeleteFile(args, manager);
     case 'rename_file':
       return handleRenameFile(args, manager);
+    case 'create_folder':
+      return handleCreateFolder(args, manager);
+    case 'delete_folder':
+      return handleDeleteFolder(args, manager);
     case 'create_project':
       return handleCreateProject(args, manager);
   }
@@ -319,7 +524,113 @@ async function handleTool(
 async function handleConnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project, { server: routedServer(args) });
-  return structured({ project, files: buildFileList(state) });
+  return structured({
+    project,
+    files: buildFileList(state),
+    shareUrl: buildShareUrl({ server: state.serverUrl, indexDocId: project }),
+  });
+}
+
+async function handleDisconnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const waitForSync = args.wait_for_sync !== false;
+  const result = await manager.disconnect(project, {
+    server: routedServer(args),
+    drainMs: waitForSync ? SYNC_WAIT_MS : 0,
+  });
+  if (!result.wasConnected) {
+    const connected = manager.connectedProjects();
+    const suffix =
+      connected.length > 0
+        ? ` Connected projects: ${connected.map((c) => c.indexDocId).join(', ')}.`
+        : ' No projects are currently connected.';
+    return error(`Error: not connected to project ${project} — nothing to disconnect.${suffix}`);
+  }
+  return structured({
+    project,
+    disconnected: true,
+    ...(waitForSync ? { synced: result.drained } : {}),
+  });
+}
+
+async function handleGetProjectInfo(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  // The index doc is the source of truth for identities/captures; both
+  // getters tolerate a V1 doc (absent maps → {}).
+  const doc = state.client.getIndexHandle()?.doc();
+  const identities = doc ? getIdentitiesFromIndex(doc) : {};
+  const captures = doc ? getCapturesFromIndex(doc) : {};
+  const diag = state.client.getSyncDiagnostics();
+  let binary = 0;
+  for (const payload of state.files.values()) {
+    if (payload.type === 'binary') binary++;
+  }
+  return structured({
+    project,
+    server: state.serverUrl,
+    shareUrl: buildShareUrl({ server: state.serverUrl, indexDocId: project }),
+    // A foreign project (share-URL `server=` routing) is always joined
+    // authorless, so its effective mode is no-auth regardless of the
+    // configured hub's observation.
+    auth_mode: serversMatch(state.serverUrl, manager.configuredServerUrl)
+      ? manager.lastObservedAuthMode()
+      : 'no-auth',
+    counts: {
+      files: state.files.size,
+      binary,
+      folders: state.client.getFolderPaths().length,
+      unavailable: state.client.getUnavailableFiles().length,
+    },
+    identities,
+    captures,
+    sync: {
+      connected_peers: diag.connectedPeers,
+      retry_timer_active: diag.retryTimerActive,
+      unavailable_retry_ticks: diag.unavailableRetryTicks,
+      stranded: diag.stranded,
+    },
+  });
+}
+
+async function handleListProjects(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  // `project_set` takes the same id-or-share-URL forms as `project`
+  // (normalizeArgs only rewrites `project`, so parse explicitly here).
+  const ref = parseProjectRef(args.project_set as string);
+  const server =
+    ref.server && !serversMatch(ref.server, manager.configuredServerUrl)
+      ? ref.server
+      : undefined;
+  let doc;
+  try {
+    doc = await manager.readProjectSet(ref.project, { server });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return error(
+      `Error: could not read project-set ${ref.project}: ${redactTokens(msg)}. ` +
+        'Check the id with whoever shared it — and if it names a project rather than a ' +
+        'project set, use connect_project instead.',
+    );
+  }
+  const projects = Object.entries(doc.projects)
+    .map(([indexDocId, entry]) => ({
+      indexDocId,
+      syncServer: entry.syncServer,
+      description: entry.description,
+      addedAt: entry.addedAt,
+      lastAccessed: entry.lastAccessed,
+      ...(entry.summary ? { summary: entry.summary } : {}),
+      shareUrl: buildShareUrl({
+        server: entry.syncServer,
+        indexDocId,
+        name: entry.description,
+      }),
+    }))
+    .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : a.lastAccessed > b.lastAccessed ? -1 : 0));
+  return structured({
+    ...(doc.name !== undefined ? { name: doc.name } : {}),
+    projects,
+  });
 }
 
 async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -360,9 +671,78 @@ function staleHashError(
   );
 }
 
+/**
+ * The binary arm of the compare-and-swap refusal: same contract as
+ * {@link staleHashError}, but the current content cannot ride the error
+ * as text — the caller re-reads (bytes come back as an image/blob
+ * block) and merges against the included hash.
+ */
+function staleHashErrorBinary(
+  tool: 'write_file',
+  path: string,
+  current: FilePayload & { type: 'binary' },
+): CallToolResult {
+  return error(
+    JSON.stringify(
+      {
+        error: 'stale_expected_hash',
+        message:
+          `${tool} refused: the file changed since you read it (expected_hash does not match ` +
+          'the current content). Re-read with read_file for the current bytes and hash, merge ' +
+          'your changes, and retry with the new expected_hash.',
+        path,
+        hash: hashPayload(current),
+        type: 'binary',
+        mimeType: current.mimeType,
+        size: current.data.byteLength,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+/** Strict base64 decode (Node's Buffer.from is lenient — it silently drops invalid characters). */
+function decodeBase64(content: string): Uint8Array | CallToolResult {
+  const compact = content.replace(/\s+/g, '');
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
+    return error(
+      'Error: parameter `content` is not valid base64. Pass the file bytes base64-encoded, ' +
+        'or drop `encoding: "base64"` to write UTF-8 text.',
+    );
+  }
+  return new Uint8Array(Buffer.from(compact, 'base64'));
+}
+
+/** The structured metadata a binary read result carries (CAP-4). */
+function binaryMeta(path: string, data: Uint8Array, mimeType: string): Record<string, unknown> {
+  return {
+    path,
+    hash: hashPayload({ type: 'binary', data, mimeType }),
+    type: 'binary',
+    mimeType,
+    size: data.byteLength,
+  };
+}
+
+/**
+ * The write-side twin of {@link binaryMeta}: no `type` — write results
+ * distinguish by what they carry (`mimeType`/`size` here, `created`
+ * below), `type` is read-side disambiguation (CAP-5).
+ */
+function binaryWriteMeta(
+  path: string,
+  data: Uint8Array,
+  mimeType: string,
+): Record<string, unknown> {
+  const { type: _type, ...rest } = binaryMeta(path, data, mimeType);
+  return rest;
+}
+
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
+  const metadataOnly = args.metadata_only === true;
   const state = await manager.connect(project, { server: routedServer(args) });
   const payload = state.files.get(path);
 
@@ -374,11 +754,155 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
     return fileNotFoundError(path, state);
   }
   if (payload.type === 'binary') {
-    // HY-1 interim: binary reads land in read_file in Phase 2 (CAP-4);
-    // until then say so — never name a tool that does not exist.
-    return error(`Error: ${path} is a binary file; read_file currently supports text files only.`);
+    // CAP-4: binary rides read_file (no sibling tool, ERG-5 rule (a)).
+    // Image MIME types come back as an `image` block a multimodal host
+    // can render; anything else as an embedded blob resource (base64).
+    // The URI is this server's own ephemeral reference for the blob —
+    // Phase 5's Q-2 decides the public hub:// resources contract.
+    const meta = binaryMeta(path, payload.data, payload.mimeType);
+    if (metadataOnly) {
+      return structured(meta);
+    }
+    const data = Buffer.from(payload.data).toString('base64');
+    const blob: CallToolResult['content'][number] = payload.mimeType.startsWith('image/')
+      ? { type: 'image', data, mimeType: payload.mimeType }
+      : {
+          type: 'resource',
+          resource: { uri: `hub://${project}/${path}`, mimeType: payload.mimeType, blob: data },
+        };
+    return {
+      content: [blob, { type: 'text', text: JSON.stringify(meta, null, 2) }],
+      structuredContent: meta,
+    };
   }
-  return structured({ path, hash: hashPayload(payload), content: payload.text });
+  if (metadataOnly) {
+    return error(
+      `Error: metadata_only applies to binary files only; ${path} is a text file — ` +
+        'drop metadata_only to read its content.',
+    );
+  }
+
+  // ERG-3: line window + byte cap. offset is 1-based; the byte cap
+  // guards context size even when no explicit window is given.
+  const offset = typeof args.offset === 'number' ? args.offset : 1;
+  const limit = typeof args.limit === 'number' ? args.limit : undefined;
+  const maxBytes = typeof args.max_bytes === 'number' ? args.max_bytes : DEFAULT_MAX_BYTES;
+  const totalLines = splitLines(payload.text).length;
+  if (offset > Math.max(totalLines, 1)) {
+    return error(
+      `Error: offset ${offset} exceeds the file's length — ${path} has ${totalLines} ` +
+        `line${totalLines === 1 ? '' : 's'}. Use offset=1 (the default) or a value ≤ ${totalLines}.`,
+    );
+  }
+  const window = windowLines(payload.text, offset, limit, maxBytes);
+  return structured({
+    path,
+    hash: hashPayload(payload),
+    type: 'text',
+    content: window.content,
+    truncated: window.truncated,
+    total_lines: window.totalLines,
+    next_offset: window.nextOffset,
+    ...(window.hint ? { hint: window.hint } : {}),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// CAP-7: search_files
+// ---------------------------------------------------------------------------
+
+/** Snippet budget per match line. Long lines are centered on the match. */
+const SNIPPET_MAX_CHARS = 200;
+
+function makeSnippet(line: string, matchIndex: number, matchLength: number): string {
+  const trimmed = line.trim();
+  if (trimmed.length <= SNIPPET_MAX_CHARS) return trimmed;
+  // Center a SNIPPET_MAX_CHARS window on the match (in raw-line coords).
+  let start = Math.max(0, matchIndex - Math.floor((SNIPPET_MAX_CHARS - matchLength) / 2));
+  const end = Math.min(line.length, start + SNIPPET_MAX_CHARS);
+  start = Math.max(0, end - SNIPPET_MAX_CHARS);
+  const prefix = start > 0 ? '…' : '';
+  const suffix = end < line.length ? '…' : '';
+  return `${prefix}${line.slice(start, end).trim()}${suffix}`;
+}
+
+async function handleSearchFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const query = args.query as string;
+  const useRegex = args.regex === true;
+  const caseSensitive = args.case_sensitive === true;
+  const maxResults = typeof args.max_results === 'number' ? args.max_results : 20;
+  if (query === '') {
+    return error(
+      'Error: parameter `query` must not be empty — pass a substring (or a pattern with `regex: true`) to search for.',
+    );
+  }
+  const state = await manager.connect(project, { server: routedServer(args) });
+
+  // A line matcher: the match's start index in the line, or -1.
+  let matcher: (line: string) => number;
+  if (useRegex) {
+    let re: RegExp;
+    try {
+      re = new RegExp(query, caseSensitive ? '' : 'i');
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return error(
+        `Error: parameter \`query\` is not a valid regular expression (${detail}). ` +
+          'Fix the pattern, or pass `regex: false` (the default) for a plain substring search.',
+      );
+    }
+    matcher = (line) => {
+      const m = re.exec(line);
+      return m === null ? -1 : m.index;
+    };
+  } else {
+    matcher = (line) =>
+      caseSensitive
+        ? line.indexOf(query)
+        : line.toLowerCase().indexOf(query.toLowerCase());
+  }
+
+  // Scan text files in path order; binaries and dangling entries have
+  // no searchable text. One snippet per matching line.
+  const perFile = new Map<string, Array<{ line: number; snippet: string }>>();
+  let totalMatches = 0;
+  let filesSearched = 0;
+  const paths = [...state.files.keys()].sort();
+  for (const path of paths) {
+    const payload = state.files.get(path)!;
+    if (payload.type !== 'text') continue;
+    filesSearched++;
+    const lines = splitLines(payload.text);
+    for (let i = 0; i < lines.length; i++) {
+      const idx = matcher(lines[i]);
+      if (idx === -1) continue;
+      totalMatches++;
+      const found = perFile.get(path) ?? [];
+      found.push({ line: i + 1, snippet: makeSnippet(lines[i], idx, query.length) });
+      perFile.set(path, found);
+    }
+  }
+
+  // Rank: per-file match count desc, then path asc (deterministic).
+  const ranked = [...perFile.entries()].sort(
+    (a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1),
+  );
+  const matches: Array<{ path: string; line: number; snippet: string }> = [];
+  for (const [path, fileMatches] of ranked) {
+    for (const m of fileMatches) {
+      if (matches.length >= maxResults) break;
+      matches.push({ path, line: m.line, snippet: m.snippet });
+    }
+    if (matches.length >= maxResults) break;
+  }
+
+  return structured({
+    matches,
+    total_matches: totalMatches,
+    files_searched: filesSearched,
+    truncated: totalMatches > matches.length,
+  });
 }
 
 async function handleWaitForChange(
@@ -433,6 +957,10 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   const state = await manager.connect(project, { server: routedServer(args) });
   const existing = state.files.get(path);
 
+  if (args.encoding === 'base64') {
+    return handleWriteFileBinary(args, manager, state, project, path, content, expectedHash, existing);
+  }
+
   if (!existing) {
     // A dangling entry is not writable: silently re-creating the
     // document would repoint the index away from whatever the original
@@ -457,7 +985,10 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
     });
   }
   if (existing.type === 'binary') {
-    return error(`Error: ${path} is a binary file. Cannot write text content to it.`);
+    return error(
+      `Error: ${path} is a binary file. Cannot write text content to it — ` +
+        'pass `encoding: "base64"` with base64-encoded bytes to replace it.',
+    );
   }
   if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
     return staleHashError('write_file', path, existing.text);
@@ -467,6 +998,65 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   return structured({
     path,
     hash: hashPayload({ type: 'text', text: content }),
+    ...(await syncField(args, manager, project, [path])),
+  });
+}
+
+/**
+ * The `encoding: "base64"` arm of write_file (CAP-5): create or replace
+ * a binary file. Same contract as the text arm — dangling entries are
+ * refused, `expected_hash` compare-and-swaps, the result carries the
+ * new `hash` and `synced` — plus `mimeType`/`size`.
+ */
+async function handleWriteFileBinary(
+  args: ToolArgs,
+  manager: ConnectionManager,
+  state: ProjectState,
+  project: string,
+  path: string,
+  content: string,
+  expectedHash: string | undefined,
+  existing: FilePayload | undefined,
+): Promise<CallToolResult> {
+  const decoded = decodeBase64(content);
+  if (!ArrayBuffer.isView(decoded)) return decoded; // the validation error result
+  const mimeType =
+    typeof args.mime_type === 'string' && args.mime_type !== ''
+      ? args.mime_type
+      : inferMimeType(path);
+
+  if (!existing) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
+    if (expectedHash !== undefined) {
+      return error(
+        `Error: write_file refused: expected_hash was given but ${path} does not exist in ` +
+          'the project (it may have been deleted since you read it). Call list_files to see ' +
+          'the current files; drop expected_hash to create a new file.',
+      );
+    }
+    const created = await state.client.createBinaryFile(path, decoded, mimeType);
+    return structured({
+      ...binaryWriteMeta(created.path, decoded, mimeType),
+      created: true,
+      ...(await syncField(args, manager, project, [created.path])),
+    });
+  }
+  if (existing.type === 'text') {
+    return error(
+      `Error: ${path} is a text file. Cannot write binary (base64) content to it — ` +
+        'drop `encoding: "base64"` to write text, or delete_file first and re-create it as binary.',
+    );
+  }
+  if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
+    return staleHashErrorBinary('write_file', path, existing);
+  }
+
+  await state.client.updateBinaryFileContent(path, decoded, mimeType);
+  return structured({
+    ...binaryWriteMeta(path, decoded, mimeType),
     ...(await syncField(args, manager, project, [path])),
   });
 }
@@ -536,6 +1126,21 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
     return unavailableFileError(path, ghost.docId);
   }
 
+  if (args.encoding === 'base64') {
+    const decoded = decodeBase64(content);
+    if (!ArrayBuffer.isView(decoded)) return decoded;
+    const mimeType =
+      typeof args.mime_type === 'string' && args.mime_type !== ''
+        ? args.mime_type
+        : inferMimeType(path);
+    const created = await state.client.createBinaryFile(path, decoded, mimeType);
+    return structured({
+      ...binaryWriteMeta(created.path, decoded, mimeType),
+      created: true,
+      ...(await syncField(args, manager, project, [created.path])),
+    });
+  }
+
   await state.client.createFile(path, content);
   return structured({
     path,
@@ -592,12 +1197,101 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   });
 }
 
+/**
+ * Every folder an agent can mean: explicit markers plus the folders
+ * file paths imply (a/b/c.qmd implies `a` and `a/b`). Used for
+ * not-found suggestions — listings show explicit markers only (CAP-6).
+ */
+function allFolderCandidates(state: ProjectState): Set<string> {
+  const out = new Set<string>(state.client.getFolderPaths());
+  for (const p of allPaths(state)) {
+    const segs = p.split('/');
+    for (let i = 1; i < segs.length; i++) {
+      out.add(segs.slice(0, i).join('/'));
+    }
+  }
+  return out;
+}
+
+async function handleCreateFolder(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = normalizeProjectPath(args.path as string);
+  if (path === '') {
+    return error(
+      'Error: create_folder requires a non-empty `path` — the folder to create within the project.',
+    );
+  }
+  const state = await manager.connect(project, { server: routedServer(args) });
+  if (state.files.has(path)) {
+    return error(
+      `Error: ${path} is a file, not a folder. Choose a different folder name, ` +
+        `or rename_file "${path}" first if it should move.`,
+    );
+  }
+  // Idempotent: the marker is a set member, not a creation event.
+  const existed = state.client.getFolderPaths().includes(path);
+  if (!existed) {
+    state.client.createFolder(path);
+  }
+  return structured({
+    path,
+    created: !existed,
+    ...(await syncField(args, manager, project, [])),
+  });
+}
+
+async function handleDeleteFolder(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = normalizeProjectPath(args.path as string);
+  const recursive = args.recursive === true;
+  const state = await manager.connect(project, { server: routedServer(args) });
+
+  const markerExists = state.client.getFolderPaths().includes(path);
+  const contained = allPaths(state).filter((p) => p.startsWith(`${path}/`));
+  if (!markerExists && contained.length === 0) {
+    const near = closestPaths(path, allFolderCandidates(state));
+    let msg =
+      `Error: Folder not found: "${path}". Call list_files to see the project's files and folders.`;
+    if (near.length > 0) {
+      msg += ` Closest existing folders: ${near.map((p) => `"${p}"`).join(', ')}.`;
+    }
+    return error(msg);
+  }
+  if (contained.length > 0 && !recursive) {
+    const sample = contained.slice(0, 3).map((p) => `"${p}"`).join(', ');
+    return error(
+      `Error: Folder "${path}" is not empty — ${contained.length} file` +
+        `${contained.length === 1 ? '' : 's'} remain${contained.length === 1 ? 's' : ''} under it ` +
+        `(${sample}${contained.length > 3 ? ', …' : ''}). Pass \`recursive: true\` to delete ` +
+        'them together with the folder, or delete_file them individually first.',
+    );
+  }
+  for (const p of contained) {
+    state.client.deleteFile(p);
+  }
+  if (markerExists) {
+    state.client.deleteFolder(path);
+  }
+  return structured({
+    path,
+    deleted: true,
+    ...(contained.length > 0 ? { files_deleted: contained.length } : {}),
+    ...(await syncField(args, manager, project, [])),
+  });
+}
+
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const files = (args.files as Array<{ path: string; content: string }>) ?? [];
+  const name = typeof args.name === 'string' && args.name !== '' ? args.name : undefined;
   const result = await manager.createProject(files);
   return structured({
     indexDocId: result.indexDocId,
     files: result.files,
+    shareUrl: buildShareUrl({
+      server: manager.configuredServerUrl,
+      indexDocId: result.indexDocId,
+      ...(name ? { name } : {}),
+    }),
     ...(await syncField(
       args,
       manager,
@@ -649,11 +1343,81 @@ const outListedFile = z.object({
   type: z.string().optional(),
   status: z.literal('unavailable').optional(),
   docId: z.string().optional(),
+  size: z.number().optional(),
+  mimeType: z.string().optional(),
+  lines: z.number().optional(),
 });
 
 const outConnectProject = z.object({
   project: z.string(),
   files: z.array(outListedFile),
+  shareUrl: z.string(),
+});
+
+const outDisconnectProject = z.object({
+  project: z.string(),
+  disconnected: z.literal(true),
+  synced: z.boolean().optional(),
+});
+
+const outIdentity = z.object({ name: z.string(), color: z.string() });
+
+const outGetProjectInfo = z.object({
+  project: z.string(),
+  server: z.string(),
+  shareUrl: z.string(),
+  auth_mode: z.enum(['no-auth', 'requires-auth', 'unknown']),
+  counts: z.object({
+    files: z.number(),
+    binary: z.number(),
+    folders: z.number(),
+    unavailable: z.number(),
+  }),
+  identities: z.record(z.string(), outIdentity),
+  captures: z.record(
+    z.string(),
+    z.object({
+      captureDocId: z.string(),
+      staleness: z.boolean().optional(),
+      state: z.string().optional(),
+      lastError: z.string().optional(),
+    }),
+  ),
+  sync: z.object({
+    connected_peers: z.number(),
+    retry_timer_active: z.boolean(),
+    unavailable_retry_ticks: z.number(),
+    stranded: z.array(
+      z.object({
+        path: z.string(),
+        docId: z.string(),
+        handleState: z.string().nullable(),
+        unavailableMarker: z.boolean(),
+      }),
+    ),
+  }),
+});
+
+const outListProjects = z.object({
+  name: z.string().optional(),
+  projects: z.array(
+    z.object({
+      indexDocId: z.string(),
+      syncServer: z.string(),
+      description: z.string(),
+      addedAt: z.string(),
+      lastAccessed: z.string(),
+      summary: z
+        .object({
+          fileCount: z.number(),
+          topFiles: z.array(z.string()),
+          contributors: z.array(outIdentity),
+          asOf: z.string(),
+        })
+        .optional(),
+      shareUrl: z.string(),
+    }),
+  ),
 });
 
 const outListFiles = z.object({ files: z.array(outListedFile) });
@@ -661,7 +1425,14 @@ const outListFiles = z.object({ files: z.array(outListedFile) });
 const outReadFile = z.object({
   path: z.string(),
   hash: z.string(),
-  content: z.string(),
+  type: z.enum(['text', 'binary']),
+  content: z.string().optional(),
+  mimeType: z.string().optional(),
+  size: z.number().optional(),
+  truncated: z.boolean().optional(),
+  total_lines: z.number().optional(),
+  next_offset: z.number().nullable().optional(),
+  hint: z.string().optional(),
 });
 
 const outWaitForChange = z.object({
@@ -680,6 +1451,8 @@ const outWriteFile = z.object({
   hash: z.string(),
   created: z.literal(true).optional(),
   synced: z.boolean().optional(),
+  mimeType: z.string().optional(),
+  size: z.number().optional(),
 });
 
 const outPatchFile = z.object({
@@ -693,6 +1466,8 @@ const outCreateFile = z.object({
   hash: z.string(),
   created: z.literal(true),
   synced: z.boolean().optional(),
+  mimeType: z.string().optional(),
+  size: z.number().optional(),
 });
 
 const outDeleteFile = z.object({
@@ -708,9 +1483,36 @@ const outRenameFile = z.object({
   synced: z.boolean().optional(),
 });
 
+const outSearchFiles = z.object({
+  matches: z.array(
+    z.object({
+      path: z.string(),
+      line: z.number(),
+      snippet: z.string(),
+    }),
+  ),
+  total_matches: z.number(),
+  files_searched: z.number(),
+  truncated: z.boolean(),
+});
+
+const outCreateFolder = z.object({
+  path: z.string(),
+  created: z.boolean(),
+  synced: z.boolean().optional(),
+});
+
+const outDeleteFolder = z.object({
+  path: z.string(),
+  deleted: z.literal(true),
+  files_deleted: z.number().optional(),
+  synced: z.boolean().optional(),
+});
+
 const outCreateProject = z.object({
   indexDocId: z.string(),
   files: z.array(z.object({ path: z.string(), docId: z.string() })),
+  shareUrl: z.string(),
   synced: z.boolean().optional(),
 });
 
@@ -749,7 +1551,7 @@ export function registerTools(
         'Connect to a Quarto Hub project by its automerge index document ID — ' +
         'or by a quarto-hub.com share URL (`https://quarto-hub.com/#/share/<id>?…`), ' +
         'from which the id is extracted automatically. ' +
-        'Returns the list of files in the project. ' +
+        'Returns the list of files in the project and its `shareUrl`. ' +
         'If the hub requires authentication and no valid credentials are cached, ' +
         'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
         '`authenticate` to sign in.',
@@ -777,14 +1579,80 @@ export function registerTools(
     {
       title: 'Read a file',
       description:
-        'Read the text content of a file in a Quarto Hub project. Returns `{ path, hash, content }` — ' +
+        'Read a file in a Quarto Hub project. Text files return `{ path, hash, type: "text", content }` — ' +
         'pass `hash` back as `expected_hash` on write_file/patch_file so an edit a collaborator made ' +
-        'since this read is never silently overwritten.',
-      inputSchema: z.object({ project: projectParam, path: pathParam.optional() }),
+        'since this read is never silently overwritten. Large reads are capped by `max_bytes` ' +
+        '(default 64 KB): a truncated result carries `next_offset` — call again with `offset` set ' +
+        'to it to continue. Binary files return the bytes as an image ' +
+        'block (image MIME types) or an embedded blob resource (anything else), with structured ' +
+        '`{ path, hash, type: "binary", mimeType, size }`; pass `metadata_only: true` for just the ' +
+        'metadata without the bytes.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        offset: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('First line to return, 1-based (default 1).'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Maximum number of lines to return (default: no line limit).'),
+        max_bytes: z
+          .number()
+          .int()
+          .min(16)
+          .max(MAX_BYTES_CAP)
+          .optional()
+          .describe(
+            `Byte cap on the returned content (default ${DEFAULT_MAX_BYTES}, max ${MAX_BYTES_CAP}). ` +
+              'A read that does not reach EOF returns `truncated: true` with a `next_offset` to continue from.',
+          ),
+        metadata_only: z
+          .boolean()
+          .optional()
+          .describe(
+            'Binary files only: return just `{ path, hash, type, mimeType, size }` without ' +
+              'the bytes. Errors on text files.',
+          ),
+      }),
       outputSchema: outReadFile,
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('read_file', args, manager),
+  );
+
+  server.registerTool(
+    'search_files',
+    {
+      title: 'Search files',
+      description:
+        'Search the content of every text file in a Quarto Hub project (binaries are skipped). ' +
+        'Plain substring by default (case-insensitive unless `case_sensitive`), or a regular ' +
+        'expression with `regex: true`. Returns matching lines as `{ path, line, snippet }` ' +
+        'ranked by per-file match count, capped by `max_results` (`truncated: true` when capped). ' +
+        'Use read_file with `offset` around a hit to see full context.',
+      inputSchema: z.object({
+        project: projectParam,
+        query: z.string().describe('The substring (or regex pattern with `regex: true`) to search for'),
+        regex: z.boolean().optional().describe('Treat `query` as a regular expression (default false)'),
+        case_sensitive: z.boolean().optional().describe('Case-sensitive matching (default false)'),
+        max_results: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe('Maximum matches to return (default 20, max 100)'),
+      }),
+      outputSchema: outSearchFiles,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('search_files', args, manager),
   );
 
   server.registerTool(
@@ -822,6 +1690,65 @@ export function registerTools(
     (args, ctx) => runDataTool('wait_for_change', args, manager, { signal: ctx?.mcpReq?.signal }),
   );
 
+  server.registerTool(
+    'get_project_info',
+    {
+      title: 'Get project info',
+      description:
+        'Project health and shape in one call: file/folder/binary counts, contributor ' +
+        'identities, engine-capture state (idle/running/error + lastError), the index ' +
+        'document id, sync server, observed auth mode, sync diagnostics (peers, stranded ' +
+        'files), and the project\'s share URL. The "doctor" tool — call it to understand ' +
+        'an unfamiliar project or diagnose a connection.',
+      inputSchema: z.object({ project: projectParam }),
+      outputSchema: outGetProjectInfo,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('get_project_info', args, manager),
+  );
+
+  server.registerTool(
+    'list_projects',
+    {
+      title: 'List projects in a collection',
+      description:
+        'Enumerate a Quarto Hub project-set (a user\'s collection of projects), given its ' +
+        'document id or a share URL to it — a human gets this link from the web client. ' +
+        'Returns each project\'s id, sync server, description, and a share URL you can pass ' +
+        'to connect_project, most-recently-used first.',
+      inputSchema: z.object({
+        project_set: z
+          .string()
+          .describe(
+            'The project-set document id, OR a quarto-hub.com share URL to the set ' +
+              '(the `server=` parameter, if present, routes the read to that hub).',
+          ),
+      }),
+      outputSchema: outListProjects,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('list_projects', args, manager),
+  );
+
+  server.registerTool(
+    'disconnect_project',
+    {
+      title: 'Disconnect from a project',
+      description:
+        'Drop the connection to one project (websocket + in-memory documents) without ' +
+        'affecting others — the release valve for long sessions touching many projects. ' +
+        'Outbound sync is drained first (bounded); the next tool call to the project ' +
+        'transparently reconnects.',
+      inputSchema: z.object({
+        project: projectParam,
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outDisconnectProject,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    (args) => runDataTool('disconnect_project', args, manager),
+  );
+
   if (readOnly) return;
 
   server.registerTool(
@@ -829,12 +1756,18 @@ export function registerTools(
     {
       title: 'Write a file',
       description:
-        'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it ' +
-        'does not exist. Returns `{ path, hash }`. Prefer patch_file for small changes to large files.',
+        'Replace the entire content of a file in a Quarto Hub project. Creates the file if it ' +
+        'does not exist. Returns `{ path, hash }` (plus `mimeType`/`size` for binary). ' +
+        'Prefer patch_file for small changes to large text files. ' +
+        'With `encoding: "base64"`, `content` is base64-encoded bytes and the file is binary.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
-        content: z.string().describe('The new file content'),
+        content: z
+          .string()
+          .describe('The new file content (base64-encoded bytes when `encoding: "base64"`)'),
+        encoding: encodingParam,
+        mime_type: mimeTypeParam,
         expected_hash: z
           .string()
           .optional()
@@ -883,11 +1816,18 @@ export function registerTools(
     'create_file',
     {
       title: 'Create a file',
-      description: 'Create a new text file in a Quarto Hub project.',
+      description:
+        'Create a new file in a Quarto Hub project. Text by default; with ' +
+        '`encoding: "base64"`, `content` is base64-encoded bytes and the file is binary.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
-        content: z.string().describe('Initial file content (defaults to empty)').default(''),
+        content: z
+          .string()
+          .describe('Initial file content (defaults to empty; base64 bytes when `encoding: "base64"`)')
+          .default(''),
+        encoding: encodingParam,
+        mime_type: mimeTypeParam,
         wait_for_sync: waitForSyncParam,
       }),
       outputSchema: outCreateFile,
@@ -930,10 +1870,54 @@ export function registerTools(
   );
 
   server.registerTool(
+    'create_folder',
+    {
+      title: 'Create a folder',
+      description:
+        'Create a folder in a Quarto Hub project. Folders are explicit markers: a file at ' +
+        '`a/b/c.qmd` needs no folder to exist, but an EMPTY folder is listed only once created. ' +
+        'Idempotent — re-creating an existing folder reports `created: false`.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: z.string().describe('The folder path to create (e.g. `assets/images`)'),
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outCreateFolder,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    (args) => runDataTool('create_folder', args, manager),
+  );
+
+  server.registerTool(
+    'delete_folder',
+    {
+      title: 'Delete a folder',
+      description:
+        'Delete a folder from a Quarto Hub project. Refuses while files remain under the path ' +
+        'unless `recursive: true`, which deletes the contained files first (reported as ' +
+        '`files_deleted`).',
+      inputSchema: z.object({
+        project: projectParam,
+        path: z.string().describe('The folder path to delete'),
+        recursive: z
+          .boolean()
+          .optional()
+          .describe('Delete the files under the folder too (default false — refuse if non-empty).'),
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outDeleteFolder,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    (args) => runDataTool('delete_folder', args, manager),
+  );
+
+  server.registerTool(
     'create_project',
     {
       title: 'Create a project',
-      description: 'Create a new Quarto Hub project on the sync server with optional initial files.',
+      description:
+        'Create a new Quarto Hub project on the sync server with optional initial files. ' +
+        'The result includes a `shareUrl` you can hand a human to open the project.',
       inputSchema: z.object({
         files: z
           .array(
@@ -944,6 +1928,10 @@ export function registerTools(
           )
           .describe('Initial files to create in the project')
           .default([]),
+        name: z
+          .string()
+          .optional()
+          .describe('Human-readable project name — carried on the result\'s `shareUrl`.'),
         wait_for_sync: waitForSyncParam,
       }),
       outputSchema: outCreateProject,

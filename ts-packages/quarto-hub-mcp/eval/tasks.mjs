@@ -225,4 +225,67 @@ export const TASKS = [
       );
     },
   },
+
+  // Phase 2 (bd-oqp2kva8): binary write through write_file's
+  // `encoding: "base64"` — the agent must discover the parameter from
+  // the tool schema and the bytes must land bit-exact on the hub.
+  {
+    id: 'add-image-binary',
+    prompt: (ctx) =>
+      MCP_ONLY +
+      `In Quarto Hub project ${ctx.projectId}, create the file ` +
+      '`images/logo.png` containing exactly this PNG image (base64): ' +
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk' +
+      '+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg== . ' +
+      'It must be a real binary file, not the base64 text. Reply DONE ' +
+      'when the file is in the project.',
+    setup: async (ctx) => {
+      const { indexDocId } = await ctx.seedProject([
+        { path: 'index.qmd', content: '# Home\n' },
+      ]);
+      ctx.projectId = indexDocId;
+    },
+    check: async (ctx) => {
+      // Byte-exactness against hub-side ground truth.
+      const indexHandle = await ctx.hub.repo.find(ctx.projectId);
+      const index = indexHandle.doc();
+      const docId = index?.files?.['images/logo.png'];
+      if (!docId) return false;
+      const binId = String(docId).startsWith('automerge:')
+        ? String(docId)
+        : `automerge:${docId}`;
+      const binHandle = await ctx.hub.repo.find(binId);
+      const doc = binHandle.doc();
+      if (!doc?.content || doc.mimeType !== 'image/png') return false;
+      const expected = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk' +
+          '+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      return Buffer.from(doc.content).equals(expected);
+    },
+  },
+
+  // Phase 2 (bd-oqp2kva8): project-wide content search. Scored on the
+  // answer, not on the agent picking search_files.
+  {
+    id: 'search-and-report',
+    prompt: (ctx) =>
+      MCP_ONLY +
+      `In Quarto Hub project ${ctx.projectId}, find which file mentions ` +
+      "the word 'spindle' and the 1-based line it appears on. " +
+      'Reply with ONLY the answer in the form path:line.',
+    setup: async (ctx) => {
+      const { indexDocId } = await ctx.seedProject([
+        { path: 'index.qmd', content: '---\ntitle: Loom\n---\n\nNothing here.\n' },
+        {
+          path: 'notes/deep.qmd',
+          content: 'First line.\nSecond line.\nThe spindle turns quietly.\nFourth line.\n',
+        },
+        { path: 'notes/other.qmd', content: 'Unrelated content.\n' },
+      ]);
+      ctx.projectId = indexDocId;
+    },
+    check: async (_ctx, finalText) => /notes\/deep\.qmd:3\b/.test(finalText.trim()),
+  },
 ];

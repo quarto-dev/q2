@@ -14,6 +14,9 @@ export type {
   FileDocumentContent,
   DocumentType,
   FileEntry,
+  ProjectSetDocument,
+  ProjectSetEntry,
+  ProjectSetEntrySummary,
 } from '@quarto/quarto-automerge-schema';
 
 export {
@@ -24,6 +27,8 @@ export {
   isBinaryExtension,
   isTextExtension,
   inferMimeType,
+  normalizeProjectPath,
+  projectSetKey,
 } from '@quarto/quarto-automerge-schema';
 
 // Export sync client types
@@ -60,6 +65,11 @@ export {
   fileUnavailableMessage,
   indexUnavailableMessage,
   setNetworkAdapterWrapper,
+  // Index-snapshot getters (quarto-hub-mcp CAP-2) and the one-shot
+  // project-set reader (CAP-3).
+  getIdentitiesFromIndex,
+  getCapturesFromIndex,
+  readProjectSetDoc,
 } from './client.js';
 export type {
   SyncClient,
@@ -68,6 +78,7 @@ export type {
   DocInventoryEntry,
   NetworkAdapterWrapper,
   ConnectionInfo,
+  ReadProjectSetOptions,
 } from './client.js';
 
 // Injectable diagnostic-log sink (bd-sl4o01y0): stdio hosts (hub-mcp)
