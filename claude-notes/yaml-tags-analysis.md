@@ -676,7 +676,7 @@ items: !special
 
 ### Integration Tests
 
-```rust
+````rust
 #[test]
 fn test_quarto_document_with_expr() {
     let qmd = r#"
@@ -718,7 +718,7 @@ format:
     // Should have no errors (theme !expr should be ignored)
     assert_eq!(errors.len(), 0);
 }
-```
+````
 
 ## Compatibility Considerations
 

@@ -2232,8 +2232,8 @@ them land together.
   `&SourceContext`, and `quarto-yaml` has no `tests/` directory and
   constructs a `SourceContext` nowhere in `src/` — so routing 30 fixtures
   through one means writing an unbudgeted helper and registering each
-  fixture's text as the context's first file. `SourceInfo::Concat`'s and
-  `SourcePiece`'s fields are all public (`source_info.rs:128-138`), and the
+  fixture's text as the context's first file. `SourceInfo::Concat`\'s and
+  `SourcePiece`\'s fields are all public (`source_info.rs:128-138`), and the
   fixtures note records `content <- source` per piece, so asserting the piece
   list needs no context and matches the committed data's shape. Keep two or
   three `map_offset` tests for the contract itself. Every shape must also
@@ -2407,8 +2407,8 @@ them land together.
   invocation too (`ci.yml:54` is
   `cargo clippy --workspace --all-targets --locked -- -D warnings`), or the
   desync-panic branch ships unlinted — Done in T11+12.
-- [x] **No call-site updates are needed** — `quarto-yaml-validation`'s 22 test
-  sites, q2's 15 and `quarto-yaml`'s own 5 all compile untouched under the
+- [x] **No call-site updates are needed** — `quarto-yaml-validation`\'s 22 test
+  sites, q2's 15 and `quarto-yaml`\'s own 5 all compile untouched under the
   additive design (§ Third-party exposure). If you find yourself editing
   them, the design has drifted back to the breaking variant; stop and
   re-read that section. — Confirmed: no call-site edits anywhere, across
@@ -2681,7 +2681,7 @@ Cargo.lock` in the q2 worktree is empty.
 **The q2 smoke, run 2026-08-21.** `quarto-source-map` at
 `/Users/gordon/src/quarto-source-map` confirmed on branch
 `char-boundary-and-concat-fixes`, clean tree, tip `0e900e2` ("Return None
-from `preimage_in`'s `Substring` arm over a `Concat` parent"), with the four
+from `preimage_in`\'s `Substring` arm over a `Concat` parent"), with the four
 behavior-fix commits all present (`8e07717` floor, `022f489` free-function
 agreement, `0c65d52` `Concat` exclusive-end, `0e900e2` `preimage_in`) and a
 `grep -rn "ProvenanceBuilder"` across the repo returning nothing — the branch
@@ -2733,7 +2733,7 @@ brief's fallback; it is conclusive here because zero files changed at all.
   PASS [   0.025s] pampa::integration test_location_health::tests::test_core_properties_simple
   ```
   **Green**, not red. Per the brief's framing this is not evidence either
-  way about where those `Location`s' row/column originate — it means this
+  way about where those `Location`s\' row/column originate — it means this
   suite's existing `Location` values already sit on char boundaries with
   row/column consistent with a floored offset, not that the two
   implementations agree in general.
@@ -2779,7 +2779,7 @@ worktree is empty; `git status --short` is clean. The
 `char-boundary-and-concat-fixes` at `0e900e2`, clean tree.
 
 **The `Location` audit, run 2026-08-21.** Task 6's scope: the third
-implementation `offset_to_location_bytes` (q2), and `quarto-yaml`'s own
+implementation `offset_to_location_bytes` (q2), and `quarto-yaml`\'s own
 `Location` uses. Read-only — no fixes anywhere; only a temporary scratch
 `#[test]` was added to q2 to measure behavior, then reverted with `git
 checkout --` before this write-up (confirmed via `git status --short`).
@@ -2839,7 +2839,7 @@ Routing: **q2-side disagreement → Plan 3's audit.** Plan 3
 for this measurement; no braid strand filed, per this repo's rule that
 in-scope plan work is never a tracker item.
 
-*Target 2 — `quarto-yaml`'s own `Location` uses, repo
+*Target 2 — `quarto-yaml`\'s own `Location` uses, repo
 `/Users/gordon/src/quarto-yaml` (clean, `main` @ `c7b8a40`).*
 
 Read, across both crates in the workspace:
@@ -2865,7 +2865,7 @@ Read, across both crates in the workspace:
   genuine UTF-8 boundary — a node's start offset cannot land mid-character.
 - `crates/quarto-yaml-validation/src/error.rs:373-380` (`with_yaml_node`) is
   the only place in the second crate that touches a `Location`: it reads
-  `.row`/`.column` off `SourceInfo::map_offset(0, ctx)`'s result to populate
+  `.row`/`.column` off `SourceInfo::map_offset(0, ctx)`\'s result to populate
   its own **locally-defined** `SourceLocation` struct (`:520`) — not
   `quarto_source_map::Location`, and not a new offset→row/column rule.
   `map_offset` is `quarto_source_map::SourceInfo::map_offset`
@@ -3006,7 +3006,7 @@ how likely someone is to re-propose them, not chronologically.
 
 **R1 — `preimage_in` should keep the affine path when every piece is
 length-matched.** Proposed twice: once as a refinement to the `Substring` fix,
-once (by this plan) as `finish()`'s collapse rule. Killed by measurement: a 1→1
+once (by this plan) as `finish()`\'s collapse rule. Killed by measurement: a 1→1
 fold — source `\n`, content one space — is length-matched with *different
 bytes*, so the predicate admits a hull that licenses copying the wrong bytes.
 Reachable in `aaa`⏎`bbb` as a root plain scalar. **This is the single most
@@ -3038,7 +3038,7 @@ untouched. See R8 for the version consequence.
 
 **R6 — a `Concat` reaches TypeScript as a byte-0 range.** Asserted on inference
 from the JSON writer emitting `(0, sum_of_piece_lengths)`, and written into
-§ Risks before anyone opened the TS file. False: `resolveChain`'s `Concat` arm
+§ Risks before anyone opened the TS file. False: `resolveChain`\'s `Concat` arm
 walks the pieces. The real defect is its `Substring` arm composing affinely —
 R1's error, in a second language.
 

@@ -811,9 +811,9 @@ history. The durable outcome — P1–P4 + the auditor — lives in
 `provenance-contract.md` and the CI property test.)
 BP (strengthened with multiplicity (M)) and completeness (strengthened to
 "exactly once" (C1+)) are *provable* under an explicit premise set:
-**{P4 tiling, L2 dispatch-terminality, L3 whole-walk Invocation-coalescing}**.
+**\{P4 tiling, L2 dispatch-terminality, L3 whole-walk Invocation-coalescing\}**.
 (M) reduces cleanly to L1 (sibling-rooted disjointness ⇐ P4) ∧ L2 (no
-ancestor/descendant double-count ⇐ terminal R1/R1'). No unfixable obstruction.
+ancestor/descendant double-count ⇐ terminal R1/R1\'). No unfixable obstruction.
 **One substantive reachable bug surfaced (Hole α):** atomic N-to-1 shortcode
 output (`ShortcodeResult::Blocks` → N independent sibling blocks sharing one
 `Invocation`) duplicates the token range when survivors are left non-adjacent,
@@ -894,7 +894,7 @@ or `Generated` source_info** is reconciled through the **InlineSplice** path
 accessors return **non-source offsets** for `Concat`/`Generated`
 (`crates/quarto-source-map/src/source_info.rs` \~350-371): `start_offset()` is the
 **sentinel `0`** for both `Concat` and `Generated`; `end_offset()` is `0` for
-`Generated` but the **`Concat`'s own `length()`** (a small positive — *not* `0`,
+`Generated` but the **`Concat`\'s own `length()`** (a small positive — *not* `0`,
 correcting an earlier overstatement here). Either way the value bears no relation
 to the byte's position in the source file. So the prefix slice becomes
 `qmd[block.start .. 0]` — reversed — and panics. The suffix slice has the
@@ -1007,7 +1007,7 @@ mitigate the writer crash but the provenance corruption remained until this fix.
 ### Resolved (decided 2026-06-03, during the pre-implementation review)
 
 - **Concat semantics — RESOLVED via the semantic-ownership rule (2026-06-03,
-  round-2 review).** `preimage_in`'s contiguous→hull behavior is fine (Phase 6
+  round-2 review).** `preimage_in`\'s contiguous→hull behavior is fine (Phase 6
   Hole γ: not a soundness issue). The disposition of a *non-contiguous* `Concat`
   (`preimage_in` → `None`) is **not** decided by piece-adjacency — the earlier
   draft's "non-contiguous → blessed `None`; adjacent-but-mis-joined → bug" was

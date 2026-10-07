@@ -112,7 +112,7 @@ Progress log:
 - **2026-07-13, bd-sgfiiktn S2** (rest of cluster 7's
   ListAttributes half + the OrderedList alias entries of cluster 9):
   ListAttributes is typed userdata (start/style/delimiter, eager
-  validated setters, structural __eq, :clone); constructor and
+  validated setters, structural \_\_eq, :clone); constructor and
   triple peeker validate loudly (garbage styles no longer silently
   default; partial triples error like pandoc's peekTriple);
   OrderedList gained listAttributes (cached, aliased, nested

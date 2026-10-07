@@ -85,8 +85,7 @@ those three properties catches the same bug classes at a fraction of the cost.
 This is not "more tests"; it is making the build graph unable to lie. Several
 "green but broken for me" episodes (including 2026-05-20) were this and only this.
 
-### R2. Headless Node chain harness (covers L9 + most of L10, kills the "silent
-delivery break" class)
+### R2. Headless Node chain harness (covers L9 + most of L10, kills the "silent delivery break" class)
 The pattern already exists: `ts-packages/quarto-sync-client/src/
 offline-creation-rust-hub.test.ts:92` spawns the real `target/debug/hub` binary and
 drives the real sync-client over real websockets. Clone it pointed at

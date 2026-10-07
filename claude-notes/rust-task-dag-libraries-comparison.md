@@ -866,7 +866,7 @@ paths.par_iter().flat_map(|path| {
 | **salsa** | High | Production | ✅ | ✅ | ✅ | Query-based systems |
 | **timely** | Very High | Production | ❌ | ❌ | ✅ | Distributed streams |
 
-*Comemo doesn't provide parallelism itself, but composes with Rayon.
+\*Comemo doesn't provide parallelism itself, but composes with Rayon.
 
 ---
 

@@ -935,7 +935,7 @@ This is the `re_execute.rs:309` call site — a **second, independent**
 `engine_host` spawn (pid 28808, distinct from the eager capture's pid 28215;
 pid 28215 had already exited by this point). New cache file appeared:
 
-```
+````
 $ gunzip -c /tmp/…/captures/d1a28c5b….bin | jq -r '.[0].result.markdown'
 …
 ::: {#cell-1 .cell execution_count=1}
@@ -949,7 +949,7 @@ $ gunzip -c /tmp/…/captures/d1a28c5b….bin | jq -r '.[0].result.markdown'
 ```
 :::
 :::
-```
+````
 
 `5` confirmed. **4J checklist item 2 (live re-execution result 5 through
 `/api/preview/re-execute`): confirmed.**
@@ -1035,7 +1035,7 @@ Rendered 1 of 1 files to /private/tmp/q2-preview-julia-4j.Fl0jKx
 
 Identical result content (`5`) to the preview-spliced capture's markdown
 (`::: {.cell-output .cell-output-display} ``` 5 ``` :::`). No divergence
-between `q2 render` and `q2 preview`'s captured/spliced output for this doc.
+between `q2 render` and `q2 preview`\'s captured/spliced output for this doc.
 No new julia process left behind by this render either (still 25).
 
 ### Summary — 4J checklist
@@ -1089,7 +1089,7 @@ Rendered each with `quarto render <doc>.qmd` from the temp project root.
 | multi-cell.qmd (`x=42` → `println("x is $x")`) | cell 2 stdout `x is 42` (V-5) | cell 2 stdout `x is 42` (`grep` confirms) | **Yes** — state persists across cells in both |
 | error-doc.qmd (`error("this should fail gracefully")`) | render errors, message contains `Execution failed in julia:` + `this should fail gracefully`; host not wedged (subsequent render still works) (J4) | render exits 1, stderr contains `this should fail gracefully` + full Julia stacktrace; a subsequent `quarto render minimal.qmd` in the same process still succeeds (host not wedged) | **Yes** — error surfaced, non-zero exit, host not wedged, in both |
 | echo-false.qmd (document-level `execute: echo: false`) | source token (`j2_hidden_source_variable`) absent, output token (`j2 output present`) present (J2) | source token absent (`grep -c` → 0), output token present (`grep -c` → 1) | **Yes** — identical semantics |
-| plot.qmd (Plots.jl figure, MIME priority) | inline `data:image/png;base64,…` (not a file), traced to `displayDataMimeType`'s HTML-target `text/html`-first quirk (§10) | not re-rendered here (Plots.jl install is not cheap — see below); **verified via source comparison instead** | **Yes** (same quirk, confirmed at the source level — see below) |
+| plot.qmd (Plots.jl figure, MIME priority) | inline `data:image/png;base64,…` (not a file), traced to `displayDataMimeType`\'s HTML-target `text/html`-first quirk (§10) | not re-rendered here (Plots.jl install is not cheap — see below); **verified via source comparison instead** | **Yes** (same quirk, confirmed at the source level — see below) |
 
 ### Corrected finding: the "HTML hides source by default" divergence noted in §9 is narrower than stated
 
@@ -1142,7 +1142,7 @@ level (equivalent evidence, zero Julia install cost):
   kApplicationJavascript, kTextHtml]` onto the front of `displayPriority`,
   regardless of `options.toMarkdown` — i.e. `text/html` always outranks
   `image/png`/`image/svg+xml` for an HTML target.
-- q2: `ts-packages/quarto-api/src/jupyter/display-data.ts`'s
+- q2: `ts-packages/quarto-api/src/jupyter/display-data.ts`\'s
   `displayDataMimeType`, whose doc comment states it reproduces this exact
   "effective behavior" (unconditional front-unshift for `toHtml`) rather
   than re-deriving the duplicate-entry array Q1 builds.
@@ -1174,7 +1174,7 @@ inferred as untested).
   dash-sequence strings through frontmatter).
 - **bd-l9jhy5u0** (existing, confirmed still open) — julia-engine leaks a
   QNR worker on execute error. **Observed reproducing under Q1 itself**
-  this session: after `error-doc.qmd`'s failed Q1 render, a new Julia
+  this session: after `error-doc.qmd`\'s failed Q1 render, a new Julia
   worker process (`cwd` = the temp Q1 project dir, confirmed via `lsof`)
   was left running on the shared global control server, matching the exact
   shape bd-l9jhy5u0 already describes for q2 (missing try/finally around
@@ -1242,7 +1242,7 @@ hash changed.
 
 ### Bug A — oneShot close/busy discarded captures (`Q-PREVIEW-CAP-1`)
 
-`executeJulia`'s pre-run (`:703-718`) and post-run (`:742-749`) closes had zero
+`executeJulia`\'s pre-run (`:703-718`) and post-run (`:742-749`) closes had zero
 busy handling. When a prior client vanished mid-run (EPIPE) and left the shared
 server's worker orphaned-busy, a fresh oneShot render's `close` failed with the
 bare QNR `"worker is busy"` protocol error and the whole capture was discarded.
@@ -1317,7 +1317,7 @@ NOT bundled into this fixture (separate scope, tracked as bd-l9jhy5u0).
   forced close propagates unchanged (fail-on-revert proven). **This test + its
   contract comment did NOT change the bundle bytes** — `deno bundle` strips
   comments and the test is not bundled, so `julia-engine.js` stays `82bff64…`.
-- **q2 fixture (PC4a, live julia):** `pc4a_abandoned_worker_close_busy`'s frozen
+- **q2 fixture (PC4a, live julia):** `pc4a_abandoned_worker_close_busy`\'s frozen
   assertion flipped to the YES-branch (fresh `record_capture` **succeeds** with a
   real capture). RED against the pre-fix bundle (`d9d5120…` → `Err … "worker is
   busy"`), GREEN against the rebundled fixture (`82bff64…` → recovers via

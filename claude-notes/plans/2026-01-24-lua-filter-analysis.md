@@ -102,7 +102,7 @@ User filters can be injected at any entry point.
 | `pre-server-shiny` | `quarto-pre/shiny.lua` | ? | ? | Shiny server setup |
 | `pre-read-options-again` | `quarto-pre/options.lua` | Yes | Yes | Re-read options after user filters |
 | `pre-bibliography-formats` | `quarto-pre/bibliography-formats.lua` | ? | ? | Bibliography format handling |
-| `pre-shortcodes-filter` | `quarto-pre/shortcodes-handlers.lua` | Yes | Yes | Process shortcodes ({{< ... >}}) |
+| `pre-shortcodes-filter` | `quarto-pre/shortcodes-handlers.lua` | Yes | Yes | Process shortcodes (\{\{< ... >\}\}) |
 | `pre-contents-shortcode-filter` | `quarto-pre/contentsshortcode.lua` | Yes | Yes | Process contents shortcode |
 | `strip-notes-from-hidden` | inline | Yes | Yes | Remove notes from hidden content |
 | `pre-combined-hidden` | combined: `hidden.lua`, `content-hidden.lua` | **MAYBE** | Yes | Hidden/conditional content |
@@ -110,7 +110,7 @@ User filters can be injected at any entry point.
 | `pre-code-annotations` | `quarto-pre/code-annotation.lua` | **MAYBE** | Yes | Code annotations (complex!) |
 | `pre-code-annotations-meta` | `quarto-pre/code-annotation.lua` | Yes | Yes | Code annotation metadata |
 | `pre-unroll-cell-outputs` | `quarto-pre/outputs.lua` | Yes | Yes | Unroll cell outputs |
-| `pre-output-location` | `quarto-pre/output-location.lua` | Yes | Yes | Output location (column-*) |
+| `pre-output-location` | `quarto-pre/output-location.lua` | Yes | Yes | Output location (column-\*) |
 | `pre-scope-resolution` | `quarto-pre/resolvescopedelements.lua` | Yes | Yes | Resolve scoped elements |
 | `pre-combined-figures-theorems-etc` | (combined, see below) | **MIXED** | Yes | Large combined filter |
 | `pre-quarto-pre-meta-inject` | `quarto-pre/meta.lua` | Yes | Yes | Inject Quarto metadata |
@@ -403,7 +403,7 @@ Filters that are **explicitly HTML-specific** or have significant HTML impact:
 ### Pre Filters with HTML Impact (but should be format-agnostic)
 
 1. **quarto-pre/code-annotation.lua** - Code annotations
-2. **quarto-pre/panel-*.lua** - Bootstrap panels (if HTML-specific)
+2. **quarto-pre/panel-\*.lua** - Bootstrap panels (if HTML-specific)
 3. **quarto-pre/parsefiguredivs.lua** - Figure parsing
 4. **quarto-pre/table-captions.lua** - Table captions
 5. **quarto-pre/shortcodes-handlers.lua** - Shortcodes

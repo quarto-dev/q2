@@ -72,7 +72,7 @@ classes).
   website with a listing page → concatenated `.css` under the
   output tree contains `.quarto-listing` / `listing-category`
   selectors.
-- [x] T3 ($theme-name, if implemented) unit test: compiling theme
+- [x] T3 (\$theme-name, if implemented) unit test: compiling theme
   `darkly` yields the darkly category-chip override (border color
   `$gray-600`) rather than the default.
 - [x] T4 run tests, record expected failures.
@@ -87,7 +87,7 @@ classes).
   `load_copy_code_layer`; push at the HTML assembly sites
   (`compile.rs:88-98`, `:226-243`, `:359-370`, wasm `:498-515` and
   wasm `compile_default_css`).
-- [x] I3 ($theme-name) emit `$theme-name: "<name>" !default;` into the
+- [x] I3 (\$theme-name) emit `$theme-name: "<name>" !default;` into the
   defaults band for built-in bootstrap themes.
 - [x] I4 make Phase-1 tests green; full `-p quarto-sass` +
   `-p quarto-core` suites (preview/render CSS parity tests must

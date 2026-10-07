@@ -156,7 +156,7 @@ contract (§6.2).
 | `transforms/{navbar,sidebar,footer}_generate.rs` | nav hrefs, logos | `resolve_metadata_path` (SourceInfo) |
 | `glob/provenance.rs` `BaseDirContext` | `listing.contents`, front-matter `resources:` | SourceInfo root-file provenance; leading `/` → project root |
 | `project/format_css.rs` + 3 call sites in `metadata_merge.rs` | `css` | explicit per-layer `layer_base`; leading `/` → project root |
-| `project/mod.rs` fragment rebase, `extension/{paths,read}.rs` | extension-contributed theme/css/include-*/template/filters/etc. | force-marked `ConfigValueKind::Path`, rebased at merge |
+| `project/mod.rs` fragment rebase, `extension/{paths,read}.rs` | extension-contributed theme/css/include-\*/template/filters/etc. | force-marked `ConfigValueKind::Path`, rebased at merge |
 
 ### B. Consuming-document-dir (violates rule 1 for any non-frontmatter declarer)
 

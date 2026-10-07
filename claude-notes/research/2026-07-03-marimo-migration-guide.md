@@ -139,14 +139,14 @@ consumer (jupyter, knitr) codes against. This is not something the extension nee
 doing the standard thing. q2's `translate_includes` just didn't honor it for the engine-contributed wire
 channel (fixed in q2-core, not the engine).
 
-**`execute()` options — `handledLanguages` is the one field this feature newly *consumes*** (see §2). Every
+**`execute()` options — `handledLanguages` is the one field this feature newly _consumes_** (see §2). Every
 other `execute()` option marimo reads (`target`, `format`, `metadata`) was already exercised by the
 python-primary path validated in 4cB and needed no changes.
 
 **No other QuartoAPI signature gaps found** for the surface marimo touches: `quarto.console`,
 `quarto.system.pandoc` (pdf/latex/typst only, via `htmlToMarkdown`), `quarto.mappedString.fromFile`,
 `quarto.markdownRegex` (`extractYaml`/`partition`/`breakQuartoMd` with a **custom cell regex** — correction 8,
-`breakQuartoMd`'s 4th param `startCodeCellRegex?: RegExp` is supported). All non-`jupyter`, all Plan-2-complete
+`breakQuartoMd`\'s 4th param `startCodeCellRegex?: RegExp` is supported). All non-`jupyter`, all Plan-2-complete
 — matches Julia's finding of zero API gaps, just a different namespace subset.
 
 ## 4. Dropped/inert methods
@@ -181,12 +181,12 @@ so the dot-joined form is a distinct language token needing its own claim key, n
 space-separated form. Both forms are Q1-legacy syntax still supported (Gordon confirmed Q1's parser did the
 same; the dotted form is discouraged but not removed).
 
-**`claimsFile`'s whole-file short-circuit — the biggest gotcha for any content-inspecting engine, spelled out
+**`claimsFile`\'s whole-file short-circuit — the biggest gotcha for any content-inspecting engine, spelled out
 here for future engine authors.** An engine's `claimsFile` answer operates at a **different, earlier layer**
 than the per-language `claims:` map. `EngineClaimsFileStage` (`crates/quarto-core/src/stage/stages/
 engine_claims_file.rs`) runs before `ParseDocumentStage`, asks every registered engine whether it claims the
 **whole input file**, and — first claimer wins — records that as `ctx.claimed_engine_name`. Per
-`engine_execution.rs:226`'s own comment, that whole-file claim **short-circuits ALL per-language tier
+`engine_execution.rs:226`\'s own comment, that whole-file claim **short-circuits ALL per-language tier
 evaluation**, functionally identical to an explicit `engine: <name>` frontmatter declaration — it bypasses the
 `claims:` map entirely, for every language in the document, not just the one that triggered the file-level
 match. marimo's `claimsFile` is content-inspecting by default (no `claims-files:` key declared → answered
@@ -213,7 +213,7 @@ tests derive a `claims-files: []` variant at test-setup time where genuine per-l
 
 ## 6. `deno.json`/mock remap
 
-Upstream `~/src/quarto-marimo`'s own root `deno.json` (used for its own `deno test` suite) maps
+Upstream `~/src/quarto-marimo`\'s own root `deno.json` (used for its own `deno test` suite) maps
 `@quarto/types` to a **local test mock** (`./tests/mocks/quarto-types.ts`) and pins `path` to a bare
 `https://deno.land/std@0.224.0/path/mod.ts` URL — fine for the engine's own unit tests, wrong for a real
 build. **The fixture deliberately does not copy this file** (plan line 388, "Do NOT copy marimo's root
@@ -237,7 +237,7 @@ offline-safe once built).
 
 ## 7. Loader-shim replacement (local rebundle vs. GitHub-release shim)
 
-Upstream `_extensions/marimo/marimo-engine.js` (the file `_extension.yml`'s `path:` points at) is a
+Upstream `_extensions/marimo/marimo-engine.js` (the file `_extension.yml`\'s `path:` points at) is a
 **GitHub-release downloader shim** — 1160 bytes, not a real bundle; it fetches the actual engine from a
 release artifact at install time. This doesn't work in an offline, git-checked-out fixture, so the fixture's
 `_extension.yml` instead points at the same relative filename, but populated by **locally rebundling**
@@ -249,7 +249,7 @@ matching the source, `deno check` clean, and no stray `@quarto/api` string marke
 
 Rebuilding requires the same `build-ts-extension` directory-resolution workaround Julia's guide already
 documents in detail (§4b there): `q2 build-ts-extension <entry.ts>` doesn't work directly (must be a
-directory or `_extension.yml` path), and `find_entry_ts`'s `<ext_dir>/src/<ext_dir_basename>.ts` convention
+directory or `_extension.yml` path), and `find_entry_ts`\'s `<ext_dir>/src/<ext_dir_basename>.ts` convention
 doesn't match a real upstream repo layout (`src/` sits at the repo root, sibling to `_extensions/`, not inside
 it) — worked around with the same throwaway, never-committed symlink
 (`_extensions/marimo/src -> ../../src`, created immediately before the build, removed immediately after,
@@ -341,7 +341,7 @@ claims form, and your live `claimsLanguage` must agree with your static declarat
 mismatch); (2) `handledLanguages` in your execute options is always a **leave-alone** set — check for your
 target language's *absence* from it to infer "I own this," never search it for your own name. If your engine's
 `claimsFile` is content-inspecting (any dynamic answer, not a declared `claims-files:` list), declare
-`claims-files: []` unless you specifically want whole-file ownership to override all other engines' per-language
+`claims-files: []` unless you specifically want whole-file ownership to override all other engines\' per-language
 claims in mixed documents.
 
 **For the `quarto-marimo` upstream PR (`q2-bare-sql-interop` → `main`):** the branch is four commits

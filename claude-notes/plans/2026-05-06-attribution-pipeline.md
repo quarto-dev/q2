@@ -516,14 +516,14 @@ either can ship without the other.
       opt-out — symmetrical to the escape-hatch case.)
     - `(Some(Git), Some(Git))` → `Some(Git)`. (Trivial agreement.)
 
-    Then a small integration assertion: when the resolved mode is
-    `Some(Off)` or `None`, the `RenderContext` constructed by
-    `render_document_to_file` has `ctx.attribution_provider.is_none()`
-    — the CLI plumbing must not install a `GitBlameProvider` for
-    either case. (Pure unit test on the resolution function plus one
-    integration test on the `RenderContext` construction; lives next
-    to the `RenderToFileOptions` → `RenderContext` plumbing site
-    introduced in Phase 3c.)
+   Then a small integration assertion: when the resolved mode is
+   `Some(Off)` or `None`, the `RenderContext` constructed by
+   `render_document_to_file` has `ctx.attribution_provider.is_none()`
+   — the CLI plumbing must not install a `GitBlameProvider` for
+   either case. (Pure unit test on the resolution function plus one
+   integration test on the `RenderContext` construction; lives next
+   to the `RenderToFileOptions` → `RenderContext` plumbing site
+   introduced in Phase 3c.)
 10. **WASM byte-identicality fixture sweep.** For every existing
     q2-debug fixture (the corpus that today drives
     `parse_qmd_to_ast`), assert that
@@ -622,7 +622,7 @@ either can ship without the other.
     time: i64 }` and `TransportAttributionData { runs:
     Vec<TransportAttributionRun>, identities: HashMap<String,
     Identity> }`, both with `Serialize + Deserialize`. The wire shape
-    is identical to the canonical types' `Serialize` form (`Arc<str>`
+    is identical to the canonical types\' `Serialize` form (`Arc<str>`
     and `String` both serialize as JSON strings), so round-tripping
     canonical → JSON → transport → builder → canonical preserves data;
     the only thing the transport detour buys is a clean place to
@@ -709,7 +709,7 @@ either can ship without the other.
 - [x] `pub fn format_supports_attribution(format: &Format) -> bool` —
   returns `true` for formats whose writers consume the lookup (HTML and
   q2-debug JSON in v1) and `false` otherwise (PDF, Typst, plain Pandoc
-  native, etc.). Used by `AttributionGenerateTransform`'s skip ladder
+  native, etc.). Used by `AttributionGenerateTransform`\'s skip ladder
   to short-circuit before invoking the provider; opting in to
   attribution on a non-consuming format would otherwise fire a
   `git blame` subprocess whose output goes nowhere visible.
@@ -1000,7 +1000,7 @@ matters, revisit then.
   `quarto-core`), and has no WASM-specific code. Keeping it in
   `quarto-core` lets the producer-invariant tests (Phase 0 test #1
   ptr_eq restoration, Phase 0 test #12 fixture sweep) run as
-  native unit tests on the canonical types' home crate, and lets
+  native unit tests on the canonical types\' home crate, and lets
   any future native caller that has a pre-built JSON payload (e.g.
   `--attribution-from-file=…`) use it without reaching into the
   WASM crate.
@@ -1045,7 +1045,7 @@ matters, revisit then.
   attribution.
 
   Rejected alternatives:
-  - Adding `AstTransformsStage` to `parse_qmd_to_ast`'s stage list —
+  - Adding `AstTransformsStage` to `parse_qmd_to_ast`\'s stage list —
     behavior change as above.
   - Building a new `AstTransformsStage::attribution_only()`
     constructor — adds API surface to the stage just for this case;
@@ -1582,7 +1582,7 @@ surface that ships the producer-side data to WASM.
      `parseQmdToAst(qmdContent)` calling `wasm.parse_qmd_to_ast`)
      gains a `parseQmdToAstWithAttribution(qmdContent, attributionJson)`
      companion. Callers that have attribution payloads to ship
-     (`ReactPreview.tsx`, `PreviewRouter.tsx`'s q2-debug branch) route
+     (`ReactPreview.tsx`, `PreviewRouter.tsx`\'s q2-debug branch) route
      through the new shim; everything else keeps calling
      `parseQmdToAst` unchanged.
 - [ ] `ReactAstDebugRenderer` becomes a much thinner consumer: it reads
@@ -1733,7 +1733,7 @@ surface that ships the producer-side data to WASM.
      colour.
   2. Use the placeholder `Identity { display_name: "<unknown>",
      color: "#888888" }`. The greyscale colour deliberately stands
-     out from `actor_color`'s saturated HSL palette so the
+     out from `actor_color`\'s saturated HSL palette so the
      placeholder is identifiable on sight.
 
   Pinned by Phase 0 tests #6 and #7 (synthetic invariant
@@ -1747,7 +1747,7 @@ surface that ships the producer-side data to WASM.
 - [ ] `time` on the wire is Unix epoch **milliseconds**. Automerge
   uses ms natively; the git provider multiplies its seconds-since-epoch
   timestamp by 1000 before populating `AttributionRun::time`. Document
-  the unit in `AttributionRun`'s doc-comment so a future provider
+  the unit in `AttributionRun`\'s doc-comment so a future provider
   can't silently introduce a 1000× discrepancy.
 
 ## Phase 7 — Documentation
@@ -1816,7 +1816,7 @@ the decision; future v2 work can reopen any of them by reference.
    `automerge-rs` into the WASM crate — exactly the work Option A
    avoids — so deferring the question would save no work, and
    keeping the question open invites a mid-implementation detour.
-   Re-evaluate in v2 if `wasm-quarto-hub-client`'s bundle pressure
+   Re-evaluate in v2 if `wasm-quarto-hub-client`\'s bundle pressure
    changes, or if a future producer needs in-Rust Automerge access
    for reasons beyond attribution.
 

@@ -21,7 +21,7 @@ Successfully implemented the `pandoc_code_span` node handler for inline code wit
 Like emphasis constructs (emph, strong, strikeout, etc.), code spans require Space node injection because the tree-sitter grammar includes surrounding whitespace in delimiters:
 
 **Example**: `test \`code\` here`
-- Tree structure shows: `code_span_delimiter: (0, 4) - (0, 6)` captures " `" (space + backtick)
+- Tree structure shows: `code_span_delimiter: (0, 4) - (0, 6)` captures \" \`\" (space + backtick)
 - Handler detects leading/trailing spaces in delimiters
 - Injects Space nodes before/after Code inline as needed
 - Result: `[Str "test", Space, Code (...) "code", Space, Str "here"]` ✅

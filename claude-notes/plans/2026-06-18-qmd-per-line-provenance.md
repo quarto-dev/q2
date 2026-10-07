@@ -253,23 +253,23 @@ flipped to **correct**. RED-first.
 
 | # | Fixture (research E*) | Assertion surface | Named revert → RED |
 |---|---|---|---|
-| T-E1 | `Div` + prose + collapsing blanks + code (`BOOM`) | `map_offset(byteof BOOM)` resolves to **BOOM's source line** (was the fence line above) | revert recursion (track only top-level blocks) → BOOM inherits the Div's linear piece → wrong line → RED |
-| T-E2 | `BlockQuote` + blanks + code | `map_offset(BOOM)` → BOOM's source line | same revert → RED |
-| T-E3 | `Div` + `BulletList` + blanks + code | `map_offset(BOOM)` → BOOM's source line | same revert → RED |
+| T-E1 | `Div` + prose + collapsing blanks + code (`BOOM`) | `map_offset(byteof BOOM)` resolves to **BOOM\'s source line** (was the fence line above) | revert recursion (track only top-level blocks) → BOOM inherits the Div's linear piece → wrong line → RED |
+| T-E2 | `BlockQuote` + blanks + code | `map_offset(BOOM)` → BOOM\'s source line | same revert → RED |
+| T-E3 | `Div` + `BulletList` + blanks + code | `map_offset(BOOM)` → BOOM\'s source line | same revert → RED |
 | T-E-glue | any nested-code fixture | `map_offset` of a fence/separator byte returns `None` (glue is `Generated`) | fold-glue-into-piece variant → returns Some → RED (pins the §5.3 decision) |
-| T-ENG-compat | `# Title\n\nBody…` (existing engine fixture) | `map_offset(byteof "Body")` still resolves to Body's source line; **update** the old "last byte resolves" assertion to a content byte | n/a (compat pin; guards we didn't regress top-level mapping) |
+| T-ENG-compat | `# Title\n\nBody…` (existing engine fixture) | `map_offset(byteof "Body")` still resolves to Body\'s source line; **update** the old "last byte resolves" assertion to a content byte | n/a (compat pin; guards we didn't regress top-level mapping) |
 | T-E-tiling | mixed doc | the SourceInfo tiles `[0,len)` with no gaps; leaf pieces are `Original`, glue pieces are `Generated` | weaken assembly → hole/overlap → RED |
 
 ### Shared
 
 | # | Assertion | Revert → RED |
 |---|---|---|
-| T-classify | leaf/container split matches `write_block`'s arms | misclassify a container as leaf → spurious span/piece → RED |
+| T-classify | leaf/container split matches `write_block`\'s arms | misclassify a container as leaf → spurious span/piece → RED |
 | T-table | §6.1 default: a table yields a single span/piece anchored at its source start (documents the caveat) | n/a (behavior pin) |
 
 **Vacuity guards:** T-N2/T-N3 discriminate on *the collapsed-blank line being
-synthesized*, not "a span exists." T-N3 keeps parent/child source lines distinct.
-T-E1–E3 discriminate on the *mapped line equalling BOOM's actual line*, with the
+synthesized*, not \"a span exists.\" T-N3 keeps parent/child source lines distinct.
+T-E1–E3 discriminate on the *mapped line equalling BOOM\'s actual line*, with the
 "revert recursion" hunk proving the bug returns.
 
 ---

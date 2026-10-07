@@ -1487,7 +1487,7 @@ caller).
   cache-key simple (path-only) without losing per-envelope
   precision.
 - **Single canonical Q-12-13 message** (per D17): "Listing item
-  from {href} produced no preview content; using static fallback
+  from \{href\} produced no preview content; using static fallback
   description." Fires for both `NotFound` and "file present but
   no first-para" paths.
 - **`CountingRuntime` test fake** delegates 24 SystemRuntime
@@ -1496,7 +1496,7 @@ caller).
   absence of cross-call caching.
 - **URL resolution** for the substituted `<img src=…>`: relative
   preview srcs are joined onto the sibling's directory then
-  `pathdiff::diff_paths`'d against the host's directory. Absolute
+  `pathdiff::diff_paths`\'d against the host's directory. Absolute
   URLs (`http://`, `https://`, `data:`, `mailto:`, `//`,
   leading-slash) pass through unchanged.
 
@@ -1509,7 +1509,7 @@ until Phase 5 wires the call site.
 
 - [x] Write tests #38–39. Fail.
 - [x] Add the call site in
-  `WebsiteProjectType::post_render`'s native-only block.
+  `WebsiteProjectType::post_render`\'s native-only block.
 - [x] Tests pass. Verify default-project type is unaffected.
 
 **Implementation note:** the existing `listing_pipeline.rs`

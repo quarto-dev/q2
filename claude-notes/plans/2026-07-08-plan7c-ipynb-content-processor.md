@@ -812,7 +812,7 @@ feature sets.
   wiring already landed); clippy clean.)*
 - [x] End-to-end per CLAUDE.md: `cargo run --bin q2 -- render fixture.ipynb`,
   inspect the output, inspect a deliberately-broken fixture's terminal
-  diagnostic; record invocation + snippets here. *(Done 2026-09-25,
+  diagnostic; record invocation + snippets here. \*(Done 2026-09-25,
   jupyter-less dev machine. Three findings, in the order discovered:
 
   **(1) `q2 render` of any `.ipynb` demands jupyter (P2-12), by design.**
@@ -824,7 +824,7 @@ feature sets.
   hardcodes `ExecutionPolicy::All` (main.rs:1359, "always executes"),
   so `get_engine_with_fallback` fails loudly when jupyter is absent
   (`engine_execution.rs:167`, P2-12). **Parity check**: a plain `.qmd`
-  with a ```{python}` cell fails with the byte-identical error — the
+  with a `` ```{python}` `` cell fails with the byte-identical error — the
   ipynb path is consistent with existing engine semantics, not a 7c
   defect. Q1 divergence to note: Q1 renders stored-output notebooks
   without jupyter; q2 will too, via Phase 3's replay engine. Sub-nuance
@@ -833,7 +833,7 @@ feature sets.
 
   **(2) Broken notebook's terminal diagnostic is correct through the
   real CLI.** Fixture: cell 1 markdown `Some intro`, cell 2 markdown
-  `![logo](images/logo.svg){width="65px" .light-content}` (kv-before-
+  ``![logo](images/logo.svg){width="65px" .light-content}`` (kv-before-
   class, same construct as the flagship fixture). Invocation:
   `cargo run --bin q2 -- render e2e-broken.ipynb`. Observed (exit
   nonzero, ANSI colors in real terminal):
@@ -875,7 +875,7 @@ feature sets.
   observation, classified pre-existing + out of scope: the inert
   pass-through emits the raw fence tag into the class
   (`class="{python}"`), which is the shared writer behavior for
-  brace-fenced blocks (a .qmd ```{sql} block routes to jupyter too, so
+  brace-fenced blocks (a .qmd ```\{sql\} block routes to jupyter too, so
   the same artifact exists there whenever a brace fence passes through
   unexecuted); execution/Phase-3 cell handling makes it moot.
 
@@ -1097,7 +1097,7 @@ final two commits came after the phase-boundary run above:
 Full `cargo xtask verify` (no skip flags, `e320a4087`): **all 14 steps
 green, exit 0** (2026-09-25). Workspace leg inside verify: 14861 run /
 14861 passed / 201 skipped — +4 vs the 14857 baseline, all accounted
-(+3 items-1–3 tests, +1 `bd79ca160`'s xtask lint test
+(+3 items-1–3 tests, +1 `bd79ca160`\'s xtask lint test
 `integration_test_files_are_skipped`; the "14860" phase-boundary figure
 above was the bare run taken before `bd79ca160` landed — verify2
 pre-fix and verify3 post-fix both count 14861, so `e320a4087` adds no
@@ -1145,7 +1145,7 @@ preview-renderer integration tests is pre-existing; that suite is green
    claims through `content_processors::convert` directly and stamps an
    additive `LoadedSource.files`; the engine trait and wire path are
    untouched. Concretized as the Phase 2 checklist item of the same name.
-   `convert`'s signature stayed fixed (settled), as required.
+   `convert`\'s signature stayed fixed (settled), as required.
 
 ## Deferred / explicitly out of scope
 

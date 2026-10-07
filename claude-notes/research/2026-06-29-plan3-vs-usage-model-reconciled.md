@@ -224,7 +224,7 @@ mechanism, and the "no MappedString provenance" simplification are **confirmed a
 - **"7 methods" (L15) vs "6" (L408)** — counting error; it's 6.
 
 ## Confirmed adequate — do NOT touch
-- **Return-based dataflow *direction*** — Plan 3 returns a result object; Phase 3E forwards
+- **Return-based dataflow _direction_** — Plan 3 returns a result object; Phase 3E forwards
   `createJupyter(host)`; no accumulator/registration. Matches lifecycle §3. (The *shape* is the
   problem — Tier 1 — not the direction.)
 - **Figure-write mechanism** — base64-decode → `host.fs.writeFileSync` via the `createJupyter(host)`

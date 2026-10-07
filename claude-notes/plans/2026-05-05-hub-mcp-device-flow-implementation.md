@@ -1246,7 +1246,7 @@ verification when `list_files` surfaced the same error to the agent.
   options. A getter so retry loop sees the refreshed token.
 - New `quarto-sync-client/src/NodeWebSocketClientAdapter.ts`
   implementing the upstream `NetworkAdapter` contract but with
-  `new WebSocket(url, [], { headers: { Authorization: \`Bearer ${token}\` } })`.
+  ``new WebSocket(url, [], { headers: { Authorization: `Bearer ${token}` } })``.
 - `client.ts` selects adapter at `:336` and `:722` based on
   `auth.getBearer` presence.
 - **`connection-manager.ts` try-then-fallback policy:**

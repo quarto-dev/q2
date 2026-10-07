@@ -8,7 +8,7 @@ Pandoc uses the Skylighting library for syntax highlighting code blocks. The hig
 
 **Location:** `external-sources/pandoc/src/Text/Pandoc/Highlighting.hs:139`
 
-When Pandoc encounters a code block with a class attribute (e.g., ````python`, ````c`), the `highlight` function uses `msum (map (\`lookupSyntax\` syntaxmap) classes)` to resolve the class to a Syntax definition. The resolution order is implemented in Skylighting:
+When Pandoc encounters a code block with a class attribute (e.g., ````python\`, ````c\`), the `highlight` function uses ``msum (map (`lookupSyntax` syntaxmap) classes)`` to resolve the class to a Syntax definition. The resolution order is implemented in Skylighting:
 
 **Location:** `external-sources/skylighting/skylighting-core/src/Skylighting/Core.hs:52-61`
 
@@ -42,7 +42,7 @@ InformationTok, WarningTok, AlertTok, ErrorTok, NormalTok
 
 Each Kate syntax definition (XML-based) maps regex patterns and keyword lists to these token types. The token types are rendered as a Haskell `Enum` with `Show` and `Read` instances, enabling JSON serialization (lines 229-248).
 
-The comment at line 243 confirms the KDE provenance: "JSON @"Keyword"@ corresponds to 'KeywordTok', and so on."
+The comment at line 243 confirms the KDE provenance: "JSON \@\"Keyword\"\@ corresponds to 'KeywordTok', and so on."
 
 ## 3. AST Representation of Highlighted Code
 

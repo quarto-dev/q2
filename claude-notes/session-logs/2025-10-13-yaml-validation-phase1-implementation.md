@@ -28,7 +28,7 @@ Implemented complete schema type system (\~300 LOC):
 - Individual schema structs for each type with appropriate constraints
 
 **Key Features:**
-- `SchemaRegistry` for managing schemas with $ref resolution
+- `SchemaRegistry` for managing schemas with \$ref resolution
 - Helper methods: `annotations()`, `annotations_mut()`, `type_name()`
 - Full support for Quarto extensions (closed objects, etc.)
 

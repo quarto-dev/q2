@@ -175,8 +175,8 @@ These tests verify modifying fields on inline elements.
 | `test_inline_pairs_iteration_with_integer_key` | pairs() with integer control variable | 448-452 |
 | `test_inline_pairs_iteration_all_fields` | Complete pairs() iteration | 432-472 |
 | `test_block_pairs_iteration` | pairs() on Block elements | 853-901 |
-| `test_inline_walk_method` | elem:walk{...} on inlines | 191-196, 1532-1538 |
-| `test_block_walk_method` | elem:walk{...} on blocks | 700-705, 1542-1545 |
+| `test_inline_walk_method` | elem:walk\{...\} on inlines | 191-196, 1532-1538 |
+| `test_block_walk_method` | elem:walk\{...\} on blocks | 700-705, 1542-1545 |
 
 ## Implementation Strategy
 

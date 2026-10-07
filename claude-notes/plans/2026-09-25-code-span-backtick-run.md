@@ -120,7 +120,7 @@ pandoc_code_span: $ => prec.right(seq(
    backtick). `code_span_delimiter_length = 1`.
 2. Inside content at `` ``y `` the scanner counts a run of 2, which is not
    1, so it emits nothing and returns false.
-3. The **internal** lexer then matches `/[`]/` — one backtick — as content.
+3. The **internal** lexer then matches ``/[`]/`` — one backtick — as content.
 4. The scanner is called again at the *second* backtick of the run: run
    length 1 == delimiter, so it emits `CODE_SPAN_CLOSE`. The span is
    `x` + one backtick, closed by the middle of the run.
@@ -128,7 +128,7 @@ pandoc_code_span: $ => prec.right(seq(
    is refused and no internal rule accepts a lone backtick: parse error.
 
 So the scanner *does* implement the exact-length rule; the internal
-`/[`]/` rule defeats it by splitting runs. Every failing case in the
+``/[`]/`` rule defeats it by splitting runs. Every failing case in the
 strand's table follows this pattern. A run *shorter* than the delimiter
 survives only because the split-off single backticks never equal the
 delimiter length.
@@ -136,7 +136,7 @@ delimiter length.
 **Consumer side** — `crates/pampa/src/pandoc/treesitter_utils/code_span_helpers.rs:75`
 walks the `content` node and concatenates raw bytes between structural
 `pandoc_soft_break` children. Hidden (underscore-prefixed) external tokens
-do not appear in the tree, so replacing `/[`]/` with a hidden external
+do not appear in the tree, so replacing ``/[`]/`` with a hidden external
 token changes nothing on the pampa side.
 
 **Baseline at HEAD** (`bash claude-notes/plans/code-span-backtick-run-investigation/run-cases.sh`):

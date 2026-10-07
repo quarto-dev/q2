@@ -225,8 +225,8 @@ the invariant moved.
   not the *source*. Observe red before fixing.
 
   **Not written.** The classification did find two new copy sites
-  (`assemble_inline_content`'s `KeepBefore` arm and
-  `assemble_recursed_container`'s verbatim early return), but both are
+  (`assemble_inline_content`\'s `KeepBefore` arm and
+  `assemble_recursed_container`\'s verbatim early return), but both are
   latent members of the very class this phase guards rather than fixes, so
   no fix exists to observe RED against and T2 would be bound to nothing.
   They are named alongside the original copy site in T1's failure message
@@ -368,7 +368,7 @@ and the invariant is **writer provenance**, not this bug class.
 - [x] **T4 — a characterization probe, not a regression test.** Extend
   `test_build_source_map_maps_lines_to_file_provenance` (`ts_engine.rs:2977`)
   with a non-identity fixture: a document the QMD writer normalizes, so
-  `input`'s coordinate space genuinely differs from `ctx.source_info`'s. One
+  `input`\'s coordinate space genuinely differs from `ctx.source_info`\'s. One
   test covers both production sites. **It has no revert hunk** — it exists
   to find out whether a defect is there. If it goes green it guards nothing;
   say so rather than counting it as coverage.
@@ -560,9 +560,9 @@ the three measured facts that make it well-posed and the worked tiling.
   **Corrected 2026-08-23 (measured in Phase 7): this phase moved zero
   snapshots either.** The `Some(ctx)` reasoning above is right about
   *reachability* and wrong about *coverage*: reaching pampa is not the same
-  as reaching a pampa snapshot. `convert_document_with_source`'s only
+  as reaching a pampa snapshot. `convert_document_with_source`\'s only
   non-test caller in the workspace **that passes `Some(ctx)`** is
-  `readers/commonmark.rs:48` (`block.rs:37`'s `convert_document` is a second
+  `readers/commonmark.rs:48` (`block.rs:37`\'s `convert_document` is a second
   production caller, but it passes `None`, which routes `NodeValue::Text` to
   `tokenize_text` and never reaches the walker), whose
   only non-test caller is `main.rs:332`\'s `--from commonmark` arm — and no
@@ -759,7 +759,7 @@ comparison, not a copy.
 #### Plan 1's hypothesis: **half right, and the correction matters**
 
 The hypothesis was "the split falls along the incremental-writer /
-span-computation line, with `incremental.rs`'s `Verbatim` arms the only
+span-computation line, with `incremental.rs`\'s `Verbatim` arms the only
 copies." The *line* holds exactly — all six `postprocess.rs` sites and all ten
 tiling-auditor sites are `locate`, and every copy is in the incremental writer.
 The *enumeration* did not: findings § 3 named one copy site, and there are
@@ -768,7 +768,7 @@ The *enumeration* did not: findings § 3 named one copy site, and there are
 - `incremental.rs:816` — `InlineAlignment::KeepBefore` in
   `assemble_inline_content`. The inline analogue of `:171`, one nesting level
   down.
-- `incremental.rs:868` — `assemble_recursed_container`'s two early returns
+- `incremental.rs:868` — `assemble_recursed_container`\'s two early returns
   (`nested_plan` is `None`, or `orig_children` is empty), which keep the whole
   container verbatim.
 
@@ -784,7 +784,7 @@ production callers, and both hand it an `original_ast` of the protected shape.
 **The split is by path, not by site: all three copy arms sit on both paths.**
 
 **Pinned by T1.** `pampa/src/apply_node_edit.rs:120` deserializes
-`untransformed_ast_json` — which *is* `capture_untransformed_ast_json`'s
+`untransformed_ast_json` — which *is* `capture_untransformed_ast_json`\'s
 output, round-tripped through the frontend. T1 asserts that artifact's pool
 shape at the producer, so this path **inherits** the guard. Naming the
 inheritance matters: nothing on the `apply_node_edit` side is itself asserted.
@@ -914,8 +914,8 @@ The old comment asserted the byte-identity reading Plan 1 retracted upstream
 `preimage_in` is an offset claim only (0.1.3 doc comment, quoted below); and
 the arm is safe only because the baseline AST is untransformed and parent-less
 — with a pointer to T1 and to the two sibling copy sites. Both siblings got a
-short note of their own at `assemble_inline_content`'s `KeepBefore` arm and
-`assemble_recursed_container`'s verbatim early return, each pointing back to
+short note of their own at `assemble_inline_content`\'s `KeepBefore` arm and
+`assemble_recursed_container`\'s verbatim early return, each pointing back to
 the long note rather than restating it. All three notes name *functions and
 arms* rather than line numbers **for the copy sites**, so a rebase cannot make
 them point at the wrong arm. They do cite line numbers for cross-file
@@ -936,7 +936,7 @@ source hull:
 | `block_source_span` (`:550`) | `:552` | one — `assemble`, via `first_block_start` (`:369`) |
 | `inline_source_span` (`:1033`, `pub`) | `:1035` | **none**; only `tests/integration/inline_splice_safety_tests.rs` |
 
-`inline_source_span`'s callers were checked because it is `pub`: every one is
+`inline_source_span`\'s callers were checked because it is `pub`: every one is
 in that single test file, none outside the crate. So nothing in production
 inherits the risk from it — worth stating, because it changes who the guard
 has to cover.
@@ -977,7 +977,7 @@ The shipped `preimage_in` (0.1.3, `source_info.rs:458-503`) makes the
 `Substring`-over-`Concat` arm return `None`; the bare `Concat` arm still
 returns `Some(hull)` for byte-contiguous pieces.
 
-**(a) `postprocess.rs:660`'s `combine(first, last)` fallback moves no
+**(a) `postprocess.rs:660`\'s `combine(first, last)` fallback moves no
 snapshot.** `77bd9d6c0` ("chore: refresh lock onto quarto-source-map 0.1.3 and
 quarto-yaml 0.1.3") touched `Cargo.lock` and `Cargo.toml` only — **zero `.snap`
 files** — and the branch has been green since. `contiguous_hull_for_run` takes
@@ -993,7 +993,7 @@ matched by construction**, the one production producer of that shape. Multi-
 option cells are **gappy**: `option_content_ranges` returns
 `content_start..line.len()` for a prefix-only language (`:260`), so the
 next line's piece starts *after* its own `#| ` prefix and the two ranges are
-not adjacent — `preimage_in`'s contiguity check already returned `None` before
+not adjacent — `preimage_in`\'s contiguity check already returned `None` before
 Plan 1's change. Only a **single-option cell** yields one piece whose hull the
 blanket-`None` removes, and only for nodes *beneath* the
 `parse_with_parent(&yaml_text, yaml_parent)` re-parse (`:229`), which are
@@ -1004,7 +1004,7 @@ blanket-`None` removes, and only for nodes *beneath* the
 Quoted verbatim from
 `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quarto-source-map-0.1.3/src/source_info.rs:410-424`:
 
-> Byte range in `target` that this `SourceInfo`'s preimage covers, if any.
+> Byte range in `target` that this `SourceInfo`\'s preimage covers, if any.
 >
 > A `Some(hull)` licenses **locating** a position in `target` — it does not
 > license **copying** bytes from it. For an `Original` or a `Substring` chain
@@ -1027,7 +1027,7 @@ and the `Substring` clause at `:431-435`:
 **The three drift amplifiers are commented, not restructured.**
 `hull_source_infos` (`postprocess.rs`) carries the full note — § 4's sentence
 quoted verbatim, plus the mechanism (the two numbers `preimage_in` reports are
-baked into a fresh `Original` and the inputs' chains dropped, so a producer
+baked into a fresh `Original` and the inputs\' chains dropped, so a producer
 whose offsets drift yields a *confidently wrong* flat range with nothing left
 downstream to say it was derived) and the operative instruction: **verify a
 producer's provenance fix upstream of these calls**, because their output
@@ -1040,7 +1040,7 @@ only) and while the grammar admits nothing between the last attribute and the
 closing `}`.
 
 **The false sentence is corrected; the code is not touched.**
-`hull_source_infos`'s pre-existing doc comment claimed it was "the only correct
+`hull_source_infos`\'s pre-existing doc comment claimed it was "the only correct
 way to fuse two spans into one `Original`", using `preimage_in` for the hull —
 false under findings § 1, whose rule is the `map_offset(0)` /
 `map_offset(length())` pair, *never* `preimage_in` for a hull. Correcting a
@@ -1061,7 +1061,7 @@ so those inputs silently take the coarse `combine()` fallback where the
 change on pampa's live postprocess path with real snapshot risk, outside a
 comments-only phase. All three doc comments name the strand, and it carries
 § 4's safe-by-shape triage as the reason it is latent rather than broken, plus
-the instruction to re-derive `math_with_attr_span_source_info`'s `+ 1` rather
+the instruction to re-derive `math_with_attr_span_source_info`\'s `+ 1` rather
 than carry it across the migration.
 
 **Plan 1's hand-off — the third and fourth `offset_to_location` rules, measured.**
@@ -1238,7 +1238,7 @@ neutralized, `map_offset(0, &ctx) == None` still passed — so that assertion
 genuinely cannot redden, as the plan states.
 
 **One narrowing.** Findings § 6 frames the three grounds as "any one
-sufficient". Ground 1 (`map_offset`'s `Generated` arm returns `None`
+sufficient". Ground 1 (`map_offset`\'s `Generated` arm returns `None`
 unconditionally) is sufficient for `map_offset` only. `resolve_byte_range` is
 safe *contingently*, on `from` staying empty — grounds 2 and 3 are what keep
 it empty, and ground 1 does not cover it. The mutation above is the evidence.
@@ -1336,7 +1336,7 @@ derived `Substring` at a fixed zero offset, not the provenance at arbitrary
 offsets.
 
 The conclusion survives (a `Substring` over a `Concat` inherits the drift), but
-the old wording *hid* something: the `Substring`'s bounds are
+the old wording *hid* something: the `Substring`\'s bounds are
 `block.code_start .. + block.code.len()`, and `code_start` comes from
 `parse_code_blocks` regex-matching the **written** QMD
 (`text_execute.rs:124-147`, `code_start: code_match.start()` at `:147`). Those

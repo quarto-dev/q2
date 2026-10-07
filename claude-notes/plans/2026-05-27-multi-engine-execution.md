@@ -473,7 +473,7 @@ doc-keyed invalidation already covers it.
       unterminated diagnostics; longer-fence round-trip. Gated to
       non-WASM; **never** wired into the default registry. Verified the
       cell form against pampa: executable cells serialize as
-      ```` ```{<name>} ```` (braces kept inside the class name).
+      \`\`\`\` \`\`\`\{<name>\} \`\`\`\` (braces kept inside the class name).
 - [x] Duplicate-handling policy: **dedup keeping first occurrence +
       diagnostic** (resolved with user; only fires for array+array
       repeated engine).

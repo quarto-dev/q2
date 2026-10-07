@@ -27,7 +27,7 @@ This session involved a deep technical discussion about whether to use lifetime-
 
 The user read my owned-data design and pushed back:
 
-> "Your concerns about lifetime make sense, but let me try to argue just a bit further for my idea. I expect Quarto to have a data structure like ProjectContext that will exist for the lifetime of a project, which could serve as the "witness" for references that only live as long as a project do."
+> "Your concerns about lifetime make sense, but let me try to argue just a bit further for my idea. I expect Quarto to have a data structure like ProjectContext that will exist for the lifetime of a project, which could serve as the \"witness\" for references that only live as long as a project do."
 
 **Key insight proposed**:
 ```rust

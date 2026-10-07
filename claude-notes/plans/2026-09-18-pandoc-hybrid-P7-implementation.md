@@ -877,7 +877,7 @@ Run before Task 10's capture, so a firing condition is fixed before snapshots ar
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T12.1 | U | `THEOREM_CLASSES` + `BUILTINS` | Assert the current tables' exact contents (8 and 21 entries, listed) — a pin, so the gap's closure or widening is visible | none | any entry added to or removed from either table |
+| T12.1 | U | `THEOREM_CLASSES` + `BUILTINS` | Assert the current tables\' exact contents (8 and 21 entries, listed) — a pin, so the gap's closure or widening is visible | none | any entry added to or removed from either table |
 | T12.2 | U | the fixture set + the evaluation predicate | Walk every `.qmd` under `tests/fixtures/pandoc-goldens/` → assert **none** contains `#alg-`, `@alg-`, or `@Alg-`; the test's doc comment names the strand and says what to do if it reddens | none | *(the fixture set — this reddens when someone adds an `alg` fixture, which is the intent)* |
 | T12.3 | U | `TheoremSugarTransform` | `seam deferred until the condition fires` — if `alg` is added, assert `::: {#alg-gcd}` becomes `CustomNode("Theorem")` with `kind == "Algorithm"` | none | the `("algorithm", "alg", "Algorithm")` row in `THEOREM_CLASSES` |
 | T12.4 | U | `RefTypeRegistry::builtin` | `seam deferred until the condition fires` — assert `registry.kind_for("alg") == Some("Algorithm")` | none | the `("alg", "Algorithm")` row in `BUILTINS` |

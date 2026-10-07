@@ -344,10 +344,10 @@ literal text, the temp file's *path* (e.g.
 `/var/folders/.../marimo-header-….html`) rather than that file's contents.
 Confirmed by reading the temp file directly off disk — it genuinely does
 contain `__MARIMO_EXPORT_CONTEXT__` and `<marimo-code hidden>` — so the
-break is entirely on the q2-consumption side, not in `extract.py`'s header
+break is entirely on the q2-consumption side, not in `extract.py`\'s header
 construction. Root cause: `ts_engine.rs::translate_includes` treats every
 engine-contributed `include-in-header` wire value as literal content
-(matching `IncludeResolveStage`'s documented architecture — engine-contributed
+(matching `IncludeResolveStage`\'s documented architecture — engine-contributed
 `PandocIncludes` are folded verbatim, never file-read, unlike knitr's
 native-Rust `convert_includes` which does read the file at its own path
 before populating the same struct), while `marimo-engine.ts` sends a
@@ -380,12 +380,12 @@ marker and the executed-output markup).
 **A third, independent finding surfaced proving RED-by-revert**: SC8's
 frozen spec text names the revert "remove the `python` claim from
 `_extension.yml`" — applying exactly that, alone, does **not** redden the
-test. Root cause: `EngineClaimsFileStage`'s whole-file `claims_file` check
+test. Root cause: `EngineClaimsFileStage`\'s whole-file `claims_file` check
 (which runs before, and independent of, per-language `claims:` resolution)
 dynamically loads marimo's own unmodified `claimsFile` JS function, which
 does its own raw-text regex scan for a `.marimo` fence — present in
 `minimal.qmd` regardless of the per-language YAML edit — and that alone
-short-circuits ALL per-language tier evaluation (`engine_execution.rs:225`'s
+short-circuits ALL per-language tier evaluation (`engine_execution.rs:225`\'s
 own comment confirms this is by design, mirroring an explicit `engine:
 marimo` declaration). A corrected revert — adding `claims-files: []`
 alongside removing the `python:` claim, which disables the dynamic
@@ -467,9 +467,9 @@ brief's Risk 1, the evidence-first procedure was run to completion:
    cell** — `<pre class="{sql} code-with-copy"><code>SELECT 1 + 1 AS
    x</code></pre>`, a plain unexecuted code block, not
    `<marimo-cell-output>` — despite `ownership["sql"]=="marimo"` being
-   correct. Root cause: `marimo-engine.ts`'s `execute()` computes
+   correct. Root cause: `marimo-engine.ts`\'s `execute()` computes
    `bareSqlOwned = (options.handledLanguages ?? []).includes("sql")`
-   (mirrored in `lib/is-marimo-cell.ts`'s `cellOwnedByMarimo`), on the
+   (mirrored in `lib/is-marimo-cell.ts`\'s `cellOwnedByMarimo`), on the
    assumption — stated explicitly in that file's doc comment — that
    `handledLanguages` is a *positive* "q2 assigned me this language" set.
    It is not: `EngineResolution::handled_languages_for` (`resolution.rs:292`)
@@ -532,8 +532,8 @@ actually arises in practice. A bare complement (`!handledLanguages.includes(lang
 is therefore sound as-is, without a new wire field.
 
 - **Upstream (`~/src/quarto-marimo`, branch `q2-bare-sql-interop`, commit
-  `77c15c8`):** `src/marimo-engine.ts`'s `bareSqlOwned` and
-  `lib/is-marimo-cell.ts`'s `cellOwnedByMarimo` both flipped to
+  `77c15c8`):** `src/marimo-engine.ts`\'s `bareSqlOwned` and
+  `lib/is-marimo-cell.ts`\'s `cellOwnedByMarimo` both flipped to
   `!handledLanguages.includes("sql")`; both doc comments corrected to state
   the leave-alone semantics and point at `resolution.rs:292`.
   `tests/is-marimo-cell.test.ts`\'s two `cellOwnedByMarimo` gate assertions
@@ -763,12 +763,12 @@ to any TS engine whose `_extension.yml` omits `claims-files:`.
 ### Finding B — `execute()`\'s outer catch is unreachable from cell-content
 syntax errors; marimo's own per-cell isolation gets there first
 
-SC18's frozen row names `execute()`'s outer try/catch (marimo-engine.ts
+SC18's frozen row names `execute()`\'s outer try/catch (marimo-engine.ts
 \~319-329) and suggests a syntactically-bad cell body (`def (:`) as the
 trigger. Empirically, that trigger does NOT reach the outer catch: a
 `{python .marimo}` cell containing `def (:` renders successfully (exit 0)
 and produces `<pre class="marimo-error">SyntaxError: invalid syntax
-(<unknown>, line 1)</pre>` in the body — `extract.py`'s own `_ParseError`
+(<unknown>, line 1)</pre>` in the body — `extract.py`\'s own `_ParseError`
 sentinel (a `try`/`except Exception` wrapped around each `app.add_code(...)`
 call, by its own doc comment written precisely "to surface parse-time
 exceptions... that would otherwise be swallowed") catches it INSIDE the
@@ -815,7 +815,7 @@ Closes Phase 4cE and the whole plan's engine-fixture-facing work.
 
 Upstream moved `~/src/quarto-marimo` (`q2-bare-sql-interop`) from `77c15c8`
 (the FINDING #4 fix already rebundled at q2 `b4f4f52bf`) to `2a2f312`
-("Factor `buildCommand(metadata)` out of `execute()`'s env-mode branch
+("Factor `buildCommand(metadata)` out of `execute()`\'s env-mode branch
 (SC19)"). Diffed every copied file before touching anything:
 `src/marimo-engine.ts` differs (the `buildCommand` extraction — 28
 insertions/18 deletions, `diff -u` confirms the pre-refactor inline
@@ -825,7 +825,7 @@ constructUvCommand)`); `lib/cell-execution-regex.ts`,
 `lib/is-marimo-cell.ts`, `lib/render-output.ts`, `\_extensions/marimo/
 command.py`, `\_extensions/marimo/extract.py` are all byte-identical
 (`diff` empty) — confirms the brief's prediction that `2a2f312` "touched
-only marimo-engine.ts + a new test file."
+only marimo-engine.ts + a new test file.\"
 
 Recopied `src/marimo-engine.ts` only. Rebundled with the same symlink
 workaround as §5 (`_extensions/marimo/src -> ../../src`, created

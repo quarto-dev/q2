@@ -40,7 +40,7 @@ Extensions (e.g., `+smart`, `-citations`) are parsed from format strings and sto
 | `markdown` | QMD reader | Alias for compatibility |
 | `json` | JSON reader | Pandoc AST JSON |
 
-Any other format string should produce a clear error: "Unsupported reader format: {format}".
+Any other format string should produce a clear error: "Unsupported reader format: \{format\}".
 
 ### Writers
 
@@ -671,7 +671,7 @@ When this is implemented, we should document:
 | `variables` | table | {} |
 | `wrap_text` | string | "wrap-auto" |
 
-(Plus many format-specific fields: epub_\*, cite_method, etc.)
+(Plus many format-specific fields: epub\_\*, cite_method, etc.)
 
 ---
 

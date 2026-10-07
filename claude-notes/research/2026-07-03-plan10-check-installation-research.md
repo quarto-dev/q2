@@ -483,7 +483,7 @@ jupyter under `#[cfg(not(target_arch = "wasm32"))]`.
 ### Error family + reporting style
 
 - `ExecutionError` (engine/error.rs): `RuntimeNotFound { engine, runtime }`
-  ("Engine runtime not found: {engine} requires {runtime}"),
+  ("Engine runtime not found: \{engine\} requires \{runtime\}"),
   `MissingPackage { engine, package, suggestion }`,
   `PackageVersionTooOld { engine, package, required_version, suggestion }` —
   the vocabulary a structured check result can map onto. **Not** wired to Q-*

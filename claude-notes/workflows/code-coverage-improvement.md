@@ -487,7 +487,7 @@ When you encounter code that "can't be tested" or a feature that "doesn't work,"
 During a coverage session, quoted strings in shortcodes appeared to produce empty output:
 
 ```
-{{< include "file with spaces.qmd" >}}
+{{{< include "file with spaces.qmd" >}}}
 → data-value: ""  (empty!)
 ```
 

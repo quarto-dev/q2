@@ -1481,7 +1481,7 @@ fn main() -> Result<()> {
 
 **Deliverables**:
 - YAML to Schema compiler (`schema/compiler.rs`)
-- Schema registry with $ref resolution
+- Schema registry with \$ref resolution
 - Support for all Quarto schema extensions (maybeArrayOf, closed, etc.)
 
 **Tests**:

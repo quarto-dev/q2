@@ -885,7 +885,7 @@ Every load-bearing branch and structural contract in P6, with either a bound sea
 6. **Finding 5's Tabset-containing-subfloat fixture — who owns it, and can it exercise what it
    claims?** **One artifact, owned by P5; P6's own nesting coverage is T2.4; and the fixture cannot
    exercise subfloat numbering at all today** — see Findings for Gordon #2. P5's round-4 traversal
-   sub-finding already names the fixture in P5's terms ("a `FloatRefTarget` inside a `Callout`'s
+   sub-finding already names the fixture in P5's terms ("a `FloatRefTarget` inside a `Callout`\'s
    `content` slot, exactly P6 Finding 5's fixture") and P5's Layer-2 goldens own it. **Do not
    create a second one.** T2.4 is P6's contribution: it asserts both the outer Callout's and the
    inner float's numbers appear in one render, which is the property P6 Finding 5 actually cares
@@ -937,7 +937,7 @@ the gap tracked as `bd-plcqhfcn`. Nothing on this plan is open.
    Finding #2) and logged the callout gate `accepted-untested` pending your call; it lands squarely
    in P6's lap because P6 owns both the reclassification (Finding 4) and the external-mode wiring.
    Verified again this pass: `modules/callouts.lua:17` passes `callout.order` straight into
-   `titlePrefix` → `numberOption` → `formatNumberOption`'s `local num = order.order`
+   `titlePrefix` → `numberOption` → `formatNumberOption`\'s `local num = order.order`
    (`crossref/format.lua:124,140`) with **no nil guard on that path** — unlike the float side,
    which guards explicitly at `crossref/tables.lua:229-231`, and unlike Theorem, which guards at
    `customnodes/theorem.lua:278`. So under `crossref-numbering: external`, a `#nte-`-labeled
@@ -953,7 +953,7 @@ the gap tracked as `bd-plcqhfcn`. Nothing on this plan is open.
    correct Finding 4's framing for this site), or fold the guard into P3's PR?
 
    **RESOLVED 2026-09-18, decided with Gordon: fold the guard into P3's PR.** It is anchor **A7**
-   there, mirroring `float_title_prefix`'s order-nil guard line for line. Consequences applied in
+   there, mirroring `float_title_prefix`\'s order-nil guard line for line. Consequences applied in
    this file:
    - **P6's plan's Finding 4 framing needed no weakening — A7 makes it true.** Finding 4 says the
      degradation is "a nil-guarded early return, not an error." That was true of the *gate* at

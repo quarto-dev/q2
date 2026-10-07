@@ -85,10 +85,10 @@ tests, so ordering this suite after that step is enough.
 
 - `@quarto/annotated-qmd` — 154/156. `div-attrs.json - Div with attributes
   conversion` and `substring invariant - links.qmd: inline code` (an off-by-one:
-  got `' \`x = 5\`'`, expected `'\`x = 5\`'`). Tracked by **bd-1d6io**
+  got `' \`x = 5\`'`, expected `\'\`x = 5\`'`). Tracked by **bd-1d6io**
   (`in_progress`). Unchanged since #250 was filed.
 - `@quarto/preview-renderer` `test:integration` — one real assertion failure in
-  `custom-components.integration.test.tsx > Equation > appends \tag{N} to the
+  `custom-components.integration.test.tsx > Equation > appends \tag\{N\} to the
   LaTeX when plain_data.order is set` (`expect(tagEl).not.toBeNull()` at
   `custom-components.integration.test.tsx:664`). **Confirmed real**: re-run
   after a full `npm run build:wasm` still fails, with every other file green
@@ -251,7 +251,7 @@ declared in its crate's `main.rs`, and no test module is hidden behind a
   nowhere** — not in CI, not in `verify`.
 - The tree-sitter **CRLF parity** check is `verify`-only.
 - `cargo nextest run --tests` (not `--all-targets`): the comment cites
-  `quarto-yaml`'s `harness = false` benches, but that crate is now external and
+  `quarto-yaml`\'s `harness = false` benches, but that crate is now external and
   **no in-tree crate has a `benches/` dir**, so the distinction is now moot.
 - `crates/quarto-hub-provider/tests/integration/auth_bridge.rs` has 2 skip
   sites; hub auth paths are thinly covered in CI.

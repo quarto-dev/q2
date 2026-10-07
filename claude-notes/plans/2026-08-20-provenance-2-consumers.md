@@ -1855,7 +1855,7 @@ reached via `render_ariadne_source_context` (`diagnostic.rs:968`) <- `render_sou
 abort is ariadne's own `str` slicing, which is why the snap belongs at the renderer. The
 file was then restored and the test confirmed green again.
 
-Worth recording: the panic names **"end** byte index 21", though 21 is the span's *start*.
+Worth recording: the panic names **\"end** byte index 21\", though 21 is the span's *start*.
 So 21 arrived as the END of a zero-width range — it fired on ariadne's `Report::build`
 **anchor**, independently confirming the anchor is `start..start` and that the single `:878`
 call is load-bearing for the anchor, not just the main label.
@@ -1983,7 +1983,7 @@ draft walked concat piece boundaries using each piece's **declared per-piece `le
 piece 1 is `Original(3,5)` declared with concat-length 1, a 2-byte source span folded to 1
 content byte. The fix measures each piece's own **source** extent
 (`piece.source_info.map_offset(0)` / `map_offset(piece.source_info.length())`). This is
-exactly upstream `0c65d52`'s defect — solved there for the *last* piece only — generalized to
+exactly upstream `0c65d52`\'s defect — solved there for the *last* piece only — generalized to
 every boundary. So "content length is not source length" has now produced **three** separate
 bugs in this epic (upstream's exclusive-end branch, this gap detection, and the drift the
 threading fixes). That recurrence is the strongest argument for the § Risks decision to leave
@@ -2010,7 +2010,7 @@ in `meta.rs`, between the `source_info` clone and the line that partially moves 
 and used for both consumers: stored in the `Scalar` variant (scoped to `Yaml::String`) and
 passed as the re-parse base at all three immediate re-parses (the `!md` tag, the annotated
 `Markdown` interpretation, the `DocumentMetadata` default), falling back to the node span when
-`None`. Carrier read in `config_markdown.rs`'s `parse_scalar_string_in_place`.
+`None`. Carrier read in `config_markdown.rs`\'s `parse_scalar_string_in_place`.
 
 **Confirmed end-to-end through the real binary**, on the block-scalar fixture:
 
@@ -2109,7 +2109,7 @@ session 2 and are consolidated here, where the plan says evidence lives.)_
 
 **The generality proof — the reason the phase exists.** q2's attribute decoder now drives
 `ProvenanceBuilder`, `AttrSourceInfo` carries content provenance, and
-`callout.rs`'s length-arithmetic workaround is **deleted**. The builder therefore has a second
+`callout.rs`\'s length-arithmetic workaround is **deleted**. The builder therefore has a second
 consumer in a completely different decoder from Plan 1's YAML path, which is what Phase 4 was
 for. The zero-content-piece trap named in the plan was not fallen into: verbatim pieces are
 tagged **by bytes**, not by length.
@@ -2135,7 +2135,7 @@ named example sites was not — see § Latent exposures). Seven new tests share 
 carrying every construct whose value slot changed. Binding was **measured**: wrapping every
 diagnostic location on both arms of `pampa::readers::qmd::read` in a
 `SourceInfo::concat(...)` — precisely the shape the decoder now produces — visibly corrupts
-`qmd-syntax-helper`'s output (a splice at byte 0; a `replace_range` percent-encoding \~340
+`qmd-syntax-helper`\'s output (a splice at byte 0; a `replace_range` percent-encoding \~340
 bytes), and **5 of the 7 tests catch it**. No production code changed in that crate.
 
 **The TypeScript boundary.** `@quarto/annotated-qmd` moved to content semantics and bumped to
@@ -2234,7 +2234,7 @@ whole-branch review found a fourth site of the epic's own defect pattern that th
 rows did not cover, because it was not discovered until after Phase 6 ran —
 `project/website_post_render.rs:217` (`copy_footer_images`), see § Workarounds that collapse.
 Fixed in the same wave. It joins rows 8 and 11 as **accepted-unbindable by construction**: no
-consumer reads those inlines' spans (they feed only image-URL extraction and the parse
+consumer reads those inlines\' spans (they feed only image-URL extraction and the parse
 diagnostics are discarded), so no fixture can distinguish the corrected `content_source_info`
 base from the raw `cv.source_info` one. Recorded honestly as unbindable rather than passed off
 as covered — the same audit outcome category as row 8, not a fifth row retroactively added to

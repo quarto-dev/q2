@@ -204,7 +204,7 @@ logo-path resolution against a synthetic merged document's directory context.
   by reading code and reproducing empirically: the single-document
   pipeline resolves `citeproc` into the `.post` filter bucket by default
   (`filter_resolve.rs`, `"citeproc" into .post`), so citeproc always runs
-  *after* `AstTransformsStage`'s Crossref sub-phase (`crossref-index` +
+  *after* `AstTransformsStage`\'s Crossref sub-phase (`crossref-index` +
   `crossref-resolve`) has already reclassified reserved-prefix keys
   (`@sec-...`, `@fig-...`, …) out of plain `Inline::Cite` nodes. The
   book-merge driver (`crates/quarto-core/src/project/book/single_file_render.rs`)
@@ -213,7 +213,7 @@ logo-path resolution against a synthetic merged document's directory context.
   Crossref-onward pipeline ran — a deliberate P2 design choice
   (`claude-notes/plans/2026-09-21-book-projects-P2-single-file-merge.md`)
   whose own tests only ever exercised pure bibliographic citations, never
-  citeproc mixed with numbered crossrefs in the same book. `embed`'s
+  citeproc mixed with numbered crossrefs in the same book. `embed`\'s
   absence (item 3) is unrelated — this reproduces independent of it.
 
   **Fix (Gordon-approved, 2026-09-28)**: split the merged document's
@@ -355,7 +355,7 @@ logo-path resolution against a synthetic merged document's directory context.
   resolves a relative `image()` path against the *including file's*
   own directory, not the project root. `resolve_typst_brand_param`
   (`pandoc_write.rs`) was passing `&ctx.project.dir` as the base for
-  `build_brand_param`'s path rewriting — correct for a single-document
+  `build_brand_param`\'s path rewriting — correct for a single-document
   render (output dir == project dir there, which is why this was
   invisible until a book render exercised it), wrong for a book.
   Fixed by computing `output_dir` from `ctx.output_path().parent()`
@@ -363,7 +363,7 @@ logo-path resolution against a synthetic merged document's directory context.
   that instead. New end-to-end test:
   `book_single_file_merge.rs::book_brand_logo_named_by_images_reference_resolves_relative_to_book_output_dir`
   — a real book render (via `orange-book`, Q2's default typst-book
-  extension) with `_brand.yml`'s `small: test-logo` reference,
+  extension) with `_brand.yml`\'s `small: test-logo` reference,
   asserting the retained `.typ`\'s logo path is `"../logo.svg"`, not
   `"logo.svg"`. `cargo nextest run -p quarto-core -E
   'test(book_single_file_merge)'` and the full `-p quarto-brand -p
@@ -444,8 +444,8 @@ logo-path resolution against a synthetic merged document's directory context.
   `crates/quarto-core/src/transforms/equation_label.rs` already does
   for the same shape (`Slot::Block`/`Blocks`/`Inline`/`Inlines`, each
   recursing back into the matching collect/transform function).
-  `transform_inlines`'s signature changed from `&mut Vec<Inline>` to
-  `&mut [Inline]` so a `Slot::Inline`'s single owned inline can be
+  `transform_inlines`\'s signature changed from `&mut Vec<Inline>` to
+  `&mut [Inline]` so a `Slot::Inline`\'s single owned inline can be
   passed via `std::slice::from_mut` without a temporary `Vec` — a
   pure widening, no call site needed updating (`&mut Vec<T>` already
   coerces to `&mut [T]`). Two new regression tests
@@ -494,21 +494,21 @@ logo-path resolution against a synthetic merged document's directory context.
   **no live invocation** of any file under
   `resources/pandoc-filters/filters/crossref/` (`index.lua`,
   `refs.lua`, `format.lua`, etc.) — every reference to them in the
-  current Rust source is a "ported from"/"matches Q1's" comment
+  current Rust source is a "ported from"/\"matches Q1\'s\" comment
   citing the algorithm's origin, not a filter-chain wiring. This
   strongly suggests the "Lua handles sec for non-HTML" assumption
   is stale for Q2's current architecture (crossref is now fully
   native Rust), though this hasn't been independently confirmed for
   every pandoc-hybrid format (only Typst was checked in depth).
 
-  Confirmed via the actual diagnostic path: `crossref_resolve.rs`'s
+  Confirmed via the actual diagnostic path: `crossref_resolve.rs`\'s
   `resolve_one_cite` classifies `@sec-intro` as ref-type `sec` via
   the format-agnostic `RefTypeRegistry` (unaffected by the `!self.html`
   gate — that gate only controls the per-document *index* of real
   targets, not the registry of valid ref-type prefixes), looks it
   up in the `CrossrefIndex`, finds nothing (never registered, per
-  above), and emits exactly `"unresolved crossref \`@{id}\`: no
-  target with this identifier was found."` — the literal string
+  above), and emits exactly ``"unresolved crossref `@{id}`: no
+  target with this identifier was found."`` — the literal string
   seen in the smoke-test output. `render_resolved_ref`
   (`crossref_render.rs`) is documented to render an unresolved ref
   as literal `"?id?"`, but the actual `.typ` output shows bare
@@ -532,12 +532,12 @@ logo-path resolution against a synthetic merged document's directory context.
   just Typst** — dispatched a fork to check whether LaTeX/PDF has an
   independent, already-working `@sec-` resolution path before
   generalizing. Finding: `FormatIdentifier::Pdf` is neither
-  `is_native()` nor `is_pandoc_hybrid()` (`format.rs`'s own comment:
+  `is_native()` nor `is_pandoc_hybrid()` (`format.rs`\'s own comment:
   "Pdf is deliberately absent: the latex/beamer epic owns it") — PDF
   has **no working render pipeline in q2 at all yet**, so there is
   nothing today that could depend on `sec` staying unregistered for
   it. The pandoc-hybrid Typst path's only Lua involvement
-  (`quarto2-shim.lua`'s `route_crossref_resolved_ref`) merely formats
+  (`quarto2-shim.lua`\'s `route_crossref_resolved_ref`) merely formats
   an *already-resolved* ref per-writer; it never builds the
   `CrossrefIndex` or registers `sec` targets — that is 100% owned by
   the Rust `crossref_index.rs`, run uniformly before dispatch to any
@@ -558,9 +558,9 @@ logo-path resolution against a synthetic merged document's directory context.
   **ninth bug**: `@sec-*` refs for a chapter-level heading rendered
   with supplement `[Section]` instead of the expected `[Chapter]`
   (`#ref(<sec-intro>, supplement: [Section])` vs `[Chapter]`). Root
-  cause: Q1's `refs.lua`'s chapter/appendix prefix-type swap
+  cause: Q1's `refs.lua`\'s chapter/appendix prefix-type swap
   (`isChapterRef` + `crossrefOption("chapters", false)`, `refs.lua:
-  60-70`) was never ported into `quarto2-shim.lua`'s
+  60-70`) was never ported into `quarto2-shim.lua`\'s
   `route_crossref_resolved_ref` — its own doc comment explicitly
   flagged this as a "v1 scope-out." Ported it (mirrors Q1 exactly,
   using `data.order`/`data.in_appendix`, always present when
@@ -679,7 +679,7 @@ logo-path resolution against a synthetic merged document's directory context.
   `Image` two `Div`s down. Fixed in
   `crates/quarto-core/src/transforms/float_ref_target.rs`: added
   `clear_matching_id()`, a recursive block/inline walker (same shape as
-  `crossref_render.rs`'s existing `collect_document_ids`) that scrubs
+  `crossref_render.rs`\'s existing `collect_document_ids`) that scrubs
   any nested attribute id equal to the identifier a `FloatRefTarget` is
   about to claim, called from `convert_div`/`convert_figure` right
   before content is assigned — safe because crossref identifiers are
@@ -689,7 +689,7 @@ logo-path resolution against a synthetic merged document's directory context.
   5295/5295 passed, 32 skipped. Re-rendering confirmed the duplicate-
   label compile error is gone.
 
-  Then swapped `_quarto.yml`'s `bibliography: references.json` back to
+  Then swapped `_quarto.yml`\'s `bibliography: references.json` back to
   `bibliography: references.bib`, deleted the TEMPORARY comment block
   and `references.json`. Re-ran the smoke test: **the citation-mode
   mismatch is *not* fixed by restoring real BibTeX support** —
@@ -698,7 +698,7 @@ logo-path resolution against a synthetic merged document's directory context.
   This rules out the plan's earlier guess that the mismatch was a
   symptom of the temporary `references.json` conversion losing CSL
   fields — the same `.bib` source is now loaded directly by
-  `load_bibliography`'s native BibTeX parser (bd-l6eh1635), and the
+  `load_bibliography`\'s native BibTeX parser (bd-l6eh1635), and the
   mismatch persists unchanged. Needs independent investigation
   (citation-mode rendering — `@turing1950` bare-citation-authors
   handling — not a BibTeX-parsing issue). All other remaining failures
@@ -737,7 +737,7 @@ logo-path resolution against a synthetic merged document's directory context.
   case. New tests: `test_author_in_text_citation_moves_name_outside_parens`
   (positive case + a bracketed-citation negative control, against a
   CSL style with a real `prefix="(" suffix=")"` layout affix, which
-  `create_test_processor`'s existing style lacks and so couldn't have
+  `create_test_processor`\'s existing style lacks and so couldn't have
   caught this). `cargo clippy -p quarto-citeproc --all-targets -- -D
   warnings`: clean. `cargo nextest run -p quarto-citeproc`: 864/864
   passed (142 skipped), including the full CSL conformance suite —
@@ -748,7 +748,7 @@ logo-path resolution against a synthetic merged document's directory context.
   general to every Typst render with a non-default `toc-depth`.**
   The earlier `--toc-depth` CLI-forwarding skip (this same plan,
   above) turned out to be only half the fix. Root cause: the
-  vendored `resources/pandoc-filters/filters/quarto-post/typst.lua`'s
+  vendored `resources/pandoc-filters/filters/quarto-post/typst.lua`\'s
   `Meta` filter unconditionally overwrites `meta["toc-depth"]` with
   `tostring(PANDOC_WRITER_OPTIONS["toc_depth"])` before the template's
   `$toc-depth$` ever substitutes — so by template-substitution time,
@@ -781,7 +781,7 @@ logo-path resolution against a synthetic merged document's directory context.
   page split (`ALIGNTEST_MARKER` on page 11, `LISTING_BODY_ALIGN_TEST`
   on page 10) — refuting the plan's earlier guess that outline-depth
   was inflating page count ahead of this pair. Root-caused directly:
-  `chapter1.qmd`'s "1.7 Code Listings" heading and its
+  `chapter1.qmd`\'s "1.7 Code Listings" heading and its
   `LISTING_BODY_ALIGN_TEST` paragraph fit at the very bottom of one
   page (genuinely in-flow, not floated — neither `#figure` call in
   `Test-Typst-Book.typ` sets `placement:`, and Typst's default for an
@@ -794,18 +794,18 @@ logo-path resolution against a synthetic merged document's directory context.
   so this pair can never be compared while they straddle a page
   boundary. Confirmed the alignment this assertion actually exists to
   test is *not* broken: `pdftotext -bbox` on the real PDF shows
-  `ALIGNTEST_MARKER`'s line at `xMin=93.0` vs. `LISTING_BODY_ALIGN_TEST`
+  `ALIGNTEST_MARKER`\'s line at `xMin=93.0` vs. `LISTING_BODY_ALIGN_TEST`
   at `xMin=85.0` — an 8pt difference, inside this assertion's own
   10pt tolerance. Q1's original renderer evidently paginated this
   content differently and never hit this boundary; nudging
-  `chapter1.qmd`'s content to force the pair back onto the same page
+  `chapter1.qmd`\'s content to force the pair back onto the same page
   under Q2's Typst layout would be tuning fixture content against a
   moving target (font metrics/margins), not a real fix, and would be
   a much larger deviation from Q1's tracked source than this plan's
   other accepted content changes. Commented out in `index.qmd` with
   the reasoning inline; filed **bd-pdf-text-position-fixture-9xhxg9un**
   for the separate, unrelated, pre-existing `pdf-text-position-test.qmd`
-  fixture failure (confirmed pre-existing at `feature/typst-testing`'s
+  fixture failure (confirmed pre-existing at `feature/typst-testing`\'s
   clean tip, not the same bug as this one, not caused by this branch).
 
   **The 112-warnings bucket: root-caused, accepted, documented — not
@@ -817,15 +817,15 @@ logo-path resolution against a synthetic merged document's directory context.
   `InterpretationContext::DocumentMetadata` (parse-as-markdown by
   default) uniformly by key — including this file's own
   `_quarto.tests.typst.*` assertion strings (a Q2-invented
-  test-harness convention, analogous to `_quarto.yml`'s
+  test-harness convention, analogous to `_quarto.yml`\'s
   `ProjectConfig`, literal-by-default, context), which are tooling
   configuration, never real document content. Bracket-label patterns
   like `"<fig-cars>"`/`"<sec-intro>"` in that block get misread as
   HTML tags; some escaped-paren regex strings fail markdown parsing
   outright. Confirmed: zero literal `<...>` syntax anywhere in
-  chapter1-3/appendix*/references.qmd's actual body content outside
+  chapter1-3/appendix\*/references.qmd's actual body content outside
   fenced code blocks (Python `<=`/`<` operators, which don't trigger
-  markdown HTML parsing) — `index.qmd`'s own assertion list fully
+  markdown HTML parsing) — `index.qmd`\'s own assertion list fully
   accounts for the warning count. The remaining 2 warnings (Unknown
   shortcode, unresolved `@fig-visualization` crossref) are item 3's
   already-accepted embed gap. Filed
@@ -841,7 +841,7 @@ logo-path resolution against a synthetic merged document's directory context.
   already there.
 
   **Fixed** in `d2a9f03bd` (`_quarto.tests.**` → `PlainString` in
-  `meta_annotations.rs`'s `ANNOTATIONS` table); `index.qmd` restored
+  `meta_annotations.rs`\'s `ANNOTATIONS` table); `index.qmd` restored
   to `printsMessage` x2 + `noErrors` for the remaining embed-gap
   warnings. bd-quarto-tests-metadata-markdown-3wsdzq4c closed.
 
@@ -916,7 +916,7 @@ around via an explicit `noErrors: true` in place of the implicit
 fixed. `296c222e3` forces a page break before the Code Listings section
 so `ALIGNTEST_MARKER`/`LISTING_BODY_ALIGN_TEST` land together and
 re-enables that `ensurePdfTextPositions` case. `d2a9f03bd` adds
-`_quarto.tests.**` → `PlainString` to `meta_annotations.rs`'s
+`_quarto.tests.**` → `PlainString` to `meta_annotations.rs`\'s
 `ANNOTATIONS` table, eliminating the 112-warning false-positive bucket;
 `index.qmd` is restored to `printsMessage` x2 + `noErrors` for the
 remaining, still-open embed-gap (D6) warnings only.

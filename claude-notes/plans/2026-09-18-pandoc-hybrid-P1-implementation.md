@@ -736,7 +736,7 @@ while §6 and the real classification both drifted. Declare it in the module pro
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T7.1 | U | `build_transform_pipeline` + the bucket classification | build `Pandoc("docx")` → every surviving name's bucket ∈ {B1, B3} | `make_test_runtime()` | any B2/B4 name removed from `PANDOC_TRANSFORM_EXCLUDED` |
+| T7.1 | U | `build_transform_pipeline` + the bucket classification | build `Pandoc("docx")` → every surviving name's bucket ∈ \{B1, B3\} | `make_test_runtime()` | any B2/B4 name removed from `PANDOC_TRANSFORM_EXCLUDED` |
 | T7.2 | U | the bucket classification vs. `build_transform_pipeline` | build `HtmlRender`, collect names → each appears exactly once in the classification, and the classification has no entry that is not a pipeline member | same | a bucket entry deleted, duplicated, or left stale |
 | T7.3 | U | `test_build_transform_pipeline_phase_ordering` (existing, `pipeline.rs:3829`) | extend the loop to the five profiles → the existing exhaustiveness (`phase() != Unclassified`) and monotonicity assertions hold | same | a transform added to the pipeline without a `phase()` override |
 
@@ -758,7 +758,7 @@ while §6 and the real classification both drifted. Declare it in the module pro
 
 ### Refactor-induced vacuity check
 
-**`test_build_transform_pipeline_phase_ordering`'s monotonicity assertion goes vacuous for every
+**`test_build_transform_pipeline_phase_ordering`\'s monotonicity assertion goes vacuous for every
 Pandoc profile, by construction.** Read at `pipeline.rs:3829-3880`: it loops
 `for format in ["html", "revealjs"]` (`pipeline.rs:3834`), builds the pipeline, and asserts (1) no member is
 `TransformPhase::Unclassified` and (2) `prev_phase <= next_phase` for every adjacent pair. After the
@@ -930,7 +930,7 @@ Silent omission would read as "covered."
      execute for a Pandoc profile, so there is nothing else to assert in P1.
    - **`toc_generate.rs:85` is not a gate.** It is inside `fn toc_title_term(ctx)` selecting
      between the `toc-title-website` and `toc-title-document` language terms — no early return.
-     `toc-generate`'s real early return, if any, is elsewhere in the file. Moot for the decision
+     `toc-generate`\'s real early return, if any, is elsewhere in the file. Moot for the decision
      (`toc-generate` is excluded either way).
    - `accepted-untested: the "a self-gated transform left on the exclude-list is invisible to a
      membership test" case. Correct, and unfixable in P1 — with the transform excluded there is no
@@ -980,17 +980,17 @@ Silent omission would read as "covered."
    **Bound: T1.1** (the `"gfm" → Pandoc("gfm")` row). The `render.rs:680-685` `is_native()` gate
    still rejects all of them at the CLI until **P7-foundation** relaxes it, so this is shape, not
    reachability.
-7. **`retain_excluding`'s silent unknown-name drop** (`transform.rs:230-233`). A renamed transform
+7. **`retain_excluding`\'s silent unknown-name drop** (`transform.rs:230-233`). A renamed transform
    silently un-excludes itself from both lists. **Bound: T2.1 and T6.1** (the two "names exist"
    validators). This is the single highest-value pair of tests in P1 relative to their cost.
 8. **`reference-location: block|section` no-op** (`footnotes.rs:109-114`). A safety branch that
    must survive the split under the Pandoc profile too. **Bound: T5.3.**
-9. **The `is_minimal_html` and `is_revealjs_target` terms of `panel_tabset.rs`'s gate.**
+9. **The `is_minimal_html` and `is_revealjs_target` terms of `panel_tabset.rs`\'s gate.**
    **Bound: T3.2** (minimal-HTML term). The `is_revealjs_target` term: `accepted-untested: reveal's
    tabset story is explicitly a future strand (bd-y5j0m776) and the term is unchanged by this task;
    T1.5's RevealjsRender name list already pins that panel-tabset is registered for reveal, so a
    widening that accidentally enabled it would surface as a reveal-leg output change in T8.1.`
-10. **`RenderContext`'s 266 construction sites and the wasm leg.** The field addition compiles or
+10. **`RenderContext`\'s 266 construction sites and the wasm leg.** The field addition compiles or
     it does not — the build is the test. `accepted-untested: adding a field with an in-new()
     derivation is compiler-enforced; a test asserting "no call site changed" is not expressible.
     The gate is criterion 6 of Task 1: full cargo xtask verify (not --skip-hub-build), per the
