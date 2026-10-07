@@ -84,6 +84,18 @@ export function UploadIcon({ size }: IconProps) {
   );
 }
 
+/** Document with an arrow entering it — "import a document". */
+export function FileImportIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 14h8" />
+      <path d="m13 11 3 3-3 3" />
+    </StrokeIcon>
+  );
+}
+
 /** Printer — "open printable version". */
 export function PrintIcon({ size }: IconProps) {
   return (
@@ -273,6 +285,25 @@ export function DownloadIcon({ size }: IconProps) {
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="15" x2="12" y2="3" />
+    </StrokeIcon>
+  );
+}
+
+/** Two overlapping sheets — "copy to clipboard". */
+export function CopyIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </StrokeIcon>
+  );
+}
+
+/** Check mark — "done" confirmation. */
+export function CheckIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <polyline points="20 6 9 17 4 12" />
     </StrokeIcon>
   );
 }

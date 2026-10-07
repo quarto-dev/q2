@@ -1,0 +1,30 @@
+---
+title: "Image Format Not Displayable"
+description: "An image was stored in a format browsers can't display, such as TIFF."
+code: Q-24-11
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-11` — Image Format Not Displayable
+
+> An image was stored in a format browsers can't display, such as TIFF.
+
+## What this means
+
+The image was stored unchanged, but its format is not one browsers show (png, jpeg, gif, webp, avif, svg, bmp and ico are). Only EMF and WMF images are converted on import.
+
+## Why this happens
+
+- The document embeds a TIFF or another uncommon image format.
+
+## How to fix
+
+Convert the image to PNG or JPEG and replace the stored file.
+
+## Related
+
+- `Q-24-9`

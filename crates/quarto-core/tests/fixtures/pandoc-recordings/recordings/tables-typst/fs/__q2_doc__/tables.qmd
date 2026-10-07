@@ -1,0 +1,17 @@
+---
+title: Tables
+---
+
+| Left | Center | Right |
+|:-----|:------:|------:|
+| a    |   b    |     c |
+| one  |  two   | three |
+
+: A pipe table {#tbl-pipe}
+
+See @tbl-pipe.
+
+| Item  | Notes                      |
+|-------|----------------------------|
+| alpha | *first* letter             |
+| beta  | **second** letter, `code`  |

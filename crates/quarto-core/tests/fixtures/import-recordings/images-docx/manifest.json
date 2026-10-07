@@ -1,0 +1,37 @@
+[
+  {
+    "path": "argv.json",
+    "sha256": "b01f4750faaefcffd554130942d7a492cb3b935a4f7fb3e3ed71eea40778a44d",
+    "size": 205
+  },
+  {
+    "path": "media/media/rId12.jpg",
+    "sha256": "810c6e17da3299255ef0d9bac1161ba36f3cc0ab5e6d24eb61e2fee715f3579c",
+    "size": 351
+  },
+  {
+    "path": "media/media/rId9.png",
+    "sha256": "e1d2966db7536ac77f7f8da8e29f2e53cc1a238e1c0dd97f1e7b59db966f796a",
+    "size": 287
+  },
+  {
+    "path": "pandoc.json",
+    "sha256": "a31136f08f5e5835231e3c3f29b88ed4d197af2b9598a56dadf7d44a3a4f4595",
+    "size": 4900
+  },
+  {
+    "path": "source.docx",
+    "sha256": "b525dd9c42d96d5364ab7e24d2c47d87a99544fee836d92fe5e2559200431d3e",
+    "size": 11632
+  },
+  {
+    "path": "status.json",
+    "sha256": "370aaa466bf7fdf5df8dec2004f5e0b4d5d352b7060c00c4a1204cc89b4b641a",
+    "size": 18
+  },
+  {
+    "path": "stderr.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  }
+]

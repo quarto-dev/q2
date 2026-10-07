@@ -1,0 +1,37 @@
+[
+  {
+    "path": "argv.json",
+    "sha256": "b01f4750faaefcffd554130942d7a492cb3b935a4f7fb3e3ed71eea40778a44d",
+    "size": 205
+  },
+  {
+    "path": "media/media/rId12.wmf",
+    "sha256": "c0a61c3e49a710ed778bdd46862a082d55132cf4ac736ed4e115af3b1c05050c",
+    "size": 62
+  },
+  {
+    "path": "media/media/rId9.emf",
+    "sha256": "b983da7cc7ab12eebde9d8fd5ef59a370424182c77d5b334d46091992ce474ee",
+    "size": 132
+  },
+  {
+    "path": "pandoc.json",
+    "sha256": "fa5d7c2c4ec156478ee213f630e5a93ec57237872ac6a36f4c749bd7c1fd6e64",
+    "size": 5413
+  },
+  {
+    "path": "source.docx",
+    "sha256": "a098c4d79d3d03c50d14a430dbb93c573bb706da50477f9307d9c58fef247bae",
+    "size": 11200
+  },
+  {
+    "path": "status.json",
+    "sha256": "370aaa466bf7fdf5df8dec2004f5e0b4d5d352b7060c00c4a1204cc89b4b641a",
+    "size": 18
+  },
+  {
+    "path": "stderr.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  }
+]

@@ -298,9 +298,8 @@ fn test_error_corpus_text_snapshots() {
 
                         // Render all diagnostics to text with hyperlinks disabled
                         // (to avoid absolute path differences in snapshots across systems)
-                        let render_options = quarto_error_reporting::TextRenderOptions {
-                            enable_hyperlinks: false,
-                        };
+                        let render_options =
+                            quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
                         let mut error_output = String::new();
                         for diagnostic in &diagnostics {
                             let text_output = diagnostic

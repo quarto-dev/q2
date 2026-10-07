@@ -1,0 +1,52 @@
+[
+  {
+    "path": "argv.json",
+    "size": 480,
+    "sha256": "6acc989389716b1d87f1d5b7f762367b475187a69afd53312d854ad4091a2088"
+  },
+  {
+    "path": "capture/callouts.epub",
+    "size": 26003,
+    "sha256": "6f8984cbb585b7fee9c537bcf712ebb340dfe66ce6ca167827f2d5f46aa2d05d"
+  },
+  {
+    "path": "env.json",
+    "size": 8568,
+    "sha256": "25bc713cfc27222412db677084a9798ff977b65370d239ffe8276b4a2e803c4c"
+  },
+  {
+    "path": "fs/__q2_doc__/callouts.qmd",
+    "size": 1620,
+    "sha256": "040a7e1ca4bec00f40b544811f7425d95ffda6eb9a97404aac69327ca16dd539"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-filter-deps.txt",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-formats/formats/epub/styles.html",
+    "size": 1793,
+    "sha256": "cf44a9dd4baa3452eeb23fb5d66dadcc1e1f37e1ac45183637d12c83fe890811"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-formats/formats/html/styles-callout.html",
+    "size": 11355,
+    "sha256": "9fad1f7e8c5146aa4031f92df4a99825a5273276985a2a6a83ce5c7a0ac70afc"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-input.json",
+    "size": 46541,
+    "sha256": "e2ff30bbb1238fd82e5cefeefd981f622c99d9869d0ae453df48509f48b46f51"
+  },
+  {
+    "path": "meta.json",
+    "size": 182,
+    "sha256": "02fe593932107892df3df15c622e84edf6864926016dc412055440396bb4e0b9"
+  },
+  {
+    "path": "reference/callouts.epub",
+    "size": 26002,
+    "sha256": "ae299a15904b6e4ef79295260f53e881f3cacf4fe6b300ab8de72d08327c47ff"
+  }
+]

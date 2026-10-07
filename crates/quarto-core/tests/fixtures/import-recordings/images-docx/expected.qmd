@@ -1,0 +1,17 @@
+::: {}
+
+![A green square](images-docx_media/e1d2966db753.png){width="0.4444444444444444in" height="0.3333333333333333in"}
+
+A green square
+
+:::
+
+::: {}
+
+![A photo](images-docx_media/810c6e17da32.jpg){width="0.5555555555555556in" height="0.4166666666666667in"}
+
+A photo
+
+:::
+
+The green square again: ![Green again](images-docx_media/e1d2966db753.png){width="0.4444444444444444in" height="0.3333333333333333in"}

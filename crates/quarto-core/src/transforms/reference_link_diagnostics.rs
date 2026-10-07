@@ -68,6 +68,7 @@ use quarto_pandoc_types::table::Row;
 use quarto_pandoc_types::{Block, Inline, Inlines};
 
 use crate::Result;
+use crate::editorial_marks::commented_range;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 
@@ -111,8 +112,12 @@ impl AstTransform for ReferenceLinkDiagnosticsTransform {
 }
 
 /// A `Span` q2 will render as a bare `<span>`, discarding its brackets.
+///
+/// Not a commented range (`[range [>> note]]`): that attribute-less span is the
+/// editorial-marks syntax, which the marks transforms consume.
 fn is_bare_span(inline: &Inline) -> bool {
-    matches!(inline, Inline::Span(span) if is_empty_attr(&span.attr))
+    matches!(inline, Inline::Span(span)
+        if is_empty_attr(&span.attr) && commented_range(span).is_none())
 }
 
 /// An `Image` q2 will render with an empty `src`, e.g. from `![alt][ref]`.
@@ -524,6 +529,31 @@ mod tests {
     fn warns_about_a_lone_bracket_group() {
         assert_eq!(
             codes("Requires Posit Connect [Version TBD] or later.\n"),
+            vec![CODE_LONE_BRACKETS]
+        );
+    }
+
+    /// `[range [>> comment]]` is the I4 commented-range syntax: the span has no
+    /// attribute block on purpose, and the editorial-marks transform consumes it
+    /// (it never renders as a bare span), so it is not a lone bracket group.
+    #[test]
+    fn does_not_warn_about_a_commented_range() {
+        assert_eq!(
+            codes("A [pampa grammar[>> pampa grammar!]] here.\n"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            codes("A [range[>> one] [>> a reply]{author=\"Ann\"}] here.\n"),
+            Vec::<String>::new()
+        );
+    }
+
+    /// Only a *trailing* comment makes a range; a bare span that merely contains
+    /// one mid-way is still a lone bracket group.
+    #[test]
+    fn still_warns_when_the_comment_is_not_trailing() {
+        assert_eq!(
+            codes("A [before [>> note] after] here.\n"),
             vec![CODE_LONE_BRACKETS]
         );
     }

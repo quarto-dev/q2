@@ -1,0 +1,222 @@
+{
+ "browser": "webkit",
+ "init": {
+  "compileMs": 241,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15"
+ },
+ "latency": [
+  {
+   "name": "empty",
+   "n": 12,
+   "digestFresh": "64399dc83de863b5",
+   "digestWarm": "64399dc83de863b5",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 281,
+     "min": 258,
+     "max": 411
+    },
+    "mount": {
+     "med": 1,
+     "min": 0,
+     "max": 1.0000000000000018
+    },
+    "inst": {
+     "med": 149,
+     "min": 140,
+     "max": 159
+    },
+    "run": {
+     "med": 115,
+     "min": 102,
+     "max": 254.00000000000006
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mem": 48889856
+   },
+   "warm": {
+    "e2e": {
+     "med": 62.99999999999909,
+     "min": 54.99999999999909,
+     "max": 70
+    },
+    "prep": {
+     "med": 1,
+     "min": 0,
+     "max": 1
+    },
+    "mount": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "run": {
+     "med": 61,
+     "min": 53,
+     "max": 65
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0
+    },
+    "mem": 44630016,
+    "start": {
+     "e2e": 162,
+     "initMs": 152
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 13,
+    "warmMessageAndClone": 1
+   }
+  },
+  {
+   "name": "callouts",
+   "n": 12,
+   "digestFresh": "b98aa45aac1aa413",
+   "digestWarm": "b98aa45aac1aa413",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 308.9999999999991,
+     "min": 301.0000000000009,
+     "max": 358
+    },
+    "mount": {
+     "med": 1,
+     "min": 0,
+     "max": 2
+    },
+    "inst": {
+     "med": 144,
+     "min": 140,
+     "max": 181
+    },
+    "run": {
+     "med": 153,
+     "min": 146,
+     "max": 170
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mem": 49741824
+   },
+   "warm": {
+    "e2e": {
+     "med": 109,
+     "min": 103.99999999999818,
+     "max": 114
+    },
+    "prep": {
+     "med": 1,
+     "min": 0,
+     "max": 1
+    },
+    "mount": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "run": {
+     "med": 106,
+     "min": 100,
+     "max": 112
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0
+    },
+    "mem": 46137344,
+    "start": {
+     "e2e": 156,
+     "initMs": 145
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 11,
+    "warmMessageAndClone": 1
+   }
+  },
+  {
+   "name": "callouts-x10",
+   "n": 12,
+   "digestFresh": "afc6526066676b89",
+   "digestWarm": "afc6526066676b89",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 730,
+     "min": 718,
+     "max": 771
+    },
+    "mount": {
+     "med": 1,
+     "min": 0,
+     "max": 1.0000000000000018
+    },
+    "inst": {
+     "med": 149,
+     "min": 143,
+     "max": 172
+    },
+    "run": {
+     "med": 570,
+     "min": 563,
+     "max": 584
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mem": 58458112
+   },
+   "warm": {
+    "e2e": {
+     "med": 529,
+     "min": 523,
+     "max": 538
+    },
+    "prep": {
+     "med": 1,
+     "min": 0,
+     "max": 1.0000000000004547
+    },
+    "mount": {
+     "med": 0,
+     "min": 0,
+     "max": 0.9999999999997726
+    },
+    "run": {
+     "med": 527,
+     "min": 521,
+     "max": 536
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0
+    },
+    "mem": 56885248,
+    "start": {
+     "e2e": 168,
+     "initMs": 157
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 11,
+    "warmMessageAndClone": 2
+   }
+  }
+ ]
+}

@@ -94,6 +94,46 @@ pub fn book_render_items(
     appendices_title: &str,
     runtime: &dyn SystemRuntime,
 ) -> Result<Vec<BookRenderItem>> {
+    build_book_render_items(project_dir, book, appendices_title, runtime, true)
+}
+
+/// The book's file-bearing paths in render order, without numbering: the
+/// same list as [`book_render_items`] (same errors, same order), but no
+/// chapter is read, so it is cheap enough for the browser's per-keystroke
+/// resolver and for deciding scope before Pass 1. Paths are as the book lists
+/// them (project-relative, not normalized).
+pub fn book_chapter_files(
+    project: &crate::project::ProjectContext,
+    runtime: &dyn SystemRuntime,
+) -> Result<Vec<PathBuf>> {
+    let book = project
+        .config
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("book"))
+        .cloned()
+        .unwrap_or_else(|| {
+            ConfigValue::new_map(
+                vec![],
+                quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            )
+        });
+    // The divider text is never read for a path list.
+    let items = build_book_render_items(&project.dir, &book, "Appendices", runtime, false)?;
+    Ok(items.into_iter().filter_map(|i| i.file).collect())
+}
+
+/// `read_numbering` is false for callers that need only the paths:
+/// `chapter_is_numbered` reads and parses every chapter's front matter.
+fn build_book_render_items(
+    project_dir: &Path,
+    book: &ConfigValue,
+    appendices_title: &str,
+    runtime: &dyn SystemRuntime,
+    read_numbering: bool,
+) -> Result<Vec<BookRenderItem>> {
     let mut items: Vec<BookRenderItem> = Vec::new();
     let mut next_number: u32 = 1;
 
@@ -107,6 +147,7 @@ pub fn book_render_items(
             &mut next_number,
             &mut items,
             runtime,
+            read_numbering,
         )?;
     }
 
@@ -124,6 +165,7 @@ pub fn book_render_items(
             &mut next_number,
             &mut items,
             runtime,
+            read_numbering,
         )?;
     }
 
@@ -146,6 +188,7 @@ pub fn book_render_items(
             &mut next_number,
             &mut items,
             runtime,
+            read_numbering,
         )?;
     }
 
@@ -190,6 +233,7 @@ fn find_inputs(
     next_number: &mut u32,
     items: &mut Vec<BookRenderItem>,
     runtime: &dyn SystemRuntime,
+    read_numbering: bool,
 ) -> Result<()> {
     for entry in entries {
         // A part entry: `part:` + `chapters:` (→ section + contents in
@@ -229,6 +273,7 @@ fn find_inputs(
                     next_number,
                     items,
                     runtime,
+                    read_numbering,
                 )?;
             }
             continue;
@@ -269,13 +314,17 @@ fn find_inputs(
         // front-matter title or first heading decides. A read failure
         // leaves the chapter unnumbered, matching Q1's
         // `partitionedMarkdownForInput` failure path.
-        let number = match runtime.file_read_string(&full_path) {
-            Ok(content) if chapter_is_numbered(&content) => {
-                let n = *next_number;
-                *next_number += 1;
-                Some(n)
+        let number = if read_numbering {
+            match runtime.file_read_string(&full_path) {
+                Ok(content) if chapter_is_numbered(&content) => {
+                    let n = *next_number;
+                    *next_number += 1;
+                    Some(n)
+                }
+                _ => None,
             }
-            _ => None,
+        } else {
+            None
         };
 
         items.push(BookRenderItem {

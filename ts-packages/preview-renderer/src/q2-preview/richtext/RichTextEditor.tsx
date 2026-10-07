@@ -260,6 +260,11 @@ export function RichTextEditor({
     const onFocusOut = (e: FocusEvent) => {
       // A surface swap fires this as the editor unmounts — not a commit.
       if (ctx.editorModeSwitchRef?.current) return;
+      // Already committed (toolbar comment-on-selection, key commit): this
+      // is the unmount's focusout. Don't stash a focus restore — it would
+      // later steal focus from wherever the closing action sent it (the
+      // span's comment input). Key commits arm their own restore first.
+      if (committedRef.current) return;
       const next = e.relatedTarget as Node | null;
       // Focus stayed within the edit box (toolbar button / link input) — not a commit.
       if (next && root && root.contains(next)) return;
@@ -285,7 +290,15 @@ export function RichTextEditor({
   // `{editor && …}` defers the toolbar past the transient pre-editor window (as before).
   return (
     <div className="q2-richtext-editor" ref={rootRef}>
-      {editor && <EditToolbar editor={editor} richSupported />}
+      {editor && (
+        <EditToolbar
+          editor={editor}
+          richSupported
+          // Comment-on-selection commits straight away; no focus restore — the
+          // span's comment bubble takes focus once it renders.
+          onCommit={() => commit(editor)}
+        />
+      )}
       {editor && <EditorContent editor={editor} />}
     </div>
   );

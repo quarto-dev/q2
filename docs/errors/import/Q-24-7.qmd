@@ -1,0 +1,26 @@
+---
+title: "List Number Styles Lost"
+description: "Some numbered lists used letters, roman numerals or parenthesised numbers, which Quarto Markdown can't write. They were imported as ordinary numbered lists."
+code: Q-24-7
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-7` — List Number Styles Lost
+
+> Some numbered lists used letters, roman numerals or parenthesised numbers, which Quarto Markdown can't write. They were imported as ordinary numbered lists.
+
+## What this means
+
+Quarto Markdown has no marker for lettered (`a.`), roman (`i.`) or parenthesised (`(1)`) lists. The list keeps its start number and its items; the style is lost.
+
+## Why this happens
+
+- The document has lists numbered `a)`, `A.`, `i.`, `(1)` or similar.
+
+## How to fix
+
+Edit the imported list to use plain numbers, or accept the numbering. Changing Quarto Markdown's grammar to keep list styles is not planned.

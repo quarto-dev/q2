@@ -97,7 +97,7 @@ fn mathml_method_is_ignored_for_docx() {
     )
     .expect("docx render must succeed with html-math-method: mathml");
     let bytes = std::fs::read(&result.output_path).unwrap();
-    let extraction = quarto_ooxml_extract::extract_docx(&bytes).expect("extract docx");
+    let extraction = quarto_output_extract::extract_docx(&bytes).expect("extract docx");
 
     assert_eq!(
         extraction.math.len(),

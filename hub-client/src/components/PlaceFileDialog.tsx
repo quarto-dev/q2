@@ -16,9 +16,11 @@ import ModalDialog from './ModalDialog';
 import FolderPicker from './FolderPicker';
 import { common, dialogs } from '../strings';
 import { joinPath } from '../utils/uniquePath';
+import type { ImportRequest } from './ImportDialog';
 import './NewFileDialog.css';
 
-export type PlaceRequest =
+/** What PlaceFileDialog itself shows: a move, or an add. */
+export type PlaceFileRequest =
   | {
       kind: 'move';
       file: FileEntry;
@@ -36,15 +38,21 @@ export type PlaceRequest =
       name?: string;
     };
 
+/**
+ * The place queue's entries. An `import` entry is shown by ImportDialog rather than this one, so
+ * a mixed drop never opens a place dialog and an import dialog at once.
+ */
+export type PlaceRequest = PlaceFileRequest | ImportRequest;
+
 export interface PlaceFileDialogProps {
   /** What to place; null = dialog closed. */
-  request: PlaceRequest | null;
+  request: PlaceFileRequest | null;
   /** Every folder in the project (explicit and file-derived). */
   folders: string[];
   existingPaths: string[];
   onClose: () => void;
   /** Perform the move or add to `newPath`. */
-  onConfirm: (request: PlaceRequest, newPath: string) => void;
+  onConfirm: (request: PlaceFileRequest, newPath: string) => void;
 }
 
 export default function PlaceFileDialog({ request, ...rest }: PlaceFileDialogProps) {
@@ -61,7 +69,7 @@ function PlaceFileForm({
   existingPaths,
   onClose,
   onConfirm,
-}: Omit<PlaceFileDialogProps, 'request'> & { request: PlaceRequest }) {
+}: Omit<PlaceFileDialogProps, 'request'> & { request: PlaceFileRequest }) {
   const isMove = request.kind === 'move';
   const currentPath = isMove ? request.file.path : null;
   const lastSlash = currentPath?.lastIndexOf('/') ?? -1;

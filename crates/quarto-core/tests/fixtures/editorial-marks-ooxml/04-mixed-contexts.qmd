@@ -1,0 +1,43 @@
+---
+title: Editorial marks in mixed contexts
+format: docx
+---
+
+Marks inside a list item, a block quote, a table cell, and a heading — each
+of these is a distinct container in the pampa grammar, and each is worth an
+OOXML round-trip test since Word's comment/track-changes XML ranges have to
+nest correctly inside list paragraphs, quote paragraphs, and table cell
+paragraphs.
+
+## List item
+
+- item
+
+  ::: --
+
+  removed from the list item.
+
+  :::
+
+- another item with an inline [>> should we keep this bullet? ] comment
+
+## Block quote
+
+> ::: ++
+>
+> added inside a block quote.
+>
+> :::
+
+> A quoted sentence with [-- an inline deletion] and [!! a highlight] together.
+
+## Table cell
+
+| Column A | Column B |
+|----------|----------|
+| plain    | [++ inserted in a cell] |
+| [-- deleted in a cell] | [>> flagged for review] |
+
+## Heading with a mark
+
+### Section title [!! needs a better name]

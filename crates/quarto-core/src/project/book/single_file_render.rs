@@ -20,13 +20,16 @@ use crate::Result;
 use crate::artifact::ArtifactStore;
 use crate::error::QuartoError;
 use crate::format::{Format, FormatIdentifier};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::pipeline::build_pandoc_pipeline_finishing_stages;
 use crate::pipeline::{
-    ChapterPauseState, build_pandoc_pipeline_finishing_stages, render_qmd_to_ast_partial,
-    run_pipeline_from_ast,
+    ChapterPauseState, PartialKind, render_qmd_to_ast_partial, run_pipeline_from_ast,
 };
+use crate::project::book::core_types::{BookRenderOptions, ChapterDiagnostics};
 use crate::project::book::render_item::BookRenderItem;
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::render_to_file::{
     RenderToFileResult, apply_project_output_dir_to_options, determine_output_paths,
     finalize_rendered_output,
@@ -99,8 +102,9 @@ fn rebase_one_typst_path(
 ///
 /// Returns the chapter's paused `Pandoc` body, its extracted
 /// [`ChapterPauseState`] (so the caller can merge artifacts/diagnostics
-/// and carry the static-passthrough fields forward), and the paused
-/// render's diagnostics.
+/// and carry the static-passthrough fields forward), the paused render's
+/// diagnostics, and the chapter's own `SourceContext` (the diagnostics are
+/// located against it; the merged document has none that resolves them).
 #[allow(clippy::too_many_arguments)]
 async fn render_chapter_paused(
     project: &ProjectContext,
@@ -111,8 +115,14 @@ async fn render_chapter_paused(
     source_name: &str,
     runtime: Arc<dyn SystemRuntime>,
     pipeline_profile: crate::format::PipelineProfile,
-    render_options: &crate::render_to_file::RenderToFileOptions,
-) -> Result<(Pandoc, ChapterPauseState, Vec<DiagnosticMessage>)> {
+    render_options: &BookRenderOptions,
+    partial_kind: PartialKind,
+) -> Result<(
+    Pandoc,
+    ChapterPauseState,
+    Vec<DiagnosticMessage>,
+    quarto_source_map::SourceContext,
+)> {
     let mut state = ChapterPauseState::new(pipeline_profile);
     let mut ctx = state.build_context(project, document, format, binaries);
     ctx.defer_citeproc = true;
@@ -130,11 +140,12 @@ async fn render_chapter_paused(
         &mut ctx,
         runtime,
         TransformPhase::Normalization,
+        partial_kind,
     )
     .await?;
 
     state = ChapterPauseState::extract_from(&mut ctx);
-    Ok((paused.ast, state, diagnostics))
+    Ok((paused.ast, state, diagnostics, paused.source_context))
 }
 
 /// Book-level fields carried forward from the first rendered chapter
@@ -174,37 +185,136 @@ impl BookLevelState {
     }
 }
 
-/// Render a book project's single-file-merge target (Typst, EPUB): the
-/// per-chapter loop + merge + once-only Crossref-onward finishing pass.
+/// What the caller's `setup` produces for the merged document: its synthetic
+/// input path (the project root plus the book's output stem, so its document
+/// directory is the project root, as natively), its output path, and the
+/// resource resolver the merged document's own Finalization pass rewrites
+/// links and images against. Native roots the resolver at `_book/`; the
+/// browser request roots it at the project directory.
+pub(crate) struct BookSetup {
+    pub synthetic_input: std::path::PathBuf,
+    pub output_path: std::path::PathBuf,
+    pub resolver: ResourceResolverContext,
+}
+
+/// What the core knows once the finishing pass has run, handed to `finish`
+/// and returned alongside its value.
+pub(crate) struct BookTail {
+    /// The finishing pass's `SourceContext` (the merged document's).
+    pub source_context: quarto_source_map::SourceContext,
+    /// Diagnostics of the book-level steps: author normalization, the
+    /// Crossref phase, citeproc and the finishing pass. Unlocatable: the
+    /// merged document carries an empty `SourceContext`.
+    pub book_diagnostics: Vec<DiagnosticMessage>,
+    /// Each chapter's diagnostics with that chapter's `SourceContext`, in
+    /// book order (chapters with none are absent).
+    pub chapter_diagnostics: Vec<ChapterDiagnostics>,
+    /// True when ANY chapter's execution was skipped.
+    pub execution_skipped: bool,
+    /// Code cells left without a result, summed over every chapter.
+    pub unexecuted_cells: usize,
+}
+
+impl BookTail {
+    /// Every diagnostic in the order native reports them: each chapter's
+    /// (in book order), then the book-level ones.
+    pub(crate) fn all_diagnostics(&self) -> Vec<DiagnosticMessage> {
+        self.chapter_diagnostics
+            .iter()
+            .flat_map(|c| c.diagnostics.iter().cloned())
+            .chain(self.book_diagnostics.iter().cloned())
+            .collect()
+    }
+}
+
+pub(crate) enum BookCoreOutcome<T> {
+    Done {
+        value: T,
+        tail: BookTail,
+    },
+    /// A [`BookRenderHooks`] call returned `Cancelled` before a chapter.
+    Cancelled,
+    /// A chapter's own stages returned `Err`; `file` is its project-relative
+    /// path. (A chapter that finished `Ok` with an error-severity diagnostic
+    /// is not a failure here: native keeps going, so the request tail scans.)
+    ChapterFailed {
+        file: String,
+        error: QuartoError,
+    },
+}
+
+/// What differs between callers of [`render_book_core`].
+pub(crate) struct BookCoreArgs<'a> {
+    pub project: &'a ProjectContext,
+    pub book_items: &'a [BookRenderItem],
+    pub format: &'a Format,
+    pub runtime: Arc<dyn SystemRuntime>,
+    pub binaries: &'a BinaryDependencies,
+    pub options: &'a BookRenderOptions,
+    /// The finishing list run over the merged document, from `Navigation`
+    /// (native: the writer tail; browser: the request tail).
+    pub finishing_stages: Vec<Box<dyn crate::stage::PipelineStage>>,
+    /// Set on the merged document's context only (never a chapter's).
+    pub prepare_options: Option<crate::pandoc_request::PrepareOptions>,
+    pub hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
+}
+
+/// The shared core of the single-file-merge book render: the per-chapter
+/// loop, the merge, link and image resolution, the book metadata, the
+/// Crossref-only pass, citeproc and the finishing pass, up to and including
+/// `finishing_stages`. Native `q2 render` wraps it with a tail that writes
+/// files ([`render_book_single_file`]); the browser's whole-book request
+/// wraps it with a tail that takes `ctx.pandoc_request`.
 ///
-/// Called from `run_with_book_support()`'s single-file-merge branch
-/// *instead of* `pass_two()` — Pass 1 and `pre_render()` still run as
-/// normal (plan Decision 2, corrected after reading `run_inner()`
-/// directly: `pre_render` is where `book_render_items`/format defaults
-/// get computed, and skipping it would leave every chapter's metadata
-/// merge unprepared), so `book_items` here is `project.book_render_items`
-/// as `pre_render` left it — not recomputed.
-pub(crate) async fn render_book_single_file(
-    project: &ProjectContext,
-    book_items: &[BookRenderItem],
-    format: &Format,
-    runtime: Arc<dyn SystemRuntime>,
-    project_artifacts: Option<&mut ArtifactStore>,
-    render_options: &crate::render_to_file::RenderToFileOptions,
-) -> Result<RenderToFileResult> {
-    let binaries = BinaryDependencies::discover(runtime.as_ref());
+/// `chapter_kind` is asked once per file-bearing chapter, just before its
+/// render, for the [`PartialKind`] (native: the native lists; browser: the
+/// request lists with that chapter's own captures, parsed there and dropped
+/// with the chapter) and any diagnostics raised choosing it.
+///
+/// `setup` runs after the chapter loop and the no-chapters error (so a
+/// failing native render does not change when `_book/` is created) and
+/// returns the [`BookSetup`] plus a caller state `S` that is handed to
+/// `finish`, which runs with the merged context after the finishing pass.
+/// The merged context borrows a `book_document` built inside this function,
+/// so it never leaves it: the tail's work happens inside `finish`.
+pub(crate) async fn render_book_core<S, T>(
+    args: BookCoreArgs<'_>,
+    chapter_kind: &mut dyn FnMut(&BookRenderItem) -> (PartialKind, Vec<DiagnosticMessage>),
+    setup: impl FnOnce(&str) -> Result<(BookSetup, S)>,
+    finish: impl for<'c> FnOnce(&mut RenderContext<'c>, S, &BookSetup, &BookTail) -> Result<T>,
+) -> Result<BookCoreOutcome<T>> {
+    let BookCoreArgs {
+        project,
+        book_items,
+        format,
+        runtime,
+        binaries,
+        options,
+        finishing_stages,
+        prepare_options,
+        hooks,
+    } = args;
     let pipeline_profile = crate::format::PipelineProfile::from_format(&format.target_format);
 
     let mut chapters: Vec<(BookRenderItem, Pandoc)> = Vec::with_capacity(book_items.len());
     let mut book_level: Option<BookLevelState> = None;
     let mut first_chapter_dir: Option<std::path::PathBuf> = None;
     let mut artifacts = ArtifactStore::default();
+    // The book-level diagnostics; each chapter's go in `chapter_diagnostics`
+    // with their own `SourceContext`.
     let mut diagnostics: Vec<DiagnosticMessage> = Vec::new();
+    let mut chapter_diagnostics: Vec<ChapterDiagnostics> = Vec::new();
     // bd-sl79jjiq: book-level truth is "was ANY chapter's execution
     // skipped" — an accumulator, not a passthrough seeded once like the
     // `BookLevelState` fields (those are project-level and never
     // chapter-mutated; this is the opposite: chapter-mutated, needs OR).
     let mut execution_skipped = false;
+    // `restore_render_context` resets the context's count on every pipeline
+    // run, so the merged context's final value is not the sum: accumulate.
+    let mut unexecuted_cells = 0usize;
+
+    let total = book_items.iter().filter(|i| i.file.is_some()).count();
+    let mut index = 0usize;
 
     for item in book_items {
         let Some(rel_path) = &item.file else {
@@ -219,6 +329,16 @@ pub(crate) async fn render_book_single_file(
             ));
             continue;
         };
+        index += 1;
+        let file_label = rel_path.to_string_lossy().to_string();
+        if let Some(hooks) = hooks
+            && hooks
+                .before_chapter(index, total, &file_label)
+                .await
+                .is_err()
+        {
+            return Ok(BookCoreOutcome::Cancelled);
+        }
 
         let input_path = project.dir.join(rel_path);
         let content = runtime.file_read(&input_path).map_err(|e| {
@@ -230,20 +350,32 @@ pub(crate) async fn render_book_single_file(
         })?;
         let document = DocumentInfo::from_path(&input_path);
 
-        let (chapter_pandoc, mut state, chapter_diagnostics) = render_chapter_paused(
-            project,
-            &document,
-            format,
-            &binaries,
-            &content,
-            &input_path.to_string_lossy(),
-            runtime.clone(),
-            pipeline_profile.clone(),
-            render_options,
-        )
-        .await?;
-        diagnostics.extend(chapter_diagnostics);
+        let (partial_kind, kind_diagnostics) = chapter_kind(item);
+        let (chapter_pandoc, mut state, partial_diagnostics, chapter_source_context) =
+            match render_chapter_paused(
+                project,
+                &document,
+                format,
+                binaries,
+                &content,
+                &input_path.to_string_lossy(),
+                runtime.clone(),
+                pipeline_profile.clone(),
+                options,
+                partial_kind,
+            )
+            .await
+            {
+                Ok(ok) => ok,
+                Err(error) => {
+                    return Ok(BookCoreOutcome::ChapterFailed {
+                        file: file_label,
+                        error,
+                    });
+                }
+            };
         execution_skipped |= state.execution_skipped;
+        unexecuted_cells += state.unexecuted_cells;
 
         artifacts
             .merge_into_project(std::mem::take(&mut state.artifacts))
@@ -254,7 +386,16 @@ pub(crate) async fn render_book_single_file(
                     e
                 ))
             })?;
-        diagnostics.append(&mut state.diagnostics);
+        let mut this_chapter = kind_diagnostics;
+        this_chapter.extend(partial_diagnostics);
+        this_chapter.append(&mut state.diagnostics);
+        if !this_chapter.is_empty() {
+            chapter_diagnostics.push(ChapterDiagnostics {
+                file: file_label,
+                diagnostics: this_chapter,
+                source_context: chapter_source_context,
+            });
+        }
 
         if book_level.is_none() {
             book_level = Some(BookLevelState::seed_from(
@@ -362,57 +503,35 @@ pub(crate) async fn render_book_single_file(
         }
     }
 
-    // Output path (Decision 5): `book_output_stem` + the same
-    // output-dir-resolution policy every document uses, fed a synthetic
-    // input path so `determine_output_paths` derives the same stem back
-    // out without duplicating its fallback logic.
+    // Output path (Decision 5): `book_output_stem` is the merged document's
+    // name; the caller's `setup` turns it into the output path and resolver
+    // (native: `determine_output_paths` and `_book/`; browser: no file
+    // effect).
     let stem = super::config::book_output_stem(&project.dir, book_config);
-    let synthetic_input = project.dir.join(format!("{stem}.qmd"));
-    let options = crate::render_to_file::RenderToFileOptions::default();
-    let effective_options =
-        apply_project_output_dir_to_options(&options, project, &synthetic_input);
-    let (output_path, output_dir, output_stem) = determine_output_paths(
-        &synthetic_input,
-        &format.target_format,
-        &effective_options,
-        runtime.as_ref(),
-    )?;
-    runtime.dir_create(&output_dir, true).map_err(|e| {
-        QuartoError::other(format!(
-            "Failed to create output directory {}: {}",
-            output_dir.display(),
-            e
-        ))
-    })?;
-    let resource_paths =
-        crate::resources::prepare_html_resources(&output_dir, &output_stem, runtime.as_ref())?;
+    let (book_setup, caller_state) = setup(&stem)?;
+    let synthetic_input = book_setup.synthetic_input.clone();
+    let book_document =
+        DocumentInfo::from_path(&synthetic_input).with_output(&book_setup.output_path);
+    let resolver = book_setup.resolver.clone();
 
-    let book_document = DocumentInfo::from_path(&synthetic_input).with_output(&output_path);
-    let project_type = crate::project::orchestrator::project_type_for(project);
-    let resolver = ResourceResolverContext::website(
-        &project.output_dir,
-        &output_path,
-        project_type.lib_dir(),
-        &output_stem,
-    );
-
-    let mut ctx = RenderContext::new(project, &book_document, format, &binaries);
+    let mut ctx = RenderContext::new(project, &book_document, format, binaries);
     ctx.artifacts = artifacts;
     ctx.diagnostics = diagnostics;
     // Plan Decision 2/item 84: the merged document's own `RenderContext`
     // is built without a `ProjectIndex` — `LinkRewriteTransform` stays
     // inert as a defensive backstop.
     ctx.project_index = None;
-    ctx.resource_resolver = Some(resolver.clone());
+    ctx.resource_resolver = Some(resolver);
     ctx.ref_type_registry = book_level.ref_type_registry;
     ctx.options = book_level.options;
     ctx.includes = book_level.includes;
     ctx.observer = book_level.observer;
     ctx.user_grammar_provider = book_level.user_grammar_provider;
     ctx.resource_report = book_level.resource_report;
+    ctx.prepare_options = prepare_options;
 
     let merged_doc = crate::stage::DocumentAst {
-        path: synthetic_input.clone(),
+        path: synthetic_input,
         ast: merged,
         ast_context: pampa::pandoc::ASTContext::default(),
         // Known scope gap (not itemized in the P2 plan, and out of
@@ -506,6 +625,7 @@ pub(crate) async fn render_book_single_file(
                 ast_context,
                 &format.target_format,
                 &citeproc_base_dir,
+                runtime.as_ref(),
             )
             .map_err(|e| QuartoError::other(format!("citeproc failed for merged book: {e}")))?;
         ctx.diagnostics.extend(citeproc_diagnostics);
@@ -529,8 +649,6 @@ pub(crate) async fn render_book_single_file(
         }
     };
 
-    let finishing_stages =
-        build_pandoc_pipeline_finishing_stages(TransformPhase::Navigation, format.identifier);
     let (finished, finishing_diagnostics) = run_pipeline_from_ast(
         post_citeproc_doc,
         &mut ctx,
@@ -545,31 +663,128 @@ pub(crate) async fn render_book_single_file(
         )
     })?;
 
-    let render_output = crate::pipeline::RenderOutput {
-        html: String::new(),
-        diagnostics: ctx.diagnostics.clone(),
+    let tail = BookTail {
         source_context: rendered.source_context,
-        // bd-sl79jjiq: true when ANY chapter's own partial render skipped a
-        // code-executing engine excluded by the render's `ExecutionPolicy`
-        // (accumulated above via `ChapterPauseState::execution_skipped`).
+        book_diagnostics: std::mem::take(&mut ctx.diagnostics),
+        chapter_diagnostics,
         execution_skipped,
+        unexecuted_cells,
     };
-
-    finalize_rendered_output(
-        &synthetic_input,
-        output_path,
-        resource_paths.resource_dir,
-        render_output,
-        &mut ctx,
-        &resolver,
-        project_type.as_ref(),
-        project_artifacts,
-        &runtime,
-        false, // is_native: Pandoc-hybrid leg wrote output_path directly
-    )
+    let value = finish(&mut ctx, caller_state, &book_setup, &tail)?;
+    Ok(BookCoreOutcome::Done { value, tail })
 }
 
-#[cfg(test)]
+/// Native `q2 render`'s single-file-merge book render: the shared core plus
+/// a tail that creates `_book/`, writes the output files and the resource
+/// copies (`finalize_rendered_output`).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) async fn render_book_single_file(
+    project: &ProjectContext,
+    book_items: &[BookRenderItem],
+    format: &Format,
+    runtime: Arc<dyn SystemRuntime>,
+    project_artifacts: Option<&mut ArtifactStore>,
+    render_options: &crate::render_to_file::RenderToFileOptions,
+) -> Result<RenderToFileResult> {
+    let binaries = BinaryDependencies::discover(runtime.as_ref());
+    let options = BookRenderOptions {
+        engine_registry_override: render_options.engine_registry_override.clone(),
+        execution_policy: render_options.execution_policy.clone(),
+    };
+    let project_type = crate::project::orchestrator::project_type_for(project);
+    let runtime_for_tail = runtime.clone();
+    let outcome = render_book_core(
+        BookCoreArgs {
+            project,
+            book_items,
+            format,
+            runtime: runtime.clone(),
+            binaries: &binaries,
+            options: &options,
+            finishing_stages: build_pandoc_pipeline_finishing_stages(
+                TransformPhase::Navigation,
+                format.identifier,
+            ),
+            prepare_options: None,
+            hooks: None,
+        },
+        &mut |_| (PartialKind::Native, Vec::new()),
+        |stem| {
+            // `book_output_stem` + the same output-dir-resolution policy
+            // every document uses, fed a synthetic input path so
+            // `determine_output_paths` derives the same stem back out
+            // without duplicating its fallback logic. Native ignores the
+            // caller's options here (`default()`), exactly as before.
+            let synthetic_input = project.dir.join(format!("{stem}.qmd"));
+            let options = crate::render_to_file::RenderToFileOptions::default();
+            let effective_options =
+                apply_project_output_dir_to_options(&options, project, &synthetic_input);
+            let (output_path, output_dir, output_stem) = determine_output_paths(
+                &synthetic_input,
+                &format.target_format,
+                &effective_options,
+                runtime.as_ref(),
+            )?;
+            runtime.dir_create(&output_dir, true).map_err(|e| {
+                QuartoError::other(format!(
+                    "Failed to create output directory {}: {}",
+                    output_dir.display(),
+                    e
+                ))
+            })?;
+            let resource_paths = crate::resources::prepare_html_resources(
+                &output_dir,
+                &output_stem,
+                runtime.as_ref(),
+            )?;
+            let resolver = ResourceResolverContext::website(
+                &project.output_dir,
+                &output_path,
+                project_type.lib_dir(),
+                &output_stem,
+            );
+            Ok((
+                BookSetup {
+                    synthetic_input,
+                    output_path,
+                    resolver,
+                },
+                resource_paths.resource_dir,
+            ))
+        },
+        |ctx, resource_dir, setup, tail| {
+            let render_output = crate::pipeline::RenderOutput {
+                html: String::new(),
+                diagnostics: tail.all_diagnostics(),
+                source_context: tail.source_context.clone(),
+                // bd-sl79jjiq: true when ANY chapter's own partial render
+                // skipped a code-executing engine excluded by the render's
+                // `ExecutionPolicy`.
+                execution_skipped: tail.execution_skipped,
+            };
+            finalize_rendered_output(
+                &setup.synthetic_input,
+                setup.output_path.clone(),
+                resource_dir,
+                render_output,
+                ctx,
+                &setup.resolver,
+                project_type.as_ref(),
+                project_artifacts,
+                &runtime_for_tail,
+                false, // is_native: Pandoc-hybrid leg wrote output_path directly
+            )
+        },
+    )
+    .await?;
+    match outcome {
+        BookCoreOutcome::Done { value, .. } => Ok(value),
+        BookCoreOutcome::ChapterFailed { error, .. } => Err(error),
+        BookCoreOutcome::Cancelled => Err(QuartoError::other("book render cancelled".to_string())),
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
 
@@ -623,7 +838,8 @@ Some chapter text.\n";
             "chapter.qmd",
             runtime,
             pipeline_profile,
-            &crate::render_to_file::RenderToFileOptions::default(),
+            &BookRenderOptions::default(),
+            PartialKind::Native,
         ));
 
         assert!(
@@ -655,6 +871,7 @@ Some chapter text.\n";
             &mut ctx,
             runtime,
             TransformPhase::Normalization,
+            PartialKind::Native,
         ));
 
         assert!(
@@ -664,5 +881,455 @@ Some chapter text.\n";
              the missing bibliography — a passing result here would mean this \
              negative control no longer exercises the deferral path"
         );
+    }
+
+    /// Records every hook call and cancels before the `cancel_at`-th chapter.
+    struct RecordingHooks {
+        calls: std::sync::Mutex<Vec<(usize, usize, String)>>,
+        cancel_at: Option<usize>,
+    }
+
+    #[async_trait::async_trait(?Send)]
+    impl crate::project::book::BookRenderHooks for RecordingHooks {
+        async fn before_chapter(
+            &self,
+            index: usize,
+            total: usize,
+            file: &str,
+        ) -> std::result::Result<(), crate::project::book::Cancelled> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((index, total, file.to_string()));
+            if self.cancel_at == Some(index) {
+                Err(crate::project::book::Cancelled)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// R9 "Abort and progress", core level: the hook sees `(1, N, file)`,
+    /// `(2, N, file)`, ... in book order with the part divider skipped and `N`
+    /// the number of file-bearing items; a `Cancelled` before the third
+    /// chapter stops the render with no output and the third chapter is never
+    /// rendered (its file is deleted after the items are computed: a render
+    /// that reached it would fail reading it instead of cancelling).
+    #[test]
+    fn hooks_see_each_file_bearing_chapter_in_order_and_cancel_stops_the_loop() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap();
+        std::fs::write(
+            root.join("_quarto.yml"),
+            "project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - part: Part One\n      chapters:\n        - ch1.qmd\n        - ch2.qmd\n    - ch3.qmd\n",
+        )
+        .unwrap();
+        for f in ["index", "ch1", "ch2", "ch3"] {
+            std::fs::write(root.join(format!("{f}.qmd")), format!("# {f}\n\nBody.\n")).unwrap();
+        }
+        let runtime = make_test_runtime();
+        let project = ProjectContext::discover(&root, runtime.as_ref()).unwrap();
+        let book = project
+            .config
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("book"))
+            .unwrap()
+            .clone();
+        let items =
+            crate::project::book::book_render_items(&root, &book, "Appendices", runtime.as_ref())
+                .unwrap();
+        assert!(items.iter().any(|i| i.file.is_none()), "a part divider");
+        std::fs::remove_file(root.join("ch2.qmd")).unwrap();
+
+        let format = Format::from_format_string("typst").unwrap();
+        let binaries = BinaryDependencies::new();
+        let options = BookRenderOptions::default();
+        let hooks = RecordingHooks {
+            calls: Default::default(),
+            cancel_at: Some(3),
+        };
+        let outcome = pollster::block_on(render_book_core(
+            BookCoreArgs {
+                project: &project,
+                book_items: &items,
+                format: &format,
+                runtime: runtime.clone(),
+                binaries: &binaries,
+                options: &options,
+                finishing_stages: Vec::new(),
+                prepare_options: None,
+                hooks: Some(&hooks),
+            },
+            &mut |_| (PartialKind::Native, Vec::new()),
+            |_| -> Result<(BookSetup, ())> { unreachable!("cancelled before setup") },
+            |_, _, _, _| -> Result<()> { unreachable!("cancelled before finish") },
+        ))
+        .unwrap();
+
+        assert!(matches!(outcome, BookCoreOutcome::Cancelled));
+        assert_eq!(
+            hooks.calls.lock().unwrap().clone(),
+            vec![
+                (1, 4, "index.qmd".to_string()),
+                (2, 4, "ch1.qmd".to_string()),
+                (3, 4, "ch2.qmd".to_string()),
+            ],
+            "exactly the calls up to the cancel, never for the divider or later chapters"
+        );
+    }
+
+    // ---- R9 task 5: chapter-relative resources through the shared core ----
+    //
+    // The core is driven the way the browser's whole-book request drives it:
+    // the request pause/finishing lists, a website-mode resolver rooted at the
+    // project directory, and `pandoc-prepare` as the tail. (The request-level
+    // halves are in `pandoc_request_books.rs` once the driver exists.)
+
+    const ONE_PIXEL_PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+        0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+
+    fn copy_tree(src: &std::path::Path, dst: &std::path::Path) {
+        std::fs::create_dir_all(dst).unwrap();
+        for entry in std::fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let to = dst.join(entry.file_name());
+            if entry.path().is_dir() {
+                copy_tree(&entry.path(), &to);
+            } else {
+                std::fs::copy(entry.path(), to).unwrap();
+            }
+        }
+    }
+
+    /// A scratch directory outside `/tmp` (request mounts reject it): under
+    /// the workspace `target/tmp`, as the integration tests' `CARGO_TARGET_TMPDIR`.
+    /// The built-in extension subtrees are extracted to the system temp dir,
+    /// which is `/tmp` on Linux, so they are relocated under the scratch root
+    /// too (each nextest test is its own process, so setting the env is safe).
+    fn scratch_root() -> (tempfile::TempDir, std::path::PathBuf) {
+        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
+        std::fs::create_dir_all(&base).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("q2-r9-core-")
+            .tempdir_in(base)
+            .unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap();
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let extracted = crate::extension::builtin_extension_subtree_roots(&runtime);
+        let src = extracted.first().expect("an extracted subtree root");
+        let subtrees = root.join("subtrees");
+        copy_tree(src, &subtrees);
+        unsafe { std::env::set_var("QUARTO_EXTENSION_SUBTREES_DIR", &subtrees) };
+        (dir, root)
+    }
+
+    fn put(root: &std::path::Path, rel: &str, bytes: &[u8]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+    }
+
+    /// A book with: a root chapter with a local image and a figure whose
+    /// caption holds an image; a chapter in `sub/` with local, `../` and
+    /// site-root images; an `href:` part page with an image; a cover image.
+    fn images_book(root: &std::path::Path, extra_yml: &str) {
+        put(
+            root,
+            "_quarto.yml",
+            format!("project:\n  type: book\nbook:\n  title: B\n  cover-image: cover.png\n  chapters:\n    - index.qmd\n    - one.qmd\n    - sub/two.qmd\n    - part: Part Two\n      href: partpage.qmd\n      chapters:\n        - three.qmd\n{extra_yml}").as_bytes(),
+        );
+        put(root, "index.qmd", b"---\ntitle: Preface\n---\n\nHello\n");
+        put(
+            root,
+            "one.qmd",
+            b"# One\n\n![root local](rootlocal.png)\n\n![A caption with ![icon](icon.png) inside.](rootfig.png){#fig-one}\n",
+        );
+        put(
+            root,
+            "sub/two.qmd",
+            b"# Two\n\n![local](local.png)\n\n![site root](/img/a.png)\n\n![up](../top.png)\n\n![Sub caption ![i](sub-icon.png).](subfig.png){#fig-two}\n",
+        );
+        put(
+            root,
+            "partpage.qmd",
+            b"---\ntitle: Part Two Page\n---\n\n![part image](part.png)\n",
+        );
+        put(root, "three.qmd", b"# Three\n\nBody three.\n");
+        for f in [
+            "rootlocal.png",
+            "icon.png",
+            "rootfig.png",
+            "top.png",
+            "part.png",
+            "cover.png",
+            "img/a.png",
+            "sub/local.png",
+            "sub/sub-icon.png",
+            "sub/subfig.png",
+        ] {
+            put(root, f, ONE_PIXEL_PNG);
+        }
+    }
+
+    /// Run the shared core as the browser driver does and return the request.
+    fn request_via_core(
+        root: &std::path::Path,
+        format_key: &str,
+        post: crate::pandoc_request::RequestPost,
+    ) -> (crate::pandoc_request::PandocRequest, BookTail) {
+        let runtime = make_test_runtime();
+        let project = ProjectContext::discover(root, runtime.as_ref()).unwrap();
+        let book = project
+            .config
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("book"))
+            .unwrap()
+            .clone();
+        let items =
+            crate::project::book::book_render_items(root, &book, "Appendices", runtime.as_ref())
+                .unwrap();
+        let format = Format::from_format_string(format_key).unwrap();
+        let binaries = BinaryDependencies::new();
+        let options = BookRenderOptions {
+            engine_registry_override: None,
+            execution_policy: crate::engine::ExecutionPolicy::None,
+        };
+        let prepare = crate::pandoc_request::PrepareOptions {
+            temp_root: std::path::PathBuf::from(&crate::pandoc_request::constants().share_root),
+            source_date_epoch: Some(1_700_000_000),
+            collect_resources: true,
+            typst_available_fonts: None,
+            post,
+        };
+        let outcome = pollster::block_on(render_book_core(
+            BookCoreArgs {
+                project: &project,
+                book_items: &items,
+                format: &format,
+                runtime: runtime.clone(),
+                binaries: &binaries,
+                options: &options,
+                finishing_stages: crate::pipeline::build_pandoc_request_finishing_stages(
+                    TransformPhase::Navigation,
+                ),
+                prepare_options: Some(prepare),
+                hooks: None,
+            },
+            &mut |_| {
+                (
+                    PartialKind::Request {
+                        captures: Vec::new(),
+                    },
+                    Vec::new(),
+                )
+            },
+            |stem| {
+                let synthetic_input = project.dir.join(format!("{stem}.qmd"));
+                let output_path = synthetic_input.with_extension(&format.output_extension);
+                let resolver = ResourceResolverContext::website(
+                    &project.dir,
+                    &output_path,
+                    crate::project::orchestrator::project_type_for(&project).lib_dir(),
+                    stem,
+                );
+                Ok((
+                    BookSetup {
+                        synthetic_input,
+                        output_path,
+                        resolver,
+                    },
+                    (),
+                ))
+            },
+            |ctx, _, _, _| {
+                ctx.pandoc_request
+                    .take()
+                    .ok_or_else(|| QuartoError::other("no request".to_string()))
+            },
+        ))
+        .unwrap();
+        match outcome {
+            BookCoreOutcome::Done { value, tail } => (value, tail),
+            BookCoreOutcome::ChapterFailed { file, error } => {
+                panic!("chapter {file} failed: {error}")
+            }
+            BookCoreOutcome::Cancelled => panic!("cancelled"),
+        }
+    }
+
+    fn input_json_targets(request: &crate::pandoc_request::PandocRequest) -> Vec<String> {
+        let input = request
+            .files
+            .iter()
+            .find(|f| f.path.ends_with("/pandoc-input.json"))
+            .expect("pandoc-input.json");
+        let json: serde_json::Value = serde_json::from_slice(&input.bytes).unwrap();
+        let mut out = Vec::new();
+        fn walk(v: &serde_json::Value, out: &mut Vec<String>) {
+            match v {
+                serde_json::Value::Object(map) => {
+                    if map.get("t").and_then(|t| t.as_str()) == Some("Image")
+                        && let Some(target) = map["c"][2][0].as_str()
+                    {
+                        out.push(target.to_string());
+                    }
+                    map.values().for_each(|v| walk(v, out));
+                }
+                serde_json::Value::Array(items) => items.iter().for_each(|v| walk(v, out)),
+                _ => {}
+            }
+        }
+        walk(&json, &mut out);
+        out
+    }
+
+    fn mounted(
+        request: &crate::pandoc_request::PandocRequest,
+        root: &std::path::Path,
+    ) -> Vec<String> {
+        let root = crate::pandoc_request::normalize_request_path(root);
+        let mut v: Vec<String> = request
+            .resource_refs
+            .iter()
+            .map(|f| {
+                f.path
+                    .strip_prefix(&format!("{root}/"))
+                    .unwrap_or(&f.path)
+                    .to_string()
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// Every chapter's images, in the pdf request: the merged document holds
+    /// project-relative targets and `resource_refs` holds each file under its
+    /// own chapter's directory, caption images and the part page's image
+    /// included, with no outside-the-project warning.
+    #[test]
+    fn pdf_request_mounts_chapter_relative_images_under_their_own_directories() {
+        let (_guard, root) = scratch_root();
+        images_book(&root, "");
+        let (request, tail) = request_via_core(
+            &root,
+            "typst",
+            crate::pandoc_request::RequestPost::CompileTypst,
+        );
+        assert_eq!(
+            mounted(&request, &root),
+            vec![
+                "icon.png",
+                "img/a.png",
+                "part.png",
+                "rootfig.png",
+                "rootlocal.png",
+                "sub/local.png",
+                "sub/sub-icon.png",
+                "sub/subfig.png",
+                "top.png",
+            ],
+            "{:?}",
+            tail.book_diagnostics
+                .iter()
+                .map(|d| &d.title)
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            tail.book_diagnostics
+                .iter()
+                .all(|d| d.code.as_deref() != Some("Q-11-1")),
+            "no outside-the-project warning"
+        );
+        let targets = input_json_targets(&request);
+        for expected in [
+            "rootlocal.png",
+            "sub/local.png",
+            "img/a.png",
+            "top.png",
+            "part.png",
+            "icon.png",
+            "sub/sub-icon.png",
+        ] {
+            assert!(
+                targets.iter().any(|t| t == expected),
+                "target {expected} in {targets:?}"
+            );
+        }
+        assert!(
+            !targets.iter().any(|t| t.starts_with('/')),
+            "no root-absolute target is left: {targets:?}"
+        );
+    }
+
+    /// A plain `typst` request names images in the `.typ` only and mounts none.
+    #[test]
+    fn typst_request_names_the_images_but_mounts_none() {
+        let (_guard, root) = scratch_root();
+        images_book(&root, "");
+        let (request, _) =
+            request_via_core(&root, "typst", crate::pandoc_request::RequestPost::None);
+        assert!(
+            request.resource_refs.is_empty(),
+            "{:?}",
+            mounted(&request, &root)
+        );
+        let targets = input_json_targets(&request);
+        assert!(targets.iter().any(|t| t == "sub/local.png"), "{targets:?}");
+        assert!(targets.iter().any(|t| t == "part.png"), "{targets:?}");
+    }
+
+    /// EPUB: the images and the `book.cover-image` reach `resource_refs`.
+    #[test]
+    fn epub_request_mounts_images_and_the_cover() {
+        let (_guard, root) = scratch_root();
+        images_book(&root, "");
+        let (request, _) =
+            request_via_core(&root, "epub", crate::pandoc_request::RequestPost::None);
+        let got = mounted(&request, &root);
+        for expected in [
+            "cover.png",
+            "sub/local.png",
+            "top.png",
+            "img/a.png",
+            "part.png",
+        ] {
+            assert!(got.iter().any(|g| g == expected), "{expected} in {got:?}");
+        }
+    }
+
+    /// Margin citations leave `bibliography`/`csl` in the metadata for typst
+    /// to read at compile time, so the pdf request carries the files, and the
+    /// plain `typst` request needs none.
+    #[test]
+    fn margin_citation_bibliography_and_csl_reach_the_pdf_request() {
+        let (_guard, root) = scratch_root();
+        images_book(
+            &root,
+            "bibliography: refs.bib\ncsl: style.csl\nreference-location: margin\ncitation-location: margin\nsuppress-bibliography: true\n",
+        );
+        put(
+            &root,
+            "refs.bib",
+            b"@book{k, author={A}, title={T}, year={2000}}\n",
+        );
+        put(&root, "style.csl", b"<style/>\n");
+        put(&root, "one.qmd", b"# One\n\nCite [@k].\n");
+        let (pdf, _) = request_via_core(
+            &root,
+            "typst",
+            crate::pandoc_request::RequestPost::CompileTypst,
+        );
+        let got = mounted(&pdf, &root);
+        assert!(got.iter().any(|g| g == "refs.bib"), "{got:?}");
+        assert!(got.iter().any(|g| g == "style.csl"), "{got:?}");
+        let (typ, _) = request_via_core(&root, "typst", crate::pandoc_request::RequestPost::None);
+        assert!(typ.resource_refs.is_empty());
     }
 }

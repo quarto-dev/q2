@@ -618,8 +618,24 @@ fn render_document(input_path: &Path, format: &str) -> RenderOutput {
         .and_then(|s| s.to_str())
         .unwrap_or("output");
 
-    let extension = quarto_core::format::Format::from_format_string(format)
-        .map_or_else(|_| "html".to_string(), |parsed| parsed.output_extension);
+    // Fallback path only (a successful render reports its own path); honor a
+    // typst document's `output-ext` so an early failure names the right file.
+    let extension = quarto_core::format::Format::from_format_string(format).map_or_else(
+        |_| "html".to_string(),
+        |parsed| {
+            let ext = (parsed.identifier == quarto_core::format::FormatIdentifier::Typst)
+                .then(|| std::fs::read_to_string(input_path).ok())
+                .flatten()
+                .and_then(|content| {
+                    quarto_core::output_ext::resolve_output_ext(
+                        &content,
+                        None,
+                        &parsed.target_format,
+                    )
+                });
+            ext.unwrap_or(parsed.output_extension)
+        },
+    );
 
     let fallback_output_path = output_dir.join(format!("{}.{}", stem, extension));
 

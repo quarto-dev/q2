@@ -1,0 +1,10 @@
+title: OOXML Editorial Marks
+author: Gordon Woodhull
+version: 0.1.0
+quarto-required: ">=2.0.0"
+contributes:
+  filters:
+    - path: ooxml-editorial-marks.lua
+      at: post-quarto
+    - path: stamp-attribution.lua
+      at: pre-quarto

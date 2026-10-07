@@ -39,6 +39,8 @@
 
 .sidebar-header .qh-btn {
   height: 28px;
+  /* Icon-only: five buttons must fit the narrowest sidebar. */
+  padding-inline: 7px;
 }
 
 /* Sidebar-header buttons are icon-only .qh-btn.small.outline (ui.css),
@@ -47,12 +49,18 @@
 .sidebar-header .new-file-btn,
 .sidebar-header .search-files-btn,
 .sidebar-header .new-folder-btn,
-.sidebar-header .upload-asset-btn {
+.sidebar-header .upload-asset-btn,
+.sidebar-header .import-doc-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1.5;
   transition: all 0.2s;
+}
+
+.sidebar-header .import-doc-btn.is-disabled {
+  color: var(--text-secondary);
+  cursor: default;
 }
 
 .file-list {

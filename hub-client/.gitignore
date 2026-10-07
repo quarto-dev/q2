@@ -34,3 +34,11 @@ e2e/**/*-snapshots/
 *.njsproj
 *.sln
 *.sw?
+
+# Served pandoc.wasm asset, fetched by scripts/fetch-pandoc-wasm.mjs
+public/pandoc/
+# Served typst.ts wasm and default fonts, same script
+public/typst/
+
+# Served pdf.js viewer (scripts/fetch-pandoc-wasm.mjs)
+public/pdfjs/

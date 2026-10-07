@@ -1,0 +1,5 @@
+[direct] p.text="Body " bubbles=1 bubbleText=["direct"] commentSpansInText=0 commentedSpan=0
+[plain-span] p.text="Before range on-plain-span after" bubbles=0 bubbleText=[] commentSpansInText=1 commentedSpan=0
+[highlight-span] p.text="Before range on-highlight after" bubbles=0 bubbleText=[] commentSpansInText=1 commentedSpan=0
+[highlight-div] p.text="Whole para" bubbles=1 bubbleText=["on-div"] commentSpansInText=0 commentedSpan=0
+[div-plain] p.text="Whole" bubbles=0 bubbleText=[] commentSpansInText=1 commentedSpan=0

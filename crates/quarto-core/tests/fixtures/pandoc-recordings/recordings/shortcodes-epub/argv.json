@@ -1,0 +1,20 @@
+[
+  "pandoc",
+  "-f",
+  "json",
+  "-t",
+  "epub",
+  "--data-dir",
+  "/__q2_share__/pandoc/datadir",
+  "-L",
+  "/__q2_share__/filters/main.lua",
+  "--default-image-extension=png",
+  "--math-method=mathml",
+  "--include-in-header=/__q2_tmp__/pandoc-formats/formats/html/styles-callout.html",
+  "--include-in-header=/__q2_tmp__/pandoc-formats/formats/epub/styles.html",
+  "--resource-path",
+  "/__q2_doc__",
+  "-o",
+  "/__q2_doc__/shortcodes.epub",
+  "/__q2_tmp__/pandoc-input.json"
+]

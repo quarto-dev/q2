@@ -1,0 +1,11 @@
+---
+title: T
+bibliography: refs.bib
+---
+
+# One
+
+See @smith2020.
+
+::: {#refs}
+:::

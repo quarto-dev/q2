@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { firefoxLaunchEnv } from './playwright.firefox-env';
 
 /**
  * Playwright configuration for hub-client E2E tests
@@ -67,7 +68,10 @@ export default defineConfig({
     },
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {
+        ...devices['Desktop Firefox'],
+        launchOptions: { env: firefoxLaunchEnv },
+      },
     },
     // Add other browsers as needed
     // {

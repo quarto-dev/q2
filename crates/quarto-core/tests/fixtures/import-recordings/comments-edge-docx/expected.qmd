@@ -1,0 +1,12 @@
+Case a, a reply: [range with a reply[>> Parent comment.]{author="Ann" date="2026-09-01T10:00:00Z"}[>> Reply comment.]{author="Dee" date="2026-09-01T11:00:00Z"}] after.
+
+Case b, a resolved comment: [resolved range[>> Resolved thread.]{author="Ann" date="2026-09-02T10:00:00Z"}] after.
+
+Case c, a paragraph whose mark was inserted by Bob.
+
+Case d, multi-paragraph text: [multi range[>> First paragraph of the comment.\
+Second paragraph of the comment.]{author="Cy" date="2026-09-03T10:00:00Z"}] after.
+
+Case e, a range starting inside emphasis: *emphasised* [*words* plain text[>> Emphasis comment.]{author="Ann" date="2026-09-04T10:00:00Z"}] after.
+
+Case f, overlapping ranges: one [two three[>> First overlap.]{author="Ann" date="2026-09-05T10:00:00Z"}] four five.[>> Second overlap.]{author="Dee" date="2026-09-05T11:00:00Z"}

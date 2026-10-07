@@ -9,7 +9,19 @@
 
 import type { Diagnostic, RenderResponse } from '@quarto/preview-renderer/types/diagnostic';
 import type { RustQmdJson } from '@quarto/pandoc-types'
-import type { AstResponse } from 'wasm-quarto-hub-client'
+import type {
+  AstDiagnostic,
+  AstResponse,
+  ClassifyImportFailureResponse,
+  FinishImportResponse,
+  ImportFormatTable,
+  PandocFormatInfo,
+  PandocRequestFile,
+  PrepareImportResponse,
+  RenderPandocRequestOptions,
+  RenderPandocRequestResponse,
+  ResolvePandocFormatsResponse,
+} from 'wasm-quarto-hub-client'
 import { discoverUserGrammars } from './userGrammar/Discovery';
 import { UserGrammarCache } from './userGrammar/Cache';
 import { loadUserGrammar } from './userGrammar/Highlight';
@@ -95,6 +107,49 @@ interface WasmModuleExtended {
     // the pre-knob behaviour.
     prefer_preview_format?: boolean,
   ) => Promise<string>;
+  // pandoc-wasm epic (R2): build the request pandoc.wasm runs. See
+  // wasm-quarto-hub-client.d.ts for the shapes. `render_pandoc_request`
+  // returns a JS object (it carries Uint8Arrays), not a JSON string.
+  render_pandoc_request: (
+    path: string,
+    format: string,
+    source_date_epoch?: number,
+    capture_gz_json?: Uint8Array,
+    typst_available_fonts?: string[],
+    abort_signal?: AbortSignal,
+    options?: RenderPandocRequestOptions,
+  ) => Promise<RenderPandocRequestResponse>;
+  get_pandoc_share_tree_version: () => string;
+  get_pandoc_share_tree: () => {
+    share_tree_version: string;
+    files: PandocRequestFile[];
+  };
+  get_typst_assets_version: () => string;
+  get_typst_assets: () => {
+    typst_assets_version: string;
+    files: PandocRequestFile[];
+  };
+  typst_date_prelude: (source_date_epoch: number) => string;
+  classify_pandoc_completion: (
+    stage_name: string,
+    success: boolean,
+    status: string,
+    stderr: string,
+    json_path: string,
+  ) => string;
+  get_pandoc_formats: () => string;
+  resolve_pandoc_formats: (path: string) => string;
+  // Document import (epic 2026-10-03-document-import-epic.md, interface 2)
+  get_import_formats: () => string;
+  prepare_import: (file_name: string, size: number, sha256_hex: string) => string;
+  finish_import: (
+    json_text: string,
+    stderr: string,
+    target_qmd_path: string,
+    media_manifest_json: string,
+    format?: string,
+  ) => string;
+  classify_import_failure: (kind: string, status: number | null | undefined, stderr: string) => string;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
@@ -592,6 +647,166 @@ export async function renderPageForPreview(
   return JSON.parse(
     await wasm.render_page_for_preview(path, userGrammars, captureGzJson),
   );
+}
+
+// ---- pandoc-wasm epic (R2): the request exports --------------------------
+
+export type {
+  PandocFormatClass,
+  PandocFormatInfo,
+  PandocRequestFile,
+  PandocRequestWire,
+  RenderPandocRequestOptions,
+  RenderPandocRequestResponse,
+  ResolvePandocFormatsResponse,
+} from 'wasm-quarto-hub-client';
+
+/**
+ * Build the pandoc request for the document at `path` rendered to `format`
+ * (a `key` of {@link getPandocFormats}). `sourceDateEpoch` is seconds (the
+ * click time in production). A document with errors comes back with no
+ * `request`; the `diagnostics` say why. A book chapter requested as typst,
+ * pdf or epub is the whole book unless `scope` is `'chapter'`. The request's
+ * bytes are copies the caller owns.
+ */
+export async function renderPandocRequest(
+  path: string,
+  format: string,
+  options: {
+    sourceDateEpoch?: number;
+    captureGzJson?: Uint8Array;
+    typstAvailableFonts?: string[];
+    /** Cancels the downloads of remote images (the click's signal). */
+    signal?: AbortSignal;
+    /** `'auto'` (the default) renders a book chapter's whole book for typst, pdf and epub. */
+    scope?: 'auto' | 'chapter';
+    /** Capture blobs by chapter path (see `RenderPandocRequestOptions`). */
+    capturesByPath?: Record<string, Uint8Array>;
+    /** Called before each chapter of a book render, with a 1-based index. */
+    onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
+    /** The active file's authorship, for comment and change authors (see `RenderPandocRequestOptions`). */
+    attributionJson?: string;
+  } = {},
+): Promise<RenderPandocRequestResponse> {
+  const wasm = getWasm();
+  return wasm.render_pandoc_request(
+    path,
+    format,
+    options.sourceDateEpoch,
+    options.captureGzJson,
+    options.typstAvailableFonts,
+    options.signal,
+    {
+      scope: options.scope,
+      capturesByPath: options.capturesByPath,
+      onProgress: options.onProgress,
+      attributionJson: options.attributionJson,
+    },
+  );
+}
+
+/** Identifies the share tree; re-read it only when this changes. */
+export function getPandocShareTreeVersion(): string {
+  return getWasm().get_pandoc_share_tree_version();
+}
+
+/** The share tree, paths relative to `request.share_tree_path`. */
+export function getPandocShareTree(): {
+  share_tree_version: string;
+  files: PandocRequestFile[];
+} {
+  return getWasm().get_pandoc_share_tree();
+}
+
+/** Identifies the typst assets; re-read them only when this changes. */
+export function getTypstAssetsVersion(): string {
+  return getWasm().get_typst_assets_version();
+}
+
+/**
+ * The vendored typst packages and Font Awesome fonts a `compile_typst`
+ * request's compile reads (paths relative to a package-cache root and a font
+ * directory), separate from the share tree.
+ */
+export function getTypstAssets(): {
+  typst_assets_version: string;
+  files: PandocRequestFile[];
+} {
+  return getWasm().get_typst_assets();
+}
+
+/** First line of the `.typ` to compile: pins the document date to `sourceDateEpoch`. */
+export function typstDatePrelude(sourceDateEpoch: number): string {
+  return getWasm().typst_date_prelude(sourceDateEpoch);
+}
+
+/** Classify a finished pandoc run into diagnostics (`Q-11-1` warnings, `Q-20-3` error). */
+export function classifyPandocCompletion(
+  stageName: string,
+  success: boolean,
+  status: string,
+  stderr: string,
+  jsonPath: string,
+): { success: boolean; diagnostics: AstDiagnostic[] } {
+  return JSON.parse(
+    getWasm().classify_pandoc_completion(stageName, success, status, stderr, jsonPath),
+  );
+}
+
+/** The formats pandoc.wasm can produce, in menu order. */
+export function getPandocFormats(): PandocFormatInfo[] {
+  return JSON.parse(getWasm().get_pandoc_formats()).formats;
+}
+
+// ============================================================================
+// Document import (epic 2026-10-03-document-import-epic.md, interface 2)
+//
+// Synchronous and unmapped: the responses are the raw snake_case JSON the Rust exports
+// return, parsed. P4's import service maps them to its own types. Callers must have awaited
+// `initWasm()` first. No image bytes cross: the Rust wasm never sees them (I9).
+// ============================================================================
+
+/** The importable formats (the picker's `accept` list, drop interception) and the source size cap. */
+export function getImportFormatTable(): ImportFormatTable {
+  return JSON.parse(getWasm().get_import_formats());
+}
+
+/**
+ * Validate a source file (extension: Q-24-1, then size: Q-24-2) and, given its SHA-256 (lowercase
+ * hex), build the pandoc request that reads it. With an empty `sha256Hex` this is validation
+ * only: no `request`. `size` is the length of the bytes actually read.
+ */
+export function prepareImport(fileName: string, size: number, sha256Hex: string): PrepareImportResponse {
+  return JSON.parse(getWasm().prepare_import(fileName, size, sha256Hex));
+}
+
+/**
+ * Turn pandoc's JSON into qmd. `targetQmdPath` is project-relative; `mediaManifestJson` is the
+ * JSON text of the media manifest; `format` is `prepareImport`'s `format` (only `pptx` changes
+ * the output).
+ */
+export function finishImport(
+  jsonText: string,
+  stderr: string,
+  targetQmdPath: string,
+  mediaManifestJson: string,
+  format?: string,
+): FinishImportResponse {
+  return JSON.parse(getWasm().finish_import(jsonText, stderr, targetQmdPath, mediaManifestJson, format));
+}
+
+/** Turn a failed import run (`kind`: the host's failure kind) into Q-24 diagnostics. */
+export function classifyImportFailure(
+  kind: string,
+  status: number | null,
+  stderr: string,
+): ClassifyImportFailureResponse {
+  return JSON.parse(getWasm().classify_import_failure(kind, status, stderr));
+}
+
+/** The document's own format(s): `format:` of the document, else `_quarto.yml`, else `html`. */
+export function resolvePandocFormats(path: string): ResolvePandocFormatsResponse {
+  return JSON.parse(getWasm().resolve_pandoc_formats(path));
 }
 
 /**

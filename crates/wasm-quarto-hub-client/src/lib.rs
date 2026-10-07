@@ -1467,30 +1467,664 @@ pub async fn render_page_for_preview(
 fn parse_capture_from(
     capture_gz_json: Option<Vec<u8>>,
 ) -> Result<Vec<quarto_trace::EngineCapture>, String> {
-    use std::io::Read;
+    quarto_core::pandoc_request::captures::parse_capture_gz(capture_gz_json.as_deref())
+}
 
-    let Some(bytes) = capture_gz_json else {
-        return Ok(Vec::new());
-    };
-    if bytes.is_empty() {
-        return Ok(Vec::new());
+// ============================================================================
+// PANDOC REQUEST EXPORTS (pandoc-wasm epic, request phase R2)
+// ============================================================================
+//
+// The Rust side builds everything one pandoc.wasm run needs (argv, env,
+// files, resource bytes) and hands it to the host as data; see
+// `claude-notes/designs/pandoc-wasm-architecture.md`. Unlike every other
+// export, `render_pandoc_request` and `get_pandoc_share_tree` return JS
+// objects, not JSON strings, because they carry bytes: `serde-wasm-bindgen`
+// is not a dependency (it would turn `Vec<u8>` into number arrays), so the
+// scalar parts go through `JSON.parse` and the byte fields are built with
+// `js_sys::Uint8Array` (a copy, never a view of wasm memory, so the host
+// may transfer it).
+
+/// `[{ path, bytes: Uint8Array }]`.
+fn request_files_to_js(files: &[quarto_core::pandoc_request::RequestFile]) -> js_sys::Array {
+    let out = js_sys::Array::new();
+    for file in files {
+        let item = js_sys::Object::new();
+        let _ = js_sys::Reflect::set(&item, &"path".into(), &JsValue::from_str(&file.path));
+        let _ = js_sys::Reflect::set(
+            &item,
+            &"bytes".into(),
+            &js_sys::Uint8Array::from(file.bytes.as_slice()).into(),
+        );
+        out.push(&item);
     }
+    out
+}
 
-    let mut decoder = flate2::read::GzDecoder::new(&bytes[..]);
-    let mut json = Vec::new();
-    decoder
-        .read_to_end(&mut json)
-        .map_err(|e| format!("ungzip failed: {}", e))?;
+/// The request as a JS object: every field JSON-compatible except `files` and
+/// `resource_refs`, whose bytes are `Uint8Array`s.
+fn pandoc_request_to_js(
+    request: &quarto_core::pandoc_request::PandocRequest,
+) -> Result<JsValue, JsValue> {
+    let mut value = serde_json::to_value(request).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    if let Some(object) = value.as_object_mut() {
+        object.remove("files");
+        object.remove("resource_refs");
+    }
+    let js = js_sys::JSON::parse(&value.to_string())?;
+    js_sys::Reflect::set(&js, &"files".into(), &request_files_to_js(&request.files))?;
+    js_sys::Reflect::set(
+        &js,
+        &"resource_refs".into(),
+        &request_files_to_js(&request.resource_refs),
+    )?;
+    Ok(js)
+}
 
-    match serde_json::from_slice::<Vec<quarto_trace::EngineCapture>>(&json) {
-        Ok(captures) => Ok(captures),
-        Err(array_err) => {
-            // Lenient fallback: a stale single-object capture doc.
-            match serde_json::from_slice::<quarto_trace::EngineCapture>(&json) {
-                Ok(single) => Ok(vec![single]),
-                Err(_) => Err(format!("JSON parse failed: {}", array_err)),
+/// The `render_pandoc_request` response envelope as a JS object.
+fn pandoc_request_envelope(
+    success: bool,
+    error: Option<String>,
+    diagnostics: Vec<JsonDiagnostic>,
+    request: Option<&quarto_core::pandoc_request::PandocRequest>,
+    unexecuted_cells: usize,
+    book: Option<&quarto_core::pandoc_request::render::BookOutcomeInfo>,
+) -> JsValue {
+    #[derive(Serialize)]
+    struct BookStats {
+        /// `book` (the whole book) or `chapter` (the active page alone).
+        scope: &'static str,
+        /// File-bearing items in the book's render list.
+        chapters: usize,
+    }
+    #[derive(Serialize)]
+    struct Stats {
+        /// Code cells with no cached result (shown as source).
+        unexecuted_cells: usize,
+        /// `null` outside a book project and on early failures.
+        book: Option<BookStats>,
+    }
+    #[derive(Serialize)]
+    struct Envelope {
+        success: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+        diagnostics: Vec<JsonDiagnostic>,
+        stats: Stats,
+    }
+    let json = serde_json::to_string(&Envelope {
+        success,
+        error,
+        diagnostics,
+        stats: Stats {
+            unexecuted_cells,
+            book: book.map(|b| BookStats {
+                scope: match b.scope {
+                    quarto_core::pandoc_request::render::ResolvedBookScope::Book => "book",
+                    quarto_core::pandoc_request::render::ResolvedBookScope::Chapter => "chapter",
+                },
+                chapters: b.chapters,
+            }),
+        },
+    })
+    .unwrap();
+    let js = js_sys::JSON::parse(&json).unwrap();
+    if let Some(request) = request {
+        match pandoc_request_to_js(request) {
+            Ok(request_js) => {
+                let _ = js_sys::Reflect::set(&js, &"request".into(), &request_js);
+            }
+            Err(e) => {
+                let _ = js_sys::Reflect::set(&js, &"success".into(), &JsValue::FALSE);
+                let _ = js_sys::Reflect::set(
+                    &js,
+                    &"error".into(),
+                    &JsValue::from_str(&format!(
+                        "failed to build the pandoc request: {}",
+                        e.as_string().unwrap_or_default()
+                    )),
+                );
             }
         }
+    }
+    js
+}
+
+/// Build the pandoc request for the document at `path`, rendered to `format`
+/// (a key of [`get_pandoc_formats`]). Async because the pipeline is; once
+/// remote images land (R6) it also fetches. Returns the envelope
+/// `{ success, error?, diagnostics, stats: { unexecuted_cells, book }, request? }`;
+/// a document with errors and an active path absent from the VFS return no
+/// `request`. A document inside a `_quarto.yml` project renders as the
+/// project's active page (R7): the request carries that page alone, with the
+/// project's metadata and `format:` layers applied. For a book chapter
+/// requested as typst, pdf or epub with `options.scope` `'auto'` (the
+/// default) the request is the whole book (R9); docx and pptx, a page that is
+/// not a chapter and `scope: 'chapter'` stay chapter-alone. `stats.book` is
+/// `{ scope: 'book' | 'chapter', chapters }` in a book project, else `null`.
+///
+/// `options` (optional, trailing) is `{ scope?: 'auto' | 'chapter',
+/// attributionJson?: string (the active file's authorship, stamped onto docx
+/// comments and tracked changes; ignored by a whole-book request),
+/// capturesByPath?: Record<string, Uint8Array>, onProgress?: (index, total,
+/// file) => void | Promise<void> }`. `capturesByPath` maps a chapter's
+/// `/`-normalized path relative to the VFS project root to its capture blob
+/// (`capture_gz_json` serves the active page when the request is
+/// chapter-alone). `onProgress` is awaited before each chapter of a book
+/// render; the loop also yields to the event loop there, so an
+/// `abort_signal` abort lands between chapters. If `onProgress` rejects the
+/// call fails with that error.
+///
+/// `source_date_epoch` is seconds, as an `f64` because an `i64` would cross
+/// as a BigInt and a JS number would throw. `capture_gz_json` is read the way
+/// `render_page_for_preview` reads it and spliced in before engine execution;
+/// `stats.unexecuted_cells` counts the code cells it left without results.
+/// `abort_signal` ties the downloads of remote images to the click (D8.5).
+#[wasm_bindgen]
+pub async fn render_pandoc_request(
+    path: &str,
+    format: &str,
+    source_date_epoch: Option<f64>,
+    capture_gz_json: Option<Vec<u8>>,
+    typst_available_fonts: Option<Vec<String>>,
+    abort_signal: Option<JsValue>,
+    options: Option<JsValue>,
+) -> JsValue {
+    // Click-time snapshot: every read in this request, including the ones
+    // after the first remote-image `await`, goes through this copy, so the
+    // Automerge sync mutating the live VFS cannot change what the request
+    // carries. It is dropped when the call ends.
+    // `abort_signal` (an `AbortSignal`, optional) stops its remote-image
+    // downloads when the click is cancelled.
+    let snapshot = Arc::new(
+        get_runtime()
+            .snapshot()
+            .with_abort_signal(abort_signal.clone().unwrap_or(JsValue::UNDEFINED)),
+    );
+    let runtime = &*snapshot;
+    let path_buf = std::path::PathBuf::from(path);
+    let fail =
+        |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0, None);
+    let options = match parse_request_options(options) {
+        Ok(o) => o,
+        Err(e) => return fail(e),
+    };
+
+    let content = match runtime.file_read(&path_buf) {
+        Ok(bytes) => bytes,
+        Err(e) => return fail(format!("Failed to read file: {}", e)),
+    };
+    let captures = match parse_capture_from(capture_gz_json) {
+        Ok(caps) => caps,
+        Err(e) => return fail(format!("Failed to parse capture: {}", e)),
+    };
+    let project = match ProjectContext::discover(&path_buf, runtime) {
+        Ok(p) => p,
+        Err(e) => return fail(format!("Failed to discover project context: {}", e)),
+    };
+
+    let hooks = JsBookHooks {
+        on_progress: options.on_progress,
+        abort_signal: abort_signal.unwrap_or(JsValue::UNDEFINED),
+        rejection: RefCell::new(None),
+    };
+    let mut outcome = quarto_core::pandoc_request::render::render_pandoc_request(
+        quarto_core::pandoc_request::render::PandocRequestInput {
+            path: &path_buf,
+            content: &content,
+            format,
+            project: &project,
+            source_date_epoch: source_date_epoch
+                .filter(|s| s.is_finite())
+                .map(|s| s as i64),
+            captures,
+            typst_available_fonts,
+            scope: options.scope,
+            captures_by_path: options.captures_by_path,
+            capture_error: None,
+            hooks: Some(&hooks),
+            // The hub prelude's resolver, as every other render installs it.
+            resolver: Some(ResourceResolverContext::vfs_root(
+                "/.quarto/project-artifacts",
+            )),
+            attribution: options.attribution_json.map(|json| {
+                Arc::new(quarto_core::attribution::PreBuiltAttributionProvider::new(
+                    json,
+                )) as Arc<dyn quarto_core::attribution::AttributionSourceProvider>
+            }),
+        },
+        Arc::clone(&snapshot) as Arc<dyn SystemRuntime>,
+    )
+    .await;
+
+    // Project render scripts cannot run in the browser. Unlike the preview's
+    // once-per-session warning, a download says so every time: its
+    // diagnostics are the click's whole report.
+    if !project.is_single_file {
+        outcome.diagnostics.extend(
+            quarto_core::project::render_scripts::render_scripts_unsupported_diagnostic(
+                RenderHost::HubClient,
+                &project.config,
+            ),
+        );
+    }
+
+    // Each chapter's diagnostics resolve against that chapter's own source
+    // context; the book-level ones (merged passes) stay unlocatable.
+    let mut diagnostics: Vec<JsonDiagnostic> = Vec::new();
+    if let Some(book) = &outcome.book {
+        for chapter in &book.chapter_diagnostics {
+            diagnostics.extend(diagnostics_to_json(
+                &chapter.diagnostics,
+                &chapter.source_context,
+            ));
+        }
+    }
+    diagnostics.extend(diagnostics_to_json(
+        &outcome.diagnostics,
+        &outcome.source_context,
+    ));
+    // A rejecting `onProgress` cancels the loop; its error is the result.
+    if let Some(rejection) = hooks.rejection.borrow_mut().take() {
+        return fail(format!("onProgress failed: {rejection}"));
+    }
+    pandoc_request_envelope(
+        outcome.request.is_some(),
+        outcome.error,
+        diagnostics,
+        outcome.request.as_ref(),
+        outcome.unexecuted_cells,
+        outcome.book.as_ref(),
+    )
+}
+
+/// The unpacked `options` object of [`render_pandoc_request`].
+struct RequestOptions {
+    scope: quarto_core::pandoc_request::render::BookScope,
+    captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
+    on_progress: Option<js_sys::Function>,
+    /// The transport JSON of `parse_qmd_to_ast_with_attribution`, for the
+    /// active file.
+    attribution_json: Option<String>,
+}
+
+/// Unpack by hand: `serde-wasm-bindgen` is not a dependency, and a
+/// `Uint8Array` is read with `Uint8Array::new` (an `instanceof` check can
+/// fail across realms).
+fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, String> {
+    use quarto_core::pandoc_request::render::BookScope;
+    let mut out = RequestOptions {
+        scope: BookScope::Auto,
+        captures_by_path: Default::default(),
+        on_progress: None,
+        attribution_json: None,
+    };
+    let Some(options) = options.filter(|o| !o.is_undefined() && !o.is_null()) else {
+        return Ok(out);
+    };
+    if !options.is_object() {
+        return Err("options must be an object".to_string());
+    }
+    let get = |key: &str| js_sys::Reflect::get(&options, &key.into()).unwrap_or(JsValue::UNDEFINED);
+    let scope = get("scope");
+    if !scope.is_undefined() && !scope.is_null() {
+        out.scope = match scope.as_string().as_deref() {
+            Some("auto") => BookScope::Auto,
+            Some("chapter") => BookScope::Chapter,
+            _ => return Err("options.scope must be 'auto' or 'chapter'".to_string()),
+        };
+    }
+    let captures = get("capturesByPath");
+    if !captures.is_undefined() && !captures.is_null() {
+        if !captures.is_object() {
+            return Err("options.capturesByPath must be an object".to_string());
+        }
+        for key in js_sys::Object::keys(&captures.clone().into()).iter() {
+            let Some(name) = key.as_string() else {
+                continue;
+            };
+            let value = js_sys::Reflect::get(&captures, &key).unwrap_or(JsValue::UNDEFINED);
+            if value.is_undefined() || value.is_null() {
+                continue;
+            }
+            out.captures_by_path
+                .insert(name, js_sys::Uint8Array::new(&value).to_vec());
+        }
+    }
+    let attribution_json = get("attributionJson");
+    if !attribution_json.is_undefined() && !attribution_json.is_null() {
+        out.attribution_json = Some(
+            attribution_json
+                .as_string()
+                .ok_or_else(|| "options.attributionJson must be a string".to_string())?,
+        );
+    }
+    let on_progress = get("onProgress");
+    if !on_progress.is_undefined() && !on_progress.is_null() {
+        out.on_progress = Some(
+            on_progress
+                .dyn_into::<js_sys::Function>()
+                .map_err(|_| "options.onProgress must be a function".to_string())?,
+        );
+    }
+    Ok(out)
+}
+
+/// The chapter loop's host hook: reports progress, yields to the event loop
+/// (wasm futures with no real `await` never would, so neither a status update
+/// nor an `AbortSignal.abort()` could be delivered mid-loop), and cancels on
+/// abort or when `onProgress` rejects.
+struct JsBookHooks {
+    on_progress: Option<js_sys::Function>,
+    abort_signal: JsValue,
+    /// The message of a rejected `onProgress`, taken by the export.
+    rejection: RefCell<Option<String>>,
+}
+
+impl JsBookHooks {
+    fn aborted(&self) -> bool {
+        !self.abort_signal.is_undefined()
+            && !self.abort_signal.is_null()
+            && js_sys::Reflect::get(&self.abort_signal, &"aborted".into())
+                .map(|v| v.is_truthy())
+                .unwrap_or(false)
+    }
+}
+
+/// A macrotask turn: resolves from a `MessageChannel` message, not
+/// `setTimeout` (no timer clamping) and not `js_sys::Function::new_no_args`
+/// (that is `eval`).
+async fn yield_to_event_loop() {
+    let Ok(channel) = web_sys::MessageChannel::new() else {
+        return;
+    };
+    let (port1, port2) = (channel.port1(), channel.port2());
+    let receiver = port1.clone();
+    let promise = js_sys::Promise::new(&mut |resolve, _reject| {
+        let callback = Closure::once_into_js(move || {
+            let _ = resolve.call0(&JsValue::UNDEFINED);
+        });
+        receiver.set_onmessage(Some(callback.unchecked_ref()));
+    });
+    if port2.post_message(&JsValue::NULL).is_ok() {
+        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+    }
+    // An open port keeps a Node event loop alive.
+    port1.close();
+    port2.close();
+}
+
+#[async_trait::async_trait(?Send)]
+impl quarto_core::project::book::BookRenderHooks for JsBookHooks {
+    async fn before_chapter(
+        &self,
+        index: usize,
+        total: usize,
+        file: &str,
+    ) -> Result<(), quarto_core::project::book::Cancelled> {
+        use quarto_core::project::book::Cancelled;
+        if self.aborted() {
+            return Err(Cancelled);
+        }
+        if let Some(on_progress) = &self.on_progress {
+            let result = on_progress.call3(
+                &JsValue::UNDEFINED,
+                &JsValue::from_f64(index as f64),
+                &JsValue::from_f64(total as f64),
+                &JsValue::from_str(file),
+            );
+            let settled = match result {
+                Ok(value) => wasm_bindgen_futures::JsFuture::from(js_sys::Promise::resolve(&value))
+                    .await
+                    .map(|_| ()),
+                Err(e) => Err(e),
+            };
+            if let Err(e) = settled {
+                let message = e
+                    .dyn_ref::<js_sys::Error>()
+                    .map(|err| String::from(err.message()))
+                    .or_else(|| e.as_string())
+                    .unwrap_or_else(|| "unknown error".to_string());
+                *self.rejection.borrow_mut() = Some(message);
+                return Err(Cancelled);
+            }
+        }
+        yield_to_event_loop().await;
+        if self.aborted() {
+            return Err(Cancelled);
+        }
+        Ok(())
+    }
+}
+
+/// SHA-256 identifying the share tree (`request.share_tree_version`). The
+/// host re-reads [`get_pandoc_share_tree`] only when this changes.
+#[wasm_bindgen]
+pub fn get_pandoc_share_tree_version() -> String {
+    quarto_core::pandoc_request::share_tree_version().to_string()
+}
+
+/// `{ share_tree_version, files: [{ path, bytes: Uint8Array }] }`, paths
+/// relative to `request.share_tree_path`.
+#[wasm_bindgen]
+pub fn get_pandoc_share_tree() -> JsValue {
+    let files: Vec<quarto_core::pandoc_request::RequestFile> =
+        quarto_core::pandoc_request::share_tree_entries()
+            .iter()
+            .map(|e| quarto_core::pandoc_request::RequestFile {
+                path: e.rel_path.clone(),
+                bytes: e.bytes.to_vec(),
+            })
+            .collect();
+    let out = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &out,
+        &"share_tree_version".into(),
+        &JsValue::from_str(quarto_core::pandoc_request::share_tree_version()),
+    );
+    let _ = js_sys::Reflect::set(&out, &"files".into(), &request_files_to_js(&files));
+    out.into()
+}
+
+/// SHA-256 identifying the typst assets (`get_typst_assets`). Separate from
+/// the pandoc share tree: only a PDF compile reads them.
+#[wasm_bindgen]
+pub fn get_typst_assets_version() -> String {
+    quarto_core::pandoc_request::typst_assets_version().to_string()
+}
+
+/// `{ typst_assets_version, files: [{ path, bytes: Uint8Array }] }`: the
+/// vendored typst packages and Font Awesome fonts, paths relative to a
+/// package-cache root (`packages/preview/<name>/<version>/...`) and a font
+/// directory (`fonts/...`).
+#[wasm_bindgen]
+pub fn get_typst_assets() -> JsValue {
+    let files: Vec<quarto_core::pandoc_request::RequestFile> =
+        quarto_core::pandoc_request::typst_asset_entries()
+            .iter()
+            .map(|e| quarto_core::pandoc_request::RequestFile {
+                path: e.rel_path.clone(),
+                bytes: e.bytes.to_vec(),
+            })
+            .collect();
+    let out = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &out,
+        &"typst_assets_version".into(),
+        &JsValue::from_str(quarto_core::pandoc_request::typst_assets_version()),
+    );
+    let _ = js_sys::Reflect::set(&out, &"files".into(), &request_files_to_js(&files));
+    out.into()
+}
+
+/// The first line of the `.typ` a `post: compile_typst` request compiles:
+/// pins the document date to `source_date_epoch` (seconds, UTC) so the PDF
+/// does not depend on the clock. Empty when the epoch is out of range.
+#[wasm_bindgen]
+pub fn typst_date_prelude(source_date_epoch: f64) -> String {
+    quarto_core::pandoc_request::typst_date_prelude(source_date_epoch as i64).unwrap_or_default()
+}
+
+/// Classify a finished pandoc run. Returns JSON
+/// `{ success, diagnostics }`: on a zero exit the `Q-11-1` warnings found on
+/// stderr; otherwise the `Q-20-3` error carrying `json_path` (the request's
+/// virtual input path, not claimed to be retained) and the stderr verbatim.
+/// `status` is a description such as `"exit status: 64"`.
+#[wasm_bindgen]
+pub fn classify_pandoc_completion(
+    stage_name: &str,
+    success: bool,
+    status: &str,
+    stderr: &str,
+    json_path: &str,
+) -> String {
+    let _ = stage_name;
+    let diagnostics: Vec<DiagnosticMessage> = if success {
+        quarto_core::pandoc_filters::diagnostics::classify_pandoc_stderr(stderr)
+    } else {
+        vec![
+            quarto_core::pandoc_filters::diagnostics::nonzero_exit_diagnostic(
+                status,
+                stderr,
+                Path::new(json_path),
+                false,
+            ),
+        ]
+    };
+    serde_json::to_string(&serde_json::json!({
+        "success": success,
+        "diagnostics": diagnostics_to_json(&diagnostics, &SourceContext::default()),
+    }))
+    .unwrap()
+}
+
+/// JSON `{ formats: [{ key, label, extension, mime, available, hidden }] }`:
+/// the formats pandoc.wasm can produce, in menu order (D8). `hidden` rows are
+/// accepted by `render_pandoc_request` but not offered (none today; `pdf` was, until H8).
+#[wasm_bindgen]
+pub fn get_pandoc_formats() -> String {
+    serde_json::to_string(&serde_json::json!({
+        "formats": quarto_core::pandoc_request::formats::PANDOC_FORMATS,
+    }))
+    .unwrap()
+}
+
+// ============================================================================
+// DOCUMENT IMPORT (epic `2026-10-03-document-import-epic.md`, interface 2)
+// ============================================================================
+//
+// Thin wrappers over `quarto_core::import`. Rust owns everything about an import except
+// running pandoc and handling image bytes (I9): none of these takes or returns image bytes.
+
+/// JSON `{ formats: [{ id, label, extensions, mime_types }], max_source_bytes }`: the formats
+/// the importer reads and the source size cap. The single source for the picker's `accept`
+/// filter, drop interception and the size check (I19); TS keeps no copy.
+#[wasm_bindgen]
+pub fn get_import_formats() -> String {
+    quarto_core::import::formats::format_table_json().to_string()
+}
+
+fn import_diagnostics_json(diags: &[DiagnosticMessage]) -> serde_json::Value {
+    serde_json::to_value(diagnostics_to_json(diags, &SourceContext::default()))
+        .unwrap_or_else(|_| serde_json::json!([]))
+}
+
+/// Validate a source file and build its pandoc request. JSON
+/// `{ success, diagnostics, format?, request?, share_tree?, source_path? }`. The extension is
+/// checked first (Q-24-1, case-insensitive), then `size` (Q-24-2); with an empty `sha256_hex`
+/// that is all (validation only: no `request`). Otherwise `size` must be the length of the
+/// bytes actually read, and the response carries the request, the empty share tree it uses
+/// and the source's virtual path. `size` is an `f64` because a `u64` would cross as a BigInt.
+#[wasm_bindgen]
+pub fn prepare_import(file_name: &str, size: f64, sha256_hex: &str) -> String {
+    if !size.is_finite() || size < 0.0 {
+        let diags = vec![quarto_core::import::report::internal_error(
+            "the source's size is not a non-negative number",
+        )];
+        return serde_json::json!({
+            "success": false,
+            "diagnostics": import_diagnostics_json(&diags),
+        })
+        .to_string();
+    }
+    let outcome = quarto_core::import::request::prepare_import(file_name, size as u64, sha256_hex);
+    let mut out = serde_json::json!({
+        "success": outcome.success,
+        "diagnostics": import_diagnostics_json(&outcome.diagnostics),
+    });
+    if let Some(format) = outcome.format {
+        out["format"] = format.into();
+    }
+    if let Some(request) = &outcome.request {
+        out["request"] = serde_json::to_value(request).unwrap_or(serde_json::Value::Null);
+    }
+    if let Some(tree) = &outcome.share_tree {
+        out["share_tree"] = serde_json::to_value(tree).unwrap_or(serde_json::Value::Null);
+    }
+    if let Some(path) = outcome.source_path {
+        out["source_path"] = path.into();
+    }
+    out.to_string()
+}
+
+/// Turn pandoc's JSON into qmd. JSON `{ success, diagnostics, qmd?, media_plan? }` with
+/// `media_plan: [{ pandoc_path, project_path }]`. `target_qmd_path` and every
+/// `project_path` are project-relative, `/`-separated, with no leading slash.
+/// `media_manifest_json` is the interface-2 manifest. `format` is the pandoc reader name
+/// `prepare_import` returned; it is optional and only `pptx` changes the output (I6).
+/// A fatal error (Q-24-12) is `success: false` with no `qmd`.
+#[wasm_bindgen]
+pub fn finish_import(
+    json_text: &str,
+    stderr: &str,
+    target_qmd_path: &str,
+    media_manifest_json: &str,
+    format: Option<String>,
+) -> String {
+    let outcome = quarto_core::import::finish_import(
+        json_text,
+        stderr,
+        target_qmd_path,
+        media_manifest_json,
+        format.as_deref(),
+    );
+    let mut out = serde_json::json!({
+        "success": outcome.success,
+        "diagnostics": import_diagnostics_json(&outcome.diagnostics),
+    });
+    if let Some(qmd) = outcome.qmd {
+        out["qmd"] = qmd.into();
+    }
+    if let Some(plan) = &outcome.media_plan {
+        out["media_plan"] = serde_json::to_value(plan).unwrap_or(serde_json::Value::Null);
+    }
+    out.to_string()
+}
+
+/// Turn a failed import run into Q-24 diagnostics. JSON `{ diagnostics }`. `kind` is the
+/// host's `RunFailureKind`; `status` is `null` when pandoc didn't exit (crash, timeout).
+#[wasm_bindgen]
+pub fn classify_import_failure(kind: &str, status: Option<i32>, stderr: &str) -> String {
+    let diagnostics = quarto_core::import::classify_import_failure(kind, status, stderr);
+    serde_json::json!({ "diagnostics": import_diagnostics_json(&diagnostics) }).to_string()
+}
+
+/// The project-aware format resolver (D8.7): the document's own `format:`
+/// keys (the first is its format), else the surrounding `_quarto.yml`'s, else
+/// `html`. JSON `{ success, error?, source, formats: [{ key, class }] }` with
+/// `source` one of `document | project | default` and `class` one of
+/// `preview | download | neither`.
+#[wasm_bindgen]
+pub fn resolve_pandoc_formats(path: &str) -> String {
+    match quarto_core::pandoc_request::formats::resolve_document_formats(
+        Path::new(path),
+        get_runtime(),
+    ) {
+        Ok(resolved) => {
+            let mut value = serde_json::to_value(&resolved).unwrap();
+            value["success"] = serde_json::Value::Bool(true);
+            value.to_string()
+        }
+        Err(error) => serde_json::json!({ "success": false, "error": error }).to_string(),
     }
 }
 

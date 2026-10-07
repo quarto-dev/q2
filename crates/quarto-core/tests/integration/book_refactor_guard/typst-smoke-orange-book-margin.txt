@@ -1,0 +1,2073 @@
+result: Ok
+outputs: 1
+output: _book/Test-Typst-Book-with-Margins.pdf
+input: Test-Typst-Book-with-Margins.qmd
+resources_dir: _book/Test-Typst-Book-with-Margins_files
+execution_skipped: true
+html_len_is_zero: true
+diagnostics: 8
+  - [Warning] Some("Q-5-37") `_brand.yml` is not referenced by any `brand:` key
+  - [Warning] Some("Q-5-37") `_brand.yml` is not referenced by any `brand:` key
+  - [Warning] Some("Q-16-3") Unknown shortcode
+  - [Warning] Some("Q-5-37") `_brand.yml` is not referenced by any `brand:` key
+  - [Warning] Some("Q-5-37") `_brand.yml` is not referenced by any `brand:` key
+  - [Warning] Some("Q-5-37") `_brand.yml` is not referenced by any `brand:` key
+  - [Warning] Some("Q-5-37") `_brand.yml` is not referenced by any `brand:` key
+  - [Warning] None unresolved crossref `@fig-visualization`: no target with this identifier was found.
+resource_report: DocumentResourceReport { entries: [] }
+pass1_failures: 0
+pass2_failures: 0
+project_diagnostics: 0
+stopped_early: false
+output_dir_files:
+  Test-Typst-Book-with-Margins.pdf
+  Test-Typst-Book-with-Margins.typ
+  logo.svg
+render_manifest:
+{
+  "version": 1,
+  "rendered_files": [
+    "Test-Typst-Book-with-Margins.pdf"
+  ],
+  "resources": []
+}
+
+===== Test-Typst-Book-with-Margins.typ =====
+// Chapter-based numbering for books with appendix support
+#let equation-numbering = it => {
+  let pattern = if state("appendix-state", none).get() != none { "(A.1)" } else { "(1.1)" }
+  numbering(pattern, counter(heading).get().first(), it)
+}
+#let callout-numbering = it => {
+  let pattern = if state("appendix-state", none).get() != none { "A.1" } else { "1.1" }
+  numbering(pattern, counter(heading).get().first(), it)
+}
+#let subfloat-numbering(n-super, subfloat-idx) = {
+  let chapter = counter(heading).get().first()
+  let pattern = if state("appendix-state", none).get() != none { "A.1a" } else { "1.1a" }
+  numbering(pattern, chapter, n-super, subfloat-idx)
+}
+// Theorem configuration for theorion
+// Chapter-based numbering (H1 = chapters)
+#let theorem-inherited-levels = 1
+
+// Appendix-aware theorem numbering
+#let theorem-numbering(loc) = {
+  if state("appendix-state", none).at(loc) != none { "A.1" } else { "1.1" }
+}
+
+// Theorem render function
+// Note: brand-color is not available at this point in template processing
+#let theorem-render(prefix: none, title: "", full-title: auto, body) = {
+  block(
+    width: 100%,
+    inset: (left: 1em),
+    stroke: (left: 2pt + black),
+  )[
+    #if full-title != "" and full-title != auto and full-title != none {
+      strong[#full-title]
+      linebreak()
+    }
+    #body
+  ]
+}
+// Some definitions presupposed by pandoc's typst output.
+#let content-to-string(content) = {
+  if content.has("text") {
+    content.text
+  } else if content.has("children") {
+    content.children.map(content-to-string).join("")
+  } else if content.has("body") {
+    content-to-string(content.body)
+  } else if content == [ ] {
+    " "
+  }
+}
+
+#let horizontalrule = line(start: (25%,0%), end: (75%,0%))
+
+#let endnote(num, contents) = [
+  #stack(dir: ltr, spacing: 3pt, super[#num], contents)
+]
+
+#show terms.item: it => block(breakable: false)[
+  #text(weight: "bold")[#it.term]
+  #block(inset: (left: 1.5em, top: -0.4em))[#it.description]
+]
+
+// Some quarto-specific definitions.
+
+#show raw.where(block: true): set block(
+    fill: luma(230),
+    width: 100%,
+    inset: 8pt,
+    radius: 2pt
+  )
+
+#let block_with_new_content(old_block, new_content) = {
+  let fields = old_block.fields()
+  let _ = fields.remove("body")
+  if fields.at("below", default: none) != none {
+    // TODO: this is a hack because below is a "synthesized element"
+    // according to the experts in the typst discord...
+    fields.below = fields.below.abs
+  }
+  block.with(..fields)(new_content)
+}
+
+#let empty(v) = {
+  if type(v) == str {
+    // two dollar signs here because we're technically inside
+    // a Pandoc template :grimace:
+    v.matches(regex("^//s*$")).at(0, default: none) != none
+  } else if type(v) == content {
+    if v.at("text", default: none) != none {
+      return empty(v.text)
+    }
+    for child in v.at("children", default: ()) {
+      if not empty(child) {
+        return false
+      }
+    }
+    return true
+  }
+
+}
+
+// Subfloats
+// This is a technique that we adapted from https://github.com/tingerrr/subpar/
+#let quartosubfloatcounter = counter("quartosubfloatcounter")
+
+#let quarto_super(
+  kind: str,
+  caption: none,
+  label: none,
+  supplement: str,
+  position: none,
+  subcapnumbering: "(a)",
+  body,
+) = {
+  context {
+    let figcounter = counter(figure.where(kind: kind))
+    let n-super = figcounter.get().first() + 1
+    set figure.caption(position: position)
+    [#figure(
+      kind: kind,
+      supplement: supplement,
+      caption: caption,
+      {
+        show figure.where(kind: kind): set figure(numbering: _ => {
+          let subfloat-idx = quartosubfloatcounter.get().first() + 1
+          subfloat-numbering(n-super, subfloat-idx)
+        })
+        show figure.where(kind: kind): set figure.caption(position: position)
+
+        show figure: it => {
+          let num = numbering(subcapnumbering, n-super, quartosubfloatcounter.get().first() + 1)
+          show figure.caption: it => block({
+            num.slice(2) // I don't understand why the numbering contains output that it really shouldn't, but this fixes it shrug?
+            [ ]
+            it.body
+          })
+
+          quartosubfloatcounter.step()
+          it
+          counter(figure.where(kind: it.kind)).update(n => n - 1)
+        }
+
+        quartosubfloatcounter.update(0)
+        body
+      }
+    )#label]
+  }
+}
+
+// callout rendering
+// this is a figure show rule because callouts are crossreferenceable
+#show figure: it => {
+  if type(it.kind) != str {
+    return it
+  }
+  let kind_match = it.kind.matches(regex("^quarto-callout-(.*)")).at(0, default: none)
+  if kind_match == none {
+    return it
+  }
+  let kind = kind_match.captures.at(0, default: "other")
+  kind = upper(kind.first()) + kind.slice(1)
+  // now we pull apart the callout and reassemble it with the crossref name and counter
+
+  // when we cleanup pandoc's emitted code to avoid spaces this will have to change
+  let old_callout = it.body.children.at(1).body.children.at(1)
+  let old_title_block = old_callout.body.children.at(0)
+  let children = old_title_block.body.body.children
+  let old_title = if children.len() == 1 {
+    children.at(0)  // no icon: title at index 0
+  } else {
+    children.at(1)  // with icon: title at index 1
+  }
+
+  // TODO use custom separator if available
+  // Use the figure's counter display which handles chapter-based numbering
+  // (when numbering is a function that includes the heading counter)
+  let callout_num = it.counter.display(it.numbering)
+  let new_title = if empty(old_title) {
+    [#kind #callout_num]
+  } else {
+    [#kind #callout_num: #old_title]
+  }
+
+  let new_title_block = block_with_new_content(
+    old_title_block,
+    block_with_new_content(
+      old_title_block.body,
+      if children.len() == 1 {
+        new_title  // no icon: just the title
+      } else {
+        children.at(0) + new_title  // with icon: preserve icon block + new title
+      }))
+
+  align(left, block_with_new_content(old_callout,
+    block(below: 0pt, new_title_block) +
+    old_callout.body.children.at(1)))
+}
+
+// 2023-10-09: #fa-icon("fa-info") is not working, so we'll eval "#fa-info()" instead
+#let callout(body: [], title: "Callout", background_color: rgb("#dddddd"), icon: none, icon_color: black, body_background_color: white) = {
+  block(
+    breakable: false, 
+    fill: background_color, 
+    stroke: (paint: icon_color, thickness: 0.5pt, cap: "round"), 
+    width: 100%, 
+    radius: 2pt,
+    block(
+      inset: 1pt,
+      width: 100%, 
+      below: 0pt, 
+      block(
+        fill: background_color,
+        width: 100%,
+        inset: 8pt)[#if icon != none [#text(icon_color, weight: 900)[#icon] ]#title]) +
+      if(body != []){
+        block(
+          inset: 1pt, 
+          width: 100%, 
+          block(fill: body_background_color, width: 100%, inset: 8pt, body))
+      }
+    )
+}
+
+// Margin layout support using marginalia package
+#import "@preview/marginalia:0.3.1" as marginalia: note, notefigure, wideblock
+
+// Render footnote as margin note using standard footnote counter
+// Used via show rule: #show footnote: it => column-sidenote(it.body)
+// The footnote element already steps the counter, so we just display it
+#let column-sidenote(body) = {
+  context {
+    let num = counter(footnote).display("1")
+    // Superscript mark in text
+    super(num)
+    // Content in margin with matching number
+    note(
+      alignment: "baseline",
+      shift: auto,
+      counter: none,  // We display our own number from footnote counter
+    )[
+      #super(num) #body
+    ]
+  }
+}
+
+// Note: Margin citations are now emitted directly from Lua as #note() calls
+// with #cite(form: "full") + locator text, preserving citation locators.
+
+// Utility: compute padding for each side based on side parameter
+#let side-pad(side, left-amount, right-amount) = {
+  let l = if side == "both" or side == "left" or side == "inner" { left-amount } else { 0pt }
+  let r = if side == "both" or side == "right" or side == "outer" { right-amount } else { 0pt }
+  (left: l, right: r)
+}
+
+// body-outset: extends ~15% into margin area
+#let column-body-outset(side: "both", body) = context {
+  let r = marginalia.get-right()
+  let out = 0.15 * (r.sep + r.width)
+  pad(..side-pad(side, -out, -out), body)
+}
+
+// page-inset: wideblock minus small inset from page boundary
+#let column-page-inset(side: "both", body) = context {
+  let l = marginalia.get-left()
+  let r = marginalia.get-right()
+  // Inset is a small fraction of the extension area (wideblock stops at far)
+  let left-inset = 0.15 * l.sep
+  let right-inset = 0.15 * (r.sep + r.width)
+  wideblock(side: side)[#pad(..side-pad(side, left-inset, right-inset), body)]
+}
+
+// screen-inset: full width minus `far` distance from edges
+#let column-screen-inset(side: "both", body) = context {
+  let l = marginalia.get-left()
+  let r = marginalia.get-right()
+  wideblock(side: side)[#pad(..side-pad(side, l.far, r.far), body)]
+}
+
+// screen-inset-shaded: screen-inset with gray background
+#let column-screen-inset-shaded(body) = context {
+  let l = marginalia.get-left()
+  wideblock(side: "both")[
+    #block(fill: luma(245), width: 100%, inset: (x: l.far, y: 1em), body)
+  ]
+}
+
+// syntax highlighting functions from skylighting:
+/* Function definitions for syntax highlighting generated by skylighting: */
+#let EndLine() = raw("/n")
+#let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
+   let blocks = []
+   let lnum = start - 1
+   let bgcolor = rgb("#f1f3f5")
+   for ln in sourcelines {
+     if number {
+       lnum = lnum + 1
+       blocks = blocks + box(width: if start + sourcelines.len() > 999 { 30pt } else { 24pt }, text(fill: rgb("#aaaaaa"), [ #lnum ]))
+     }
+     blocks = blocks + ln + EndLine()
+   }
+   block(fill: bgcolor, width: 100%, inset: 8pt, radius: 2pt, blocks)
+}
+#let AlertTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let AnnotationTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let AttributeTok(s) = text(fill: rgb("#657422"),raw(s))
+#let BaseNTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let BuiltInTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let CharTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let CommentTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let CommentVarTok(s) = text(style: "italic",fill: rgb("#5e5e5e"),raw(s))
+#let ConstantTok(s) = text(fill: rgb("#8f5902"),raw(s))
+#let ControlFlowTok(s) = text(weight: "bold",fill: rgb("#003b4f"),raw(s))
+#let DataTypeTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let DecValTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let DocumentationTok(s) = text(style: "italic",fill: rgb("#5e5e5e"),raw(s))
+#let ErrorTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let ExtensionTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let FloatTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let FunctionTok(s) = text(fill: rgb("#4758ab"),raw(s))
+#let ImportTok(s) = text(fill: rgb("#00769e"),raw(s))
+#let InformationTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let KeywordTok(s) = text(weight: "bold",fill: rgb("#003b4f"),raw(s))
+#let NormalTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let OperatorTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let OtherTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let PreprocessorTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let RegionMarkerTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let SpecialCharTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let SpecialStringTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let StringTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let VariableTok(s) = text(fill: rgb("#111111"),raw(s))
+#let VerbatimStringTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let WarningTok(s) = text(style: "italic",fill: rgb("#5e5e5e"),raw(s))
+
+
+
+#let article(
+  title: none,
+  subtitle: none,
+  authors: none,
+  keywords: (),
+  date: none,
+  abstract-title: none,
+  abstract: none,
+  thanks: none,
+  cols: 1,
+  lang: "en",
+  region: "US",
+  font: none,
+  fontsize: 11pt,
+  title-size: 1.5em,
+  subtitle-size: 1.25em,
+  heading-family: none,
+  heading-weight: "bold",
+  heading-style: "normal",
+  heading-color: black,
+  heading-line-height: 0.65em,
+  mathfont: none,
+  codefont: none,
+  linestretch: 1,
+  sectionnumbering: none,
+  linkcolor: none,
+  citecolor: none,
+  filecolor: none,
+  toc: false,
+  toc_title: none,
+  toc_depth: none,
+  toc_indent: 1.5em,
+  doc,
+) = {
+  // Set document metadata for PDF accessibility
+  set document(title: title, keywords: keywords)
+  set document(
+    author: authors.map(author => content-to-string(author.name)).join(", ", last: " & "),
+  ) if authors != none and authors != ()
+  set par(
+    justify: true,
+    leading: linestretch * 0.65em
+  )
+  set text(lang: lang,
+           region: region,
+           size: fontsize)
+  set text(font: font) if font != none
+  show math.equation: set text(font: mathfont) if mathfont != none
+  show raw: set text(font: codefont) if codefont != none
+
+  set heading(numbering: sectionnumbering)
+
+  show link: set text(fill: rgb(content-to-string(linkcolor))) if linkcolor != none
+  show ref: set text(fill: rgb(content-to-string(citecolor))) if citecolor != none
+  show link: this => {
+    if filecolor != none and type(this.dest) == label {
+      text(this, fill: rgb(content-to-string(filecolor)))
+    } else {
+      text(this)
+    }
+   }
+
+  let has-title-block = title != none or (authors != none and authors != ()) or date != none or abstract != none
+  if has-title-block {
+    place(
+      top,
+      float: true,
+      scope: "parent",
+      clearance: 4mm,
+      block(below: 1em, width: 100%)[
+
+        #if title != none {
+          align(center, block(inset: 2em)[
+            #set par(leading: heading-line-height) if heading-line-height != none
+            #set text(font: heading-family) if heading-family != none
+            #set text(weight: heading-weight)
+            #set text(style: heading-style) if heading-style != "normal"
+            #set text(fill: heading-color) if heading-color != black
+
+            #text(size: title-size)[#title #if thanks != none {
+              footnote(thanks, numbering: "*")
+              counter(footnote).update(n => n - 1)
+            }]
+            #(if subtitle != none {
+              parbreak()
+              text(size: subtitle-size)[#subtitle]
+            })
+          ])
+        }
+
+        #if authors != none and authors != () {
+          let count = authors.len()
+          let ncols = calc.min(count, 3)
+          grid(
+            columns: (1fr,) * ncols,
+            row-gutter: 1.5em,
+            ..authors.map(author =>
+                align(center)[
+                  #author.name /
+                  #author.affiliation /
+                  #author.email
+                ]
+            )
+          )
+        }
+
+        #if date != none {
+          align(center)[#block(inset: 1em)[
+            #date
+          ]]
+        }
+
+        #if abstract != none {
+          block(inset: 2em)[
+          #text(weight: "semibold")[#abstract-title] #h(1em) #abstract
+          ]
+        }
+      ]
+    )
+  }
+
+  if toc {
+    let title = if toc_title == none {
+      auto
+    } else {
+      toc_title
+    }
+    block(above: 0em, below: 2em)[
+    #outline(
+      title: title,
+      depth: toc_depth,
+      indent: toc_indent
+    );
+    ]
+  }
+
+  doc
+}
+
+#set table(
+  inset: 6pt,
+  stroke: none
+)
+#import "@preview/fontawesome:0.5.0": *
+#import "@preview/theorion:0.4.1": make-frame
+
+// Simple theorem render: bold title with period, italic body
+#let simple-theorem-render(prefix: none, title: "", full-title: auto, body) = {
+  if full-title != "" and full-title != auto and full-title != none {
+    strong[#full-title.]
+    h(0.5em)
+  }
+  emph(body)
+  parbreak()
+}
+#let (theorem-counter, theorem-box, theorem, show-theorem) = make-frame(
+  "theorem",
+  text(weight: "bold")[Theorem],
+  inherited-levels: theorem-inherited-levels,
+  numbering: theorem-numbering,
+  render: simple-theorem-render,
+)
+#show: show-theorem
+#let (lemma-counter, lemma-box, lemma, show-lemma) = make-frame(
+  "lemma",
+  text(weight: "bold")[Lemma],
+  inherited-levels: theorem-inherited-levels,
+  numbering: theorem-numbering,
+  render: simple-theorem-render,
+)
+#show: show-lemma
+#let (definition-counter, definition-box, definition, show-definition) = make-frame(
+  "definition",
+  text(weight: "bold")[Definition],
+  inherited-levels: theorem-inherited-levels,
+  numbering: theorem-numbering,
+  render: simple-theorem-render,
+)
+#show: show-definition
+// Transform footnotes to sidenotes
+#show footnote: it => column-sidenote(it.body)
+#show footnote.entry: none
+#let brand-color = (:)
+#let brand-color-background = (:)
+#let brand-logo = (:)
+
+#set page(
+  paper: "us-letter",
+  // Margins handled by marginalia.setup in typst-show.typ AFTER book.with()
+  numbering: "1",
+  columns: 1,
+)
+// Logo is handled by orange-book's cover page, not as a page background
+// NOTE: marginalia.setup is called in typst-show.typ AFTER book.with()
+// to ensure marginalia's margins override the book format's default margins
+#import "@preview/orange-book:0.7.1": book, part, chapter, appendices
+
+#show: book.with(
+  title: [Test Typst Book with Margins],
+  author: "Test Author",
+  date: "2024-01-01",
+  main-color: brand-color.at("primary", default: blue),
+  logo: {
+    let logo-info = brand-logo.at("medium", default: none)
+    if logo-info != none { image(logo-info.path, alt: logo-info.at("alt", default: none)) }
+  },
+  outline-depth: 3,
+  supplement-chapter: "Chapter",
+  padded-heading-number: false,
+)
+
+// Configure marginalia page geometry for book context
+// Geometry computed by Quarto's meta.lua filter (typstGeometryFromPaperWidth)
+// IMPORTANT: This must come AFTER book.with() to override the book format's margin settings
+#import "@preview/marginalia:0.3.1" as marginalia
+
+#show: marginalia.setup.with(
+  inner: (
+    far: 0.649in,
+    width: 0.811in,
+    sep: 0.250in,
+  ),
+  outer: (
+    far: 0.648in,
+    width: 2.000in,
+    sep: 0.250in,
+  ),
+  top: 1.25in,
+  bottom: 1.25in,
+  // CRITICAL: Enable book mode for recto/verso awareness
+  book: true,
+  clearance: 12pt,
+)
+
+// Reset Quarto's custom figure counters at each chapter (level-1 heading).
+// Orange-book only resets kind:image and kind:table, but Quarto uses custom kinds.
+// This list is generated dynamically from crossref.categories.
+#show heading.where(level: 1): it => {
+  counter(figure.where(kind: "quarto-float-fig")).update(0)
+  counter(figure.where(kind: "quarto-float-tbl")).update(0)
+  counter(figure.where(kind: "quarto-float-lst")).update(0)
+  counter(figure.where(kind: "quarto-callout-Note")).update(0)
+  counter(figure.where(kind: "quarto-callout-Warning")).update(0)
+  counter(figure.where(kind: "quarto-callout-Caution")).update(0)
+  counter(figure.where(kind: "quarto-callout-Tip")).update(0)
+  counter(figure.where(kind: "quarto-callout-Important")).update(0)
+  counter(figure.where(kind: "quarto-float-dino")).update(0)
+  counter(math.equation).update(0)
+  it
+}
+#show figure.where(kind: "quarto-float-lst"): set align(start)
+
+#heading(level: 1, numbering: none)[Preface]
+<preface>
+This is a test book for Typst output format.
+
+== About this book
+<about-this-book>
+This book tests the basic Typst book rendering functionality in Quarto, with margin layout features enabled. See #cite(<knuth84>, form: "prose")#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<knuth84>, form: "full")] for additional discussion of literate programming.
+
+#part[Part I: Getting Started]
+= Introduction
+<sec-intro>
+This is the first chapter of the book.
+
+== Basic Figures
+<sec-basic-figures>
+Kinematica analysis begins here. See #ref(<fig-cars>, supplement: [Figure]) for the velocity-distance dataset.
+
+#figure([
+#Skylighting(([#NormalTok("plot(cars)");],));
+], caption: figure.caption(
+position: bottom, 
+[
+A plot of the cars dataset
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-cars>
+
+
+== Margin Figures
+<sec-margin-figures>
+Heliovis demonstrates the heliocentric model visualization in body text.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-fig", supplement: "Figure", 
+[
+#box(image("logo.svg"))
+]
+, caption: figure.caption(position: bottom, [
+Heliocircula orbital mechanics illustration
+])
+)
+<fig-margin-orbital>
+
+
+The figure above demonstrates a margin figure placement. The entire figure including its caption should appear in the margin.
+
+== Margin Captions
+<sec-margin-captions>
+Epicycloid reference body text introduces this figure.
+
+#[
+#set figure(gap: 0pt)
+#set figure.caption(position: top)
+#show figure.caption: it => note(alignment: "top", dy: -0.01pt, counter: none, shift: "avoid", keep-order: true)[#text(size: 0.9em)[#it]]
+#figure([
+#box(image("logo.svg"))
+], caption: [
+Coperniciana caption for body figure
+], kind: "quarto-float-fig", supplement: "Figure")
+<fig-margincap-epicycle>
+]
+
+
+The figure above shows a body figure with its caption placed in the margin.
+
+== Sidenotes
+<sec-sidenotes>
+The Galileana observation#footnote[Telescopia confirmed the heliocentric model through direct observation of Jupiter's moons.] revolutionized astronomy. Scientists could now observe celestial bodies in unprecedented detail.
+
+Another important development#footnote[Elliptica discovered that planets move in ellipses, not perfect circles.] refined our understanding of planetary motion.
+
+== Embedded Notebooks
+<sec-embedded-notebooks>
+Parametrica visualization follows. See fig-visualization for the computational rendering.
+
+#strong[?embed]
+
+Methodologia continues in #ref(<sec-methods>, supplement: [Chapter]).
+
+== Callouts
+<sec-callouts>
+#block[
+#callout(
+body: 
+[
+The ships hung in the sky in much the same way that bricks don't. This is a note callout without a custom title.
+
+]
+, 
+title: 
+[
+Note
+]
+, 
+background_color: 
+rgb("#dae6fb")
+, 
+icon_color: 
+rgb("#0758E5")
+, 
+icon: 
+fa-info()
+, 
+body_background_color: 
+white
+)
+]
+Catharsis body text warns of impending beverage dangers.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#figure([
+#block[
+#callout(
+body: 
+[
+Apothegma: On no account allow anyone to make you a conditions-affected beverage. Beveragia hazard documented in #ref(<wrn-tea>, supplement: [Warning]) applies here.
+
+]
+, 
+title: 
+[Whose Tea Is This?]
+, 
+background_color: 
+rgb("#fcefdc")
+, 
+icon_color: 
+rgb("#EB9113")
+, 
+icon: 
+fa-exclamation-triangle()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Warning", 
+supplement: "Warning", 
+numbering: callout-numbering, 
+)
+<wrn-tea>
+
+
+]
+
+
+== Custom Crossref Dinosaurs
+<sec-custom-crossref-dinosaurs>
+Paleontologica category testing begins. #ref(<sec-custom-crossref-dinosaurs>, supplement: [Section]) validates custom crossref types.
+
+#figure([
+#strong[Stegosaurus]
+
+], caption: figure.caption(
+position: bottom, 
+[
+Herbivorica plates distinguish this specimen. See #ref(<dino-steg>, supplement: [Dinosaur]) for taxonomic details.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-steg>
+
+
+#figure([
+#strong[Tyrannosaurus Rex]
+
+], caption: figure.caption(
+position: bottom, 
+[
+Carnivorica apex predator documented here. Reference #ref(<dino-trex>, supplement: [Dinosaur]) or #ref(<dino-steg>, supplement: [Dinosaur]) for comparison.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-trex>
+
+
+== Margin Dinosaurs
+<sec-margin-dinosaurs>
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-dino", supplement: "Dinosaur", 
+[
+#strong[Ankylosaura]
+
+]
+, caption: figure.caption(position: bottom, [
+This armored dinosaur demonstrates margin placement for custom floats.
+])
+)
+<dino-margin-ankylo>
+
+
+Thyreophora body text discussing armored dinosaurs appears here, with the custom float in the margin.
+
+== Equations
+<sec-equations>
+The fundamental equation of special relativity:
+
+#math.equation(block: true, numbering: equation-numbering, [ $ E = m c^2 $ ])<eq-einstein>
+
+Relativistica equivalence shown in #ref(<eq-einstein>, supplement: [Equation]) unifies energy and mass.
+
+Another important equation:
+
+#math.equation(block: true, numbering: equation-numbering, [ $ F = m a $ ])<eq-newton>
+
+Dynamica principles in #ref(<eq-newton>, supplement: [Equation]) relate force to acceleration.
+
+== Margin Equations
+<sec-margin-equations>
+Gravitonia body text introduces gravitational theory.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#math.equation(block: true, numbering: equation-numbering, [ $ F = G frac(m_1 m_2, r^2) $ ])<eq-margin-gravity>
+
+Gravitolex universal gravitation derivation.
+
+]
+Attractiva force described by #ref(<eq-margin-gravity>, supplement: [Equation]) governs celestial mechanics.
+
+== Theorems
+<sec-theorems>
+#theorem(title: [Pythagorean Theorem])[
+For a right triangle with legs $a$ and $b$ and hypotenuse $c$: $a^2 + b^2 = c^2$
+
+] <thm-pythagorean>
+Geometrica fundamentals established in #ref(<thm-pythagorean>, supplement: [Theorem]).
+
+Triangulata body text introduces the inequality lemma.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#lemma(title: [Triangle Inequality])[
+Inequalitas: For any triangle with sides $a$, $b$, and $c$: $a + b > c$
+
+] <lem-triangle>
+]
+Boundaria proven in #ref(<lem-triangle>, supplement: [Lemma]) demonstrates margin theorem placement.
+
+== Code Listings
+<sec-code-listings>
+Structurata programming principles from #cite(<dijkstra1968>, form: "prose")#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<dijkstra1968>, form: "full")] inform our code style. Listbody is body text that should left-align with code listings.
+
+#figure([
+#Skylighting(([#CommentTok("# Alignmark");],
+[#KeywordTok("def");#NormalTok(" hello():");],
+[#NormalTok("    ");#BuiltInTok("print");#NormalTok("(");#StringTok("/"Hello, World!/"");#NormalTok(")");],
+[],
+[#ControlFlowTok("if");#NormalTok(" ");#VariableTok("__name__");#NormalTok(" ");#OperatorTok("==");#NormalTok(" ");#StringTok("/"__main__/"");#NormalTok(":");],
+[#NormalTok("    hello()");],));
+], caption: figure.caption(
+position: top, 
+[
+Hello World in Python
+]), 
+kind: "quarto-float-lst", 
+supplement: "Listing", 
+)
+<lst-hello>
+
+
+Programmata basics shown in #ref(<lst-hello>, supplement: [Listing]).
+
+#figure([
+#Skylighting(([#KeywordTok("def");#NormalTok(" fibonacci(n):");],
+[#NormalTok("    ");#ControlFlowTok("if");#NormalTok(" n ");#OperatorTok("<=");#NormalTok(" ");#DecValTok("1");#NormalTok(":");],
+[#NormalTok("        ");#ControlFlowTok("return");#NormalTok(" n");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" fibonacci(n");#OperatorTok("-");#DecValTok("1");#NormalTok(") ");#OperatorTok("+");#NormalTok(" fibonacci(n");#OperatorTok("-");#DecValTok("2");#NormalTok(")");],));
+], caption: figure.caption(
+position: top, 
+[
+Fibonacci Sequence
+]), 
+kind: "quarto-float-lst", 
+supplement: "Listing", 
+)
+<lst-fibonacci>
+
+
+Recursiva patterns demonstrated in #ref(<lst-fibonacci>, supplement: [Listing]).
+
+== Margin Listings
+<sec-margin-listings>
+Orbitcode algorithmic implementation appears in the body.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-lst", supplement: "Listing", 
+[
+#set align(left)
+#Skylighting(([#KeywordTok("def");#NormalTok(" kepler_equation(M, e):");],
+[#NormalTok("    ");#CommentTok("/"/"/"Solve Kepler's equation./"/"/"");],
+[#NormalTok("    E ");#OperatorTok("=");#NormalTok(" M  ");#CommentTok("# initial guess");],
+[#NormalTok("    ");#ControlFlowTok("for");#NormalTok(" _ ");#KeywordTok("in");#NormalTok(" ");#BuiltInTok("range");#NormalTok("(");#DecValTok("10");#NormalTok("):");],
+[#NormalTok("        E ");#OperatorTok("=");#NormalTok(" M ");#OperatorTok("+");#NormalTok(" e ");#OperatorTok("*");#NormalTok(" sin(E)");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" E");],));
+]
+, caption: figure.caption(position: top, [
+Orbitsolva solver
+])
+)
+<lst-margin-kepler>
+
+
+Iterativa convergence in #ref(<lst-margin-kepler>, supplement: [Listing]) solves orbital anomalies.
+
+#part[Part II: Advanced Topics]
+= Methods
+<sec-methods>
+This is the second chapter of the book. Previousia foundations from #ref(<sec-intro>, supplement: [Chapter]) inform our methodology.
+
+The fundamental problem with any bureaucratic methodology is that it must, by its very nature, assume that the person filling out the forms is lying. This is not because bureaucrats are inherently suspicious people, but because the forms themselves were designed by committees who assumed that clarity was a luxury that could not be afforded in these troubled times.
+
+Consider, for example, the simple act of changing one's address. One might naively suppose that this would involve telling the relevant authorities where one now lives. In practice, it requires filling out seventeen forms, each of which asks for one's previous address in a slightly different format, and all of which must be submitted to different departments who do not, under any circumstances, communicate with each other.
+
+The postal service, meanwhile, continues to deliver mail to addresses that have not existed for thirty years, on the grounds that someone might still be expecting it. This is considered efficiency.
+
+== Tables
+<sec-tables>
+Informatica theory from #cite(<shannon1948>, form: "prose")#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<shannon1948>, form: "full")] provides foundations. Tabulara #ref(<tbl-data>, supplement: [Table]) presents the structured dataset.
+
+#figure([
+#table(
+  columns: 3,
+  align: (auto,auto,auto,),
+  table.header([Column A], [Column B], [Column C],),
+  table.hline(),
+  [1], [2], [3],
+  [4], [5], [6],
+)
+], caption: figure.caption(
+position: top, 
+[
+Sample data table
+]), 
+kind: "quarto-float-tbl", 
+supplement: "Table", 
+)
+<tbl-data>
+
+
+== Margin Tables
+<sec-margin-tables>
+Periodicus orbital tabulation is discussed in the body text.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-tbl", supplement: "Table", 
+[
+#table(
+  columns: 2,
+  align: (auto,auto,),
+  table.header([Planet], [Period],),
+  table.hline(),
+  [Mercury], [88d],
+  [Venus], [225d],
+  [Earth], [365d],
+  [Mars], [687d],
+)
+]
+, caption: figure.caption(position: top, [
+Orbitperioda periods
+])
+)
+<tbl-margin-planets>
+
+
+Celestia periods listed in #ref(<tbl-margin-planets>, supplement: [Table]) demonstrate margin table placement.
+
+== Margin Caption Tables
+<sec-margin-caption-tables>
+Spectralis body text introduces stellar spectroscopy.
+
+#[
+#set figure(gap: 0pt)
+#set figure.caption(position: top)
+#show figure.caption: it => note(alignment: "top", dy: -0.01pt, counter: none, shift: "avoid", keep-order: true)[#text(size: 0.9em)[#it]]
+#figure([
+#table(
+  columns: 3,
+  align: (auto,auto,auto,),
+  table.header([Element], [Symbol], [Wavelength],),
+  table.hline(),
+  [Hydrogen], [H], [656.3nm],
+  [Helium], [He], [587.6nm],
+  [Carbon], [C], [247.9nm],
+)
+], caption: [
+Elementica stellar caption
+], kind: "quarto-float-tbl", supplement: "Table")
+<tbl-margincap-elements>
+]
+
+
+Absorptia lines documented in #ref(<tbl-margincap-elements>, supplement: [Table]) reveal stellar composition.
+
+== Cross-references
+<sec-cross-references>
+Retrospecta analysis continues. Kinematica data from #ref(<fig-cars>, supplement: [Figure]) and tabulara structure from #ref(<tbl-data>, supplement: [Table]) provide foundations.
+
+== Sub-figures
+<sec-sub-figures>
+Compositia panels follow. See #ref(<fig-panel>, supplement: [Figure]) for combined visualization, with #ref(<fig-panel-a>, supplement: [Figure]) and #ref(<fig-panel-b>, supplement: [Figure]) as components.
+
+#quarto_super(
+kind: 
+"quarto-float-fig"
+, 
+caption: 
+[
+A panel with two sub-figures showing the same plot.
+]
+, 
+label: 
+<fig-panel>
+, 
+position: 
+bottom
+, 
+supplement: 
+"Figure"
+, 
+subcapnumbering: 
+"(a)"
+, 
+[
+#grid(columns: 2, gutter: 2em,
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+First panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-panel-a>
+
+
+]
+],
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Second panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-panel-b>
+
+
+]
+],
+)
+]
+)
+== Margin Subfigures
+<sec-margin-subfigures>
+Chromatus body text introduces the spectral analysis.
+
+#note(counter: none, alignment: "baseline", dy: 0pt, shift: auto)[
+#quarto_super(
+kind: 
+"quarto-float-fig"
+, 
+caption: 
+[
+Wavelengthra panel
+]
+, 
+label: 
+<fig-margin-panel>
+, 
+position: 
+bottom
+, 
+supplement: 
+"Figure"
+, 
+subcapnumbering: 
+"(a)"
+, 
+[
+#grid(columns: 1, gutter: 2em,
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Waveluma alpha
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-margin-panel-a>
+
+
+]
+],
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Wavelumb beta
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-margin-panel-b>
+
+
+]
+],
+)
+]
+)
+]
+
+Diffractionica analysis in #ref(<fig-margin-panel>, supplement: [Figure]) shows margin subfigure placement with #ref(<fig-margin-panel-a>, supplement: [Figure]) and #ref(<fig-margin-panel-b>, supplement: [Figure]).
+
+== Margin Citations
+<sec-margin-citations>
+Newtoniana reference body discusses classical mechanics. Newton established the laws of motion @newton1687#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<newton1687>, form: "full")], which were later refined by Einstein @einstein1905#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<einstein1905>, form: "full")]. Bibliographica marginalia should appear in the margin for these citations.
+
+Literatica programming discussed by #cite(<knuth84>, form: "prose")#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<knuth84>, form: "full")] informs our approach.
+
+== More Callouts
+<sec-more-callouts>
+Beveragia warning from #ref(<sec-intro>, supplement: [Chapter]) applies: see #ref(<wrn-tea>, supplement: [Warning]) for safety protocols.
+
+Hermeneutica body text interprets the hitchhiker's wisdom.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#figure([
+#block[
+#callout(
+body: 
+[
+Prolegomena: A towel is about the most massively useful thing an interstellar hitchhiker can have. Fabricata utility documented in #ref(<tip-towel>, supplement: [Tip]).
+
+]
+, 
+title: 
+[Whose Towel Is This?]
+, 
+background_color: 
+rgb("#ccf1e3")
+, 
+icon_color: 
+rgb("#00A047")
+, 
+icon: 
+fa-lightbulb()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Tip", 
+supplement: "Tip", 
+numbering: callout-numbering, 
+)
+<tip-towel>
+
+
+]
+
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#block[
+#callout(
+body: 
+[
+Don't Panic. Under no circumstances should you allow yourself to panic.
+
+]
+, 
+title: 
+[
+Paniculus
+]
+, 
+background_color: 
+rgb("#ffe5d0")
+, 
+icon_color: 
+rgb("#FC5300")
+, 
+icon: 
+fa-fire()
+, 
+body_background_color: 
+white
+)
+]
+]
+
+
+Philologica body text analyzes alien verse forms.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#figure([
+#block[
+#callout(
+body: 
+[
+Scholiasta: Vogon poetry is of course, the third worst in the universe. Poetica horrors catalogued in #ref(<nte-vogon>, supplement: [Note]).
+
+]
+, 
+title: 
+[A Note About Vogon Poetry]
+, 
+background_color: 
+rgb("#dae6fb")
+, 
+icon_color: 
+rgb("#0758E5")
+, 
+icon: 
+fa-info()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Note", 
+supplement: "Note", 
+numbering: callout-numbering, 
+)
+<nte-vogon>
+
+
+]
+
+
+== More Dinosaurs
+<sec-more-dinosaurs>
+Taxonomica counter reset testing. #ref(<sec-more-dinosaurs>, supplement: [Section]) validates chapter-boundary behavior.
+
+#figure([
+#strong[Velociraptor]
+
+], caption: figure.caption(
+position: bottom, 
+[
+Dromaeosaura hunting behavior documented here. See #ref(<dino-raptor>, supplement: [Dinosaur]) for pack dynamics.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-raptor>
+
+
+Comparativa analysis: #ref(<dino-steg>, supplement: [Dinosaur]) and #ref(<dino-trex>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]) establish baseline taxonomy.
+
+== More Equations
+<sec-more-equations>
+Formulix body text introduces the quadratic formula.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#math.equation(block: true, numbering: equation-numbering, [ $ x = frac(- b plus.minus sqrt(b^2 - 4 a c), 2 a) $ ])<eq-quadratic>
+
+Quadratica root formula.
+
+]
+Algebraica roots computed via #ref(<eq-quadratic>, supplement: [Equation]).
+
+Retrospectiva: #ref(<eq-einstein>, supplement: [Equation]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<eq-newton>, supplement: [Equation]) provide foundational physics.
+
+== More Theorems
+<sec-more-theorems>
+#theorem(title: [Fundamental Theorem of Calculus])[
+If $F$ is an antiderivative of $f$ on $/[a/,b/]$, then: $integral_a^b f/(x/)thin d x = F/(b/)- F/(a/)$
+
+] <thm-calculus>
+Integrala foundations established in #ref(<thm-calculus>, supplement: [Theorem]).
+
+Continua body text introduces the continuity definition.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#definition(title: [Continuous Function])[
+Limitica: A function $f$ is continuous at $c$ if $lim_(x arrow.r c) f/(x/)= f/(c/)$.
+
+] <def-continuous>
+]
+Epsilondelta defined in #ref(<def-continuous>, supplement: [Definition]) demonstrates margin definition placement.
+
+Retrospectiva: #ref(<thm-pythagorean>, supplement: [Theorem]) and #ref(<lem-triangle>, supplement: [Lemma]) from #ref(<sec-intro>, supplement: [Chapter]) provide geometric foundations.
+
+== More Code Listings
+<sec-more-code-listings>
+Algorithmix body text introduces the sorting algorithm.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-lst", supplement: "Listing", 
+[
+#set align(left)
+#Skylighting(([#KeywordTok("def");#NormalTok(" quicksort(arr):");],
+[#NormalTok("    ");#ControlFlowTok("if");#NormalTok(" ");#BuiltInTok("len");#NormalTok("(arr) ");#OperatorTok("<=");#NormalTok(" ");#DecValTok("1");#NormalTok(":");],
+[#NormalTok("        ");#ControlFlowTok("return");#NormalTok(" arr");],
+[#NormalTok("    pivot ");#OperatorTok("=");#NormalTok(" arr[");#BuiltInTok("len");#NormalTok("(arr) ");#OperatorTok("//");#NormalTok(" ");#DecValTok("2");#NormalTok("]");],
+[#NormalTok("    left ");#OperatorTok("=");#NormalTok(" [x ");#ControlFlowTok("for");#NormalTok(" x ");#KeywordTok("in");#NormalTok(" arr ");#ControlFlowTok("if");#NormalTok(" x ");#OperatorTok("<");#NormalTok(" pivot]");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" quicksort(left) ");#OperatorTok("+");#NormalTok(" [pivot] ");#OperatorTok("+");#NormalTok(" quicksort([x ");#ControlFlowTok("for");#NormalTok(" x ");#KeywordTok("in");#NormalTok(" arr ");#ControlFlowTok("if");#NormalTok(" x ");#OperatorTok(">");#NormalTok(" pivot])");],));
+]
+, caption: figure.caption(position: top, [
+Quicksortix
+])
+)
+<lst-quicksort>
+
+
+Sortiva efficiency demonstrated in #ref(<lst-quicksort>, supplement: [Listing]).
+
+Retrospectiva: #ref(<lst-hello>, supplement: [Listing]) and #ref(<lst-fibonacci>, supplement: [Listing]) from #ref(<sec-intro>, supplement: [Chapter]) provide programming foundations.
+
+= Results
+<sec-results>
+This is the third chapter of the book.
+
+== Cross-chapter references
+<sec-cross-chapter-refs>
+Synthesica analysis combines previous findings. Compositia visualization in #ref(<fig-panel>, supplement: [Figure]) from #ref(<sec-methods>, supplement: [Chapter]) provides the complete panel. Componenta breakdown: #ref(<fig-panel-a>, supplement: [Figure]) shows the first panel and #ref(<fig-panel-b>, supplement: [Figure]) shows the second panel.
+
+Kinematica data from #ref(<fig-cars>, supplement: [Figure]) in #ref(<sec-intro>, supplement: [Chapter]) establishes velocity-distance relationships.
+
+== Results Citations
+<sec-results-citations>
+Algorithmia body text discusses computational complexity as established by #cite(<knuth84>, form: "prose")#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<knuth84>, form: "full")]. The foundational work on classical mechanics @newton1687#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<newton1687>, form: "full")] informs our physical models. Relativistica principles from #cite(<einstein1905>, form: "prose")#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<einstein1905>, form: "full")] provide the theoretical framework.
+
+Bibliographica marginalia demonstrates citation placement in chapter 3.
+
+== Cross-chapter margin references
+<sec-cross-chapter-margin>
+Marginala content from previous chapters:
+
+- Copernicana orbital diagram in #ref(<fig-margin-orbital>, supplement: [Figure]) from #ref(<sec-intro>, supplement: [Chapter])
+- Ptolemaica caption figure in #ref(<fig-margincap-epicycle>, supplement: [Figure])
+- Planetaria periods in #ref(<tbl-margin-planets>, supplement: [Table]) from #ref(<sec-methods>, supplement: [Chapter])
+- Wavelengthra panel in #ref(<fig-margin-panel>, supplement: [Figure])
+- Attractiva equation in #ref(<eq-margin-gravity>, supplement: [Equation])
+- Keplerian solver in #ref(<lst-margin-kepler>, supplement: [Listing])
+
+== Cross-chapter callout references
+<sec-cross-chapter-callouts>
+Admonitia references from previous chapters:
+
+- Beveragia hazard in #ref(<wrn-tea>, supplement: [Warning]) from #ref(<sec-intro>, supplement: [Chapter])
+- Fabricata utility in #ref(<tip-towel>, supplement: [Tip]) from #ref(<sec-methods>, supplement: [Chapter])
+- Poetica horrors in #ref(<nte-vogon>, supplement: [Note])
+
+Anagnorisis body text reveals the cosmic truth.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#figure([
+#block[
+#callout(
+body: 
+[
+Peripeteia: The answer to the ultimate question of life, the universe, and everything is 42. Ultimata response documented in #ref(<imp-answer>, supplement: [Important]).
+
+]
+, 
+title: 
+[The Answer]
+, 
+background_color: 
+rgb("#f7dddc")
+, 
+icon_color: 
+rgb("#CC1914")
+, 
+icon: 
+fa-exclamation()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Important", 
+supplement: "Important", 
+numbering: callout-numbering, 
+)
+<imp-answer>
+
+
+]
+
+
+== Custom crossref dinosaurs
+<sec-custom-crossref-dinosaurs-ch3>
+#figure([
+#strong[Pterodactyl]
+
+], caption: figure.caption(
+position: bottom, 
+[
+Pterosaura flight mechanics documented here. See #ref(<dino-ptero>, supplement: [Dinosaur]) for aerodynamic analysis.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-ptero>
+
+
+Comparativa taxonomy: #ref(<dino-steg>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<dino-raptor>, supplement: [Dinosaur]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+Marginala specimen: #ref(<dino-margin-ankylo>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]) demonstrates placement.
+
+== Wide Content
+<sec-wide-content>
+Panoramica observation body text introduces wide figures.
+
+#wideblock(side: "both")[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Celestica wide survey visualization
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-wide-observation>
+
+
+]
+
+
+Expansiva layout demonstrated in #ref(<fig-wide-observation>, supplement: [Figure]) spans page width.
+
+== Forward references to appendices
+<sec-forward-refs>
+Appendica A content:
+
+- Compositia panel in #ref(<fig-appendix-panel>, supplement: [Figure])
+- Admonitia warning in #ref(<wrn-appendix>, supplement: [Warning])
+- Consilia tip in #ref(<tip-appendix>, supplement: [Tip])
+- Fossilica specimen in #ref(<dino-appendix>, supplement: [Dinosaur])
+- Orbitala margin figure in #ref(<fig-appendix-margin>, supplement: [Figure])
+
+Appendica B content:
+
+- Secundaria panel in #ref(<fig-appendix-b-panel>, supplement: [Figure])
+- Monitoria warning in #ref(<wrn-appendix-b>, supplement: [Warning])
+- Advisoria tip in #ref(<tip-appendix-b>, supplement: [Tip])
+- Brachiosaura specimen in #ref(<dino-appendix-b>, supplement: [Dinosaur])
+- Visualica margin figure in #ref(<fig-appendix-b-margin>, supplement: [Figure])
+
+#show: appendices.with("Appendices", hide-parent: true)
+#heading(level: 1, numbering: none)[Appendices]
+= Additional Resources
+<sec-resources>
+This appendix contains additional resources and supplementary material.
+
+== Data Sources
+<sec-data-sources>
+The data used in this book comes from various sources.
+
+== Code Repository
+<sec-code-repository>
+All code examples are available in the companion repository. Computationa theory from #cite(<turing1950>, form: "prose")#note(alignment: "baseline", shift: auto, counter: none)[#set text(size: 0.85em)
+#cite(<turing1950>, form: "full")] establishes foundational concepts.
+
+Foundationa material in #ref(<sec-intro>, supplement: [Chapter]), with kinematica visualization in #ref(<fig-cars>, supplement: [Figure]).
+
+== Appendix Margin Figures
+<sec-appendix-margin-figures>
+Appendixia body text introduces the appendix margin content.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-fig", supplement: "Figure", 
+[
+#box(image("logo.svg"))
+]
+, caption: figure.caption(position: bottom, [
+Appendorba supplementary diagram
+])
+)
+<fig-appendix-margin>
+
+
+Additiva diagram in #ref(<fig-appendix-margin>, supplement: [Figure]) demonstrates appendix margin figure numbering.
+
+== Appendix Sub-figures
+<sec-appendix-sub-figures>
+Appendiculata subfigure numbering test. #ref(<sec-appendix-sub-figures>, supplement: [Section]) validates letter-based chapter numbering.
+
+Compositia panel in #ref(<fig-appendix-panel>, supplement: [Figure]), with #ref(<fig-appendix-panel-a>, supplement: [Figure]) and #ref(<fig-appendix-panel-b>, supplement: [Figure]) as components.
+
+#quarto_super(
+kind: 
+"quarto-float-fig"
+, 
+caption: 
+[
+A panel of sub-figures in the appendix demonstrating letter-based numbering.
+]
+, 
+label: 
+<fig-appendix-panel>
+, 
+position: 
+bottom
+, 
+supplement: 
+"Figure"
+, 
+subcapnumbering: 
+"(a)"
+, 
+[
+#grid(columns: 2, gutter: 2em,
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+First appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-panel-a>
+
+
+]
+],
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Second appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-panel-b>
+
+
+]
+],
+)
+]
+)
+== Appendix Margin Tables
+<sec-appendix-margin-tables>
+Tabulata body text introduces supplementary data.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-tbl", supplement: "Table", 
+[
+#table(
+  columns: 2,
+  align: (auto,auto,),
+  table.header([Constant], [Value],),
+  table.hline(),
+  [G], [6.674e-11],
+  [c], [299792458],
+  [h], [6.626e-34],
+)
+]
+, caption: figure.caption(position: top, [
+Constantia values
+])
+)
+<tbl-appendix-margin>
+
+
+Fundamentala constants in #ref(<tbl-appendix-margin>, supplement: [Table]) demonstrate appendix margin table placement.
+
+== Appendix Callouts
+<sec-appendix-callouts>
+Admonitia appendix numbering test. #ref(<sec-appendix-callouts>, supplement: [Section]) validates letter-based callout numbering.
+
+#figure([
+#block[
+#callout(
+body: 
+[
+Pericula appendix hazard documented here. Admonitoria reference in #ref(<wrn-appendix>, supplement: [Warning]).
+
+]
+, 
+title: 
+[Appendix Warning]
+, 
+background_color: 
+rgb("#fcefdc")
+, 
+icon_color: 
+rgb("#EB9113")
+, 
+icon: 
+fa-exclamation-triangle()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Warning", 
+supplement: "Warning", 
+numbering: callout-numbering, 
+)
+<wrn-appendix>
+
+
+Appendicata body text introduces the supplementary guidance.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#figure([
+#block[
+#callout(
+body: 
+[
+Consilia appendix guidance provided here.
+
+]
+, 
+title: 
+[Appendix Tip]
+, 
+background_color: 
+rgb("#ccf1e3")
+, 
+icon_color: 
+rgb("#00A047")
+, 
+icon: 
+fa-lightbulb()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Tip", 
+supplement: "Tip", 
+numbering: callout-numbering, 
+)
+<tip-appendix>
+
+
+]
+
+
+Advisoria reference in #ref(<tip-appendix>, supplement: [Tip]) demonstrates margin callout placement.
+
+Retrospecta: beveragia warning in #ref(<wrn-tea>, supplement: [Warning]) from #ref(<sec-intro>, supplement: [Chapter]).
+
+== Appendix Custom Crossref Dinosaurs
+<sec-appendix-dinosaurs>
+Taxonomica appendix numbering test. #ref(<sec-appendix-dinosaurs>, supplement: [Section]) validates letter-based crossref numbering.
+
+#figure([
+#strong[Triceratops]
+
+], caption: figure.caption(
+position: bottom, 
+[
+Ceratopsia specimen documented here. Fossilica reference in #ref(<dino-appendix>, supplement: [Dinosaur]).
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-appendix>
+
+
+Comparativa: herbivorica specimen #ref(<dino-steg>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]).
+
+== Appendix Margin Dinosaurs
+<sec-appendix-margin-dinosaurs>
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-dino", supplement: "Dinosaur", 
+[
+#strong[Diplodoca]
+
+]
+, caption: figure.caption(position: bottom, [
+This long-necked dinosaur demonstrates appendix margin placement.
+])
+)
+<dino-appendix-margin>
+
+
+Longneckia body text discusses the margin dinosaur placement.
+
+== Appendix Equations
+<sec-appendix-equations>
+The Pythagorean theorem:
+
+#math.equation(block: true, numbering: equation-numbering, [ $ a^2 + b^2 = c^2 $ ])<eq-pythagorean>
+
+Geometrica appendix result in #ref(<eq-pythagorean>, supplement: [Equation]).
+
+Retrospectiva: relativistica in #ref(<eq-einstein>, supplement: [Equation]) from #ref(<sec-intro>, supplement: [Chapter]) and algebraica in #ref(<eq-quadratic>, supplement: [Equation]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+== Appendix Margin Equations
+<sec-appendix-margin-equations>
+Electrica body text introduces supplementary mathematics.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#math.equation(block: true, numbering: equation-numbering, [ $ integral.cont arrow(E) dot.op d arrow(A) = Q / epsilon.alt_0 $ ])<eq-appendix-margin-gauss>
+
+Gaussiana electric field law.
+
+]
+Integrala surface law in #ref(<eq-appendix-margin-gauss>, supplement: [Equation]) demonstrates appendix margin equation placement.
+
+== Appendix Theorems
+<sec-appendix-theorems>
+#theorem(title: [Example Appendix Theorem])[
+This theorem demonstrates appendix numbering. It should ideally be Theorem A.1.
+
+] <thm-appendix>
+Demonstrata result in #ref(<thm-appendix>, supplement: [Theorem]). Retrospectiva: #ref(<thm-pythagorean>, supplement: [Theorem]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<thm-calculus>, supplement: [Theorem]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+== Appendix Listings
+<sec-appendix-listings>
+#figure([
+#Skylighting(([#CommentTok("# This demonstrates appendix listing numbering");],
+[#CommentTok("# Should display as Listing A.1");],
+[#KeywordTok("def");#NormalTok(" appendix_function():");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" ");#StringTok("/"Appendix example/"");],));
+], caption: figure.caption(
+position: top, 
+[
+Appendix Code Example
+]), 
+kind: "quarto-float-lst", 
+supplement: "Listing", 
+)
+<lst-appendix-example>
+
+
+Exemplara code in #ref(<lst-appendix-example>, supplement: [Listing]).
+
+Retrospectiva: programmata in #ref(<lst-hello>, supplement: [Listing]) from #ref(<sec-intro>, supplement: [Chapter]) and sortiva in #ref(<lst-quicksort>, supplement: [Listing]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+== Appendix Margin Listings
+<sec-appendix-margin-listings>
+Algoritha body text introduces supplementary code.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-lst", supplement: "Listing", 
+[
+#set align(left)
+#Skylighting(([#KeywordTok("def");#NormalTok(" appendix_helper():");],
+[#NormalTok("    ");#CommentTok("/"/"/"Appendix margin code./"/"/"");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" ");#DecValTok("42");],));
+]
+, caption: figure.caption(position: top, [
+Auxiliara annotation
+])
+)
+<lst-appendix-margin>
+
+
+Helpera function in #ref(<lst-appendix-margin>, supplement: [Listing]) demonstrates appendix margin listing placement.
+
+= Supplementary Data
+<sec-supplementary>
+This is the second appendix containing supplementary data and additional examples.
+
+== Appendix B Margin Figures
+<sec-appendix-b-margin-figures>
+Secondaria body text introduces the supplementary margin content.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-fig", supplement: "Figure", 
+[
+#box(image("logo.svg"))
+]
+, caption: figure.caption(position: bottom, [
+Databvisual supplementary data
+])
+)
+<fig-appendix-b-margin>
+
+
+Graphica diagram in #ref(<fig-appendix-b-margin>, supplement: [Figure]) demonstrates second appendix margin figure numbering.
+
+== Additional Figures
+<sec-additional-figures>
+#quarto_super(
+kind: 
+"quarto-float-fig"
+, 
+caption: 
+[
+A panel of sub-figures in Appendix B demonstrating B-prefix numbering.
+]
+, 
+label: 
+<fig-appendix-b-panel>
+, 
+position: 
+bottom
+, 
+supplement: 
+"Figure"
+, 
+subcapnumbering: 
+"(a)"
+, 
+[
+#grid(columns: 2, gutter: 2em,
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Third appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-b-panel-a>
+
+
+]
+],
+  [
+#block[
+#figure([
+#box(image("logo.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Fourth appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-b-panel-b>
+
+
+]
+],
+)
+]
+)
+Secundaria panel in #ref(<fig-appendix-b-panel>, supplement: [Figure]), with #ref(<fig-appendix-b-panel-a>, supplement: [Figure]) and #ref(<fig-appendix-b-panel-b>, supplement: [Figure]) as components.
+
+== Appendix B Margin Tables
+<sec-appendix-b-margin-tables>
+Metrica body text introduces additional supplementary data.
+
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-tbl", supplement: "Table", 
+[
+#table(
+  columns: 2,
+  align: (auto,auto,),
+  table.header([Parameter], [Unit],),
+  table.hline(),
+  [Mass], [kg],
+  [Length], [m],
+  [Time], [s],
+)
+]
+, caption: figure.caption(position: top, [
+Unitaria values
+])
+)
+<tbl-appendix-b-margin>
+
+
+Dimensiona units in #ref(<tbl-appendix-b-margin>, supplement: [Table]) demonstrate Appendix B margin table placement.
+
+== Additional Callouts
+<sec-additional-callouts>
+#figure([
+#block[
+#callout(
+body: 
+[
+Pericula secundaria hazard documented here. Monitoria reference in #ref(<wrn-appendix-b>, supplement: [Warning]).
+
+]
+, 
+title: 
+[Appendix B Warning]
+, 
+background_color: 
+rgb("#fcefdc")
+, 
+icon_color: 
+rgb("#EB9113")
+, 
+icon: 
+fa-exclamation-triangle()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Warning", 
+supplement: "Warning", 
+numbering: callout-numbering, 
+)
+<wrn-appendix-b>
+
+
+Exegesis body text explicates supplementary guidance.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#figure([
+#block[
+#callout(
+body: 
+[
+Gnomicon: Consilia secundaria guidance provided here. Advisoria reference in #ref(<tip-appendix-b>, supplement: [Tip]).
+
+]
+, 
+title: 
+[Appendix B Tip]
+, 
+background_color: 
+rgb("#ccf1e3")
+, 
+icon_color: 
+rgb("#00A047")
+, 
+icon: 
+fa-lightbulb()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Tip", 
+supplement: "Tip", 
+numbering: callout-numbering, 
+)
+<tip-appendix-b>
+
+
+]
+
+
+== Additional Dinosaurs
+<sec-additional-dinosaurs>
+#figure([
+#strong[Brachiosaurus]
+
+], caption: figure.caption(
+position: bottom, 
+[
+Sauropoda giganta specimen documented here. Brachiosaura reference in #ref(<dino-appendix-b>, supplement: [Dinosaur]).
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-appendix-b>
+
+
+== Appendix B Margin Dinosaurs
+<sec-appendix-b-margin-dinosaurs>
+#notefigure(alignment: "baseline", dy: 0pt, shift: auto, counter: none, kind: "quarto-float-dino", supplement: "Dinosaur", 
+[
+#strong[Parasaura]
+
+]
+, caption: figure.caption(position: bottom, [
+This crested dinosaur demonstrates Appendix B margin placement.
+])
+)
+<dino-appendix-b-margin>
+
+
+Hadrosaura body text discusses the margin dinosaur placement.
+
+== Appendix B Margin Equations
+<sec-appendix-b-margin-equations>
+Magnetica body text introduces additional supplementary mathematics.
+
+#note(alignment: "baseline", dy: 0pt, shift: auto, counter: none)[
+#math.equation(block: true, numbering: equation-numbering, [ $ nabla times arrow(B) = mu_0 arrow(J) + mu_0 epsilon.alt_0 frac(partial arrow(E), partial t) $ ])<eq-appendix-b-margin>
+
+Maxwelliana field law.
+
+]
+Electromagnetica law in #ref(<eq-appendix-b-margin>, supplement: [Equation]) demonstrates Appendix B margin equation placement.
+
+== Cross-references
+<sec-appendix-b-crossrefs>
+Retrospecta from Appendix A: compositia panel in #ref(<fig-appendix-panel>, supplement: [Figure]).
+
+Marginala from Appendix A: orbitala diagram in #ref(<fig-appendix-margin>, supplement: [Figure]).
+
+Foundationa content: carnivorica #ref(<dino-trex>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]) and beveragia #ref(<wrn-tea>, supplement: [Warning]).
+
+Marginala from Chapter 1: copernicana #ref(<fig-margin-orbital>, supplement: [Figure]) and keplerian #ref(<lst-margin-kepler>, supplement: [Listing]).
+
+#show bibliography: none
+
+#bibliography(("/references.bib"))
+

@@ -197,6 +197,50 @@ fn test_extract_share_tree_is_independent_per_destination() {
     assert!(second_dir.path().join("filters/main.lua").exists());
 }
 
+/// R2: the in-memory share tree (what the wasm host mounts) is exactly the
+/// file set, with the same bytes, that native `extract_share_tree` writes
+/// to disk. `include_dir::Dir::files()` is top-level only, so a flat walk
+/// would silently drop nested files; this pins the recursive walk.
+#[test]
+fn test_in_memory_share_tree_equals_disk_extracted_tree() {
+    use std::collections::BTreeMap;
+
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    extract_share_tree(dir.path()).expect("extract_share_tree() should succeed");
+
+    let mut on_disk = BTreeMap::new();
+    for entry in walkdir::WalkDir::new(dir.path())
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+    {
+        let rel = entry
+            .path()
+            .strip_prefix(dir.path())
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        on_disk.insert(rel, std::fs::read(entry.path()).unwrap());
+    }
+
+    let in_memory: BTreeMap<String, Vec<u8>> = quarto_core::pandoc_request::share_tree_entries()
+        .iter()
+        .map(|e| (e.rel_path.clone(), e.bytes.to_vec()))
+        .collect();
+
+    assert_eq!(
+        in_memory.keys().collect::<Vec<_>>(),
+        on_disk.keys().collect::<Vec<_>>(),
+        "in-memory and disk-extracted file sets differ"
+    );
+    assert!(
+        in_memory == on_disk,
+        "same paths, different bytes between the in-memory and disk-extracted trees"
+    );
+    // Nested files are present (not just top-level ones).
+    assert!(in_memory.keys().any(|k| k.matches('/').count() >= 3));
+}
+
 /// L-TIER
 ///
 /// T3.4: `encode_params_blob`'s output round-trips through the real

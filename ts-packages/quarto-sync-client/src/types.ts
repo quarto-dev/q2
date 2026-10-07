@@ -383,6 +383,16 @@ export interface CreateBinaryFileResult {
 }
 
 /**
+ * Result of `createFileIfAbsent`. `docId` is set only when the file was created.
+ */
+export interface CreateFileIfAbsentResult {
+  /** False when the path was already in the index and nothing was written. */
+  created: boolean;
+  /** The new document's ID, when `created`. */
+  docId?: string;
+}
+
+/**
  * Options for creating a new project.
  */
 export interface CreateProjectOptions {

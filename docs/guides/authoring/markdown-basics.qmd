@@ -198,6 +198,38 @@ A longer comment, over several paragraphs.
 :::
 ```
 
+#### Word and PowerPoint output
+
+When you render to Word (`docx`) or PowerPoint (`pptx`), including "Download as" in quarto-hub, the marks become the real thing, with no extension or filter to install:
+
+* In Word, `[++ ]` and `[-- ]` become tracked insertions and deletions, `[!! ]` a yellow highlight, and `[>> ]` a comment in the review pane.
+  The block forms apply the same to every paragraph inside.
+  `author` and `date` become the author and date Word shows; without an `author`, Word shows "unknown".
+* A comment on a stretch of text is written the way importing a Word document writes it: a span around the text that ends in the comment, with any replies after it.
+
+  ```qmd
+  A [commented range[>> Please reword this.]{author="Ann"}[>> Done.]{author="Dee"}] in a sentence.
+  ```
+
+  In Word the first comment covers the range and the replies are further comments on the same range.
+  Word shows them as separate comments rather than as a thread.
+* A comment inside another comment is part of the outer comment's text, not a second comment.
+* In PowerPoint there is no tracked-change markup to write to, so each mark becomes a formatted run instead: underline for insertions, strikethrough for deletions, a yellow highlight, and comments as bracketed italic red text such as ` [Ana: needs a citation]`.
+  Formatting inside a marked run is lost.
+
+When you render a document in a git repository with `--attribution=git`, every insertion, deletion and comment that doesn't set `author` or `date` itself gets them from `git blame` on its source lines.
+Each person who committed marks then appears as a separate author in Word's review pane.
+The name defaults to the part of the committer's email before the `@`; to use full names, map the emails in the document or project metadata (both `name` and `color` are required, or the entry is ignored):
+
+```yaml
+attribution:
+  identities:
+    ana@example.com: {name: Ana Alvarez, color: "#cc0000"}
+```
+
+An explicit `author=` or `date=` always wins, and a highlight has no author in Word.
+PowerPoint output ignores authors on insertions and deletions.
+
 ### Lists
 
 ### Syntax Characters (FIXME we need a better name)

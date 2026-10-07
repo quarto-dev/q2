@@ -1,4 +1,34 @@
 {
+  "download-as-book-progress|dark": {
+    "color-contrast": 1
+  },
+  "download-as-book-progress|light": {
+    "color-contrast": 1
+  },
+  "download-as-disabled|dark": {
+    "color-contrast": 1
+  },
+  "download-as-disabled|light": {
+    "color-contrast": 1
+  },
+  "download-as-done|dark": {
+    "color-contrast": 1
+  },
+  "download-as-done|light": {
+    "color-contrast": 1
+  },
+  "download-as-failed|dark": {
+    "color-contrast": 1
+  },
+  "download-as-failed|light": {
+    "color-contrast": 1
+  },
+  "download-as-progress|dark": {
+    "color-contrast": 1
+  },
+  "download-as-progress|light": {
+    "color-contrast": 1
+  },
   "editor-shell|dark": {
     "color-contrast": 1
   },

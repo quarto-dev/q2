@@ -1,0 +1,27 @@
+[
+  {
+    "path": "argv.json",
+    "sha256": "bda38903fdd0abd8c1d301d47d72cfc140645b325a2bff8dc72c99de231eeb3e",
+    "size": 180
+  },
+  {
+    "path": "pandoc.json",
+    "sha256": "efc637f9f7b334405488acd05fd4f412c012facbbd1676c407b89998b0f9cb58",
+    "size": 1466
+  },
+  {
+    "path": "source.pptx",
+    "sha256": "64f85589bf6c98ceac77431185fffc1d5a9c7afd1d4ac54a35804411fa6fc262",
+    "size": 33777
+  },
+  {
+    "path": "status.json",
+    "sha256": "370aaa466bf7fdf5df8dec2004f5e0b4d5d352b7060c00c4a1204cc89b4b641a",
+    "size": 18
+  },
+  {
+    "path": "stderr.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  }
+]

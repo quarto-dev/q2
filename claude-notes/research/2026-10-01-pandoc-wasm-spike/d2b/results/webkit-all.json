@@ -1,0 +1,382 @@
+{
+ "browser": "webkit",
+ "init": {
+  "compileMs": 209,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15"
+ },
+ "latency": [
+  {
+   "name": "empty",
+   "n": 12,
+   "digestFresh": "64399dc83de863b5",
+   "digestWarm": "64399dc83de863b5",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 236,
+     "min": 228,
+     "max": 379
+    },
+    "mount": {
+     "med": 1,
+     "min": 0,
+     "max": 1
+    },
+    "inst": {
+     "med": 128,
+     "min": 121,
+     "max": 146
+    },
+    "run": {
+     "med": 98,
+     "min": 93,
+     "max": 240
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mem": 48889856
+   },
+   "warm": {
+    "e2e": {
+     "med": 56.99999999999909,
+     "min": 49,
+     "max": 60.00000000000091
+    },
+    "prep": {
+     "med": 1,
+     "min": 0,
+     "max": 1
+    },
+    "mount": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "run": {
+     "med": 55,
+     "min": 48,
+     "max": 58
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mem": 44630016,
+    "start": {
+     "e2e": 146,
+     "initMs": 136
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 10.999999999999545,
+    "warmMessageAndClone": 0.9999999999999432
+   }
+  },
+  {
+   "name": "callouts",
+   "n": 12,
+   "digestFresh": "b98aa45aac1aa413",
+   "digestWarm": "b98aa45aac1aa413",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 285,
+     "min": 270,
+     "max": 315
+    },
+    "mount": {
+     "med": 1,
+     "min": 0,
+     "max": 1
+    },
+    "inst": {
+     "med": 131,
+     "min": 123,
+     "max": 140
+    },
+    "run": {
+     "med": 146.00000000000006,
+     "min": 135,
+     "max": 166
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mem": 49676288
+   },
+   "warm": {
+    "e2e": {
+     "med": 99.00000000000182,
+     "min": 93,
+     "max": 112
+    },
+    "prep": {
+     "med": 1,
+     "min": 0,
+     "max": 1
+    },
+    "mount": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "run": {
+     "med": 97,
+     "min": 92,
+     "max": 103.00000000000006
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0
+    },
+    "mem": 46399488,
+    "start": {
+     "e2e": 145.99999999999818,
+     "initMs": 135
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 10.999999999999034,
+    "warmMessageAndClone": 1
+   }
+  },
+  {
+   "name": "callouts-x10",
+   "n": 12,
+   "digestFresh": "afc6526066676b89",
+   "digestWarm": "afc6526066676b89",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 682,
+     "min": 669,
+     "max": 689
+    },
+    "mount": {
+     "med": 0.9999999999999982,
+     "min": 0,
+     "max": 1.0000000000000018
+    },
+    "inst": {
+     "med": 138,
+     "min": 129,
+     "max": 143
+    },
+    "run": {
+     "med": 532,
+     "min": 527,
+     "max": 539
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mem": 58195968
+   },
+   "warm": {
+    "e2e": {
+     "med": 508,
+     "min": 496.00000000000364,
+     "max": 521.9999999999964
+    },
+    "prep": {
+     "med": 0,
+     "min": 0,
+     "max": 1
+    },
+    "mount": {
+     "med": 1,
+     "min": 0,
+     "max": 1
+    },
+    "run": {
+     "med": 505.0000000000009,
+     "min": 487,
+     "max": 519
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0
+    },
+    "mem": 56819712,
+    "start": {
+     "e2e": 154,
+     "initMs": 144
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 10.999999999996362,
+    "warmMessageAndClone": 2
+   }
+  }
+ ],
+ "correctness": {
+  "ABA": [
+   "callouts:true",
+   "tables:true",
+   "callouts:true",
+   "crossrefs:true",
+   "callouts:true",
+   "tables:true"
+  ],
+  "env": [
+   "one|111",
+   "two|222",
+   "one|111"
+  ],
+  "errors": [
+   "filter error(): output=no trap=null stderr=\"ERROR: Error running filter '/f.lua':\\n/f.lua:1: boom\\nstack traceback:\\n\" | next good render equal=true",
+   "filter syntax error: output=no trap=null stderr=\"ERROR: Error running filter '/f.lua':\\n/f.lua:1: unexpected symbol near\" | next good render equal=true",
+   "filter os.exit(3): output=no trap=Error: exit with exit code 3 stderr=\"\" | next good render equal=true"
+  ],
+  "oom": {
+   "fresh": "status 251",
+   "warmBeforeEqual": true,
+   "warmOom": "trap=Error: exit with exit code 1 output=no",
+   "afterEqual": [
+    false,
+    false
+   ],
+   "afterTrap": [
+    "Error: exit with exit code 1",
+    "Error: exit with exit code 1"
+   ]
+  }
+ },
+ "memory": {
+  "warm": {
+   "rssStart": 4100,
+   "rssPeak": 4100,
+   "rssEnd": 4005,
+   "wasmMbTrace": [
+    [
+     1,
+     42
+    ],
+    [
+     10,
+     44
+    ],
+    [
+     20,
+     44
+    ],
+    [
+     30,
+     44
+    ],
+    [
+     40,
+     44
+    ],
+    [
+     50,
+     44
+    ],
+    [
+     60,
+     44
+    ],
+    [
+     70,
+     44
+    ],
+    [
+     80,
+     44
+    ],
+    [
+     90,
+     44
+    ],
+    [
+     100,
+     44
+    ]
+   ]
+  },
+  "fresh": {
+   "rssStart": 4047,
+   "rssPeak": 4476,
+   "rssEnd": 1951,
+   "wasmMbTrace": [
+    [
+     1,
+     47
+    ],
+    [
+     10,
+     47
+    ],
+    [
+     20,
+     47
+    ],
+    [
+     30,
+     47
+    ],
+    [
+     40,
+     47
+    ],
+    [
+     50,
+     47
+    ],
+    [
+     60,
+     47
+    ],
+    [
+     70,
+     47
+    ],
+    [
+     80,
+     47
+    ],
+    [
+     90,
+     47
+    ],
+    [
+     100,
+     47
+    ]
+   ]
+  }
+ },
+ "cancel": {
+  "freshTerminateMs": 0,
+  "freshNextRender": [
+   292,
+   285,
+   275
+  ],
+  "warmTerminateMs": 0,
+  "warmNextRenderAfterKill": [
+   {
+    "coldFirstRender": 286,
+    "firstConvertMs": 128
+   },
+   {
+    "coldFirstRender": 276,
+    "firstConvertMs": 120
+   },
+   {
+    "coldFirstRender": 280.00000000001455,
+    "firstConvertMs": 127.00000000001455
+   }
+  ]
+ }
+}

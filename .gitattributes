@@ -9,3 +9,47 @@
 # future multi-line writer would break on Windows in exactly the way this pin
 # exists to prevent (bd-1d6io).
 ts-packages/annotated-qmd/examples/* text eol=lf
+
+# pandoc-wasm (R0): constants, recordings, schemas, filters and fixtures are
+# compared byte-for-byte or hashed, so a CRLF checkout would break them.
+resources/pandoc-wasm.json text eol=lf
+resources/typst-wasm.json text eol=lf
+resources/pandoc-filters/** text eol=lf
+crates/quarto-core/schemas/pandoc-request.* text eol=lf
+
+# pandoc-wasm recordings: argv/env/params/input JSON, share tree and outputs are
+# hashed or byte-compared. Text types are pinned to LF by extension; the
+# binary outputs and images stay binary.
+scripts/pandoc-capture.sh text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.json text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.qmd text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.bib text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.typ text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.html text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.lua text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.txt text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.md text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.yaml text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.yml text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.css text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.csl text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.docx binary
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.pptx binary
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.epub binary
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.png binary
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.jpg binary
+crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.js text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-argv-matrix/**/*.qmd text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-argv-matrix/**/*.bib text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-argv-matrix/**/*.theme text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-argv-matrix/**/*.yml text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-argv-matrix/**/*.json text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-argv-matrix/**/*.csl text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-argv-matrix/**/*.docx binary
+ts-packages/pandoc-host/src/typst-argv-flags.json text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/fixtures.json text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/parity/** text eol=lf
+
+# pandoc-request R9: native book refactor-guard recordings are byte-compared.
+crates/quarto-core/tests/integration/book_refactor_guard/** text eol=lf
+crates/quarto-core/tests/integration/pandoc_request_books/** text eol=lf

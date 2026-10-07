@@ -52,7 +52,13 @@ import EphemeralSessionBanner from './EphemeralSessionBanner';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewFolderDialog from './NewFolderDialog';
-import PlaceFileDialog, { type PlaceRequest } from './PlaceFileDialog';
+import PlaceFileDialog, { type PlaceFileRequest, type PlaceRequest } from './PlaceFileDialog';
+import ImportDialog from './ImportDialog';
+import { importAvailable, type ImportOutcome } from '../pandoc/importService';
+import { useImportFormats } from '../pandoc/useImportFormats';
+import { useWindowFileDrop } from '../hooks/useWindowFileDrop';
+import { routeDroppedEntries } from '../utils/routeDroppedEntries';
+import { commitImport, defaultImportStorageDeps } from '../services/importStorage';
 import SearchFilesDialog from './SearchFilesDialog';
 import type { MatchRange } from '../services/search';
 import { linkFromPaste } from '../utils/pasteLink';
@@ -79,6 +85,9 @@ import ImageViewer from './ImageViewer';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
+import type { PreviewMode } from './render/getQ2Format';
+import { useDownloadAs } from '../pandoc/useDownloadAs';
+import { download as downloadStrings } from '../strings';
 import { fileSidebar, dialogs } from '../strings';
 import { getAncestorPaths } from '../utils/fileTree';
 import { sanitizeFilename } from '../services/resourceService';
@@ -429,6 +438,9 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // Current document format (e.g., 'q2-slides', 'q2-debug', or null for default)
   const [currentFormat, setCurrentFormat] = useState<string | null>(null);
 
+  // The router's mode (react / dom / download / neither) and the "Download as" control it drives.
+  const [previewMode, setPreviewMode] = useState<PreviewMode>({ mode: 'dom' });
+
   // Handle format changes from PreviewRouter
   const handleFormatChange = useCallback((format: string | null) => {
     setCurrentFormat(format);
@@ -487,6 +499,10 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const dequeuePlace = useCallback(() => {
     setPlaceQueue((q) => q.slice(1));
   }, []);
+
+  // Document import (P5). Offered where pandoc.wasm ships (not the `q2 preview` embed).
+  const importEnabled = importAvailable();
+  const importFormats = useImportFormats(importEnabled);
 
   // Every folder in the project: explicitly created ones plus those
   // implied by file paths. Feeds the folder pickers in both dialogs.
@@ -634,6 +650,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // untouched during replay so that when replay exits, the Automerge sync
   // effect's setContent(automergeContent) always produces a state change.
   const displayContent = replayState.isActive ? replayState.currentContent : content;
+  const downloadAs = useDownloadAs(currentFile?.path ?? null, displayContent, wasmStatus === 'ready', captures, identities);
 
   // When replay content changes, update Monaco and VFS for display.
   // Writing to VFS ensures the preview renderer sees historical content.
@@ -1162,13 +1179,19 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
   }, [handleCreateTextFile, currentFile]);
 
-  // Files dropped onto the sidebar tree: added directly, no dialog —
-  // unless the name is already taken (in the project or earlier in the
-  // batch), in which case the place-file dialog asks for a folder/name,
-  // exactly as a conflicting internal move does. Files failing the
-  // size/empty checks are skipped with a console warning.
+  // Files dropped onto the sidebar tree, the editor, or anywhere else in the window: added
+  // directly, no dialog — unless the name is already taken (in the project or earlier in the
+  // batch), in which case the place-file dialog asks for a folder/name, exactly as a conflicting
+  // internal move does. Files failing the size/empty checks are skipped with a console warning.
+  // Importable documents dropped at the top level (not inside a dropped folder) go to the import
+  // queue first (I5); the rest take the upload path.
   const handleDropFiles = useCallback(
-    (entries: DroppedEntries, destination: string) => {
+    (dropped: DroppedEntries, destination: string) => {
+      const { imports, uploads: entries } = routeDroppedEntries(dropped, {
+        formats: replayState.isActive ? null : importFormats,
+        destination,
+      });
+      for (const { file, folder } of imports) enqueuePlace({ kind: 'import', file, folder });
       const taken = new Set(files.map((f) => f.path));
       // Dropped directories become folders even when empty, so the tree
       // mirrors what was dropped.
@@ -1197,8 +1220,19 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         void handleUploadAsset(file, path);
       }
     },
-    [files, handleUploadAsset, enqueuePlace]
+    [files, handleUploadAsset, enqueuePlace, importFormats, replayState.isActive]
   );
+
+  // Window-level fallback: a file dropped where no component handles it (top bar, preview pane,
+  // image viewer, no file open, a dialog's backdrop) is routed like an editor drop instead of
+  // letting the browser navigate to it. In replay mode the drop is taken and ignored.
+  useWindowFileDrop({
+    enabled: importEnabled,
+    onDrop: (entries) => {
+      if (replayState.isActive) return;
+      handleDropFiles(entries, resolveDefaultDestination({ selection: currentFile?.path ?? null }));
+    },
+  });
 
 
 
@@ -1474,9 +1508,37 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     [files, allFolders, handleRenameFile]
   );
 
+  // The Import button's picker: one dialog per file, queued behind whatever is open. The folder is
+  // where the current file lives (the project root with no file open), like an asset upload.
+  const handleImportPick = useCallback(
+    (file: File) => {
+      if (replayState.isActive) return;
+      enqueuePlace({ kind: 'import', file, folder: resolveDefaultDestination({ selection: currentFile?.path ?? null }) });
+    },
+    [replayState.isActive, enqueuePlace, currentFile]
+  );
+
+  // Store an import's images, then its qmd, and on success open the qmd the way a created text file
+  // opens (`handleCreateTextFile`'s pattern, plus the URL update `handleSelectFile` makes): the
+  // file isn't in `fileContents` yet, so `handleSelectFile` would show it empty.
+  const handleCommitImport = useCallback(
+    async (outcome: Extract<ImportOutcome, { ok: true }>, qmdPath: string) => {
+      const result = await commitImport(outcome, qmdPath, defaultImportStorageDeps());
+      if (result.ok) {
+        setCurrentFile({ path: result.qmdPath, docId: result.qmdDocId });
+        setContent(result.qmd);
+        setDiagnostics([]);
+        setUnlocatedErrors([]);
+        onNavigateToFile(result.qmdPath, { replace: true });
+      }
+      return result;
+    },
+    [onNavigateToFile, setContent]
+  );
+
   // Place-file dialog confirmed: move an existing file or add a new one.
   const handlePlaceConfirm = useCallback(
-    (request: PlaceRequest, newPath: string) => {
+    (request: PlaceFileRequest, newPath: string) => {
       if (request.kind === 'move') handleRenameFile(request.file, newPath);
       else void handleUploadAsset(request.file, newPath);
     },
@@ -1532,6 +1594,11 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                         onOpenInNewTab={handleOpenInNewTab}
                         onCopyLink={handleCopyLink}
                         onOpenSearch={() => setShowSearchDialog(true)}
+                        importDocument={
+                          importEnabled
+                            ? { formats: importFormats, disabled: replayState.isActive, onPick: handleImportPick }
+                            : undefined
+                        }
                       />
                     </>
                   );
@@ -1595,6 +1662,15 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
               splitFraction={editorPaneFraction}
               onSetSplit={handleSetSplitPreset}
               splitDisabled={previewUnavailable}
+              downloadAs={
+                downloadAs.available && currentFile && isSourceFile(currentFile.path)
+                  ? {
+                      ...downloadAs,
+                      disabledReason:
+                        previewMode.mode === 'neither' ? downloadStrings.neitherDescription(previewMode.formatKey) : undefined,
+                    }
+                  : undefined
+              }
             />
             {replayState.isActive && (
               <div className="replay-mode-banner">REPLAY MODE</div>
@@ -1774,6 +1850,8 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
             />
           )}
           <PreviewRouter
+            onPreviewModeChange={setPreviewMode}
+            projectKey={project.id}
             content={displayContent}
             currentFile={currentFile}
             files={files}
@@ -1868,14 +1946,24 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         onSelectFile={handleSelectSearchResult}
       />
 
-      {/* Place-file dialog (move, or add a conflicting drop) */}
-      <PlaceFileDialog
-        request={placeQueue[0] ?? null}
-        folders={allFolders}
-        existingPaths={files.map((f) => f.path)}
-        onClose={dequeuePlace}
-        onConfirm={handlePlaceConfirm}
-      />
+      {/* Place-file dialog (move, or add a conflicting drop), or the import dialog: one queue, one dialog at a time */}
+      {placeQueue[0]?.kind === 'import' ? (
+        <ImportDialog
+          request={placeQueue[0]}
+          folders={allFolders}
+          existingPaths={files.map((f) => f.path)}
+          onClose={dequeuePlace}
+          commit={handleCommitImport}
+        />
+      ) : (
+        <PlaceFileDialog
+          request={placeQueue[0] ?? null}
+          folders={allFolders}
+          existingPaths={files.map((f) => f.path)}
+          onClose={dequeuePlace}
+          onConfirm={handlePlaceConfirm}
+        />
+      )}
 
       {/* New folder dialog */}
       <NewFolderDialog

@@ -1,0 +1,44 @@
+{
+  "name": "@quarto/typst-host",
+  "version": "0.0.1",
+  "private": true,
+  "description": "DOM-free host that compiles a .typ to PDF with the pinned typst.ts wasm compiler (pandoc-wasm epic, host phase H7). Worker-agnostic core: TypstSession and createHandler.",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./fontBundle": {
+      "types": "./src/fontBundle.ts",
+      "source": "./src/fontBundle.ts",
+      "import": "./dist/fontBundle.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "typecheck:tests": "tsc -p tsconfig.tests.json"
+  },
+  "dependencies": {
+    "@myriaddreamin/typst-ts-web-compiler": "0.7.0",
+    "@myriaddreamin/typst.ts": "0.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

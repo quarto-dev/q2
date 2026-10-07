@@ -40,6 +40,7 @@ export type {
   CaptureRef,
   ConnectOptions,
   CreateBinaryFileResult,
+  CreateFileIfAbsentResult,
   CreateProjectOptions,
   CreateProjectResult,
   DisconnectOptions,

@@ -1,0 +1,141 @@
+/** SCRATCH probe: nested comments (delete me)
+ * DOM-structure contract for the q2-preview comment chrome (bd-q2wqj24c).
+ *
+ * The theme CSS is written for the native HTML writer's DOM, where a block
+ * is a DIRECT child of its container (`blockquote > h4`,
+ * `.callout-body > :first-child`, `li > p:last-of-type`, …). The comment
+ * chrome must therefore never put an element between a block and its
+ * parent: `CommentBlock` renders the block untouched and portals its
+ * bubble (and the block glow) into one body-level overlay layer,
+ * `[data-q2-comment-layer]`, positioned from the block's measured rect.
+ *
+ * The DOM parity harness (`hub-client/src/services/smokeAllParity.wasm.test.tsx`)
+ * mounts read-only — no `PreviewContext`, so no chrome — and is blind to
+ * this class of bug; the "parity guard" block below is the check it lacks.
+ */
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, cleanup, fireEvent } from '@testing-library/react';
+import React from 'react';
+import { Ast } from '../../framework';
+import { previewRegistry } from '../registry';
+import { PreviewContext } from '../PreviewContext';
+import type { PreviewContextValue } from '../PreviewContext';
+import type { ResolvedSource } from '../sourceIndex';
+
+afterEach(() => {
+    cleanup();
+    document.body.innerHTML = '';
+});
+
+// --- AST builders -----------------------------------------------------------
+
+// Every commentable block gets its own pool entry so `resolveSource` can
+// hand it back as a committable TopLevel node.
+const POOL: { t: 0; r: [number, number]; d: number }[] = [];
+function pooled<T extends object>(node: T): T & { s: number } {
+    const s = POOL.length;
+    POOL.push({ t: 0, r: [s * 10, s * 10 + 9], d: 0 });
+    return { ...node, s };
+}
+
+const str = (c: string) => ({ t: 'Str', c });
+const comment = (text: string) => ({
+    t: 'Span',
+    c: [['', ['quarto-edit-comment'], []], [str(text)]],
+});
+const para = (...inlines: unknown[]) => pooled({ t: 'Para', c: inlines });
+const plain = (...inlines: unknown[]) => pooled({ t: 'Plain', c: inlines });
+const header = (level: number, id: string, ...inlines: unknown[]) =>
+    pooled({ t: 'Header', c: [level, [id, [], []], inlines] });
+const blockQuote = (...blocks: unknown[]) => pooled({ t: 'BlockQuote', c: blocks });
+const bulletList = (...items: unknown[][]) => pooled({ t: 'BulletList', c: items });
+const callout = (...content: unknown[]) => ({
+    t: 'CustomBlock',
+    type_name: 'Callout',
+    slots: {
+        title: { kind: 'inlines', value: [str('Note')] },
+        content: { kind: 'blocks', value: content },
+    },
+    plain_data: { type: 'note', icon: true, appearance: 'default' },
+    attr: ['', [], []],
+});
+
+function astJson(blocks: unknown[]): string {
+    return JSON.stringify({
+        'pandoc-api-version': [1, 23, 0],
+        meta: {},
+        blocks,
+        astContext: { p: POOL },
+    });
+}
+
+const resolveSource = (node: any): ResolvedSource | null => {
+    if (node?.s === undefined) return null;
+    return {
+        sourceNode: node,
+        reachabilityClass: 'TopLevel',
+        sourceEntry: POOL[Number(node.s)],
+    };
+};
+
+function mount(blocks: unknown[], withContext = true) {
+    const ast = (
+        <Ast
+            astJson={astJson(blocks)}
+            currentFilePath="/project/test.qmd"
+            onNavigateToDocument={() => {}}
+            setAst={() => {}}
+            registry={previewRegistry}
+        />
+    );
+    if (!withContext) return render(ast);
+    const ctx: PreviewContextValue = {
+        currentFilePath: '/project/test.qmd',
+        commentsMode: 'show',
+        resolveSource,
+        commitSubtreeEdit: () => {},
+    };
+    return render(<PreviewContext.Provider value={ctx}>{ast}</PreviewContext.Provider>);
+}
+
+// --- DOM helpers ------------------------------------------------------------
+
+const layer = () => document.querySelector('[data-q2-comment-layer]');
+const bubbles = () => [...document.querySelectorAll<HTMLElement>('.q2-comment-bubble')];
+
+
+const span = (classes: string[], ...inl: unknown[]) => ({ t: 'Span', c: [['', classes, []], inl] });
+const sp = { t: 'Space' };
+const div = (classes: string[], ...blocks: unknown[]) => pooled({ t: 'Div', c: [['', classes, []], blocks] });
+
+function report(label: string, container: HTMLElement) {
+    const p = container.querySelector('p');
+    (globalThis as any).__probe ??= [];
+    (globalThis as any).__probe.push(`[${label}] p.text=${JSON.stringify(p?.textContent)} bubbles=${bubbles().length} bubbleText=${JSON.stringify(bubbles().map((b) => b.textContent))} commentSpansInText=${container.querySelectorAll('.quarto-edit-comment').length} commentedSpan=${container.querySelectorAll('.q2-commented-span').length}`);
+}
+
+describe('nested comment probe', () => {
+    it('baseline: comment as direct child of the paragraph', () => {
+        const { container } = mount([para(str('Body'), sp, comment('direct'))]);
+        report('direct', container);
+    });
+    it('comment inside a plain span', () => {
+        const { container } = mount([para(str('Before'), sp, span([], str('range'), sp, comment('on-plain-span')), sp, str('after'))]);
+        report('plain-span', container);
+    });
+    it('comment inside a quarto-highlight span', () => {
+        const { container } = mount([para(str('Before'), sp, span(['quarto-highlight'], str('range'), sp, comment('on-highlight')), sp, str('after'))]);
+        report('highlight-span', container);
+    });
+    it('comment inside a quarto-highlight div paragraph', () => {
+        const { container } = mount([div(['quarto-highlight'], para(str('Whole'), sp, str('para'), comment('on-div')))]);
+        report('highlight-div', container);
+    });
+    it('comment as a direct child block of a div (wrapped in Plain)', () => {
+        const { container } = mount([div([], para(str('Whole')), plain(comment('div-level')))]);
+        report('div-plain', container);
+    });
+});
+import { afterAll } from 'vitest';
+import { writeFileSync } from 'node:fs';
+afterAll(() => writeFileSync(process.env.PROBE_OUT ?? '/dev/null', ((globalThis as any).__probe ?? []).join('\n') + '\n'));

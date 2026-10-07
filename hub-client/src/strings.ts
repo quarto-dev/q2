@@ -55,6 +55,91 @@ export const header = {
   noFileSelected: 'No file selected',
 } as const;
 
+/** "Download as" (pandoc.wasm in the browser, or the native render in the preview embed). */
+export const pdfPreview = {
+  title: 'PDF preview',
+  updating: 'Updating the PDF…',
+  failedTitle: 'The PDF could not be updated.',
+  failedKeeping: 'Showing the last PDF that compiled.',
+  retry: 'Try again',
+};
+
+export const download = {
+  buttonLabel: 'Download as',
+  buttonTooltip: 'Download this document as another format',
+  menuLabel: 'Download as',
+  compilingPdf: 'Compiling the PDF…',
+  startingCompiler: 'Starting the PDF compiler…',
+  cancel: 'Cancel',
+  dismiss: 'Dismiss',
+  copyStatus: 'Copy this message',
+  copiedStatus: 'Copied',
+  statusRegionLabel: 'Download status',
+  preparing: 'Preparing the document…',
+  startingConverter: 'Starting the converter…',
+  loadingFromCache: 'Loading the converter…',
+  verifying: 'Verifying the converter…',
+  compiling: 'Compiling the converter…',
+  downloadingConverter: (loaded: string, total: string | null) =>
+    total ? `Downloading the converter… ${loaded} of ${total}` : `Downloading the converter… ${loaded}`,
+  downloadingConverterShort: 'Downloading the converter…',
+  mounting: 'Preparing files…',
+  converting: (label: string) => `Converting to ${label}…`,
+  renderingNatively: (label: string) => `Rendering ${label}…`,
+  /** A whole-book render, before each chapter (`index` is 1-based). */
+  renderingChapter: (index: number, total: number, file: string) => `Rendering chapter ${index} of ${total}: ${file}`,
+  bookDone: (chapters: number) => (chapters === 1 ? 'Book downloaded (1 chapter)' : `Book downloaded (${chapters} chapters)`),
+  /** Menu entries for a document that is a chapter of a book project (typst, pdf and epub). */
+  downloadBookAs: (label: string) => `Download book as ${label}`,
+  thisChapterOnly: 'This chapter only',
+  captureFetchFailed: (n: number) =>
+    n === 1
+      ? 'The executed output of 1 chapter could not be fetched, so that chapter has its code cells as source.'
+      : `The executed output of ${n} chapters could not be fetched, so those chapters have their code cells as source.`,
+  cancelled: 'Download cancelled.',
+  done: (fileName: string) => `Downloaded ${fileName}.`,
+  warnings: (n: number) => (n === 1 ? '1 warning' : `${n} warnings`),
+  unexecutedCells: (n: number) =>
+    n === 1
+      ? '1 code cell was not executed; its output is not in the file.'
+      : `${n} code cells were not executed; their output is not in the file.`,
+  typstDangling:
+    'The .typ file names images and brand assets but does not include them, so it may have dangling resource references.',
+  failed: {
+    'request-failed': 'The document could not be prepared for download, so nothing was downloaded.',
+    'native-failed': 'The document has errors, so nothing was downloaded. Fix them and try again.',
+    'native-error': 'The preview server could not render the document.',
+    'pandoc-error': 'The converter reported an error, so nothing was downloaded.',
+    'typst-error': 'The PDF compiler reported an error, so nothing was downloaded.',
+    'package-error': 'A Typst package the document needs could not be fetched, so nothing was downloaded. Check your connection and try again.',
+    'invalid-request': 'The converter rejected the request, so nothing was downloaded.',
+    unsupported:
+      'This browser cannot run the converter. It needs WebAssembly exception handling (Chrome or Edge 137, Firefox 131, Safari 18.4).',
+    blocked: 'The browser or an extension blocked the converter (workers or WebAssembly compilation).',
+    'download-failed': 'The converter could not be downloaded. Check your connection and try again.',
+    offline: 'You are offline and the converter is not saved yet. Connect once to download it (about 16 MB).',
+    timeout: 'The conversion took too long and was stopped. A filter may be stuck in a loop.',
+    'out-of-memory': 'The document needs more memory than this browser can give. Try fewer or smaller images.',
+    crashed: 'The converter stopped unexpectedly. Try again.',
+    done: '',
+    cancelled: '',
+  },
+  /** Class "download": no preview, only a download for the document's own format. */
+  noPreviewTitle: (label: string) => `No live preview for ${label} documents`,
+  noPreviewBody: 'Download the rendered file to see it. It is rendered when you click, not while you edit.',
+  downloadOwn: (label: string) => `Download ${label}`,
+  /** Class "neither": the control is disabled and says why. */
+  neitherTitle: (format: string) => `No preview or download for ${format} documents`,
+  neitherBody: (format: string) =>
+    format === 'pdf'
+      ? `format: pdf means LaTeX, which the browser can't run. To make a PDF here, use format: typst.`
+      : `The browser can preview HTML and slides, and download Word, PowerPoint and EPUB. A document whose format is ${format} can't be shown or downloaded here.`,
+  neitherDescription: (format: string) =>
+    format === 'pdf'
+      ? `Download is unavailable: format: pdf means LaTeX. Use format: typst to make a PDF in the browser.`
+      : `Download is unavailable: documents with format ${format} can't be converted in the browser.`,
+} as const;
+
 /** SyncStatusBadge (FILES section + document bottom bar). */
 export const syncStatus = {
   /** Prefix when disconnected (browser offline / socket down / no peer). */
@@ -212,6 +297,49 @@ export const notifications = {
 } as const;
 
 /** Editor-shell dialogs. */
+/** Document import (Import button, placement dialog, report; document import epic, P5). */
+export const importDoc = {
+  buttonLabel: 'Import document',
+  buttonTooltip: 'Import a Word, OpenDocument, RTF, EPUB or PowerPoint file as a Quarto document',
+  dialogTitle: (name: string) => `Import ${name}`,
+  folderLabel: 'Folder:',
+  nameLabel: 'Name:',
+  /** Where the document's images will go: `dir` has no trailing slash. */
+  mediaLine: (dir: string) => `Images will be stored in ${dir}/`,
+  errorExists: 'A file with this name already exists in that folder',
+  errorMediaExists: (dir: string) => `A folder named ${dir} already exists there`,
+  errorExtension: 'The name must end in .qmd',
+  errorEmptyName: 'Enter a name for the document',
+  import: 'Import',
+  cancel: 'Cancel',
+  close: 'Close',
+  progressRegionLabel: 'Import progress',
+  progress: {
+    reading: 'Reading the file…',
+    'loading-pandoc': 'Starting the converter…',
+    converting: 'Converting the document…',
+    images: 'Processing images…',
+    finishing: 'Finishing…',
+  },
+  writing: 'Adding the document to the project…',
+  reportSucceeded: 'The document was imported.',
+  reportSucceededWithNotes: 'The document was imported. Notes from the import:',
+  reportFailed: 'The document could not be imported, so nothing was added to the project.',
+  groupErrors: (n: number) => (n === 1 ? '1 error' : `${n} errors`),
+  groupWarnings: (n: number) => (n === 1 ? '1 warning' : `${n} warnings`),
+  groupInfo: (n: number) => (n === 1 ? '1 note' : `${n} notes`),
+  /** `import-write-failed`: `step` is e.g. "image 2 of 5" or "the document". */
+  writeFailed: (step: string, path: string, cause: string) => `Could not add ${step} (${path}): ${cause}`,
+  writeFailedAppeared: (path: string) => `A file appeared at ${path} while importing, so nothing was overwritten.`,
+  writeFailedRenamed: (path: string, actual: string) =>
+    `A different file appeared at ${path} while importing (the image would have been stored as ${actual}).`,
+  /** `import-cleanup-failed`. */
+  cleanupDeleteFailed: (path: string, cause: string) => `Could not remove ${path} after the failed import: ${cause}`,
+  cleanupReplaced: (path: string) => `${path} was left in place because another change replaced it after the import wrote it.`,
+  stepImage: (index: number, total: number) => `image ${index} of ${total}`,
+  stepDocument: 'the document',
+} as const;
+
 export const dialogs = {
   newFile: {
     title: 'New file',

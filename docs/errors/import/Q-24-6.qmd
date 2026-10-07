@@ -1,0 +1,26 @@
+---
+title: "Paragraph-Mark Changes Dropped"
+description: "Tracked insertions or deletions of paragraph breaks were not imported."
+code: Q-24-6
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-6` — Paragraph-Mark Changes Dropped
+
+> Tracked insertions or deletions of paragraph breaks were not imported.
+
+## What this means
+
+Word can track the insertion or deletion of a paragraph break itself. The importer has no editorial mark for a paragraph break, so these were dropped; the text on either side is imported as written.
+
+## Why this happens
+
+- The document has tracked changes that added or removed paragraph breaks.
+
+## How to fix
+
+Nothing needs fixing. Compare against the original document if the paragraph structure matters.

@@ -1,0 +1,19 @@
+---
+title: Authors on tracked changes
+format: docx
+---
+
+Inline marks carry author and date:
+[++ inserted]{author="Gina" date="2026-06-06T06:06:06Z"}
+[-- deleted]{author="Hal"}.
+A comment[>> from Ivy]{author="Ivy"} too.
+
+Block marks carry them too:
+
+::: ++ {author="Eve" date="2026-05-05T05:05:05Z"}
+A block insertion.
+:::
+
+::: -- {author="Frank"}
+A block deletion.
+:::

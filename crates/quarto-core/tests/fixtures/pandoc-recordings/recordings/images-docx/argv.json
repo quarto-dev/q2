@@ -1,0 +1,18 @@
+[
+  "pandoc",
+  "-f",
+  "json",
+  "-t",
+  "docx",
+  "--data-dir",
+  "/__q2_share__/pandoc/datadir",
+  "-L",
+  "/__q2_share__/filters/main.lua",
+  "--resource-path",
+  "/__q2_doc__",
+  "-o",
+  "/__q2_doc__/images.docx",
+  "--default-image-extension",
+  "png",
+  "/__q2_tmp__/pandoc-input.json"
+]

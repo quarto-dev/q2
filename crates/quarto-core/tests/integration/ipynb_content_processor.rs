@@ -133,10 +133,8 @@ fn flagship_rendering_half_labels_owning_cell_with_snippet() {
     )
     .expect_err("kv-before-class in cell 2 must fail to parse");
 
-    let options = quarto_error_reporting::TextRenderOptions {
-        enable_hyperlinks: false,
-    };
-    // `enable_hyperlinks: false` disables OSC-8 only; the ariadne renderer
+    let options = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
+    // `.hyperlinks(false)` disables OSC-8 only; the ariadne renderer
     // still emits SGR color codes (nextest strips them when displaying, so
     // assert on the stripped text).
     let rendered: String = err
@@ -333,9 +331,7 @@ fn cell_option_yaml_error_lands_in_owning_cell() {
         quarto_error_reporting::DiagnosticMessageBuilder::error("cell options are not valid YAML")
             .with_location(anchor)
             .build();
-    let options = quarto_error_reporting::TextRenderOptions {
-        enable_hyperlinks: false,
-    };
+    let options = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
     let rendered = strip_ansi(&diagnostic.to_text_with_renderer(Some(&ctx), &options, None));
     assert!(
         rendered.contains("notebook.ipynb[cell 2, code]:1:"),
@@ -475,9 +471,7 @@ mod seam2 {
 
         // The error-path flagship, end to end: rendering the REBUILT
         // context must label the owning cell and show its in-cell snippet.
-        let options = TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let options = TextRenderOptions::default().hyperlinks(false);
         let rendered: String = pe
             .diagnostics
             .iter()
@@ -741,9 +735,7 @@ fn scaling_gate_per_cell_registration_and_render() {
         let diagnostic = quarto_error_reporting::DiagnosticMessageBuilder::error("synthetic")
             .with_location(location)
             .build();
-        let options = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let options = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let t = Instant::now();
         let rendered = diagnostic.to_text_with_renderer(Some(&ctx), &options, None);
         let render = t.elapsed();

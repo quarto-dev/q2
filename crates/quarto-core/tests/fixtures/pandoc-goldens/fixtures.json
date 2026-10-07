@@ -1,0 +1,12 @@
+[
+  {"qmd": "crossrefs/all-docx.qmd", "resources": ["crossrefs/img/thinker.jpg"]},
+  {"qmd": "callouts.qmd", "resources": []},
+  {"qmd": "crossrefs/callouts.qmd", "resources": ["crossrefs/img/painter.jpg", "crossrefs/img/abbas.jpg"]},
+  {"qmd": "crossrefs/theorems.qmd", "resources": []},
+  {"qmd": "crossrefs/theorem-types.qmd", "resources": []},
+  {"qmd": "crossrefs/equations.qmd", "resources": []},
+  {"qmd": "smoke-all/crossrefs/theorem/proof-rendering.qmd", "resources": []},
+  {"qmd": "smoke-all/2025/01/08/7260.qmd", "resources": []},
+  {"qmd": "smoke-all/mermaid/backticks.qmd", "resources": []},
+  {"qmd": "tabset-subfloat.qmd", "resources": []}
+]

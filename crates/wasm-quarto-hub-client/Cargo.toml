@@ -17,7 +17,7 @@ quarto-core = { path = "../quarto-core" }
 # NOTE: `quarto-error-catalog` is intentionally NOT a dependency here — the WASM
 # bridge never surfaces docs URLs, so installing the catalog would only bloat the
 # bundle past the PWA precache limit. See the comment in `init()` in src/lib.rs.
-quarto-error-reporting = { version = "0.3.0", features = ["json"] }
+quarto-error-reporting = { version = "0.4.0", features = ["json"] }
 # Direct dep so the test-only `quarto_highlight_for_test` export can
 # call the Registry-backed highlight path. Same crate quarto-core uses
 # via CodeHighlightStage — ensuring WASM tests exercise the same code
@@ -30,6 +30,7 @@ quarto-source-map = "0.3.0"
 quarto-system-runtime = { path = "../quarto-system-runtime", features = ["js-bridge"] }
 quarto-project-create = { path = "../quarto-project-create" }
 quarto-trace = { path = "../quarto-trace" }
+async-trait = "0.1"
 flate2 = "1.1"
 wasm-printf-fmt = { path = "../wasm-printf-fmt" }
 wasm-bindgen = "0.2"
@@ -37,7 +38,7 @@ wasm-bindgen = "0.2"
 # `[patch.crates-io]` below and `quarto-system-runtime/Cargo.toml` for
 # the rationale). To upgrade, bump the vendored patch first.
 wasm-bindgen-futures = "=0.4.58"
-web-sys = { version = "0.3", features = ["console"] }
+web-sys = { version = "0.3", features = ["console", "MessageChannel", "MessagePort"] }
 js-sys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

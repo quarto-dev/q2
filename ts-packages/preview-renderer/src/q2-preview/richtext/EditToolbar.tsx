@@ -15,11 +15,19 @@
 // editor (which would collapse the selection before the command runs). The link
 // input DOES take focus; the editor's commit is scoped to "focus left the whole
 // edit box" (see RichTextEditor), so focusing the input keeps the session open.
+//
+// Comment-on-selection (💬, rich surface only — span comments prototype, see
+// custom/CommentSpan.tsx): applies the editable `span` mark to the selection
+// (serializes as `[selected text]`), commits the block, and opens the span's
+// add-comment bubble in the rendered view.
 
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import type { Editor } from '@tiptap/core';
+import { getMarkRange, type Editor } from '@tiptap/core';
 import { shouldPlaceChromeBelow } from '../editChromeGeometry';
 import { ensureRichTextStyles } from './styles';
+import type { EditorialKind } from './schema';
+import { editorialAvailability } from './editorialSelection';
+import { requestOpenCommentOnSpan } from '../commentPending';
 import { ModeToggle } from './ModeToggle';
 import { EditTypeIndicator } from './EditTypeIndicator';
 
@@ -43,7 +51,10 @@ const MARKS: MarkSpec[] = [
 export function EditToolbar({
   editor,
   richSupported,
+  onCommit,
 }: {
+  /** Commit the edit session now (rich surface); used by comment-on-selection. */
+  onCommit?: () => void;
   /** The live tiptap editor when the rich surface is mounted; null/undefined on
    *  the plain surface (no marks then). */
   editor?: Editor | null;
@@ -145,6 +156,135 @@ export function EditToolbar({
     editor?.chain().focus().run();
   };
 
+  // ---- comment on selection ------------------------------------------------
+  // Wrap the selection (within one text block) in a plain span chip, commit the
+  // block, and ask the span comment chrome to open its add-comment bubble on
+  // the span once it renders (see `commentPending.ts`). The comment itself is
+  // typed in the bubble — the same UI as the `+` on a block — with the span
+  // highlighted, so what is being commented on stays visible.
+  // Transient feedback in the toolbar when the selection can't be commented
+  // on (there is no toast facility inside the preview iframe).
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 2500);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const startComment = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editor) return;
+    const { doc, schema, selection } = editor.state;
+    const { from, to, $from, $to } = selection;
+    if (from === to) {
+      setNotice('Select some text to comment on');
+      return;
+    }
+    if (!$from.sameParent($to)) {
+      setNotice('Select text within one paragraph');
+      return;
+    }
+    const spanType = schema.marks.span;
+    // Existing spans are never altered here (no extending, merging, or
+    // nesting). Entirely inside one span: just open that span's bubble.
+    // Partly overlapping one: refuse.
+    if (editor.isActive('span')) {
+      const range = getMarkRange($from, spanType);
+      if (!range) return;
+      requestOpenCommentOnSpan(doc.textBetween(range.from, range.to, ' '));
+      setTimeout(() => onCommit?.(), 0);
+      return;
+    }
+    if (doc.rangeHasMark(from, to, spanType)) {
+      setNotice('Selection overlaps an existing span');
+      return;
+    }
+    const text = doc.textBetween(from, to, ' ');
+    if (!text.trim()) {
+      setNotice('Select some text to comment on');
+      return;
+    }
+    editor.chain().setMark('span', { attr: ['', [], []], comments: [] }).run();
+    requestOpenCommentOnSpan(text);
+    // Commit once the press has fully completed: the trailing `click` must be
+    // delivered while the toolbar still exists, or it lands on whatever sits
+    // under the pointer after the editor closes and can re-open the block.
+    setTimeout(() => onCommit?.(), 0);
+  };
+
+  // ---- editorial marks (!! highlight, -- delete, ++ insert) ------------------
+  // Enabled only with text selected. Adds the editable `span` mark with an
+  // editorial `kind` (serializes as `[!! text]` etc.); when the selection is
+  // exactly an editorial span, only that kind is enabled and it removes the
+  // mark (see editorialSelection.ts). Existing spans are never otherwise altered.
+  const avail = editor
+    ? editorialAvailability(editor.state.doc, editor.state.selection.from, editor.state.selection.to)
+    : ({ mode: 'none' } as const);
+
+  const applyEditorialMark = (kind: EditorialKind) => (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editor) return;
+    if (avail.mode === 'add') {
+      editor.chain().focus().setMark('span', { attr: ['', [], []], comments: [], kind }).run();
+    } else if (avail.mode === 'remove' && avail.kind === kind) {
+      const { mark, from, to } = avail;
+      const attr = mark.attrs.attr as [string, string[], unknown[]];
+      const bare = !attr[0] && attr[1].length === 0 && attr[2].length === 0 && mark.attrs.comments.length === 0;
+      editor
+        .chain()
+        .focus()
+        .command(({ tr }) => {
+          tr.removeMark(from, to, mark);
+          // A span carrying attrs/comments stays a plain span; a bare one disappears.
+          if (!bare) tr.addMark(from, to, mark.type.create({ ...mark.attrs, kind: '' }));
+          return true;
+        })
+        .run();
+    }
+  };
+
+  const editorialButtons = (
+    [
+      { sigil: '!!', kind: 'highlight', title: 'Highlight selection', label: '!!' },
+      { sigil: '--', kind: 'delete', title: 'Mark selection as deleted', label: '--' },
+      { sigil: '++', kind: 'insert', title: 'Mark selection as inserted', label: '++' },
+    ] as const
+  ).map((b) => {
+    const removing = avail.mode === 'remove' && avail.kind === b.kind;
+    const enabled = avail.mode === 'add' || removing;
+    return (
+      <button
+        key={b.sigil}
+        type="button"
+        title={removing ? `Remove ${b.kind} mark` : b.title}
+        disabled={!enabled}
+        aria-pressed={removing}
+        className={`q2-rt-tb-btn q2-rt-tb-${b.kind}${removing ? ' q2-rt-tb-active' : ''}`}
+        onMouseDown={(e) => e.preventDefault()}
+        onMouseUp={applyEditorialMark(b.kind)}
+      >
+        {b.label}
+      </button>
+    );
+  });
+
+  const commentButton = (
+    <button
+      type="button"
+      title="Comment on selection"
+      className="q2-rt-tb-btn q2-rt-tb-comment"
+      // mousedown only keeps the editor's focus + selection (as every toolbar
+      // button does); the action itself runs on mouse-up, so the wrap + commit
+      // happen once the press completes rather than mid-press.
+      onMouseDown={(e) => e.preventDefault()}
+      onMouseUp={startComment}
+    >
+      💬
+    </button>
+  );
+
   return (
     <div
       ref={toolbarRef}
@@ -178,6 +318,9 @@ export function EditToolbar({
           >
             🔗
           </button>
+          {commentButton}
+          {editorialButtons}
+          {notice && <span className="q2-rt-tb-notice">{notice}</span>}
         </>
       ) : (
         <div className="q2-rt-link-editor">

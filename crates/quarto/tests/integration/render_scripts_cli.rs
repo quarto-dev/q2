@@ -798,3 +798,35 @@ fn no_project_renders_without_scripts() {
     );
     assert!(dir.join("solo.html").exists());
 }
+
+/// bd-gnw9asuo: under `--json-errors`, stderr is reserved for NDJSON.
+/// A successful script's "Running pre-render script" status line and
+/// its own stdout/stderr chatter must not reach the stream (the same
+/// treatment `--quiet` gives them).
+#[test]
+fn json_errors_keeps_script_output_off_stderr() {
+    require_python!();
+    let temp = TempDir::new().unwrap();
+    let project = canonical(temp.path());
+    write_minimal_project(
+        &project,
+        "project:\n  type: website\n  output-dir: _site\n  pre-render: chatty.py\n",
+    );
+    write_file(
+        &project.join("chatty.py"),
+        "import sys\nprint(\"chatty stdout\")\nprint(\"chatty stderr\", file=sys.stderr)\n",
+    );
+
+    let out = run_q2(&project, &["--json-errors"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "render should succeed; stderr: {stderr}"
+    );
+    for line in stderr.lines().filter(|l| !l.trim().is_empty()) {
+        assert!(
+            serde_json::from_str::<serde_json::Value>(line).is_ok_and(|v| v.is_object()),
+            "--json-errors stderr must be pure NDJSON; non-JSON line:\n{line}\nfull stderr:\n{stderr}"
+        );
+    }
+}

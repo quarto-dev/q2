@@ -135,6 +135,22 @@ jobs:
           cd hub-client
           npm run build:wasm
 
+      # pandoc.wasm.gz must be in hub-client/public/pandoc/ before the hub-client
+      # build below: Vite copies public/ into dist/ at build time, so a later fetch
+      # leaves the loader without its asset and every pandoc-*.harness.spec.ts
+      # assertion fails (host phase H2). A cache miss during a GitHub outage fails
+      # the job (--require).
+      - name: Cache pandoc.wasm and typst assets
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/pandoc-wasm
+            .cache/typst-assets
+          key: pandoc-wasm-${{ hashFiles('resources/pandoc-wasm.json', 'resources/typst-wasm.json') }}
+
+      - name: Fetch pandoc.wasm
+        run: node scripts/fetch-pandoc-wasm.mjs --require
+
       # Build only the workspaces the e2e tests actually exercise.
       # q2-demos/* currently fail their vite build (they import an
       # absolute path "/src/wasm-js-bridge/cache.js" that only exists
@@ -194,10 +210,27 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}-${{ matrix.browser }}
 
+      # The pandoc.wasm parity net (hub-client/e2e/pandoc-parity.harness.spec.ts, host
+      # phase H3) runs in "Run harness tests" below: it renders the P7 docx golden
+      # fixtures through the Rust request and pandoc.wasm in Chromium and compares them
+      # with the Q1 goldens through R0's extractor CLI, which is Rust-only. Its Node twin
+      # (src/pandoc/goldenParity.wasm.test.ts) runs in ts-test-suite.yml's test:ci.
+      # Both run on every PR rather than behind `paths:` filters: the wasm build they
+      # need is already in these jobs, so a filter would only add a way to miss a change.
+      - name: Build quarto-output-extract
+        run: cargo build -p quarto-output-extract
+
       - name: Install Playwright
         run: |
           cd hub-client
           npx playwright install --with-deps ${{ matrix.browser }}
+
+      # WebKit only runs the pandoc.wasm specs (host phase H6), in the chromium leg.
+      - name: Install Playwright WebKit
+        if: matrix.browser == 'chromium'
+        run: |
+          cd hub-client
+          npx playwright install --with-deps webkit
 
       # Run E2E tests — custom specs only (smoke-all excluded by testIgnore)
       - name: Run E2E tests
@@ -270,6 +303,52 @@ jobs:
         run: |
           cd hub-client
           npx playwright test --config playwright.harness.config.ts --project=${{ matrix.browser }}
+
+      # pandoc.wasm in WebKit (host phase H6). Playwright's Linux WebKit was never checked for
+      # wasm exnref (the spike covered macOS WebKit 26.4 only), so a feature probe runs first.
+      # If the probe fails the suite is skipped with a warning rather than failing the job:
+      # that means this WebKit build cannot run pandoc.wasm, which the app reports to users
+      # as "unsupported browser", not a regression in this repo. Once the probe has passed on
+      # a CI run, delete `continue-on-error` and the `if:` so a webkit failure gates.
+      - name: Probe WebKit for pandoc.wasm features
+        if: matrix.browser == 'chromium'
+        id: webkit_probe
+        continue-on-error: true
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit \
+            --workers=1 --retries=0 e2e/pandoc-browser-probe.harness.spec.ts
+
+      - name: Warn that the WebKit pandoc suite was skipped
+        if: matrix.browser == 'chromium' && steps.webkit_probe.outcome != 'success'
+        run: echo "::warning title=WebKit pandoc suite skipped::This Playwright WebKit build failed the exnref/feature probe (see the probe step); pandoc.wasm specs did not run in WebKit."
+
+      - name: Run pandoc harness tests in WebKit
+        if: matrix.browser == 'chromium' && steps.webkit_probe.outcome == 'success'
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit --workers=1
+
+      # Warm-pandoc timing (H10b 5c): same-run ratios, byte equality and frame order only; the
+      # absolute figures are local. Its own single-worker step because the medians need an
+      # otherwise idle machine, which the two-worker harness step above is not.
+      - name: Run warm-pandoc timing specs
+        if: matrix.browser == 'chromium'  # Firefox timing is run by hand (plan 5c)
+        env:
+          PANDOC_WARM_TIMING: '1'
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=${{ matrix.browser }} \
+            --workers=1 --retries=0 e2e/pandoc-warm.harness.spec.ts -g timing
+
+      - name: Run warm-pandoc timing specs in WebKit
+        if: matrix.browser == 'chromium' && steps.webkit_probe.outcome == 'success'
+        env:
+          PANDOC_WARM_TIMING: '1'
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit \
+            --workers=1 --retries=0 e2e/pandoc-warm.harness.spec.ts -g timing
 
       # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
       # readiness timeout, so it belongs in this workflow rather than

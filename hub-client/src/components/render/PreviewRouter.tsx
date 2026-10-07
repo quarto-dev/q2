@@ -4,14 +4,20 @@ import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { isSourceFile } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic, RenderComment } from '@quarto/preview-renderer/types/diagnostic';
 import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
-import { parseQmdToAst, isWasmReady, initWasm } from '@quarto/preview-runtime';
+import { parseQmdToAst, isWasmReady, initWasm, resolvePandocFormats } from '@quarto/preview-runtime';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
 import { FallbackView, NonQmdPlaceholderView } from '@quarto/preview-renderer/overlays/PreviewStaticInfoViews';
-import { getQ2Format } from './getQ2Format';
+import { classifyPreviewMode, type PreviewMode } from './getQ2Format';
+import { DownloadOnlyView, NeitherView } from './DownloadOnlyViews';
+import PdfPreviewPane from './PdfPreviewPane';
+import { formatByKey, menuFormats, pdfPreviewAvailable, withOutputExt } from '../../pandoc/downloadService';
+import { useDownloadAs } from '../../pandoc/useDownloadAs';
 
 interface PreviewRouterProps {
   content: string;
+  /** The project's id: the PDF preview keys its in-flight renders by it (two projects can share a path). */
+  projectKey?: string;
   currentFile: FileEntry | null;
   files: FileEntry[];
   fileContents: Map<string, string>;
@@ -31,6 +37,8 @@ interface PreviewRouterProps {
   currentSlideIndex?: number;
   onSlideChange?: (slideIndex: number) => void;
   onFormatChange?: (format: string | null) => void;
+  /** The router's mode (react / dom / download / neither); drives the "Download as" control. */
+  onPreviewModeChange?: (mode: PreviewMode) => void;
   onContentRewrite: (content: string) => void;
   /**
    * Automerge actor → display identity (name + colour). Threaded
@@ -89,7 +97,8 @@ interface PreviewRouterProps {
  * the Edit / Authors pills and the printable-document affordance on it.
  */
 export default function PreviewRouter(props: PreviewRouterProps) {
-  const [reactFormat, setReactFormat] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>({ mode: 'dom' });
+  const reactFormat = previewMode.mode === 'react' ? previewMode.format : null;
   const [checkedPath, setCheckedPath] = useState<string | undefined>(undefined);
   const initialChecking = checkedPath !== props.currentFile?.path;
 
@@ -132,11 +141,21 @@ export default function PreviewRouter(props: PreviewRouterProps) {
 
         // Parse the QMD to AST to check metadata
         const result = await parseQmdToAst(props.content);
-        if (result.success) {
-          const format = getQ2Format(result.ast);
-          setReactFormat(format);
+        const deps = {
+          resolve: (path: string) => (isWasmReady() ? resolvePandocFormats(path) : null),
+          canDownload: (key: string) => menuFormats().some((f) => f.key === key),
+          canPreviewPdf: pdfPreviewAvailable,
+        };
+        // A format the parser's metadata merge does not know (`latex`) fails the parse. The
+        // resolver still classifies it; a failed parse of a previewable document changes nothing.
+        const mode = classifyPreviewMode(result.success ? result.ast : '{"meta":{}}', props.currentFile?.path, deps);
+        if (result.success || mode.mode === 'download' || mode.mode === 'pdf' || mode.mode === 'neither') {
+          const format = mode.mode === 'react' ? mode.format : null;
+          // Keep the same object when nothing changed, so a keystroke does not re-render consumers.
+          setPreviewMode((prev) => (JSON.stringify(prev) === JSON.stringify(mode) ? prev : mode));
           lastStableFormatRef.current = format;
           props.onFormatChange?.(format);
+          props.onPreviewModeChange?.(mode);
         }
       } catch (err) {
         console.error('[PreviewRouter] Error checking format:', err);
@@ -165,7 +184,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   // Render the appropriate preview component with shared WASM error banner.
   // `identities` and `attributionOn` are for ReactPreview only — Preview
   // doesn't know about either.
-  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onContentRewrite, fileContents, identities, captures, attributionOn, commentsMode, onCommentsChange, onAttributionGeneratingChange, ...commonProps } = props;
+  const { onRegisterScrollToLine, onRegisterSetScrollRatio, onRegisterReplayScroll, onFormatChange, onPreviewModeChange: _onPreviewModeChange, onContentRewrite, fileContents, identities, captures, attributionOn, commentsMode, onCommentsChange, onAttributionGeneratingChange, ...commonProps } = props;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -174,7 +193,13 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         <FallbackView content={props.content} message="Loading WASM renderer..." />
       )}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {reactFormat ? (
+        {previewMode.mode === 'download' ? (
+          <DownloadModePane formatKey={previewMode.formatKey} path={props.currentFile?.path ?? null} content={props.content} wasmReady={wasmStatus === 'ready'} />
+        ) : previewMode.mode === 'pdf' ? (
+          <PdfPreviewPane path={props.currentFile?.path ?? null} content={props.content} projectKey={props.projectKey} captureDocId={captures?.[props.currentFile?.path ?? '']?.captureDocId} />
+        ) : previewMode.mode === 'neither' ? (
+          <NeitherView formatKey={previewMode.formatKey} />
+        ) : reactFormat ? (
           <ReactPreview {...commonProps} onContentRewrite={onContentRewrite} fileContents={fileContents} format={reactFormat} identities={identities} captures={captures} attributionOn={attributionOn} commentsMode={commentsMode} onCommentsChange={onCommentsChange} onAttributionGeneratingChange={onAttributionGeneratingChange} onRegisterReplayScroll={onRegisterReplayScroll} />
         ) : (
           // Phase 9 Decision 6: pass `fileContents` so any sibling
@@ -188,4 +213,14 @@ export default function PreviewRouter(props: PreviewRouterProps) {
       </div>
     </div>
   );
+}
+
+/** The "download" mode pane: its own hook instance of the shared controller. */
+function DownloadModePane({ formatKey, path, content, wasmReady }: { formatKey: string; path: string | null; content: string; wasmReady: boolean }) {
+  const dl = useDownloadAs(path, content, wasmReady);
+  const row = wasmReady ? formatByKey(formatKey) : undefined;
+  if (!row) return <NeitherView formatKey={formatKey} />;
+  // The button names the file with the document's own `output-ext` (the controller re-applies it at the click).
+  const format = withOutputExt(row, path && isWasmReady() ? resolvePandocFormats(path) : null);
+  return <DownloadOnlyView format={format} busy={dl.status.phase === 'working'} onDownload={() => dl.start(format)} />;
 }

@@ -1,0 +1,957 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "Note",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "with",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "two",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "paragraphs.",
+          "t": "Str"
+        },
+        {
+          "c": [
+            {
+              "c": [
+                {
+                  "c": "First",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "para",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "of",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "the",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "note.",
+                  "t": "Str"
+                }
+              ],
+              "t": "Para"
+            },
+            {
+              "c": [
+                {
+                  "c": "Second",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "para",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "of",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "the",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "note.",
+                  "t": "Str"
+                }
+              ],
+              "t": "Para"
+            }
+          ],
+          "t": "Note"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "Note",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "with",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "list.",
+          "t": "Str"
+        },
+        {
+          "c": [
+            {
+              "c": [
+                {
+                  "c": "Intro:",
+                  "t": "Str"
+                }
+              ],
+              "t": "Para"
+            },
+            {
+              "c": [
+                {
+                  "c": "item",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "one",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            },
+            {
+              "c": [
+                {
+                  "c": "item",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "two",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ],
+          "t": "Note"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        [
+          1,
+          {
+            "t": "LowerAlpha"
+          },
+          {
+            "t": "Period"
+          }
+        ],
+        [
+          [
+            {
+              "c": [
+                {
+                  "c": "alpha",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "one",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ],
+          [
+            {
+              "c": [
+                {
+                  "c": "alpha",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "two",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ]
+      ],
+      "t": "OrderedList"
+    },
+    {
+      "c": [
+        [
+          4,
+          {
+            "t": "LowerRoman"
+          },
+          {
+            "t": "Period"
+          }
+        ],
+        [
+          [
+            {
+              "c": [
+                {
+                  "c": "roman",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "four",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ],
+          [
+            {
+              "c": [
+                {
+                  "c": "roman",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "five",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ]
+      ],
+      "t": "OrderedList"
+    },
+    {
+      "c": [
+        [
+          {
+            "c": [
+              {
+                "c": "list",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "A",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "item",
+                "t": "Str"
+              }
+            ],
+            "t": "Plain"
+          }
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": "list",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "B",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "item",
+                "t": "Str"
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "t": "BulletList"
+    },
+    {
+      "c": [
+        {
+          "c": "Paragraph",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "text",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "that",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "starts",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "with",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "number:",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "1.",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "not",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "list",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "1)",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "x",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "+",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "y",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "-",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "not",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "list",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "either",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        [
+          [
+            {
+              "c": "Term",
+              "t": "Str"
+            }
+          ],
+          [
+            [
+              {
+                "c": [
+                  {
+                    "c": "Definition",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "para",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "one.",
+                    "t": "Str"
+                  }
+                ],
+                "t": "Para"
+              },
+              {
+                "c": [
+                  {
+                    "c": "Definition",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "para",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "two",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "continues",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "here.",
+                    "t": "Str"
+                  }
+                ],
+                "t": "Para"
+              }
+            ]
+          ]
+        ]
+      ],
+      "t": "DefinitionList"
+    },
+    {
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          []
+        ],
+        [
+          [
+            {
+              "t": "AlignDefault"
+            },
+            {
+              "c": 0.07058823529411765,
+              "t": "ColWidth"
+            }
+          ],
+          [
+            {
+              "t": "AlignDefault"
+            },
+            {
+              "c": 0.07058823529411765,
+              "t": "ColWidth"
+            }
+          ]
+        ],
+        [
+          [
+            "",
+            [],
+            []
+          ],
+          [
+            [
+              [
+                "",
+                [],
+                []
+              ],
+              [
+                [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  {
+                    "t": "AlignDefault"
+                  },
+                  1,
+                  1,
+                  [
+                    {
+                      "c": [
+                        {
+                          "c": "H1",
+                          "t": "Str"
+                        }
+                      ],
+                      "t": "Plain"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  {
+                    "t": "AlignDefault"
+                  },
+                  1,
+                  1,
+                  [
+                    {
+                      "c": [
+                        {
+                          "c": "H2",
+                          "t": "Str"
+                        }
+                      ],
+                      "t": "Plain"
+                    }
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              "",
+              [],
+              []
+            ],
+            0,
+            [],
+            [
+              [
+                [
+                  "",
+                  [],
+                  []
+                ],
+                [
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "c": [
+                          {
+                            "c": "a",
+                            "t": "Str"
+                          }
+                        ],
+                        "t": "Plain"
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "c": [
+                          {
+                            "c": "b",
+                            "t": "Str"
+                          }
+                        ],
+                        "t": "Plain"
+                      }
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "",
+                  [],
+                  []
+                ],
+                [
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "c": [
+                          {
+                            "c": "f1",
+                            "t": "Str"
+                          }
+                        ],
+                        "t": "Plain"
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "c": [
+                          {
+                            "c": "f2",
+                            "t": "Str"
+                          }
+                        ],
+                        "t": "Plain"
+                      }
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "",
+            [],
+            []
+          ],
+          []
+        ]
+      ],
+      "t": "Table"
+    },
+    {
+      "c": [
+        [
+          1,
+          {
+            "t": "Decimal"
+          },
+          {
+            "t": "Period"
+          }
+        ],
+        [
+          [
+            {
+              "c": [
+                {
+                  "c": "first",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "numbered",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ],
+          [
+            {
+              "c": [
+                {
+                  "c": "second",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "numbered",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ]
+      ],
+      "t": "OrderedList"
+    },
+    {
+      "c": [
+        {
+          "c": "Interlude",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "paragraph",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "between",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "two",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "numbered",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "lists.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        [
+          1,
+          {
+            "t": "Decimal"
+          },
+          {
+            "t": "Period"
+          }
+        ],
+        [
+          [
+            {
+              "c": [
+                {
+                  "c": "restarted",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "first",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ],
+          [
+            {
+              "c": [
+                {
+                  "c": "restarted",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "second",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ]
+      ],
+      "t": "OrderedList"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}

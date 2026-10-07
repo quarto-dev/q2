@@ -314,6 +314,24 @@ fn apply_book_title_metadata(meta: &mut ConfigValue, book: &ConfigValue) {
     }
 }
 
+/// Chapter-alone counterpart of [`apply_book_title_metadata`]: fills only the
+/// keys `meta` does not already have, so a chapter's own front matter wins.
+///
+/// A chapter rendered on its own (the PDF preview pane) never goes through
+/// the book merge, so nothing else hands the book's title and author to a
+/// template like orange-book's, whose `author` default is an array that
+/// `text()` rejects (`expected content, found array`).
+pub(crate) fn seed_missing_book_title_metadata(meta: &mut ConfigValue, book: &ConfigValue) {
+    for key in BOOK_TITLE_METADATA_KEYS {
+        if meta.get(key).is_none()
+            && let Some(value) = book.get(key)
+            && !is_falsy(value)
+        {
+            meta.insert_path(&[key], value.clone());
+        }
+    }
+}
+
 /// Merge N chapters' post-Normalization `(BookRenderItem, Pandoc)` pairs
 /// into one document: marker blocks + attribute-stamped body per file
 /// item, a `.quarto-book-part`-wrapped divider heading per part/appendix
@@ -667,6 +685,23 @@ mod tests {
         assert!(matches!(merged.blocks[div_pos + 1], Block::Paragraph(_)));
         assert!(matches!(merged.blocks[div_pos + 2], Block::RawBlock(_)));
         assert!(matches!(merged.blocks[div_pos + 3], Block::Header(_)));
+    }
+
+    #[test]
+    fn seed_missing_book_title_metadata_fills_gaps_and_keeps_existing() {
+        let mut meta = map(vec![("title", s("Chapter Title"))]);
+        let book = map(vec![
+            ("title", s("Book Title")),
+            ("author", s("Jane Doe")),
+            ("subtitle", s("")),
+        ]);
+
+        seed_missing_book_title_metadata(&mut meta, &book);
+
+        let text = |k: &str| meta.get(k).and_then(|v| v.as_plain_text());
+        assert_eq!(text("title"), Some("Chapter Title".to_string()));
+        assert_eq!(text("author"), Some("Jane Doe".to_string()));
+        assert!(meta.get("subtitle").is_none(), "falsy book value skipped");
     }
 
     #[test]

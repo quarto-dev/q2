@@ -15,8 +15,8 @@
  * use the overlay's uncontrolled fallback (defaults to collapsed).
  */
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Diagnostic } from '../types/diagnostic';
 
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
@@ -172,5 +172,45 @@ describe('PreviewErrorOverlay (bd-mwtf parse-error display)', () => {
     // Collapsed: just an Error button, no diagnostic list.
     expect(screen.getByText(/Error/)).toBeTruthy();
     expect(document.querySelector('.preview-error-diagnostics')).toBeNull();
+  });
+});
+
+describe('PreviewErrorOverlay copy button', () => {
+  function stubClipboard() {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    return writeText;
+  }
+
+  it('copies the message and diagnostics, not the "Render Error" title', async () => {
+    const writeText = stubClipboard();
+    render(
+      <PreviewErrorOverlay
+        error={{
+          message: 'Pass 1 failed',
+          diagnostics: [parseDiagnostic],
+          pass1Failures: [
+            { source_file: 'about.qmd', error: 'parse error 1', diagnostics: [] },
+          ],
+        }}
+        visible={true}
+        collapsed={false}
+      />,
+    );
+    // The button lives in the content area, not the header.
+    const button = document.querySelector('.preview-error-content .preview-error-copy-btn');
+    expect(button).not.toBeNull();
+    expect(document.querySelector('.preview-error-header .preview-error-copy-btn')).toBeNull();
+
+    fireEvent.click(button!);
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).not.toContain('Render Error');
+    expect(text).toContain('Pass 1 failed');
+    expect(text).toContain(
+      'Line 11: [Q-2-10] Closed Quote Without Matching Open Quote - A space is causing',
+    );
+    expect(text).toContain('about.qmd failed to parse');
+    expect(text).toContain('parse error 1');
   });
 });
