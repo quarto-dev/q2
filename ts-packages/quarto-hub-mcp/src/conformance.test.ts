@@ -46,6 +46,7 @@ import {
   type SeededProject,
 } from './in-memory-fixture.js';
 import { resetDocsCorpusForTests } from './docs-tool.js';
+import { PARSER_UNAVAILABLE } from './test-setup.js';
 
 /** Tool budget (ERG-5): the default listing never exceeds this. */
 const TOOL_BUDGET = 24;
@@ -240,6 +241,14 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   args: (seed: SeededProject) => Record<string, unknown>;
   /** Extra args needing fixture access (e.g. a doc minted on the hub). */
   setup?: (f: InMemoryMcpFixture) => Promise<Record<string, unknown>>;
+  /**
+   * The call needs the wasm-qmd-parser (CAP-11). Toolchain-less CI legs
+   * (workspace-ts-suites) leave the parser unbuilt and the tool errors by
+   * design, so the execution loop skips these cases there — the same
+   * gated-tier pattern as the qmd-* test files. The coverage test is
+   * unaffected: the case stays registered either way.
+   */
+  requiresParser?: true;
 }> = [
   { tool: 'connect_project', args: (seed) => ({ project: seed.indexDocId }) },
   { tool: 'list_files', args: (seed) => ({ project: seed.indexDocId }) },
@@ -255,6 +264,7 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   {
     // index.qmd has no headings — an empty outline is a valid result.
     tool: 'get_outline',
+    requiresParser: true,
     args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
   },
   {
@@ -450,6 +460,9 @@ describe('result conformance (BP-1 net)', () => {
       const ajv = new Ajv2020({ allErrors: true });
       const { tools } = await f.client.listTools();
       for (const c of GOLDEN_RESULT_CASES) {
+        // Parser-tier cases cannot succeed without the parser build (the
+        // tool errors by design) — skip them on toolchain-less legs.
+        if (c.requiresParser && PARSER_UNAVAILABLE) continue;
         const declared = tools.find((t) => t.name === c.tool)?.outputSchema;
         if (declared === undefined) {
           throw new Error(`golden case for ${c.tool}: tool declares no outputSchema`);

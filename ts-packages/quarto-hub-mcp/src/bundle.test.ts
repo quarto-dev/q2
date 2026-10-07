@@ -8,6 +8,12 @@
  * with plain `node` — keyring addon resolution via the bundle's mini
  * node_modules, base64-inlined automerge wasm, full MCP round-trip
  * against an in-process sync peer, stdout purity, and stdin-EOF exit.
+ *
+ * Parser tier (CAP-11): bundling stages the wasm-qmd-parser nodejs pkg,
+ * which only a wasm32 toolchain can build — so on toolchain-less legs
+ * (PARSER_UNAVAILABLE, e.g. CI's workspace-ts-suites) the whole file
+ * skips, the same gated-tier pattern as the qmd-* test files. CI covers
+ * the file in the toolchain-rich test-suite job (ts-test-suite.yml).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -18,6 +24,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpTestClient } from './mcp-test-client.js';
 import { startTestHub, type TestHub } from './test-hub.js';
+import { PARSER_UNAVAILABLE } from './test-setup.js';
 
 const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -25,26 +32,26 @@ let tmpDir: string;
 let bundleEntry: string;
 let hub: TestHub;
 
-beforeAll(async () => {
-  execFileSync('node', [path.join(pkgRoot, 'scripts/bundle.mjs')], {
-    stdio: 'pipe',
-  });
-  // os.tmpdir() is outside the repo: node resolution from the copied
-  // bundle cannot accidentally reach the workspace node_modules.
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-mcp-bundle-test-'));
-  fs.cpSync(path.join(pkgRoot, 'dist-bundle'), path.join(tmpDir, 'bundle'), {
-    recursive: true,
-  });
-  bundleEntry = path.join(tmpDir, 'bundle', 'index.mjs');
-  hub = await startTestHub();
-}, 60000);
+describe.skipIf(PARSER_UNAVAILABLE)('bundle smoke', () => {
+  beforeAll(async () => {
+    execFileSync('node', [path.join(pkgRoot, 'scripts/bundle.mjs')], {
+      stdio: 'pipe',
+    });
+    // os.tmpdir() is outside the repo: node resolution from the copied
+    // bundle cannot accidentally reach the workspace node_modules.
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-mcp-bundle-test-'));
+    fs.cpSync(path.join(pkgRoot, 'dist-bundle'), path.join(tmpDir, 'bundle'), {
+      recursive: true,
+    });
+    bundleEntry = path.join(tmpDir, 'bundle', 'index.mjs');
+    hub = await startTestHub();
+  }, 60000);
 
-afterAll(async () => {
-  await hub?.stop();
-  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-});
+  afterAll(async () => {
+    await hub?.stop();
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 
-describe('bundle smoke', () => {
   it('ships the expected artifacts', () => {
     const bundleDir = path.join(tmpDir, 'bundle');
     expect(fs.existsSync(path.join(bundleDir, 'index.mjs'))).toBe(true);
