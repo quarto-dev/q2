@@ -1,12 +1,13 @@
 {
   "name": "@quarto/hub-mcp",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "MCP server for AI agent access to Quarto Hub projects via automerge",
   "license": "MIT",
   "author": {
     "name": "Posit PBC"
   },
+  "mcpName": "io.github.quarto-dev/hub-mcp",
   "type": "module",
   "main": "dist/index.js",
   "types": "src/index.ts",
@@ -43,11 +44,14 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
     "@automerge/automerge-repo": "2.6.0-alpha.5",
     "@automerge/automerge-repo-network-websocket": "2.6.0-alpha.5",
     "@modelcontextprotocol/client": "~2.3.1",
+    "@modelcontextprotocol/conformance": "^0.2.0-alpha.12",
     "@modelcontextprotocol/core": "~2.3.1",
     "@modelcontextprotocol/inspector": "^2.9.0",
+    "@modelcontextprotocol/node": "^2.1.1",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.18.1",
     "ajv": "^8.17.1",

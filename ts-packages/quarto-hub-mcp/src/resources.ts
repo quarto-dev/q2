@@ -51,6 +51,11 @@ import {
 } from '@quarto/quarto-sync-client';
 
 import { ConnectionManager, type ProjectEvent } from './connection-manager.js';
+import {
+  FIXTURE_RESOURCE_TEMPLATE,
+  FIXTURE_RESOURCES,
+  readFixtureResource,
+} from './conformance-fixtures.js';
 import { serversMatch } from './share-url.js';
 import { QUARTO_ICON } from './icon.js';
 
@@ -187,7 +192,7 @@ const LIST_CHANGED_DEBOUNCE_MS = 150;
 export function registerResources(
   server: McpServer,
   manager: ConnectionManager,
-  opts: { era: 'modern' | 'legacy' },
+  opts: { era: 'modern' | 'legacy'; fixtures?: boolean },
 ): void {
   server.server.registerCapabilities({
     resources: { subscribe: true, listChanged: true },
@@ -209,6 +214,19 @@ export function registerResources(
       }
     }
     const all = collectResources(manager);
+    if (opts.fixtures === true) {
+      // The conformance fixture statics ride the same list (sorted in —
+      // 'test://' sorts after 'hub://', so project pages are unaffected).
+      all.push(
+        ...FIXTURE_RESOURCES.map((r) => ({
+          uri: r.uri,
+          name: r.name,
+          description: r.description,
+          mimeType: r.mimeType,
+        })),
+      );
+      all.sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
+    }
     const page = all.slice(offset, offset + RESOURCE_PAGE_SIZE);
     const nextOffset = offset + RESOURCE_PAGE_SIZE;
     return {
@@ -220,6 +238,12 @@ export function registerResources(
   // -- resources/read -------------------------------------------------
   server.server.setRequestHandler('resources/read', async (request) => {
     const uri = request.params.uri;
+    if (opts.fixtures === true) {
+      // `test://` URIs belong to the fixture surface (unknown ones throw
+      // ResourceNotFoundError inside — the sep-2164 scenario).
+      const fixture = readFixtureResource(uri);
+      if (fixture !== null) return { contents: fixture };
+    }
     const parsed = parseFileResourceUri(uri);
     if (parsed === null) {
       throw new ProtocolError(
@@ -272,6 +296,7 @@ export function registerResources(
           'before reading; subscribe for change notifications.',
         icons: [QUARTO_ICON],
       },
+      ...(opts.fixtures === true ? [FIXTURE_RESOURCE_TEMPLATE] : []),
     ],
   }));
 
@@ -328,7 +353,7 @@ export function registerResources(
     listChangedTimer.unref();
   };
 
-  manager.onProjectEvent((ev: ProjectEvent) => {
+  const offProjectEvent = manager.onProjectEvent((ev: ProjectEvent) => {
     switch (ev.kind) {
       case 'changed': {
         const foreign = serversMatch(ev.serverUrl, manager.configuredServerUrl)
@@ -348,4 +373,21 @@ export function registerResources(
         break;
     }
   });
+
+  // The bridge listener's lifetime is the SERVER's, not the manager's:
+  // under one-server-per-request serving (the CAP-16 HTTP loopback)
+  // every exchange constructs a fresh server around the shared manager,
+  // and a listener left behind would fan project events out to dead
+  // instances forever. Unhook on close, and cancel any pending debounce
+  // so nothing references the closed server afterwards. Chain — the
+  // entry may have its own close hook.
+  const prevOnClose = server.server.onclose;
+  server.server.onclose = () => {
+    offProjectEvent();
+    if (listChangedTimer !== undefined) {
+      clearTimeout(listChangedTimer);
+      listChangedTimer = undefined;
+    }
+    prevOnClose?.();
+  };
 }
