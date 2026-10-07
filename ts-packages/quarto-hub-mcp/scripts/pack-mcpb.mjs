@@ -12,10 +12,10 @@
  * loader's exact version (network; `--platforms` narrows the list for
  * offline development/test runs).
  *
- * Steps: clean bundle rebuild → stage `dist-bundle/` + all-platform
- * keyring + `mcpb/manifest.json` + LICENSE/README/NOTICE → validate the
- * manifest → `mcpb pack`. The workspace `dist-bundle/` keeps its dev
- * (host-only) state; only the staged copy gains all platforms.
+ * Steps: clean bundle rebuild straight into the staging dir
+ * (`HUB_MCP_BUNDLE_OUT` — the workspace `dist-bundle/` is never
+ * touched) → all-platform keyring + `mcpb/manifest.json` +
+ * LICENSE/README/NOTICE → validate the manifest → `mcpb pack`.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -76,14 +76,19 @@ if (manifest.version !== sourcePkg.version) {
   process.exit(1);
 }
 
-console.log('building bundle (npm run bundle)…');
-execFileSync('npm', ['run', 'bundle'], { cwd: pkgRoot, stdio: 'inherit' });
-
 const stage = join(out, 'stage-mcpb');
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 
-cpSync(join(pkgRoot, 'dist-bundle'), join(stage, 'dist-bundle'), { recursive: true });
+// Build straight into the staging dir (private output — the workspace
+// dist-bundle is never touched, so this races nothing; see
+// HUB_MCP_BUNDLE_OUT in scripts/bundle.mjs).
+console.log('building bundle (npm run bundle)…');
+execFileSync('npm', ['run', 'bundle'], {
+  cwd: pkgRoot,
+  stdio: 'inherit',
+  env: { ...process.env, HUB_MCP_BUNDLE_OUT: join(stage, 'dist-bundle') },
+});
 
 const napiSrcDir = join(dirname(require.resolve('@napi-rs/keyring/package.json')), '..');
 const staged = stageKeyring({

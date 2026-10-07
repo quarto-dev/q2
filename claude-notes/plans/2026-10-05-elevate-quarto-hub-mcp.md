@@ -1370,32 +1370,32 @@ bridge with the exact `SdkError: Not connected`).
 
 Test specifications:
 
-- [ ] Packaging smoke test: `npm pack` from a clean build, install the
+- [x] Packaging smoke test: `npm pack` from a clean build, install the
   tarball into a temp prefix, `npx @quarto/hub-mcp --help` runs, and the
   installed server connects to the in-process test-hub (CAP-15).
-- [ ] `server.json` validates against the MCP Registry schema; the `.mcpb`
+- [x] `server.json` validates against the MCP Registry schema; the `.mcpb`
   bundle's one-click config shows the exact command and requires consent
   (CAP-15).
-- [ ] Official conformance suite green at `--spec-version 2026-07-28` with an
+- [x] Official conformance suite green at `--spec-version 2026-07-28` with an
   **empty** expected-failures baseline, run against the CAP-16 Streamable HTTP
   transport if it has landed, else a test-only loopback listener; gates the
   registry listing's conformance claim (satisfies §9).
 
 Work items:
 
-- [ ] CAP-15 npm publish (bd-3tak0lyy): package layout from a clean build
+- [x] CAP-15 npm publish (bd-3tak0lyy): package layout from a clean build
   (HY-3), license notices, install docs; `server.json` + `mcpName` and
   `mcp-publisher` publication to the MCP Registry (a GitHub Actions flow
   exists); `.mcpb` bundle for Claude Desktop one-click install (the one-click
   config MUST show the exact command and require consent — Security Best
   Practices). Retire the standalone tarball (bd-sca6g1tu) once npm ships.
-- [ ] Official conformance suite (deferred from Phase 0): run
+- [x] Official conformance suite (deferred from Phase 0): run
   `npx @modelcontextprotocol/conformance server --spec-version 2026-07-28`
   before the registry listing claims conformance — by now either the CAP-16
   transport exists to run it against, or the listing itself justifies the
   test-only loopback listener, and the suite will have matured past 0.1.x.
   Empty expected-failures baseline is the bar.
-- [ ] **Design doc first (gates implementation):** CAP-16 hub-served MCP over
+- [x] **Design doc first (gates implementation):** CAP-16 hub-served MCP over
   Streamable HTTP. Must resolve: hub as OAuth resource server (RFC 9728 PRM
   with `WWW-Authenticate` + `.well-known` fallback per SEP-985; RFC 8707
   resource indicators; scope hints and `insufficient_scope` step-up per
@@ -1410,13 +1410,146 @@ Work items:
   websocket state — working assumption is a per-user pool keyed by token
   subject with idle eviction, Q-5); multi-tenant fairness (one automerge
   connection per user × N users).
-- [ ] **Explore (no commitment):** MCP Apps extension
+- [x] **Explore (no commitment):** MCP Apps extension
   (`io.modelcontextprotocol/ui`) for an in-host rendered preview of a file —
   the closest MCP equivalent of the web client's live preview. Gated on host
   support; a one-page feasibility note only.
-- [ ] CAP-3 full discovery: hub-side per-user project registry (auth-keyed),
+- [x] CAP-3 full discovery: hub-side per-user project registry (auth-keyed),
   if the design doc confirms the need; MVP shipped in Phase 2.
-- [ ] Update `docs/` MCP page with npm + remote-connection instructions.
+- [x] Update `docs/` MCP page with npm + remote-connection instructions.
+
+#### Phase 6 completion record (landed 2026-10-07, bd-8iv9jty5)
+
+**CAP-15 packaging.** `scripts/pack-npm.mjs` (clean-build bundle →
+publish-shaped staging → `npm pack`): the npm package is the
+self-contained `dist-bundle/` payload with exactly one runtime
+dependency (`@napi-rs/keyring`, delivered per-platform by npm — the
+vendored addons would only bloat the tarball) plus the vendored
+`wasm-qmd-parser` (ours, unpublished). The publish manifest is
+generated (the workspace `package.json` stays `private` and dev-shaped)
+with `bin: hub-mcp` matching the unscoped name for bare `npx`, Node 24
+engines, and `mcpName: io.github.quarto-dev/hub-mcp` (registry
+ownership link). LICENSE/README/NOTICE.md ride along. `server.json`
+(registry listing, validated against the vendored 2025-12-11 schema —
+which caught the 100-char description cap) and `mcpb/manifest.json`
+(one-click: exact `node ${__dirname}/dist-bundle/index.mjs` command
+visible, credentials only via prompted `user_config`, secret marked
+`sensitive`) are the two public manifests. `scripts/pack-mcpb.mjs`
+vendors all eight keyring platforms into the `.mcpb` (no npm install in
+bundle hosts — same co-staging as the release tarball).
+`Implementation.version` now reports the npm version via a
+`build-info.json npmVersion` stamp when installed from npm
+(gitCommit-stamp standalone, launcher-injected under `q2 mcp`,
+package-floor 0.1.0 in dev). Version bumped 0.0.1 → 0.1.0 with a drift
+pin against the floor. **Not yet published**: the actual `npm publish`
++ registry submission is an operator decision (bd-3tak0lyy's
+public-release gate); `.github/workflows/publish-hub-mcp.yml` is the
+dry-run-by-default dispatch that packs/validates always and publishes
+only through the `npm-publish` environment + GitHub OIDC. The
+standalone tarball (bd-sca6g1tu) stays until the npm channel has
+shipped and soaked.
+
+**Official conformance suite.** Pinned
+`@modelcontextprotocol/conformance@0.2.0-alpha.12` (the 0.2.0 line
+carries the frozen requirement sets; still alpha — the plan's "past
+0.1.x" is half-true). Run as `--requirements 2026-07-28`, which is
+stricter and more honest than the plan's `--spec-version`: the frozen
+at-release set, not whatever the suite accumulates later.
+**37/37 required server scenarios pass (146 checks), empty
+expected-failures baseline, exit 0**; all 36 failing checks are in the
+suite's own not-scored roster (tasks extension, two pending scenarios
+whose reference fixture can't pass either) and are asserted to stay
+confined there. The suite drives the `test_*` fixture surface
+(`src/conformance-fixtures.ts`) through our real `createServer` —
+registered only behind `conformanceFixtures: true` (loopback-only; a
+guard test pins the default listing clean, ERG-5 untouched). Three
+findings worth remembering: (1) the per-request transport's `-32021` →
+HTTP 400 mapping only fires under `responseMode: 'auto'` — forced SSE
+commits 200 before the error exists; (2) MRTR `requestState` integrity
+is the SDK's HMAC codec installed at construction, verified by the seam
+before handlers run — tampering rejection is automatic; (3) client
+capabilities live in `ctx.mcpReq.envelope[CLIENT_CAPABILITIES_META_KEY]`,
+not `_meta` (reserved keys are lifted).
+
+**The loopback listener** (`src/http-loopback.ts`, test-only) is the
+CAP-16 rehearsal: SDK `createMcpHandler` per-request serving + Host/
+Origin guards (dns-rebinding scenario green) over a shared
+`ConnectionManager`. It exposed a real production bug class the stdio
+path never sees: per-request instances each registered a manager
+project-event listener forever — fixed at the root (the resource
+bridge unhooks on server close, debounce cancelled; leak test pins 25
+round-trips at baseline). The execFileSync-starves-the-loopback lesson
+(the suite's first runs: every scenario "timed out" at exactly the
+timeout because the sync spawn blocked the event loop) is recorded in
+the test's comment.
+
+**CAP-16 design doc** landed at
+`claude-notes/plans/2026-10-07-hub-mcp-streamable-http-design.md`:
+hub-minted JWT access tokens (no IdP passthrough; audience = endpoint),
+RFC 9728 PRM + SEP-985 fallback, CIMD (DCR rejected), capability
+scopes (`mcp:read`/`mcp:write`/`mcp:listen`) with `insufficient_scope`
+step-up, hub-side consent screen, SSRF rules reusing BP-18's endpoint
+validation, `Origin` → 403, legacy `reject`, `render`/`authenticate`
+omitted over HTTP. **Q-5 resolved**: per-user `ConnectionManager` pool
+on the hub — 500-entry LRU, 20 project connections/user, 15-minute
+idle TTL touched by live listen streams, 8 in-flight requests/user,
+429 + `Retry-After`. CAP-3 full registry confirmed needed (§9 of the
+design doc) and folded into the implementation plan recommendation.
+MCP Apps feasibility note at
+`claude-notes/research/2026-10-07-mcp-apps-feasibility.md`: worth
+doing, not yet — revisit on host GA or the extension's scenarios
+turning scored.
+
+**E2E (per the phase gate).** The packaging smoke test IS the e2e for
+distribution: real `npm pack` → real `npm install` into an empty
+prefix → the installed `.bin/hub-mcp` `--help` (exit 0, stderr usage,
+clean stdout) and an MCP handshake + `tools/list` from the installed
+payload against the in-process test-hub (invocation and assertions in
+`src/npm-pack.test.ts`; the `.mcpb` legs in `src/mcpb-pack.test.ts`
+unpack the bundle and verify the runnable payload incl. per-platform
+`.node` addons). The conformance run's invocation and full summary are
+in `src/conformance-official.test.ts` (the suite's transcript lands in
+a persisted log per run). Bundle rebuilt + `q2 mcp --launcher-info`
+freshness confirmed after each commit.
+
+**Eval suite (same 15 tasks, regression detection — Phase 6 adds no
+agent-facing surface):** `eval/results/2026-10-07T11-42-20/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/463 | $0.79 | 0 | 0 | 16s |
+| read-and-report | PASS | 4 | 98/744 | $0.56 | 0 | 0 | 16s |
+| patch-typo | PASS | 6 | 130/1504 | $0.65 | 0 | 0 | 24s |
+| write-new-file | PASS | 5 | 130/898 | $0.59 | 0 | 0 | 20s |
+| rename-file | PASS | 7 | 162/1361 | $0.63 | 0 | 0 | 24s |
+| collaborator-edit | PASS | 4 | 98/700 | $0.55 | 0 | 0 | 30s |
+| watch-live-edit | PASS | 5 | 130/1429 | $0.62 | 0 | 0 | 51s |
+| stale-write-recovery | PASS | 6 | 130/2058 | $0.69 | 1 | 1 | 33s |
+| add-image-binary | PASS | 6 | 130/1596 | $0.65 | 0 | 0 | 27s |
+| search-and-report | PASS | 6 | 98/1011 | $0.59 | 2 | 2 | 18s |
+| watch-project-edit | PASS | 5 | 130/1066 | $0.60 | 0 | 0 | 58s |
+| history-and-restore | PASS | 9 | 130/2562 | $0.79 | 0 | 0 | 53s |
+| outline-and-section-edit | PASS | 9 | 162/2404 | $0.73 | 0 | 0 | 35s |
+| docs-lookup | PASS | 5 | 98/753 | $0.59 | 0 | 0 | 25s |
+| fix-render-error | PASS | 7 | 130/2021 | $0.71 | 0 | 0 | 34s |
+
+15/15 PASS, median 6 turns (Phases 2–5: 5 — within model variance, no
+surface change). `stale-write-recovery`'s single `isError` is the
+DESIGNED refusal; `search-and-report`'s two are validation retries the
+agent recovered from on the spot (transcript ends clean; the retry
+counter doing its job), not a server regression.
+
+**Phase-close gate.** `npm run test -w ts-packages/quarto-hub-mcp`
+green (62 files, 545 passed + 3 skips). `cargo xtask verify` green
+(full, hub-build leg included) — after fixing a race I introduced and
+caught only because verify runs the whole suite at once: the packaging
+tests rebuilt the shared `dist-bundle/` while `bundle.test.ts` spawned
+it (wipe-while-spawning; 3×30s timeouts, masked standalone).
+`scripts/bundle.mjs` now honors `HUB_MCP_BUNDLE_OUT` and both pack
+scripts build into private staging dirs — the workspace bundle is never
+touched during packaging. Docs: `docs/tools/q2-mcp.qmd` gains the
+npm/`.mcpb` channels + remote-access note; README leads with the three
+channels.
 
 ---
 
@@ -1454,10 +1587,12 @@ Work items:
   deletes shared index state driving other collaborators' preview engines;
   the CAP-12 render loop never touches captures; CAP-2's read surface
   covers observation. See the Phase 4 checklist entry.
-- **Q-5 (Phase 6):** Under the 2026-07-28 stateless model (sessions removed),
-  how does the hub keep automerge connections warm across an agent's requests?
-  Working assumption: a per-user pool keyed by token subject with idle
-  eviction; the design doc must size it.
+- **Q-5 (Phase 6):** **Resolved 2026-10-07** (CAP-16 design doc §7):
+  per-user `ConnectionManager` pool on the hub — 500-entry LRU keyed by
+  token subject, 20 project connections/user, 15-minute idle TTL touched
+  by live listen streams, 8 in-flight requests/user with 429 +
+  `Retry-After`. Numbers to be validated against production traffic
+  before launch (design D-4).
 - **Q-6 (Phase 3):** Is `restore_file_version` agent-appropriate? Working
   answer: yes, with `destructiveHint: true` and a reversible result (it is how
   a human uses Ctrl+Z); confirm with the web-client owners that a restore shows
