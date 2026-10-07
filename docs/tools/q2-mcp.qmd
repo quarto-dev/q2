@@ -119,6 +119,30 @@ the same safety signals you have when editing by hand:
   with the same selector shows (heading included), so structural edits
   land where intended and a collaborator's edits elsewhere survive.
 
+## Resources and prompts
+
+Beyond tools, the server speaks two more parts of the MCP protocol,
+for hosts that support them.
+
+**Resources.** Every file in a connected project is an MCP resource
+with a URI like `hub://project/<id>/index.qmd`. In a host that can
+attach resources as context (for example, an @-mention picker), you
+can attach a project file directly instead of asking the agent to read
+it; binary files arrive as base64 blobs with their MIME type. A host
+can also subscribe to a file's resource to be notified when a
+collaborator changes it, and every write the agent makes carries a
+resource link to the file it touched, so the host can offer to open or
+attach it.
+
+**Prompts.** Four guided workflows appear in the host's prompt picker:
+
+| Prompt | What it walks the agent through |
+|--------|---------------------------------|
+| `review-draft` | A careful, read-only review of one draft file, findings ordered by importance |
+| `collaborate-with-human` | The etiquette for editing a project you are actively working in (presence, hashes, watching) |
+| `safe-edit-workflow` | The read → patch → confirm loop for editing one file without clobbering anyone |
+| `fix-render-errors` | The render → diagnose → patch → re-render loop (present only with `--allow-render`) |
+
 ## Tool reference
 
 ### Projects

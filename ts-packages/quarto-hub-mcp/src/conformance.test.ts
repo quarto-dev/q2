@@ -22,7 +22,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { ToolSchema } from '@modelcontextprotocol/core';
+import { ToolSchema, ResourceSchema, PromptSchema } from '@modelcontextprotocol/core';
 import type { ProjectSetDocument } from '@quarto/quarto-sync-client';
 
 import {
@@ -149,6 +149,58 @@ describe('in-memory fixture smoke', () => {
       ]);
     } finally {
       await ro.close();
+    }
+  });
+});
+
+// ============================================================================
+// Capability advertisement (BP-5, BP-6, BP-9, BP-17)
+// ============================================================================
+
+describe('capability advertisement (Phase 5)', () => {
+  it('declares honest capabilities: resources subscribe+listChanged; static lists declare no listChanged', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const caps = f.client.getServerCapabilities();
+      // Resources genuinely list-change (collaborators add/remove files)
+      // and are subscribable; the tool and prompt lists are fixed at
+      // construction, so claiming listChanged for them would be a lie
+      // (and contradict the long cache hints, BP-17).
+      expect(caps?.resources).toEqual({ subscribe: true, listChanged: true });
+      expect(caps?.prompts).toEqual({ listChanged: false });
+      expect(caps?.tools).toEqual({ listChanged: false });
+      // BP-9: the Implementation record carries the Quarto icon.
+      expect(f.client.getServerVersion()?.icons?.length).toBe(1);
+      expect(f.client.getServerVersion()?.icons?.[0]?.mimeType).toBe('image/svg+xml');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('resources/list and prompts/list entries validate against the SDK wire schemas', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
+      const { resources } = await f.client.listResources();
+      expect(resources.length).toBeGreaterThan(0);
+      for (const r of resources) {
+        const check = ResourceSchema.safeParse(r);
+        expect(
+          check.success,
+          `resource ${String(r.uri)} fails ResourceSchema: ${check.success ? '' : JSON.stringify(check.error.issues)}`,
+        ).toBe(true);
+      }
+      const { prompts } = await f.client.listPrompts();
+      expect(prompts.length).toBeGreaterThan(0);
+      for (const p of prompts) {
+        const check = PromptSchema.safeParse(p);
+        expect(
+          check.success,
+          `prompt ${String(p.name)} fails PromptSchema: ${check.success ? '' : JSON.stringify(check.error.issues)}`,
+        ).toBe(true);
+      }
+    } finally {
+      await f.close();
     }
   });
 });

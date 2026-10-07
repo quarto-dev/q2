@@ -49,6 +49,17 @@ The write tools are hidden when the server is started with `--read-only`.
 `authenticate` and `authenticate_clear` are present only when the OAuth env
 vars are configured (see [Setup](#setup)). On a no-auth hub they are unused.
 
+### Resources and prompts
+
+For hosts that support them, the server also speaks MCP **resources** and
+**prompts**. Every file in a connected project is a resource under
+`hub://project/<id>/<path>` (binary files as base64 blobs), subscribable
+for change notifications, and every write result carries a resource link to
+the file it touched. Four prompt templates — `review-draft`,
+`collaborate-with-human`, `safe-edit-workflow`, and (with `--allow-render`)
+`fix-render-errors` — walk the agent through the standard workflows. See
+`docs/tools/q2-mcp.qmd` in the Quarto repository for details.
+
 ### `wait_for_change` — reacting to a live collaborator
 
 `wait_for_change` lets an agent respond to another editor without busy-polling
