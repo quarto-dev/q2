@@ -31,7 +31,15 @@ The habits that most often break a note here, in order of frequency:
 11. A multi-paragraph footnote written Pandoc-style (`[^1]: First.` and an
     indented second paragraph). Write it as a block footnote: `::: ^1` on its
     own line, the paragraphs, `:::`.
-12. A shortcode quoted inside a fenced code block. Shortcodes expand inside
+12. Continuation lines of a `- [x]` item indented six spaces to sit under the
+    text. The item's content column is 2 (`[x]` is content), so a paragraph after
+    a blank line, a fenced block or a sub-list at column 6 is an *indented code
+    block*. Indent continuations two spaces. `scripts/q2-dedent-task-items.py`
+    re-indents an existing file.
+13. A fenced block that contains another fence (a Rust raw string holding a
+    ```` ```{r} ```` cell, a Markdown example with its own fences). Use four
+    backticks for the outer fence.
+14. A shortcode quoted inside a fenced code block. Shortcodes expand inside
     code blocks on purpose (textual inclusion of snippets), so a quoted
     `{{< include "x.qmd" >}}` reports Q-17-2. Write it as `{{{< include "x.qmd" >}}}`
     (triple braces; renders with double), or open the fence as

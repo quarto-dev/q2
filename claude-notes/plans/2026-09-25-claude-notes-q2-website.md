@@ -36,6 +36,7 @@ All in `scripts/`:
 | `q2-escape-openers.py` | Escape exactly the delimiter a diagnostic points at; re-render until the class converges. `--only-context` limits it to clearly literal cases (the rest are listed for review); `--block-pattern` covers diagnostics that carry no opener position, and is also tried in the enclosing block when the opener is not clearly literal (the usual culprit behind an unclosed `**` is a `` `x`'s `` inside it). Code spans are matched over the whole block, since they wrap lines. |
 | `q2-escape-literal.py` | Sweep a pattern through the prose of every `.md` (skips front matter, fences, code spans, comments, URLs, link targets). For delimiters q2 pairs silently. |
 | `claude-notes-escape-fixpoint.sh` | Run every reviewed rule jointly until nothing changes. Fixing one class exposes more of the others. |
+| `q2-dedent-task-items.py` | Re-indent `- [x]` items whose continuation lines all sit at column 6 (indented code to CommonMark) to the item's content column. |
 
 Every content commit was checked mechanically: each changed line differs from the
 original only by inserted backslashes. Hand fixes are committed separately.
@@ -152,6 +153,8 @@ whose original markup had an unbalanced backtick.
 | 2026-10-07, after merging `main` again (nightly .20261007) | 1157 / 1479 | 324 | 424 |
 | 2026-10-07, after re-escaping to fixpoint | 1186 / 1479 | 295 | 331 |
 | 2026-10-07, Q-2-7 cleared, star rules widened | 1208 / 1479 | 273 | 372 |
+| 2026-10-07, 12-file Haiku pilot, reviewed | 1220 / 1480 | 262 | 371 |
+| 2026-10-07, 50-file Haiku batch, reviewed | 1269 / 1480 | 213 | 350 |
 
 Remaining error classes (nightly .20261007): uncoded parse errors 372 (153 files),
 Q-2-12 33, Q-2-11 33, Q-2-41 24, Q-2-5 12, Q-2-35 11, Q-2-13 8, Q-2-2 7, plus a
@@ -193,6 +196,42 @@ APOS="(?<=[\`*_~^\\]])'(?=\\w)"
 scripts/q2-escape-openers.py claude-notes Q-2-12 --dry-run --only-context "$STAR" --block-pattern "$APOS" --max-rounds 1
 scripts/q2-escape-openers.py claude-notes Q-2-13 --dry-run --only-context "$STAR" --block-pattern "$APOS" --max-rounds 1
 ```
+
+## Per-file agent workflow (2026-10-07)
+
+The remaining errors are one or two per file, so the work is parallel by file.
+Two runs so far with the Workflow tool, one Haiku agent per file (scripts under
+the session's `workflows/scripts/`, name `claude-notes-qmd-fix-v2`):
+
+- Inline, before: `q2 render --json-errors` once; group the error records by
+  file with their opener positions; pick a batch (files with the fewest errors
+  first, skipping the repro fixture directories).
+- Per file: a *fixer* agent gets the diagnostics, the rules from
+  `instructions/writing-notes.md`, and hard constraints (syntax only; backslash
+  over anything else; never change emphasis style; never edit inside a fence
+  except to escape a quoted shortcode). A separate *verifier* agent copies the
+  file to a scratch directory and renders it there, so ten agents do not race on
+  `_site/`. The script loops fixer, verifier up to three rounds, because each fix
+  lets the parser reach the next error.
+- Inline, after: classify every changed line (backslash, backtick delimiters,
+  fence, dedent, other), render every changed file standalone, read every
+  "other" line, run the fixpoint script, tally, commit.
+
+Results. Pilot of 12: 6 right and minimal, 3 right but incomplete, 2 overreached
+(`*x*` rewritten as `_x_` across a file), 1 wrong. Batch of 50: 32 clean on the
+agents\' own, 36 files touched only by backslashes or dedents, 4 wrong edits
+reverted (a correct code span rewritten with backslashes, emphasis deleted, a
+multi-line span restructured, pointless re-indentation), 1 damaged table row.
+About 8M tokens and 19 minutes for the batch of 50. The self-reported status is
+not reliable (the verifier agent is Haiku too); the standalone render is.
+
+What Haiku gets right that the scripts cannot: closing a bold the author
+forgot, choosing double-backtick delimiters, indenting a fence into a list,
+merging a heading continuation. What it gets wrong: anything that needs the
+whole file (fence nesting, the same wildcard repeated twenty times, a `>` at the
+start of a continuation line), and it will delete or restyle markup when the
+rules do not name a fix. The hand follow-up after each batch was roughly a third
+of the files; worth it, but the review is the job, not the launch.
 
 ## Manual review queue: star emphasis
 
