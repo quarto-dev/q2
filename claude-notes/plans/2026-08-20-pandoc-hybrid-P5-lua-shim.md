@@ -710,11 +710,11 @@ None remain open. Both of this plan's originally-deferred items are resolved:
   (P4), not via the constructor — this plan's Route-R reconstruction checklist item above
   ("no re-defaulting of already-resolved fields") already states the resulting principle
   correctly and needs no further change.
-- ~~`ExampleEmbed`'s Pandoc-tail behavior — genuinely unscoped, not just deferred.~~ **Resolved
+- ~~`ExampleEmbed`\'s Pandoc-tail behavior — genuinely unscoped, not just deferred.~~ **Resolved
   2026-09-17** (see finding above) — no longer deferred, no longer this plan's concern at all.
 
 **This closes out all four of this plan's originally-flagged open design questions**
-(`ExampleEmbed`'s non-HTML behavior, the `algorithm`/`alg` fix location, the Q1-version pinning
+(`ExampleEmbed`\'s non-HTML behavior, the `algorithm`/`alg` fix location, the Q1-version pinning
 mechanism, and this constructor-passthrough policy) — plus the Callout routing question P6
 found independently. What remains in the coarse checklist above is implementation work, not
 open design.

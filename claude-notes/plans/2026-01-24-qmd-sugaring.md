@@ -246,11 +246,11 @@ CustomNode {
 ### DecoratedCodeBlock
 
 **Input**:
-```markdown
+```` markdown
 ```{.python filename="example.py"}
 print("Hello")
 ```
-```
+````
 
 **Parsed as**:
 ```

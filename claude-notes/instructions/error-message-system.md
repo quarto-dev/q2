@@ -141,7 +141,7 @@ The build script generates variants using a **nested loop** (for each prefix, tr
 - `Q-2-11-simple.qmd` - base case: `"a`
 - `Q-2-11-simple-1.qmd` - prefix `[`, suffix ` *a*`: `["a *a*`
 - `Q-2-11-simple-2.qmd` - prefix `[`, suffix ` _a_`: `["a _a_`
-- `Q-2-11-simple-3.qmd` - prefix `[`, suffix ` \`a\``: `["a \`a\``
+- `Q-2-11-simple-3.qmd` - prefix `[`, suffix `` `a` ``: `` ["a `a` ``
 - `Q-2-11-simple-4.qmd` - prefix `_`, suffix ` *a*`: `_"a *a*`
 - ... (9 total: 3 prefixes × 3 suffixes)
 

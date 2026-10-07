@@ -91,7 +91,7 @@ Already working or next to implement:
 - `pandoc_display_math` - display math $$...$$
 
 ### Category 4: Links and Images (Priority: HIGH)
-- `pandoc_span` - [text](url) or [text]{attrs}
+- `pandoc_span` - [text](url) or [text]\{attrs\}
 - `pandoc_image` - ![alt](url)
 - `target` - the (url) part of links
 - `inline_link` - full link construct (from inline grammar)

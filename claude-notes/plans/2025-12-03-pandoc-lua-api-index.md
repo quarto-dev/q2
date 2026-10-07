@@ -406,8 +406,8 @@ Generic list type with methods.
 ### Metamethods
 | Method | Lines | Description |
 |--------|-------|-------------|
-| __concat | 4763-4773 | Concatenate lists |
-| __eq | 4775-4790 | Compare lists |
+| `__concat` | 4763-4773 | Concatenate lists |
+| `__eq` | 4775-4790 | Compare lists |
 
 ### Instance Methods
 | Method | Lines | Description |
@@ -708,6 +708,6 @@ When searching lua-filters.md:
 - **Type definitions**: Search for `## TypeName {#type-`
 - **Constructors**: Search for `### FunctionName {#pandoc.`
 - **Module functions**: Search for `### function_name {#pandoc.module.`
-- **Constants**: Search for `[\`ConstantName\`]`
+- **Constants**: Search for `` [`ConstantName`] ``
 - **Examples**: Look in lines 473-1003
 - **Version requirements**: Search for `*Since:`
