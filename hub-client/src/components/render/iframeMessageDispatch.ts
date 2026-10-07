@@ -51,10 +51,33 @@ export interface UpdateThemeMessage {
     cssUrl: string | null;
 }
 
+/**
+ * q2-debug only — the editor's caret, expressed as a UTF-8 byte offset
+ * into the source the current AST was parsed from. `null` hides the
+ * virtual caret (no editor, no model, cursor unknown).
+ */
+export interface CursorMessage {
+    type: 'CURSOR';
+    payload: CursorPayload | null;
+}
+
+export interface CursorPayload {
+    /** UTF-8 byte offset of the caret (selection head) into the source text. */
+    offset: number;
+    /** Whether the Monaco text area currently has focus (drives blink). */
+    focused: boolean;
+    /**
+     * Non-empty editor selection as ordered UTF-8 byte offsets
+     * (`start < end`); omitted when the selection is collapsed.
+     */
+    selection?: { start: number; end: number };
+}
+
 export type IframeMessage =
     | LoadCustomComponentsMessage
     | UpdateAstMessage
-    | UpdateThemeMessage;
+    | UpdateThemeMessage
+    | CursorMessage;
 
 export interface IframeMessageHandlers {
     /**
@@ -74,6 +97,11 @@ export interface IframeMessageHandlers {
      * which has no theme channel.
      */
     applyTheme?: (cssUrl: string | null) => void;
+    /**
+     * q2-debug only — moves (or hides, on `null`) the virtual caret
+     * that mirrors the Monaco cursor. Omitted by q2-preview.
+     */
+    updateCursor?: (payload: CursorPayload | null) => void;
 }
 
 export type IframeMessageDispatcher = (
@@ -120,6 +148,8 @@ export function makeIframeMessageDispatcher(
             handlers.updateAst(message.payload);
         } else if (message.type === 'UPDATE_THEME') {
             handlers.applyTheme?.(message.cssUrl);
+        } else if (message.type === 'CURSOR') {
+            handlers.updateCursor?.(message.payload);
         }
     };
 }

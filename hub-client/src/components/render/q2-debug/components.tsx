@@ -28,67 +28,68 @@ import type {
     QuotedInline,
 } from '@quarto/preview-renderer/framework';
 import { blockStyle, inlineStyle } from './styles';
+import { dataOffProps, DATA_STR_TEXT } from './sourceOffset';
 
 export const Para = (args: NodeArgs<ParaBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>Para:</strong> {renderChildren(args)}
     </div>
 );
 
 export const Plain = (args: NodeArgs<PlainBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>Plain:</strong> {renderChildren(args)}
     </div>
 );
 
 export const Header = (args: NodeArgs<HeaderBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>Header(level={args.node.c[0]}):</strong> {renderChildren(args)}
     </div>
 );
 
 export const CodeBlock = (args: NodeArgs<CodeBlockType>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>CodeBlock:</strong> <code>{args.node.c[1]}</code>
     </div>
 );
 
 export const BulletList = (args: NodeArgs<BulletListBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>BulletList:</strong>
         {renderChildren(args)}
     </div>
 );
 
 export const OrderedList = (args: NodeArgs<OrderedListBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>OrderedList(start={args.node.c[0][0]}):</strong>
         {renderChildren(args)}
     </div>
 );
 
 export const BlockQuote = (args: NodeArgs<BlockQuoteBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>BlockQuote:</strong>
         {renderChildren(args)}
     </div>
 );
 
 export const Div = (args: NodeArgs<DivBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>Div:</strong>
         {renderChildren(args)}
     </div>
 );
 
-export const HorizontalRule = (_args: NodeArgs<HorizontalRuleBlock>) => (
-    <div style={blockStyle}>
+export const HorizontalRule = (args: NodeArgs<HorizontalRuleBlock>) => (
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>HorizontalRule</strong>
     </div>
 );
 
 export const RawBlock = (args: NodeArgs<RawBlockType>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>RawBlock({args.node.c[0]}):</strong> {args.node.c[1]}
     </div>
 );
@@ -98,7 +99,7 @@ export const RawBlock = (args: NodeArgs<RawBlockType>) => (
 // historical visible output. The framework's `renderChildrenRegistry.Figure`
 // renders only the body blocks (consistent with every other entry).
 export const Figure = (args: NodeArgs<FigureBlock>) => (
-    <div style={blockStyle}>
+    <div style={blockStyle} {...dataOffProps(args.node)}>
         <strong>Figure:</strong>
         {renderChildren(args)}
         {args.node.c[1][0] && (
@@ -130,57 +131,59 @@ export const BlockComponents: Record<string, (props: any) => React.ReactNode> = 
 };
 
 export const Str = (args: NodeArgs<StrInline>) => (
-    <span style={inlineStyle}><strong>Str:</strong> {args.node.c}</span>
+    <span style={inlineStyle} {...dataOffProps(args.node)}>
+        <strong>Str:</strong> <span {...{ [DATA_STR_TEXT]: '' }}>{args.node.c}</span>
+    </span>
 );
 
-export const Space = (_args: NodeArgs<SpaceInline>) => (
-    <span style={inlineStyle}><strong>Space</strong></span>
+export const Space = (args: NodeArgs<SpaceInline>) => (
+    <span style={inlineStyle} {...dataOffProps(args.node)}><strong>Space</strong></span>
 );
 
-export const SoftBreak = (_args: NodeArgs<SoftBreakInline>) => (
-    <span style={inlineStyle}><strong>SoftBreak</strong></span>
+export const SoftBreak = (args: NodeArgs<SoftBreakInline>) => (
+    <span style={inlineStyle} {...dataOffProps(args.node)}><strong>SoftBreak</strong></span>
 );
 
-export const LineBreak = (_args: NodeArgs<LineBreakInline>) => (
-    <span style={inlineStyle}><strong>LineBreak</strong></span>
+export const LineBreak = (args: NodeArgs<LineBreakInline>) => (
+    <span style={inlineStyle} {...dataOffProps(args.node)}><strong>LineBreak</strong></span>
 );
 
 export const Emph = (args: NodeArgs<EmphInline>) => (
-    <span style={inlineStyle}>
+    <span style={inlineStyle} {...dataOffProps(args.node)}>
         <strong>Emph:</strong> {renderChildren(args)}
     </span>
 );
 
 export const Strong = (args: NodeArgs<StrongInline>) => (
-    <span style={inlineStyle}>
+    <span style={inlineStyle} {...dataOffProps(args.node)}>
         <strong>Strong:</strong> {renderChildren(args)}
     </span>
 );
 
 export const Code = (args: NodeArgs<CodeInline>) => (
-    <span style={inlineStyle}><strong>Code:</strong> {args.node.c[1]}</span>
+    <span style={inlineStyle} {...dataOffProps(args.node)}><strong>Code:</strong> {args.node.c[1]}</span>
 );
 
 export const Link = (args: NodeArgs<LinkInline>) => (
-    <span style={inlineStyle}>
+    <span style={inlineStyle} {...dataOffProps(args.node)}>
         <strong>Link({args.node.c[2][0]}):</strong> {renderChildren(args)}
     </span>
 );
 
 export const Image = (args: NodeArgs<ImageInline>) => (
-    <span style={inlineStyle}>
+    <span style={inlineStyle} {...dataOffProps(args.node)}>
         <strong>Image({args.node.c[2][0]}):</strong> {renderChildren(args)}
     </span>
 );
 
 export const Span = (args: NodeArgs<SpanInline>) => (
-    <span style={inlineStyle}>
+    <span style={inlineStyle} {...dataOffProps(args.node)}>
         <strong>Span:</strong> {renderChildren(args)}
     </span>
 );
 
 export const Quoted = (args: NodeArgs<QuotedInline>) => (
-    <span style={inlineStyle}>
+    <span style={inlineStyle} {...dataOffProps(args.node)}>
         <strong>Quoted({args.node.c[0].t}):</strong> {renderChildren(args)}
     </span>
 );

@@ -913,6 +913,8 @@ export default function ReactPreview({
             onPreviewScroll={handlePreviewScroll}
             onPreviewClickAtLine={revealEditorLine}
             onAstRendered={handleAstRendered}
+            editorRef={editorRef}
+            editorReady={editorReady}
           />
         ) : previewState === 'ERROR_AT_START' && currentError ? (
           <div style={{ padding: '20px', color: 'red' }}>

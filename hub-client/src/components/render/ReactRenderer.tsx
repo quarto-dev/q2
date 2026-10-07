@@ -1,5 +1,6 @@
 import { useMemo, useRef, useCallback, Component } from 'react';
-import type { ReactNode, Ref } from 'react';
+import type { ReactNode, Ref, RefObject } from 'react';
+import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { Q2DebugIframe } from './q2-debug/Q2DebugIframe';
 import { Q2PreviewIframe, type Q2PreviewIframeHandle } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
@@ -152,6 +153,12 @@ interface ReactRendererProps {
    */
   onPreviewClickAtLine?: (line: number, hostY?: number) => void;
   onAstRendered?: () => void;
+  /**
+   * Monaco editor handle, forwarded to `Q2DebugIframe` only, which
+   * mirrors the editor cursor as a virtual caret in the debug AST view.
+   */
+  editorRef?: RefObject<Monaco.editor.IStandaloneCodeEditor | null>;
+  editorReady?: boolean;
 }
 
 /**
@@ -183,6 +190,8 @@ function ReactRenderer({
   onPreviewScroll,
   onPreviewClickAtLine,
   onAstRendered,
+  editorRef,
+  editorReady,
 }: ReactRendererProps) {
   // Stable wrappers for Q2PreviewIframe props that are useEffect dependencies.
   //
@@ -325,6 +334,9 @@ function ReactRenderer({
             onNavigateToDocument={stableNavigate}
             setAst={stableSetAst}
             customComponentsCode={customComponentsCode}
+            renderedContent={renderedContent}
+            editorRef={editorRef}
+            editorReady={editorReady}
           />
         </div>
       </ErrorBoundary>

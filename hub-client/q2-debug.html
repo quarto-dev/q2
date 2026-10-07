@@ -18,6 +18,53 @@
       width: 100%;
       height: 100vh;
       overflow: auto;
+      /* Containing block for the virtual caret (see entry.tsx). */
+      position: relative;
+      /* The virtual caret replaces the browser's selection model:
+         clicks place the editor cursor instead (CURSOR_CLICK). */
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: default;
+    }
+    #root [data-str-text] {
+      cursor: text;
+    }
+    /* Virtual caret mirroring the Monaco cursor. Our own element, not
+       the browser's selection caret: the debug DOM is never editable. */
+    .q2-debug-caret {
+      position: absolute;
+      width: 2px;
+      background: #d62828;
+      pointer-events: none;
+      z-index: 10;
+      animation: q2-debug-caret-blink 1s step-end infinite;
+    }
+    .q2-debug-caret.unfocused {
+      animation: none;
+      background: #b0b0b0;
+    }
+    .q2-debug-caret.hidden {
+      display: none;
+    }
+    /* Our own selection highlight (native selection is off). A
+       see-through tint over the text, like a native selection; this is
+       one of the cases where translucency is the point, so the usual
+       solid-colour rule does not apply. The text keeps its own colour. */
+    .q2-debug-selection {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .q2-debug-selection-rect {
+      position: absolute;
+      background: rgba(214, 40, 40, 0.18);
+      border-radius: 2px;
+    }
+    @keyframes q2-debug-caret-blink {
+      0%, 50% { opacity: 1; }
+      50.01%, 100% { opacity: 0; }
     }
   </style>
   <script>
