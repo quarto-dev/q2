@@ -211,6 +211,52 @@ export function EditToolbar({
     setTimeout(() => onCommit?.(), 0);
   };
 
+  // ---- editorial marks (!! highlight, -- delete, ++ insert) ------------------
+  // Cheap version: replace the selected text with the sugared span `[!! text]`
+  // (an opaque chip, like any other editorial mark) and commit. Inline
+  // formatting inside the selection is flattened to plain text.
+  const applyEditorialMark = (sigil: '!!' | '--' | '++') => (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editor) return;
+    const { doc, selection } = editor.state;
+    const { from, to, $from, $to } = selection;
+    if (from === to || !$from.sameParent($to)) {
+      setNotice(from === to ? 'Select some text to mark' : 'Select text within one paragraph');
+      return;
+    }
+    const text = doc.textBetween(from, to, ' ').trim();
+    if (!text) {
+      setNotice('Select some text to mark');
+      return;
+    }
+    const kind = sigil === '!!' ? 'highlight' : sigil === '--' ? 'delete' : 'insert';
+    editor
+      .chain()
+      .insertContentAt({ from, to }, { type: 'chip', attrs: { src: `[${sigil} ${text}]`, kind } })
+      .run();
+    setTimeout(() => onCommit?.(), 0);
+  };
+
+  const editorialButtons = (
+    [
+      { sigil: '!!', kind: 'highlight', title: 'Highlight selection', label: '!!' },
+      { sigil: '--', kind: 'delete', title: 'Mark selection as deleted', label: '--' },
+      { sigil: '++', kind: 'insert', title: 'Mark selection as inserted', label: '++' },
+    ] as const
+  ).map((b) => (
+    <button
+      key={b.sigil}
+      type="button"
+      title={b.title}
+      className={`q2-rt-tb-btn q2-rt-tb-${b.kind}`}
+      onMouseDown={(e) => e.preventDefault()}
+      onMouseUp={applyEditorialMark(b.sigil)}
+    >
+      {b.label}
+    </button>
+  ));
+
   const commentButton = (
     <button
       type="button"
@@ -260,6 +306,7 @@ export function EditToolbar({
             🔗
           </button>
           {commentButton}
+          {editorialButtons}
           {notice && <span className="q2-rt-tb-notice">{notice}</span>}
         </>
       ) : (

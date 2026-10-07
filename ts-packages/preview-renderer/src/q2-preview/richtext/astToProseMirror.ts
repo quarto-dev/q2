@@ -163,7 +163,14 @@ function inlines(items: AstNode[], marks: readonly Mark[], ctx: Ctx): PMNode[] {
         // Synthesized / editorial-mark spans (`quarto-*`) stay opaque chips, and
         // so does a span nested inside another span (one `span` mark per text).
         if (isShortcode || classes.some((c) => c.startsWith('quarto-')) || marks.some((m) => m.type === M.span)) {
-          out.push(chip(node, isShortcode ? 'shortcode' : 'span', ctx, ''));
+          const editorialKind = classes.includes('quarto-insert')
+            ? 'insert'
+            : classes.includes('quarto-delete')
+              ? 'delete'
+              : classes.includes('quarto-highlight')
+                ? 'highlight'
+                : 'span';
+          out.push(chip(node, isShortcode ? 'shortcode' : editorialKind, ctx, ''));
           break;
         }
         // Authored span -> editable `span` mark. Its content is built under a

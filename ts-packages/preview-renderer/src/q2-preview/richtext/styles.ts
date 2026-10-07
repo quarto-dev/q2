@@ -119,6 +119,14 @@ const CSS = `
    slightly stronger underline. */
 .q2-rt-span { background-color: #f3e8ff; border-bottom: 1px dashed #a855f7; border-radius: 2px; }
 .q2-rt-span-commented { border-bottom-style: solid; }
+/* Editorial marks, colored like the rendered output (solid equivalents of the
+   theme's $editorial-* tints on white). */
+.q2-chip-insert { background: #d9ecd9; border-color: #8fc98f; }
+.q2-chip-delete { background: #ffd9d9; border-color: #e89a9a; text-decoration: line-through; }
+.q2-chip-highlight { background: #fff799; border-color: #e6d94d; }
+.q2-rt-tb-insert { color: #16a34a; font-weight: 700; }
+.q2-rt-tb-delete { color: #dc2626; font-weight: 700; }
+.q2-rt-tb-highlight { color: #ca8a04; font-weight: 700; }
 .q2-chip-math { background: rgba(80, 160, 120, 0.14); border-color: rgba(80, 160, 120, 0.30); }
 .q2-chip-cite, .q2-chip-shortcode { background: rgba(160, 120, 80, 0.14); border-color: rgba(160, 120, 80, 0.30); }
 `;
