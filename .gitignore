@@ -103,6 +103,10 @@ resources/extension-build/deno.lock
 # from docs/_site; never commit it (bd-hwop1zii).
 agents-docs-dist/
 
+# hub-mcp eval suite raw stream-json (bulky; the condensed transcript-*.md
+# and summary.json ARE committed per the plan's "commit the transcripts").
+ts-packages/quarto-hub-mcp/eval/results/*/raw/
+
 # pandoc.wasm download cache and the served asset (scripts/fetch-pandoc-wasm.mjs)
 .cache/pandoc-wasm/
 # typst.ts wasm asset and default fonts (same script)
