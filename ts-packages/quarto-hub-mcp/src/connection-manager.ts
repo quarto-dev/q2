@@ -165,6 +165,32 @@ export interface ProjectChangeEvent {
 }
 
 /**
+ * A file-level event in a connected project (BP-5): the raw material
+ * the MCP resources bridge turns into `notifications/resources/updated`
+ * and `notifications/resources/list_changed`. Fired for local and
+ * remote changes alike — the bridge's subscribers asked for both.
+ */
+export interface ProjectFileEvent {
+  kind: 'added' | 'changed' | 'removed';
+  serverUrl: string;
+  indexDocId: string;
+  path: string;
+}
+
+/**
+ * A project connection lifecycle event (BP-5): a connect makes a whole
+ * project's files enumerable as resources, a disconnect removes them —
+ * both are `resources/list_changed` semantics.
+ */
+export interface ProjectConnectionEvent {
+  kind: 'connected' | 'disconnected';
+  serverUrl: string;
+  indexDocId: string;
+}
+
+export type ProjectEvent = ProjectFileEvent | ProjectConnectionEvent;
+
+/**
  * A project-wide listener registered by
  * {@link ConnectionManager.waitForAnyChange}. Events accumulate
  * (deduped by path) and the owner debounces: a sync batch touching many
@@ -297,29 +323,34 @@ function buildSyncCallbacks(
   waiters: Set<ChangeWaiter>,
   projectWaiters: Set<ProjectChangeWaiter>,
   sidecars: SidecarState,
+  emitFileEvent?: (kind: 'added' | 'changed' | 'removed', path: string) => void,
 ): SyncClientCallbacks {
   return {
     onFileAdded(path: string, file: FilePayload) {
       files.set(path, file);
       fireWaiters(waiters, path, file);
       notifyProjectWaiters(projectWaiters, path, file, 'added');
+      emitFileEvent?.('added', path);
     },
     onFileChanged(path: string, text: string, _patches: Patch[]) {
       const payload: FilePayload = { type: 'text', text };
       files.set(path, payload);
       fireWaiters(waiters, path, payload);
       notifyProjectWaiters(projectWaiters, path, payload, 'edited');
+      emitFileEvent?.('changed', path);
     },
     onBinaryChanged(path: string, data: Uint8Array, mimeType: string) {
       const payload: FilePayload = { type: 'binary', data, mimeType };
       files.set(path, payload);
       fireWaiters(waiters, path, payload);
       notifyProjectWaiters(projectWaiters, path, payload, 'edited');
+      emitFileEvent?.('changed', path);
     },
     onFileRemoved(path: string) {
       files.delete(path);
       fireWaiters(waiters, path, null);
       notifyProjectWaiters(projectWaiters, path, null, 'removed');
+      emitFileEvent?.('removed', path);
     },
     onCapturesChange(captures) {
       sidecars.captures = captures;
@@ -394,6 +425,8 @@ export class ConnectionManager {
   // fires after a hub-wide event, but at most one forceRefresh+reprobe
   // cycle runs at a time.
   private authRecheckInflight: Promise<void> | undefined;
+  /** BP-5 resource-bridge listeners (see {@link onProjectEvent}). */
+  private readonly projectEventListeners = new Set<(e: ProjectEvent) => void>();
 
   constructor(deps: ConnectionManagerDeps | string) {
     // Backwards-compat: the prior signature was `new ConnectionManager(url)`.
@@ -419,6 +452,36 @@ export class ConnectionManager {
   /** Phase 7 hook — observed auth-mode of the last connect attempt. */
   lastObservedAuthMode(): ObservedAuthMode {
     return this.observedAuthMode;
+  }
+
+  /**
+   * Subscribe to project file/connection events (BP-5). The MCP
+   * resources bridge is the one consumer: it maps these onto
+   * `notifications/resources/updated` and
+   * `notifications/resources/list_changed`. Returns an unsubscribe
+   * function. Listeners must be fast and non-throwing — a throw is
+   * logged and swallowed so one bad listener can't break sync
+   * callbacks for the waiters sharing them.
+   */
+  onProjectEvent(listener: (e: ProjectEvent) => void): () => void {
+    this.projectEventListeners.add(listener);
+    return () => {
+      this.projectEventListeners.delete(listener);
+    };
+  }
+
+  /** Deliver a project event to every registered listener (BP-5). */
+  private emitProjectEvent(e: ProjectEvent): void {
+    for (const listener of this.projectEventListeners) {
+      try {
+        listener(e);
+      } catch (err) {
+        console.error(
+          '[hub-mcp] project-event listener threw:',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
   }
 
   /** The cache key for {@link projects}: connection state is per (server, project) (bd-qt7h8h5g). */
@@ -515,7 +578,9 @@ export class ConnectionManager {
     const projectWaiters = new Set<ProjectChangeWaiter>();
     const sidecars: SidecarState = { captures: {} };
     const callbacks: SyncClientCallbacks = {
-      ...buildSyncCallbacks(files, waiters, projectWaiters, sidecars),
+      ...buildSyncCallbacks(files, waiters, projectWaiters, sidecars, (kind, path) =>
+        this.emitProjectEvent({ kind, serverUrl, indexDocId, path }),
+      ),
       onError(err: Error) {
         console.error(
           `[hub-mcp] Sync error for project ${indexDocId}:`,
@@ -542,6 +607,7 @@ export class ConnectionManager {
     presence.attach();
     const state: ProjectState = { client, files, waiters, sidecars, projectWaiters, presence, serverUrl };
     this.projects.set(this.projectKey(serverUrl, indexDocId), state);
+    this.emitProjectEvent({ kind: 'connected', serverUrl, indexDocId });
     return state;
   }
 
@@ -719,7 +785,21 @@ export class ConnectionManager {
     const waiters = new Set<ChangeWaiter>();
     const projectWaiters = new Set<ProjectChangeWaiter>();
     const sidecars: SidecarState = { captures: {} };
-    const callbacks = buildSyncCallbacks(tempFiles, waiters, projectWaiters, sidecars);
+    // The index doc id is generated inside createNewProject, so the
+    // event bridge can't name the project until it resolves; events
+    // fired during creation (the initial file adds) are creation noise
+    // and deliberately dropped.
+    const createdId: { current?: string } = {};
+    const callbacks = buildSyncCallbacks(tempFiles, waiters, projectWaiters, sidecars, (kind, path) => {
+      if (createdId.current !== undefined) {
+        this.emitProjectEvent({
+          kind,
+          serverUrl: this.serverUrl,
+          indexDocId: createdId.current,
+          path,
+        });
+      }
+    });
 
     const client = this.syncClientFactory(callbacks);
     const result = await client.createNewProject(
@@ -754,6 +834,12 @@ export class ConnectionManager {
       serverUrl: this.serverUrl,
     };
     this.projects.set(this.projectKey(this.serverUrl, result.indexDocId), state);
+    createdId.current = result.indexDocId;
+    this.emitProjectEvent({
+      kind: 'connected',
+      serverUrl: this.serverUrl,
+      indexDocId: result.indexDocId,
+    });
     return { indexDocId: result.indexDocId, files: result.files };
   }
 
@@ -809,6 +895,7 @@ export class ConnectionManager {
       return { wasConnected: false, drained: true };
     }
     this.projects.delete(key);
+    this.emitProjectEvent({ kind: 'disconnected', serverUrl: server, indexDocId });
     const interruptErr = () =>
       new Error(
         `project ${indexDocId} was disconnected (disconnect_project) while this ` +
@@ -891,6 +978,11 @@ export class ConnectionManager {
     const results = await Promise.all(
       Array.from(this.projects.entries()).map(async ([indexDocId, s]) => {
         s.presence.dispose();
+        this.emitProjectEvent({
+          kind: 'disconnected',
+          serverUrl: s.serverUrl,
+          indexDocId: indexDocId.slice(indexDocId.indexOf('\n') + 1),
+        });
         return {
           indexDocId,
           report: await s.client.disconnect(options),

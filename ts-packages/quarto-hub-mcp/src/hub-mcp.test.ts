@@ -175,11 +175,16 @@ describe('MCP protocol (read-only mode)', () => {
     ).rejects.toThrow('Tool write_file not found');
   });
 
-  it('declares no prompts capability (fix_errors needs the write tools)', async () => {
-    // The fix_errors prompt instructs the agent to call patch_file,
-    // which does not exist in read-only mode — so the prompt must not
-    // be offered either.
-    await expect(client.listPrompts()).rejects.toThrow();
+  it('declares only read-only-safe prompts (fix_errors needs the write tools)', async () => {
+    // fix_errors instructs the agent to call patch_file, which does not
+    // exist in read-only mode — so it must not be offered. Phase 5's
+    // review-draft and collaborate-with-human are read-only safe, so the
+    // prompts capability now exists in read-only mode with just those two.
+    const prompts = await client.listPrompts();
+    expect(prompts.map((p) => p.name).sort()).toEqual([
+      'collaborate-with-human',
+      'review-draft',
+    ]);
   });
 });
 
