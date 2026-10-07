@@ -110,7 +110,7 @@ this guard once the writer-side round-trip lands.
   (alongside the existing `format === 'q2-debug'` branch at line \~141).
   Note: this is `ReactRenderer.tsx`, not `ReactPreview.tsx` — the latter
   passes `format` down but doesn't pick the renderer.
-- **`ReactPreview.tsx`'s `doRender` gains a temporary format switch**:
+- **`ReactPreview.tsx`\'s `doRender` gains a temporary format switch**:
   q2-debug / q2-slides keep using `parseQmdToAst(content)` (path-less,
   in-memory content); q2-preview calls `renderPageInProject(currentFile.path)`
   and reads `astJson` from the response (path-based, reads from VFS —
@@ -315,7 +315,7 @@ rationale for each decision.)
   `pub` for cross-crate use, `#[derive(Debug)]` to match
   `RenderOutput`. JSON serialization happens **inside** this
   function (not in the renderer): the function builds an
-  `ASTContext` lifted from `parse_qmd_to_ast`'s consumer
+  `ASTContext` lifted from `parse_qmd_to_ast`\'s consumer
   (`wasm-quarto-hub-client/src/lib.rs:905-910`) plus the
   `JsonConfig { include_inline_locations: true }` from
   `lib.rs:914-916`, then calls
@@ -355,7 +355,7 @@ rationale for each decision.)
   else `merge_into_project`) and the loop at `lib.rs:1386-1391` for
   Page-scoped artifacts (per-key VFS write). Both are required to
   honor the multi-plan contracts below.
-- **Page-scoped artifact handling**: mirror `RenderToHtmlRenderer`'s
+- **Page-scoped artifact handling**: mirror `RenderToHtmlRenderer`\'s
   Page-scoped loop. The loop runs the same artifact-flush as the
   HTML pipeline; for theme CSS / icon CSS / fonts (artifacts with
   real bytes via `Artifact::from_bytes`) this puts loadable bytes
@@ -429,7 +429,7 @@ rationale for each decision.)
   helper, no behavior change for HTML. After this lands, the
   q2-preview branch added inside the helper covers all three
   wasm-bindgen entry points (`render_qmd`, `render_qmd_content`,
-  and `render_page_in_project`'s single-file branch) at once. A
+  and `render_page_in_project`\'s single-file branch) at once. A
   fixture using `render_qmd <path>` with `format: q2-preview`
   Just Works as a side effect.
 
@@ -444,7 +444,7 @@ rationale for each decision.)
   ```
 
   Pre-requisites of the helper's contract are already met by both
-  call sites' preludes:
+  call sites\' preludes:
   - `render_qmd`: `runtime.file_read(path)` for content +
     `ProjectContext::discover(path, runtime)` for project.
   - `render_qmd_content`: `Path::new("/input.qmd")` synthetic +
@@ -487,7 +487,7 @@ rationale for each decision.)
 - `crates/wasm-quarto-hub-client/src/lib.rs:1283-1285` — the doc-comment
   contract that `RenderResponse` is the same shape across branches;
   evolves to "payload selected by format."
-- `crates/wasm-quarto-hub-client/src/lib.rs:914-916` — `parse_qmd_to_ast`'s
+- `crates/wasm-quarto-hub-client/src/lib.rs:914-916` — `parse_qmd_to_ast`\'s
   `JsonConfig`, lifted verbatim for q2-preview AST serialization.
 - `crates/wasm-quarto-hub-client/src/lib.rs:1005, 1152` — `render_qmd`
   and `render_qmd_content`, the two wasm-bindgen entry points that
@@ -799,7 +799,7 @@ something else) joins the pipeline:
 
 Plan 7 absorbs these cleanups for two reasons. First, Plan 7 is
 already removing related placeholder/stub code in the same files
-(`ReactPreview.tsx`'s read-only guard; the WASM round-trip wiring),
+(`ReactPreview.tsx`\'s read-only guard; the WASM round-trip wiring),
 so the touch surface overlaps. Second, the dispatch interface
 naturally settles when q2-preview becomes editable — Plan 7's
 `pipeline_kind: "preview"` parameter already implies a structured
@@ -817,7 +817,7 @@ populates it from the same lookup table that drives
 instead of comparing on `target_format`. The TS side mirrors this
 with a thin helper (`pipelineKindForFormat(format) -> 'baseline' |
 'preview'`) that's the single source of truth on the JS side; both
-`ReactPreview.tsx::doRender`'s data-source switch and Plan 7's
+`ReactPreview.tsx::doRender`\'s data-source switch and Plan 7's
 edit-back wiring read through it. Plan 7's `incremental_write_qmd`
 parameter is the same value, flowing through the write side.
 
@@ -846,7 +846,7 @@ iframe simply stops referencing them.
   dispatch lives inside the existing function (Option B in §"Resolved decisions").
   Both new helpers (`render_single_doc_to_preview_response`,
   `render_project_active_page_to_preview_response`) must mirror their
-  HTML siblings' single-file/project branching exactly, or else
+  HTML siblings\' single-file/project branching exactly, or else
   q2-preview behaves differently for default-projects vs. websites.
   Lift the shape directly from the HTML versions; share factored
   pieces wherever practical.
@@ -858,7 +858,7 @@ iframe simply stops referencing them.
   helpers (`error_response`, `render_error_response`,
   `pass_failure_response`). All five must populate the new
   `ast_json: Option<String>` field — `None` for every HTML and
-  error path; `Some(...)` only in the two success paths' new
+  error path; `Some(...)` only in the two success paths\' new
   q2-preview branches. The mechanical sweep is smaller after the
   prep refactor than before — but easy to miss one of the helper
   sites. Get the struct field and all five seams updated before

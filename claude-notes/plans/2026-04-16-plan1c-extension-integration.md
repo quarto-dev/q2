@@ -786,7 +786,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
      host holds only the *global*). Fields: `resource_dir`, `runtime_dir`
      (via `quarto_util::quarto_runtime_dir()` — plan1a-host), `data_dir`
      (via `quarto_util::quarto_data_dir()` — **prerequisite: this leaf does not
-     exist yet; add it to `quarto-util` mirroring `runtime_dir.rs`'s *shape* (a
+     exist yet; add it to `quarto-util` mirroring `runtime_dir.rs`\'s *shape* (a
      pure `*_dir_from(...)` branch helper + `create_dir_all`), resolving via
      `dirs::data_dir()` namespaced under `quarto`. Unlike `runtime_dir.rs`,
      which has no env override, `quarto_data_dir()` checks a `QUARTO_DATA_DIR`

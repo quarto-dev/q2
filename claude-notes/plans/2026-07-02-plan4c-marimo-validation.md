@@ -447,21 +447,21 @@ Upstreamable. No marimo-internal work.
 **BLOCKING FINDING #3 (2026-07-02, 4cB attempt 3) — RESOLVED (controller
 sign-off received) — SC8's specified named revert ("remove the `python`
 claim from `_extension.yml`") is VACUOUS; a DIFFERENT mechanism
-(`EngineClaimsFileStage`'s whole-file dynamic `claims_file`) already assigns
+(`EngineClaimsFileStage`\'s whole-file dynamic `claims_file`) already assigns
 marimo ownership independent of the per-language `claims:` map.**
 Empirically proven, not a guess — see the task report's "Final completion"
 section for the full trace. The corrected two-part revert (`claims-files:
 []` + remove the `python:` claim) is now SC8's official named revert (see
 the Test Seam Spec table's in-row annotation); RED evidence captured
-verbatim in `marimo_engine_e2e.rs`'s doc comment; fixture restored
+verbatim in `marimo_engine_e2e.rs`\'s doc comment; fixture restored
 byte-identical.
 
 - Applying exactly the brief's specified revert (deleting the `python:` key
-  from `_extension.yml`'s `claims:` map, everything else unchanged) does
+  from `_extension.yml`\'s `claims:` map, everything else unchanged) does
   **NOT** redden `sc8_minimal_marimo_render_shows_marimo_signature_and_result`
   — it stays GREEN. Confirmed by direct `RUST_LOG=debug` render trace: marimo's
   subprocess still runs ("Executing marimo cells...").
-- Root cause: `crates/quarto-core/src/stage/stages/engine_claims_file.rs`'s
+- Root cause: `crates/quarto-core/src/stage/stages/engine_claims_file.rs`\'s
   `EngineClaimsFileStage` runs BEFORE any per-language tier resolution and
   asks every registered engine `claims_file(file, ext)` — "first claimer
   wins" — for the **whole file**, regardless of extension (`.qmd` included).
@@ -471,7 +471,7 @@ byte-identical.
   like an explicit `engine: marimo` declaration, bypassing the per-language
   `claims:` map (T1-T4 in `resolution.rs`) entirely.
 - The marimo fixture's `_extension.yml` declares no `claims-files:` key, so
-  `TsEngine.claims_files` is `None` → `ts_engine.rs:716-717`'s
+  `TsEngine.claims_files` is `None` → `ts_engine.rs:716-717`\'s
   content-inspecting DYNAMIC path fires: it loads the (unmodified,
   excluded-from-editing) engine module and calls its live `claimsFile`,
   which does its own independent regex scan
@@ -509,7 +509,7 @@ controller triage, full evidence in `.superpowers/sdd/task-4cB-report.md`.
 - Confirmed the temp file itself DOES contain the expected markers
   (`__MARIMO_EXPORT_CONTEXT__` script + `<marimo-code hidden>…</marimo-code>`)
   — read directly off disk before pipeline cleanup. So `extract.py`/
-  `marimo-engine.ts`'s header-construction is correct; the break is entirely
+  `marimo-engine.ts`\'s header-construction is correct; the break is entirely
   in how q2 consumes `ExecuteResult.includes["include-in-header"]`.
 - Root cause: `crates/quarto-core/src/engine/ts_engine.rs::translate_includes`
   (\~line 440) passes each wire string straight through into
@@ -522,7 +522,7 @@ controller triage, full evidence in `.superpowers/sdd/task-4cB-report.md`.
   `append_pandoc_includes`, `include_resolve.rs:262-278`, called from both
   `IncludeResolveStage` and `ApplyTemplateStage`'s late drain — neither path
   reads files for this channel).
-- But `marimo-engine.ts`'s `execute()` (line \~340-346) writes header content
+- But `marimo-engine.ts`\'s `execute()` (line \~340-346) writes header content
   to a temp file and sends **the file's path** as the wire value — "(like
   Jupyter does)", per its own comment — i.e. it assumes Q1/Pandoc-style
   file-path semantics (matching knitr's native-Rust `convert_includes`,
@@ -558,7 +558,7 @@ reported here for controller triage, full evidence in
   first class as the literal string `"{python}"` (braces included) — see
   `crates/quarto-core/src/engine/capture_splice.rs:74` (`engine_cell_lang`),
   which strips the `{…}` wrapper back off when resolving the cell's language.
-  But `crates/pampa/src/writers/qmd.rs`'s `write_attr` (line 431:
+  But `crates/pampa/src/writers/qmd.rs`\'s `write_attr` (line 431:
   `write!(writer, ".{}", class)?;`) doesn't know about this special encoding —
   for a 2+-class `CodeBlock` (`write_codeblock`, lines 664-672, takes the
   `write_attr` branch whenever more than one class is present, which is always
@@ -568,7 +568,7 @@ reported here for controller triage, full evidence in
 - Confirmed via `cargo run --bin pampa -- -f markdown -t qmd`: round-tripping
   `{python .marimo}` produces the malformed fence above; round-tripping the
   dotted form `{python.marimo}` (single class `"{python.marimo}"`, hits
-  `write_codeblock`'s single-class bare-word branch) round-trips correctly.
+  `write_codeblock`\'s single-class bare-word branch) round-trips correctly.
 - Impact on the render: `serialize_ast_to_qmd`
   (`crates/quarto-core/src/stage/stages/engine_execution.rs:569`) is what feeds
   `target.markdown` to every TS engine — so the malformed fence is what marimo's
@@ -580,7 +580,7 @@ reported here for controller triage, full evidence in
   matches), so `execute()` splices nothing back in and passes the malformed
   fence straight through in `processedMarkdown`. That text then fails
   downstream tree-sitter re-parse with the generic pampa fallback
-  (`quarto-parse-errors`'s `"Parse error" / "unexpected character or token
+  (`quarto-parse-errors`\'s `"Parse error" / "unexpected character or token
   here"`), which is the error `q2 render` surfaces.
 - This blocks **any** TS engine consuming a `{lang .firstclass}`-syntax cell via
   the standard `serialize_ast_to_qmd` path — not marimo-specific, and not
@@ -591,7 +591,7 @@ reported here for controller triage, full evidence in
   `crates/pampa/src/writers/qmd.rs` to detect a bracket-wrapped first class
   (`class.starts_with('{') && class.ends_with('}')`) and emit it as a bare
   unprefixed language token (mirroring the reader's encoding and
-  `engine_cell_lang`'s unwrap), then re-attempt 4cB.
+  `engine_cell_lang`\'s unwrap), then re-attempt 4cB.
 
 ### Phase 4cB2: Dynamic-claims fixture
 - [x] Second fixture: identical engine, **`claims:` removed** from `_extension.yml`
@@ -663,7 +663,7 @@ reported here for controller triage, full evidence in
       is a quarto-core wire-protocol change outside this task's scope. Full
       evidence trail (both directions of the SC4-revert experiment, exact
       HTML snippets, confirmatory failure mode) in
-      `marimo_engine_e2e.rs`'s doc comment ahead of the (uncommitted, not-
+      `marimo_engine_e2e.rs`\'s doc comment ahead of the (uncommitted, not-
       passing) SC9 section, and in `.superpowers/sdd/task-4cB2-report.md`.
       **Controller decision needed** before SC9 can be completed as
       literally specified (see the Test Seam Spec row annotation below and
@@ -773,7 +773,7 @@ reported here for controller triage, full evidence in
       dynamic-claims-less fixture derivation (`setup_marimo_project_dynamic`,
       same machinery SC9/SC14 use) instead. RED-by-revert: the brief's two
       suggested single edits (widen the cell-split regex; neuter
-      `cellOwnedByMarimo`'s sql-only check for "r") were BOTH tried and found
+      `cellOwnedByMarimo`\'s sql-only check for "r") were BOTH tried and found
       VACUOUS (no spare `marimoExecution.output` exists to inject wrong
       content for an over-claimed cell with no real output, so the fallback
       always reconstructs the original text byte-identical); the actual
@@ -798,7 +798,7 @@ reported here for controller triage, full evidence in
       `<pre class="marimo-error">SyntaxError: ...</pre>` with a normal exit
       0. Used an unresolvable `pyproject` dependency name instead, which
       fails at the `uv run` SUBPROCESS level and genuinely reaches
-      `execute()`'s outer try/catch, producing the "Error executing marimo"
+      `execute()`\'s outer try/catch, producing the "Error executing marimo"
       substring this row specifies. RED-by-revert: neuter the catch
       (rethrow) → render fails outright, captured verbatim in the test's doc
       comment.)
@@ -888,7 +888,7 @@ history):** the original GREEN case is UNIMPLEMENTABLE — architectural FINDING
 `derive_cell_outputs`/`is_cell_wrapper`) anchors only on `::: {.cell}` wrappers;
 marimo emits bare `{=html}` islands with no wrapper, so its capture records
 server-side but never splices — the pane shows inert source regardless of the
-delivery chain's health. Additionally the original assertion (b)'s premise was
+delivery chain's health. Additionally the original assertion (b)\'s premise was
 wrong: the literal source ALSO survives in the include-in-header
 `notebookCode:` script, not only URL-encoded. **SC21 is REFRAMED as SC21-NEG, a
 limitation-pinning canary** (controller adjudication, user asked, AFK —
@@ -921,7 +921,7 @@ best-judgment per recommended option; reversible):
   (distinctive literal `40 + 2`, distinctive result `42` — avoids the ambient-`2` regex-dodging the julia preview spec needed for its `1 + 1` doc).
 - **Seam (mount + wait + assertion surface):** new
   `q2-preview-spa/e2e/engine-capture-splice-marimo.spec.ts`, mirroring
-  `engine-capture-splice-julia.spec.ts`'s shape. Gates: deno+uv presence AND
+  `engine-capture-splice-julia.spec.ts`\'s shape. Gates: deno+uv presence AND
   opt-in `QUARTO_SC21_LIVE=1` (user directive; same pattern as the julia
   spec's `QUARTO_PC6_LIVE`). Wait via `waitForFunction` on the pane
   (NO reload — the eager capture is recorded at server startup, so the first SPA render may already be spliced; the echo spec documents these semantics in its header). CONJUNCTIVE

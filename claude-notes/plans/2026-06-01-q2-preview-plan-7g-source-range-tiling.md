@@ -228,7 +228,7 @@ earlier draft lumped both as "blessed same-preimage groups," which conflated an
    nodes, each stamped `Generated { from: [Invocation -> token@R] }`
    (`crates/quarto-core/src/transforms/shortcode_resolve.rs` `stamp_block` :624,
    anchor \~:781). All N resolve via
-   `preimage_in`'s `Generated` arm to the **same** range `R`, so by the literal
+   `preimage_in`\'s `Generated` arm to the **same** range `R`, so by the literal
    sibling-disjointness rule they maximally overlap. The Phase 6 audit
    (§5 Hole α / L3, premise table P4) established this sharing is **acceptable
    by design** — the writer coalesces same-`Invocation` runs and emits `R` once,

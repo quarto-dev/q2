@@ -162,9 +162,10 @@ def main():
                          "(lookbehind sees the rest of the line); other occurrences are "
                          "listed for manual review instead")
     ap.add_argument("--block-pattern", metavar="REGEX",
-                    help="for diagnostics without an opener position, escape every match of "
-                         "REGEX (outside code spans) in the enclosing block; the match start is "
-                         "the escaped character. E.g. '~' for Q-2-17, \"(?<=`)'(?=\\w)\" for Q-2-7")
+                    help="for diagnostics without an opener position, or whose opener fails "
+                         "--only-context, escape every match of REGEX (outside code spans) in "
+                         "the enclosing block; the match start is the escaped character. "
+                         "E.g. '~' for Q-2-17, \"(?<=`)'(?=\\w)\" for Q-2-7")
     args = ap.parse_args()
     block_re = re.compile(args.block_pattern) if args.block_pattern else None
     only_re = re.compile(args.only_context) if args.only_context else None
@@ -208,6 +209,16 @@ def main():
                         skipped.append(f"{f}:{ln}:{abs(col)}: {line.strip()[:120]}")
                     continue
                 if only_re is not None and not only_re.match(line, i):
+                    # Not clearly literal. The reported opener is often a real
+                    # *emphasis* broken by a different culprit in the same
+                    # block (e.g. `x`'s inside **bold**), so try the block
+                    # pattern there before sending it to review.
+                    if block_re is not None and block_escape(lines, ln, block_re):
+                        if args.dry_run:
+                            print(f"{f}:{ln}: [block fallback in review case]")
+                        changed = True
+                        edits += 1
+                        continue
                     if (f, ln, i) not in seen_review:
                         seen_review.add((f, ln, i))
                         review.append(f"{f}:{ln}:{i + 1}: {line[max(0, i - 50):i]}[{ch}]{line[i + len(ch):i + 50]}")

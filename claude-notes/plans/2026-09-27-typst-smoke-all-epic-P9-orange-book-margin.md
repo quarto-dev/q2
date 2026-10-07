@@ -106,7 +106,7 @@ correction to the original analysis**:
   key — Q1's real page-correctness comes entirely from unique-text search plus the
   implicit same-page check between resolved subject/object bboxes, not from this
   annotation. **Q2's port needs to tolerate this decorative extra key** rather than
-  reject it as unrecognized input — worth an explicit check if `spec.rs`'s
+  reject it as unrecognized input — worth an explicit check if `spec.rs`\'s
   deserializer uses anything like `#[serde(deny_unknown_fields)]` on this assertion
   shape (P1/P3's concern, flagging here since this fixture is where it'd first bite).
 

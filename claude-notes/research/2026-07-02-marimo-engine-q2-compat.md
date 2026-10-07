@@ -284,11 +284,11 @@ edit was needed to make the bundle build or `deno check` pass.
    julia). If marimo's actual maintainers state a preferred display name,
    update this value; it has no behavioral effect beyond satisfying q2's
    required-field check.
-4. **`claimsLanguage`'s dynamic branches were cross-checked, not
+4. **`claimsLanguage`\'s dynamic branches were cross-checked, not
    exercised.** §4 is a static read of the TS source against the fixture's
    `claims:` map; the actual Pass-1 resolver behavior (does q2 correctly
    assign priority-2/priority-1/interop per the map, matching what
-   `claimsLanguage` would return if asked dynamically) is 4cB+'s job to
+   `claimsLanguage` would return if asked dynamically) is 4cB+\'s job to
    verify against a real render, same division of labor as julia's
    4A (static claims declaration) vs. 4B (first real render, §9 of the
    julia log). **Partially confirmed by 4cB attempt 1 (§9): the static
@@ -302,7 +302,7 @@ edit was needed to make the bundle build or `deno check` pass.
 
 **Resolved marimo version:** `marimo==0.23.13` (python 3.13.7,
 `cpython-3.13.7-macos-aarch64-none`), resolved via `uv run --with marimo` —
-consistent with the environment facts' `uv.lock` constraint (`>=0.23.1`).
+consistent with the environment facts\' `uv.lock` constraint (`>=0.23.1`).
 
 **Manual invocation:**
 ```
@@ -408,7 +408,7 @@ static, via a declared `claims-files:` key, or dynamic, via the live JS
 engine_claims_file.rs`) runs before `ParseDocumentStage`, asks every
 registered engine whether it claims the **whole input file**, and — first
 claimer wins — records that engine as `ctx.claimed_engine_name`. Per
-`engine_execution.rs:225`'s own comment, that claim **"short-circuits ALL
+`engine_execution.rs:225`\'s own comment, that claim **"short-circuits ALL
 tier evaluation and returns exactly that engine"** — functionally identical
 to an explicit `engine: <name>` frontmatter declaration, entirely bypassing
 whatever the `claims:` map says about individual languages.
@@ -442,7 +442,7 @@ variant (identical engine, `claims:` map dropped from `_extension.yml`,
 derived per-test in `marimo_engine_e2e.rs` rather than committed as a second
 bundle) renders the same python-only `minimal.qmd` SC8 uses with the same
 result: `p4cb2_dynamic_path_parity_minimal_render_matches_static` is GREEN.
-This proves the legacy dynamic path (`ts_engine.rs:668`'s `claims_language`
+This proves the legacy dynamic path (`ts_engine.rs:668`\'s `claims_language`
 else-branch: `ensure_loaded` + a live `ClaimsLanguage` wire call) resolves
 `{python .marimo}` ownership identically to the static `claims:` map.
 
@@ -495,7 +495,7 @@ brief's Risk 1, the evidence-first procedure was run to completion:
 **Why this isn't fixed here.** Both ends of a fix are out of this task's
 authorized scope: `marimo-engine.ts`/`is-marimo-cell.ts` are excluded
 fixture/engine source (only the pre-authorized `claims-files: []` tweak was
-sanctioned, not flipping `bareSqlOwned`'s sense), and the durable fix is
+sanctioned, not flipping `bareSqlOwned`\'s sense), and the durable fix is
 architecturally bigger than a one-line flip anyway — a bare
 `!handledLanguages.includes(lang)` on the engine side cannot distinguish "I
 own this language" from "nobody owns this language" (exactly the ambiguity
@@ -536,7 +536,7 @@ is therefore sound as-is, without a new wire field.
   `lib/is-marimo-cell.ts`'s `cellOwnedByMarimo` both flipped to
   `!handledLanguages.includes("sql")`; both doc comments corrected to state
   the leave-alone semantics and point at `resolution.rs:292`.
-  `tests/is-marimo-cell.test.ts`'s two `cellOwnedByMarimo` gate assertions
+  `tests/is-marimo-cell.test.ts`\'s two `cellOwnedByMarimo` gate assertions
   (fed under the old, backwards convention) corrected to match: bare-sql
   cell + `handled=[]` → owned (`true`); + `handled=["sql"]` → NOT owned
   (`false`). RED captured against the flipped implementation with the
@@ -555,7 +555,7 @@ is therefore sound as-is, without a new wire field.
   `grep bareSqlOwned` shows `!(options.handledLanguages ?? []).includes("sql")`;
   `grep handledLanguages.includes` shows the negated
   `cellOwnedByMarimo` expression; `deno check` on the bundle is clean.
-  `crates/quarto-core/src/engine/ts_protocol.rs`'s `TsExecuteOptions::handled_languages`
+  `crates/quarto-core/src/engine/ts_protocol.rs`\'s `TsExecuteOptions::handled_languages`
   field gained a doc comment stating the leave-alone semantics and this
   finding, so the next TS-engine author doesn't repeat it — no logic change
   in q2-core.
@@ -637,7 +637,7 @@ output HTML directly:
   `<marimo-code hidden>...</marimo-code>` tag carrying the URL-encoded
   notebook source, plus the islands runtime `<script type="module"
   src="https://cdn.jsdelivr.net/npm/@marimo-team/islands@.../main.js">`.
-- `<body>`: the widget's raw `{=html}` output (`render-output.ts`'s
+- `<body>`: the widget's raw `{=html}` output (`render-output.ts`\'s
   non-mime-sensitive branch, `result += "```{=html}\n" + output.value +
   "\n```\n\n"`, which becomes a Pandoc `RawBlock` the HTML writer emits
   verbatim — no DOM postprocessor, no `store_html_dependencies`) is a
@@ -742,7 +742,7 @@ reasons.
 SC16 is the first row with a SECOND, *independently owned* engine in the
 same document (`{r}` → knitr). Rendering `{python .marimo}` + `{r}` through
 the unmodified committed fixture confirmed the short-circuit breaks
-coexistence outright: `resolve_engines`'s `claimed` seed collapses the
+coexistence outright: `resolve_engines`\'s `claimed` seed collapses the
 sequence to exactly `[marimo]` (empty ownership map), knitr never runs, and
 the `{r}` cell is spliced back as raw, unexecuted source
 (`<pre class="{r} code-with-copy"><code>1 + 1</code></pre>` — not knitr's
@@ -760,7 +760,7 @@ with no error, just quietly-wrong output. This is a q2-core /
 extension-authoring gotcha independent of marimo specifically; it applies
 to any TS engine whose `_extension.yml` omits `claims-files:`.
 
-### Finding B — `execute()`'s outer catch is unreachable from cell-content
+### Finding B — `execute()`\'s outer catch is unreachable from cell-content
 syntax errors; marimo's own per-cell isolation gets there first
 
 SC18's frozen row names `execute()`'s outer try/catch (marimo-engine.ts
@@ -779,7 +779,7 @@ marimo's own dataflow-graph execution model, producing
 crash (observed independently while debugging SC13's companion-import-cell
 requirement).
 
-Net effect: `execute()`'s outer catch is reachable only by a failure
+Net effect: `execute()`\'s outer catch is reachable only by a failure
 OUTSIDE marimo's own per-cell/runtime error isolation — i.e. a genuine
 subprocess-level failure (non-zero exit from `uv run`, a bad
 `command.py`/`extract.py` invocation, a `JSON.parse` failure on malformed

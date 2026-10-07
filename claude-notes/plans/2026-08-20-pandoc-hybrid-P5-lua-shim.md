@@ -329,13 +329,13 @@ unspecified, and nested wire nodes depend on it.** `run_emulated_filter_chain` c
 `run_emulated_filter(doc, v.filter, v.traverser)` (`ast/runemulation.lua:82`) — traversal is a
 **per-entry** property of the filter-list entry, not a global setting, and nearly every entry in
 `main.lua` sets `traverser = 'jog'` explicitly. Wire nodes nest: a `FloatRefTarget` inside a
-`Callout`'s `content` slot serializes as a wire Div inside a slot Div inside a wire Div
+`Callout`\'s `content` slot serializes as a wire Div inside a slot Div inside a wire Div
 (`json.rs:1502-1534` wraps each slot's content in a `data-slot-name` Div). A **bottom-up**
 traversal converts the inner node first, so `quarto.Callout{content = ...}` receives an
 already-real Q1 scaffold; a topdown traversal would hand the constructor raw, unconverted wire
 Divs, which then never get converted, because the shim's own filter group has already passed that
 subtree. P6 Finding 5 specifically asks for a Tabset-containing-subfloat fixture, so this case is
-known to be in scope. **State the traversal contract explicitly: bottom-up (matching `jog`'s
+known to be in scope. **State the traversal contract explicitly: bottom-up (matching `jog`\'s
 default direction for this kind of pass), not topdown**, in the shim's filter-group definition —
 this is P4's patch item to show concretely (the actual group literal, not just the `tappend`
 line), cross-referenced here since it's this plan's shim code that the literal defines.
@@ -373,10 +373,10 @@ Three concrete failure paths, resolved per the epic-wide `pandoc`-subsystem deci
 
    **Critical correction (2026-09-18, round 4 review — found independently by two dispatched
    reviewers): the guard above is specified against the wrong predicate and does not prevent the
-   abort it exists to prevent.** `callout_title_prefix`'s actual guard tests
+   abort it exists to prevent.** `callout_title_prefix`\'s actual guard tests
    **`crossref.categories.by_ref_type[refType(id)]`**, not `valid_ref_types()`. Read directly:
    `valid_ref_types()` (`crossref/refs.lua:198-212`) is a strict **superset** of
-   `by_ref_type`'s keys — it additionally contributes every theorem-family type
+   `by_ref_type`\'s keys — it additionally contributes every theorem-family type
    (`tkeys(theorem_types)`: `thm, lem, cor, prp, cnj, def, exm, exr, alg`) plus the literals `"eq"`
    and `"sec"`. So any `ref_type` in that extra set **passes the guard above and still hits
    `fail()`** — reachable, not theoretical: Q2's classifier splits on the first hyphen with no
@@ -413,7 +413,7 @@ Three concrete failure paths, resolved per the epic-wide `pandoc`-subsystem deci
 
 ## Theorem field-map, audited against the real Q1 constructor (not assumed mechanical)
 
-`theorem.lua`'s constructor starts at line **87**, not 88 (citation fix, round 4 review, Reviewer
+`theorem.lua`\'s constructor starts at line **87**, not 88 (citation fix, round 4 review, Reviewer
 B). It is `{name, div, identifier}` — **not** `{ref_type, kind, identifier}`
 as Q2's `plain_data` carries. The shim has to derive, not pass through 1:1:
 - `identifier` — direct pass-through, matches.
@@ -456,7 +456,7 @@ as Q2's `plain_data` carries. The shim has to derive, not pass through 1:1:
   ```
 
 **`algorithm`/`alg` gap: confirmed real, fix location resolved, detection-mismatch worry resolved
-as a non-issue (2026-09-17).** `theorem.rs`'s `THEOREM_CLASSES` (8 entries:
+as a non-issue (2026-09-17).** `theorem.rs`\'s `THEOREM_CLASSES` (8 entries:
 theorem/lemma/corollary/proposition/conjecture/definition/example/exercise) has no `algorithm`
 entry, while Q1's `theorem_types` table (`theorem.lua:1-52`) does (`alg = {env="algorithm",
 style="plain", title="Algorithm"}`).
@@ -529,7 +529,7 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
   zero diff under `src/resources/filters/`), so **pin to tag `v1.11.3`** — byte-identical to
   what's actually vendored, no dev drift to absorb. Record this in
   `resources/pandoc-filters/README.md` (P4 owns creating it), mirroring
-  `resources/scss/README.md`'s Source/Updating structure — Bootstrap pins a release number,
+  `resources/scss/README.md`\'s Source/Updating structure — Bootstrap pins a release number,
   this pins a release **tag**, since quarto-cli's Lua filters have no per-file version. The
   actual drift-detection mechanism doesn't need separate design: it's the Layer-1/Layer-2
   contract tests below, the same behavioral-tripwire philosophy P3 already established for its
@@ -548,7 +548,7 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
 
 ## Consumes / Produces (seams)
 - **Consumes:** P2 schema; P4 run machinery; P1's `Pandoc`-kind exclude-list (this shim's
-  field-map audits assume `panel-tabset`'s sugar half survives to the cut, which depends on P1
+  field-map audits assume `panel-tabset`\'s sugar half survives to the cut, which depends on P1
   keeping it enabled — see P1 for the resolved list).
 - **Produces for P7:** rendered custom nodes per format, **plus** the code-block-decorations
   sideband bridge P7 needs to design separately (this shim doesn't carry it).
@@ -569,10 +569,10 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
   a Route N case after all — resolved upstream in P1's Rust core (2026-09-17), out of this
   plan's scope entirely.
 - [x] Resolve `CrossrefResolvedRef` directly to a Pandoc inline in the shim (mirror `refs.lua`);
-  resolve `Equation` the same way (mirror `equations.lua`'s format-specific `RawInline`
+  resolve `Equation` the same way (mirror `equations.lua`\'s format-specific `RawInline`
   injection); do not attempt a Route-R constructor call for either — none exists. **Done:**
   implementation plan Tasks 4 (`3cc1870a3`) and 5 (`2328a638e`).
-- [x] **`ExampleEmbed`'s non-HTML behavior — resolved 2026-09-17, decided with Gordon (see P1).**
+- [x] **`ExampleEmbed`\'s non-HTML behavior — resolved 2026-09-17, decided with Gordon (see P1).**
   No longer this plan's open question at all: `example-embed-render` reclassified to
   format-parameterized B1, resolved entirely in Rust upstream of the cut.
 - [x] Decide Theorem's `algorithm`/`alg` fix location; check the class-vs-identifier detection
@@ -591,7 +591,7 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
   reclassification to R (P6, 2026-09-17) means every wire type is now Route R or Route N;
   Route L is not vestigial in the design (the general rule still routes future presentation-only
   types there), just currently unused. Don't build dead Route-L machinery speculatively. **Done:**
-  confirmed by construction — `quarto2-shim.lua`'s `routes` table carries exactly seven entries,
+  confirmed by construction — `quarto2-shim.lua`\'s `routes` table carries exactly seven entries,
   each `"R"` or `"N"`, no `"L"` value, mechanically bound by `test_route_table_has_no_route_l`
   (Task 1) and `test_shim_routes_cover_the_schema` (Task 7).
 - [x] Route-R reconstruction (wire → constructor, then post-construction `order` assignment per
@@ -602,7 +602,7 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
   functions** — **corrected 2026-09-18, round 4 review: the full list is `refPrefix`,
   `refNumberOption`, `subrefNumber`, `refHyperlink`, `refDelim`, `crossrefOption`, `nbspString`
   for `CrossrefResolvedRef`** (the prior three-function list could produce a prefix but not a
-  number), **plus `add_ref_prefix`'s nbsp logic reproduced inline (it's closure-local, not
+  number), **plus `add_ref_prefix`\'s nbsp logic reproduced inline (it's closure-local, not
   callable)**, **and `renderEquation(eq, label, alt, order)` for `Equation`** (confirm the
   fallback branch, `crossref/equations.lua:133-144`, not the LaTeX/Typst branches, is the one that
   reads `order`) — not reimplementing their logic. See the Route-N Finding above for the corrected
@@ -617,8 +617,8 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
 - [x] **New (2026-09-18, round 4 review): state the shim group's traversal contract as
   bottom-up, not topdown** (see the traversal sub-finding above), and have P4's patch item show
   the actual filter-group literal, not just the `tappend` line — nested wire nodes (a
-  `FloatRefTarget` inside a `Callout`'s `content` slot, exactly P6 Finding 5's fixture) depend on
-  inner-before-outer conversion order. **Done:** Task 1 (`1b4596c72`) — `quarto2-shim.lua`'s
+  `FloatRefTarget` inside a `Callout`\'s `content` slot, exactly P6 Finding 5's fixture) depend on
+  inner-before-outer conversion order. **Done:** Task 1 (`1b4596c72`) — `quarto2-shim.lua`\'s
   filter-group entry documents the bottom-up contract inline; `test_nested_wire_nodes_convert_inner_first`
   binds it.
 - [x] **New (2026-09-18, round 4 review): add a Layer-1 assertion that each Route-N function this
@@ -632,12 +632,12 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
   **Done:** field maps implemented per-type in Tasks 2–3; `Proof.plain_data.type` confirmed
   present (P2 Task 3 landed ahead of this branch), consumed directly in Task 2's `route_proof`.
 - [x] **New (2026-09-18): the shim's loading mechanism** — implemented in P4 (small marked patch
-  to `main.lua`'s filter-list assembly, positioned before `quarto_normalize_filters` — see P4's
+  to `main.lua`\'s filter-list assembly, positioned before `quarto_normalize_filters` — see P4's
   Finding 2 and this plan's "shim's loading mechanism" Finding above), but this plan's shim code
   is what gets loaded, so confirm the shim's own file lives as a sibling to `customnodes/*.lua`
   under **our own** vendored-but-not-upstream tree (P4's README should list it as "ours," not part
   of the `v1.11.3` pin, so a re-vendor delete-and-recopy doesn't remove it). **Done:** confirmed —
-  `resources/pandoc-filters/README.md`'s "Ours vs. pinned" list names `quarto2-shim.lua` and
+  `resources/pandoc-filters/README.md`\'s "Ours vs. pinned" list names `quarto2-shim.lua` and
   `quarto2-shim-probe.lua`, bound by `pandoc_filters::test_readme_records_the_pins`.
 - [x] **The shim's error handling** per the Finding above — unrecognized `type_name` unwraps to
   slot content (not a hard fail); the Callout-`fail()` case falls back to raw-Div reconstruction
@@ -661,14 +661,14 @@ since Route-R reconstruction is already `ref_type`-agnostic (same mechanism as t
   warning emitted), `callout-foreign-category.qmd` (`::: {#thm-x .callout-note}` — asserts the
   render *completes* with the fallback warning, not `FATAL QUARTO ERROR`), `proof-missing-type.qmd`
   (asserts the diagnostic carries pandoc's stderr verbatim and the temp JSON is retained). **Done:**
-  Task 6 (`9118e64d1`) — all three fixtures created exactly as named; `unknown-wire-type.qmd`'s
+  Task 6 (`9118e64d1`) — all three fixtures created exactly as named; `unknown-wire-type.qmd`\'s
   base type was corrected during implementation from the originally-envisioned shape to
   `.theorem .my-custom-highlight` after measurement showed a `.callout-note`-based fixture
   produced a vacuous discriminator (Q1's own class-keyed dispatcher independently recognized the
   residual class).
 - [x] Layer-1 introspection test — **name the harness before writing it** (2026-09-18): it must
   run inside pandoc's own Lua (a probe script invoked via `pandoc --lua-filter`, since Q1's node
-  registry — `by_ast_name` — is only populated by `main.lua`'s own imports; `mlua` inside `pampa`
+  registry — `by_ast_name` — is only populated by `main.lua`\'s own imports; `mlua` inside `pampa`
   cannot load `main.lua`). Assert a **per-type name mapping**, not set-equality — Q1's slot names
   don't match Q2's for every type (`theorem.lua`/`proof.lua` declare `slots = {div, name}` against
   Q2's `content`/`title`; `panel-tabset.lua` declares no `slots` field at all, an explicit N/A for
@@ -706,7 +706,7 @@ None remain open. Both of this plan's originally-deferred items are resolved:
   field where this was a live, undecided question — Theorem's `kind` — everything else that
   looked similarly shaped (Tabset's `active`, Callout's `appearance`/`icon`) turned out to
   already be fully resolved by Q2 before the wire cut, making Q1's parallel defaulting dead
-  code for Route R. `kind`'s resolution: Q2 supplies it via a `crossref-<type>-title` param
+  code for Route R. `kind`\'s resolution: Q2 supplies it via a `crossref-<type>-title` param
   (P4), not via the constructor — this plan's Route-R reconstruction checklist item above
   ("no re-defaulting of already-resolved fields") already states the resulting principle
   correctly and needs no further change.

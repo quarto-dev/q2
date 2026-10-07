@@ -346,10 +346,10 @@ that keeps `panel-tabset` enabled). Neither is external to this plan.
 
 ### Refactor-induced vacuity check
 
-**Only `panel_tabset.rs`'s self-gate is widened — not `draft_alert.rs`/`format_css.rs`/
+**Only `panel_tabset.rs`\'s self-gate is widened — not `draft_alert.rs`/`format_css.rs`/
 `responsive_image.rs`.** That scope choice means the vacuity question here is about the
 **absence** of three tests. There is deliberately **no**
-test asserting `format_css.rs`'s gate is un-widened, because such a test would have to assert the
+test asserting `format_css.rs`\'s gate is un-widened, because such a test would have to assert the
 *absence* of a code change, which no runtime surface distinguishes: with `format-css` on the
 exclude-list, its gate never executes for a Pandoc profile, so widened or not, every behavioral
 assertion reads identically. The state this would need to distinguish — "stray `.css` files staged
@@ -381,7 +381,7 @@ Block::RawBlock(RawBlock {
 })
 ```
 
-`render_embed`'s snippet/caption path and the `with_number_label` "Demo N: " prepend follow
+`render_embed`\'s snippet/caption path and the `with_number_label` "Demo N: " prepend follow
 immediately after (`example_embed.rs:410+`). The sugar half is `"example-embed"` (`:125-127`),
 registered at `pipeline.rs:1303`; the render half at `pipeline.rs:1475`.
 
@@ -460,7 +460,7 @@ document:
   The `NoteReference`→`Note` reconstruction the design doc's §6 SPLIT row describes
   ("B1: `NoteRef`+`Def` → native Pandoc `Note`") must be **written**, not carved out. Its inputs
   are all present (`definitions: HashMap<String, NoteContent>`, with `NoteContent::Inlines` needing
-  a `Paragraph`/`Plain` wrap to become `Note`'s `Blocks`), so the work is small and local — but it
+  a `Paragraph`/`Plain` wrap to become `Note`\'s `Blocks`), so the work is small and local — but it
   is new behavior, and the seam for T5.1 therefore does not exist until this task creates it.
 
 **The shape: two registered transforms, not an in-transform profile branch.** This is the shape
@@ -541,7 +541,7 @@ detached definition content. The split's marker-based dedup (keyed on the named 
 does not have this collision, so both footnotes now render correctly. This is a genuine, beneficial
 bug fix — not a regression, and not reverted — but it is an undocumented exception to the "byte-
 identical to today" bar until this note. Pinned by
-`crates/quarto-core/tests/integration/footnotes_dedup.rs`'s
+`crates/quarto-core/tests/integration/footnotes_dedup.rs`\'s
 `inline_note_and_numerically_named_footnote_do_not_collide`.
 
 ### Test Seam Spec

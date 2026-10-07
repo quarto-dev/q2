@@ -481,8 +481,8 @@ for v1.)
   and the package's `tsconfig.json` has **no Deno typings** (`lib: ["ES2022",
   "DOM"]`, no `deno.ns`, no `@types/deno`). A `connectControl` that calls
   `Deno.connect` there would fail `tsc` ("Cannot find name 'Deno'") — and `tsc`
-  runs in `cargo xtask verify`'s ts-packages build. So put it in a new module
-  (e.g. `src/control-transport.ts`) **added to `tsconfig.json`'s `exclude` list**,
+  runs in `cargo xtask verify`\'s ts-packages build. So put it in a new module
+  (e.g. `src/control-transport.ts`) **added to `tsconfig.json`\'s `exclude` list**,
   exactly like `deno-host.ts`/`main.ts`. It:
   - reads the **token from the first line of `Deno.stdin`** (NOT `Deno.args` — see
     "Token delivery"; only `--control` is parsed from `Deno.args`) — reading with a
@@ -502,7 +502,7 @@ for v1.)
 - `main.ts` (currently 23 lines, no arg parsing): when `--control` is present,
   `await connectControl()` (from the new module) and pass the returned
   `reader`/`writer` into the **unchanged** `runHost(reader, writer, denoHost)`.
-  `runHost`/`host.ts` need **no signature change** (verified: `runHost`'s reader
+  `runHost`/`host.ts` need **no signature change** (verified: `runHost`\'s reader
   param is already `ReadableStream<Uint8Array>` and its writer is `FrameWriter`;
   `Deno.stdout` and `conn` both satisfy these). The token is consumed from stdin
   and the socket pre-line by `connectControl` before `runHost`, so it never
@@ -517,7 +517,7 @@ for v1.)
   `cargo xtask build-engine-host-bundle` + `cargo build` for `q2` to pick it up
   (the embedded `dist/engine-host-deno.js` via `include_str!`; esbuild entry is
   `src/main.ts`, so the new module is bundled iff `main.ts` imports it). *(Note:
-  `main.ts`'s header comment "Bundle with: esbuild (Phase 4 — not yet)" is **stale** —
+  `main.ts`\'s header comment "Bundle with: esbuild (Phase 4 — not yet)" is **stale** —
   the bundle pipeline is already live, exactly as this trap describes; do not read it
   as "bundling isn't wired up yet.")*
 - **Coverage honesty (corrected — seam #8 cannot be a vitest test):** the new

@@ -1224,7 +1224,7 @@ attempt and must not be read as providing.
   snapshots all collapse to their body text and stop discriminating their entire renderers — while
   staying green, because the snapshot would be re-accepted. T8.3 is the guard, and it must assert
   non-emptiness per snapshot rather than in aggregate.
-- **`cargo insta review`'s accept-everything ergonomics is the standing risk here**, which is why
+- **`cargo insta review`\'s accept-everything ergonomics is the standing risk here**, which is why
   the acceptance criterion invokes CLAUDE.md's snapshot rule explicitly: report the count, summarize
   what changed, flag anything unexpected, and list the affected `.snap` files after committing.
 - **The Equation snapshot must be the docx one** (D3); a latex Equation snapshot would be stable
@@ -1269,7 +1269,7 @@ preserves slot content → zero-byte snapshot diff, D7), so this is the only mec
 one test with both directions, not two — splitting it invites dropping the load-bearing half.
 
 **5. The bottom-up traversal contract.** **Bound, T1.4**, with the nested fixture P6 Finding 5 also
-needs (a `FloatRefTarget` inside a `Callout`'s `content` slot). The discriminator is the **inner**
+needs (a `FloatRefTarget` inside a `Callout`\'s `content` slot). The discriminator is the **inner**
 node's caption prefix, not "it rendered" — a topdown traversal still produces a numbered outer
 callout and a syntactically valid document. The "path was actually exercised" assertion is the
 absence of `data-custom-type` from the captured AST. P4 T8.3 binds the *field*
@@ -1294,7 +1294,7 @@ Stated in Task 8's rationale so a future reader does not read Task 8 as a duplic
 
 **8. The JSON-decoder integer trap.** **Bound, T1.1 (`U`-cheap tier via `pandoc lua`) plus the
 negative assertions T4.3 and T5.2.** Measured: `pandoc.json.decode` yields a float and
-`format.lua:184`'s `tostring` renders `1.0`. Worth naming separately because the natural assertion
+`format.lua:184`\'s `tostring` renders `1.0`. Worth naming separately because the natural assertion
 (`contains("Figure\u{a0}1")`) is GREEN under the bug.
 
 **9. The attr sanitizer.** **Bound, T1.2 (both halves: the class filter and the attribute
@@ -1302,7 +1302,7 @@ deletions) and T3.3 (`no __quarto_custom_node` on a rendered callout).** Named s
 every Route-R constructor receives the attr, so a sanitizer bug is a seven-type defect that no
 single route's test would localize.
 
-**10. `FloatRefTarget`'s `kind`→`type` rename.** **Bound, T2.3**, whose revert hunk is the mapping
+**10. `FloatRefTarget`\'s `kind`→`type` rename.** **Bound, T2.3**, whose revert hunk is the mapping
 line itself.
 
 **11. Tabset's `need_emulation == false` return branch.** **Bound, T3.5** — a test anchored only
@@ -1315,7 +1315,7 @@ field-map prose says it is deliberately unused, which is the record.
 
 **13. Multi-ref joining and subfloat refs (Route N).** **`accepted-untested` by construction: Q2
 emits one `CrossrefResolvedRef` per `@ref` and drops additional ids upstream of the cut
-(`crossref_resolve.rs:540`'s own test documents this), and `plain_data` carries no `parent`, so
+(`crossref_resolve.rs:540`\'s own test documents this), and `plain_data` carries no `parent`, so
 neither branch is reachable in v1.** `refDelim` and `subrefNumber` are still arity-probed (T7.4) so
 an upstream signature change is loud when the branches do become reachable.
 
@@ -1334,7 +1334,7 @@ and the real shim; I did not verify through the `q2` binary, because the CLI for
 admits docx is P7-foundation's."* Same bar P4's companion sets for itself.
 
 **16. Windows.** **`accepted-untested` on Windows, bound as portable logic elsewhere:
-`test-suite.yml:28`'s matrix is `[ubuntu-latest, macos-latest]` — there is no Windows CI leg.**
+`test-suite.yml:28`\'s matrix is `[ubuntu-latest, macos-latest]` — there is no Windows CI leg.**
 Required mitigations: every path the harness builds uses `Path::join` (never a literal `/`), and the
 Lua side needs no change (`init.lua:123-131` derives its separator from `package.config:sub(1,1)`).
 The residual risk is the observer probe's `io.open` path on a Windows temp directory.

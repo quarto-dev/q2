@@ -230,8 +230,8 @@ page": at \~400 lines the migration content would have dominated
 `listings.qmd`. The existing `### Migrating a Quarto 1 template`
 subsection **moves** to the new page, leaving a pointer behind.
 
-**D2 — The wild worked example: `quarto-dev/quarto-web`'s
-`docs/gallery/gallery.ejs`.** Chosen over `InseeFrLab/utilitR`'s
+**D2 — The wild worked example: `quarto-dev/quarto-web`\'s
+`docs/gallery/gallery.ejs`.** Chosen over `InseeFrLab/utilitR`\'s
 `listing.ejs` on provenance — same org, so no third-party licensing
 question. It exercises `metadataAttrs(tile)`, three raw `<a href>`s, a
 raw `<img src>`, an `alt`-building nested ternary, and a nested
@@ -326,7 +326,7 @@ citing any file touched here. Output was **inspected**, not inferred:
 - Every cross-link resolves: `listings.html#custom-templates`,
   `paths.html#raw-html-is-not-rewritten`,
   `../../errors/listing/Q-12-{9,10,13,24}.html`.
-- `Q-12-24`'s mapping table renders 7 body rows (was 5), including the
+- `Q-12-24`\'s mapping table renders 7 body rows (was 5), including the
   two new markdown-link / markdown-image rows.
 
 The worked example in the doc was itself rendered before being written

@@ -300,7 +300,7 @@ Byte-exact passthrough confirmed in `RESULTS.md`, e.g.:
 **What this proves.** The core unknown — *can we faithfully round-trip prose-rich
 + Quarto-opaque qmd through a ProseMirror document?* — is answered **yes**, with
 evidence. The AST-driven seed (refinement 1) means chip detection is a trivial,
-authoritative typed-AST walk, and `prosemirror-markdown`'s **stock serializer
+authoritative typed-AST walk, and `prosemirror-markdown`\'s **stock serializer
 needed no per-node overrides** beyond the one chip rule. That resolves the
 post-spike "library vs hand-roll" question (open Q #2) decisively in favor of
 **`prosemirror-markdown` + the chip rule** — at least for this corpus.
