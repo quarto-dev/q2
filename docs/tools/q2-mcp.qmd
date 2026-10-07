@@ -126,13 +126,19 @@ for hosts that support them.
 
 **Resources.** Every file in a connected project is an MCP resource
 with a URI like `hub://project/<id>/index.qmd`. In a host that can
-attach resources as context (for example, an @-mention picker), you
+attach resources as context (for example, an \@-mention picker), you
 can attach a project file directly instead of asking the agent to read
 it; binary files arrive as base64 blobs with their MIME type. A host
 can also subscribe to a file's resource to be notified when a
 collaborator changes it, and every write the agent makes carries a
 resource link to the file it touched, so the host can offer to open or
 attach it.
+
+Treat resource URIs like share links: a `hub://` URI contains the
+project's document id, which is enough to open the project on hubs
+that do not require sign-in. Don't paste resource URIs — or agent
+transcripts that contain them — into public issues, forums, or chat
+channels.
 
 **Prompts.** Four guided workflows appear in the host's prompt picker:
 
