@@ -1168,29 +1168,172 @@ rules (a)/(b)). New strands filed this phase: bd-s0tm9sdq
 
 Test specifications:
 
-- [ ] `resources/list` on a connected project enumerates files (paginated with
+- [x] `resources/list` on a connected project enumerates files (paginated with
   `nextCursor` on a 500-file fixture); `resources/read` returns text contents
   and base64 blob contents for binaries; a modern client's
   `subscriptions/listen` and a legacy client's `resources/subscribe` both
   receive `notifications/resources/updated` on `onFileChanged` (BP-5; the
   SDK maps eras).
-- [ ] Write-tool results include a `resource_link` to the file's `hub://` URI
+  *(resources.test.ts: URI contract units, 500-file pagination walk +
+  SDK-client aggregate, two-project enumeration, text/blob reads,
+  template advertisement, legacy subscribe gating + unsubscribe,
+  list_changed on add/remove, resource_link blocks. resources-modern.test.ts:
+  2026-07-28-pinned SDK client over the real stdio entry — negotiated
+  capabilities, listen → updated on the listened file only, silence after
+  close, list_changed to listChanged listeners.)*
+- [x] Write-tool results include a `resource_link` to the file's `hub://` URI
   (BP-5).
-- [ ] `prompts/list` exposes the workflow templates; `prompts/get` renders
+  *(write_file text+binary, create_file text+binary, patch_file both arms,
+  rename_file (links the NEW URI), restore_file_version both arms.)*
+- [x] `prompts/list` exposes the workflow templates; `prompts/get` renders
   with arguments (BP-6).
+  *(prompts.test.ts: all four on the full surface, read-only drops the
+  edit/render pair, no-`--allow-render` drops fix-render-errors, args
+  schemas, content assertions per template, unknown-name protocol error.)*
 
 Work items:
 
-- [ ] BP-5 resources + resource template (URI scheme e.g.
-  `hub://{server}/{indexDocId}/{path}` — finalize in implementation, Q-2) +
-  subscribe bridge over the sync-client callbacks;
-  `notifications/resources/list_changed` on file add/remove; `resource_link`
-  blocks in write results; `ttlMs`/`cacheScope` on list results (BP-17).
-- [ ] BP-6 prompts: `review-draft`, `collaborate-with-human`,
+- [x] BP-5 resources + resource template + subscribe bridge over the
+  sync-client callbacks; `notifications/resources/list_changed` on file
+  add/remove; `resource_link` blocks in write results;
+  `ttlMs`/`cacheScope` on list results (BP-17). **Design decisions
+  recorded:**
+  (1) **Q-2 resolved:** `hub://project/<indexDocId>/<path>[?server=…]`.
+  The doc id rides in the PATH, not the host — RFC 3986 host normalizers
+  lowercase and automerge doc ids are case-sensitive base58 (Node's URL
+  parser happens to preserve opaque-host case, but this is a public
+  contract other parsers will normalize). The literal `project` segment
+  leaves room for other resource kinds (`hub://collection/…`). `?server=`
+  appears exactly when a share URL routed the project to a foreign hub,
+  mirroring the share-URL grammar — a resource URI identifies precisely
+  what a share URL identifies. The Phase 4 ephemeral blob URI
+  (`hub://<id>/<path>`, doc id in host position) is aligned to the
+  contract.
+  (2) **Handlers are hand-rolled on the low-level `Server`**, not
+  `McpServer.registerResource`: the SDK's built-in `resources/list`
+  handler does not paginate (ignores `cursor` entirely), and the contract
+  requires `nextCursor` (PAGE_SIZE 100; 500-file fixture walks five
+  pages). Registration order in createServer: declare
+  `capabilities.tools/prompts` with `listChanged: false` at construction
+  (the SDK's `?? true` registration default would otherwise claim change
+  notifications for lists that are fixed at construction — and would
+  contradict the long cache hints); `registerResources` then declares
+  `resources: {subscribe: true, listChanged: true}` on the underlying
+  server and sets the list/read/templates handlers.
+  (3) **Era bridge:** SDK v2.3.1 has no built-in legacy
+  `resources/subscribe` handler — the serving entry (serveStdio's listen
+  router) owns the modern `subscriptions/listen` path and filters the
+  instance's outbound change notifications per subscription (dropping
+  what nobody requested; the modern era never delivers un-requested
+  change types). So the server tracks legacy subscriptions itself
+  (per-instance Set, gated by `parseFileResourceUri`) and the bridge
+  emits `sendResourceUpdated` unconditionally on modern / subscription-
+  gated on legacy. `createServer` gains an `era` option fed by
+  `serveStdio`'s factory context (`ctx.era`).
+  (4) **Event seam:** `ConnectionManager.onProjectEvent` —
+  `added/changed/removed` per file plus `connected/disconnected`
+  lifecycle. `list_changed` is debounced (150 ms trailing edge, unref'd
+  timer): a project connect fires one `added` per existing file, and the
+  notification says "the list changed", not "an entry changed".
+  Creation-time adds (doc id unknown until createNewProject resolves)
+  are deliberately dropped.
+  (5) **resources/list enumerates every connected project's files**
+  (the verb takes no project argument), sorted by URI for deterministic
+  pages; entries carry `uri/name/mimeType/size`.
+  (6) **Cache hints (BP-17):** long private TTL on `prompts/list` and
+  `resources/templates/list` (both static); `resources/list` /
+  `resources/read` keep the no-cache default — files are live-edited
+  data.
+- [x] BP-6 prompts: `review-draft`, `collaborate-with-human`,
   `safe-edit-workflow` (read → patch → confirm), plus the render-flavored
   `fix-render-errors` (render → read diagnostics → patch → re-render) — all
-  four land here, now that CAP-12 has shipped in Phase 4.
-- [ ] BP-9 icons, if deferred from Phase 1.
+  four land here, now that CAP-12 has shipped in Phase 4. Gated by mode:
+  read-only drops the edit/render pair; fix-render-errors requires
+  `--allow-render`. `review-draft` embeds the draft as an embedded
+  resource under its hub:// URI. **Skills-over-MCP decided (§6 row):**
+  prompts are the portable baseline; no mainstream host advertises
+  ext-skills — revisit at Phase 6 registry listing.
+- [x] BP-9 icons. Quarto mark (from `hub-client/public/quarto-icon.svg`,
+  hand-minified, data-URI inlined for the single-file bundle) on the
+  `Implementation` record, the four prompts, and the resource template —
+  deliberately NOT on each of the 24 tools: ~600 chars × 24 entries on
+  every `tools/list` is ~15 KB of agent context per session for pure
+  chrome, and hosts fall back to the server icon for unadorned tools.
+
+#### Phase 5 completion record (landed 2026-10-07, bd-rpra6kpq)
+
+**E2E (real binary, recorded).** Drove `./target/debug/q2 mcp` over
+stdio with a 2026-07-28-pinned SDK client AND a default-negotiation
+legacy client (one-off `drive.mjs` script, transcript reviewed and
+discarded after recording). Modern leg: `server/discover` →
+capabilities `{prompts:{listChanged:false}, resources:{subscribe:true,
+listChanged:true}, tools:{listChanged:false}}`, Implementation carries
+the SVG icon + version `0.32.0+9ae309745.dirty`; `create_project` →
+`resources/list` → two entries with `hub://project/<id>/<path>` URIs,
+`text/markdown` mimeTypes and byte sizes; `resources/read` → the file's
+text; `listen({resourceSubscriptions: [index.qmd],
+resourcesListChanged: true})` → honored filter echoed → `write_file` →
+result content `[text, resource_link]` with the link's hub:// URI →
+`notifications/resources/updated` for exactly the listened URI;
+`write_file` of a new path → `notifications/resources/list_changed`;
+`prompts/list` → `review-draft, collaborate-with-human,
+safe-edit-workflow` (no `--allow-render`, so no fix-render-errors);
+`prompts/get review-draft` → `user:text` (review protocol) +
+`user:resource` (the draft embedded under its hub:// URI, current
+content). Legacy leg: `resources/subscribe` accepted; `write_file` →
+`notifications/resources/updated` for the subscribed URI. Output
+inspected for every call; server stderr clean.
+
+**Eval suite (same 15 tasks):** `eval/results/2026-10-07T08-19-49/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/518 | $0.77 | 0 | 0 | 10s |
+| read-and-report | PASS | 4 | 98/592 | $0.55 | 0 | 0 | 16s |
+| patch-typo | PASS | 6 | 130/1439 | $0.64 | 0 | 0 | 25s |
+| write-new-file | PASS | 6 | 130/992 | $0.60 | 0 | 0 | 20s |
+| rename-file | PASS | 7 | 162/1663 | $0.65 | 0 | 0 | 30s |
+| collaborator-edit | PASS | 4 | 98/621 | $0.54 | 0 | 0 | 14s |
+| watch-live-edit | PASS | 5 | 98/1106 | $0.59 | 0 | 0 | 55s |
+| stale-write-recovery | PASS | 6 | 130/2355 | $0.72 | 1 | 1 | 38s |
+| add-image-binary | PASS | 6 | 130/1175 | $0.62 | 0 | 0 | 42s |
+| search-and-report | PASS | 4 | 66/366 | $0.51 | 0 | 0 | 13s |
+| watch-project-edit | PASS | 5 | 130/812 | $0.59 | 0 | 0 | 60s |
+| history-and-restore | PASS | 9 | 194/3091 | $0.85 | 0 | 0 | 47s |
+| outline-and-section-edit | PASS | 8 | 162/1820 | $0.69 | 0 | 0 | 43s |
+| docs-lookup | PASS | 5 | 98/676 | $0.59 | 0 | 0 | 16s |
+| fix-render-error | PASS | 7 | 130/1529 | $0.68 | 0 | 0 | 25s |
+
+15/15 PASS, median 5 turns (Phases 2/3/4: 5 — no regression), zero
+`isError` except the DESIGNED stale-hash refusal in
+`stale-write-recovery`. Phase 5's surfaces are host-facing (agents use
+tools), so no new eval tasks — the suite's job here is regression
+detection on the existing surface.
+
+**Phase-close gate.** `npm run test -w ts-packages/quarto-hub-mcp` green
+(58 files, 527 passed + 3 skips — 18 new legacy-era resource/prompt
+tests, 3 new modern-era stdio tests, 2 new capability/wire-schema
+conformance tests). `cargo xtask verify` green (full, hub-build leg
+included). Bundle rebuilt and embedded; freshness confirmed by
+`q2 mcp --launcher-info`. Tool budget unchanged: **21/24 data tools —
+resources and prompts are not tools, exactly the ERG-5 rule (b)
+escape.** Docs: `docs/tools/q2-mcp.qmd` gains a Resources-and-prompts
+section; the package README points at it (its tool tables were already
+stale on Phases 2–4 — filed bd-chtwjljk to refresh separately).
+
+**The verify catch that mattered.** The first `cargo xtask verify` run
+failed the hub-mcp leg with **82 unhandled rejections despite all 526
+assertions passing** — the debounced `sendResourceListChanged` fired
+after fixture teardown closed the transport, and `void promise` never
+attaches a `.catch`. The standalone suite had masked it (my grep
+filtered the summary lines; vitest exits nonzero on unhandled errors).
+Fixed at the root: the bridge's sends are guarded by `isConnected()`
+and swallow only the benign close-race `SdkError(NotConnected)` —
+anything else is logged to stderr, never thrown, because delivery
+failure must not break the sync callbacks the bridge rides on.
+Regression test pins it (`a debounced list_changed firing after server
+close does not reject unhandled` — verified red against the unfixed
+bridge with the exact `SdkError: Not connected`).
 
 ### Phase 6 — Distribution and remote access
 
