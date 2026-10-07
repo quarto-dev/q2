@@ -647,6 +647,12 @@ function App() {
   // Handle initial URL-based navigation
   useEffect(() => {
     if (initialLoadRef.current) return;
+    // Connect only once the local identity has loaded. `resolveAuthorId` and the screen name
+    // are read from this render; before the async `getUserIdentity()` lands they are undefined,
+    // and a connection opened without them stamps no author on its edits and registers no
+    // identity, so a docx download names comment authors by raw actor-id prefix. (With auth on,
+    // the author id comes from the server, but the screen name is still needed for the identity.)
+    if (screenName === undefined || (!AUTH_ENABLED && localAuthorId === undefined)) return;
     initialLoadRef.current = true;
 
     const loadFromUrl = async () => {
@@ -756,7 +762,7 @@ function App() {
     };
 
     loadFromUrl();
-  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile, connectToSharedProject]);
+  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile, connectToSharedProject, screenName, localAuthorId]);
 
   // Disconnect sync when auth is lost (token expired or user logged out).
   // Without this, the WebSocket adapter keeps retrying with an expired cookie

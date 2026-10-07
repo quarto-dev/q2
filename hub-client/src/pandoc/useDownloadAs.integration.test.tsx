@@ -9,6 +9,7 @@ import { renderHook, act } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({
   start: vi.fn(async () => {}),
+  setIdentities: vi.fn(),
   bookInfoFor: vi.fn(),
   embed: false,
   idle: { phase: 'idle' as const },
@@ -16,6 +17,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@quarto/preview-runtime', () => ({ isWasmReady: () => true, resolvePandocFormats: () => null }));
 vi.mock('./bookInfo', () => ({ bookInfoFor: h.bookInfoFor }));
+vi.mock('./downloadAttribution', () => ({ setDownloadIdentities: h.setIdentities }));
 vi.mock('./featureFlag', () => ({ isPreviewEmbed: () => h.embed }));
 vi.mock('./downloadService', () => ({
   getDownloadController: () => ({ subscribe: () => () => {}, getSnapshot: () => h.idle, dismiss: () => {}, cancel: () => {}, start: h.start }),
@@ -36,8 +38,19 @@ const captures: Record<string, CaptureRef> = {
 
 beforeEach(() => {
   h.start.mockClear();
+  h.setIdentities.mockClear();
   h.bookInfoFor.mockReset();
   h.embed = false;
+});
+
+describe('useDownloadAs: author table', () => {
+  it('a hook instance with no table (the download-mode pane) leaves the editor\'s table alone', () => {
+    const table = { bear: { name: 'Kind Bear', color: '#ff0000' } };
+    renderHook(() => useDownloadAs('one.qmd', '', true, undefined, table));
+    renderHook(() => useDownloadAs('one.qmd', '', true));
+    expect(h.setIdentities).toHaveBeenLastCalledWith(table);
+    expect(h.setIdentities).not.toHaveBeenCalledWith({});
+  });
 });
 
 describe('useDownloadAs: books', () => {
