@@ -265,7 +265,11 @@ jobs:
       # need the wasm-qmd-parser nodejs pkg, which only a wasm32 toolchain
       # can build. workspace-ts-suites is deliberately toolchain-free (the
       # suite's global setup writes a marker and the tier skips there), so
-      # the tier runs here alongside the other WASM-needing suites.
+      # the tier runs here alongside the other WASM-needing suites. Beyond
+      # the qmd-* files, the tier includes: conformance.test.ts, whose
+      # parser-gated golden cases (e.g. get_outline) skip there but must
+      # execute somewhere; and bundle.test.ts, which stages the pkg into
+      # dist-bundle at build time and so cannot run toolchain-free at all.
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -274,7 +278,7 @@ jobs:
         run: |
           npm run build --if-present -w ts-packages/quarto-sync-client -w ts-packages/quarto-automerge-schema
           cd ts-packages/quarto-hub-mcp
-          npx vitest run src/qmd-ast.test.ts src/qmd-outline.test.ts src/qmd-sections.test.ts
+          npx vitest run src/qmd-ast.test.ts src/qmd-outline.test.ts src/qmd-sections.test.ts src/conformance.test.ts src/bundle.test.ts
 
   # ── Workspace TS suites (GH #250) ────────────────────────────────────────
   #
@@ -404,8 +408,9 @@ jobs:
         run: npm test -w trace-viewer
 
       # These two resolve workspace siblings through dist/, so they need the
-      # "Build ts-packages workspaces" step above. hub-mcp is the heaviest
-      # suite in this job (~32s: bundle.test.ts runs esbuild in beforeAll).
+      # "Build ts-packages workspaces" step above. hub-mcp's parser tier
+      # (qmd-*, conformance's parser-gated cases, bundle.test.ts) skips on
+      # this toolchain-free leg and runs in the test-suite job instead.
       #
       # --retry=2: `src/doc-inventory.test.ts > getDocInventory > reports
       # index, text, and binary docs with states and heads` fails
