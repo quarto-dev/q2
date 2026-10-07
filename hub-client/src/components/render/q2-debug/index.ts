@@ -4,7 +4,7 @@ export {
     Para, Plain, Header, CodeBlock, BulletList, OrderedList,
     BlockQuote, Div, HorizontalRule, RawBlock, Figure,
     Str, Space, SoftBreak, LineBreak,
-    Emph, Strong, Code, Link, Image, Span, Quoted,
+    Emph, Strong, Code, Link, Image, Span, Quoted, Math,
     BlockComponents, InlineComponents, AstRenderer,
 } from './components';
 export { q2DebugRegistry } from './registry';

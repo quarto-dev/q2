@@ -42,6 +42,9 @@ import {
     BlockQuote, Div, HorizontalRule, RawBlock, Figure,
     Str, Space, SoftBreak, LineBreak,
     Emph, Strong, Code, Link, Image, Span, Quoted,
+    // Aliased: a bare `Math` import would shadow the global used by the
+    // caret/selection geometry below.
+    Math as MathComponent,
     blockStyle, inlineStyle,
     q2DebugRegistry,
 } from '.';
@@ -76,6 +79,7 @@ import {
     BlockQuote, Div, HorizontalRule, RawBlock, Figure,
     Str, Space, SoftBreak, LineBreak,
     Emph, Strong, Code, Link, Image, Span, Quoted,
+    Math: MathComponent,
     q2DebugRegistry, blockStyle, inlineStyle,
 };
 
@@ -121,17 +125,75 @@ let caretRaf = 0;
 let sourceBytes: Uint8Array | null = null;
 const utf8Decoder = new TextDecoder();
 
-let selectionEl: HTMLDivElement | null = null;
+let selectionEl: SVGSVGElement | null = null;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function ensureSelectionLayer(): HTMLDivElement | null {
+function ensureSelectionLayer(): SVGSVGElement | null {
   const rootElement = document.getElementById('root');
   if (!rootElement) return null;
   if (!selectionEl || !selectionEl.isConnected) {
-    selectionEl = document.createElement('div');
-    selectionEl.className = 'q2-debug-selection';
+    selectionEl = document.createElementNS(SVG_NS, 'svg');
+    selectionEl.setAttribute('class', 'q2-debug-selection');
     rootElement.appendChild(selectionEl);
   }
   return selectionEl;
+}
+
+/** Rect in the root's scroll space (not viewport space). */
+interface Box {
+  left: number; top: number; right: number; bottom: number;
+  /** Source byte where the box's content starts — rows are built in this order. */
+  start: number;
+  /** Tie-break for several rects of one node (a wrapped Str's lines). */
+  seq: number;
+}
+
+/**
+ * Group boxes into rows by vertical overlap and, per row, build one
+ * hull polygon that joins neighbouring boxes with diagonals: along the
+ * top, each box's top edge then a line from its top-right corner to
+ * the next box's top-left; along the bottom (walking back right to
+ * left), each box's bottom edge then a line from its bottom-left to
+ * the previous box's bottom-right. Boxes of different heights (a Str
+ * text run next to a Space badge) therefore read as one connected
+ * highlight instead of a row of separate blocks.
+ */
+function hullPaths(boxes: Box[]): string[] {
+  if (boxes.length === 0) return [];
+  // Rows follow *source order*, like wrapped text: walk the boxes in the
+  // order their content appears in the document and start a new row only
+  // when the next box goes back to the left of where the previous one
+  // ended. Everything else — a raised exponent, a matrix's top row sitting
+  // beside the `=` that precedes it — stays on the current row and is
+  // joined by the diagonals. (Grouping by vertical position instead
+  // either merged a matrix's rows with the baseline or split the exponent
+  // off into its own hull; neither reads as "the selection".)
+  const sorted = [...boxes].sort((a, b) => a.start - b.start || a.seq - b.seq);
+  const rows: Box[][] = [];
+  let prev: Box | null = null;
+  for (const b of sorted) {
+    const wraps = prev !== null && b.left < prev.right - 1;
+    if (!prev || wraps) rows.push([b]);
+    else rows[rows.length - 1].push(b);
+    prev = b;
+  }
+  const f = (n: number) => n.toFixed(1);
+  return rows.map(row => {
+    row.sort((a, b) => a.left - b.left);
+    let d = `M${f(row[0].left)} ${f(row[0].top)}`;
+    for (let i = 0; i < row.length; i++) {
+      const r = row[i];
+      d += ` L${f(r.right)} ${f(r.top)}`;                  // top edge
+      if (i + 1 < row.length) d += ` L${f(row[i + 1].left)} ${f(row[i + 1].top)}`; // diagonal to next top-left
+    }
+    for (let i = row.length - 1; i >= 0; i--) {
+      const r = row[i];
+      d += ` L${f(r.right)} ${f(r.bottom)}`;               // down right edge / along to bottom-right
+      d += ` L${f(r.left)} ${f(r.bottom)}`;                // bottom edge
+      if (i > 0) d += ` L${f(row[i - 1].right)} ${f(row[i - 1].bottom)}`; // diagonal to previous bottom-right
+    }
+    return d + ' Z';
+  });
 }
 
 /**
@@ -146,21 +208,26 @@ function ensureSelectionLayer(): HTMLDivElement | null {
  */
 function paintSelection(
   rootElement: HTMLElement,
-  layer: HTMLDivElement,
+  layer: SVGSVGElement,
   selection: { start: number; end: number } | undefined,
 ) {
   layer.replaceChildren();
   if (!selection || selection.end <= selection.start) return;
+  // Size the layer to the scrollable content so paths in scroll space
+  // aren't clipped.
+  layer.setAttribute('width', String(rootElement.scrollWidth));
+  layer.setAttribute('height', String(rootElement.scrollHeight));
   const rootRect = rootElement.getBoundingClientRect();
-  const addRect = (r: DOMRect) => {
+  const boxes: Box[] = [];
+  let seq = 0;
+  const addRect = (r: DOMRect, start: number) => {
     if (r.width <= 0 && r.height <= 0) return;
-    const d = document.createElement('div');
-    d.className = 'q2-debug-selection-rect';
-    d.style.left = `${r.left - rootRect.left + rootElement.scrollLeft}px`;
-    d.style.top = `${r.top - rootRect.top + rootElement.scrollTop}px`;
-    d.style.width = `${Math.max(r.width, 1)}px`;
-    d.style.height = `${r.height}px`;
-    layer.appendChild(d);
+    const left = r.left - rootRect.left + rootElement.scrollLeft;
+    const top = r.top - rootRect.top + rootElement.scrollTop;
+    boxes.push({
+      left, top, right: left + Math.max(r.width, 1), bottom: top + r.height,
+      start, seq: seq++,
+    });
   };
 
   for (const el of rootElement.querySelectorAll<HTMLElement>(`[${DATA_OFF}]`)) {
@@ -187,11 +254,18 @@ function paintSelection(
       const r = document.createRange();
       r.setStart(textNode, from);
       r.setEnd(textNode, to);
-      for (const rect of r.getClientRects()) addRect(rect);
+      for (const rect of r.getClientRects()) addRect(rect, Math.max(range.start, selection.start));
       continue;
     }
     if (el.querySelector(`[${DATA_OFF}]`)) continue; // container
-    addRect(el.getBoundingClientRect());
+    addRect(el.getBoundingClientRect(), range.start);
+  }
+
+  for (const d of hullPaths(boxes)) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('class', 'q2-debug-selection-hull');
+    path.setAttribute('d', d);
+    layer.appendChild(path);
   }
 }
 
@@ -221,38 +295,41 @@ function scheduleCaretPlacement() {
 }
 
 interface CaretTarget {
-  el: HTMLElement;
-  start: number;
-  end: number;
+  leaf: Leaf;
+  /** Where on the leaf the caret sits: inside its text, or at an edge. */
+  at: 'inside' | 'start' | 'end';
 }
 
 /**
- * Pick the element whose stamped range should host the caret.
- *
- * Preference order mirrors `findElementForLine` in scrollSyncDom.ts,
- * but at byte granularity: the smallest containing range wins (ties go
- * to the later element in document order, i.e. the deeper one); when
- * nothing contains the offset — blank lines, front matter, the gap
- * after the last block — fall back to the nearest preceding node,
- * then the first following one.
+ * Pick the leaf that hosts the caret. Only leaves qualify — never a
+ * container — so an offset inside syntax with no glyph of its own
+ * (`\begin{bmatrix}`, the `*` of an `Emph`, a blank line) resolves to
+ * the nearest leaf *in source order*: the preceding leaf's end or the
+ * following leaf's start, whichever is closer in bytes. A leaf whose
+ * range contains the offset wins outright (smallest range on ties).
  */
 function findCaretTarget(rootElement: HTMLElement, offset: number): CaretTarget | null {
-  let best: CaretTarget | null = null;
-  let preceding: CaretTarget | null = null;
-  let following: CaretTarget | null = null;
-  for (const el of rootElement.querySelectorAll<HTMLElement>(`[${DATA_OFF}]`)) {
-    const range = parseDataOff(el.getAttribute(DATA_OFF) ?? '');
-    if (!range) continue;
-    const { start, end } = range;
-    if (offset >= start && offset <= end) {
-      if (!best || end - start <= best.end - best.start) best = { el, start, end };
-    } else if (end < offset) {
-      if (!preceding || end >= preceding.end) preceding = { el, start, end };
-    } else if (start > offset) {
-      if (!following || start < following.start) following = { el, start, end };
+  let inside: Leaf | null = null;
+  let before: Leaf | null = null;
+  let after: Leaf | null = null;
+  for (const leaf of leaves(rootElement)) {
+    if (offset >= leaf.start && offset <= leaf.end) {
+      if (!inside || leaf.end - leaf.start < inside.end - inside.start) inside = leaf;
+    } else if (leaf.end < offset) {
+      if (!before || leaf.end > before.end) before = leaf;
+    } else if (leaf.start > offset) {
+      if (!after || leaf.start < after.start) after = leaf;
     }
   }
-  return best ?? preceding ?? following;
+  if (inside) return { leaf: inside, at: 'inside' };
+  if (before && after) {
+    return offset - before.end <= after.start - offset
+      ? { leaf: before, at: 'end' }
+      : { leaf: after, at: 'start' };
+  }
+  if (before) return { leaf: before, at: 'end' };
+  if (after) return { leaf: after, at: 'start' };
+  return null;
 }
 
 function placeCaret() {
@@ -275,23 +352,17 @@ function placeCaret() {
   }
 
   let rect: DOMRect | null = null;
-  const textHost = target.el.querySelector<HTMLElement>(`:scope > [${DATA_STR_TEXT}]`);
-  const textNode = textHost?.firstChild;
-  if (
-    textNode &&
-    // `Node` here is the framework component import, so use the DOM constant.
-    textNode.nodeType === 3 /* TEXT_NODE */ &&
-    cursor.offset >= target.start &&
-    cursor.offset <= target.end
-  ) {
+  const { leaf } = target;
+  const textNode = leaf.textHost?.firstChild;
+  if (target.at === 'inside' && leaf.textHost && textNode) {
     // Inside a Str: land between characters.
     const text = textNode.textContent ?? '';
-    const rel = cursor.offset - target.start;
+    const rel = cursor.offset - leaf.start;
     // With the source at hand, align it against the rendered text so
     // escapes/entities don't skew the index; otherwise assume 1:1 bytes.
     const idx = sourceBytes
       ? textIndexForSourceByte(
-          utf8Decoder.decode(sourceBytes.subarray(target.start, target.end)),
+          utf8Decoder.decode(sourceBytes.subarray(leaf.start, leaf.end)),
           text,
           rel,
         )
@@ -304,16 +375,17 @@ function placeCaret() {
     if (!rect || (rect.width === 0 && rect.height === 0)) {
       // Collapsed ranges at the very start/end of a text node can report
       // an empty rect in some engines; fall back to the host's edge.
-      const host = textHost!.getBoundingClientRect();
+      const host = leaf.textHost.getBoundingClientRect();
       rect = new DOMRect(idx === 0 ? host.left : host.right, host.top, 0, host.height);
     }
   } else {
-    // Not a Str (Space, SoftBreak, a container whose syntax is under the
-    // caret, or a fallback neighbour): snap to the nearer edge of its badge.
-    const box = target.el.getBoundingClientRect();
-    const distStart = Math.abs(cursor.offset - target.start);
-    const distEnd = Math.abs(target.end - cursor.offset);
-    const atStart = cursor.offset < target.start || distStart < distEnd;
+    // A textless leaf (Space, SoftBreak, a KaTeX glyph) or a source-order
+    // neighbour: sit on the edge. 'inside' a multi-byte glyph such as
+    // `\alpha` picks the nearer edge in bytes.
+    const box = leaf.el.getBoundingClientRect();
+    const atStart =
+      target.at === 'start' ||
+      (target.at === 'inside' && cursor.offset - leaf.start < leaf.end - cursor.offset);
     rect = new DOMRect(atStart ? box.left : box.right, box.top, 0, box.height);
   }
 
@@ -328,6 +400,83 @@ function placeCaret() {
   if (cursor.focused) {
     caret.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Math glyph stamps
+//
+// `Math` renders KaTeX whose glyph spans carry `data-s`/`data-e`
+// character ranges into the LaTeX (see `mathInstrument.ts`). Those are
+// relative; here they become absolute `data-off` byte stamps so the
+// glyphs participate in the caret, selection hull, and click resolver
+// as ordinary leaves — and the Math badge, now having stamped
+// descendants, is treated as a container. Byte base = the badge's own
+// start + the bytes before the LaTeX inside its source slice (which is
+// how the `$` / `$$` / `\(` delimiter width is discovered without the
+// component having to know the syntax).
+//
+// Driven by a MutationObserver on `#root` rather than only a frame
+// after `root.render`: React commits on its own scheduler, which can
+// land *after* the next animation frame, and KaTeX output arrives via
+// innerHTML which React may re-set later. Observing the DOM catches
+// both. Already-stamped glyphs are skipped, so the pass is idempotent.
+// ---------------------------------------------------------------------------
+
+function stampMathLeaves(): boolean {
+  const rootElement = document.getElementById('root');
+  if (!rootElement || !sourceBytes) return false;
+  let changed = false;
+  for (const badge of rootElement.querySelectorAll<HTMLElement>('[data-math]')) {
+    const range = parseDataOff(badge.getAttribute(DATA_OFF) ?? '');
+    const latex = badge.getAttribute('data-math-latex');
+    const host = badge.querySelector<HTMLElement>(':scope > [data-math-render]');
+    if (!range || latex == null || !host) continue;
+    if (!host.querySelector(`[data-s][data-e]:not([${DATA_OFF}])`)) continue; // already stamped
+    const slice = utf8Decoder.decode(sourceBytes.subarray(range.start, range.end));
+    const at = slice.indexOf(latex);
+    if (at < 0) {
+      // The AST's math text does not appear verbatim in its source span
+      // (normalised whitespace?) — glyphs stay unmapped; the badge is the leaf.
+      console.warn('[q2-debug] math text not found in its source span', { slice, latex });
+      continue;
+    }
+    const base = range.start + utf8Length(slice.slice(0, at));
+    for (const glyph of host.querySelectorAll<HTMLElement>('[data-s][data-e]')) {
+      const s = Number(glyph.getAttribute('data-s'));
+      const e = Number(glyph.getAttribute('data-e'));
+      if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) continue;
+      const start = base + utf8Length(latex.slice(0, s));
+      const end = base + utf8Length(latex.slice(0, e));
+      if (end > range.end) continue;
+      glyph.setAttribute(DATA_OFF, `${start}-${end}`);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// Any DOM change under #root (React commit, innerHTML reset) may have
+// moved leaves or introduced unstamped math glyphs. Our own caret and
+// selection layers live under #root too; ignore mutations inside them
+// so painting doesn't re-trigger the observer in a loop.
+let domSyncRaf = 0;
+const rootObserver = new MutationObserver((records) => {
+  const ours = records.every(r =>
+    (r.target instanceof Element) &&
+    (r.target.closest('.q2-debug-caret, .q2-debug-selection') !== null),
+  );
+  if (ours) return;
+  if (domSyncRaf) return;
+  domSyncRaf = requestAnimationFrame(() => {
+    domSyncRaf = 0;
+    stampMathLeaves();
+    invalidateLeaves();
+    scheduleCaretPlacement();
+  });
+});
+{
+  const rootElement = document.getElementById('root');
+  if (rootElement) rootObserver.observe(rootElement, { childList: true, subtree: true });
 }
 
 window.addEventListener('resize', () => { invalidateLeaves(); scheduleCaretPlacement(); });
@@ -652,7 +801,7 @@ function updateAst(payload: UpdateAstPayload) {
     );
     // The new tree commits asynchronously; re-anchor the caret once it
     // has painted (a second frame covers React's own scheduling).
-    requestAnimationFrame(() => { invalidateLeaves(); scheduleCaretPlacement(); });
+    requestAnimationFrame(() => { stampMathLeaves(); invalidateLeaves(); scheduleCaretPlacement(); });
   } catch (err) {
     console.error('Failed to render AST:', err);
     rootElement.innerHTML = `

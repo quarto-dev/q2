@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { renderMath } from './mathInstrument';
 import { Node, renderChildren, useAttributionHover } from '@quarto/preview-renderer/framework';
 import type {
     InlineNode,
@@ -26,6 +27,7 @@ import type {
     ImageInline,
     SpanInline,
     QuotedInline,
+    MathInline,
 } from '@quarto/preview-renderer/framework';
 import { blockStyle, inlineStyle } from './styles';
 import { dataOffProps, DATA_STR_TEXT } from './sourceOffset';
@@ -188,6 +190,50 @@ export const Quoted = (args: NodeArgs<QuotedInline>) => (
     </span>
 );
 
+/**
+ * Math (InlineMath / DisplayMath): the raw LaTeX label plus a KaTeX
+ * rendering whose glyphs carry source positions.
+ *
+ * `renderMath` instruments the LaTeX so each glyph span sits inside
+ * `span[data-s][data-e]` with its character range in the LaTeX string
+ * (see `mathInstrument.ts`). The badge is marked `data-math` and the
+ * rendering host `data-math-render`; after each render `entry.tsx`
+ * (`stampMathLeaves`) converts those relative ranges into absolute
+ * `data-off` byte stamps, so the virtual caret, the selection hull, and
+ * click/drag all land on the rendered glyphs rather than on the raw
+ * text. The raw LaTeX stays visible as a plain label (no text marker).
+ * When instrumentation fails for a formula the badge itself is the
+ * caret target, as for any other textless leaf.
+ */
+export const Math = (args: NodeArgs<MathInline>) => {
+    const [{ t: mathType }, latex] = args.node.c;
+    const isDisplay = mathType === 'DisplayMath';
+    // Memoized per (latex, mode): React re-sets innerHTML whenever the
+    // object identity changes, which would tear down the KaTeX DOM (and
+    // the entry's byte stamps) on every re-render.
+    const rendered = useMemo(() => {
+        const r = renderMath(latex, isDisplay);
+        return r.html ? { html: { __html: r.html }, instrumented: r.instrumented } : null;
+    }, [latex, isDisplay]);
+    return (
+        <span
+            style={inlineStyle}
+            {...dataOffProps(args.node)}
+            data-math=""
+            data-math-latex={latex}
+        >
+            <strong>Math({mathType}):</strong>{' '}
+            {rendered && (
+                <span
+                    style={{ marginLeft: '6px', display: isDisplay ? 'block' : 'inline-block' }}
+                    {...(rendered.instrumented ? { 'data-math-render': '' } : {})}
+                    dangerouslySetInnerHTML={rendered.html}
+                />
+            )}
+        </span>
+    );
+};
+
 export const InlineComponents: Record<string, (props: any) => React.ReactNode> = {
     Str,
     Space,
@@ -200,6 +246,7 @@ export const InlineComponents: Record<string, (props: any) => React.ReactNode> =
     Image,
     Span,
     Quoted,
+    Math,
 };
 
 /**

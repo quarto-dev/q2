@@ -56,11 +56,13 @@
       left: 0;
       pointer-events: none;
       z-index: 5;
+      overflow: visible;
     }
-    .q2-debug-selection-rect {
-      position: absolute;
-      background: rgba(214, 40, 40, 0.18);
-      border-radius: 2px;
+    .q2-debug-selection-hull {
+      fill: rgba(214, 40, 40, 0.18);
+      stroke: rgba(214, 40, 40, 0.45);
+      stroke-width: 1;
+      stroke-linejoin: round;
     }
     @keyframes q2-debug-caret-blink {
       0%, 50% { opacity: 1; }
