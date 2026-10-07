@@ -53,7 +53,7 @@ So the fix is a *restoration* of the port's original intent, not a redesign.
 
 | # | Tier | Real unit mounted | Seam (mount · events · assertion surface) | Mock boundary | Named revert hunk |
 |---|------|-------------------|-------------------------------------------|---------------|-------------------|
-| 1 | Rust unit (`resolution.rs`) | `resolve_engines` (real resolver) | build registry [marimo,knitr,jupyter]; `resolve_engines(meta, ast, reg, None)`; assert seq⊇{marimo,knitr}, ownership{python→marimo,r→knitr}, `handled_languages_for("marimo")∋"r"` | `MockEngine` claim closures = env dep (registry); resolver is the unit | Remove `mock_marimo`'s `("python",Some("marimo"))→Primary(2)` arm → `ownership["python"]!="marimo"` RED (proven) |
+| 1 | Rust unit (`resolution.rs`) | `resolve_engines` (real resolver) | build registry [marimo,knitr,jupyter]; `resolve_engines(meta, ast, reg, None)`; assert seq⊇\{marimo,knitr\}, ownership\{python→marimo,r→knitr\}, `handled_languages_for("marimo")∋"r"` | `MockEngine` claim closures = env dep (registry); resolver is the unit | Remove `mock_marimo`\'s `("python",Some("marimo"))→Primary(2)` arm → `ownership["python"]!="marimo"` RED (proven) |
 | 2 | Rust unit (`resolution.rs`) | `resolve_engines` | same doc, `claimed=Some("marimo")`; assert seq==[marimo], ownership empty, r∉handled | as above | (characterization — documents the bug; no revert) |
 | 3 | deno unit (`quarto-marimo/tests/`) | marimo engine's `claimsFile` | write temp `.qmd` with a marimo fence; call `engine.claimsFile(path, ".qmd")`; assert `=== false` | `Deno.readTextFileSync` real (temp file); function is the unit | Restore `claimsFile` body to `containsMarimoFence(...)` → assertion RED |
 | 4 | deno unit (`quarto-marimo/tests/`) | sew-back cell loop in `execute` (guard, unchanged) | drive the cell loop over `[{r}, {python .marimo}]`; assert `{r}` sourceVerbatim survives unmodified | subprocess/`extract.py` mocked | Change the `else { push(cell.sourceVerbatim) }` branch to drop non-marimo cells → RED |
@@ -124,7 +124,7 @@ Add to `crates/quarto-core/tests/integration/marimo_engine_e2e.rs`. It renders
 the mixed doc through the **committed** fixture (`setup_marimo_project`, NOT the
 claims-less `setup_marimo_project_dynamic` workaround SC16 uses) — which only
 works once the fixture's `claimsFile` is fixed. Named revert: restore
-`claimsFile`'s content-sniff in the fixture bundle → the `{r}` cell renders raw
+`claimsFile`\'s content-sniff in the fixture bundle → the `{r}` cell renders raw
 (`class="{r}"`) → RED (the 2026-07-03 SC16 annotation documents this exact raw
 render firsthand).
 

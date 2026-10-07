@@ -443,7 +443,7 @@ to execute (order T9–T11 → T6/T6b/T7/T7b/T8/T8b → T12 → optional T13, pe
 - **Cross-render context freshness** — Plan 5's; no test in either direction.
 - **`engines:` `{path}`-entry runtime semantics** — Plan 4b Task 9's; we pass values only (T3 shape).
 - **Content-pattern claims** — Plan 7a's; 1c.2 lands only unconditional extension claims.
-- **`file-extensions` can-handle *consumption*** — T9 binds the parse-time normalization (storage side);
+- **`file-extensions` can-handle _consumption_** — T9 binds the parse-time normalization (storage side);
   that a normalized `.ECHO`-declared engine then actually pre-filters `a.echo` at resolution relies on
   existing resolution tests (lowercase fixtures). `file-extensions` is the can-handle pre-filter, not
   P2's admission axis (that's `claims-files`, bound by T7b), so this is low-stakes — logged, not seamed.

@@ -148,19 +148,23 @@ fix with Q-5-5, pass after.
 
 Real binary, repro project:
 
-    cargo run --bin q2 -- render claude-notes/plans/include-in-header-text-blocks-investigation/repro
-    grep -o 'marker-[a-d]' \_site/*.html
+```sh
+cargo run --bin q2 -- render claude-notes/plans/include-in-header-text-blocks-investigation/repro
+grep -o 'marker-[a-d]' \_site/*.html
 
-    index (fence):      marker-a   (was: none + Q-5-5)
-    multi-para:         marker-d   (was: none + Q-5-5)
-    bare-html:          marker-b   (unchanged, still Q-1-20)
-    inline-raw:         marker-c   (unchanged)
+index (fence):      marker-a   (was: none + Q-5-5)
+multi-para:         marker-d   (was: none + Q-5-5)
+bare-html:          marker-b   (unchanged, still Q-1-20)
+inline-raw:         marker-c   (unchanged)
+```
 
 `_site/index.html` lines 14–17, inspected:
 
-    <style type="text/css">
-      .marker-a { color: rebeccapurple; }
-    </style>
-    </head>
+```
+<style type="text/css">
+  .marker-a { color: rebeccapurple; }
+</style>
+</head>
+```
 
-No Q-5-5 in the render output; no ``` fence markers leak into the HTML.
+No Q-5-5 in the render output; no \`\`\` fence markers leak into the HTML.

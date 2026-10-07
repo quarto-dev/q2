@@ -259,7 +259,7 @@ waits; nothing else blocks.
   group expansion (first-member default, append-after-explicit,
   multiple groups, flat vs nested list shape), strict shape
   errors (Q-5-20/21 cases), first-listed-wins ordering contract
-  *(41 tests written first, observed failing on stubs, then pass)*
+  \*(41 tests written first, observed failing on stubs, then pass)\*
 - [x] Implement `crates/quarto-core/src/project/project_profile.rs`:
   `ProjectProfileConfig` + `extract_profile_config` (extraction
   +strip, site-aware: BaseConfig/LocalConfig/Overlay),
@@ -277,8 +277,8 @@ waits; nothing else blocks.
   `_quarto.yml.local` over profiles, `.yml` over `.yaml`,
   `profile:`-in-overlay warning, unknown-profile warning,
   span integrity of a diagnostic pointing into an overlay file
-  *(25 tests in `project_profile_overlays.rs`, written first,
-  observed failing on the delegating stub)*
+  \*(25 tests in `project_profile_overlays.rs`, written first,
+  observed failing on the delegating stub)\*
 - [x] Implement overlay discovery + merge in `parse_config`
   (`apply_project_profiles`); `active_config_profiles` +
   `profile_config_paths` on `ProjectConfig`;

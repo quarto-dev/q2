@@ -129,7 +129,7 @@ confirms it.
 
 - Phase 0 — Test plan (TDD):
   - Commit `proptest-regressions/lib.txt` as the regression pin (fails first).
-  - Unit tests, 4 sites × {deletion, reorder} (matrix above).
+  - Unit tests, 4 sites × \{deletion, reorder\} (matrix above).
   - Verify each fails before the fix.
 - Phase 1 — Remove `needs_plan` at the 4 compute sites **and** delete/reduce
   the corresponding apply-side fallbacks (required cleanup above). Update

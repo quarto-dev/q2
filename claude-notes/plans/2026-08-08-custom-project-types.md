@@ -84,7 +84,7 @@ Q1 quirks we deliberately do not copy:
   site (native CLI, WASM, and LSP all reach it via
   `ProjectContext::discover`).
 - **`ProjectKind`** (`project/mod.rs:279-289`) is a closed `Copy` enum
-  {Default, Website, Book, Manuscript}; a doc comment says it is a pure
+  \{Default, Website, Book, Manuscript\}; a doc comment says it is a pure
   dispatch tag. `project_type_for` (`project/orchestrator.rs:418-431`)
   maps it to `DefaultProjectType`/`WebsiteProjectType` (book/manuscript
   currently also map to default, silently).
@@ -111,7 +111,7 @@ Q1 quirks we deliberately do not copy:
   essentially everything downstream just works.
 - **Config merge machinery is ready**: `ConfigValue` carries
   `SourceInfo` provenance, `MergeOp` (default Concat for arrays,
-  `!prefer` for replace), and `quarto-config`'s layered `MergedConfig`.
+  `!prefer` for replace), and `quarto-config`\'s layered `MergedConfig`.
   The per-document metadata merge (`stage/stages/metadata_merge.rs`)
   already rebases extension-relative `Path`-kind values.
 
@@ -276,7 +276,7 @@ New error-catalog entries (Q-16 block is extension-related):
   built-in and no extension in `_extensions/` contributes project type
   `foo`. Hint: list available project-contributing extensions found, and
   the built-in names. Replaces the `.ok().unwrap_or_default()` at
-  mod.rs:651-656. (`ProjectKind::try_from`'s error stops being
+  mod.rs:651-656. (`ProjectKind::try_from`\'s error stops being
   discarded.)
 - **Unsupported base type** (error): extension resolves but declares
   base `book`/`manuscript`.

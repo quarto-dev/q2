@@ -1677,7 +1677,7 @@ annotated-qmd is the only EXCUSED entry, pending bd-1d6io."
 `ts-packages/annotated-qmd` is 154/156. The two failures are
 `div-attrs.json - Div with attributes conversion` and
 `substring invariant - links.qmd: inline code` (a one-byte-early start offset
-that captures the preceding space: got `' \`x = 5\`'`, expected `'\`x = 5\`\'`).
+that captures the preceding space: got ``' `x = 5`'``, expected ``'`x = 5`'``).
 
 **This is bd-1d6io, and it is being worked right now** — `.worktrees/workspace-2`
 is on `braid/bd-1d6io-annotated-qmd-source-tracking` with a commit *"Tighten
@@ -1796,16 +1796,16 @@ build:wasm`) if it's missing.
   - \~80 silent-skip sites let engine tests (jupyter, knitr/R, julia, uv,
     dart-sass) pass vacuously in CI; extend the `QUARTO_CI=1` hard-fail pattern
     beyond deno, or install the engines.
-  - `tree-sitter-doctemplate`'s 215-line corpus runs in neither CI nor `verify`.
-  - `wasm-qmd-parser`'s 4 tests never build (workspace-excluded).
-  - `npm run typecheck --workspaces` runs in no workflow, and `verify`'s
+  - `tree-sitter-doctemplate`\'s 215-line corpus runs in neither CI nor `verify`.
+  - `wasm-qmd-parser`\'s 4 tests never build (workspace-excluded).
+  - `npm run typecheck --workspaces` runs in no workflow, and `verify`\'s
     `typecheck:tests` legs for `preview-renderer`/`preview-runtime` are not in
     CI either.
   - Dead test scripts: `preview-runtime` `test:wasm` (nonexistent config) and
     `test:integration` (zero files), `kanban` `test:wasm` (zero files, masked by
     `passWithNoTests`), `editors/vscode-quarto-rust` `test` (no test sources,
     outside the workspace).
-  - `q2-preview-spa`'s 17 Playwright specs run only behind `verify --e2e`.
+  - `q2-preview-spa`\'s 17 Playwright specs run only behind `verify --e2e`.
   - **Widen `ci-test-suite-unwired` beyond `scripts.test`** so packages whose
     only tests live under `test:integration` / `test:e2e` are covered too.
   - `sync-test-harness` is ubuntu-only (Task 5b) — no macOS coverage.

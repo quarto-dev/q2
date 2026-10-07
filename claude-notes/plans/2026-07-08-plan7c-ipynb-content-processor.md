@@ -447,7 +447,7 @@ never touch engine availability.
   `ctx.source_info.map_offset` lands in the owning cell's virtual file —
   `FileId(ORIGINAL_FILE_ID.0 + 1 + i)` by the converter's construction —
   which *is* the notebook cell index. A fence that maps into a **markdown**
-  cell (a literal ```{python} fence in prose) stays inert. The notebook
+  cell (a literal \`\`\`\{python\} fence in prose) stays inert. The notebook
   bytes come from `source_context.get_file(ORIGINAL_FILE_ID)` (registered
   by `ParseDocumentStage`; missing = broken invariant → loud error), so no
   re-reading and no path guessing.
@@ -517,7 +517,7 @@ Found in the July-2026 audit of the live code; each is a work item:
    cells extend these, extending the existing `lint:allow` markers);
    `pipeline.rs:896` (the `StageError` rebuild — registers **nothing** today,
    not even `ORIGINAL_FILE_ID`, so percent/spin provenance already drops
-   there); `pipeline.rs:934` (`parse_qmd_to_ast`'s output context);
+   there); `pipeline.rs:934` (`parse_qmd_to_ast`\'s output context);
    `pipeline.rs:1108` (q2-preview). Miss any and squiggles silently drop. The
    `pipeline.rs:896` gap is a live 7b-era latent bug — fixing it for cells
    fixes percent/spin too. How the files *reach* these sites is settled
@@ -608,7 +608,7 @@ Found in the July-2026 audit of the live code; each is a work item:
   1. `Location.row` is **0-indexed** (upstream quarto-source-map's own
      test is the authority); five assertions in the new tests claimed
      1-indexed rows and were fixed.
-  2. `heading_with_content_before_it_is_not_snipped`'s expected string
+  2. `heading_with_content_before_it_is_not_snipped`\'s expected string
      was unproducible — it claimed a blank line inserted by the
      separator *inside* a single verbatim cell, which no 1/2/3-cell
      reading produces. Q1 semantics (contentBeforeHeading ⇒ verbatim)

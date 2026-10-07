@@ -499,7 +499,7 @@ For each non-overlapping match:
     keep L1). Emit `Q-12-13` "no preview content found in
     rendered output for \{href\}".
 - Else (file missing): substitute with `inner`. Emit
-  `Q-12-13` "listing target {href} did not produce a rendered
+  `Q-12-13` "listing target \{href\} did not produce a rendered
   output file" (different wording but same code, since both
   are "L1 fallback retained for this listing item").
 
@@ -572,7 +572,7 @@ character).
 
 ### Determinism
 
-`scraper`'s parse output is deterministic given input. The
+`scraper`\'s parse output is deterministic given input. The
 cache traversal order is "first reference wins"; since the
 cache value never changes for a given key, any order produces
 identical substitutions. Multiple listing hosts referencing the
@@ -672,7 +672,7 @@ single-function reader has been stable for years).
 
 L7 adds:
 
-- **`Q-12-13`**: `warning`, "Listing item from {relative-source-path}
+- **`Q-12-13`**: `warning`, "Listing item from \{relative-source-path\}
   produced no preview content; using the static fallback
   description." Fired when a sibling output file is missing,
   unparseable, or has no usable `<p>` in `main.content`.
@@ -717,7 +717,7 @@ audit trail; no decisions left for the L7 session.
    we write the full buffer in one `file_write` call; partial
    writes are a filesystem concern handled by the runtime. If
    write fails, we propagate the error and the post_render
-   hook aborts — same as `write_sitemap`'s contract.
+   hook aborts — same as `write_sitemap`\'s contract.
 5. **Whether to embed the `image-placeholder` URL or read from
    the source profile at L7-time.** Settled (embed in the
    marker), but the alternative is documented here in case a

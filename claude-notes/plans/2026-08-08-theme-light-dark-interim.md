@@ -1,7 +1,7 @@
 # Interim support for `theme: {light: [...], dark: [...]}` — use light, warn on dark
 
 **Strand:** bd-o76p01wb (P1, feature) — discovered-from bd-ad7i1pc6 (custom project types, PR #474)
-**Full-support strand (out of scope here):** bd-0pic6 — "Support theme: {light, dark} dark-mode config (object form)"
+**Full-support strand (out of scope here):** bd-0pic6 — "Support theme: \{light, dark\} dark-mode config (object form)"
 **Branch:** `braid/bd-o76p01wb-light-dark-theme-map`, based on `origin/feature/bd-ad7i1pc6-custom-project-types` (PR #474). The eventual PR waits for #474 to merge, then retargets/rebases onto `main`.
 
 ## Overview
@@ -114,7 +114,7 @@ under subsystem `theme`. Next free code: **Q-14-3** for the new warning.
 
 **D1 — parse the map form in quarto-sass, not in a quarto-core pre-pass.**
 `ThemeConfig::from_config_value` gains a branch: when the theme value is a map
-whose keys ⊆ {`light`, `dark`} (at least one present), it is a light/dark
+whose keys ⊆ \{`light`, `dark`\} (at least one present), it is a light/dark
 pair. Rationale: single source of truth repairs both consumers
 (compile_theme_css + bootstrap_js), covers project config *and* document
 frontmatter overrides, and sits next to the brand precedent. Any map with

@@ -314,7 +314,7 @@ They mount the Deno harness and can only run once 1b exists, so they are not RTQ
   `ExecutionContext`**, so the project cannot be threaded from a method `ctx`. It must be **set on the
   instance at engine-selection / render-setup**, before the first instance method runs. `claims_*` do
   **not** trigger launch — they use `ensure_loaded` (`ts_engine.rs:746`). RTQ ships the field + setter
-  + the new `launch_engine` signature, and its tests set a literal project; the **production setter
+  \+ the new `launch_engine` signature, and its tests set a literal project; the **production setter
   call site + the render-boundary cache reset** (so the next render re-captures its own project) are
   owned by **1c Phase 2**, verified Q1-consistent there.)* **Demux note:** `Init` is
   **non-engine-addressed**, so it needs arms in `engine_name_for`/`operation_name_for`
@@ -797,7 +797,7 @@ breaks today — a forward-correctness item, not a live bug.)*
 Done directly on `feature/ts-engine-extensions` (pure 2A hygiene, independent of return-to-Q1):
 - **B6 (config parity test):** switched `config.test.ts` from `Set`-equality to **sorted-array
   compare** — catches a removed/added key, a value mutation, **and a lost duplicate** (the language
-  keys' deliberate duplicates), while ignoring functionally-irrelevant order. **217 pass / 1 skip**
+  keys\' deliberate duplicates), while ignoring functionally-irrelevant order. **217 pass / 1 skip**
   confirmed.
 - **B7 / 2a-3 (stale status):** flipped plan2a's "§2aa not yet built" banners (lines 6-7, 28, 140)
   → "landed".

@@ -172,7 +172,7 @@ planned.** Recorded here only so the issue can be answered accurately.
   bd-cymkcyaf that plain HTML does *not* default echo off; only revealjs/beamer/pptx/dashboard do).
 - `shouldHide(...)` + `keepHidden`: under `render: keep-hidden: true`, hidden content is still
   emitted but tagged with the `.hidden` class rather than dropped.
-- `echo: "fenced"` is a third value (emit the cell as a fenced ```` ```` ```` block including its
+- `echo: "fenced"` is a third value (emit the cell as a fenced \`\`\`\` \`\`\`\` \`\`\`\` block including its
   YAML options) — `echoFenced()` in the same file.
 - `src/resources/filters/quarto-post/foldcode.lua` — folding applies only to blocks classed
   `cell-code`, honours a document-level `param("code-fold")` default plus per-block override,

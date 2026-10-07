@@ -160,8 +160,7 @@ Implementation:
   fr-require=OK;fr-abs=OK;fr-resolve=OK
   ```
 
-  *All three #588 rows agree through the real render path, and the
-  #587 filter loads its module via both require forms.)*
+  *(All three #588 rows agree through the real render path, and the #587 filter loads its module via both require forms.)*
 - [x] Strand bookkeeping: bd-sr0nipl7, bd-9uqdoy0e, bd-9xa0yui7 moved to
   `in_review` (close at PR merge, matching repo practice — e.g.
   bd-8b0af414). GH #587/#588 comment wording drafted for Carlos in the

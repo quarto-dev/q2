@@ -370,7 +370,7 @@ revocation store**, both on the credential path: review accordingly.
   re-login stays valid; integration test extended with a same-second family
   member; e2e re-run fully green.*
 
-  ***Not verified** (needs a human + a real Google client id): the visual
+  **_Not verified_** (needs a human + a real Google client id): the visual
   browser flow — Google login UI, One-Tap-free renewal in a FedCM-blocked
   browser session, and the SPA's logged-out UX on device B. The HTTP surface
   those flows drive is exactly what the e2e exercised. Ops docs added at

@@ -178,7 +178,7 @@ Phase 1's audit covers all three, plus q2 and `quarto-yaml`.
   the **raw** offset, and flooring upstream destroys the input its ceil needs.
   Both statements are true of different layers; cost (a) below is the rendered
   one. **Decided 2026-08-21: floor anyway, accepting three costs.**
-  (a) *A caret regression.* `quarto-error-reporting`'s
+  (a) *A caret regression.* `quarto-error-reporting`\'s
   `snap_span_to_char_boundaries` (`src/diagnostic.rs:671-686`) floors the start
   and **ceils** the end, so today `Original{7,8}` inside `✨` renders as `6..9`
   — the whole character highlighted. After flooring, both ends arrive as `6`,
@@ -188,7 +188,7 @@ Phase 1's audit covers all three, plus q2 and `quarto-yaml`.
   already wrong and Plans 2-3 remove them — but it is a regression, not a pure
   fix, and the zero-width label must be tested in Plan 2, since both renderers
   live in `quarto-error-reporting`.
-  (b) *A wire change.* `.offset` is not renderer-only: `pampa`'s JSON writer
+  (b) *A wire change.* `.offset` is not renderer-only: `pampa`\'s JSON writer
   emits it as `"o"` (`src/writers/json.rs:550`, `:555`, `:2005`, `:2014`,
   `:2258`, `:2267`) and `quarto-core`\'s TS engine reads it as `file_offset`
   (`src/engine/ts_engine.rs:689`). Expect JSON-writer snapshot churn for any
@@ -243,11 +243,11 @@ Phase 1's audit covers all three, plus q2 and `quarto-yaml`.
   The other pair is worse still: `start_offset()` returns **0** and
   `end_offset()` returns the **content length**, so there is no `None` to check
   and a caller gets a plausible-looking wrong number — **and the same defect exists in
-  TypeScript, one composition level up.** `resolveChain`'s `Substring` arm
+  TypeScript, one composition level up.** `resolveChain`\'s `Substring` arm
   (`ts-packages/annotated-qmd/src/source-map.ts:301-315`) computes
   `range: [parentStart + localStart, parentStart + localEnd]` — affine
   composition over the parent's resolved range, which is exactly
-  `preimage_in`'s bug in another language. `Substring{parent: Concat}` is
+  `preimage_in`\'s bug in another language. `Substring{parent: Concat}` is
   precisely the shape these value spans take once provenance is correct, so that
   arm is where the work lands. A confident wrong answer, not a failure to
   resolve. Plan 2 Phase 4 owns it, and the fix is entirely on the TS side.
@@ -334,7 +334,7 @@ return last.source_info.map_offset(last.length, ctx);
 where `last.length` is the piece's **content** length. For a verbatim piece
 that equals its source length and the answer is the true source end; for a
 replacement it does not. The comment above it claims the branch maps "to the
-end of the last piece… like `Original`/`Substring`'s `map_offset(length)`" — and
+end of the last piece… like `Original`/`Substring`\'s `map_offset(length)`\" — and
 for `Original` that *is* the end offset. So `Concat` is inconsistent with the
 other variants in exactly the way `Location.offset` is inconsistent with
 `Location.column`: the same class of defect, one variant over.

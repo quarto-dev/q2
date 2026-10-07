@@ -264,7 +264,7 @@ All tests in `hub-client/src/components/render/framework/`.
 
 - [ ] Create repo-root directory `resources/attribution/` with a short
   `README.md` (one paragraph: "Shared viewer CSS/JS, consumed by both
-  `quarto-core`'s `AttributionViewerTransform` via `include_str!` and
+  `quarto-core`\'s `AttributionViewerTransform` via `include_str!` and
   hub-client via Vite's `?raw` import. Edit this single source; both
   surfaces re-pick it up.") Matches the layout/voice of
   `resources/scss/README.md`.

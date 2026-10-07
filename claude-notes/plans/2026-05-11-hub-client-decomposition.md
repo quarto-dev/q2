@@ -566,9 +566,9 @@ hub-client — those files are not imported by the build.
   *(2026-05-13: temporary probe imports in `main.tsx` compiled
   cleanly through `tsc --noEmit` and `vite build`. Reverted
   after verification. tsconfig.app.json needed no changes —
-  hub-client doesn't use TS project references for workspace
-  deps; it relies on npm\'s `node_modules/@quarto/...` symlinks
-  + tsc\'s "bundler" `moduleResolution`.)*
+  hub-client doesn\'t use TS project references for workspace
+  deps; it relies on npm's `node_modules/@quarto/...` symlinks
+  \+ tsc's "bundler" `moduleResolution`.)*
 
 **Acceptance:** both new packages exist, are recognized by npm
 workspaces, have passing test commands, and are importable from

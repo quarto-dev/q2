@@ -97,7 +97,7 @@ end
 Two consequences worth pinning down before implementing:
 
 1. **The attribute value is parsed as markdown inlines**, so
-   `title="Use \`renv\`"` yields a code span in the header.
+   ``title="Use `renv`"`` yields a code span in the header.
 2. **The leading heading is only *removed* inside `resolveHeadingCaption`**
    (`external-sources/quarto-cli/src/resources/filters/common/pandoc.lua:130-138`
    does `div.content:remove(1)`). When `title=` is non-empty that function is
@@ -225,7 +225,7 @@ the wrong bytes.
   from an `AstTransform` at
   `crates/quarto-core/src/transforms/config_markdown.rs:164`.
 - **Mapping (unsolved, tree-wide).** The YAML path has exactly this bug:
-  `quarto-yaml`'s `compute_scalar_len` spans the quotes while the *decoded*
+  `quarto-yaml`\'s `compute_scalar_len` spans the quotes while the *decoded*
   scalar is handed to the nested parse, and nothing compensates. The design doc
   `claude-notes/plans/2026-07-20-ipynb-surface-syntax-design.md:73-92` states
   the constraint outright — `Substring`/`Concat` compose only affine maps, a

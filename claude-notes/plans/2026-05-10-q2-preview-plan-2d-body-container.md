@@ -894,7 +894,7 @@ npx playwright test smoke-all \
 
 **Process notes:**
 
-- Initial run hit a parse error on `title-block-multi-author.qmd` (line 23 col 6, "Out of scope: Multi-author rendering UX"). Root cause: bd-1qk5 (post-codespan apostrophe trips Q-2-7). The fixture body had `\`AliceBob\`) — matches Rust's \`TemplateValue::List\`` — backtick→`)`→apostrophe-after-codespan combo that the parser still chokes on. Rewrote the body to plain ASCII with no backticks/apostrophes; fixture green on re-run.
+- Initial run hit a parse error on `title-block-multi-author.qmd` (line 23 col 6, "Out of scope: Multi-author rendering UX"). Root cause: bd-1qk5 (post-codespan apostrophe trips Q-2-7). The fixture body had ``AliceBob`) — matches Rust's ``TemplateValue::List`` — backtick→`` `) ``→apostrophe-after-codespan combo that the parser still chokes on. Rewrote the body to plain ASCII with no backticks/apostrophes; fixture green on re-run.
 - `body-container-minimal.qmd` failed once with a "Peer connection failed" sync flake; passed on retry without any content change. Re-stating the smoke fixture cleanly (no special characters) reduces parser-vs-flake ambiguity.
 
 ## Revision history

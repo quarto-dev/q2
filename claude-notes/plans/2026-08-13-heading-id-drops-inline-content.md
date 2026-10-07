@@ -403,7 +403,7 @@ every inline kind plus the dedup sequences `section`/`section-1`/… and
 **Phase 6 — user-facing blast radius. Zero.** `docs/` was rendered before and
 after and the full set of `<section id=…>` values diffed: **1250 ids across
 238 files, no change.** The one docs heading that looked at risk
-(`## \`--force\` and \`--trust\` are different permissions`) turns out to be a
+(`` ## `--force` and `--trust` are different permissions ``) turns out to be a
 callout title, not a section heading, so it never becomes an anchor.
 
 ## Strand outcomes

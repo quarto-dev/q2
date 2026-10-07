@@ -402,14 +402,14 @@ before the comrak fix because it is worth more.
   **Correction 2026-08-23 (in execution).** The hole named in this item is
   wrong in two ways, both measured in Phase 6a: a body consisting solely of
   fence characters resolves **correctly** when the closing fence is present
-  (```` ````{python}\n```\n```` ```` → `13..16`); the real hole is a body
+  (\`\`\`\` \`\`\`\`\{python\}\n\`\`\`\n\`\`\`\` \`\`\`\` → `13..16`); the real hole is a body
   whose *last line* is fence-only in a block with **no** closing fence, and
   it degrades to the **whole block**, not "a few bytes off". The landed doc
   comment states the measured shape. Same correction on
   `claude-notes/research/2026-08-23-provenance-3-design-recommendations.md`
   § 1, where it originated; full evidence in § Evidence → Phase 6 → 6a.
 - [x] **Draft the producer-side strand** (outside this epic; title/body in
-  recommendations § 1): carry `code_fence_content`'s provenance on
+  recommendations § 1): carry `code_fence_content`\'s provenance on
   `CodeBlock` as `text_source`, built with `ProvenanceBuilder` so elided
   `block_continuation` markers become gaps; `process_fenced_code_block`
   (`pampa/src/pandoc/treesitter_utils/fenced_code_block.rs:30`) currently
@@ -419,7 +419,7 @@ before the comrak fix because it is worth more.
   — `crates/pampa/src/pandoc/treesitter.rs:1002-1005` (**not** `:1000-1001`,
   which is the tail of the live `text` binding). Narrow
   `process_shortcode_string` (`treesitter_utils/shortcode.rs:31-46`) to take
-  `&dyn Fn() -> String`, make the closure return `text` (so `:1006`'s
+  `&dyn Fn() -> String`, make the closure return `text` (so `:1006`\'s
   `IntermediateBaseText(text, range)` goes too), drop the callee's
   `let … else { panic!() }`, and comment at
   the construction site that the arg's range is the quote-inclusive node span

@@ -227,8 +227,8 @@ with the correct provenance:
     Lua machinery attached (`filter_path`, `line` — Plan 4's filter
     `by.data` shape) are preserved by promoting the kind from
     `filter` to `shortcode`, renaming to `lua_path` / `lua_line` in
-    `by.data` to reflect the new context. See "Lua-shortcode
-    enrichment" below.
+    `by.data` to reflect the new context. See \"Lua-shortcode
+    enrichment\" below.
   - The post-walk recurses into nested blocks/inlines (model on
     `recurse_inline` / `resolve_block` in this file) so every node in
     the dispatch output gets the anchor.
@@ -254,8 +254,7 @@ with the correct provenance:
       `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
       through from call sites at lines 665 and 920, and use it as the
       Str's `source_info`. This is required to satisfy the
-      "Escaped-shortcode regression test" (line 453: \"its source_info
-      stays Original (not Generated)\") — without this fix, the
+      \"Escaped-shortcode regression test\" (line 453: `"its source_info stays Original (not Generated)"`) — without this fix, the
       regression test would fail on Plan 6's own implementation.
 - **`TitleBlockTransform`** (line 183-185): synthesizes a level-1 Header
   from `title:` metadata. Fix: emit `Generated { by: By::title_block(), from: smallvec![] }`

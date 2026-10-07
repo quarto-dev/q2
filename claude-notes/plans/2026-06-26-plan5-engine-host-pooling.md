@@ -134,7 +134,7 @@ built-ins-only — the engine vanishes on edit.
 
 **Plan 5 owns the *latency* of the last two.** The `re_execute.rs` / `recompute_staleness(Auto)`
 re-compute path is exactly what the warm host keeps fast (no Deno respawn + module-`import()` per
-edit). The boundary: **R5 makes re-compute *correct*** (the right registry runs); **Plan 5 makes it
-*interactive*** (the host is already warm). The measure-first gate (§Open #1) applies to this path
+edit). The boundary: **R5 makes re-compute _correct_** (the right registry runs); **Plan 5 makes it
+_interactive_** (the host is already warm). The measure-first gate (§Open #1) applies to this path
 specifically — the kernel already survives a respawn, so the win is bounded to the Deno-spawn +
 `import()` cost on each re-compute.

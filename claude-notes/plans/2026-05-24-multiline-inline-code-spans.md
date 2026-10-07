@@ -78,8 +78,8 @@ characters.
 | `` > A `code\n> span` in bq.`` (block quote)             | `Code "code span"` inside the `BlockQuote`/`Para`; `> ` prefix stripped |
 | `` - item with `inline\n  code` here `` (list item)      | `Code "inline code"`; the continuation indent is stripped |
 | `` `code\n# heading\nspan` `` (block-like content)       | one `Code "code # heading span"` — even paragraph-interrupting characters are absorbed as literal text |
-| `` `code\n```python\nx=1\n```\nspan` `` (triple fence)   | one `Code "code \`\`\`python x=1 \`\`\` span"` — even triple-backtick fences are absorbed |
-| `` `code\n\n---\n\nspan` `` (blank-line + thematic break) | code span is **not formed**; opener is literal `` `code ``, then a `HorizontalRule`, then `Para [ Str "span\`" ... ]` |
+| `` `code\n```python\nx=1\n```\nspan` `` (triple fence)   | one ``Code "code \`\`\`python x=1 \`\`\` span"`` — even triple-backtick fences are absorbed |
+| `` `code\n\n---\n\nspan` `` (blank-line + thematic break) | code span is **not formed**; opener is literal `` `code ``, then a `HorizontalRule`, then ``Para [ Str "span\`" ... ]`` |
 | ``No close: `open\nthen text\n\nnew paragraph``          | `` `open `` literal; paragraph continues across the soft break with `SoftBreak`, then a new `Para` |
 | ``` ``two backticks\nwith newline`` ```                     | one `Code "two backticks with newline"` (level-2 delimiter) |
 

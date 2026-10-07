@@ -359,7 +359,7 @@ lightly). Both reuse the same corpus format where possible.
 passing** — baseline was 2/8; the corpus has grown to 19 cases and the
 xfail list is empty. The cluster table below predates
 bd-tzwcof0n (which cleared the Attr cluster, \~21 entries). Strands closed so far: bd-0xghpvij
-(OrderedList ListAttributes), bd-55mb0rjz (__eq + Haskell-show
+(OrderedList ListAttributes), bd-55mb0rjz (\_\_eq + Haskell-show
 tostring), bd-hitjclzp (property cache+readback — the worked example
 is byte-identical to pandoc e2e).
 
@@ -425,7 +425,7 @@ List noise is gone.
   — 12 root-cause clusters covering all 128 baseline xfails, each
   with evidence, class, disposition, and strand.
 - [x] 1.2 Ten child strands filed under bd-grkrb9nj (see
-  `braid dep tree bd-grkrb9nj`): bd-55mb0rjz (E: __eq/tostring),
+  `braid dep tree bd-grkrb9nj`): bd-55mb0rjz (E: \_\_eq/tostring),
   bd-23yvjfmm (A: filter returns), bd-tzwcof0n (B: attr shapes),
   bd-hitjclzp (D0: content mutation; related bd-195t),
   bd-0g2yp61w (D1: setters), bd-1fjtodu8 (E2: List module),
@@ -452,7 +452,7 @@ List noise is gone.
   `citations`, `caption`) alias the same Lua table across reads;
   every marshal-out path (fuzzy peekers, FromLua, all six
   filter-return handlers, shortcode extraction, clone/walk/
-  __pairs/__eq/__tostring) flushes the cache back through
+  \_\_pairs/\_\_eq/\_\_tostring) flushes the cache back through
   set_field first. Added the missing set_field arms flush needs:
   BulletList/OrderedList/DefinitionList/LineBlock `content`,
   Figure/Table `caption` (part of D1). 9 new integration tests

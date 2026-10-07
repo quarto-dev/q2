@@ -236,9 +236,9 @@ nightly-2026-04-28 / 1.97 — fine); edition 2024 (we already use it).
   the host; sandbox unless `--allow-edit`); `--share --ui editor --allow-edit`
   (full collaborative editing, persists to host disk); `--share --allow-edit`
   (viewer with inline-edit write-back); `--join --port N`; `--join --no-browser`.
-- Conflicts (clap `conflicts_with`): `--join` × {`path`, `--share`,
+- Conflicts (clap `conflicts_with`): `--join` × \{`path`, `--share`,
   `--no-project`, `--allow-edit`, `--ui`, `--data-dir`,
-  `--preview-dir`}.
+  `--preview-dir`\}.
 - ALPN: `b"q2/preview-tunnel/0"`. Ticket KIND: `"q2preview"` (KIND string is
   the protocol version tag; breaking change ⇒ new KIND).
 
@@ -598,7 +598,7 @@ strand bd-l4j4ky8k closed; Phase 0 (bd-9gam4jqe) and Phase 4
 re-run (runbook above) and a human-driven session for the
 Safari-app/lid-close observations. Housekeeping done: remote `spike/…`
 branch deleted 2026-08-04 (throwaway; existed to run the Windows +
-cross-network CI legs), ephemeral SPIKE_* secrets deleted, session token
+cross-network CI legs), ephemeral SPIKE\_* secrets deleted, session token
 dead with the host process; the local spike worktree
 (`.worktrees/bd-l4j4ky8k-live-share-feasibility-gate`) is kept for
 reference until Phase 1 re-implements under tests — its code is still
@@ -679,7 +679,7 @@ suite lives in `crates/quarto-p2p/tests/integration/{ticket,tunnel}.rs`)*
 - [x] `tunnel::half_close_propagates` — guest-side TCP write-half shutdown
   reaches the target as read-EOF (and the reverse direction), while the
   other direction keeps flowing; guards the splice's EOF ↔
-  `SendStream::finish()` mapping, which `websocket_frames_survive`'s
+  `SendStream::finish()` mapping, which `websocket_frames_survive`\'s
   symmetric traffic does not exercise
 - [x] `tunnel::clean_shutdown` — `shutdown()` on both handles completes
   without hangs and unbinds the local port
@@ -692,7 +692,7 @@ green, `cargo nextest run --workspace` 10873 passed, `cargo xtask verify
 from `wasm-quarto-hub-client` still fails — output inspected for all)*
 
 - [x] `ticket.rs` — struct + `iroh_tickets::Ticket` impl + `FromStr`/`Display`
-  *(postcard wire format follows iroh-tickets' versioned-enum convention:
+  *(postcard wire format follows iroh-tickets\' versioned-enum convention:
   `TicketWireFormat::Variant1 { id, addrs, token }`; manual `Debug`
   redacts the token)*
 - [x] `host.rs` — `Endpoint` (preset injectable for tests) + `Router` with a

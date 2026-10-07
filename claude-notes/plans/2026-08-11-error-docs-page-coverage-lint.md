@@ -347,7 +347,7 @@ nine new pages. Spot-checked the rendered HTML of `Q-16-5` and `Q-3-42`.
    output, and arguably better source readability for fenced examples.
    Worth standardizing on one; not done here.
 2. **A trailing possessive apostrophe opens a single quote.** "the
-   scripts'" failed `Q-5-12` with `Q-2-7` (unclosed single quote) and took
+   scripts\'" failed `Q-5-12` with `Q-2-7` (unclosed single quote) and took
    the whole page out of the render, which in turn produced two `Q-13-4`
    warnings on the pages linking to it. Rephrased.
 

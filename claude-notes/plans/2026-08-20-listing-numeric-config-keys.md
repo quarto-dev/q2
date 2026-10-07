@@ -63,7 +63,7 @@ Swept the workspace for `as_plain_text()` + `parse()` chains and bare
 | `listing/config.rs:538` | `grid-columns` | grid class `quarto-listing-cols-N` wrong → falls to default 3 |
 | `listing/config.rs:893` | `feed: items:` | inside `parse_feed` — the audit the strand asked for found exactly this one |
 
-**Broken for unquoted *floats*** (`Yaml::Real` handled nowhere):
+**Broken for unquoted _floats_** (`Yaml::Real` handled nowhere):
 
 - `revealjs/assemble.rs:238` `float_opt` — handles `as_int()` + string, but
   `margin: 0.2` arrives as `Scalar(Yaml::Real("0.2"))` → both probes miss →

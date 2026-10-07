@@ -44,7 +44,7 @@ title: Include error repro
 
 Before the include.
 
-{{< include "_bad.qmd" >}}
+{{{< include "_bad.qmd" >}}}
 
 After the include.
 ```

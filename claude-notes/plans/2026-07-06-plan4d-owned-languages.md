@@ -62,8 +62,8 @@ duplicate of `handled_languages`:
    `resolution.rs:987-1007`; design §4.3/§6.1/§10).
 2. **`!handled.includes(L)` is therefore ambiguous** — it means "L owned by me
    **or** L owned by nobody," not "owned by me." With both projections a language
-   is exactly one of {`owned` = mine, `handled` = someone else's / a cell handler,
-   neither = owned by nobody}. `owned_languages` is the only signal that isolates
+   is exactly one of \{`owned` = mine, `handled` = someone else's / a cell handler,
+   neither = owned by nobody\}. `owned_languages` is the only signal that isolates
    the positive set. (The existing `handled_languages` wire doc comment overstates
    this as "coincide"; Phase 4d-D corrects it.)
 3. **Resolution is one-shot and never re-run.** `resolve_engines` is called once

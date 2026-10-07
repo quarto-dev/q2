@@ -158,7 +158,7 @@ An `include` shortcode standing alone inside a fenced code block — the standar
 
 ````markdown
 ```{.python filename="app.py"}
-{{< include app.py >}}
+{{{< include app.py >}}}
 ```
 ````
 

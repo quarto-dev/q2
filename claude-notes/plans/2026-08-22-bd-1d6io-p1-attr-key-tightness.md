@@ -203,8 +203,8 @@ The other three categories are pre-existing fixture staleness being flushed:
 1. **tightness** (5 fixtures) — bd-1d6io **failure #1**, fixed by Plan 7g
    Phase 3 and never regenerated. The wide `Code`/`RawInline`/`Quoted`/`Cite`
    range splits into a tight node plus a 1-byte `Space`:
-   `links`: `Space [125,133] ' \`x = 5\`'` + `Code [125,133] ' \`x = 5\`'`
-   → `Space [125,126] ' '` + `Code [126,133] '\`x = 5\`'`.
+   `links`: ``Space [125,133] ' `x = 5`'`` + ``Code [125,133] ' `x = 5`'``
+   → `Space [125,126] ' '` + ``Code [126,133] '`x = 5`'``.
    Also 6 sites in `tutorial`, 2 `RawInline` + 2 `Quoted` + 1 citation prefix
    in `inline-types`, 2 `Cite` in `academic-paper`, 1 `Code` in `blog-post`.
 
@@ -228,7 +228,7 @@ The other three categories are pre-existing fixture staleness being flushed:
    13/20.
 
 **One change is an improvement that is still not correct, and it is not ours.**
-`academic-paper`'s `meta.author` inline sub-nodes went from unresolvable
+`academic-paper`\'s `meta.author` inline sub-nodes went from unresolvable
 (`Str` → `'---\ntitl'`, i.e. document start) to resolvable but shifted
 (`Str "Dr."` → `[71,80]` `'"Dr. Alic'`, should be `[72,75]`). This is
 **bd-mxa44voa** — nested-parse drift where quarto-yaml's span is
@@ -404,7 +404,7 @@ confirmed test binding empirically by reverting each change in isolation, and
 independently re-derived the fixture categorization.
 
 - [x] **Windows breakage in the corpus test (blocking).** `is_known` matched
-  `KNOWN`'s forward-slashed suffixes against a `Path::display()` string,
+  `KNOWN`\'s forward-slashed suffixes against a `Path::display()` string,
   which is backslashed on Windows — so the one legitimate finding would be
   reported as a violation and the test was red for Windows developers only
   (CI is ubuntu + macOS, so CI would never have caught it). Normalized to
@@ -484,7 +484,7 @@ substitution.
   range absorbing 2 spaces against 1 NBSP is still flagged; a source *tab*
   is accepted, since a Pandoc `Space` can come from either.
 - [x] Checked for other producers first: the only other whitespace-into-text
-  path is `code_span_helpers.rs`, which writes `Code`'s text, and `Code`
+  path is `code_span_helpers.rs`, which writes `Code`\'s text, and `Code`
   passes `None`. Both NBSP producers are covered; nothing retains a plain
   boundary space.
 - [x] Binding re-verified after tightening: reverting the attr-key fix still

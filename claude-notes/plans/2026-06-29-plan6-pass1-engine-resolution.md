@@ -751,17 +751,17 @@ frontmatter); the widening lands once in the shared parser.
         in `resolution.notes`, never reaches `ctx.diagnostics` → RED.
 - [x] Implement in `resolve_engines_inner` (`resolution.rs:360`):
   - [x] Add `notes: Vec<ResolutionNote>` to `EngineResolution`
-        (`resolution.rs:278-287`) with
-        ```rust
-        #[derive(Debug, Clone, PartialEq)]
-        pub enum ResolutionNote {
-            UnknownOverrideEngine { engine: String },
-            ConflictingDuplicateEngineConfig { engine: String },
-        }
-        ```
-        Purity preserved: warnings are returned data. Initialize `notes` at
-        the three early returns (`resolution.rs:371,382,426`) and the final
-        build (`:583`) — four sites, all inside `resolve_engines_inner`.
+    (`resolution.rs:278-287`) with
+    ```rust
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum ResolutionNote {
+        UnknownOverrideEngine { engine: String },
+        ConflictingDuplicateEngineConfig { engine: String },
+    }
+    ```
+    Purity preserved: warnings are returned data. Initialize `notes` at
+    the three early returns (`resolution.rs:371,382,426`) and the final
+    build (`:583`) — four sites, all inside `resolve_engines_inner`.
   - [x] **Project-load validation — already provided by 4b-C
         (`5acf0e6dc`); do NOT add a second check.** 4b-C's
         `build_engine_registry` splice validates every project `engines:`
@@ -814,7 +814,7 @@ frontmatter); the widening lands once in the shared parser.
         `resolution.rs` comparing `ConfigValueKind` structure/values and
         ignoring source-info fields.
 - [x] **Wire pass-through hygiene:** `build_engine_config_map`
-  (`project/mod.rs:541`) already forwards `_quarto.yml`'s `engines:`
+  (`project/mod.rs:541`) already forwards `_quarto.yml`\'s `engines:`
   value verbatim onto `LaunchEngine.project.config.engines`, and Q1
   engines type it `string[]`. With map-form entries now legal, lower
   **names only**: strings pass through; a single-key map contributes
@@ -948,7 +948,7 @@ frontmatter); the widening lands once in the shared parser.
   the core **abort and return `None`** (fall through). This *is* the
   "attempt the resolution" predicate — no separate probe. The tier bodies
   are otherwise unchanged; only the claim they read comes from the
-  closure, so `claim_for`'s table interception is shared by both paths.
+  closure, so `claim_for`\'s table interception is shared by both paths.
   When every consultation is `Some`, the Pass-1 result is **identical**
   to `resolve_engines` (all answers were static, so the loading path would
   not have loaded either) — that equivalence is the

@@ -411,8 +411,8 @@ all but one already using `..Default::default()`. So the field costs one real
 edit instead of 192 mechanical ones. It is also the better semantic home — the
 resolved brand *is* parsed project configuration, sitting next to `metadata`
 and `config_path`, and `parse_config` is the single place a `_quarto.yml`
-becomes a `ProjectConfig`, so "`config.brand` agrees with `config.metadata`'s
-`brand:` key" holds by construction.
+becomes a `ProjectConfig`, so \"`config.brand` agrees with `config.metadata`\'s
+`brand:` key\" holds by construction.
 
 *`ResolvedBrand` lives in `quarto-brand`, not `quarto-sass`.* "A brand plus
 where it came from" is a brand concept; `quarto-sass` merely happens to be
@@ -517,7 +517,7 @@ project has no brand), so test 47 was added first. The explicit
 means, and gating it would be a regression.
 
 **Caught in self-review: the missing-file warning blamed the wrong key.**
-`copy_favicon`'s warning was hardcoded to `website.favicon refers to missing
+`copy_favicon`\'s warning was hardcoded to `website.favicon refers to missing
 file '…'`. Under the fallback that key doesn't exist anywhere in the project,
 so a typo'd brand logo would have sent the reader hunting for a `website.favicon`
 they never wrote. `resolved_website_favicon` now returns a `ResolvedFavicon`
@@ -631,7 +631,7 @@ proved nothing — the explicit key and the fallback would both have produced
 - **WASM.** `copy_favicon` is `#[cfg(not(target_arch = "wasm32"))]`; the
   transform is not. Whatever carries the brand must compile for
   `wasm32-unknown-unknown` (hub-client / `q2 preview`). `quarto-brand` already
-  does — it is in `quarto-sass`'s tree, which builds for WASM — but this needs
+  does — it is in `quarto-sass`\'s tree, which builds for WASM — but this needs
   `cargo xtask verify` (full, not `--skip-hub-build`) before push.
 - **Light/dark.** `Brand::favicon()` returns `None` for a `logo.small`
   light/dark pair by design, deferring the choice to the caller. Doing anything

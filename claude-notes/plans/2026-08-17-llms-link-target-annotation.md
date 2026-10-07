@@ -36,12 +36,14 @@ cannot express:
 Proposed mechanism (from the strand): a link attribute honored by both
 transforms —
 
-    [text](guide/index.md){link-format="html"}   # companion keeps .html
-    [text](guide/index.md){link-format="llms"}   # HTML page links companion
+```
+[text](guide/index.md){link-format="html"}   # companion keeps .html
+[text](guide/index.md){link-format="llms"}   # HTML page links companion
+```
 
 Absent the attribute, behavior is exactly today's — purely opt-in.
 
-Real-world motivation for case 2: the Posit Connect docs' "Copy for LLM /
+Real-world motivation for case 2: the Posit Connect docs\' "Copy for LLM /
 View as Markdown" button pair computes the companion URL by string surgery
 on `window.location.pathname` in client-side JS, because Quarto (1 and 2)
 exposes no way to obtain a companion href. It hardcodes Q1's `.llms.md` and
@@ -191,11 +193,11 @@ green pins — attr-survival and the D6 static fallthrough).
 
 ### Phase 1 — `link-format="html"` (opt out of companion retarget)
 
-- [x] Attr check at the Link call site (`clean_inline`'s Link arm) —
+- [x] Attr check at the Link call site (`clean_inline`\'s Link arm) —
   reads the pin before `sanitize_attr` (whose `kv_noise` now also
   consumes `link-format`), skips `retarget_href` when pinned; the
   html-bound AST is scrubbed by a `strip_kv` in
-  `keep_inline_in_html`'s Link arm.
+  `keep_inline_in_html`\'s Link arm.
 - [x] Listing synthesizer call site untouched (synthesized links carry
   no authored attrs; existing listing tests unchanged and green).
 
@@ -277,7 +279,7 @@ green pins — attr-survival and the D6 static fallthrough).
 - **WASM surface.** No `RenderOutput`/wire-shape changes anticipated — this
   is AST-transform-internal — but `quarto-core` changes still require full
   `cargo xtask verify` before push (CLAUDE.md).
-- **`.qmd`-source projects' accidental `.md` pass-through.** Today a
+- **`.qmd`-source projects\' accidental `.md` pass-through.** Today a
   literal `[x](guide/index.md)` in a `.qmd` project reaches the companion
   by falling through to static-resource resolution. Once `link-format="llms"`
   exists, that accidental path becomes redundant but must not regress

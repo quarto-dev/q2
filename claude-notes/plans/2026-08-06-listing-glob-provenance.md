@@ -53,7 +53,7 @@ Distinct bugs:
    glob string containing `*` in front-matter `contents:` — DocumentMetadata
    context tries to parse the string as markdown before the listing parser's
    `as_plain_text` fallback recovers it.
-6. **Silent glob corruption when the markdown parse *succeeds*** (fixture
+6. **Silent glob corruption when the markdown parse _succeeds_** (fixture
    `p6-glob-corruption`, verified 2026-08-06): `contents: ["p*osts*.qmd"]`
    parses as emphasis, `as_plain_text` reconstructs `posts.qmd` (asterisks
    lost), the listing renders empty, and **no diagnostic fires at all**. Same
@@ -102,7 +102,7 @@ Q1-inherited inconsistency where some globs default to `*.qmd` and others to
 follow-up strand (`discovered-from:bd-v7ixzsp5`) when the API shape settles.
 
 Consequence (intentional behavior change, shipping **silently** — Carlos,
-2026-08-06: q2 is 0.*, no stability promises): a subdirectory host using a
+2026-08-06: q2 is 0.\*, no stability promises): a subdirectory host using a
 project-relative glob (`posts/*.qmd` meaning root-level `posts/` from
 `sub/index.qmd`) stops matching. This aligns with both Q1 and the new
 provenance semantics. No transition diagnostic.
@@ -168,7 +168,7 @@ to the stage/render context. Keep the helper synchronous and pure.
 
 ### Phase 0 — investigation residue (small, before tests)
 - [x] Confirm how pampa assigns the document's own FileId (assumed `FileId(0)`)
-  and that `_quarto.yml`'s metadata layer retains `parse_file` provenance
+  and that `_quarto.yml`\'s metadata layer retains `parse_file` provenance
   through `resolve_format_config` + merging. **Confirmed 2026-08-06:**
   front matter = `Substring` into the RawBlock's source (doc `FileId(0)`,
   `pampa/src/pandoc/meta.rs:355-361`); `_quarto.yml` parsed via
@@ -217,7 +217,7 @@ to the stage/render context. Keep the helper synchronous and pure.
   (`resolve_content_globs`, `item_matches`; pure, WASM-safe).
   `MetadataMergeStage` registers `_quarto.yml`/`_metadata.yml` in BOTH
   document SourceContexts (hash FileIds; symmetric append preserves
-  `IncludeExpansionStage`'s FileId-parity invariant — a full-suite run
+  `IncludeExpansionStage`\'s FileId-parity invariant — a full-suite run
   caught the one-context version).
 - [x] `ListingContents::Glob { pattern, source }` — carries `SourceInfo`
   rather than a pre-resolved base dir (resolution happens at the two
@@ -292,7 +292,7 @@ to the stage/render context. Keep the helper synchronous and pure.
 
 ## Decisions (Carlos, 2026-08-06)
 
-1. **Behavior change ships silently.** q2 is 0.*; no stability promises. Fix
+1. **Behavior change ships silently.** q2 is 0.\*; no stability promises. Fix
    it properly, no transition diagnostic.
 2. **Escaping the project root warns** via a new diagnostic code registered in
    `quarto-error-catalog`, so warnings-as-errors mode fails loudly.

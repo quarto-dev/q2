@@ -815,11 +815,11 @@ node. These are one decision, not two items:
   > right one, "the bug is invisible by construction".
   >
   > **What to do instead** — this closes the hole this item actually names,
-  > which is that it is a ***public*** constructor:
+  > which is that it is a **_public_** constructor:
   >   (a) demote `config_value_from_yaml` from `pub` to `pub(crate)` and delete
   >       the `pub use` at `lib.rs:57`, so nothing outside quarto-config can
   >       reach it;
-  >   (b) thread content provenance through it in lockstep with `meta.rs`'s
+  >   (b) thread content provenance through it in lockstep with `meta.rs`\'s
   >       read (the same one-line `content_source_info()` call), so it is not a
   >       fiction and the five span tests gain the same fidelity the retarget
   >       was for;
@@ -830,14 +830,14 @@ node. These are one decision, not two items:
   >
   > Verified while measuring this, so it need not be re-derived: the function has
   > **no production caller**. Its only callers are convert.rs's own 17 tests, the
-  > `#[cfg(test)]` use in `materialize.rs`'s `layer()` helper (`:495`), and two
+  > `#[cfg(test)]` use in `materialize.rs`\'s `layer()` helper (`:495`), and two
   > **locally-shadowed same-name test helpers** at
   > `quarto-core/src/project/project_profile.rs:639` and `render_scripts.rs:712`
   > whose bodies call **pampa's** converter, not this one. The plan is right that
   > it is dead API; only the disposal was unbuildable. Leave those two helpers
   > alone — they are unrelated despite the identical name, and they are exactly
   > what makes a grep-based audit here reach the wrong conclusion.
-- [x] **Preserve the serialized wire shape.** `ConfigValueKind`'s
+- [x] **Preserve the serialized wire shape.** `ConfigValueKind`\'s
   `Serialize`/`Deserialize` are hand-written
   (`quarto-pandoc-types/src/config_value.rs:222`, `:305`) and the `Scalar`
   arm emits `{"Scalar": <value>}`. Keep that: drop provenance on
@@ -877,7 +877,7 @@ this plan uses "founding" for both and they are not interchangeable.
 >
 > Why: `MetadataMergeStage`
 > (`quarto-core/src/stage/stages/metadata_merge.rs:308-352`) **unconditionally**
-> pre-registers `_quarto.yml`'s content into both `doc.ast_context.source_context`
+> pre-registers `_quarto.yml`\'s content into both `doc.ast_context.source_context`
 > and `doc.source_context`, keyed by `quarto_yaml::file_id_for_filename` — the same
 > hash-based `FileId` scheme the binder matches on — *earlier in the pipeline*, and
 > for every candidate `attach_config_source` is actually given. That registration
@@ -972,7 +972,7 @@ this plan uses "founding" for both and they are not interchangeable.
   > flag. Production never hand-builds these nodes, so the rule is right for
   > production traffic and the noise is confined to those fixtures — which today
   > pair a decoded value with a synthetic `SourceInfo::for_test()` span anyway,
-  > exactly the shape `span_assert.rs`'s module docs call
+  > exactly the shape `span_assert.rs`\'s module docs call
   > invisible-by-construction.
   >
   > **CORRECTED 2026-08-22 (session 2), by review: an earlier revision of this
@@ -988,7 +988,7 @@ this plan uses "founding" for both and they are not interchangeable.
   > hand-built node: it is the literal truth that no derivation ran.
   > The instruction is still right, for a narrower reason: the warning exists to
   > police **production** traffic, none of the touched fixtures asserts anything
-  > about `content_source_info`'s value or resolves its span, so the synthetic
+  > about `content_source_info`\'s value or resolves its span, so the synthetic
   > value has zero blast radius — and the real rigor lives in the four dedicated
   > tests, which build `None` directly. **Do not reuse the "fidelity gain"
   > framing, here or in Plan 3.**
@@ -1001,7 +1001,7 @@ this plan uses "founding" for both and they are not interchangeable.
 - [x] **No `Q-` code for that report.** Decided here: it is an internal
   consistency failure a user cannot act on, so it gets a plain internal
   diagnostic rather than a catalog code. This is not only taste —
-  `cargo xtask lint`'s `error-docs-page-missing` and
+  `cargo xtask lint`\'s `error-docs-page-missing` and
   `error-docs-sidebar-unlisted` would then require a
   `docs/errors/<subsystem>/<code>.qmd` page **and** an in-code-order
   sidebar entry in the same commit, mechanically enforced
