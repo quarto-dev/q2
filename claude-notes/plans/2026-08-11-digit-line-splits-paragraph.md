@@ -308,7 +308,7 @@ symbols are not in the valid set and read as false for every marker. The code
 comment records this so the next person doesn't retry it.
 
 Also extended: the `mark_end` guard after gate 2 was keyed on the *character*
-(`!= '`\' && != \'*'`). With three more peeking branches that proxy no longer
+(``!= '`' && != '*'``). With three more peeking branches that proxy no longer
 holds, so it is now an explicit `second_peeked` boolean — otherwise a peeked
 run would be swallowed into the SOFT_LINE_ENDING token's range.
 

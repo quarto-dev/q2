@@ -14,7 +14,7 @@ Automerge 3.5.0 (JS, 2026-09-16) / automerge 0.12.0 (Rust, 2026-09-16) shipped a
 hex-string "author" in its metadata, recorded in the document history and
 propagated by sync. See [the 3.5.0 release notes](https://github.com/automerge/automerge/releases/tag/js%2Fautomerge-3.5.0),
 [`Author` in the Rust API](https://docs.rs/automerge/latest/automerge/struct.Author.html),
-and the design-intent note in [This Month in Automerge: July '26](https://automerge.org/blog/2026-july/)
+and the design-intent note in [This Month in Automerge: July \'26](https://automerge.org/blog/2026-july/)
 ("author provenance").
 
 Quarto-hub currently solves attribution by giving each user a **stable actor
@@ -263,7 +263,7 @@ flowchart LR
   correct and avoids the clone's side effects: a full-document fork per
   `findDoc`, a re-randomized actor on every call (one random actor per
   document instance is D1's model, not one per find), a spurious
-  `applyMutation` notification through the repo, and `DocHandle.update`'s
+  `applyMutation` notification through the repo, and `DocHandle.update`\'s
   fixed-heads precondition. The backend is shared by construction:
   `fork`/`clone` are the only ways to get a second backend (`view` reuses
   the same handle), and on the paths our handles flow through — find,
@@ -736,6 +736,6 @@ unrelated to this work.
 
 - [Automerge 3.5.0 release notes](https://github.com/automerge/automerge/releases/tag/js%2Fautomerge-3.5.0) — the feature announcement
 - [Rust `Author` docs](https://docs.rs/automerge/latest/automerge/struct.Author.html) / [`LoadOptions::author`](https://docs.rs/automerge/latest/automerge/struct.LoadOptions.html)
-- [This Month in Automerge: July '26](https://automerge.org/blog/2026-july/) — author provenance design intent (Keyhive revocation context)
+- [This Month in Automerge: July \'26](https://automerge.org/blog/2026-july/) — author provenance design intent (Keyhive revocation context)
 - `claude-notes/plans/2026-09-17-index-doc-duplicate-seq-self-heal.md` (bd-6f21d4c6) — the collision this plan removes at the source
 - Current implementation: inventory table above

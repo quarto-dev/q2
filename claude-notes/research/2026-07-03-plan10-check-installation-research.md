@@ -186,7 +186,7 @@ for (const engine of executionEngines()) {
   `resolveEngines(context)` dynamically imports `project.config.engines` entries
   (extension-contributed engines flow in via `mergeProjectEngines`,
   `src/project/project-context.ts:764-792`).
-- **So extension engines' `checkInstallation` IS invoked by `quarto check`** —
+- **So extension engines\' `checkInstallation` IS invoked by `quarto check`** —
   provided the extension is discovered/registered for the current context. In Q1
   as shipped: built-in jupyter + knitr always; bundled julia extension when
   loaded; marimo only if installed as a contributing extension. `markdown` does
@@ -530,7 +530,7 @@ jupyter under `#[cfg(not(target_arch = "wasm32"))]`.
 
 The binding constraint (Q1-identical user-visible behavior) fixes the *what*;
 the options differ in *how* engine check output travels and how much of
-`quarto check`'s surface Plan 10 implements.
+`quarto check`\'s surface Plan 10 implements.
 
 ### Axis 1 — how TS-engine check output reaches the terminal
 
@@ -549,7 +549,7 @@ the engine's console output streams live while the check runs.
 During the check call the host routes the console sink into a capture buffer
 (a swappable "current sink" indirection inside the host's `log` object) and
 returns the transcript; the Rust command prints it in exact report order.
-- \+ Deterministic ordering fully under `q2 check`'s control → Q1-identical
+- \+ Deterministic ordering fully under `q2 check`\'s control → Q1-identical
   report layout is guaranteed and snapshot-testable; plan-1a-conformant typed
   payload; JSON mode later reuses the same data path.
 - \+ Sink-capture is safe in practice: during `q2 check` the command drives one
@@ -752,7 +752,7 @@ the whole command.
 
 **Consequences noted (no decision needed, will be encoded in the plan):**
 
-- **C1 — cwd-dependence:** `q2 check`'s engine list depends on the directory
+- **C1 — cwd-dependence:** `q2 check`\'s engine list depends on the directory
   it runs in (project extension discovery from cwd, zero-file fallback) —
   identical to Q1's behavior. The command reuses the project/registry setup
   path from `project/mod.rs`.

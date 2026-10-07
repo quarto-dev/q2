@@ -214,7 +214,7 @@ phases differ substantially between them.
 
 ## Risks / tradeoffs (draft)
 
-- **(B)'s blast radius measured lower than feared.** `sectionize_blocks` output feeds
+- **(B)\'s blast radius measured lower than feared.** `sectionize_blocks` output feeds
   `quarto-ast-reconcile`\'s hashing, `llms.rs`, the idempotence tests, and the HTML writer's
   `section` detection — but the recursion spike passed all 12306 workspace tests. The remaining
   risk is the *attribute-merge* half (finding 5), which the spike did not implement.
@@ -321,7 +321,7 @@ q2 keeps the marker class *and* the Div, so 10 Connect-docs pages carry a
       *under* the preceding top-level section rather than beside it.
 - [x] A non-section Div terminates the walk (pandoc's `sectionToListItem`).
 - [x] Remove the `BlockQuote` arm (bd-8yjvs3bj).
-- [x] Un-sectionized fallback: documented the precondition in `pampa::toc`'s module docs and filed
+- [x] Un-sectionized fallback: documented the precondition in `pampa::toc`\'s module docs and filed
       **bd-tebu6o4a**. Running sectionize for reveal would change reveal's slide DOM and wants its
       own testing; reveal emits no `nav#TOC` today, so this is a trap for the next person, not a
       live bug.
@@ -481,7 +481,7 @@ The same 7 pre-existing differences remain.
 > Two local environment stumbles worth noting, neither caused by this branch:
 > the new `ts-packages/quarto-engine-host-deno` workspace needed `npm install`
 > after the rebase, and `@esbuild/darwin-arm64` was missing from `node_modules`
-> (optional platform dep), which failed `quarto-hub-mcp`'s bundle test.
+> (optional platform dep), which failed `quarto-hub-mcp`\'s bundle test.
 
 ## Phase 6 — render-component fallout from Phase 2 (found by CI)
 

@@ -647,7 +647,7 @@ documents this for the author-facing side). The content sniff runs once, at clai
 - [x] Flip Plan 4's now-removed exclusion ("Julia claims by language only; no `claims_file` for `.jl`"
       → julia claims `.jl` percent via the processor). **Done 2026-09-24** — the fixture's
       `_extension.yml` gained `claims-files: [{extension: .jl, processor: {name: percent, language:
-      julia}}]`; `engine-resolution.md`'s stale `julia does NOT declare claims-files` example comment
+      julia}}]`; `engine-resolution.md`\'s stale `julia does NOT declare claims-files` example comment
       updated to match. Verified the existing live julia e2e suite (`julia_engine_e2e.rs`, gated on
       real `deno`+`julia` on `PATH`) still passes unchanged with this fixture edit — the claim is
       additive and does not touch execution.
@@ -668,7 +668,7 @@ documents this for the author-facing side). The content sniff runs once, at clai
       `ipykernel install --user --name phase8-py`) rather than touching the system/Homebrew Python,
       put it first on `PATH`, and reran: **all three files rendered, all three appeared with their
       converted YAML-frontmatter titles** ("Percent Python Notes", "Percent Julia Analysis", "Spin R
-      Report") in `_site/*.html`'s `<title>`. Cleaned up the venv + kernelspec afterward. The
+      Report") in `_site/*.html`\'s `<title>`. Cleaned up the venv + kernelspec afterward. The
       "zero Pass-1 launch" numeric proof itself is the Phase 6 `RSCRIPT_SPAWN_COUNT` unit-level
       regression tripwire (a real binary run can't cheaply instrument in-process counters from
       outside without adding new production instrumentation) — this real-binary run's job, and what
@@ -693,7 +693,7 @@ documents this for the author-facing side). The content sniff runs once, at clai
       call site that needed `parent_source_info` and wasn't getting it. **Fix:** all three call
       sites now use the existing `range_to_source_info_with_context` helper (already used by other
       node kinds for exactly this purpose) instead of building `SourceInfo` directly. **Verified via
-      TDD** (`pampa/src/readers/qmd.rs`'s new `yaml_frontmatter_source_info_reroots_through_concat_parent`
+      TDD** (`pampa/src/readers/qmd.rs`\'s new `yaml_frontmatter_source_info_reroots_through_concat_parent`
       test, confirmed RED against the original `document.rs` code, GREEN against the fix) and via
       the real binary: re-running the same broken `.R` file now shows `broken.R:2:4` — the **true
       original file, line, and column** — with the ariadne snippet displaying the real `#'`-prefixed

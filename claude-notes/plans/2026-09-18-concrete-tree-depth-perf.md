@@ -140,7 +140,7 @@ soon as it goes over the limit:
 ### Related, bigger finding: `print_whole_tree` into a sink (bd-khect2gq)
 
 Right after the depth check, `read` calls `print_whole_tree(&mut tree.walk(),
-&mut output_stream)` unconditionally. `quarto-core`'s `ParseDocumentStage`
+&mut output_stream)` unconditionally. `quarto-core`\'s `ParseDocumentStage`
 passes `std::io::sink()`, so on every render we do a *third* full cursor walk.
 For each node it allocates a `"  ".repeat(depth)` string and formats
 `Node::kind()` and the `Node` `Debug` output, then throws the result away. That

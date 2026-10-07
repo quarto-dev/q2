@@ -82,7 +82,7 @@ this **cannot be fixed by making the rule smarter** — nothing distinguishes
 - **(b) flip to escape** — insert `\` before the *opening* `$` instead of
   appending a closing one. The diagnostic already carries the opening
   mark's location (the `math-start` capture, surfaced as the blue "This is
-  the opening '$' mark." note) — `q_2_23.rs` just doesn't use it. This
+  the opening '\$' mark." note) — `q_2_23.rs` just doesn't use it. This
   matches how Q-2-7 and `apostrophe-quotes` already behave, and is what
   `docs/errors/markdown/Q-2-23.qmd` already tells users to do by hand.
   Trade-off: a genuinely-unclosed math span becomes visibly-wrong literal
