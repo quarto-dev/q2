@@ -53,6 +53,8 @@ const CSS = `
   cursor: pointer;
   color: #334155;
 }
+.q2-rt-tb-btn:disabled { opacity: 0.35; cursor: default; }
+.q2-rt-tb-btn:disabled:hover { background: none; }
 .q2-rt-tb-btn:hover { background: rgba(59, 130, 246, 0.12); }
 .q2-rt-tb-active { background: rgba(59, 130, 246, 0.18); color: rgb(37, 99, 235); }
 /* Mode toggle — the Markdown-mark SVG. inline-flex centers it; the SVG's
