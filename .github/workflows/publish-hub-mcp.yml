@@ -1,0 +1,116 @@
+name: Publish hub-mcp
+
+# CAP-15 distribution (bd-3tak0lyy): packs the `@quarto/hub-mcp` npm
+# tarball and the `.mcpb` one-click bundle exactly the way the workspace
+# tests validate them (scripts/pack-npm.mjs, scripts/pack-mcpb.mjs),
+# then — only on an explicit non-dry-run dispatch — publishes to npm
+# and submits server.json to the MCP Registry with mcp-publisher over
+# GitHub OIDC.
+#
+# Dry-run is the default and is also the release-time validation path:
+# it proves the npm/mcpb channels still build and install from a clean
+# checkout without publishing anything. The real publish additionally
+# requires:
+#   - the `npm-publish` GitHub environment (protection rules: required
+#     reviewers), and
+#   - the NPM_TOKEN secret (npm automation token for the @quarto scope),
+#   - the package version in ts-packages/quarto-hub-mcp/package.json to
+#     be unpublished (npm rejects republishes).
+# Registry authentication is GitHub OIDC (no stored secret): the
+# io.github.quarto-dev/* namespace is owned by this repo's org.
+#
+# The standalone release tarball (bd-sca6g1tu) stays until the npm
+# channel has shipped and soaked; retiring it is a separate step.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Pack and validate only — no npm publish, no registry submission'
+        required: true
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  pack:
+    name: Pack and validate (npm tarball + .mcpb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build wasm-qmd-parser (nodejs target)
+        run: node ts-packages/quarto-hub-mcp/scripts/build-qmd-parser.mjs
+
+      # The packaging tests do the full cycle: clean-build bundle →
+      # pack → install into an empty prefix → run the installed server
+      # against the in-process test-hub; registry-schema and mcpb
+      # manifest validation; all-platform keyring vendoring.
+      - name: Validate packaging (pack, install, smoke, manifests)
+        run: |
+          npx vitest run src/npm-pack.test.ts src/registry.test.ts src/mcpb-pack.test.ts
+        working-directory: ts-packages/quarto-hub-mcp
+
+      - name: Pack npm tarball
+        run: node ts-packages/quarto-hub-mcp/scripts/pack-npm.mjs --out dist-npm
+
+      - name: Pack .mcpb bundle
+        run: node ts-packages/quarto-hub-mcp/scripts/pack-mcpb.mjs --out dist-mcpb
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hub-mcp-dist
+          path: |
+            dist-npm/*.tgz
+            dist-mcpb/*.mcpb
+          retention-days: 30
+
+  publish:
+    name: Publish to npm + MCP Registry
+    if: inputs.dry-run == false
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      id-token: write # mcp-publisher GitHub OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: hub-mcp-dist
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish quarto-hub-mcp-*.tgz --access public
+
+      - name: Install mcp-publisher
+        run: |
+          curl -sSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
+            | tar -xz
+          chmod +x mcp-publisher
+
+      - name: Log in to the MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json to the MCP Registry
+        run: ../mcp-publisher publish
+        working-directory: ts-packages/quarto-hub-mcp
