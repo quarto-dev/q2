@@ -57,7 +57,7 @@ import type {
     PlainBlock,
     SpanInline,
 } from '../../framework';
-import { Block as B } from '../dispatchers';
+import { Block as B, Inline as RawInline } from '../dispatchers';
 import { PreviewContext } from '../PreviewContext';
 import type { CommentsMode } from '../PreviewContext';
 import { usePreviewEdit } from '../usePreviewEdit';
@@ -70,7 +70,7 @@ const CHROME_BLUE = '#4a7ba7';
 const DIVIDER = '1px solid rgba(74, 123, 167, 0.3)';
 const GLOW = '0 0 8px 2px rgba(140, 190, 240, 0.6)';
 
-function isComment(inline: InlineNode): boolean {
+export function isComment(inline: InlineNode): boolean {
     if (inline.t === 'Span' && 'c' in inline) {
         const classes = (inline as SpanInline).c[0][1];
         return classes.includes('quarto-edit-comment');
@@ -120,7 +120,15 @@ function inlineSlot(block: BlockNode): InlineNode[] | null {
         // Image containment (bd-y66gbfs4): an unconstrained <img> would
         // widen the shrink-to-fit bubble to its intrinsic size. `100%`
         // resolves against the bubble's inner max-width'd containers.
-        '.q2-comment-bubble img { max-width: 100%; max-height: 2.5em; object-fit: contain; }';
+        '.q2-comment-bubble img { max-width: 100%; max-height: 2.5em; object-fit: contain; }\n' +
+        // A span carrying comments (CommentSpan.tsx): a light blue text
+        // background ties the bubble to its text without hovering. Follows
+        // the line boxes (not a rectangle over the bounding box) so a span
+        // wrapped across lines never covers text that isn't in it.
+        '.q2-commented-span { background-color: #e3eefb; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }\n' +
+        // Hovered span (or its bubble, or its bubble open): a stronger blue.
+        // Rendered by Span.tsx from the anchor context.
+        '.q2-comment-span-hover { background-color: #c7ddf7; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }';
     document.head.appendChild(tag);
 })();
 
@@ -134,7 +142,7 @@ function inlineSlot(block: BlockNode): InlineNode[] | null {
  * `::: {.definition-list}` sugar became bare `term\n:   def` syntax).
  * Refuse to touch those.
  */
-function sameCommentableKind(rendered: BlockNode, source: BlockNode): boolean {
+export function sameCommentableKind(rendered: BlockNode, source: BlockNode): boolean {
     const paraish = (t: string) => t === 'Para' || t === 'Plain';
     if (paraish(rendered.t) && paraish(source.t)) {
         // An implicit figure is a paragraph holding just an image —
@@ -168,7 +176,7 @@ function sameCommentableKind(rendered: BlockNode, source: BlockNode): boolean {
 //
 // Plan: claude-notes/plans/2026-08-26-rich-comment-bubbles.md
 
-const EDITORIAL_MARK_CLASSES = new Map<string, string>([
+export const EDITORIAL_MARK_CLASSES = new Map<string, string>([
     ['quarto-edit-comment', 'nested comment'],
     ['quarto-insert', 'insertion mark'],
     ['quarto-delete', 'deletion mark'],
@@ -220,6 +228,9 @@ const CommentSpanContent = ({
             Span: BubbleSpan,
             // Block content has no place in the chip-sized bubble.
             Note: () => <UnsupportedChip kind="footnote" />,
+            // Spans inside a bubble never grow chrome of their own
+            // (`CommentSpan.tsx` is the registry's `Inline`): dispatch raw.
+            Inline: RawInline,
         };
         return { registry, sourceInfoPool: outer.sourceInfoPool };
     }, [outer.registry, outer.sourceInfoPool]);
@@ -238,7 +249,21 @@ const CommentSpanContent = ({
     );
 };
 
-export const CommentBlock = (args: NodeArgs<BlockNode>) => {
+/**
+ * The block a span is rendered inside (the RENDERED block, `s` intact),
+ * provided by `CommentBlock` around every block it renders. Span
+ * comments (`CommentSpan.tsx`) resolve this block to its source node and
+ * locate the span inside it — inlines are not in the source index.
+ */
+export const EnclosingBlockContext = React.createContext<BlockNode | null>(null);
+
+export const CommentBlock = (args: NodeArgs<BlockNode>) => (
+    <EnclosingBlockContext.Provider value={args.node}>
+        <CommentBlockInner {...args} />
+    </EnclosingBlockContext.Provider>
+);
+
+const CommentBlockInner = (args: NodeArgs<BlockNode>) => {
     const edit = usePreviewEdit();
     const insideContainer = React.useContext(InsideCommentContainer);
     const mode: CommentsMode =
@@ -325,6 +350,117 @@ export const CommentBlock = (args: NodeArgs<BlockNode>) => {
         }
     }
 
+    /**
+     * Resolve the block to a committable source node. Null when
+     * commenting here would corrupt the source: table cells resolve as
+     * Opaque (the edit system can't commit there — same reason they
+     * aren't click-editable), and transform products (figure captions →
+     * Figure, def-list items → DefinitionList) round-trip lossily.
+     */
+    const resolveCommittable = () => {
+        const resolved = edit.resolveSource(block);
+        if (!resolved || !resolved.sourceNode) return null;
+        if (resolved.reachabilityClass === 'Opaque') return null;
+        if (!sameCommentableKind(block, resolved.sourceNode)) return null;
+        return resolved;
+    };
+
+    // Remove the index-th comment span (counting comment spans only,
+    // in order) from the source node and commit.
+    const resolveCommentAtIndex = (index: number): void => {
+        const resolved = resolveCommittable();
+        if (!resolved) return;
+        const modified = structuredClone(resolved.sourceNode);
+        const removeNth = (arr: InlineNode[]) => {
+            let seen = -1;
+            for (let i = 0; i < arr.length; i++) {
+                if (isComment(arr[i])) {
+                    seen++;
+                    if (seen === index) {
+                        arr.splice(i, 1);
+                        return;
+                    }
+                }
+            }
+        };
+        const slot = inlineSlot(modified);
+        if (slot) {
+            removeNth(slot);
+        } else if (isCommentContainer(modified)) {
+            // Comments live across the container's paragraphs; count
+            // them in order, remove the index-th, and drop a paragraph
+            // that was left empty by the removal.
+            const children = (modified as DivBlock).c[1];
+            let seen = -1;
+            outer:
+            for (let ci = 0; ci < children.length; ci++) {
+                const arr = inlineSlot(children[ci]);
+                if (!arr) continue;
+                for (let i = 0; i < arr.length; i++) {
+                    if (isComment(arr[i])) {
+                        seen++;
+                        if (seen === index) {
+                            arr.splice(i, 1);
+                            if (arr.length === 0) children.splice(ci, 1);
+                            break outer;
+                        }
+                    }
+                }
+            }
+            // Last comment resolved with a single wrapped block left →
+            // unwrap: commit the bare block in place of the container.
+            const anyLeft = children.some((ch) =>
+                (inlineSlot(ch) ?? []).some(isComment),
+            );
+            if (!anyLeft && children.length === 1) {
+                edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), children[0]);
+                return;
+            }
+        }
+        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified);
+    };
+
+    // Append a comment span (text) to the source node and commit.
+    const addComment = (text: string) => {
+        const resolved = resolveCommittable();
+        if (!resolved) return;
+        const modified = structuredClone(resolved.sourceNode);
+        const newComment: SpanInline = {
+            t: 'Span',
+            c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: text }]],
+        };
+        const slot = inlineSlot(modified);
+        if (slot) {
+            slot.push(newComment);
+        } else if (modified.t === 'CodeBlock') {
+            // A code block can't hold an inline span: wrap it in a
+            // comment container Div with the comment as a `[>> ...]`
+            // paragraph inside. Further comments append to that Div.
+            const wrapper: DivBlock = {
+                t: 'Div',
+                c: [
+                    ['', [CONTAINER_CLASS], []],
+                    [modified, { t: 'Para', c: [newComment] } as ParaBlock],
+                ],
+            };
+            edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), wrapper as BlockNode);
+            return;
+        } else if (isCommentContainer(modified)) {
+            // Append to the container's last comment paragraph, or add
+            // a fresh one at the end.
+            const children = (modified as DivBlock).c[1];
+            const lastCommentPara = [...children].reverse().find((ch) =>
+                (inlineSlot(ch) ?? []).some(isComment),
+            );
+            if (lastCommentPara) {
+                inlineSlot(lastCommentPara)!.push(newComment);
+            } else {
+                children.push({ t: 'Para', c: [newComment] } as ParaBlock);
+            }
+        }
+        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified);
+    };
+
     const inner = (
         <B node={newBlock} onNavigateToDocument={onNavigateToDocument} setLocalAst={setLocalAst} />
     );
@@ -341,9 +477,10 @@ export const CommentBlock = (args: NodeArgs<BlockNode>) => {
     return (
         <CommentWrapper
             comments={comments}
-            block={block}
-            rendered={newBlock}
-            edit={edit}
+            anchorNode={newBlock}
+            fallbackAnchor={block.t === 'Plain' ? plainHost : null}
+            addComment={addComment}
+            resolveCommentAtIndex={resolveCommentAtIndex}
             mode={mode}
             onNavigateToDocument={onNavigateToDocument}
         >
@@ -351,8 +488,6 @@ export const CommentBlock = (args: NodeArgs<BlockNode>) => {
         </CommentWrapper>
     );
 };
-
-type EditHandle = ReturnType<typeof usePreviewEdit>;
 
 // Only one self-expanded bubble at a time: expanding one collapses the
 // previously expanded one via this module-level latch.
@@ -400,6 +535,35 @@ function getCommentLayer(): HTMLElement {
 // by -100% horizontally so no width measurement is needed).
 const BUBBLE_TOP_OFFSET = 11;
 const BUBBLE_RIGHT_OFFSET = 10;
+// 'margin' placement (span comments): the chrome sits OFF the content, in
+// the right margin — its left edge this far past the right edge of the
+// span's nearest block-level ancestor, its top on the span's own line.
+const MARGIN_GAP = 12;
+// A margin bubble keeps at least this much viewport to its right.
+const VIEWPORT_EDGE_GAP = 8;
+
+/** How the chrome sits relative to its anchor. */
+export type BubblePlacement =
+    /** Over the anchor's top-right corner, extending left (blocks). */
+    | 'corner'
+    /** In the right margin beside the anchor's line, extending right (spans). */
+    | 'margin';
+
+/** The nearest ancestor that lays out as a block — the content edge a margin bubble hangs off. */
+function blockHost(anchor: Element): Element {
+    let el: Element | null = anchor;
+    while (el && el !== document.body) {
+        const d = getComputedStyle(el).display;
+        if (!d.startsWith('inline') && d !== 'contents') return el;
+        el = el.parentElement;
+    }
+    return anchor;
+}
+
+/** Natural top of the chrome for an anchor rect (viewport px). Keep in sync with placeEntry. */
+function naturalTop(placement: BubblePlacement, anchorRect: DOMRect): number {
+    return placement === 'margin' ? anchorRect.top : anchorRect.top - BUBBLE_TOP_OFFSET;
+}
 // Bubbles on reveal slides read small next to slide-sized type (the deck
 // itself is scaled to fit; the layer is not), so deck chrome is scaled
 // up by this factor. Tune to taste; only applies inside decks.
@@ -422,6 +586,8 @@ type HoverRecord = {
     chromeEl: Element | null;
     /** The `.q2-comment-bubble` inside the chrome, while visible. */
     bubbleEl: Element | null;
+    /** Whole anchor counts as hover (spans), not just its right half (blocks). */
+    wholeAnchor: boolean;
     onPointer: (p: { x: number; y: number; hovered: boolean; inBubble: boolean }) => void;
     onLeave: () => void;
 };
@@ -463,9 +629,11 @@ function onDocumentMouseMove(e: MouseEvent) {
     // Only the RIGHT half of the block counts as hover (the bubble lives
     // at the right edge) — mousing across the left half while reading
     // doesn't reveal chrome or reshuffle the bubble layout. Moves over
-    // the bubble itself always count.
+    // the bubble itself always count, and so does anywhere over a
+    // whole-anchor record (a commented span is small enough to hover).
     const rect = hit.anchorEl?.getBoundingClientRect();
-    const hovered = inBubble || (!!rect && e.clientX >= rect.left + rect.width / 2);
+    const hovered =
+        inBubble || hit.wholeAnchor || (!!rect && e.clientX >= rect.left + rect.width / 2);
     hit.onPointer({ x: e.clientX, y: e.clientY, hovered, inBubble });
 }
 
@@ -524,6 +692,7 @@ type BubbleEntry = {
     /** The anchor whose typography / deck-ness the chrome last adopted. */
     styledFrom: Element | null;
     setInDeck: (inDeck: boolean) => void;
+    placement: BubblePlacement;
 };
 
 if (typeof window !== 'undefined') {
@@ -583,8 +752,21 @@ function observeAnchor(e: BubbleEntry, anchor: Element | null) {
  */
 function placeEntry(e: BubbleEntry, anchor: Element, anchorRect: DOMRect, layerRect: DOMRect) {
     if (e.el) {
-        e.el.style.top = `${anchorRect.top - layerRect.top - BUBBLE_TOP_OFFSET}px`;
-        e.el.style.left = `${anchorRect.right - layerRect.left + BUBBLE_RIGHT_OFFSET}px`;
+        e.el.style.top = `${naturalTop(e.placement, anchorRect) - layerRect.top}px`;
+        if (e.placement === 'margin') {
+            // Off the content edge — but never off the SCREEN: pull the
+            // chrome back left as far as needed for its right edge to
+            // stay inside the viewport (offsetWidth ignores the transform,
+            // so it is the chrome's real width; the deck scale is not
+            // applied to margin bubbles' clamp, spans on slides are rare).
+            const hostRect = blockHost(anchor).getBoundingClientRect();
+            const viewportRight = document.documentElement.clientWidth - VIEWPORT_EDGE_GAP;
+            const wanted = hostRect.right + MARGIN_GAP;
+            const left = Math.min(wanted, viewportRight - e.el.offsetWidth);
+            e.el.style.left = `${left - layerRect.left}px`;
+        } else {
+            e.el.style.left = `${anchorRect.right - layerRect.left + BUBBLE_RIGHT_OFFSET}px`;
+        }
         e.el.style.visibility = '';
         // The chrome sits in the body-level layer, so it no longer
         // inherits the block's typography (a reveal deck sets its font
@@ -681,10 +863,9 @@ function scheduleBubbleRelayout(reset = false) {
             placeEntry(e, anchor, anchorRect, layerRect);
             const rect = el.getBoundingClientRect();
             if (rect.width === 0) continue;
-            // Natural anchor: the chrome's top sits BUBBLE_TOP_OFFSET above
-            // the block's top (keep in sync with placeEntry). Never read
+            // Natural anchor (see naturalTop / placeEntry). Never read
             // back from our own transform: that round-trip proved fragile.
-            const top = anchorRect.top - BUBBLE_TOP_OFFSET;
+            const top = naturalTop(e.placement, anchorRect);
             // HOVER PIN: the hovered bubble sits at its natural
             // position (same spot every time, overlapping its block,
             // ready to click) — except it may never sit above the top
@@ -809,22 +990,48 @@ function scheduleBubbleRelayout(reset = false) {
     });
 }
 
-const CommentWrapper = ({
+/**
+ * The comment chrome (bubble + glow + hover + force layout) for one
+ * commentable node — a block (`CommentBlock`) or a span
+ * (`CommentSpan.tsx`). The wrapper knows nothing about where the
+ * comments live in the source: `addComment` / `resolveCommentAtIndex`
+ * are supplied by the caller and commit against its own source node.
+ */
+export const CommentWrapper = ({
     children,
     comments,
-    block,
-    rendered,
-    edit,
+    anchorNode,
+    fallbackAnchor = null,
+    hoverWholeAnchor = false,
+    placement = 'corner',
+    claimInitialOpen,
+    addComment,
+    resolveCommentAtIndex,
     mode,
     onNavigateToDocument,
 }: {
     children: React.ReactNode;
     comments: InlineNode[];
-    /** The source block (comment spans included) — what add/resolve commit against. */
-    block: BlockNode;
-    /** The block as rendered (comments stripped) — the node whose host element anchors the chrome. */
-    rendered: BlockNode;
-    edit: EditHandle;
+    /** The node as rendered (comments stripped) — the one whose host element registers via `CommentAnchorContext`. */
+    anchorNode: unknown;
+    /** Anchor to use when the node has no element of its own (a Plain's `PlainHost`). */
+    fallbackAnchor?: React.RefObject<HTMLElement | null> | null;
+    /** Count the pointer anywhere over the anchor as hover (spans), not just its right half (blocks). */
+    hoverWholeAnchor?: boolean;
+    /** Where the chrome sits relative to the anchor (see `BubblePlacement`). */
+    placement?: BubblePlacement;
+    /**
+     * Asked once on mount: should this bubble open expanded with the
+     * add-comment input (comment-on-selection hand-off)? A callback rather
+     * than a boolean so the one-shot claim happens in the mount effect —
+     * safe under StrictMode's double render, where a render-time claim
+     * would be consumed by the discarded first pass.
+     */
+    claimInitialOpen?: () => boolean;
+    /** Append a comment with this text to the source node and commit. */
+    addComment: (text: string) => void;
+    /** Remove the index-th comment (comment spans only, in order) from the source node and commit. */
+    resolveCommentAtIndex: (index: number) => void;
     mode: CommentsMode;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;
 }) => {
@@ -838,14 +1045,8 @@ const CommentWrapper = ({
     // being edited (the edit surface replaces the component) or when
     // nothing registered; the layout pass hides the chrome then.
     const anchorRef = React.useRef<Element | null>(null);
-    const plainHost = React.useContext(PlainHostContext);
-    const anchorTarget = React.useMemo<CommentAnchorTarget>(
-        () => ({ node: rendered, register: (el) => { anchorRef.current = el; } }),
-        [rendered],
-    );
     const getAnchorRef = React.useRef<() => Element | null>(() => null);
-    getAnchorRef.current = () =>
-        anchorRef.current ?? (block.t === 'Plain' ? plainHost?.current ?? null : null);
+    getAnchorRef.current = () => anchorRef.current ?? fallbackAnchor?.current ?? null;
 
     /**
      * Route an `<a>` click inside the bubble through the preview's
@@ -892,6 +1093,14 @@ const CommentWrapper = ({
     // add-comment input open at its bottom).
     const [selfExpanded, setSelfExpanded] = React.useState(false);
     const [showInlineInput, setShowInlineInput] = React.useState(false);
+    React.useLayoutEffect(() => {
+        if (claimInitialOpen?.()) {
+            setSelfExpanded(true);
+            setShowInlineInput(true);
+        }
+        // Mount only: the claim is one-shot by design.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const inlineInputRef = React.useRef<HTMLTextAreaElement>(null);
     const [isHovered, setIsHovered] = React.useState(false);
     // Hovering the bubble itself glows the block (mirror of the
@@ -984,6 +1193,10 @@ const CommentWrapper = ({
     React.useEffect(() => {
         const ta = inlineInputRef.current;
         if (showInlineInput && ta) {
+            // The input owns focus now: drop any block-editor focus restore
+            // still pending from the edit session that just closed (it would
+            // fire from the reland effect / backstop timer and deselect us).
+            previewCtx?.cancelPendingLand?.();
             ta.focus();
             const end = ta.value.length;
             ta.setSelectionRange(end, end);
@@ -1018,119 +1231,6 @@ const CommentWrapper = ({
         };
     }, [selfExpanded]);
 
-    /**
-     * Resolve the block to a committable source node. Null when
-     * commenting here would corrupt the source: table cells resolve as
-     * Opaque (the edit system can't commit there — same reason they
-     * aren't click-editable), and transform products (figure captions →
-     * Figure, def-list items → DefinitionList) round-trip lossily.
-     */
-    const resolveCommittable = () => {
-        const resolved = edit.resolveSource(block);
-        if (!resolved || !resolved.sourceNode) return null;
-        if (resolved.reachabilityClass === 'Opaque') return null;
-        if (!sameCommentableKind(block, resolved.sourceNode)) return null;
-        return resolved;
-    };
-
-    // Remove the index-th comment span (counting comment spans only,
-    // in order) from the source node and commit.
-    const resolveCommentAtIndex = (index: number): void => {
-        const resolved = resolveCommittable();
-        if (!resolved) return;
-        const modified = structuredClone(resolved.sourceNode);
-        const removeNth = (arr: InlineNode[]) => {
-            let seen = -1;
-            for (let i = 0; i < arr.length; i++) {
-                if (isComment(arr[i])) {
-                    seen++;
-                    if (seen === index) {
-                        arr.splice(i, 1);
-                        return;
-                    }
-                }
-            }
-        };
-        const slot = inlineSlot(modified);
-        if (slot) {
-            removeNth(slot);
-        } else if (isCommentContainer(modified)) {
-            // Comments live across the container's paragraphs; count
-            // them in order, remove the index-th, and drop a paragraph
-            // that was left empty by the removal.
-            const children = (modified as DivBlock).c[1];
-            let seen = -1;
-            outer:
-            for (let ci = 0; ci < children.length; ci++) {
-                const arr = inlineSlot(children[ci]);
-                if (!arr) continue;
-                for (let i = 0; i < arr.length; i++) {
-                    if (isComment(arr[i])) {
-                        seen++;
-                        if (seen === index) {
-                            arr.splice(i, 1);
-                            if (arr.length === 0) children.splice(ci, 1);
-                            break outer;
-                        }
-                    }
-                }
-            }
-            // Last comment resolved with a single wrapped block left →
-            // unwrap: commit the bare block in place of the container.
-            const anyLeft = children.some((ch) =>
-                (inlineSlot(ch) ?? []).some(isComment),
-            );
-            if (!anyLeft && children.length === 1) {
-                edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), children[0]);
-                return;
-            }
-        }
-        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified);
-    };
-
-    // Append a comment span to the source node and commit.
-    const addComment = () => {
-        const resolved = resolveCommittable();
-        if (!resolved) return;
-        const modified = structuredClone(resolved.sourceNode);
-        const newComment: SpanInline = {
-            t: 'Span',
-            c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: commentText }]],
-        };
-        const slot = inlineSlot(modified);
-        if (slot) {
-            slot.push(newComment);
-        } else if (modified.t === 'CodeBlock') {
-            // A code block can't hold an inline span: wrap it in a
-            // comment container Div with the comment as a `[>> ...]`
-            // paragraph inside. Further comments append to that Div.
-            const wrapper: DivBlock = {
-                t: 'Div',
-                c: [
-                    ['', [CONTAINER_CLASS], []],
-                    [modified, { t: 'Para', c: [newComment] } as ParaBlock],
-                ],
-            };
-            edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), wrapper as BlockNode);
-            setCommentText('');
-            return;
-        } else if (isCommentContainer(modified)) {
-            // Append to the container's last comment paragraph, or add
-            // a fresh one at the end.
-            const children = (modified as DivBlock).c[1];
-            const lastCommentPara = [...children].reverse().find((ch) =>
-                (inlineSlot(ch) ?? []).some(isComment),
-            );
-            if (lastCommentPara) {
-                inlineSlot(lastCommentPara)!.push(newComment);
-            } else {
-                children.push({ t: 'Para', c: [newComment] } as ParaBlock);
-            }
-        }
-        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified);
-        setCommentText('');
-    };
-
     const chromeVisible = comments.length > 0 || isHovered || selfExpanded;
 
     // Register this bubble with the force layout while visible. Mounts
@@ -1151,6 +1251,7 @@ const CommentWrapper = ({
             observed: null,
             styledFrom: null,
             setInDeck,
+            placement,
         };
         entryRef.current = entry;
         bubbleEntries.add(entry);
@@ -1178,6 +1279,7 @@ const CommentWrapper = ({
             anchorEl: null,
             chromeEl: null,
             bubbleEl: null,
+            wholeAnchor: hoverWholeAnchor,
             onPointer: ({ x, y, hovered, inBubble }) => {
                 setIsHovered(hovered);
                 lastPointerRef.current = { x, y };
@@ -1211,7 +1313,7 @@ const CommentWrapper = ({
         if (!entry) return;
         entry.glow = glowRef.current;
         placeEntryNow(entry);
-    }, [bubbleHovered, chromeVisible]);
+    }, [bubbleHovered, isHovered, chromeVisible]);
 
     // The bubble just changed shape (same triggers as the re-register
     // above) under a possibly STATIONARY pointer — e.g. the ✓ row that was
@@ -1269,9 +1371,27 @@ const CommentWrapper = ({
     // The chrome (bubble + block glow) is portalled into the overlay
     // layer; the block itself renders untouched. No element ever sits
     // between the block and its parent (bd-q2wqj24c).
+    // Whole-anchor targets (spans) also glow while the pointer is over the
+    // anchor itself: the enclosing block already highlights on hover, so
+    // without this the span would be indistinguishable from its block.
+    // (An open span bubble keeps its span highlighted, so what is being
+    // commented on stays visible while typing.)
+    const glowVisible = bubbleHovered || (hoverWholeAnchor && (isHovered || selfExpanded));
+    // Whole-anchor targets highlight the anchor's TEXT (the span renders the
+    // highlight class itself, following its line boxes) instead of the
+    // rectangular glow overlay, which would cover other text when the span
+    // wraps. Delivered through the anchor context, declaratively.
+    const anchorTarget = React.useMemo<CommentAnchorTarget>(
+        () => ({
+            node: anchorNode,
+            register: (el) => { anchorRef.current = el; },
+            highlighted: hoverWholeAnchor && glowVisible,
+        }),
+        [anchorNode, hoverWholeAnchor, glowVisible],
+    );
     const chrome = chromeVisible && (
         <>
-            {bubbleHovered && (
+            {glowVisible && !hoverWholeAnchor && (
                 // Bubble hover glows the block, tying the two together:
                 // an outline over the block's rect (placed by the layout
                 // pass), never a style written onto the block.
@@ -1291,13 +1411,14 @@ const CommentWrapper = ({
                     ref={chromeRef}
                     style={{
                         // `top`/`left` are written by the layout pass
-                        // (placeEntry) from the block's rect; the -100%
-                        // translation right-aligns the chrome on that
-                        // point without measuring its width.
+                        // (placeEntry) from the anchor's rect; for 'corner'
+                        // the -100% translation right-aligns the chrome on
+                        // that point without measuring its width, for
+                        // 'margin' the chrome extends right from it.
                         position: 'absolute',
                         pointerEvents: 'auto',
-                        transform: `translate(-100%, ${nudge}px)${inDeck ? ` scale(${DECK_BUBBLE_SCALE})` : ''}`,
-                        transformOrigin: 'top right',
+                        transform: `translate(${placement === 'margin' ? '0' : '-100%'}, ${nudge}px)${inDeck ? ` scale(${DECK_BUBBLE_SCALE})` : ''}`,
+                        transformOrigin: placement === 'margin' ? 'top left' : 'top right',
                         // Animate nudge changes; the relayout pass reads
                         // the in-flight translation, so mid-animation
                         // reflows stay correct.
@@ -1463,7 +1584,8 @@ const CommentWrapper = ({
                                                 if (e.key === 'Enter') {
                                                     e.preventDefault();
                                                     if (commentText) {
-                                                        addComment();
+                                                        addComment(commentText);
+                                                        setCommentText('');
                                                         // Close once the comment
                                                         // shows up in the list.
                                                         setCloseAtCount(comments.length);

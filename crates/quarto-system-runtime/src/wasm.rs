@@ -23,9 +23,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
+use crate::traits::validate_fetch_url;
 use crate::traits::{
-    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SassOutput, SystemRuntime,
-    TempDir, XdgDirKind,
+    CommandOutput, FetchPolicy, PathKind, PathMetadata, RuntimeError, RuntimeResult, SassOutput,
+    SystemRuntime, TempDir, XdgDirKind,
 };
 use crate::vfs::{VirtualFileSystem, not_found_error};
 
@@ -181,12 +182,82 @@ extern "C" {
     /// The Promise rejects if the request fails or the response status is not ok.
     #[wasm_bindgen(js_name = "jsFetchUrl", catch)]
     fn js_fetch_url_impl(url: &str) -> Result<JsValue, JsValue>;
+
+    /// [`js_fetch_url_impl`] for URLs the document names: `https` only,
+    /// `credentials: 'omit'`, no redirects off https, a byte cap, a timeout
+    /// and an optional `AbortSignal` (the click's). Same resolved JSON.
+    #[wasm_bindgen(js_name = "jsFetchUrlHardened", catch)]
+    fn js_fetch_url_hardened_impl(
+        url: &str,
+        max_bytes: f64,
+        timeout_ms: f64,
+        signal: &JsValue,
+    ) -> Result<JsValue, JsValue>;
 }
 
 #[cfg(not(feature = "js-bridge"))]
 fn js_fetch_url_impl(_url: &str) -> Result<JsValue, JsValue> {
     Err(JsValue::from_str("js-bridge feature not enabled"))
 }
+
+#[cfg(not(feature = "js-bridge"))]
+fn js_fetch_url_hardened_impl(
+    _url: &str,
+    _max_bytes: f64,
+    _timeout_ms: f64,
+    _signal: &JsValue,
+) -> Result<JsValue, JsValue> {
+    Err(JsValue::from_str("js-bridge feature not enabled"))
+}
+
+// =============================================================================
+// JavaScript Interop for SVG Rasterization
+// =============================================================================
+//
+// The JS shim at /src/wasm-js-bridge/rasterize.js draws an SVG onto a canvas
+// (main thread only: it needs `<img>` and `<canvas>`) and resolves a
+// `Uint8Array` of PNG bytes. With no DOM it rejects with an error named
+// `RasterizerUnavailable`; `jsCanRasterizeSvg()` is the synchronous probe.
+
+#[cfg(feature = "js-bridge")]
+#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/rasterize.js")]
+extern "C" {
+    /// Whether `jsRasterizeSvg` can run (there is a DOM, or a test override).
+    #[wasm_bindgen(js_name = "jsCanRasterizeSvg")]
+    fn js_can_rasterize_svg_impl() -> bool;
+
+    /// Rasterize `svg` to a PNG, longest side at most `max_side`, aborting with
+    /// the optional `AbortSignal`. Resolves a `Uint8Array`.
+    #[wasm_bindgen(js_name = "jsRasterizeSvg", catch)]
+    fn js_rasterize_svg_impl(
+        svg: &[u8],
+        max_side: f64,
+        signal: &JsValue,
+    ) -> Result<JsValue, JsValue>;
+}
+
+#[cfg(not(feature = "js-bridge"))]
+fn js_can_rasterize_svg_impl() -> bool {
+    false
+}
+
+#[cfg(not(feature = "js-bridge"))]
+fn js_rasterize_svg_impl(
+    _svg: &[u8],
+    _max_side: f64,
+    _signal: &JsValue,
+) -> Result<JsValue, JsValue> {
+    Err(JsValue::from_str("js-bridge feature not enabled"))
+}
+
+/// A JS handle held by a `Send + Sync` runtime. `JsValue` is `!Send`, but this
+/// target is single-threaded (the same reason the VFS sits in an `RwLock`
+/// nobody contends), so the handle never crosses a thread.
+struct SingleThreaded<T>(T);
+// SAFETY: wasm32-unknown-unknown here has no threads; see above.
+unsafe impl<T> Send for SingleThreaded<T> {}
+// SAFETY: as above.
+unsafe impl<T> Sync for SingleThreaded<T> {}
 
 // =============================================================================
 // Monotonic clock: performance.now()
@@ -226,6 +297,11 @@ pub struct WasmRuntime {
     /// directory, and document metadata. Set by the host environment (e.g., the
     /// hub-client sets `format.html.source-location: full` for scroll sync).
     runtime_metadata: RwLock<Option<serde_json::Value>>,
+
+    /// The `AbortSignal` of the call this runtime is a snapshot for, which
+    /// `fetch_url_hardened` hands to `fetch` (design D8.5: aborting the
+    /// click stops its downloads). `None` on the live runtime.
+    abort_signal: Option<SingleThreaded<JsValue>>,
 }
 
 impl WasmRuntime {
@@ -234,6 +310,7 @@ impl WasmRuntime {
         Self {
             vfs: RwLock::new(VirtualFileSystem::new()),
             runtime_metadata: RwLock::new(None),
+            abort_signal: None,
         }
     }
 
@@ -242,7 +319,32 @@ impl WasmRuntime {
         Self {
             vfs: RwLock::new(vfs),
             runtime_metadata: RwLock::new(None),
+            abort_signal: None,
         }
+    }
+
+    /// A click-time snapshot: a second runtime over a copy of this one's VFS
+    /// and runtime metadata. A request that awaits (the remote-image fetch)
+    /// reads only the snapshot, so the Automerge sync mutating the live VFS
+    /// cannot change what the request sees. The bootstrap SCSS under
+    /// `/__quarto_resources__` is copied with everything else (one code path;
+    /// the copy is a few MB and lives for one call). The snapshot is owned by
+    /// the call that took it and is dropped when that call ends or fails, so
+    /// a superseded call finishing late touches nothing global.
+    pub fn snapshot(&self) -> Self {
+        Self {
+            vfs: RwLock::new(self.vfs.read().unwrap().clone()),
+            runtime_metadata: RwLock::new(self.runtime_metadata.read().unwrap().clone()),
+            abort_signal: None,
+        }
+    }
+
+    /// Tie this (snapshot) runtime's hardened fetches to `signal`, an
+    /// `AbortSignal`; `undefined`/`null` leaves them unaborted.
+    pub fn with_abort_signal(mut self, signal: JsValue) -> Self {
+        self.abort_signal =
+            (!signal.is_undefined() && !signal.is_null()).then_some(SingleThreaded(signal));
+        self
     }
 
     /// Add a file to the virtual filesystem.
@@ -312,6 +414,44 @@ impl Default for WasmRuntime {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Await a `jsFetchUrl`/`jsFetchUrlHardened` promise and decode its JSON
+/// (`{ mimeType, content: base64 }`).
+async fn decode_fetch_result(promise: JsValue) -> RuntimeResult<(Vec<u8>, String)> {
+    let result = JsFuture::from(js_sys::Promise::from(promise))
+        .await
+        .map_err(|e| RuntimeError::Network(format!("URL fetch failed: {}", js_error_text(&e))))?;
+
+    let json_str = result
+        .as_string()
+        .ok_or_else(|| RuntimeError::NotSupported("fetch result was not a string".to_string()))?;
+
+    #[derive(serde::Deserialize)]
+    struct FetchResult {
+        #[serde(rename = "mimeType")]
+        mime_type: String,
+        content: String,
+    }
+
+    let fetch_result: FetchResult = serde_json::from_str(&json_str).map_err(|e| {
+        RuntimeError::NotSupported(format!("Failed to parse fetch result JSON: {e}"))
+    })?;
+
+    use base64::Engine as _;
+    let content = base64::engine::general_purpose::STANDARD
+        .decode(&fetch_result.content)
+        .map_err(|e| RuntimeError::NotSupported(format!("Failed to base64-decode content: {e}")))?;
+
+    Ok((content, fetch_result.mime_type))
+}
+
+/// A rejected promise's reason as text (an `Error`'s message, else its debug form).
+fn js_error_text(e: &JsValue) -> String {
+    e.dyn_ref::<js_sys::Error>()
+        .map(|err| String::from(err.message()))
+        .or_else(|| e.as_string())
+        .unwrap_or_else(|| format!("{e:?}"))
 }
 
 // Note: Using ?Send because WASM is single-threaded and JsFuture is not Send
@@ -458,34 +598,59 @@ impl SystemRuntime for WasmRuntime {
         let promise = js_fetch_url_impl(url).map_err(|e| {
             RuntimeError::NotSupported(format!("Failed to call jsFetchUrl: {:?}", e))
         })?;
+        decode_fetch_result(promise).await
+    }
 
+    async fn fetch_url_hardened(
+        &self,
+        url: &str,
+        policy: &FetchPolicy,
+    ) -> RuntimeResult<(Vec<u8>, String)> {
+        validate_fetch_url(url).map_err(RuntimeError::Network)?;
+        let signal = self
+            .abort_signal
+            .as_ref()
+            .map_or(JsValue::UNDEFINED, |s| s.0.clone());
+        let promise = js_fetch_url_hardened_impl(
+            url,
+            policy.max_bytes as f64,
+            f64::from(policy.timeout_ms),
+            &signal,
+        )
+        .map_err(|e| {
+            RuntimeError::NotSupported(format!("Failed to call jsFetchUrlHardened: {:?}", e))
+        })?;
+        decode_fetch_result(promise).await
+    }
+
+    fn can_rasterize_svg(&self) -> bool {
+        js_can_rasterize_svg_impl()
+    }
+
+    async fn rasterize_svg(&self, svg: &[u8], max_side: u32) -> RuntimeResult<Vec<u8>> {
+        let signal = self
+            .abort_signal
+            .as_ref()
+            .map_or(JsValue::UNDEFINED, |s| s.0.clone());
+        let promise = js_rasterize_svg_impl(svg, f64::from(max_side), &signal).map_err(|e| {
+            RuntimeError::NotSupported(format!(
+                "Failed to call jsRasterizeSvg: {:?}",
+                js_error_text(&e)
+            ))
+        })?;
         let result = JsFuture::from(js_sys::Promise::from(promise))
             .await
-            .map_err(|e| RuntimeError::NotSupported(format!("URL fetch failed: {:?}", e)))?;
-
-        let json_str = result.as_string().ok_or_else(|| {
-            RuntimeError::NotSupported("fetch result was not a string".to_string())
-        })?;
-
-        #[derive(serde::Deserialize)]
-        struct FetchResult {
-            #[serde(rename = "mimeType")]
-            mime_type: String,
-            content: String,
-        }
-
-        let fetch_result: FetchResult = serde_json::from_str(&json_str).map_err(|e| {
-            RuntimeError::NotSupported(format!("Failed to parse fetch result JSON: {e}"))
-        })?;
-
-        use base64::Engine as _;
-        let content = base64::engine::general_purpose::STANDARD
-            .decode(&fetch_result.content)
             .map_err(|e| {
-                RuntimeError::NotSupported(format!("Failed to base64-decode content: {e}"))
+                // `RasterizerUnavailable` is "no DOM here", not a failure of this SVG.
+                if e.dyn_ref::<js_sys::Error>().is_some_and(|err| {
+                    err.name().as_string().as_deref() == Some("RasterizerUnavailable")
+                }) {
+                    RuntimeError::NotSupported(js_error_text(&e))
+                } else {
+                    RuntimeError::Io(std::io::Error::other(js_error_text(&e)))
+                }
             })?;
-
-        Ok((content, fetch_result.mime_type))
+        Ok(js_sys::Uint8Array::new(&result).to_vec())
     }
 
     fn os_name(&self) -> &'static str {

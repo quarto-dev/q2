@@ -1,0 +1,18 @@
+---
+title: Inline editorial marks
+format: docx
+---
+
+## Basic forms
+
+Here is [!! a highlight].
+
+Here is [++ an insertion].
+
+Here is [-- a deletion].
+
+Here is [>> a comment].
+
+## Combined in one sentence
+
+Please review: the deadline is [-- Friday][++ Monday], which [!! affects the whole schedule] [>> can we confirm this with the client first?].

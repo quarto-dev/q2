@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "kind": "pandoc",
+  "job_id": "1f12547f0cce8150",
+  "writer": "json",
+  "argv": [
+    "pandoc",
+    "-f",
+    "docx",
+    "--track-changes=all",
+    "-t",
+    "json",
+    "--extract-media=/__q2_share__/import/media",
+    "-o",
+    "/__q2_share__/import/out.json",
+    "/__q2_share__/import/source.docx"
+  ],
+  "env": {
+    "SOURCE_DATE_EPOCH": "1700000000"
+  },
+  "files": [],
+  "dirs": [],
+  "resource_refs": [],
+  "share_root": "/__q2_share__",
+  "share_tree_path": "/__q2_share__/pandoc-share",
+  "doc_dir": "/__q2_share__/import",
+  "project_root": "/__q2_share__/import",
+  "output_path": "/__q2_share__/import/out.json",
+  "stage_name": "import",
+  "json_path": "/__q2_share__/import/source.docx",
+  "post": "none",
+  "expected_pandoc_wasm_sha256": "44829227ac8f74fb57387d12ac7e347e89fa851510e089263d27f5af2e266332",
+  "share_tree_version": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "typst_available_fonts": null,
+  "host_inputs": [
+    {
+      "path": "/__q2_share__/import/source.docx",
+      "sha256": "a0ef45da992704a91871e1ff63b120266f4cdf300603f0fb922ed3f1a8b8ac41",
+      "size": 11868
+    }
+  ],
+  "collect_dirs": [
+    "/__q2_share__/import/media"
+  ]
+}

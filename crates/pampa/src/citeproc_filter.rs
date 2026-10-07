@@ -15,6 +15,7 @@ use biblatex::{Bibliography, ChunksExt, DateValue, EntryType, PermissiveType};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::parse_csl;
 use quarto_error_reporting::DiagnosticMessage;
+use quarto_system_runtime::SystemRuntime;
 use serde::{Deserialize, Serialize};
 
 use crate::pandoc::ast_context::ASTContext;
@@ -99,11 +100,17 @@ pub struct ChapterCitationManifest {
 /// gates the bibliography *block*, not citation resolution), `None` when
 /// citeproc did not run at all (no bibliography/references configured) or
 /// ran but resolved no citations. Non-book callers may ignore it.
+///
+/// The bibliography and CSL files are read through `runtime`, never
+/// `std::fs`: on `wasm32-unknown-unknown` `std::fs` is an unsupported stub, so
+/// reading through the runtime is what makes citeproc work against the
+/// browser's VFS.
 pub fn apply_citeproc_filter(
     pandoc: Pandoc,
     context: ASTContext,
     _target_format: &str,
     base_dir: &Path,
+    runtime: &dyn SystemRuntime,
 ) -> Result<
     (
         Pandoc,
@@ -122,7 +129,7 @@ pub fn apply_citeproc_filter(
     }
 
     // Load CSL style
-    let style = load_csl_style(&config, base_dir)?;
+    let style = load_csl_style(&config, base_dir, runtime)?;
 
     // Create processor
     let mut processor = Processor::new(style);
@@ -134,7 +141,7 @@ pub fn apply_citeproc_filter(
 
     // Load bibliography references from files
     for bib_path in &config.bibliography {
-        let references = load_bibliography(bib_path, base_dir)?;
+        let references = load_bibliography(bib_path, base_dir, runtime)?;
         processor.add_references(references);
     }
 
@@ -215,10 +222,13 @@ fn resolve_against_base(base_dir: &Path, declared: &str) -> PathBuf {
 pub fn load_csl_style(
     config: &CiteprocConfig,
     base_dir: &Path,
+    runtime: &dyn SystemRuntime,
 ) -> Result<quarto_csl::Style, CiteprocFilterError> {
     let csl_content = if let Some(ref csl_path) = config.csl {
         let path = resolve_against_base(base_dir, csl_path);
-        std::fs::read_to_string(&path).map_err(|e| CiteprocFilterError::StyleNotFound(path, e))?
+        runtime
+            .file_read_string(&path)
+            .map_err(|e| CiteprocFilterError::StyleNotFound(path, e))?
     } else {
         DEFAULT_CSL_STYLE.to_string()
     };
@@ -233,9 +243,14 @@ pub fn load_csl_style(
 }
 
 /// Load bibliography references from a CSL-JSON or BibTeX file.
-fn load_bibliography(path: &str, base_dir: &Path) -> Result<Vec<Reference>, CiteprocFilterError> {
+fn load_bibliography(
+    path: &str,
+    base_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Result<Vec<Reference>, CiteprocFilterError> {
     let path = resolve_against_base(base_dir, path);
-    let content = std::fs::read_to_string(&path)
+    let content = runtime
+        .file_read_string(&path)
         .map_err(|e| CiteprocFilterError::BibliographyNotFound(path.clone(), e))?;
 
     let is_bibtex = path
@@ -1534,6 +1549,7 @@ mod tests {
         Code, CustomNode, Emph, LineBreak, Math, MathType, QuoteType, Quoted, RawInline, SmallCaps,
         SoftBreak, Space, Strikeout, Strong, Subscript, Superscript, Underline,
     };
+    use quarto_system_runtime::NativeRuntime;
 
     // Helper to create a default SourceInfo for tests
     fn si() -> quarto_source_map::SourceInfo {
@@ -3684,7 +3700,13 @@ mod tests {
         };
         let context = ASTContext::new();
 
-        let result = apply_citeproc_filter(pandoc.clone(), context, "html", Path::new("."));
+        let result = apply_citeproc_filter(
+            pandoc.clone(),
+            context,
+            "html",
+            Path::new("."),
+            &NativeRuntime::new(),
+        );
         assert!(result.is_ok());
         let (result_pandoc, _, _, _manifest) = result.unwrap();
         // Should pass through unchanged since no bibliography
@@ -3745,7 +3767,13 @@ mod tests {
         };
         let context = ASTContext::new();
 
-        let result = apply_citeproc_filter(pandoc, context, "html", Path::new("."));
+        let result = apply_citeproc_filter(
+            pandoc,
+            context,
+            "html",
+            Path::new("."),
+            &NativeRuntime::new(),
+        );
         assert!(result.is_ok());
         let (result_pandoc, _, _, _manifest) = result.unwrap();
 
@@ -3777,7 +3805,8 @@ mod tests {
         )
         .unwrap();
 
-        let references = load_bibliography("references.bib", dir.path()).unwrap();
+        let references =
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
         assert_eq!(references.len(), 1);
 
         let reference = &references[0];
@@ -3877,7 +3906,8 @@ mod tests {
         )
         .unwrap();
 
-        let references = load_bibliography("references.bib", dir.path()).unwrap();
+        let references =
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
         let by_id = |id: &str| {
             references
                 .iter()
@@ -3951,7 +3981,8 @@ mod tests {
         )
         .unwrap();
 
-        let references = load_bibliography("references.bib", dir.path()).unwrap();
+        let references =
+            load_bibliography("references.bib", dir.path(), &NativeRuntime::new()).unwrap();
         assert_eq!(
             references[0].title.as_deref(),
             Some(
@@ -3980,7 +4011,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            load_bibliography("malformed.bib", dir.path()),
+            load_bibliography("malformed.bib", dir.path(), &NativeRuntime::new()),
             Err(CiteprocFilterError::BibliographyParseError(_, _))
         ));
     }
@@ -3988,7 +4019,7 @@ mod tests {
     #[test]
     fn test_load_csl_style_default() {
         let config = CiteprocConfig::default();
-        let result = load_csl_style(&config, Path::new("."));
+        let result = load_csl_style(&config, Path::new("."), &NativeRuntime::new());
         assert!(result.is_ok());
     }
 
@@ -3998,7 +4029,7 @@ mod tests {
             csl: Some("/nonexistent/path/style.csl".to_string()),
             ..Default::default()
         };
-        let result = load_csl_style(&config, Path::new("."));
+        let result = load_csl_style(&config, Path::new("."), &NativeRuntime::new());
         assert!(result.is_err());
     }
 
@@ -4050,5 +4081,229 @@ mod tests {
             assert!(d.attr.1.contains(&"references".to_string()));
             assert!(d.attr.1.contains(&"csl-bib-body".to_string()));
         }
+    }
+
+    // ── Reads go through the runtime, never `std::fs` (R9 task 1) ─────────
+    //
+    // `MemRuntime` serves a few files that exist nowhere on disk and fails
+    // every other operation: a citeproc pass that still touched `std::fs`
+    // would not find `/mem/refs.bib` and the tests below would fail. (On
+    // `wasm32-unknown-unknown` `std::fs` is an unsupported stub, which is the
+    // bug these tests pin from the native side.)
+
+    struct MemRuntime {
+        files: std::collections::HashMap<PathBuf, String>,
+    }
+
+    impl MemRuntime {
+        fn new(files: &[(&str, &str)]) -> Self {
+            Self {
+                files: files
+                    .iter()
+                    .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+                    .collect(),
+            }
+        }
+    }
+
+    fn unsupported<T>() -> quarto_system_runtime::RuntimeResult<T> {
+        Err(quarto_system_runtime::RuntimeError::NotSupported(
+            "MemRuntime".to_string(),
+        ))
+    }
+
+    #[async_trait::async_trait]
+    impl SystemRuntime for MemRuntime {
+        fn file_read(&self, path: &Path) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+            self.files
+                .get(path)
+                .map(|c| c.as_bytes().to_vec())
+                .ok_or_else(|| {
+                    quarto_system_runtime::RuntimeError::Io(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "No such file or directory (in memory)",
+                    ))
+                })
+        }
+        fn file_write(&self, _: &Path, _: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+        fn path_exists(
+            &self,
+            path: &Path,
+            _: Option<quarto_system_runtime::PathKind>,
+        ) -> quarto_system_runtime::RuntimeResult<bool> {
+            Ok(self.files.contains_key(path))
+        }
+        fn canonicalize(&self, path: &Path) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            Ok(path.to_path_buf())
+        }
+        fn path_metadata(
+            &self,
+            _: &Path,
+        ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::PathMetadata> {
+            unsupported()
+        }
+        fn file_copy(&self, _: &Path, _: &Path) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+        fn path_rename(&self, _: &Path, _: &Path) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+        fn file_remove(&self, _: &Path) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+        fn dir_create(&self, _: &Path, _: bool) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+        fn dir_remove(&self, _: &Path, _: bool) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+        fn dir_list(&self, _: &Path) -> quarto_system_runtime::RuntimeResult<Vec<PathBuf>> {
+            unsupported()
+        }
+        fn cwd(&self) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            Ok(PathBuf::from("/mem"))
+        }
+        fn temp_dir(
+            &self,
+            _: &str,
+        ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::TempDir> {
+            unsupported()
+        }
+        fn exec_pipe(
+            &self,
+            _: &str,
+            _: &[&str],
+            _: &[u8],
+        ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+            unsupported()
+        }
+        fn exec_command(
+            &self,
+            _: &str,
+            _: &[&str],
+            _: Option<&[u8]>,
+        ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::CommandOutput> {
+            unsupported()
+        }
+        fn env_get(&self, _: &str) -> quarto_system_runtime::RuntimeResult<Option<String>> {
+            Ok(None)
+        }
+        fn env_all(
+            &self,
+        ) -> quarto_system_runtime::RuntimeResult<std::collections::HashMap<String, String>>
+        {
+            Ok(Default::default())
+        }
+        async fn fetch_url(
+            &self,
+            _: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+            unsupported()
+        }
+        fn os_name(&self) -> &'static str {
+            "mem"
+        }
+        fn arch(&self) -> &'static str {
+            "mem"
+        }
+        fn cpu_time(&self) -> quarto_system_runtime::RuntimeResult<u64> {
+            unsupported()
+        }
+        fn xdg_dir(
+            &self,
+            _: quarto_system_runtime::XdgDirKind,
+            _: Option<&Path>,
+        ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            unsupported()
+        }
+        fn stdout_write(&self, _: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+        fn stderr_write(&self, _: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+            unsupported()
+        }
+    }
+
+    const MEM_BIB: &str = "@book{knuth1984,\n  author = {Knuth, Donald E.},\n  title = {The TeXbook},\n  year = {1984}\n}\n";
+
+    fn cite_pandoc(meta: ConfigValue) -> Pandoc {
+        Pandoc {
+            meta,
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![make_cite("knuth1984")],
+                source_info: si(),
+            })],
+        }
+    }
+
+    #[test]
+    fn bibliography_is_read_through_the_runtime() {
+        let rt = MemRuntime::new(&[("/mem/refs.bib", MEM_BIB)]);
+        let refs = load_bibliography("refs.bib", Path::new("/mem"), &rt).unwrap();
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].id, "knuth1984");
+    }
+
+    #[test]
+    fn csl_style_is_read_through_the_runtime() {
+        // A one-entry CSL that is not the default style, only in memory.
+        let csl = r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="in-text" default-locale="en-US">
+  <info><title>Mem</title><id>mem</id><updated>2026-01-01T00:00:00+00:00</updated></info>
+  <citation><layout><text variable="citation-number" prefix="[" suffix="]"/></layout></citation>
+  <bibliography><layout><text variable="title"/></layout></bibliography>
+</style>
+"#;
+        let rt = MemRuntime::new(&[("/mem/style.csl", csl)]);
+        let config = CiteprocConfig {
+            csl: Some("style.csl".to_string()),
+            ..Default::default()
+        };
+        assert!(load_csl_style(&config, Path::new("/mem"), &rt).is_ok());
+    }
+
+    #[test]
+    fn apply_citeproc_filter_resolves_a_cite_from_an_in_memory_bibliography() {
+        let rt = MemRuntime::new(&[("/mem/refs.bib", MEM_BIB)]);
+        let pandoc = cite_pandoc(meta_map(vec![("bibliography", meta_string("refs.bib"))]));
+        let (out, _, _, manifest) =
+            apply_citeproc_filter(pandoc, ASTContext::new(), "typst", Path::new("/mem"), &rt)
+                .unwrap();
+        assert!(manifest.is_some(), "the citation must have resolved");
+        // The `Cite` node is gone from the body and a bibliography block follows.
+        assert!(
+            out.blocks.len() >= 2,
+            "no bibliography block: {:?}",
+            out.blocks.len()
+        );
+        if let Block::Paragraph(p) = &out.blocks[0] {
+            assert!(!p.content.iter().any(|i| matches!(i, Inline::Cite(_))));
+        }
+    }
+
+    #[test]
+    fn missing_bibliography_names_the_file_not_a_platform_error() {
+        let rt = MemRuntime::new(&[]);
+        let pandoc = cite_pandoc(meta_map(vec![("bibliography", meta_string("refs.bib"))]));
+        let err = apply_citeproc_filter(pandoc, ASTContext::new(), "typst", Path::new("/mem"), &rt)
+            .expect_err("a missing bibliography must fail");
+        let msg = err.to_string();
+        assert!(msg.contains("/mem/refs.bib"), "{msg}");
+        assert!(!msg.contains("not supported on this platform"), "{msg}");
+    }
+
+    #[test]
+    fn missing_csl_names_the_file() {
+        let rt = MemRuntime::new(&[("/mem/refs.bib", MEM_BIB)]);
+        let pandoc = cite_pandoc(meta_map(vec![
+            ("bibliography", meta_string("refs.bib")),
+            ("csl", meta_string("absent.csl")),
+        ]));
+        let err = apply_citeproc_filter(pandoc, ASTContext::new(), "typst", Path::new("/mem"), &rt)
+            .expect_err("a missing CSL must fail");
+        let msg = err.to_string();
+        assert!(msg.contains("/mem/absent.csl"), "{msg}");
     }
 }

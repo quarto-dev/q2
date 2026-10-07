@@ -1,0 +1,47 @@
+[
+  {
+    "path": "argv.json",
+    "size": 297,
+    "sha256": "c9a7637cbc9fb34c3ca19c610ee8559b3db865802ea49577452a27e866b18c89"
+  },
+  {
+    "path": "capture/all-docx.pptx",
+    "size": 165502,
+    "sha256": "a129c61387aa8a2e07482772d4768639e8c34f688f78b6b116a64b5744e9f332"
+  },
+  {
+    "path": "env.json",
+    "size": 8612,
+    "sha256": "61816fdb1962856218b3f59911cbd8f17ad9f70c0c917b9e77a569b8d5bb7caf"
+  },
+  {
+    "path": "fs/__q2_doc__/all-docx.qmd",
+    "size": 1120,
+    "sha256": "4c3472a32654926c96a418e6d38836f792a0d37333783daee65f9a25fde1f37a"
+  },
+  {
+    "path": "fs/__q2_doc__/img/thinker.jpg",
+    "size": 153115,
+    "sha256": "3be8d35b9c0c960314c859c0f7754c60deefd1399b76d67262f892445f96f8c5"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-filter-deps.txt",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-input.json",
+    "size": 32277,
+    "sha256": "b5898b465984cde5a501525e60788ec5abca41e26a1edcca7618435c0edfb735"
+  },
+  {
+    "path": "meta.json",
+    "size": 182,
+    "sha256": "1972ce271f1edc90ea333ed701fe6f70111545c3791e1d50c2f7bf6f9cea3bb6"
+  },
+  {
+    "path": "reference/all-docx.pptx",
+    "size": 165502,
+    "sha256": "a129c61387aa8a2e07482772d4768639e8c34f688f78b6b116a64b5744e9f332"
+  }
+]

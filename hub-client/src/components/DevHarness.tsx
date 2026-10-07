@@ -8,7 +8,7 @@
  * This component is only imported in development builds.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ProjectSetError from './ProjectSetError';
 import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
@@ -23,6 +23,10 @@ import { PreviewIcon } from './icons';
 import StatusTab from './tabs/StatusTab';
 import ProjectTopBar from './ProjectTopBar';
 import DocumentTopBar from './DocumentTopBar';
+import ImportDialog from './ImportDialog';
+import { createStubImportService, setImportServiceForTests, type ImportFormats, type ImportService } from '../pandoc/importService';
+import { DownloadOnlyView, NeitherView } from './render/DownloadOnlyViews';
+import type { DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 import Toast from './Toast';
 import UpdateAvailableToast from './UpdateAvailableToast';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
@@ -619,6 +623,124 @@ function EditorChrome({ children }: { children: React.ReactNode }) {
   );
 }
 
+
+/**
+ * The import dialog (document import P5) reached in one state. The dialog owns its phase, so a
+ * state past the form is reached the way a user reaches it: a scripted service, and the harness
+ * clicks Import once the form is ready. `pending` states never resolve (the dialog stays there).
+ */
+type ImportHarnessMode =
+  | 'proposal'
+  | 'collision'
+  | 'too-large'
+  | 'unsupported'
+  | 'importing'
+  | 'loading-pandoc'
+  | 'writing'
+  | 'report'
+  | 'failure'
+  | 'offline'
+  | 'write-failure';
+
+function ImportDialogPage({ mode }: { mode: ImportHarnessMode }) {
+  const file = useMemo(() => {
+    const name = mode === 'unsupported' ? 'picture.png' : mode === 'failure' ? 'corrupt.docx' : 'report.docx';
+    const f = new File(['x'], name);
+    Object.defineProperty(f, 'size', { value: mode === 'too-large' ? 30 * 1024 * 1024 : 1024 });
+    if (mode === 'too-large') Object.defineProperty(f, 'name', { value: 'huge.docx' });
+    return f;
+  }, [mode]);
+
+  // Installed during the first render, before the dialog's mount effects read it.
+  useState(() => {
+    const base = createStubImportService();
+    const never = new Promise<never>(() => {});
+    const service: ImportService = { ...base };
+    if (mode === 'importing') service.importDocument = (_f, _p, opts) => (opts?.onProgress?.('converting'), never);
+    if (mode === 'loading-pandoc') {
+      service.importDocument = (_f, _p, opts) => {
+        opts?.onProgress?.('loading-pandoc');
+        opts?.onLoadProgress?.({ phase: 'download', loaded: 6_500_000, total: 16_700_000 });
+        return never;
+      };
+    }
+    if (mode === 'offline') {
+      service.importDocument = async () => ({
+        ok: false,
+        uiState: 'offline',
+        diagnostics: [{ origin: 'host', kind: 'error', code: 'offline', message: 'The converter could not be loaded.' }],
+      });
+    }
+    setImportServiceForTests(service);
+  });
+
+  const commit: React.ComponentProps<typeof ImportDialog>['commit'] = (outcome, qmdPath) => {
+    if (mode === 'writing') return new Promise(() => {});
+    if (mode === 'write-failure') {
+      return Promise.resolve({
+        ok: false,
+        diagnostics: [
+          { origin: 'host', kind: 'error', code: 'import-write-failed', message: `Could not add the document (${qmdPath}): A file appeared at ${qmdPath} while importing, so nothing was overwritten.`, path: qmdPath },
+          { origin: 'host', kind: 'error', code: 'import-cleanup-failed', message: 'Could not remove report_media/000000000000.png after the failed import: not connected', path: 'report_media/000000000000.png' },
+          ...outcome.diagnostics,
+        ],
+      });
+    }
+    return Promise.resolve({ ok: true, qmdPath, qmdDocId: 'harness', qmd: outcome.qmd, diagnostics: outcome.diagnostics });
+  };
+
+  // Past the form: press Import as soon as validation has enabled it.
+  useEffect(() => {
+    if (mode === 'proposal' || mode === 'collision' || mode === 'too-large' || mode === 'unsupported') return;
+    const timer = setInterval(() => {
+      const button = document.querySelector<HTMLButtonElement>('.import-dialog .qh-btn.primary:not([disabled])');
+      if (button) {
+        clearInterval(timer);
+        button.click();
+      }
+    }, 50);
+    return () => clearInterval(timer);
+  }, [mode]);
+
+  const taken = mode === 'collision';
+  return (
+    <EditorChrome>
+      <ImportDialog
+        request={{ kind: 'import', file, folder: 'docs' }}
+        folders={taken ? ['docs', 'docs/report_media'] : ['docs']}
+        existingPaths={taken ? ['docs/report.qmd', 'docs/index.qmd'] : ['docs/index.qmd']}
+        onClose={() => {}}
+        commit={commit}
+      />
+    </EditorChrome>
+  );
+}
+
+/** The Files sidebar with the Import button next to Add asset (formats from the stub table). */
+function ImportButtonPage({ loading }: { loading?: boolean }) {
+  const [formats, setFormats] = useState<ImportFormats | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    void createStubImportService().getImportFormats().then(setFormats);
+  }, [loading]);
+  const [picked, setPicked] = useState<string[]>([]);
+  return (
+    <EditorChrome>
+      <div style={{ width: 260 }}>
+        <FileSidebar
+          files={[]}
+          currentFile={null}
+          onSelectFile={() => {}}
+          onNewFile={() => {}}
+          onUploadFiles={() => {}}
+          importDocument={{ formats, onPick: (f) => setPicked((p) => [...p, f.name]) }}
+        />
+      </div>
+      <div data-testid="import-picked">{picked.join(',')}</div>
+    </EditorChrome>
+  );
+}
+
 interface Props {
   page: string;
 }
@@ -670,6 +792,89 @@ const FAKE_SINGLE_FILE_PREVIEW: ProjectInvitePreview = {
   topFiles: [],
   fileCount: 1,
   contributorInitials: ['CS'],
+};
+
+
+/* ---- "Download as" states (pandoc-host H5) ---- */
+
+const HARNESS_DOCX: DownloadFormat = {
+  key: 'docx',
+  label: 'Word',
+  extension: 'docx',
+  mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
+
+/**
+ * The document top bar with the "Download as" control in one fixed state. `interactive`
+ * wires a fake controller: select an entry and it goes working -> done, cancel -> cancelled.
+ */
+function DownloadAsPage({
+  status: fixed,
+  disabledReason,
+  interactive,
+  book,
+  formats = [HARNESS_DOCX],
+  children,
+}: {
+  status?: DownloadStatus;
+  disabledReason?: string;
+  interactive?: boolean;
+  /** A document that is a book chapter: its menu offers the book entries. */
+  book?: { chapter: boolean; chapters: string[] };
+  formats?: DownloadFormat[];
+  children?: React.ReactNode;
+}) {
+  const [live, setLive] = useState<DownloadStatus>({ phase: 'idle' });
+  const status = interactive ? live : (fixed ?? { phase: 'idle' });
+  return (
+    <EditorChrome>
+      <div className="top-bars">
+        <DocumentTopBar
+          currentFilePath="report.qmd"
+          sidebarOpen={true}
+          onToggleSidebar={() => {}}
+          sidebarToggleRef={{ current: null }}
+          downloadAs={{
+            available: true,
+            formats,
+            status,
+            disabledReason,
+            book,
+            start: (format, scope) =>
+              setLive({
+                phase: 'done',
+                clickId: 1,
+                format,
+                fileName: `report.${format.extension}`,
+                warnings: [],
+                notices: [],
+                unexecutedCells: 0,
+                book: scope === 'auto' ? { chapters: 3 } : undefined,
+              }),
+            cancel: () => setLive({ phase: 'cancelled', clickId: 1, format: HARNESS_DOCX }),
+            dismiss: () => setLive({ phase: 'idle' }),
+          }}
+        />
+      </div>
+      <div id="sidebar-drawer" hidden />
+      {children}
+    </EditorChrome>
+  );
+}
+
+const HARNESS_EPUB: DownloadFormat = { key: 'epub', label: 'EPUB (.epub)', extension: 'epub', mime: 'application/epub+zip' };
+const HARNESS_BOOK = { chapter: true, chapters: ['index.qmd', 'report.qmd', 'two.qmd'] };
+
+const harnessDone: DownloadStatus = {
+  phase: 'done',
+  clickId: 1,
+  format: HARNESS_DOCX,
+  fileName: 'report.docx',
+  notices: [],
+  unexecutedCells: 2,
+  warnings: [
+    { origin: 'rust', kind: 'warning', code: 'Q-11-1', title: 'pandoc warning', problem: 'Could not fetch resource figure.png' },
+  ],
 };
 
 const DEV_PAGES: Record<string, () => React.ReactNode> = {
@@ -916,6 +1121,61 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
           (axe's aria-valid-attr-value flags a dangling reference). */}
       <div id="sidebar-drawer" hidden />
     </EditorChrome>
+  ),
+  'import-button': () => <ImportButtonPage />,
+  'import-button-loading': () => <ImportButtonPage loading />,
+  'import-dialog': () => <ImportDialogPage mode="proposal" />,
+  'import-dialog-collision': () => <ImportDialogPage mode="collision" />,
+  'import-dialog-too-large': () => <ImportDialogPage mode="too-large" />,
+  'import-dialog-unsupported': () => <ImportDialogPage mode="unsupported" />,
+  'import-dialog-importing': () => <ImportDialogPage mode="importing" />,
+  'import-dialog-loading-pandoc': () => <ImportDialogPage mode="loading-pandoc" />,
+  'import-dialog-writing': () => <ImportDialogPage mode="writing" />,
+  'import-dialog-report': () => <ImportDialogPage mode="report" />,
+  'import-dialog-failure': () => <ImportDialogPage mode="failure" />,
+  'import-dialog-offline': () => <ImportDialogPage mode="offline" />,
+  'import-dialog-write-failure': () => <ImportDialogPage mode="write-failure" />,
+  'download-as': () => <DownloadAsPage interactive />,
+  'download-as-progress': () => (
+    <DownloadAsPage
+      status={{ phase: 'working', clickId: 1, format: HARNESS_DOCX, stage: 'loading', load: { phase: 'download', loaded: 6_500_000, total: 16_700_000 } }}
+    />
+  ),
+  'download-as-done': () => <DownloadAsPage status={harnessDone} />,
+  // A document that is a chapter of a book: the menu offers "Download book as" and "This chapter only".
+  'download-as-book': () => <DownloadAsPage interactive book={HARNESS_BOOK} formats={[HARNESS_DOCX, HARNESS_EPUB]} />,
+  'download-as-book-progress': () => (
+    <DownloadAsPage
+      book={HARNESS_BOOK}
+      formats={[HARNESS_DOCX, HARNESS_EPUB]}
+      status={{ phase: 'working', clickId: 1, format: HARNESS_EPUB, stage: 'chapter', chapter: { index: 2, total: 3, file: 'report.qmd' } }}
+    />
+  ),
+  'download-as-failed': () => (
+    <DownloadAsPage
+      status={{
+        phase: 'failed',
+        clickId: 1,
+        format: HARNESS_DOCX,
+        state: 'pandoc-error',
+        notices: [],
+        diagnostics: [{ origin: 'rust', kind: 'error', code: 'Q-20-3', title: 'pandoc failed', problem: 'exit status: 83' }],
+      }}
+    />
+  ),
+  'download-as-disabled': () => (
+    <DownloadAsPage disabledReason="Download is unavailable: documents with format latex can't be converted in the browser.">
+      <div style={{ height: 240 }}>
+        <NeitherView formatKey="latex" />
+      </div>
+    </DownloadAsPage>
+  ),
+  'download-as-only': () => (
+    <DownloadAsPage>
+      <div style={{ height: 240 }}>
+        <DownloadOnlyView format={HARNESS_DOCX} busy={false} onDownload={() => {}} />
+      </div>
+    </DownloadAsPage>
   ),
   notifications: () => (
     <EditorChrome>

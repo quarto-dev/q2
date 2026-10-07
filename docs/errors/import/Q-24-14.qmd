@@ -1,0 +1,31 @@
+---
+title: "Unmatched Comment Markers"
+description: "Some Word comment markers had no matching start or end. A start without an end became a point comment; an end without a start was removed."
+code: Q-24-14
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-14` — Unmatched Comment Markers
+
+> Some Word comment markers had no matching start or end. A start without an end became a point comment; an end without a start was removed.
+
+## What this means
+
+Word marks each comment's range with a start and an end. These did not pair up (for example the file was saved with a comment's range partly deleted), so the importer kept a start as a point comment and dropped a stray end.
+
+## Why this happens
+
+- The comment's range was deleted in Word but the comment was kept.
+- The file was produced by a tool that writes incomplete comment markers.
+
+## How to fix
+
+Nothing needs fixing; the comment text is kept where possible.
+
+## Related
+
+- `Q-24-5`

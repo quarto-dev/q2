@@ -16,6 +16,11 @@ export default mergeConfig(
       include: ['src/**/*.wasm.test.{ts,tsx}'],
       // Use node environment - WASM doesn't need DOM
       environment: 'node',
+      // pandoc.wasm needs the WebAssembly exnref proposal; Node 24 only takes the flag
+      // here (NODE_OPTIONS rejects it). V8 flags are not reliable under threads, so the
+      // fork pool is required (src/pandoc/pandocHost.wasm.test.ts asserts both).
+      pool: 'forks',
+      execArgv: ['--experimental-wasm-exnref'],
       // Pass even when no test files are found (initially)
       passWithNoTests: true,
       // Hang detection only — deliberately loose (5-10x typical duration),
@@ -35,6 +40,9 @@ export default mergeConfig(
         // unions both into a single object; rollup-plugin-alias matches
         // the longest prefix).
         '/src': path.resolve(__dirname, 'src'),
+        '@quarto/pandoc-host': path.resolve(__dirname, '../ts-packages/pandoc-host/src/index.ts'),
+        // A directory alias, so `@quarto/typst-host/fontBundle` resolves too (the main thread imports only that).
+        '@quarto/typst-host': path.resolve(__dirname, '../ts-packages/typst-host/src'),
         '@quarto/preview-renderer': path.resolve(__dirname, '../ts-packages/preview-renderer/src'),
         '@quarto/preview-runtime': path.resolve(__dirname, '../ts-packages/preview-runtime/src'),
         '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),

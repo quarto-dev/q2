@@ -1,0 +1,227 @@
+{
+ "browser": "chromium",
+ "n": 12,
+ "date": "2026-10-03T17:32:38.783Z",
+ "init": {
+  "compileMs": 157.5,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.7778.96 Safari/537.36"
+ },
+ "warmup": [
+  {
+   "name": "callouts",
+   "gapMs": 0,
+   "firstConvertColdInstance": {
+    "n": 12,
+    "med": 145.5,
+    "min": 137.69999998807907,
+    "max": 158.59999999403954
+   },
+   "convertAfterOneWarmup": {
+    "n": 12,
+    "med": 126.09999999403954,
+    "min": 122,
+    "max": 135.30000001192093
+   },
+   "steadyWarm": {
+    "n": 12,
+    "med": 120.59999999403954,
+    "min": 115.40000000596046,
+    "max": 125.2000000178814
+   },
+   "deltaMedian": 5.5
+  },
+  {
+   "name": "callouts",
+   "gapMs": 500,
+   "firstConvertColdInstance": {
+    "n": 12,
+    "med": 137.19999998807907,
+    "min": 134.59999999403954,
+    "max": 142.59999999403954
+   },
+   "convertAfterOneWarmup": {
+    "n": 12,
+    "med": 121.30000001192093,
+    "min": 119.80000001192093,
+    "max": 123.2000000178814
+   },
+   "steadyWarm": {
+    "n": 12,
+    "med": 116.90000000596046,
+    "min": 112.7999999821186,
+    "max": 124
+   },
+   "deltaMedian": 4.4000000059604645
+  }
+ ],
+ "spare": {
+  "name": "callouts",
+  "idleMs": 300,
+  "spawnAndInstantiate": {
+   "n": 12,
+   "med": 40.80000001192093,
+   "min": 34.099999994039536,
+   "max": 54.900000005960464
+  },
+  "requestToOutput": {
+   "n": 12,
+   "med": 138.7999999821186,
+   "min": 133.30000001192093,
+   "max": 141.80000001192093
+  },
+  "insideWorker": {
+   "n": 12,
+   "med": 137.69999998807907,
+   "min": 132.30000001192093,
+   "max": 140.7999999821186
+  },
+  "freshEndToEnd": {
+   "n": 12,
+   "med": 172.7999999821186,
+   "min": 166.7999999821186,
+   "max": 184.40000000596046
+  },
+  "bytesEqualToFresh": true
+ },
+ "stderrProbe": {
+  "fd1": "PROBE-IO-STDOUT\n",
+  "fd2": "PROBE-IO-STDERR\nWARNING (f.lua:1) quarto-style warning\n",
+  "stderrFile": "",
+  "warnings": "[]",
+  "trap": null,
+  "output": "x\n\n[alt]\n"
+ },
+ "typst": {
+  "fonts": 20,
+  "packages": 37
+ },
+ "typstCheck": {
+  "e2e": 192.09999999403954,
+  "id": 0.3211698587343944,
+  "ok": true,
+  "initMs": 42.20000001788139,
+  "compileMs": 137.69999998807907,
+  "pdfLen": 40319,
+  "diagnostics": []
+ },
+ "contention": {
+  "plain": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": null,
+   "spin": 0,
+   "cores": 12,
+   "alone": {
+    "n": 12,
+    "med": 117.5,
+    "min": 112.2999999821186,
+    "max": 122.80000001192093
+   },
+   "older": {
+    "n": 12,
+    "med": 116,
+    "min": 110.7999999821186,
+    "max": 121.10000002384186
+   },
+   "newer": {
+    "n": 12,
+    "med": 117.59999999403954,
+    "min": 111.09999999403954,
+    "max": 130.5
+   },
+   "olderMinusAlone": -1.5,
+   "newerMinusAlone": 0.09999999403953552
+  },
+  "loaded": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": "typst",
+   "spin": 0,
+   "cores": 12,
+   "alone": {
+    "n": 12,
+    "med": 126.5,
+    "min": 111.80000001192093,
+    "max": 126.7999999821186
+   },
+   "older": {
+    "n": 12,
+    "med": 119.10000002384186,
+    "min": 111.2000000178814,
+    "max": 131.90000000596046
+   },
+   "newer": {
+    "n": 12,
+    "med": 125.7000000178814,
+    "min": 110.80000001192093,
+    "max": 127.30000001192093
+   },
+   "olderMinusAlone": -7.399999976158142,
+   "newerMinusAlone": -0.7999999821186066,
+   "typstCompile": {
+    "n": 12,
+    "med": 89.80000001192093,
+    "min": 83.09999999403954,
+    "max": 101.7999999821186
+   }
+  },
+  "throttle4x": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": null,
+   "spin": 0,
+   "cores": 12,
+   "alone": {
+    "n": 12,
+    "med": 120.2000000178814,
+    "min": 115.59999999403954,
+    "max": 123.5
+   },
+   "older": {
+    "n": 12,
+    "med": 122.5,
+    "min": 117.90000000596046,
+    "max": 136.90000000596046
+   },
+   "newer": {
+    "n": 12,
+    "med": 121.5,
+    "min": 113.30000001192093,
+    "max": 126.7000000178814
+   },
+   "olderMinusAlone": 2.2999999821186066,
+   "newerMinusAlone": 1.2999999821186066
+  },
+  "coresLoaded": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": null,
+   "spin": 11,
+   "cores": 12,
+   "alone": {
+    "n": 12,
+    "med": 168.60000002384186,
+    "min": 139,
+    "max": 186.40000000596046
+   },
+   "older": {
+    "n": 12,
+    "med": 166.2999999821186,
+    "min": 129.59999999403954,
+    "max": 196.80000001192093
+   },
+   "newer": {
+    "n": 12,
+    "med": 163.59999999403954,
+    "min": 117,
+    "max": 184.7999999821186
+   },
+   "olderMinusAlone": -2.3000000417232513,
+   "newerMinusAlone": -5.000000029802322
+  }
+ }
+}

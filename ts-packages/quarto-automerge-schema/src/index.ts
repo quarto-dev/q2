@@ -489,6 +489,17 @@ const BINARY_EXTENSIONS = new Set([
   'tif',
   // Documents
   'pdf',
+  // Import sources (document import I21): stored as-is via Add asset and
+  // by import when EMF/WMF conversion fails. No viewer, so selecting one
+  // is a no-op like pdf. Mirror of `BINARY_EXTENSIONS` in
+  // crates/quarto-hub/src/resource.rs.
+  'docx',
+  'odt',
+  'rtf',
+  'epub',
+  'pptx',
+  'emf',
+  'wmf',
   // hephaestus plot documents (bd-sxiv2tio). Mirror of
   // `BINARY_EXTENSIONS` in crates/quarto-hub/src/resource.rs.
   'hep',
@@ -612,6 +623,13 @@ export function inferMimeType(path: string): string {
     tif: 'image/tiff',
     // Documents
     pdf: 'application/pdf',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    odt: 'application/vnd.oasis.opendocument.text',
+    rtf: 'application/rtf',
+    epub: 'application/epub+zip',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    emf: 'image/emf',
+    wmf: 'image/wmf',
     hep: 'application/vnd.hephaestus.plot',
     // Fonts
     woff: 'font/woff',

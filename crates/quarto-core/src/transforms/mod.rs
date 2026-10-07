@@ -12,6 +12,7 @@
 //! - [`AppendixStructureTransform`] - Consolidates appendix content into single container
 //! - [`CalloutTransform`] - Converts callout Divs to CustomNodes
 //! - [`CalloutResolveTransform`] - Resolves Callout CustomNodes to standard Div structure
+//! - [`EditorialMarksOoxmlTransform`] - Renders editorial marks to Word and PowerPoint (docx, pptx)
 //! - [`FooterGenerateTransform`] - Resolves `page-footer:` YAML into `navigation.footer`
 //! - [`FooterRenderTransform`] - Renders `navigation.footer` to HTML
 //! - [`FootnotesTransform`] - Resolves footnote refs/defs into native `Inline::Note`s
@@ -69,6 +70,7 @@ pub(crate) mod crossref_render;
 mod crossref_resolve;
 mod date_normalize;
 mod draft_alert;
+mod editorial_marks_ooxml;
 mod equation_label;
 mod example_embed;
 mod float_ref_target;
@@ -155,6 +157,7 @@ pub use crossref_render::CrossrefRenderTransform;
 pub use crossref_resolve::CrossrefResolveTransform;
 pub use date_normalize::DateNormalizeTransform;
 pub use draft_alert::DraftAlertTransform;
+pub use editorial_marks_ooxml::EditorialMarksOoxmlTransform;
 pub use equation_label::EquationLabelTransform;
 pub use example_embed::{ExampleEmbedRenderTransform, ExampleEmbedTransform};
 pub use float_ref_target::FloatRefTargetSugarTransform;

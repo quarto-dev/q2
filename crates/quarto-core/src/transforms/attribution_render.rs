@@ -179,7 +179,7 @@ impl AstTransform for AttributionRenderTransform {
 /// identity rather than the literal slot `0` prevents silent
 /// misattribution by byte-range collision if slot assignment ever
 /// changes (bd-vmlhw7nx).
-fn query_attribution(
+pub(crate) fn query_attribution(
     si: &SourceInfo,
     runs: &AttributionMap,
     blamed: quarto_source_map::FileId,

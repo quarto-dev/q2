@@ -1,0 +1,48 @@
+== memory over 100 renders (callouts), warm instance
+#1: wasm 43 MB, rss 423 MB
+#10: wasm 44 MB, rss 453 MB
+#20: wasm 44 MB, rss 463 MB
+#30: wasm 44 MB, rss 465 MB
+#40: wasm 44 MB, rss 465 MB
+#50: wasm 44 MB, rss 465 MB
+#60: wasm 44 MB, rss 465 MB
+#70: wasm 44 MB, rss 465 MB
+#80: wasm 44 MB, rss 466 MB
+#90: wasm 44 MB, rss 466 MB
+#100: wasm 44 MB, rss 385 MB
+outputs differing from the first fresh render: 0; rss growth over run: -11 MB
+
+== memory over 100 renders (callouts), fresh instance each (production shape)
+#1: rss 448 MB
+#10: rss 504 MB
+#20: rss 513 MB
+#30: rss 516 MB
+#40: rss 504 MB
+#50: rss 514 MB
+#60: rss 517 MB
+#70: rss 518 MB
+#80: rss 516 MB
+#90: rss 517 MB
+#100: rss 518 MB
+rss growth over run: 82 MB
+
+== errors on a warm instance, each followed by a good render (must equal the fresh reference)
+   after start: good render equals reference = true trap=null wasm 43 MB
+1 missing input file       : trap=null output=null stderr="ERROR: /nope.json: withBinaryFile: does not exist (No such file or directory)" warn=""
+   after missing input: good render equals reference = true trap=null wasm 44 MB
+2 Lua syntax error         : trap=null output=null stderr="ERROR: Error running filter '/f.lua':\n/f.lua:1: unexpected symbol near 'end'" warn=""
+   after Lua syntax error: good render equals reference = true trap=null wasm 44 MB
+3 filter throws error()    : trap=null output=null stderr="ERROR: Error running filter '/f.lua':\n/f.lua:1: boom from filter\nstack traceback:\n\t/f.lua:1: in function 'Str'" warn=""
+   after error() in filter: good render equals reference = true trap=null wasm 44 MB
+4 filter: nil index        : trap=null output=null stderr="ERROR: Error running filter '/f.lua':\n/f.lua:1: attempt to index a nil value (local 't')\nstack traceback:" warn=""
+   after nil index in filter: good render equals reference = true trap=null wasm 44 MB
+5 missing filter file      : trap=null output=null stderr="ERROR: Error running filter '/f.lua':\ncannot open /f.lua: No such file or directory" warn=""
+   after missing filter: good render equals reference = true trap=null wasm 44 MB
+6 bad format (-t nonesuch) : trap=null output=null stderr="ERROR: Unknown output format 'nonesuch'" warn=""
+   after bad output format: good render equals reference = true trap=null wasm 44 MB
+7 bad json input           : trap=null output=null stderr="ERROR: JSON parse error: Unexpected \"not json\\n\\n\", expecting record key literal or }" warn=""
+   after bad JSON input: good render equals reference = true trap=null wasm 44 MB
+8 filter calls os.exit(3)  : trap="Error: exit with exit code 3" output=null stderr="" warn=""
+   after os.exit in filter: good render equals reference = true trap=null wasm 45 MB
+9 filter allocs 2 GB string: trap=null output="x\n" stderr="" warn="[]"
+   after big allocation in filter: good render equals reference = true trap=null wasm 2129 MB

@@ -281,10 +281,18 @@ export function Q2PreviewIframe({
   // cache is drained on unmount.
   const assetCacheRef = useRef<Map<string, ManifestCacheEntry>>(new Map());
 
+  // Bumped every time the cleanup effect below (re)mounts. That effect
+  // revokes and clears the asset cache on cleanup, but a `useMemo` result
+  // survives StrictMode's simulated unmount/remount, so without this the
+  // manifest would keep pointing at revoked blob URLs. Depending on it
+  // re-runs the walker against the now-empty cache.
+  const [assetCacheEpoch, setAssetCacheEpoch] = useState(0);
+
   // Cleanup any outstanding blob URL on unmount. Drains both the theme
   // URL and the asset cache.
   useEffect(() => {
     const assetCache = assetCacheRef.current;
+    setAssetCacheEpoch((n) => n + 1);
     return () => {
       if (currentThemeBlobUrlRef.current) {
         URL.revokeObjectURL(currentThemeBlobUrlRef.current);
@@ -304,7 +312,7 @@ export function Q2PreviewIframe({
   // image content changes between renders.
   const assetManifest = useMemo(
     () => buildAssetManifest(astJson, currentFilePath, assetCacheRef.current).manifest,
-    [astJson, currentFilePath],
+    [astJson, currentFilePath, assetCacheEpoch],
   );
 
   // Handle messages from the iframe

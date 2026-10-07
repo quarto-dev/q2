@@ -1,0 +1,65 @@
+/**
+ * Moby Dick import spike (throwaway; see claude-notes/research/2026-10-04-moby-dick-import-spike/).
+ * Pattern of pandoc-import-measure.harness.spec.ts: fresh page, warm-up, peak RSS of ms-playwright processes.
+ * Env: MOBY_DOCX (path), MOBY_RUNS (default 3), MOBY_OUT (json path, `-<project>` is inserted).
+ */
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { expect, test, type Page } from '@playwright/test';
+import type {} from './helpers/testHooks';
+import { tinyDocx } from './helpers/importDocx';
+
+test.skip(!process.env.MOBY_DOCX, 'opt-in: set MOBY_DOCX');
+
+function rssMb(): number {
+  const out = execFileSync('ps', ['-axo', 'rss=,command='], { maxBuffer: 1 << 26 }).toString('utf8');
+  let kb = 0;
+  for (const line of out.split('\n')) if (line.includes('ms-playwright')) kb += Number(line.trim().split(/\s+/)[0]) || 0;
+  return Math.round(kb / 1024);
+}
+async function withPeakRss<T>(fn: () => Promise<T>) {
+  const startMb = rssMb();
+  let peak = startMb;
+  const timer = setInterval(() => (peak = Math.max(peak, rssMb())), 100);
+  try {
+    return { value: await fn(), peakMb: peak, startMb };
+  } finally {
+    clearInterval(timer);
+    peak = Math.max(peak, rssMb());
+  }
+}
+async function boot(page: Page) {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__quartoTestReady);
+  await page.evaluate(async () => {
+    await window.__quartoTestReady;
+  });
+}
+const runImport = (page: Page, docx: Uint8Array) =>
+  page.evaluate((b64) => window.__quartoTest!.pandoc.runImport(b64, 'docx', { wallTimeoutMs: 300_000 }), Buffer.from(docx).toString('base64'));
+
+test('measure: moby dick import', async ({ context }, testInfo) => {
+  test.setTimeout(20 * 60_000);
+  const project = testInfo.project.name;
+  const docx = new Uint8Array(readFileSync(process.env.MOBY_DOCX!));
+  const runs: unknown[] = [];
+  const file = process.env.MOBY_OUT!.replace(/\.json$/, `-${project}.json`);
+  try {
+    for (let i = 0; i < Number(process.env.MOBY_RUNS ?? 3); i++) {
+      const page = await context.newPage();
+      try {
+        await boot(page);
+        const warmup = await runImport(page, tinyDocx());
+        expect(warmup.ok, JSON.stringify(warmup)).toBe(true);
+        await new Promise((r) => setTimeout(r, 2000));
+        const m = await withPeakRss(() => runImport(page, docx));
+        runs.push({ docxBytes: docx.byteLength, ...m.value, rssStartMb: m.startMb, rssPeakMb: m.peakMb, growthMb: m.peakMb - m.startMb });
+        expect(m.value.ok, JSON.stringify(m.value)).toBe(true);
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    writeFileSync(file, JSON.stringify({ project, date: new Date().toISOString(), runs }, null, 2));
+  }
+});

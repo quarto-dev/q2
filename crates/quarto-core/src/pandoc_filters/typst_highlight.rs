@@ -27,6 +27,7 @@ use std::path::Path;
 
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::highlight_theme::{DotTheme, TextStyle};
+use quarto_system_runtime::SystemRuntime;
 
 /// Q1's `kDefaultHighlightStyle` (`pandoc.ts`).
 const DEFAULT_PALETTE: &str = "arrow";
@@ -83,12 +84,14 @@ impl std::fmt::Display for HighlightError {
 /// `brand_mode` is the document's `brand-mode` (`"dark"` selects dark
 /// palette variants). `block_background` is the brand's resolved
 /// `monospace-block` background color, if any; it replaces the palette's
-/// own code-block background.
+/// own code-block background. A `.theme` file is read through `runtime`
+/// (the VFS in the browser) and ends up as argv text, so it is not mounted.
 pub fn typst_highlight_args(
     doc_dir: &Path,
     meta: &ConfigValue,
     brand_mode: Option<&str>,
     block_background: Option<&str>,
+    runtime: &dyn SystemRuntime,
 ) -> Result<Vec<OsString>, HighlightError> {
     let dark = brand_mode == Some("dark");
     let declared = declared_style(meta, dark);
@@ -97,7 +100,7 @@ pub fn typst_highlight_args(
     match style {
         "none" | "idiomatic" => Ok(vec![flag(style)]),
         _ => {
-            let theme_json = load_theme_json(doc_dir, style, dark)?;
+            let theme_json = load_theme_json(doc_dir, style, dark, runtime)?;
             let theme: DotTheme = serde_json::from_str(&theme_json)
                 .map_err(|e| HighlightError(format!("invalid highlight theme `{style}`: {e}")))?;
             let definitions = highlighting_definitions(&theme, block_background);
@@ -139,10 +142,15 @@ fn declared_style(meta: &ConfigValue, dark: bool) -> Option<String> {
 
 /// Read the palette JSON: a `.theme` path relative to the document, or a
 /// vendored palette name (with adaptive names resolved for `dark`).
-fn load_theme_json(doc_dir: &Path, style: &str, dark: bool) -> Result<String, HighlightError> {
+fn load_theme_json(
+    doc_dir: &Path,
+    style: &str,
+    dark: bool,
+    runtime: &dyn SystemRuntime,
+) -> Result<String, HighlightError> {
     if style.ends_with(".theme") {
         let path = doc_dir.join(style);
-        return std::fs::read_to_string(&path).map_err(|e| {
+        return runtime.file_read_string(&path).map_err(|e| {
             HighlightError(format!(
                 "cannot read highlight theme `{}`: {e}",
                 path.display()
@@ -260,6 +268,21 @@ fn is_hex_color(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn highlight_args(
+        doc_dir: &Path,
+        meta: &ConfigValue,
+        brand_mode: Option<&str>,
+        block_background: Option<&str>,
+    ) -> Result<Vec<OsString>, HighlightError> {
+        typst_highlight_args(
+            doc_dir,
+            meta,
+            brand_mode,
+            block_background,
+            &quarto_system_runtime::NativeRuntime::new(),
+        )
+    }
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_source_map::SourceInfo;
 
@@ -295,7 +318,7 @@ mod tests {
     #[test]
     fn none_and_idiomatic_are_plain_flags() {
         for style in ["none", "idiomatic"] {
-            let args = typst_highlight_args(
+            let args = highlight_args(
                 Path::new("."),
                 &meta(&[("syntax-highlighting", style)]),
                 None,
@@ -308,7 +331,7 @@ mod tests {
 
     #[test]
     fn unset_defaults_to_arrow_with_styled_block() {
-        let args = typst_highlight_args(Path::new("."), &meta(&[]), None, None).unwrap();
+        let args = highlight_args(Path::new("."), &meta(&[]), None, None).unwrap();
         let defs = definitions_arg(&args);
         assert!(defs.contains("let bgcolor = rgb(\"#f1f3f5\")"), "{defs}");
         assert!(
@@ -325,7 +348,7 @@ mod tests {
 
     #[test]
     fn highlight_style_is_an_alias_and_syntax_highlighting_wins() {
-        let alias = typst_highlight_args(
+        let alias = highlight_args(
             Path::new("."),
             &meta(&[("highlight-style", "tango")]),
             None,
@@ -334,7 +357,7 @@ mod tests {
         .unwrap();
         assert!(definitions_arg(&alias).contains("#204a87"));
 
-        let both = typst_highlight_args(
+        let both = highlight_args(
             Path::new("."),
             &meta(&[
                 ("highlight-style", "tango"),
@@ -349,27 +372,26 @@ mod tests {
 
     #[test]
     fn brand_background_overrides_palette_background() {
-        let args = typst_highlight_args(Path::new("."), &meta(&[]), None, Some("#1e1e2e")).unwrap();
+        let args = highlight_args(Path::new("."), &meta(&[]), None, Some("#1e1e2e")).unwrap();
         assert!(definitions_arg(&args).contains("let bgcolor = rgb(\"#1e1e2e\")"));
     }
 
     #[test]
     fn non_hex_brand_background_is_ignored() {
-        let args =
-            typst_highlight_args(Path::new("."), &meta(&[]), None, Some("rebeccapurple")).unwrap();
+        let args = highlight_args(Path::new("."), &meta(&[]), None, Some("rebeccapurple")).unwrap();
         assert!(definitions_arg(&args).contains("let bgcolor = rgb(\"#f1f3f5\")"));
     }
 
     #[test]
     fn brand_mode_dark_selects_dark_variant_of_adaptive_name() {
-        let light = typst_highlight_args(
+        let light = highlight_args(
             Path::new("."),
             &meta(&[("syntax-highlighting", "arrow")]),
             None,
             None,
         )
         .unwrap();
-        let dark = typst_highlight_args(
+        let dark = highlight_args(
             Path::new("."),
             &meta(&[("syntax-highlighting", "arrow")]),
             Some("dark"),
@@ -381,7 +403,7 @@ mod tests {
 
     #[test]
     fn unknown_style_is_an_error() {
-        let err = typst_highlight_args(
+        let err = highlight_args(
             Path::new("."),
             &meta(&[("syntax-highlighting", "no-such-style")]),
             None,
@@ -400,7 +422,7 @@ mod tests {
                 "text-styles":{"Keyword":{"text-color":"#008000","bold":true,"underline":true}}}"##,
         )
         .unwrap();
-        let args = typst_highlight_args(
+        let args = highlight_args(
             dir.path(),
             &meta(&[("syntax-highlighting", "mine.theme")]),
             None,
@@ -419,7 +441,7 @@ mod tests {
 
     #[test]
     fn missing_theme_file_is_an_error() {
-        let err = typst_highlight_args(
+        let err = highlight_args(
             Path::new("/nonexistent-dir"),
             &meta(&[("syntax-highlighting", "gone.theme")]),
             None,

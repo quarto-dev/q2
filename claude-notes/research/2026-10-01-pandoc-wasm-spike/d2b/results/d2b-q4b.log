@@ -1,0 +1,7 @@
+big input json bytes: 6316428
+fresh _start, -M100m, big doc: status 251 trap null stderr "pandoc: Heap exhausted;\npandoc: Current maximum heap size is 104857600 bytes (100 MB).\npandoc: Use `+RTS -M<size>' to increase it.\n"
+warm -M100m: good A equals ref: true
+warm -M100m, big doc: trap "Error: exit with exit code 1" output null stderr "" wasm MB 138
+   after OOM, good A #1: equals ref false trap="Error: exit with exit code 1" stderr=""
+   after OOM, good A #2: equals ref false trap="Error: exit with exit code 1" stderr=""
+   after OOM, good A #3: equals ref false trap="Error: exit with exit code 1" stderr=""

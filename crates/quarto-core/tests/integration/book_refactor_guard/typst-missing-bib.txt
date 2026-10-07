@@ -1,0 +1,15 @@
+result: Ok
+outputs: 0
+pass1_failures: 0
+pass2_failures: 1
+  - <ROOT> :: citeproc failed for merged book: Bibliography file '<ROOT>/refs.bib' not found: No such file or directory (os error 2)
+    diagnostics: 0
+project_diagnostics: 0
+stopped_early: false
+output_dir_files:
+render_manifest:
+{
+  "version": 1,
+  "rendered_files": [],
+  "resources": []
+}

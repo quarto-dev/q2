@@ -1,0 +1,9 @@
+---
+title: Citations
+bibliography: refs.bib
+---
+
+Narrative citation: @knuth1984 shows literate programming [@knuth1984, p. 97].
+Several at once [@knuth1984; @lamport1994].
+
+# References

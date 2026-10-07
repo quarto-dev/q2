@@ -1,0 +1,32 @@
+[
+  {
+    "path": "argv.json",
+    "sha256": "1c3d9591c162f85e7bb8edb97198345ab283a167d13289efa55c813afebe2a7c",
+    "size": 178
+  },
+  {
+    "path": "media/Pictures/0.png",
+    "sha256": "e1d2966db7536ac77f7f8da8e29f2e53cc1a238e1c0dd97f1e7b59db966f796a",
+    "size": 287
+  },
+  {
+    "path": "pandoc.json",
+    "sha256": "757c2be06d62b7914987e94ef69123f5b66a4e5897d49707192a2a83dd12ec21",
+    "size": 10016
+  },
+  {
+    "path": "source.odt",
+    "sha256": "5387e0a5b548596fb0325d2c39b78793592ae96338b1b962f7e12f3834189158",
+    "size": 8490
+  },
+  {
+    "path": "status.json",
+    "sha256": "370aaa466bf7fdf5df8dec2004f5e0b4d5d352b7060c00c4a1204cc89b4b641a",
+    "size": 18
+  },
+  {
+    "path": "stderr.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  }
+]

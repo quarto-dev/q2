@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { firefoxLaunchEnv } from './playwright.firefox-env';
 
 /**
  * Playwright configuration for dev-harness behavioral tests.
@@ -54,7 +55,20 @@ export default defineConfig({
     },
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {
+        ...devices['Desktop Firefox'],
+        launchOptions: { env: firefoxLaunchEnv },
+      },
+    },
+    // The pandoc.wasm and typst worker specs only (host phases H6, H7): WebKit is the browser most likely to
+    // diverge on exnref, the Cache API and worker/wasm memory limits. Run it with
+    // `--project=webkit --workers=1` (Playwright has no per-project worker count): the
+    // pandoc specs each instantiate a ~59 MB module and WebKit's compile is slower.
+    // The verified browser versions are listed in dev-docs/pandoc-wasm-host.md.
+    {
+      name: 'webkit',
+      testMatch: '**/{pandoc,typst}-*.harness.spec.ts',
+      use: { ...devices['Desktop Safari'] },
     },
   ],
 

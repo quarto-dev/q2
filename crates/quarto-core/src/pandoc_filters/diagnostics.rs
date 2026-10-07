@@ -31,6 +31,11 @@ fn strip_ansi(line: &str) -> std::borrow::Cow<'_, str> {
     ANSI_SGR.replace_all(line, "")
 }
 
+/// Strips ANSI SGR escape sequences from a whole text.
+pub fn strip_ansi_codes(text: &str) -> String {
+    ANSI_SGR.replace_all(text, "").into_owned()
+}
+
 /// Extracts warning-shaped lines from a completed pandoc invocation's
 /// stderr, re-emitting each as a `Q-11-1` ("Lua Filter Diagnostic")
 /// warning — the same code `quarto.warn()` itself emits
@@ -57,22 +62,42 @@ fn strip_ansi(line: &str) -> std::borrow::Cow<'_, str> {
 /// warning prefix (Task 2's T2.4 covers the production cause). Lines that
 /// match neither shape are dropped, not surfaced.
 pub fn classify_pandoc_stderr(stderr: &str) -> Vec<DiagnosticMessage> {
-    stderr
-        .lines()
-        .filter_map(|line| {
-            let stripped = strip_ansi(line);
-            if stripped.starts_with("[WARNING]") || stripped.starts_with("WARNING (") {
-                let code = shim_warning_code(&stripped).unwrap_or("Q-11-1");
-                Some(
-                    DiagnosticMessageBuilder::warning(stripped.into_owned())
-                        .with_code(code)
-                        .build(),
-                )
-            } else {
-                None
-            }
+    pandoc_warning_texts(stderr, false)
+        .into_iter()
+        .map(|text| {
+            let code = shim_warning_code(&text).unwrap_or("Q-11-1");
+            DiagnosticMessageBuilder::warning(text)
+                .with_code(code)
+                .build()
         })
         .collect()
+}
+
+/// The warning-shaped entries of a pandoc invocation's stderr, ANSI codes stripped: the raw
+/// texts, for callers that choose their own diagnostic codes ([`classify_pandoc_stderr`]
+/// here, document import's Q-24-4).
+///
+/// An entry starts at a `[WARNING]` or `WARNING (` line. With `join_continuations`, the
+/// non-empty lines that follow it (up to the next bracketed log line or a blank line) are
+/// part of the same entry, joined by a space; without it each entry is one line.
+pub fn pandoc_warning_texts(stderr: &str, join_continuations: bool) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut open = false;
+    for line in stderr.lines() {
+        let stripped = strip_ansi(line);
+        if stripped.starts_with("[WARNING]") || stripped.starts_with("WARNING (") {
+            out.push(stripped.into_owned());
+            open = join_continuations;
+        } else if open && !stripped.trim().is_empty() && !stripped.starts_with('[') {
+            if let Some(last) = out.last_mut() {
+                last.push(' ');
+                last.push_str(stripped.trim());
+            }
+        } else {
+            open = false;
+        }
+    }
+    out
 }
 
 /// Recognizes the wire-format shim's own two warning-shaped messages
@@ -113,19 +138,146 @@ pub fn nonzero_exit_error(
     stderr: &str,
     retained_json_path: &Path,
 ) -> PipelineError {
-    let message = DiagnosticMessageBuilder::error(format!(
-        "pandoc exited with {status_desc}; input JSON retained at {}:\n{stderr}",
-        retained_json_path.display()
-    ))
-    .with_code("Q-20-3")
-    .build();
-    PipelineError::stage_error_with_diagnostics(stage_name, vec![message])
+    PipelineError::stage_error_with_diagnostics(
+        stage_name,
+        vec![nonzero_exit_diagnostic(
+            status_desc,
+            stderr,
+            retained_json_path,
+            true,
+        )],
+    )
+}
+
+/// The `Q-20-3` diagnostic itself. `json_retained` says whether the input
+/// JSON really is left on disk at `json_path`: native keeps it for
+/// debugging, but a browser run's path lives in a throwaway virtual
+/// filesystem, so claiming it was "retained" would be false (the path is
+/// still named, as the id the request carried).
+pub fn nonzero_exit_diagnostic(
+    status_desc: &str,
+    stderr: &str,
+    json_path: &Path,
+    json_retained: bool,
+) -> DiagnosticMessage {
+    let message = if json_retained {
+        format!(
+            "pandoc exited with {status_desc}; input JSON retained at {}:\n{stderr}",
+            json_path.display()
+        )
+    } else {
+        format!(
+            "pandoc exited with {status_desc} (input JSON {}):\n{stderr}",
+            json_path.display()
+        )
+    };
+    DiagnosticMessageBuilder::error(message)
+        .with_code("Q-20-3")
+        .build()
+}
+
+/// Decides how to handle a completed pandoc invocation's exit status and
+/// captured stderr — the corrected policy (commit `0b295831e`): capture
+/// stderr **unconditionally**, not only on failure.
+///
+/// On success, classifies `[WARNING]`-shaped stderr lines as `Q-11-1`
+/// diagnostics via [`classify_pandoc_stderr`] (may return an empty `Vec`).
+/// On failure, builds the `Q-20-3` error via [`nonzero_exit_error`],
+/// wrapping stderr verbatim and naming `json_path`.
+///
+/// `success`/`status_desc` are taken separately rather than as a single
+/// `std::process::ExitStatus` so this function stays platform-neutral and
+/// directly unit-testable with injected values (see
+/// `crates/quarto-core/tests/integration/pandoc_transport.rs` T10.1-T10.5).
+pub fn classify_pandoc_completion(
+    stage_name: &str,
+    success: bool,
+    status_desc: &str,
+    stderr: &str,
+    json_path: &Path,
+) -> Result<Vec<DiagnosticMessage>, PipelineError> {
+    // Native keeps the input JSON on failure (see `retain_temp_json_unless_success`).
+    classify_pandoc_completion_with(stage_name, success, status_desc, stderr, json_path, true)
+}
+
+/// [`classify_pandoc_completion`] with the retention fact supplied by the
+/// caller (see [`nonzero_exit_diagnostic`]).
+pub fn classify_pandoc_completion_with(
+    stage_name: &str,
+    success: bool,
+    status_desc: &str,
+    stderr: &str,
+    json_path: &Path,
+    json_retained: bool,
+) -> Result<Vec<DiagnosticMessage>, PipelineError> {
+    if success {
+        Ok(classify_pandoc_stderr(stderr))
+    } else {
+        Err(PipelineError::stage_error_with_diagnostics(
+            stage_name,
+            vec![nonzero_exit_diagnostic(
+                status_desc,
+                stderr,
+                json_path,
+                json_retained,
+            )],
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use quarto_error_reporting::DiagnosticKind;
+
+    /// R2: a non-zero exit from a browser run is `Q-20-3` carrying the
+    /// (virtual) `json_path`, without the native "retained at" claim, and
+    /// the verbatim stderr.
+    #[test]
+    fn test_virtual_json_path_is_not_claimed_retained() {
+        let path = Path::new("/__q2_share__/pandoc-input.json");
+        let diag = nonzero_exit_diagnostic("exit status: 64", "boom\n", path, false);
+        assert_eq!(diag.code.as_deref(), Some("Q-20-3"));
+        assert!(diag.title.contains("/__q2_share__/pandoc-input.json"));
+        assert!(!diag.title.contains("retained"), "{}", diag.title);
+        assert!(diag.title.contains("boom"));
+        let native = nonzero_exit_diagnostic("exit status: 64", "boom\n", path, true);
+        assert!(native.title.contains("input JSON retained at"));
+    }
+
+    /// R2: warnings on a zero exit are `Q-11-1`, same as native.
+    #[test]
+    fn test_with_variant_classifies_warnings_on_success() {
+        let diags = classify_pandoc_completion_with(
+            "pandoc-write",
+            true,
+            "exit status: 0",
+            "[WARNING] Could not fetch resource a.png\n",
+            Path::new("/x.json"),
+            false,
+        )
+        .unwrap();
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-11-1"));
+    }
+
+    /// The shared helper behind both callers: one entry per warning line by default; with
+    /// `join_continuations` the indented lines that follow are part of the entry, a blank
+    /// or bracketed line ends it, and unprefixed noise is dropped either way.
+    #[test]
+    fn test_pandoc_warning_texts_joins_continuations_only_when_asked() {
+        let stderr = "noise\n[WARNING] first\n  more of first\n\nstray\n[WARNING] second\n[INFO] x\n  not a continuation\n";
+        assert_eq!(
+            pandoc_warning_texts(stderr, false),
+            ["[WARNING] first", "[WARNING] second"]
+        );
+        assert_eq!(
+            pandoc_warning_texts(stderr, true),
+            ["[WARNING] first more of first", "[WARNING] second"]
+        );
+        // `classify_pandoc_stderr` keeps its one-line-per-warning behaviour.
+        assert_eq!(classify_pandoc_stderr(stderr).len(), 2);
+    }
 
     /// T10.1 (pure half): a single `[WARNING]` line produces exactly one
     /// `Q-11-1` warning diagnostic, carrying the line verbatim.

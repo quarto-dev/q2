@@ -909,6 +909,13 @@ pub enum RenderMode {
     ActivePage(std::path::PathBuf),
 }
 
+/// What the whole-book pandoc request needs beyond the pipeline's own state.
+pub(crate) struct BookRequestParams<'a> {
+    pub prepare_options: crate::pandoc_request::PrepareOptions,
+    pub captures_by_path: &'a std::collections::BTreeMap<String, Vec<u8>>,
+    pub hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
+}
+
 /// Two-pass project render driver.
 ///
 /// Generic over [`Pass2Renderer`] so the same orchestration logic
@@ -1855,6 +1862,49 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         Vec<FileFailure>,
     ) {
         self.pass_one().await
+    }
+
+    /// The browser's whole-book pandoc request: Pass 1 and the book's
+    /// `pre_render` run as [`Self::run_book_single_file_merge`] runs them
+    /// (the book's render list and format defaults are computed there), then
+    /// the shared single-file-merge core renders every chapter one after
+    /// another and ends in a `PandocRequest` instead of a pandoc process.
+    /// `pass1_failures` are ignored, as native does without `--fail-fast`.
+    /// No engine-registry shutdown or diagnostics drain: the browser has no
+    /// engines.
+    pub(crate) async fn run_book_request(
+        &mut self,
+        params: BookRequestParams<'_>,
+    ) -> crate::pandoc_request::render::PandocRequestOutcome {
+        use crate::pandoc_request::render::PandocRequestOutcome;
+        let (profiles, _pass1_failures) = self.pass_one().await;
+        let index = Arc::new(ProjectIndex::new(profiles));
+        if let Err(e) = self
+            .project_type
+            .pre_render(self.project, &index, self.runtime.as_ref())
+            .await
+        {
+            return match e {
+                QuartoError::Parse(parse_error) => PandocRequestOutcome {
+                    request: None,
+                    diagnostics: parse_error.diagnostics.clone(),
+                    source_context: parse_error.source_context.clone(),
+                    error: Some(QuartoError::Parse(parse_error).to_string()),
+                    unexecuted_cells: 0,
+                    book: None,
+                },
+                other => PandocRequestOutcome::failed_with(format!("pre_render failed: {other}")),
+            };
+        }
+        let book_items = self.project.book_render_items.clone().unwrap_or_default();
+        crate::project::book::request::render_book_request(
+            self.project,
+            &book_items,
+            &self.format,
+            self.runtime.clone(),
+            params,
+        )
+        .await
     }
 
     async fn pass_one(

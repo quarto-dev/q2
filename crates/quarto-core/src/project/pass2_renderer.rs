@@ -1368,3 +1368,155 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         self.chapter_seeds = seeds;
     }
 }
+
+// ───────────────────────────────────────────────────────────────────
+// Pandoc-request impl: builds the `PandocRequest` the browser hands to
+// pandoc.wasm (R7), instead of rendering HTML.
+// ───────────────────────────────────────────────────────────────────
+
+/// What one page's Pass-2 produced under [`RenderToPandocRequestRenderer`].
+///
+/// Not a [`Pass2Payload`] variant: the wasm response tail's exhaustive match
+/// on the payload builds a JSON `RenderResponse`, which cannot carry the
+/// request's `Uint8Array`s.
+#[derive(Debug)]
+pub struct PandocRequestPassTwoOutput {
+    /// Source `.qmd` path (as the orchestrator received it).
+    pub source_path: PathBuf,
+    /// The request (absent when the page has errors), its diagnostics and
+    /// source context, and the count of cells shown as source.
+    pub outcome: crate::pandoc_request::render::PandocRequestOutcome,
+    /// The page's Pass-1 profile, bridged onto the context by `run_pipeline`.
+    pub document_profile: Option<crate::document_profile::DocumentProfile>,
+}
+
+/// In-memory Pass-2 renderer for pandoc.wasm downloads of a project page.
+///
+/// `Pass2Renderer::render` has no room for the request's options, so they
+/// are fields set by the constructor.
+pub struct RenderToPandocRequestRenderer {
+    prepare_options: crate::pandoc_request::PrepareOptions,
+    captures: Vec<quarto_trace::EngineCapture>,
+    attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
+}
+
+impl RenderToPandocRequestRenderer {
+    pub fn new(
+        prepare_options: crate::pandoc_request::PrepareOptions,
+        captures: Vec<quarto_trace::EngineCapture>,
+    ) -> Self {
+        Self {
+            prepare_options,
+            captures,
+            attribution: None,
+        }
+    }
+
+    /// Authorship data for the page this renderer renders (the active page).
+    pub fn with_attribution(
+        mut self,
+        attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
+    ) -> Self {
+        self.attribution = attribution;
+        self
+    }
+}
+
+#[async_trait(?Send)]
+impl Pass2Renderer for RenderToPandocRequestRenderer {
+    type Output = PandocRequestPassTwoOutput;
+
+    async fn render(
+        &mut self,
+        doc_info: &DocumentInfo,
+        format: &Format,
+        _format_str: &str,
+        project: &ProjectContext,
+        index: Arc<ProjectIndex>,
+        runtime: Arc<dyn SystemRuntime>,
+        _project_artifacts: &mut ArtifactStore,
+    ) -> Result<Self::Output> {
+        use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
+
+        let input_bytes = runtime.file_read(&doc_info.input).map_err(|e| {
+            crate::error::QuartoError::other(format!(
+                "Failed to read {} for Pass-2 render: {}",
+                doc_info.input.display(),
+                e
+            ))
+        })?;
+
+        // Where native would put the output, but rooted at the project
+        // directory whatever `output-dir` says. Nothing is written: the path
+        // only anchors the resolver, which relativizes image targets and
+        // links to the page. Mirroring the source layout under the project
+        // directory leaves them relative to the source file, the one thing
+        // pandoc can resolve here (its working directory is `/` in the
+        // browser, and the request's resource path is the document's
+        // directory), and it cannot collide with a real `output-dir`.
+        let rel = doc_info
+            .input
+            .strip_prefix(&project.dir)
+            .unwrap_or(&doc_info.input);
+        let output_path = project
+            .dir
+            .join(rel)
+            .with_extension(&format.output_extension);
+        let doc = doc_info.clone().with_output(output_path.clone());
+        let stem = doc_info
+            .input
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let resolver = ResourceResolverContext::website(
+            &project.dir,
+            &output_path,
+            super::orchestrator::project_type_for(project).lib_dir(),
+            stem,
+        );
+
+        let binaries = BinaryDependencies::new();
+        let mut ctx =
+            RenderContext::new(project, &doc, format, &binaries).with_options(RenderOptions {
+                verbose: false,
+                execute: false,
+                use_freeze: false,
+                output_path: Some(output_path),
+            });
+        ctx.project_index = Some(index);
+        ctx.resource_resolver = Some(resolver);
+        ctx.prepare_options = Some(self.prepare_options.clone());
+        ctx.attribution_provider = self.attribution.clone();
+
+        let source_name = doc_info.input.to_string_lossy().to_string();
+        let outcome = crate::pandoc_request::render::build_request_in_context(
+            &mut ctx,
+            &input_bytes,
+            &source_name,
+            runtime,
+            self.captures.clone(),
+            self.prepare_options.typst_available_fonts.clone(),
+        )
+        .await;
+        Ok(PandocRequestPassTwoOutput {
+            source_path: doc_info.input.clone(),
+            outcome,
+            document_profile: ctx.document_profile,
+        })
+    }
+
+    fn output_path(_output: &Self::Output) -> Option<&Path> {
+        None
+    }
+
+    fn build_project_resolver(
+        &self,
+        project: &ProjectContext,
+        lib_dir: &str,
+    ) -> ResourceResolverContext {
+        // Only a non-HTML format reaches this renderer, so no
+        // project-level hook consumes the resolver; it names the project
+        // root, as the per-page one does.
+        ResourceResolverContext::project_root(&project.dir, lib_dir)
+    }
+}

@@ -83,6 +83,31 @@ pub struct QmdWriterContext {
     /// unescaped whitespace (Pandoc's rule), so `~a b~` would read back as
     /// literal text. Pandoc's markdown writer does the same.
     pub sub_sup_depth: usize,
+
+    /// Whether the inline after the one being written is a word boundary
+    /// (a `Space`, a break, or the end of the line's inlines). Set by
+    /// [`write_inline_run`] before each inline and read by `write_str`, which
+    /// uses it to tell a line-start list marker (`1.` then a space) from a
+    /// number or a hyphen that merely begins a word (`1.5`, `-5`).
+    pub next_is_boundary: bool,
+
+    /// The last byte the previous inline wrote, if any inline has written since
+    /// the block started. `write_str` reads it to see that the text before it
+    /// ended in `]`, so a `Str` that begins with `(` can't turn `[span]` into
+    /// the start of a link.
+    pub last_byte: Option<u8>,
+
+    /// The bullet character (`*` or `-`) of the `BulletList` written just
+    /// before the block now being written, at the same nesting level; `None`
+    /// when the previous sibling wasn't a bullet list. `write_block` takes it
+    /// on entry and sets it again on exit, so a list's own contents never leak
+    /// into the siblings around it.
+    pub prev_bullet_marker: Option<char>,
+
+    /// The bullet character the `BulletList` being started should use. Two
+    /// adjacent bullet lists re-read as one unless their markers differ, so
+    /// `write_block` alternates it from `prev_bullet_marker`.
+    pub bullet_marker: char,
 }
 
 impl Default for QmdWriterContext {
@@ -101,7 +126,20 @@ impl QmdWriterContext {
             inline_fragment: false,
             at_line_start: false,
             sub_sup_depth: 0,
+            next_is_boundary: false,
+            last_byte: None,
+            prev_bullet_marker: None,
+            bullet_marker: '*',
         }
+    }
+
+    /// Mark the start of a new sequence of sibling blocks (a list item's, a
+    /// table cell's, a definition's, a caption's): its first block has no
+    /// previous sibling, so it must not alternate the bullet marker of a list
+    /// that ended the previous sequence. `write_block` already does this for the
+    /// first child of a container; this covers containers with several sequences.
+    fn begin_block_sequence(&mut self) {
+        self.prev_bullet_marker = None;
     }
 
     pub fn push_emphasis(&mut self, delimiter: EmphasisDelimiter, is_strong: bool) {
@@ -178,14 +216,16 @@ impl<'a, W: Write + ?Sized> Write for BlockQuoteContext<'a, W> {
 
 struct BulletListContext<'a, W: Write + ?Sized> {
     inner: &'a mut W,
+    marker: u8,
     at_line_start: bool,
     is_first_line: bool,
 }
 
 impl<'a, W: Write + ?Sized> BulletListContext<'a, W> {
-    fn new(inner: &'a mut W) -> Self {
+    fn new(inner: &'a mut W, marker: char) -> Self {
         Self {
             inner,
+            marker: u8::try_from(marker).expect("bullet marker is ASCII"),
             at_line_start: true,
             is_first_line: true,
         }
@@ -198,7 +238,7 @@ impl<'a, W: Write + ?Sized> Write for BulletListContext<'a, W> {
         for &byte in buf {
             if self.at_line_start {
                 if self.is_first_line {
-                    self.inner.write_all(b"* ")?;
+                    self.inner.write_all(&[self.marker, b' '])?;
                     self.is_first_line = false;
                 } else {
                     self.inner.write_all(b"  ")?;
@@ -747,6 +787,9 @@ fn write_bulletlist(
         .iter()
         .all(|item| item.is_empty() || matches!(item[0], Block::Plain(_)));
 
+    // Read before the items are written: nested lists reset the context field.
+    let marker = ctx.bullet_marker;
+
     for (i, item) in bulletlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
             // Add blank line between items in loose lists
@@ -758,7 +801,7 @@ fn write_bulletlist(
             // `*` (or `-`) marker line as an item with zero blocks; that
             // is a distinct AST shape from `[Plain []]` handled below
             // (`* []`, which parses as an inline `[]` inside Plain).
-            writeln!(buf, "*")?;
+            writeln!(buf, "{marker}")?;
             continue;
         }
 
@@ -773,11 +816,12 @@ fn write_bulletlist(
             };
 
         if is_empty_item {
-            writeln!(buf, "* []")?;
+            writeln!(buf, "{marker} []")?;
         } else {
             let task_rewritten = task_item_to_ascii(item);
             let item: &[Block] = task_rewritten.as_deref().unwrap_or(item);
-            let mut item_writer = BulletListContext::new(buf);
+            let mut item_writer = BulletListContext::new(buf, marker);
+            ctx.begin_block_sequence();
             for (j, block) in item.iter().enumerate() {
                 if j > 0 && !is_tight {
                     // Add a blank line between blocks within a list item in loose lists
@@ -832,6 +876,7 @@ fn write_orderedlist(
         let item: &[Block] = task_rewritten.as_deref().unwrap_or(item);
         let mut item_writer =
             OrderedListContext::new(buf, current_num, number_style.clone(), delimiter.clone());
+        ctx.begin_block_sequence();
         for (j, block) in item.iter().enumerate() {
             if j > 0 && !is_tight {
                 // Add a blank line between blocks within a list item in loose lists
@@ -855,9 +900,7 @@ fn write_header(
     write!(buf, " ")?;
 
     // Write the header content
-    for inline in &header.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&header.content, buf, ctx, false)?;
 
     // Compute the effective attr for writing: suppress auto-generated IDs.
     // When AttrSourceInfo.id is None, the ID was auto-generated by postprocessing.
@@ -887,6 +930,7 @@ fn write_cell_content(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    ctx.begin_block_sequence();
     for (i, block) in cell.content.iter().enumerate() {
         if i > 0 {
             write!(buf, " ")?; // Join multiple blocks with space
@@ -1035,6 +1079,7 @@ fn write_definitionlist(
         // Write the definitions
         for definition in definitions {
             write!(buf, ":   ")?;
+            ctx.begin_block_sequence();
             for (j, block) in definition.iter().enumerate() {
                 if j > 0 {
                     writeln!(buf)?;
@@ -1124,6 +1169,7 @@ fn write_figure(
     if let Some(ref long_caption) = figure.caption.long {
         if !long_caption.is_empty() {
             writeln!(buf)?;
+            ctx.begin_block_sequence();
             for (i, block) in long_caption.iter().enumerate() {
                 if i > 0 {
                     writeln!(buf)?;
@@ -1161,9 +1207,7 @@ fn write_inlinerefdef(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[^{}]: ", refdef.id)?;
-    for inline in &refdef.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&refdef.content, buf, ctx, false)?;
     writeln!(buf)?;
     Ok(())
 }
@@ -1272,6 +1316,7 @@ fn write_cell_block_on_marker_line(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     let mut block_buf = Vec::<u8>::new();
+    ctx.begin_block_sequence();
     write_block(block, &mut block_buf, ctx)?;
     let content = String::from_utf8_lossy(&block_buf);
     let mut lines = content.lines();
@@ -1400,6 +1445,7 @@ fn write_list_table(
     if let Some(ref long_caption) = table.caption.long
         && !long_caption.is_empty()
     {
+        ctx.begin_block_sequence();
         for block in long_caption {
             write_block(block, buf, ctx)?;
         }
@@ -1751,6 +1797,18 @@ fn escape_markdown(
     start_prev_is_alnum: bool,
     line_start_escapes: LineStartEscapes,
 ) -> String {
+    escape_markdown_at(text, start_prev_is_alnum, line_start_escapes, None)
+}
+
+/// [`escape_markdown`] plus one forced escape: when `force_escape_at` is
+/// `Some(i)`, the character at char index `i` is written with a backslash even
+/// though it is ordinary text elsewhere (see [`line_start_hazard`]).
+fn escape_markdown_at(
+    text: &str,
+    start_prev_is_alnum: bool,
+    line_start_escapes: LineStartEscapes,
+    force_escape_at: Option<usize>,
+) -> String {
     let chars: Vec<char> = text.chars().collect();
     // Whether `chars[i]` is the first character of a line. Only consulted for
     // `#` and `>`, and only under `WhereMeaningful`.
@@ -1768,6 +1826,12 @@ fn escape_markdown(
     let mut i = 0;
     while i < chars.len() {
         let ch = chars[i];
+        if force_escape_at == Some(i) {
+            result.push('\\');
+            result.push(ch);
+            i += 1;
+            continue;
+        }
         match ch {
             // Characters that must be escaped to avoid triggering markdown syntax:
             '\\' => result.push_str("\\\\"), // Escape character itself
@@ -1926,6 +1990,35 @@ fn starts_character_reference(rest: &[char]) -> bool {
     crate::pandoc::treesitter_utils::entity_reference::entity_table().contains_key(&candidate)
 }
 
+/// For a `Str` that begins a line, the char index of the character that must
+/// be backslash-escaped so the line doesn't read as block syntax.
+///
+/// Covers the markers `escape_markdown` leaves alone because they are
+/// ordinary text mid-line: a bullet `-` or `+`, an ordered marker (`1.`,
+/// `12)`), the definition-list colon and the fenced-div fence `:::`. A marker
+/// only counts when whitespace follows it, or the text ends and
+/// `next_is_boundary` says a space, a break or the end of the line comes next,
+/// so `1.5` and `-5` stay as they are. `*`, `#`, `>`, `|`, backticks, `~` and
+/// runs of `-` are already escaped everywhere or by `escape_markdown`.
+fn line_start_hazard(text: &str, next_is_boundary: bool) -> Option<usize> {
+    let chars: Vec<char> = text.chars().collect();
+    let ends_token = |i: usize| match chars.get(i) {
+        None => next_is_boundary,
+        Some(c) => c.is_whitespace(),
+    };
+    match *chars.first()? {
+        '-' | '+' if ends_token(1) => Some(0),
+        ':' if ends_token(1) || chars.starts_with(&[':', ':', ':']) => Some(0),
+        '0'..='9' => {
+            let digits = chars.iter().take_while(|c| c.is_ascii_digit()).count();
+            // The reader reads at most 9 digits as a list number.
+            let marker = chars.get(digits)?;
+            (digits <= 9 && matches!(marker, '.' | ')') && ends_token(digits + 1)).then_some(digits)
+        }
+        _ => None,
+    }
+}
+
 fn write_str(
     s: &Str,
     buf: &mut dyn std::io::Write,
@@ -1957,7 +2050,16 @@ fn write_str(
     } else {
         LineStartEscapes::Always
     };
-    let escaped = escape_markdown(&s.text, ctx.prev_emitted_alnum, line_start_escapes);
+    // Text that begins a line must not read as a list, definition or div, and
+    // text right after a `]` must not turn that bracket into a link.
+    let hazard = if ctx.at_line_start {
+        line_start_hazard(&s.text, ctx.next_is_boundary)
+    } else if ctx.last_byte == Some(b']') && s.text.starts_with('(') {
+        Some(0)
+    } else {
+        None
+    };
+    let escaped = escape_markdown_at(&s.text, ctx.prev_emitted_alnum, line_start_escapes, hazard);
     write!(buf, "{}", escaped)
 }
 
@@ -2004,9 +2106,7 @@ fn write_emph(
     write!(buf, "{}", delim_str)?;
     ctx.push_emphasis(delimiter, false);
 
-    for inline in &emph.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&emph.content, buf, ctx, false)?;
 
     ctx.pop_emphasis();
     write!(buf, "{}", delim_str)
@@ -2027,9 +2127,7 @@ fn write_strong(
     write!(buf, "{}", delim_str)?;
     ctx.push_emphasis(delimiter, true);
 
-    for inline in &strong.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&strong.content, buf, ctx, false)?;
 
     ctx.pop_emphasis();
     write!(buf, "{}", delim_str)
@@ -2107,9 +2205,7 @@ fn write_link(
         return write!(buf, "<#{}>", anchor_id);
     }
     write!(buf, "[")?;
-    for inline in &link.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&link.content, buf, ctx, false)?;
     write!(buf, "](")?;
     write!(buf, "{}", link.target.0)?;
     if !link.target.1.is_empty() {
@@ -2128,9 +2224,7 @@ fn write_image(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "![")?;
-    for inline in &image.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&image.content, buf, ctx, false)?;
     write!(buf, "](")?;
     write!(buf, "{}", image.target.0)?;
     if !image.target.1.is_empty() {
@@ -2149,9 +2243,7 @@ fn write_strikeout(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "~~")?;
-    for inline in &strikeout.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&strikeout.content, buf, ctx, false)?;
     write!(buf, "~~")
 }
 
@@ -2233,19 +2325,23 @@ fn write_span(
 ) -> std::io::Result<()> {
     let (id, classes, keyvals) = &span.attr;
 
-    // Check if this is an editorial mark span that should use decorated syntax
-    // These spans have exactly one class, no ID, and no key-value pairs
-    if id.is_empty()
-        && classes.len() == 1
-        && keyvals.is_empty()
-        && let Some(marker) = editorial_marker_for_class(&classes[0])
+    // A span whose first class is an editorial mark's is written with the
+    // decorated syntax (`[++ …]`), the rest of its attributes following in
+    // braces. The reader puts the mark's class first, so only a span with the
+    // mark first round-trips; one with the mark later, or with two marks, keeps
+    // the generic form below. `write_div` follows the same rule.
+    if let Some(marker) = classes.first().and_then(|c| editorial_marker_for_class(c))
+        && !classes[1..]
+            .iter()
+            .any(|c| editorial_marker_for_class(c).is_some())
     {
-        // Write using decorated syntax
         write!(buf, "[{} ", marker)?;
-        for inline in &span.content {
-            write_inline(inline, buf, ctx)?;
-        }
+        write_inline_run(&span.content, buf, ctx, false)?;
         write!(buf, "]")?;
+        let rest = (id.clone(), classes[1..].to_vec(), keyvals.clone());
+        if !is_empty_attr(&rest) {
+            write_attr(&rest, buf, ctx)?;
+        }
         return Ok(());
     }
 
@@ -2258,9 +2354,7 @@ fn write_span(
         write!(buf, " ]")?;
         return Ok(());
     }
-    for inline in &span.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&span.content, buf, ctx, false)?;
     write!(buf, "]")?;
     if !is_empty_attr(&span.attr) {
         write_attr(&span.attr, buf, ctx)?;
@@ -2274,9 +2368,7 @@ fn write_underline(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[")?;
-    for inline in &underline.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&underline.content, buf, ctx, false)?;
     write!(buf, "]{{.underline}}")
 }
 fn write_smallcaps(
@@ -2285,9 +2377,7 @@ fn write_smallcaps(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[")?;
-    for inline in &smallcaps.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&smallcaps.content, buf, ctx, false)?;
     write!(buf, "]{{.smallcaps}}")
 }
 fn write_cite(
@@ -2794,9 +2884,7 @@ fn write_insert(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[++ ")?;
-    for inline in &insert.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&insert.content, buf, ctx, false)?;
     write!(buf, "]")?;
     if !is_empty_attr(&insert.attr) {
         write_attr(&insert.attr, buf, ctx)?;
@@ -2809,9 +2897,7 @@ fn write_delete(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[-- ")?;
-    for inline in &delete.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&delete.content, buf, ctx, false)?;
     write!(buf, "]")?;
     if !is_empty_attr(&delete.attr) {
         write_attr(&delete.attr, buf, ctx)?;
@@ -2824,9 +2910,7 @@ fn write_highlight(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[!! ")?;
-    for inline in &highlight.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&highlight.content, buf, ctx, false)?;
     write!(buf, "]")?;
     if !is_empty_attr(&highlight.attr) {
         write_attr(&highlight.attr, buf, ctx)?;
@@ -2839,12 +2923,54 @@ fn write_editcomment(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[>> ")?;
-    for inline in &comment.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    write_inline_run(&comment.content, buf, ctx, false)?;
     write!(buf, "]")?;
     if !is_empty_attr(&comment.attr) {
         write_attr(&comment.attr, buf, ctx)?;
+    }
+    Ok(())
+}
+
+/// A writer that remembers the last byte written through it.
+struct LastByteWriter<'a> {
+    inner: &'a mut dyn std::io::Write,
+    last: Option<u8>,
+}
+
+impl std::io::Write for LastByteWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(bytes)?;
+        if n > 0 {
+            self.last = Some(bytes[n - 1]);
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Write the inlines of one container (or one line of a paragraph), telling
+/// each `Str` whether a word boundary follows it.
+///
+/// `ends_at_boundary` says what follows the *last* inline: true at the end of
+/// a line, false inside a container, where the closing delimiter comes next.
+fn write_inline_run(
+    inlines: &[Inline],
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+    ends_at_boundary: bool,
+) -> std::io::Result<()> {
+    for (i, inline) in inlines.iter().enumerate() {
+        ctx.next_is_boundary = match inlines.get(i + 1) {
+            Some(next) => matches!(
+                next,
+                Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_)
+            ),
+            None => ends_at_boundary,
+        };
+        write_inline(inline, buf, ctx)?;
     }
     Ok(())
 }
@@ -2854,6 +2980,11 @@ fn write_inline(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    let mut tracked = LastByteWriter {
+        inner: buf,
+        last: None,
+    };
+    let buf: &mut dyn std::io::Write = &mut tracked;
     // Before dispatch: most inline kinds open with a non-alphanumeric byte
     // (delimiter, bracket, backtick, ...), so any inlines nested inside
     // them begin with a non-alphanumeric byte-stream context. Reset
@@ -2866,6 +2997,14 @@ fn write_inline(
         crate::pandoc::Inline::Str(_) | crate::pandoc::Inline::Custom(_)
     ) {
         ctx.prev_emitted_alnum = false;
+        // Nor does one begin a line: the opener comes first. A break inside the
+        // inline sets the flag again for what follows it.
+        if !matches!(
+            inline,
+            crate::pandoc::Inline::SoftBreak(_) | crate::pandoc::Inline::LineBreak(_)
+        ) {
+            ctx.at_line_start = false;
+        }
     }
 
     let result = match inline {
@@ -2902,6 +3041,10 @@ fn write_inline(
         }
     };
 
+    if let Some(byte) = tracked.last {
+        ctx.last_byte = Some(byte);
+    }
+
     // After dispatch: refresh `prev_emitted_alnum` to reflect the byte
     // this inline most recently emitted.
     match inline {
@@ -2936,11 +3079,33 @@ fn write_block(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    // Two bullet lists in a row re-read as one list unless their markers
+    // differ (`*` then `-`), and the AST has nowhere to keep a marker, so the
+    // block loop's previous sibling decides. A container takes the value on
+    // entry and so leaves `None` for its own first child.
+    let prev_marker = ctx.prev_bullet_marker.take();
+    if matches!(block, Block::BulletList(_)) {
+        ctx.bullet_marker = if prev_marker == Some('*') { '-' } else { '*' };
+    }
+    let marker = ctx.bullet_marker;
+    let result = write_block_inner(block, buf, ctx);
+    ctx.prev_bullet_marker = matches!(block, Block::BulletList(_)).then_some(marker);
+    result
+}
+
+fn write_block_inner(
+    block: &crate::pandoc::Block,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     // Every block starts on its own line, so the reader's byte-stream
     // context resets here too. Clear any alphanumeric carry-over from
     // the previous block so a `Str`-leading `'` at the head of this
-    // block is escaped correctly.
+    // block is escaped correctly. The same goes for the line-start flag and the
+    // last byte: a block's inlines begin a line only when its writer says so.
     ctx.prev_emitted_alnum = false;
+    ctx.at_line_start = false;
+    ctx.last_byte = None;
 
     match block {
         Block::Plain(plain) => {
@@ -3049,9 +3214,8 @@ fn write_prose_line(
     if hazard {
         ctx.suppress_dash_canonicalization = true;
     }
-    for inline in line {
-        write_inline(inline, buf, ctx)?;
-    }
+    // A line's inlines end at a break or the end of the block: a boundary.
+    write_inline_run(line, buf, ctx, true)?;
     ctx.suppress_dash_canonicalization = false;
     Ok(())
 }
@@ -3061,6 +3225,8 @@ pub fn write_paragraph(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    // A paragraph's first line begins a line, in a list item or block quote too.
+    ctx.at_line_start = true;
     write_prose_inlines(&para.content, buf, ctx)?;
     writeln!(buf)?;
     Ok(())
@@ -3071,6 +3237,8 @@ pub fn write_plain(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    // A paragraph's first line begins a line, in a list item or block quote too.
+    ctx.at_line_start = true;
     write_prose_inlines(&plain.content, buf, ctx)?;
     writeln!(buf)?;
     Ok(())
@@ -3256,6 +3424,8 @@ fn write_impl<T: std::io::Write>(
     buf: &mut T,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    let prepared = super::qmd_prepass::prepare(pandoc);
+    let pandoc = &*prepared;
     // Phase 5: Write ConfigValue directly without MetaValueWithSourceInfo conversion
     let mut need_newline = write_config_value_meta(&pandoc.meta, buf, ctx)?;
     for block in &pandoc.blocks {
@@ -3309,6 +3479,8 @@ fn write_impl_tracked(
     buf: &mut Vec<u8>,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<quarto_source_map::SourceInfo> {
+    let prepared = super::qmd_prepass::prepare(pandoc);
+    let pandoc = &*prepared;
     let mut pieces: Vec<(quarto_source_map::SourceInfo, usize)> = Vec::new();
 
     // Track YAML frontmatter as a single piece

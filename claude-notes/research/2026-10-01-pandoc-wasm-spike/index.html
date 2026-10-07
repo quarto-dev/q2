@@ -1,0 +1,10 @@
+<!doctype html><meta charset=utf-8><title>pandoc-wasm spike</title>
+<script type="module">
+  const w = new Worker("./worker.bundle.js", { type: "module" });
+  let n = 0; const pending = new Map();
+  w.onmessage = ({ data }) => { pending.get(data.id)(data); pending.delete(data.id); };
+  window.workerCreatedAt = performance.now();
+  window.convert = (opts, stdin, files) => new Promise(res => { const id = ++n; pending.set(id, res);
+    w.postMessage({ id, wasmUrl: "./pandoc.wasm", opts, stdin, files }); });
+  window.ready = true;
+</script>

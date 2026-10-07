@@ -167,7 +167,8 @@ enum Commands {
         attribution: Option<AttributionMode>,
 
         /// Emit diagnostics as one JSON object per line on stderr
-        /// instead of human-readable text.
+        /// instead of human-readable text. Implies `--quiet`, so stderr
+        /// carries nothing but JSON.
         #[arg(long = "json-errors")]
         json_errors: bool,
 

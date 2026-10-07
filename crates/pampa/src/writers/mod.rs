@@ -15,4 +15,5 @@ pub(crate) mod json_stream;
 pub mod native;
 pub mod plaintext;
 pub mod qmd;
+pub(crate) mod qmd_prepass;
 pub mod raw_json;

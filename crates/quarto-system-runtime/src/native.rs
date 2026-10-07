@@ -1029,6 +1029,14 @@ mod tests {
     }
 
     #[test]
+    fn svg_rasterization_is_unavailable_on_native() {
+        let rt = runtime();
+        assert!(!rt.can_rasterize_svg());
+        let err = pollster::block_on(rt.rasterize_svg(b"<svg/>", 2048)).unwrap_err();
+        assert!(matches!(err, RuntimeError::NotSupported(_)), "{err}");
+    }
+
+    #[test]
     fn test_compile_sass_via_trait() {
         let rt = runtime();
         let scss = "$color: #333; body { color: $color; }";

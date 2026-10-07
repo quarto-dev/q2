@@ -1,0 +1,57 @@
+[
+  {
+    "path": "argv.json",
+    "size": 481,
+    "sha256": "bfde573098121eeb2b52ea74c9d01eb04418954333dfe4112050031573820a95"
+  },
+  {
+    "path": "capture/citations.epub",
+    "size": 32061,
+    "sha256": "927704fb95ea2862bc33726ebb1220d1e491165dbb2b3841abafc318f08b0aeb"
+  },
+  {
+    "path": "env.json",
+    "size": 8568,
+    "sha256": "e7d8aee5c7d08c68dfda5c8d437a6b1369d7b3013ea1264a310a5ff81794f529"
+  },
+  {
+    "path": "fs/__q2_doc__/citations.qmd",
+    "size": 186,
+    "sha256": "28f06a84badabcfb5cbc5d38fbedb5e55d28eeb7d301ff6d972b9e3853ce8071"
+  },
+  {
+    "path": "fs/__q2_doc__/refs.bib",
+    "size": 343,
+    "sha256": "512c41da8f87bbc14b9c338a3973b7acdd686c596443092835b2e4c314ef65dd"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-filter-deps.txt",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-formats/formats/epub/styles.html",
+    "size": 1793,
+    "sha256": "cf44a9dd4baa3452eeb23fb5d66dadcc1e1f37e1ac45183637d12c83fe890811"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-formats/formats/html/styles-callout.html",
+    "size": 11355,
+    "sha256": "9fad1f7e8c5146aa4031f92df4a99825a5273276985a2a6a83ce5c7a0ac70afc"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-input.json",
+    "size": 22857,
+    "sha256": "dbb9ab3e65296d5d9c518c0df5012bf192bd5fbedbde69a0961267bf942f8cec"
+  },
+  {
+    "path": "meta.json",
+    "size": 185,
+    "sha256": "46a556d5856b795a6c5c43e1791d37fea7f7345d9312cfdddaf1733283553ad7"
+  },
+  {
+    "path": "reference/citations.epub",
+    "size": 32061,
+    "sha256": "da2e49f9d92157a7935e94a4069f7b3bf031f324c199631ec18cbebb5468f2a3"
+  }
+]

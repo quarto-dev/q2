@@ -32,6 +32,11 @@ const CSS = `
   user-select: none;
   font-size: 0.8rem;
   line-height: 1;
+  /* An absolutely positioned box shrink-to-fits its containing block, so on a
+     narrow screen it would squeeze the buttons and wrap their labels (--, !!, ++).
+     Size to content instead; the buttons never wrap or shrink. */
+  width: max-content;
+  white-space: nowrap;
 }
 /* bd-pvcnea83: flip below the edit box when there is no room above (e.g. the
    first block of a title-less document, flush against the viewport top — the
@@ -48,11 +53,15 @@ const CSS = `
   background: none;
   border-radius: 3px;
   min-width: 1.6em;
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 0.25em 0.4em;
   font-size: 0.8rem;
   cursor: pointer;
   color: #334155;
 }
+.q2-rt-tb-btn:disabled { opacity: 0.35; cursor: default; }
+.q2-rt-tb-btn:disabled:hover { background: none; }
 .q2-rt-tb-btn:hover { background: rgba(59, 130, 246, 0.12); }
 .q2-rt-tb-active { background: rgba(59, 130, 246, 0.18); color: rgb(37, 99, 235); }
 /* Mode toggle — the Markdown-mark SVG. inline-flex centers it; the SVG's
@@ -71,6 +80,8 @@ const CSS = `
 .q2-rt-tb-strike { text-decoration: line-through; }
 .q2-rt-tb-sep { width: 1px; align-self: stretch; margin: 2px 2px; background: rgba(0, 0, 0, 0.12); }
 .q2-rt-link-editor { display: flex; align-items: center; gap: 2px; }
+/* Transient refusal notice next to the comment button. */
+.q2-rt-tb-notice { font-size: 0.72rem; color: #b91c1c; padding: 0 0.4em; white-space: nowrap; }
 .q2-rt-link-input {
   font-size: 0.78rem;
   padding: 0.15em 0.4em;
@@ -111,6 +122,20 @@ const CSS = `
   cursor: default;
   user-select: all;
 }
+/* Authored span (the editable span mark): a lavender tint + dashed underline so a
+   span reads as a span, distinct from the comment chrome's blue and from chips.
+   Solid colors on purpose (no alpha). A span carrying hidden comments gets a
+   slightly stronger underline. */
+.q2-rt-span { background-color: #f3e8ff; border-bottom: 1px dashed #a855f7; border-radius: 2px; }
+.q2-rt-span-commented { border-bottom-style: solid; }
+/* Editorial spans, colored like the rendered marks (solid equivalents of the
+   theme's $editorial-* tints on white). */
+.q2-rt-span-insert { background-color: #d9ecd9; border-bottom: none; }
+.q2-rt-span-delete { background-color: #ffd9d9; border-bottom: none; text-decoration: line-through; }
+.q2-rt-span-highlight { background-color: #fff799; border-bottom: none; }
+.q2-rt-tb-insert { color: #16a34a; font-weight: 700; }
+.q2-rt-tb-delete { color: #dc2626; font-weight: 700; }
+.q2-rt-tb-highlight { color: #ca8a04; font-weight: 700; }
 .q2-chip-math { background: rgba(80, 160, 120, 0.14); border-color: rgba(80, 160, 120, 0.30); }
 .q2-chip-cite, .q2-chip-shortcode { background: rgba(160, 120, 80, 0.14); border-color: rgba(160, 120, 80, 0.30); }
 `;

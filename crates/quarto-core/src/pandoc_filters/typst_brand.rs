@@ -156,6 +156,55 @@ fn logo_map(brand: &Brand, mode: &str, prefix: &Path) -> Value {
     Value::Object(out)
 }
 
+/// The local files a compiled `.typ` reads for `resolved`: `source: file`
+/// brand fonts and every logo image, resolved against the brand's own
+/// directory (the project root for an inline brand). External URLs are not
+/// files. Pandoc never reads them; only a PDF compile does (R4).
+pub fn brand_asset_files(resolved: &ResolvedBrand, project_dir: &Path) -> Vec<std::path::PathBuf> {
+    let base = resolved.dir.as_deref().unwrap_or(project_dir);
+    let mut rels: Vec<String> = Vec::new();
+    if let Some(typography) = resolved.brand.typography.as_ref() {
+        for font in &typography.fonts {
+            if let quarto_brand::BrandFont::File(file_font) = font {
+                rels.extend(file_font.files.iter().map(|f| f.path().to_string()));
+            }
+        }
+    }
+    if let Some(logo) = resolved.brand.logo.as_ref() {
+        let entries = [&logo.small, &logo.medium, &logo.large];
+        for entry in entries.into_iter().flatten() {
+            match entry {
+                LogoEntry::Single(r) => rels.push(r.path().to_string()),
+                LogoEntry::LightDark { light, dark } => {
+                    rels.extend(
+                        light
+                            .iter()
+                            .chain(dark.iter())
+                            .map(|r| r.path().to_string()),
+                    );
+                }
+            }
+        }
+        if let Some(images) = logo.images.as_ref() {
+            rels.extend(images.values().map(|r| r.path().to_string()));
+        }
+    }
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    for rel in rels {
+        if quarto_util::is_external_url(&rel) {
+            continue;
+        }
+        let path = match rel.strip_prefix('/') {
+            Some(rooted) => project_dir.join(rooted),
+            None => base.join(&rel),
+        };
+        if !out.contains(&path) {
+            out.push(path);
+        }
+    }
+    out
+}
+
 /// Picks `mode`'s side of a logo entry. A [`LogoEntry::Single`] serves
 /// both modes identically; a missing side of a
 /// [`LogoEntry::LightDark`] pair yields `None` for that mode (Q1

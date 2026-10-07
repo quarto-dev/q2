@@ -77,8 +77,9 @@ pub fn build_merged_bibliography(
     base_dir: &Path,
     cited_order: &[String],
     references: Vec<Reference>,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<Vec<Block>> {
-    let style = pampa::citeproc_filter::load_csl_style(config, base_dir).map_err(|e| {
+    let style = pampa::citeproc_filter::load_csl_style(config, base_dir, runtime).map_err(|e| {
         QuartoError::other(format!(
             "failed to load CSL style for book-wide bibliography merge: {e}"
         ))

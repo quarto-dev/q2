@@ -726,6 +726,25 @@
   overflow-y: auto;
 }
 
+/* Sticky so it stays in the content's top corner while a long error scrolls. */
+.preview-error-copy-btn {
+  position: sticky;
+  top: 0;
+  float: inline-end;
+  margin-inline-start: 8px;
+  background: var(--error-overlay-bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--error-overlay-dismiss);
+  cursor: pointer;
+  padding: 2px;
+  line-height: 0;
+}
+
+.preview-error-copy-btn:hover {
+  color: var(--editor-text);
+}
+
 .preview-error-message {
   margin: 0;
   white-space: pre-wrap;

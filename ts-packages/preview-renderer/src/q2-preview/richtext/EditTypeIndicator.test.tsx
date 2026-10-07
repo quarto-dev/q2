@@ -42,6 +42,7 @@ function codeBlockIndex(): Map<string, SourceIndexEntry> {
     m.set('0:0-20:0', {
         sourceNode: { t: 'CodeBlock', c: [['', ['python'], []], 'x = 1'] } as any,
         reachabilityClass: 'TopLevel',
+        sourcePool: [],
     });
     return m;
 }
@@ -52,10 +53,12 @@ function divParaIndex(): Map<string, SourceIndexEntry> {
     m.set('0:0-18:0', {
         sourceNode: { t: 'Div', c: [['', ['d'], []], []] } as any,
         reachabilityClass: 'Descendable',
+        sourcePool: [],
     });
     m.set('0:11-14:0', {
         sourceNode: { t: 'Para', c: [{ t: 'Str', c: 'BBB' }] } as any,
         reachabilityClass: 'TopLevel',
+        sourcePool: [],
     });
     return m;
 }

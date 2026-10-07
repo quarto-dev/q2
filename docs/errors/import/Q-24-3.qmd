@@ -1,0 +1,32 @@
+---
+title: "The Converter Couldn't Read the File"
+description: "The converter (pandoc) could not read the file. It may be damaged, password-protected, or a different type than its extension says."
+code: Q-24-3
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-3` — The Converter Couldn't Read the File
+
+> The converter (pandoc) could not read the file. It may be damaged, password-protected, or a different type than its extension says.
+
+## What this means
+
+The converter exited with an error or produced nothing for this file. The message pandoc gave is shown as the problem text.
+
+## Why this happens
+
+- The file is truncated or damaged (for example, an interrupted download).
+- The file is encrypted or password-protected.
+- The file's contents are a different type than its extension says.
+
+## How to fix
+
+Open the file in its own application and save a fresh copy, removing any password protection, then import that copy.
+
+## Related
+
+- `Q-24-13`

@@ -1,0 +1,31 @@
+---
+title: "Internal Import Error"
+description: "The import failed because of a problem in the importer itself: the converter's output could not be read, an image had no manifest entry, or the converter's host rejected the request."
+code: Q-24-12
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-12` — Internal Import Error
+
+> The import failed because of a problem in the importer itself: the converter's output could not be read, an image had no manifest entry, or the converter's host rejected the request.
+
+## What this means
+
+Something that should always hold did not: pandoc's JSON could not be read, an image link pointed at a file the media manifest doesn't list, the qmd could not be written, or the converter's host refused the request.
+
+## Why this happens
+
+- A bug in the importer.
+- A browser or converter version mismatch.
+
+## How to fix
+
+Try the import again. If it keeps failing, report it with the document if you can share it.
+
+## Related
+
+- `Q-24-3`

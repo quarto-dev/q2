@@ -24,6 +24,9 @@ hashlink = "0.11"
 pathdiff.workspace = true
 sha2 = "0.11"
 hex = "0.4"
+# Image links in imported qmd are percent-encoded (document import I12).
+percent-encoding = "2"
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
 glob = "0.3"
 # Nested-cell-mask opener/closer matching (engine/nested_cell_mask.rs) runs on
 # both native and wasm32 (the WASM preview pipeline must mask displayed cells
@@ -48,6 +51,10 @@ tree-sitter-r = "1.2"
 # compile-time `format_description!` macro. WASM-compatible.
 time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
 
+# Backs `inline_css` (Q1's juice step), used by the `inline-css` subcommand and
+# the `css-inline` pipeline stage. Default features (remote/file stylesheet
+# loading, rayon) stay off, which keeps it buildable for wasm32.
+css-inline = { version = "0.21", default-features = false }
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
 quarto-pandoc-types.workspace = true
@@ -177,11 +184,13 @@ insta.workspace = true
 quarto-error-catalog = { workspace = true }
 # P7 Task 11: the shared docx/pptx semantic extractor + pandoc-goldens
 # fixture manifest, also used by `cargo xtask capture-pandoc-goldens`.
-quarto-ooxml-extract = { path = "../quarto-ooxml-extract" }
+quarto-output-extract = { path = "../quarto-output-extract" }
 # Enables `quarto_config::span_assert` for tests that assert *where* a
 # diagnostic points, not just which code it carries (bd-9yh3pzfu).
 quarto-config = { workspace = true, features = ["span-assert"] }
 tempfile = "3"
+# R1: validate the PandocRequest golden against its published JSON Schema.
+jsonschema = { version = "0.55", default-features = false }
 walkdir.workspace = true
 tokio = { version = "1", features = ["rt", "macros"] }
 tracing-subscriber.workspace = true
@@ -191,6 +200,9 @@ socket2 = "0.6"
 # only the deflate read codec is needed (same minimal feature set as
 # quarto-source-fetch, which already vendors this at the same version).
 zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# document-import P6 T6: every part of a docx/pptx the editorial-marks export writes must be
+# well-formed XML (the extension's run-tests.py checked this with minidom).
+roxmltree = "0.21"
 # book-projects P2 item 49: pure-Rust PDF text extraction for hermetic
 # inspection of a real compiled Typst PDF's rendered figure numbers.
 # CI (main's test-suite.yml) provisions `typst` but not `pdftotext`

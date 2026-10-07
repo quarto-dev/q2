@@ -1,0 +1,889 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "Case",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "reply:",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "0"
+                ],
+                [
+                  "author",
+                  "Ann"
+                ],
+                [
+                  "date",
+                  "2026-09-01T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Parent",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "comment.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "1"
+                ],
+                [
+                  "author",
+                  "Dee"
+                ],
+                [
+                  "date",
+                  "2026-09-01T11:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Reply",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "comment.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "range",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "with",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "reply",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "0"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": [
+                  [
+                    "",
+                    [
+                      "comment-end"
+                    ],
+                    [
+                      [
+                        "id",
+                        "1"
+                      ]
+                    ]
+                  ],
+                  []
+                ],
+                "t": "Span"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "after.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Case",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "b,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "resolved",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "comment:",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "2"
+                ],
+                [
+                  "author",
+                  "Ann"
+                ],
+                [
+                  "date",
+                  "2026-09-02T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Resolved",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "thread.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "resolved",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "range",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "2"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "after.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Case",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "c,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "paragraph",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "whose",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "mark",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "was",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "inserted",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "by",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "Bob.",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "paragraph-insertion"
+              ],
+              [
+                [
+                  "author",
+                  "Bob"
+                ],
+                [
+                  "date",
+                  "2026-09-06T10:00:00Z"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Case",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "d,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "multi-paragraph",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "text:",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "3"
+                ],
+                [
+                  "author",
+                  "Cy"
+                ],
+                [
+                  "date",
+                  "2026-09-03T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "First",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "paragraph",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "of",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "the",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "comment.",
+                "t": "Str"
+              },
+              {
+                "t": "LineBreak"
+              },
+              {
+                "c": "Second",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "paragraph",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "of",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "the",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "comment.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "multi",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "range",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "3"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "after.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Case",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "e,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "range",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "starting",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "inside",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "emphasis:",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            {
+              "c": "emphasised",
+              "t": "Str"
+            }
+          ],
+          "t": "Emph"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "4"
+                ],
+                [
+                  "author",
+                  "Ann"
+                ],
+                [
+                  "date",
+                  "2026-09-04T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Emphasis",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "comment.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": [
+            {
+              "c": "words",
+              "t": "Str"
+            }
+          ],
+          "t": "Emph"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "plain",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "text",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "4"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "after.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Case",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "f,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "overlapping",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "ranges:",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "one",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "5"
+                ],
+                [
+                  "author",
+                  "Ann"
+                ],
+                [
+                  "date",
+                  "2026-09-05T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "First",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "overlap.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "two",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "6"
+                ],
+                [
+                  "author",
+                  "Dee"
+                ],
+                [
+                  "date",
+                  "2026-09-05T11:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Second",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "overlap.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "three",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "5"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "four",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "6"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "five.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}

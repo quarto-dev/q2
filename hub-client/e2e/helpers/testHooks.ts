@@ -33,6 +33,8 @@ export interface QuartoTestHooks {
   projectSet: typeof projectSet;
   reconcileProjectSet: typeof reconcileIntoConnectedProjectSet;
   wasmRenderer: typeof wasmRenderer;
+  pandoc: typeof import('../../src/test-hooks').pandoc;
+  typst: typeof import('../../src/test-hooks').typst;
 }
 
 declare global {

@@ -70,7 +70,7 @@ use crate::Result;
 use crate::artifact::{ArtifactScope, ArtifactStore};
 use crate::artifact_flush::{enqueue_artifacts, route_drained_project_artifacts};
 use crate::error::QuartoError;
-use crate::format::Format;
+use crate::format::{Format, FormatIdentifier};
 use crate::output_sink::{OutputSink, OutputSinkError};
 use crate::pipeline::{HtmlRenderConfig, RenderOutput, render_qmd_to_html, render_qmd_to_pandoc};
 use crate::project::index::ProjectIndex;
@@ -132,6 +132,13 @@ pub struct RenderToFileOptions {
     /// and behaves exactly as before. Set per-chapter by the book
     /// orchestration via the renderer's `chapter_seeds` map.
     pub chapter_seed: Option<crate::render::ChapterSeed>,
+
+    /// Render these bytes as the document's source instead of reading
+    /// `input_path` (pandoc-wasm H4b: the preview server renders the
+    /// editor's current text, which can be ahead of the disk copy). The
+    /// path still anchors project discovery and relative resources, and
+    /// nothing is written back. `None` (the default) reads the file.
+    pub source_override: Option<Vec<u8>>,
 }
 
 /// Result of rendering a document to a file.
@@ -253,13 +260,16 @@ pub fn render_document_to_file(
     let input_path = canonical_input.as_deref().unwrap_or(input_path);
 
     // Read input file
-    let input_bytes = runtime.file_read(input_path).map_err(|e| {
-        QuartoError::other(format!(
-            "Failed to read input file {}: {}",
-            input_path.display(),
-            e
-        ))
-    })?;
+    let input_bytes = match options.source_override.clone() {
+        Some(bytes) => bytes,
+        None => runtime.file_read(input_path).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to read input file {}: {}",
+                input_path.display(),
+                e
+            ))
+        })?,
+    };
 
     // Use provided project or discover
     let discovered_project;
@@ -303,8 +313,17 @@ pub fn render_document_to_file(
     // and default-kind projects leave `output_dir == dir`, preserving
     // the pre-Phase-1 "beside the input" behavior.
     let effective_options = apply_project_output_dir_to_options(options, project, input_path);
-    let (output_path, output_dir, output_stem) =
-        determine_output_paths(input_path, format, &effective_options, runtime.as_ref())?;
+    // `output-ext` (Q1 semantics): for typst, `pdf` (the default) means
+    // compile; any other value is literal and means "pandoc output only".
+    // Resolved once, here, so path computation and the stages agree.
+    let output_ext = typst_output_ext(&input_bytes, project, format);
+    let (output_path, output_dir, output_stem) = determine_output_paths_with_ext(
+        input_path,
+        format,
+        output_ext.as_deref(),
+        &effective_options,
+        runtime.as_ref(),
+    )?;
 
     // Create output directory
     runtime.dir_create(&output_dir, true).map_err(|e| {
@@ -320,7 +339,10 @@ pub fn render_document_to_file(
         resources::prepare_html_resources(&output_dir, &output_stem, runtime.as_ref())?;
 
     // Set up render context
-    let render_format = format_from_name(format)?;
+    let mut render_format = format_from_name(format)?;
+    if let Some(ext) = &output_ext {
+        render_format.output_extension = ext.clone();
+    }
     // P7-foundation Task 3: the Pandoc-hybrid leg's `PandocWriteStage`
     // writes its output file directly at `ctx.output_path()`, whose
     // top priority is `document.output` (see `StageContext::output_path`)
@@ -612,6 +634,18 @@ pub(crate) fn determine_output_paths(
     options: &RenderToFileOptions,
     runtime: &dyn SystemRuntime,
 ) -> Result<(PathBuf, PathBuf, String)> {
+    determine_output_paths_with_ext(input_path, format, None, options, runtime)
+}
+
+/// [`determine_output_paths`] with a resolved `output-ext` that replaces the
+/// format's default extension (see [`crate::output_ext`]).
+pub(crate) fn determine_output_paths_with_ext(
+    input_path: &Path,
+    format: &str,
+    extension_override: Option<&str>,
+    options: &RenderToFileOptions,
+    runtime: &dyn SystemRuntime,
+) -> Result<(PathBuf, PathBuf, String)> {
     // Determine file extension using the base format (strips extension prefix).
     // P7-foundation Task 3: this used to re-derive the extension via its own
     // match on `identifier.as_str()`, which never knew about `Pptx` (or
@@ -622,7 +656,8 @@ pub(crate) fn determine_output_paths(
     // truth for every `FormatIdentifier` variant; `render_format` already
     // carries its result, so reuse it instead of duplicating the mapping.
     let render_format = Format::from_format_string(format).unwrap_or_else(|_| Format::html());
-    let extension = render_format.output_extension.clone();
+    let extension =
+        extension_override.map_or_else(|| render_format.output_extension.clone(), str::to_string);
 
     // Get input stem
     let stem = input_path
@@ -683,6 +718,21 @@ pub(crate) fn determine_output_paths(
         .to_string();
 
     Ok((output_path, output_dir, output_stem))
+}
+
+/// The `output-ext` override for a typst render, `None` for every other
+/// format (LaTeX's `output-ext` is the latex epic's job) or when unset.
+fn typst_output_ext(input_bytes: &[u8], project: &ProjectContext, format: &str) -> Option<String> {
+    let render_format = Format::from_format_string(format).ok()?;
+    if render_format.identifier != FormatIdentifier::Typst {
+        return None;
+    }
+    let content = std::str::from_utf8(input_bytes).ok()?;
+    crate::output_ext::resolve_output_ext(
+        content,
+        project.config.metadata.as_ref(),
+        &render_format.target_format,
+    )
 }
 
 /// Convert a format name to a Format instance.
@@ -1241,6 +1291,7 @@ Content.
             &mut ctx,
             runtime.clone(),
             crate::transform::TransformPhase::Navigation,
+            crate::pipeline::PartialKind::Native,
         ))
         .unwrap();
         let mut held = crate::pipeline::BookChapterPauseState::extract_from(&mut ctx);

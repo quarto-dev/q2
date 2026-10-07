@@ -62,6 +62,7 @@ pub mod lua_differential;
 pub mod math_text_source;
 pub mod nesting_cursor_roundtrip_tests;
 pub mod node_edit_tests;
+pub mod qmd_writer_pandoc_shapes;
 pub mod qmd_writer_source_info;
 pub mod quarto_math_seam;
 pub mod regenerate_nested_buffers_tests;

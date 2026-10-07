@@ -1,0 +1,32 @@
+[
+  {
+    "path": "argv.json",
+    "sha256": "1b397ab163cb786ce9380a654395c495f3c7258cff1bbe0734ca17fdf6c9513f",
+    "size": 180
+  },
+  {
+    "path": "media/media/file0.png",
+    "sha256": "e1d2966db7536ac77f7f8da8e29f2e53cc1a238e1c0dd97f1e7b59db966f796a",
+    "size": 287
+  },
+  {
+    "path": "pandoc.json",
+    "sha256": "98f80cf33946a74abc97104b2efd9642cc6defe8c98f80ef9d26e5f1a00e20a3",
+    "size": 16436
+  },
+  {
+    "path": "source.epub",
+    "sha256": "4e4bdd6325a9b45595495e32558ce1d4a073e16318597506a87988f7e6d05ea4",
+    "size": 6189
+  },
+  {
+    "path": "status.json",
+    "sha256": "370aaa466bf7fdf5df8dec2004f5e0b4d5d352b7060c00c4a1204cc89b4b641a",
+    "size": 18
+  },
+  {
+    "path": "stderr.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  }
+]

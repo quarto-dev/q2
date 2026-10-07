@@ -39,6 +39,12 @@ if (import.meta.env.VITE_E2E === '1') {
     import('./test-hooks');
 }
 
+// Pandoc dev harness (`window.q2PandocDownload`, see src/pandoc/devHarness.ts): `vite dev`
+// only. VITE_E2E builds get it through ./test-hooks, so `__quartoTestReady` covers it.
+if (import.meta.env.DEV) {
+  void import('./pandoc/devHarness').then((m) => m.installDevHarness());
+}
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const authProvider = GOOGLE_CLIENT_ID ? googleAuthProvider : noopAuthProvider;

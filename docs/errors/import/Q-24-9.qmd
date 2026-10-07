@@ -1,0 +1,32 @@
+---
+title: "Image Conversion Failed"
+description: "An EMF or WMF image could not be converted to SVG. The original was stored, but browsers can't display it."
+code: Q-24-9
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-9` — Image Conversion Failed
+
+> An EMF or WMF image could not be converted to SVG. The original was stored, but browsers can't display it.
+
+## What this means
+
+Word documents often embed vector images as EMF or WMF, which browsers can't show. The importer converts them to SVG in the browser; for this image the conversion failed, so the original file is stored under its own extension.
+
+## Why this happens
+
+- The image uses EMF/WMF records the converter does not support.
+- The image is damaged.
+
+## How to fix
+
+The original still works when the document is downloaded as Word or PDF. To show it on a web page, export it from its source application as PNG or SVG and replace the file.
+
+## Related
+
+- `Q-24-10`
+- `Q-24-11`

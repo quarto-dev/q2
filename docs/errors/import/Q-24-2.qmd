@@ -1,0 +1,30 @@
+---
+title: "Import File Too Large"
+description: "The source file is larger than the importer accepts (25 MB). It was refused before the converter was loaded."
+code: Q-24-2
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-2` — Import File Too Large
+
+> The source file is larger than the importer accepts (25 MB). It was refused before the converter was loaded.
+
+## What this means
+
+The file is larger than 25 MB. Importing runs the converter in your browser, and a very large file can exhaust the browser's memory, so larger files are refused up front.
+
+## Why this happens
+
+- The document embeds many or large images, audio or video.
+
+## How to fix
+
+Import a smaller copy: compress the images (in Word, *Picture Format → Compress Pictures*), remove embedded media you don't need, or split the document into parts.
+
+## Related
+
+- `Q-24-13`

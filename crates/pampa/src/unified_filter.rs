@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
 
-use quarto_system_runtime::SystemRuntime;
+use quarto_system_runtime::{RuntimeError, SystemRuntime};
 
 use crate::attribution::AttributionLookup;
 use crate::pandoc::Pandoc;
@@ -155,17 +155,27 @@ impl From<CiteprocFilterError> for FilterError {
 #[derive(Debug)]
 pub enum CiteprocFilterError {
     /// Bibliography file not found or unreadable.
-    BibliographyNotFound(PathBuf, std::io::Error),
+    BibliographyNotFound(PathBuf, RuntimeError),
     /// Failed to parse bibliography file.
     BibliographyParseError(PathBuf, String),
     /// CSL style file not found or unreadable.
-    StyleNotFound(PathBuf, std::io::Error),
+    StyleNotFound(PathBuf, RuntimeError),
     /// Failed to parse CSL style.
     StyleParseError(PathBuf, String),
     /// Citation processing error.
     ProcessingError(String),
     /// No bibliography specified in document metadata.
     NoBibliography,
+}
+
+/// The underlying cause of a failed read. An I/O error prints bare (as it did
+/// when the files were read with `std::fs`, so the message is unchanged on
+/// native); any other runtime error keeps its own prefix.
+fn runtime_cause(err: &RuntimeError) -> String {
+    match err {
+        RuntimeError::Io(e) => e.to_string(),
+        other => other.to_string(),
+    }
 }
 
 impl std::fmt::Display for CiteprocFilterError {
@@ -176,7 +186,7 @@ impl std::fmt::Display for CiteprocFilterError {
                     f,
                     "Bibliography file '{}' not found: {}",
                     path.display(),
-                    err
+                    runtime_cause(err)
                 )
             }
             CiteprocFilterError::BibliographyParseError(path, err) => {
@@ -188,7 +198,12 @@ impl std::fmt::Display for CiteprocFilterError {
                 )
             }
             CiteprocFilterError::StyleNotFound(path, err) => {
-                write!(f, "CSL style file '{}' not found: {}", path.display(), err)
+                write!(
+                    f,
+                    "CSL style file '{}' not found: {}",
+                    path.display(),
+                    runtime_cause(err)
+                )
             }
             CiteprocFilterError::StyleParseError(path, err) => {
                 write!(f, "Failed to parse CSL style '{}': {}", path.display(), err)
@@ -236,6 +251,7 @@ pub async fn apply_filter(
                     context,
                     target_format,
                     base_dir,
+                    runtime.as_ref(),
                 )?;
             Ok(FilterOutput {
                 pandoc: new_pandoc,
@@ -440,7 +456,10 @@ mod tests {
     fn test_citeproc_error_bibliography_not_found() {
         let err = CiteprocFilterError::BibliographyNotFound(
             PathBuf::from("/path/to/refs.bib"),
-            std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+            RuntimeError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "file not found",
+            )),
         );
         let msg = format!("{}", err);
         assert!(msg.contains("Bibliography file"));
@@ -464,7 +483,10 @@ mod tests {
     fn test_citeproc_error_style_not_found() {
         let err = CiteprocFilterError::StyleNotFound(
             PathBuf::from("/path/to/style.csl"),
-            std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+            RuntimeError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "file not found",
+            )),
         );
         let msg = format!("{}", err);
         assert!(msg.contains("CSL style file"));
