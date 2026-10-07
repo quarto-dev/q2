@@ -78,7 +78,7 @@ impl SourceInfoSerializer {
 }
 ```
 
-#### Task 1.3: Update write_* Functions
+#### Task 1.3: Update write\_* Functions
 
 Modify all write functions to accept and use SourceInfoSerializer.
 
@@ -185,7 +185,7 @@ impl SourceInfoDeserializer {
 }
 ```
 
-#### Task 2.2: Update read_* Functions
+#### Task 2.2: Update read\_* Functions
 
 Modify all read functions to accept and use SourceInfoDeserializer.
 

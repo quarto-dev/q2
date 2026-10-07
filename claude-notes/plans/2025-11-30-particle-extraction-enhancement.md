@@ -18,7 +18,7 @@ Plus a bonus fix for `position_IbidWithSuffix`.
 1. **Punctuation-connected particle extraction** (`reference.rs:365-391`)
    - Added fallback logic after space-based extraction
    - Handles apostrophe (`'`, `'`), hyphen (`-`), en-dash (`–`)
-   - Example: "d'Aubignac" → non_dropping_particle="d'", family="Aubignac"
+   - Example: "d'Aubignac" → non_dropping_particle="d\'", family="Aubignac"
    - Example: "al-One" → non_dropping_particle="al-", family="One"
 
 2. **No-space delimiter for punctuation particles** (`eval.rs:1474-1481`, `1565-1577`, `1671-1690`)

@@ -967,28 +967,28 @@ time.
 - [x] Manual smoke per §"End-to-end CLI verification" on a 3-page
       nested fixture at `/tmp/q2-phase2-smoke`:
 
-      - `_quarto.yml` with `project.type: website`, `website.sidebar`
-        including a "Guides" nested section.
-      - `index.qmd`, `about.qmd`, `guides/intro.qmd`.
-      - `cargo run --bin q2 -- render /tmp/q2-phase2-smoke` succeeded
-        with zero warnings.
-      - All outputs landed in `_site/`: `index.html`, `about.html`,
-        `guides/intro.html`.
-      - Sidebar HTML inspected:
-        - Title "Phase 2 Smoke" renders from `website.sidebar.title`.
-        - `index.html` / `about.html` / `guides/intro.html` links
-          all rewritten (`.qmd`→`.html`); subdirectory path
-          `guides/intro.html` preserved.
-        - Bare-path entries display the referenced documents'
-          *titles* ("Home", "About", "Guide Intro") rather than
-          raw hrefs — from the `enrich_text_from_index` Generate
-          helper added after the smoke revealed raw-href labels.
-        - Current page's link carries `class="…active"` on both
-          `index.html` and `guides/intro.html`; other pages'
-          links do not.
-        - Guides section renders with toggle chevron,
-          `aria-expanded="true"`, `show` on the child `<ul>`
-          (because `collapse-level=2` and this is a depth-1 section).
+  - `_quarto.yml` with `project.type: website`, `website.sidebar`
+    including a "Guides" nested section.
+  - `index.qmd`, `about.qmd`, `guides/intro.qmd`.
+  - `cargo run --bin q2 -- render /tmp/q2-phase2-smoke` succeeded
+    with zero warnings.
+  - All outputs landed in `_site/`: `index.html`, `about.html`,
+    `guides/intro.html`.
+  - Sidebar HTML inspected:
+    - Title "Phase 2 Smoke" renders from `website.sidebar.title`.
+    - `index.html` / `about.html` / `guides/intro.html` links
+      all rewritten (`.qmd`→`.html`); subdirectory path
+      `guides/intro.html` preserved.
+    - Bare-path entries display the referenced documents\'
+      *titles* ("Home", "About", "Guide Intro") rather than
+      raw hrefs — from the `enrich_text_from_index` Generate
+      helper added after the smoke revealed raw-href labels.
+    - Current page's link carries `class="…active"` on both
+      `index.html` and `guides/intro.html`; other pages\'
+      links do not.
+    - Guides section renders with toggle chevron,
+      `aria-expanded="true"`, `show` on the child `<ul>`
+      (because `collapse-level=2` and this is a depth-1 section).
 - [x] Added `sidebar_generate_enriches_missing_text_from_index` and
       `sidebar_generate_does_not_clobber_explicit_text` unit tests
       for the enrichment pass.

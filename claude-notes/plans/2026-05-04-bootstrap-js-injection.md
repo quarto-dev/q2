@@ -106,7 +106,7 @@ When that session starts, the relevant questions will be:
 
 - **Trigger:** "document contains math." This needs an AST scan during a stage that runs after engines/transforms but before template apply. Possibly during `RenderHtmlBodyStage` or as a sibling stage. Quarto 1 does this in pandoc itself, so we'll be designing fresh.
 - **Asset:** MathJax is *much* bigger than Bootstrap (\~1MB+ for the full distribution), and is typically served from CDN even in production. Decision needed: vendor it, ship a stub loader, or default to CDN. Quarto 1 hosts it locally per-project — likely the right precedent.
-- **Injection shape:** MathJax wants a `<script>` *plus* a config `<script>` block (window.MathJax = {…}) — so it's *not* just a `js:` artifact, it also needs an inline configuration. This is the case where the simple `predicate → js: artifact` pattern starts to creak, and where a small `JsFeature` abstraction (predicate + assets + inline config) might pay for itself. Worth revisiting then, not now.
+- **Injection shape:** MathJax wants a `<script>` *plus* a config `<script>` block (window.MathJax = \{…\}) — so it's *not* just a `js:` artifact, it also needs an inline configuration. This is the case where the simple `predicate → js: artifact` pattern starts to creak, and where a small `JsFeature` abstraction (predicate + assets + inline config) might pay for itself. Worth revisiting then, not now.
 - **Alternative engines:** KaTeX and `webtex` are listed in Quarto 1's options. Decide whether q2 supports the full menu or just MathJax v1.
 
 A separate plan doc + beads issue will be opened next session.

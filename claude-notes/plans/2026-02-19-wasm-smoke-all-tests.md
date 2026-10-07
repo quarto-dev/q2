@@ -137,7 +137,7 @@ The `diagnostics[].title` is the message text, and `diagnostics[].kind` maps to 
 - [x] **shouldError(result)**
   - Assert `result.success === false`
 
-- [x] **printsMessage(result, { level, regex, negate? })**
+- [x] **printsMessage(result, \{ level, regex, negate? \})**
   - Collect messages from whichever is present: `result.diagnostics` (on failure) or `result.warnings` (on success) — they are mutually exclusive, never both present. Map each to `{ level, message }` where `level` is derived from `kind` (case-insensitive) and `message` is `title`.
   - Filter by `level`
   - Check if any `message` matches `new RegExp(regex)`

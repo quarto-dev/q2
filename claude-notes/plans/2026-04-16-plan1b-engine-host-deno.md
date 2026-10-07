@@ -519,8 +519,8 @@ unguarded *here*, with rationale:
       NOT re-run `import()` or re-call `engine.init?.(quartoAPI)`. The
       harness returns the cached `LoadEngineResult` directly. If the
       message's `enginePath` differs from the cached entry's path,
-      respond with `error` ("engine name reused with different path:
-      ${cachedPath} vs ${msg.enginePath}") — config drift is a bug, not
+      respond with `error` (\"engine name reused with different path:
+      \$\{cachedPath\} vs \$\{msg.enginePath\}\") — config drift is a bug, not
       a silent overwrite. This idempotency is what lets plan1a-engine use
       naive `OnceLock<...>` for the Rust-side init state without
       double-checked locking; see plan1a-engine "Race-free init via
@@ -632,7 +632,7 @@ unguarded *here*, with rationale:
       **Drain before exiting.** Because dispatch is non-blocking, requests may
       still be in flight when EOF/`shutdown` is reached. Before `Deno.exit(0)`,
       `await` the `perEngineQueue` tails (and flush their `Response` frames) so a
-      concurrently-running `Execute`'s response is written, not truncated. In the
+      concurrently-running `Execute`\'s response is written, not truncated. In the
       normal teardown order q2 stops issuing requests before it closes stdin, so
       the drain is usually empty — it is a correctness backstop under parallel
       Pass-2, not the common path. (A hung drain is still bounded by the host's
@@ -676,7 +676,7 @@ unguarded *here*, with rationale:
        **The metadata map may be nested, not flat.** q2 preserves an
        explicitly-written bin — `execute:\n  echo: false` — as a *nested map*
        under `meta["execute"]`; it does **not** hoist `echo` to the top level
-       (verified against `crates/quarto-config/src/format.rs`'s
+       (verified against `crates/quarto-config/src/format.rs`\'s
        `test_resolve_format_nested_objects`). So the partition has two stages,
        matching `metadataAsFormat`:
 
@@ -1031,7 +1031,7 @@ doubles.*
 
 - [x] **Test T-A5 — `Init` frame is consumed, response-less, and gates
     `loadEngine` (RTQ Item A; the host-loop behavior RTQ handed to 1b).** *Real
-    unit:* `host.ts`'s first-frame handling. *Seam:* (a) send `Init { global }`
+    unit:* `host.ts`\'s first-frame handling. *Seam:* (a) send `Init { global }`
     (throwaway id), then `loadEngine` for an engine whose `init()` calls
     `quarto.text.lines("a\nb")` and stashes the result; assert the engine's
     `init()` saw a **built** API (the stashed value is `["a","b"]`, no throw) and
@@ -1092,7 +1092,7 @@ doubles.*
     into one value. *Named reverts:* ▸ stop threading `LaunchEngine.project` into
     `launch()` (pass `undefined`) → the "matches project" assertion RED. ▸ source
     *both* the declared and resolved output dir from the **same** field (collapse
-    `config`'s `output-dir` and `output_dir`) → the "declared `_site` vs resolved
+    `config`\'s `output-dir` and `output_dir`) → the "declared `_site` vs resolved
     `/abs/proj/_site`" distinctness assertion RED.
 - [x] **Test: no shared cross-engine context state (RTQ Item A T-A4).** Two engines A,
     B; deliver `Init { global }`; `loadEngine` both; `launchEngine` A only.
@@ -1119,7 +1119,7 @@ doubles.*
     declares `async init()` and resolves after a tick; verify that
     `loaded` is sent only after the resolution, and any error from
     the rejection is reported. *Named revert:* ▸ drop the defensive `await` on
-    `init()`'s result → `loaded` is written before the async `init` resolves → the
+    `init()`\'s result → `loaded` is written before the async `init` resolves → the
     "loaded only after resolution" ordering assertion RED.
 - [x] Test: module top-level code that accesses `quarto.*` fails (no
     global available). Verify the failure mode is a clean load error,
@@ -1255,7 +1255,7 @@ doubles.*
       `WalkEntry` to `{ path, isFile, isDirectory }` (sketch above). Default
       `includeDirs: false` (files-only) so the common "promote the figures" case
       needs no flag.
-    - **Consumer** — Plan 3's `assets.ts` calls `quarto`'s host `fs.walk`; the
+    - **Consumer** — Plan 3's `assets.ts` calls `quarto`\'s host `fs.walk`; the
       WASM host (`@quarto/engine-host-wasm`, future) supplies its own VFS-backed
       `walk` against the same member. (Cross-ref to the Plan 3 reviewer: 1b now owns
       both halves; nothing for Plan 2 to add.)
@@ -1312,7 +1312,7 @@ doubles.*
     There is **no `quarto.htmlDependency()` API method.** An imperative registration
     helper would have to stash registrations in mutable state on the single shared
     QuartoAPI, cleared before each `execute()` and drained after —
-    which **races** under parallel Pass-2: two engines' `execute()`s interleave
+    which **races** under parallel Pass-2: two engines\' `execute()`s interleave
     across `await`s and write the same slot, so deps get dropped or misattributed.
     Q1 has no such mechanism in its engine protocol — every engine output is a field
     on a freshly-returned result object, the `quarto` API is shared but never mutated
@@ -1436,7 +1436,7 @@ doubles.*
 - [x] **MappedString serialization for `markdownForFile` (Deno → Rust):**
     When an engine converts a non-QMD file to QMD via `markdownForFile`, the
     result is a `MappedString` with provenance back to the original file.
-    The harness serializes this mapping by walking the `MappedString`'s
+    The harness serializes this mapping by walking the `MappedString`\'s
     underlying piece structure and emitting **one `TsSourceMapEntry` per
     piece** — same shape and same rule as the Rust side's flattening of
     `SourceInfo::Concat::pieces` (plan1a-protocol appendix, "Source-map
@@ -1474,7 +1474,7 @@ doubles.*
     serialized under an `AsyncMutex` (`writeMutex`). Async (not `writeSync`) so a
     large frame yields and the read loop keeps draining the channel — the
     continuous-drain property that prevents a large-payload deadlock. The mutex
-    serializes concurrent dispatch tasks' writes so two frames never interleave
+    serializes concurrent dispatch tasks\' writes so two frames never interleave
     across the `await`. `AsyncMutex` is a tiny hand-rolled promise-chain
     serializer (each acquirer chains onto a `tail` promise), **not** a
     dependency.
@@ -1517,7 +1517,7 @@ doubles.*
     bundle steps). Build the bundle and check the result into git, replacing the
     placeholder plan1a-host committed at the same path. **Framing (per plan1a-host's
     reworked "Bundle embedding"):** the harness is a **generated build artifact**
-    embedded via `include_str!`, treated **exactly like `q2 mcp`'s `dist-bundle/`
+    embedded via `include_str!`, treated **exactly like `q2 mcp`\'s `dist-bundle/`
     and the preview SPA's `dist/`** — it is **NOT** the `resources/…`-*source*
     pattern (reveal.js/clipboard/bootstrap). (The earlier "bundle is source like
     `reveal.js`" framing was wrong; the cited `quarto-system-runtime`/`ejs-bundle.js`
@@ -1692,7 +1692,7 @@ Flagged as a possible future concern — if the bundle grows problematically,
 options include a cargo feature flag to gate the embed, or loading from a
 known filesystem path instead of embedding. For now, embedding is the
 simplest approach and matches q2's existing generated-bundle embeds
-(`q2 mcp`'s `dist-bundle/`, the preview SPA's `dist/`).
+(`q2 mcp`\'s `dist-bundle/`, the preview SPA's `dist/`).
 
 ### Why a separate plan from 1a?
 
@@ -1776,7 +1776,7 @@ this record exists so the divergence is not silently re-introduced by a future
   the wrong state return a clear error
 - [x] `target()` handled as harness-internal (never reaches the protocol)
 - [x] deferred-deps infra built (RTQ FC-2): `dependencies: bool` (default true) on
-  `TsExecuteOptions`; under `false`, `execute()`'s `engineDependencies` is
+  `TsExecuteOptions`; under `false`, `execute()`\'s `engineDependencies` is
   **forwarded** on `TsExecuteResult` (the harness does **not** fold); the harness
   handles the new `dependencies` verb as a thin pass-through to
   `engine.dependencies()`, replying `dependenciesResult { includes }`. q2's render
@@ -1837,7 +1837,7 @@ this record exists so the divergence is not silently re-introduced by a future
   and launch-context method bodies may throw "not yet implemented"
   pending Plans 2/3
 - [x] **`PlatformHost.fs.walk` lands in 1b — both the interface member (added to
-  `@quarto/api`'s `PlatformHost.fs`) and the `denoHost` impl (`walkSync`-backed),
+  `@quarto/api`\'s `PlatformHost.fs`) and the `denoHost` impl (`walkSync`-backed),
   with the `deno test` covering it** (files-only default, `maxDepth`, `includeDirs`);
   Plan 3's jupyter `assets()` consumes it, nothing left for Plan 2 to add
 - [x] Bundle builds cleanly with `npm run build`, produces

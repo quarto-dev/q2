@@ -244,7 +244,7 @@ pub const NODE_TYPES: &str =
     include_str!("../../tree-sitter-markdown/src/node-types.json");
 ```
 
-**Note**: Rename exports to remove "_BLOCK" suffix since there's only one grammar now.
+**Note**: Rename exports to remove "\_BLOCK" suffix since there's only one grammar now.
 
 ### Phase 5: Update lib.rs Documentation
 
@@ -443,7 +443,7 @@ After this cleanup, we could also:
    - `HIGHLIGHT_QUERY_BLOCK` → `HIGHLIGHT_QUERY`
    - `INJECTION_QUERY_BLOCK` → `INJECTION_QUERY`
    - `NODE_TYPES_BLOCK` → `NODE_TYPES`
-   - Recommendation: YES, removes "_BLOCK" suffix that's no longer meaningful
+   - Recommendation: YES, removes \"\_BLOCK\" suffix that's no longer meaningful
 
 3. **Do we need deprecation warnings?**
    - This is an internal crate (publish = false)

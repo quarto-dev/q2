@@ -695,8 +695,8 @@ fn apply_container_reconciliation(
 
 When a container's hash changes because a child changed:
 
-- Original Div: contains [Para("foo"), CodeBlock({py}, "...")]
-- Executed Div: contains [Para("foo"), CodeBlock({}, "output")]
+- Original Div: contains [Para("foo"), CodeBlock(\{py\}, "...")]
+- Executed Div: contains [Para("foo"), CodeBlock(\{\}, "output")]
 
 The Div's hash changes (because children hashes changed), but we want to:
 1. Keep the Div's source location (it's the same Div structurally)

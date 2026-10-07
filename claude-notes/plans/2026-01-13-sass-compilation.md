@@ -393,7 +393,7 @@ All 32 quarto-sass tests pass:
 - Created JS bridge: `hub-client/src/wasm-js-bridge/sass.js`
   - Lazy-loads dart-sass (\~5MB) on first compilation to avoid blocking startup
   - Implements custom VFS importer for reading files from the virtual filesystem
-  - Handles SCSS partial resolution (_prefix, .scss extension, index files)
+  - Handles SCSS partial resolution (\_prefix, .scss extension, index files)
   - Suppresses deprecation warnings (same as TS Quarto)
 - Added `sass` npm dependency to hub-client (^1.77.0)
 - Implemented `WasmRuntime::compile_sass()` in `crates/quarto-system-runtime/src/wasm.rs`

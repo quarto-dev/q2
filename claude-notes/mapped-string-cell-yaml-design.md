@@ -91,7 +91,7 @@ let annotated = parse_yaml_annotated(&yaml_block.text, yaml_source_info)?;
 ### Scenario 3: YAML in Executable Code Cells (Complex)
 
 **Example**: `analysis.qmd`
-```markdown
+````markdown
 Here's an analysis:
 
 ```{r}
@@ -103,7 +103,7 @@ Here's an analysis:
 library(ggplot2)
 ggplot(data) + geom_point()
 ```
-```
+````
 
 **Characteristics**:
 - YAML is distributed across multiple lines
@@ -122,25 +122,25 @@ ggplot(data) + geom_point()
 ### Text Transformation Pipeline
 
 1. **Original source** (what user sees):
-```
+   ```
     offset:  0         1         2         3
              0123456789012345678901234567890123456789
    content: "#| echo: false\n#| warning: false\n#| fig-width: 8\n"
-```
+   ```
 
 2. **Extracted lines** (what we parse):
-```
+   ```
    Line 1: "#| echo: false"    (offsets 0-14 in source)
    Line 2: "#| warning: false" (offsets 15-31 in source)
    Line 3: "#| fig-width: 8"   (offsets 32-47 in source)
-```
+   ```
 
 3. **Normalized YAML** (what yaml-rust2 sees):
-```
+   ```
    offset: 0         1         2
            012345678901234567890123456789012345
    yaml:   "echo: false\nwarning: false\nfig-width: 8\n"
-```
+   ```
 
 4. **Mapping requirement**:
    - YAML offset 0 → source offset 3 (skip `#| `)
@@ -731,7 +731,7 @@ fn test_scenario_3_cell_options() {
 
 ### Integration Tests
 
-```rust
+````rust
 #[test]
 fn test_error_reporting_cell_options() {
     let qmd = r#"
@@ -774,7 +774,7 @@ print("test")
         [mapped.location.offset..mapped.location.offset + 13];
     assert_eq!(error_text, "invalid_value");
 }
-```
+````
 
 ## Advantages of This Design
 

@@ -40,7 +40,7 @@ pub trait ErrorCollector {
 **Error Collection During Parsing**:
 - `postprocess.rs` uses `ErrorCollector` to collect warnings and errors during AST transformation
 - Example warnings: "Caption found without a preceding table at 35:1"
-- Example errors: "Found attr in postprocess: {...} - this should have been removed"
+- Example errors: "Found attr in postprocess: \{...\} - this should have been removed"
 
 **Top-level Error Handling**:
 - `qmd.rs` reader creates either `TextErrorCollector` or `JsonErrorCollector` based on `error_formatter` parameter

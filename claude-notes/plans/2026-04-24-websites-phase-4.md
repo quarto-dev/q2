@@ -686,25 +686,25 @@ Phase 2 and Phase 3 made).
 - [x] Smoke fixture `/tmp/q2-phase4-smoke/` — three-page sidebar.
       Observed HTML on each page (per CLAUDE.md §End-to-end
       verification):
-      * **index.html** (first page): empty `nav-page-previous` div,
-        next `<a href="about.html" … aria-label="About">About</a>`
-        with right-arrow icon.
-      * **about.html** (middle): prev →
-        `<a href="index.html" … aria-label="Home">Home</a>` with
-        left-arrow; next → `<a href="docs.html" … aria-label="Documentation">Documentation</a>`
-        with right-arrow.
-      * **docs.html** (last): prev →
-        `<a href="about.html" … aria-label="About">About</a>` with
-        left-arrow, empty `nav-page-next` div.
-      * Bare-path entries enriched with profile titles ("Home",
-        "About", "Documentation") via Phase 2 / shared
-        `enrich_navigation_items` machinery.
+  * **index.html** (first page): empty `nav-page-previous` div,
+    next `<a href="about.html" … aria-label="About">About</a>`
+    with right-arrow icon.
+  * **about.html** (middle): prev →
+    `<a href="index.html" … aria-label="Home">Home</a>` with
+    left-arrow; next → `<a href="docs.html" … aria-label="Documentation">Documentation</a>`
+    with right-arrow.
+  * **docs.html** (last): prev →
+    `<a href="about.html" … aria-label="About">About</a>` with
+    left-arrow, empty `nav-page-next` div.
+  * Bare-path entries enriched with profile titles ("Home",
+    "About", "Documentation") via Phase 2 / shared
+    `enrich_navigation_items` machinery.
 - [x] Smoke fixture `/tmp/q2-phase4-separator-smoke/` — separator
       boundary `[a, ---, b, c]`. Observed:
-      * **a.html**: separator-as-next, no prev → strip skipped
-        entirely (lonely page).
-      * **b.html**: prev empty (separator), next → `c.html`.
-      * **c.html**: prev → `b.html`, next empty.
+  * **a.html**: separator-as-next, no prev → strip skipped
+    entirely (lonely page).
+  * **b.html**: prev empty (separator), next → `c.html`.
+  * **c.html**: prev → `b.html`, next empty.
       Confirms Decision 4 separator semantics end-to-end.
 - [x] Re-ran `/tmp/q2-phase2-smoke/` + `/tmp/q2-phase3-smoke/` after
       Phase 4 wiring. Sidebar (5 navbar elements + 1 footer) and
@@ -732,18 +732,18 @@ Phase 2 and Phase 3 made).
       closed with a reason citing commit `4a59a9dd` and the
       follow-up bead IDs.
 - [x] **Follow-ups filed** (each `discovered-from:bd-nwun`):
-      * `bd-q1pe` — Emit `<link rel="prev/next">` meta tags for
-        page-navigation (Decision 7 defer).
-      * `bd-xwq8` — Suppress page-nav for `page-layout: custom`
-        pages (Q1 parity).
-      * `bd-q6ky` — Plain-text aria-label projection for rich
-        titles (rides with rich-title support in
-        `DocumentProfile`).
-      * `bd-bobp` — Index-forgiveness for page-source matching
-        (mirrors Phase 3's `bd-jbml`).
-      * `bd-nf50` — *(epic-wide, related to `bd-tr81`)* Page-
-        navigation rules need user-facing docs in the Q2 docs
-        site (Decision 9).
+  * `bd-q1pe` — Emit `<link rel="prev/next">` meta tags for
+    page-navigation (Decision 7 defer).
+  * `bd-xwq8` — Suppress page-nav for `page-layout: custom`
+    pages (Q1 parity).
+  * `bd-q6ky` — Plain-text aria-label projection for rich
+    titles (rides with rich-title support in
+    `DocumentProfile`).
+  * `bd-bobp` — Index-forgiveness for page-source matching
+    (mirrors Phase 3's `bd-jbml`).
+  * `bd-nf50` — *(epic-wide, related to `bd-tr81`)* Page-
+    navigation rules need user-facing docs in the Q2 docs
+    site (Decision 9).
 - [x] Updated the epic plan's "Work items" checklist — Phase 4 marked
       done, sub-plan linked, `bd-nwun` referenced.
 - [x] Added the documentation reminder to the epic plan's

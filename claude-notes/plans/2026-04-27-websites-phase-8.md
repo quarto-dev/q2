@@ -858,8 +858,8 @@ Every test authored before the code that makes it pass.
 37. `graph_force_render_includes_always_render_pages` —
     `project.always-render: true` → page in `force_render`.
 38. `transitive_deps_finds_closure_via_reverse_edges` — Mode B's
-    `needed_profiles` query: targets={X}, X depends on Y, Y on Z
-    → result includes {X, Y, Z}.
+    `needed_profiles` query: targets=\{X\}, X depends on Y, Y on Z
+    → result includes \{X, Y, Z\}.
 39. `transitive_deps_terminates_on_cycles` — pathological cyclic
     `nav-dependencies` declaration; query returns finite set.
 40. `implicit_target_pulls_in_always_render_dependents` — Mode B
@@ -886,7 +886,7 @@ Every test authored before the code that makes it pass.
     `"5 pages, 5 rendered (5 profile-cache hits)"`.
 43. `mode_a_warm_run_after_body_edit_still_renders_all` — edit
     one page's body → every page Pass-2 runs anyway; that page's
-    profile cache misses; siblings' profile caches hit.
+    profile cache misses; siblings\' profile caches hit.
 44. `mode_a_warm_run_after_metadata_yml_edit_invalidates_subtree_profiles`
     — edit `chapters/_metadata.yml` → only chapters/* profile
     cache misses; every page still re-renders Pass-2 (Mode A).
@@ -899,7 +899,7 @@ Every test authored before the code that makes it pass.
 46. `mode_b_single_target_renders_only_that_page` —
     `quarto render foo.qmd` in a project; foo has no nav
     dependencies → `_site/foo.html` is the only Pass-2 output.
-    Other pages' output files unchanged on disk.
+    Other pages\' output files unchanged on disk.
 47. `mode_b_walks_dependency_closure_for_pass1` — foo has a
     body link to bar.qmd → bar's profile is re-extracted (or
     cache-hit) so foo's Pass-2 link rewriting can resolve;
@@ -913,7 +913,7 @@ Every test authored before the code that makes it pass.
 50. `mode_b_directory_arg_expands_to_targets` —
     `quarto render foo/` renders every `.qmd` under `foo/`.
 51. `mode_b_multi_target_arg_renders_union` —
-    `quarto render a.qmd b.qmd` renders {a, b} only.
+    `quarto render a.qmd b.qmd` renders \{a, b\} only.
 52. `mode_b_unrelated_pages_outputs_byte_identical_to_pre_render` —
     confirm Mode B doesn't accidentally touch other pages.
 
@@ -923,7 +923,7 @@ Every test authored before the code that makes it pass.
     pre-populate cache → `--clean-cache` → cache empty before render.
 54. `pipeline_corrupt_profile_cache_falls_through_to_live_extract`.
 55. `pipeline_sitemap_merge_preserves_skipped_entries` —
-    Mode B edit-one-render-one → other pages' sitemap
+    Mode B edit-one-render-one → other pages\' sitemap
     `<lastmod>` is the *original* timestamp.
 56. `pipeline_default_project_no_cache_io` — single-doc render
     (no cache_dir) → no `.quarto/cache/` writes.
@@ -1283,15 +1283,15 @@ None — inline asserts cover the vocabulary.
 - [ ] No snapshot drift from Phase 7.
 - [ ] Follow-ups filed (each `discovered-from:bd-<phase8>`,
       parent-child to `bd-0tr6`):
-      * `nav-dependencies` glob support
-        (`[posts/*.qmd]`, `[chapters/**/*.qmd]`).
-      * Smarter Mode B: detect "user-named target had a nav-config
-        edit between runs that affects it" and pull in only the
-        affected sidebar members rather than relying on the user
-        to know.
-      * Open-question follow-up: opt-in Pass-2 caching for users
-        who explicitly assert filter purity (separate epic, not
-        in Phase 8).
+    * `nav-dependencies` glob support
+      (`[posts/*.qmd]`, `[chapters/**/*.qmd]`).
+    * Smarter Mode B: detect "user-named target had a nav-config
+      edit between runs that affects it" and pull in only the
+      affected sidebar members rather than relying on the user
+      to know.
+    * Open-question follow-up: opt-in Pass-2 caching for users
+      who explicitly assert filter purity (separate epic, not
+      in Phase 8).
 - [ ] Close `bd-pphv`, `bd-r82e`.
 - [ ] Update epic plan §"Work items".
 - [ ] Update §"Follow-up beads report (running log)".

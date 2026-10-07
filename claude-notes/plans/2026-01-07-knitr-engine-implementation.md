@@ -977,7 +977,7 @@ where
 
 ### Integration Tests (require R)
 
-```rust
+````rust
 #[cfg(test)]
 mod integration_tests {
     use super::*;
@@ -1137,7 +1137,7 @@ plot(1:10)
         assert!(result.markdown.contains("4"));
     }
 }
-```
+````
 
 ### CI Setup (based on quarto-cli)
 

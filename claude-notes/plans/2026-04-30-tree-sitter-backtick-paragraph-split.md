@@ -82,7 +82,7 @@ So the scanner is over-rejecting `SOFT_LINE_ENDING` whenever a continuation line
 
 ### Why 3+ matters
 
-`parse_fenced_code_block` (scanner.c:615–675) only emits `FENCED_CODE_BLOCK_START_BACKTICK` when `level >= 3`. With only one or two leading backticks the scanner falls through to inline parsing (`CODE_SPAN_START` at line 626–628). So at the line-break decision point, "lookahead == \'`'" is overly broad — we need to count backticks before deciding.
+`parse_fenced_code_block` (scanner.c:615–675) only emits `FENCED_CODE_BLOCK_START_BACKTICK` when `level >= 3`. With only one or two leading backticks the scanner falls through to inline parsing (`CODE_SPAN_START` at line 626–628). So at the line-break decision point, \"lookahead == \'\`\'\" is overly broad — we need to count backticks before deciding.
 
 ## Proposed fix
 
@@ -90,7 +90,7 @@ In both branches of scanner.c that exclude backtick from soft-line-break candida
 
 Approach:
 
-1. After the lexer has already advanced past the newline and any leading indentation (lines 2241–2254), if `lexer->lookahead == '`'`, peek-advance through consecutive backticks counting them.
+1. After the lexer has already advanced past the newline and any leading indentation (lines 2241–2254), if ``lexer->lookahead == '`'``, peek-advance through consecutive backticks counting them.
 2. If the count is `>= 3`, leave the existing "do not emit soft break" behaviour (a fenced code block is starting).
 3. If the count is `< 3`, treat the same as any other inline character: emit `SOFT_LINE_ENDING`.
 
@@ -206,7 +206,7 @@ The fix peek-counts up to 3 consecutive backticks at two points: before
 the first gate (line-start) and after `match_line` for the second gate
 (post-block-prefix). The peek advances the lexer; we deliberately do
 **not** call `mark_end` during the peek, so tree-sitter rewinds the lexer
-to the previously-marked position (`line 2247`'s pre-indent mark) between
+to the previously-marked position (`line 2247`\'s pre-indent mark) between
 scan calls. For the soft-break-firing path with a leading-backtick line,
 the SOFT_LINE_ENDING token's range is therefore the bare newline (not
 including the indent); we set `STATE_MATCHING` and reset `s->matched` and

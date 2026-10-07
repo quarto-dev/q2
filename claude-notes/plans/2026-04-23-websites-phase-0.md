@@ -539,15 +539,15 @@ find it.
       `npm install` once from the worktree root per hub-client
       conventions.)
 - [x] End-to-end: `cargo run --bin q2 -- render <fixture>.qmd`
-      on 3 synthetic fixtures (title-only, headings+author+categories,
-      full frontmatter with code block). MD5 of each rendered HTML
-      matches between `feature/websites` (pre-change) and
-      `feature/websites-phase-0` (post-change):
-      - `65d0bf7fa6978659d2bde67acfcbf5cb` (test-basic: title+subtitle+author+python)
-      - `d95941f74c232939bf75f5f533ce1b69` (fix2: minimal title)
-      - `88f0a5d8af4d23d4052a1eea9511890c` (fix3: categories, multi-author)
+  on 3 synthetic fixtures (title-only, headings+author+categories,
+  full frontmatter with code block). MD5 of each rendered HTML
+  matches between `feature/websites` (pre-change) and
+  `feature/websites-phase-0` (post-change):
+  - `65d0bf7fa6978659d2bde67acfcbf5cb` (test-basic: title+subtitle+author+python)
+  - `d95941f74c232939bf75f5f533ce1b69` (fix2: minimal title)
+  - `88f0a5d8af4d23d4052a1eea9511890c` (fix3: categories, multi-author)
 
-      **The Phase-0 change is behaviorally invisible at the CLI.**
+  **The Phase-0 change is behaviorally invisible at the CLI.**
 - [ ] `br update bd-f3jc --status closed` with reason.
 - [ ] `br sync --flush-only && git add .beads/ && git commit`.
 - [ ] Stop and request permission before pushing to remote, per

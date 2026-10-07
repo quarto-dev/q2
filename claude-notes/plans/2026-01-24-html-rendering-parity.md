@@ -824,7 +824,7 @@ This can be implemented and tested in isolation before other transforms.
 |--------|----------|
 | **ID** | Moves from header to section. Header has NO ID in HTML output. |
 | **Classes** | Duplicated on both section AND header. |
-| **Attributes** | Key-value attributes (data-*, style, etc.) duplicated on both section AND header. |
+| **Attributes** | Key-value attributes (data-\*, style, etc.) duplicated on both section AND header. |
 | **levelN class** | Added ONLY to section, NOT to header. Format: `level2`, `level3`, etc. |
 | **"section" class** | Pandoc does NOT add a "section" class. Uses `<section>` HTML tag directly. |
 | **Empty sections** | Valid - section contains only the header with no other content. |

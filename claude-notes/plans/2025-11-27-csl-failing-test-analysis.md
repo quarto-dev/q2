@@ -12,7 +12,7 @@ Current state: 276 enabled tests passing, 582 tests still ignored.
 
 ### 1. Prefix/Suffix Ordering (HIGH PRIORITY)
 
-**Affected tests**: collapse_*, many formatting tests
+**Affected tests**: collapse\_\*, many formatting tests
 **Example**: `collapse_CitationNumberRangesWithAffixes.txt`
 
 **Problem**: CSL spec puts prefix/suffix INSIDE formatting for layout elements.
@@ -32,7 +32,7 @@ See: `external-sources/citeproc/src/Citeproc/Style.hs:591`
 
 ### 2. HTML in CSL-JSON Fields (HIGH PRIORITY)
 
-**Affected tests**: flipflop_*, textcase_*, many others
+**Affected tests**: flipflop_\*, textcase_\*, many others
 **Example**: `flipflop_ItalicsSimple.txt`
 
 **Problem**: CSL-JSON allows HTML markup in text fields. We escape it instead of preserving.
@@ -52,7 +52,7 @@ Actual:     One TwoA &lt;i&gt;Three Four&lt;/i&gt; Five!
 
 ### 3. Flip-Flop Formatting (MEDIUM PRIORITY)
 
-**Affected tests**: 19 flipflop_* tests
+**Affected tests**: 19 flipflop\_\* tests
 **Example**: `flipflop_ItalicsSimple.txt`
 
 **Problem**: When italic is applied to content already containing `<i>`, nested italics should flip to normal.
@@ -67,7 +67,7 @@ Actual:   <i>One TwoE <i>Three</i> Four Five!</i>
 
 ### 4. Text Case Edge Cases (MEDIUM PRIORITY)
 
-**Affected tests**: textcase_* tests
+**Affected tests**: textcase\_\* tests
 **Example**: `textcase_InQuotes.txt`
 
 **Problems**:
@@ -87,7 +87,7 @@ Actual:   From &quot;distance&quot; To &quot;friction&quot;: Substituting...
 
 ### 5. Date Formatting - Negative Years/Eras (LOW PRIORITY)
 
-**Affected tests**: date_NegativeDate*.txt
+**Affected tests**: date\_NegativeDate\*.txt
 **Example**: `date_NegativeDateSort.txt`
 
 **Problem**: Negative years should display with era suffix.
@@ -101,7 +101,7 @@ Actual:   BookX (-100714)
 
 ### 6. Bibliography Layout Structure (LOW PRIORITY)
 
-**Affected tests**: variables_ContainerTitleShort*.txt
+**Affected tests**: variables\_ContainerTitleShort\*.txt
 
 **Problem**: Complex bibliography layouts expect specific div structure.
 

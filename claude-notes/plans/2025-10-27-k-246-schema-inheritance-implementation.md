@@ -56,7 +56,7 @@ When `baseSchema` is provided:
 6. **Merge additionalProperties**: Use `allOf` to combine all additionalProperties schemas
 7. **Merge propertyNames**: Use `anyOf` if multiple base schemas have propertyNames
 8. **Merge closed**: Derived is closed if ANY base is closed OR derived specifies closed
-9. **Remove $id**: Base schema $ids are not propagated to avoid duplicate IDs
+9. **Remove \$id**: Base schema \$ids are not propagated to avoid duplicate IDs
 
 ### How `super` is Parsed (from-yaml.ts:407-413)
 
@@ -1112,7 +1112,7 @@ SchemaError::InvalidStructure {
 3. **No cycle detection**: Circular inheritance will cause infinite loops
    - Future enhancement: Add visited set to detect cycles
 
-4. **No $id propagation**: Base schema $ids are stripped
+4. **No \$id propagation**: Base schema \$ids are stripped
    - Matches quarto-cli behavior
 
 ## Future Enhancements

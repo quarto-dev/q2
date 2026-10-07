@@ -348,7 +348,7 @@ This should still work because:
 
 ```markdown
 ```
-+--------+
+\+--------+
 | Header |
 +--------+
 ```
@@ -358,7 +358,7 @@ This should still work because:
 
 **Expected:** 1 definition list found
 
-This is actually a legitimate definition list (definition of the code block), so it should be detected. The "term" is the code fence start (````), not the content inside the code block, so the grid border check wouldn't trigger.
+This is actually a legitimate definition list (definition of the code block), so it should be detected. The "term" is the code fence start (\`\`\`\`), not the content inside the code block, so the grid border check wouldn't trigger.
 
 Actually, wait. Let me trace through this:
 1. Find `:   This is a definition...`

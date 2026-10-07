@@ -44,7 +44,7 @@ Removed all inline grammar exports:
 - Removed `INJECTION_QUERY_INLINE` constant
 - Removed `NODE_TYPES_INLINE` constant
 
-Also renamed exports to remove "_BLOCK" suffix:
+Also renamed exports to remove "\_BLOCK" suffix:
 - `HIGHLIGHT_QUERY_BLOCK` → `HIGHLIGHT_QUERY`
 - `INJECTION_QUERY_BLOCK` → `INJECTION_QUERY`
 - `NODE_TYPES_BLOCK` → `NODE_TYPES`
@@ -127,7 +127,7 @@ cargo build --release -p tree-sitter-qmd
 ### 2. Clearer API ✅
 - Only exports what's actually used
 - No confusing INLINE_LANGUAGE constant
-- Removed misleading "_BLOCK" suffixes
+- Removed misleading "\_BLOCK" suffixes
 
 ### 3. Better Documentation ✅
 - README accurately describes architecture
@@ -180,7 +180,7 @@ These internal names are fine and don't cause confusion since they're not part o
 
 Could potentially:
 - Delete tree-sitter-markdown-inline directory entirely (after confirming no one needs historical reference)
-- Rename internal fields from "block_*" to more generic names (low priority)
+- Rename internal fields from "block\_\*" to more generic names (low priority)
 
 ## Success Criteria Met
 

@@ -238,7 +238,7 @@ Test cases needed:
 
 | Feature | Emph | Strong | Quoted |
 |---------|------|--------|--------|
-| Delimiters | Yes (*/_) | Yes (**/__) | Yes ('/") |
+| Delimiters | Yes (\*/\_) | Yes (\*\*/\_\_) | Yes (\'/\") |
 | Content | Inlines | Inlines | Inlines |
 | Attributes | No | No | No |
 | Nesting | Yes | Yes | Yes |

@@ -953,14 +953,14 @@ reasons (see Phase 2 Decision 6).
       `ProjectPipeline` end-to-end via the same helper shape as
       `sidebar_pipeline.rs` (temp dir, `ProjectContext::discover`,
       `ProjectPipeline::run`). Covers:
-      * navbar rendering + active-item highlighting per page
-      * dropdown menu href rewriting + dropdown active class
-      * page-footer rendering + footer-item href rewriting
-      * active-class cross-contamination guard
-      * format-agnostic invariant spot check (`.qmd` paths survive
-        Generate, Render rewrites them, active class survives)
-      * single-doc-in-project regression (doc-level frontmatter
-        navbar still works; doesn't spill into siblings)
+  * navbar rendering + active-item highlighting per page
+  * dropdown menu href rewriting + dropdown active class
+  * page-footer rendering + footer-item href rewriting
+  * active-class cross-contamination guard
+  * format-agnostic invariant spot check (`.qmd` paths survive
+    Generate, Render rewrites them, active class survives)
+  * single-doc-in-project regression (doc-level frontmatter
+    navbar still works; doesn't spill into siblings)
 
 ### CLI end-to-end + regression
 - [x] Smoke fixture at `/tmp/q2-phase3-smoke/` with three pages,
@@ -968,17 +968,17 @@ reasons (see Phase 2 Decision 6).
       icon + copyright), and `website.title` set. Rendered clean.
       Observed HTML per page (quoted here for close-out review,
       per CLAUDE.md §End-to-end verification):
-      * **index.html**:
-        - Brand uses site title: `<a class="navbar-brand" href="/">Q2 Phase 3 Smoke</a>`
-        - `<a href="index.html" class="nav-link active">Home</a>` (active)
-        - `<a href="about.html" class="nav-link">About</a>` (rewritten, not active)
-        - Dropdown `Docs` with `<a href="guides/intro.html" class="dropdown-item">Guide Intro</a>` (enriched text from profile)
-        - `<footer class="footer">` with left `© 2026 Quarto`, right github icon link (`<i class="bi bi-github">`)
-      * **about.html**: same navbar structure, active class flipped
-        to `About` only (`href="about.html" class="nav-link active"`).
-      * **guides/intro.html**: dropdown leaf active
-        (`<a href="guides/intro.html" class="dropdown-item active">`);
-        dropdown ancestor stays inactive (Decision 5 — matches Q1).
+  * **index.html**:
+    - Brand uses site title: `<a class="navbar-brand" href="/">Q2 Phase 3 Smoke</a>`
+    - `<a href="index.html" class="nav-link active">Home</a>` (active)
+    - `<a href="about.html" class="nav-link">About</a>` (rewritten, not active)
+    - Dropdown `Docs` with `<a href="guides/intro.html" class="dropdown-item">Guide Intro</a>` (enriched text from profile)
+    - `<footer class="footer">` with left `© 2026 Quarto`, right github icon link (`<i class="bi bi-github">`)
+  * **about.html**: same navbar structure, active class flipped
+    to `About` only (`href="about.html" class="nav-link active"`).
+  * **guides/intro.html**: dropdown leaf active
+    (`<a href="guides/intro.html" class="dropdown-item active">`);
+    dropdown ancestor stays inactive (Decision 5 — matches Q1).
 - [x] Revealjs/standalone single-doc smoke at
       `/tmp/q2-phase3-revealjs-smoke/deck.qmd` with top-level
       `page-footer: "© 2026 Standalone"`. Rendered clean without any

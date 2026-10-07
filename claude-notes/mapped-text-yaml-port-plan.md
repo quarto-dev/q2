@@ -193,7 +193,7 @@ pub struct AnnotatedParse {
 **Tasks**:
 - [ ] Define Schema enum and variants
 - [ ] Implement schema annotations (description, documentation, etc.)
-- [ ] Implement $ref resolution
+- [ ] Implement \$ref resolution
 - [ ] Test schema construction
 
 **Data structure**:

@@ -1062,7 +1062,7 @@ The `wasm-quarto-hub-client` crate uses `wasm32-unknown-emscripten`, which enabl
 
 | Line | Operation | Purpose |
 |------|-----------|---------|
-| 87 | `fs::create_dir_all(&resource_dir)` | Create _files dir |
+| 87 | `fs::create_dir_all(&resource_dir)` | Create \_files dir |
 | 98 | `fs::write(&css_path, ...)` | Write CSS |
 
 ---

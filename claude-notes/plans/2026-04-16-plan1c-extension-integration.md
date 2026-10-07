@@ -893,7 +893,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   **plan1a-engine already dropped `#[derive(Clone)]` and introduced
   `Arc<EngineRegistry>` at the \~25–30 mechanical clone sites** (incl.
   `HtmlRenderConfig` / `with_engine_registry` and the `quarto-preview`
-  pass-through chain — see plan1a-engine's "Migration from `main`'s registry"
+  pass-through chain — see plan1a-engine's "Migration from `main`\'s registry"
   note for the verified site list; mandatory-to-compile there, not optional
   cleanup). **Plan 1c does the *deeper* ownership move on top of that `Arc`:**
   hoist it to `ProjectContext`, build once, thread per-file via `StageContext`.
@@ -1327,7 +1327,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
 - [x] Write test: extension engine registered in context, discoverable by name
 - [x] Write test: implicit `{r}`+`{python}` → `[knitr]` (knitr `Interop` python; reticulate preserved)
 - [x] Write test: explicit `engine: [knitr, jupyter]`, `{r}`+`{python}` → `[knitr, jupyter]`
-  with `ownership` = {r→knitr, python→jupyter} and knitr's `handled_languages` ⊇ {python}
+  with `ownership` = \{r→knitr, python→jupyter\} and knitr's `handled_languages` ⊇ \{python\}
 - [x] Write test: pure `{python}`, no python extension → `[jupyter]` (knitr **not** dragged in)
 - [x] Write test: claimed file → **single engine** — a claimed `.echo`/`.jl`
   file resolves to exactly the claiming engine (`sequence == [claimer]`); a
@@ -1380,7 +1380,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   loud failure. Full Q1 parity (Q1 is always single-engine); case 4 is the
   deliberate q2 *multi-engine* divergence.
   **Landed-code change (1c owns it, alongside the `resolution.rs` revert):**
-  `engine/jupyter/text_execute.rs`'s `partition_cells` currently raises
+  `engine/jupyter/text_execute.rs`\'s `partition_cells` currently raises
   `NoHandlerForLanguage` for *any* owned-but-unrunnable cell regardless of
   sequence length. Note it has **no sequence parameter today** —
   `partition_cells(blocks, handled_languages)` — so gating on `|sequence| > 1`

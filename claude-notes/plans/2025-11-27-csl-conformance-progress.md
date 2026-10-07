@@ -53,7 +53,7 @@ The `name-as-sort-order` attribute controls this, but the default should be disp
 - [ ] Respect `name-as-sort-order="first"` and `name-as-sort-order="all"`
 - [ ] Handle `sort-separator` attribute properly
 
-**Tests to unlock**: name_* category (many)
+**Tests to unlock**: name\_* category (many)
 
 ### Priority 3: Full Date Formatting ✅ Completed
 **Actual Impact**: +42 additional tests (total: 26 date tests passing)
@@ -85,7 +85,7 @@ Date formatting is now feature-complete for basic use cases.
 - [ ] Implement macro-based sort keys
 - [ ] Handle missing values (sort after present values)
 
-**Tests to unlock**: sort_* category
+**Tests to unlock**: sort\_* category
 
 ### Priority 5: Disambiguation Algorithm ⬜ Not Started
 **Estimated Impact**: \~60-70 additional tests
@@ -98,7 +98,7 @@ Complex multi-phase algorithm. Requires sorting to work first.
 - [ ] Phase 3: Year-suffix disambiguation (a, b, c)
 - [ ] Phase 4: Conditional disambiguation flag
 
-**Tests to unlock**: disambiguate_* category
+**Tests to unlock**: disambiguate\_* category
 
 ### Priority 6: Position Tracking ⬜ Not Started
 **Estimated Impact**: \~15-20 additional tests
@@ -109,7 +109,7 @@ Complex multi-phase algorithm. Requires sorting to work first.
 - [ ] Implement near-note detection
 - [ ] Update condition evaluation for position checks
 
-**Tests to unlock**: position_* category
+**Tests to unlock**: position\_\* category
 
 ### Priority 7: Collapsing ⬜ Not Started
 **Estimated Impact**: \~20 additional tests
@@ -119,7 +119,7 @@ Complex multi-phase algorithm. Requires sorting to work first.
 - [ ] Implement year collapsing (Smith 2000a, b, c)
 - [ ] Implement author collapsing
 
-**Tests to unlock**: collapse_* category
+**Tests to unlock**: collapse\_\* category
 
 ## Passing Tests by Category
 

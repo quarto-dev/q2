@@ -15,7 +15,7 @@ The parser cannot handle a line break immediately before the shortcode closing d
 
 **Parser state:**
 - State: 2605
-- Symbol: "_close_block"
+- Symbol: "\_close_block"
 - Location: After "hello" (column 9, row 0)
 
 The parser successfully recognizes:
@@ -121,7 +121,7 @@ File: `crates/quarto-markdown-pandoc/resources/error-corpus/Q-2-27.json`
 
 ### 1. Find where to emit the error
 
-The error occurs at state 2605 with symbol "_close_block". I need to find where this state is handled in the parser.
+The error occurs at state 2605 with symbol \"\_close_block\". I need to find where this state is handled in the parser.
 
 Look for:
 - Grammar rule that produces state 2605
@@ -180,7 +180,7 @@ A `q-2-27` converter rule could automatically fix this by:
 
 Need to understand:
 - Where is state 2605 in the grammar?
-- What rule produces "_close_block" symbol?
+- What rule produces "\_close\_block" symbol?
 - Why does newline cause this state?
 
 Let me search the grammar files for shortcode handling.

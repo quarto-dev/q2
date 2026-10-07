@@ -386,7 +386,7 @@ For documents with thousands of blocks, O(n^2) alignment is too slow.
 This design complements the ipynb source tracking work:
 
 1. **ipynb → qmd**: The previous plan handles source locations from notebook cells to qmd
-2. **qmd → engine → qmd'**: This plan handles source locations through engine execution
+2. **qmd → engine → qmd\'**: This plan handles source locations through engine execution
 
 Together, they provide end-to-end source tracking:
 ```

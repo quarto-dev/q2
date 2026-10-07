@@ -251,11 +251,11 @@ Updated analysis of 478 remaining failing tests: `claude-notes/plans/2025-11-28-
 
 | Issue | Priority | Tests Affected | Description |
 |-------|----------|----------------|-------------|
-| k-430 | P2 | collapse_*, formatting | ✅ FIXED: Prefix/suffix ordering - now inside formatting for layout |
-| k-431 | P2 | flipflop_*, textcase_* | ✅ FIXED: HTML markup in CSL-JSON now parsed (5/6 flipflop cases pass; remaining needs k-432) |
-| k-432 | P3 | 19 flipflop_* tests | ✅ FIXED: Flip-flop formatting with CslRenderContext (2 tests pass, others need title-case fixes) |
-| k-433 | P3 | textcase_* tests | ✅ FIXED: nocase span support, quote escaping, whitespace in capitalize_all (6 new tests) |
-| k-434 | P3 | date_Negative* | ✅ FIXED: Date era formatting (BC/AD for negative years, sort key adjustment for chronological order) |
+| k-430 | P2 | collapse\_\*, formatting | ✅ FIXED: Prefix/suffix ordering - now inside formatting for layout |
+| k-431 | P2 | flipflop\_*, textcase\_* | ✅ FIXED: HTML markup in CSL-JSON now parsed (5/6 flipflop cases pass; remaining needs k-432) |
+| k-432 | P3 | 19 flipflop\_* tests | ✅ FIXED: Flip-flop formatting with CslRenderContext (2 tests pass, others need title-case fixes) |
+| k-433 | P3 | textcase\_* tests | ✅ FIXED: nocase span support, quote escaping, whitespace in capitalize_all (6 new tests) |
+| k-434 | P3 | date\_Negative* | ✅ FIXED: Date era formatting (BC/AD for negative years, sort key adjustment for chronological order) |
 
 ### Recommended Implementation Order
 

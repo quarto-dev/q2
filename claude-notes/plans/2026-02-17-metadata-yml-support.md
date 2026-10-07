@@ -314,7 +314,7 @@ css: !path styles/custom.css
 
 - [x] Handle YAML parse errors with descriptive messages
 - [x] Include file path and source location in error messages
-- [x] Fail render with "Directory metadata validation failed for {file}" message
+- [x] Fail render with "Directory metadata validation failed for \{file\}" message
 - [ ] (Future) Add schema validation when front-matter schemas are ported
 
 ### Phase 3: Path Resolution - DEFERRED

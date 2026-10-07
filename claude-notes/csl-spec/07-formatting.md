@@ -146,7 +146,7 @@ Hyphenated parts treated as separate words.
 
 Title case only applies to English items:
 
-- If `default-locale` is "en-*" or unset: items assumed English unless
+- If `default-locale` is \"en-\*\" or unset: items assumed English unless
   `language` field has non-"en" value
 - If `default-locale` is non-English: items assumed non-English unless
   `language` field starts with "en"

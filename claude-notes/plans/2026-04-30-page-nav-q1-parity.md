@@ -101,25 +101,25 @@ edits are themselves the regression diff. No literal output snapshot
 needed; the pipeline tests are precise enough.
 
 - [x] Write failing pipeline tests in
-      `crates/quarto-core/tests/page_navigation_pipeline.rs` for the
-      Phase 1 / Phase 2 / Phase 3 contracts:
-      - `pipeline_page_nav_default_off_for_websites`: minimal
-        website fixture with sidebar, no `page-navigation` setting →
-        **no** `<nav class="page-navigation">` in any rendered page.
-      - `pipeline_page_nav_top_level_true_enables`: `page-navigation:
-        true` at top level → strip present on pages with neighbors.
-      - `pipeline_page_nav_website_scope_true_enables`: same but
-        under `website:` key.
-      - `pipeline_page_nav_doc_overrides_project_default_off`:
-        project default off, one page sets `page-navigation: true`
-        in frontmatter → that one page gets a strip.
-      - `pipeline_page_nav_emits_layout_css`: render a page with
-        page-nav enabled; the emitted website CSS contains
-        `.page-navigation` and `display:flex` together (regression
-        guard against losing the Q1 layout rule). May be in a
-        sibling test file if pipeline output doesn't expose CSS.
-      - `pipeline_page_nav_links_bootstrap_icons`: rendered page's
-        `<head>` contains `<link …bootstrap-icons.css">`.
+  `crates/quarto-core/tests/page_navigation_pipeline.rs` for the
+  Phase 1 / Phase 2 / Phase 3 contracts:
+  - `pipeline_page_nav_default_off_for_websites`: minimal
+    website fixture with sidebar, no `page-navigation` setting →
+    **no** `<nav class="page-navigation">` in any rendered page.
+  - `pipeline_page_nav_top_level_true_enables`: `page-navigation:
+    true` at top level → strip present on pages with neighbors.
+  - `pipeline_page_nav_website_scope_true_enables`: same but
+    under `website:` key.
+  - `pipeline_page_nav_doc_overrides_project_default_off`:
+    project default off, one page sets `page-navigation: true`
+    in frontmatter → that one page gets a strip.
+  - `pipeline_page_nav_emits_layout_css`: render a page with
+    page-nav enabled; the emitted website CSS contains
+    `.page-navigation` and `display:flex` together (regression
+    guard against losing the Q1 layout rule). May be in a
+    sibling test file if pipeline output doesn't expose CSS.
+  - `pipeline_page_nav_links_bootstrap_icons`: rendered page's
+    `<head>` contains `<link …bootstrap-icons.css">`.
 
 Status after writing the tests:
 
@@ -148,43 +148,43 @@ edits are themselves the regression diff for the default flip.
 ## Phase 1 — Project config gate (default off)
 
 - [x] **Config placement (decided):** accept both
-      `website.page-navigation` and **top-level** `page-navigation`
-      in `_quarto.yml`, mirroring Q1's `websiteConfigBoolean`. The
-      top-level key plays nicely with Q2's metadata-merging
-      behavior, so users can also write `page-navigation: true|false`
-      in document frontmatter and have it override the project
-      default per page through the normal merge path. Precedence
-      (most-specific wins): document frontmatter > `website.…` >
-      top-level > built-in default.
+  `website.page-navigation` and **top-level** `page-navigation`
+  in `_quarto.yml`, mirroring Q1's `websiteConfigBoolean`. The
+  top-level key plays nicely with Q2's metadata-merging
+  behavior, so users can also write `page-navigation: true|false`
+  in document frontmatter and have it override the project
+  default per page through the normal merge path. Precedence
+  (most-specific wins): document frontmatter > `website.…` >
+  top-level > built-in default.
 - [x] **Implementation (decided to keep the read inline in the
-      transform rather than introduce a new pre-resolver stage):**
-      added `resolve_website_bool` in `transforms/config.rs`, which
-      handles both top-level and `website.`-scoped placements with
-      the documented precedence. The transform calls it directly,
-      passing the project-type default. No need to surface a new
-      `navigation.page_navigation_enabled` boolean since the gate
-      computes cheaply from already-merged meta.
+  transform rather than introduce a new pre-resolver stage):**
+  added `resolve_website_bool` in `transforms/config.rs`, which
+  handles both top-level and `website.`-scoped placements with
+  the documented precedence. The transform calls it directly,
+  passing the project-type default. No need to surface a new
+  `navigation.page_navigation_enabled` boolean since the gate
+  computes cheaply from already-merged meta.
 - [x] Update `PageNavGenerateTransform` (`page_nav_generate.rs:60`)
-      to call `resolve_website_bool(&ast.meta, "page-navigation",
-      page_nav_default_for_kind(ctx.project.project_kind()))` and
-      early-return on `false`. Document-level frontmatter naturally
-      wins because metadata merge places it at the top level.
+  to call `resolve_website_bool(&ast.meta, "page-navigation",
+  page_nav_default_for_kind(ctx.project.project_kind()))` and
+  early-return on `false`. Document-level frontmatter naturally
+  wins because metadata merge places it at the top level.
 - [x] **Books hook:** `page_nav_default_for_kind` is a `match` on
-      `ProjectKind` with `Book => true` and the others `false`.
-      Books aren't reachable in Q2 today; this is a one-line flip
-      when they land.
+  `ProjectKind` with `Book => true` and the others `false`.
+  Books aren't reachable in Q2 today; this is a one-line flip
+  when they land.
 - [x] Confirm `pipeline_page_nav_default_off_for_websites`,
-      `pipeline_page_nav_top_level_true_enables`,
-      `pipeline_page_nav_website_scope_true_enables`, and
-      `pipeline_page_nav_doc_overrides_project_default_off` are
-      green; existing pipeline tests 39/40/43 updated to opt in.
+  `pipeline_page_nav_top_level_true_enables`,
+  `pipeline_page_nav_website_scope_true_enables`, and
+  `pipeline_page_nav_doc_overrides_project_default_off` are
+  green; existing pipeline tests 39/40/43 updated to opt in.
 - [x] **End-to-end CLI verification:** ran
-      `cargo run --manifest-path .../Cargo.toml --bin q2 -- render`
-      from `examples/websites/06-site-metadata/`. With no
-      `page-navigation` setting, all three rendered pages contain
-      zero `page-navigation` markup (matches `q1-site/`). With
-      `website.page-navigation: true` added, all three pages render
-      the strip with the expected prev/next links.
+  `cargo run --manifest-path .../Cargo.toml --bin q2 -- render`
+  from `examples/websites/06-site-metadata/`. With no
+  `page-navigation` setting, all three rendered pages contain
+  zero `page-navigation` markup (matches `q1-site/`). With
+  `website.page-navigation: true` added, all three pages render
+  the strip with the expected prev/next links.
 
 ## Phase 2 — Port Q1's layout SCSS
 
@@ -236,34 +236,34 @@ to put it in Q2):
   comment near the rules so the future refactor is easy to find.
 
 - [x] Add Q1's lines 740-768 to
-      `resources/scss/bootstrap/_bootstrap-rules.scss` near the
-      existing `.page-columns .page-navigation` rule (line 319):
+  `resources/scss/bootstrap/_bootstrap-rules.scss` near the
+  existing `.page-columns .page-navigation` rule (line 319):
 
-      ```scss
-      .page-navigation { display: flex; justify-content: space-between; }
-      .nav-page { padding-bottom: 0.75em; }
-      .nav-page .bi { font-size: 1.8rem; vertical-align: middle; }
-      .nav-page .nav-page-text { padding-left: 0.25em; padding-right: 0.25em; }
-      .nav-page a { color: $text-muted; text-decoration: none; display: flex; align-items: center; }
-      .nav-page a:hover { color: $link-hover-color; }
-      ```
+  ```scss
+  .page-navigation { display: flex; justify-content: space-between; }
+  .nav-page { padding-bottom: 0.75em; }
+  .nav-page .bi { font-size: 1.8rem; vertical-align: middle; }
+  .nav-page .nav-page-text { padding-left: 0.25em; padding-right: 0.25em; }
+  .nav-page a { color: $text-muted; text-decoration: none; display: flex; align-items: center; }
+  .nav-page a:hover { color: $link-hover-color; }
+  ```
 - [x] Add `@media print { .nav-page { display: none; } }` to the
-      same SCSS file. (Q1 has it inside a generic `@media print`
-      block; we keep ours adjacent to the page-nav rules so the
-      group is self-contained.)
+  same SCSS file. (Q1 has it inside a generic `@media print`
+  block; we keep ours adjacent to the page-nav rules so the
+  group is self-contained.)
 - [x] Drop a TODO marker noting that when a second website-only
-      feature appears, this group of rules becomes the seed of a
-      future website Sass bundle. (Done; see comment in
-      `_bootstrap-rules.scss` near the new rules.)
+  feature appears, this group of rules becomes the seed of a
+  future website Sass bundle. (Done; see comment in
+  `_bootstrap-rules.scss` near the new rules.)
 - [x] Confirmed: `pipeline_page_nav_emits_layout_css` is green.
 - [x] End-to-end: rendered `06-site-metadata` with
-      `website.page-navigation: true`. The compiled
-      `_site/site_libs/quarto/quarto-theme-c8344243879f4b5e.css`
-      contains the `.page-navigation{display:flex;…}` rule and the
-      `.nav-page a:hover{color…}` rule (both grep-confirmed). Visual
-      browser inspection still pending until Phase 3 lands the
-      Bootstrap Icons font (without it the strip will lay out
-      single-row but the arrow glyphs will be blank).
+  `website.page-navigation: true`. The compiled
+  `_site/site_libs/quarto/quarto-theme-c8344243879f4b5e.css`
+  contains the `.page-navigation{display:flex;…}` rule and the
+  `.nav-page a:hover{color…}` rule (both grep-confirmed). Visual
+  browser inspection still pending until Phase 3 lands the
+  Bootstrap Icons font (without it the strip will lay out
+  single-row but the arrow glyphs will be blank).
 
 ## Phase 3 — Bundle Bootstrap Icons
 
@@ -271,82 +271,82 @@ to put it in Q2):
 Q1.
 
 - [x] Vendored under `resources/bootstrap-icons/` per the
-      "External Sources Policy" in CLAUDE.md. Q1 ships only the
-      `bootstrap-icons.css` (\~99 KB) + `bootstrap-icons.woff` (\~180
-      KB) pair; we mirror that exactly. README.md alongside records
-      provenance and licensing (matches the existing
-      `resources/scss/README.md` convention).
+  "External Sources Policy" in CLAUDE.md. Q1 ships only the
+  `bootstrap-icons.css` (\~99 KB) + `bootstrap-icons.woff` (\~180
+  KB) pair; we mirror that exactly. README.md alongside records
+  provenance and licensing (matches the existing
+  `resources/scss/README.md` convention).
 - [x] Created `WebsiteBootstrapIconsTransform`
-      (`crates/quarto-core/src/transforms/website_bootstrap_icons.rs`)
-      and registered it in the pipeline alongside
-      `WebsiteFaviconTransform`. The transform stores two
-      Project-scope artifacts under `css:bootstrap-icons:…` and
-      `font:bootstrap-icons:…` with on-disk paths
-      `bootstrap/bootstrap-icons.{css,woff}`. The `<link
-      rel="stylesheet">` is emitted **automatically** by
-      `apply_template`, which iterates every `css:*` artifact and
-      asks the per-page resolver for a URL — that's why the
-      transform itself does *not* touch `header-includes` (an
-      explicit injection there would create a duplicate `<link>`,
-      a regression I caught and fixed during this phase).
+  (`crates/quarto-core/src/transforms/website_bootstrap_icons.rs`)
+  and registered it in the pipeline alongside
+  `WebsiteFaviconTransform`. The transform stores two
+  Project-scope artifacts under `css:bootstrap-icons:…` and
+  `font:bootstrap-icons:…` with on-disk paths
+  `bootstrap/bootstrap-icons.{css,woff}`. The `<link
+  rel="stylesheet">` is emitted **automatically** by
+  `apply_template`, which iterates every `css:*` artifact and
+  asks the per-page resolver for a URL — that's why the
+  transform itself does *not* touch `header-includes` (an
+  explicit injection there would create a duplicate `<link>`,
+  a regression I caught and fixed during this phase).
 - [x] **Existing tests updated:** four `artifact_scoping_pipeline`
-      tests assumed the *first* `<link rel="stylesheet">` was the
-      theme. With `bootstrap-icons.css` sorting before
-      `quarto-theme-...` in `css:*` artifact order, that's no
-      longer true. Added `extract_theme_stylesheet_href` which
-      filters by `/quarto/quarto-theme-` substring and updated the
-      tests. Also re-captured the Phase-5 single-doc baseline hash
-      for `doc_files/styles.css` (Phase 2's SCSS additions changed
-      the byte content); doc.html hash unchanged (no body markup
-      affected).
+  tests assumed the *first* `<link rel="stylesheet">` was the
+  theme. With `bootstrap-icons.css` sorting before
+  `quarto-theme-...` in `css:*` artifact order, that's no
+  longer true. Added `extract_theme_stylesheet_href` which
+  filters by `/quarto/quarto-theme-` substring and updated the
+  tests. Also re-captured the Phase-5 single-doc baseline hash
+  for `doc_files/styles.css` (Phase 2's SCSS additions changed
+  the byte content); doc.html hash unchanged (no body markup
+  affected).
 - [x] Confirmed `pipeline_page_nav_links_bootstrap_icons` is green.
 - [x] **End-to-end:** re-rendered `06-site-metadata` with
-      `website.page-navigation: true`, served via the existing
-      `127.0.0.1:8000` server, opened `_site/guides.html` in a real
-      browser. Visual check (full-page screenshot taken, `/tmp/
-      q2-page-nav-after.png`): the prev/next strip lays out
-      single-row, "Home ←" left-aligned, "→ API Reference"
-      right-aligned, both glyphs visible (Bootstrap Icons font
-      loaded successfully), links muted-grey per Q1's styling.
-      File system: `\_site/site_libs/bootstrap/{bootstrap-icons.css,
-      bootstrap-icons.woff}` both present. Head links: a single
-      `<link rel="stylesheet" href="site_libs/bootstrap/bootstrap-icons.css">`
-      on the root page; nested page (`docs/api.html`, tested via
-      a temporary `docs/api.qmd` copy) gets
-      `../site_libs/bootstrap/bootstrap-icons.css` correctly.
+  `website.page-navigation: true`, served via the existing
+  `127.0.0.1:8000` server, opened `_site/guides.html` in a real
+  browser. Visual check (full-page screenshot taken, `/tmp/
+  q2-page-nav-after.png`): the prev/next strip lays out
+  single-row, "Home ←" left-aligned, "→ API Reference"
+  right-aligned, both glyphs visible (Bootstrap Icons font
+  loaded successfully), links muted-grey per Q1's styling.
+  File system: `\_site/site_libs/bootstrap/{bootstrap-icons.css,
+  bootstrap-icons.woff}` both present. Head links: a single
+  `<link rel="stylesheet" href="site_libs/bootstrap/bootstrap-icons.css">`
+  on the root page; nested page (`docs/api.html`, tested via
+  a temporary `docs/api.qmd` copy) gets
+  `../site_libs/bootstrap/bootstrap-icons.css` correctly.
 
 ## Phase 4 — Docs
 
 - [x] Documented `website.page-navigation` (and the top-level
-      placement) in `docs/navigation.qmd`. The page is now titled
-      "Navbars, Page Footers, and Prev/Next Navigation" and gains a
-      "Page navigation (prev/next)" section between "Page footer"
-      and the existing "Navigation items" reference — covering the
-      enable/disable rules, per-document overrides, the
-      flatten-and-pick-neighbor algorithm (cross-referencing
-      bd-nf50's flatten / dedupe / separator rules), and guidance on
-      when to leave the strip off.
+  placement) in `docs/navigation.qmd`. The page is now titled
+  "Navbars, Page Footers, and Prev/Next Navigation" and gains a
+  "Page navigation (prev/next)" section between "Page footer"
+  and the existing "Navigation items" reference — covering the
+  enable/disable rules, per-document overrides, the
+  flatten-and-pick-neighbor algorithm (cross-referencing
+  bd-nf50's flatten / dedupe / separator rules), and guidance on
+  when to leave the strip off.
 - [x] Updated example READMEs and `_quarto.yml` files where they
-      relied on the old default-on:
-      - `01-minimal/README.md` "Things you may notice" — flipped
-        from "the strip appears automatically" to "the strip is off
-        by default; opt in with `page-navigation: true`."
-      - `02-auto-sidebar/_quarto.yml` — added
-        `website.page-navigation: true` so the README's prev/next
-        narrative still renders. Re-rendered: 4 of 5 posts get the
-        strip; `work-in-progress.html` (a draft excluded from the
-        sidebar) correctly does not.
-      - `03-nested-sidebar/_quarto.yml` — added
-        `website.page-navigation: true`. README now points at
-        `docs/navigation.qmd` for the full precedence rules.
-        Re-rendered: `installation.html` strip count = 2,
-        `tuning.html` count = 0 (doc-level
-        `page-navigation: false` correctly overrides the project
-        opt-in).
+  relied on the old default-on:
+  - `01-minimal/README.md` "Things you may notice" — flipped
+    from "the strip appears automatically" to "the strip is off
+    by default; opt in with `page-navigation: true`."
+  - `02-auto-sidebar/_quarto.yml` — added
+    `website.page-navigation: true` so the README's prev/next
+    narrative still renders. Re-rendered: 4 of 5 posts get the
+    strip; `work-in-progress.html` (a draft excluded from the
+    sidebar) correctly does not.
+  - `03-nested-sidebar/_quarto.yml` — added
+    `website.page-navigation: true`. README now points at
+    `docs/navigation.qmd` for the full precedence rules.
+    Re-rendered: `installation.html` strip count = 2,
+    `tuning.html` count = 0 (doc-level
+    `page-navigation: false` correctly overrides the project
+    opt-in).
 - [x] `06-site-metadata` was the working fixture used during
-      development; left as-is so it still illustrates the
-      *default-off* behavior (the user can opt in interactively to
-      see the strip appear).
+  development; left as-is so it still illustrates the
+  *default-off* behavior (the user can opt in interactively to
+  see the strip appear).
 
 ## Resolved decisions
 
@@ -383,49 +383,49 @@ makes anchors inherit container color; `.sidebar-title > a` covers
 the site title).
 
 - [x] Ported the following Q1 rules from `quarto-nav.scss` into
-      `resources/scss/bootstrap/_bootstrap-rules.scss`, alongside
-      the page-nav block:
-      - `.sidebar-logo-link { text-decoration: none }` (line 315 in Q1)
-      - `.sidebar-navigation a { color: inherit }` (277)
-      - `.sidebar-navigation li a { text-decoration: none }` (319)
-      - `.sidebar-title > a { font-size: inherit; text-decoration: none }` (289)
-      - `.sidebar-item`, `.sidebar-section`,
-        `.sidebar-item .sidebar-item-container` (display:flex
-        justify-content:space-between cursor:pointer),
-        `.sidebar-item-text { width: 100% }` (348-410)
-      - `.sidebar.sidebar-navigation > * { padding-top: 1em }` (352)
-      - The `$sidebar-hl` derivation +
-        `$sidebar-color`/`$sidebar-hover-color`/`$sidebar-active-color`/
-        `$sidebar-disabled-color` defaults (464-472)
-      - `div.sidebar-item-container { color/hover/disabled/active }` (525-541)
+  `resources/scss/bootstrap/_bootstrap-rules.scss`, alongside
+  the page-nav block:
+  - `.sidebar-logo-link { text-decoration: none }` (line 315 in Q1)
+  - `.sidebar-navigation a { color: inherit }` (277)
+  - `.sidebar-navigation li a { text-decoration: none }` (319)
+  - `.sidebar-title > a { font-size: inherit; text-decoration: none }` (289)
+  - `.sidebar-item`, `.sidebar-section`,
+    `.sidebar-item .sidebar-item-container` (display:flex
+    justify-content:space-between cursor:pointer),
+    `.sidebar-item-text { width: 100% }` (348-410)
+  - `.sidebar.sidebar-navigation > * { padding-top: 1em }` (352)
+  - The `$sidebar-hl` derivation +
+    `$sidebar-color`/`$sidebar-hover-color`/`$sidebar-active-color`/
+    `$sidebar-disabled-color` defaults (464-472)
+  - `div.sidebar-item-container { color/hover/disabled/active }` (525-541)
 
-      The four `$sidebar-*-color` variables flow naturally from
-      `$sidebar-fg`/`$sidebar-bg` already declared in
-      `_bootstrap-variables.scss`, so theme overrides Just Work.
+  The four `$sidebar-*-color` variables flow naturally from
+  `$sidebar-fg`/`$sidebar-bg` already declared in
+  `_bootstrap-variables.scss`, so theme overrides Just Work.
 - [x] Re-captured `doc_files/styles.css` hash in the Phase-5
-      single-doc baseline (`tests/fixtures/phase5-single-doc-baseline/
-      expected_hashes.txt`); doc.html unchanged.
+  single-doc baseline (`tests/fixtures/phase5-single-doc-baseline/
+  expected_hashes.txt`); doc.html unchanged.
 - [x] **End-to-end:** browser screenshot at
-      `/tmp/q2-sidebar-after2.png` matches Q1's `/tmp/q1-sidebar.png`
-      visually: site title in dark text without underline, sidebar
-      links muted-gray with no underline, active page in slightly
-      darker shade.
+  `/tmp/q2-sidebar-after2.png` matches Q1's `/tmp/q1-sidebar.png`
+  visually: site title in dark text without underline, sidebar
+  links muted-gray with no underline, active page in slightly
+  darker shade.
 - [x] `cargo xtask verify --skip-hub-build` passes (8125 tests).
 
 ## Definition of done
 
 - [x] All Phase-0 tests are green.
 - [x] `cargo xtask verify --skip-hub-build` passes (8125 tests +
-      lint + trace-viewer).
+  lint + trace-viewer).
 - [x] `examples/websites/06-site-metadata` rendered with
-      `page-navigation: true` in `_quarto.yml`, viewed in a real
-      browser. Visual check (full-page screenshot at
-      `/tmp/q2-page-nav-after.png`): prev/next on a single row,
-      "Home ←" left-aligned and "→ API Reference" right-aligned,
-      arrow glyphs visible, links muted-grey per Q1 styling.
+  `page-navigation: true` in `_quarto.yml`, viewed in a real
+  browser. Visual check (full-page screenshot at
+  `/tmp/q2-page-nav-after.png`): prev/next on a single row,
+  "Home ←" left-aligned and "→ API Reference" right-aligned,
+  arrow glyphs visible, links muted-grey per Q1 styling.
 - [x] The same example without the opt-in renders zero
-      `page-navigation` markup (`grep -c page-navigation
-      \_site/*.html` → 0 on every page) — Q1-parity confirmed.
+  `page-navigation` markup (`grep -c page-navigation
+  \_site/*.html` → 0 on every page) — Q1-parity confirmed.
 - [x] `bd-bsut` closed; `bd-nf50` closed (the new
-      docs/navigation.qmd subsection covers all four flatten/dedupe/
-      separator/section-header rules it called for).
+  docs/navigation.qmd subsection covers all four flatten/dedupe/
+  separator/section-header rules it called for).
