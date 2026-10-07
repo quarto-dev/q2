@@ -46,6 +46,22 @@
     .q2-debug-caret.hidden {
       display: none;
     }
+    /* Hidden input sink: receives typing in the preview and forwards it
+       to the editor (see entry.tsx). Parked on the caret, invisible,
+       but focusable. */
+    .q2-debug-input {
+      position: absolute;
+      width: 1px;
+      height: 1em;
+      padding: 0;
+      border: 0;
+      margin: 0;
+      opacity: 0;
+      resize: none;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 1;
+    }
     /* Our own selection highlight (native selection is off). A
        see-through tint over the text, like a native selection; this is
        one of the cases where translucency is the point, so the usual

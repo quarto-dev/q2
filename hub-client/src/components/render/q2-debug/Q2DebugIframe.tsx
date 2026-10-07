@@ -26,6 +26,15 @@ interface Q2DebugIframeProps {
   editorReady?: boolean;
 }
 
+/** Monaco command ids the preview may trigger (allow-list for EDIT messages). */
+const EDIT_COMMANDS = new Set([
+  'deleteLeft', 'deleteRight', 'deleteWordLeft', 'deleteWordRight', 'deleteAllLeft',
+  'cursorLeft', 'cursorRight', 'cursorUp', 'cursorDown', 'cursorHome', 'cursorEnd',
+  'cursorLeftSelect', 'cursorRightSelect', 'cursorUpSelect', 'cursorDownSelect',
+  'cursorHomeSelect', 'cursorEndSelect',
+  'undo', 'redo', 'editor.action.selectAll',
+]);
+
 /**
  * The editor caret as a UTF-8 byte offset into the model text — the
  * unit the AST's `l.b.o` / `l.e.o` fields use. Monaco's `getOffsetAt`
@@ -85,6 +94,31 @@ export function Q2DebugIframe({
         onNavigateToDocument?.(event.data.path, event.data.anchor);
       } else if (event.data.type === 'SET_AST') {
         setAst(event.data.ast);
+        // A preview-side edit: the iframe already shows the result and
+        // knows where its caret is (a byte offset into the *rewritten*
+        // source). Once the incremental write lands in the model, park
+        // Monaco's cursor there so its CURSOR echo agrees with the
+        // iframe instead of wherever the edit left Monaco's own cursor.
+        const editor = editorRef?.current;
+        const model = editor?.getModel();
+        const caretOffset = event.data.caretOffset;
+        if (editor && model && typeof caretOffset === 'number') {
+          // The write may reach the model in several steps (Automerge op
+          // → change event → applyEdits), each of which moves Monaco's
+          // own cursor. Re-park after every step for a short window, and
+          // once on a timer in case the write was a no-op.
+          const park = () => {
+            const current = editor.getModel();
+            if (!current) return;
+            editor.setPosition(positionForByteOffset(current, caretOffset));
+          };
+          // `handleContentRewrite` updates the model synchronously inside
+          // `setAst` above, so park now; keep listening briefly for any
+          // later step (Automerge echo) and park once more on a timer.
+          park();
+          const sub = model.onDidChangeContent(park);
+          setTimeout(() => { sub.dispose(); park(); }, 400);
+        }
       } else if (event.data.type === 'CURSOR_CLICK') {
         // Reverse of `cursorPayload`: a UTF-8 byte offset from the
         // iframe's click hit-test becomes a Monaco position. With
@@ -105,8 +139,35 @@ export function Q2DebugIframe({
         } else {
           editor.setPosition(head);
         }
+        // Focus stays in the preview's input sink so typing there edits
+        // the document (EDIT); the editor is driven without focus.
         editor.revealPositionInCenterIfOutsideViewport(head);
-        editor.focus();
+      } else if (event.data.type === 'EDIT') {
+        // Typing in the preview. `trigger` works without editor focus and
+        // goes through Monaco's normal command path (undo stack, selection
+        // replacement, read-only gating).
+        const editor = editorRef?.current;
+        if (!editor) return;
+        if (event.data.kind === 'type' && typeof event.data.text === 'string') {
+          editor.trigger('q2-debug', 'type', { text: event.data.text });
+        } else if (
+          event.data.kind === 'command' &&
+          typeof event.data.command === 'string' &&
+          EDIT_COMMANDS.has(event.data.command)
+        ) {
+          editor.trigger('q2-debug', event.data.command, null);
+        }
+        const pos = editor.getPosition();
+        if (pos) editor.revealPositionInCenterIfOutsideViewport(pos);
+        // Report the exact outcome. `trigger` is synchronous, so the
+        // cursor now reflects this command and nothing else; the preview
+        // applies this payload instead of trusting passive echoes, which
+        // may still carry intermediate positions from earlier writes.
+        const payload = cursorPayload(editor, true);
+        iframeRef.current?.contentWindow?.postMessage(
+          { type: 'CURSOR', payload: payload ? { ...payload, fromCommand: true } : null },
+          '*',
+        );
       } else if (event.data.type === 'CURSOR_SELECT') {
         // Drag in the preview: anchor stays where the pointer went
         // down, head follows the pointer.

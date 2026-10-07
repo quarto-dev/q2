@@ -139,7 +139,7 @@ export const Str = (args: NodeArgs<StrInline>) => (
 );
 
 export const Space = (args: NodeArgs<SpaceInline>) => (
-    <span style={inlineStyle} {...dataOffProps(args.node)}><strong>Space</strong></span>
+    <span style={inlineStyle} {...dataOffProps(args.node)} data-space=""><strong>Space</strong></span>
 );
 
 export const SoftBreak = (args: NodeArgs<SoftBreakInline>) => (

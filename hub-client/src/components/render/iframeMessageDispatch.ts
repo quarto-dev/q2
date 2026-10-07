@@ -71,6 +71,13 @@ export interface CursorPayload {
      * (`start < end`); omitted when the selection is collapsed.
      */
     selection?: { start: number; end: number };
+    /**
+     * q2-debug: this payload is the direct result of a command the
+     * preview asked Monaco to run (EDIT), read synchronously after it,
+     * not a passive cursor echo. The preview applies it even while its
+     * own caret is authoritative.
+     */
+    fromCommand?: boolean;
 }
 
 export type IframeMessage =
