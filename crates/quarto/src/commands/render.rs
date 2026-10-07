@@ -39,7 +39,7 @@ use quarto_core::project::render_scripts;
 use quarto_core::{Format, ProjectContext, QuartoError, RenderToFileOptions};
 use quarto_error_reporting::{
     CoalescedDiagnostic, DiagnosticMessage, DiagnosticMessageBuilder, JsonDiagnostic,
-    JsonPass1Failure, diagnostic_to_json, with_source_file,
+    JsonPass1Failure, TextRenderOptions, diagnostic_to_json_with_options, with_source_file,
 };
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -1693,8 +1693,8 @@ fn failure_attribution_line(group: &quarto_error_reporting::CoalescedDiagnostic)
 }
 
 /// The text form of a render's diagnostics: what `q2 render` prints
-/// on stderr (`color: true`), or the same content with every ANSI
-/// escape and OSC 8 hyperlink removed (`color: false`). One function,
+/// on stderr (`color: true`), or the same content rendered with no ANSI
+/// color and no OSC 8 hyperlinks (`color: false`). One function,
 /// so the terminal and `q2 preview --static`'s browser overlay cannot
 /// drift apart (bd-sl79jjiq Phase 1).
 ///
@@ -1717,13 +1717,9 @@ fn format_render_diagnostics_text(
     config_sources: &[PathBuf],
     color: bool,
 ) -> String {
-    // `quarto-error-reporting` 0.2.2 has no color switch (ariadne's SGR
-    // codes are always emitted), only a hyperlink switch; the escapes
-    // are stripped below for the no-color form. bd-6d9ew2up tracks
-    // adding `color` to `TextRenderOptions` upstream.
-    let opts = quarto_error_reporting::TextRenderOptions {
-        enable_hyperlinks: color,
-    };
+    // The no-color form also drops hyperlinks: it is for the browser
+    // overlay, where OSC 8 sequences are just noise.
+    let opts = TextRenderOptions::default().color(color).hyperlinks(color);
     let mut out = String::new();
     let mut line = |text: &str| {
         out.push_str(text);
@@ -1734,7 +1730,7 @@ fn format_render_diagnostics_text(
         line(&format!(
             "warning: profile-pass skipped {}: {}",
             failure.input.display(),
-            failure.error
+            failure_error_text(failure, &opts)
         ));
     }
     // bd-9hlja: coalesce pass2_failures whose structured diagnostics
@@ -1780,7 +1776,7 @@ fn format_render_diagnostics_text(
             line(&format!(
                 "error: {}: {}",
                 failure.input.display(),
-                failure.error
+                failure_error_text(failure, &opts)
             ));
         }
     }
@@ -1839,7 +1835,7 @@ fn format_render_diagnostics_text(
         line("note: stopped at first error (--fail-fast); remaining files not checked");
     }
 
-    if color { out } else { strip_ansi_escapes(&out) }
+    out
 }
 
 /// Remove terminal escape sequences: CSI (`ESC [ … <final byte>`, the
@@ -1960,6 +1956,11 @@ fn multi_format_warning_diagnostics(
 /// conversion in this module goes through here, so a located record
 /// always says which file its coordinates are in.
 ///
+/// `rendered` is drawn plain, with no SGR color and no OSC-8 hyperlinks
+/// (bd-ckbqmupi): the stream is for jq pipelines and agents, not a
+/// terminal. Hyperlink targets travel structurally (`source_file`,
+/// `origin.notebook_path`).
+///
 /// `fallback` is the file the caller knows the diagnostic is about
 /// (the page being rendered, the project config); see
 /// [`json_source_file`] for when it applies.
@@ -1968,7 +1969,7 @@ fn diagnostic_json(
     ctx: &SourceContext,
     fallback: Option<&Path>,
 ) -> JsonDiagnostic {
-    let json = diagnostic_to_json(diag, ctx);
+    let json = diagnostic_to_json_with_options(diag, ctx, &TextRenderOptions::plain());
     match json_source_file(diag, ctx, fallback) {
         Some(source_file) => with_source_file(json, source_file),
         None => json,
@@ -2034,6 +2035,35 @@ fn wire_path(path: &Path) -> String {
         .to_string()
 }
 
+/// A file failure's message, rendered with `opts`.
+///
+/// A failure with structured diagnostics is re-rendered from them, in
+/// the same order and with the same separator as `ParseError::render`
+/// (which produced `failure.error` with the default options), so the
+/// result honors `opts`. A failure without them has only an opaque
+/// message: it is plain text for every `QuartoError` variant today but
+/// can embed text rendered elsewhere, so it is sanitized when `opts`
+/// asks for no color.
+fn failure_error_text(
+    failure: &quarto_core::project::orchestrator::FileFailure,
+    opts: &TextRenderOptions,
+) -> String {
+    match &failure.source_context {
+        Some(ctx) if !failure.diagnostics.is_empty() => failure
+            .diagnostics
+            .iter()
+            .filter_map(|d| {
+                render_diagnostic_guarded(d.code.as_deref(), || {
+                    d.to_text_with_options(Some(ctx), opts)
+                })
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ if !opts.enable_color => strip_ansi_escapes(&failure.error),
+        _ => failure.error.clone(),
+    }
+}
+
 /// Print a diagnostic the CLI raises itself, outside the render
 /// summary: ariadne text normally, one NDJSON record under
 /// `--json-errors`. `ctx` resolves its location for the JSON record
@@ -2085,7 +2115,7 @@ fn print_render_diagnostics_json(
         };
         emit_json_line(&JsonPass1Failure::new(
             wire_path(&failure.input),
-            failure.error.clone(),
+            failure_error_text(failure, &TextRenderOptions::plain()),
             diagnostics,
         ));
     }
@@ -2097,7 +2127,7 @@ fn print_render_diagnostics_json(
     for failure in &summary.pass2_failures {
         if failure.diagnostics.is_empty() {
             let diag = DiagnosticMessageBuilder::error("Render failed")
-                .problem(failure.error.clone())
+                .problem(failure_error_text(failure, &TextRenderOptions::plain()))
                 .build();
             let code = diag.code.as_deref();
             if let Some(json) = render_diagnostic_guarded(code, || {

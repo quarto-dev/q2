@@ -361,9 +361,7 @@ mod tests {
         // Render with hyperlinks disabled so the assertion is
         // path-independent. The ariadne snippet should mention the
         // file and an excerpt of the contents.
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
         assert!(
             rendered.contains("Q-14-1"),
@@ -439,9 +437,7 @@ mod tests {
         assert_eq!(d.code.as_deref(), Some("Q-14-8"));
         assert_eq!(d.location.as_ref(), Some(&location));
 
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = strip_ansi(&d.to_text_with_options(Some(&parse_err.source_context), &opts));
         assert!(rendered.contains("Q-14-8"), "{rendered}");
         assert!(
@@ -480,9 +476,7 @@ mod tests {
         let d = &parse_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("Q-14-8"));
         assert_eq!(d.location, None);
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = strip_ansi(&d.to_text_with_options(None, &opts));
         assert!(
             rendered.contains("typography.headings.weight"),
@@ -562,9 +556,7 @@ mod tests {
         );
         assert_eq!(d.location.as_ref(), Some(&location));
 
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
         assert!(
             rendered.contains("Q-14-2"),
@@ -636,9 +628,7 @@ mod tests {
         );
         assert_eq!(d.location.as_ref(), Some(&location));
 
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
         assert!(
             rendered.contains("Q-14-4"),
@@ -718,9 +708,7 @@ mod tests {
         );
         assert_eq!(d.location.as_ref(), Some(&location));
 
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
         assert!(
             rendered.contains("Q-14-6"),
@@ -802,9 +790,7 @@ mod tests {
         );
         assert_eq!(d.location.as_ref(), Some(&location));
 
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
         assert!(
             rendered.contains("Q-14-7"),
