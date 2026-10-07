@@ -40,6 +40,7 @@ import {
 import type { CredentialStore } from './auth/credential-store.js';
 import { ReauthRequired, type RefreshManager } from './auth/refresh-manager.js';
 import { redactTokens } from './auth/redact.js';
+import { PresenceTracker, type PresenceSnapshotEntry } from './presence-tracker.js';
 import { serversMatch } from './share-url.js';
 
 // ---------------------------------------------------------------------------
@@ -141,11 +142,45 @@ interface ChangeWaiter {
   interrupt?: (err: Error) => void;
 }
 
+/**
+ * One observed project-level change (CAP-18). `hash` is the sha256
+ * content hash (`sha256:<hex>`) after the change, null on removal.
+ */
+export interface ProjectChangeEvent {
+  path: string;
+  hash: string | null;
+  kind: 'added' | 'edited' | 'removed';
+}
+
+/**
+ * A project-wide listener registered by
+ * {@link ConnectionManager.waitForAnyChange}. Events accumulate
+ * (deduped by path) and the owner debounces: a sync batch touching many
+ * files resolves as one result, not one result per file.
+ */
+interface ProjectChangeWaiter {
+  /**
+   * Own-write exclusion (ERG-8): an event whose content hash matches is
+   * the echo of the caller's own write and is dropped — never fires,
+   * never joins `events`.
+   */
+  excludeHash?: string;
+  /** Accepted events so far, deduped by path (an 'added' kind sticks). */
+  events: ProjectChangeEvent[];
+  /** Called once per accepted event so the owner can (re)arm its settle timer. */
+  onEvent: () => void;
+  interrupt?: (err: Error) => void;
+}
+
 interface ProjectState {
   client: SyncClient;
   files: Map<string, FilePayload>;
   /** Pending long-poll waiters, keyed implicitly by their `path` field. */
   waiters: Set<ChangeWaiter>;
+  /** Pending project-wide waiters (CAP-18). */
+  projectWaiters: Set<ProjectChangeWaiter>;
+  /** Passive presence observation (CAP-8) — never broadcasts (Q-3). */
+  presence: PresenceTracker;
   /** The sync server this project is connected through (bd-qt7h8h5g). */
   serverUrl: string;
 }
@@ -160,6 +195,16 @@ export interface ChangeResult {
   payload: FilePayload | null;
   /** sha256 (`sha256:<hex>`) of the payload, or null when absent/removed. */
   hash: string | null;
+}
+
+/**
+ * Result of a {@link ConnectionManager.waitForAnyChange} project-wide
+ * long-poll (CAP-18). `changed: false` means the call timed out with
+ * nothing observed; `changes` is then empty.
+ */
+export interface ProjectChangeResult {
+  changed: boolean;
+  changes: ProjectChangeEvent[];
 }
 
 /**
@@ -189,6 +234,80 @@ function fireWaiters(
       w.fire(payload);
     }
   }
+}
+
+/**
+ * Settle window for project-wide watches (CAP-18): the first accepted
+ * event starts the clock; events landing inside the window accumulate
+ * so a multi-file sync batch resolves as one result. 150 ms is far
+ * above a same-batch callback fan-out and far below anything an agent
+ * could perceive.
+ */
+export const PROJECT_WATCH_SETTLE_MS = 150;
+
+/**
+ * Offer a file event to every project-wide waiter. The waiter's own
+ * exclusion filter (ERG-8) drops the echo of its caller's own write;
+ * accepted events are deduped by path (a file 'added' then edited
+ * within the window stays 'added').
+ */
+function notifyProjectWaiters(
+  waiters: Set<ProjectChangeWaiter>,
+  path: string,
+  payload: FilePayload | null,
+  kind: ProjectChangeEvent['kind'],
+): void {
+  if (waiters.size === 0) return;
+  const hash = hashPayload(payload);
+  for (const w of [...waiters]) {
+    if (w.excludeHash !== undefined && hash !== null && hash === w.excludeHash) {
+      continue;
+    }
+    const i = w.events.findIndex((e) => e.path === path);
+    if (i >= 0) {
+      const prev = w.events[i]!;
+      w.events[i] = { path, hash, kind: prev.kind === 'added' ? 'added' : kind };
+    } else {
+      w.events.push({ path, hash, kind });
+    }
+    w.onEvent();
+  }
+}
+
+/**
+ * The file-event callbacks shared by {@link ConnectionManager}'s
+ * connect and createProject paths: update the files mirror, fire
+ * per-path waiters, and offer the event to project-wide waiters.
+ */
+function buildSyncCallbacks(
+  files: Map<string, FilePayload>,
+  waiters: Set<ChangeWaiter>,
+  projectWaiters: Set<ProjectChangeWaiter>,
+): SyncClientCallbacks {
+  return {
+    onFileAdded(path: string, file: FilePayload) {
+      files.set(path, file);
+      fireWaiters(waiters, path, file);
+      notifyProjectWaiters(projectWaiters, path, file, 'added');
+    },
+    onFileChanged(path: string, text: string, _patches: Patch[]) {
+      const payload: FilePayload = { type: 'text', text };
+      files.set(path, payload);
+      fireWaiters(waiters, path, payload);
+      notifyProjectWaiters(projectWaiters, path, payload, 'edited');
+    },
+    onBinaryChanged(path: string, data: Uint8Array, mimeType: string) {
+      const payload: FilePayload = { type: 'binary', data, mimeType };
+      files.set(path, payload);
+      fireWaiters(waiters, path, payload);
+      notifyProjectWaiters(projectWaiters, path, payload, 'edited');
+    },
+    onFileRemoved(path: string) {
+      files.delete(path);
+      fireWaiters(waiters, path, null);
+      notifyProjectWaiters(projectWaiters, path, null, 'removed');
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +421,17 @@ export class ConnectionManager {
   }
 
   /**
+   * The project-wide counterpart of {@link pendingWaiterCount}
+   * (CAP-18): pending `waitForAnyChange` waiters. Same conformance-test
+   * seam — a cancelled project-wide poll must unregister promptly.
+   */
+  pendingProjectWaiterCount(indexDocId: string): number {
+    return (
+      this.projects.get(this.projectKey(this.serverUrl, indexDocId))?.projectWaiters.size ?? 0
+    );
+  }
+
+  /**
    * Connect to a project. Walks the try-then-fallback auth policy,
    * then opens the sync client. Re-uses existing project state when
    * we've already connected.
@@ -365,25 +495,9 @@ export class ConnectionManager {
   ): Promise<ProjectState> {
     const files = new Map<string, FilePayload>();
     const waiters = new Set<ChangeWaiter>();
+    const projectWaiters = new Set<ProjectChangeWaiter>();
     const callbacks: SyncClientCallbacks = {
-      onFileAdded(path: string, file: FilePayload) {
-        files.set(path, file);
-        fireWaiters(waiters, path, file);
-      },
-      onFileChanged(path: string, text: string, _patches: Patch[]) {
-        const payload: FilePayload = { type: 'text', text };
-        files.set(path, payload);
-        fireWaiters(waiters, path, payload);
-      },
-      onBinaryChanged(path: string, data: Uint8Array, mimeType: string) {
-        const payload: FilePayload = { type: 'binary', data, mimeType };
-        files.set(path, payload);
-        fireWaiters(waiters, path, payload);
-      },
-      onFileRemoved(path: string) {
-        files.delete(path);
-        fireWaiters(waiters, path, null);
-      },
+      ...buildSyncCallbacks(files, waiters, projectWaiters),
       onError(err: Error) {
         console.error(
           `[hub-mcp] Sync error for project ${indexDocId}:`,
@@ -406,7 +520,9 @@ export class ConnectionManager {
       peerTimeoutMs: PEER_TIMEOUT_MS,
     });
 
-    const state: ProjectState = { client, files, waiters, serverUrl };
+    const presence = new PresenceTracker(client);
+    presence.attach();
+    const state: ProjectState = { client, files, waiters, projectWaiters, presence, serverUrl };
     this.projects.set(this.projectKey(serverUrl, indexDocId), state);
     return state;
   }
@@ -490,6 +606,81 @@ export class ConnectionManager {
   }
 
   /**
+   * Project-wide long-poll (CAP-18): resolve with the set of files
+   * added, edited, or removed by anyone, or after `timeoutMs` with
+   * `changed: false`. The first event starts a short settle window
+   * ({@link PROJECT_WATCH_SETTLE_MS}) so a multi-file sync batch lands
+   * as one result.
+   *
+   * `options.sinceHash` is an exclusion filter, not a baseline (ERG-8):
+   * pass the `hash` of your own just-completed write so its echo
+   * neither fires the watch nor joins the reported set. Unlike the
+   * per-path arm there is no gap-close — a first-time connect treats
+   * the freshly-synced state as the baseline (the agent has no prior
+   * view to diff against), and an already-connected call registers
+   * synchronously, so no event can slip through.
+   *
+   * `options.signal` is the BP-3 cancellation contract, same as the
+   * per-path arm.
+   */
+  async waitForAnyChange(
+    indexDocId: string,
+    timeoutMs: number,
+    options?: { sinceHash?: string; signal?: AbortSignal; server?: string },
+  ): Promise<ProjectChangeResult> {
+    const signal = options?.signal;
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const server = options?.server ?? this.serverUrl;
+    const state =
+      this.projects.get(this.projectKey(server, indexDocId)) ??
+      (await this.connect(indexDocId, { server: options?.server }));
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    }
+
+    return await new Promise<ProjectChangeResult>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout>;
+      let settleTimer: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = () => {
+        clearTimeout(timer);
+        if (settleTimer !== undefined) clearTimeout(settleTimer);
+        signal?.removeEventListener('abort', onAbort);
+      };
+      const onAbort = () => {
+        state.projectWaiters.delete(waiter);
+        cleanup();
+        reject(signal!.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+      };
+      const waiter: ProjectChangeWaiter = {
+        excludeHash: options?.sinceHash,
+        events: [],
+        onEvent: () => {
+          if (settleTimer !== undefined) clearTimeout(settleTimer);
+          settleTimer = setTimeout(() => {
+            state.projectWaiters.delete(waiter);
+            cleanup();
+            resolve({ changed: true, changes: waiter.events });
+          }, PROJECT_WATCH_SETTLE_MS);
+        },
+        interrupt: (err) => {
+          state.projectWaiters.delete(waiter);
+          cleanup();
+          reject(err);
+        },
+      };
+      state.projectWaiters.add(waiter);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      timer = setTimeout(() => {
+        state.projectWaiters.delete(waiter);
+        cleanup();
+        resolve({ changed: false, changes: [] });
+      }, timeoutMs);
+    });
+  }
+
+  /**
    * Create a new project. Currently this path always runs *after* the
    * agent has authenticated (or the hub is no-auth), so we run the
    * same auth resolution pre-flight.
@@ -508,26 +699,8 @@ export class ConnectionManager {
 
     const tempFiles = new Map<string, FilePayload>();
     const waiters = new Set<ChangeWaiter>();
-    const callbacks: SyncClientCallbacks = {
-      onFileAdded(path: string, file: FilePayload) {
-        tempFiles.set(path, file);
-        fireWaiters(waiters, path, file);
-      },
-      onFileChanged(path: string, text: string, _patches: Patch[]) {
-        const payload: FilePayload = { type: 'text', text };
-        tempFiles.set(path, payload);
-        fireWaiters(waiters, path, payload);
-      },
-      onBinaryChanged(path: string, data: Uint8Array, mimeType: string) {
-        const payload: FilePayload = { type: 'binary', data, mimeType };
-        tempFiles.set(path, payload);
-        fireWaiters(waiters, path, payload);
-      },
-      onFileRemoved(path: string) {
-        tempFiles.delete(path);
-        fireWaiters(waiters, path, null);
-      },
-    };
+    const projectWaiters = new Set<ProjectChangeWaiter>();
+    const callbacks = buildSyncCallbacks(tempFiles, waiters, projectWaiters);
 
     const client = this.syncClientFactory(callbacks);
     const result = await client.createNewProject(
@@ -550,9 +723,31 @@ export class ConnectionManager {
       resolveAuthorId,
     );
 
-    const state: ProjectState = { client, files: tempFiles, waiters, serverUrl: this.serverUrl };
+    const presence = new PresenceTracker(client);
+    presence.attach();
+    const state: ProjectState = {
+      client,
+      files: tempFiles,
+      waiters,
+      projectWaiters,
+      presence,
+      serverUrl: this.serverUrl,
+    };
     this.projects.set(this.projectKey(this.serverUrl, result.indexDocId), state);
     return { indexDocId: result.indexDocId, files: result.files };
+  }
+
+  /**
+   * Passive presence snapshot for `list_presence` (CAP-8): every peer
+   * heard from recently, freshest first. Connects first if needed;
+   * observation starts at connect and never broadcasts anything (Q-3).
+   */
+  async observePresence(
+    indexDocId: string,
+    options?: { server?: string },
+  ): Promise<PresenceSnapshotEntry[]> {
+    const state = await this.connect(indexDocId, options);
+    return state.presence.snapshot();
   }
 
   /**
@@ -594,14 +789,18 @@ export class ConnectionManager {
       return { wasConnected: false, drained: true };
     }
     this.projects.delete(key);
-    for (const w of [...state.waiters]) {
-      w.interrupt?.(
-        new Error(
-          `project ${indexDocId} was disconnected (disconnect_project) while this ` +
-            'poll was pending — re-call wait_for_change to keep watching (it reconnects).',
-        ),
+    const interruptErr = () =>
+      new Error(
+        `project ${indexDocId} was disconnected (disconnect_project) while this ` +
+          'poll was pending — re-call wait_for_change to keep watching (it reconnects).',
       );
+    for (const w of [...state.waiters]) {
+      w.interrupt?.(interruptErr());
     }
+    for (const w of [...state.projectWaiters]) {
+      w.interrupt?.(interruptErr());
+    }
+    state.presence.dispose();
     const report = await state.client.disconnect({
       drainMs: options?.drainMs ?? 0,
     });
@@ -670,10 +869,13 @@ export class ConnectionManager {
    */
   async disconnectAll(options?: DisconnectOptions): Promise<void> {
     const results = await Promise.all(
-      Array.from(this.projects.entries()).map(async ([indexDocId, s]) => ({
-        indexDocId,
-        report: await s.client.disconnect(options),
-      })),
+      Array.from(this.projects.entries()).map(async ([indexDocId, s]) => {
+        s.presence.dispose();
+        return {
+          indexDocId,
+          report: await s.client.disconnect(options),
+        };
+      }),
     );
     for (const { indexDocId, report } of results) {
       if (!report.drained) {
@@ -917,6 +1119,7 @@ export class ConnectionManager {
     await Promise.all(
       entries.map(async ([, s]) => {
         try {
+          s.presence.dispose();
           await s.client.disconnect();
         } catch {
           console.error(

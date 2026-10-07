@@ -200,9 +200,16 @@ function buildInstructions(readOnly: boolean): string {
     'skips the bytes).' +
     '\n4. Every write reports `synced: true|false` (hub acknowledgement). `synced: false` ' +
     'means "not yet confirmed", not "lost" — verify before claiming completion.' +
-    '\n5. wait_for_change long-polls a file for collaborator edits; pass its `hash` back as ' +
-    '`since_hash` on the next call so no edit between polls is missed.' +
-    '\n6. Housekeeping: get_project_info reports a project\'s shape and connection health; ' +
+    '\n5. wait_for_change long-polls for collaborator edits: with `path` it watches that file ' +
+    '(pass its `hash` back as `since_hash` on the next call so no edit between polls is missed); ' +
+    'without `path` it watches the whole project and reports every added/edited/removed file — ' +
+    'pass your own just-written `hash` as `since_hash` so your own write is not reported back.' +
+    '\n6. Collaborating with humans: list_presence shows who is editing what (observed ' +
+    'passively — check it before editing a file a teammate has open). get_file_history ' +
+    'lists a file\'s changes with authors, or diffs two versions with from_hash/to_hash. ' +
+    'restore_file_version is your undo: it reverts a file to a prior change `head` from ' +
+    'get_file_history as a new, reversible change.' +
+    '\n7. Housekeeping: get_project_info reports a project\'s shape and connection health; ' +
     'list_projects enumerates a collection from its share URL; create_folder/delete_folder ' +
     'manage folders; disconnect_project releases a connection you no longer need.' +
     '\n\nAuth: if a call fails with AuthRequiredError/ReauthRequired, call `authenticate` — ' +

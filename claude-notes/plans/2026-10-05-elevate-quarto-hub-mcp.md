@@ -831,36 +831,106 @@ byte-exact PNG on the hub in 6 turns with zero errors;
 
 Test specifications:
 
-- [ ] `list_presence` reflects a fake peer's ephemeral presence message on the
+- [x] `list_presence` reflects a fake peer's ephemeral presence message on the
   index channel (test-hub + hand-crafted message per `presenceService`'s
   schema); the MCP server itself emits **no** presence (CAP-8, Q-3).
-- [ ] `get_file_history` returns ordered change summaries with author
+  *(presence.test.ts: file-channel, index-channel, leave, and wiretap
+  no-emit cases; presence-tracker.test.ts units staleness/pruning.)*
+- [x] `get_file_history` returns ordered change summaries with author
   attribution; called with `from_hash`/`to_hash` it returns a diff between
   the two heads matching an expected patch (CAP-9).
-- [ ] `wait_for_change` emits progress notifications when given a
+  *(file-history.test.ts, incl. an attributed-collaborator case;
+  file-history-diff.test.ts units the unified-diff formatter.)*
+- [x] `wait_for_change` emits progress notifications when given a
   `progressToken` (BP-4).
-- [ ] `wait_for_change` without `path` returns the set of changed paths with
+  *(project-watch.test.ts wire case; wait-for-change-project-handler.test.ts
+  fake-timer cadence cases.)*
+- [x] `wait_for_change` without `path` returns the set of changed paths with
   hashes; the agent's own write (its post-write `hash` passed as
   `since_hash`) is not reported (CAP-18).
-- [ ] `restore_file_version` to a prior hash produces a new change whose
+  *(project-watch.test.ts: edit/add/remove kinds, exclusion + control.)*
+- [x] `restore_file_version` to a prior hash produces a new change whose
   content equals the historical text and whose result carries the
   pre-restore `hash` (CAP-19, if Q-6 says yes).
+  *(restore-file-version.test.ts, incl. reversal via `pre_restore_heads`.)*
 
 Work items:
 
-- [ ] CAP-8 `list_presence` (passive only).
-- [ ] CAP-18 project-wide watch; CAP-19 `restore_file_version` (Q-6).
-- [ ] CAP-9 `get_file_history` (automerge `getHeads`/`view`/`diff`; bounded
+- [x] CAP-8 `list_presence` (passive only).
+- [x] CAP-18 project-wide watch; CAP-19 `restore_file_version` (Q-6: **yes** —
+  the plan's working answer held; `destructiveHint`, reversible result,
+  `expected_hash` CAS, no-op when already current).
+- [x] CAP-9 `get_file_history` (automerge `getHeads`/`view`/`diff`; bounded
   `limit`; `from_hash`/`to_hash` diff mode).
-- [ ] BP-4 progress on `wait_for_change`.
-- [ ] Q-3 decision recorded (agent self-announcement). **Constraint found in
-  review:** the MCP server authenticates as the human and fetches *their*
-  per-project author id (`fetchAuthorId`), so writing "Claude (via MCP)" into
-  the `identities` map would rename the human's own entry. Recommendation:
-  the hub mints a distinct, user-linked author id for agent sessions (e.g. a
-  flag on the author-id endpoint) so the web client can show "Charlie (via
-  Claude)" without touching the human's identity; never fake cursor presence.
-  Design it with the bd-r62zad5b owner.
+- [x] BP-4 progress on `wait_for_change`.
+- [x] Q-3 decision recorded (agent self-announcement). **DECIDED
+  2026-10-06:** the server never announces itself — it shares the human's
+  author id, so writing "Claude (via MCP)" into the `identities` map would
+  rename the human's own entry, and fake cursor presence would misrepresent
+  them. `list_presence` is passive-only (a wiretap test proves the server
+  emits nothing). Honest agent attribution needs a hub-minted, user-linked
+  agent author id so the web client can show "Charlie (via Claude)" — filed
+  as **bd-b2wpeud0** (related to bd-r62zad5b; same endpoint and identity
+  model, to be designed with that owner).
+
+**Eval suite (12 tasks — added `watch-project-edit` and
+`history-and-restore`):** `eval/results/2026-10-06T15-09-54/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/509 | $0.58 | 0 | 0 | 11s |
+| read-and-report | PASS | 4 | 98/575 | $0.52 | 0 | 0 | 12s |
+| patch-typo | PASS | 6 | 130/1087 | $0.58 | 0 | 0 | 18s |
+| write-new-file | PASS | 6 | 130/1068 | $0.58 | 0 | 0 | 32s |
+| rename-file | PASS | 7 | 162/1768 | $0.63 | 0 | 0 | 30s |
+| collaborator-edit | PASS | 4 | 66/637 | $0.51 | 0 | 0 | 13s |
+| watch-live-edit | PASS | 5 | 98/859 | $0.55 | 0 | 0 | 49s |
+| stale-write-recovery | PASS | 6 | 130/2188 | $0.67 | 1 | 1 | 36s |
+| add-image-binary | PASS | 5 | 130/1405 | $0.61 | 0 | 0 | 37s |
+| search-and-report | PASS | 4 | 66/371 | $0.49 | 0 | 0 | 16s |
+| watch-project-edit | PASS | 5 | 130/848 | $0.56 | 0 | 0 | 57s |
+| history-and-restore | PASS | 10 | 194/2855 | $0.77 | 0 | 0 | 49s |
+
+12/12 PASS, median 5 turns (Phase 2: 5 — no regression). The unnamed-tool
+prompts did their job: `watch-project-edit` discovered the no-`path`
+project-wide arm of `wait_for_change` from the tool description alone
+(3× `wait_for_change`), and `history-and-restore` drove the full
+investigate → restore loop (`get_file_history` ×5, `restore_file_version`
+×3, zero `isError` — the longer 10-turn path is investigation, not
+flailing). The only `isError` remains the DESIGNED stale-hash refusal in
+`stale-write-recovery`.
+
+**E2E (real binary, recorded).** Drove `./target/debug/q2 mcp
+--server <test-hub>` over stdio JSON-RPC (`McpTestClient` with a custom
+command; one-off script, transcript reviewed and discarded after
+recording): `tools/list` → **19 tools** including `list_presence`,
+`get_file_history`, `restore_file_version`; `create_project` (2 files,
+`name`) → shareUrl with `server=` + `name=` filled; `list_presence`
+after hub-side broadcasts → `E2E Xavier` on `notes.qmd` (file channel)
+and `Index Ivy` with `file_path: null` (index channel), both
+`active: true`; project-wide `wait_for_change` with a collaborator edit
+landing mid-wait → `{changed: true, changes: [{path: "live.qmd", kind:
+"edited", hash: sha256:556e…}]}`; `get_file_history` list → 2 entries,
+newest first, heads/hashes/authors/`added_chars`/`removed_chars` (4/4
+for the beta→BETA edit); diff mode `from_hash`/`to_hash` → exact
+unified diff `@@ -1,3 +1,3 @@ alpha -beta +BETA gamma`;
+`restore_file_version` → `{restored_from, pre_restore_hash,
+pre_restore_heads, hash, synced: true}` with `read_file` confirming
+`alpha\nbeta\ngamma\n` restored, then a second restore with
+`pre_restore_heads[0]` undoing the restore itself. Output inspected for
+every call. One fix found by inspection: automerge change `time` is
+seconds since epoch — entries now surface it ×1000 as ms (the JS
+convention) so `new Date(entry.time)` works.
+
+**Phase-close gate.** `cargo xtask verify` green (14/14, full — hub-build
+leg included). `npm run test -w ts-packages/quarto-hub-mcp` green (45
+files, 420 passed + 3 skips). Bundle rebuilt and embedded; freshness
+confirmed by `q2 mcp --launcher-info` (embed at branch tip 56557c70a,
+not dirty). Tool budget: 19/24 data tools (22/24 with auth) — matches
+the plan's tally exactly. Commits: CAP-18+BP-4 (4878e5b0b), CAP-8
+(f29caf637), CAP-9 (15258f24e), CAP-19 (30f020a87), Q-3+steering+docs
+(41a01bf0f), eval (27c2d332f), time-unit fix (f83142b50), pin updates
+(56557c70a).
 
 ### Phase 4 — Quarto-specific intelligence
 

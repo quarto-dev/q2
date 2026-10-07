@@ -31,9 +31,18 @@ import {
 } from '@quarto/quarto-sync-client';
 import { ConnectionManager, hashPayload } from './connection-manager.js';
 import {
+  currentHeads,
+  diffFileHistory,
+  formatUnifiedDiff,
+  listFileHistory,
+  textAtHead,
+  UnknownChangeHashError,
+} from './file-history.js';
+import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
   extractAuthContext,
+  type ProgressNotification,
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
 import { buildShareUrl, parseProjectRef, serversMatch } from './share-url.js';
@@ -438,6 +447,8 @@ type DataToolName =
   | 'get_project_info'
   | 'list_projects'
   | 'list_files'
+  | 'list_presence'
+  | 'get_file_history'
   | 'read_file'
   | 'search_files'
   | 'wait_for_change'
@@ -448,6 +459,7 @@ type DataToolName =
   | 'rename_file'
   | 'create_folder'
   | 'delete_folder'
+  | 'restore_file_version'
   | 'create_project';
 
 /**
@@ -456,20 +468,29 @@ type DataToolName =
  * optional — a schema-level `required` would reject the share-URL call
  * before normalization runs — so the requirement is enforced here,
  * after normalization.
+ *
+ * `wait_for_change` is deliberately absent: its `path` is genuinely
+ * optional since CAP-18 (omitted = project-wide watch). A share URL's
+ * `file=` still fills it as a default via normalizeArgs.
  */
 const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
   'read_file',
-  'wait_for_change',
   'write_file',
   'patch_file',
   'create_file',
   'delete_file',
+  'get_file_history',
+  'restore_file_version',
 ]);
 
-/** Per-call extras threaded from the SDK request context (BP-3). */
+/** Per-call extras threaded from the SDK request context (BP-3, BP-4). */
 interface ToolExtras {
   /** The MCP request's cancellation signal, when the caller can cancel. */
   readonly signal?: AbortSignal;
+  /** Present only when the caller requested progress notifications (BP-4). */
+  readonly progressToken?: string | number;
+  /** Notification sender bound to the request (BP-4); token-gated by the caller. */
+  readonly sendNotification?: (n: ProgressNotification) => Promise<void>;
 }
 
 async function handleTool(
@@ -496,6 +517,10 @@ async function handleTool(
       return handleListProjects(args, manager);
     case 'list_files':
       return handleListFiles(args, manager);
+    case 'list_presence':
+      return handleListPresence(args, manager);
+    case 'get_file_history':
+      return handleGetFileHistory(args, manager);
     case 'read_file':
       return handleReadFile(args, manager);
     case 'search_files':
@@ -516,6 +541,8 @@ async function handleTool(
       return handleCreateFolder(args, manager);
     case 'delete_folder':
       return handleDeleteFolder(args, manager);
+    case 'restore_file_version':
+      return handleRestoreFileVersion(args, manager);
     case 'create_project':
       return handleCreateProject(args, manager);
   }
@@ -633,6 +660,98 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
   });
 }
 
+async function handleGetFileHistory(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = args.path as string;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  const payload = state.files.get(path);
+  if (!payload) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
+    return fileNotFoundError(path, state);
+  }
+  if (payload.type === 'binary') {
+    return error(
+      `Error: get_file_history only supports text files; "${path}" is binary ` +
+        `(${payload.mimeType}). Binary content is all-or-nothing — there is no per-line ` +
+        'history or diff to show.',
+    );
+  }
+  const handle = state.client.getFileHandle(path);
+  const doc = handle?.doc();
+  if (!handle || !doc) {
+    return fileNotFoundError(path, state);
+  }
+
+  const fromHash = typeof args.from_hash === 'string' ? args.from_hash : undefined;
+  const toHash = typeof args.to_hash === 'string' ? args.to_hash : undefined;
+
+  // Diff mode (CAP-9 rule (a): the diff is a mode of this tool, not a sibling).
+  if (fromHash !== undefined || toHash !== undefined) {
+    if (fromHash === undefined) {
+      return error(
+        'Error: `to_hash` requires `from_hash` — the diff direction would be ambiguous. ' +
+          'Pass both (from `get_file_history` list mode), or pass `from_hash` alone to diff ' +
+          'against the current content.',
+      );
+    }
+    try {
+      const { fromText, toText, resolvedTo } = diffFileHistory(doc, fromHash, toHash);
+      const { diff, addedLines, removedLines } = formatUnifiedDiff(fromText, toText, path);
+      return structured({
+        path,
+        from_hash: fromHash,
+        to_hash: resolvedTo,
+        diff,
+        added_lines: addedLines,
+        removed_lines: removedLines,
+      });
+    } catch (err) {
+      if (err instanceof UnknownChangeHashError) {
+        return error(
+          `Error: ${err.message} in "${path}". Call get_file_history without ` +
+            '`from_hash`/`to_hash` to list the change hashes this file knows.',
+        );
+      }
+      throw err;
+    }
+  }
+
+  // List mode.
+  const rawLimit = typeof args.limit === 'number' ? args.limit : 20;
+  const limit = Math.max(1, Math.min(100, rawLimit));
+  const indexDoc = state.client.getIndexHandle()?.doc();
+  const identities = indexDoc ? getIdentitiesFromIndex(indexDoc) : {};
+  const result = listFileHistory(doc, identities, limit);
+  return structured({
+    path,
+    heads: result.heads,
+    entries: result.entries,
+    total_changes: result.totalChanges,
+    truncated: result.truncated,
+  });
+}
+
+async function handleListPresence(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const presences = await manager.observePresence(project, { server: routedServer(args) });
+  return structured({
+    project,
+    presences,
+    ...(presences.length === 0
+      ? {
+          message:
+            'No collaborators heard from recently. Presence is observed passively: a peer ' +
+            'appears here only after their editor broadcasts (on cursor activity), and drops ' +
+            'out about a minute after their last broadcast. Absence of an entry does not prove ' +
+            'nobody has the project open.',
+        }
+      : {}),
+  });
+}
+
 async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project, { server: routedServer(args) });
@@ -648,7 +767,7 @@ async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Prom
  * and its hash — the caller can merge and retry without an extra read.
  */
 function staleHashError(
-  tool: 'write_file' | 'patch_file',
+  tool: 'write_file' | 'patch_file' | 'restore_file_version',
   path: string,
   currentText: string,
 ): CallToolResult {
@@ -905,21 +1024,93 @@ async function handleSearchFiles(args: ToolArgs, manager: ConnectionManager): Pr
   });
 }
 
+/**
+ * Progress cadence for the blocking watch (BP-4): an immediate
+ * `progress: 0` so the host shows life, then one notification per 5 s.
+ * Hosts with `resetTimeoutOnProgress` treat each as a liveness proof,
+ * which is what lets a 55 s poll outlive a short per-request timeout.
+ */
+const PROGRESS_INTERVAL_MS = 5000;
+
+/**
+ * Run `wait` under a progress ticker: emits `progress: 0` immediately
+ * and `elapsed / total` every {@link PROGRESS_INTERVAL_MS} until the
+ * wait settles. No-op without a progressToken (BP-4 is opt-in per
+ * request). The ticker is always torn down before the result returns,
+ * so no notification ever races the response.
+ */
+async function withWaitProgress<T>(
+  extras: ToolExtras,
+  totalMs: number,
+  watching: string,
+  wait: () => Promise<T>,
+): Promise<T> {
+  if (extras.progressToken === undefined || !extras.sendNotification) {
+    return wait();
+  }
+  const send = extras.sendNotification;
+  const token = extras.progressToken;
+  const startedAt = Date.now();
+  const emit = (progress: number) =>
+    send({
+      method: 'notifications/progress',
+      params: {
+        progressToken: token,
+        progress,
+        total: totalMs,
+        message: `watching ${watching} (${Math.round(progress / 1000)}s of ${Math.round(totalMs / 1000)}s)`,
+      },
+    }).catch(() => {
+      // A dead notification channel must not fail the wait itself.
+    });
+  const ticker = setInterval(() => {
+    void emit(Math.min(Date.now() - startedAt, totalMs));
+  }, PROGRESS_INTERVAL_MS);
+  try {
+    await emit(0);
+    return await wait();
+  } finally {
+    clearInterval(ticker);
+  }
+}
+
 async function handleWaitForChange(
   args: ToolArgs,
   manager: ConnectionManager,
   extras: ToolExtras,
 ): Promise<CallToolResult> {
   const project = args.project as string;
-  const path = args.path as string;
+  const path = typeof args.path === 'string' && args.path !== '' ? args.path : undefined;
   const rawTimeout = typeof args.timeout_seconds === 'number' ? args.timeout_seconds : 25;
   const timeoutSec = Math.max(1, Math.min(55, rawTimeout));
   const sinceHash = typeof args.since_hash === 'string' ? args.since_hash : undefined;
 
-  const result = await manager.waitForChange(project, path, timeoutSec * 1000, sinceHash, {
-    signal: extras.signal,
-    server: routedServer(args),
-  });
+  // Project-wide arm (CAP-18): no path → watch every file. `since_hash`
+  // becomes an exclusion filter for the caller's own write echo (ERG-8).
+  if (path === undefined) {
+    const result = await withWaitProgress(extras, timeoutSec * 1000, 'the whole project', () =>
+      manager.waitForAnyChange(project, timeoutSec * 1000, {
+        sinceHash,
+        signal: extras.signal,
+        server: routedServer(args),
+      }),
+    );
+    if (!result.changed) {
+      return structured({
+        changed: false,
+        changes: [],
+        message: `No change within ${timeoutSec}s. Call wait_for_change again to keep watching.`,
+      });
+    }
+    return structured({ changed: true, changes: result.changes });
+  }
+
+  const result = await withWaitProgress(extras, timeoutSec * 1000, path, () =>
+    manager.waitForChange(project, path, timeoutSec * 1000, sinceHash, {
+      signal: extras.signal,
+      server: routedServer(args),
+    }),
+  );
 
   if (!result.changed) {
     return structured({
@@ -1280,6 +1471,78 @@ async function handleDeleteFolder(args: ToolArgs, manager: ConnectionManager): P
   });
 }
 
+async function handleRestoreFileVersion(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = args.path as string;
+  const targetHead = args.hash as string;
+  const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  const payload = state.files.get(path);
+  if (!payload) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
+    return fileNotFoundError(path, state);
+  }
+  if (payload.type === 'binary') {
+    return error(
+      `Error: restore_file_version only supports text files; "${path}" is binary ` +
+        `(${payload.mimeType}). To roll a binary back, write_file its previous bytes with ` +
+        '`encoding: "base64"`.',
+    );
+  }
+  const handle = state.client.getFileHandle(path);
+  const doc = handle?.doc();
+  if (!handle || !doc) {
+    return fileNotFoundError(path, state);
+  }
+
+  let historicalText: string;
+  try {
+    historicalText = textAtHead(doc, targetHead);
+  } catch (err) {
+    if (err instanceof UnknownChangeHashError) {
+      return error(
+        `Error: ${err.message} in "${path}". Call get_file_history to list the change ` +
+          'hashes this file knows, then pass one as `hash`.',
+      );
+    }
+    throw err;
+  }
+
+  // ERG-1 consistency: the optional compare-and-swap refuses to restore
+  // over a collaborator's racing edit.
+  const preRestoreHash = hashPayload(payload);
+  if (expectedHash !== undefined && preRestoreHash !== expectedHash) {
+    return staleHashError('restore_file_version', path, payload.text);
+  }
+  const preRestoreHeads = currentHeads(doc);
+
+  // Restoring the current state is an honest no-op — writing would mint
+  // an empty change that litters the history.
+  if (payload.text === historicalText) {
+    return structured({
+      path,
+      restored_from: targetHead,
+      already_current: true,
+      pre_restore_hash: preRestoreHash,
+      pre_restore_heads: preRestoreHeads,
+      hash: preRestoreHash,
+    });
+  }
+
+  state.client.updateFileContent(path, historicalText);
+  return structured({
+    path,
+    restored_from: targetHead,
+    pre_restore_hash: preRestoreHash,
+    pre_restore_heads: preRestoreHeads,
+    hash: hashPayload({ type: 'text', text: historicalText }),
+    ...(await syncField(args, manager, project, [path])),
+  });
+}
+
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const files = (args.files as Array<{ path: string; content: string }>) ?? [];
   const name = typeof args.name === 'string' && args.name !== '' ? args.name : undefined;
@@ -1337,6 +1600,58 @@ async function runDataTool(
 // (conformance.test.ts GOLDEN_RESULT_CASES), so a schema added here
 // without a golden case (or a drifted result shape) fails the suite.
 // ---------------------------------------------------------------------------
+
+const outPresenceEntry = z.object({
+  peer_id: z.string(),
+  user_id: z.string(),
+  user_name: z.string(),
+  user_color: z.string(),
+  file_path: z.string().nullable(),
+  cursor_offset: z.number().nullable(),
+  selection: z
+    .object({ start_offset: z.number(), end_offset: z.number() })
+    .nullable(),
+  last_seen_ms_ago: z.number(),
+  active: z.boolean(),
+});
+
+const outListPresence = z.object({
+  project: z.string(),
+  presences: z.array(outPresenceEntry),
+  message: z.string().optional(),
+});
+
+const outHistoryEntry = z.object({
+  head: z.string(),
+  hash: z.string(),
+  seq: z.number(),
+  time: z.number(),
+  author: z.string(),
+  name: z.string().nullable(),
+  color: z.string().nullable(),
+  added_chars: z.number(),
+  removed_chars: z.number(),
+});
+
+// CAP-9: one tool, two modes (ERG-5 rule (a)) — a bounded change
+// listing, or a unified diff between two heads.
+const outGetFileHistory = z.union([
+  z.object({
+    path: z.string(),
+    heads: z.array(z.string()),
+    entries: z.array(outHistoryEntry),
+    total_changes: z.number(),
+    truncated: z.boolean(),
+  }),
+  z.object({
+    path: z.string(),
+    from_hash: z.string(),
+    to_hash: z.string(),
+    diff: z.string(),
+    added_lines: z.number(),
+    removed_lines: z.number(),
+  }),
+]);
 
 const outListedFile = z.object({
   path: z.string(),
@@ -1437,13 +1752,27 @@ const outReadFile = z.object({
 
 const outWaitForChange = z.object({
   changed: z.boolean(),
-  path: z.string(),
+  // Per-path arm: the watched path. Absent on the project-wide arm
+  // (CAP-18), which reports `changes` instead.
+  path: z.string().optional(),
   hash: z.string().nullable().optional(),
   removed: z.literal(true).optional(),
   type: z.string().optional(),
   mimeType: z.string().optional(),
   content: z.string().optional(),
   message: z.string().optional(),
+  // Project-wide arm (CAP-18): every file added, edited, or removed
+  // during the wait, with its post-change content hash (null on
+  // removal).
+  changes: z
+    .array(
+      z.object({
+        path: z.string(),
+        hash: z.string().nullable(),
+        kind: z.enum(['added', 'edited', 'removed']),
+      }),
+    )
+    .optional(),
 });
 
 const outWriteFile = z.object({
@@ -1513,6 +1842,16 @@ const outCreateProject = z.object({
   indexDocId: z.string(),
   files: z.array(z.object({ path: z.string(), docId: z.string() })),
   shareUrl: z.string(),
+  synced: z.boolean().optional(),
+});
+
+const outRestoreFileVersion = z.object({
+  path: z.string(),
+  restored_from: z.string(),
+  pre_restore_hash: z.string(),
+  pre_restore_heads: z.array(z.string()),
+  hash: z.string(),
+  already_current: z.literal(true).optional(),
   synced: z.boolean().optional(),
 });
 
@@ -1660,14 +1999,24 @@ export function registerTools(
     {
       title: 'Watch for changes',
       description:
-        'Long-poll: block until a file in the project is edited by any collaborator, then return its ' +
-        'new content. Returns as soon as a change is observed, or after `timeout_seconds` with ' +
-        '`changed: false` (re-call to keep watching). The result includes a `hash`; pass it back as ' +
-        '`since_hash` on the next call so an edit landing between calls is never missed. Lets an agent ' +
-        'react to a live collaborator without busy-polling read_file.',
+        'Long-poll: block until something changes, then return it. With `path`, watches that file and ' +
+        'returns its new content on edit. Omit `path` to watch the whole project: returns ' +
+        '`changes: [{path, hash, kind}]` (kind is added/edited/removed) for any collaborator\'s ' +
+        'activity — pass your own just-written `hash` as `since_hash` so your own write\'s echo is ' +
+        'not reported back to you. Returns as soon as a change is observed, or after ' +
+        '`timeout_seconds` with `changed: false` (re-call to keep watching). On the per-file arm ' +
+        'the result includes a `hash`; pass it back as `since_hash` on the next call so an edit ' +
+        'landing between calls is never missed. Lets an agent react to a live collaborator without ' +
+        'busy-polling read_file.',
       inputSchema: z.object({
         project: projectParam,
-        path: z.string().describe('The file path within the project to watch').optional(),
+        path: z
+          .string()
+          .describe(
+            'The file path within the project to watch. Omit to watch the whole project ' +
+              '(result carries `changes` instead of content).',
+          )
+          .optional(),
         timeout_seconds: z
           .number()
           .describe('Max seconds to block before returning changed=false (default 25, clamped to 1-55)')
@@ -1676,18 +2025,27 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            'Optional hash from a prior result. If the file already differs from it, returns immediately ' +
-              '(closes the gap between polls).',
+            'Per-file arm: hash from a prior result — if the file already differs, returns ' +
+              'immediately (closes the gap between polls). Project-wide arm: your own post-write ' +
+              'hash — its echo is excluded from the result.',
           ),
       }),
       outputSchema: outWaitForChange,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
     },
     // The one blocking tool: thread the request's cancellation signal
-    // (BP-3) so a client cancel unregisters the waiter promptly. ctx is
-    // always present from the SDK; the optional chain keeps bare
-    // handler-level test harnesses working.
-    (args, ctx) => runDataTool('wait_for_change', args, manager, { signal: ctx?.mcpReq?.signal }),
+    // (BP-3) so a client cancel unregisters the waiter promptly, and
+    // the progressToken + notification channel (BP-4) so a host that
+    // asked for progress gets it. ctx is always present from the SDK;
+    // the optional chains keep bare handler-level test harnesses working.
+    (args, ctx) =>
+      runDataTool('wait_for_change', args, manager, {
+        signal: ctx?.mcpReq?.signal,
+        progressToken: ctx?.mcpReq?._meta?.progressToken,
+        sendNotification: ctx?.mcpReq
+          ? (n) => ctx.mcpReq.notify(n as unknown as Parameters<typeof ctx.mcpReq.notify>[0])
+          : undefined,
+      }),
   );
 
   server.registerTool(
@@ -1728,6 +2086,66 @@ export function registerTools(
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('list_projects', args, manager),
+  );
+
+  server.registerTool(
+    'list_presence',
+    {
+      title: 'List collaborators present',
+      description:
+        'Who is in the project right now: each collaborator\'s name, the file they are ' +
+        'editing, cursor/selection offsets when resolvable, and how long ago they were last ' +
+        'heard from (`active` = within the last 5s, same threshold the web client shows). ' +
+        'Observation is passive — this server never announces itself, and a peer only appears ' +
+        'after their editor broadcasts (on cursor activity), so an empty list does not prove ' +
+        'nobody is watching. Check before editing a file a teammate may have open; combine ' +
+        'with wait_for_change to react to their edits.',
+      inputSchema: z.object({
+        project: projectParam,
+      }),
+      outputSchema: outListPresence,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('list_presence', args, manager),
+  );
+
+  server.registerTool(
+    'get_file_history',
+    {
+      title: 'Get file history',
+      description:
+        'History of one text file. List mode (default): the most recent changes, newest ' +
+        'first — each entry carries the change `head` (pass to `from_hash`/`to_hash` or ' +
+        'restore_file_version), the content `hash` after it, its author (with display ' +
+        'name/color when the project records them), timestamp, and added/removed character ' +
+        'counts. Diff mode: pass `from_hash` and `to_hash` (from a prior listing) for a ' +
+        'unified diff between those two versions; `from_hash` alone diffs that version ' +
+        'against the current content. Use it to answer "what changed since yesterday", to ' +
+        'review a collaborator\'s edit before building on it, or to pick a restore point ' +
+        'for restore_file_version.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe('Max changes to return in list mode (default 20, cap 100).'),
+        from_hash: z
+          .string()
+          .optional()
+          .describe('Diff mode: the older change `head`. Alone, diffs against the current content.'),
+        to_hash: z
+          .string()
+          .optional()
+          .describe('Diff mode: the newer change `head` (requires `from_hash`).'),
+      }),
+      outputSchema: outGetFileHistory,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('get_file_history', args, manager),
   );
 
   server.registerTool(
@@ -1867,6 +2285,40 @@ export function registerTools(
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     (args) => runDataTool('rename_file', args, manager),
+  );
+
+  server.registerTool(
+    'restore_file_version',
+    {
+      title: 'Restore a file version',
+      description:
+        'Revert a text file to a prior version — the agent\'s undo (humans have Ctrl+Z and the ' +
+        'web client\'s history view). `hash` is a change `head` from get_file_history. The restore ' +
+        'is a NEW change on top of history (never a rewrite), attributed to you, so it syncs like ' +
+        'any edit and collaborators keep their concurrent work. The result carries ' +
+        '`pre_restore_hash` and `pre_restore_heads` — pass `pre_restore_heads[0]` back as `hash` ' +
+        'to undo the restore itself. Pass `expected_hash` (from your last read) to refuse ' +
+        'restoring over a collaborator\'s racing edit. Restoring the current version is a no-op ' +
+        '(`already_current: true`).',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        hash: z
+          .string()
+          .describe('The change `head` to restore to, from get_file_history list mode.'),
+        expected_hash: z
+          .string()
+          .optional()
+          .describe(
+            'Compare-and-swap: refuse if the file\'s current content hash differs (a ' +
+              'collaborator edited since your read).',
+          ),
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outRestoreFileVersion,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    (args) => runDataTool('restore_file_version', args, manager),
   );
 
   server.registerTool(
