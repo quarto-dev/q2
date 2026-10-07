@@ -226,7 +226,10 @@ fn list_json_emits_a_structured_page_array() {
     // The JSON and text forms enumerate the same pages in the same order.
     let text = stdout(&q2(&["docs", "llms", "--list"]));
     assert_eq!(pages.len(), text.lines().count(), "json/text page count");
-    assert_eq!(href, text.lines().next().unwrap().split('\t').next().unwrap());
+    assert_eq!(
+        href,
+        text.lines().next().unwrap().split('\t').next().unwrap()
+    );
 }
 
 #[test]
@@ -242,7 +245,10 @@ fn embed_info_json_reports_state_and_provenance() {
     assert!(info["pages"].is_number(), "pages count present: {info}");
     if embed_is_real() {
         assert_eq!(info["placeholder"], false, "{info}");
-        assert!(info["commit"].is_string(), "real embed names its commit: {info}");
+        assert!(
+            info["commit"].is_string(),
+            "real embed names its commit: {info}"
+        );
     } else {
         assert_eq!(info["placeholder"], true, "{info}");
     }

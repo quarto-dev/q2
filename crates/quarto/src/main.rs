@@ -778,7 +778,6 @@ enum DocsCommands {
 /// The four modes are mutually exclusive; bare invocation prints the
 /// llms.txt index.
 #[derive(clap::Args)]
-#[group(id = "jsonable", multiple = true, args = ["list", "embed_info"])]
 struct DocsLlmsArgs {
     /// Documentation page to print, as an href from the index or
     /// `--list` (e.g. `guides/authoring/figures.md`). The `.qmd` and
@@ -799,15 +798,23 @@ struct DocsLlmsArgs {
     embed_info: bool,
 
     /// Emit machine-readable JSON (requires `--list` or `--embed-info`)
-    #[arg(long, conflicts_with_all = ["href", "full"], requires = "jsonable")]
+    #[arg(long, conflicts_with_all = ["href", "full"])]
     json: bool,
 }
 
 impl DocsLlmsArgs {
-    fn mode(self) -> commands::docs_llms::Mode {
+    fn mode(self) -> anyhow::Result<commands::docs_llms::Mode> {
         use commands::docs_llms::Mode;
+        // clap's group-`requires` does not propagate through the
+        // tuple-variant subcommand, so `--json`'s pairing rule is
+        // enforced here instead (rejected combos: bare index + --json;
+        // `conflicts` covers href/full).
+        anyhow::ensure!(
+            !self.json || self.list || self.embed_info,
+            "the argument '--json' requires '--list' or '--embed-info'"
+        );
         // clap enforces mutual exclusion; the order here is arbitrary.
-        if self.full {
+        Ok(if self.full {
             Mode::Full
         } else if self.list {
             Mode::List { json: self.json }
@@ -817,7 +824,7 @@ impl DocsLlmsArgs {
             Mode::Page(href)
         } else {
             Mode::Index
-        }
+        })
     }
 }
 
@@ -1529,9 +1536,9 @@ fn main() -> Result<()> {
             profile,
         }),
         Commands::Docs { command } => match command {
-            DocsCommands::Llms(args) => commands::docs_llms::execute(args.mode()),
+            DocsCommands::Llms(args) => commands::docs_llms::execute(args.mode()?),
         },
-        Commands::AgentsInfo(args) => commands::docs_llms::execute(args.mode()),
+        Commands::AgentsInfo(args) => commands::docs_llms::execute(args.mode()?),
         Commands::Mcp { args } => commands::mcp::run(&args),
 
         Commands::ProvideHub {

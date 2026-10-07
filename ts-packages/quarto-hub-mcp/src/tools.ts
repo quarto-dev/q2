@@ -61,6 +61,7 @@ import {
   parseDiagnostics,
   removeRenderDir,
   runRender,
+  runRenderBatch,
 } from './render.js';
 import {
   DocsUnavailableError,
@@ -353,6 +354,8 @@ function cutToBytes(text: string, maxBytes: number): string {
 interface LineWindow {
   content: string;
   totalLines: number;
+  /** 1-based line the window ends at (inclusive). */
+  end: number;
   truncated: boolean;
   nextOffset: number | null;
   hint?: string;
@@ -392,6 +395,7 @@ function windowLines(
     return {
       content: windowed,
       totalLines,
+      end,
       truncated,
       nextOffset: truncated ? end + 1 : null,
       ...(truncated
@@ -420,6 +424,7 @@ function windowLines(
     return {
       content: pageLines.join('\n') + '\n',
       totalLines,
+      end,
       truncated: true,
       nextOffset: end + 1,
       hint:
@@ -434,6 +439,7 @@ function windowLines(
   return {
     content,
     totalLines,
+    end: start + 1,
     truncated: true,
     nextOffset: null,
     hint:
@@ -1080,32 +1086,73 @@ async function handleRender(
   try {
     const { written, skipped } = materializeProject(state.files, dir);
     const q2Path = process.env['QUARTO_Q2_PATH'] ?? 'q2';
-    const outcome = await runRender({
-      q2Path,
-      cwd: dir,
-      targets,
-      timeoutMs: timeoutSeconds * 1000,
-      signal: extras.signal,
-    });
-    if (outcome.spawnError !== undefined) {
-      return error(
-        `Error: could not launch q2 ("${q2Path}"): ${outcome.spawnError}. Under \`q2 mcp\` the ` +
-          'launcher injects QUARTO_Q2_PATH pointing at the hosting binary; running standalone, ' +
-          'set QUARTO_Q2_PATH or put q2 on PATH.',
-      );
+    const timeoutMs = timeoutSeconds * 1000;
+
+    // One spawn for project/file modes; per-file spawns (shared deadline)
+    // for the loose-files fallback — q2 refuses multiple paths without a
+    // project (Q-7-4).
+    let ok: boolean;
+    let exitCode: number | null;
+    let timedOut = false;
+    let durationMs: number;
+    const diagnostics: ReturnType<typeof parseDiagnostics> = [];
+    if (mode === 'files') {
+      const started = Date.now();
+      const batch = await runRenderBatch({
+        q2Path,
+        cwd: dir,
+        files: targets,
+        timeoutMs,
+        signal: extras.signal,
+      });
+      durationMs = Date.now() - started;
+      const spawnErr = batch.find((r) => r.outcome.spawnError !== undefined);
+      if (spawnErr) {
+        return error(
+          `Error: could not launch q2 ("${q2Path}"): ${spawnErr.outcome.spawnError}. Under \`q2 mcp\` the ` +
+            'launcher injects QUARTO_Q2_PATH pointing at the hosting binary; running standalone, ' +
+            'set QUARTO_Q2_PATH or put q2 on PATH.',
+        );
+      }
+      exitCode = batch.every((r) => r.outcome.exitCode === 0)
+        ? 0
+        : (batch.find((r) => (r.outcome.exitCode ?? 1) !== 0)?.outcome.exitCode ?? null);
+      timedOut = batch.some((r) => r.outcome.timedOut);
+      for (const r of batch) diagnostics.push(...parseDiagnostics(r.outcome.stderr, dir));
+      ok = exitCode === 0 && !timedOut;
+    } else {
+      const outcome = await runRender({
+        q2Path,
+        cwd: dir,
+        targets,
+        timeoutMs,
+        signal: extras.signal,
+      });
+      if (outcome.spawnError !== undefined) {
+        return error(
+          `Error: could not launch q2 ("${q2Path}"): ${outcome.spawnError}. Under \`q2 mcp\` the ` +
+            'launcher injects QUARTO_Q2_PATH pointing at the hosting binary; running standalone, ' +
+            'set QUARTO_Q2_PATH or put q2 on PATH.',
+        );
+      }
+      diagnostics.push(...parseDiagnostics(outcome.stderr, dir));
+      exitCode = outcome.exitCode;
+      timedOut = outcome.timedOut;
+      durationMs = outcome.durationMs;
+      ok = outcome.exitCode === 0 && !timedOut;
     }
-    const diagnostics = parseDiagnostics(outcome.stderr, dir);
+
     const outputs = collectOutputs(dir, new Set(written));
     return structured({
-      ok: outcome.exitCode === 0 && !outcome.timedOut,
-      exit_code: outcome.exitCode,
+      ok,
+      exit_code: exitCode,
       target: pathArg ?? '.',
       mode,
       ...(mode === 'files' ? { files: targets } : {}),
       diagnostics,
       outputs,
-      duration_ms: outcome.durationMs,
-      ...(outcome.timedOut
+      duration_ms: durationMs,
+      ...(timedOut
         ? {
             timed_out: true,
             hint:
@@ -1226,15 +1273,29 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
     if (!resolved.ok) return resolved.result;
     const s = resolved.section;
     const window = windowLines(payload.text, s.line, s.endLine - s.line + 1, maxBytes);
+    // Truncation is reported against the SECTION, not the file: a read
+    // that reached the section's last line is complete (truncated: false)
+    // even though the file continues; one cut short by max_bytes points
+    // its continuation at the next section line. (The byte-cut
+    // pathological case is truncated with a null nextOffset.)
+    const sectionComplete =
+      window.end >= s.endLine && !(window.truncated && window.nextOffset === null);
     return structured({
       path,
       hash: hashPayload(payload),
       type: 'text',
       content: window.content,
-      truncated: window.truncated,
+      truncated: !sectionComplete,
       total_lines: window.totalLines,
-      next_offset: window.nextOffset,
-      ...(window.hint ? { hint: window.hint } : {}),
+      next_offset: sectionComplete ? null : window.nextOffset,
+      ...(sectionComplete
+        ? {}
+        : {
+            hint: `Section "${s.title}" continues past max_bytes=${maxBytes} — ` +
+              (window.nextOffset !== null
+                ? `call read_file with offset=${window.nextOffset} to continue.`
+                : 'raise max_bytes to see more of it.'),
+          }),
       section: sectionInfo(s),
     });
   }

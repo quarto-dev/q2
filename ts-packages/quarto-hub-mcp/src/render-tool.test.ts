@@ -22,13 +22,22 @@ import type { FilePayload } from '@quarto/quarto-sync-client';
 
 const STUB = `#!/usr/bin/env node
 // Fake q2 for render-tool tests. Behavior selected by FAKE_Q2_MODE.
+// Invoked as: fake-q2 render <files...> --json-errors (one file per call
+// in the loose-files mode). FAKE_Q2_FAIL_FILE names the file that fails.
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
 const mode = process.env.FAKE_Q2_MODE ?? 'success';
-// Always report argv + cwd on stdout for the tool to ignore (not JSON).
-console.log(JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }));
-if (mode === 'fail') {
-  process.stderr.write(JSON.stringify({
-    "$schema": "https://quarto.org/schemas/v1/json-diagnostic.json",
+const args = process.argv.slice(2);
+const files = args.slice(1, args.indexOf('--json-errors'));
+const failFile = process.env.FAKE_Q2_FAIL_FILE ?? 'bad.qmd';
+console.log(JSON.stringify({ argv: args, cwd: process.cwd() }));
+if (mode === 'hang') {
+  // Never exits; the tool must kill us at its timeout.
+  setInterval(() => {}, 1000);
+  await new Promise(() => {});
+}
+if (files.includes(failFile)) {
+  const diag = {
     kind: "error",
     title: "Include file not found",
     code: "Q-17-2",
@@ -36,38 +45,29 @@ if (mode === 'fail') {
     hints: [],
     start_line: 7,
     start_column: 1,
-    source_file: process.cwd() + "/bad.qmd",
+    source_file: process.cwd() + "/" + failFile,
     details: []
-  }) + "\\n");
-  process.exit(1);
-}
-if (mode === 'pass1') {
-  process.stderr.write(JSON.stringify({
-    "$schema": "https://quarto.org/schemas/v1/json-pass1-failure.json",
-    source_file: process.cwd() + "/bad.qmd",
-    error: "Error: [Q-17-2] Include file not found",
-    diagnostics: [{
+  };
+  if (mode === 'pass1') {
+    process.stderr.write(JSON.stringify({
+      "$schema": "https://quarto.org/schemas/v1/json-pass1-failure.json",
+      source_file: process.cwd() + "/" + failFile,
+      error: "Error: [Q-17-2] Include file not found",
+      diagnostics: [{ "$schema": "https://quarto.org/schemas/v1/json-diagnostic.json", ...diag }]
+    }) + "\\n");
+  } else {
+    process.stderr.write(JSON.stringify({
       "$schema": "https://quarto.org/schemas/v1/json-diagnostic.json",
-      kind: "error",
-      title: "Include file not found",
-      code: "Q-17-2",
-      problem: "Could not read included file: I/O error",
-      hints: [],
-      start_line: 7,
-      start_column: 1,
-      source_file: process.cwd() + "/bad.qmd",
-      details: []
-    }]
-  }) + "\\n");
+      ...diag
+    }) + "\\n");
+  }
   process.exit(1);
 }
-if (mode === 'hang') {
-  setInterval(() => {}, 1000);
-} else {
+for (const f of files) {
   mkdirSync('_site', { recursive: true });
-  writeFileSync('_site/index.html', '<html></html>');
-  process.exit(0);
+  writeFileSync('_site/' + basename(f, '.qmd') + '.html', '<html></html>');
 }
+process.exit(0);
 `;
 
 interface RenderResult {
@@ -138,7 +138,6 @@ async function seedAndRender(args: Record<string, unknown>): Promise<RenderResul
 
 describe('render (CAP-12)', () => {
   it('parses a bare json-diagnostic line into structuredContent', async () => {
-    process.env['FAKE_Q2_MODE'] = 'fail';
     const r = await seedAndRender({});
     expect(r.ok).toBe(false);
     expect(r.exit_code).toBe(1);
@@ -168,13 +167,38 @@ describe('render (CAP-12)', () => {
     expect(r.diagnostics[0]!.file).toBe('bad.qmd');
   });
 
+  it('loose-files mode renders every qmd and unions the results (Q-7-4 avoidance)', async () => {
+    process.env['FAKE_Q2_FAIL_FILE'] = 'broken.qmd';
+    const f = await startInMemoryMcp({ allowRender: true });
+    try {
+      const seed = await seedProject(f, [
+        { path: 'good.qmd', content: '# Good\n\nfine.\n' },
+        { path: 'broken.qmd', content: '---\ntitle: Bad\n---\n\n# Hi\n\n{{< include missing-file.qmd >}}\n' },
+        { path: 'notes.md', content: 'not a render target\n' },
+      ]);
+      const r = structured<RenderResult>(
+        await callTool(f, 'render', { project: seed.indexDocId }),
+      );
+      expect(r.mode).toBe('files');
+      expect(r.files).toEqual(['broken.qmd', 'good.qmd']);
+      expect(r.ok).toBe(false);
+      expect(r.diagnostics).toHaveLength(1);
+      expect(r.diagnostics[0]!.code).toBe('Q-17-2');
+      expect(r.diagnostics[0]!.file).toBe('broken.qmd');
+      // The good file still rendered.
+      expect(r.outputs).toContain('_site/good.html');
+    } finally {
+      await f.close();
+    }
+  });
+
   it('a clean render reports ok with produced outputs', async () => {
     process.env['FAKE_Q2_MODE'] = 'success';
     const r = await seedAndRender({});
     expect(r.ok).toBe(true);
     expect(r.exit_code).toBe(0);
     expect(r.diagnostics).toEqual([]);
-    expect(r.outputs).toContain('_site/index.html');
+    expect(r.outputs).toContain('_site/bad.html');
   });
 
   it('a single-file render targets just that file', async () => {

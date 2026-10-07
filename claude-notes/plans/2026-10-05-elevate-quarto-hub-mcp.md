@@ -1088,6 +1088,82 @@ Work items:
   clears it in the web client. Revisit only if a future capability
   (agents driving hub-side preview execution) creates a real need.
 
+#### Phase 4 completion record (landed 2026-10-06/07, bd-738mbhpj)
+
+All of the above, in eight commits on
+`braid/bd-738mbhpj-hub-mcp-phase-4-quarto-intelligence` (stacked on
+Phase 3's branch per the PR-stack rule): S-1 spike + build un-rot
+(48b2b981f), CAP-11 + CI wiring (c851bd627, f0fd2b895), CAP-12
+(96a8f2732), CAP-13 (6c16af48a), Q-4 (b66b940a7), eval + dist fallback
+(25bdc75ae), and the e2e-driven fixes below (this commit).
+
+**E2E (real binary, recorded).** Drove `./target/debug/q2 mcp
+--allow-render` over stdio JSON-RPC (`McpTestClient` with a custom
+command; one-off script, transcript reviewed and discarded after
+recording): `tools/list` → **22 tools** (21 data + opt-in `render`, no
+auth env); `get_outline` → heading tree with ids and line ranges;
+`read_file section=Methods` → exact section with `section` metadata and
+`truncated: false` (the e2e caught truncation being reported against
+the file, not the section — fixed: a complete section read is
+`truncated: false, next_offset: null`, a max_bytes-cut section points
+its continuation inside the section); `patch_file section=Methods` →
+read-back confirms only the section changed; `docs query` → 48 ranked
+hits from the REAL embedded corpus (top hit `guides/authoring/
+figures.md` with a term-dense snippet); `docs page` → full markdown;
+`render` (files mode, broken include) → `Q-17-2` with
+file/line/column — the e2e ALSO caught `q2 render a.qmd b.qmd` being
+Q-7-4 (multiple paths require a project), so loose-files mode now runs
+one invocation per file under a shared deadline; `render` after
+patching → `ok: true` with real outputs; single-file mode → clean.
+Output inspected for every call; server stderr clean.
+
+**Eval suite (15 tasks — added `outline-and-section-edit`,
+`docs-lookup`, `fix-render-error`):**
+`eval/results/2026-10-06T23-22-28/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/441 | $0.54 | 0 | 0 | 11s |
+| read-and-report | PASS | 4 | 98/785 | $0.56 | 0 | 0 | 18s |
+| patch-typo | PASS | 6 | 130/1415 | $0.64 | 0 | 0 | 33s |
+| write-new-file | PASS | 6 | 130/986 | $0.60 | 0 | 0 | 17s |
+| rename-file | PASS | 7 | 130/1384 | $0.63 | 0 | 0 | 36s |
+| collaborator-edit | PASS | 4 | 98/740 | $0.56 | 0 | 0 | 24s |
+| watch-live-edit | PASS | 5 | 98/766 | $0.57 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 162/2254 | $0.71 | 1 | 0 | 38s |
+| add-image-binary | PASS | 6 | 130/1448 | $0.65 | 0 | 0 | 25s |
+| search-and-report | PASS | 4 | 98/438 | $0.55 | 0 | 0 | 10s |
+| watch-project-edit | PASS | 5 | 130/888 | $0.59 | 0 | 0 | 58s |
+| history-and-restore | PASS | 9 | 130/2209 | $0.76 | 0 | 0 | 32s |
+| outline-and-section-edit | PASS | 9 | 162/2004 | $0.71 | 0 | 0 | 29s |
+| docs-lookup | PASS | 5 | 98/776 | $0.59 | 0 | 0 | 15s |
+| fix-render-error | PASS | 7 | 162/1933 | $0.71 | 0 | 0 | 30s |
+
+15/15 PASS, median 5 turns (Phases 2/3: 5 — no regression), zero
+`isError` except the DESIGNED stale-hash refusal in
+`stale-write-recovery`. The first outline run caught the tsc `dist/`
+build having no staged parser (only dist-bundle had one) — the agent
+recovered via `read_file` + `old_string` exactly as designed, and the
+gap is fixed (env-spec → staged-package → repo-relative fallback in
+`qmd-parser.ts`); the rerun shows the intended `get_outline` →
+`read_file section` → `patch_file section` (with `expected_hash`)
+sequence. `fix-render-error` drove the full CAP-12 loop: render →
+`Q-17-2` → fix → clean render.
+
+**Phase-close gate.** `cargo xtask verify` green (14/14, full — hub-build
+leg included; one pre-existing fix first: `--json` needed a manual
+pairing check because clap's group-`requires` doesn't propagate through
+the tuple-variant subcommand — the verify run caught it after the
+local run had masked it). `npm run test -w ts-packages/quarto-hub-mcp`
+green (49 files, 498 passed + 3 skips). Bundle rebuilt and embedded;
+freshness confirmed by `q2 mcp --launcher-info` (embed at branch tip).
+Docs embed staged (`cargo xtask build-agents-docs`, 331 artifacts) for
+the real-corpus e2e/eval. Tool budget: **21/24 data tools, 24/24 with
+auth — at the ERG-5 ceiling exactly**; Phase 5+ additions must
+displace, consolidate, or move to resources/prompts (the plan's own
+rules (a)/(b)). New strands filed this phase: bd-s0tm9sdq
+(wasm-qmd-parser CI coverage), bd-1ldys1z6 (`write_qmd` misnomer).
+
 ### Phase 5 — MCP-native surfaces
 
 Test specifications:
