@@ -205,6 +205,11 @@ typst-gather.workspace = true
 # system collection when it is absent — fine for us, since the plot
 # text is shaped with the bundled faces in `resources/hephaestus/`.
 # Keep the version in step with the `fontique` parley pulls in.
+# Process-group kill for `child_runner` (a pandoc `--filter` grandchild must
+# not outlive a timed-out or cancelled render).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 fontique = { version = "0.9", default-features = false, features = ["fontconfig-dlopen"] }
 

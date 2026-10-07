@@ -178,6 +178,11 @@ pub struct StageContext {
     /// Cancellation token for graceful shutdown (Ctrl+C)
     pub cancellation: Cancellation,
 
+    /// Wall-clock limit for each native child process a stage starts
+    /// (typst, pandoc). `None` is unbounded. Copied from
+    /// `RenderContext::child_deadline` by `run_pipeline`.
+    pub child_deadline: Option<std::time::Duration>,
+
     /// Project-wide index of Pass-1 [`DocumentProfile`]s.
     ///
     /// Populated by
@@ -459,6 +464,7 @@ impl StageContext {
             resource_resolver: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
+            child_deadline: None,
             attribution_provider: None,
             attribution_data: None,
             resolved_listings: Vec::new(),
@@ -537,6 +543,15 @@ impl StageContext {
     /// operations to enable graceful cancellation.
     pub fn is_cancelled(&self) -> bool {
         self.cancellation.is_cancelled()
+    }
+
+    /// Limits for a native child process started by a stage.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn child_limits(&self) -> crate::child_runner::ChildLimits {
+        crate::child_runner::ChildLimits {
+            deadline: self.child_deadline,
+            cancellation: Some(self.cancellation.clone()),
+        }
     }
 
     /// Add a diagnostic to the context.

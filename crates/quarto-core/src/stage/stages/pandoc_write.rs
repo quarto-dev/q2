@@ -86,15 +86,17 @@ pub fn retain_temp_json_unless_success(success: bool, json_path: &Path) {
 /// so this fallback value is never actually reached in a caller that
 /// propagates the `?`).
 #[cfg(not(target_arch = "wasm32"))]
-fn resolve_and_gate_pandoc(
+pub fn resolve_and_gate_pandoc(
     stage_name: &str,
     runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Result<std::path::PathBuf, PipelineError> {
     let pandoc_path = runtime.find_binary("pandoc", "QUARTO_PANDOC");
 
-    let version_output = pandoc_path
-        .as_ref()
-        .and_then(|p| Command::new(p).arg("--version").output().ok());
+    let version_output = pandoc_path.as_ref().and_then(|p| {
+        let mut cmd = Command::new(p);
+        cmd.arg("--version");
+        crate::child_runner::run_probe(cmd)
+    });
     let version_str = version_output.map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
 
     version::gate(version_str.as_deref())
@@ -1379,6 +1381,22 @@ impl PandocWriteStage {
         request: &PandocRequest,
         pandoc_bin: &Path,
     ) -> Result<Vec<DiagnosticMessage>, PipelineError> {
+        self.execute_with(
+            request,
+            pandoc_bin,
+            crate::child_runner::ChildLimits::default(),
+        )
+    }
+
+    /// [`execute`](Self::execute) with a deadline and cancellation for the
+    /// pandoc child. A timeout or cancel is a distinct stage error.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn execute_with(
+        &self,
+        request: &PandocRequest,
+        pandoc_bin: &Path,
+        limits: crate::child_runner::ChildLimits,
+    ) -> Result<Vec<DiagnosticMessage>, PipelineError> {
         let name = self.name();
         for dir in &request.dirs {
             std::fs::create_dir_all(dir).map_err(|e| {
@@ -1434,13 +1452,11 @@ impl PandocWriteStage {
             };
             (k.clone(), v)
         });
-        let output = Command::new(pandoc_bin)
-            .args(request.argv.iter().skip(1).map(|a| native(a)))
-            .envs(env)
-            .output()
-            .map_err(|e| {
-                PipelineError::stage_error(name, format!("failed to execute pandoc: {e}"))
-            })?;
+        let mut cmd = Command::new(pandoc_bin);
+        cmd.args(request.argv.iter().skip(1).map(|a| native(a)))
+            .envs(env);
+        let output = crate::child_runner::run_child(cmd, limits)
+            .map_err(|e| crate::child_runner::stage_error(name, "pandoc", e))?;
 
         // T10.1/T10.5: stderr is classified unconditionally, regardless of
         // exit status — not only on failure. T10.3: the temp JSON is
@@ -1507,7 +1523,7 @@ impl PipelineStage for PandocWriteStage {
         let prepared = self.prepare(&mut doc, ctx, &opts, &typst)?;
         ctx.add_diagnostics(prepared.diagnostics);
 
-        let warnings = self.execute(&prepared.request, &pandoc_bin)?;
+        let warnings = self.execute_with(&prepared.request, &pandoc_bin, ctx.child_limits())?;
         ctx.add_diagnostics(warnings);
 
         // Q1's shortcode-unescape postprocessor (`format-markdown.ts:21`,

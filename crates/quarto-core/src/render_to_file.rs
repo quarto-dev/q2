@@ -139,6 +139,15 @@ pub struct RenderToFileOptions {
     /// path still anchors project discovery and relative resources, and
     /// nothing is written back. `None` (the default) reads the file.
     pub source_override: Option<Vec<u8>>,
+
+    /// Kill the native child processes (typst, pandoc) when this is
+    /// cancelled. `None` (the default) never cancels.
+    pub cancellation: Option<crate::stage::Cancellation>,
+
+    /// Wall-clock limit for each native child process (typst, pandoc).
+    /// `None` (the default) never times out, so `q2 render` lets a long
+    /// run finish.
+    pub child_deadline: Option<std::time::Duration>,
 }
 
 /// Result of rendering a document to a file.
@@ -427,6 +436,8 @@ pub fn render_document_to_file(
     // (bd-sl79jjiq): both legs run `EngineExecutionStage`.
     config.execution_policy = options.execution_policy.clone();
     ctx.execution_policy = options.execution_policy.clone();
+    ctx.cancellation = options.cancellation.clone();
+    ctx.child_deadline = options.child_deadline;
 
     // Run the render pipeline
     let render_output = if render_format.identifier.is_native() {

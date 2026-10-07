@@ -252,9 +252,8 @@ impl PipelineStage for TypstCompileStage {
         }
         cmd.arg(&typ_input).arg(&pdf_output);
 
-        let output = cmd.output().map_err(|e| {
-            PipelineError::stage_error(self.name(), format!("failed to execute typst: {e}"))
-        })?;
+        let output = crate::child_runner::run_child(cmd, ctx.child_limits())
+            .map_err(|e| crate::child_runner::stage_error(self.name(), "typst", e))?;
 
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         if !output.status.success() {
@@ -324,7 +323,11 @@ fn resolve_and_gate_typst(
         ));
     };
 
-    let version_output = Command::new(&path).arg("--version").output().ok();
+    let version_output = {
+        let mut cmd = Command::new(&path);
+        cmd.arg("--version");
+        crate::child_runner::run_probe(cmd)
+    };
     let version_str = version_output
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
@@ -502,7 +505,7 @@ pub(crate) fn discover_available_typst_fonts(
     let mut cmd = Command::new(typst_path);
     cmd.arg("fonts");
     cmd.args(font_path_args);
-    let output = cmd.output().ok()?;
+    let output = crate::child_runner::run_probe(cmd)?;
     if !output.status.success() {
         return None;
     }

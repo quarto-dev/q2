@@ -986,6 +986,9 @@ pub fn render_once(
         attribution: args.attribution,
         chapter_seed: None,
         source_override: None,
+        // `q2 render` never times out or cancels a long typst or pandoc run.
+        cancellation: None,
+        child_deadline: None,
     };
 
     match target {

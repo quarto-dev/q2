@@ -428,6 +428,13 @@ pub struct RenderContext<'a> {
     /// override is. Default `All`.
     pub execution_policy: crate::engine::ExecutionPolicy,
 
+    /// Cancels the native child processes (typst, pandoc) of this render.
+    /// Copied onto `StageContext::cancellation` by `run_pipeline`.
+    pub cancellation: Option<crate::stage::Cancellation>,
+
+    /// Wall-clock limit for each native child process. `None` is unbounded.
+    pub child_deadline: Option<std::time::Duration>,
+
     /// Bridged back from `StageContext::execution_skipped` by
     /// `run_pipeline`: the policy excluded this document although it
     /// resolved to a code-executing engine.
@@ -599,6 +606,8 @@ impl<'a> RenderContext<'a> {
             format_options: FormatOptions::default(),
             engine_registry_override: None,
             execution_policy: crate::engine::ExecutionPolicy::default(),
+            cancellation: None,
+            child_deadline: None,
             execution_skipped: false,
             document_profile: None,
             chapter_seed: None,

@@ -15,7 +15,8 @@ use quarto_core::stage::PandocWriteStage;
 
 /// A fake pandoc. `--version` prints `pandoc $FAKE_VERSION`; any other call
 /// writes its argv and the interesting env to `$FAKE_LOG`, and exits 3 with
-/// `lua: boom` on stderr when `$FAKE_FAIL` is set.
+/// `lua: boom` on stderr when `$FAKE_FAIL` is set. `$FAKE_SLEEP` (seconds)
+/// delays the run.
 #[cfg(unix)]
 fn write_fake_pandoc(dir: &Path) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
@@ -24,6 +25,7 @@ fn write_fake_pandoc(dir: &Path) -> PathBuf {
         &path,
         "#!/bin/sh\n\
          if [ \"$1\" = \"--version\" ]; then echo \"pandoc $FAKE_VERSION\"; exit 0; fi\n\
+         if [ -n \"$FAKE_SLEEP\" ]; then sleep \"$FAKE_SLEEP\"; fi\n\
          { for a in \"$@\"; do echo \"ARG:$a\"; done\n\
            echo \"SHARE:$QUARTO_SHARE_PATH\"\n\
            echo \"SDE:${SOURCE_DATE_EPOCH-unset}\"; } > \"$FAKE_LOG\"\n\
@@ -42,6 +44,7 @@ fn write_fake_pandoc(dir: &Path) -> PathBuf {
         &path,
         "@echo off\r\n\
          if \"%~1\"==\"--version\" (echo pandoc %FAKE_VERSION% & exit /b 0)\r\n\
+         if defined FAKE_SLEEP (ping -n %FAKE_SLEEP% 127.0.0.1 >nul)\r\n\
          (for %%a in (%*) do echo ARG:%%a) > \"%FAKE_LOG%\"\r\n\
          echo SHARE:%QUARTO_SHARE_PATH%>> \"%FAKE_LOG%\"\r\n\
          if defined FAKE_FAIL (echo lua: boom 1>&2 & exit /b 3)\r\n\
@@ -230,4 +233,68 @@ fn execute_failure_is_q_20_3_and_keeps_the_temp_json() {
         Path::new(&request.json_path).exists(),
         "the temp JSON is retained on failure"
     );
+}
+
+/// A request whose paths live under a scratch dir, for the fake to chew on.
+fn scratch_request(scratch: &Path) -> PandocRequest {
+    let mut request: PandocRequest =
+        serde_json::from_str(include_str!("../../schemas/pandoc-request.golden.json")).unwrap();
+    let norm = |p: &Path| quarto_core::pandoc_request::normalize_request_path(p);
+    let root = norm(&scratch.join("root"));
+    request.share_tree_path = format!("{root}/pandoc-share");
+    request.json_path = format!("{root}/pandoc-input.json");
+    request.files[0].path = request.json_path.clone();
+    request.files[1].path = format!("{root}/pandoc-filter-deps.txt");
+    request.dirs.clear();
+    request
+}
+
+#[test]
+fn execute_with_deadline_kills_a_slow_pandoc() {
+    use quarto_core::child_runner::ChildLimits;
+    let (_fake, fake_bin) = install_fake("3.11", false);
+    unsafe { std::env::set_var("FAKE_SLEEP", "30") };
+    let scratch = tempfile::tempdir().unwrap();
+    let request = scratch_request(scratch.path());
+
+    let start = std::time::Instant::now();
+    let err = PandocWriteStage::new()
+        .execute_with(
+            &request,
+            &fake_bin,
+            ChildLimits {
+                deadline: Some(std::time::Duration::from_millis(300)),
+                cancellation: None,
+            },
+        )
+        .expect_err("a slow pandoc must hit the deadline");
+    let text = format!("{err:?}");
+    assert!(text.contains("timed out"), "{text}");
+    assert!(start.elapsed() < std::time::Duration::from_secs(10));
+}
+
+#[test]
+fn execute_with_cancellation_kills_pandoc_with_a_distinct_error() {
+    use quarto_core::child_runner::ChildLimits;
+    use quarto_core::stage::Cancellation;
+    let (_fake, fake_bin) = install_fake("3.11", false);
+    unsafe { std::env::set_var("FAKE_SLEEP", "30") };
+    let scratch = tempfile::tempdir().unwrap();
+    let request = scratch_request(scratch.path());
+
+    let token = Cancellation::new();
+    token.cancel();
+    let err = PandocWriteStage::new()
+        .execute_with(
+            &request,
+            &fake_bin,
+            ChildLimits {
+                deadline: None,
+                cancellation: Some(token),
+            },
+        )
+        .expect_err("a cancelled pandoc must stop");
+    let text = format!("{err:?}");
+    assert!(text.contains("cancelled"), "{text}");
+    assert!(!text.contains("timed out"), "{text}");
 }

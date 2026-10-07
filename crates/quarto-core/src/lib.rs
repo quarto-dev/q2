@@ -42,6 +42,8 @@ pub mod ast_walk;
 pub mod attribution;
 pub mod brand_fonts;
 pub mod cell_options;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod child_runner;
 pub mod components;
 pub mod config_sources;
 pub mod crossref;
@@ -114,6 +116,11 @@ pub use transforms::{
 pub fn version() -> &'static str {
     quarto_util::cli_version()
 }
+
+// Pandoc binary resolution plus version gate (`Q-20-1`/`Q-20-2`), for callers
+// outside the render pipeline (the preview server's import route).
+#[cfg(not(target_arch = "wasm32"))]
+pub use stage::stages::resolve_and_gate_pandoc;
 
 // Re-export render-to-file types (native only)
 #[cfg(not(target_arch = "wasm32"))]
