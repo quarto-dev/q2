@@ -11,6 +11,7 @@ import {
   MarkdownSerializerState,
   defaultMarkdownSerializer,
 } from 'prosemirror-markdown';
+import { EDITORIAL_SIGILS, type EditorialKind } from './schema';
 import { Fragment, type Mark as PMMark, type Node as PMNode } from '@tiptap/pm/model';
 
 const d = defaultMarkdownSerializer;
@@ -103,7 +104,10 @@ const marks = {
   // the lowest-ranked mark (schema order), so it is always the outermost
   // delimiter pair: other marks split around a span edge, never vice versa.
   span: {
-    open: '[',
+    open: (_state: MarkdownSerializerState, mark: PMMark) => {
+      const kind = mark.attrs.kind as EditorialKind | '';
+      return kind ? `[${EDITORIAL_SIGILS[kind]} ` : '[';
+    },
     close: (_state: MarkdownSerializerState, mark: PMMark) => {
       const comments = (mark.attrs.comments as string[] | undefined) ?? [];
       return comments.map((c) => ' ' + c).join('') + ']' + attrString(mark.attrs.attr);

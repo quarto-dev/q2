@@ -14,7 +14,11 @@
 
 import { Schema, type NodeSpec, type MarkSpec, type DOMOutputSpec } from '@tiptap/pm/model';
 
-export type ChipKind = 'math' | 'cite' | 'shortcode' | 'span' | 'raw' | 'block' | 'insert' | 'delete' | 'highlight';
+/** Editorial-mark kinds carried by the `span` mark -> their qmd sigil. */
+export const EDITORIAL_SIGILS = { insert: '++', delete: '--', highlight: '!!' } as const;
+export type EditorialKind = keyof typeof EDITORIAL_SIGILS;
+
+export type ChipKind = 'math' | 'cite' | 'shortcode' | 'span' | 'raw' | 'block';
 
 const pDOM: DOMOutputSpec = ['p', 0];
 const blockquoteDOM: DOMOutputSpec = ['blockquote', 0];
@@ -132,8 +136,10 @@ const marks: Record<string, MarkSpec> = {
   // An authored `[text]{attrs}` span as an editable mark (span comments
   // prototype). `attr` is the Pandoc attr tuple; `comments` the verbatim source
   // of `[>> …]` comments that were inside the span (hidden, written back).
+  // `kind` is '' for a plain span, else the editorial mark: 'insert' `[++ ]`,
+  // 'delete' `[-- ]`, 'highlight' `[!! ]` (see EDITORIAL_SIGILS).
   span: {
-    attrs: { attr: { default: ['', [], []] }, comments: { default: [] } },
+    attrs: { attr: { default: ['', [], []] }, comments: { default: [] }, kind: { default: '' } },
     inclusive: false,
     parseDOM: [
       {
@@ -150,6 +156,7 @@ const marks: Record<string, MarkSpec> = {
           return {
             attr: parse(el.getAttribute('data-attr'), ['', [], []]),
             comments: parse(el.getAttribute('data-comments'), []),
+            kind: el.getAttribute('data-kind') ?? '',
           };
         },
       },
@@ -158,7 +165,8 @@ const marks: Record<string, MarkSpec> = {
       return [
         'span',
         {
-          class: 'q2-rt-span',
+          class: mark.attrs.kind ? `q2-rt-span q2-rt-span-${mark.attrs.kind}` : 'q2-rt-span',
+          'data-kind': mark.attrs.kind,
           'data-attr': JSON.stringify(mark.attrs.attr),
           'data-comments': JSON.stringify(mark.attrs.comments),
         },

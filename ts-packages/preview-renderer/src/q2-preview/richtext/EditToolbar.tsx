@@ -25,6 +25,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'r
 import { getMarkRange, type Editor } from '@tiptap/core';
 import { shouldPlaceChromeBelow } from '../editChromeGeometry';
 import { ensureRichTextStyles } from './styles';
+import type { EditorialKind } from './schema';
 import { requestOpenCommentOnSpan } from '../commentPending';
 import { ModeToggle } from './ModeToggle';
 import { EditTypeIndicator } from './EditTypeIndicator';
@@ -212,30 +213,27 @@ export function EditToolbar({
   };
 
   // ---- editorial marks (!! highlight, -- delete, ++ insert) ------------------
-  // Cheap version: replace the selected text with the sugared span `[!! text]`
-  // (an opaque chip, like any other editorial mark) and commit. Inline
-  // formatting inside the selection is flattened to plain text.
-  const applyEditorialMark = (sigil: '!!' | '--' | '++') => (e: MouseEvent) => {
+  // Sets the editable `span` mark with an editorial `kind` on the selection
+  // (serializes as `[!! text]` etc.). Existing spans are never altered.
+  const applyEditorialMark = (kind: EditorialKind) => (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!editor) return;
-    const { doc, selection } = editor.state;
+    const { doc, schema, selection } = editor.state;
     const { from, to, $from, $to } = selection;
-    if (from === to || !$from.sameParent($to)) {
-      setNotice(from === to ? 'Select some text to mark' : 'Select text within one paragraph');
-      return;
-    }
-    const text = doc.textBetween(from, to, ' ').trim();
-    if (!text) {
+    if (from === to || !doc.textBetween(from, to, ' ').trim()) {
       setNotice('Select some text to mark');
       return;
     }
-    const kind = sigil === '!!' ? 'highlight' : sigil === '--' ? 'delete' : 'insert';
-    editor
-      .chain()
-      .insertContentAt({ from, to }, { type: 'chip', attrs: { src: `[${sigil} ${text}]`, kind } })
-      .run();
-    setTimeout(() => onCommit?.(), 0);
+    if (!$from.sameParent($to)) {
+      setNotice('Select text within one paragraph');
+      return;
+    }
+    if (doc.rangeHasMark(from, to, schema.marks.span)) {
+      setNotice('Selection overlaps an existing span');
+      return;
+    }
+    editor.chain().focus().setMark('span', { attr: ['', [], []], comments: [], kind }).run();
   };
 
   const editorialButtons = (
@@ -251,7 +249,7 @@ export function EditToolbar({
       title={b.title}
       className={`q2-rt-tb-btn q2-rt-tb-${b.kind}`}
       onMouseDown={(e) => e.preventDefault()}
-      onMouseUp={applyEditorialMark(b.sigil)}
+      onMouseUp={applyEditorialMark(b.kind)}
     >
       {b.label}
     </button>
