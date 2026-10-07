@@ -252,6 +252,16 @@ jobs:
         run: npm run build
         working-directory: q2-preview-spa
 
+      # The MCP bundle's qmd parser (CAP-11): a wasm32 artifact like the
+      # others above — target-independent, so build it once here and let
+      # every bundle-building leg reuse it (their freshness stamps match
+      # the shared checkout, so `npm run bundle` skips rebuilding).
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Build wasm-qmd-parser (nodejs target)
+        run: node ts-packages/quarto-hub-mcp/scripts/build-qmd-parser.mjs
+
       # Docs embed for `q2 docs llms` (bd-hwop1zii). Target-independent
       # like the SPA dists, so it is staged once here rather than on
       # every build leg — where cross-compiled targets could not run the
@@ -284,6 +294,7 @@ jobs:
             trace-viewer/dist
             q2-preview-spa/dist
             agents-docs-dist
+            crates/wasm-qmd-parser/pkg-nodejs
           retention-days: 7
           if-no-files-found: error
 
@@ -308,7 +319,7 @@ jobs:
   # build already relies on — see stage-keyring.mjs).
   hub-mcp-bundle:
     name: Build standalone hub MCP bundle
-    needs: check-inputs
+    needs: [check-inputs, web-payloads]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -330,6 +341,13 @@ jobs:
       - name: npm ci
         run: npm ci
 
+      # The qmd parser wasm (CAP-11), built once in web-payloads — this
+      # job has no Rust toolchain, and with the pkg present and fresh
+      # (same checkout) `npm run bundle` stages it without rebuilding.
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-payloads
+
       # esbuild compiles the @quarto/* workspace deps from TS source (the
       # `source` condition in scripts/bundle.mjs), so no prior workspace
       # build is needed here.
@@ -337,8 +355,9 @@ jobs:
         run: npm run bundle -w ts-packages/quarto-hub-mcp
 
       # Fail closed: a real bundle (not the empty/placeholder case), every
-      # requested keyring addon staged, and the module graph actually
-      # loads under node (the linux-x64 addon resolves on this runner).
+      # requested keyring addon staged, the qmd parser staged AND loading,
+      # and the module graph actually loads under node (the linux-x64
+      # addon resolves on this runner).
       - name: Verify bundle
         shell: bash
         run: |
@@ -351,6 +370,14 @@ jobs:
             test -d "$DIR/node_modules/@napi-rs/keyring-$P" \
               || { echo "::error::keyring addon for $P not staged"; exit 1; }
           done
+          for f in package.json wasm_qmd_parser.js wasm_qmd_parser_bg.wasm; do
+            test -f "$DIR/node_modules/wasm-qmd-parser/$f" \
+              || { echo "::error::qmd parser $f not staged"; exit 1; }
+          done
+          node --input-type=module -e \
+            "const m = await import('$DIR/node_modules/wasm-qmd-parser/wasm_qmd_parser.js'); \
+             const r = JSON.parse(m.parse_qmd('# ok\n', 'true')); \
+             if (r.success !== true) { console.error('qmd parser smoke failed'); process.exit(1); }"
           node "$DIR/index.mjs" --help >/dev/null
 
       # Build a copy named for the version so the tarball extracts into a

@@ -68,6 +68,21 @@ guides/authoring/tables.md	Tables
 guides/projects/llms-txt.md	llms.txt: a markdown mirror for AI tools
 ```
 
+## Machine-readable JSON
+
+Programs that consume the page list or the provenance report can read
+them as JSON instead of parsing the text forms:
+
+```bash
+q2 docs llms --list --json
+q2 docs llms --embed-info --json
+```
+
+`--list --json` prints a `[{"href": "...", "title": "..."}, ...]` array
+in the same order as the text form; `--embed-info --json` prints
+`{"placeholder": false, "commit": "...", "dirty": false, "pages": 255}`.
+`--json` works only with `--list` or `--embed-info`.
+
 ## The whole corpus at once
 
 ```bash

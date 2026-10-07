@@ -113,6 +113,11 @@ the same safety signals you have when editing by hand:
 - **Ranges.** Large files read in pages: a truncated `read_file`
   result carries `next_offset` to continue from, and `list_files`
   shows each file's size and line count up front.
+- **Structure.** For `.qmd` files, `get_outline` returns the heading
+  tree with line ranges, and `read_file`/`patch_file` take a `section`
+  selector naming a heading. A patch replaces exactly the range a read
+  with the same selector shows (heading included), so structural edits
+  land where intended and a collaborator's edits elsewhere survive.
 
 ## Tool reference
 
@@ -131,15 +136,17 @@ the same safety signals you have when editing by hand:
 | Tool | Purpose |
 |------|---------|
 | `list_files` | List files and folders with size, type, and line counts |
-| `read_file` | Read a file (`offset`/`limit`/`max_bytes` for ranges; binaries return image/blob blocks, `metadata_only` skips the bytes) |
+| `read_file` | Read a file (`offset`/`limit`/`max_bytes` for ranges; `section` for one qmd section; binaries return image/blob blocks, `metadata_only` skips the bytes) |
 | `search_files` | Substring or regex search across the project's text files, with snippets |
+| `get_outline` | A .qmd file's heading tree with line ranges — the map for `section` selectors and targeted reads |
 | `write_file` | Replace a file's content (creates if absent; `encoding: "base64"` for images and other binaries) |
-| `patch_file` | Replace one exact string — the preferred way to make small edits |
+| `patch_file` | Replace one exact string, or a whole qmd `section` (heading included) — the preferred way to make small edits |
 | `create_file` | Create a new text or binary file |
 | `delete_file` | Delete a file |
 | `rename_file` | Rename or move a file |
 | `restore_file_version` | Revert a file to a prior version from `get_file_history` (a new, reversible change) |
 | `wait_for_change` | Long-poll a file — or the whole project with no `path` — for collaborator edits |
+| `render` *(opt-in)* | Render the project (or one file) with `q2 render --json-errors`; returns structured diagnostics — see below |
 
 ### Collaboration
 
@@ -155,6 +162,12 @@ the same safety signals you have when editing by hand:
 | `create_folder` | Create a folder (folders are explicit markers; files need no folder to exist) |
 | `delete_folder` | Delete a folder; `recursive: true` deletes contained files first |
 
+### Documentation
+
+| Tool | Purpose |
+|------|---------|
+| `docs` | Search (`query`) or read (`page`) the Quarto 2 documentation embedded in the `q2` binary — no project or network needed |
+
 ### Sign-in
 
 | Tool | Purpose |
@@ -163,13 +176,32 @@ the same safety signals you have when editing by hand:
 | `authenticate_status` | Report sign-in state without starting a flow |
 | `authenticate_clear` | Remove cached credentials |
 
+## Rendering (opt-in, `--allow-render`)
+
+The `render` tool closes the agent's edit loop without a shell: it
+materializes the project to a temporary directory, runs
+`q2 render --json-errors` on it, and returns structured results —
+`{ ok, exit_code, diagnostics, outputs, duration_ms }` — where each
+diagnostic carries its `Q-` code, message, and source location (file,
+line, column). With no `path` it renders everything (a project render
+when `_quarto.yml` is present, otherwise every `.qmd`); with `path` it
+renders one file. Renders time out after `timeout_seconds` (default 120)
+and the temporary directory is always removed — rendered files are not
+retained, `outputs` just lists what was produced.
+
+**Rendering executes project code** — computations, filters, and engine
+code in the project run on your machine — so the tool only exists when
+you opt in by adding `--allow-render` to the `args` array, and it never
+appears together with `--read-only` (the stricter gate wins). Only
+enable it for projects you trust.
+
 ## Read-only mode
 
 To let an agent look but never edit, add `--read-only` to the `args`
 array. The server then exposes only read tools (`connect_project`,
 `list_files`, `read_file`, `search_files`, `wait_for_change`,
 `get_project_info`, `list_projects`, `list_presence`,
-`get_file_history`, `disconnect_project`) — no write,
+`get_file_history`, `get_outline`, `disconnect_project`) — no write,
 create, or delete calls exist in that configuration.
 
 ## A note on trust

@@ -1,2 +1,15 @@
 [target.wasm32-unknown-unknown]
-rustflags = ["-C", "target-feature=+bulk-memory", "-Zwasm-c-abi=spec"]
+# Cargo CONCATENATES target.*.rustflags across config files (closer files
+# last), so the monorepo root's `.cargo/config.toml` flags — which add
+# `+exception-handling` and `panic=unwind` for wasm-quarto-hub-client's Lua
+# needs — leak into this crate's builds. rustc takes the last `-C panic`,
+# so the explicit `panic=abort` below wins: this crate has no Lua and no
+# catch_unwind needs, and abort keeps the build free of the `-Zbuild-std`
+# (rust-src) requirement that panic=unwind imposes.
+rustflags = [
+    "-C",
+    "target-feature=+bulk-memory",
+    "-C",
+    "panic=abort",
+    "-Zwasm-c-abi=spec",
+]

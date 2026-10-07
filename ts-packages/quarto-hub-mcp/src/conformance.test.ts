@@ -45,11 +45,13 @@ import {
   type InMemoryMcpFixture,
   type SeededProject,
 } from './in-memory-fixture.js';
+import { resetDocsCorpusForTests } from './docs-tool.js';
+import { PARSER_UNAVAILABLE } from './test-setup.js';
 
 /** Tool budget (ERG-5): the default listing never exceeds this. */
 const TOOL_BUDGET = 24;
 
-/** Read-write mode lists these today (19 tools; auth tools need OAuth env). */
+/** Read-write mode lists these today (21 tools; auth tools need OAuth env). */
 const EXPECTED_RW_TOOLS = [
   'connect_project',
   'create_file',
@@ -58,7 +60,9 @@ const EXPECTED_RW_TOOLS = [
   'delete_file',
   'delete_folder',
   'disconnect_project',
+  'docs',
   'get_file_history',
+  'get_outline',
   'get_project_info',
   'list_files',
   'list_presence',
@@ -132,7 +136,9 @@ describe('in-memory fixture smoke', () => {
       expect(tools.tools.map((t) => t.name).sort()).toEqual([
         'connect_project',
         'disconnect_project',
+        'docs',
         'get_file_history',
+        'get_outline',
         'get_project_info',
         'list_files',
         'list_presence',
@@ -235,6 +241,14 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   args: (seed: SeededProject) => Record<string, unknown>;
   /** Extra args needing fixture access (e.g. a doc minted on the hub). */
   setup?: (f: InMemoryMcpFixture) => Promise<Record<string, unknown>>;
+  /**
+   * The call needs the wasm-qmd-parser (CAP-11). Toolchain-less CI legs
+   * (workspace-ts-suites) leave the parser unbuilt and the tool errors by
+   * design, so the execution loop skips these cases there — the same
+   * gated-tier pattern as the qmd-* test files. The coverage test is
+   * unaffected: the case stays registered either way.
+   */
+  requiresParser?: true;
 }> = [
   { tool: 'connect_project', args: (seed) => ({ project: seed.indexDocId }) },
   { tool: 'list_files', args: (seed) => ({ project: seed.indexDocId }) },
@@ -246,6 +260,37 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     // Before rename_file moves index.qmd: the golden calls run in order.
     tool: 'get_file_history',
     args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+  },
+  {
+    // index.qmd has no headings — an empty outline is a valid result.
+    tool: 'get_outline',
+    requiresParser: true,
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+  },
+  {
+    // The docs corpus comes from a fake q2 stub so the case is offline and
+    // embed-state-independent (CAP-13).
+    tool: 'docs',
+    args: () => ({ query: 'alpha' }),
+    setup: async () => {
+      const { mkdtempSync, writeFileSync, chmodSync } = await import('node:fs');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const dir = mkdtempSync(join(tmpdir(), 'conformance-fake-q2-'));
+      const stub = join(dir, 'fake-q2.mjs');
+      writeFileSync(
+        stub,
+        '#!/usr/bin/env node\n' +
+          'if (process.argv.includes("--full")) {\n' +
+          '  process.stdout.write("---\\ntitle: Alpha\\nurl: alpha.md\\n---\\n\\n# Alpha\\n\\nalpha body.\\n");\n' +
+          '  process.exit(0);\n' +
+          '}\nprocess.exit(2);\n',
+      );
+      chmodSync(stub, 0o755);
+      process.env['QUARTO_Q2_PATH'] = stub;
+      resetDocsCorpusForTests();
+      return {};
+    },
   },
   {
     tool: 'wait_for_change',
@@ -415,6 +460,9 @@ describe('result conformance (BP-1 net)', () => {
       const ajv = new Ajv2020({ allErrors: true });
       const { tools } = await f.client.listTools();
       for (const c of GOLDEN_RESULT_CASES) {
+        // Parser-tier cases cannot succeed without the parser build (the
+        // tool errors by design) — skip them on toolchain-less legs.
+        if (c.requiresParser && PARSER_UNAVAILABLE) continue;
         const declared = tools.find((t) => t.name === c.tool)?.outputSchema;
         if (declared === undefined) {
           throw new Error(`golden case for ${c.tool}: tool declares no outputSchema`);
@@ -731,7 +779,9 @@ describe('tool titles (BP-9)', () => {
       expect(titles).toEqual({
         connect_project: 'Connect to a project',
         disconnect_project: 'Disconnect from a project',
+        docs: 'Search Quarto documentation',
         get_file_history: 'Get file history',
+        get_outline: 'Get document outline',
         get_project_info: 'Get project info',
         list_projects: 'List projects in a collection',
         list_files: 'List files',

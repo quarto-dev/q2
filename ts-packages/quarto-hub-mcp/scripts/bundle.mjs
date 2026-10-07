@@ -5,6 +5,7 @@
  *     index.mjs                      — the bundled server (esbuild)
  *     build-info.json                — git commit + build time stamp
  *     node_modules/@napi-rs/...      — the keyring native addon
+ *     node_modules/wasm-qmd-parser/  — the qmd parser wasm (CAP-11)
  *
  * The output is consumed two ways:
  *   - embedded into the `q2` binary (`q2 mcp` extracts + runs it), and
@@ -48,6 +49,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { parsePlatformList, stageKeyring } from './stage-keyring.mjs';
+import { ensureQmdParserPkg } from './qmd-parser-pkg.mjs';
+import { stageQmdParser } from './stage-qmd-parser.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(here, '..');
@@ -120,6 +123,11 @@ const automergeBase64Plugin = {
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
+// The qmd parser (CAP-11): build the nodejs pkg when missing or stale,
+// then stage it below with the keyring. External to esbuild — its glue
+// reads the .wasm __dirname-relative, which cannot survive bundling.
+const qmdParserPkg = ensureQmdParserPkg({});
+
 // Shared esbuild options for every entry we bundle (the MCP server and the
 // `q2 provide-hub` auth bridge). Both embed into the same dist-bundle/ that
 // the q2 binary include_dir!s, so they must use identical bundling rules.
@@ -129,7 +137,7 @@ const sharedOptions = {
   format: 'esm',
   target: NODE_TARGET,
   conditions: ['source'],
-  external: ['@napi-rs/keyring'],
+  external: ['@napi-rs/keyring', 'wasm-qmd-parser'],
   // Minify to shrink both the standalone tarball and the copy embedded
   // in the q2 binary (include_dir!). `keepNames` preserves class/function
   // .name through mangling — cheap insurance for libraries that key on
@@ -185,6 +193,9 @@ const copied = stageKeyring({
   platforms: parsePlatformList(process.env['KEYRING_PLATFORMS']),
 });
 
+// --- ship the qmd parser the same way (CAP-11) --------------------------
+const parserFiles = stageQmdParser({ pkgDir: qmdParserPkg, outDir });
+
 // --- build stamp --------------------------------------------------------
 // Diagnosability guard against the stale-embed trap: the launcher and
 // bug reports can always tell which source state a bundle came from.
@@ -212,6 +223,7 @@ writeFileSync(
       builtAt: new Date().toISOString(),
       nodeTarget: NODE_TARGET,
       keyringPackages: copied.sort(),
+      qmdParserFiles: parserFiles,
     },
     null,
     2,

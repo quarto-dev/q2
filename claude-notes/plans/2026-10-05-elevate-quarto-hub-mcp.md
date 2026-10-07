@@ -934,38 +934,235 @@ the plan's tally exactly. Commits: CAP-18+BP-4 (4878e5b0b), CAP-8
 
 ### Phase 4 — Quarto-specific intelligence
 
-- [ ] **Spike S-1 (gates CAP-11):** qmd parser in Node. Compare (a)
+- [x] **Spike S-1 (gates CAP-11):** qmd parser in Node. Compare (a)
   `wasm-qmd-parser` built with a `nodejs` target and staged into the esbuild
   bundle (precedent: keyring `.node` staging), vs. (b) napi-rs module for
   `pampa`. Output: decision + measured bundle-size/startup cost. Time-boxed;
   failure mode = CAP-11 slips, rest of phase proceeds.
 
+#### S-1 spike record (2026-10-06, bd-738mbhpj)
+
+**Decision: (a) — `wasm-qmd-parser --target nodejs`, staged as an external
+package in `dist-bundle/node_modules/wasm-qmd-parser/`** (exactly the
+keyring `.node` pattern: esbuild `external`, Node resolves real files at
+runtime, the pkg's own `__dirname`-relative `readFileSync` of the `.wasm`
+keeps working — bundling it would break that, same as automerge's node
+entrypoint).
+
+Measurements (Apple Silicon, Node 24, `--release` build with wasm-pack's
+bundled wasm-opt):
+
+| metric | value |
+|---|---|
+| `.wasm` size | 4.61 MB raw / 1.24 MB gzip |
+| `require` + instantiation | 3.8 ms |
+| first parse (cold) | 17 ms |
+| warm parse, ~1 KB doc | 0.11 ms |
+| warm parse, 34 KB doc | 28 ms (linear scaling) |
+| bundle impact | +4.6 MB raw to `dist-bundle/` and the q2 embed; ~1.24 MB to gzipped channels |
+
+Option (b) napi-rs rejected: a new crate plus per-platform `.node` builds is
+a build axis the repo does not have (keyring is vendored from npm, not built
+here), size multiplies per staged platform (~4–8 MB × 4–5 targets vs one
+4.6 MB all-platform wasm), and the parse latency win is irrelevant when a
+34 KB document parses in 28 ms and tool calls are network-bound. Option (a)
+also guarantees parser parity with the web preview — same crate, same pampa.
+
+API facts pinned by the spike:
+
+- `parse_qmd(qmd, "true")` returns `{"success":true,"ast":"<json string>"}`
+  (double-encoded); locations ride every node as
+  `l: {b: {c,l,o}, e: {c,l,o}, f}` with byte offsets `o` — everything a
+  section selector needs. Parse is error-tolerant (unclosed fence still
+  returns `success: true`).
+- AST → qmd is `convert(astJson, "json", "qmd")`. **`write_qmd` is misnamed**
+  — it round-trips JSON to JSON; filed bd-1ldys1z6.
+- The generated CJS pkg survives Node's `cjs-module-lexer`: named ESM
+  imports (`import { parse_qmd } from 'wasm-qmd-parser'`) work, so the MCP
+  source uses ordinary imports with the package marked external.
+- Lazy-load story: the parser is only needed once a project with `.qmd`
+  files connects; 3.8 ms init makes even eager loading invisible.
+
+Build fixes the spike had to land first (the crate did not compile on
+`main` for *any* target — `build-wasm.yml` is `workflow_dispatch`-only, so
+the rot was invisible; CI gap filed as bd-s0tm9sdq):
+
+1. **Duplicate strong symbols** (`memcmp`, `vsnprintf`, `fclose`, …):
+   tree-sitter 0.26 compiles `tree-sitter-language`'s `wasm/src/*.c` into
+   `libtree_sitter.rlib`, colliding with the crate's `c_shim.rs`. Fixed with
+   the established repo pattern the crate was missing:
+   `[patch.crates-io] tree-sitter-language = { path =
+   "../tree-sitter-language-wasm-shim" }` (empty C stubs; see the 2026-04-20
+   wasm-shim-merge plan).
+2. **Undefined `snprintf`** after the patch: the crate's local `c_shim.rs`
+   predated the merged superset. Deleted it and swapped to the shared
+   `wasm-c-shim` crate (its symbol set is a strict superset; already used by
+   wasm-quarto-hub-client and pampa's wasm tests).
+3. **`panic_unwind does not have the panic strategy unwind`**: cargo
+   *concatenates* `target.*.rustflags` across config files, so the
+   workspace root's `panic=unwind,+exception-handling` (for hub-client's
+   Lua) leaks into this crate. Fixed in the crate's `.cargo/config.toml`
+   with a trailing `-C panic=abort` (rustc last-wins) — no Lua here, and
+   abort avoids the `-Zbuild-std`/rust-src requirement. Verified: bare
+   `wasm-pack build --target nodejs|--target web` both work with committed
+   config alone.
+
 Test specifications:
 
-- [ ] `get_outline` on a fixture qmd returns the expected heading tree;
+- [x] `get_outline` on a fixture qmd returns the expected heading tree;
   `read_file` with a `section` selector returns exactly that section's
   content (CAP-11).
-- [ ] `patch_file` with a `section` selector replaces exactly one section's
+- [x] `patch_file` with a `section` selector replaces exactly one section's
   content; concurrent outside edits are preserved (CRDT merge) (CAP-11).
-- [ ] `render_project` on a fixture project with a deliberate error returns
+- [x] `render_project` on a fixture project with a deliberate error returns
   `structuredContent.diagnostics[]` with the expected `Q-` code and source
   location; absent `--allow-render`, the tool is not listed (CAP-12).
-- [ ] `docs` with a `query` returns ranked pages; `docs` with a `page`
+  *(render-real.test.ts: Q-17-2 with file/line/column from the real binary,
+  gated on target/debug/q2; render-tool.test.ts: fake-q2 wire cases incl.
+  both NDJSON envelope shapes, timeout, outputs, materialization +
+  path-escape guard; render-gating.test.ts: the three listing gates.)*
+- [x] `docs` with a `query` returns ranked pages; `docs` with a `page`
   returns one page's markdown (CAP-13 / bd-dn81ol95).
+  *(docs-corpus.test.ts: corpus parse/rank/lookup units; docs.test.ts:
+  tool-level through a fake-q2 stub — ranking, snippets, max_results
+  truncation, miss suggestions, placeholder-embed error, read-only
+  surface; conformance golden case with its own stub.)*
 
 Work items:
 
-- [ ] CAP-11 AST surface (post-S-1): `get_outline` + `section` selectors on
-  `read_file`/`patch_file`.
-- [ ] CAP-12 `render_project` / `render_file`: launcher injects
+- [x] CAP-11 AST surface (post-S-1): `get_outline` + `section` selectors on
+  `read_file`/`patch_file`. **Design refinement recorded:** the section
+  splice is computed from the parser's line locations against the *current*
+  text and applied through `updateFileContent` (automerge's diff) — the
+  sync-client `getFileAst`/`updateFileAst` AST-cache path was evaluated and
+  rejected: `writeQmd` re-serializes the whole document (clobbering +
+  writer-normalization risk) for zero gain over a line-range splice.
+  `section` replaces the whole range read_file shows (heading included) —
+  read/patch agree exactly; an empty `new_string` deletes the section; all
+  math is line-based (never byte offsets: automerge text is UTF-16).
+- [x] CAP-12 `render_project` / `render_file`: launcher injects
   `QUARTO_Q2_PATH` (`current_exe`); server materializes the project via
   `exportProjectAsZip` → temp dir → `q2 render --json-errors`; parse the
   JSON diagnostics wire into `structuredContent`; **opt-in via
   `--allow-render`** (code-execution gate), documented with the security
-  model.
-- [ ] CAP-13 `docs` tool (bd-dn81ol95 + bd-b6cocsxw; design the
-  `q2 docs llms --json` ↔ MCP seam).
-- [ ] CAP-10 `clear_capture` decision (Q-4).
+  model. **Design decisions recorded:** (1) consolidated to ONE `render`
+  tool with an optional `path` (the plan's own ERG-5 rule (a) — same verb,
+  varied by parameter; the CAP-9 diff-arm consolidation precedent).
+  (2) Materialization walks `state.files` directly — the server already
+  holds every payload; `exportProjectAsZip` is the browser-side API and a
+  zip round-trip buys nothing in Node. (3) Three render modes, because
+  `q2 render .` without `_quarto.yml` is Q-7-7 and bare `q2 render` is
+  Q-7-3: `file` (one `path`), `project` (directory render when
+  `_quarto.yml` exists), `files` (loose-projects fallback — each `.qmd`
+  passed explicitly, capped at 500 for argv safety). (4) `--read-only`
+  wins the `--allow-render` combination (code execution is beyond "look
+  but don't touch"); `QUARTO_Q2_PATH` falls back to `q2` on PATH for the
+  standalone/npx channel. (5) Diagnostics are relativized out of the temp
+  dir (realpath both sides — macOS /tmp symlink) and capped streams +
+  SIGTERM→SIGKILL timeout keep a runaway render bounded.
+- [x] CAP-13 `docs` tool (bd-dn81ol95 + bd-b6cocsxw; design the
+  `q2 docs llms --json` ↔ MCP seam). **Seam design recorded:** ONE
+  subprocess per process lifetime — `q2 docs llms --full` via
+  `QUARTO_Q2_PATH` (the CAP-12 launcher injection doubles as the CAP-13
+  seam; PATH fallback for standalone). The corpus's per-page
+  `---\ntitle:/url:` markers (assemble_llms_full) make page attribution
+  exact, so search and page fetches serve from the in-process cache.
+  Chosen over (a) launcher-extracted doc dirs (standalone channel would
+  need a second path) and (c) staging the corpus into dist-bundle (~1 MB
+  duplication plus a docs-render step in every bundle build). The
+  `--json` flag (bd-b6cocsxw) shipped anyway — structured
+  `--list`/`--embed-info` for other machine consumers; search is
+  term-tokenized (AND-matches rank first), snippets pick the
+  highest-term-density line. Both strands closed. Tool budget: 21/24
+  data, 24/24 with auth — at the ceiling exactly; Phase 5+ additions
+  must displace or consolidate.
+- [x] CAP-10 `clear_capture` decision (Q-4). **DECIDED 2026-10-06: no
+  tool — human-only.** `clearCapture` deletes an entry from the shared
+  index document, which drives *other* collaborators' preview engines —
+  clearing a capture mid-session forces an unexpected re-execution in a
+  teammate's web preview, the same invisible-shared-mutation class Q-3
+  rejected. The agent's own render loop (CAP-12) renders in a temp dir
+  via `q2` and never touches hub-side captures, so there is no agent
+  need; the CAP-2 read surface (captures in `get_project_info`) lets the
+  agent *observe* a stale/errored capture and advise the human, who
+  clears it in the web client. Revisit only if a future capability
+  (agents driving hub-side preview execution) creates a real need.
+
+#### Phase 4 completion record (landed 2026-10-06/07, bd-738mbhpj)
+
+All of the above, in eight commits on
+`braid/bd-738mbhpj-hub-mcp-phase-4-quarto-intelligence` (stacked on
+Phase 3's branch per the PR-stack rule): S-1 spike + build un-rot
+(48b2b981f), CAP-11 + CI wiring (c851bd627, f0fd2b895), CAP-12
+(96a8f2732), CAP-13 (6c16af48a), Q-4 (b66b940a7), eval + dist fallback
+(25bdc75ae), and the e2e-driven fixes below (this commit).
+
+**E2E (real binary, recorded).** Drove `./target/debug/q2 mcp
+--allow-render` over stdio JSON-RPC (`McpTestClient` with a custom
+command; one-off script, transcript reviewed and discarded after
+recording): `tools/list` → **22 tools** (21 data + opt-in `render`, no
+auth env); `get_outline` → heading tree with ids and line ranges;
+`read_file section=Methods` → exact section with `section` metadata and
+`truncated: false` (the e2e caught truncation being reported against
+the file, not the section — fixed: a complete section read is
+`truncated: false, next_offset: null`, a max_bytes-cut section points
+its continuation inside the section); `patch_file section=Methods` →
+read-back confirms only the section changed; `docs query` → 48 ranked
+hits from the REAL embedded corpus (top hit `guides/authoring/
+figures.md` with a term-dense snippet); `docs page` → full markdown;
+`render` (files mode, broken include) → `Q-17-2` with
+file/line/column — the e2e ALSO caught `q2 render a.qmd b.qmd` being
+Q-7-4 (multiple paths require a project), so loose-files mode now runs
+one invocation per file under a shared deadline; `render` after
+patching → `ok: true` with real outputs; single-file mode → clean.
+Output inspected for every call; server stderr clean.
+
+**Eval suite (15 tasks — added `outline-and-section-edit`,
+`docs-lookup`, `fix-render-error`):**
+`eval/results/2026-10-06T23-22-28/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/441 | $0.54 | 0 | 0 | 11s |
+| read-and-report | PASS | 4 | 98/785 | $0.56 | 0 | 0 | 18s |
+| patch-typo | PASS | 6 | 130/1415 | $0.64 | 0 | 0 | 33s |
+| write-new-file | PASS | 6 | 130/986 | $0.60 | 0 | 0 | 17s |
+| rename-file | PASS | 7 | 130/1384 | $0.63 | 0 | 0 | 36s |
+| collaborator-edit | PASS | 4 | 98/740 | $0.56 | 0 | 0 | 24s |
+| watch-live-edit | PASS | 5 | 98/766 | $0.57 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 162/2254 | $0.71 | 1 | 0 | 38s |
+| add-image-binary | PASS | 6 | 130/1448 | $0.65 | 0 | 0 | 25s |
+| search-and-report | PASS | 4 | 98/438 | $0.55 | 0 | 0 | 10s |
+| watch-project-edit | PASS | 5 | 130/888 | $0.59 | 0 | 0 | 58s |
+| history-and-restore | PASS | 9 | 130/2209 | $0.76 | 0 | 0 | 32s |
+| outline-and-section-edit | PASS | 9 | 162/2004 | $0.71 | 0 | 0 | 29s |
+| docs-lookup | PASS | 5 | 98/776 | $0.59 | 0 | 0 | 15s |
+| fix-render-error | PASS | 7 | 162/1933 | $0.71 | 0 | 0 | 30s |
+
+15/15 PASS, median 5 turns (Phases 2/3: 5 — no regression), zero
+`isError` except the DESIGNED stale-hash refusal in
+`stale-write-recovery`. The first outline run caught the tsc `dist/`
+build having no staged parser (only dist-bundle had one) — the agent
+recovered via `read_file` + `old_string` exactly as designed, and the
+gap is fixed (env-spec → staged-package → repo-relative fallback in
+`qmd-parser.ts`); the rerun shows the intended `get_outline` →
+`read_file section` → `patch_file section` (with `expected_hash`)
+sequence. `fix-render-error` drove the full CAP-12 loop: render →
+`Q-17-2` → fix → clean render.
+
+**Phase-close gate.** `cargo xtask verify` green (14/14, full — hub-build
+leg included; one pre-existing fix first: `--json` needed a manual
+pairing check because clap's group-`requires` doesn't propagate through
+the tuple-variant subcommand — the verify run caught it after the
+local run had masked it). `npm run test -w ts-packages/quarto-hub-mcp`
+green (49 files, 498 passed + 3 skips). Bundle rebuilt and embedded;
+freshness confirmed by `q2 mcp --launcher-info` (embed at branch tip).
+Docs embed staged (`cargo xtask build-agents-docs`, 331 artifacts) for
+the real-corpus e2e/eval. Tool budget: **21/24 data tools, 24/24 with
+auth — at the ERG-5 ceiling exactly**; Phase 5+ additions must
+displace, consolidate, or move to resources/prompts (the plan's own
+rules (a)/(b)). New strands filed this phase: bd-s0tm9sdq
+(wasm-qmd-parser CI coverage), bd-1ldys1z6 (`write_qmd` misnomer).
 
 ### Phase 5 — MCP-native surfaces
 
@@ -1079,7 +1276,10 @@ Work items:
   the server currently shares the human's author id and would otherwise
   rename their identity; never fake cursor presence.
 - **Q-4 (Phase 4):** Is `clear_capture` agent-appropriate (it mutates shared
-  project state) or human-only?
+  project state) or human-only? **Resolved 2026-10-06: human-only.** It
+  deletes shared index state driving other collaborators' preview engines;
+  the CAP-12 render loop never touches captures; CAP-2's read surface
+  covers observation. See the Phase 4 checklist entry.
 - **Q-5 (Phase 6):** Under the 2026-07-28 stateless model (sessions removed),
   how does the hub keep automerge connections warm across an agent's requests?
   Working assumption: a per-user pool keyed by token subject with idle
