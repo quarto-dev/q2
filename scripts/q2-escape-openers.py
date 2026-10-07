@@ -101,6 +101,34 @@ def escaped(delim):
 
 
 CODE_SPAN = re.compile(r"(`+)(?:.*?[^`])?\1(?!`)")
+CODE_SPAN_BLOCK = re.compile(CODE_SPAN.pattern, re.DOTALL)  # spans may wrap lines
+
+
+def block_bounds(lines, ln):
+    """1-based (start, end) of the block (run of non-blank lines) that
+    contains, or else ends before, 1-based line `ln`."""
+    e = min(ln, len(lines))
+    while e > 1 and lines[e - 1].strip() == "":
+        e -= 1
+    s = e
+    while s > 1 and lines[s - 2].strip() != "":
+        s -= 1
+    while e < len(lines) and lines[e].strip() != "":
+        e += 1
+    return s, e
+
+
+def in_code_span(lines, ln, i):
+    """Is 0-based column `i` of 1-based line `ln` inside a code span?
+
+    Code spans are matched over the whole block, not line by line: a span
+    that wraps across lines would otherwise pair its closing backtick with
+    the next one on that line, so `` `x`'s `` at the start of a line looks
+    like code."""
+    s, e = block_bounds(lines, ln)
+    text = "\n".join(lines[s - 1:e])
+    off = sum(len(l) + 1 for l in lines[s - 1:ln - 1]) + i
+    return any(a <= off < b for a, b in (m.span() for m in CODE_SPAN_BLOCK.finditer(text)))
 
 
 def block_escape(lines, ln, pattern):
@@ -110,24 +138,16 @@ def block_escape(lines, ln, pattern):
     Fallback for diagnostics with no opener position: the error is reported
     at the end of the block (typical in pipe tables), so the opener is
     somewhere above. Returns the number of escapes."""
-    e = min(ln, len(lines))
-    while e > 1 and lines[e - 1].strip() == "":
-        e -= 1
-    s = e
-    while s > 1 and lines[s - 2].strip() != "":
-        s -= 1
-    n = 0
-    for i in range(s - 1, e):
-        line = lines[i]
-        spans = [m.span() for m in CODE_SPAN.finditer(line)]
-        hits = [m.start() for m in pattern.finditer(line)
-                if not any(a <= m.start() < b for a, b in spans)
-                and (m.start() == 0 or line[m.start() - 1] != "\\")]
-        for j in reversed(hits):
-            line = line[:j] + "\\" + line[j:]
-        lines[i] = line
-        n += len(hits)
-    return n
+    s, e = block_bounds(lines, ln)
+    text = "\n".join(lines[s - 1:e])
+    spans = [m.span() for m in CODE_SPAN_BLOCK.finditer(text)]
+    hits = [m.start() for m in pattern.finditer(text)
+            if not any(a <= m.start() < b for a, b in spans)
+            and (m.start() == 0 or text[m.start() - 1] != "\\")]
+    for j in reversed(hits):
+        text = text[:j] + "\\" + text[j:]
+    lines[s - 1:e] = text.split("\n")
+    return len(hits)
 
 
 def main():
@@ -168,8 +188,7 @@ def main():
             for ln, col in sorted(locs, key=lambda t: (t[0], -t[1])):
                 line = lines[ln - 1]
                 i = locate(line, col, ch)
-                if i is not None and any(a <= i < b for a, b in
-                                         (m.span() for m in CODE_SPAN.finditer(line))):
+                if i is not None and in_code_span(lines, ln, i):
                     # inside a code span a backslash would render literally;
                     # the diagnostic is a knock-on from an earlier error
                     i = None
