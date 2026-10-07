@@ -102,7 +102,7 @@ Read before rebasing; the plan above was written before these landed.
 - **Textual conflicts.** `downloadController.ts` (the two file-name sites, a new `buildRequest` sixth argument,
   `StartOptions.scope`/`captureDocIds`, `done.book`), `downloadService.ts` (`MENU_FORMATS` is now every table row,
   with a rewritten doc comment; `wasmDeps` forwards `scope`/`capturesByPath`/`onProgress`), `useDownloadAs.ts`,
-  `DownloadAsControl.tsx`. Nothing in `PreviewRouter.tsx`, `getQ2Format.ts`, `strings.ts`'s `neither` copy or Rust
+  `DownloadAsControl.tsx`. Nothing in `PreviewRouter.tsx`, `getQ2Format.ts`, `strings.ts`\'s `neither` copy or Rust
   changed, so the classifier and Rust tasks rebase cleanly.
 - **`ResolvedFormat.extension` must reach three consumers, not one:** (1) the menu's `DownloadFormat` for a
   `typst` row; (2) `DownloadModePane` in `PreviewRouter.tsx`, which builds its format from `formatByKey(formatKey)`

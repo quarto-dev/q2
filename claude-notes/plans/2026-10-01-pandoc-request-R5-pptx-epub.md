@@ -14,7 +14,7 @@ Extend the docx request to pptx and epub. The only real work is `epub_extra_args
 ## Checklist
 
 ### Tests first
-- [x] pptx and epub fixtures' requests equal the recorded native runs (R0 wrapper). Epub is expected to need a document `identifier` for reproducibility (R0 exploration).
+- [x] pptx and epub fixtures\' requests equal the recorded native runs (R0 wrapper). Epub is expected to need a document `identifier` for reproducibility (R0 exploration).
 
 ### Tasks
 - [x] `epub_extra_args` (`pandoc_write.rs:152`, `std::fs` + `FORMATS_DIR`) made in-memory: the `--include-in-header` temp paths become `files` entries written under the temp root, beside the share tree; `epub-embed-font` and repeated `css` feed `resource_refs`; `epub-cover-image` and `epub-metadata` likewise (D3).

@@ -1,7 +1,7 @@
 # R0 exploration: a versioned, hashable `PandocRequest`
 
 **Date:** 2026-10-01. **Phase:** pandoc-request R0 (`claude-notes/plans/2026-10-01-pandoc-request-R0-foundations.md`).
-**Method:** the 24 committed recordings (`crates/quarto-core/tests/fixtures/pandoc-recordings/`), replayed with the pinned native pandoc 3.11 through `pandoc-recording replay --env/--arg`; a throwaway Python prototype of the job id over the recordings' `argv.json`, `env.json`, `manifest.json` and `meta.json`. Native only: the wasm side is H0's.
+**Method:** the 24 committed recordings (`crates/quarto-core/tests/fixtures/pandoc-recordings/`), replayed with the pinned native pandoc 3.11 through `pandoc-recording replay --env/--arg`; a throwaway Python prototype of the job id over the recordings\' `argv.json`, `env.json`, `manifest.json` and `meta.json`. Native only: the wasm side is H0's.
 
 ## Recommendation (for R1)
 

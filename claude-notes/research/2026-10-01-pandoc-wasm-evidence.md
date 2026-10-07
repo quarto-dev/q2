@@ -164,7 +164,7 @@ Setup: pandoc 3.11 wasm (SHA-256 `44829227...`, 59,163,604 bytes, verified again
 - **`poll_oneoff`**: wrapped on every run; **0 calls** over all runs in both browsers, so 0 non-zero returns (nothing in this workload sleeps or polls).
 - **Non-ASCII**: with `args_sizes_get` overridden to UTF-8 byte lengths, an output name `数据 résumé.docx` plus a 600-character non-ASCII `--metadata title=` value runs and writes the file; with the shim's own `args_sizes_get` (UTF-16 units) the same argv traps with "memory access out of bounds" in both engines. The short non-ASCII output name alone passes with the shim's counts, so the override is only needed for long non-ASCII argv; keep it unconditionally.
 - **`_start` twice on one instance traps** (`unreachable`) in both engines: one instance per run, as the plan assumes.
-- **Latency, fresh instance, module precompiled (instantiate + run):** Chromium docx ~140 ms with the Lua filters vs ~66 ms bare, so the vendored filters' startup is **~70 ms** (Node was ~250-300 ms); first run after load 293 ms (callouts-docx: instance 25 ms + 268 ms). Per recording run time (Chromium, `_start` only): docx 77-268 ms (median 90), pptx 108-176 (median 121), epub 66-154 (median 83), typst 67-133 (median 81). WebKit: instance 115-260 ms, first run 390 ms, medians docx 114, pptx 129, epub 99, typst 98 ms; Lua startup ~70 ms (bare ~185 ms vs ~250 ms with filters). Informational only (the reactor numbers are not a comparable baseline).
+- **Latency, fresh instance, module precompiled (instantiate + run):** Chromium docx ~140 ms with the Lua filters vs ~66 ms bare, so the vendored filters\' startup is **~70 ms** (Node was ~250-300 ms); first run after load 293 ms (callouts-docx: instance 25 ms + 268 ms). Per recording run time (Chromium, `_start` only): docx 77-268 ms (median 90), pptx 108-176 (median 121), epub 66-154 (median 83), typst 67-133 (median 81). WebKit: instance 115-260 ms, first run 390 ms, medians docx 114, pptx 129, epub 99, typst 98 ms; Lua startup ~70 ms (bare ~185 ms vs ~250 ms with filters). Informational only (the reactor numbers are not a comparable baseline).
 - **Memory** (`instance.exports.memory.buffer.byteLength` after the run): 47-49 MB with filters over all recordings (bare docx 44 MB), identical in both engines; a bad-option run is 42 MB.
 
 Open questions settled:
@@ -273,7 +273,7 @@ Spec: `hub-client/e2e/typst-measure.harness.spec.ts` (opt-in, `Q2_MEASURE=1`; sa
 | warm compile, median of 5 (module resident, fresh worker) | 67 ms | 87 ms |
 | Rust wasm memory after (shared with the pandoc measurements) | 32 MB | 32 MB |
 
-Process RSS (summed over every `ms-playwright` process; the harness's browser keeps earlier contexts' memory, so read the deltas, not the absolute values):
+Process RSS (summed over every `ms-playwright` process; the harness's browser keeps earlier contexts\' memory, so read the deltas, not the absolute values):
 
 | Step | Chromium start -> peak | WebKit start -> peak |
 |---|---:|---:|

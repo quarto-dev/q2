@@ -135,7 +135,7 @@ refer to*. Derive it from the diagnostic's own location, resolved through the sa
 3. location resolves but the file is not on disk → no `source_file` (honest; counted in the re-check);
 4. no location, or it does not resolve → the caller's known file (page input, config path), if any.
 All emitted paths are made absolute (`std::path::absolute`, which stays in plain form on Windows).
-This mirrors `quarto-error-reporting`'s own `hyperlink_target` rule for the text path. It lives in
+This mirrors `quarto-error-reporting`\'s own `hyperlink_target` rule for the text path. It lives in
 q2 because the crate's `diagnostic_to_json` leaves attribution to callers by design.
 Rule 1 matters: page renders produce diagnostics whose coordinates are in `_quarto.yml`
 (e.g. raw HTML in `website.page-footer`, Q-2-9). Tagging those with the page path would make the
@@ -159,7 +159,7 @@ record point at the wrong file.
 ## Broader-review follow-ups (2026-10-06, same PR)
 
 - [x] **R1** filed upstream as **qe-hal9cc7b** in posit-dev/quarto-error-reporting's skein: an opt-in
-      plain (no SGR, no OSC-8) rendering mode for `diagnostic_to_json`'s `rendered`, default
+      plain (no SGR, no OSC-8) rendering mode for `diagnostic_to_json`\'s `rendered`, default
       unchanged. q2's adoption and the q2-built pass-1 `error` blob stay on bd-ckbqmupi.
 - [x] **R5** fixed (bd-3801o1o0). Correction to the finding above: the quote was not misplaced.
       The claude-notes link target really is `Q-X-Y'.qmd`. The defect was `'…'` quoting, which is

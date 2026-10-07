@@ -48,7 +48,7 @@ So: store the SVG, and rasterize at export when the writer is docx or pptx.
   dpi than intended (measured, native pandoc 3.11: 400x300 PNG without pHYs gives `wp:extent` 5.56 in; the same PNG
   with pHYs 192 dpi gives 2.09 in; native with `rsvg-convert` on a 200x150 SVG gives 2.08 in). The rasterizer therefore
   renders at 2x intrinsic size **and writes a 192 dpi pHYs chunk (7559 px/m)**, so pandoc displays it at intrinsic
-  size. The `Image`'s own width/height only change display size, so they need not reach the rasterizer. The existing
+  size. The `Image`\'s own width/height only change display size, so they need not reach the rasterizer. The existing
   `convertMetafileToPng` has the same missing-pHYs property today.
 - **Browser intrinsic size is unreliable:** `naturalWidth x naturalHeight` for a viewBox-only SVG is 300x150 in
   Chromium and 100x50 in WebKit (Firefox not yet measured; it launches now, see T0). The JS rasterizer parses the SVG root
@@ -155,7 +155,7 @@ imported EMF/WMF show as alt text in docx/pptx on the integration branch in betw
   - **Normalize ids** after serializing: renumber `EMFJS_[a-z]\d+` and `wmfjs_[a-z]\d+` by order of appearance; test that a
     clipped EMF converted twice in one session gives identical bytes.
   - **Store at 1x:** root `width`/`height` = inches x 96 (today's `metafileSize` bakes `SCALE=2`: `width="200px"` on
-    `viewBox="0 0 100 50"`); keep the imported `Image`'s own `{width="…in" height="…in"}`.
+    `viewBox="0 0 100 50"`); keep the imported `Image`\'s own `{width="…in" height="…in"}`.
   - `importService` stores `<hash>.svg`, mime `image/svg+xml` (`svg` is already in `BINARY_EXTENSIONS`
     `ts-packages/quarto-automerge-schema/src/index.ts:485`, image list `:531`, `inferMimeType` `:619`, and
     `crates/quarto-hub/src/resource.rs:38`; DISPLAYABLE already includes svg, so no Q-24-11). I16's 10 MB rule applies
@@ -208,7 +208,7 @@ Per-crate gate each task: `cargo clippy -p quarto-core --all-targets -- -D warni
 
 T1 landed in `3764dd6b4` (on top of the WIP `c331944c6`). All of it is on `import/metafile-svg-media` only: the local `feature/hub-import` ref is still `448c270c1`, so T2-T4 (`70e23fac8`) have not landed there either.
 
-**Verified for T1:** vitest 135 files / 1602 tests green; `tsc -b` clean; `cargo clippy -p quarto-core -p quarto-error-catalog --all-targets -D warnings` clean; Playwright (throwaway configs on :5199 and :5198, because other worktrees' previews hold :5173 and :5174) `pandoc-import-emf` + `pandoc-svg-rasterize` 24/24 on Chromium and Firefox, 12/12 on WebKit; `import-dialog` 36/36 Chromium; P5 `import-document.spec.ts` 13/13 Chromium (rebuilt with `VITE_DEFAULT_SYNC_SERVER=/ws`). The Rust planner names converted media `<sha12>.<ext>` from the manifest's `ext`, so `.svg` needs no Rust change; no snapshot pins `.png` for converted media; Q-24-9/Q-24-10 docs pages now say SVG.
+**Verified for T1:** vitest 135 files / 1602 tests green; `tsc -b` clean; `cargo clippy -p quarto-core -p quarto-error-catalog --all-targets -D warnings` clean; Playwright (throwaway configs on :5199 and :5198, because other worktrees\' previews hold :5173 and :5174) `pandoc-import-emf` + `pandoc-svg-rasterize` 24/24 on Chromium and Firefox, 12/12 on WebKit; `import-dialog` 36/36 Chromium; P5 `import-document.spec.ts` 13/13 Chromium (rebuilt with `VITE_DEFAULT_SYNC_SERVER=/ws`). The Rust planner names converted media `<sha12>.<ext>` from the manifest's `ext`, so `.svg` needs no Rust change; no snapshot pins `.png` for converted media; Q-24-9/Q-24-10 docs pages now say SVG.
 **book3.wmf** (local only, not committed) through the real converter in all three browsers: 367x220 at 1x, 3267 B, elements svg/defs/clipPath/rect/polygon/ellipse, byte-identical when converted twice (it drifted `wmfjs_c0` -> `wmfjs_c1` before normalization), non-blank.
 **Workspace nextest (once, at the end):** 15965 passed, 202 skipped, 2 slow, 226 s. No live baseline was run (that needs a cold build in workspace-1 at `448c270c1`). What the run shows: 12 passing tests in the two new Rust modules (`rasterize_svg_images::`, `pandoc_svg_rasterize::`); one existing `pipeline.rs` test was renamed/updated, none removed. The delta against a baseline is therefore expected to be +12 passed, +0 skipped, but that is inferred from the run's test names, not measured.
 

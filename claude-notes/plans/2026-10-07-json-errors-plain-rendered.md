@@ -25,7 +25,7 @@ That is unreadable to a jq pipeline or an agent without an ANSI stripper. `quart
   `diagnostic_to_json_with_options(.., &TextRenderOptions::plain())`.
 - **pass-1 `error`:** when the failure carries structured diagnostics and a source context, the CLI
   re-renders `error` plain from them (same content and order as `ParseError::render`). A failure
-  without structured diagnostics already has a plain message (`QuartoError`'s non-parse variants
+  without structured diagnostics already has a plain message (`QuartoError`\'s non-parse variants
   are plain strings), so it passes through unchanged. The field stays (the schema requires it);
   dropping it would be a wire break for no gain.
 - **Plain means no OSC-8 either.** `ipynb_diagnostic_hyperlinks_real_notebook` asserted the
@@ -43,7 +43,7 @@ That is unreadable to a jq pipeline or an agent without an ANSI stripper. `quart
   `strip_ansi_escapes` itself stays for genuinely opaque text: preview's abort messages, and a
   failure's message when it has no structured diagnostics to re-render.
 - **Dependency bump:** 0.3.2 → 0.4.0, in the workspace *and* in the excluded
-  `wasm-quarto-hub-client` (own manifest and lockfile; it shares `quarto-core`'s types). Breaking only for `TextRenderOptions { .. }` struct literals →
+  `wasm-quarto-hub-client` (own manifest and lockfile; it shares `quarto-core`\'s types). Breaking only for `TextRenderOptions { .. }` struct literals →
   `TextRenderOptions::default().hyperlinks(false)`.
 
 ## Checklist
