@@ -593,6 +593,13 @@ fn ipynb_parse_error_json_carries_cell_origin() {
 /// string: exact URL spelling (drive letters, separators, encoding) is
 /// QER's contract. It asserts a `file` URL, no fragment, and a path that
 /// resolves to the notebook on disk.
+///
+/// bd-ckbqmupi: hyperlinks are a *text-mode* behavior, so the link is
+/// checked on the human-readable stderr of a plain `q2 render` (emitted
+/// even when stderr is not a terminal). Under `--json-errors`,
+/// `rendered` is plain text: the same label with no escapes, while the
+/// link target travels structurally as `origin.notebook_path` (pinned
+/// by `ipynb_parse_error_json_carries_cell_origin`).
 #[test]
 fn ipynb_diagnostic_hyperlinks_real_notebook() {
     let temp = TempDir::new().unwrap();
@@ -624,23 +631,21 @@ fn ipynb_diagnostic_hyperlinks_real_notebook() {
     );
 
     let out_path = dir.join("broken.html");
-    let output = run_q2_render(
-        &dir,
-        &[
-            "--json-errors",
-            "-o",
-            out_path.to_str().unwrap(),
-            "broken.ipynb",
-        ],
-    );
-    assert!(!output.status.success(), "expected non-zero exit");
+    let render_args = ["-o", out_path.to_str().unwrap(), "broken.ipynb"];
 
+    // The visible label is the pseudo-path. Front-matter synthesis from
+    // the leading H1 reserves "cell 1" for the pseudo-cell
+    // (number_shift, Q1 convention), so the first real cell labels as 2.
+    let label = "broken.ipynb[cell 2, markdown]";
+
+    // --json-errors: `rendered` names the cell plainly, with no escapes.
+    let mut json_args = vec!["--json-errors"];
+    json_args.extend(render_args);
+    let output = run_q2_render(&dir, &json_args);
+    assert!(!output.status.success(), "expected non-zero exit");
     let stderr = String::from_utf8_lossy(&output.stderr);
     let lines = parse_ndjson_lines(&stderr);
-
-    // The diagnostic carrying the cell origin; its `rendered` field is
-    // the ANSI human-readable rendering.
-    let rendered = lines
+    let json_rendered = lines
         .iter()
         .find_map(|l| {
             let diags: Vec<&Value> = if is_pass1_failure_shape(l) {
@@ -664,11 +669,16 @@ fn ipynb_diagnostic_hyperlinks_real_notebook() {
         .unwrap_or_else(|| {
             panic!("expected a rendered diagnostic with notebook_cell origin; stderr:\n{stderr}")
         });
+    assert!(
+        json_rendered.contains(label) && !json_rendered.contains('\u{1b}'),
+        "JSON rendered must show the plain label with no escapes; got:\n{json_rendered:?}"
+    );
 
-    // The visible label is the pseudo-path. Front-matter synthesis from
-    // the leading H1 reserves "cell 1" for the pseudo-cell
-    // (number_shift, Q1 convention), so the first real cell labels as 2.
-    let label = "broken.ipynb[cell 2, markdown]";
+    // Text mode: the label hyperlinks the real notebook.
+    let output = run_q2_render(&dir, &render_args);
+    assert!(!output.status.success(), "expected non-zero exit");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let rendered: &str = &stderr;
     assert!(
         rendered.contains(label),
         "rendered must show the pseudo-path label; got:\n{rendered:?}"
@@ -1293,4 +1303,71 @@ fn discovery_parse_error_json_carries_source_file() {
         "Q-5-17 must be located in _quarto.yml; got:\n{diag:#}"
     );
     assert_source_file(diag, &config);
+}
+
+// ====================================================================
+// bd-ckbqmupi: no terminal escapes anywhere on the --json-errors stream
+// ====================================================================
+
+/// Every string value in `value`, recursively, paired with its JSON
+/// path (for failure messages).
+fn string_values<'a>(value: &'a Value, path: String, out: &mut Vec<(String, &'a str)>) {
+    match value {
+        Value::String(s) => out.push((path, s)),
+        Value::Array(items) => {
+            for (i, item) in items.iter().enumerate() {
+                string_values(item, format!("{path}[{i}]"), out);
+            }
+        }
+        Value::Object(map) => {
+            for (key, item) in map {
+                string_values(item, format!("{path}.{key}"), out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// `rendered` (on every diagnostic, nested ones included) and the
+/// pass-1 wrapper's `error` are human-readable text for machine
+/// consumers, so `--json-errors` renders them plain: no SGR color, no
+/// OSC-8 hyperlinks. Checked on *decoded* strings: serde_json writes
+/// ESC as the six characters `\u001b`, so a raw-byte search of stderr
+/// cannot see escapes inside JSON strings.
+#[test]
+fn json_errors_strings_carry_no_terminal_escapes() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_mixed_project(&dir);
+
+    let output = run_q2_render(&dir, &["--json-errors"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let lines = parse_ndjson_strict(&stderr);
+
+    // The fixture must exercise both blobs, or the check is vacuous.
+    assert!(
+        lines
+            .iter()
+            .any(|l| is_pass1_failure_shape(l) && l.get("error").is_some()),
+        "fixture must produce a pass-1 failure with `error`; got:\n{lines:#?}"
+    );
+    assert!(
+        top_level_diagnostics(&lines)
+            .iter()
+            .any(|d| d.get("rendered").is_some()),
+        "fixture must produce a located diagnostic with `rendered`; got:\n{lines:#?}"
+    );
+
+    let mut strings = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        string_values(line, format!("line{i}"), &mut strings);
+    }
+    let escaped: Vec<&(String, &str)> = strings
+        .iter()
+        .filter(|(_, s)| s.contains('\u{1b}'))
+        .collect();
+    assert!(
+        escaped.is_empty(),
+        "--json-errors strings must carry no terminal escapes; offending fields:\n{escaped:#?}"
+    );
 }
