@@ -28,6 +28,9 @@ The habits that most often break a note here, in order of frequency:
 9. Reference-style links `[text][1]`. Only inline links work.
 10. A heading underlined with `===` or `---`. It silently becomes a paragraph;
     use `#`.
+11. A multi-paragraph footnote written Pandoc-style (`[^1]: First.` and an
+    indented second paragraph). Write it as a block footnote: `::: ^1` on its
+    own line, the paragraphs, `:::`.
 
 Whitespace-flanked `*`, `~16`, `x^2` and a bare `@` (`` `main` @ `sha` ``) are
 literal text and need nothing. `snake_case` is fine.

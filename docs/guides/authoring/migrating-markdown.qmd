@@ -61,7 +61,20 @@ them point at the exact character to escape.
 | `` `has a ` inside` `` (a code span containing a backtick) | error too | parse error | double the delimiter: ``` ``has a ` inside`` ``` |
 | a code block indented four spaces | code block | Q-2-35 | a fenced block |
 | `term` / `: definition` (a definition list) | definition list | Q-2-54 | a list or a table |
-| `[^1]: First paragraph.` followed by an indented second paragraph | multi-paragraph note | Q-2-35 | keep the note to one paragraph |
+| `[^1]: First paragraph.` followed by an indented second paragraph | multi-paragraph note | Q-2-35 (the intended code is Q-2-29) | a block footnote, below |
+
+A footnote with more than one paragraph is written as a fenced div whose
+label is the reference, instead of Pandoc's indented continuation:
+
+``` qmd
+Quarto writes block footnotes as fenced divs [^1].
+
+::: ^1
+First paragraph of the note.
+
+Second paragraph of the note.
+:::
+```
 
 Two things make these easier to find than the table suggests. First,
 `q2 render` prints the opening delimiter for every "unclosed" error

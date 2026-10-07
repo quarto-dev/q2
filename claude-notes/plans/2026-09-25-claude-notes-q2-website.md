@@ -280,6 +280,7 @@ plans/2026-09-29-typst-smoke-all-followup.md:85:4: 6. [**]`authors.lua` (shared 
    is literal text since the bare-`@` fix. The indented blocks in the notes are the
    authoring habit (short command transcripts) plus two misindented continuations;
    three more Q-2-35 are knock-on positions from an earlier error in the file, and
-   one is a multi-paragraph footnote, which q2 does not support.
+   one is a Pandoc-style multi-paragraph footnote; q2 writes those as `::: ^1` block
+   footnotes (Q-2-29 is the intended diagnostic, but Q-2-35 fires instead).
 5. Site polish: `index` page (00-INDEX.md is stale), navigation, and whether CI
    should require a clean render.
