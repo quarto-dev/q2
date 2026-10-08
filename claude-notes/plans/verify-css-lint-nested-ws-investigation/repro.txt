@@ -1,0 +1,36 @@
+$ npm pkg get name -w hub-client
+{
+  "hub-client": "hub-client",
+  "quarto-hub-vscode": "quarto-hub-vscode"
+}
+
+$ npm run lint:css -w hub-client ; echo EXIT=$?
+
+> hub-client@0.0.0 lint:css
+> node scripts/lint-css.mjs
+
+lint:css: clean
+npm error Lifecycle script `lint:css` failed with error:
+npm error workspace quarto-hub-vscode@0.0.1
+npm error location <repo>/hub-client/vscode-sync-experiment
+npm error Missing script: "lint:css"
+npm error
+npm error To see a list of scripts, run:
+npm error   npm run --workspace=quarto-hub-vscode@0.0.1
+EXIT=1
+
+$ npm run lint:css -w hub-client --if-present ; echo EXIT=$?
+
+> hub-client@0.0.0 lint:css
+> node scripts/lint-css.mjs
+
+lint:css: clean
+EXIT=0
+
+$ npm run lint:css --prefix hub-client ; echo EXIT=$?
+
+> hub-client@0.0.0 lint:css
+> node scripts/lint-css.mjs
+
+lint:css: clean
+EXIT=0
