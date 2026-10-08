@@ -1,5 +1,7 @@
 dist/
 node_modules/
+# pdf.js viewer tree, fetched by `prebuild` (scripts/fetch-pandoc-wasm.mjs --pdfjs-only)
+public/pdfjs/
 *.tsbuildinfo
 # Playwright artifacts (failed-test traces / videos / screenshots).
 test-results/

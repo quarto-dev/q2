@@ -878,6 +878,9 @@ async fn spa_handler(req: axum::http::Request<axum::body::Body>) -> Response {
     }
 
     let ui = current_ui();
+    if is_pdfjs_path(rel) {
+        return pdfjs_embedded_response(ui, rel, ctx);
+    }
     // Try the exact path first (an asset like `assets/index-<hash>.js`).
     if let Some(file) = lookup_embedded(ui, rel) {
         return asset_response(rel, Bytes::from_static(file), embedded_gz(ui, rel), ctx);
@@ -1002,6 +1005,52 @@ async fn artifact_resource_handler(
     serve_spa_index(ctx).await
 }
 
+/// Is `rel` (a dist-relative path, no leading `/`) inside the bundled pdf.js tree?
+fn is_pdfjs_path(rel: &str) -> bool {
+    rel == "pdfjs" || rel.starts_with("pdfjs/")
+}
+
+/// The one locale file every non-en-US viewer.ftl request is answered with.
+const PDFJS_FALLBACK_LOCALE_FILE: &str = "pdfjs/web/locale/en-US/viewer.ftl";
+
+/// Decide which file answers a request for `rel` under `pdfjs/` (P4-D1), given `has`, "does the
+/// served tree contain this dist-relative path". Every server of the pdf.js tree (the SPA handler,
+/// the `--preview-dir` disk path, the `--join` frontend, the static server) goes through here.
+///
+/// - an existing path is served as is;
+/// - `pdfjs/web/locale/<x>/viewer.ftl` for a locale the tree lacks (the preview binary ships only
+///   `en-US`) is answered with the `en-US` file, because pdf.js does not fall back to English by
+///   itself and shows empty toolbar labels when the file is missing;
+/// - anything else is `None`: the caller answers 404 (not `index.html`).
+pub fn resolve_pdfjs_rel(rel: &str, has: impl Fn(&str) -> bool) -> Option<String> {
+    if !is_pdfjs_path(rel) {
+        return None;
+    }
+    if has(rel) {
+        return Some(rel.to_string());
+    }
+    let locale = rel
+        .strip_prefix("pdfjs/web/locale/")?
+        .strip_suffix("/viewer.ftl")?;
+    if locale.is_empty() || locale.contains('/') {
+        return None;
+    }
+    has(PDFJS_FALLBACK_LOCALE_FILE).then(|| PDFJS_FALLBACK_LOCALE_FILE.to_string())
+}
+
+fn pdfjs_not_found() -> Response {
+    (StatusCode::NOT_FOUND, "not found").into_response()
+}
+
+/// The `/pdfjs/...` branch of [`spa_handler`] for the embedded bundles.
+fn pdfjs_embedded_response(ui: PreviewUi, rel: &str, ctx: AssetRequestCtx<'_>) -> Response {
+    let Some(served) = resolve_pdfjs_rel(rel, |r| lookup_embedded(ui, r).is_some()) else {
+        return pdfjs_not_found();
+    };
+    let file = lookup_embedded(ui, &served).expect("resolve_pdfjs_rel checked presence");
+    asset_response(&served, Bytes::from_static(file), embedded_gz(ui, &served), ctx)
+}
+
 /// Serve the SPA `index.html` (override dir if set, else the embedded bundle).
 /// The index branch of [`spa_handler`], shared with the artifact route's
 /// fall-through (a non-resource `/.quarto/…` path got `index.html` before this
@@ -1023,6 +1072,19 @@ async fn serve_spa_index(ctx: AssetRequestCtx<'_>) -> Response {
 }
 
 async fn serve_from_disk(root: &std::path::Path, rel: &str, ctx: AssetRequestCtx<'_>) -> Response {
+    let served;
+    let rel = if is_pdfjs_path(rel) {
+        // Under `/pdfjs/` a miss is a 404 (or the en-US locale alias), never `index.html`.
+        match resolve_pdfjs_rel(rel, |r| root.join(r).is_file()) {
+            Some(r) => {
+                served = r;
+                served.as_str()
+            }
+            None => return pdfjs_not_found(),
+        }
+    } else {
+        rel
+    };
     let abs = root.join(rel);
     match tokio::fs::read(&abs).await {
         Ok(bytes) => asset_response(rel, Bytes::from(bytes), disk_gz(&abs).await, ctx),
@@ -1175,6 +1237,77 @@ fn content_type_for(path: &str) -> HeaderValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ──────────────────────────────────────────────────────────────
+    // pdf.js serving (hub-parity Plan 4, P4-D1): the path decision is
+    // a pure function over "does the tree contain X", so it is tested
+    // on an in-memory tree (EMBEDDED_SPA is the placeholder in
+    // `test-suite.yml`).
+    // ──────────────────────────────────────────────────────────────
+
+    fn pdfjs_tree() -> HashSet<&'static str> {
+        HashSet::from([
+            "index.html",
+            "pdfjs/web/viewer.html",
+            "pdfjs/build/pdf.mjs",
+            "pdfjs/web/locale/locale.json",
+            "pdfjs/web/locale/en-US/viewer.ftl",
+        ])
+    }
+
+    #[test]
+    fn pdfjs_existing_paths_are_served_as_is() {
+        let tree = pdfjs_tree();
+        for rel in [
+            "pdfjs/web/viewer.html",
+            "pdfjs/build/pdf.mjs",
+            "pdfjs/web/locale/en-US/viewer.ftl",
+        ] {
+            assert_eq!(
+                resolve_pdfjs_rel(rel, |r| tree.contains(r)).as_deref(),
+                Some(rel)
+            );
+        }
+    }
+
+    #[test]
+    fn pdfjs_missing_locale_viewer_ftl_is_answered_with_en_us() {
+        let tree = pdfjs_tree();
+        for rel in [
+            "pdfjs/web/locale/de-DE/viewer.ftl",
+            "pdfjs/web/locale/zh-CN/viewer.ftl",
+        ] {
+            assert_eq!(
+                resolve_pdfjs_rel(rel, |r| tree.contains(r)).as_deref(),
+                Some("pdfjs/web/locale/en-US/viewer.ftl")
+            );
+        }
+    }
+
+    #[test]
+    fn pdfjs_other_missing_paths_are_not_found() {
+        let tree = pdfjs_tree();
+        for rel in [
+            "pdfjs",
+            "pdfjs/",
+            "pdfjs/nope.js",
+            "pdfjs/web/locale/de-DE/other.ftl",
+            "pdfjs/web/locale//viewer.ftl",
+            "pdfjs/web/locale/a/b/viewer.ftl",
+            "assets/index.js", // not under pdfjs/: the caller never asks
+        ] {
+            assert_eq!(resolve_pdfjs_rel(rel, |r| tree.contains(r)), None, "{rel}");
+        }
+    }
+
+    #[test]
+    fn pdfjs_locale_alias_needs_the_en_us_file() {
+        let tree = HashSet::from(["pdfjs/web/viewer.html"]);
+        assert_eq!(
+            resolve_pdfjs_rel("pdfjs/web/locale/de-DE/viewer.ftl", |r| tree.contains(r)),
+            None
+        );
+    }
 
     // ──────────────────────────────────────────────────────────────
     // Phase 4 (bd-jt1etjbn): `--ui` never touches the write policy.

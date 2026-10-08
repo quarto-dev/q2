@@ -1,0 +1,33 @@
+{
+  "name": "@quarto/pdf-viewer",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Mounts the stock pdf.js viewer in a same-origin iframe with flash-free recompile swaps and per-file zoom/scroll restore. Shared by hub-client and the q2-preview SPA.",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

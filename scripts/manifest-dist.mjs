@@ -41,11 +41,13 @@ const MANIFEST_FILENAME = 'spa-manifest.json';
 const CONTENT_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.js', 'application/javascript'],
+  ['.mjs', 'application/javascript'],
   ['.css', 'text/css'],
   ['.json', 'application/json'],
   ['.wasm', 'application/wasm'],
   ['.svg', 'image/svg+xml'],
   ['.png', 'image/png'],
+  ['.gif', 'image/gif'],
   ['.jpg', 'image/jpeg'],
   ['.jpeg', 'image/jpeg'],
   ['.woff', 'font/woff'],

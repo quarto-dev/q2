@@ -10,6 +10,7 @@ export default mergeConfig(
       // This ensures tests work on fresh clones without building packages first
       alias: {
         '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),
+        '@quarto/pdf-viewer': path.resolve(__dirname, '../ts-packages/pdf-viewer/src/index.ts'),
         '@quarto/pandoc-host': path.resolve(__dirname, '../ts-packages/pandoc-host/src/index.ts'),
         // A directory alias, so `@quarto/typst-host/fontBundle` resolves too (the main thread imports only that).
         '@quarto/typst-host': path.resolve(__dirname, '../ts-packages/typst-host/src'),

@@ -6,6 +6,7 @@
   "description": "Standalone SPA host for Quarto's q2-preview format. Mirrors hub-client's preview pane by importing from @quarto/preview-renderer.",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node ../scripts/fetch-pandoc-wasm.mjs --pdfjs-only --require",
     "build": "tsc -b && vite build && node ../scripts/precompress-dist.mjs dist && node ../scripts/manifest-dist.mjs dist",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
@@ -14,6 +15,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@quarto/pdf-viewer": "*",
     "@quarto/preview-renderer": "*",
     "@quarto/preview-runtime": "*",
     "react": "^19.2.0",

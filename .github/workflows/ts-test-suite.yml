@@ -324,6 +324,10 @@ jobs:
         shell: bash
         run: npm test -w ts-packages/preview-runtime
 
+      - name: Run pdf-viewer unit tests
+        shell: bash
+        run: npm test -w ts-packages/pdf-viewer
+
       - name: Run pandoc-host unit tests
         shell: bash
         run: |

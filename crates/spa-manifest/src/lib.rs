@@ -102,12 +102,13 @@ pub fn content_type_for(path: &str) -> &'static str {
         .unwrap_or("");
     match ext.to_ascii_lowercase().as_str() {
         "html" => "text/html; charset=utf-8",
-        "js" => "application/javascript",
+        "js" | "mjs" => "application/javascript",
         "css" => "text/css",
         "json" => "application/json",
         "wasm" => "application/wasm",
         "svg" => "image/svg+xml",
         "png" => "image/png",
+        "gif" => "image/gif",
         "jpg" | "jpeg" => "image/jpeg",
         "woff" => "font/woff",
         "woff2" => "font/woff2",
@@ -256,6 +257,19 @@ mod tests {
     //! live with the implementation. The mode-decision tests stay in
     //! quarto-preview, which owns the embedded manifests.
     use super::*;
+
+    #[test]
+    fn content_type_covers_pdfjs_module_and_gif_assets() {
+        assert_eq!(
+            content_type_for("pdfjs/build/pdf.mjs"),
+            "application/javascript"
+        );
+        assert_eq!(
+            content_type_for("pdfjs/web/images/loading.gif"),
+            "image/gif"
+        );
+        assert_eq!(content_type_for("x.MJS"), "application/javascript");
+    }
 
     /// Write `files` (rel path → bytes) under a fresh tempdir.
     fn fixture_tree(files: &[(&str, &[u8])]) -> tempfile::TempDir {

@@ -2,14 +2,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mountPdfViewer, VIEWER_WATCHDOG_MS, viewerUrl } from './pdfViewer';
 
-describe('viewerUrl', () => {
-  it('addresses the stock viewer under the base path', () => {
-    expect(viewerUrl('/')).toBe('/pdfjs/web/viewer.html');
-    expect(viewerUrl('/hub')).toBe('/hub/pdfjs/web/viewer.html');
-  });
-  it('names the file and hides the sidebar', () => {
-    expect(viewerUrl('/', 'blob:http://x/1')).toBe('/pdfjs/web/viewer.html?file=blob%3Ahttp%3A%2F%2Fx%2F1#pagemode=none');
-    expect(viewerUrl('/', 'blob:http://x/1', true)).toBe('/pdfjs/web/viewer.html?file=blob%3Ahttp%3A%2F%2Fx%2F1');
+describe('hub-client pdfViewer binding', () => {
+  it('defaults the base to the app base path', () => {
+    expect(viewerUrl()).toBe(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/pdfjs/web/viewer.html`);
   });
 });
 

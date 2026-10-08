@@ -49,7 +49,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-use crate::{AssetRequestCtx, PreviewUi, asset_response_parts, embedded_gz, lookup_embedded};
+use crate::{
+    AssetRequestCtx, PreviewUi, asset_response_parts, embedded_gz, lookup_embedded,
+    resolve_pdfjs_rel,
+};
 
 /// Bounds on the per-connection head-peek (design decision 3): the
 /// request head must complete within 64 KiB and 5 s, or the connection
@@ -338,17 +341,24 @@ fn route(consumed: &[u8], serving: &Serving) -> Route {
     let Some(parsed) = parse_head(consumed) else {
         return Route::Tunnel;
     };
-    if !paths.contains(parsed.rel) {
-        return Route::Tunnel;
-    }
+    // A pdf.js locale the tree lacks is answered with the en-US file, as the host does; every
+    // other non-manifest path tunnels.
+    let rel = if paths.contains(parsed.rel) {
+        parsed.rel.to_string()
+    } else {
+        match resolve_pdfjs_rel(parsed.rel, |r| paths.contains(r)) {
+            Some(aliased) => aliased,
+            None => return Route::Tunnel,
+        }
+    };
     // A manifest entry always resolves against this binary's own embed
     // (the manifest is its post-resolution view); a miss must tunnel,
     // never 404 locally.
-    if lookup_embedded(*ui, parsed.rel).is_none() {
+    if lookup_embedded(*ui, &rel).is_none() {
         return Route::Tunnel;
     }
     Route::Local {
-        rel: parsed.rel.to_string(),
+        rel,
         accept_encoding: parsed.accept_encoding,
         is_head: parsed.is_head,
         ui: *ui,

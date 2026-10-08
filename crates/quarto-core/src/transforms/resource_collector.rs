@@ -87,11 +87,9 @@ impl AstTransform for ResourceCollectorTransform {
         // make, and the `input_dir.join(href)` model below would look for
         // the source in the wrong place (spurious `Q-5-6`).
         if ctx.format.identifier == crate::format::FormatIdentifier::Typst
-            && !crate::render_to_file::output_in_place(
-                ctx.project,
-                &ctx.document.input,
-                &ctx.output_path(),
-            )
+            && !ctx
+                .project
+                .output_in_place(&ctx.document.input, &ctx.output_path())
         {
             return Ok(());
         }

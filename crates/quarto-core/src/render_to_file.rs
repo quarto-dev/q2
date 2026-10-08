@@ -625,28 +625,10 @@ pub(crate) fn finalize_rendered_output(
     })
 }
 
-/// Whether `output_path` sits where a project render puts it: the source's
-/// directory mirrored under the project output directory (`_site/sub/` for
-/// `sub/a.qmd`; the source directory itself in a default project). Only a
-/// render *elsewhere* (a temp dir, `.quarto/preview-out/x`, `--output-dir`)
-/// needs [`source_mirroring_resolver`]; in-place renders keep the stock
-/// copy-into-the-output-tree model.
-pub(crate) fn output_in_place(
-    project: &crate::project::ProjectContext,
-    input_path: &Path,
-    output_path: &Path,
-) -> bool {
-    let source_dir = input_path.parent().unwrap_or(Path::new(""));
-    let Ok(rel) = source_dir.strip_prefix(&project.dir) else {
-        return false;
-    };
-    output_path.parent() == Some(project.output_dir.join(rel).as_path())
-}
-
 /// Resolver for formats whose written output is consumed relative to the
 /// *source* rather than served from the project output directory
 /// (docx, odt, epub, pptx, typst; epic P2-D1), when the output is not
-/// [`output_in_place`].
+/// [`ProjectContext::output_in_place`](crate::project::ProjectContext::output_in_place).
 ///
 /// `LinkRewriteTransform` rewrites every image target relative to the
 /// output page. With the stock resolver (`site_root = project.output_dir`,
@@ -675,7 +657,7 @@ fn source_mirroring_resolver(
     output_stem: &str,
 ) -> Option<ResourceResolverContext> {
     use crate::format::FormatIdentifier as F;
-    if output_in_place(project, input_path, output_path) {
+    if project.output_in_place(input_path, output_path) {
         return None;
     }
     match identifier {

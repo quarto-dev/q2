@@ -21,6 +21,8 @@
 //   hub-client/public/pdfjs/{web,build}/    the release's viewer, trimmed, with pdf.worker.mjs patched
 //                                           to a constant document fingerprint (see patchWorker)
 // --from-pdfjs <file> uses an already-downloaded release zip (still SHA-checked).
+// --pdfjs-only fetches just the pdf.js viewer (the preview SPA's prebuild); --require still applies.
+// The same tree is also written to q2-preview-spa/public/pdfjs/ with the non-en-US locales pruned.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -216,9 +218,27 @@ const keepPdfjsFile = (name) =>
   !name.startsWith('web/compressed.') &&
   !name.endsWith('/');
 
-export async function fetchPdfjsViewer({ fromZip } = {}) {
-  const stamp = `${pdfjsConstants.upstream_zip_sha256}:${sha256(Buffer.from(FINGERPRINT_GETTER + pdfjsConstants.stable_fingerprint + keepPdfjsFile.toString() + 'v2'))}`;
-  if (readIfExists(pdfjsStamp)?.toString() === stamp && existsSync(path.join(pdfjsDir, 'web/viewer.html'))) return { dir: pdfjsDir };
+// The preview binary embeds its own copy; every locale but en-US is pruned from it and
+// quarto-preview answers any other locale's viewer.ftl with the en-US file (P4-D1). hub-client's
+// copy keeps all locales: a static host or Vite has no alias, and a missing locale file leaves
+// pdf.js toolbar labels empty.
+export const pdfjsDests = [
+  { dir: pdfjsDir, pruneLocales: false },
+  { dir: path.join(repo, 'q2-preview-spa/public/pdfjs'), pruneLocales: true },
+];
+
+const KEPT_LOCALE = 'en-US';
+// `web/locale/locale.json` (the locale list) is kept; only the per-locale directories are pruned.
+const keepForDest = (name, { pruneLocales }) =>
+  keepPdfjsFile(name) && !(pruneLocales && name.startsWith('web/locale/') && /^web\/locale\/[^/]+\//.test(name) && !name.startsWith(`web/locale/${KEPT_LOCALE}/`));
+
+export async function fetchPdfjsViewer({ fromZip, dests = pdfjsDests } = {}) {
+  const stampFor = (dest) =>
+    `${pdfjsConstants.upstream_zip_sha256}:${sha256(Buffer.from(FINGERPRINT_GETTER + pdfjsConstants.stable_fingerprint + keepPdfjsFile.toString() + keepForDest.toString() + `v3:${dest.pruneLocales}`))}`;
+  const stale = dests.filter(
+    (d) => readIfExists(path.join(d.dir, '.stamp'))?.toString() !== stampFor(d) || !existsSync(path.join(d.dir, 'web/viewer.html')),
+  );
+  if (stale.length === 0) return { dirs: dests.map((d) => d.dir), dir: dests[0]?.dir };
   let zip;
   if (fromZip) zip = readFileSync(fromZip);
   else {
@@ -235,19 +255,22 @@ export async function fetchPdfjsViewer({ fromZip } = {}) {
   }
   if (sha256(zip) !== pdfjsConstants.upstream_zip_sha256)
     throw new Error(`${pdfjsConstants.asset_name}: sha256 ${sha256(zip)} != ${pdfjsConstants.upstream_zip_sha256} (a proxy may have altered the download)`);
-  const entries = Object.entries(unzipSync(zip)).filter(([name]) => keepPdfjsFile(name));
-  if (!entries.some(([n]) => n === 'web/viewer.html') || !entries.some(([n]) => n === 'build/pdf.worker.mjs'))
+  const all = Object.entries(unzipSync(zip)).filter(([name]) => keepPdfjsFile(name));
+  if (!all.some(([n]) => n === 'web/viewer.html') || !all.some(([n]) => n === 'build/pdf.worker.mjs'))
     throw new Error(`${pdfjsConstants.asset_name} has no web/viewer.html or build/pdf.worker.mjs`);
-  rmSync(pdfjsDir, { recursive: true, force: true });
-  for (const [name, bytes] of entries) {
+  // Decode and patch once; every destination gets the same bytes.
+  const files = all.map(([name, bytes]) => {
     let text = name.endsWith('.mjs') ? new TextDecoder().decode(bytes) : null;
     if (text !== null) text = text.replace(/\n\/\/# sourceMappingURL=\S+\s*$/, '\n'); // the maps are not shipped
     if (name === 'build/pdf.worker.mjs') text = patchWorker(text);
-    const out = text === null ? bytes : new TextEncoder().encode(text);
-    writeAtomic(path.join(pdfjsDir, name), out);
+    return [name, text === null ? bytes : new TextEncoder().encode(text)];
+  });
+  for (const dest of stale) {
+    rmSync(dest.dir, { recursive: true, force: true });
+    for (const [name, bytes] of files) if (keepForDest(name, dest)) writeAtomic(path.join(dest.dir, name), bytes);
+    writeAtomic(path.join(dest.dir, '.stamp'), stampFor(dest));
   }
-  writeAtomic(pdfjsStamp, stamp);
-  return { dir: pdfjsDir };
+  return { dirs: dests.map((d) => d.dir), dir: dests[0]?.dir };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -266,17 +289,20 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       console.error(`${what} unavailable: ${e instanceof Error ? e.message : e}`);
     }
   };
+  const pdfjsOnly = args.includes('--pdfjs-only'); // the SPA's prebuild: pandoc and typst assets are not its business
+  if (!pdfjsOnly)
   await attempt('pandoc.wasm', async () => {
     const r = await fetchPandocWasm({ fromWasm: arg('--from-wasm') });
     console.log(`pandoc.wasm ok: ${path.relative(repo, r.wasmPath)}, ${path.relative(repo, r.gzPath)}`);
   });
+  if (!pdfjsOnly)
   await attempt('typst assets', async () => {
     const r = await fetchTypstAssets({ fromCrate: arg('--from-crate') });
     console.log(`typst assets ok: ${path.relative(repo, r.wasmGzPath)}, ${path.relative(repo, r.fontsGzPath)}, ${path.relative(repo, r.fontsPath)}`);
   });
   await attempt('pdf.js viewer', async () => {
     const r = await fetchPdfjsViewer({ fromZip: arg('--from-pdfjs') });
-    console.log(`pdf.js viewer ok: ${path.relative(repo, r.dir)}`);
+    console.log(`pdf.js viewer ok: ${r.dirs.map((d) => path.relative(repo, d)).join(', ')}`);
   });
   if (failed) {
     if (require) process.exit(1);

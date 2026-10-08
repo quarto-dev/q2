@@ -1966,6 +1966,24 @@ fn read_config_layer(path: &Path, runtime: &dyn SystemRuntime) -> Result<ConfigV
 }
 
 impl ProjectContext {
+    /// Whether `output_path` sits where a project render puts it: the
+    /// source's directory mirrored under the project output directory
+    /// (`_site/sub/` for `sub/a.qmd`; the source directory itself in a
+    /// default project). Only a render *elsewhere* (a temp dir,
+    /// `.quarto/preview-out/x`, `--output-dir`) needs the source-mirroring
+    /// resolver; in-place renders keep the stock copy-into-the-output-tree
+    /// model.
+    ///
+    /// Pure path logic, so it is available on wasm32 too (the transforms
+    /// that call it are not native-only, unlike `render_to_file`).
+    pub fn output_in_place(&self, input_path: &Path, output_path: &Path) -> bool {
+        let source_dir = input_path.parent().unwrap_or(Path::new(""));
+        let Ok(rel) = source_dir.strip_prefix(&self.dir) else {
+            return false;
+        };
+        output_path.parent() == Some(self.output_dir.join(rel).as_path())
+    }
+
     /// Discover project context from a path.
     ///
     /// If the path is a file, looks for `_quarto.yml` in parent directories.
@@ -3170,6 +3188,30 @@ mod tests {
     }
 
     // === ProjectContext tests (unit tests for methods that don't need runtime) ===
+
+    #[test]
+    fn test_output_in_place() {
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            output_dir: PathBuf::from("/project/_site"),
+            ..Default::default()
+        };
+        let in_place = |input: &str, output: &str| {
+            context.output_in_place(Path::new(input), Path::new(output))
+        };
+        // source directory mirrored under the output directory
+        assert!(in_place("/project/sub/a.qmd", "/project/_site/sub/a.pdf"));
+        assert!(in_place("/project/a.qmd", "/project/_site/a.pdf"));
+        // elsewhere: preview-out request dir, OS temp dir, wrong subdirectory
+        assert!(!in_place(
+            "/project/a.qmd",
+            "/project/.quarto/preview-out/x/a.pdf"
+        ));
+        assert!(!in_place("/project/a.qmd", "/tmp/a.pdf"));
+        assert!(!in_place("/project/sub/a.qmd", "/project/_site/a.pdf"));
+        // input outside the project dir
+        assert!(!in_place("/elsewhere/a.qmd", "/project/_site/a.pdf"));
+    }
 
     #[test]
     fn test_project_context_project_kind_with_config() {

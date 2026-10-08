@@ -12,6 +12,7 @@ pub mod eager_capture;
 pub mod editor_ui;
 pub mod join_frontend;
 pub mod join_tunnel;
+pub mod pdfjs_serving;
 pub mod render_scripts_boot;
 pub mod share;
 pub mod smoke;
