@@ -992,8 +992,11 @@ pub fn render_once(
 
     // Set up render options
     let options = RenderToFileOptions {
-        output_path: args.output.as_ref().map(PathBuf::from),
-        output_dir: args.output_dir.as_ref().map(PathBuf::from),
+        // Absolutised against the cwd: a relative path would otherwise be
+        // re-interpreted against the project dir by the resolvers and by
+        // the typst/pandoc children (which run in other directories).
+        output_path: args.output.as_ref().map(|p| cwd.join(p)),
+        output_dir: args.output_dir.as_ref().map(|p| cwd.join(p)),
         quiet: args.console_quiet(),
         replay_captures,
         engine_registry_override: None,
@@ -1007,6 +1010,7 @@ pub fn render_once(
         // `q2 render` never times out or cancels a long typst or pandoc run.
         cancellation: None,
         child_deadline: None,
+        capture_materialize_dir: None,
     };
 
     match target {

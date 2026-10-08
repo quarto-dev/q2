@@ -55,6 +55,8 @@
 //! nodes. The walk recurses through `Inline::Custom` slots
 //! defensively, in case any custom nodes remain.
 
+use std::path::PathBuf;
+
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::Slot;
 use quarto_pandoc_types::block::Block;
@@ -70,7 +72,8 @@ use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::llms::{companion_href, profile_has_companion, strip_kv};
 use crate::transforms::navigation_active::page_relative_source;
 use crate::transforms::navigation_href::{
-    resolve_doc_relative_href, resolve_doc_relative_target, resolve_static_resource_href,
+    is_external, resolve_doc_relative_href, resolve_doc_relative_target,
+    resolve_static_resource_href,
 };
 
 /// Attribute selecting which *output* of the target page a body link
@@ -131,6 +134,7 @@ impl AstTransform for LinkRewriteTransform {
             llms_enabled,
             llms_active,
             diagnostics: &mut local_diags,
+            keep_existing_in: keep_existing_image_dir(ctx),
         };
         for block in &mut ast.blocks {
             rewriter.visit_block(block);
@@ -158,9 +162,33 @@ struct LinkRewriter<'a> {
     /// then).
     llms_active: bool,
     diagnostics: &'a mut Vec<quarto_error_reporting::DiagnosticMessage>,
+    /// typst only: the output directory. A relative image whose file
+    /// already exists there (a materialized capture plot) is not a
+    /// source-relative path and is left alone (epic P2-D1, E10).
+    keep_existing_in: Option<PathBuf>,
+}
+
+/// The directory whose already-present relative images the rewrite must
+/// leave alone: the typst output (request) directory, `None` otherwise.
+fn keep_existing_image_dir(ctx: &RenderContext) -> Option<PathBuf> {
+    if ctx.format.identifier != crate::format::FormatIdentifier::Typst {
+        return None;
+    }
+    ctx.output_path().parent().map(PathBuf::from)
 }
 
 impl<'a> LinkRewriter<'a> {
+    fn exists_in_output_dir(&self, raw: &str) -> bool {
+        let Some(dir) = &self.keep_existing_in else {
+            return false;
+        };
+        if raw.starts_with('/') || is_external(raw) {
+            return false;
+        }
+        let path_part = raw.split(['#', '?']).next().unwrap_or(raw);
+        !path_part.is_empty() && dir.join(path_part).is_file()
+    }
+
     fn visit_block(&mut self, block: &mut Block) {
         match block {
             Block::Plain(p) => self.visit_inlines(&mut p.content),
@@ -300,7 +328,9 @@ impl<'a> LinkRewriter<'a> {
                 // so a rewrite here would orphan every preview image.
                 // Same mode-gate as `ResourceCollectorTransform`.
                 self.visit_inlines(&mut img.content);
-                if !self.resolver.is_some_and(|r| r.is_vfs_root_mode()) {
+                if !self.resolver.is_some_and(|r| r.is_vfs_root_mode())
+                    && !self.exists_in_output_dir(&img.target.0)
+                {
                     img.target.0 =
                         resolve_static_resource_href(&img.target.0, self.source, self.resolver);
                 }

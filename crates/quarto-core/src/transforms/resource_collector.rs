@@ -80,6 +80,21 @@ impl AstTransform for ResourceCollectorTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+        // typst rendered somewhere other than its in-place location
+        // compiles the `.typ` where it is written and resolves its images
+        // in place, with hrefs relative to that directory
+        // (`source_mirroring_resolver`): there is no output-tree copy to
+        // make, and the `input_dir.join(href)` model below would look for
+        // the source in the wrong place (spurious `Q-5-6`).
+        if ctx.format.identifier == crate::format::FormatIdentifier::Typst
+            && !crate::render_to_file::output_in_place(
+                ctx.project,
+                &ctx.document.input,
+                &ctx.output_path(),
+            )
+        {
+            return Ok(());
+        }
         let input_dir = ctx.document.input.parent().unwrap_or(Path::new("."));
 
         // Without a resolver, we have no destination to compute.

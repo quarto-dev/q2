@@ -148,6 +148,12 @@ pub struct RenderToFileOptions {
     /// `None` (the default) never times out, so `q2 render` lets a long
     /// run finish.
     pub child_deadline: Option<std::time::Duration>,
+
+    /// Directory holding materialized capture outputs (plots) that the
+    /// pandoc writers should be able to find, as an extra
+    /// `--resource-path` entry next to the source directory (epic E10).
+    /// `None` (the default) adds nothing; Plan 6 fills it.
+    pub capture_materialize_dir: Option<PathBuf>,
 }
 
 /// Result of rendering a document to a file.
@@ -397,12 +403,28 @@ pub fn render_document_to_file(
     // projects pass `lib_dir == "site_libs"` so Project-scope
     // artifacts resolve under `{output_dir}/site_libs/`.
     let project_type = project_type_for(project);
-    let resolver = ResourceResolverContext::website(
-        &project.output_dir,
+    //
+    // Pandoc-written binary formats and typst (epic P2-D1) are the
+    // exception: their output may sit outside the source tree (a temp
+    // or `.quarto/preview-out/` request directory), so the rewrite is
+    // computed against the *source* location instead of the project's
+    // output directory (see `source_mirroring_resolver`).
+    let resolver = source_mirroring_resolver(
+        &render_format.identifier,
+        project,
+        input_path,
         &output_path,
-        project_type.lib_dir(),
+        &project_type.lib_dir(),
         &output_stem,
-    );
+    )
+    .unwrap_or_else(|| {
+        ResourceResolverContext::website(
+            &project.output_dir,
+            &output_path,
+            project_type.lib_dir(),
+            &output_stem,
+        )
+    });
     // Phase 6: make the same resolver available to AST transforms
     // via `RenderContext::resource_resolver` so the body-link
     // rewriter (`LinkRewriteTransform`) can compute page-relative
@@ -438,6 +460,7 @@ pub fn render_document_to_file(
     ctx.execution_policy = options.execution_policy.clone();
     ctx.cancellation = options.cancellation.clone();
     ctx.child_deadline = options.child_deadline;
+    ctx.capture_materialize_dir = options.capture_materialize_dir.clone();
 
     // Run the render pipeline
     let render_output = if render_format.identifier.is_native() {
@@ -600,6 +623,81 @@ pub(crate) fn finalize_rendered_output(
         render_output,
         resource_report,
     })
+}
+
+/// Whether `output_path` sits where a project render puts it: the source's
+/// directory mirrored under the project output directory (`_site/sub/` for
+/// `sub/a.qmd`; the source directory itself in a default project). Only a
+/// render *elsewhere* (a temp dir, `.quarto/preview-out/x`, `--output-dir`)
+/// needs [`source_mirroring_resolver`]; in-place renders keep the stock
+/// copy-into-the-output-tree model.
+pub(crate) fn output_in_place(
+    project: &crate::project::ProjectContext,
+    input_path: &Path,
+    output_path: &Path,
+) -> bool {
+    let source_dir = input_path.parent().unwrap_or(Path::new(""));
+    let Ok(rel) = source_dir.strip_prefix(&project.dir) else {
+        return false;
+    };
+    output_path.parent() == Some(project.output_dir.join(rel).as_path())
+}
+
+/// Resolver for formats whose written output is consumed relative to the
+/// *source* rather than served from the project output directory
+/// (docx, odt, epub, pptx, typst; epic P2-D1), when the output is not
+/// [`output_in_place`].
+///
+/// `LinkRewriteTransform` rewrites every image target relative to the
+/// output page. With the stock resolver (`site_root = project.output_dir`,
+/// `page_output = <output file>`) that is only right when the page is
+/// flushed into the project output directory; a render into an
+/// arbitrary directory produces hrefs that climb out of that directory
+/// to a wrong place.
+///
+/// - Pandoc binary formats: `site_root = project.dir` and `page_output`
+///   mirrors the source path under the project, so every rewritten
+///   href is correct relative to the source (pandoc resolves it from
+///   `--resource-path <doc dir>`) whatever the project type.
+/// - typst: the `.typ` is compiled where it is written, so `page_output`
+///   stays the real output file and only `site_root` moves to `project.dir`:
+///   hrefs climb from the output directory to the source file.
+///
+/// `None` for every other format (html, revealjs, gfm, ...) and for
+/// in-place renders: their hrefs keep the stock resolver.
+#[cfg(not(target_arch = "wasm32"))]
+fn source_mirroring_resolver(
+    identifier: &crate::format::FormatIdentifier,
+    project: &crate::project::ProjectContext,
+    input_path: &Path,
+    output_path: &Path,
+    lib_dir: &str,
+    output_stem: &str,
+) -> Option<ResourceResolverContext> {
+    use crate::format::FormatIdentifier as F;
+    if output_in_place(project, input_path, output_path) {
+        return None;
+    }
+    match identifier {
+        F::Docx | F::Odt | F::Epub | F::Pptx => {
+            // Mirror the source under the project; `with_extension` keeps
+            // the stem so the page directory equals the source directory.
+            let mirror = input_path.with_extension("out");
+            Some(ResourceResolverContext::website(
+                &project.dir,
+                mirror,
+                lib_dir,
+                output_stem,
+            ))
+        }
+        F::Typst => Some(ResourceResolverContext::website(
+            &project.dir,
+            output_path,
+            lib_dir,
+            output_stem,
+        )),
+        _ => None,
+    }
 }
 
 /// When `options` has no explicit `output_path` / `output_dir`, fall

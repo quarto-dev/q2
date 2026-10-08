@@ -472,7 +472,7 @@ mod tests {
             Ok(PathBuf::from("/"))
         }
         fn temp_dir(&self, _: &str) -> RuntimeResult<TempDir> {
-            Ok(TempDir::new(PathBuf::from("/tmp/test")))
+            Ok(TempDir::new(PathBuf::from("/nonexistent/q2-mock-temp-dir")))
         }
         fn exec_pipe(&self, _: &str, _: &[&str], _: &[u8]) -> RuntimeResult<Vec<u8>> {
             Ok(vec![])

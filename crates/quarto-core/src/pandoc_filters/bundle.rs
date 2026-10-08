@@ -18,8 +18,8 @@
 //! `Drop` for its `TempDir` at process exit and leaked one directory per
 //! process that reached it (one per `q2 render --to docx`, one per `L`-tier
 //! test process under nextest). Callers own the destination's lifecycle —
-//! `PandocWriteStage` extracts into `ctx.temp_dir()`, which the pipeline
-//! already cleans up.
+//! `PandocWriteStage` extracts into `ctx.temp_dir()`, which the
+//! `StageContext` owns and removes when it drops (after the last stage).
 //!
 //! Tests: `crates/quarto-core/tests/integration/pandoc_transport.rs`
 //! (T2.1, T2.5).

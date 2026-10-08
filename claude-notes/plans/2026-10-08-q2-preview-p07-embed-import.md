@@ -40,7 +40,7 @@ Per task: `cargo clippy -p <crate> --all-targets -- -D warnings` plus `cargo nex
 
 ### Part A: baseline and remaining checks
 
-- [ ] 7.1 Baseline `cargo nextest run --workspace` on the integration tip.
+- [ ] 7.1 Baseline: take the workspace pass/skip counts recorded for the current integration tip (epic, "Workspace nextest ledger"); run `cargo nextest run --workspace` only if the tip has no recorded entry, and then say so in the Handoff log.
 - [ ] 7.2 Confirm which parts of the import epic (P0-P6, close-out) are in this branch (the plan assumes P0-P5: `crates/quarto-core/src/import/`, `hub-client/src/pandoc/importService.ts`, `ImportDialog.tsx`, commits `f116b3e59`..`f541ebbe7`).
 - [ ] 7.3 Run `finish_import` on a native-run result (the spikes compared JSON and media only) and confirm acceptance.
 - [ ] 7.4 Run `pandocHost.wasm.test.ts` to settle native-versus-wasm reader parity.

@@ -28,7 +28,7 @@ Per task: `tsc` plus `vitest` in `hub-client`. Workspace nextest at the end of t
 
 ### Part A: client
 
-- [ ] 13.1 Baseline `cargo nextest run --workspace` on the integration tip.
+- [ ] 13.1 Baseline: take the workspace pass/skip counts recorded for the current integration tip (epic, "Workspace nextest ledger"); run `cargo nextest run --workspace` only if the tip has no recorded entry, and then say so in the Handoff log.
 - [ ] 13.2 Remove the `!isPreviewEmbed()` gate on `bookInfoFor`; `runNative` (which already forwards `scope`, Plan 12.3) sets `book` from `stats.book` and shows the busy outcome as a visible notice separate from `superseded`; the menu's paired entries then appear in the embed through the same code as hub-client.
 - [ ] 13.3 Vitest: menu entries and requests in embed mode; file names from `Content-Disposition`; busy handling; `book` status from stats; a non-member page downloads standalone with the notice from `X-Q2-Diagnostics`.
 - [ ] 13.4 hub-client changelog.

@@ -1225,6 +1225,7 @@ fn stage_context_from_render_context(
         stage_ctx.cancellation = cancellation.clone();
     }
     stage_ctx.child_deadline = ctx.child_deadline;
+    stage_ctx.capture_materialize_dir = ctx.capture_materialize_dir.clone();
     // book-projects P2/P5: a *finishing* pipeline (driven by
     // `run_pipeline_from_ast`) never re-runs `PreEngineSugaringStage`, so
     // the registry/index it seeded must be carried in from the caller's

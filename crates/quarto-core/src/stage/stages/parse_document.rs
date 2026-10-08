@@ -342,7 +342,7 @@ mod tests {
                 Ok(PathBuf::from("/"))
             }
             fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
-                Ok(TempDir::new(PathBuf::from("/tmp/test")))
+                Ok(TempDir::new(PathBuf::from("/nonexistent/q2-mock-temp-dir")))
             }
             fn exec_pipe(
                 &self,
@@ -535,7 +535,7 @@ mod tests {
                 Ok(PathBuf::from("/"))
             }
             fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
-                Ok(TempDir::new(PathBuf::from("/tmp/test")))
+                Ok(TempDir::new(PathBuf::from("/nonexistent/q2-mock-temp-dir")))
             }
             fn exec_pipe(
                 &self,
@@ -750,7 +750,7 @@ mod tests {
                 Ok(PathBuf::from("/"))
             }
             fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
-                Ok(TempDir::new(PathBuf::from("/tmp/test")))
+                Ok(TempDir::new(PathBuf::from("/nonexistent/q2-mock-temp-dir")))
             }
             fn exec_pipe(
                 &self,
@@ -960,7 +960,7 @@ mod tests {
                 Ok(PathBuf::from("/"))
             }
             fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
-                Ok(TempDir::new(PathBuf::from("/tmp/test")))
+                Ok(TempDir::new(PathBuf::from("/nonexistent/q2-mock-temp-dir")))
             }
             fn exec_pipe(
                 &self,

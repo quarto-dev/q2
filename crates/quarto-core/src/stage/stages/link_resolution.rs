@@ -388,7 +388,7 @@ mod tests {
             _: &str,
         ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::TempDir> {
             Ok(quarto_system_runtime::TempDir::new(PathBuf::from(
-                "/tmp/test",
+                "/nonexistent/q2-mock-temp-dir",
             )))
         }
         fn exec_pipe(

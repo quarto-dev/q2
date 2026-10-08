@@ -64,8 +64,9 @@ use crate::stage::{
 };
 
 /// Removes the temp JSON input on a successful render; leaves it on disk
-/// on failure, where a future debugging session may want to inspect the
-/// exact input pandoc choked on.
+/// on failure. The failure copy that outlives the render is made by
+/// [`retain_failed_json`], because the pipeline temp dir holding
+/// `json_path` is removed when the `StageContext` drops.
 ///
 /// A missing/already-removed file on the success path is not an error —
 /// `remove_file`'s result is deliberately discarded.
@@ -74,6 +75,24 @@ pub fn retain_temp_json_unless_success(success: bool, json_path: &Path) {
     if success {
         let _ = std::fs::remove_file(json_path);
     }
+}
+
+/// Copies the input JSON of a failed pandoc run out of the pipeline temp
+/// dir (removed when the render ends) to a stable file in the OS temp dir,
+/// so the `Q-20-3` "input JSON retained at <path>" message stays true and
+/// a developer can replay the failing pandoc input. One small file per
+/// failed render; `None` when the copy fails (the message then does not
+/// claim retention).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn retain_failed_json(json_path: &Path) -> Option<PathBuf> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static SEQ: AtomicUsize = AtomicUsize::new(0);
+    let dest = std::env::temp_dir().join(format!(
+        "quarto-pandoc-failure-{}-{}.json",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::copy(json_path, &dest).ok().map(|_| dest)
 }
 
 /// Resolves the `pandoc` binary via `runtime.find_binary` (honouring
@@ -1291,6 +1310,11 @@ impl PandocWriteStage {
         );
         args.push(PandocArg::text("--resource-path"));
         args.push(PandocArg::Path(doc_dir_abs.clone()));
+        // Repeat the flag rather than joining with `:` (breaks on Windows).
+        if let Some(dir) = &ctx.capture_materialize_dir {
+            args.push(PandocArg::text("--resource-path"));
+            args.push(PandocArg::Path(dir.clone()));
+        }
         if let Some(n) = shift_heading_level_by {
             args.push(PandocArg::text("--shift-heading-level-by"));
             args.push(PandocArg::text(n.to_string()));
@@ -1460,17 +1484,35 @@ impl PandocWriteStage {
 
         // T10.1/T10.5: stderr is classified unconditionally, regardless of
         // exit status — not only on failure. T10.3: the temp JSON is
-        // retained on failure (for debugging) and removed on success.
+        // retained on failure (for debugging; copied out of the pipeline
+        // temp dir, which is removed with the context) and removed on
+        // success.
         let stderr = String::from_utf8_lossy(&output.stderr);
         let status_desc = output.status.to_string();
         let json_path = Path::new(&request.json_path);
-        let warnings = classify_pandoc_completion(
-            &request.stage_name,
-            output.status.success(),
-            &status_desc,
-            &stderr,
-            json_path,
-        )?;
+        let success = output.status.success();
+        let retained = if success {
+            None
+        } else {
+            retain_failed_json(json_path)
+        };
+        let warnings = match &retained {
+            Some(kept) => classify_pandoc_completion(
+                &request.stage_name,
+                success,
+                &status_desc,
+                &stderr,
+                kept,
+            )?,
+            None => crate::pandoc_filters::diagnostics::classify_pandoc_completion_with(
+                &request.stage_name,
+                success,
+                &status_desc,
+                &stderr,
+                json_path,
+                false,
+            )?,
+        };
         retain_temp_json_unless_success(output.status.success(), json_path);
         Ok(warnings)
     }

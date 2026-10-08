@@ -435,6 +435,11 @@ pub struct RenderContext<'a> {
     /// Wall-clock limit for each native child process. `None` is unbounded.
     pub child_deadline: Option<std::time::Duration>,
 
+    /// Extra directory pandoc searches for images (`--resource-path`),
+    /// where capture plots are materialized. Threaded from
+    /// `RenderToFileOptions::capture_materialize_dir`.
+    pub capture_materialize_dir: Option<std::path::PathBuf>,
+
     /// Bridged back from `StageContext::execution_skipped` by
     /// `run_pipeline`: the policy excluded this document although it
     /// resolved to a code-executing engine.
@@ -608,6 +613,7 @@ impl<'a> RenderContext<'a> {
             execution_policy: crate::engine::ExecutionPolicy::default(),
             cancellation: None,
             child_deadline: None,
+            capture_materialize_dir: None,
             execution_skipped: false,
             document_profile: None,
             chapter_seed: None,

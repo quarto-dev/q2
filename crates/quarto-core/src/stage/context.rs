@@ -78,6 +78,12 @@ pub struct StageContext {
     /// preserves `StageContext: Send + Sync` (`PathBuf` is both).
     temp_dir: std::sync::OnceLock<PathBuf>,
 
+    /// Owns the directory the lazy path of [`temp_dir`](Self::temp_dir)
+    /// created, so it is removed when this context drops (after the last
+    /// stage ran). Empty for a caller-owned path seeded by
+    /// [`with_temp_dir`](Self::with_temp_dir), which the caller cleans up.
+    owned_temp_dir: std::sync::OnceLock<quarto_system_runtime::TempDir>,
+
     /// Extensions discovered for this document
     pub extensions: Vec<Extension>,
 
@@ -238,6 +244,10 @@ pub struct StageContext {
     /// `RenderContext::execution_policy` by `run_pipeline`. Consulted by
     /// `EngineExecutionStage` after engine resolution.
     pub execution_policy: crate::engine::ExecutionPolicy,
+
+    /// Extra pandoc `--resource-path` entry for materialized capture
+    /// plots; threaded from `RenderContext::capture_materialize_dir`.
+    pub capture_materialize_dir: Option<PathBuf>,
 
     /// Set by `EngineExecutionStage` when the policy excluded this
     /// document although it resolved to a code-executing engine.
@@ -442,6 +452,7 @@ impl StageContext {
             project,
             document,
             temp_dir: std::sync::OnceLock::new(),
+            owned_temp_dir: std::sync::OnceLock::new(),
             extensions,
             variables,
             project_env,
@@ -458,6 +469,7 @@ impl StageContext {
             document_profile: None,
             registry,
             execution_policy: crate::engine::ExecutionPolicy::default(),
+            capture_materialize_dir: None,
             execution_skipped: false,
             claimed_engine_name: None,
             conversion_stash: None,
@@ -510,16 +522,18 @@ impl StageContext {
         if let Some(path) = self.temp_dir.get() {
             return Ok(path.as_path());
         }
-        let path = self
+        let owned = self
             .runtime
             .temp_dir("quarto-pipeline")
-            .map_err(|e| PipelineError::other(format!("Failed to create temp directory: {}", e)))?
-            .into_path();
+            .map_err(|e| PipelineError::other(format!("Failed to create temp directory: {}", e)))?;
+        let path = owned.path().to_path_buf();
         // Each `StageContext` is single-threaded, so the only way the
-        // cell is already set here is a benign race we don't expect;
-        // `set` returning `Err` just means someone else won — use
-        // whatever value ended up stored.
-        let _ = self.temp_dir.set(path);
+        // cells are already set here is a benign race we don't expect.
+        // If we lose it, `owned` drops here and removes its own
+        // (unused) directory; the winner's path is what we return.
+        if self.temp_dir.set(path).is_ok() {
+            let _ = self.owned_temp_dir.set(owned);
+        }
         Ok(self
             .temp_dir
             .get()
@@ -628,7 +642,7 @@ mod tests {
     impl MockRuntime {
         fn new() -> Self {
             Self {
-                temp_path: PathBuf::from("/tmp/mock"),
+                temp_path: PathBuf::from("/nonexistent/q2-mock-temp-dir"),
                 temp_dir_calls: std::sync::atomic::AtomicUsize::new(0),
             }
         }
