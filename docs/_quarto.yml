@@ -329,6 +329,8 @@ website:
             - errors/project/Q-5-38.qmd
             - errors/project/Q-5-39.qmd
             - errors/project/Q-5-40.qmd
+            - errors/project/Q-5-41.qmd
+            - errors/project/Q-5-42.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd

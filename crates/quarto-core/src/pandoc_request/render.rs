@@ -16,28 +16,14 @@ use super::{PandocRequest, PrepareOptions, RequestPost, constants};
 use crate::error::QuartoError;
 use crate::format::Format;
 use crate::pipeline::{build_pandoc_request_stages_fetching, run_pipeline};
+use crate::project::book::{BookScopeResolution, resolve_book_scope};
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
 use crate::resource_resolver::ResourceResolverContext;
 
-/// Which part of a book a request covers (`options.scope` of the export).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BookScope {
-    /// The whole book when the project is a book, the format consolidates
-    /// (typst, pdf, epub) and the active file is a chapter; the active page
-    /// alone otherwise.
-    #[default]
-    Auto,
-    /// The active page alone: the chapter-alone request.
-    Chapter,
-}
+pub use crate::project::book::BookScope;
 
-/// What actually happened, in `stats.book` of the export's envelope.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResolvedBookScope {
-    Book,
-    Chapter,
-}
+pub use crate::project::book::ResolvedBookScope;
 
 /// Present when the project is a book.
 #[derive(Debug)]
@@ -65,7 +51,7 @@ pub struct PandocRequestInput<'a> {
     /// The hub prelude installs the vfs-root resolver for every render;
     /// `None` leaves the pipeline's default.
     pub resolver: Option<ResourceResolverContext>,
-    pub scope: BookScope,
+    pub scope: Option<BookScope>,
     /// Every chapter's gzipped `EngineCapture[]`, keyed by sidecar key (see
     /// [`super::captures`]). Only the whole-book path (and, as the fallback
     /// when `captures` is empty, the active file's entry for a chapter-scope
@@ -337,7 +323,7 @@ fn active_file_captures(
 /// What `render_project_request` needs beyond the document: the scope and
 /// the capture inputs.
 struct ProjectRequestInputs<'a> {
-    scope: BookScope,
+    scope: Option<BookScope>,
     captures: Vec<quarto_trace::EngineCapture>,
     capture_error: Option<String>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
@@ -345,47 +331,10 @@ struct ProjectRequestInputs<'a> {
     attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
 }
 
-/// A book's render list as the whole-book dispatch needs it: how many items
-/// bear a file and whether the active file is one of them. Cheap and
-/// pass-free (a pure function of the `book:` config and the file system).
-struct BookMembership {
-    chapters: usize,
-    active_is_chapter: bool,
-}
-
-/// `Err` carries the book's own error (`Q-5-34`/`Q-5-35`/`Q-5-36`).
-fn book_membership(
-    project: &ProjectContext,
-    active: &Path,
-    runtime: &dyn SystemRuntime,
-) -> Result<BookMembership, QuartoError> {
-    let files = crate::project::book::book_chapter_files(project, runtime)?;
-    let active_key = active.strip_prefix(&project.dir).ok().map(|rel| {
-        crate::project::book::links::normalize_book_path(&rel.to_string_lossy().replace('\\', "/"))
-    });
-    let mut chapters = 0;
-    let mut active_is_chapter = false;
-    for file in &files {
-        chapters += 1;
-        let key = crate::project::book::links::normalize_book_path(
-            &file.to_string_lossy().replace('\\', "/"),
-        );
-        if active_key.as_deref() == Some(key.as_str()) {
-            active_is_chapter = true;
-        }
-    }
-    Ok(BookMembership {
-        chapters,
-        active_is_chapter,
-    })
-}
-
-/// A document inside a project: the project's pass 1 builds the index (so
-/// cross-document links, the project's `format:` layers and its metadata all
-/// resolve as they do natively), then pass 2 renders only the active page,
-/// with a renderer that builds the request instead of writing a file. For a
-/// book chapter whose format consolidates (typst, pdf, epub) and whose scope
-/// is not `Chapter`, the whole book is rendered instead.
+/// [`render_project_request_resolved`] after deciding the scope. A book whose
+/// chapter list is broken fails here with the book's own error when the
+/// request would consolidate it, as a render does; the resolver's notices
+/// lead the outcome's diagnostics.
 async fn render_project_request(
     path: &Path,
     format: Format,
@@ -395,12 +344,63 @@ async fn render_project_request(
     inputs: ProjectRequestInputs<'_>,
     runtime: Arc<dyn SystemRuntime>,
 ) -> PandocRequestOutcome {
-    use crate::project::ProjectKind;
+    // `project.files` holds canonical paths and the active-page filter
+    // compares by equality.
+    let active = runtime
+        .canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf());
+    let mut resolution =
+        match resolve_book_scope(project, &active, inputs.scope, &format, runtime.as_ref()) {
+            Ok(resolution) => resolution,
+            Err(QuartoError::Parse(parse_error)) => {
+                return PandocRequestOutcome {
+                    request: None,
+                    diagnostics: parse_error.diagnostics.clone(),
+                    source_context: parse_error.source_context.clone(),
+                    error: Some(QuartoError::Parse(parse_error).to_string()),
+                    unexecuted_cells: 0,
+                    book: None,
+                };
+            }
+            Err(other) => return PandocRequestOutcome::failed(other.to_string()),
+        };
+    let notices = std::mem::take(&mut resolution.diagnostics);
+    let mut outcome = render_project_request_resolved(
+        path,
+        format,
+        format_str,
+        project,
+        prepare_options,
+        inputs,
+        resolution,
+        runtime,
+    )
+    .await;
+    outcome.diagnostics.splice(0..0, notices);
+    outcome
+}
+
+/// A document inside a project: the project's pass 1 builds the index (so
+/// cross-document links, the project's `format:` layers and its metadata all
+/// resolve as they do natively), then pass 2 renders only the active page,
+/// with a renderer that builds the request instead of writing a file. For a
+/// book chapter whose format consolidates (typst, pdf, epub) and whose scope
+/// is not `Chapter`, the whole book is rendered instead.
+async fn render_project_request_resolved(
+    path: &Path,
+    format: Format,
+    format_str: &str,
+    project: &ProjectContext,
+    prepare_options: PrepareOptions,
+    inputs: ProjectRequestInputs<'_>,
+    resolution: BookScopeResolution,
+    runtime: Arc<dyn SystemRuntime>,
+) -> PandocRequestOutcome {
     use crate::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use crate::project::pass2_renderer::RenderToPandocRequestRenderer;
 
     let ProjectRequestInputs {
-        scope,
+        scope: _,
         captures,
         capture_error,
         captures_by_path,
@@ -418,38 +418,9 @@ async fn render_project_request(
         .canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf());
 
-    // Book: decide before running anything whether this is the whole book.
-    let is_book = project.project_kind() == ProjectKind::Book;
-    let consolidates = matches!(
-        format.identifier,
-        crate::format::FormatIdentifier::Typst | crate::format::FormatIdentifier::Epub
-    );
-    let mut membership: Option<BookMembership> = None;
-    if is_book {
-        match book_membership(&project, &active, runtime.as_ref()) {
-            Ok(m) => membership = Some(m),
-            // An `auto` download of a book whose list is broken fails with
-            // that error, as a render does; a chapter-alone request leaves it
-            // to the pipeline, which reports it as it always has.
-            Err(e) if scope == BookScope::Auto && consolidates => {
-                return match e {
-                    QuartoError::Parse(parse_error) => PandocRequestOutcome {
-                        request: None,
-                        diagnostics: parse_error.diagnostics.clone(),
-                        source_context: parse_error.source_context.clone(),
-                        error: Some(QuartoError::Parse(parse_error).to_string()),
-                        unexecuted_cells: 0,
-                        book: None,
-                    },
-                    other => PandocRequestOutcome::failed(other.to_string()),
-                };
-            }
-            Err(_) => {}
-        }
-    }
-    let whole_book = scope == BookScope::Auto
-        && consolidates
-        && membership.as_ref().is_some_and(|m| m.active_is_chapter);
+    // The scope was decided before anything ran (see `resolve_book_scope`).
+    let membership = resolution.membership;
+    let whole_book = resolution.scope == ResolvedBookScope::Book;
 
     let renderer_captures;
     if whole_book {
@@ -470,20 +441,8 @@ async fn render_project_request(
             Err(message) => return PandocRequestOutcome::failed(message),
         };
         // A page outside the chapter list (or a chapter requested alone)
-        // renders as a page of the project: keep the active file in the
-        // render set, as the footer and 404 are (`restrict_render_list`).
-        if is_book && let Ok(rel) = active.strip_prefix(&project.dir) {
-            project.extra_render_files = vec![rel.to_path_buf()];
-        }
-        // The page skips the book merge, so hand it the book's title,
-        // author and date as project metadata (the chapter's own win).
-        if is_book
-            && format.identifier == crate::format::FormatIdentifier::Typst
-            && let Some(meta) = project.config.metadata.as_mut()
-            && let Some(book) = meta.get("book").cloned()
-        {
-            crate::project::book::merge::seed_missing_book_title_metadata(meta, &book);
-        }
+        // renders as a page of the project (see `prepare_page_in_book`).
+        crate::project::book::prepare_page_in_book(&mut project, &active, &format);
     }
 
     // Whole-book: the data describes the active file only, so it is not used.
@@ -514,7 +473,7 @@ async fn render_project_request(
 
     let mut pipeline = pipeline.with_mode(RenderMode::ActivePage(active.clone()));
     let book_info = membership.map(|m| BookOutcomeInfo {
-        scope: ResolvedBookScope::Chapter,
+        scope: resolution.scope,
         chapters: m.chapters,
         chapter_diagnostics: Vec::new(),
     });

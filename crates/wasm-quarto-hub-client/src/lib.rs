@@ -1561,6 +1561,7 @@ fn pandoc_request_envelope(
                 scope: match b.scope {
                     quarto_core::pandoc_request::render::ResolvedBookScope::Book => "book",
                     quarto_core::pandoc_request::render::ResolvedBookScope::Chapter => "chapter",
+                    quarto_core::pandoc_request::render::ResolvedBookScope::Page => "page",
                 },
                 chapters: b.chapters,
             }),
@@ -1739,7 +1740,7 @@ pub async fn render_pandoc_request(
 
 /// The unpacked `options` object of [`render_pandoc_request`].
 struct RequestOptions {
-    scope: quarto_core::pandoc_request::render::BookScope,
+    scope: Option<quarto_core::pandoc_request::render::BookScope>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
     on_progress: Option<js_sys::Function>,
     /// The transport JSON of `parse_qmd_to_ast_with_attribution`, for the
@@ -1753,7 +1754,7 @@ struct RequestOptions {
 fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, String> {
     use quarto_core::pandoc_request::render::BookScope;
     let mut out = RequestOptions {
-        scope: BookScope::Auto,
+        scope: None,
         captures_by_path: Default::default(),
         on_progress: None,
         attribution_json: None,
@@ -1768,8 +1769,10 @@ fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, Str
     let scope = get("scope");
     if !scope.is_undefined() && !scope.is_null() {
         out.scope = match scope.as_string().as_deref() {
-            Some("auto") => BookScope::Auto,
-            Some("chapter") => BookScope::Chapter,
+            // `'auto'` means the user did not choose (Plan 5 replaces it
+            // with `'book' | 'chapter'`).
+            Some("auto") => None,
+            Some("chapter") => Some(BookScope::Chapter),
             _ => return Err("options.scope must be 'auto' or 'chapter'".to_string()),
         };
     }

@@ -46,7 +46,10 @@ fn render(path: &Path, format: &str) -> PandocRequestOutcome {
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
             attribution: None,
-            scope: quarto_core::pandoc_request::render::BookScope::Chapter,
+            // The hub sends a scope only for formats that consolidate a book;
+            // an explicit one for docx would draw the "ignored" notice.
+            scope: (format == "typst")
+                .then_some(quarto_core::pandoc_request::render::BookScope::Chapter),
             captures_by_path: Default::default(),
             capture_error: None,
             hooks: None,

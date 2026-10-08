@@ -1742,6 +1742,20 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-40",
     "since_version": "99.9.9"
   },
+  "Q-5-41": {
+    "subsystem": "project",
+    "title": "Page Is Not Part of the Book",
+    "message_template": "A page in a book project that is not in the book's chapter list was asked for as part of the book. It was rendered as a standalone document instead. Add the file to `book.chapters` to include it in the book.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-41",
+    "since_version": "99.9.9"
+  },
+  "Q-5-42": {
+    "subsystem": "project",
+    "title": "Book Scope Does Not Apply to This Format",
+    "message_template": "A book scope (`book` or `chapter`) was given for a format that has no whole-book output (`html`, `docx`, `pptx`). The option was ignored and each page is rendered on its own. Book scope applies to `typst`, `pdf` and `epub`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-42",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",

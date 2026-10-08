@@ -301,11 +301,9 @@ fn book_resolution(
         .iter()
         .map(|f| super::captures::sidecar_key(runtime, &project.dir.join(f)))
         .collect();
-    let active = super::captures::sidecar_key(runtime, path);
-    BookResolution {
-        chapter: chapters.contains(&active),
-        chapters,
-    }
+    let chapter = crate::project::book::book_membership(project, path, runtime)
+        .is_ok_and(|m| m.active_is_chapter);
+    BookResolution { chapter, chapters }
 }
 
 #[cfg(test)]

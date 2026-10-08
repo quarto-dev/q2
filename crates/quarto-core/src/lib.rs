@@ -97,6 +97,9 @@ pub use pipeline::{
     build_html_pipeline, build_html_pipeline_stages, build_html_pipeline_with_stages,
     render_qmd_to_html, render_qmd_to_preview_ast,
 };
+pub use project::book::BookScope;
+#[cfg(not(target_arch = "wasm32"))]
+pub use project::book::render_chapter_alone;
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectKind};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
 pub use resource_resolver::ResourceResolverContext;

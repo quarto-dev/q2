@@ -7,6 +7,7 @@
  */
 
 pub mod bibliography;
+pub(crate) mod chapter;
 pub mod citeproc;
 pub mod config;
 pub mod core_types;
@@ -20,6 +21,7 @@ pub(crate) mod multi_file_html;
 pub mod project_type;
 pub mod render_item;
 pub(crate) mod request;
+pub mod scope;
 pub mod static_analyzer;
 
 // The shared single-file-merge core is ungated (the browser's whole-book
@@ -27,6 +29,9 @@ pub mod static_analyzer;
 pub(crate) mod single_file_render;
 
 pub use bibliography::{aggregate_chapter_citations, build_merged_bibliography};
+pub(crate) use chapter::prepare_page_in_book;
+#[cfg(not(target_arch = "wasm32"))]
+pub use chapter::render_chapter_alone;
 pub use citeproc::{set_suppress_bibliography, strip_citeproc_from_filters};
 pub use core_types::{BookRenderHooks, BookRenderOptions, Cancelled, ChapterDiagnostics};
 pub use images::resolve_chapter_image_targets;
@@ -35,5 +40,9 @@ pub use merge::merge_book_chapters;
 pub use project_type::{BookProjectType, is_supported_format};
 pub use render_item::{
     BookRenderItem, BookRenderItemKind, book_chapter_files, book_render_items, chapter_is_numbered,
+};
+pub use scope::{
+    BookMembership, BookScope, BookScopeResolution, ResolvedBookScope, book_membership,
+    format_consolidates_book, resolve_book_scope, scope_ignored_notice,
 };
 pub(crate) use static_analyzer::analyze_book_project_statically;

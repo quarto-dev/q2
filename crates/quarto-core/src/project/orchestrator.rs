@@ -977,6 +977,9 @@ pub struct ProjectPipeline<'a, R: Pass2Renderer> {
     /// Explicit Pass-2 worker-count override (`with_jobs`). `None`
     /// ⇒ use the `QUARTO_JOBS`/auto default via [`worker_count`].
     jobs: Option<usize>,
+    /// What the user chose for a book render (`--book-scope`); `None` means
+    /// nothing was chosen. See [`crate::BookScope`].
+    book_scope: Option<crate::BookScope>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1040,15 +1043,13 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             // rule P3's docx/pptx diagnostic is one instance of.
             let unsupported = FormatIdentifier::try_from(self.format_str.as_str())
                 .is_ok_and(|id| !crate::project::book::is_supported_format(&id));
-            // A Subset render (`q2 render ch1.qmd`) stays on the ordinary
-            // per-document path: the P5 book orchestration below always
-            // renders the whole book, while the CLI contract for a
-            // named-file render is exactly that file (pinned by
-            // book_project_type::
+            // Scope is explicit (P3-D1): the whole book, or the one page
+            // named on the command line as a standalone document. Only
+            // formats that consolidate a book into one file (typst, epub)
+            // have a whole-book output; `None` behaves as `Book` there. An
+            // html Subset render (`q2 render ch1.qmd`) stays on the
+            // ordinary per-document path (pinned by book_project_type::
             // single_chapter_subset_render_keeps_one_file_render_set).
-            // Typst/Epub keep P2's committed dispatch (merge always); the
-            // per-document typst path has never carried the book
-            // orchestration and its template invocation is unverified.
             let full_render = matches!(self.mode, RenderMode::Full);
             if unsupported {
                 Err(crate::project::book::render_item::book_diagnostic(
@@ -1062,12 +1063,8 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
                     "Render to a supported format (`q2 render --to html`), or change the \
                      project's `format:` key.",
                 ))
-            } else if matches!(
-                self.format.identifier,
-                FormatIdentifier::Typst | FormatIdentifier::Epub
-            ) {
-                // book-projects P2: single-file merge.
-                self.run_book_single_file_merge().await
+            } else if crate::project::book::format_consolidates_book(&self.format) {
+                self.run_book_scoped().await
             } else if full_render && self.format.identifier == FormatIdentifier::Html {
                 // book-projects P5: multi-file pass 3 (pause at Navigation
                 // / aggregate the crossref registry / resume from
@@ -1080,10 +1077,66 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
         } else {
             self.run_inner().await
         };
+        let mut result = result;
+        // An explicit scope for a format with no whole-book output is
+        // ignored, with a notice (`None` is silent).
+        if let Some(scope) = self.book_scope
+            && !crate::project::book::format_consolidates_book(&self.format)
+            && let Ok(summary) = &mut result
+        {
+            summary
+                .project_diagnostics
+                .push(crate::project::book::scope_ignored_notice(
+                    scope,
+                    &self.format,
+                ));
+        }
         if let Err(e) = self.project.registry.shutdown_all() {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
         }
         result
+    }
+
+    /// A book rendered to a format that consolidates it (typst, epub):
+    /// resolve the explicit scope against the one page named, if any, then
+    /// either merge the whole book or render that page alone through
+    /// [`crate::project::book::render_chapter_alone`]'s mechanism. A render
+    /// naming no page, or several, covers the whole book.
+    async fn run_book_scoped(&mut self) -> Result<ProjectRenderSummary<RenderToFileResult>> {
+        let active = match &self.mode {
+            RenderMode::Subset(set) if set.len() == 1 => set.iter().next().cloned(),
+            RenderMode::ActivePage(page) => Some(page.clone()),
+            _ => None,
+        };
+        let Some(active) = active else {
+            return self.run_book_single_file_merge().await;
+        };
+        let active = self
+            .runtime
+            .canonicalize(&active)
+            .unwrap_or_else(|_| active.clone());
+        let resolution = crate::project::book::resolve_book_scope(
+            self.project,
+            &active,
+            self.book_scope,
+            &self.format,
+            self.runtime.as_ref(),
+        )?;
+        if resolution.scope == crate::project::book::ResolvedBookScope::Book {
+            return self.run_book_single_file_merge().await;
+        }
+        let mut summary = crate::project::book::chapter::render_chapter_alone_summary(
+            self.project,
+            &active,
+            &self.format,
+            self.renderer.options,
+            self.runtime.clone(),
+        )
+        .await?;
+        summary
+            .project_diagnostics
+            .splice(0..0, resolution.diagnostics);
+        Ok(summary)
     }
 
     /// book-projects P2: the single-file-merge dispatch
@@ -1408,7 +1461,16 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             renderer,
             fail_fast: false,
             jobs: None,
+            book_scope: None,
         }
+    }
+
+    /// Set the explicit book scope (`q2 render --book-scope`). Default
+    /// `None`: nothing chosen, which behaves as `Book` for formats that
+    /// consolidate a book (typst, epub) and is ignored by the others.
+    pub fn with_book_scope(mut self, scope: Option<crate::BookScope>) -> Self {
+        self.book_scope = scope;
+        self
     }
 
     /// Set the render mode. Default is [`RenderMode::Full`]; CLI

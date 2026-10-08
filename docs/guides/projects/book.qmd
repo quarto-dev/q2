@@ -126,6 +126,30 @@ Which format you render to changes how chapters combine:
   implemented at all yet — Quarto 2 has no LaTeX output for any
   project type, not just books.
 
+## Rendering one chapter
+
+Naming a chapter renders the whole book to Typst and EPUB, because
+those formats put the book in one file: `q2 render mybook/intro.qmd
+--to typst` still produces the whole book. `--book-scope` makes the
+choice explicit:
+
+```bash
+q2 render intro.qmd --to typst --book-scope chapter   # intro.pdf: this chapter alone
+q2 render intro.qmd --to typst --book-scope book      # the whole book (the default)
+```
+
+`--book-scope chapter` needs exactly one file. The chapter renders as a
+standalone document, with the book's title, author and date, named
+after the chapter instead of the book.
+
+A page that is in the project but not in `book.chapters` has no place
+in the book. Asked for the book (explicitly or by default), it renders
+as a standalone document and reports
+[`Q-5-41`](../../errors/project/Q-5-41.qmd); `--book-scope chapter`
+asks for exactly that, so there is no notice. HTML, DOCX and PPTX have
+no whole-book output, so `--book-scope` is ignored for them with
+[`Q-5-42`](../../errors/project/Q-5-42.qmd).
+
 ## Known limitations
 
 Book projects are new in this release. A few gaps are worth knowing

@@ -110,6 +110,9 @@ pub struct RenderArgs {
     /// always uses the default (`All`); `q2 preview --static` narrows
     /// it to the pages being viewed. Not a CLI flag.
     pub execution_policy: quarto_core::engine::ExecutionPolicy,
+    /// `--book-scope`: `None` means nothing was chosen. See
+    /// [`quarto_core::BookScope`].
+    pub book_scope: Option<quarto_core::BookScope>,
 }
 
 impl RenderArgs {
@@ -965,6 +968,21 @@ pub fn render_once(
     )
     .map_err(RenderAbort::Dispatch)?;
 
+    // `--book-scope chapter` renders one file alone: it needs exactly one.
+    if args.book_scope == Some(quarto_core::BookScope::Chapter) {
+        let one_file = args.inputs.len() == 1
+            && match &target {
+                RenderTarget::SingleDoc(_) => true,
+                RenderTarget::Subset { targets, .. } => targets.len() == 1,
+                RenderTarget::FullProject { .. } => false,
+            };
+        if !one_file {
+            return Err(RenderAbort::Other(anyhow::anyhow!(
+                "`--book-scope chapter` needs exactly one file"
+            )));
+        }
+    }
+
     // bd-45yw: load replay capture if --replay <path> or
     // QUARTO_REPLAY=<path> is set. Hard-fail on read errors and on
     // traces missing engine_capture so investigators don't waste
@@ -1078,6 +1096,7 @@ fn render_single_doc(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
+    .with_book_scope(args.book_scope)
     .with_fail_fast(args.fail_fast);
 
     // bd-hxhnnlzs: keep Jupyter kernels warm across the whole pipeline
@@ -1269,6 +1288,7 @@ fn render_project(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
+    .with_book_scope(args.book_scope)
     .with_fail_fast(args.fail_fast);
 
     if let Some(target_set) = targets {
