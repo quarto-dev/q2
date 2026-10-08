@@ -2,8 +2,8 @@
 date: 2026-07-20
 branch: TBD (plan phase — no implementation yet)
 status: >
-  v1.1 — ratified by user 2026-07-20 (all five open questions
-  resolved; see § Resolved decisions). Awaiting explicit go-ahead
+  v1.1 - ratified by user 2026-07-20 (all five open questions
+  resolved; see Resolved decisions). Awaiting explicit go-ahead
   to begin implementation.
 braid: bd-5m4ga0s1 (supersedes + related → epic bd-je48v)
 ---

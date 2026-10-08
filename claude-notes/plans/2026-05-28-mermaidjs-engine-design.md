@@ -2,7 +2,7 @@
 date: 2026-05-28
 branch: TBD (no implementation work yet — design phase)
 status: >
-  v2 — Q-A resolved by PR #238 (engine sequence); Q-B/Q-C/Q-D still
+  v2 - Q-A resolved by PR #238 (engine sequence); Q-B/Q-C/Q-D still
   open. Implementation gated on PR #238 merging.
 beads: bd-je48v (epic); see § Beads issues below.
 ---
