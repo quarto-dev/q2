@@ -3,7 +3,31 @@
 **Date:** 2026-10-08
 **Braid:** bd-e0e9kd4a
 **Branch:** `braid/bd-e0e9kd4a-folded-scalar-provenance-desync` (topic branch in the main checkout, based on `main` @ `8ae461f1b`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Resolved (2026-10-08). The fix shipped upstream; q2 adds a regression test. See § Resolution.
+
+## Resolution
+
+We went with option (d) from the quarto-yaml strand, a variant of Q1 below. The bug was filed in the quarto-yaml skein as
+`qy-block-scalar-utf8-drift-7dccrmto`. quarto-yaml fixed it by switching its parser from yaml-rust2 to
+saphyr, whose scanner already counts characters (posit-dev/quarto-yaml#22, released as 0.5.0). q2 picked up
+0.5.0 in `feca201b9`. That commit changes only `Cargo.toml` and `Cargo.lock`, so the remaining q2 work was:
+
+- **Assessment against 0.5.0.** A scratch probe printed spans and content provenance for these cases:
+  - the original repro (`beads` is now at bytes 21..26; 0.4.0 gave 23..28);
+  - `|`;
+  - a multi-line `>`;
+  - two block scalars in a row, one on a line longer than the lookahead buffer;
+  - a block scalar inside a sequence.
+
+  Every case was correct. `q2 render` of the repro and of the two mermaid plans where the bug was found now
+  produces no "no content provenance" warning.
+- **Regression test.** `pampa::pandoc::meta::tests::non_ascii_block_scalars_keep_later_spans_and_provenance`
+  puts a folded and a literal non-ASCII scalar before a key whose value contains raw HTML. It asserts two
+  things: no desync warning, and Q-2-9 carets that underline exactly `<b>` and `</b>`. The test parses real
+  YAML; the older desync tests used hand-built nodes. Re-pinning quarto-yaml to `=0.4.0` turns it red: two
+  desync warnings, and both carets fall back to a zero-width span at end of input.
+
+The design questions below are moot now that the upstream switch landed. They are kept for the record.
 
 ## Triage verdict
 
