@@ -72,13 +72,28 @@ use crate::artifact_flush::{enqueue_artifacts, route_drained_project_artifacts};
 use crate::error::QuartoError;
 use crate::format::{Format, FormatIdentifier};
 use crate::output_sink::{OutputSink, OutputSinkError};
-use crate::pipeline::{HtmlRenderConfig, RenderOutput, render_qmd_to_html, render_qmd_to_pandoc};
+use crate::pipeline::{
+    HtmlRenderConfig, RenderOutput, render_qmd_to_html, render_qmd_to_pandoc_with_captures,
+};
 use crate::project::index::ProjectIndex;
 use crate::project::orchestrator::project_type_for;
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext};
 use crate::resource_resolver::ResourceResolverContext;
 use crate::resources;
+
+/// What a typst render produces (epic E8). Unset (`None` on
+/// [`RenderToFileOptions::typst_target`]) keeps `q2 render` semantics:
+/// `output-ext` decides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypstTarget {
+    /// Compile to a PDF whatever `output-ext` says (the browser's
+    /// `typst-pdf` never refuses).
+    Pdf,
+    /// Write the typst source and skip the compile: `output-ext`, or
+    /// `typ` when unset or `pdf`. A literal `output-ext: typst` is kept.
+    Source,
+}
 
 /// Options for rendering a document to a file.
 #[derive(Debug, Clone, Default)]
@@ -154,6 +169,18 @@ pub struct RenderToFileOptions {
     /// `--resource-path` entry next to the source directory (epic E10).
     /// `None` (the default) adds nothing; Plan 6 fills it.
     pub capture_materialize_dir: Option<PathBuf>,
+
+    /// Typst only: force a PDF or the typst source regardless of
+    /// `output-ext` (epic E8). `None` (the default) leaves `q2 render`
+    /// unchanged. Ignored for other formats.
+    pub typst_target: Option<TypstTarget>,
+
+    /// Server-recorded engine captures spliced into the AST in place of
+    /// running engines (epic E10); only the Pandoc-hybrid leg (typst,
+    /// docx, ...) uses them. Their plot files are written into
+    /// `capture_materialize_dir`, never beside the source. Empty (the
+    /// default) splices nothing.
+    pub captures: Vec<quarto_trace::EngineCapture>,
 }
 
 /// Result of rendering a document to a file.
@@ -177,6 +204,10 @@ pub struct RenderToFileResult {
     /// merged with the static-channel list before the copy step.
     /// Empty for renders that produced no engine/filter resources.
     pub resource_report: crate::project_resources::DocumentResourceReport,
+    /// Engine cells left unexecuted and shown as source: counted only on
+    /// the Pandoc-hybrid leg under [`crate::engine::ExecutionPolicy::None`]
+    /// (the preview routes), `0` otherwise.
+    pub unexecuted_cells: usize,
 }
 
 /// Render a QMD document to a file (simple API).
@@ -331,7 +362,7 @@ pub fn render_document_to_file(
     // `output-ext` (Q1 semantics): for typst, `pdf` (the default) means
     // compile; any other value is literal and means "pandoc output only".
     // Resolved once, here, so path computation and the stages agree.
-    let output_ext = typst_output_ext(&input_bytes, project, format);
+    let output_ext = typst_output_ext(&input_bytes, project, format, options.typst_target);
     let (output_path, output_dir, output_stem) = determine_output_paths_with_ext(
         input_path,
         format,
@@ -472,11 +503,12 @@ pub fn render_document_to_file(
             runtime.clone(),
         ))?
     } else {
-        let (rendered, diagnostics) = pollster::block_on(render_qmd_to_pandoc(
+        let (rendered, diagnostics) = pollster::block_on(render_qmd_to_pandoc_with_captures(
             &input_bytes,
             &input_path.to_string_lossy(),
             &mut ctx,
             runtime.clone(),
+            options.captures.clone(),
         ))?;
         // Finding 3's decision (see `render_qmd_to_pandoc`'s doc comment):
         // no binary bytes travel through `content` — `PandocWriteStage`
@@ -616,12 +648,14 @@ pub(crate) fn finalize_rendered_output(
     debug!("Output: {}", output_path.display());
 
     let resource_report = std::mem::take(&mut ctx.resource_report);
+    let unexecuted_cells = ctx.unexecuted_cells;
     Ok(RenderToFileResult {
         input_path: input_path.to_path_buf(),
         output_path,
         resources_dir,
         render_output,
         resource_report,
+        unexecuted_cells,
     })
 }
 
@@ -813,17 +847,36 @@ pub(crate) fn determine_output_paths_with_ext(
 
 /// The `output-ext` override for a typst render, `None` for every other
 /// format (LaTeX's `output-ext` is the latex epic's job) or when unset.
-fn typst_output_ext(input_bytes: &[u8], project: &ProjectContext, format: &str) -> Option<String> {
+///
+/// `target` (epic E8) overrides what the document asks for: `Pdf` always
+/// compiles; `Source` never compiles (an explicit `output-ext: pdf` also
+/// becomes `typ`, which would otherwise select the compile recipe).
+fn typst_output_ext(
+    input_bytes: &[u8],
+    project: &ProjectContext,
+    format: &str,
+    target: Option<TypstTarget>,
+) -> Option<String> {
     let render_format = Format::from_format_string(format).ok()?;
     if render_format.identifier != FormatIdentifier::Typst {
         return None;
     }
+    if target == Some(TypstTarget::Pdf) {
+        return Some(crate::output_ext::TYPST_COMPILE_EXT.to_string());
+    }
     let content = std::str::from_utf8(input_bytes).ok()?;
-    crate::output_ext::resolve_output_ext(
+    let ext = crate::output_ext::resolve_output_ext(
         content,
         project.config.metadata.as_ref(),
         &render_format.target_format,
-    )
+    );
+    if target == Some(TypstTarget::Source) {
+        return Some(match ext {
+            Some(e) if !crate::output_ext::is_typst_compile_ext(Some(&e)) => e,
+            _ => "typ".to_string(),
+        });
+    }
+    ext
 }
 
 /// Convert a format name to a Format instance.

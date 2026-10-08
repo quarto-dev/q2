@@ -1011,6 +1011,8 @@ pub fn render_once(
         cancellation: None,
         child_deadline: None,
         capture_materialize_dir: None,
+        typst_target: None,
+        captures: Vec::new(),
     };
 
     match target {

@@ -71,6 +71,8 @@ pub mod pandoc_filters;
 pub mod pandoc_formats;
 pub mod pandoc_request;
 pub mod pipeline;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod preview_out;
 pub mod project;
 pub mod project_resources;
 pub mod render;
@@ -128,5 +130,5 @@ pub use stage::stages::resolve_and_gate_pandoc;
 // Re-export render-to-file types (native only)
 #[cfg(not(target_arch = "wasm32"))]
 pub use render_to_file::{
-    RenderToFileOptions, RenderToFileResult, render_document_to_file, render_to_file,
+    RenderToFileOptions, RenderToFileResult, TypstTarget, render_document_to_file, render_to_file,
 };

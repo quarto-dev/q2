@@ -63,11 +63,29 @@ impl WatchFilter {
     /// Returns true if `path` should surface as a [`WatchEvent::Modified`].
     pub fn accepts(self, path: &Path) -> bool {
         match self {
-            Self::SourcesOnly => is_source_file(path),
-            Self::PreviewBroad => is_preview_relevant(path),
+            Self::SourcesOnly => is_source_file(path) && !in_preview_out(path),
+            Self::PreviewBroad => is_preview_relevant(path) && !in_preview_out(path),
             Self::All => true,
         }
     }
+}
+
+/// Whether `path` is under a `.quarto/preview-out/` request directory (epic
+/// E9). Preview renders write images (capture plots, copies) there, and
+/// `PreviewBroad` accepts images by extension alone, so without this a
+/// render would raise watcher events for its own output. Matched as the two
+/// adjacent components rather than "any hidden component": the project
+/// itself may live under a hidden directory (`~/.worktrees/...`).
+fn in_preview_out(path: &Path) -> bool {
+    let mut prev_is_quarto = false;
+    for c in path.components() {
+        let name = c.as_os_str();
+        if prev_is_quarto && name == "preview-out" {
+            return true;
+        }
+        prev_is_quarto = name == ".quarto";
+    }
+    false
 }
 
 /// Configuration for the filesystem watcher.
@@ -301,6 +319,17 @@ fn is_preview_relevant(path: &Path) -> bool {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn preview_out_request_directories_never_surface() {
+        let f = WatchFilter::PreviewBroad;
+        assert!(!f.accepts(Path::new("/p/.quarto/preview-out/abc/fig/plot.png")));
+        assert!(!f.accepts(Path::new("/p/sub/.quarto/preview-out/abc/doc.md")));
+        assert!(!WatchFilter::SourcesOnly.accepts(Path::new("/p/.quarto/preview-out/a/x.qmd")));
+        // A project under a hidden directory still works.
+        assert!(f.accepts(Path::new("/home/u/.worktrees/w/img.png")));
+        assert!(f.accepts(Path::new("/p/.quarto/other/img.png")));
+    }
 
     #[test]
     fn test_is_source_file() {

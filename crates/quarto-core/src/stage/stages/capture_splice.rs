@@ -99,6 +99,11 @@ pub struct CaptureSpliceStage {
     /// Recorded engine captures, in execution order (bd-5yff4). One per
     /// engine that ran server-side. Empty = clean pass-through.
     captures: Vec<EngineCapture>,
+    /// Directory to materialize capture files into, instead of the
+    /// document's own directory (epic E10: a request directory, never the
+    /// source tree). `None` falls back to the context's
+    /// `capture_materialize_dir`, then the document directory.
+    materialize_dir: Option<std::path::PathBuf>,
 }
 
 impl CaptureSpliceStage {
@@ -110,7 +115,15 @@ impl CaptureSpliceStage {
     pub fn new() -> Self {
         Self {
             captures: Vec::new(),
+            materialize_dir: None,
         }
+    }
+
+    /// Write capture files (plots) into `dir` instead of beside the
+    /// document. Used by renders into a request directory (epic E10).
+    pub fn with_materialize_dir(mut self, dir: Option<std::path::PathBuf>) -> Self {
+        self.materialize_dir = dir;
+        self
     }
 
     /// Attach a single recorded capture. Convenience for the
@@ -179,11 +192,17 @@ impl PipelineStage for CaptureSpliceStage {
         // dir comes from the AST's path (absolute in the WASM VFS and
         // in `q2 render`); a bare source name (some native test
         // harnesses) falls back to the project dir.
-        let doc_dir = doc_ast
-            .path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
+        let doc_dir = self
+            .materialize_dir
+            .clone()
+            .or_else(|| ctx.capture_materialize_dir.clone())
+            .unwrap_or_else(|| {
+                doc_ast
+                    .path
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf)
+            });
         for capture in &self.captures {
             if !capture.files.is_empty() {
                 trace_event!(

@@ -190,6 +190,7 @@ runtimelib = { version = "2.0", features = ["tokio-runtime"] }
 jupyter-protocol = "2.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
+walkdir.workspace = true
 
 # `typst-gather` stages @preview packages a document references beyond
 # Quarto's 5 vendored ones (pandoc-hybrid-typst Phase 2). Native-only:

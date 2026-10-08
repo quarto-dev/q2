@@ -375,6 +375,22 @@ where
     }
 
     let storage = build_storage(&config).context("building storage manager")?;
+
+    // Epic E9: remove request directories a crashed or killed server left in
+    // `.quarto/preview-out/`. Aged, so a second `q2 preview` on the same
+    // project keeps its live ones. Single-file mode's root can be a large
+    // unrelated directory, so it checks only its own `.quarto/` and never walks.
+    if let Some(root) = config.project_root.clone() {
+        let single_file = config.single_file.is_some();
+        tokio::task::spawn_blocking(move || {
+            let max_age = quarto_core::preview_out::SWEEP_MAX_AGE;
+            if single_file {
+                quarto_core::preview_out::sweep_project_preview_out(&root, max_age);
+            } else {
+                quarto_core::preview_out::sweep_preview_out(&root, max_age);
+            }
+        });
+    }
     let hub_config = build_hub_config(&config);
 
     // Phase C.1 hook: once the hub context is ready, spawn the eager

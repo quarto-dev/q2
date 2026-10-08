@@ -487,7 +487,27 @@ pub async fn render_qmd_to_pandoc(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
-    let stages = build_pandoc_pipeline_stages(ctx.format.identifier);
+    render_qmd_to_pandoc_with_captures(content, source_name, ctx, runtime, Vec::new()).await
+}
+
+/// [`render_qmd_to_pandoc`] splicing recorded `captures` before engine
+/// execution (epic E10). Capture files go to `ctx.capture_materialize_dir`
+/// when set, else beside the document. Under `ExecutionPolicy::None` the
+/// cells left unexecuted are counted into `ctx.unexecuted_cells`.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn render_qmd_to_pandoc_with_captures(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    captures: Vec<quarto_trace::EngineCapture>,
+) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
+    let stages = build_pandoc_pipeline_stages_with_captures(
+        ctx.format.identifier,
+        captures,
+        ctx.capture_materialize_dir.clone(),
+        ctx.execution_policy == crate::engine::ExecutionPolicy::None,
+    );
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     let rendered = output.into_rendered_output().ok_or_else(|| {
         crate::error::QuartoError::Other(
@@ -615,10 +635,19 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 pub fn build_pandoc_prefix_stages(
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
+    build_pandoc_prefix_stages_in(captures, None)
+}
+
+/// [`build_pandoc_prefix_stages`] with the capture files written into
+/// `materialize_dir` rather than beside the document (epic E10).
+pub fn build_pandoc_prefix_stages_in(
+    captures: Vec<quarto_trace::EngineCapture>,
+    materialize_dir: Option<std::path::PathBuf>,
+) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None);
     stages.retain(|s| !PANDOC_STAGE_EXCLUDED.contains(&s.name()));
     if !captures.is_empty() {
-        insert_capture_splice_stage(&mut stages, captures);
+        insert_capture_splice_stage_in(&mut stages, captures, materialize_dir);
     }
     // Last, so HTML spliced in or produced by user filters is covered too;
     // a no-op unless the format is typst.
@@ -635,7 +664,14 @@ pub fn build_pandoc_prefix_stages(
 fn build_pandoc_request_prefix(
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_pandoc_prefix_stages(captures);
+    build_pandoc_request_prefix_in(captures, None)
+}
+
+fn build_pandoc_request_prefix_in(
+    captures: Vec<quarto_trace::EngineCapture>,
+    materialize_dir: Option<std::path::PathBuf>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_pandoc_prefix_stages_in(captures, materialize_dir);
     let engine_idx = stages
         .iter()
         .position(|s| s.name() == "engine-execution")
@@ -684,7 +720,20 @@ pub fn build_pandoc_request_pause_stages(
     upper_bound: crate::transform::TransformPhase,
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    pause_stages_from(build_pandoc_request_prefix(captures), upper_bound)
+    build_pandoc_request_pause_stages_in(upper_bound, captures, None)
+}
+
+/// [`build_pandoc_request_pause_stages`] writing capture files into
+/// `materialize_dir` (epic E10; the book download's chapters).
+pub fn build_pandoc_request_pause_stages_in(
+    upper_bound: crate::transform::TransformPhase,
+    captures: Vec<quarto_trace::EngineCapture>,
+    materialize_dir: Option<std::path::PathBuf>,
+) -> Vec<Box<dyn PipelineStage>> {
+    pause_stages_from(
+        build_pandoc_request_prefix_in(captures, materialize_dir),
+        upper_bound,
+    )
 }
 
 /// The browser pandoc request list resuming at `lower_bound`: a
@@ -726,7 +775,30 @@ pub fn build_pandoc_request_finishing_stages(
 pub fn build_pandoc_pipeline_stages(
     format_identifier: crate::format::FormatIdentifier,
 ) -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_pandoc_prefix_stages(Vec::new());
+    build_pandoc_pipeline_stages_with_captures(format_identifier, Vec::new(), None, false)
+}
+
+/// [`build_pandoc_pipeline_stages`] splicing server-recorded `captures`
+/// (no kernels; epic E10) and writing their files into `materialize_dir`.
+/// With no captures and `count_unexecuted` false the list is exactly the
+/// plain one. `count_unexecuted` adds [`UnexecutedCellCountStage`] right
+/// after the splice (before engine execution); callers set it only under
+/// `ExecutionPolicy::None`, where cells still in the AST will not run.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_pandoc_pipeline_stages_with_captures(
+    format_identifier: crate::format::FormatIdentifier,
+    captures: Vec<quarto_trace::EngineCapture>,
+    materialize_dir: Option<std::path::PathBuf>,
+    count_unexecuted: bool,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_pandoc_prefix_stages_in(captures, materialize_dir);
+    if count_unexecuted {
+        let engine_idx = stages
+            .iter()
+            .position(|s| s.name() == "engine-execution")
+            .expect("engine-execution stage must exist in the pipeline");
+        stages.insert(engine_idx, Box::new(UnexecutedCellCountStage::new()));
+    }
     stages.push(Box::new(PandocWriteStage::new()));
     if format_identifier == crate::format::FormatIdentifier::Typst {
         // book-projects P2c: flush `ctx.resource_copies` (images, etc.)
@@ -859,6 +931,16 @@ fn insert_capture_splice_stage(
     stages: &mut Vec<Box<dyn PipelineStage>>,
     captures: Vec<quarto_trace::EngineCapture>,
 ) {
+    insert_capture_splice_stage_in(stages, captures, None);
+}
+
+/// [`insert_capture_splice_stage`] with the capture files written into
+/// `materialize_dir` instead of beside the document.
+fn insert_capture_splice_stage_in(
+    stages: &mut Vec<Box<dyn PipelineStage>>,
+    captures: Vec<quarto_trace::EngineCapture>,
+    materialize_dir: Option<std::path::PathBuf>,
+) {
     let spliced_engine_names: std::collections::HashSet<String> =
         captures.iter().map(|c| c.engine_name.clone()).collect();
 
@@ -871,8 +953,11 @@ fn insert_capture_splice_stage(
         .position(|s| s.name() == "engine-execution")
         .expect("engine-execution stage must exist in the pipeline");
     stages[engine_idx] = Box::new(engine_stage);
-    let splice_stage: Box<dyn PipelineStage> =
-        Box::new(crate::stage::CaptureSpliceStage::new().with_captures(captures));
+    let splice_stage: Box<dyn PipelineStage> = Box::new(
+        crate::stage::CaptureSpliceStage::new()
+            .with_captures(captures)
+            .with_materialize_dir(materialize_dir),
+    );
     stages.insert(engine_idx, splice_stage);
 }
 
@@ -1450,6 +1535,13 @@ pub enum PartialKind {
     Request {
         captures: Vec<quarto_trace::EngineCapture>,
     },
+    /// [`PartialKind::Request`] writing capture files into
+    /// `materialize_dir` instead of beside the document (epic E10: the
+    /// book download's request directory).
+    RequestMaterialized {
+        captures: Vec<quarto_trace::EngineCapture>,
+        materialize_dir: Option<std::path::PathBuf>,
+    },
 }
 
 /// The pause stage list for [`render_qmd_to_ast_partial`], chosen by the
@@ -1474,6 +1566,10 @@ fn partial_stage_list(
         PartialKind::Request { captures } if pandoc => {
             build_pandoc_request_pause_stages(upper_bound, captures)
         }
+        PartialKind::RequestMaterialized {
+            captures,
+            materialize_dir,
+        } if pandoc => build_pandoc_request_pause_stages_in(upper_bound, captures, materialize_dir),
         _ => build_html_pipeline_pause_stages(upper_bound),
     }
 }
