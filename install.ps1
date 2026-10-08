@@ -3,8 +3,9 @@
 #
 #   irm https://raw.githubusercontent.com/quarto-dev/q2/main/install.ps1 | iex
 #
-# Downloads the published release zip for x86_64 Windows, verifies its
-# SHA-256 against the published checksum, and installs q2.exe. Mirrors
+# Downloads the published release zip for this machine's architecture
+# (windows_amd64 or windows_arm64), verifies its SHA-256 against the
+# published checksum, and installs q2.exe. Mirrors
 # install.sh's contract (same artifact naming, same checksum file
 # format). Signature verification is checksum-only on Windows for now —
 # minisign has no ubiquitous Windows install path; noted in the plan
@@ -22,6 +23,8 @@
 #                        Pass it through the one-liner as
 #                          & ([scriptblock]::Create((irm <url>))) -Nightly
 #   -Dest <dir>          install directory (default: %USERPROFILE%\.local\bin)
+#   -Platform <p>        windows_amd64 or windows_arm64 instead of the
+#                        detected one (e.g. x64 on ARM64, under emulation)
 #   -ArtifactUrl <u>     override the download (a URL or a local path — the
 #                        local path form is what the CI smoke test uses)
 #   -Checksum <hex>      expected sha256; skips fetching the .sha256 file
@@ -38,7 +41,9 @@ param(
     [string]$ArtifactUrl,
     [string]$Checksum,
     [switch]$NoVerify,
-    [switch]$Nightly
+    [switch]$Nightly,
+    [ValidateSet('windows_amd64', 'windows_arm64')]
+    [string]$Platform
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,17 +51,45 @@ Set-StrictMode -Version Latest
 
 $Owner = 'quarto-dev'
 $Repo = 'q2'
-$Platform = 'windows_amd64'
 $UA = @{ 'User-Agent' = 'q2-install' }
 
 function Die([string]$msg) { throw "q2 install: $msg" }
 function Step([string]$msg) { Write-Host "-> $msg" }
 
-# q2 ships an x86_64 Windows binary; ARM64 Windows runs it under
-# emulation, so we don't hard-block on architecture.
 if (-not [System.Environment]::Is64BitOperatingSystem) {
     Die 'only 64-bit Windows is supported'
 }
+
+# The OS architecture, not this process's: an x64 PowerShell running
+# under emulation on ARM64 sees PROCESSOR_ARCHITECTURE=AMD64. Any one
+# source saying ARM64 settles it; each is guarded, so on older .NET
+# Frameworks without RuntimeInformation (Windows releases that predate
+# Windows on ARM64) detection quietly answers "not ARM64".
+function Test-Arm64Os {
+    # Machine-wide; Windows seeds each process's PROCESSOR_ARCHITECTURE
+    # from this and only overrides the per-process copy under emulation.
+    try {
+        $key = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
+        if ((Get-ItemProperty -LiteralPath $key -Name PROCESSOR_ARCHITECTURE -ErrorAction Stop).PROCESSOR_ARCHITECTURE -eq 'ARM64') { return $true }
+    }
+    catch { }
+    try {
+        if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -eq 'Arm64') { return $true }
+    }
+    catch { }
+    return ($env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') -or ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64')
+}
+
+# Platforms to look for, preferred first. ARM64 prefers the native build
+# and falls back to windows_amd64 (which it runs under emulation) for
+# releases that predate the ARM64 asset (bd-windows-arm64-nightly-xms5p652).
+# An explicit -Platform is taken as-is.
+# (@() around the whole `if`: a one-element result would otherwise come
+# back as a bare string, and $Candidates[0] would be its first letter.)
+$Candidates = @(if ($Platform) { $Platform }
+                elseif (Test-Arm64Os) { 'windows_arm64', 'windows_amd64' }
+                else { 'windows_amd64' })
+$Platform = $Candidates[0]
 
 if (-not $Dest) { $Dest = Join-Path $env:USERPROFILE '.local\bin' }
 
@@ -135,6 +168,24 @@ function Invoke-GitHubApi([string]$Uri, [string]$What, [scriptblock]$Ready = { $
     }
 }
 
+# Does release $rel list a zip for platform $p?
+function Test-PlatformAsset($rel, [string]$p) {
+    return @($rel.assets | Where-Object { $_.name -match "^q2-.+-$p\.zip$" }).Count -gt 0
+}
+
+# The first of $Candidates that release $rel ships, announcing a fallback.
+function Select-Platform($rel, [string]$what) {
+    foreach ($p in $Candidates) {
+        if (Test-PlatformAsset $rel $p) {
+            if ($p -ne $Candidates[0]) {
+                Step "$what has no $($Candidates[0]) build; installing $p (runs under x64 emulation)"
+            }
+            return $p
+        }
+    }
+    Die "$what has no $($Candidates -join ' or ') archive (expected q2-<version>-$($Candidates[0]).zip)"
+}
+
 # Channel selection is one or the other (mirrors install.sh): nightlies
 # are replaced daily, so a nightly version can never be pinned by tag.
 if ($Nightly -and $Version) { Die '-Nightly and -Version are mutually exclusive: -Nightly for the latest nightly, -Version vX.Y.Z for a release' }
@@ -143,14 +194,16 @@ if ($Version -match '-nightly\.') { Die "nightly builds cannot be pinned by vers
 if ($Nightly -and -not $ArtifactUrl) {
     # The rolling `nightly` prerelease: invisible to releases/latest, and
     # its tag carries no version — the version is in the asset name
-    # (q2-<version>-windows_amd64.zip), so pick the asset by name.
+    # (q2-<version>-windows_amd64.zip), so pick the asset by name. Wait
+    # for the PREFERRED platform's asset: right after the release is
+    # replaced its listing can be partial, and settling for the fallback
+    # then would install x64 on ARM64 for no reason.
     Step 'resolving nightly release...'
-    $isAsset = { param($a) $a.name -match "^q2-.+-$Platform\.zip$" }
     $rel = Invoke-GitHubApi "https://api.github.com/repos/$Owner/$Repo/releases/tags/nightly" `
         "the nightly release (is one published at https://github.com/$Owner/$Repo/releases/tag/nightly?)" `
-        { param($r) @($r.assets | Where-Object { & $isAsset $_ }).Count -gt 0 }
-    $asset = @($rel.assets | Where-Object { & $isAsset $_ })
-    if ($asset.Count -eq 0) { Die "the nightly release has no $Platform archive (expected q2-<version>-$Platform.zip)" }
+        { param($r) Test-PlatformAsset $r $Candidates[0] }
+    $Platform = Select-Platform $rel 'the nightly release'
+    $asset = @($rel.assets | Where-Object { $_.name -match "^q2-.+-$Platform\.zip$" })
     $ArtifactUrl = $asset[0].browser_download_url
     $Version = $asset[0].name -replace '^q2-', '' -replace "-$Platform\.zip$", ''
     Step "nightly release: $Version"
@@ -160,8 +213,17 @@ elseif (-not $Version -and -not $ArtifactUrl) {
     $rel = Invoke-GitHubApi "https://api.github.com/repos/$Owner/$Repo/releases/latest" 'the latest release'
     $Version = $rel.tag_name
     if (-not $Version) { Die 'could not determine the latest release; pass -Version vX.Y.Z' }
+    $Platform = Select-Platform $rel "release $Version"
+}
+elseif ($Version -and -not $ArtifactUrl -and $Candidates.Count -gt 1) {
+    # A pinned tag may predate the ARM64 build; look before downloading.
+    $tag = if ($Version -match '^v') { $Version } else { "v$Version" }
+    $rel = Invoke-GitHubApi "https://api.github.com/repos/$Owner/$Repo/releases/tags/$tag" "release $tag"
+    $Platform = Select-Platform $rel "release $tag"
+    $Version = $rel.tag_name
 }
 if ($Version) { Step "release: $Version" }
+Step "platform: $Platform"
 
 $bare = if ($Version) { $Version -replace '^v', '' } else { '' }
 $archive = "q2-$bare-$Platform.zip"

@@ -1,5 +1,5 @@
 # Release pipeline (bd-c6l13j79), as a REUSABLE workflow (bd-p4ljdp2e):
-# web payloads → 5-target binary build → checksummed, signed artifacts →
+# web payloads → 6-target binary build → checksummed, signed artifacts →
 # GitHub Release. Two callers:
 #
 #   release.yml  tag push / dispatch on an existing tag  → channel: release
@@ -447,7 +447,8 @@ jobs:
           # target platform — both libc flavors on linux (glibc + Alpine
           # node), both mac archs (Rosetta mismatch: x64 q2 under an
           # arm64 node and vice versa), both win archs (arm64 Windows
-          # runs x64 q2 under emulation with a native arm64 node).
+          # can run either q2 under either node: x64 binaries run there
+          # under emulation, and older releases ship only the x64 one).
           # NOTE the keyring lists stay libc-plural even though q2 itself
           # is now musl-only: the addon must match the user's *node*, and
           # an Alpine user runs a musl node while a Debian user runs a
@@ -486,6 +487,16 @@ jobs:
             os: windows-latest
             ext: zip
             keyring: win32-x64-msvc,win32-arm64-msvc
+            cargo_flags: ''
+          # Native ARM64 build (bd-windows-arm64-nightly-xms5p652). Built
+          # on an arm runner rather than cross-compiled from
+          # windows-latest: an x64 Windows host cannot execute an ARM64
+          # binary, and the verify steps below must run it.
+          - platform: windows_arm64
+            target: aarch64-pc-windows-msvc
+            os: windows-11-arm
+            ext: zip
+            keyring: win32-arm64-msvc,win32-x64-msvc
             cargo_flags: ''
     steps:
       - uses: actions/checkout@v6
@@ -584,8 +595,8 @@ jobs:
           cargo build --release --locked --target ${{ matrix.target }} -p quarto ${{ matrix.cargo_flags }}
 
       # Every target in the matrix can execute on its runner (musl
-      # binaries are static; darwin x86_64 runs under Rosetta; windows
-      # runs natively), so these checks are unconditional. `shell: bash`
+      # binaries are static; darwin x86_64 runs under Rosetta; both
+      # windows legs run natively), so these checks are unconditional. `shell: bash`
       # uses Git Bash on the windows runner.
       #
       # Beyond braid's version check, this is the anti-stale-embed /
@@ -820,7 +831,7 @@ jobs:
       - name: Compare hashes across platforms
         run: |
           cd asset-hashes
-          EXPECTED="linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64"
+          EXPECTED="linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64 windows_arm64"
           for platform in $EXPECTED; do
             f="asset-manifest-hashes-$platform.txt"
             if [ ! -f "$f" ]; then
@@ -869,7 +880,7 @@ jobs:
           # "<platform>:<ext>" — Windows ships .zip, the rest .tar.gz.
           for entry in linux_amd64:tar.gz linux_arm64:tar.gz \
                        darwin_amd64:tar.gz darwin_arm64:tar.gz \
-                       windows_amd64:zip; do
+                       windows_amd64:zip windows_arm64:zip; do
             platform="${entry%%:*}"; ext="${entry##*:}"
             for f in "q2-${VERSION}-${platform}.${ext}" \
                      "q2-${VERSION}-${platform}.${ext}.sha256"; do
@@ -981,6 +992,7 @@ jobs:
             echo "| macOS Intel | \`q2-${VERSION}-darwin_amd64.tar.gz\` |"
             echo "| macOS Apple Silicon | \`q2-${VERSION}-darwin_arm64.tar.gz\` |"
             echo "| Windows x86_64 | \`q2-${VERSION}-windows_amd64.zip\` |"
+            echo "| Windows ARM64 | \`q2-${VERSION}-windows_arm64.zip\` |"
             echo
             echo "**Verify a manual download** (Unix archives are signed with [minisign](https://jedisct1.github.io/minisign/), Ed25519):"
             echo
