@@ -92,7 +92,7 @@ Already working or next to implement:
 
 ### Category 4: Links and Images (Priority: HIGH)
 - `pandoc_span` - \[text\](url) or \[text\]\{attrs\}
-- `pandoc_image` - ![alt](url)
+- `pandoc_image` - `![alt](url)`
 - `target` - the (url) part of links
 - `inline_link` - full link construct (from inline grammar)
 - `image` - full image construct (from inline grammar)

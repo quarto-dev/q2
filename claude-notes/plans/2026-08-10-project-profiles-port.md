@@ -352,7 +352,7 @@ waits; nothing else blocks.
 - [x] Rebased over #486 (merged 2026-08-10 15:38). Failing tests
   first: 6 binary-driven tests (bootstrap activation, `.local`
   bootstrap wins, real-env/CLI beat bootstrap, `_environment-<p>`
-  layering first-listed-wins via `{{< env >}}` in rendered HTML,
+  layering first-listed-wins via `{{{< env >}}}` in rendered HTML,
   `.local` beats profile env files, no bootstrap recursion from
   `_environment-<p>`) — 3 observed failing pre-implementation
 - [x] `dotenv_quarto_profile` in `project/environment.rs`

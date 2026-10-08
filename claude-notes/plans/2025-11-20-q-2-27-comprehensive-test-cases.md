@@ -108,7 +108,7 @@ The error occurs when a line break appears in the final `$_shortcode_sep` before
 
 6. **with-kv-naked**
    - Description: Line break after key-value with naked string
-   - Content: `{{< meta key=value\n>}}`
+   - Content: `{{{< meta key=value\n>}}}`
    - Tests: Key-value with naked string value
 
 7. **with-kv-single-quoted**
@@ -123,12 +123,12 @@ The error occurs when a line break appears in the final `$_shortcode_sep` before
 
 9. **with-kv-number**
    - Description: Line break after key-value with number value
-   - Content: `{{< meta key=42\n>}}`
+   - Content: `{{{< meta key=42\n>}}}`
    - Tests: Key-value with number value
 
 10. **with-multiple-kvs**
     - Description: Line break after multiple key-value attributes
-    - Content: `{{< meta key1=val1 key2=val2\n>}}`
+    - Content: `{{{< meta key1=val1 key2=val2\n>}}}`
     - Tests: Multiple key-value attributes
 
 #### Category 3: Mixed Content

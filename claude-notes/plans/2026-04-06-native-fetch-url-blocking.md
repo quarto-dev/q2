@@ -67,7 +67,7 @@ Using `reqwest::blocking` is appropriate here because:
 - [x] **3** Checked — `reqwest` import still needed for
   `reqwest::blocking::get`, no dead imports
 
-- [x] **4** Test native CLI: rendered `{{< placeholder 200 format=png >}}`
+- [x] **4** Test native CLI: rendered `{{{< placeholder 200 format=png >}}}`
   — HTML output contains embedded PNG image
 
 - [x] **5** `cargo nextest run --workspace` — 7232 passed, 0 failed

@@ -177,7 +177,7 @@ they inherit all of it — no separate book pipeline):
 inline, markup kept; `website.sidebar.contents[].text` (all levels; also feeds
 next/prev page text and breadcrumbs); `website.navbar.left/right[].text` incl. nested
 menus; navbar/tools/about `href`s (rendered then **innerText**-extracted so
-`{{< var >}}` works in hrefs); `website.page-footer` regions — bare-string and
+`{{{< var >}}}` works in hrefs); `website.page-footer` regions — bare-string and
 per-region strings as **blocks**, nav-item `text` too; `website.sidebar.header/footer`,
 `website.margin-header/footer` (merged with page frontmatter), `website.body-header/footer`
 — blocks, entries may be *file paths* (`.md`/`.html` read from disk);
@@ -235,7 +235,7 @@ avoids both.
    diagnostic in metadata, navbar, footer, `<title>` flattening, and include files
    alike. (Deliberately noisier than Q1, which is silent in text contexts.)
 6. **Env-files strand (`bd-environment-files-372u9qbs`): parallel, expect rebase.**
-   Tests here must be independent of environment-file changes: use `{{< meta >}}`
+   Tests here must be independent of environment-file changes: use `{{{< meta >}}}`
    (fully self-contained) as the primary shortcode in tests; the few env-specific
    tests set process env explicitly (process env wins over `_environment` files in
    both designs, so they stay valid after the other strand lands).
@@ -248,7 +248,7 @@ avoids both.
   navbar): asserts substituted `<title>` (plain text, tags stripped), navbar
   brand (markup un-escaped, shortcode substituted), page-footer region, sidebar
   title, include file content, and doc `subtitle`/`title` — primary shortcode
-  `{{< meta >}}`, one env case with explicitly set process env.
+  `{{{< meta >}}}`, one env case with explicitly set process env.
   → `crates/quarto-core/tests/integration/shortcode_config_pipeline.rs`;
   12/13 fail at branch point (verified 2026-08-10), the 13th is the
   plain-strings no-regression guard which passes by design.

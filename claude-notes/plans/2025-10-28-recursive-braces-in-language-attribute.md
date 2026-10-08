@@ -7,11 +7,11 @@
 
 Code blocks with recursively-nested braces in language attributes fail to parse:
 
-```markdown
+````markdown
 ```{{r}}
 cat("hi")
 ```
-```
+````
 
 Currently only `{r}` and bare `r` work, but `{{r}}`, `{{{r}}}`, etc. fail with parse errors.
 

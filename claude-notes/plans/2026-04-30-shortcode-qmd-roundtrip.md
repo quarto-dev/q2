@@ -122,14 +122,14 @@ The grammar treats shortcodes as inline only — a standalone `{{< video ... >}}
 Per `crates/pampa/AGENTS.md`: write tests first, run, see them fail, *then* implement.
 
 - [x] Add a **direct qmd → qmd writer** test (the existing qmd-json-qmd suite does not exercise `write_shortcode`). New fixtures under `tests/snapshots/qmd/shortcode-*.qmd` covered by `unit_test_snapshots_qmd` (`tests/test.rs:293`):
-  - [x] `shortcode-name-only.qmd` — `{{< meta >}}`
+  - [x] `shortcode-name-only.qmd` — `{{{< meta >}}}`
   - [x] `shortcode-positional.qmd` — `{{< video https://youtu.be/abc >}}` (the user's URL case)
   - [x] `shortcode-keyword-args.qmd` — `{{< video https://youtu.be/abc width="800" height="450" >}}` (the user's full case)
   - [x] `shortcode-escaped.qmd` — `{{{< meta >}}}` to verify `is_escaped`
   - [x] `shortcode-naked-string.qmd` — `{{{< meta foo >}}}` (unquoted positional, no whitespace)
   - [x] `shortcode-with-quoted-string.qmd` — `{{{< meta "foo bar" >}}}` (positional that requires quoting)
 - [x] Add a **round-trip parse-write-parse semantic equivalence** test (`test_qmd_to_qmd_shortcode_roundtrip` in `tests/test.rs`). Parses qmd, writes qmd, re-parses, and compares JSON forms with location fields stripped. Covers the same 6 cases.
-- [x] Confirmed both tests fail. The roundtrip test fails with `failed to parse regenerated QMD ("{{meta}}\n")` — the buggy writer's output is not even valid syntax. Snapshot test produces `{{meta}}` instead of `{{< meta >}}`.
+- [x] Confirmed both tests fail. The roundtrip test fails with `failed to parse regenerated QMD ("{{meta}}\n")` — the buggy writer's output is not even valid syntax. Snapshot test produces `{{meta}}` instead of `{{{< meta >}}}`.
 
 ### Phase 2 — Fix `write_shortcode`
 
