@@ -1,0 +1,8 @@
+[package]
+name = "markers"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+yaml-rust2 = "=0.11.1"
+quarto-yaml = "=0.4.0"
+[workspace]
