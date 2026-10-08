@@ -69,3 +69,9 @@ Reproduced at HEAD with Node v24.20.0 / npm 11.19.0. The transcript is in `verif
 - With `--prefix`, npm runs the script with hub-client as its own root. `scripts/lint-css.mjs` currently passes that way (repro.txt), but if it ever imports hoisted deps, resolution still works, because node walks up to the root `node_modules`.
 - Making the sync test an exact match is stricter, so any future cosmetic edit to the CI line will need a matching xtask edit. That's the intent.
 - Option (c) touches someone else's in-flight experiment, so coordinate before moving it.
+
+## Pre-flight verify (2026-10-08)
+
+`cargo xtask verify --skip-hub-build --skip-css-lint` on this branch: everything passed (15989 of 15990 tests) except `quarto::integration smoke_all::smoke_all`. All 19 smoke-all failures are in `typst/margin-layout/` and `typst/orange-book*`, and every one is caused by this machine's setup, not by this strand:
+- knitr: R 4.6 can't load `cairo.so` or `R_X11.so`, because `/opt/X11/lib/libSM.6.dylib` and `libXrender.1.dylib` are missing (XQuartz isn't installed), so `dev.control()` has no graphics device.
+- jupyter: `ModuleNotFoundError: No module named 'great_tables'` in the active venv.
