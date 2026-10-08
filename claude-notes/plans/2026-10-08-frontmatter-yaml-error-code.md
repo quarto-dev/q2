@@ -3,11 +3,34 @@
 **Date:** 2026-10-08
 **Braid:** bd-x30aq7ae
 **Branch:** `braid/bd-x30aq7ae-frontmatter-yaml-error-code` (topic branch in the main checkout, based on `main` @ `3d3360ab6`)
-**Status:** Investigation is done and the design needs the user's input. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Implemented on this branch (2026-10-08). See § Decisions and § Implementation log.
 
 ## Triage verdict
 
 **Ready to design; Phase 2 is blocked on an upstream quarto-yaml release** (`qy-scan-error-location-f9r4yvxq`). All three defects reproduce at HEAD at one call site. Defects (1) and (2) can be fixed locally in pampa. Defect (3) needs one decision: fix `quarto-yaml` upstream (cleanest, but needs a crate release and a bump) or recover the position inside pampa.
+
+## Decisions (user, 2026-10-08)
+
+1. **Span source:** fix upstream. Done in quarto-yaml 0.4.0 (`qy-scan-error-location-f9r4yvxq`, posit-dev/quarto-yaml PR #21). Scan errors now carry `location`; `Display` and `message` carry no position text; `From<ScanError>` was removed.
+2. **Collector helpers:** fix the call site only. `error_at`/`warn_at` stay for internal invariants.
+3. **Other Q-0-99 sites:** separate strands, `bd-caption-warning-q099-5krqlz6w` and `bd-depth-limit-q099-f1q9vqjw`.
+4. **Message shape:** the catalog title "YAML Syntax Error" (Q-1-1), with the scanner text as `problem` and a hint naming the front matter.
+5. **Bump regression (found during implementation):** 0.4.0 removed the position text that every stringifying `quarto_yaml::Error` site relied on. Decision: fix them all in this PR (see the implementation log).
+
+## Implementation log
+
+- `quarto-yaml` workspace dep 0.3.0 → 0.4.0 (`Cargo.toml`, `Cargo.lock`).
+- New `pampa::utils::yaml_syntax_error`:
+  - `yaml_error_parts` splits the error into its message and optional location;
+  - `yaml_syntax_error` returns a Q-1-1 builder, using a fallback span when the error has no location;
+  - `describe_yaml_error` returns `"<message> (line L, column C)"` for prose-only paths;
+  - `line_column` converts a byte offset to a 1-based line and a char-counted column.
+- Frontmatter (`pampa/src/pandoc/meta.rs`): located Q-1-1 plus a front-matter hint.
+- `quarto_core::config_sources::yaml_parse_error`: a located Q-1-1 as `QuartoError::Parse`, with the file's in-hand content registered under quarto-yaml's filename-hash FileId. Used for `_quarto.yml` (`parse_config`), profile overlays and `_quarto.yml.local` (`read_config_layer`), and `_metadata.yml` (`directory_metadata_for_document`). `describe_yaml_error` is re-exported from the same module.
+- Prose sites use `describe_yaml_error`: extension manifests (`extension/read.rs`, surfaced as Q-16-1 prose), `_variables.yml` (startup warning), language term files (`language.rs` ×2), and the `quarto use` config loader (`commands/use_cmd/config.rs`).
+- Unchanged, and better by construction: the Jupyter cell-option paths already used `CellOptionsError::location()`, which is now precise.
+- Unaffected: `wasm-quarto-hub-client` `vfs_set_runtime_metadata` parses with `serde_yaml`, so its TS test pinning "Failed to parse YAML" stays valid.
+- Found: a malformed `_metadata.yml` is silently ignored (`metadata_merge.rs` `.unwrap_or_default()`), which is not a regression. Filed `bd-metadata-yml-error-swallowed-b8sjkxek`.
 
 ## Issue context
 

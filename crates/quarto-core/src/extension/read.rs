@@ -63,11 +63,13 @@ pub fn read_extension_with_org(
     };
 
     let filename = extension_file.display().to_string();
+    // Discovery reports this as prose inside a Q-16-1 warning, so the
+    // position goes into the text (bd-x30aq7ae).
     let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
         crate::error::QuartoError::Other(format!(
             "Failed to parse {}: {}",
             extension_file.display(),
-            e
+            pampa::utils::yaml_syntax_error::describe_yaml_error(&content, e)
         ))
     })?;
 
@@ -787,6 +789,20 @@ mod tests {
         let file = dir.join("_extension.yml");
         fs::write(&file, yaml).unwrap();
         file
+    }
+
+    #[test]
+    fn test_read_extension_yaml_syntax_error_names_the_position() {
+        // bd-x30aq7ae: quarto-yaml >= 0.4.0 keeps the position out of the
+        // message; discovery shows this as prose, so it must be spelled out.
+        // The unclosed flow sequence fails at the `:` of `author:`.
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/test-ext");
+        let file = write_extension(&ext_dir, "title: x\ncontributes: [a\nauthor: b\n");
+        let err = read_extension(&file, &make_runtime())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("(line 3, column 7)"), "{err}");
     }
 
     #[test]
