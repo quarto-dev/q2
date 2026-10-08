@@ -30,6 +30,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-10-08
 
+- [`c0312fca1`](https://github.com/quarto-dev/q2/commits/c0312fca1): The Import button, file picker, drop handling and placement dialog now work in `q2 preview --ui editor` (and `--share` guests), reading docx, odt, rtf, epub and pptx files with the machine's own pandoc; a missing or too-old pandoc is reported as such instead of the button being hidden.
 - [`4482cf93f`](https://github.com/quarto-dev/q2/commits/4482cf93f): "Download book as" and "This chapter only" now tell the renderer which one you chose, and the plain typst, PDF and EPUB entries on a page that is not a chapter mean "this page"; a click that no longer holds (the page was removed from, or added to, the book after the menu opened) delivers what you asked for with a notice, instead of silently switching to a different download.
 - [`2eae5f047`](https://github.com/quarto-dev/q2/commits/2eae5f047): Downloading a typst or epub book from a page that is not in the book's chapter list now says so (`Q-5-41`) when it delivers that page on its own, instead of leaving you to wonder why the book is missing; `q2 render` gains `--book-scope book|chapter` to choose between the whole book and one chapter.
 

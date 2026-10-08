@@ -40,26 +40,26 @@ Per task: `cargo clippy -p <crate> --all-targets -- -D warnings` plus `cargo nex
 
 ### Part A: baseline and remaining checks
 
-- [ ] 7.1 Baseline: take the workspace pass/skip counts recorded for the current integration tip (epic, "Workspace nextest ledger"); run `cargo nextest run --workspace` only if the tip has no recorded entry, and then say so in the Handoff log.
-- [ ] 7.2 Confirm which parts of the import epic (P0-P6, close-out) are in this branch (the plan assumes P0-P5: `crates/quarto-core/src/import/`, `hub-client/src/pandoc/importService.ts`, `ImportDialog.tsx`, commits `f116b3e59`..`f541ebbe7`).
-- [ ] 7.3 Run `finish_import` on a native-run result (the spikes compared JSON and media only) and confirm acceptance.
-- [ ] 7.4 Run `pandocHost.wasm.test.ts` to settle native-versus-wasm reader parity.
-- [ ] 7.5 Extend the crafted-input matrix with HTML, SVG and font references inside epubs, with `--sandbox`.
+- [x] 7.1 Baseline: take the workspace pass/skip counts recorded for the current integration tip (epic, "Workspace nextest ledger"); run `cargo nextest run --workspace` only if the tip has no recorded entry, and then say so in the Handoff log.
+- [x] 7.2 Confirm which parts of the import epic (P0-P6, close-out) are in this branch (the plan assumes P0-P5: `crates/quarto-core/src/import/`, `hub-client/src/pandoc/importService.ts`, `ImportDialog.tsx`, commits `f116b3e59`..`f541ebbe7`).
+- [x] 7.3 Run `finish_import` on a native-run result (the spikes compared JSON and media only) and confirm acceptance.
+- [x] 7.4 Run `pandocHost.wasm.test.ts` to settle native-versus-wasm reader parity.
+- [x] 7.5 Extend the crafted-input matrix with HTML, SVG and font references inside epubs, with `--sandbox`.
 
 ### Part B: quarto-core and the server route
 
-- [ ] 7.6 `import_argv_in(format, source_name, dir)` in `quarto-core`; `import_argv` delegates with `import_dir()`; the xtask's own builder stays, untouched (its tests `:681-697` and the recordings stay valid). The shared builder adds neither `--sandbox` nor `+RTS`. Tests: argv for each format with a virtual and a real directory; the existing `import_request.rs` recording check stays green.
-- [ ] 7.7 `crates/quarto-preview/src/import_route.rs` (new, sibling of `render_download.rs`; registered next to `/api/preview/render`, `lib.rs:737`): a per-route `.layer(DefaultBodyLimit::max(..))`; a per-request temp dir cleaned up by a guard inside the blocking closure; argv from the shared builder, then `--sandbox` and `+RTS -M512M -RTS`; the Plan 1 child runner with deadline and cancel, taking the pandoc path and timeout as parameters of the blocking function (the test seam; no `QUARTO_PANDOC` env racing); media collection with the byte caps (stat before read, no symlinks; the per-file and total limits and the sort order duplicate `ts-packages/pandoc-host/src/limits.ts:24-25` and `shared.ts:72-95`, so a test pins them); the P7-D5 remap; the P7-D2 framing.
-- [ ] 7.8 Handler tests with real fixtures: docx with an image; 400 for an unsupported extension; 413 over the cap; missing pandoc; a crafted epub (`file:` and `//127.0.0.1` references) yields no host data; an expanding docx hits the heap cap (the cap is a parameter of the blocking function, like the pandoc path and timeout, so the test uses a small docx expanding past a `-M64M` cap rather than a 650 MB one); `native_media_paths_are_remapped_to_virtual_prefix`; the remap covers stderr and stdout and a surviving real path is an error; timeout and abort tests use a fake pandoc script through the injected path (a `#[cfg(unix)]` script helper with a `#[cfg(not(unix))]` counterpart), not a real pandoc race.
-- [ ] 7.9 `tests/integration/import_route.rs` + `main.rs`: real server and pandoc; round-trip the fixtures and compare with the recordings.
+- [x] 7.6 `import_argv_in(format, source_name, dir)` in `quarto-core`; `import_argv` delegates with `import_dir()`; the xtask's own builder stays, untouched (its tests `:681-697` and the recordings stay valid). The shared builder adds neither `--sandbox` nor `+RTS`. Tests: argv for each format with a virtual and a real directory; the existing `import_request.rs` recording check stays green.
+- [x] 7.7 `crates/quarto-preview/src/import_route.rs` (new, sibling of `render_download.rs`; registered next to `/api/preview/render`, `lib.rs:737`): a per-route `.layer(DefaultBodyLimit::max(..))`; a per-request temp dir cleaned up by a guard inside the blocking closure; argv from the shared builder, then `--sandbox` and `+RTS -M512M -RTS`; the Plan 1 child runner with deadline and cancel, taking the pandoc path and timeout as parameters of the blocking function (the test seam; no `QUARTO_PANDOC` env racing); media collection with the byte caps (stat before read, no symlinks; the per-file and total limits and the sort order duplicate `ts-packages/pandoc-host/src/limits.ts:24-25` and `shared.ts:72-95`, so a test pins them); the P7-D5 remap; the P7-D2 framing.
+- [x] 7.8 Handler tests with real fixtures: docx with an image; 400 for an unsupported extension; 413 over the cap; missing pandoc; a crafted epub (`file:` and `//127.0.0.1` references) yields no host data; an expanding docx hits the heap cap (the cap is a parameter of the blocking function, like the pandoc path and timeout, so the test uses a small docx expanding past a `-M64M` cap rather than a 650 MB one); `native_media_paths_are_remapped_to_virtual_prefix`; the remap covers stderr and stdout and a surviving real path is an error; timeout and abort tests use a fake pandoc script through the injected path (a `#[cfg(unix)]` script helper with a `#[cfg(not(unix))]` counterpart), not a real pandoc race.
+- [x] 7.9 `tests/integration/import_route.rs` + `main.rs`: real server and pandoc; round-trip the fixtures and compare with the recordings.
 
 ### Part C: hub-client
 
-- [ ] 7.10 `importAvailable()` is `isPreviewEmbed() || pandocWasmEnabled()` (true in the embed although `VITE_PANDOC_WASM=0`; update `importService.test.ts:294-305`); `hub-client/src/pandoc/nativeImportRunner.ts` implements `ImportDeps.runner` through the route and fills `RunSuccess` (zeros for the stats fields); failures map per P7-D3 (the single exit-status mapping lives here) and use the new diagnostics-only failure path in `importService.ts`; `defaultDeps` picks the native runner when `isPreviewEmbed()`. Tests: `parses frames and rejects truncated bodies`; each status mapping; abort; `Q-20-*` and `Q-24-2` render on their own.
-- [ ] 7.11 Progress: the runner calls `options.onStage('running')` when it posts (maps to `converting`); `loading-pandoc` never stalls the dialog (`ImportDialog` test); `onLoadProgress` is unused.
-- [ ] 7.12 Vitest: import service with the native runner and a fake fetch (including the changed `importService.test.ts` assertion); `Editor` shows the button in embed mode; drop handling unchanged.
-- [ ] 7.13 hub-client changelog entry.
-- [ ] 7.14 Plan end: workspace nextest against 7.1; reconcile this checklist; write the Handoff log; land per the epic.
+- [x] 7.10 `importAvailable()` is `isPreviewEmbed() || pandocWasmEnabled()` (true in the embed although `VITE_PANDOC_WASM=0`; update `importService.test.ts:294-305`); `hub-client/src/pandoc/nativeImportRunner.ts` implements `ImportDeps.runner` through the route and fills `RunSuccess` (zeros for the stats fields); failures map per P7-D3 (the single exit-status mapping lives here) and use the new diagnostics-only failure path in `importService.ts`; `defaultDeps` picks the native runner when `isPreviewEmbed()`. Tests: `parses frames and rejects truncated bodies`; each status mapping; abort; `Q-20-*` and `Q-24-2` render on their own.
+- [x] 7.11 Progress: the runner calls `options.onStage('running')` when it posts (maps to `converting`); `loading-pandoc` never stalls the dialog (`ImportDialog` test); `onLoadProgress` is unused.
+- [x] 7.12 Vitest: import service with the native runner and a fake fetch (including the changed `importService.test.ts` assertion); `Editor` shows the button in embed mode; drop handling unchanged.
+- [x] 7.13 hub-client changelog entry.
+- [x] 7.14 Plan end: workspace nextest against 7.1; reconcile this checklist; write the Handoff log; land per the epic.
 
 ## Risks
 
@@ -69,4 +69,21 @@ Per task: `cargo clippy -p <crate> --all-targets -- -D warnings` plus `cargo nex
 
 ## Handoff log
 
-Written by the implementing agent in the plan-end task, committed with the checklist: what landed (commit range), any task that deviated from the plan and why, names and signatures of the interfaces later plans consume exactly as they ended up, the workspace nextest baseline and final counts, and anything the next agent in the lane or a plan that waits on this one must know. Empty until the plan lands.
+Landed on `q2-preview/p07-embed-import`: four commits on top of `c4ce01a3c` (rebased once, no conflicts): `import_argv_in` (7.6), the route and its tests (7.7-7.9), the hub-client runner (7.10-7.12), the changelog (7.13).
+
+**Interfaces (as shipped)**
+- `quarto_core::import::request::import_argv_in(format: &ImportFormat, source_path: &str, dir: &str) -> Vec<String>`; `import_argv` delegates with `import_dir()`. No `--sandbox` or `+RTS` in it.
+- `POST /api/preview/import` (`quarto_preview::import_route`, `BODY_LIMIT` = 25 MB + 64 KB on this route only). Request: body = source bytes, header `file_name` = name whose extension picks the format. 200 body: `[u32 BE header_len][JSON {status, stderr, stdout, timedOut, aborted, outputLen, collected:[{path,len}], diagnostics}][output][media...]`. Refusals carry `{diagnostics:[...]}`: 400 (`Q-24-1`), 413 (`Q-24-2`), 422 (`Q-20-1`/`Q-20-2`). Past the body limit axum's own 413 has no body. Hardening: `--sandbox`, `+RTS -M512M -RTS`, 120 s timeout, kill on handler drop, the wasm collection caps (a test pins them to `limits.ts`).
+- hub-client: `nativeImportRunner.ts` (`createNativeImportRunner`, `parseFrame`); new `RunFailureKind` `'refused'` (maps to `invalid-request` in `uiStateFor`; the import service shows its diagnostics with no `uiState`). `importAvailable()` = `isPreviewEmbed() || pandocWasmEnabled()`; `defaultDeps` uses the native runner in the embed.
+
+**Deviations / notes**
+- 400/413/422 bodies are JSON diagnostics (the plan left 400/413 as text) so `Q-24-1`/`Q-24-2` render from Rust's wording.
+- Missing-pandoc is tested through an injected resolver closure, not a real absent pandoc.
+- 7.3: a native run through `finish_import` reproduces every fixture's `expected.qmd`. 7.4: `pandocHost.wasm.test.ts` 59 passed. 7.5: the crafted epub now has HTML, CSS (font-face, import) and SVG references to a host marker file and loopback; removing `--sandbox` makes it fail.
+- No test renders `Editor` in embed mode; the wiring is `importEnabled = importAvailable()`, covered via `importAvailable()` and the sidebar tests.
+- Windows `\\?\` stripping and separator handling are unit-tested on strings only (UNVERIFIED on a real Windows pandoc).
+- Plan 13 owns the end-to-end and `--join` checks.
+
+Baseline: c4ce01a3c, 16033 passed, 202 skipped (Plan 2's entry). Delta +20 passed, 0 skipped ( = 1 quarto-core, 17 route unit tests, 2 integration). Also green: wasm32 check, hub-client vitest 1622 + integration 218, changelog wasm test.
+
+Ledger: 2c023038a: 16053 passed, 202 skipped

@@ -39,7 +39,9 @@ export type RunFailureKind =
   /** The caller's signal aborted the render. */
   | 'aborted'
   /** A later `run()` replaced this one. */
-  | 'superseded';
+  | 'superseded'
+  /** The native import route refused the run with diagnostics Rust worded itself (`Q-20-*`, `Q-24-1`, `Q-24-2`); show `diagnostics` as they are. */
+  | 'refused';
 
 type ExecuteFailureKind = Exclude<ExecuteResult, ExecuteSuccess>['kind'];
 
@@ -112,6 +114,7 @@ export function uiStateFor(o: RunOutcome): UiState {
     case 'pandoc-exit':
       return 'pandoc-error';
     case 'invalid-request':
+    case 'refused':
       return 'invalid-request';
   }
 }

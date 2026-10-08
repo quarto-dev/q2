@@ -3,7 +3,7 @@
 //! equals every recording's `argv.json`.
 
 use quarto_core::import::formats::{IMPORT_FORMATS, MAX_SOURCE_BYTES, format_for_file_name};
-use quarto_core::import::request::prepare_import;
+use quarto_core::import::request::{import_argv, import_argv_in, import_dir, prepare_import};
 use quarto_core::pandoc_request::PandocRequest;
 use serde_json::Value;
 
@@ -136,5 +136,30 @@ fn every_fixture_source_maps_to_a_format() {
     for name in support::FIXTURES {
         let (file, _, _) = support::source_info(name);
         assert!(format_for_file_name(&file).is_some(), "{name}");
+    }
+}
+
+#[test]
+fn import_argv_in_places_output_and_media_under_the_given_directory() {
+    for format in IMPORT_FORMATS {
+        let virtual_argv = import_argv(format, "/v/source.x");
+        // The wasm path is the same builder over the virtual directory.
+        assert_eq!(
+            virtual_argv,
+            import_argv_in(format, "/v/source.x", &import_dir()),
+            "{}",
+            format.id
+        );
+        let real = import_argv_in(format, "/tmp/req/source.x", "/tmp/req");
+        assert!(real.contains(&"--extract-media=/tmp/req/media".to_string()));
+        let o = real.iter().position(|a| a == "-o").unwrap();
+        assert_eq!(real[o + 1], "/tmp/req/out.json");
+        assert_eq!(real.last().unwrap(), "/tmp/req/source.x");
+        // No hardening flags in the shared builder.
+        assert!(
+            !real
+                .iter()
+                .any(|a| a == "--sandbox" || a.starts_with("+RTS"))
+        );
     }
 }

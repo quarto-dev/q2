@@ -14,6 +14,7 @@ import { inferMimeType } from '@quarto/preview-renderer/types/project';
 import { DEFAULT_CONVERT_BUDGET_MS, DEFAULT_CONVERT_TIMEOUT_MS, buildMedia } from './importMedia';
 import { FILE_SIZE_LIMITS } from '../services/resourceService';
 import { isPreviewEmbed, pandocWasmEnabled } from './featureFlag';
+import { createNativeImportRunner } from './nativeImportRunner';
 import type { LoadProgress } from './pandocLoader';
 import { getImportRunner } from './pandocService';
 import { uiStateFor, type RunFailure, type RunOptions, type RunOutcome, type RunStage, type UiState } from './pandocRunner';
@@ -214,6 +215,9 @@ export function createImportService(deps: ImportDeps): ImportService {
       case 'invalid-request':
       case 'superseded':
         return { ok: false, diagnostics: [...classify(out.kind, out.status, out.stderr), ...asDiagnostics(out.diagnostics)] };
+      case 'refused':
+        // The native route's own diagnostics (Q-20-* pandoc missing or too old, Q-24-2), shown as they are: no `uiState`, so no "download failed" headline.
+        return { ok: false, diagnostics: asDiagnostics(out.diagnostics) };
       default:
         // pandoc-exit, no-output, oom, crash, timeout: Rust picks Q-24-3 or Q-24-13 from the kind.
         return { ok: false, diagnostics: classify(out.kind, out.status, out.stderr) };
@@ -288,16 +292,18 @@ export function createImportService(deps: ImportDeps): ImportService {
   return { getImportFormats, validateImportSource, importDocument };
 }
 
-/** Import is offered where pandoc.wasm is shipped and the browser build renders: not in the `q2 preview` embed, which has no pandoc.wasm (D7). Unlike `downloadAvailable()`, false in the embed. */
+/** Import is offered where pandoc.wasm is shipped, and in the `q2 preview` embed, whose native server runs the reader (Plan 7, E6). */
 export function importAvailable(): boolean {
-  return pandocWasmEnabled() && !isPreviewEmbed();
+  return isPreviewEmbed() || pandocWasmEnabled();
 }
 
 /** The real dependencies: the import runner, the Rust wasm (initialised on first use) and the lazy rtf.js converter. */
 function defaultDeps(): ImportDeps {
+  // The embed has no pandoc.wasm: its native server runs the reader.
+  const embedRunner = isPreviewEmbed() ? createNativeImportRunner() : undefined;
   return {
     // Looked up per call, so building the service creates no runner or loader.
-    runner: { run: (request, shareTree, options) => getImportRunner().run(request, shareTree, options) },
+    runner: embedRunner ?? { run: (request, shareTree, options) => getImportRunner().run(request, shareTree, options) },
     wasm: {
       ready: () => runtime.initWasm(),
       getImportFormatTable: runtime.getImportFormatTable,

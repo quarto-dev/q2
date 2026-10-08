@@ -14,6 +14,7 @@ import {
 import { PandocLoadError } from './pandocLoader';
 import { failure, type RunOutcome, type RunStage } from './pandocRunner';
 import * as featureFlag from './featureFlag';
+import { createNativeImportRunner } from './nativeImportRunner';
 
 const SOURCE_PATH = '/__q2_share__/import/source.docx';
 const MEDIA = '/__q2_share__/import/media';
@@ -221,6 +222,15 @@ describe('importDocument: run failures (the table in P4 T4)', () => {
     expect(a.wasm.classifyImportFailure).not.toHaveBeenCalled();
   });
 
+  it('refused (the native route\'s own Q-20-* / Q-24-2) shows its diagnostics as they are: no uiState, no classify', async () => {
+    const q20: Diagnostic = { origin: 'rust', kind: 'error', code: 'Q-20-1', title: 'Pandoc Not Found' };
+    const { svc, wasm } = setup({ run: async () => failure('refused', [q20], []) });
+    const out = await svc.importDocument(docx(), 'a.qmd');
+    expect(out).toEqual({ ok: false, diagnostics: [q20] });
+    expect(out).not.toHaveProperty('uiState');
+    expect(wasm.classifyImportFailure).not.toHaveBeenCalled();
+  });
+
   it('a file that cannot be read is an import-read-failed host diagnostic, and pandoc does not run', async () => {
     const { svc, run } = setup();
     const gone = { name: 'a.docx', size: 3, arrayBuffer: () => Promise.reject(new Error('NotReadableError')) } as unknown as File;
@@ -291,14 +301,14 @@ describe('importDocument: progress, cancellation and serialization', () => {
 });
 
 describe('availability and the default instance', () => {
-  it('importAvailable is pandocWasmEnabled() && !isPreviewEmbed(), unlike downloadAvailable()', () => {
+  it('importAvailable is isPreviewEmbed() || pandocWasmEnabled(): the embed offers import through its native server', () => {
     const wasm = vi.spyOn(featureFlag, 'pandocWasmEnabled');
     const embed = vi.spyOn(featureFlag, 'isPreviewEmbed');
     for (const [w, e, want] of [
       [true, false, true],
-      [true, true, false],
+      [true, true, true],
+      [false, true, true],
       [false, false, false],
-      [false, true, false],
     ] as const) {
       wasm.mockReturnValue(w);
       embed.mockReturnValue(e);
@@ -312,5 +322,36 @@ describe('availability and the default instance', () => {
     expect(getImportService()).toBe(stub);
     setImportServiceForTests(undefined);
     expect(getImportService()).not.toBe(stub);
+  });
+});
+
+describe('importDocument with the native runner', () => {
+  const json = new TextEncoder().encode('{"blocks":[]}');
+  const body = (): Uint8Array => {
+    const header = new TextEncoder().encode(JSON.stringify({ status: 0, stderr: '', stdout: '', timedOut: false, aborted: false, diagnostics: [], outputLen: json.length, collected: [{ path: `${MEDIA}/a.png`, len: 2 }] }));
+    const out = new Uint8Array(4 + header.length + json.length + 2);
+    new DataView(out.buffer).setUint32(0, header.length, false);
+    out.set(header, 4);
+    out.set(json, 4 + header.length);
+    out.set([7, 8], 4 + header.length + json.length);
+    return out;
+  };
+  const request = { job_id: 'r', output_path: `${MEDIA}/../out.json`, host_inputs: [{ path: SOURCE_PATH, sha256: 's', size: 3 }] };
+
+  it('goes from reading straight to converting and never stalls in loading-pandoc', async () => {
+    const fetchFn = (async () => new Response(body())) as unknown as typeof fetch;
+    const runner = createNativeImportRunner({ fetchFn, baseUrl: 'http://127.0.0.1/' });
+    const { svc, wasm } = setup({ deps: { runner } });
+    wasm.prepareImport.mockImplementation((name: string, size: number, sha: string) =>
+      sha === '' ? { success: true, diagnostics: [], format: 'docx' } : { success: true, diagnostics: [], format: 'docx', request, share_tree: { share_tree_version: 'v', files: [] }, source_path: SOURCE_PATH },
+    );
+    const seen: ImportProgress[] = [];
+    const onLoadProgress = vi.fn();
+    const out = await svc.importDocument(docx(), 'a.qmd', { onProgress: (p) => seen.push(p), onLoadProgress });
+    expect(out.ok).toBe(true);
+    // 'loading-pandoc' is announced before the run and replaced at once by the runner's 'running' stage.
+    expect(seen).toEqual(['reading', 'loading-pandoc', 'converting', 'images', 'finishing']);
+    expect(onLoadProgress).not.toHaveBeenCalled();
+    expect(wasm.finishImport).toHaveBeenCalledWith('{"blocks":[]}', '', 'a.qmd', expect.any(String), 'docx');
   });
 });

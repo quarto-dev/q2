@@ -321,6 +321,23 @@ describe('ImportDialog: the run', () => {
     expect(within(report).getByText(/fetch failed/)).toBeTruthy();
   });
 
+  it('shows the native route\'s own refusal (Q-20-1) on its own: no "download failed" headline', async () => {
+    const base = createStubImportService();
+    const service: ImportService = {
+      ...base,
+      importDocument: async () => ({
+        ok: false,
+        diagnostics: [{ origin: 'rust', kind: 'error', code: 'Q-20-1', title: 'Pandoc Not Found', problem: 'The pandoc binary could not be found on PATH.' }],
+      }),
+    };
+    setup({ service });
+    await start();
+    const report = await screen.findByTestId('import-report');
+    expect(within(report).getByText(importDoc.reportFailed)).toBeTruthy();
+    expect(within(report).getByText(/Q-20-1/)).toBeTruthy();
+    expect(report.querySelector('.import-report-failure')).toBeNull();
+  });
+
   it('shows a storage failure first, then the import report', async () => {
     const warning = { origin: 'rust', kind: 'warning', code: 'Q-24-4', title: 'Reader warning', problem: 'p' } as const;
     const base = createStubImportService();

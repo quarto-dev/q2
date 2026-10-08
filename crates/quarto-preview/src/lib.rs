@@ -30,6 +30,7 @@ pub mod capture_driver;
 pub mod config;
 pub mod deps;
 pub mod diagnostics;
+pub mod import_route;
 pub mod join_frontend;
 pub mod re_execute;
 pub mod render_download;
@@ -751,6 +752,14 @@ pub fn extend_with_preview(
         // pandoc-wasm H4b (D7): "Download as" for the embedded hub, which
         // carries no pandoc.wasm; renders natively and returns the file.
         .route("/api/preview/render", post(render_download::render_handler))
+        // Plan 7 (P7-D1): document import for the embed; native pandoc runs the
+        // reader. The body limit rises to the source cap on this route only.
+        .route(
+            "/api/preview/import",
+            post(import_route::import_handler).layer(axum::extract::DefaultBodyLimit::max(
+                import_route::BODY_LIMIT,
+            )),
+        )
         // bd-b9kzg: SPA fetches accumulated server-side diagnostics
         // (capture-driver / deps-parse / re-execute failures) per
         // page. Merged with the WASM render's own `result.warnings`

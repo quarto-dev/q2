@@ -61,9 +61,17 @@ fn is_hex_sha256(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-/// The argv of a reader run over `source_path` (interface 2).
+/// The argv of a reader run over `source_path` (interface 2), inside the wasm's virtual
+/// import directory.
 pub fn import_argv(format: &ImportFormat, source_path: &str) -> Vec<String> {
-    let dir = import_dir();
+    import_argv_in(format, source_path, &import_dir())
+}
+
+/// The argv of a reader run over `source_path`, with the output and the extracted media under
+/// `dir`. The wasm path passes its virtual directory (`import_argv`); the native route passes a
+/// real per-request directory. It adds no hardening flags (`--sandbox`, `+RTS`): those belong to
+/// the native route, and adding them here would change the recorded `argv.json` files.
+pub fn import_argv_in(format: &ImportFormat, source_path: &str, dir: &str) -> Vec<String> {
     let mut argv = vec!["pandoc".to_string(), "-f".into(), format.id.into()];
     if format.track_changes {
         argv.push("--track-changes=all".into());
