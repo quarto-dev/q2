@@ -62,7 +62,7 @@ direct `Image` URLs (via bd-kpuweafo, for *sync*) are handled. The full set:
 - `Image` URLs `![](./img.png)` — in the deck **and inside included files**.
 - `_brand.yml` (done: bd-ggvq1j68) and themes (`theme: custom.scss` + its `@import`s).
 - `bibliography:` / `csl:` paths.
-- `{{< embed other.qmd#cell >}}` (embeds another doc's output).
+- `{{{< embed other.qmd#cell >}}}` (embeds another doc's output).
 - `resources:` globs.
 - Raw HTML `<img src>`, `<video>`, `<link>`, `<script src>`; CSS `url(...)`.
 - Listing/sidebar globs (project-shaped; less relevant single-file).

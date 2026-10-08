@@ -144,7 +144,7 @@ action needed; pure Rust throughout, no platform-specific APIs, so
   full 86-fixture set (76 `ensurePdfTextPositions` assertions, the richest
   struct-tree exercise in the epic) — 81 passed, 5 pre-existing skips, 0 failed,
   identical to the 0.14.2 baseline. `orange-book`/`orange-book-margin` — same
-  single pre-existing failure (the bd-gak8uiza `{{< embed >}}`/`fig-visualization`
+  single pre-existing failure (the bd-gak8uiza `{{{< embed >}}}`/`fig-visualization`
   gap) reproduces identically under both Typst versions; confirmed by running the
   same fixtures against the default 0.14.2 binary and diffing the failure output.
   No struct-tree-shape regression found between 0.14.2 and CI's pinned 0.15.1.

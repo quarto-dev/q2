@@ -457,7 +457,7 @@ once per phase boundary.
   nine** flavors (fixture: heading + emphasis + code + escaped
   shortcode; no code cells). Snippets (Escaped line): markdown,
   markdown_github, markdown_mmd, markua, gfm, commonmark,
-  commonmark_x → `{{< meta title >}}` (postprocessor active);
+  commonmark_x → `{{{< meta title >}}}` (postprocessor active);
   markdown_strict, markdown_phpextra → `{{&lt; meta title &gt;}}`
   (those two writers HTML-entity-escape; measured Q1 parity — its
   postprocessor does not rewrite them either). All nine produced

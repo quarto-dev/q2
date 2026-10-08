@@ -126,7 +126,7 @@ Where `inlinesToString` (in `quarto-cli/src/resources/filters/common/pandoc.lua`
 
 | Aspect | TS Quarto (expected) | q2 (current) |
 |---|---|---|
-| `args[1]` for `{{< sc 5 >}}` | `"5"` (plain string) | `{value = "5"}` (table) |
+| `args[1]` for `{{{< sc 5 >}}}` | `"5"` (plain string) | `{value = "5"}` (table) |
 | `args` contains kwargs? | No | Yes (appended after positional) |
 | `kwargs` missing key | Returns `pandoc.Inlines({})` | Returns `nil` |
 | `pandoc.utils.stringify(args[1])` | `"5"` | `""` (table has no sequence items) |

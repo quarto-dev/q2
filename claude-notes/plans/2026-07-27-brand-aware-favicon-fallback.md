@@ -639,7 +639,7 @@ proved nothing — the explicit key and the fallback would both have produced
 - **Docs drift — now tracked as bd-qnylgu69** (`related` to this strand).
   `docs/guides/authoring/brand.qmd` appears to be largely a port of Q1's brand
   documentation and describes behavior Q2 may not have — e.g. the
-  `{{< brand logo … >}}` shortcode (line 734ff) and navbar logo suppression via
+  `{{{< brand logo … >}}}` shortcode (line 734ff) and navbar logo suppression via
   `_quarto.yml` (line 483ff), the latter being bd-hp3tx, which is open. The
   audit strand also owns documenting that Q2 requires an explicit `brand:` key.
 - **Possibly related, not investigated:** bd-k5rxujiy — "`q2 preview`: logo

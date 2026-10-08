@@ -167,7 +167,7 @@ foundation is in place — content authors will benefit from `new
   these pages (we already render `docs_url` in the ariadne footer
   via the catalog).
 - A Quarto shortcode for **linking to** error pages from other
-  content (e.g. `{{< error Q-1-1 >}}` → styled cross-reference).
+  content (e.g. `{{{< error Q-1-1 >}}}` → styled cross-reference).
   Interesting future work — would give guides and how-tos a clean
   way to cite specific error codes — but not part of this epic.
 - Internationalization. English-only.

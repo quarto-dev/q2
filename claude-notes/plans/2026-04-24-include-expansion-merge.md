@@ -73,7 +73,7 @@ In scope:
 Out of scope for this session:
 
 - Pushing the merged branch (user will approve separately).
-- Shortcode resolution beyond `include` — e.g. `{{< meta … >}}` or
+- Shortcode resolution beyond `include` — e.g. `{{{< meta … >}}}` or
   user-defined shortcodes in Lua — is intentionally not moved
   relative to the checkpoint. That remains
   `ShortcodeResolveTransform`\'s responsibility inside

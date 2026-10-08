@@ -94,7 +94,7 @@ What a profile **does not** contain:
   filters would introduce (Lua, JSON, citeproc).
 - **Theme CSS, code highlighting, rendered HTML body, applied
   template.** All of those are downstream of the checkpoint.
-- **Resolved shortcodes.** `{{< meta … >}}` and friends are resolved
+- **Resolved shortcodes.** `{{{< meta … >}}}` and friends are resolved
   during `AstTransformsStage`, after the checkpoint.
 - **Cross-document information.** A `DocumentProfile` describes a
   single file. Merged across siblings by Phase 1's `ProjectIndex`

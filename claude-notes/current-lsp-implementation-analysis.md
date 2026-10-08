@@ -74,7 +74,7 @@ apps/lsp/
   - MathJax-based completions (\~48KB JSON data)
 
 - **Shortcode completions** (`completion-shortcode.ts`)
-  - Quarto shortcodes (`{{< shortcode >}}`)
+  - Quarto shortcodes (`{{{< shortcode >}}}`)
 
 - **Reference completions** (`refs/`)
   - **Crossref** (`completion-crossref.ts`) - `@fig-id`, `@tbl-id`, etc.

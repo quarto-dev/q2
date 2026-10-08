@@ -568,7 +568,7 @@ rationale for each decision.)
   `CodeHighlightStage`, `RenderHtmlBodyStage`, `ApplyTemplateStage`.
 - **End-to-end fixture tests** (two fixtures, both `format: q2-preview`):
   - **Single-file fixture**: no `_quarto.yml` ancestor. Includes a
-    callout, a theorem, a `{{< meta foo >}}` shortcode, and a Lua
+    callout, a theorem, a `{{{< meta foo >}}}` shortcode, and a Lua
     filter. Routes through the single-file branch
     (`render_single_doc_to_preview_response`). Assert:
     - The Callout encoded as `__quarto_custom_node` Div with

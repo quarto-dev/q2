@@ -724,7 +724,7 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
 - [x] **3.1** `sidebar_title_shortcode_substitutes`
   (`crates/quarto-core/tests/integration/shortcode_config_pipeline.rs:203`)
   renders `full_fixture` (`:122`), which declares **both** a navbar and
-  `sidebar.title: "Side {{< meta version >}}"`, and asserts `"Side 9.9.9"`
+  `sidebar.title: "Side {{{< meta version >}}}"`, and asserts `"Side 9.9.9"`
   appears. It is the one existing test the gate breaks (§Blast-radius
   sweep).
 

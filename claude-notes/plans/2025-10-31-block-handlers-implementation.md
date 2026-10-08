@@ -26,7 +26,7 @@
 - Note references ([^ref])
 - Quotes, superscript, subscript, strikeout
 - Editorial marks (insert, delete, highlight, comment)
-- Shortcodes ({{< shortcode >}})
+- Shortcodes ({{{< shortcode >}}})
 - Links and images
 - Math (inline and display)
 

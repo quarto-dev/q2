@@ -116,7 +116,7 @@ Already working or next to implement:
 - `note_reference` - [^note_id]
 
 ### Category 8: Shortcodes (Priority: MEDIUM)
-- `shortcode` - {{< shortcode >}}
+- `shortcode` - {{{< shortcode >}}}
 - `shortcode_escaped` - {{{< shortcode >}}}
 - `shortcode_keyword_param`
 - `shortcode_name`, `shortcode_string`, `shortcode_number`, `shortcode_boolean`

@@ -177,7 +177,7 @@ handling from scratch.
     is an `Inline::Shortcode` where `name == "include"`
   - **Block-level only:** Quarto 1 only expands includes that occupy an
     entire line (`isBlockShortcode` in `parse-shortcode.ts` uses regex
-    `^\s*{{< ... >}}\s*$`). The AST-level equivalent is: the shortcode is
+    `^\s*{{{< ... >}}}\s*$`). The AST-level equivalent is: the shortcode is
     the only child of a `Paragraph`. If an include shortcode appears inline
     among other inlines (e.g., `text {{< include f.qmd >}} more`), leave it
     in place — `ShortcodeResolveTransform` will encounter it later and can

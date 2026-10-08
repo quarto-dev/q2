@@ -58,7 +58,7 @@ Filed 2026-08-11 by Carlos Scheidegger, one day old, no staleness concerns. Five
 
 1. `text:` is HTML-escaped instead of rendered as markdown/HTML.
 2. A bare-string page-footer item lands in `href=` with an **empty** link body.
-3. Shortcodes (`{{< env … >}}`) stay literal in item strings.
+3. Shortcodes (`{{{< env … >}}}`) stay literal in item strings.
 4. Named entities (`&copy;`) stay literal there.
 5. An item with `text:` but no `href:` is still wrapped in `<a href="#">`.
 

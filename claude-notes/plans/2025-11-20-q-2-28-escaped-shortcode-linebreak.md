@@ -320,7 +320,7 @@ cat test-q-2-28.qmd
 2. **Nested shortcodes**: `{{{< meta {{{< inner >}}} >}}}`
    - Make sure we only fix the outer shortcode
 
-3. **Mixed regular and escaped**: `{{< regular >}} {{{< escaped\n>}}}`
+3. **Mixed regular and escaped**: `{{< regular >}} {{{< escaped\n>}}}`{shortcodes="false"}
    - Should only fix Q-2-28, not touch regular shortcode
 
 4. **In different contexts**: Inside links, emphasis, etc.

@@ -16,7 +16,7 @@ Audit found **critical crash bugs** in the native writer. Instead of emitting he
 4. **CaptionBlock** - Figure/table caption blocks
 
 ### Inline Extensions
-1. **Shortcode** - `{{< shortcode >}}` syntax
+1. **Shortcode** - `{{{< shortcode >}}}` syntax
 2. **NoteReference** - `[^1]` references (should be converted in postprocess)
 3. **Attr** - Standalone attributes (for headings/tables)
 4. **Insert** - CriticMarkup `{++text++}`

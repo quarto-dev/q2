@@ -8,7 +8,7 @@ test: observed 12 hard-fails vs 1.9 expected under i.i.d., p ≈ 8e-7).
 
 Two clusters dominate:
 
-- **A — shortcode/extension `[html]`**: every top failure expands a `{{< … >}}`
+- **A — shortcode/extension `[html]`**: every top failure expands a `{{{< … >}}}`
   shortcode (runs the WASM Lua interpreter). The multi-file extension fixtures
   (`block-shortcode` = 3 files, worst with 3 hard-fails) add a VFS-sync race on
   top: nothing gates the first render / the assertion re-render on all project

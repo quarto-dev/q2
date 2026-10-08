@@ -280,7 +280,7 @@ scope for now (a later, informative error message is the likely treatment).
   runtime) — not statically discoverable; engines don't run in WASM preview
   anyway. Documented caveat.
 - **Long-tail channels** beyond include + image: `bibliography:`/`csl:`,
-  `{{< embed >}}`, `resources:` globs, raw `<img>/<video>/<link>/<script>`/CSS
+  `{{{< embed >}}}`, `resources:` globs, raw `<img>/<video>/<link>/<script>`/CSS
   `url(...)`. Each is a future per-channel extension of the resolver; the
   worklist structure accommodates them. Note in the strand as follow-ups.
 - **Included-file content-edit re-render** (Phase 2 watcher extension above).
