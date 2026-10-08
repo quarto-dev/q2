@@ -42,7 +42,10 @@ The habits that most often break a note here, in order of frequency:
     re-indents an existing file.
 13. A fenced block that contains another fence (a Rust raw string holding a
     ```` ```{r} ```` cell, a Markdown example with its own fences). Use four
-    backticks for the outer fence.
+    backticks for the outer fence. One diagnostic looks through it on purpose:
+    an inner ```` ```{{r}} ```` opener (the Quarto 1 doubled-brace form) still
+    reports Q-2-50, so a note that documents that idiom opts out in its front
+    matter, `diagnostics: {Q-2-50: {level: off, reason: "..."}}`.
 14. A shortcode quoted in a code span or a fenced code block. Shortcodes
     expand there on purpose (textual inclusion of snippets), so a quoted
     `{{< include "x.qmd" >}}` reports Q-17-2 and `{{{< meta title >}}}` reports

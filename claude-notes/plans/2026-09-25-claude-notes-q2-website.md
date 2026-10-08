@@ -7,11 +7,15 @@
 339 → 0 outside three repro fixtures) and quoted shortcodes (Q-16-3 95 → 0,
 Q-16-5 77 → 0), 2026-10-08. Mechanical escaping, six per-file agent batches
 for errors, four for brackets, three for shortcodes, and hand tails; the star
-queue below is historical. The render now reports 1449 / 1449 and 3 warnings,
-all q2 bugs filed with repros: Q-2-50 on a fence line inside a four-backtick
-block (bd-3djx9ris) and the YAML provenance desync for a folded scalar holding
-a non-ASCII character (bd-e0e9kd4a, twice). The repro fixtures that exist to
-warn are excluded in `_quarto.yml`. Note for the tally scripts: `--json-errors`
+queue below is historical. The render now reports 1449 / 1449 and 2 warnings,
+both one q2 bug filed with a repro: the YAML provenance desync for a folded
+scalar holding a non-ASCII character (bd-e0e9kd4a, in progress). A third,
+Q-2-50 on a `{{r}}` fence line inside a four-backtick block, turned out to be
+by design (bd-3djx9ris, closed: the nested check is what catches Quarto 1
+openers hidden in display fences); the one note that documents that idiom
+now carries `diagnostics: {Q-2-50: {level: off, reason: …}}` in its front
+matter, as `docs/errors/markdown/Q-2-50.qmd` does. The repro fixtures that
+exist to warn are excluded in `_quarto.yml`. Note for the tally scripts: `--json-errors`
 emits some warnings with no `code` field ("Missing shortcode argument",
 "Shortcode error", the provenance self-check; bd-9vmlk2md), so count
 `kind: warning`, not codes. Remaining work: site polish, CI, and every merge
@@ -123,7 +127,7 @@ before accepting, and keep it for the long tail, not for whole documents.
 | bd-fx3fr46j | Q-2-29 (indented footnote content) is never emitted; Q-2-35 fires instead |
 | bd-v8t4l69h | shortcodes are evaluated inside fenced code blocks; closed, intentional (textual snippet inclusion). Quote them as `{{{< ... >}}}` or `shortcodes="false"` |
 | bd-qcdweixf | tilde fences (`~~~`) are not recognized; Q-2-18 unclosed strikeout instead |
-| bd-3djx9ris | Q-2-50 (doubled braces) fires on a fence-shaped line that is content of an enclosing four-backtick block |
+| bd-3djx9ris | Q-2-50 (doubled braces) fires on a fence-shaped line inside an enclosing four-backtick block; closed, by design (bd-q250-nested-fence-blind-spot-t68z1lsw). A note documenting the idiom opts out with `diagnostics: {Q-2-50: {level: off}}` in its front matter |
 | bd-e0e9kd4a | a folded `>` block scalar with a non-ASCII character desyncs the next scalar's provenance ("YAML string scalar has no content provenance", twice) |
 | bd-9vmlk2md | three warnings carry no Q code and so hide from code-keyed tooling: "Missing shortcode argument", "Shortcode error", the provenance self-check |
 
