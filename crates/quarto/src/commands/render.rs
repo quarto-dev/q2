@@ -3588,8 +3588,9 @@ mod render_once_tests {
         );
 
         let text = report.diagnostics_text(false);
+        // Q-1-1 "YAML Syntax Error" (was the generic Q-0-99 until bd-x30aq7ae).
         assert!(
-            text.contains("Q-0-99"),
+            text.contains("Q-1-1"),
             "diagnostics text carries the code: {text}"
         );
         assert!(

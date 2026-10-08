@@ -214,9 +214,10 @@ pub fn yaml_parse_error(
 ) -> crate::error::QuartoError {
     let fid = quarto_yaml::file_id_for_filename(filename);
     let whole_file = SourceInfo::original(fid, 0, content.len());
-    let diagnostic = pampa::utils::yaml_syntax_error::yaml_syntax_error(error, &whole_file)
-        .add_hint(format!("`{}` could not be parsed", path.display()))
-        .build();
+    let diagnostic =
+        pampa::utils::yaml_syntax_error::yaml_syntax_error(error, content, &whole_file)
+            .add_hint(format!("`{}` could not be parsed", path.display()))
+            .build();
     let mut source_context = SourceContext::new();
     source_context.add_file_with_id(fid, filename.to_string(), Some(content.to_string()));
     crate::error::QuartoError::Parse(crate::error::ParseError::new(

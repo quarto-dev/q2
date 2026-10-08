@@ -600,7 +600,7 @@ pub fn rawblock_to_config_value(
         Ok(y) => y,
         Err(e) => {
             diagnostics.add(
-                crate::utils::yaml_syntax_error::yaml_syntax_error(e, &yaml_parent)
+                crate::utils::yaml_syntax_error::yaml_syntax_error(e, &block.text, &yaml_parent)
                     .add_hint(
                         "The YAML front matter at the top of this document could not be parsed",
                     )
