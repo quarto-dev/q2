@@ -6912,11 +6912,12 @@ dependencies = [
 
 [[package]]
 name = "quarto-yaml"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2f8c0f416556efd4e2b725d5cc21158e2d339deeb8b1a403af5b83313934aa0"
+checksum = "4471a18b1536828024c50b86a0f01a1338c24838bea6c48caae8240f8373c4b8"
 dependencies = [
  "quarto-source-map",
+ "saphyr-parser",
  "serde",
  "thiserror 2.0.21",
  "yaml-rust2",
@@ -7737,6 +7738,16 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "saphyr-parser"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7429158804c36e705d9423b7848018e535b3e92d439a763e364ee12670ef473b"
+dependencies = [
+ "arraydeque",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
