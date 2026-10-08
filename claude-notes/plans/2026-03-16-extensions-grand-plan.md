@@ -589,7 +589,7 @@ integration that was originally scoped here.
 
 **Goal**: `quarto install extension` command support.
 
-- [ ] GitHub source detection (org/repo[@version][/subdir])
+- [ ] GitHub source detection (`org/repo[@version][/subdir]`)
 - [ ] Archive URL support
 - [ ] Local path support
 - [ ] Trust verification prompt

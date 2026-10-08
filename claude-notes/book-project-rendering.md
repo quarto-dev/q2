@@ -117,7 +117,7 @@ export async function bookProjectConfig(
 }
 ```
 
-**Key data structure: BookRenderItem[]**
+**Key data structure: `BookRenderItem[]`**
 
 ```typescript
 interface BookRenderItem {

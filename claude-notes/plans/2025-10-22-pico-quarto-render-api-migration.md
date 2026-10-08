@@ -51,7 +51,7 @@ fn read<T: Write>(
 ## Implementation Plan
 
 ### Step 1: Update pico-quarto-render API usage
-- Remove the `error_formatter` parameter (None::<fn...>)
+- Remove the `error_formatter` parameter (`None::<fn...>`)
 - Update destructuring to 3-tuple: `(pandoc, context, warnings)`
 - Handle warnings (can ignore for now or log them)
 

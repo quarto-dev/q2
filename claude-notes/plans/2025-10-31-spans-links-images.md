@@ -390,7 +390,7 @@ Test cases needed:
 - ✅ Spans parse correctly with attributes
 - ✅ Images parse as `!` + Link (matching Pandoc)
 - ✅ All existing tests still pass
-- ✅ No "[TOP-LEVEL MISSING NODE]" warnings for these nodes
+- ✅ No "\[TOP-LEVEL MISSING NODE\]" warnings for these nodes
 - ✅ Output matches Pandoc native format exactly
 
 ## Estimate

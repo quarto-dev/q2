@@ -2237,7 +2237,7 @@ remaining deferred work.
     - `data-attr-time` carries the commit Unix timestamp.
   - Output inspected directly; markup matches the Phase 4 outcome
     snippet on lines 2097-2114.
-- [-] Manual end-to-end (hub-client browser): **not exercisable in v1.**
+- \[-\] Manual end-to-end (hub-client browser): **not exercisable in v1.**
   `ReactPreview.tsx:155` hard-codes `enabled: false`. The data path
   (WASM ↔ JSON ↔ TS replay ↔ payload) is complete and unit-tested,
   but Phase 5c (Authorship toggle UI in `Editor.tsx` + per-node colour

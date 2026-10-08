@@ -182,8 +182,8 @@ Quarto-version generation.
 
 ### Design rationale: generational-purge check is not memoized
 
-[Recorded during implementation — future-me, don't re-add the memo
-without reading this.]
+\[Recorded during implementation — future-me, don't re-add the memo
+without reading this.\]
 
 The helper that runs the generational purge
 (`ensure_sass_cache_ready` in the stage) is called on every

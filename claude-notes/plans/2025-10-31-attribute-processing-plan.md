@@ -206,7 +206,7 @@ Create tests for:
 
 ## Success Criteria
 
-- ✅ No "[TOP-LEVEL MISSING NODE]" warnings for attribute nodes
+- ✅ No "\[TOP-LEVEL MISSING NODE\]" warnings for attribute nodes
 - ✅ Code spans with attributes parse correctly
 - ✅ All attribute components (id, classes, key-value) extracted correctly
 - ✅ Output matches Pandoc native format

@@ -135,7 +135,7 @@ function validateArray(value: AnnotatedParse, schema: ArraySchema, context: Vali
 
 Extensive search across the codebase shows `kind` is used to:
 - Determine navigation structure in mappings/sequences (lines 550, 579, 697, 721-724, etc.)
-- Skip special parsing cases (<<EMPTY>>, etc.)
+- Skip special parsing cases (\<\<EMPTY>>, etc.)
 - NOT to determine whether result is an array or object
 
 This is important: **changing result structure won't break kind-based logic**

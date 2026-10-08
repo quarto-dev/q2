@@ -188,7 +188,7 @@ boot controller if extracted.
       masks it). Pinned at 8 s, documented in spec + config.
 - [x] Watch-it-fail: against the Jun-10 binary (pre-fix embedded
       SPA): fails with the exact production failure ("Render Error —
-      Document automerge:<id> is unavailable"). After
+      Document automerge:\<id> is unavailable"). After
       `cargo xtask build-q2-preview-spa` + `cargo build -p quarto
       --bin q2`: passes in 9.1 s (one 8 s queue-release cycle +
       render). Chromium control + full chromium e2e suite: 31 passed;

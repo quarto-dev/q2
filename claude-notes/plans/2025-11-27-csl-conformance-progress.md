@@ -115,7 +115,7 @@ Complex multi-phase algorithm. Requires sorting to work first.
 **Estimated Impact**: \~20 additional tests
 
 **Tasks**:
-- [ ] Implement citation number collapsing ([1-3])
+- [ ] Implement citation number collapsing (\[1-3\])
 - [ ] Implement year collapsing (Smith 2000a, b, c)
 - [ ] Implement author collapsing
 

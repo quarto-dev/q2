@@ -310,7 +310,7 @@ From analyzing the templates, these variables are used:
 **Required for basic rendering**:
 - `body` - rendered document content
 - `lang` - document language (default: "en")
-- `pagetitle` - page title for <title> tag
+- `pagetitle` - page title for \<title> tag
 
 **Optional metadata**:
 - `title`, `subtitle` - document title block

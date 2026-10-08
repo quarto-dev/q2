@@ -45,7 +45,7 @@ Found **29 panic!() statements** across 4 writers. All of these crash the progra
 1. **Line 542**: Editorial marks (Insert, Delete, Highlight, EditComment) - `panic!("Unsupported inline type: {:?}", inline)`
 2. **Line 993**: CaptionBlock - `panic!("CaptionBlock found in JSON writer - should have been processed during postprocessing")`
 3. **Line 1070**: Non-MetaMap metadata - `panic!("Expected MetaMap for Pandoc.meta")`
-4. **Line 1216, 1258**: Test assertions (acceptable - in #[test] functions)
+4. **Line 1216, 1258**: Test assertions (acceptable - in `#[test]` functions)
 
 ## Categorization by Severity
 

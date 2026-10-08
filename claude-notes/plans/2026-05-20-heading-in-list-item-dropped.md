@@ -128,7 +128,7 @@ Write the failing test **first**, then implement.
   ```
 
   Now returns a `BulletList` whose item contains a `Header` block
-  (level 1, id "section-1", inlines [Str "Section", Space, Str "1"]) —
+  (level 1, id "section-1", inlines `[Str "Section", Space, Str "1"]`) —
   structurally identical to Pandoc's output. Verified 2026-05-20.
 
 ## Out of scope

@@ -488,7 +488,7 @@ resources website). See `bd-tr81` for its own plan.
   - `shared-theme/` — exercises scoped artifact relocation.
 - **End-to-end CLI verification** per CLAUDE.md §"End-to-end verification"
   for every phase that produces user-visible output (cargo run --bin quarto
-  -- render <fixture>; inspect output).
+  -- render \<fixture>; inspect output).
 - **Snapshot tests** for rendered HTML fragments (sidebar, page-nav) with
   explicit call-outs when snapshots change.
 - **Hub-client smoke test** in phase 9: real browser session showing a

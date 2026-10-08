@@ -84,7 +84,7 @@ The Rust parser is not tracking source locations when constructing Figure blocks
 
 2. **Missing instrumentation**: The code that builds Figure blocks may not be calling the source tracking functions.
 
-3. **Tree-sitter gaps**: The tree-sitter parser may not have Figure-specific rules, causing it to fall back to default [0, 0] ranges.
+3. **Tree-sitter gaps**: The tree-sitter parser may not have Figure-specific rules, causing it to fall back to default `[0, 0]` ranges.
 
 ## Impact
 

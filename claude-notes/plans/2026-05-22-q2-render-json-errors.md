@@ -182,7 +182,7 @@ fn print_render_diagnostics(
 
 `print_render_diagnostics_text` is the existing body verbatim.
 `print_render_diagnostics_json` walks the same four sources
-(pass1_failures, pass2_failures, outputs[..].render_output.diagnostics,
+(pass1_failures, pass2_failures, `outputs[..]`.render_output.diagnostics,
 project_diagnostics) but emits `diagnostic_to_json(diag, &ctx)` as
 NDJSON.
 

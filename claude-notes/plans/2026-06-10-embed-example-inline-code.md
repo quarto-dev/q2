@@ -147,7 +147,7 @@ For each of the 8 examples:
    first child (the snippet that best represents the deck).
 3. Replace the bare `[Example: NN-…]` link body with a one-sentence caption +
    \+ a `[View source](…github…)` link (so the numbered output reads
-   "Demo N: <sentence>. View source", not "Demo N: Example: NN-…").
+   "Demo N: \<sentence>. View source", not "Demo N: Example: NN-…").
 4. Optionally add `@demo-<slug>` cross-references in the prose where they read
    naturally (fragments already does this at line 136).
 

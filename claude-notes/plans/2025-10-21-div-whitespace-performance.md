@@ -107,7 +107,7 @@ fn find_div_whitespace_errors(&self, content: &str, errors: &[...]) -> Vec<usize
 - Simple change
 - Reduces from O(N²) to O(N)
 - Clear and understandable
-- Minimal memory overhead (one Vec<usize>)
+- Minimal memory overhead (one `Vec<usize>`)
 
 **Cons:**
 - Uses extra memory for line_starts array

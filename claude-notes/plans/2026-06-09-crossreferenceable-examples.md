@@ -177,7 +177,7 @@ in `pre_engine_sugaring.rs`.
 
 ### Caption source (Decision 2 — minor)
 
-A numbered float needs caption text ("Example 1: <caption>"). Where from?
+A numbered float needs caption text ("Example 1: \<caption>"). Where from?
 Options: (a) a `title=`/caption attribute on the div; (b) the fallback link's
 text; (c) a dedicated caption paragraph in the div body (like figure captions).
 **Lean:** support an optional caption (attribute or a caption para); when absent,

@@ -80,7 +80,7 @@ Created minimal test files and compared parse trees:
       (pandoc_str [2, 0] - [2, 1]))))
 ```
 
-The list_item extends to [2, 1] and incorrectly contains both paragraphs.
+The list_item extends to `[2, 1]` and incorrectly contains both paragraphs.
 
 ### 3. Scanner Code Analysis
 

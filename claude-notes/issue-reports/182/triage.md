@@ -15,7 +15,7 @@ The reporter's qmd-web sources contain inputs like:
 See `func()` <a href="x">link</a> done.
 ```
 
-with a real space between the closing backtick of the inline code span and the `<` of the bare HTML. After parsing, the AST has `Code` immediately followed by `RawInline` with no intervening `Space`, so the qmd writer emits `` `func()``<a href="x">`{=html}…`\`\` and the result is unparseable. The bug is in the **reader**: the space is being dropped during tree-sitter → AST conversion. The writer is innocent.
+with a real space between the closing backtick of the inline code span and the `<` of the bare HTML. After parsing, the AST has `Code` immediately followed by `RawInline` with no intervening `Space`, so the qmd writer emits `` `func()``\<a href="x">`{=html}…`\`\` and the result is unparseable. The bug is in the **reader**: the space is being dropped during tree-sitter → AST conversion. The writer is innocent.
 
 The fix is small and local: the `"html_element"` branch in `crates/pampa/src/pandoc/treesitter.rs` already handles leading/trailing whitespace correctly for the anchor-shorthand case (it splits the whitespace out into adjacent `Space` inlines). The same handling is missing from the sibling RawInline case in the same `match` arm.
 

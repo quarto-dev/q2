@@ -38,7 +38,7 @@ Each case is a small `.qmd` chosen to exercise the detection logic at a distinct
 | `tab-indent`          | A single leading tab (which expands to column 4)                             | Confirms tab handling agrees with `advance()`\'s 4-column expansion in scanner.c.    |
 | `more-than-four`      | 5–8 leading spaces at top level                                              | "4 or more" boundary.                                                                |
 | `inside-list-item`    | Inside a list item: list marker, then continuation line with **extra** 4-space indent beyond the list-item indent | Confirms the check fires on **leftover** indentation, not raw column count.        |
-| `well-indented-list`  | Continuation line whose indentation **exactly** matches the list-item indent | **Negative** case (no error). Should be a "captures": [] test that expects success. The harness needs to accept negative cases — if it doesn't, file a follow-up beads. |
+| `well-indented-list`  | Continuation line whose indentation **exactly** matches the list-item indent | **Negative** case (no error). Should be a "captures": `[]` test that expects success. The harness needs to accept negative cases — if it doesn't, file a follow-up beads. |
 | `after-paragraph`     | 4-space-indented line directly following a paragraph (CommonMark would call this a "lazy continuation"; we still want to reject it) | Lazy-continuation interaction. |
 
 Use `crates/pampa/resources/error-corpus/Q-2-32.json` as the structural template. The `captures` field points at the disallowed leading whitespace span.

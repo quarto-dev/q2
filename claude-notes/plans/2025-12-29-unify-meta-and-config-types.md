@@ -624,7 +624,7 @@ pampa, quarto-core, etc.
 3. **Lua filter compatibility**: Do Lua filters expect specific structure?
    - Need to verify Lua readwrite produces compatible data
 
-4. **Performance**: Is Vec<ConfigMapEntry> slower than IndexMap?
+4. **Performance**: Is `Vec<ConfigMapEntry>` slower than `IndexMap`?
    - Likely negligible; measure if concerned
 
 ## Success Criteria

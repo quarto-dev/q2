@@ -397,7 +397,7 @@ Since `scraper` uses an immutable tree (ego-tree), we need a strategy for mutati
 4. Serialize back to HTML
 
 **Option B: Use html5ever + rcdom directly**
-1. Parse with html5ever into rcdom (already mutable via Rc<RefCell>)
+1. Parse with html5ever into rcdom (already mutable via `Rc<RefCell>`)
 2. Implement `selectors::Element` trait for rcdom nodes
 3. Build our DOM wrapper API on top
 4. Serialize with html5ever's serializer

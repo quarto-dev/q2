@@ -663,7 +663,7 @@ impl Task for GridTableConversionTask {
 
 3. **Error handling**
    - **Issue:** Parallel errors harder to aggregate
-   - **Mitigation:** Rayon collects errors into Result<Vec<_>>
+   - **Mitigation:** Rayon collects errors into `Result<Vec<_>>`
    - **Future:** Better error context (which file failed?)
 
 4. **Pandoc resource extraction**

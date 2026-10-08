@@ -318,7 +318,7 @@ Only leaf types (no nested AST nodes) work correctly:
 
 1. Can we use conditional types to recursively transform array elements?
 2. Can we transform tuple elements (e.g., `[Attr, Inline[]]` → `[Attr, Annotated_Inline[]]`)?
-3. How do we handle cross-type references (Inline_Note containing Block[])?
+3. How do we handle cross-type references (Inline_Note containing `Block[]`)?
 4. How do we handle complex nested objects (Citation, Caption)?
 5. Can we make the transformation mechanical and maintainable?
 6. What are the TypeScript compiler performance implications?

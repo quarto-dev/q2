@@ -340,7 +340,7 @@ Given that helpers exist and are presumably working:
 ## Success Criteria
 
 1. ✅ All 7 block handlers uncommented in treesitter.rs
-2. ✅ No "[TOP-LEVEL MISSING NODE]" warnings for supported blocks
+2. ✅ No "\[TOP-LEVEL MISSING NODE\]" warnings for supported blocks
 3. ✅ No "Expected Block or Section, got IntermediateUnknown" crashes
 4. ✅ Each handler has 5+ tests (basic + edge cases)
 5. ✅ All 135+ existing inline tests still pass

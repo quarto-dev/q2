@@ -850,7 +850,7 @@ None tracked specifically for this work. The `body-classes` and "Layout / chrome
 - `hub-client/public/q2-preview.html:28` — iframe `<body>` declaration (verified to carry no class — `useEffect` overwrite is safe).
 - `hub-client/e2e/helpers/smokeAllDiscovery.ts:124-129` — `parseTwoArraySpec` defines the `ensureHtmlElements` YAML schema (two arrays: positives + negatives).
 - `hub-client/e2e/helpers/smokeAllAssertions.ts:122-138` — `ensureHtmlElements` runner; positives use `toBeAttached`, negatives use `toHaveCount(0)`.
-- `hub-client/src/components/render/framework/types.ts:155-167` — `AstProps` (the prop shape `PreviewDocument` receives) and `FormatRegistry` (Record<string, …> with required `Ast`, `Block`, `Inline` keys; arbitrary string keys allowed for synthetic entries like `__fallback__`, `__title_block__`).
+- `hub-client/src/components/render/framework/types.ts:155-167` — `AstProps` (the prop shape `PreviewDocument` receives) and `FormatRegistry` (`Record<string, …>` with required `Ast`, `Block`, `Inline` keys; arbitrary string keys allowed for synthetic entries like `__fallback__`, `__title_block__`).
 - `hub-client/src/components/render/framework/RegistryContext.tsx:19-22` — registry context shape and access pattern.
 - `hub-client/src/components/render/q2-preview/dispatchers.tsx:39` / `:78-82` — `useContext(RegistryContext).registry` lookup and `__fallback__` precedent for synthetic-key resolution.
 - `hub-client/src/components/render/q2-preview/registry.ts:30-40` — current `previewRegistry` shape; 2D adds the `__title_block__` line.

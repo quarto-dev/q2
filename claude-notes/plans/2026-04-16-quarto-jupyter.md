@@ -1028,8 +1028,8 @@ Commit range (Plan 3): `99c1fed2b..3fcade285`
 - T12 `6da1d9597` `makeJupyter` factory (7 real + `notebookExtensions` value + 15 NotImplemented) + Row 19 conformance + smoke
 - T13 `3fcade285` wire `makeJupyter` into `buildQuartoAPI`; **dropped the last cast** → cast-free `: QuartoAPI`
 
-**Verification:** per-package `tsc --noEmit` clean (quarto-api, quarto-types [zero
-edits], engine-host-deno cast-free); vitest green (quarto-api incl. 118 jupyter
+**Verification:** per-package `tsc --noEmit` clean (quarto-api, quarto-types \[zero
+edits\], engine-host-deno cast-free); vitest green (quarto-api incl. 118 jupyter
 tests; engine-host-deno); deno leg green (deno-host, wire-parity `--sloppy-imports`).
 Full `cargo xtask verify` run at wrap-up (see session/branch).
 

@@ -184,7 +184,7 @@ A Quarto contributor should be able to:
 
 3. **Writer Error Pattern** (ansi.rs):
    - AnsiWriterContext accumulates errors during traversal
-   - Returns Result with Vec<DiagnosticMessage> on failure
+   - Returns Result with `Vec<DiagnosticMessage>` on failure
    - Allows continuing on non-fatal errors
 
 4. **Generic Migration Pattern** (used widely):

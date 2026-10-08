@@ -70,7 +70,7 @@ pub fn read<T: Write>(
 
 ### Step 1: Update read() function signature
 - Remove error_formatter parameter and generic F
-- Change return type to include Vec<DiagnosticMessage> in both Ok and Err cases
+- Change return type to include `Vec<DiagnosticMessage>` in both Ok and Err cases
 - Handle recursive call for missing newline case
 
 ### Step 2: Update error handling in read()

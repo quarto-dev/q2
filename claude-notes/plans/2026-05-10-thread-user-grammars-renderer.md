@@ -32,7 +32,7 @@ Phase-9 close-out (bd-ayj6). Description verbatim:
 >
 > Threading user grammars through the renderer is straightforward:
 > add a field to RenderToHtmlRenderer holding an
-> Arc<Mutex<Option<JsUserGrammars>>> (or similar) and have its
+> `Arc<Mutex<Option<JsUserGrammars>>>` (or similar) and have its
 > render() method install the provider on the per-page RenderContext.
 >
 > Filed as discovered-from-bd-ayj6 and tagged P3 since most

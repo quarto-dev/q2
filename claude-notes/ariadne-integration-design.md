@@ -43,7 +43,7 @@ report.write((filename, Source::from(&input_str)), &mut output)?;
 2. **Source required**: Must provide original source text for context
 3. **Multiple labels**: Can add multiple labels pointing to different spans
 4. **Colors**: Red for errors, Blue for info/notes
-5. **Span format**: `start_byte..end_byte` (Range<usize>)
+5. **Span format**: `start_byte..end_byte` (`Range<usize>`)
 
 ## Design Goals
 

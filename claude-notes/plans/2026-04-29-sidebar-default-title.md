@@ -163,7 +163,7 @@ data structure.
       confirm no `.sidebar-header` block.
 - [x] Toggle `_quarto.yml` to `sidebar.title: "Custom"`, re-render,
       confirm header contains `Custom`.
-- [\~] Reload at `127.0.0.1:8000/_site/` and verify visually. — *not done; HTML inspection above is sufficient evidence; leave to user when reloading the running 127.0.0.1:8000 server.*
+- \[\~\] Reload at `127.0.0.1:8000/_site/` and verify visually. — *not done; HTML inspection above is sufficient evidence; leave to user when reloading the running 127.0.0.1:8000 server.*
 - [x] Capture observed HTML snippets in this plan's "End-to-end
       verification" section before declaring done.
 

@@ -130,7 +130,7 @@ Observations:
 `pampa::writers::json::write_with_config` operates in two passes:
 
 1. **Build pass**: constructs a `serde_json::Value` tree. Every AST
-   node becomes a `Value::Object` (IndexMap<String, Value>) with
+   node becomes a `Value::Object` (`IndexMap<String, Value>`) with
    freshly-allocated `String` keys (`"c"`, `"s"`, `"t"`, `"attrS"`,
    `"targetS"`, etc.) and `Value::*` leaves. For a document producing
    \~10 MB of JSON, this tree is on the order of tens of megabytes in

@@ -468,7 +468,7 @@ test"; do not expand L0 to cover schema runtime wiring.
 
 | Field | Guarantee |
 |---|---|
-| `listing_item` | A [`ListingItemInfo`] holding per-document advertisement for listings consumers. **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; L1's `ListingItemInfoStage` fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the only open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
+| `listing_item` | A \[`ListingItemInfo`\] holding per-document advertisement for listings consumers. **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; L1's `ListingItemInfoStage` fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the only open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
 
 ### New §"Scoped feature surfaces"
 

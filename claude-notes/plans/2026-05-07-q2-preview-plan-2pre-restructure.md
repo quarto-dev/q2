@@ -341,7 +341,7 @@ Several documents currently reference paths that 2pre changes. Update as part of
 
 - **`~/docs/demo-playground/elliot/render_components.qmd`** — references `/hub-client/src/components/render/ReactAstDebugRenderer.tsx` (4 references at lines 7, 15, 33/37, 51) and `/hub-client/src/components/render/ReactRenderer.tsx`, plus the `componentRegistry` symbol name in the code-block snippet (lines 25-32). **2pre does the path-and-symbol edit, but not blanket:**
   - Lines 7, 15, 33, 37 — references to the renderer-as-implementation. Repoint to `/hub-client/src/components/render/q2-debug/` (the new q2-debug barrel directory).
-  - Line 51 — *"Most/all of that plumbing is in `renderChildrenRegistry` in [ReactAstDebugRenderer.tsx]"*. After 2pre, `renderChildrenRegistry` lives in `framework/dispatch.tsx`, **not** `q2-debug/`. Repoint this one specifically to `/hub-client/src/components/render/framework/dispatch.tsx`.
+  - Line 51 — *"Most/all of that plumbing is in `renderChildrenRegistry` in \[ReactAstDebugRenderer.tsx\]"*. After 2pre, `renderChildrenRegistry` lives in `framework/dispatch.tsx`, **not** `q2-debug/`. Repoint this one specifically to `/hub-client/src/components/render/framework/dispatch.tsx`.
   - Lines 25-32 (code snippet) — rename `componentRegistry` → `q2DebugRegistry` to match the source.
   - `ReactRenderer.tsx`\'s path is unchanged; references to it stay.
 

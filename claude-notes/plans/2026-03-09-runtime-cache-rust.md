@@ -202,5 +202,5 @@ used for future LRU eviction if needed.
 ## Reference
 
 See parent plan (`claude-notes/plans/2026-03-09-runtime-cache.md`) for API
-design, conventions, and design decisions (async rationale, Vec<u8> rationale,
+design, conventions, and design decisions (async rationale, `Vec<u8>` rationale,
 atomic write rationale, etc.).

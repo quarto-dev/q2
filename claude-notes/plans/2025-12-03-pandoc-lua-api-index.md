@@ -567,7 +567,7 @@ Plain-text document layout (for custom writers).
 | before_non_blank | 6130-6146 | Conditional before non-blank |
 | blanklines | 6148-6163 | Insert blank lines |
 | braces | 6165-6180 | Wrap in {} |
-| brackets | 6182-6197 | Wrap in [] |
+| brackets | 6182-6197 | Wrap in `[]` |
 | cblock | 6199-6219 | Centered block |
 | chomp | 6221-6236 | Remove trailing blanks |
 | concat | 6238-6256 | Concatenate Docs |
