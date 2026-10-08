@@ -214,7 +214,7 @@ could run on ARM64 is too old for the detection.
 
 ### D5. Smoke-test the real ARM install path every night
 
-Add `windows-11-arm` to `nightly.yml`'s `install-smoke` matrix. (As built:
+Add `windows-11-arm` to `nightly.yml`\'s `install-smoke` matrix. (As built:
 the Windows smoke tests run the installer twice, under PowerShell 7 and
 under Windows PowerShell 5.1. Detection relies on different .NET runtimes
 in each, and 5.1 is what most `irm | iex` users get.) Besides the

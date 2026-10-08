@@ -7,9 +7,12 @@
 339 → 0 outside three repro fixtures) and quoted shortcodes (Q-16-3 95 → 0,
 Q-16-5 77 → 0), 2026-10-08. Mechanical escaping, six per-file agent batches
 for errors, four for brackets, three for shortcodes, and hand tails; the star
-queue below is historical. The render now reports 1449 / 1449 and 2 warnings,
-both one q2 bug filed with a repro: the YAML provenance desync for a folded
-scalar holding a non-ASCII character (bd-e0e9kd4a, in progress). A third,
+queue below is historical. The render now reports 1451 / 1451 with no
+diagnostics at all (after merging `origin/main` once more on 2026-10-08: two
+new plans, three `\'` escapes and one code span). The last two warnings were
+one q2 bug filed with a repro, the YAML provenance desync for a folded scalar
+holding a non-ASCII character (bd-e0e9kd4a, in progress); worked around by
+spelling two cosmetic `status:` blocks in ASCII. A third,
 Q-2-50 on a `{{r}}` fence line inside a four-backtick block, turned out to be
 by design (bd-3djx9ris, closed: the nested check is what catches Quarto 1
 openers hidden in display fences); the one note that documents that idiom
@@ -181,6 +184,7 @@ whose original markup had an unbalanced backtick.
 | 2026-10-07, last eleven by hand; fixtures excluded | 1456 / 1456 | 0 | 0 |
 | 2026-10-08, bracket warnings (four batches + hand) | 1456 / 1456 | 0 | 0 |
 | 2026-10-08, shortcode warnings (three batches + hand) | 1456 / 1456 | 0 | 0 |
+| 2026-10-08, uncoded warnings, fixtures excluded, `origin/main` merged | 1451 / 1451 | 0 | 0 |
 
 Remaining error classes (nightly .20261007): uncoded parse errors 372 (153 files),
 Q-2-12 33, Q-2-11 33, Q-2-41 24, Q-2-5 12, Q-2-35 11, Q-2-13 8, Q-2-2 7, plus a
