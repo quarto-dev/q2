@@ -7,7 +7,7 @@
 
 ## Triage verdict
 
-**Ready to design.** All three defects reproduce at HEAD at one call site. Defects (1) and (2) can be fixed locally in pampa. Defect (3) needs one decision: fix `quarto-yaml` upstream (cleanest, but needs a crate release and a bump) or recover the position inside pampa.
+**Ready to design; Phase 2 is blocked on an upstream quarto-yaml release** (`qy-scan-error-location-f9r4yvxq`). All three defects reproduce at HEAD at one call site. Defects (1) and (2) can be fixed locally in pampa. Defect (3) needs one decision: fix `quarto-yaml` upstream (cleanest, but needs a crate release and a bump) or recover the position inside pampa.
 
 ## Issue context
 
@@ -87,6 +87,8 @@ Production emitters of Q-0-99 in pampa (through `DiagnosticCollector::{error,war
    - (c) Do (b) now and (a) later.
 
    I lean toward (a). Do you want an upstream quarto-yaml change in scope here?
+
+   **Decided (user, 2026-10-08): (a).** Filed upstream as `qy-scan-error-location-f9r4yvxq` in the quarto-yaml skein (repo `posit-dev/quarto-yaml`, local clone `~/repos/github/posit-dev/quarto-yaml`). A separate agent fixes it and publishes a new crate version. The q2 side of this plan resumes after that release: bump the workspace `quarto-yaml` dep, then consume `Error::ParseError { location, .. }` in `rawblock_to_config_value`.
 2. **Should the collector helpers change for every caller?** One option is to give `DiagnosticCollector::error_at/warn_at` a required `code` argument (or remove them), so the Q-0-99-with-path pattern can't recur. The other is to fix only this call site and leave the helpers for genuine internal invariants.
 3. **Should the other Q-0-99 sites be in this PR?** The caption-without-table fallback and the too-deeply-nested error are both user-reachable. Fold them in, or file separate strands? The depth-limit case would need its own new code.
 4. **Message shape.** Keep the title "YAML Syntax Error" from the Q-1-1 catalog, put the scanner info (for example "did not find expected ',' or ']'") in `problem`, and add a hint naming the frontmatter. Or keep a custom title such as "Failed to parse YAML frontmatter"?
