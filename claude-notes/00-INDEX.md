@@ -58,11 +58,11 @@ We track work in Beads instead of Markdown. Run `br quickstart` to see how. Keep
 
 - **[error-reporting-design-research.md](error-reporting-design-research.md)** - Comprehensive design for error reporting and console print subsystem: ariadne (visual errors), R cli (structured output), tidyverse style guide (message best practices), Markdown-based API with Pandoc AST, multiple output formats (ANSI/HTML/JSON)
 - **[error-id-system-design.md](error-id-system-design.md)** - TypeScript-style error code system for Quarto. Format: `Q-<subsystem>-<number>` (e.g., Q-1-1). JSON catalog, optional but encouraged, enables Googleable error codes <!-- quarto-error-code-audit-ignore-file -->
-- **`crates/quarto-error-reporting/`** - ✅ **Phase 1 Complete!** Error reporting with TypeScript-style error codes. Includes DiagnosticMessage types, builder API, error catalog (JSON), Q-<subsystem>-<number> format. Phase 2-4 planned (rendering, console helpers)
+- **`crates/quarto-error-reporting/`** - ✅ **Phase 1 Complete!** Error reporting with TypeScript-style error codes. Includes DiagnosticMessage types, builder API, error catalog (JSON), Q-\<subsystem>-\<number> format. Phase 2-4 planned (rendering, console helpers)
 
 ## YAML and Validation
 
-- **[yaml-schema-from-yaml-design.md](yaml-schema-from-yaml-design.md)** - **[REVISED FOR YAML 1.2]** Design for loading Quarto schemas from YAML files. **Critical change**: Uses YamlWithSourceInfo instead of serde to ensure YAML 1.2 compatibility and source tracking. Required for Quarto extensions support. Includes complete implementation plan for `validate-yaml` binary. See YAML-1.2-REQUIREMENT.md in both quarto-yaml and quarto-yaml-validation crates
+- **[yaml-schema-from-yaml-design.md](yaml-schema-from-yaml-design.md)** - **\[REVISED FOR YAML 1.2\]** Design for loading Quarto schemas from YAML files. **Critical change**: Uses YamlWithSourceInfo instead of serde to ensure YAML 1.2 compatibility and source tracking. Required for Quarto extensions support. Includes complete implementation plan for `validate-yaml` binary. See YAML-1.2-REQUIREMENT.md in both quarto-yaml and quarto-yaml-validation crates
 
 ## JavaScript Runtime Dependencies
 
@@ -174,7 +174,7 @@ LSP Features + CLI Validation
 
 ### YAML Tags
 - **Choice**: Full tag support via yaml-rust2's Event API, with YamlWithSourceInfo tag field
-- **Rationale**: yaml-rust2 provides complete tag support through Option<Tag> in Event::Scalar/SequenceStart/MappingStart, compatible with TypeScript's tagged value representation, enables !expr for R/Python expressions
+- **Rationale**: yaml-rust2 provides complete tag support through `Option<Tag>` in Event::Scalar/SequenceStart/MappingStart, compatible with TypeScript's tagged value representation, enables !expr for R/Python expressions
 
 ### CLI Architecture
 - **Choice**: Workspace architecture (turborepo-style) + Commands directory (cargo-style)

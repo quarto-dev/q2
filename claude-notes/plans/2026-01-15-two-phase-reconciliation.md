@@ -134,7 +134,7 @@ Lists (`Vec<Vec<Block>>`) use purely positional matching—item 0 vs item 0, etc
 
 Current algorithm pairs: (0↔0), (1↔1), (2↔2), resulting in all mismatches.
 
-Ideal: after[1]↔before[0], after[2]↔before[1], after[0]↔new
+Ideal: `after[1]↔before[0]`, `after[2]↔before[1]`, `after[0]↔new`
 
 ---
 
@@ -201,8 +201,8 @@ Recursing into misaligned containers "tries too hard" to preserve source locatio
 
 **Phase 1 (exact matches):**
 - `after[0]` (Div "0"): hash has no match → needs phase 2
-- `after[1]` (Div "1"): hash matches `before[0]` → `KeepBefore(0)`, mark before[0] used
-- `after[2]` (Div "2"): hash matches `before[1]` → `KeepBefore(1)`, mark before[1] used
+- `after[1]` (Div "1"): hash matches `before[0]` → `KeepBefore(0)`, mark `before[0]` used
+- `after[2]` (Div "2"): hash matches `before[1]` → `KeepBefore(1)`, mark `before[1]` used
 
 **Phase 2 (positional matches):**
 - `after[0]`: Is `before[0]` unused? **NO** (claimed in phase 1) → needs phase 3

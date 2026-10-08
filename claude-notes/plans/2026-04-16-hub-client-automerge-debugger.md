@@ -289,23 +289,23 @@ between the two pages.
       Chrome MCP extension is not connected in this session, and the
       authed flows require real Google sign-in that cannot be driven
       autonomously):
-      - [ ] Navigate to `/debug.html` while signed out → gate screen
-            saying "Go to Quarto Hub and sign in".
-      - [ ] Sign in via main app, reload `/debug.html` → inspector UI
-            with "Connecting…" / "Connected" indicator.
-      - [ ] Quick-pick a local project in the sidebar → subscribes,
-            renders JSON, message log populates with sync traffic.
-      - [ ] Paste an `automerge:...` URL for a non-local document →
-            subscribes as expected; shows "unavailable" if the server
-            doesn't have it.
-      - [ ] Switch to "Local IndexedDB" mode → banner appears,
-            MessageLog disappears, "Stored locally" panel lists doc IDs
-            from disk; clicking one loads without any network traffic.
-      - [ ] Open `/debug.html#doc=automerge:<any-known-id>` in a fresh
-            tab → the doc is auto-subscribed on first load.
-      - [ ] Disconnect / reconnect cleanly (no stuck "Connecting…").
-      - [ ] No console errors; message-log filters (type / direction /
-            document) work.
+  - [ ] Navigate to `/debug.html` while signed out → gate screen
+        saying "Go to Quarto Hub and sign in".
+  - [ ] Sign in via main app, reload `/debug.html` → inspector UI
+        with "Connecting…" / "Connected" indicator.
+  - [ ] Quick-pick a local project in the sidebar → subscribes,
+        renders JSON, message log populates with sync traffic.
+  - [ ] Paste an `automerge:...` URL for a non-local document →
+        subscribes as expected; shows "unavailable" if the server
+        doesn't have it.
+  - [ ] Switch to "Local IndexedDB" mode → banner appears,
+        MessageLog disappears, "Stored locally" panel lists doc IDs
+        from disk; clicking one loads without any network traffic.
+  - [ ] Open `/debug.html#doc=automerge:<any-known-id>` in a fresh
+        tab → the doc is auto-subscribed on first load.
+  - [ ] Disconnect / reconnect cleanly (no stuck "Connecting…").
+  - [ ] No console errors; message-log filters (type / direction /
+        document) work.
 - [ ] **Update `hub-client/changelog.md`** — requires the first commit's
       hash. Per the project's two-commit workflow in CLAUDE.md, this is
       added in a second commit once the feature commit is merged.

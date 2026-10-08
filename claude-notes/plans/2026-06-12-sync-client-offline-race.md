@@ -395,7 +395,9 @@ production restart scenario).
 
 (none currently)
 
+```{=html}
 <details><summary>Resolved 2026-06-12 (see above)</summary>
+```
 
 1. **Hub-side accept policy** (if Phase 1 lands on (b)): should the
    hub accept any announced document from an authenticated client
@@ -411,4 +413,6 @@ production restart scenario).
    Part 1 fix) or recreate-and-clean? If the content was throwaway,
    recreate is zero-effort once the scan tool exists.
 
+```{=html}
 </details>
+```

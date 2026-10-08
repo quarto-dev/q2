@@ -563,7 +563,7 @@ longer re-writes the wrong block on blur).
   block* (content mismatch) **closes** the editor and discards the draft; drop-focus best-effort.
   *(DROP + no-spurious are genuinely covered + fail-on-revert verified. KEEP and the commit-on-drop
   corruption are the fix below.)*
-- [\~] **Active editor goes hidden** (collapsed region → drop): **DEFERRED 2026-06-13.** The original
+- \[\~\] **Active editor goes hidden** (collapsed region → drop): **DEFERRED 2026-06-13.** The original
   tile-based visibility check was *exactly* what broke KEEP — while editing, the active block is a
   textarea wrapper with **no `data-block-pool-id`**, so `tileForAnchorR0` can never find it → always
   reads "hidden" → spurious drop. The fix below **removed** that broken check (restoring KEEP). The
@@ -638,7 +638,7 @@ reimplementation; fail-on-revert mandatory):**
   Fail-on-revert verified (reverting the guard → stale draft committed). Plus a follow-up hoisted the
   guard to the top of `commitIfDirty` so the *cancel* branch can't fire on a stale textarea either
   (commit `2e6e1133`; hardening — the race is not jsdom-reproducible, test kept as a regression guard).
-- [\~] **Collapsed-region drop (reworked)**: **DEFERRED → P2.5/Phase-3 Playwright** (jsdom has no
+- \[\~\] **Collapsed-region drop (reworked)**: **DEFERRED → P2.5/Phase-3 Playwright** (jsdom has no
   layout; the `activeEditRegionRef`-box check can't be tested without real rects). The broken
   tile-based check was removed; this correct version is the remaining piece. Documented in code + ↑.
 - [x] Existing **DROP (content mismatch)** and **no-spurious-on-fresh-open** stay green; fail-on-revert
@@ -729,7 +729,7 @@ cursors close the **cross-actor** window (the rare, hard one).
   `usePreviewEdit` path, no active text editor → live-identity doesn't apply).
 - [x] **No regression:** preview-renderer **355 unit + 368 integration + typecheck** green; existing
   `p2-3b` KEEP/DROP/commit-guard tests stay green. Rust-free (no Rust/WASM delta).
-- [\~] **Browser-tier self-heal-KEEP guard — REVEALED A REAL BUG, deferred (bd-k1evg0g1).** The reshaped
+- \[\~\] **Browser-tier self-heal-KEEP guard — REVEALED A REAL BUG, deferred (bd-k1evg0g1).** The reshaped
   `q2-preview-self-heal-on-write.spec.ts` (real hub + Automerge) asserts self-heal KEEP survives a real
   collaborator shift. It FAILS — exposing that `findReanchorCandidate` DROPs a TOP-LEVEL block when a
   preceding block shifts past the active block's old `anchorR0` (see the corrected watch-item below). Left
@@ -1015,7 +1015,7 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
   it reaches the iframe bundle via the chip tooltip). Fail-on-revert verified cold (orchestrator-run):
   removing the chip `preventDefault`/`eat` reds (A) (host tears the editor down on the click), and
   disabling the dispatchers chord branch reds (B)+(C). Restore → 3/3 green.)*
-- [\~] **(cross-ref) Collapsed-region drop** (from P2.3b — see the §2b/Self-heal deferral notes):
+- \[\~\] **(cross-ref) Collapsed-region drop** (from P2.3b — see the §2b/Self-heal deferral notes):
   a collaborator re-render that moves the active *unchanged* edited block into a `display:none`
   region → drop, measuring `activeEditRegionRef`\'s box after the re-anchor remount. Needs real
   layout. Already removed from the P2.3b inline check; this is the remaining browser-tier piece.

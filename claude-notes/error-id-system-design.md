@@ -52,15 +52,15 @@ Organize codes by subsystem using the first number after `Q-`:
 
 | Subsystem | Number | Examples |
 |-----------|--------|----------|
-| YAML and Configuration | 1 | Q-1-1: YAML syntax error<br>Q-1-2: Invalid schema<br>Q-1-50: Config merge conflict |
-| Markdown and Parsing | 2 | Q-2-1: Markdown syntax error<br>Q-2-301: Unclosed code block<br>Q-2-450: Invalid div syntax |
-| Engines and Execution | 3 | Q-3-1: Engine not found<br>Q-3-405: Jupyter execution failed<br>Q-3-701: Knitr error |
-| Rendering and Formats | 4 | Q-4-1: Unknown format<br>Q-4-102: Invalid PDF config<br>Q-4-550: HTML template error |
-| Projects and Structure | 5 | Q-5-1: Invalid project structure<br>Q-5-201: Missing \_quarto.yml<br>Q-5-403: Circular reference |
-| Extensions and Plugins | 6 | Q-6-1: Extension not found<br>Q-6-234: Filter error<br>Q-6-501: Shortcode error |
-| CLI and Tools | 7 | Q-7-1: Invalid command<br>Q-7-301: LSP error<br>Q-7-502: Preview server error |
-| Publishing and Deployment | 8 | Q-8-1: Publish target not found<br>Q-8-234: Authentication failed<br>Q-8-501: Deployment error |
-| Internal/System Errors | 0 | Q-0-1: Internal error (unreachable code)<br>Q-0-2: Assertion failed |
+| YAML and Configuration | 1 | Q-1-1: YAML syntax error`<br>`{=html}Q-1-2: Invalid schema`<br>`{=html}Q-1-50: Config merge conflict |
+| Markdown and Parsing | 2 | Q-2-1: Markdown syntax error`<br>`{=html}Q-2-301: Unclosed code block`<br>`{=html}Q-2-450: Invalid div syntax |
+| Engines and Execution | 3 | Q-3-1: Engine not found`<br>`{=html}Q-3-405: Jupyter execution failed`<br>`{=html}Q-3-701: Knitr error |
+| Rendering and Formats | 4 | Q-4-1: Unknown format`<br>`{=html}Q-4-102: Invalid PDF config`<br>`{=html}Q-4-550: HTML template error |
+| Projects and Structure | 5 | Q-5-1: Invalid project structure`<br>`{=html}Q-5-201: Missing \_quarto.yml`<br>`{=html}Q-5-403: Circular reference |
+| Extensions and Plugins | 6 | Q-6-1: Extension not found`<br>`{=html}Q-6-234: Filter error`<br>`{=html}Q-6-501: Shortcode error |
+| CLI and Tools | 7 | Q-7-1: Invalid command`<br>`{=html}Q-7-301: LSP error`<br>`{=html}Q-7-502: Preview server error |
+| Publishing and Deployment | 8 | Q-8-1: Publish target not found`<br>`{=html}Q-8-234: Authentication failed`<br>`{=html}Q-8-501: Deployment error |
+| Internal/System Errors | 0 | Q-0-1: Internal error (unreachable code)`<br>`{=html}Q-0-2: Assertion failed |
 | Reserved for Future | 9+ | Available for new subsystems |
 
 **Numbering within subsystems**:

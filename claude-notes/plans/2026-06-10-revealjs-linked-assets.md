@@ -6,7 +6,7 @@
 **Status:** DRAFT — iterating on the plan. **Do not implement until the user gives the go-ahead.**
 
 > This is a first draft meant for discussion. Open questions are called out
-> inline as **[Q-n]**; design decisions we still need to make are in
+> inline as **\[Q-n\]**; design decisions we still need to make are in
 > §"Open questions / decisions". Expect this document to change before any code.
 
 ## Problem
@@ -67,7 +67,7 @@ those — the deck must be **served** (a VFS-backed virtual fetch / service
 worker), not inlined. So fixing this strand is a prerequisite to doing
 bd-kjrpya2d correctly, and it changes that approach from "inline" to "serve".
 (The interim inline TS in `preview-renderer` — `assetWalker`/`RawBlock`/
-`iframePostProcessor` — likely gets reverted or reworked; see **[Q-7]**.)
+`iframePostProcessor` — likely gets reverted or reworked; see **\[Q-7\]**.)
 
 ## How `format: html` does it today (the model to mirror)
 
@@ -101,13 +101,13 @@ Make reveal participate in steps 2–4 instead of inlining:
    **in-binary, not on disk**, we can't use `store_html_dependencies`
    (it `runtime.file_read`s a path); we add a small helper that registers an
    `Artifact::from_bytes(...)` directly from the `include_str!` constants.
-   **[Q-1]** scope: Project (shared `site_libs`, deduped) for website renders;
+   **\[Q-1\]** scope: Project (shared `site_libs`, deduped) for website renders;
    Page for single-doc — mirror how html deps pick scope.
 3. **Emit `<link>` / `<script src>`** in the reveal scaffold using the
    resolver-computed URLs (the `css_paths`/`script_paths` the rest of
    apply_template already builds), instead of inline `<style>`/`<script>`.
    The `Reveal.initialize({…})` inline `<script>` stays inline (it's
-   per-document config, not a shared asset) — **[Q-2]**.
+   per-document config, not a shared asset) — **\[Q-2\]**.
 4. **Flush** rides the existing paths automatically once the artifacts are
    registered with the right scope (website `flush_site_libs`, single-doc
    `<doc>_files`, preview VFS flush).
@@ -125,33 +125,33 @@ constructors in `resource_resolver.rs`); the work is making reveal *use* it.
 
 ## Decisions (resolved with user 2026-06-10)
 
-- **[Q-1] Artifact scope (Project vs Page).** OPEN (implementation detail, not a
+- **\[Q-1\] Artifact scope (Project vs Page).** OPEN (implementation detail, not a
   product decision). Mirror the html rule — Project scope under a website
   project (shared/deduped `site_libs`), Page scope for a lone `q2 render
   deck.qmd` (`<doc>_files`). Confirm exactly how html deps pick scope in
   `store_html_dependencies` callers during Phase 1.
-- **[Q-2] What stays inline.** ✅ DECIDED: `Reveal.initialize(config)` stays
+- **\[Q-2\] What stays inline.** ✅ DECIDED: `Reveal.initialize(config)` stays
   inline (per-doc config); everything vendored/shared is linked.
-- **[Q-3] Theme handling.** ✅ DECIDED: single theme (`white`) is fine for now —
+- **\[Q-3\] Theme handling.** ✅ DECIDED: single theme (`white`) is fine for now —
   full reveal theming is explicitly future work. So: link the one theme CSS as
   an artifact (`theme-white.css` or similar); the per-theme/multi-theme dedup
   story comes with the future theming phase, not here.
-- **[Q-4] `embed-resources: true` opt-in.** ✅ DECIDED: **do NOT offer
+- **\[Q-4\] `embed-resources: true` opt-in.** ✅ DECIDED: **do NOT offer
   `embed-resources` at all yet.** Linked is the **only** mode. Self-contained
   single-file output is a big cross-cutting feature (Quarto 2 emits complex
   HTML/JS that doesn't embed easily) to be handled **outside** revealjs later —
   out of scope here. (Removes the old Phase 4.)
-- **[Q-5] reveal.js monolith vs plugins.** ✅ DECIDED: keep one `reveal.js`
+- **\[Q-5\] reveal.js monolith vs plugins.** ✅ DECIDED: keep one `reveal.js`
   artifact; plugins are a later phase, out of scope.
-- **[Q-6] WASM/preview byte source.** ✅ CONFIRMED: the WASM render must register
+- **\[Q-6\] WASM/preview byte source.** ✅ CONFIRMED: the WASM render must register
   + flush these artifacts to the VFS the same way html deps do, so a deck
   previewed *directly* (not embedded) loads its libs. The embedded-iframe case
   is bd-kjrpya2d's separate served-fetch work.
-- **[Q-7] Revert the inline-embedding behavior.** ✅ DECIDED: **revert any
+- **\[Q-7\] Revert the inline-embedding behavior.** ✅ DECIDED: **revert any
   changed behavior relative to `main` that embeds resources into an HTML file.**
   See §"Revert scope" below — this is its own phase (Phase R), and it can/should
   happen up front since it's independent of the reveal link-emission work.
-- **[Q-8] Scope boundary of this strand.** ✅ DECIDED: this strand is
+- **\[Q-8\] Scope boundary of this strand.** ✅ DECIDED: this strand is
   **render-side only** (link emission + flush, single-doc + website + direct
   preview), verifiable without a browser. The preview *served-fetch* iframe
   rework + embed UX stays under bd-kjrpya2d.
@@ -172,7 +172,7 @@ embed-in-preview work on this branch:
   - `ts-packages/preview-renderer/src/q2-preview/embedIframe.ts` + its test —
     new files; delete. Plus the embed tests added to `assetWalker.test.ts`,
     `iframePostProcessor.embed.test.ts`, and `RawBlock.test.tsx`.
-- **[Q-R1] Decide: Rust VFS-sync of resources-scoped `.html`** (discovery
+- **\[Q-R1\] Decide: Rust VFS-sync of resources-scoped `.html`** (discovery
   `resource_files` category, `HubConfig.resource_files`,
   `config::resolve_project_resource_html`, `PreviewConfig.resource_html_files`,
   `preview.rs` wiring). This does **not** embed into HTML — it makes resource
@@ -205,7 +205,7 @@ docs feature, not resource-embedding.
   + `register_reveal_assets(&mut ArtifactStore, theme)` in `revealjs/assemble.rs`:
   in-binary `include_str!` bytes → `Artifact::from_string` with keys
   `css:revealjs:<order>` / `js:revealjs:reveal` (order encoded for the CSS
-  cascade), paths `revealjs/<file>`, **`Project` scope** ([Q-1]: Project for
+  cascade), paths `revealjs/<file>`, **`Project` scope** (\[Q-1\]: Project for
   dedup; resolver handles single-doc vs website). Registered from
   `CompileThemeCssStage`\'s reveal branch (the point that already establishes a
   doc's CSS-framework artifacts, where the Bootstrap path is skipped).
@@ -218,7 +218,7 @@ docs feature, not resource-embedding.
   the real binary (`q2 render talk.qmd`): 1016-byte HTML, 4 links + reveal.js
   script, assets at `talk_files/revealjs/*`. Website dedup verified
   (`site_libs/revealjs/*` written once, no per-deck `_files/revealjs/`).
-  **Preview/WASM ([Q-6]) not yet exercised** — same Project-scoped artifact
+  **Preview/WASM (\[Q-6\]) not yet exercised** — same Project-scoped artifact
   path flushes to the VFS, but confirm with a WASM build + a directly-previewed
   deck (separate from the embed/served work).
 - [x] **4 — Re-stage examples + verify.** DONE. `cargo xtask stage-doc-examples`
@@ -232,7 +232,7 @@ docs feature, not resource-embedding.
   (incl. WASM build + hub-client) passed.
 - [ ] **5 — Hand back to bd-kjrpya2d** for the served-iframe preview rework
   (now that decks reference `slides_files/revealjs/…`, the embed must *serve*).
-  Also still open: **[Q-6] direct-deck preview** — a deck opened *directly* in
+  Also still open: **\[Q-6\] direct-deck preview** — a deck opened *directly* in
   `q2 preview` (not embedded). The WASM build compiles and uses the same
   artifact path, but the q2-preview SPA's reveal-deck rendering + VFS lib
   loading is not yet browser-verified.

@@ -409,7 +409,7 @@ List noise is gone.
   filter.lua, oracle.json}`, `regen-oracles.sh` (refuses non-pinned
   pandoc; pin in `ORACLE_VERSION` = 3.9.0.2), normalizer strips
   q2 source extensions (`astContext`, node `s`/`a`,
-  api-version[3]), runner drives the **real pampa binary**
+  `api-version[3]`), runner drives the **real pampa binary**
   (`CARGO_BIN_EXE_pampa … -F … -t json`), xfail ratchet verified
   by fault injection. Seeded with 8 cases — baseline 2 pass
   (reassignment control, all-5-fuzzy-Div-forms guard), 6 xfail
@@ -593,7 +593,7 @@ test exists and breaks, STOP and show it before deleting/updating.
   not property-indexable + no walk (21), pandoc.Pandoc/Meta*
   missing (17), SimpleTable missing (2).
 - [x] S1. Citation as userdata + Cite peekers — DONE 2026-07-13.
-  New `LuaCitation` (types.rs): Rc<RefCell<Citation>> cell +
+  New `LuaCitation` (types.rs): `Rc<RefCell<Citation>>` cell +
   PropertyCache on the Inlines-valued `prefix`/`suffix` (aliased
   reads, `:insert` persists), eager typed setters (id/mode/
   prefix/suffix/note_num/hash), structural `__eq` via the
@@ -618,7 +618,7 @@ test exists and breaks, STOP and show it before deleting/updating.
   normalized JSON byte-identical to pandoc 3.9.0.2; HTML matches.
 - [x] S2. ListAttributes as userdata + OrderedList aliases — DONE
   2026-07-13. `LuaListAttributes` rebuilt as typed userdata
-  (Rc<RefCell<triple>> cell, start/style/delimiter properties
+  (`Rc<RefCell<triple>>` cell, start/style/delimiter properties
   with eager validated setters, structural `__eq`, `:clone`; no
   `__tostring` — pandoc has none either). `pandoc.ListAttributes`
   returns userdata with Pandoc defaults; garbage style/delim is a
@@ -640,7 +640,7 @@ test exists and breaks, STOP and show it before deleting/updating.
   type="I">` matches.
 - [x] S3. Cell/Row/TableHead/TableFoot/TableBody + Caption — DONE
   2026-07-13. All six table-part wrappers rebuilt as cache-backed
-  userdata (Rc<RefCell<T>> + PropertyCache, shared
+  userdata (`Rc<RefCell<T>>` + PropertyCache, shared
   `table_part_userdata!` skeleton in constructors.rs): typed
   properties with eager validated setters, attr +
   identifier/classes/attributes aliases routed through a cached

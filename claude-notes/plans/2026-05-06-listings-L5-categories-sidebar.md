@@ -456,7 +456,7 @@ it:
 `item-default.template` after `$if(subtitle)$ … $endif$` and
 before `$if(description)$`:
 
-```
+````
 $if(show.categories)$
 $if(category-html)$
 ```{=html}
@@ -464,7 +464,7 @@ $category-html$
 ```
 $endif$
 $endif$
-```
+````
 
 `item-grid.template` similarly, slotted between subtitle and
 description.

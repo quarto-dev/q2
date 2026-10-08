@@ -140,7 +140,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 1: Tests first (TDD)
 
-- [x]**1.0** Write failing tests before any implementation changes. Add these
+- [x] **1.0** Write failing tests before any implementation changes. Add these
   tests to the `#[cfg(test)]` module in `shortcode.rs`:
 
   - **`test_args_are_plain_strings`**: Call a handler with
@@ -162,7 +162,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 2: Implementation
 
-- [x]**2.1** Fix `build_args_table` (\~shortcode.rs:268): pass positional args
+- [x] **2.1** Fix `build_args_table` (\~shortcode.rs:268): pass positional args
   as plain strings in a sequential table. Do NOT include keyword args.
 
   Current (broken):
@@ -193,7 +193,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
   }
   ```
 
-- [x]**2.2** Fix `build_kwargs_table` (\~shortcode.rs:287): add `__index`
+- [x] **2.2** Fix `build_kwargs_table` (\~shortcode.rs:287): add `__index`
   metatable that returns empty `pandoc.Inlines({})` for missing keys.
 
   **Truthiness note:** This changes missing-key behavior from `nil` (falsy) to
@@ -212,7 +212,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
   table.set_metatable(Some(mt))?;
   ```
 
-- [x]**2.3** Replace the existing Rust `read_arg` implementation with a Lua
+- [x] **2.3** Replace the existing Rust `read_arg` implementation with a Lua
   one that matches TS Quarto. The current Rust implementation
   (shortcode.rs:355-365) unwraps `{value=...}` tables — this is dead code
   after item 2.1 changes args to plain strings.
@@ -241,19 +241,19 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 3: Update existing tests
 
-- [x]**3.1** Update `test_handler_receives_args` (shortcode.rs:691-721).
+- [x] **3.1** Update `test_handler_receives_args` (shortcode.rs:691-721).
   Currently the Lua handler does `return args[1].value` which relies on the
   old `{value=...}` wrapping. Change to `return args[1]` since args are now
   plain strings.
 
-- [x]**3.2** Verify `test_read_arg_helper` (shortcode.rs:874-905) still
+- [x] **3.2** Verify `test_read_arg_helper` (shortcode.rs:874-905) still
   passes without changes. After the fix, `args[1]` is a plain string, so
   `read_arg(args, 1)` hits the string pass-through path. This test should
   pass as-is.
 
 ### Phase 4: Integration test
 
-- [x]**4.1** Update the lipsum smoke-all test fixture at
+- [x] **4.1** Update the lipsum smoke-all test fixture at
   `crates/quarto/tests/smoke-all/extensions/lipsum-shortcode/test.qmd`.
   Currently asserts `ensureFileRegexMatches: ["Lorem ipsum dolor sit amet"]`
   which passes even with 5 paragraphs (the default when arg parsing fails).
@@ -264,10 +264,10 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 5: Verification
 
-- [x]**5.1** Run `cargo nextest run -p pampa` — all shortcode tests pass.
-- [x]**5.2** Run `cargo nextest run -p quarto --test smoke_all` — lipsum
+- [x] **5.1** Run `cargo nextest run -p pampa` — all shortcode tests pass.
+- [x] **5.2** Run `cargo nextest run -p quarto --test smoke_all` — lipsum
   integration test passes with tightened assertion.
-- [x]**5.3** Run `cargo nextest run --workspace` — no regressions across
+- [x] **5.3** Run `cargo nextest run --workspace` — no regressions across
   the monorepo.
 
 ## Design Notes

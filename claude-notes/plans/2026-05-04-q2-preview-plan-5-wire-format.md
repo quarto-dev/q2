@@ -776,7 +776,7 @@ the writer emits code 4.
       single ID. **Read-side note:** deserialization rebuilds each anchor
       with a fresh `Arc`, so a subsequent re-serialization produces N
       copies — this test verifies the *write-time* optimization keyed
-      on `Arc::as_ptr`. See [[anchor-dedup-invariant]] in §"Risk areas"
+      on `Arc::as_ptr`. See \[\[anchor-dedup-invariant\]\] in §"Risk areas"
       for the broader contract. Test passes Plan-5-alone (no shortcode
       resolver needed — Arc sharing is hand-wired).
 - [x] Streaming-writer parity test. Helper shape:
@@ -890,7 +890,7 @@ starting Plan 5:
   **writer-side optimization only** — deserialization rebuilds each
   anchor with a fresh `Arc`, so pool-size is not stable over
   read-write-read. AST content and Plan-3 hashes (which exclude
-  `source_info`) are stable. See [[anchor-dedup-invariant]] in §"Risk
+  `source_info`) are stable. See \[\[anchor-dedup-invariant\]\] in §"Risk
   areas".
 - **TypeScript hand-mirror updates**: see §"TypeScript wire-format
   definitions" above. Settled — code 4's `d` becomes `{ by; from? }`,
@@ -991,7 +991,7 @@ Phase 6 for test-file placement and per-phase landing.)
   the shared target exactly once and each Generated entry's
   `from[0].si_id` references it by ID. *Read-side note:* deserialization
   rebuilds each anchor with a fresh `Arc`; this test only verifies the
-  write-time optimization (see [[anchor-dedup-invariant]] in §"Risk
+  write-time optimization (see \[\[anchor-dedup-invariant\]\] in §"Risk
   areas"). Test passes Plan-5-alone (no shortcode resolver needed).
 - **Streaming-writer parity test**: implement helper
   `roundtrip_via_stream(ast) -> ast` that streams the AST via
@@ -1070,7 +1070,7 @@ Phase 6 for test-file placement and per-phase landing.)
   `CustomNode` blocks, not the pool; don't confuse them.
 - **Pool ID stability**: changing the format of pool entries shouldn't
   affect their IDs (which are sequential by intern order). Verify.
-- **<a id="anchor-dedup-invariant"></a>Anchor dedup is a writer-side
+- **`<a id="anchor-dedup-invariant"></a>`{=html}Anchor dedup is a writer-side
   optimization, not a round-trip-stable property.** The writer's
   `arc_parent_ids` HashMap is keyed by `Arc::as_ptr`; multiple anchors
   pointing to the same `Arc<SourceInfo>` collapse to one pool entry.
