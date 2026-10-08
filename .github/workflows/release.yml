@@ -1,6 +1,6 @@
 # Release (bd-c6l13j79): tag push (or manual dispatch on an existing tag)
 # → preflight (tag must equal the workspace Cargo.toml version) → the
-# shared release pipeline (release-pipeline.yml: web payloads → 5-target
+# shared release pipeline (release-pipeline.yml: web payloads → 6-target
 # build → checksummed, signed artifacts → GitHub Release).
 #
 # The build/verify/sign/publish jobs live in release-pipeline.yml
