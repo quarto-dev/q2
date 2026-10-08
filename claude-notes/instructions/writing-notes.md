@@ -43,11 +43,14 @@ The habits that most often break a note here, in order of frequency:
 13. A fenced block that contains another fence (a Rust raw string holding a
     ```` ```{r} ```` cell, a Markdown example with its own fences). Use four
     backticks for the outer fence.
-14. A shortcode quoted inside a fenced code block. Shortcodes expand inside
-    code blocks on purpose (textual inclusion of snippets), so a quoted
-    `{{< include "x.qmd" >}}` reports Q-17-2. Write it as `{{{< include "x.qmd" >}}}`
-    (triple braces; renders with double), or open the fence as
-    `` ```{.markdown shortcodes="false"} ``.
+14. A shortcode quoted in a code span or a fenced code block. Shortcodes
+    expand there on purpose (textual inclusion of snippets), so a quoted
+    `{{< include "x.qmd" >}}` reports Q-17-2 and `{{{< meta title >}}}` reports
+    Q-16-5 and renders as `?meta:title`. In a span or in prose write it with
+    triple braces, `{{{< meta title >}}}` (renders with double); for a block,
+    open the fence as `` ```{.yaml shortcodes="false"} `` and leave its content
+    alone. A span that must show the triple-brace form takes the same
+    attribute: `` `{{{< x >}}}`{shortcodes="false"} ``{shortcodes="false"}.
 15. Angle brackets in prose (Q-2-9): q2 reads `<x>` as an HTML tag and passes it
     through, so the reader sees nothing. A generic type goes in a code span
     (`` `Vec<String>` ``, the whole expression). A placeholder escapes the `<`:

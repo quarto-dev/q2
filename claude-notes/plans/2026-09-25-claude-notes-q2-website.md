@@ -3,11 +3,13 @@
 **Strand:** bd-uk8zgkha (epic)
 **Branch:** `braid/bd-uk8zgkha-claude-notes-website` (main checkout, no worktree; not pushed)
 **Status:** every note renders (1456 / 1456, 0 errors, 2026-10-07, nightly
-.20261007), and the bracket warnings are gone (Q-2-9 152 → 0, Q-2-49 339 → 0
-outside three repro fixtures, 2026-10-08). Mechanical escaping, six per-file
-agent batches for errors, four for brackets, and hand tails; the star queue
-below is historical. Remaining: the shortcode warnings (Q-16-3 95, Q-16-5 77),
-site polish, CI, and every merge from `main` needs the fixpoint script (and
+.20261007), and the warnings are gone too: brackets (Q-2-9 152 → 0, Q-2-49
+339 → 0 outside three repro fixtures) and quoted shortcodes (Q-16-3 95 → 0,
+Q-16-5 77 → 0), 2026-10-08. Mechanical escaping, six per-file agent batches
+for errors, four for brackets, three for shortcodes, and hand tails; the star
+queue below is historical. Left in the tally: Q-2-45/46 reference links (8,
+in notes about reference links), Q-5-6 (2), Q-2-50 (1). Remaining work: site
+polish, CI, and every merge from `main` needs the fixpoint script (and
 probably a small batch) for the notes it brings in.
 
 ## Goal
@@ -165,6 +167,7 @@ whose original markup had an unbalanced backtick.
 | 2026-10-07, batch 6 (multi-error tail) | 1464 / 1480 | 18 | 15 |
 | 2026-10-07, last eleven by hand; fixtures excluded | 1456 / 1456 | 0 | 0 |
 | 2026-10-08, bracket warnings (four batches + hand) | 1456 / 1456 | 0 | 0 |
+| 2026-10-08, shortcode warnings (three batches + hand) | 1456 / 1456 | 0 | 0 |
 
 Remaining error classes (nightly .20261007): uncoded parse errors 372 (153 files),
 Q-2-12 33, Q-2-11 33, Q-2-41 24, Q-2-5 12, Q-2-35 11, Q-2-13 8, Q-2-2 7, plus a
@@ -319,6 +322,40 @@ and where two parse errors (`Q-*.json`, `**_quarto.yml**`) had been hiding as
 fences naively and routes any file with an info-string fence inside an open block
 to a human instead of an agent; the one agent miss of that kind happened before
 the check existed.
+
+## Shortcode warnings (2026-10-08)
+
+Q-16-3 "Unknown shortcode" (95) and Q-16-5 "Unknown metadata key" /
+"Environment variable not set" (77). q2 runs shortcodes in prose, inline code
+spans and fenced blocks alike, by design; in these notes every one is quoted
+syntax. About 85% sat in code spans, 10% in fenced blocks (the diagnostic
+points at the opening fence), the rest bare in prose. Probed first: triple
+braces work in spans, prose and blocks and render as double; `shortcodes="false"`
+works on a fence with or without a language class; the closing `{{{</ x >}}}` and
+comment `{{{</* */>}}}` forms take triple braces inside a span but not bare in
+prose (Q-2-52). Rules for the agents: T1 span → triple braces on every
+shortcode in it; T2 fence → the attribute, content untouched; T3 prose → triple
+braces, closing form into a span.
+
+Batch 1 (7 hand-picked files, 49 warnings) surfaced the one real subtlety: a
+note that *demonstrates* the escape, "`{{{< … >}}}`{shortcodes="false"} renders the literal
+`{{{< … >}}}`". Triple-bracing the right-hand span makes both sides render the
+same, and the left-hand span was already rendering as double before any edit —
+the demo had been silently wrong since q2 learned to expand in spans. The fix
+is the same attribute on the span, `` `{{{< … >}}}`{shortcodes="false"} ``{shortcodes="false"},
+which shows its text verbatim (four braces also work, but say less). That
+became rule T4; the T2 "exception" for blocks that already contain triple
+braces went away, because a block showing source syntax wants the attribute
+more, not less.
+
+Batches of 7, 20 and 30; 118 agents, 4.4M tokens; reviewed by line class
+(braces, fence-attr, span-attr) and standalone render. Misfires: two T4 edits
+put the attribute on the span that should render double. Hand follow-up: four
+demo spans the warnings could not point at (a triple-braced span that was
+*already* rendering wrong), found by grepping for lines with two triple-braced
+spans and no attribute; two more nested-fence repairs; one prose note beside a
+repro directory. The nested-fence detector in the batch picker caught both
+fence cases before an agent saw them.
 
 ## Manual review queue: star emphasis (historical)
 

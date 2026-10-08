@@ -100,14 +100,16 @@ them, the escapes are harmless.
 | `<anonymous>`, `Vec<String>` (angle brackets in prose) | raw HTML | Q-2-9; passed through as raw HTML, so invisible in the page | `\<anonymous>` for a placeholder; a code span for a type |
 | `<br>`, `<details>` (HTML you want rendered) | raw HTML | Q-2-9; passed through, with a warning | `` `<br>`{=html} `` inline; a ```` ```{=html} ```` block for a tag-only line |
 
-## Shortcodes inside code blocks
+## Shortcodes inside code spans and blocks
 
-Shortcodes are expanded inside fenced code blocks too, on purpose: an
-include shortcode in a code block pulls a reusable snippet into it
-textually. So a document that *quotes* a shortcode in a code block,
-as an example, gets the shortcode's effect instead of its text (for
-an include, a Q-17-2 "include file not found" error). Two ways to
-keep it literal:
+Shortcodes are expanded inside inline code spans and fenced code
+blocks too, on purpose: an include shortcode in a code block pulls a
+reusable snippet into it textually. So a document that *quotes* a
+shortcode in code, as an example, gets the shortcode's effect instead
+of its text: for an include, a Q-17-2 "include file not found" error;
+for `{{{< meta title >}}}` or `{{{< env HOME >}}}`, a Q-16-5 warning and
+`?meta:title` in the page; for a made-up name, Q-16-3 "Unknown
+shortcode". Two ways to keep it literal:
 
 ````{.qmd shortcodes="false"}
 ```{.markdown shortcodes="false"}
@@ -125,7 +127,12 @@ triple braces
 ````
 
 keeps one shortcode literal and renders it with the ordinary double
-braces. The triple-brace form works in prose as well.
+braces. The triple-brace form works in prose and in inline code spans
+as well: `` `{{{< meta title >}}}` ``{shortcodes="false"} renders as `{{{< meta title >}}}`.
+
+To *show* the triple-brace form itself, put the same attribute on the
+span: `` `{{{< meta title >}}}`{shortcodes="false"} ``{shortcodes="false"} renders its text
+verbatim, as `{{{< meta title >}}}`{shortcodes="false"}.
 
 ## Quiet differences: no diagnostic
 
