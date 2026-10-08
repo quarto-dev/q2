@@ -686,8 +686,25 @@ fn a_chapter_with_broken_front_matter_fails_before_any_chapter_renders() {
     write(&root, "two.qmd", b"---\ntitle: [unclosed\n---\n\nBroken.\n");
     let out = render(&root.join("one.qmd"), "typst", BookScope::Auto);
     assert!(out.request.is_none());
+    // The summary is the error's title; since bd-x30aq7ae that is the
+    // catalog's "YAML Syntax Error" (Q-1-1), and the front-matter context
+    // moved into the diagnostic's hint.
     let error = out.error.as_deref().unwrap_or_default();
-    assert!(error.to_lowercase().contains("front"), "{error}");
+    assert_eq!(error, "YAML Syntax Error");
+    let book = out.book.as_ref().expect("book outcome");
+    let yaml = book
+        .chapter_diagnostics
+        .iter()
+        .filter(|c| c.file.ends_with("two.qmd"))
+        .flat_map(|c| c.diagnostics.iter())
+        .find(|d| d.code.as_deref() == Some("Q-1-1"))
+        .unwrap_or_else(|| panic!("a Q-1-1 in two.qmd: {:?}", book.chapter_diagnostics));
+    assert!(
+        yaml.hints
+            .iter()
+            .any(|h| h.as_str().contains("front matter")),
+        "{yaml:?}"
+    );
 }
 
 #[test]

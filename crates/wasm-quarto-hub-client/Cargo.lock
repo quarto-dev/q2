@@ -3769,9 +3769,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-yaml"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f9a69c3be9978c6fae79e9f7521f4c72edcd378af81672d72b23cb5e8836d7d"
+checksum = "b2f8c0f416556efd4e2b725d5cc21158e2d339deeb8b1a403af5b83313934aa0"
 dependencies = [
  "quarto-source-map",
  "serde",

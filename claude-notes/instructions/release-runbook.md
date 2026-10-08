@@ -11,9 +11,9 @@ discover.
 
 ## What a release produces
 
-A GitHub Release at tag `vX.Y.Z` with, for five platforms
+A GitHub Release at tag `vX.Y.Z` with, for six platforms
 (`linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`,
-`windows_amd64`):
+`windows_amd64`, `windows_arm64`):
 
 - `q2-<version>-<platform>.tar.gz` (`.zip` on Windows) — just the `q2`
   binary; the hub MCP server, preview SPA, trace viewer, and the docs
@@ -192,7 +192,7 @@ git tag -a vX.Y.Z -m "q2 vX.Y.Z" && git push origin vX.Y.Z
 ```
 
 Re-pushing the tag re-fires the workflow from the new commit. The
-`release` job only publishes when **all five** legs succeed, so a
+`release` job only publishes when **all six** legs succeed, so a
 partial run leaves no half-published release.
 
 ### 6. Verify the published release
@@ -314,6 +314,14 @@ section is what to know when the two interact.
   no musl prebuilts — both musl legs 404'd at the v8 download in the
   v0.1.0 dry-run, which is why the matrix was gnu from PR #280 until
   bd-dofxhzaj. That dependency was removed in bd-3e3sam51.
+- **Windows ships two native builds**: `windows_amd64`
+  (`x86_64-pc-windows-msvc` on `windows-latest`) and `windows_arm64`
+  (`aarch64-pc-windows-msvc` on `windows-11-arm`). The ARM64 leg builds
+  natively for the same reason `linux_arm64` does: an x64 host cannot
+  execute an ARM64 binary, and the verify steps run it. `install.ps1`
+  picks the asset from the OS architecture and falls back to
+  `windows_amd64` (which ARM64 Windows runs under emulation) for releases
+  that predate the ARM64 asset (bd-windows-arm64-nightly-xms5p652).
 - **Because the binaries are static, the runner image no longer sets a
   compatibility floor.** The old `ubuntu-22.04` pin existed *only* to
   keep the glibc requirement low; with musl it bought nothing, so the

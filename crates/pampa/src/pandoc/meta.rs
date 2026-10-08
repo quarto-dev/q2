@@ -599,10 +599,12 @@ pub fn rawblock_to_config_value(
     let yaml = match quarto_yaml::parse_with_parent(&block.text, yaml_parent.clone()) {
         Ok(y) => y,
         Err(e) => {
-            // Report the YAML parse error as a diagnostic
-            diagnostics.error_at(
-                format!("Failed to parse YAML frontmatter: {}", e),
-                yaml_parent,
+            diagnostics.add(
+                crate::utils::yaml_syntax_error::yaml_syntax_error(e, &block.text, &yaml_parent)
+                    .add_hint(
+                        "The YAML front matter at the top of this document could not be parsed",
+                    )
+                    .build(),
             );
             // Return an empty map as the metadata
             return ConfigValue {

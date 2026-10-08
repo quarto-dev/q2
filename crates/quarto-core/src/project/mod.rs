@@ -161,13 +161,8 @@ pub fn directory_metadata_for_document(
             .map_err(|e| QuartoError::Other(format!("Failed to read {}: {}", path.display(), e)))?;
 
         let filename = path.to_string_lossy().to_string();
-        let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
-            QuartoError::Other(format!(
-                "Directory metadata validation failed for {}: {}",
-                path.display(),
-                e
-            ))
-        })?;
+        let yaml = quarto_yaml::parse_file(&content, &filename)
+            .map_err(|e| crate::config_sources::yaml_parse_error(&path, &filename, &content, e))?;
 
         // Convert to ConfigValue with ProjectConfig interpretation context
         let mut diagnostics = DiagnosticCollector::new();
@@ -1957,7 +1952,7 @@ fn read_config_layer(path: &Path, runtime: &dyn SystemRuntime) -> Result<ConfigV
         .map_err(|e| QuartoError::Other(format!("Failed to read {}: {}", path.display(), e)))?;
     let filename = path.to_string_lossy().to_string();
     let yaml = quarto_yaml::parse_file(&content, &filename)
-        .map_err(|e| QuartoError::Other(format!("Failed to parse {}: {}", path.display(), e)))?;
+        .map_err(|e| crate::config_sources::yaml_parse_error(path, &filename, &content, e))?;
     // Like the base-config parse above, tag diagnostics from the
     // collector are not surfaced here; MetadataMergeStage re-collects
     // them per document.
@@ -2297,9 +2292,8 @@ impl ProjectContext {
         let filename = path.to_string_lossy().to_string();
 
         // Parse YAML with source tracking
-        let yaml = quarto_yaml::parse_file(&content, &filename).map_err(|e| {
-            QuartoError::Other(format!("Failed to parse {}: {}", path.display(), e))
-        })?;
+        let yaml = quarto_yaml::parse_file(&content, &filename)
+            .map_err(|e| crate::config_sources::yaml_parse_error(path, &filename, &content, e))?;
 
         // Convert to ConfigValue with ProjectConfig interpretation context
         // (strings are kept literal, not parsed as markdown)
@@ -3746,13 +3740,14 @@ mod tests {
 
             let result = directory_metadata_for_document(&project, &doc_path, &native_runtime());
 
-            assert!(result.is_err());
-            let err = result.unwrap_err().to_string();
-            assert!(
-                err.contains("metadata") || err.contains("parse") || err.contains("yaml"),
-                "Error should mention metadata/parse/yaml: {}",
-                err
-            );
+            // bd-x30aq7ae: a located Q-1-1, not prose.
+            let Err(QuartoError::Parse(pe)) = result else {
+                panic!("expected QuartoError::Parse, got: {result:?}");
+            };
+            assert_eq!(pe.diagnostics.len(), 1);
+            assert_eq!(pe.diagnostics[0].code.as_deref(), Some("Q-1-1"));
+            let rendered = pe.render();
+            assert!(rendered.contains("_metadata.yml:1:"), "{rendered}");
         }
 
         #[test]

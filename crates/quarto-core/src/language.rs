@@ -87,7 +87,7 @@ pub enum TermFileError {
 pub fn parse_term_file(content: &str, filename: &str) -> Result<TermLayer, TermFileError> {
     let yaml = quarto_yaml::parse_file(content, filename).map_err(|e| TermFileError::Yaml {
         filename: filename.to_string(),
-        message: e.to_string(),
+        message: pampa::utils::yaml_syntax_error::describe_yaml_error(content, e),
     })?;
     let mut diagnostics = DiagnosticCollector::new();
     let config = pampa::pandoc::yaml_to_config_value(
@@ -447,7 +447,7 @@ pub fn parse_language_file(
 ) -> Result<StructuredTermLayer, TermFileError> {
     let yaml = quarto_yaml::parse_file(content, filename).map_err(|e| TermFileError::Yaml {
         filename: filename.to_string(),
-        message: e.to_string(),
+        message: pampa::utils::yaml_syntax_error::describe_yaml_error(content, e),
     })?;
     let mut parse_diags = DiagnosticCollector::new();
     let config = pampa::pandoc::yaml_to_config_value(

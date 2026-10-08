@@ -153,7 +153,11 @@ impl ProjectConfigFile {
             let parsed = parse_file(&text, &path.to_string_lossy()).map_err(|e| {
                 CommandFailure::new(
                     format!("Failed to parse {filename}"),
-                    format!("{}: {e}", path.display()),
+                    format!(
+                        "{}: {}",
+                        path.display(),
+                        quarto_core::config_sources::describe_yaml_error(&text, e)
+                    ),
                 )
             })?;
 
@@ -349,6 +353,16 @@ mod tests {
         let path = dir.path().join("_quarto.yml");
         std::fs::write(&path, text).unwrap();
         ProjectConfigFile::load(&path)
+    }
+
+    #[test]
+    fn yaml_syntax_error_names_the_position() {
+        // bd-x30aq7ae: the unclosed flow sequence fails at the `:` of
+        // `title:`; the position must survive into the prose.
+        let err = load_from("project:\n  type: [website\ntitle: x\n")
+            .expect_err("malformed YAML must be refused");
+        let text = err.0.to_text(None);
+        assert!(text.contains("(line 3, column 6)"), "{text}");
     }
 
     #[test]

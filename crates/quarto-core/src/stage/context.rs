@@ -1005,6 +1005,29 @@ mod tests {
         let ctx = StageContext::new(runtime, format, project, doc).unwrap();
         assert_eq!(ctx.claimed_engine_name, None);
     }
+
+    #[test]
+    fn variables_yaml_syntax_error_warning_names_the_position() {
+        // bd-x30aq7ae: quarto-yaml >= 0.4.0 keeps the position out of the
+        // message, so the warning's prose must spell it out. The unclosed
+        // flow sequence fails at the `:` of `b:` (line 3, column 2).
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join("_quarto.yml"),
+            "project:\n  type: default\n",
+        )
+        .unwrap();
+        std::fs::write(tmp.path().join("_variables.yml"), "a: 1\nlist: [x\nb: 2\n").unwrap();
+        std::fs::write(tmp.path().join("index.qmd"), "# Hi\n").unwrap();
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let project = ProjectContext::discover(tmp.path(), &runtime).unwrap();
+
+        let mut diagnostics = Vec::new();
+        assert!(load_project_variables(&runtime, &project, &mut diagnostics).is_none());
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        let text = diagnostics[0].to_text(None);
+        assert!(text.contains("(line 3, column 2)"), "{text}");
+    }
 }
 
 /// Resolve the path to built-in extensions.
@@ -1044,7 +1067,7 @@ fn load_project_variables(
                 .problem(format!(
                     "`{}` could not be parsed: {}; `var` shortcodes will not resolve",
                     path.display(),
-                    e
+                    pampa::utils::yaml_syntax_error::describe_yaml_error(&content, e)
                 ))
                 .build(),
             );

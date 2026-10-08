@@ -587,6 +587,48 @@ fn overlay_yaml_parse_error_aborts_discovery() {
         result.is_err(),
         "a malformed overlay must abort, matching Q1's loud failure"
     );
+    // bd-x30aq7ae: a located Q-1-1 into the overlay, not prose.
+    let pe = parse_error(result);
+    assert_yaml_syntax_error_in(&pe, "_quarto-prod.yml");
+}
+
+#[test]
+fn base_config_yaml_syntax_error_is_located_q_1_1() {
+    // The unclosed flow sequence makes the scanner fail at the `:` of
+    // `title:` (line 3, column 6).
+    let (result, _tmp) = discover_with(
+        &[("_quarto.yml", "project:\n  type: [website\ntitle: x\n")],
+        None,
+    );
+    let pe = parse_error(result);
+    assert_yaml_syntax_error_in(&pe, "_quarto.yml");
+    let rendered = pe.render();
+    assert!(rendered.contains("_quarto.yml:3:6"), "{rendered}");
+}
+
+/// The single diagnostic is a Q-1-1 located in the file named `file_name`,
+/// whose content is registered under the location's FileId so the span
+/// renders. (Matched by name: discovery canonicalizes the temp dir, so the
+/// test's own spelling of the path would hash to a different FileId.)
+fn assert_yaml_syntax_error_in(pe: &quarto_core::ParseError, file_name: &str) {
+    assert_eq!(pe.diagnostics.len(), 1, "{:?}", pe.diagnostics);
+    let d = &pe.diagnostics[0];
+    assert_eq!(d.code.as_deref(), Some("Q-1-1"), "{d:?}");
+    let (fid, _, _) = d
+        .location
+        .as_ref()
+        .and_then(|l| l.resolve_byte_range())
+        .expect("located");
+    let file = pe
+        .source_context
+        .get_file(quarto_source_map::FileId(fid))
+        .expect("the located file is registered");
+    assert!(
+        std::path::Path::new(&file.path).ends_with(file_name),
+        "located in {}, expected {file_name}",
+        file.path
+    );
+    assert!(file.content.is_some());
 }
 
 // ── bookkeeping ─────────────────────────────────────────────────────

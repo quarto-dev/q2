@@ -252,8 +252,13 @@ pub fn partition_cell_options(
     }
 
     let yaml_parent = SourceInfo::concat(concat_pieces);
-    let options = quarto_yaml::parse_with_parent(&yaml_text, yaml_parent)
-        .map_err(CellOptionsError::InvalidYaml)?;
+    // An unclosed `[`/`{` is reported at end of input, i.e. on the first
+    // code line; pull it back onto the option lines (bd-x30aq7ae).
+    let options = quarto_yaml::parse_with_parent(&yaml_text, yaml_parent).map_err(|e| {
+        CellOptionsError::InvalidYaml(pampa::utils::yaml_syntax_error::clamp_error_to_content(
+            e, &yaml_text,
+        ))
+    })?;
 
     Ok(PartitionedCell {
         options: Some(options),
