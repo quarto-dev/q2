@@ -336,7 +336,7 @@ Resolution and application are split:
 
 5. ~~**Preview / hub scope.**~~ *Answered: decision 3.*
 
-<details><summary>Original wording of the answered questions</summary>
+`<details>`{=html}`<summary>`{=html}Original wording of the answered questions`</summary>`{=html}
 
 1. **Sequencing.** Confirm: suppression fully first (A, phases 1–5), then the diagnostic (B, phases 6–7)? Or interleave — ship a minimal `off`-only suppression and Q-2-49 together, deferring validation/rot-control to a follow-up?
 

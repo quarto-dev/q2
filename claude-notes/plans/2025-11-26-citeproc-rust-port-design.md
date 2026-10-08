@@ -110,7 +110,7 @@ The `Eval.hs` module implements:
 2. **Disambiguation** (year-suffix, add-names, add-givenname)
 3. **Position tracking** (first, ibid, subsequent, near-note)
 4. **Sorting** with Unicode collation
-5. **Grouping and collapsing** (e.g., [1-3] instead of [1,2,3])
+5. **Grouping and collapsing** (e.g., \[1-3\] instead of \[1,2,3\])
 6. **Name formatting** (particles, initials, et al.)
 7. **Date formatting** with locale-specific patterns
 

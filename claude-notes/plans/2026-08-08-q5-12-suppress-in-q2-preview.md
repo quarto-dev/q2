@@ -8,7 +8,7 @@
 `q2 preview` of a project that configures `project.pre-render` /
 `project.post-render` scripts shows the "Render Warning" overlay:
 
-> [Q-5-12] Project render scripts do not run in the hub preview — This
+> \[Q-5-12\] Project render scripts do not run in the hub preview — This
 > project configures `project.pre-render` / `project.post-render` scripts,
 > which cannot run in the browser. The preview renders without them; use
 > `q2 render` on a machine with the interpreters installed to run the

@@ -384,7 +384,7 @@ corpus so each new field is exercised on a branch that discriminates it.
 - **`Proof`\'s value domain, for honesty about what the test can prove.** Q1's `proof_types`
   (`proof.lua:8-21`) has three keys — `proof`, `remark`, `solution`. Q2's sugar transform handles
   **`.proof` only** (`proof.rs:21`: "Scope: `.proof` only. `.remark` and `.solution` have
-  ref-types [elsewhere]"). So `plain_data.type` is single-valued today; see the vacuity check.
+  ref-types \[elsewhere\]"). So `plain_data.type` is single-valued today; see the vacuity check.
 
 **Acceptance criterion.**
 1. Task 2's conformance test passes with the three new keys declared in the schema and produced
@@ -873,7 +873,7 @@ mirror is `seam deferred until P5's Lua contract test`.
 | `crossref_index.rs:252-254` empty-identifier early return | `accepted-untested: unreachable from qmd. `has_crossref_plain_data` (`:319-321`) already returns false for an empty `attr.0`, so `index_custom_target` can never be called with one. Dead-defensive.` |
 | `crossref_index.rs:256-259` missing-`ref_type` early return | `accepted-untested: unreachable from qmd for the same reason — `has_crossref_plain_data:322-326` requires a string `ref_type`. This is the branch that makes Proof order-free, and *that* consequence **is** bound (T1.4 from the schema side, T3.1's key-set equality from the producer side).` |
 | `json.rs:3710` / `:1489` `plain_data.is_null()` guard — omits `data-custom-data` entirely | **bound — T2.3** (streaming) and the new parity seam in item 2 (non-streaming) |
-| `json.rs:3708` / `:1487` `serde_json::to_string(...).unwrap_or_else(\|_\| "{}")` fallback | `accepted-untested: unreachable — `slot_meta` is a `Map<String, Value>` of string values, which cannot fail to serialize. Same for the `"null"` fallback at `:3713`/`:1492`.` |
+| `json.rs:3708` / `:1487` `serde_json::to_string(...).unwrap_or_else(\|_\| "{}")` fallback | `accepted-untested: unreachable — `slot_meta` is a ``Map<String, Value>`` of string values, which cannot fail to serialize. Same for the `"null"` fallback at `:3713`/`:1492`.` |
 | `example_embed.rs:175-185` invalid-`file` degradation (drops `file`, pushes a diagnostic) | **`accepted-untested` as of 2026-09-18 — the binding was lost, deliberately.** It *was* bound by Task 2's two `ExampleEmbed` fixtures (the numbered/unnumbered key sets differ, so the degradation path changed the observed set). Gordon's Finding-5 decision drops `ExampleEmbed` from the artifact, so those fixtures had to go (a corpus producing a type the schema does not declare is RED against correct code — T2.4 is two-way). Natural home: **P1 Task 4**, which owns `ExampleEmbedRenderTransform`\'s format-parameterization and is where the node's Pandoc-leg behaviour is decided. Recorded rather than dropped so the loss is visible. |
 | `callout.rs:270-274` `appearance="minimal"` → `("simple", false)` normalization | `accepted-untested by P2: this is value-level normalization, not field-set membership, and P2's contract is the field set. It is already covered by `callout_resolve.rs`'s existing unit tests (`:650-928`).` |
 | `dispatchers.tsx:668`/`:683` `?? __fallback__` miss path | **bound — T4.2** (block form). `accepted-untested: the inline form at `:683` is the same one-line expression; a second test would assert the same hunk.` |

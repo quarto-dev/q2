@@ -74,8 +74,8 @@ getAmbiguities =
 Test: `disambiguate_AddNamesSuccess`
 
 **Input:**
-- ITEM-1: authors = [Smith, Brown, Jones], year = 1980
-- ITEM-2: authors = [Smith, Beefheart, Jones], year = 1980
+- ITEM-1: authors = `[Smith, Brown, Jones]`, year = 1980
+- ITEM-2: authors = `[Smith, Beefheart, Jones]`, year = 1980
 
 **With et-al-min=3, et-al-use-first=1:**
 - Both render as "Smith et al. (1980)" - **should be detected as ambiguous!**

@@ -88,9 +88,9 @@ When parsing `<https://example.com>` standalone:
 
 1. **The inline parser works correctly** when tested standalone
 2. **The block parser creates an ERROR node** when the autolink appears inside a div
-3. **The ERROR contains `key_value_key`** trying to match "https" at position [2, 1] - [2, 6]
+3. **The ERROR contains `key_value_key`** trying to match "https" at position `[2, 1]` - `[2, 6]`
 4. **The `<` is being consumed** somewhere, leaving "https" to be parsed
-5. **Position [2, 1]** means the error starts at the 'h' in 'https', not the '<'
+5. **Position `[2, 1]`** means the error starts at the 'h' in 'https', not the '<'
 
 ## Grammar Analysis
 

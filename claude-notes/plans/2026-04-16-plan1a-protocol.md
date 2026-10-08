@@ -952,7 +952,7 @@ are converted at the boundary per the appendix table.
 - `TsMetadataValue` ↔ `ConfigValue` (see "ConfigValue → TsMetadataValue" below)
 - `TsFormatInfo` ← q2's `Format`
 - `TsPandocAttr` ↔ `quarto_pandoc_types::Attr` (Vec→LinkedHashMap)
-- `TsHtmlDependency` ↔ q2's `HtmlDependency` (Vec<String>→Vec<PathBuf>)
+- `TsHtmlDependency` ↔ q2's `HtmlDependency` (`Vec<String>`→`Vec<PathBuf>`)
 - `TsSourceMapEntry[]` ↔ `SourceInfo::Concat`
 - `Option<TsLanguageClaim>` ↔ q2's `LanguageClaim` (`None` ↔ `LanguageClaim::None`;
   `Primary/Interop/Fallback{priority}` ↔ the same-named enum arms — see plan1a-engine)

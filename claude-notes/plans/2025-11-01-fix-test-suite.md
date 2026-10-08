@@ -93,8 +93,8 @@ After completing the k-274 tree-sitter refactoring, we need to fix the failing t
 
 **Problem:**
 - Input: `~he~~l~~lo~` (subscript with strikeout inside)
-- Expected: Subscript containing [Str "he", Strikeout [Str "l"], Str "lo"]
-- Actual: Subscript containing [Str "he", RawInline "leftover", Str "lo"]
+- Expected: Subscript containing `[Str "he", Strikeout [Str "l"], Str "lo"]`
+- Actual: Subscript containing `[Str "he", RawInline "leftover", Str "lo"]`
 
 **Root cause:** Strikeout (\~\~ inside \~) not being parsed correctly when nested in subscript
 

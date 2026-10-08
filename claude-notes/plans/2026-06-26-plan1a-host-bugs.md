@@ -35,7 +35,7 @@ hide the culprit if it wasn't the engine you waited on).
 The fix makes the shared-ness explicit so no single engine is falsely blamed. So:
 
 - [x] **Honest crash label:** when `>1` slot is in flight, prefix the snapshot with "recent subprocess
-  stderr (shared across in-flight engines: [...]):" + a sorted, deduplicated roster; when exactly one
+  stderr (shared across in-flight engines: \[...\]):" + a sorted, deduplicated roster; when exactly one
   slot is in flight, emit the bare ring join (no header) — unchanged from today.
 - [x] **Ring hygiene:** `stderr_loop` must **not** push `[INFO]` lines into `recent_stderr` (trace
   them only); ring keeps `[WARN]`/`[ERROR]`/unprefixed — so an env-enabled INFO toggle never degrades

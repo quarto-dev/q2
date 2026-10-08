@@ -130,7 +130,7 @@ read(
    └─ Find <script> tag at bytes 0-40 in the substring
 ```
 
-### Step 3: Create SourceInfo for the <script> Node
+### Step 3: Create SourceInfo for the \<script> Node
 
 ```rust
 // node_to_source_info_with_context is called:
@@ -385,7 +385,7 @@ pub fn read_top_level<T: Write>(
 
 ## Recommendation
 
-**Proceed with Option<SourceInfo> approach.**
+**Proceed with `Option<SourceInfo>` approach.**
 
 This is the fundamentally correct fix that:
 - Solves the problem completely

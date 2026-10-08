@@ -103,7 +103,7 @@ Wait, line 241 DOES contain pipes. The check on line 62 should work. Let me trac
    - Line 242 is blank, so start_idx = 242
    - Line 241 is not blank, so exit while loop
    - start_idx = 242 - 1 = 241
-3. Check if lines[241] has 2+ pipes
+3. Check if `lines[241]` has 2+ pipes
    - Line 241: `+----------------+-----...+`
    - Contains pipes! Should return true!
 
@@ -131,8 +131,8 @@ if start_idx > 0 {
 
 Starting with i=243 (the `:` line):
 1. start_idx = 243
-2. Loop: lines[242] is empty, so start_idx = 242
-3. Loop: lines[241] is not empty, exit loop
+2. Loop: `lines[242]` is empty, so start_idx = 242
+3. Loop: `lines[241]` is not empty, exit loop
 4. start_idx = 242 - 1 = 241
 
 So start_idx should be 241, which is the grid table border.

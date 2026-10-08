@@ -1507,7 +1507,7 @@ Website project rendering extends the single-document pipeline with:
 
 The Rust port needs:
 - **ProjectType trait** with pre/post-render hooks
-- **Thread-safe navigation state** (Arc<RwLock<>>)
+- **Thread-safe navigation state** (`Arc<RwLock<>>`)
 - **Dependency graph analysis** for safe parallelization
 - **Incremental update support** for sitemap/search
 - **HTML parsing** for search indexing (scraper crate)

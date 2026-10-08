@@ -189,7 +189,7 @@ Keep a shim crate at old location that re-exports from pampa.
 
 ### Phase 3: Cargo Configuration
 1. Update root Cargo.toml (workspace members and dependencies)
-2. Update crates/pampa/Cargo.toml (package name, add [[bin]])
+2. Update crates/pampa/Cargo.toml (package name, add `[[bin]]`)
 3. Update crates/pampa/fuzz/Cargo.toml
 4. Update dependent crates\' Cargo.toml files
 

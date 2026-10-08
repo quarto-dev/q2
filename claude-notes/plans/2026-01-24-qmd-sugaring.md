@@ -96,7 +96,7 @@ This is the reference implementation for new custom node types.
 
 | Type | QMD Pattern | Slots | Plain Data |
 |------|-------------|-------|------------|
-| **Tabset** | `.panel-tabset` | tabs: Vec<Tab> | level |
+| **Tabset** | `.panel-tabset` | tabs: `Vec<Tab>` | level |
 | **DecoratedCodeBlock** | CodeBlock + filename attr | code: Block | filename, fold, annotations |
 | **FloatRefTarget** | Divs with `#fig-*`, `#tbl-*` IDs | content, caption_long, caption_short | ref_type, identifier |
 
@@ -312,7 +312,7 @@ CustomNode {
 ### Phase A: Infrastructure (if needed)
 
 - [ ] Verify CustomNode serialization works for new slot patterns
-- [ ] Add any needed slot types (e.g., Vec<Tab> might need special handling)
+- [ ] Add any needed slot types (e.g., `Vec<Tab>` might need special handling)
 - [ ] Verify Shortcode handling is complete (already exists as `Inline::Shortcode`)
 
 ### Phase B: Tabset Transform

@@ -139,7 +139,7 @@ for group in coalesce_by_source(entries) {
 }
 ```
 
-The legacy "error: <path>: <plain string>" fallback is still needed
+The legacy "error: \<path>: \<plain string>" fallback is still needed
 for failures whose `diagnostics` is empty (any non-structured
 remaining error path, including sass errors we haven't migrated yet
 and any future stragglers). Keep that loop, but only for failures

@@ -407,7 +407,7 @@ Why widen the enum rather than wire through three callers separately: provenance
 - [x] Delete `source_info_attr_empty` test at `inline.rs:1453`. Was already neutralised during Phase 6 sweep (assertion-pin fix), now structurally impossible after the signature change.
 - [x] Audit `AttrSourceInfo::empty()` call sites: confirmed they're scaffolding-only — the production-side `InlineAttr::new` no longer accepts empty input as a sentinel-triggering pattern, so `AttrSourceInfo::empty()` is honest about its meaning everywhere it appears. No site renamed.
 - [x] Decide whether `AttrSourceInfo::empty()` should be renamed: kept as-is — the name is honest and the rename would touch every Block-with-attr test fixture.
-- [x] Clean up the stale doc-comment at `crates/quarto-pandoc-types/src/attr.rs:45-46`: doc now reads "fall back to `None` (or whatever Option<SourceInfo>-aware behavior the consumer prefers)" and cross-references `theorem.rs` / `proof.rs` as canonical patterns.
+- [x] Clean up the stale doc-comment at `crates/quarto-pandoc-types/src/attr.rs:45-46`: doc now reads "fall back to `None` (or whatever `Option<SourceInfo>`-aware behavior the consumer prefers)" and cross-references `theorem.rs` / `proof.rs` as canonical patterns.
 - [x] Verify: `cargo xtask verify --skip-hub-build` clean after all sites are updated. **Promoted to full `cargo xtask verify` for Phase 8 (see below).** Full verify passed 2026-06-01 (see Phase 8 item).
 
 ### Discovered production residue — landed during Phase 6.5
@@ -526,7 +526,7 @@ Work items:
 
 - [x] `cargo xtask verify` (full, including hub-build) clean **with `-D deprecated` enabled**. Completed 2026-06-01: full `cargo xtask verify` passed (9745 Rust tests, hub build:all green, 83 WASM tests) — confirmed via exit-code-0 task output. Phase 7's `deprecated = "deny"` is in effect.
 - [x] All existing tests pass. Confirmed: 9745 nextest tests pass; 83 WASM tests pass; 19 preview-renderer unit tests pass.
-- [x] New tests from Phases 2, 3, 4 pass. All Phase 4 deferred tests committed in `3c3492ac` and Phase 8 deferred tests (pool[0] WASM, MissingSourceInfoRef WASM ×2, atomic-gate sanity ×3, sourceInfo.test.ts) committed in this session — all pass.
+- [x] New tests from Phases 2, 3, 4 pass. All Phase 4 deferred tests committed in `3c3492ac` and Phase 8 deferred tests (`pool[0]` WASM, MissingSourceInfoRef WASM ×2, atomic-gate sanity ×3, sourceInfo.test.ts) committed in this session — all pass.
 - [x] (Audited 2026-06-01 — no work needed.) `#[derive(Default)]` exposure to the deprecation: the three candidate files don't contain a SourceInfo transitively. `-D deprecated` did not surface unexpected derive warnings.
 - [ ] Manual smoke test of q2-preview: open a document with shortcodes, edit a paragraph, save, re-open; verify the shortcode tokens are preserved and the framework's `s:` is intact on rebuilt wrappers. *(Requires browser — deferred to user or follow-up session.)*
 - [ ] Manual smoke test of q2-debug: open a document; verify the source_info pool display shows `[0] = Generated{by: user_edit, …}` as the reserved slot, and that documents without user edits still display correctly (pool entry 0 is always present even if unreferenced from any node). Also edit a node inside q2-debug; verify the resulting AST round-trips cleanly through `incremental_write_qmd` (no `MissingSourceInfoRef` errors). *(Requires browser — deferred to user or follow-up session.)*

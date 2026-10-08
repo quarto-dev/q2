@@ -117,7 +117,7 @@ fn wrap_yaml_with_source_info<'a>(
 
 ### User's Intuition
 
-> "It would be sufficient for the YamlWithSourceInfo object that came from merging document metadata and project metadata to have the same lifetime bounds as the DocumentContext object that holds the document Yaml object. [...] I'd like to be able to express that the merged object has the shorter of the two lifetimes."
+> "It would be sufficient for the YamlWithSourceInfo object that came from merging document metadata and project metadata to have the same lifetime bounds as the DocumentContext object that holds the document Yaml object. \[...\] I'd like to be able to express that the merged object has the shorter of the two lifetimes."
 
 ### How to Express This in Rust
 

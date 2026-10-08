@@ -203,7 +203,7 @@ discovery questions. The following are **immutable** for v1:
     (b) connection-manager observed `lastObservedAuthMode === 'no-auth'`.
   - `authenticate_finish({}) -> string` — **one** poll against
     Google's `/token`. Returns `pending`/`slow_down` text on those
-    responses; persists bundle + returns "Authenticated as <email>"
+    responses; persists bundle + returns "Authenticated as \<email>"
     on success; typed error on terminal failure.
 
   Single-poll-per-call is deliberate: MCP tool calls have client
@@ -389,7 +389,7 @@ Landed on `feature/hub-mcp-device-flow`:
 - `AuthConfig` now carries `additional_audiences: Vec<String>` with
   an `audiences()` iterator that lists primary `client_id` first,
   then additional. `set_audience` + `set_required_spec_claims(&["exp",
-  "aud"])` plumbed in [`build_auth_state_from_parts`] —
+  "aud"])` plumbed in \[`build_auth_state_from_parts`\] —
   `build_auth_state` retains its discovery wrapper and now delegates
   to it. The test-only `build_auth_state_from_parts` skips OIDC
   discovery so integration tests can drive a mock OIDC provider on
@@ -944,7 +944,7 @@ Landed on `feature/hub-mcp-device-flow`:
   `LastObservedAuthModeSource` / `AuthFlowConfig` types.
 - `AuthToolsState.handleStart` walks the documented 3-step short-
   circuit chain: (1) `RefreshManager.getValidIdToken()` succeeds →
-  "Already authenticated as <email>." with no Google call; (2)
+  "Already authenticated as \<email>." with no Google call; (2)
   `connectionManager.lastObservedAuthMode() === 'no-auth'` → "The
   configured hub does not require authentication; no action needed."
   with no Google call; (3) otherwise initiates the device flow and
@@ -973,7 +973,7 @@ Landed on `feature/hub-mcp-device-flow`:
   (the SLOW_DOWN_BUMP constant). On success it decodes the `email`
   claim from the id_token (and nothing else from the JWT body),
   writes a fresh `CredentialBundle` to the store, clears the cached
-  device_code, and returns "Authenticated as <email>." Terminal
+  device_code, and returns "Authenticated as \<email>." Terminal
   errors (`DeviceFlowDeniedError` / `DeviceFlowExpiredError` /
   generic `DeviceFlowError`) clear the cache and surface a
   redacted error message — `redactTokens` runs on every error
@@ -1043,7 +1043,7 @@ the `@modelcontextprotocol/sdk` already on the workspace
   - Clear cached state on success and on terminal errors.
 - `authenticate_start`:
   1. `RefreshManager.getValidIdToken()` succeeds → decode email,
-     return "Already authenticated as <email>".
+     return "Already authenticated as \<email>".
   2. `connectionManager.lastObservedAuthMode() === 'no-auth'` → return
      "The configured hub does not require authentication; no action
      needed." (no Google call). Only positive observation triggers
@@ -1069,7 +1069,7 @@ the `@modelcontextprotocol/sdk` already on the workspace
      - `pending` → "Still waiting for browser approval…"
      - `slow_down` → similar with recommended brief wait.
      - `tokens` → `CredentialStore.write(bundle)`, decode email,
-       clear cached device_code, return "Authenticated as <email>".
+       clear cached device_code, return "Authenticated as \<email>".
      - `DeviceFlowDeniedError` / `DeviceFlowExpiredError` → clear,
        return typed tool error.
 - Canonical URL `https://www.google.com/device` is a hard-coded
@@ -1296,7 +1296,7 @@ Tests passing is necessary but not sufficient. Before declaring done:
      `verification_uri`, the `user_code`, and canonical URL
      `https://www.google.com/device`.
    - Open canonical URL; type code; approve consent screen.
-   - Agent calls `authenticate_finish` → "Authenticated as <email>".
+   - Agent calls `authenticate_finish` → "Authenticated as \<email>".
    - Re-issue action; succeeds.
    - **Inspect credential store:**
      - macOS: `security find-generic-password -s dev.quarto.hub-mcp

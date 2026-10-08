@@ -1,7 +1,7 @@
 # Snyk PR remediation skill
 
 **Braid strand:** bd-t8bwkr64
-**Immediate motivation:** PR #637 ([Snyk] Upgrade katex from 0.18.2 to 0.18.4) is red on CI with the same failure signature as every previous katex Snyk PR.
+**Immediate motivation:** PR #637 (\[Snyk\] Upgrade katex from 0.18.2 to 0.18.4) is red on CI with the same failure signature as every previous katex Snyk PR.
 
 ## Overview
 
@@ -116,7 +116,7 @@ Verification for the katex case:
 - The skill must state the invariants explicitly: never weaken or skip the
   guard tests; never `npm install` from hub-client; exact pins (no carets);
   push requires user approval.
-- Description/trigger phrases: "snyk PR", "posit-snyk-bot", "[Snyk] Upgrade",
+- Description/trigger phrases: "snyk PR", "posit-snyk-bot", "\[Snyk\] Upgrade",
   "snyk-upgrade-" branch names, "make the snyk PR mergeable".
 
 ## Work items

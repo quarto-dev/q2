@@ -359,7 +359,7 @@ None.
 
 ### Status
 
-Implemented & confirmed live (Cmd-Enter and margin-click blur, unlock mode; non-nested edits still refocus correctly; ArrowDown roving continues from the edited item). **Clean-slate rebuild DONE (2026-06-19)** — `refocusTargetForAnchorR0` added to `outerBlocks.ts`, call site rewired in `PreviewRoot.tsx` `executeLanding`. Three TDD tests added to `outerBlocks.integration.test.ts` (unlock exact-match → B; unlock no-match → null [the optional hardening from accepted-untested]; locked delegates → outer block). RED `refocusTargetForAnchorR0 is not a function`; revert-RED returns null (binding proven); GREEN after. Integration suite 461 passed / 1 skipped, tsc clean.
+Implemented & confirmed live (Cmd-Enter and margin-click blur, unlock mode; non-nested edits still refocus correctly; ArrowDown roving continues from the edited item). **Clean-slate rebuild DONE (2026-06-19)** — `refocusTargetForAnchorR0` added to `outerBlocks.ts`, call site rewired in `PreviewRoot.tsx` `executeLanding`. Three TDD tests added to `outerBlocks.integration.test.ts` (unlock exact-match → B; unlock no-match → null \[the optional hardening from accepted-untested\]; locked delegates → outer block). RED `refocusTargetForAnchorR0 is not a function`; revert-RED returns null (binding proven); GREEN after. Integration suite 461 passed / 1 skipped, tsc clean.
 
 ---
 

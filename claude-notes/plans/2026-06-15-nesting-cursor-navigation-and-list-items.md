@@ -478,9 +478,9 @@ positions on the *same* line should not diverge. Candidate causes:
   descent — `readLiveCaret` derives `bufferLine` by counting `\n` bytes only (column-invariant), so
   `Ls` is identical for begin-vs-inside on the same source line; trailing-blank overshoot resolves
   correctly via the nearest-child fallback. Verified independently (opus spec review). Commit `444590db`.
-- [\~] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span — **N/A (Cause 1):**
+- \[\~\] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span — **N/A (Cause 1):**
   no overshoot bug exists; `surfaceLineSpan` already trims and the fallback resolves correctly.
-- [\~] **3.c** Align/retire the non-trimming byte fallback — **N/A (Cause 1):** the byte-space
+- \[\~\] **3.c** Align/retire the non-trimming byte fallback — **N/A (Cause 1):** the byte-space
   `childSurfaceToward` fallback is only reached in the **no-caret** branch, so it cannot diverge for a
   trailing-whitespace caret.
 - [x] **3.d** If the repro is cause 1, **don't "fix" it** — document that descent is caret-line-driven
@@ -529,7 +529,7 @@ the first delete affordance for block editing (we have no other way to remove an
    reconciliation + `incremental_write` delete it from the QMD source.
 
 So the only blocker is the **frontend cancel-on-empty guard** (intentional today,
-`dispatchers.tsx:204-212`: *"An empty draft would delete the block … we restore [the guard] here"*).
+`dispatchers.tsx:204-212`: *"An empty draft would delete the block … we restore \[the guard\] here"*).
 
 ### Behavior (resolved with the user)
 **Delete is uniform — never blocked.** Emptying a block and committing it *in any way*
@@ -833,7 +833,7 @@ in jsdom; pixel growth is asserted only in the e2e tier (real layout).
 | **6.h** | e2e | full chain + §0 list render; 2-item bullet fixture · activate item-1 text · clear+commit · **list still renders; item-1 `<li>` present but textless; item-2 intact** | none | (i) §0 empty-item guard → list render crashes → RED; (ii) §6 delete branch → item-1 keeps text → RED |
 | **7.a** | jsdom | `EditTextarea` opened via **pointer** · printable keydown `'a'` · **`data-expanded` absent before, present after** | none | the `setExpanded(true)` trigger in `onKeyDown` → never set → RED. *Gating (shape): before-type height stays `contentHeight`.* |
 | **7.b** | jsdom | `useBlockEditHover.activate` keyboard path + `EditTextarea` · roving Enter vs pointer-down · **`data-expanded` present (keyboard) / absent (pointer) at open** | none | the `{keyboard:true}`→`expandOnOpen` wiring on the Enter/Space activate path → roving-Enter opens collapsed → RED |
-| **7.c** | jsdom | `EditTextarea` `onKeyDown`, start collapsed · fire **each** leave key (edge ↓ [edge mocked], nesting chord, Esc, Cmd/Ctrl+Enter) · **`data-expanded` stays absent after each; AND the leave action fired (e.g. `requestMove` called for edge ↓)** | mock edge detection; stub `requestMove`/`requestNestingMove`/`setEditTarget` | move `setExpanded(true)` *before* the leave-key returns (i.e. drop the exclusion) → a leave key expands → RED. **Vacuity guard:** the "leave action fired" assert proves the key was exercised in the leaving state, not a no-op state |
+| **7.c** | jsdom | `EditTextarea` `onKeyDown`, start collapsed · fire **each** leave key (edge ↓ \[edge mocked\], nesting chord, Esc, Cmd/Ctrl+Enter) · **`data-expanded` stays absent after each; AND the leave action fired (e.g. `requestMove` called for edge ↓)** | mock edge detection; stub `requestMove`/`requestNestingMove`/`setEditTarget` | move `setExpanded(true)` *before* the leave-key returns (i.e. drop the exclusion) → a leave key expands → RED. **Vacuity guard:** the "leave action fired" assert proves the key was exercised in the leaving state, not a no-op state |
 | **7.d** | jsdom | the height `useLayoutEffect`, `expanded=true`, `contentHeight=100`, **stub `ta.scrollHeight=40`** · trigger via draft change · **`ta.style.height === '100px'`** | stub `scrollHeight` (deterministic clamp arithmetic, not real layout) | the `Math.max(contentHeight,…)` clamp (revert to bare `scrollHeight`) → `'40px'` → RED |
 | **7.e** | e2e (real layout) | `EditTextarea` in browser; **fixture where source is taller than render** (multi-source-line para rendering as fewer visual lines) · click-activate · type 1 char · delete the added lines · **height ≈ `contentHeight` on open; grows >50px after type; shrinks back but never < `contentHeight`** | none | height effect expand (revert to fixed `contentHeight`) → no growth → RED. **Fixture is load-bearing:** if collapsed==expanded height the "grows" assert is vacuous |
 | **7.f** | e2e | full roving + keyboard activate; same source>render fixture · roving + Enter · **textarea opens tall (expanded), not `contentHeight`** | none | `{keyboard:true}`/`expandOnOpen` wiring → opens collapsed → RED (same fixture caveat as 7.e) |

@@ -45,14 +45,14 @@ pub struct ASTContext {
 ```
 
 ### 4. Filename Behavior
-- `main.rs` always sets a filename (either from `-i` arg or "<stdin>")
+- `main.rs` always sets a filename (either from `-i` arg or "\<stdin>")
 - `ASTContext::with_filename()` adds file to both `filenames` and `source_context`
 - `ASTContext::new()` creates empty context (used by JSON reader for backward compat)
 
 ### 5. Current Behavior
 Tested with actual binary:
 - With file: outputs `"filenameIndex": 0` ✓
-- With stdin: outputs `"filenameIndex": 0` with filename "<stdin>" ✓
+- With stdin: outputs `"filenameIndex": 0` with filename "\<stdin>" ✓
 
 ## The Real Question
 
@@ -89,7 +89,7 @@ When there's no filename (old `None` case), we still need to provide a `FileId`.
    - Could cause issues if SourceContext is queried
 
 2. **Create a dummy file in SourceContext when empty**
-   - Add "<unknown>" or "" to SourceContext when needed
+   - Add "\<unknown>" or "" to SourceContext when needed
    - FileId(0) always valid
 
 3. **Use FileId based on what's in SourceContext**

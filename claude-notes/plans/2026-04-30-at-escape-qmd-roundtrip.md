@@ -110,12 +110,12 @@ up automatically by `test_qmd_roundtrip_consistency` in
 - [x] Add `at_escape_plain_inline.qmd` with `See \@jjallaire please.`
 - [x] Add `at_escape_in_emphasis.qmd` with `*\@user* mention.` to cover
       another container.
-- [\~] ~~Add `at_escape_brace_form.qmd` with `See \@{some-key} please.`~~
+- \[\~\] ~~Add `at_escape_brace_form.qmd` with `See \@{some-key} please.`~~
       Removed: bare `{...}` in inline text is itself a parse error
       independent of the `@` escape, so the brace-citation form can't
       currently be round-tripped end-to-end. Tracked separately as
       bd-tpve (discovered-from bd-21gu).
-- [\~] ~~Negative cases (`at_no_escape_at_end.qmd`,
+- \[\~\] ~~Negative cases (`at_no_escape_at_end.qmd`,
       `at_no_escape_before_space.qmd`).~~ Removed: bare `@` is
       *always* a parse error in qmd `Str` context (verified — see
       "Fix strategy" table), so over-escape of `@` is not a concern.

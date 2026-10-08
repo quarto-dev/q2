@@ -886,8 +886,8 @@ Currently `get_hash_value` is O(n) in number of hash entries.
 
 **Options**:
 1. Keep Vec, O(n) lookup (current design)
-2. Add HashMap<String, usize> index for string keys
-3. Add HashMap<Yaml, usize> index for all keys
+2. Add `HashMap<String, usize>` index for string keys
+3. Add `HashMap<Yaml, usize>` index for all keys
 
 **Recommendation**: Start with O(n), optimize if profiling shows it's a bottleneck. Most configs have <50 keys.
 

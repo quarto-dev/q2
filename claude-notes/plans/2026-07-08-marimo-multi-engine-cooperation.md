@@ -53,8 +53,8 @@ So the fix is a *restoration* of the port's original intent, not a redesign.
 
 | # | Tier | Real unit mounted | Seam (mount · events · assertion surface) | Mock boundary | Named revert hunk |
 |---|------|-------------------|-------------------------------------------|---------------|-------------------|
-| 1 | Rust unit (`resolution.rs`) | `resolve_engines` (real resolver) | build registry [marimo,knitr,jupyter]; `resolve_engines(meta, ast, reg, None)`; assert seq⊇\{marimo,knitr\}, ownership\{python→marimo,r→knitr\}, `handled_languages_for("marimo")∋"r"` | `MockEngine` claim closures = env dep (registry); resolver is the unit | Remove `mock_marimo`\'s `("python",Some("marimo"))→Primary(2)` arm → `ownership["python"]!="marimo"` RED (proven) |
-| 2 | Rust unit (`resolution.rs`) | `resolve_engines` | same doc, `claimed=Some("marimo")`; assert seq==[marimo], ownership empty, r∉handled | as above | (characterization — documents the bug; no revert) |
+| 1 | Rust unit (`resolution.rs`) | `resolve_engines` (real resolver) | build registry `[marimo,knitr,jupyter]`; `resolve_engines(meta, ast, reg, None)`; assert seq⊇\{marimo,knitr\}, ownership\{python→marimo,r→knitr\}, `handled_languages_for("marimo")∋"r"` | `MockEngine` claim closures = env dep (registry); resolver is the unit | Remove `mock_marimo`\'s `("python",Some("marimo"))→Primary(2)` arm → `ownership["python"]!="marimo"` RED (proven) |
+| 2 | Rust unit (`resolution.rs`) | `resolve_engines` | same doc, `claimed=Some("marimo")`; assert seq==`[marimo]`, ownership empty, r∉handled | as above | (characterization — documents the bug; no revert) |
 | 3 | deno unit (`quarto-marimo/tests/`) | marimo engine's `claimsFile` | write temp `.qmd` with a marimo fence; call `engine.claimsFile(path, ".qmd")`; assert `=== false` | `Deno.readTextFileSync` real (temp file); function is the unit | Restore `claimsFile` body to `containsMarimoFence(...)` → assertion RED |
 | 4 | deno unit (`quarto-marimo/tests/`) | sew-back cell loop in `execute` (guard, unchanged) | drive the cell loop over `[{r}, {python .marimo}]`; assert `{r}` sourceVerbatim survives unmodified | subprocess/`extract.py` mocked | Change the `else { push(cell.sourceVerbatim) }` branch to drop non-marimo cells → RED |
 | 5 | q2 e2e (`q2-preview-spa/e2e/engine-capture-splice-marimo.spec.ts`) | full `q2 preview` render in browser | mixed marimo+knitr fixture; assert BOTH the marimo island AND the `{r}` output appear in the pane | none (real render; needs R + uv/marimo/deno + rebuilt fixture bundle) | Restore `claimsFile` in the fixture's bundled `marimo-engine.js` → `{r}` renders raw, output assertion RED |
@@ -92,10 +92,10 @@ q2 work branch: `braid/marimo-multi-engine-cooperation` (off
   proxy: is-marimo-cell.test.ts + the post-sync render test below.
 - [x] Implement: `claimsFile → false` for `.qmd`/`.md` in marimo `main` `src/marimo-engine.ts`
 - [x] marimo deno suite green (67/67); q2 `engine::resolution` green (36/36)
-- [\~] Seam #5 (mixed fixture + e2e): **deferred to Gordon** — ready-to-add
+- \[\~\] Seam #5 (mixed fixture + e2e): **deferred to Gordon** — ready-to-add
       render test below; add after re-syncing the fixture from
       `q2-bare-sql-interop`.
-- [\~] End-to-end real `q2 render`/`q2 preview`: **deferred to Gordon** (fixture
+- \[\~\] End-to-end real `q2 render`/`q2 preview`: **deferred to Gordon** (fixture
       re-sync gates it). Native resolution + deno unit tiers verified.
 - [ ] Gordon: merge `main`→`q2-bare-sql-interop`, rebuild+re-sync fixture, add
   the render test below, run `QUARTO_SC21_LIVE=1` marimo preview e2e.

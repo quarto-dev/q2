@@ -207,7 +207,7 @@ Search in this order:
 ## Terminology
 
 - **AST** - Abstract Syntax Tree (Pandoc's intermediate representation)
-- **Pandoc** - The document type (Meta + [Block])
+- **Pandoc** - The document type (Meta + `[Block]`)
 - **Block** - Top-level document elements (Para, Header, CodeBlock, etc.)
 - **Inline** - Inline elements (Str, Emph, Strong, Link, etc.)
 - **Meta** - Document metadata (title, author, etc.)

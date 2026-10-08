@@ -304,10 +304,10 @@ This change:
 ### Edge Cases Handled
 
 1. **No spaces in delimiters**: `'quote'` → Just returns Quoted (no extra Spaces)
-2. **Leading space**: ` 'quote'` → Returns [Space, Quoted]
-3. **Trailing space**: `'quote' ` → Returns [Quoted, Space]
-4. **Both spaces**: ` 'quote' ` → Returns [Space, Quoted, Space]
-5. **Between quotes**: `'a' 'b'` → Returns [Quoted, Space, Quoted] ✅ (our failing case)
+2. **Leading space**: ` 'quote'` → Returns `[Space, Quoted]`
+3. **Trailing space**: `'quote' ` → Returns `[Quoted, Space]`
+4. **Both spaces**: ` 'quote' ` → Returns `[Space, Quoted, Space]`
+5. **Between quotes**: `'a' 'b'` → Returns `[Quoted, Space, Quoted]` ✅ (our failing case)
 
 ## Test Case Analysis
 
@@ -316,12 +316,12 @@ Input: `'single quote' "double quote"`
 **Current behavior:**
 - Grammar captures ` "` (space-quote) as opening delimiter for double quote
 - `process_quoted` ignores the space, returns single Quoted inline
-- Paragraph gets: [Quoted, Quoted] ❌
+- Paragraph gets: `[Quoted, Quoted]` ❌
 
 **After fix:**
 - `process_quoted` detects leading space in opening delimiter
 - Emits Space before the Quoted
-- Paragraph gets: [Quoted, Space, Quoted] ✅
+- Paragraph gets: `[Quoted, Space, Quoted]` ✅
 
 ## Files to Modify
 

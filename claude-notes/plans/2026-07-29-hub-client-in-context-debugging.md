@@ -296,7 +296,7 @@ Upstream accessors (each with tests first):
       `src/doc-inventory.test.ts` against the real test-hub (6 tests,
       incl. heads-advance-on-edit and dangling-entry cases)
 - [x] `preview-runtime` (`automergeSync.ts`): null-safe re-exports
-      (`getRepo` → null, `getDocInventory` → [] before connect); also
+      (`getRepo` → null, `getDocInventory` → `[]` before connect); also
       re-exported the `SyncDiagnostics`/`DocInventoryEntry` types from
       the barrel; mockSyncClient extended
 - [x] `projectSetService`: `getProjectSetDebugSnapshot()` via pure

@@ -91,7 +91,7 @@ Already working or next to implement:
 - `pandoc_display_math` - display math $$...$$
 
 ### Category 4: Links and Images (Priority: HIGH)
-- `pandoc_span` - [text](url) or [text]\{attrs\}
+- `pandoc_span` - \[text\](url) or \[text\]\{attrs\}
 - `pandoc_image` - ![alt](url)
 - `target` - the (url) part of links
 - `inline_link` - full link construct (from inline grammar)
@@ -295,7 +295,7 @@ document: {Node document (0, 0) - (1, 0)}
 1. All node types have handlers in `native_visitor`
 2. Each node type has at least 3 tests (basic, edge case, interaction)
 3. All tests in `test_treesitter_refactoring.rs` pass
-4. No "[TOP-LEVEL MISSING NODE]" warnings for valid QMD
+4. No "\[TOP-LEVEL MISSING NODE\]" warnings for valid QMD
 5. Output matches expected Pandoc AST structure
 6. All existing tests pass (re-enable after refactoring complete)
 

@@ -74,11 +74,11 @@ Edges that exist in substance but not in the skein:
   `.quarto-banner nav.quarto-secondary-nav` rule is the only consumer of
   `#quarto-header.quarto-banner`, and q2 has neither. Should become a `blocks`
   edge or be folded in.
-- **`bd-6cme` — "[websites] Sidebar search integration"** (open, p2). q2 has no
+- **`bd-6cme` — "\[websites\] Sidebar search integration"** (open, p2). q2 has no
   search: `navbar_to_html` emits a bare `<div class="quarto-search"></div>`
   placeholder and there is no `window.quartoOpenSearch`. The strand's third
   bullet (search button) is a shell until this lands.
-- **`bd-49ar` — "[websites] Sidebar collapse/expand JS"** (open, p2) — sibling
+- **`bd-49ar` — "\[websites\] Sidebar collapse/expand JS"** (open, p2) — sibling
   concern for in-sidebar section collapse, same Bootstrap-JS dependency.
 
 ## What the code looks like today

@@ -281,7 +281,7 @@ crates/
    - Lifetime-based resource management
    - Default pandoc renderer setup
 
-4. **Context Creation** (`render-contexts.ts`) **[Most Complex]**
+4. **Context Creation** (`render-contexts.ts`) **\[Most Complex\]**
    - Engine and target resolution
    - Format resolution (html, pdf, etc.)
    - Metadata merging from 5 sources
@@ -311,7 +311,7 @@ crates/
    - Diagram rendering (mermaid, graphviz)
    - Dependency injection
 
-9. **Pandoc Conversion** (`pandoc.ts`) **[Largest Stage]**
+9. **Pandoc Conversion** (`pandoc.ts`) **\[Largest Stage\]**
    - Merge engine results
    - Generate defaults file
    - Resolve format extras (filters, postprocessors, dependencies)
@@ -1012,7 +1012,7 @@ pub async fn update_sitemap(
 
 **Critical for Rust Port**:
 - ProjectType trait with async hooks (pre_render, format_extras, post_render)
-- Global navigation state shared across all file renders (Arc<RwLock<NavigationState>>)
+- Global navigation state shared across all file renders (`Arc<RwLock<NavigationState>>`)
 - HTML parsing with scraper (for search indexing)
 - XML generation (for sitemap)
 - EJS-compatible templating (tera recommended) for navigation templates

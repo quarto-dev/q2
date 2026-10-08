@@ -345,7 +345,7 @@ StdioServerTransport never watches EOF — explicit `stdin 'end'`
 watcher + guarded shutdown; hub-mcp test suite got 3× faster as a side
 effect), bd-2d8ur7e9 (entry-module guard failed under symlinked
 invocation paths because Node canonicalizes `import.meta.url` but
-argv[1] was compared verbatim — macOS `/tmp`→`/private/tmp` and npm
+`argv[1]` was compared verbatim — macOS `/tmp`→`/private/tmp` and npm
 `.bin` shims both hit this; `realpathSync` fix; this one would have
 broken the npx channel outright).
 

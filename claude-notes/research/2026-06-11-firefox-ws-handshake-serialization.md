@@ -1,7 +1,7 @@
 # Firefox `q2 preview` peer-connection timeout: root cause
 
 **Date:** 2026-06-11
-**Strand:** bd-jit6pdwq (q2 preview: Firefox flaky 'Document automerge:<id> is unavailable' on cold start)
+**Strand:** bd-jit6pdwq (q2 preview: Firefox flaky 'Document automerge:\<id> is unavailable' on cold start)
 **Symptom:** sporadic, Firefox-only `Peer connection failed, continuing in
 offline mode: Error: Timeout waiting for peer connection`, followed by a
 permanent `Document … is unavailable` boot error in the preview SPA.

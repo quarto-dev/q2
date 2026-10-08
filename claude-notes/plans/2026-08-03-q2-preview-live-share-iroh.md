@@ -2,7 +2,7 @@
 title: "q2 preview live share over iroh (`--share` / `--join`)"
 date: 2026-08-03
 status: planned
-branch: feature/preview-live-share (integration line; sub-tasks on braid/<id>-<slug>)
+branch: feature/preview-live-share (integration line; sub-tasks on braid/\<id>-\<slug>)
 braid: bd-yyoyvx91
 design-input: user design doc "Creating q2 preview with iroh" (2026-08-03 session)
 verified: "file:line claims checked against ../iroh @ v1.0.3, ../iroh-tickets @ 1.0.0, ../samod, and this tree"
@@ -951,7 +951,7 @@ then went green with the implementation)*
   5 s per-attempt cap; unit tests cover 200 / non-200-keeps-polling /
   nothing-listening)*
 - [x] Status messaging from the client watch channel: "connected via
-  <direct|relay>", "reconnecting…". API pinned:
+  \<direct|relay>", "reconnecting…". API pinned:
   `Connection::paths()` returns a `PathList` whose `Path` entries
   expose `is_selected()` / `is_relay()` / `is_ip()` / `rtt()`
   (`../iroh/iroh/src/socket/remote_map/remote_state/path_watcher.rs:446-494`);

@@ -45,7 +45,7 @@ Example test: `sort_AguStyle.txt`
 Required features:
 - `collapse="year"` - "(Smith 1900, 2000)" instead of "(Smith 1900, Smith 2000)"
 - `collapse="year-suffix"` - "(Smith 2020a, b)"
-- `collapse="citation-number"` - "[1-3]" instead of "[1, 2, 3]"
+- `collapse="citation-number"` - "\[1-3\]" instead of "\[1, 2, 3\]"
 
 Uses `Tag::Names` and `Tag::Date` from Output AST.
 

@@ -296,7 +296,7 @@ per-language in a module-level map. Kernelspecs via `jupyter --paths --json`
    (`knitr.ts:32-41`): knitr >= 1.30, rmarkdown >= 2.3.
    - both version-OK → real test render `"Checking Knitr engine render......"` →
      `OK\n` with a ```` ```{r} 1 + 1 ```` doc.
-   - else → `knitrInstallationMessage` per missing/outdated package: "The <pkg>
+   - else → `knitrInstallationMessage` per missing/outdated package: "The \<pkg>
      package is not available in this R installation." + `Install with
      install.packages("<pkg>")` (or update variant).
 

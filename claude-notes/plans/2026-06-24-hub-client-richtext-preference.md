@@ -113,7 +113,7 @@ Plus a Settings toggle, mirroring the "Nesting cursor" checkbox.
 - [x] Full hub-client suites green: 660 unit + 76 integration (a stale env first failed 3 unrelated suites on a missing `minisearch` dep from the merged search feature; fixed via `npm install` from repo root). Was: `npm run test:integration` (+ unit) for the touched areas,
       then the full hub-client suites.
 - [x] `cd hub-client && npm run build:all` — passed (strict project-references gate).
-- [\~] End-to-end: NOT driven as a full authenticated hub session — that needs a
+- \[\~\] End-to-end: NOT driven as a full authenticated hub session — that needs a
       running sync backend + Google auth + an open project, not feasible to stand
       up here (`debug.html` is a renderer harness, not the editor+preview path).
       Verified by layers instead, each leg covered: (1) preference defaults ON

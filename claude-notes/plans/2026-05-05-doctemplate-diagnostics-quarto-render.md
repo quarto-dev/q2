@@ -162,7 +162,7 @@ file IDs in their `SourceInfo` resolve against the
       compiles the template into the same source context the AST uses;
       if `ApplyTemplateStage` does not, the ariadne renderer will
       have nothing to slice from and we will get
-      "<unknown source>" output instead of a caret.
+      "\<unknown source>" output instead of a caret.
 
 ### Phase 4: end-to-end verification
 
@@ -376,7 +376,7 @@ not blocking this fix.
       `Undefined variable`, `author-greeting`, and `custom.html`.
       *Failure signal:* compiles; will fail at runtime because
       production code drops the diagnostic before stderr.
-- [\~] Hub-client smoke test: **scope adjusted.**
+- \[\~\] Hub-client smoke test: **scope adjusted.**
       `wasm-quarto-hub-client` has no Rust-side `tests/` dir and
       its WASM-bound `render_qmd_content` requires a JS test
       harness to exercise. The crate already routes
@@ -447,7 +447,7 @@ not blocking this fix.
 - [x] Full `cargo xtask verify` (Rust + hub-client +
       trace-viewer): all steps passed.
 - [x] Real `q2 render` invocation captured below.
-- [\~] Hub-client browser smoke-test: deferred. The structured
+- \[\~\] Hub-client browser smoke-test: deferred. The structured
       diagnostic flows through `RenderOutput.diagnostics` /
       `diagnostics_to_json` / `JsonDiagnostic.warnings` (existing
       rails), so no new code-path on the WASM side. A live UI

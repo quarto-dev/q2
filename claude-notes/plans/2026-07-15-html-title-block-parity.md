@@ -393,7 +393,7 @@ screenshots for banner/visual phases) before any phase is declared done.
 ### Phase 3 — Metadata grid completeness (bd-j6huijli) — DONE 2026-07-16
 
 - [x] TDD red: strengthened `smoke-all/title-block/metadata-grid.qmd`
-  assertions (p.date-modified, p.doi > a[href doi.org],
+  assertions (p.date-modified, p.doi > a\[href doi.org\],
   div.keywords > div.block-title, div.description,
   div.quarto-categories > div.quarto-category; 6 checks red before
   the fix); new `categories-disabled.qmd` fixture

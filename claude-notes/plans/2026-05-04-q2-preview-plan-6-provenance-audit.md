@@ -80,7 +80,7 @@ holds the design details; this list is the work-tracking surface.
   Invocation appended).
 - [x] Multi-inline shortcode anchor test
   (`multi_inline_shortcode_resolution_shares_invocation_source` —
-  Strong[Str], Space, Str all share the same Invocation source_info).
+  `Strong[Str]`, Space, Str all share the same Invocation source_info).
 - [x] Escaped-shortcode regression test
   (`escaped_shortcode_keeps_original_source_info`).
 - [x] Error-inline regression test
@@ -411,7 +411,7 @@ comprehensive grep.
   dispatches (`UserFiltersStage`) leave `Generated { by: filter, ... }`
   intact — that is the steady-state for filter constructions, per
   Plan 4 §"Filter constructions become Generated \{ by: filter, from:
-  [] \}". The post-walk is not wired into the filter stage and should
+  `[]` \}". The post-walk is not wired into the filter stage and should
   not be.
 - **Most transforms just need to preserve ctx.source_info**. The
   "audit and fix" is mostly bug fixes — ctx already has the info; the

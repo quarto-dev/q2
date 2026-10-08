@@ -453,7 +453,7 @@ cargo test -p quarto-markdown-pandoc -- --ignored
 - \~16 bytes per unique SourceInfo
 - For 1000 unique SourceInfos: \~16KB
 
-**Reader**: Vec<SourceInfo>
+**Reader**: `Vec<SourceInfo>`
 - Temporary during deserialization
 - Dropped after AST is built
 - For 1000 SourceInfos with Rc: \~100KB

@@ -102,8 +102,8 @@ inputs shown.
 | `* a\n*\n` | list with empty item | same | `LIST_MARKER_STAR_DONT_INTERRUPT` wins |
 | `a \* b` | literal | literal | backslash escape already works |
 | `` `a * b` `` | code span | code span | scanner never reaches `parse_star` |
-| `**bold **` | Strong[bold ] | pandoc-md: Strong[bold, Space]; commonmark: literal | closer side, out of scope |
-| `*a *b* c*` | Emph[a] b Emph[c] | pandoc-md: Emph[a ] b\* c\*; commonmark: nested | closer side, out of scope |
+| `**bold **` | `Strong[bold ]` | pandoc-md: `Strong[bold, Space]`; commonmark: literal | closer side, out of scope |
+| `*a *b* c*` | `Emph[a]` b `Emph[c]` | pandoc-md: `Emph[a ]` b\* c\*; commonmark: nested | closer side, out of scope |
 
 ### Cases still erroring after the change (need lookahead; follow-up)
 

@@ -42,8 +42,8 @@ Implemented comprehensive error system (\~200 LOC):
 
 **Core Types:**
 - `ValidationError` with message, paths, YAML node, and source location
-- `InstancePath` for tracking location in YAML tree (e.g., ["format", "html", "toc"])
-- `SchemaPath` for tracking location in schema (e.g., ["properties", "format"])
+- `InstancePath` for tracking location in YAML tree (e.g., `["format", "html", "toc"]`)
+- `SchemaPath` for tracking location in schema (e.g., `["properties", "format"]`)
 - `PathSegment` enum (Key/Index)
 - `SourceLocation` for file/line/column reporting
 

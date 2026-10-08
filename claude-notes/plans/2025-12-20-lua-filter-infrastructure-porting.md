@@ -214,8 +214,8 @@ pub enum Slot {
 - `content: Blocks` - the callout body
 
 **Example: PanelTabset** has slots:
-- `titles: Inlines` - Vec<Inline> where i-th element is a Span for tab i's title
-- `contents: Blocks` - Vec<Block> where i-th element is a Div for tab i's content
+- `titles: Inlines` - `Vec<Inline>` where i-th element is a Span for tab i's title
+- `contents: Blocks` - `Vec<Block>` where i-th element is a Div for tab i's content
 
 This **parallel array storage** matches the Lua implementation. Filters must maintain the invariant that parallel arrays have matching lengths.
 

@@ -356,7 +356,7 @@ Deleted:
       change is pure TypeScript (no Rust touched) and the WASM artifact is current.
       Also validated the third preview-renderer consumer: `cargo xtask build-q2-preview-spa`
       bundled cleanly (`q2-preview-*.js` 1.14 MB).
-- [\~] **E2E (primary): hub-client dev browser** — **NOT run in this environment** (no
+- \[\~\] **E2E (primary): hub-client dev browser** — **NOT run in this environment** (no
       visual browser access). Strongest proxy done: the jsdom integration tests drive the
       REAL `PreviewRoot` with real pointer/mousedown gestures through the actual dispatcher
       + `EditToolbar` + `RichTextEditor` (tiptap) + `ModeToggle` + `EditTypeIndicator`,
@@ -365,7 +365,7 @@ Deleted:
       standalone chip, exactly one `.q2-rt-toolbar`). **Not verified without a browser:** CSS
       layout — the "no cut-off left-margin text" visual property, Markdown-mark icon appearance, and
       the above/below pixel flip. **Recommend the user do the hub-client dev browser check.**
-- [\~] **E2E (secondary): `q2 preview`** — SPA bundle **rebuilt** via
+- \[\~\] **E2E (secondary): `q2 preview`** — SPA bundle **rebuilt** via
       `cargo xtask build-q2-preview-spa` (compiles/bundles cleanly), so a subsequent
       `q2 preview` is fresh. Not browser-inspected here. No Rust touched → `cargo xtask verify`
       not required.

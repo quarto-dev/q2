@@ -20,7 +20,7 @@ runs). The raw script logs live in `measurements/`.
 
 ## Headline table
 
-| Stage                                | Profile | target/<profile> | Wall-time | Executables in deps/ |
+| Stage                                | Profile | target/\<profile> | Wall-time | Executables in deps/ |
 | ------------------------------------ | ------- | ---------------: | --------: | -------------------: |
 | Baseline (first run)                 | debug   |       21 GB (1) |    114 s  |                  220 |
 | Baseline (first run)                 | release |           11 GB  |    133 s  |                  220 |

@@ -111,7 +111,7 @@ let checks = futures::join_all(
 - No external dependencies
 
 **Why it's not great:**
-- Manual work sharing (Arc<Mutex<Option<T>>>)
+- Manual work sharing (`Arc<Mutex<Option<T>>>`)
 - Async overhead for CPU-bound work
 - Still not DAG-oriented
 
@@ -337,12 +337,12 @@ let results: Vec<_> = graph.tasks.keys()
 - ✅ Explicit DAG (you see all tasks and dependencies)
 - ✅ Automatic work sharing (OnceCell deduplicates)
 - ✅ Parallel execution (Rayon)
-- ✅ Type-safe-ish (Box<dyn Any> + downcasting)
+- ✅ Type-safe-ish (`Box<dyn Any>` + downcasting)
 - ✅ No async overhead (uses blocking OnceCell, not async)
 - ✅ \~200 lines of code (maintainable)
 
 **Downsides:**
-- ❌ Type erasure (Box<dyn Any>)
+- ❌ Type erasure (`Box<dyn Any>`)
 - ❌ Manual graph construction
 - ❌ No built-in error handling (need to add)
 

@@ -112,13 +112,13 @@ interface WasmRenderResult {
 
 The `diagnostics[].title` is the message text, and `diagnostics[].kind` maps to log levels for `printsMessage` matching. The Rust runner uses `DiagnosticKind::{Error, Warning, Info, Note}` → `LogLevel::{Error, Warn, Info, Debug}` (see `runner.rs:270-275`). **Verify the exact serialized string casing** of `kind` at runtime (e.g., is it `"error"` or `"Error"`?) — the spec YAML uses uppercase (`ERROR`, `WARN`) so the mapping must be case-insensitive or normalized.
 
-- [x] **ensureFileRegexMatches(result, matches: string[], noMatches?: string[])**
+- [x] **ensureFileRegexMatches(result, matches: `string[]`, noMatches?: `string[]`)**
   - Assert `result.success === true` and `result.html` exists
   - For each pattern in `matches`: `new RegExp(pattern, 'm').test(result.html)` must be true
   - For each pattern in `noMatches`: `new RegExp(pattern, 'm').test(result.html)` must be false
   - Use multiline flag (`m`) to match TS Quarto behavior
 
-- [x] **ensureHtmlElements(result, selectors: string[], noMatchSelectors?: string[])**
+- [x] **ensureHtmlElements(result, selectors: `string[]`, noMatchSelectors?: `string[]`)**
   - Parsed from the same two-array YAML format as `ensureFileRegexMatches`: `[[selectors...], [noMatchSelectors...]]`
   - Assert `result.success === true` and `result.html` exists
   - Parse HTML with `new JSDOM(result.html)`

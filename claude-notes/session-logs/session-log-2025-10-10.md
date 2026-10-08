@@ -110,7 +110,7 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 - **Rationale**: Simplest integration with Claude Desktop, Cursor, VS Code; no network config needed
 
 ### Architecture Pattern
-- **Choice**: Tool-based with procedural macros (#[tool] attribute)
+- **Choice**: Tool-based with procedural macros (`#[tool]` attribute)
 - **Rationale**: Clean API, automatic parameter validation, similar to existing Rust patterns
 
 ## Timeline Estimates

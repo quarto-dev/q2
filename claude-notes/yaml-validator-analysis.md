@@ -47,7 +47,7 @@ format:
 ```
 - Navigate to `format.html.theme`
 - Find schema for `theme` (enum of theme names)
-- Return completion items: ["default", "cosmo", "cerulean", ...]
+- Return completion items: `["default", "cosmo", "cerulean", ...]`
 
 ### 2. Annotated YAML Parser (`annotated-yaml.ts`)
 

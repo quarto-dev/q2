@@ -272,7 +272,7 @@ let transformed_source = SourceInfo::Original {
 
 **Disadvantages:**
 - Loses connection to original source location
-- Error messages would show "<anonymous>" instead of the actual file
+- Error messages would show "\<anonymous>" instead of the actual file
 - Need to track relationship between anonymous source and original separately
 
 ### User's Pragmatic Alternative

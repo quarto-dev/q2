@@ -63,7 +63,7 @@ Q1 has all three link states (glob/`path:`-to-document, `path:` to a non-documen
 **D3. Ordering: declared position.** A record occupies its own slot in `contents:`; glob items keep the index of their first matching pattern. Mechanically the sort key is `(index, is_glob)`: a glob item's index is the first *positive pattern* that matched it (unchanged from today), a record's is the count of `Glob` entries declared before it, and `is_glob` breaks the tie so a record written before a glob sorts before that glob's items. Deliberately **not** derived from provenance — `SourceInfo::for_test()` and `By::programmatic_config()` are constants, so equal-comparing sources would collapse every glob to index 0. Differs from Q1 (records appended after all glob matches) only under `sort: false` with a record written before a glob, and diverges toward what the YAML says. Documented in the guide. A record whose `path:` names a document a glob also matches yields **two items** (Q1 parity, no dedupe).
 
 > **Amended during execution (Task 5, fix rounds 1-2).** The wording above —
-> "a record's [index] is the count of `Glob` entries declared before it" — is
+> "a record's \[index\] is the count of `Glob` entries declared before it" — is
 > wrong wherever a `contents:` entry does not survive into
 > `resolution.positives()`. A glob item's index is its *ordinal in
 > `positives()`*, which excludes negated patterns and patterns dropped as
@@ -2342,7 +2342,7 @@ git commit -m "End-to-end tests for inline listing records (bd-listing-inline-co
 
 - [x] **Step 2: Write `docs/guides/projects/listings.qmd`** (user-facing, usage not internals), sections:
 
-```markdown
+````markdown
 ---
 title: "Listings"
 description: "Generate lists of pages or hand-written entries with `listing:`."
@@ -2399,7 +2399,7 @@ placed all records after all glob matches.)
 YAML files in `contents:` (Quarto 1's `contents: items.yml`) are skipped
 with a warning ([`Q-12-23`](/docs/errors/listing/Q-12-23.qmd)); move the
 records inline.
-```
+````
 
 - [x] **Step 3: Verify the docs build with Q2** (never Q1):
 

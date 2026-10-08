@@ -79,7 +79,7 @@ From our [render pipeline analysis](../render-pipeline/single-document/README.md
 | 1 | CLI Entry | Raw args | RenderFlags, Services |
 | 2 | Main Coordinator | Flags | ProjectContext |
 | 3 | File Rendering Setup | ProjectContext | TempContext, Lifetime |
-| 4 | Render Context Creation | File path | ExecutionTarget, Format[], RenderContext[] |
+| 4 | Render Context Creation | File path | ExecutionTarget, `Format[]`, `RenderContext[]` |
 | 5 | Engine Selection | File + metadata | Engine, Target |
 | 6 | YAML Validation | Target | Validated metadata |
 | 7 | Engine Execution | Target | ExecuteResult (markdown + supporting files) |

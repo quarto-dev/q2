@@ -5,7 +5,7 @@
 **Date:** 2026-06-10
 **Status:** DONE — all prongs (A–D) implemented + browser-verified; full
 `cargo xtask verify` green. Not pushed (awaiting review). Sibling follow-up
-[Q-E1] (HTML-preview CSS-codepath drift) remains a candidate strand.
+\[Q-E1\] (HTML-preview CSS-codepath drift) remains a candidate strand.
 
 ## Why preview reveal is React (and stays React)
 
@@ -54,13 +54,13 @@ and the Bootstrap leak + missing `reset.css` already diverge the result.
 README) — npm is already the upstream. Make that a guarantee, not a habit:
 
 - Pin npm `reveal.js` to an **exact** version (drop the `^`), matching the
-  vendored copy. **[Q-A1]** also pin `@revealjs/react` exact (it carries its own
+  vendored copy. **\[Q-A1\]** also pin `@revealjs/react` exact (it carries its own
   reveal.js — confirm it resolves the *same* reveal.js, not a second copy).
 - Add a **sync check** (xtask or a test) asserting
   `resources/revealjs/{reveal.css,reset.css,theme/white.css,reveal.js}` are
   byte-identical to `node_modules/reveal.js/dist/…`. A future `reveal.js` bump
   then fails CI until the vendored copy is re-synced — render and preview can't
-  drift. **[Q-A2]** xtask (`cargo xtask check-revealjs-sync`) vs a Rust/TS test;
+  drift. **\[Q-A2\]** xtask (`cargo xtask check-revealjs-sync`) vs a Rust/TS test;
   where does it run in `verify`.
 
 ### Prong B — one CSS **source**
@@ -85,7 +85,7 @@ reveal deck should render in a reveal-only CSS environment (as render does):
 
 - When the active document is `format: revealjs`, **don't inject** (or remove)
   the `data-q2-theme` HTML-theme `<link>` — the deck supplies its own complete
-  CSS. **[Q-C1]** exact mechanism: gate the theme-injection in `entry.tsx` on
+  CSS. **\[Q-C1\]** exact mechanism: gate the theme-injection in `entry.tsx` on
   the format, vs. scoping Bootstrap so it can't reach `.reveal`. Gating is
   cleaner and matches render (render decks have zero Bootstrap). Confirm nothing
   in the deck content (rendered via `previewRegistry`) actually needs Bootstrap.
@@ -96,23 +96,23 @@ Investigate why `@revealjs/react`\'s `<Deck transition:'slide'>` doesn't animate
 while native `Reveal.initialize` does. Hypotheses: the `<Deck>` re-creates/
 re-syncs on every preview re-render (preview re-renders on each edit), resetting
 transition state; or a config/lifecycle nuance of `@revealjs/react`; or it needs
-`Reveal.sync()` vs full re-init. **[Q-D1]** confirm it reproduces on a static
+`Reveal.sync()` vs full re-init. **\[Q-D1\]** confirm it reproduces on a static
 (non-editing) load — if transitions work until the first edit, it's the
 re-render lifecycle, not config. This prong may be independent of A–C.
 
 ## Open questions
 
-- **[Q-A1]** ✅ RESOLVED: `@revealjs/react@0.2.0` declares `reveal.js` as a
+- **\[Q-A1\]** ✅ RESOLVED: `@revealjs/react@0.2.0` declares `reveal.js` as a
   **peerDependency** (`>=5`), no bundled/nested copy — it uses the hoisted
   top-level `reveal.js@6.0.0`. So there's exactly one npm reveal.js and the
   vendored copy derives from it; pinning the top-level `reveal.js` exact +
   enforcing vendored byte-identity gives both pipelines one engine version.
-- **[Q-A2]** Sync-check home (xtask vs test) + wiring into `cargo xtask verify`.
-- **[Q-C1]** Theme-injection gating point + confirming reveal content needs no
+- **\[Q-A2\]** Sync-check home (xtask vs test) + wiring into `cargo xtask verify`.
+- **\[Q-C1\]** Theme-injection gating point + confirming reveal content needs no
   Bootstrap.
-- **[Q-D1]** Transition root cause (lifecycle vs config) — may split into its
+- **\[Q-D1\]** Transition root cause (lifecycle vs config) — may split into its
   own sub-strand if unrelated to the CSS/version convergence.
-- **[Q-E1]** Is the same drift latent for the **HTML** preview (`q2-debug`/
+- **\[Q-E1\]** Is the same drift latent for the **HTML** preview (`q2-debug`/
   `q2-preview` formats) — i.e., does the HTML preview's CSS also come from a
   different code path than render's `CompileThemeCssStage`? Out of scope here
   (reveal-only), but worth a sibling strand if so — it's the same class of bug.
@@ -151,6 +151,6 @@ re-render lifecycle, not config. This prong may be independent of A–C.
 
 ## Out of scope
 
-- The HTML-preview CSS-codepath convergence ([Q-E1]) — sibling strand if needed.
+- The HTML-preview CSS-codepath convergence (\[Q-E1\]) — sibling strand if needed.
 - The served-iframe embed work (bd-kjrpya2d) — orthogonal.
 - Render-side reveal (bd-jij5gge2) — done.

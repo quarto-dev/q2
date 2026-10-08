@@ -479,9 +479,9 @@ from Pandoc's doctemplates library):
 | `nowrap`     | —           | Returns the value unchanged in v1. Pandoc's nowrap controls fill-mode in plain text output; for our use case (markdown output) it's a no-op. |
 | `alpha`      | —           | Integer-string → letter form (1→a, 2→b, …, 26→z, 27→aa).       |
 | `roman`      | —           | Integer-string → lowercase Roman numeral.                      |
-| `left`       | width [pad] | Pad-right string to width chars (no-op if longer).             |
-| `center`     | width [pad] | Center string within width.                                    |
-| `right`      | width [pad] | Pad-left string to width chars.                                |
+| `left`       | width `[pad]` | Pad-right string to width chars (no-op if longer).             |
+| `center`     | width `[pad]` | Center string within width.                                    |
+| `right`      | width `[pad]` | Pad-left string to width chars.                                |
 
 Tests:
 - Each pipe in isolation (input → output table).

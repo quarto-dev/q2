@@ -107,7 +107,7 @@ bd-oejuizi9 / bd-hjv5o).
 - [x] End-to-end on Windows, bd-1klbq2zd stack tip:
   `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`
   → **PASS** (exit 0; previously `cannot open ...\../../...orange-book.lua`).
-- [~] Full workspace `cargo nextest run --workspace` + `cargo xtask verify
+- \[~\] Full workspace `cargo nextest run --workspace` + `cargo xtask verify
   --skip-hub-build`: **deferred to CI** per user direction (2026-09-30).
 - [x] Snapshot check: no `.snap` changes (source-only edit).
 

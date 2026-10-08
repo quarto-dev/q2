@@ -105,7 +105,7 @@ Keep objects but use 1-2 char keys.
 
 Format:
 - `i` = id
-- `r` = range (array: [start_offset, start_row, start_col, end_offset, end_row, end_col])
+- `r` = range (array: `[start_offset, start_row, start_col, end_offset, end_row, end_col]`)
 - `t` = type (0-3)
 - `d` = data (type-specific)
 

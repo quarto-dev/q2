@@ -131,9 +131,9 @@ These tests verify modifying fields on inline elements.
 
 | Test Name | Description | Lines Covered |
 |-----------|-------------|---------------|
-| `test_attr_positional_access` | attr[1], attr[2], attr[3] | 1327-1341 |
+| `test_attr_positional_access` | `attr[1]`, `attr[2]`, `attr[3]` | 1327-1341 |
 | `test_attr_named_access` | attr.identifier, attr.classes, attr.attributes | 1346-1361 |
-| `test_attr_positional_set` | attr[1] = ..., attr[2] = ..., attr[3] = ... | 1374-1385 |
+| `test_attr_positional_set` | `attr[1]` = ..., `attr[2]` = ..., `attr[3]` = ... | 1374-1385 |
 | `test_attr_named_set` | attr.identifier = ..., attr.classes = ..., attr.attributes = ... | 1390-1402 |
 | `test_attr_readonly_tag_error` | attr.tag = ... (should error) | 1403 |
 | `test_attr_unknown_field_error` | attr.unknown = ... (should error) | 1404 |

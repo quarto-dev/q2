@@ -10,7 +10,7 @@
 
 **Analysis Status Legend**:
 - [ ] Not started
-- [\~] Partial (reading code)
+- \[\~\] Partial (reading code)
 - [x] Complete
 
 ---
@@ -63,13 +63,13 @@ For each stage, we categorize side effects:
 
 | Group | Stages | Document | Status |
 |-------|--------|----------|--------|
-| Init | 4 | [01-init-filters.md](./01-init-filters.md) | [x] |
-| Normalize | 6 | [02-normalize-filters.md](./02-normalize-filters.md) | [x] |
-| Pre | \~17 | [03-pre-filters.md](./03-pre-filters.md) | [x] |
-| Crossref | 6 | [04-crossref-filters.md](./04-crossref-filters.md) | [x] |
-| Layout | 9 | [05-layout-filters.md](./05-layout-filters.md) | [x] |
-| Post | \~29 | [06-post-filters.md](./06-post-filters.md) | [x] |
-| Finalize | 7 | [07-finalize-filters.md](./07-finalize-filters.md) | [x] |
+| Init | 4 | [01-init-filters.md](./01-init-filters.md) | \[x\] |
+| Normalize | 6 | [02-normalize-filters.md](./02-normalize-filters.md) | \[x\] |
+| Pre | \~17 | [03-pre-filters.md](./03-pre-filters.md) | \[x\] |
+| Crossref | 6 | [04-crossref-filters.md](./04-crossref-filters.md) | \[x\] |
+| Layout | 9 | [05-layout-filters.md](./05-layout-filters.md) | \[x\] |
+| Post | \~29 | [06-post-filters.md](./06-post-filters.md) | \[x\] |
+| Finalize | 7 | [07-finalize-filters.md](./07-finalize-filters.md) | \[x\] |
 
 ---
 

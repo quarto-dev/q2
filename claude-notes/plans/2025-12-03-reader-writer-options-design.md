@@ -638,11 +638,11 @@ When this is implemented, we should document:
 
 | Field | Type | Default |
 |-------|------|---------|
-| `abbreviations` | Set<String> | Common abbreviations |
+| `abbreviations` | `Set<String>` | Common abbreviations |
 | `columns` | int | 80 |
 | `default_image_extension` | string | "" |
 | `extensions` | Extensions | (format-dependent) |
-| `indented_code_classes` | [string] | [] |
+| `indented_code_classes` | `[string]` | `[]` |
 | `standalone` | bool | false |
 | `strip_comments` | bool | false |
 | `tab_stop` | int | 4 |

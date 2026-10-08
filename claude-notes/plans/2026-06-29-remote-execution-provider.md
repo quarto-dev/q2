@@ -528,22 +528,22 @@ work (it pairs naturally with Phase 1's capture-consumption port).
 D1–D6 and Q6–Q8 are **resolved** (see "Decisions locked" above). What
 remains genuinely open and needs settling *during* the relevant phase:
 
-1. **Auth bridge (D1=C) [Phase 3]**: token hand-off mechanism from
+1. **Auth bridge (D1=C) \[Phase 3\]**: token hand-off mechanism from
    Node→Rust — env var (simple, but token in process env), inherited
    fd / pipe, or a short-lived local socket. Plus how refresh
    propagates (Node refreshes; Rust must pick up the new token before
    the old one expires on reconnect). Lean fd/pipe for the secret.
-2. **Beacon/claim channel [Phase 2]**: carry the beacon + claim on the
+2. **Beacon/claim channel \[Phase 2\]**: carry the beacon + claim on the
    index `DocHandle` (needs a new exposed broadcast/subscribe method on
    `SyncClient`, since only per-file handles are exposed today) vs a
    convention on a well-known per-file handle. Lean index handle.
-3. **Claim granularity [Phase 2/4]**: per-document vs per-request
+3. **Claim granularity \[Phase 2/4\]**: per-document vs per-request
    (lean per-request keyed by `(path, generation)`; see D5).
-4. **Naming (Q7) [Phase 0/3]**: working name `q2 provide-hub`;
+4. **Naming (Q7) \[Phase 0/3\]**: working name `q2 provide-hub`;
    alternatives `q2 provide`, `q2 provide-execution`, `q2 hub-provide`.
    Avoid `connect` (Posit Connect collision). Final pick before the
    subcommand is user-visible.
-5. **Clear in-flight race (D6 sub-3) [Phase 4]**: confirm
+5. **Clear in-flight race (D6 sub-3) \[Phase 4\]**: confirm
    write-if-not-cleared vs accept-and-document once the executor exists.
 
 ## Phased plan (TDD)
@@ -1199,5 +1199,5 @@ click-through is the manual verification the user can run with
 - Prior plans:
   - `claude-notes/plans/2026-06-11-q2-mcp-hub-auth.md` (auth + launcher; native-Rust findings)
   - `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md` (capture splice)
-  - `claude-notes/plans/2026-05-27-multi-engine-execution.md` (Vec<EngineCapture>)
+  - `claude-notes/plans/2026-05-27-multi-engine-execution.md` (`Vec<EngineCapture>`)
   - `claude-notes/plans/2026-01-06-execution-engine-infrastructure.md` (engine trait)

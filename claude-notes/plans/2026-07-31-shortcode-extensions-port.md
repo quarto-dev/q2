@@ -118,11 +118,11 @@ in-grammar, so this restriction may simply not apply — verify in Phase 0).
 These are the places where we deliberately diverge from Q1, following the
 project's porting principles: *strictness is acceptable when the diagnostic is
 source-mapped and actionable; prefer explicit declaration over inference.*
-Each is flagged **[decided]** (follows an existing Q2 policy) or **[needs user
-sign-off]**.
+Each is flagged **\[decided\]** (follows an existing Q2 policy) or **\[needs user
+sign-off\]**.
 
 **D1. Unknown shortcode → coded, source-mapped diagnostic; no silent drop.
-[decided 2026-07-31]**
+\[decided 2026-07-31\]**
 Q1 warns and passes the raw text through (silently, in text context) — partly a
 Hugo-interop feature. Decision: warning-level diagnostic with a new `Q-*` code,
 `.with_location()` pointing at the invocation (we have `SourceInfo` on every
@@ -134,7 +134,7 @@ Unknown-shortcode-as-*error* needs no dedicated flag: `q2 render --strict`
 (warnings-as-errors, already shipped) composes with this warning.
 
 **D2. Extension load failure is a real diagnostic, never a downstream
-misattribution. [decided — this is bd-nzdm1wry]**
+misattribution. \[decided — this is bd-nzdm1wry\]**
 A malformed `_extension.yml` or a Lua file that fails to load must produce a
 coded diagnostic naming the extension file and cause, at load/first-use time.
 The current behavior (silent `tracing::warn!`, then "unknown shortcode ?greet"
@@ -142,7 +142,7 @@ pointing at the *user's document*) is precisely the Q1-style misattribution this
 port should eliminate.
 
 **D3. Manifest strictness: relax to Q1-compat intake, validate loudly.
-[decided 2026-07-31 — proposal approved as written]**
+\[decided 2026-07-31 — proposal approved as written\]**
 Q1 requires no named fields in `_extension.yml`. Q2 hard-requires
 `title`/`author`/`contributes` (bd-8b0af414), so real Q1 extensions
 (julia-engine, marimo) fail to load — and per D2 today they fail *silently*.
@@ -152,8 +152,8 @@ nothing is an error, matching Q1's `validateExtension`); missing
 as semver *when present*, with a source-mapped error into the YAML file when
 malformed (we have quarto-yaml source locations; Q1 didn't).
 
-**D4. Handler-name conflicts are diagnosed, not silent. [decided 2026-07-31,
-conditional on practicality]**
+**D4. Handler-name conflicts are diagnosed, not silent. \[decided 2026-07-31,
+conditional on practicality\]**
 Keep a deterministic precedence (matching Q1: built-ins win; among extensions,
 more-local wins; document `shortcodes:` files lowest). The shadowing diagnostic
 (naming both files) is approved *if practical* — user flagged a feasibility
@@ -164,27 +164,27 @@ already tracks the script being loaded), a file-level (not span-level)
 diagnostic should be cheap; if it turns out invasive, ship the precedence rule
 documented but undiagnosed and file a follow-on strand.
 
-**D5. `include` stays a Rust pre-stage, not a Lua handler. [decided]**
+**D5. `include` stays a Rust pre-stage, not a Lua handler. \[decided\]**
 Q2's `include_expansion.rs` already mirrors Q1's TS-side design (and Q1 itself
 never had a Lua `include`). Keep circular-include detection and source-mapped
 missing-file errors as coded diagnostics (verify they have `Q-*` codes; add if
 not).
 
-**D6. `embed` is out of scope for this plan. [confirmed 2026-07-31]**
+**D6. `embed` is out of scope for this plan. \[confirmed 2026-07-31\]**
 Q1 `embed` drags in notebook rendering, `notebook-links`/`notebook-view`, and
 the jupyter-embed placeholder machinery. User: `{{< embed >}}` needs a more
 drastic redesign for Q2 — deferred to its own strand/epic, dependent on Q2's
 engine story.
 
-**D7. Paired shortcodes not ported. [confirmed 2026-07-31 — deferred]**
+**D7. Paired shortcodes not ported. \[confirmed 2026-07-31 — deferred\]**
 Shipped in Q1 1.4 (`#5902`), never documented, zero occurrences in quarto-web.
 User: these likely exist purely for Hugo passthrough — which means if we ever
 implement the D1 passthrough config for Hugo interop, paired syntax belongs to
 *that* feature (pass the paired form through verbatim), not to the handler
 dispatch machinery. File a backlog strand recording this framing.
 
-**D8. In-grammar parsing is the single source of truth. [decided — already Q2
-reality; text-position scanning deferred 2026-07-31]**
+**D8. In-grammar parsing is the single source of truth. \[decided — already Q2
+reality; text-position scanning deferred 2026-07-31\]**
 Q1 has *four* shortcode parsers (LPeg grammar, sentinel encoder, AST-level
 metadata re-parser, TS regex parser) because it had to smuggle shortcodes past
 Pandoc's reader. Q2 parses them in the tree-sitter grammar with real
@@ -231,7 +231,7 @@ where the study only has static reads.
       (code block / attribute / link target / image src / grid table /
       metadata values) deferred with Phase 3 — still unwritten, revisit when
       Phase 3 opens.
-- [\~] Real published extensions: `quarto-tiers` (Posit, real-world) verified
+- \[\~\] Real published extensions: `quarto-tiers` (Posit, real-world) verified
       end-to-end via connect-docs (badge spans render, 0 warnings). Adding
       copied fixtures of fontawesome-class extensions remains open — good
       first item for a follow-up session.
@@ -286,7 +286,7 @@ where the study only has static reads.
 - [x] `read_arg` verified matching Q1; `error_output` now accepts table
       message_or_args (Q1 contract; error_args case ported into
       contract-doc-shortcodes). Message text deviates from Q1's `?name:msg`
-      ([Shortcode Error (name): msg]) — accepted deviation.
+      (\[Shortcode Error (name): msg\]) — accepted deviation.
 - [x] `shortcode_to_span` `process::exit(1)` removed: nested kv values
       encode Q1-style recursive param spans (commit 7c3b2f10).
 

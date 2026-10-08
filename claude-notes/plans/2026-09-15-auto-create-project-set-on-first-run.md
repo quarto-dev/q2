@@ -253,7 +253,7 @@ that redirects every `WebSocket` to `ws://127.0.0.1:1/` while
 > Couldn't connect to the sync server
 > Your project list lives on the sync server, and it did not answer.
 > (Could not reach sync server. Please check your connection and try again.)
-> [Try again]
+> \[Try again\]
 
 Set `window.__wsBlock = false`, clicked **Try again**: the home's
 "No projects yet" state appeared, root created. Screenshot:

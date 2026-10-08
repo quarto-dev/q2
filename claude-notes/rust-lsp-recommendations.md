@@ -75,7 +75,7 @@ impl LanguageServer for QuartoLsp {
 ### 5. **dashmap** - Concurrent HashMap
 - **Version**: 5.5+
 - **Purpose**: Thread-safe caching (TOC, links, symbols)
-- **Why**: Better than RwLock<HashMap> for concurrent access
+- **Why**: Better than `RwLock<HashMap>` for concurrent access
 - **Features**:
   - Lock-free reads when possible
   - Async-friendly

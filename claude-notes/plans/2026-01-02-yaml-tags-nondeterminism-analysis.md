@@ -115,7 +115,7 @@ SourceInfo::Substring {
 }
 ```
 
-The expr value has offsets [15,20], path has [33,47]. These are **not equal**, so content comparison correctly distinguishes them.
+The expr value has offsets `[15,20]`, path has `[33,47]`. These are **not equal**, so content comparison correctly distinguishes them.
 
 The problem is that the pointer cache **bypasses** content comparison entirely.
 
@@ -152,7 +152,7 @@ json!({
 })
 ```
 
-- CLONE_A (with offsets [15,20]) is created and stored in the `inlines` Vec
+- CLONE_A (with offsets `[15,20]`) is created and stored in the `inlines` Vec
 - `write_inlines` interns CLONE_A; `id_map` gets `addr_clone_a -> 2`
 - `json!` returns a Value
 - **`inlines` is dropped**, freeing CLONE_A's memory
@@ -170,7 +170,7 @@ json!({
 })
 ```
 
-- CLONE_B (with offsets [33,47]) is created
+- CLONE_B (with offsets `[33,47]`) is created
 - **If the allocator reuses the freed memory**, CLONE_B is at address `addr_clone_a`
 - `write_inlines` calls `intern(&clone_b_source_info)`
 - In `intern`: `ptr = addr_clone_a` (due to memory reuse)

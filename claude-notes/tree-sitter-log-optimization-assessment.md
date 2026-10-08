@@ -200,7 +200,7 @@ For the div-whitespace benchmark (12 seconds):
 
 | Aspect | Current | Proposed | Equivalent? |
 |--------|---------|----------|-------------|
-| Parameter parsing | HashMap with String keys/values | Direct match with Option<T> | ✅ Yes |
+| Parameter parsing | HashMap with String keys/values | Direct match with `Option<T>` | ✅ Yes |
 | Error handling | `.expect()` on `.get()` | `.expect()` on Option | ✅ Yes |
 | Unknown parameters | Stored in HashMap, never used | Ignored in match | ✅ Yes (better!) |
 | Duplicate keys | Last value wins (HashMap) | Last value wins (Option overwrite) | ✅ Yes |

@@ -456,7 +456,7 @@ For each code in `/tmp/orphaned-in-catalog.txt`:
 
 ### Report Structure
 
-```markdown
+````markdown
 # Error Code Audit Report
 Generated: YYYY-MM-DD
 
@@ -533,7 +533,7 @@ Add entry to error_catalog.json with:
 ---
 
 [Repeat for each issue]
-```
+````
 
 ### Generate the Report
 

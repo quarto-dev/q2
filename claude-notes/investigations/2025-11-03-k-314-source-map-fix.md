@@ -14,13 +14,13 @@ When delimiters captured surrounding whitespace, the function would:
 2. Create the inline element (Strong, etc.) with the full parent node's range including delimiter spaces (incorrect)
 
 For example, with `**bold** ` (with trailing space in delimiter):
-- The Strong element would get range [9,19] (full node)
-- The Space node would get range [9,19] (parent node, incorrect)
+- The Strong element would get range `[9,19]` (full node)
+- The Space node would get range `[9,19]` (parent node, incorrect)
 
 ### Expected Behavior
-- The Strong element should get range [10,18] (excluding delimiter spaces)
-- The leading Space should get range [9,10] (just the space)
-- The trailing Space should get range [18,19] (just the space)
+- The Strong element should get range `[10,18]` (excluding delimiter spaces)
+- The leading Space should get range `[9,10]` (just the space)
+- The trailing Space should get range `[18,19]` (just the space)
 
 ## Solution
 Modified `process_inline_with_delimiter_spaces` in `crates/quarto-markdown-pandoc/src/pandoc/treesitter_utils/text_helpers.rs`:

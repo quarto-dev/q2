@@ -120,7 +120,7 @@ function ignoreExprViolations(
 #### Example 1: Figure Caption with R Expression
 
 **document.qmd**:
-```yaml
+````yaml
 ---
 title: "Analysis"
 ---
@@ -130,7 +130,7 @@ title: "Analysis"
 #| fig-cap: !expr paste("Air", "Quality")
 plot(airquality)
 ```
-```
+````
 
 **Parsed metadata**:
 ```json
@@ -153,18 +153,18 @@ plot(airquality)
 #### Example 2: Conditional Evaluation
 
 **document.qmd**:
-```yaml
+````yaml
 ```{r}
 #| eval: !expr knitr::is_html_output()
 print("Only for HTML")
 ```
-```
+````
 
 **Purpose**: Conditionally execute code based on output format.
 
 #### Example 3: Multiple Tags in Project Config
 
-**_quarto.yml**:
+**\_quarto.yml**:
 ```yaml
 format:
   html:
@@ -868,7 +868,7 @@ invalid: !expr
 
 **Additional memory per tagged value**:
 - YamlTag struct: \~48 bytes (2 Strings + overhead)
-- Optional wrapper: 8 bytes (Option<YamlTag>)
+- Optional wrapper: 8 bytes (`Option<YamlTag>`)
 
 **Typical case**: Very few tagged values in a config (< 10)
 **Total overhead**: < 1 KB per document

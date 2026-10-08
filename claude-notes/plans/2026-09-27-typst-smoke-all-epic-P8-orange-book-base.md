@@ -149,7 +149,7 @@ logo-path resolution against a synthetic merged document's directory context.
   handlers; there is no `embed.lua` anywhere in the tree and no Rust handler
   named `embed`. `claude-notes/plans/2026-07-31-shortcode-extensions-port.md`
   confirms this explicitly (D6, confirmed 2026-07-31): "`embed` is out of
-  scope for this plan... needs a more [substantial] redesign... own epic,
+  scope for this plan... needs a more \[substantial\] redesign... own epic,
   engine-dependent." An unresolved shortcode call produces a Q-16-3
   "Shortcode handler not found" warning + an inline `**?embed**` marker, not a
   hard failure — engine-resolution for chapter1.qmd is driven only by its own
@@ -666,7 +666,7 @@ logo-path resolution against a synthetic merged document's directory context.
   in `appendix.qmd`/`appendix-b.qmd`/`chapter2.qmd` (back to
   `fig-cars-1.svg`, now that bd-2lxj10z0 makes knitr receive the real
   label), which surfaced an **eleventh bug**: Typst compile failed with
-  `label `<fig-cars>` occurs multiple times`. Root cause, confirmed by
+  `label `\<fig-cars>` occurs multiple times`. Root cause, confirmed by
   rendering and inspecting the reconciled AST: `label_reinject`
   (bd-2lxj10z0) correctly hands knitr the `#fig-cars` label so it can
   derive the right output filename, but knitr's own rendered markdown

@@ -127,7 +127,7 @@ bundles its `.jl` scripts).
 `jupyter-kernel.ts` + `resources/jupyter/jupyter.py` (socket-server shell) +
 `notebook.py` (actual execution via **nbclient**; papermill only for param
 injection; optional **jupyter-cache**):
-- TCP-only transport; daemon keyed by md5(abs input)[:20] transport file in
+- TCP-only transport; daemon keyed by `md5(abs input)[:20]` transport file in
   runtime `jt/`; `{port,secret}` JSON; detached double-spawn (`start`→`serve`);
   default 300s keepalive self-exit; 5-consecutive-error exit.
 - Wire: client→daemon `{command: execute|abort|file|start|serve, secret,

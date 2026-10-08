@@ -35,7 +35,7 @@ the suspected trigger, but the immediate goal is twofold:
 
 ### Phase 2 — Source-code mapping
 
-- [x] Locate where "Document <id> is unavailable" is produced
+- [x] Locate where "Document \<id> is unavailable" is produced
       (automerge-repo `Repo.find()`, surfaced raw by
       `JoinCollectionLanding.tsx:74` via `projectSetService.ts:237`)
 - [x] Trace the project-collection import path; enumerate distinct

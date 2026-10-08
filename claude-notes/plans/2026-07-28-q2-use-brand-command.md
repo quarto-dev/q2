@@ -73,7 +73,7 @@ writes a config key.
 
 Q2 **deliberately has no auto-discovery**. `crates/quarto-core/src/project/mod.rs:354-376`:
 
-> The **project-level** brand named by `_quarto.yml`\'s `brand:` key […] `None`
+> The **project-level** brand named by `_quarto.yml`\'s `brand:` key \[…\] `None`
 > when no `brand:` key is present — Q2 deliberately has no `_brand.yml`
 > auto-discovery, unlike Q1
 
@@ -470,8 +470,10 @@ implements each is noted.
 - [ ] 15–20 written and failing (network + copy; Phases 6–7)
 - [ ] 10–12 written and failing (copy mode; Phase 7)
 
+```{=html}
 <details>
 <summary>Full case list (the contract)</summary>
+```
 
   1. No `_quarto.yml` anywhere up the tree → non-zero exit, message names the
      missing file, **nothing written** (no `_brand.yml`, no `_quarto.yml`).
@@ -524,7 +526,9 @@ implements each is noted.
       the test that proves the declaration step actually connects — the exact
       failure mode a Q1-faithful copy-only port would have.
 
+```{=html}
 </details>
+```
 
 ### Phase 1 — Shared `commands/common/` module
 

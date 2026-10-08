@@ -266,7 +266,7 @@ remains the *only* site that arms the fade, which is what makes the A invariant 
 
 | # | Tier | Real unit mounted | Seam · assertion | Named revert hunk → RED |
 |---|------|-------------------|------------------|--------------------------|
-| **G14-1** | jsdom integration | `PreviewRoot` reland-fade reset (A) | **Added to `g9-reland-fade.integration.test.tsx`.** Dirty nest-out → settled rerender lands on the blockquote (fade cleared, ref reset). Then **plain blur** the blockquote editor (→ a `'focus'` landing). **Assert IMMEDIATELY (no timer advance): no `.q2-reland-fade` anywhere** — binds the reset, not B's focus-branch clear. | Restore the sticky ref (remove `fadeSourceR0Ref.current = null` from `clearRelandFade`) → the plain-close apply effect re-fades pool[1] (stale r0=2) → `expected 0, got 1` → **RED** (proven 2026-06-18; T7 stays green). |
+| **G14-1** | jsdom integration | `PreviewRoot` reland-fade reset (A) | **Added to `g9-reland-fade.integration.test.tsx`.** Dirty nest-out → settled rerender lands on the blockquote (fade cleared, ref reset). Then **plain blur** the blockquote editor (→ a `'focus'` landing). **Assert IMMEDIATELY (no timer advance): no `.q2-reland-fade` anywhere** — binds the reset, not B's focus-branch clear. | Restore the sticky ref (remove `fadeSourceR0Ref.current = null` from `clearRelandFade`) → the plain-close apply effect re-fades `pool[1]` (stale r0=2) → `expected 0, got 1` → **RED** (proven 2026-06-18; T7 stays green). |
 | **G14-T7** (pre-existing) | jsdom integration | G9 apply/clear with a nested source | Unchanged — still green under A+B+D. | (its three original hunks) |
 
 > **Mock boundary:** `getBoundingClientRect` on `[data-block-pool-id]` tiles
@@ -570,7 +570,7 @@ For **G16-at**, the `surfaceAtLine` surface SET is the inline array
 `[{r0:0,r1:65} /*BlockQuote*/, {r0:27,r1:65} /*OrderedList*/, {r0:31,r1:39} /*oh*/,
 {r0:43,r1:53} /*dear*/]` (add `{r0:57,r1:65}` for the item-3 leaf if exercising
 line 6). With the fixed `>`-aware span, line 3's deepest containing surface is the
-OrderedList **container** whose only leaf children (`oh`→[2,2], `dear`→[4,4]) do
+OrderedList **container** whose only leaf children (`oh`→`[2,2]`, `dear`→`[4,4]`) do
 **not** cover line 3 → `surfaceAtLine`\'s A2 container-gap check returns `null`
 (verified against the real container structure 2026-06-18).
 

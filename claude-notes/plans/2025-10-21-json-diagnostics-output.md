@@ -38,7 +38,7 @@ let result = readers::qmd::read(
 ```
 
 **Key observations**:
-1. `error_formatter` is `Option<F>` where F is a function that produces Vec<String>
+1. `error_formatter` is `Option<F>` where F is a function that produces `Vec<String>`
 2. This is used for **parse errors** (tree-sitter errors), not warnings
 3. The formatter is called in `qmd.rs` at lines 106-112
 
@@ -434,7 +434,7 @@ Should not output any diagnostic JSON (empty array or nothing).
 Eventually, all errors (parse errors, metadata errors, warnings) should use DiagnosticMessage.
 
 Current split:
-- Parse errors: Vec<String> (ariadne-formatted or JSON)
+- Parse errors: `Vec<String>` (ariadne-formatted or JSON)
 - Metadata errors/warnings: DiagnosticMessage
 
 Goal: Everything as DiagnosticMessage.

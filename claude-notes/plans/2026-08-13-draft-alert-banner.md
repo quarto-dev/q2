@@ -41,7 +41,7 @@ publishes four unmarked draft pages.
 
 Nearly empty — one outgoing `related` edge:
 
-- **related → `bd-w0o9`** ("[websites] draft-mode include/visible/exclude
+- **related → `bd-w0o9`** ("\[websites\] draft-mode include/visible/exclude
   option", open, p3, itself `discovered-from` `bd-9svl`). Q1 supports
   `draft-mode: visible|unlinked|none`; q2 has none of it and always excludes
   drafts from auto sidebars. **This is a sibling, not a blocker** — see the

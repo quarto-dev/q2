@@ -85,7 +85,7 @@ disabled). This is the seam we reproduce in Rust.
 
 - `ensureDirSync(dir)` — creating **into an existing dir is allowed**;
   hard error only if the dir already contains `_quarto.yml`/`_quarto.yaml`
-  ("The directory '<dir>' already contains a quarto project").
+  ("The directory '\<dir>' already contains a quarto project").
 - Scaffold/supporting file writes are individually skipped if the target
   file already exists (merge-into-non-empty-dir semantics).
 - Writes `.gitignore` via `ensureGitignore`: entries `/.quarto/` and

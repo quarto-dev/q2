@@ -277,7 +277,7 @@ errors never do*):
       driving the real `q2 mcp` launcher (embed fresh; no fallback notice).
       Observed outputs: `create_project` after revocation → "…credentials
       have expired or were revoked. Ask me to authenticate again." ;
-      post-ban stderr → "[hub-mcp] Your account is not allowed on this
+      post-ban stderr → "\[hub-mcp\] Your account is not allowed on this
       Quarto Hub…" ; post-ban `read_file` → the same denial message.
 
 ## F3 — discriminate `/auth/me` `exp` (`bd-aw8f3sp8`)

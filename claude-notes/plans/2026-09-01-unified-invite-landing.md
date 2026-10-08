@@ -93,7 +93,7 @@ seeded first-run samples, revocable/role-scoped links, sender UI redesign
   (pure functions, no DOM).
 - [x] `InviteLanding.test.tsx` (jsdom pragma): renders both `kind`s ×
   \{signed-in, signed-out\}; exact kicker/CTA copy per matrix (incl.
-  "Join and open <start name>" / generic legacy text); payload block
+  "Join and open \<start name>" / generic legacy text); payload block
   skipped when preview absent; no name input, no color swatches, no
   footnote below CTA; CTA busy state while joining.
 - [x] `App`-level "share does not connect on load, connects on CTA" —

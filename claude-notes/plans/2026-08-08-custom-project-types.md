@@ -145,7 +145,7 @@ precedence *and* array concat semantics in one project. It also chains
 `type: posit-docs → website`, giving us the full resolution path.
 
 (The same project also needs `contributes.metadata` from quarto-openapi
-[bd-zb2tod5f], `.ts` pre-render script execution, `_environment`, `!path`
+\[bd-zb2tod5f\], `.ts` pre-render script execution, `_environment`, `!path`
 includes, profiles, `llms-txt` — all tracked separately under
 bd-wch2dotq. This strand only makes `type: posit-docs` work.)
 

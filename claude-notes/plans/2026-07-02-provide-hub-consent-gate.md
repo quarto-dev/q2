@@ -90,7 +90,7 @@ Key structural facts that shape the design:
   Node auth bridge pipes the *Node child's* stdio (`token_bridge.rs`),
   not the provider process's terminal. (`--token` dev mode has no child
   at all.)
-- **samod exposes `Repo::stop() -> impl Future`** which "wait[s] until
+- **samod exposes `Repo::stop() -> impl Future`** which "wait\[s\] until
   all storage tasks have completed" — but does **not** documentedly
   guarantee outbound *network* sync has been acked by the server. The
   existing execute integration test confirms sync with sleep-based

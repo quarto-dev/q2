@@ -338,7 +338,7 @@ do not pull from upstream. Sources of confusion that misled this
 audit's first pass:
 
 - `crates/tree-sitter-qmd/README.md` line 3 — *"`tree-sitter-qmd`
-  is a fork of [`tree-sitter-markdown`]…"*. Should be reworded to
+  is a fork of \[`tree-sitter-markdown`\]…"*. Should be reworded to
   "originated as a fork of, but is now developed independently".
 - `crates/tree-sitter-qmd/package.json` — still declares
   `"name": "@tree-sitter-grammars/tree-sitter-markdown"`,
