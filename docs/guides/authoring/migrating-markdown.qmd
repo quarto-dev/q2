@@ -96,8 +96,9 @@ them, the escapes are harmless.
 | You wrote | Pandoc | q2 | Fix |
 |---|---|---|---|
 | `[text][ref]` and `[ref]: url` (a reference-style link) | link | Q-2-45 / Q-2-46; rendered as literal spans | an inline link `[text](url)` |
-| `[REVISED]`, `[x]` outside a task list (bare brackets) | literal | Q-2-49; rendered as a span | `\[REVISED\]`, or a code span |
-| `<anonymous>`, `<div>` (raw HTML in prose) | raw HTML | Q-2-9; passed through as raw HTML, so invisible in the page | `` `<anonymous>` `` when you mean the text |
+| `[REVISED]`, `[x]` outside a task list (bare brackets) | literal | Q-2-49; rendered as a span | `\[REVISED\]`; a code span for `argv[1]` |
+| `<anonymous>`, `Vec<String>` (angle brackets in prose) | raw HTML | Q-2-9; passed through as raw HTML, so invisible in the page | `\<anonymous>` for a placeholder; a code span for a type |
+| `<br>`, `<details>` (HTML you want rendered) | raw HTML | Q-2-9; passed through, with a warning | `` `<br>`{=html} `` inline; a ```` ```{=html} ```` block for a tag-only line |
 
 ## Shortcodes inside code blocks
 

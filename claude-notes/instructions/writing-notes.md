@@ -23,8 +23,12 @@ The habits that most often break a note here, in order of frequency:
    code (Q-2-35).
 7. A stray backtick, or a code span that contains a backtick with single-backtick
    delimiters. Use double backticks around a span that contains one.
-8. Bare brackets as editorial marks: `[REVISED]`, `[sic]`. They become spans
-   with a warning; write `\[REVISED\]`.
+8. Bare brackets as editorial marks: `[REVISED]`, `[sic]`, `**[Q-1]**`,
+   `[[a-ref]]`. They become spans with a warning (Q-2-49); write `\[REVISED\]`.
+   A code expression (`argv[1]`, `[2, 4]`, `["mermaid"]`) goes in a code span
+   instead. A checkbox state q2 does not know, `- [~]` or `- [-]`, is the same
+   warning; write `- \[\~\]`. And `- [x]**bold**` with no space after `]` is not
+   a task item at all.
 9. Reference-style links `[text][1]`. Only inline links work.
 10. A heading underlined with `===` or `---`. It silently becomes a paragraph;
     use `#`.
@@ -44,6 +48,12 @@ The habits that most often break a note here, in order of frequency:
     `{{< include "x.qmd" >}}` reports Q-17-2. Write it as `{{{< include "x.qmd" >}}}`
     (triple braces; renders with double), or open the fence as
     `` ```{.markdown shortcodes="false"} ``.
+15. Angle brackets in prose (Q-2-9): q2 reads `<x>` as an HTML tag and passes it
+    through, so the reader sees nothing. A generic type goes in a code span
+    (`` `Vec<String>` ``, the whole expression). A placeholder escapes the `<`:
+    `"Authenticated as \<email>"`. HTML you actually want rendered is a raw
+    inline, `` `<br>`{=html} `` (with a space on each side when it sits between
+    two code spans), or a tag-only line becomes a ```` ```{=html} ```` block.
 
 Whitespace-flanked `*`, `~16`, `x^2` and a bare `@` (`` `main` @ `sha` ``) are
 literal text and need nothing. `snake_case` is fine.

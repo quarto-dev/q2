@@ -3,10 +3,12 @@
 **Strand:** bd-uk8zgkha (epic)
 **Branch:** `braid/bd-uk8zgkha-claude-notes-website` (main checkout, no worktree; not pushed)
 **Status:** every note renders (1456 / 1456, 0 errors, 2026-10-07, nightly
-.20261007). Mechanical escaping, six per-file agent batches, and a hand tail; the
-star queue below is historical. Remaining: warnings (Q-2-49, Q-2-9, Q-16-3,
-Q-16-5), site polish, CI, and every merge from `main` needs the fixpoint script
-(and probably a small batch) for the notes it brings in.
+.20261007), and the bracket warnings are gone (Q-2-9 152 → 0, Q-2-49 339 → 0
+outside three repro fixtures, 2026-10-08). Mechanical escaping, six per-file
+agent batches for errors, four for brackets, and hand tails; the star queue
+below is historical. Remaining: the shortcode warnings (Q-16-3 95, Q-16-5 77),
+site polish, CI, and every merge from `main` needs the fixpoint script (and
+probably a small batch) for the notes it brings in.
 
 ## Goal
 
@@ -162,13 +164,16 @@ whose original markup had an unbalanced backtick.
 | 2026-10-07, batch 5 | 1430 / 1480 | 52 | 182 |
 | 2026-10-07, batch 6 (multi-error tail) | 1464 / 1480 | 18 | 15 |
 | 2026-10-07, last eleven by hand; fixtures excluded | 1456 / 1456 | 0 | 0 |
+| 2026-10-08, bracket warnings (four batches + hand) | 1456 / 1456 | 0 | 0 |
 
 Remaining error classes (nightly .20261007): uncoded parse errors 372 (153 files),
 Q-2-12 33, Q-2-11 33, Q-2-41 24, Q-2-5 12, Q-2-35 11, Q-2-13 8, Q-2-2 7, plus a
 tail. The uncoded count grows whenever an escape lets the parser reach further into
 a file. It has not been broken down by cause on this nightly; on .20260925 it was
 end-of-line cascades 76, backtick runs 44, indented lines 58, braces 20, `⟨` 6, `$`
-5. Warnings are not yet addressed: Q-2-49 240, Q-2-9 105, Q-16-3 63, Q-16-5 50.
+5. Warnings before the bracket pass: Q-2-49 339, Q-2-9 152, Q-16-3 95, Q-16-5 77;
+after it, the brackets are down to the three repro fixtures (`q1probe*.md`,
+`track-changes-source.md`), and the shortcode warnings are untouched.
 
 ### Bringing the branch up to date (2026-10-06)
 
@@ -264,6 +269,56 @@ prefix-bisect (render the file's first N blocks until it fails;
   containing ` #`; raw control characters in a regex; `N*` in a table header.
 - Six repro fixtures under `plans/code-span-backtick-run-investigation/cases/` and
   the import spike's `losses.md` are supposed to fail; excluded in `_quarto.yml`.
+
+## Bracket warnings (2026-10-08)
+
+Two codes, both bracket ambiguity. Q-2-9 "HTML element converted to raw HTML":
+`<x>` passed through as raw HTML, so the reader sees nothing. Q-2-49: a bare
+`[x]` with no attribute block renders as an empty span, brackets dropped. Read
+every occurrence first (339 + 152), and the shapes were:
+
+- Angle: real HTML the author wanted rendered (`<br>` in table cells,
+  `<details>/<summary>`, `<a id>`), ~25; generic types (`Vec<String>`,
+  `Arc<Mutex<Option<T>>>`), ~70; prose placeholders (`"Authenticated as
+  <email>"`, `Q-<subsystem>-<number>`, `-i <file>`), ~45 — the case nobody had
+  named, and the most common after types.
+- Square: code expressions (`argv[1]`, `[2, 4]`, `["mermaid"]`, `[]` in a type
+  column); labels and marks (`**[Q-1]**`, `[verified]`, `[Phase 2]`,
+  `[Disconnect]`); `[[wiki-style refs]]`; and task checkboxes q2 did not
+  recognise — `- [x]**1.0**` (no space), a nested `- [ ]` at column 6 after a
+  paragraph line (read as the paragraph's continuation), and the author's own
+  states `- [\~]`, `- [-]`, `- [→]`.
+
+Fixes, each verified in a probe file first: `` `<br>`{=html} `` inline (with a
+space on each side when it sits between two code spans, or the backticks run
+together); a tag-only line becomes a ```` ```{=html} ```` block; a type or code
+expression goes whole into one code span, emphasis kept outside; a placeholder
+escapes only the `<` (`\<email>`); labels, refs and odd checkboxes escape the
+brackets; `- [x]**` gains its space; the over-indented checklist dedents by four.
+Tie-break for the agents: when unsure, escape.
+
+Same workflow as the error batches (`claude-notes-brackets-v1`: Haiku fixer,
+Haiku verifier, up to two rounds), with two changes: the fixer gets the exact
+span and token q2 flagged, so it hunts less; and the verifier also reports parse
+errors, so a fix that breaks the file comes back as `regressed` for round two.
+Batches of 10 (hand-picked to cover every shape), 50 (single-warning files),
+120 (everything else) and 6; about 380 agents and 13.5M tokens; every batch
+reviewed by line class (backslash, codespan, rawhtml, space, dedent, fence) and a
+standalone render of every changed file. Misfires over 186 files: an escape
+applied inside a mispaired fence, a space inserted inside an expression while
+wrapping it, a `<summary>` left outside its `{=html}` block. The judgment calls
+(type vs placeholder, code vs label) were right every time I read them.
+
+The real find was structural: eight files held a fenced listing that itself
+contained a ```` ``` ```` fence (a template with an inner `{=html}` block, a
+Markdown example with a `{r}` cell, a Rust raw string with a qmd document). q2,
+like CommonMark, closes the outer block at the inner fence, so everything after
+it to the next fence is prose — which is where the bracket warnings came from,
+and where two parse errors (`Q-*.json`, `**_quarto.yml**`) had been hiding as
+"code". Four-backtick outer fences fix all of them. The batch picker now pairs
+fences naively and routes any file with an info-string fence inside an open block
+to a human instead of an agent; the one agent miss of that kind happened before
+the check existed.
 
 ## Manual review queue: star emphasis (historical)
 

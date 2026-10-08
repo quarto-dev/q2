@@ -6,7 +6,7 @@ All four fixtures in this directory were run through
 | Fixture | Input | Result |
 | --- | --- | --- |
 | `prose.qmd` | `X {{python}} Y` | **Bare parse error** — "unexpected character or token here" at the second `{` (1:4), no error code, no hint |
-| `prose-single.qmd` | `X {python} Y` | **[Q-2-41]** "Curly braces are reserved for attribute syntax" with actionable hint (`\{...\}` escape, attribute syntax) |
+| `prose-single.qmd` | `X {python} Y` | **\[Q-2-41\]** "Curly braces are reserved for attribute syntax" with actionable hint (`\{...\}` escape, attribute syntax) |
 | `fence.qmd` | ` ```{{python}} ` opener inside a displayed ` ````markdown ` fence | Parses fine; content kept **verbatim**: `CodeBlock ... "```{{python}}\n1 + 1\n```"` — the doubled braces are shown to the reader (Quarto 1 collapses to `{python}`) |
 | `fence-single.qmd` | ` ```{python} ` opener inside a displayed ` ````markdown ` fence | Parses fine, verbatim: `CodeBlock ... "```{python}\n1 + 1\n```"` — already the desired display form |
 
