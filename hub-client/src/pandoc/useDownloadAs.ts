@@ -32,9 +32,11 @@ export interface DownloadAs {
  */
 export function useDownloadAs(path: string | null, content: string, wasmReady: boolean, captures?: Record<string, CaptureRef>, identities?: Record<string, ActorIdentity>): DownloadAs {
   const controller = getDownloadController();
-  // A comment's author is looked up at the click, in the editor's current author table.
+  // A comment's author is looked up at the click, in the editor's current author table. A caller
+  // that has no table (the download-mode pane) must not write: the table is shared module state,
+  // and an empty write would erase the editor's, leaving authors as raw actor-id prefixes.
   useEffect(() => {
-    setDownloadIdentities(identities ?? {});
+    if (identities) setDownloadIdentities(identities);
   }, [identities]);
   const status = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const contentRef = useRef(content);

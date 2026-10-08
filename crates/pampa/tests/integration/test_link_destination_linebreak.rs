@@ -23,9 +23,7 @@ fn render_diagnostics(input: &str, filename: &str) -> String {
     let mut source_context = quarto_source_map::SourceContext::new();
     source_context.add_file(filename.to_string(), Some(content));
 
-    let render_options = quarto_error_reporting::TextRenderOptions {
-        enable_hyperlinks: false,
-    };
+    let render_options = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
 
     let mut output = String::new();
     for diagnostic in &diagnostics {

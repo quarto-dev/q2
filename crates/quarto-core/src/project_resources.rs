@@ -2097,9 +2097,7 @@ mod tests {
         // Render to text WITHOUT hyperlinks so the snapshot is
         // path-independent. The Ariadne snippet should at least
         // include the pattern text and the leading-`/` info hint.
-        let opts = quarto_error_reporting::TextRenderOptions {
-            enable_hyperlinks: false,
-        };
+        let opts = quarto_error_reporting::TextRenderOptions::default().hyperlinks(false);
         let rendered = d.to_text_with_options(Some(&parse_err.source_context), &opts);
         assert!(
             rendered.contains("Q-5-1"),
