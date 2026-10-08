@@ -193,6 +193,39 @@ pub fn register_config_source(source_context: &mut SourceContext, path: &Path) -
     true
 }
 
+/// Prose for a `parse_file` failure where no span can be rendered
+/// (`"<message> (line L, column C)"`); see [`yaml_parse_error`] for the
+/// located form.
+pub use pampa::utils::yaml_syntax_error::describe_yaml_error;
+
+/// A located Q-1-1 error for a config file that
+/// `quarto_yaml::parse_file(content, filename)` rejected (bd-x30aq7ae).
+///
+/// `filename` must be the exact string passed to `parse_file`: the
+/// error's location carries the FileId hashed from it, and the file's
+/// `content` is registered under that same id, so the span cannot
+/// mis-pair. The in-hand `content` is used rather than re-reading
+/// `path`, which also keeps this working on non-filesystem runtimes.
+pub fn yaml_parse_error(
+    path: &Path,
+    filename: &str,
+    content: &str,
+    error: quarto_yaml::Error,
+) -> crate::error::QuartoError {
+    let fid = quarto_yaml::file_id_for_filename(filename);
+    let whole_file = SourceInfo::original(fid, 0, content.len());
+    let diagnostic =
+        pampa::utils::yaml_syntax_error::yaml_syntax_error(error, content, &whole_file)
+            .add_hint(format!("`{}` could not be parsed", path.display()))
+            .build();
+    let mut source_context = SourceContext::new();
+    source_context.add_file_with_id(fid, filename.to_string(), Some(content.to_string()));
+    crate::error::QuartoError::Parse(crate::error::ParseError::new(
+        vec![diagnostic],
+        source_context,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

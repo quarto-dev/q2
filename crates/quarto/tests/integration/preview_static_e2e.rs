@@ -496,8 +496,9 @@ fn a_failing_rerender_reports_diagnostics_and_does_not_reload() {
     let stop = sse.wait_for("render-stop");
     assert!(stop.contains("\"ok\":false"), "{stop}");
     assert!(stop.contains("\"errors\":1"), "{stop}");
+    // Q-1-1 "YAML Syntax Error" (was the generic Q-0-99 until bd-x30aq7ae).
     assert!(
-        stop.contains("Q-0-99"),
+        stop.contains("Q-1-1"),
         "diagnostics text carries the code: {stop}"
     );
     assert!(
@@ -525,7 +526,7 @@ fn a_failing_rerender_reports_diagnostics_and_does_not_reload() {
         server.stderr()
     );
     assert!(
-        server.stderr().contains("Q-0-99"),
+        server.stderr().contains("Q-1-1"),
         "the terminal sees the diagnostics too; stderr:\n{}",
         server.stderr()
     );
@@ -549,7 +550,7 @@ fn boot_with_a_failing_page_still_serves_the_rest() {
     let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
     assert_eq!(server.get("/index.html").status, 200);
     assert!(
-        server.stderr().contains("Q-0-99"),
+        server.stderr().contains("Q-1-1"),
         "boot diagnostics printed; stderr:\n{}",
         server.stderr()
     );

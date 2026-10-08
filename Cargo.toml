@@ -131,7 +131,7 @@ path = "./crates/quarto-util"
 path = "./crates/spa-manifest"
 
 [workspace.dependencies.quarto-yaml]
-version = "0.3.0"
+version = "0.4.0"
 
 [workspace.dependencies.quarto-error-reporting]
 version = "0.4.0"

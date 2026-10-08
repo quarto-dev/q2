@@ -124,3 +124,15 @@ fn every_embedded_file_is_a_flat_string_map_with_known_keys() {
 // `_language-sr-Latn.yml` with no `_language-sr.yml`. The subtag walk must
 // tolerate missing intermediate layers; that behavior is unit-tested with the
 // resolution engine (phase 2 of the plan).
+
+#[test]
+fn term_file_yaml_syntax_error_names_the_position() {
+    // bd-x30aq7ae: quarto-yaml >= 0.4.0 keeps the position out of the
+    // message, so it must be spelled out here. The unclosed flow sequence
+    // fails at the `:` of `toc-title-document:`.
+    let content = "title-block-author-single: Author\ncrossref-fig-title: [Figure\ntoc-title-document: Contents\n";
+    let err = parse_term_file(content, "_language-xx.yml")
+        .expect_err("malformed YAML must be refused")
+        .to_string();
+    assert!(err.contains("(line 3, column 19)"), "{err}");
+}
