@@ -89,7 +89,7 @@ phrasing where they conflict:
 
 | Question | Decision |
 | --- | --- |
-| **Fidelity target (v1)** | **Prose-rich, Quarto-opaque.** Headings, bold/italic, links, lists, blockquotes, inline/fenced code render as true rich text. Everything Quarto-specific — shortcodes `{{< … >}}`, `::: {.callout}` divs + `{attrs}`, math `$…$`/`$$…$$`, `@crossref`/`@cite`, raw HTML/inline — becomes an **opaque "chip"**: an atomic ProseMirror node that renders as a non-editable pill and re-emits its **exact source token** on serialize. |
+| **Fidelity target (v1)** | **Prose-rich, Quarto-opaque.** Headings, bold/italic, links, lists, blockquotes, inline/fenced code render as true rich text. Everything Quarto-specific — shortcodes `{{{< … >}}}`, `::: {.callout}` divs + `{attrs}`, math `$…$`/`$$…$$`, `@crossref`/`@cite`, raw HTML/inline — becomes an **opaque "chip"**: an atomic ProseMirror node that renders as a non-editable pill and re-emits its **exact source token** on serialize. |
 | **Rollout** | Experimental **branch** for now (fidelity gaps are acceptable while exploring). Ship behind an **opt-in flag** (mirroring the existing `unlockNestingCursor` pattern), defaulting to the textarea. **Eventual** requirement (not this spike): fall back to the textarea when the user needs to type syntax the rich editor can't represent, or to add new blocks. |
 | **This session's deliverable** | A **throwaway round-trip spike**: a minimal, isolated harness proving `markdown → ProseMirror doc → markdown` (with chips) on real qmd fixtures, *before* any integration. De-risks the one genuine unknown. |
 
@@ -435,7 +435,7 @@ interactive structural-edit round-trip tests).
   `richtext-shots/{07-toggle-rich,09-toggle-plain-fixed}.png`.
 - **Chip source via `.l`** — chip text now slices from a node's literal `.l`
   location, not the compact pool entry (which is mis-assigned for shortcode
-  spans). Shortcode chips render verbatim `{{< meta key >}}`. (Also filed
+  spans). Shortcode chips render verbatim `{{{< meta key >}}}`. (Also filed
   bd-u145dg3y: warn when a block-level shortcode is used inline.)
 - **Known limitation (Phase 2):** plain→rich re-seeds the rich editor from the
   original AST (it can't parse arbitrary edited markdown in-iframe). rich→plain

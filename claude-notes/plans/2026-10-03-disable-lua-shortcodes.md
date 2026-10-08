@@ -9,7 +9,7 @@
 
 `docs/guides/authoring/brand.qmd` fails to render through pandoc.wasm, and natively with
 `q2 render --to typst`. The failing text is documentation of the syntax (lines 859-864), written with the
-escape: ``### Shortcode - `{{{< brand >}}}` `` and ``Use `{{{< brand color COLOR_NAME VARIANT >}}}` …``.
+escape: ``### Shortcode - `{{{< brand >}}}` ``{shortcodes="false"} and ``Use `{{{< brand color COLOR_NAME VARIANT >}}}` …``{shortcodes="false"}.
 Errors: `shortcodes-handlers.lua:111` (`brandCommand` is nil, string concat) for the bare form;
 `modules/brand/brand.lua:20` (`assert`, mode `"VARIANT"`) for the argument form.
 The e2e test `hub-client/e2e/pandoc-warm.harness.spec.ts` ("larger fixtures") hides it by replacing the
@@ -21,18 +21,18 @@ Two shortcode passes run over the same text, and expansion is not idempotent:
 
 1. **Rust** (`crates/quarto-core/src/transforms/shortcode_resolve.rs`): `Inline::Code` (≈L2159) and
    `Block::CodeBlock` (≈L1899) call `expand_text_in_place` → `parse_text_shortcodes`
-   (`shortcode_text.rs:63-67`), which turns `{{{< x >}}}` into the literal `{{< x >}}` ("applied once").
+   (`shortcode_text.rs:63-67`), which turns `{{{< x >}}}`{shortcodes="false"} into the literal `{{{< x >}}}` ("applied once").
    Port of Q1's `apply_code_shortcode` (bd-fz6gwfq0); covered by
    `crates/quarto-core/tests/integration/shortcode_text_contexts.rs`.
 2. **Pandoc Lua** (vendored Q1 stack): `pre-shortcodes-filter` → `shortcodes_filter()`
    (`filters/customnodes/shortcodes.lua:208`), whose `code_handler`/`attr_handler` run Q1's
-   `apply_code_shortcode` over code and attribute text. It now sees the already-unescaped `{{< … >}}`
+   `apply_code_shortcode` over code and attribute text. It now sees the already-unescaped `{{{< … >}}}`
    and expands it as live.
 
 Confirmed by dumping the retained `pandoc-input.json`: the `Code` node text reaches Lua as
-`{{< brand color COLOR_NAME VARIANT >}}`. Reproduced natively again at review (`q2 render x.qmd --to typst`, rc=1, crash at `shortcodes.lua:305`) with three
+`{{{< brand color COLOR_NAME VARIANT >}}}`. Reproduced natively again at review (`q2 render x.qmd --to typst`, rc=1, crash at `shortcodes.lua:305`) with three
 minimal files: `` `{{{< brand >}}}` `` and `` `{{{< brand color COLOR_NAME VARIANT >}}}` `` fail; a
-live `{{< brand color primary >}}` does **not** crash (Rust warns "Shortcode `brand` is not recognized"
+live `{{{< brand color primary >}}}` does **not** crash (Rust warns "Shortcode `brand` is not recognized"
 and Lua never sees it).
 
 Exposure: text contexts only (code, raw, math, attribute values). Escaped shortcodes in ordinary
@@ -59,7 +59,7 @@ edits vendored Lua handlers); (3) teach Rust `brand` and split ownership by name
 ## Prerequisite: Rust skips footnote definitions (found in review)
 
 The Lua pass is not purely redundant. Rust's `shortcode_resolve` treats `Block::NoteDefinitionPara` and
-`Block::NoteDefinitionFencedBlock` as leaves (L1136, L1928), so a shortcode in `[^1]: Note {{< meta author >}}.`
+`Block::NoteDefinitionFencedBlock` as leaves (L1136, L1928), so a shortcode in `[^1]: Note {{{< meta author >}}}.`
 is never expanded by Rust. Native HTML shows `?meta` there. Pandoc paths resolve it today only because Lua
 catches it. Measured against a scratch share tree: with the Lua pass off, pandoc exits rc=83 on that input (an
 unresolved `Shortcode` custom node reaches `render`, which calls `internal_error()`); every other context tried
@@ -121,7 +121,7 @@ figure). Known red before this work: `pandoc_request_prepare::golden_file_is_str
   (register in `main.rs`, alphabetical). Use `render_document_to_file` with `native` (AST dump: no writer escaping,
   no typst compile; model on `gfm_shortcode_round_trip` in `pandoc_long_tail_formats.rs`). Cases: the bare
   `` `{{{< brand >}}}` ``, the arguments form, and an escaped shortcode in a fenced code block; assert the render
-  succeeds and the output contains the literal `{{< brand ... >}}`. Add a control: a live `{{< brand color primary >}}`
+  succeeds and the output contains the literal `{{{< brand ... >}}}`. Add a control: a live `{{{< brand color primary >}}}`
   still only warns. Practical in CI: the existing long-tail tests already run real native pandoc with no skip.
   Confirm it fails (rc 83) before T2. Note `shortcode_text_contexts.rs` is HTML-only, so it never covered this.
 - [x] **T2 Off-switch** (after `bd-xjg7vl6c`): flag-gate the entry in `main.lua` and `crossref.lua` per the design above; README entries.
@@ -171,9 +171,9 @@ figure). Known red before this work: `pandoc_request_prepare::golden_file_is_str
 - T6 (scratch copy of `docs/guides/authoring`): `brand.qmd` html rc=0; escaped examples show literally in html
   and typst. `brand.qmd` to typst fails for reasons unrelated to shortcodes (missing `docs/authoring/images/*.png`
   screenshots, which typst treats as fatal and html only warns on; then a dangling `<dark-brand>` link label).
-  The "live" `{{< brand ... >}}` at old lines 887/898 are inside fenced blocks marked `shortcodes="false"`, so no
+  The "live" `{{{< brand ... >}}}` at old lines 887/898 are inside fenced blocks marked `shortcodes="false"`, so no
   live brand shortcode occurs in prose and none renders `?brand`. `shortcodes.qmd`: html and typst rc=0, the
-  `{{{< meta key >}}}` code-span table now shows literal `{{< meta key >}}`. Brand support still `bd-qnylgu69`.
+  `{{{< meta key >}}}`{shortcodes="false"} code-span table now shows literal `{{{< meta key >}}}`. Brand support still `bd-qnylgu69`.
 
 ## Risks / open items
 

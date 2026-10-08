@@ -311,10 +311,10 @@ done:
 ## Decisions (resolved 2026-05-22)
 
 1. **Page format** = plain markdown body inside qmd. Shortcode-driven
-   page generation (e.g. `{{< error-page Q-1-1 >}}` pulling catalog
+   page generation (e.g. `{{{< error-page Q-1-1 >}}}` pulling catalog
    data at render time) is over-engineered for v1. A shortcode for
-   *linking to* error pages from other content (e.g. `{{< error
-   Q-1-1 >}}` → a styled link) is interesting future work but
+   *linking to* error pages from other content (e.g. `{{{< error
+   Q-1-1 >}}}` → a styled link) is interesting future work but
    explicitly out of scope here.
 2. **Listing view** — defer to when content has landed; ship with
    the table-grouped-by-category form drafted above and iterate.

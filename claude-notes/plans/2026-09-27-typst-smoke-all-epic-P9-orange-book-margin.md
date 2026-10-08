@@ -204,7 +204,7 @@ assertions (`Ankylosaura`/`Thyreophora` expected `rightOf` on page 11;
 `Orbitsolva`/`Orbitcode` expected `leftOf` on page 12) failed with fully
 inverted measured coordinates (e.g. Subject.Left=91.2 vs Object.Right=474.7 —
 not a near-miss, the opposite relation entirely). Root cause: `chapter1.qmd:54`
-uses `{{< embed notebooks/computations.ipynb#fig-visualization >}}` to embed a
+uses `{{{< embed notebooks/computations.ipynb#fig-visualization >}}}` to embed a
 matplotlib plot (Figure 1.4); Q2 has never implemented the `embed` shortcode
 (`Q-16-3` "Unknown shortcode"), so the whole figure — image, caption, and the
 `@fig-visualization` crossref target — is silently dropped. That removes a real
@@ -221,7 +221,7 @@ decorative `page:` key) are confirmed correct on all 24 assertions.
 `notebook-view`, and the jupyter-embed placeholder machinery... deferred to
 its own strand/epic." That plan's own Phase 6 checklist called for filing that
 strand but never did — confirmed via `braid list`/`braid search`, no strand
-existed. Filed now: **bd-gak8uiza** — "Implement the `{{< embed >}}` notebook
+existed. Filed now: **bd-gak8uiza** — "Implement the `{{{< embed >}}}` notebook
 shortcode for Q2".
 
 Fixed the 2 assertions in place (commit `21c29365e`) to match measured reality
@@ -255,7 +255,7 @@ position assertions pass.
   `/StructTreeRoot` page-scoping work — **confirmed working**, P3's
   page-keyed map has no bug here. 2 of the 24 (`Ankylosaura`/`Thyreophora`,
   `Orbitsolva`/`Orbitcode`) initially failed, but root-caused to
-  bd-gak8uiza (missing `{{< embed >}}` figure shifting the whole book by
+  bd-gak8uiza (missing `{{{< embed >}}}` figure shifting the whole book by
   one page, flipping recto/verso parity for content that crosses that
   boundary) — not a P3/P9 bug. Fixed in place (commit `21c29365e`),
   commented to revert once bd-gak8uiza lands. Confirmed P1/P3's assertion
@@ -271,7 +271,7 @@ position assertions pass.
   nextest: 601 passed, 1 failed (`smoke_all::smoke_all`, an aggregate
   test), 2 skipped — the failure's 6 sub-failures are exactly the known
   set: the 5 pre-existing P5 `#notefigure\(` margin-layout misses plus the
-  bd-gak8uiza-blocked `{{< embed >}}` content (missing
+  bd-gak8uiza-blocked `{{{< embed >}}}` content (missing
   `fig-visualization` crossref/caption/warning), both already understood
   and out of P9's scope. No new regressions.
 

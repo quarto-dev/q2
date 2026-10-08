@@ -166,8 +166,8 @@ pairs). Special case vs #486's "real env always wins" filter:
 `QUARTO_PROFILE` must be set on children **unconditionally** — if
 `--profile b` overrode an inherited `QUARTO_PROFILE=a`, children must
 see `b` (Q1 parity, where the env var was overwritten). Also insert
-the normalized value into the project env map so `{{< env
-QUARTO_PROFILE >}}` resolves.
+the normalized value into the project env map so `{{{< env
+QUARTO_PROFILE >}}}` resolves.
 
 ### Source tracking / diagnostics plumbing
 
@@ -331,7 +331,7 @@ waits; nothing else blocks.
   real-env-wins rule): engines via `EngineContext.project_env`
   pair injection in `EngineExecutionStage`, render scripts via
   `RenderScriptsContext.quarto_profile` (+real-spawn unix test);
-  `{{< env QUARTO_PROFILE >}}` special-cased in
+  `{{{< env QUARTO_PROFILE >}}}` special-cased in
   `EnvShortcodeHandler` to beat the real env (unit-tested)
 - [x] E2E (2026-08-10, recorded): fixture with
   `profile: group: [draft, final]` + `_quarto-prod.yml` setting

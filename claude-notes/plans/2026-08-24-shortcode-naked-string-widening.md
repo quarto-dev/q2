@@ -137,8 +137,8 @@ the naked charset, so the writer already quotes it.
 **Why `size=2x` is not a valid test fixture.** `shortcode_number` is
 `token(prec(3, …))` (`grammar.js:696`) and beats the naked token's `prec(1)` on
 lexical precedence regardless of match length. So digit-initial values keep
-erroring as `Q-2-34` after the widening — verified — and `{{< fa envelope
-size=2x >}}` is a committed *error* fixture
+erroring as `Q-2-34` after the widening — verified — and `{{{< fa envelope
+size=2x >}}}` is a committed *error* fixture
 (`resources/error-corpus/Q-2-34.json`), not a success case. Any test needing a
 working `key=value` must use a non-digit value.
 
@@ -514,7 +514,7 @@ Append to `crates/pampa/tests/integration/test_shortcode.rs`. The helpers
 `parse_qmd` (:13), `get_first_shortcode` (:33), `get_positional_strings` (:59)
 and `get_keyword_arg` (:74) already exist, and `ShortcodeArg` is imported at :11.
 
-```rust
+```{.rust shortcodes="false"}
 // ============================================================================
 // Naked-argument widening (bd-shortcode-escaped-gt-fatal-2u79bqp1,
 // bd-shortcode-naked-value-nonascii-47fzbmow)
@@ -1126,7 +1126,7 @@ demonstrably wrong wording for an unterminated shortcode. Three other probes
 (`{{< kbd = >}}`, `{{< kbd > >}}`, `{{< kbd "x >}}`) now fail with **no**
 catalog code at all (generic "unexpected character or token" parse error) —
 a different but related symptom. The digit-initial control case
-(`{{< fa envelope size=2x >}}`) correctly still reports `Q-2-34`. Full table
+(`{{{< fa envelope size=2x >}}}`) correctly still reports `Q-2-34`. Full table
 in the Task 4 report.
 
 **Step 3 — Q1 comparison:**

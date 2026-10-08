@@ -115,7 +115,7 @@ The code snippet is out of scope (hand-authored). What this feature owns is
 | Option | Sketch | Verdict |
 | --- | --- | --- |
 | **(1a) Built-in Rust transform on `Div.embed-example-iframe`** | New transform in `quarto-core/src/transforms/`, mirrors `callout_resolve`. Reads `file=`, link-resolves it, emits an `<iframe>` + source link. | **Chosen.** Shared pipeline → render + preview + HTML + revealjs. Placeholders are already Divs → minimal authoring churn (just the rename). No Lua runtime. |
-| (1b) Built-in shortcode `{{< … >}}` | Register a handler beside `meta`. | Rejected — the Div is the right surface for a *block* with a fallback child link; would also collide conceptually with the existing `{{< embed >}}` notebook shortcode. |
+| (1b) Built-in shortcode `{{{< … >}}}` | Register a handler beside `meta`. | Rejected — the Div is the right surface for a *block* with a fallback child link; would also collide conceptually with the existing `{{{< embed >}}}` notebook shortcode. |
 | (1c) Lua filter scoped to `docs/` | `docs/_filters/…lua`. | Rejected — couples to `docs/`; feature must be general + built-in. |
 | (1d) `format: html` website feature | Bake into the website format. | Rejected — wrong altitude; too broad. |
 

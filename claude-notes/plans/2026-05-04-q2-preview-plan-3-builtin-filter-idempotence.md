@@ -558,9 +558,9 @@ first run in both applicable modes.
 
 **Existing fixtures (carry forward from prior plan draft):**
 
-- [x] `meta-single` — `{{< meta foo >}}` with single-string foo →
+- [x] `meta-single` — `{{{< meta foo >}}}` with single-string foo →
   shortcode-resolve, metadata-normalize.
-- [x] `meta-markdown` — `{{< meta foo >}}` with `**Bold** title` →
+- [x] `meta-markdown` — `{{{< meta foo >}}}` with `**Bold** title` →
   shortcode-resolve (PandocInlines branch).
 - [x] `include-trivial` — `{{< include child.qmd >}}` →
   include-expansion stage, shortcode-resolve.

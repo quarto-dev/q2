@@ -39,8 +39,8 @@ pipeline-produced metadata-derived node fully attributable.
 Thread per-value `SourceInfo` to where synthesizers can stamp it as
 `ValueSource` anchors. Three target consumers:
 
-1. **Meta/var shortcode resolutions** (closes bd-129m3) — `{{< meta
-   footer >}}` → `Generated { by: shortcode("meta"), from:
+1. **Meta/var shortcode resolutions** (closes bd-129m3) — `{{{< meta
+   footer >}}}` → `Generated { by: shortcode("meta"), from:
    [Invocation -> token_si, ValueSource -> value_si] }`.
 2. **DocumentProfile.title → nav-text** (closes bd-8pmq3) — sidebar /
    navbar entries built from `profile.title` carry a `ValueSource`
@@ -379,7 +379,7 @@ must be pinned:
   own source_info (the parsed positions inside the YAML string).
   Under the node-edit architecture, editing the resolved inline
   resolves (via the wrapper's `Invocation` anchor) to the
-  `{{< meta … >}}` token, not the rendered value — the `ValueSource`
+  `{{{< meta … >}}}` token, not the rendered value — the `ValueSource`
   is ignored by the writer. Confirm the attribution surfaces the
   value origin without affecting the edit target.
 

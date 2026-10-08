@@ -26,7 +26,7 @@ shortcodes through literally in project-level contexts that Quarto 1 evaluates:
    injected verbatim).
 
 No warning in any of the three. Real-world hit: Posit Connect docs use
-`{{< env CONNECT_VERSION >}}` in all three contexts — all 352 pages affected.
+`{{{< env CONNECT_VERSION >}}}` in all three contexts — all 352 pages affected.
 
 ## Dependency graph
 
@@ -49,7 +49,7 @@ All file paths in the strand are current. Reproduced at HEAD (`0c5d0abe`); local
 external fixture with a `website.navbar` so the navbar-brand path actually fires);
 observed output in `../observations.md`. Summary:
 
-```
+```{shortcodes="false"}
 <title>Home – My Site <small>Version {{< env REPRO_VERSION >}}</small></title>
 <a class="navbar-brand" href="./">My Site &lt;small&gt;Version {{&lt; env REPRO_VERSION &gt;}}&lt;/small&gt;</a>
 You are viewing version <strong>{{< env REPRO_VERSION >}}</strong>.        <!-- include -->
@@ -124,7 +124,7 @@ You are viewing version <strong>2026.08.0</strong>. **md-test** `code-test` <!--
 Q1's five mechanisms:
 
 1. **Reader-level text preprocessing.** `readqmd.lua` runs the lpeg shortcode parser
-   over the *entire* source text — frontmatter included — turning `{{< … >}}` into
+   over the *entire* source text — frontmatter included — turning `{{{< … >}}}` into
    `quarto-shortcode__` spans, which become custom `Shortcode` AST nodes wherever
    markdown is parsed (including metadata values).
 2. **The shortcode filter walks metadata.** `pre-shortcodes-filter`
@@ -279,7 +279,7 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
   scalars untouched).
 - [x] `ShortcodeResolveTransform::transform` walks `ast.meta` (all values) using a
   pre-walk snapshot as handler context — meta walk runs BEFORE the blocks walk
-  so body-level `{{< meta k >}}` sees resolved values. Runs before
+  so body-level `{{{< meta k >}}}` sees resolved values. Runs before
   `MetadataNormalizeTransform`, so `pagetitle` derivation sees resolved text.
 - [x] Silent-drop concern in `inlines_to_plain_text` resolved without changing the
   helper: after the meta walk, unresolved shortcodes are already replaced by

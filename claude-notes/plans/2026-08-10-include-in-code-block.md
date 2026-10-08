@@ -25,7 +25,7 @@ v1 recognizes an include **only** when the shortcode is the sole content of a li
 
 **This matches Q1 exactly** — a finding that emerged after the decision was made and confirms it. Q1's `processMarkdownIncludes` (`src/core/handlers/base.ts:355-380`) splits each cell into lines and tests each with `isBlockShortcode`, whose regex is anchored to the whole line:
 
-```js
+```{.js shortcodes="false"}
 content.match(/^\s*{{< (?!\/\*)(.+?)(?<!\*\/) >}}\s*$/)
 ```
 
@@ -66,7 +66,7 @@ Three ways out:
 
 1. **Recurse (Q1 parity).** Re-scan spliced content for include lines, using the `include_stack` for cycles. No include survives to stage 13, so the problem vanishes by construction, and the D3 divergence disappears (shrinking bd-cq0xhxg5's scope). Cost: a listing that embeds a `.qmd` shows the *expanded* text, not the file's literal source. Users wanting literal source have `shortcodes="false"` — which is already the documented mechanism for exactly that.
 2. **Preserve unhandled includes in code text.** In the code/raw text arms of `ShortcodeResolveTransform`, treat an `include` shortcode as `Preserve` (emit its source text verbatim) instead of dispatching it to the error branch. The invariant that makes this sound: after stage 3, every *authored* fence include has been expanded, so anything still present must have come from spliced content — and literal is the right rendering for it. Keeps D3's intent and makes it actually true. Cost: a new (small) rule in the transform, and the `?include` token stops existing for fences entirely.
-3. **Escape includes in spliced content.** Rewrite `{{< include … >}}` to the escaped `{{{< … >}}}` form while splicing. Works, but it is a text mutation the author never wrote, and it creates an asymmetry with `{{< meta … >}}` in the same fence. Not recommended.
+3. **Escape includes in spliced content.** Rewrite `{{< include … >}}` to the escaped `{{{< … >}}}`{shortcodes="false"} form while splicing. Works, but it is a text mutation the author never wrote, and it creates an asymmetry with `{{{< meta … >}}}` in the same fence. Not recommended.
 
 **Chosen: option 1 (recurse).** It is the Q1-parity answer, needs no new rule in the shortcode transform, and makes the nested `?include` impossible by construction rather than by special-casing. Pinned by `code_fence_include_recurses`, `code_fence_include_cycle_reports_and_drops_line`, `code_fence_include_of_self_reports_cycle` (unit) and `nested_code_fence_include_expands_without_token`, `self_including_code_fence_reports_a_cycle` (full pipeline).
 
@@ -178,7 +178,7 @@ The strand names an origin (`br-4kslym5r`) in the **connect-docs porting skein**
 
 Consequence for the calculus: no incoming `blocks` pressure from other strands in this skein, so urgency comes entirely from the Connect-docs port, not from internal dependents. Nothing here is blocked on anything else.
 
-Adjacent (not linked, but the relevant prior work): **bd-fz6gwfq0** — the 0.16.0 text-level shortcode work that made `{{< meta … >}}` expand inside code fences. That is the machinery that currently eats the include.
+Adjacent (not linked, but the relevant prior work): **bd-fz6gwfq0** — the 0.16.0 text-level shortcode work that made `{{{< meta … >}}}` expand inside code fences. That is the machinery that currently eats the include.
 
 ## What the code looks like today
 
@@ -216,7 +216,7 @@ Note that `expand_blocks` *does* visit every `CodeBlock` — as an element `bloc
 - `dispatch_shortcode` has no `include` handler by design; the `shortcode.name == "include"` branch (`:630`) returns `ShortcodeResult::Error` with the `Q-17-4` diagnostic.
 - `expand_text_segments` (`:1489-1493`) handles `Error` by pushing `'?'` then the shortcode name — hence `?include` replacing the whole body.
 
-So the mechanism that already makes `{{< meta … >}}` work inside a fence is the same mechanism that eats the include, and it operates on exactly the right data: raw text.
+So the mechanism that already makes `{{{< meta … >}}}` work inside a fence is the same mechanism that eats the include, and it operates on exactly the right data: raw text.
 
 ### The finding that changes the fix site — the profile checkpoint
 

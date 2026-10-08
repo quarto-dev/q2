@@ -378,7 +378,7 @@ items keep "anchor" in their name (`invocation_anchor`,
 field name and any Lua-table key use `from`. `by` / `from` reads cleanly
 in both Rust and Lua serializations — preserve that pairing throughout.
 
-```rust
+```{.rust shortcodes="false"}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SourceInfo {
     Original { file_id: FileId, start_offset: usize, end_offset: usize },

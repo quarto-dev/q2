@@ -28,7 +28,7 @@ fn write_shortcode(
 }
 ```
 
-The writer emits only `{{` + name + `}}`. It ignores `is_escaped`, `positional_args`, and `keyword_args`. The format string is also wrong — even for a name-only shortcode, qmd syntax requires `{{< name >}}`, not `{{name}}`.
+The writer emits only `{{` + name + `}}`. It ignores `is_escaped`, `positional_args`, and `keyword_args`. The format string is also wrong — even for a name-only shortcode, qmd syntax requires `{{{< name >}}}`, not `{{name}}`.
 
 The parser side is fine. `process_shortcode` (`crates/pampa/src/pandoc/treesitter_utils/shortcode.rs:48`) populates the `Shortcode` struct (defined in `crates/quarto-pandoc-types/src/shortcode.rs`) with all the data we need:
 
@@ -126,8 +126,8 @@ Per `crates/pampa/AGENTS.md`: write tests first, run, see them fail, *then* impl
   - [x] `shortcode-positional.qmd` — `{{< video https://youtu.be/abc >}}` (the user's URL case)
   - [x] `shortcode-keyword-args.qmd` — `{{< video https://youtu.be/abc width="800" height="450" >}}` (the user's full case)
   - [x] `shortcode-escaped.qmd` — `{{{< meta >}}}` to verify `is_escaped`
-  - [x] `shortcode-naked-string.qmd` — `{{< meta foo >}}` (unquoted positional, no whitespace)
-  - [x] `shortcode-with-quoted-string.qmd` — `{{< meta "foo bar" >}}` (positional that requires quoting)
+  - [x] `shortcode-naked-string.qmd` — `{{{< meta foo >}}}` (unquoted positional, no whitespace)
+  - [x] `shortcode-with-quoted-string.qmd` — `{{{< meta "foo bar" >}}}` (positional that requires quoting)
 - [x] Add a **round-trip parse-write-parse semantic equivalence** test (`test_qmd_to_qmd_shortcode_roundtrip` in `tests/test.rs`). Parses qmd, writes qmd, re-parses, and compares JSON forms with location fields stripped. Covers the same 6 cases.
 - [x] Confirmed both tests fail. The roundtrip test fails with `failed to parse regenerated QMD ("{{meta}}\n")` — the buggy writer's output is not even valid syntax. Snapshot test produces `{{meta}}` instead of `{{< meta >}}`.
 

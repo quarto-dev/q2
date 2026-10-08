@@ -338,10 +338,10 @@ nine new pages. Spot-checked the rendered HTML of `Q-16-5` and `Q-3-42`.
 
 1. **Bare shortcodes in prose *and* in fenced code blocks are executed.**
    The first render fired 15 genuine `Q-16-3`/`Q-16-5` diagnostics from
-   the pages documenting those very codes — `{{< meta version >}}` inside
+   the pages documenting those very codes — `{{{< meta version >}}}` inside
    a ```` ```markdown ```` fence resolved rather than displaying. The
    convention the rest of `docs/` uses is the triple-brace form
-   `{{{< … >}}}`, which renders as `{{< … >}}` in both inline code spans
+   `{{{< … >}}}`{shortcodes="false"}, which renders as `{{{< … >}}}` in both inline code spans
    and fenced blocks. Sibling pages `Q-2-27`/`Q-2-28` instead use a fence
    attribute, ```` ```{.markdown shortcodes="false"} ```` — equivalent
    output, and arguably better source readability for fenced examples.

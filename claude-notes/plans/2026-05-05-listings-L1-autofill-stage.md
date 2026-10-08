@@ -22,7 +22,7 @@ in the relevant sections below. Summary:
   becomes a `quarto-core` dep. Reused for L9's RFC 822 RSS dates.
 - **D13 — shortcode-bearing image `src` is out of scope.** L1 runs
   before pre-engine sugaring, so an `Image` whose `src` was
-  originally `{{< meta thumbnail >}}.png` still carries the literal
+  originally `{{{< meta thumbnail >}}}.png` still carries the literal
   shortcode text in `target.0`. Filed `bd-8h9o` as a discovered-from
   follow-up to study the problem in isolation; L1 does not filter
   these today.
@@ -51,8 +51,8 @@ auto-derived values when the author hasn't supplied them. The stage:
      (full text, **not truncated**; per D11 the listing host's
      `max-description-length` is L3's concern).
    - `image` — first `Inline::Image` `target.0` from `ast.blocks`
-     (document order). Shortcode-bearing `src` (e.g. `{{< meta
-     thumb >}}.png`) is **not** filtered here; tracked separately
+     (document order). Shortcode-bearing `src` (e.g. `{{{< meta
+     thumb >}}}.png`) is **not** filtered here; tracked separately
      under `bd-8h9o` (see D13).
    - `word_count` — tokenized scan of `ast.blocks` plain text.
    - `reading_time_minutes` — `word_count / 200` (200 wpm
@@ -887,7 +887,7 @@ success":
   wrong — `chrono` is not a workspace dependency.
 - **D13 (shortcode-bearing image src out of scope; 2026-05-06):**
   L1 does not filter images whose `src` carries an
-  unresolved shortcode (e.g. `{{< meta thumb >}}.png`). L1
+  unresolved shortcode (e.g. `{{{< meta thumb >}}}.png`). L1
   runs after `IncludeExpansionStage` but before
   `PreEngineSugaringStage`, so such images are present in
   `target.0` as literal text. `bd-8h9o` (discovered-from

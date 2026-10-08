@@ -137,7 +137,7 @@ Each row: **file** · **format scope** · **status** · **Q2 location (ported) /
 | book-numbering.lua | typst/latex/epub + book | format-not-in-q2 / not-ported ⚑ | needs per-chapter "book item" context Q2 lacks |
 | code-annotation.lua | agnostic (+ presentation) | not-ported | → `code-block-generate` (parse) + new Finalization render (DL) |
 | code-filename.lua | agnostic | partial | ported via `code_block_decorations` sideband (`code_block_render.rs:187`). Missing Div-wraps-CodeBlock rule |
-| contentsshortcode.lua | agnostic | not-ported ⚑ | `{{< contents id >}}` needs two-pass doc-wide shortcode resolution; current `ShortcodeHandler` is single-pass |
+| contentsshortcode.lua | agnostic | not-ported ⚑ | `{{{< contents id >}}}` needs two-pass doc-wide shortcode resolution; current `ShortcodeHandler` is single-pass |
 | engine-escape.lua | agnostic | not-ported | backtick-escaped engine fences → likely `native:parse` (grammar); unconfirmed |
 | figures.lua | html / latex | not-ported / format-not-in-q2 | `fig-alt`→`alt` propagation missing → `crossref-render`/`float-ref-target` |
 | hidden.lua | agnostic | not-ported | `keep/remove/clear-hidden` class strip + note-strip → early Normalization |
@@ -323,7 +323,7 @@ Only **6 files** raised a genuine `⚑` signal, and every one is a **missing sub
 | `table-captions.lua` | which-executed-cell-produced-this-table provenance, available only right after `EngineExecutionStage` |
 | `contentsshortcode.lua` | **two-pass** document-wide shortcode resolution (current `ShortcodeHandler` is single-pass) |
 
-The one finding that genuinely touches the *filter-extension* seam question is **`contentsshortcode` + shortcode-in-metadata**: the `ShortcodeResolveTransform` resolves inline, single-pass, and only over `ast.blocks` (`shortcode_resolve.rs:891`). A `{{< contents >}}`-style relocation shortcode and `{{< meta … >}}` inside metadata both need capabilities the current resolver lacks. That's an argument for evolving the **shortcode resolver**, not for adding user-filter positions.
+The one finding that genuinely touches the *filter-extension* seam question is **`contentsshortcode` + shortcode-in-metadata**: the `ShortcodeResolveTransform` resolves inline, single-pass, and only over `ast.blocks` (`shortcode_resolve.rs:891`). A `{{{< contents >}}}`-style relocation shortcode and `{{{< meta … >}}}` inside metadata both need capabilities the current resolver lacks. That's an argument for evolving the **shortcode resolver**, not for adding user-filter positions.
 
 **Implication for the extensions plan.** The 2026-03-16 plan's 8→2 collapse for *user* filters remains sound: the built-in catalog gives no evidence that authors of built-in work needed intermediate positions, so it's weak evidence that *user* filters need them either. If a case for a mid-pipeline user-filter seam is ever made, it should come from a concrete extension use-case (e.g. "run after crossref numbering but before navigation"), which `bd-0fd0` already gestures at — not from this catalog.
 

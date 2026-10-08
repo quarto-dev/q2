@@ -239,7 +239,7 @@ fn test_write_json_with_shortcode_error() {
 
 Test with actual qmd files containing problematic constructs:
 
-```bash
+```{.bash shortcodes="false"}
 # Should emit Q-3-30 error
 echo '{{< shortcode >}}' | quarto-markdown-pandoc -t json --json-errors
 
@@ -251,7 +251,7 @@ echo '{++insert++}' | quarto-markdown-pandoc -t json --json-errors
 
 ### Q-3-30: Shortcode
 
-```
+```{shortcodes="false"}
 Error: Shortcode not supported in JSON format
 
 Cannot render shortcode `{{< myshortcode >}}` in JSON format

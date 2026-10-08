@@ -214,7 +214,7 @@ Parsed as `CodeBlock` with language attribute.
 
 ### 2. **Shortcodes**
 
-Parses `{{< shortcode >}}` syntax:
+Parses `{{{< shortcode >}}}` syntax:
 
 ```rust
 pub enum Shortcode {

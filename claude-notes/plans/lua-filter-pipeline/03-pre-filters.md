@@ -73,7 +73,7 @@
 **Side Effects**:
 | Type | Details |
 |------|---------|
-| `ENV` | `os.getenv()` for `{{< env VAR >}}` shortcode |
+| `ENV` | `os.getenv()` for `{{{< env VAR >}}}` shortcode |
 | `FR` | User shortcode files loaded via `loadfile()` (at init time) |
 
 **Pandoc API**: None during filter execution (shortcode loading happens at init)
@@ -92,7 +92,7 @@
 **Condition**: Only if `flags.has_contents_shortcode` is true
 
 **Side Effects**: **PURE**
-- Processes `{{< contents >}}` shortcode for TOC generation
+- Processes `{{{< contents >}}}` shortcode for TOC generation
 
 **Pandoc API**: None
 
@@ -291,7 +291,7 @@
 
 ## Data Flow
 
-```
+```{shortcodes="false"}
 Normalized Quarto AST
        ↓
 [flags]

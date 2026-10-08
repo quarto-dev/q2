@@ -122,7 +122,7 @@ holds the design details; this list is the work-tracking surface.
   ```
   Fixture: a `.qmd` with `title:` (drives title-block), two `## `
   headers (drive sectionize), a footnote `^[…]` (drives footnotes
-  transform + appendix container), and a `{{< meta title >}}`
+  transform + appendix container), and a `{{{< meta title >}}}`
   shortcode (drives the resolver + stamper). Observed HTML
   (inspected, snippet preserved):
   ```html
@@ -250,7 +250,7 @@ with the correct provenance:
       footnote `<sup>` multi-node-overlap case (round-trip-friendly
       via block-level Verbatim).
     - `shortcode_to_literal` (lines 1043-1109): the literal-text Str
-      produced for escaped `{{</ ... >}}` shortcodes. Today it emits
+      produced for escaped `{{{</ ... >}}}` shortcodes. Today it emits
       `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
       through from call sites at lines 665 and 920, and use it as the
       Str's `source_info`. This is required to satisfy the
@@ -453,7 +453,7 @@ shortcode-resolved content **with no attribution-code changes**:
   `AttributionMap::query_byte_range` picks the latest author covering
   the token's bytes.
 
-For multi-author shortcodes: if author A wrote `{{< meta foo >}}` at
+For multi-author shortcodes: if author A wrote `{{{< meta foo >}}}` at
 T1 and author B changed `foo` to `bar` at T2 > T1, the byte range
 covers bytes touched by both; `query_byte_range` picks the latest
 (B). This is the policy specified in the 2026-05-20 design
@@ -813,29 +813,29 @@ Lua-handler filter & shortcode").
   resulting `[Strong[Str], Space, Str]` ALL have `Generated` with
   `Invocation` anchors whose `source_info` is the same shortcode
   token's range.
-- **Attribution interaction test**: render a doc with `{{< meta foo >}}`
+- **Attribution interaction test**: render a doc with `{{{< meta foo >}}}`
   through two commits by different authors (author A wrote the line at
   T1; author B changed `foo` → `bar` at T2). With Plan 6 stamped and a
   `GitBlameProvider` installed, the resulting `astContext.attribution`
   for the resolved Str references author B's identity (the latest
   author of the token bytes). This is the multi-author latest-wins
   policy.
-- **Escaped-shortcode regression test**: `{{</ meta foo >}}` resolves
+- **Escaped-shortcode regression test**: `{{{</ meta foo >}}}` resolves
   to literal text; its source_info stays Original (not Generated).
-- **Error-inline regression test**: an unknown shortcode `{{< bogus >}}`
+- **Error-inline regression test**: an unknown shortcode `{{{< bogus >}}}`
   resolves via `make_error_inline` to `Strong[Str("?bogus")]`. Both
   layers carry `Original` source_info pointing at the bogus
   shortcode's token bytes (NOT `Default`, NOT `Generated`).
   `is_atomic_kind()` does not fire; round-trip through the
   incremental writer Verbatim-copies the original token bytes.
 - **Error / escaped round-trip test**: full incremental-writer
-  round-trip on a fixture containing both `{{</ meta foo >}}` and
-  `{{< bogus >}}`. After Plan 6's stamping + the incremental writer, the
+  round-trip on a fixture containing both `{{{</ meta foo >}}}` and
+  `{{{< bogus >}}}`. After Plan 6's stamping + the incremental writer, the
   output qmd should byte-equal the input for those regions
   (verbatim-copy via the Original anchor in both cases).
 - **Shortcode-inside-include composition test**: `parent.qmd`
   contains `{{< include foo.qmd >}}`; `foo.qmd` contains
-  `{{< meta title >}}`. After Plan 6 stamping (and Plan 8's wrapper),
+  `{{{< meta title >}}}`. After Plan 6 stamping (and Plan 8's wrapper),
   the resolved Str inside the IncludeExpansion wrapper has
   `Generated { by: { kind: "shortcode", data: { name: "title" } },
   from: [Invocation -> Original{file_id: <foo.qmd's FileId>, ...}] }`.

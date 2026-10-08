@@ -38,7 +38,7 @@ project:
 ```
 
 Its navbar/sidebar reference `.md` files directly (`file: admin/index.md`), and its
-`.md` sources use shortcodes (`{{< env … >}}`), raw HTML blocks, and `format:`
+`.md` sources use shortcodes (`{{{< env … >}}}`), raw HTML blocks, and `format:`
 front matter — but **zero** `engine:` keys and zero executable cells. So the
 "identical to `.qmd`, engines ignored" policy covers the real corpus exactly.
 
@@ -587,7 +587,7 @@ Work items (all landed 2026-08-07, session 2):
     correct from both root (`admin/index.html`) and the admin page itself
     (`index.html` / `../index.html`)
   - body link rewrote to `href="admin/index.html"`
-  - inline `{{< env CONNECT_VERSION >}}` expanded to `2026.08` in both `.md`
+  - inline `{{{< env CONNECT_VERSION >}}}` expanded to `2026.08` in both `.md`
     and `.qmd` (verified in a paired fixture)
   - **discovered (not `.md`-related):** shortcodes in *metadata fields*
     (`title:`/`subtitle:`) expand empty — identically for `.qmd` and `.md`.

@@ -134,7 +134,7 @@ logo-path resolution against a synthetic merged document's directory context.
 - [x] Set `index.qmd`\'s `render-project: true` (confirm it's already set in Q1's
   fixture; add if not, matching Q1's own convention). Already set; unchanged.
 - [x] `chapter1.qmd` (carries `_quarto.tests.run.skip`) uses
-  `{{< embed notebooks/computations.ipynb#fig-visualization >}}`, and neither it
+  `{{{< embed notebooks/computations.ipynb#fig-visualization >}}}`, and neither it
   nor `index.qmd` declares `requires: jupyter`. Confirm whether the book-merge
   path needs a live Jupyter runtime to process this embed, or only reads
   pre-baked notebook outputs — if the former, this fixture needs the same
@@ -142,7 +142,7 @@ logo-path resolution against a synthetic merged document's directory context.
   already provides for other fixtures, or it will hard-fail (not cleanly skip)
   on machines without Jupyter installed.
 
-  **Resolved 2026-09-28: neither — `{{< embed >}}` is not implemented in Q2 at
+  **Resolved 2026-09-28: neither — `{{{< embed >}}}` is not implemented in Q2 at
   all, so jupyter-availability is moot.** `dispatch_shortcode` in
   `crates/quarto-core/src/transforms/shortcode_resolve.rs` only has three
   built-in Rust handlers (`meta`/`env`/`var`) and falls through to Lua
@@ -899,7 +899,7 @@ the pandoc template via a `--defaults` file instead of a bare (and
 range-capped) CLI flag.
 
 Accepted gaps, both root-caused and documented rather than left silently
-red, at the time P8 closed: `{{< embed >}}` shortcode unimplemented (own
+red, at the time P8 closed: `{{{< embed >}}}` shortcode unimplemented (own
 epic, D6, `claude-notes/plans/2026-07-31-shortcode-extensions-port.md`)
 costs 4 assertions (2 `ensureTypstFileRegexMatches`, 2
 `ensurePdfRegexMatches`) and remains open; the

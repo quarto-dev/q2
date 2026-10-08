@@ -283,7 +283,7 @@ git show feature/typst-testing:claude-notes/plans/2026-09-27-typst-smoke-all-epi
 (workspace-2, macOS): **15295 tests run, 15294 passed, 1 failed, 201 skipped**,
 718.929s. The one failure is `quarto::integration smoke_all::smoke_all` itself
 (232 passed, 45 skipped, 1 failed *within* that test) — the pre-existing,
-separately-filed bd-gak8uiza `{{< embed >}}`-unimplemented gap in
+separately-filed bd-gak8uiza `{{{< embed >}}}`-unimplemented gap in
 `orange-book-margin/index.qmd` (missing `fig-visualization` crossref/caption),
 not a new regression. Per this doc's own escape hatch above, "done" here means
 every fixture passes except that one identified, filed gap — not literally

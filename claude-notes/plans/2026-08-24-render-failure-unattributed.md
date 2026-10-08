@@ -180,7 +180,7 @@ passed in the with-changes workspace run.
 
 ### End-to-end, through the real binary
 
-`q2 render` in a project whose R chunk emits `{{< fa envelope size=1x >}}`.
+`q2 render` in a project whose R chunk emits `{{{< fa envelope size=1x >}}}`.
 
 Before — the page dies unnamed:
 
@@ -191,7 +191,7 @@ Shortcode parameter values starting with digits must be quoted.
 
 After — output inspected, both the page and the offending line are named:
 
-```
+```{shortcodes="false"}
 error: while rendering /…/t2/knit.qmd
 Error: [Q-2-34] Unquoted shortcode parameter starting with digit
      ╭─[ /…/t2/knit.knitr.rmarkdown:138:23 ]
