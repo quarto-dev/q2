@@ -67,7 +67,7 @@ The known producer kinds, defined in
 | `By::filter(path, line)`     | 458  | `"filter"`                | Typed Inline/Block constructed inside a user Lua filter (auto-attached).      | yes     |
 | `By::sectionize()`           | 470  | `"sectionize"`            | `SectionizeTransform`\'s synthesized section `Div`.                            | no      |
 | `By::user_edit()`            | 479  | `"user-edit"`             | **Dormant.** Was React-constructed edit content; the `stampUserEdits` stamping path was removed and the current write-back model (`target-incremental-writes.md`) does not stamp edits. Constructor retained, currently unused in production. | no      |
-| `By::shortcode(name)`        | 494  | `"shortcode"`             | Result of resolving a `{{< name … >}}` token. **Requires an `Invocation`.**   | yes     |
+| `By::shortcode(name)`        | 494  | `"shortcode"`             | Result of resolving a `{{{< name … >}}}` token. **Requires an `Invocation`.**   | yes     |
 | `By::include()`              | 505  | `"include"`               | **Dormant.** Was for a planned `IncludeExpansion` wrapper; that design (Plan 8) is abandoned — `IncludeExpansionStage` splices flat and includes round-trip without a wrapper (see Plan 8 tombstone). Constructor retained, currently unused. | n/a |
 | `By::title_block()`          | 513  | `"title-block"`           | Title-block stage's synthesized title `h1`.                                   | yes     |
 | `By::footnotes()`            | 521  | `"footnotes"`             | Footnotes stage's container `Div` chrome.                                     | no      |
@@ -307,7 +307,7 @@ flow through the dispatch funnel:**
 - [`make_error_inline`](../../crates/quarto-core/src/transforms/shortcode_resolve.rs)
   (`:1352`) — `?key` Strong wrapping the unknown-shortcode message.
 - [`shortcode_to_literal`](../../crates/quarto-core/src/transforms/shortcode_resolve.rs)
-  (`:1368`) — `{{</ … >}}` escaped-shortcode literal text.
+  (`:1368`) — `{{{</ … >}}}` escaped-shortcode literal text.
 
 Both branches consume their `shortcode_owned.source_info` directly
 and emit an `Original` (the user-visible bytes belong to the token,

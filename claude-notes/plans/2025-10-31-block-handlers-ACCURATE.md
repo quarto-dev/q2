@@ -70,7 +70,7 @@ Most inline handlers ARE working:
 - Notes: inline notes ^[note], note references [^ref]
 - Quotes: single and double quotes
 - Links/Images: spans and images
-- Shortcodes: {{< shortcode >}}
+- Shortcodes: {{{< shortcode >}}}
 - Attributes: full attribute support
 
 ## Implementation Statistics
@@ -124,11 +124,11 @@ All 7 missing block handlers are **CRITICAL** because they all cause crashes. We
 - **Complexity**: Medium (language, attributes, content)
 - **Dependencies**: Attribute handling (already working)
 - **Example**:
-  ```markdown
+  ````markdown
   ```python
   print("hello")
   ```
-  ```
+  ````
 - **Helper**: `process_fenced_code_block` exists
 - **Note**: Only backtick fences (no tildes), no indented code blocks
 

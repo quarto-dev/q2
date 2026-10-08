@@ -103,7 +103,7 @@ Field semantics:
 
 ## Page template
 
-```markdown
+````markdown
 ---
 title: "..."
 description: "..."
@@ -150,7 +150,7 @@ A minimal reproducer if it helps clarify the scenario above.
 ## Related errors (optional)
 
 - [`Q-X-Y'`](Q-X-Y'.qmd) — short note on the relationship.
-```
+````
 
 ## Quality bar by status
 

@@ -28,7 +28,7 @@
 | `Image` | additionally `src` | — |
 | `Link` | additionally `target` | — |
 
-Escaped `{{{< … >}}}` in text → literal `{{< … >}}` (handled by
+Escaped `{{{< … >}}}`{shortcodes="false"} in text → literal `{{{< … >}}}` (handled by
 `parse_text_shortcodes`). Unknown-name shortcodes in Q1 reconstruct literally; q2
 emits marker + Q-16-5 (decision 4). Q1's `default_image_extension` dedup after src
 substitution is a Pandoc-reader artifact q2 doesn't share — not ported.
@@ -69,7 +69,7 @@ substitution is a Pandoc-reader artifact q2 doesn't share — not ported.
       containing `{{<` (12 files): fixed 8 error-catalog pages + shortcodes.qmd;
       `brand.qmd` already carried `shortcodes="false"` blocks and its triple-brace
       inline codes now display correctly; `environment.qmd` triple-brace inline
-      codes now display `{{< env … >}}` as intended (they showed raw triple braces
+      codes now display `{{{< env … >}}}` as intended (they showed raw triple braces
       before — latent docs bug fixed by the escape semantics). Full
       `q2 render docs/` (194 files): **zero** Q-16 warnings; the remaining 25
       warnings (Q-13-4/Q-5-6 missing links/resources) are pre-existing.
@@ -102,7 +102,7 @@ Filed 2026-08-10 (today), priority 2, type bug, label `parity`, by Carlos Scheid
 Q1 substitutes shortcodes inside fenced code blocks by default; q2 0.15.0 leaves them
 literal (HTML-escaped), no warning. Body-text shortcodes work. Real-world hit: Connect
 docs `admin/authentication/ldap-based/include/_users.qmd` uses
-`{{< meta authentication.vendor >}}` inside a `.gcfg` config example shared by five
+`{{{< meta authentication.vendor >}}}` inside a `.gcfg` config example shared by five
 LDAP authentication pages.
 
 ## Dependency graph
@@ -138,7 +138,7 @@ code text is never examined. Matches the strand exactly.
 
 Q1 ground truth (spot-checked in `external-sources/quarto-cli/src/resources/filters/customnodes/shortcodes.lua`):
 
-- `:210-211` — escaped form `{{{< … >}}}` substitutes to literal `{{< … >}}` text.
+- `:210-211` — escaped form `{{{< … >}}}`{shortcodes="false"} substitutes to literal `{{{< … >}}}` text.
 - `:251-252` — `apply_code_shortcode(text)` = lpeg text-level substitution.
 - `:285` — `shortcodes=false` attribute opts an element out.
 - `:289,296,329,335,361` — applied to CodeBlock text, element attributes, Code text,
@@ -146,7 +146,7 @@ Q1 ground truth (spot-checked in `external-sources/quarto-cli/src/resources/filt
   ground-truth study.)
 
 Repro copied to `claude-notes/plans/shortcodes-in-code-blocks-investigation/repro/`
-(from the connect-docs skein; uses `{{< meta vendor >}}` so it's env-independent).
+(from the connect-docs skein; uses `{{{< meta vendor >}}}` so it's env-independent).
 Reproduction at HEAD: see `../observations.md` in the investigation dir.
 
 ## Proposed phases (draft — for the consolidated bd-fz6gwfq0 scope)

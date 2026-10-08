@@ -8,7 +8,7 @@ File: claude-notes/plans/2025-11-20-shortcode-linebreak-error.md
 The parser cannot handle a line break immediately before the shortcode closing delimiter `>}}`.
 
 **Example that fails:**
-```markdown
+```{.markdown shortcodes="false"}
 {{< hello
    >}}
 ```
@@ -59,7 +59,7 @@ Following tidyverse guidelines and existing patterns:
 
 File: `crates/quarto-markdown-pandoc/resources/error-corpus/Q-2-27.json`
 
-```json
+```{.json shortcodes="false"}
 {
   "code": "Q-2-27",
   "title": "Line Break Before Shortcode Close",
@@ -149,7 +149,7 @@ Find the shortcode parsing code and add logic to emit Q-2-27 when:
 **Test file**: `~/today/bad-shortcode-linebreak.qmd`
 
 **Expected output**:
-```
+```{shortcodes="false"}
 Error: [Q-2-27] Line Break Before Shortcode Close
 ╭─[bad-shortcode-linebreak.qmd:1:1]
 │
@@ -174,7 +174,7 @@ A `q-2-27` converter rule could automatically fix this by:
 1. Detecting Q-2-27 errors
 2. Finding the newline before `>}}`
 3. Removing the newline and any leading whitespace on the next line
-4. Result: `{{< hello >}}`
+4. Result: `{{{< hello >}}}`
 
 ## Grammar Context
 
