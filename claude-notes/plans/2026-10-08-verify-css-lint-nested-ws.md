@@ -3,7 +3,7 @@
 **Date:** 2026-10-08
 **Braid:** bd-verify-css-lint-nested-ws-r0dd5vdk
 **Branch:** `braid/bd-verify-css-lint-nested-ws-r0dd5vdk-css-lint-nested-ws` (topic branch in the main checkout, not a worktree, at the user's request), based on `main` @ `3d3360ab6`
-**Status:** Investigation complete. Waiting on design alignment with the user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design agreed 2026-10-08 (see Decisions). Implemented; PR open for CI.
 
 ## Triage verdict
 
@@ -48,7 +48,24 @@ Reproduced at HEAD with Node v24.20.0 / npm 11.19.0. The transcript is in `verif
 - **Phase 2, bug-class sweep.** Decide what to do about hub-client-e2e.yml's `build --workspace hub-client` fan-out. Fix `AGENTS.md:530`.
 - **Phase 3, verify.** Run `cargo xtask verify --skip-hub-build` (without `--skip-css-lint`) and confirm it is green, and that a seeded CSS violation still fails it (so `--if-present` or `--prefix` didn't silently skip the lint).
 
-## Open design questions for the user
+## Decisions (2026-10-08, with the user)
+
+1. **Fix shape:** (b), `--prefix hub-client` in both verify and CI. Moving the experiment (c) is a follow-up, filed as bd-prfbxrth, and will be raised with Elliot on the PR.
+2. **Regression guard:** (i), a new `nested-npm-workspace` xtask lint (`crates/xtask/src/lint/nested_npm_workspaces.rs`), with `hub-client/vscode-sync-experiment` allowlisted pending bd-prfbxrth. The PR message flags this for the follow-up. The sync test is also tightened to an exact-line match.
+3. **e2e build fan-out:** acceptable for now. `hub-client-e2e.yml:189` is unchanged.
+4. **Ownership:** Gordon's earlier CI fix is noted on the strand. The PR is where we talk to Elliot.
+
+## Work items
+
+- [x] Phase 0: `css_lint_command_matches_ci_workflow` now matches the whole line. It fails against the old CI line (`--if-present`), as expected.
+- [x] Phase 0: unit tests for the nested-workspace lint (sibling, literal-nested, glob-nested, allowlisted, no manifest).
+- [x] Phase 1: `CSS_LINT_ARGS` and the CI step both use `npm run lint:css --prefix hub-client`.
+- [x] Phase 2: the lint is registered in `lint/mod.rs`, sharing `workspace_dirs`/`workspace_globs` with `ci_test_wiring`. `AGENTS.md` is updated.
+- [x] Sanity: with the allowlist entry removed, `cargo xtask lint` flags `package.json:8`. A seeded `margin-left: 0` in `hub-client/src/App.css` makes `npm run lint:css --prefix hub-client` exit 1.
+- [x] `cargo xtask verify` is green locally, with one exception: `smoke_all` has 9 environment-only failures (R lacks `gt`/`flextable`, and the venv has `great_tables` without `pandas`/`polars`). Steps 6–14 were rerun with `--skip-rust-tests` after an `npm ci` to refresh stale `node_modules`, and all passed.
+- [ ] PR open and CI green.
+
+## Original design questions (answered above)
 
 1. **Fix shape.** Which of these do you want?
    - (a) `--if-present`, mirroring CI. It's cheap and stays in sync with b8ce24b7c, but if hub-client's `lint:css` script were ever renamed or removed, both gates would silently pass.

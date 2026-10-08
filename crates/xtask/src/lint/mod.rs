@@ -9,6 +9,7 @@ mod error_docs;
 mod error_docs_sidebar;
 mod external_sources;
 mod metadata_as_str;
+mod nested_npm_workspaces;
 mod pandoc_pin;
 mod vendored_pandoc_filters;
 
@@ -107,6 +108,11 @@ pub fn run_check(config: &LintConfig) -> Result<()> {
         eprintln!("Checking npm-workspace test scripts against the CI workflows");
     }
     all_violations.extend(ci_test_wiring::check(&workspace_root)?);
+
+    if config.verbose {
+        eprintln!("Checking npm workspaces for nesting");
+    }
+    all_violations.extend(nested_npm_workspaces::check(&workspace_root)?);
 
     if config.verbose {
         eprintln!("Checking vendored pandoc filters 'Ours vs. pinned' section");

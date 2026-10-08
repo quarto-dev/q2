@@ -144,7 +144,10 @@ jobs:
       # violations one day after the rule itself merged — bd-owmzraf6.)
       - name: Lint hub-client CSS
         shell: bash
-        run: npm run lint:css -w hub-client --if-present
+        # --prefix, not -w: `-w hub-client` also selects the nested
+        # hub-client/vscode-sync-experiment workspace, which has no lint:css.
+        # Must match CSS_LINT_ARGS in crates/xtask/src/verify.rs exactly.
+        run: npm run lint:css --prefix hub-client
 
       # Deno — needed for engine-host-deno deno-test and the freshness gate.
       # denoland/setup-deno is safe here: this workflow has no "Free disk space"

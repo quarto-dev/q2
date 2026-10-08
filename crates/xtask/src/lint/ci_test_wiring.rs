@@ -63,7 +63,7 @@ pub(crate) const EXCUSED: &[(&str, &str)] = &[(
 ///
 /// Only the trailing-`*` form npm actually uses here is supported
 /// (`ts-packages/*`, `q2-demos/*`); anything else is treated as a literal path.
-fn workspace_dirs(root: &Path, globs: &[String]) -> Vec<PathBuf> {
+pub(super) fn workspace_dirs(root: &Path, globs: &[String]) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     for glob in globs {
         if let Some(prefix) = glob.strip_suffix("/*") {
@@ -86,6 +86,19 @@ fn workspace_dirs(root: &Path, globs: &[String]) -> Vec<PathBuf> {
     }
     dirs.sort();
     dirs
+}
+
+/// The root `package.json`'s `workspaces` entries, in declaration order.
+pub(super) fn workspace_globs(root_manifest: &serde_json::Value) -> Vec<String> {
+    root_manifest
+        .get("workspaces")
+        .and_then(|w| w.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The `run:` script of every step that looks like it runs tests.
@@ -135,15 +148,7 @@ pub fn check(workspace_root: &Path) -> Result<Vec<Violation>> {
     let root: serde_json::Value = serde_json::from_str(&root_manifest)
         .with_context(|| format!("Failed to parse {}", root_manifest_path.display()))?;
 
-    let globs: Vec<String> = root
-        .get("workspaces")
-        .and_then(|w| w.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
+    let globs = workspace_globs(&root);
 
     // Every test-running `run:` script across every scanned workflow.
     //

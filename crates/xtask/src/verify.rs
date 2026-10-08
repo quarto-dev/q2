@@ -30,9 +30,15 @@ use crate::test;
 const TOTAL_STEPS: u32 = 14;
 
 /// The hub-client CSS lint, exactly as CI's `Lint hub-client CSS` step in
-/// `.github/workflows/ts-test-suite.yml` runs it (from the repo root, via the
-/// npm workspace). Kept as a constant so a test can hold the two in sync.
-const CSS_LINT_ARGS: [&str; 4] = ["run", "lint:css", "-w", "hub-client"];
+/// `.github/workflows/ts-test-suite.yml` runs it (from the repo root). Kept
+/// as a constant so a test can hold the two in sync.
+///
+/// `--prefix`, not `-w`: npm resolves `-w hub-client` to every workspace at or
+/// under that path, which includes the nested
+/// `hub-client/vscode-sync-experiment` (no `lint:css` script, so the step
+/// failed). `--prefix` runs exactly one package, and unlike `--if-present` a
+/// renamed script still fails loudly (bd-verify-css-lint-nested-ws-r0dd5vdk).
+const CSS_LINT_ARGS: [&str; 4] = ["run", "lint:css", "--prefix", "hub-client"];
 
 /// Configuration for the verify command.
 #[derive(Default)]
@@ -885,10 +891,14 @@ mod tests {
     #[test]
     fn css_lint_command_matches_ci_workflow() {
         let workflow = include_str!("../../../.github/workflows/ts-test-suite.yml");
-        let local = format!("npm {}", CSS_LINT_ARGS.join(" "));
+        let local = format!("run: npm {}", CSS_LINT_ARGS.join(" "));
+        // Whole-line match: a substring check let CI gain `--if-present`
+        // (b8ce24b7c) while verify kept the bare command, and the drift went
+        // unnoticed until verify failed on main
+        // (bd-verify-css-lint-nested-ws-r0dd5vdk).
         assert!(
-            workflow.contains(&format!("run: {local}")),
-            "ts-test-suite.yml has no `run: {local}` step; keep CI and verify in sync"
+            workflow.lines().any(|line| line.trim() == local),
+            "ts-test-suite.yml has no `{local}` step (exact line); keep CI and verify in sync"
         );
     }
 

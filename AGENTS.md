@@ -527,7 +527,7 @@ cargo xtask verify           # Full verification (Rust + hub-client builds + tes
 ```
 
 This runs:
-0. `cargo xtask lint`, `npm run lint:css -w hub-client`, and clippy - the
+0. `cargo xtask lint`, `npm run lint:css --prefix hub-client`, and clippy - the
    fail-fast lints (step 1 in the xtask's numbering). The CSS lint enforces
    `hub-client/design-system.md` and runs even under `--skip-hub-build`;
    disable it with `--skip-css-lint`.
