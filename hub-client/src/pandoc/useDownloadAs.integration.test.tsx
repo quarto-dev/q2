@@ -78,18 +78,18 @@ describe('useDownloadAs: books', () => {
     expect(result.current.book?.chapter).toBe(true);
   });
 
-  it('"Download book as" starts with scope auto and the capture doc ids of the chapters that have one, resolved fresh at click time', () => {
+  it('"Download book as" starts with scope book and the capture doc ids of the chapters that have one, resolved fresh at click time', () => {
     h.bookInfoFor.mockReturnValue({ chapter: true, chapters: ['index.qmd', 'one.qmd', 'two.qmd'] });
     const { result } = renderHook(() => useDownloadAs('one.qmd', 'text', true, captures));
-    act(() => result.current.start(EPUB, 'auto'));
-    expect(h.start).toHaveBeenCalledWith({ path: 'one.qmd', format: EPUB, content: 'text', scope: 'auto', captureDocIds: { 'index.qmd': 'c0', 'one.qmd': 'c1' } });
+    act(() => result.current.start(EPUB, 'book'));
+    expect(h.start).toHaveBeenCalledWith({ path: 'one.qmd', format: EPUB, content: 'text', scope: 'book', captureDocIds: { 'index.qmd': 'c0', 'one.qmd': 'c1' } });
   });
 
-  it('a click on "Download book as" when the page is no longer a chapter falls back to the chapter-alone scope, with the page\'s own capture', () => {
-    h.bookInfoFor.mockReturnValueOnce({ chapter: true, chapters: ['one.qmd'] }).mockReturnValue({ chapter: false, chapters: [] });
+  it('a "Download book as" click on a page that is no longer a chapter still sends scope book (Rust returns the page and the notice) with no capture ids', () => {
+    h.bookInfoFor.mockReturnValue({ chapter: false, chapters: [] });
     const { result } = renderHook(() => useDownloadAs('one.qmd', '', true, captures));
-    act(() => result.current.start(EPUB, 'auto'));
-    expect(h.start).toHaveBeenCalledWith({ path: 'one.qmd', format: EPUB, content: '', scope: 'chapter', captureDocId: 'c1' });
+    act(() => result.current.start(EPUB, 'book'));
+    expect(h.start).toHaveBeenCalledWith({ path: 'one.qmd', format: EPUB, content: '', scope: 'book' });
   });
 
   it('"This chapter only" starts with scope chapter and the page\'s own capture doc id; an ordinary pick passes no scope', () => {

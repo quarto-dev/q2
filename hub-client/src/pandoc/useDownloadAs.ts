@@ -13,8 +13,8 @@ export interface DownloadAs {
   available: boolean;
   formats: DownloadFormat[];
   status: DownloadStatus;
-  /** `scope` is the book entries' pick: `'auto'` the whole book, `'chapter'` this chapter only. */
-  start: (format: DownloadFormat, scope?: 'auto' | 'chapter') => void;
+  /** `scope` is the menu entry's pick for a format that consolidates a book: `'book'` the whole book, `'chapter'` this page only. */
+  start: (format: DownloadFormat, scope?: 'book' | 'chapter') => void;
   /** The resolver's book field for the open document; null outside a book (and in the native embed). */
   book?: BookInfo | null;
   /** Re-read `book` (the project's chapter list may have changed since the document opened). */
@@ -65,24 +65,21 @@ export function useDownloadAs(path: string | null, content: string, wasmReady: b
   }, [controller, path]);
 
   const start = useCallback(
-    (format: DownloadFormat, scope?: 'auto' | 'chapter') => {
+    (format: DownloadFormat, scope?: 'book' | 'chapter') => {
       if (!path) return;
       // Resolved at the click, like the book scope below: the document's `output-ext` is what it says now.
       const named = withOutputExt(format, isWasmReady() ? resolvePandocFormats(path) : null);
       const options: StartOptions = { path, format: named, content: contentRef.current };
-      if (scope === 'auto') {
-        // Re-resolved now: the chapter list is what the project says at the click, not at the menu open.
+      if (scope === 'book') {
+        // The scope goes to Rust as clicked: a page that is no longer a chapter comes back as the page alone
+        // plus the Q-5-41 notice. The chapter list is re-read now, not at the menu open, only to pick captures.
+        options.scope = 'book';
         const fresh = bookInfoFor(path);
-        if (fresh?.chapter) {
-          options.scope = 'auto';
-          options.captureDocIds = captureDocIdsFor(fresh.chapters, capturesRef.current);
-        } else {
-          options.scope = 'chapter';
-        }
+        if (fresh?.chapter) options.captureDocIds = captureDocIdsFor(fresh.chapters, capturesRef.current);
       } else if (scope === 'chapter') {
         options.scope = 'chapter';
       }
-      if (options.scope !== 'auto') options.captureDocId = capturesRef.current?.[path]?.captureDocId;
+      if (options.scope !== 'book') options.captureDocId = capturesRef.current?.[path]?.captureDocId;
       void controller.start(options);
     },
     [controller, path],

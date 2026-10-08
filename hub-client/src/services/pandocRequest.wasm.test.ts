@@ -57,7 +57,7 @@ interface WasmModule {
     typst_available_fonts?: string[],
     abort_signal?: AbortSignal,
     options?: {
-      scope?: 'auto' | 'chapter';
+      scope?: 'book' | 'chapter';
       capturesByPath?: Record<string, Uint8Array>;
       onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
     },
@@ -667,7 +667,7 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
     // A `title:` plus the chapter's own heading: the merge puts an id-less
     // synthesized title heading first, which the link must not resolve to.
     wasm.vfs_add_file('/b/one.qmd', '---\ntitle: One Title\n---\n\n# One {#sec-one}\n\nFirst chapter.\n');
-    const out = await wasm.render_pandoc_request('/b/index.qmd', 'typst', SDE, undefined, undefined, undefined, { scope: 'auto' });
+    const out = await wasm.render_pandoc_request('/b/index.qmd', 'typst', SDE, undefined, undefined, undefined, { scope: 'book' });
     const tree = wasm.get_pandoc_share_tree();
     const result = await execute(out.request as unknown as PandocRequest, tree, { module });
     if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);

@@ -25,7 +25,7 @@ interface Envelope {
   success: boolean;
   error?: string;
   diagnostics: { kind: string; title: string; code?: string; start_line?: number; rendered?: string }[];
-  stats: { unexecuted_cells: number; book: { scope: 'book' | 'chapter'; chapters: number } | null };
+  stats: { unexecuted_cells: number; book: { scope: 'book' | 'chapter' | 'page'; chapters: number } | null };
   request?: {
     files: RequestFile[];
     resource_refs: RequestFile[];
@@ -35,7 +35,7 @@ interface Envelope {
 }
 
 interface Options {
-  scope?: 'auto' | 'chapter';
+  scope?: 'book' | 'chapter';
   capturesByPath?: Record<string, Uint8Array>;
   onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
 }
@@ -225,15 +225,39 @@ describe('whole-book request (R9)', () => {
     expect(a.request!.job_id).toBe(b.request!.job_id);
   });
 
-  it('renders a page that is not a chapter alone, with no mention of the book', async () => {
+  it('delivers a page that is not a chapter alone with the Q-5-41 notice, whether book or nothing was chosen', async () => {
     smallBook();
     add('notes.qmd', '# Notes\n\nA page outside the book.\n');
-    const out = await render('notes.qmd', 'typst');
+    for (const options of [undefined, { scope: 'book' as const }]) {
+      const out = await render('notes.qmd', 'typst', options);
+      expect(out.error).toBeUndefined();
+      expect(out.stats.book).toEqual({ scope: 'page', chapters: 3 });
+      expect(plainText(out)).toContain('A page outside the book.');
+      expect(plainText(out)).not.toContain('First');
+      expect(out.diagnostics.filter((d) => d.code === 'Q-5-41')).toHaveLength(1);
+    }
+  });
+
+  it('asking for the chapter of a page outside the book is just that page, with no notice', async () => {
+    smallBook();
+    add('notes.qmd', '# Notes\n\nA page outside the book.\n');
+    const out = await render('notes.qmd', 'typst', { scope: 'chapter' });
     expect(out.error).toBeUndefined();
-    expect(out.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
     expect(plainText(out)).toContain('A page outside the book.');
-    expect(plainText(out)).not.toContain('First');
-    expect(out.diagnostics.every((d) => !d.title.includes('book'))).toBe(true);
+    expect(out.diagnostics.some((d) => d.code === 'Q-5-41')).toBe(false);
+  });
+
+  it('a docx request sends no scope and gets no scope diagnostic', async () => {
+    smallBook();
+    const out = await render('one.qmd', 'docx');
+    expect(out.diagnostics.some((d) => d.code === 'Q-5-41' || d.code === 'Q-5-42')).toBe(false);
+  });
+
+  it("rejects the old 'auto' scope", async () => {
+    smallBook();
+    const out = await render('one.qmd', 'typst', { scope: 'auto' as 'book' });
+    expect(out.success).toBe(false);
+    expect(out.error).toContain("'book' or 'chapter'");
   });
 
   it('fails the whole render when a chapter is broken, naming its file', async () => {
@@ -493,7 +517,7 @@ describe('progress, yield and abort (R9)', () => {
 
   it('rejects a malformed options object without rendering', async () => {
     smallBook();
-    const out = await render('one.qmd', 'typst', { scope: 'sideways' as 'auto' });
+    const out = await render('one.qmd', 'typst', { scope: 'sideways' as 'book' });
     expect(out.success).toBe(false);
     expect(out.error).toContain('scope');
   });

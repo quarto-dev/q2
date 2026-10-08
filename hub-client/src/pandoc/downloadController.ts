@@ -88,7 +88,7 @@ export interface RequestEnvelope {
   success: boolean;
   error?: string;
   diagnostics: unknown[];
-  stats?: { unexecuted_cells: number; book?: { scope: 'book' | 'chapter'; chapters: number } | null };
+  stats?: { unexecuted_cells: number; book?: { scope: 'book' | 'chapter' | 'page'; chapters: number } | null };
   request?: unknown;
 }
 
@@ -117,7 +117,7 @@ export interface TypstChainDeps {
 /** The sixth `buildRequest` argument, passed only when the click asked for a scope (a book chapter's menu items). */
 export interface BuildRequestExtra {
   /** Absent for a chapter-alone request that only carries `captureGzJson`: the deps' default scope applies. */
-  scope?: 'auto' | 'chapter';
+  scope?: 'book' | 'chapter';
   /** The open page's own capture, for a chapter-alone request. */
   captureGzJson?: Uint8Array;
   /** Capture blobs by chapter path (sidecar keys); only for a whole-book click. */
@@ -177,10 +177,12 @@ export interface StartOptions {
   /** The editor's current text; only the native executor uses it. */
   content?: string;
   /**
-   * A book chapter's request scope: `'auto'` is the whole book for typst, pdf and epub ("Download book
-   * as"), `'chapter'` the page alone ("This chapter only"). Absent: the controller's default (chapter).
+   * The request scope, sent only for formats that consolidate a book (typst, pdf, epub): `'book'` is the whole
+   * book ("Download book as"), `'chapter'` the page alone ("This chapter only"). Absent: the user did not choose
+   * (and the controller's default, if any, applies). A `'book'` for a page that is not a chapter comes back as the
+   * page alone plus the `Q-5-41` notice.
    */
-  scope?: 'auto' | 'chapter';
+  scope?: 'book' | 'chapter';
   /** For a whole-book click: chapter path (sidecar key) to capture doc id, for every chapter that has a capture. */
   captureDocIds?: Record<string, string>;
   /**
@@ -400,7 +402,7 @@ export class DownloadController {
 
     let extra: BuildRequestExtra | undefined;
     let captureNotices: string[] = [];
-    if (scope !== 'auto' && captureDocId && this.deps.fetchCaptures) {
+    if (scope !== 'book' && captureDocId && this.deps.fetchCaptures) {
       const got = await this.deps.fetchCaptures({ [path]: captureDocId }, own.signal);
       if (!current()) return;
       const bytes = got.byPath[path];
@@ -409,7 +411,7 @@ export class DownloadController {
     }
     if (scope) {
       extra = { ...extra, scope };
-      if (scope === 'auto') {
+      if (scope === 'book') {
         const ids = captureDocIds ?? {};
         if (this.deps.fetchCaptures && Object.keys(ids).length > 0) {
           const got = await this.deps.fetchCaptures(ids, own.signal);

@@ -666,7 +666,8 @@ export type {
  * (a `key` of {@link getPandocFormats}). `sourceDateEpoch` is seconds (the
  * click time in production). A document with errors comes back with no
  * `request`; the `diagnostics` say why. A book chapter requested as typst,
- * pdf or epub is the whole book unless `scope` is `'chapter'`. The request's
+ * pdf or epub is the whole book unless `scope` is `'chapter'`; a page that
+ * is not a chapter comes back alone with the `Q-5-41` notice. The request's
  * bytes are copies the caller owns.
  */
 export async function renderPandocRequest(
@@ -678,8 +679,8 @@ export async function renderPandocRequest(
     typstAvailableFonts?: string[];
     /** Cancels the downloads of remote images (the click's signal). */
     signal?: AbortSignal;
-    /** `'auto'` (the default) renders a book chapter's whole book for typst, pdf and epub. */
-    scope?: 'auto' | 'chapter';
+    /** Absent or `'book'` renders a book chapter's whole book for typst, pdf and epub; `'chapter'` the page alone. */
+    scope?: 'book' | 'chapter';
     /** Capture blobs by chapter path (see `RenderPandocRequestOptions`). */
     capturesByPath?: Record<string, Uint8Array>;
     /** Called before each chapter of a book render, with a 1-based index. */

@@ -23,8 +23,8 @@ export interface DownloadAsControlProps {
   status: DownloadStatus;
   /** When set, the button is disabled and this text explains why. */
   disabledReason?: string;
-  /** A book chapter's entries pass the scope (`'auto'` the whole book, `'chapter'` this chapter); the others pass the format alone. */
-  onSelect: (format: DownloadFormat, scope?: 'auto' | 'chapter') => void;
+  /** A book chapter's entries pass the scope (`'book'` the whole book, `'chapter'` this chapter); the others pass the format alone. */
+  onSelect: (format: DownloadFormat, scope?: 'book' | 'chapter') => void;
   /** The resolver's book field for the open document; `chapter: true` offers the book entries. */
   book?: { chapter: boolean } | null;
   /** Called when the menu opens, so the host can refresh `book` (the project's chapter list may have changed). */
@@ -143,13 +143,15 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
           {formats.map((f) =>
             book?.chapter && BOOK_FORMATS.includes(f.key) ? (
               <Fragment key={f.key}>
-                <MenuItem onSelect={() => onSelect(f, 'auto')}>{download.downloadBookAs(f.label)}</MenuItem>
+                <MenuItem onSelect={() => onSelect(f, 'book')}>{download.downloadBookAs(f.label)}</MenuItem>
                 <MenuItem subtext={f.label} onSelect={() => onSelect(f, 'chapter')}>
                   {download.thisChapterOnly}
                 </MenuItem>
               </Fragment>
             ) : (
-              <MenuItem key={f.key} onSelect={() => onSelect(f)}>
+              // The plain entry of a format that consolidates a book means "this page", so it says so; the
+              // other formats have no whole-book output and send no scope.
+              <MenuItem key={f.key} onSelect={() => (BOOK_FORMATS.includes(f.key) ? onSelect(f, 'chapter') : onSelect(f))}>
                 {f.label}
               </MenuItem>
             ),

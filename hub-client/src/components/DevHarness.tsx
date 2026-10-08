@@ -849,7 +849,7 @@ function DownloadAsPage({
                 warnings: [],
                 notices: [],
                 unexecutedCells: 0,
-                book: scope === 'auto' ? { chapters: 3 } : undefined,
+                book: scope === 'book' ? { chapters: 3 } : undefined,
               }),
             cancel: () => setLive({ phase: 'cancelled', clickId: 1, format: HARNESS_DOCX }),
             dismiss: () => setLive({ phase: 'idle' }),

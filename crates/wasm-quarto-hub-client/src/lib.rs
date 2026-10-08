@@ -1598,12 +1598,14 @@ fn pandoc_request_envelope(
 /// `request`. A document inside a `_quarto.yml` project renders as the
 /// project's active page (R7): the request carries that page alone, with the
 /// project's metadata and `format:` layers applied. For a book chapter
-/// requested as typst, pdf or epub with `options.scope` `'auto'` (the
-/// default) the request is the whole book (R9); docx and pptx, a page that is
-/// not a chapter and `scope: 'chapter'` stay chapter-alone. `stats.book` is
-/// `{ scope: 'book' | 'chapter', chapters }` in a book project, else `null`.
+/// requested as typst, pdf or epub with `options.scope` `'book'` or absent
+/// (the user did not choose) the request is the whole book (R9); docx and
+/// pptx and `scope: 'chapter'` stay chapter-alone, and a page that is not a
+/// chapter is delivered alone with the `Q-5-41` notice (`stats.book.scope`
+/// `'page'`). `stats.book` is `{ scope: 'book' | 'chapter' | 'page', chapters }`
+/// in a book project, else `null`.
 ///
-/// `options` (optional, trailing) is `{ scope?: 'auto' | 'chapter',
+/// `options` (optional, trailing) is `{ scope?: 'book' | 'chapter',
 /// attributionJson?: string (the active file's authorship, stamped onto docx
 /// comments and tracked changes; ignored by a whole-book request),
 /// capturesByPath?: Record<string, Uint8Array>, onProgress?: (index, total,
@@ -1769,11 +1771,9 @@ fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, Str
     let scope = get("scope");
     if !scope.is_undefined() && !scope.is_null() {
         out.scope = match scope.as_string().as_deref() {
-            // `'auto'` means the user did not choose (Plan 5 replaces it
-            // with `'book' | 'chapter'`).
-            Some("auto") => None,
+            Some("book") => Some(BookScope::Book),
             Some("chapter") => Some(BookScope::Chapter),
-            _ => return Err("options.scope must be 'auto' or 'chapter'".to_string()),
+            _ => return Err("options.scope must be 'book' or 'chapter'".to_string()),
         };
     }
     let captures = get("capturesByPath");

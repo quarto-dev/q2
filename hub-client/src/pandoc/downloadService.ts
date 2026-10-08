@@ -128,11 +128,11 @@ function previewFontFamilies(runner: NonNullable<ChainRunners['typst']>) {
 
 /**
  * The browser-side dependencies shared by the download controller and the PDF preview's. `scope` is
- * the default for what a book chapter requests: `'chapter'` is the page alone, `'auto'` the whole
- * book for typst, pdf and epub (R9). A click that carries its own scope (the menu's "Download book
+ * the default for what a book chapter requests: `'chapter'` is the page alone, `'book'` the whole
+ * book for typst, pdf and epub (R9); `undefined` sends no scope (the user did not choose). A click that carries its own scope (the menu's "Download book
  * as" and "This chapter only") overrides it through `buildRequest`'s sixth argument.
  */
-function wasmDeps(scope: 'auto' | 'chapter', runners: ChainRunners = {}): Omit<DownloadDeps, 'save'> {
+function wasmDeps(scope: 'book' | 'chapter' | undefined, runners: ChainRunners = {}): Omit<DownloadDeps, 'save'> {
   return {
     buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts, extra) => {
       await initWasm();
@@ -196,9 +196,9 @@ export function getDownloadController(): DownloadController {
     controller = isPreviewEmbed()
       ? new DownloadController({ native: (request, opts) => renderNatively(request, opts), save: saveBlob })
       : new DownloadController({
-          // Chapter-alone unless the click says otherwise: only the book chapter's "Download book as"
-          // entry asks for 'auto' (R9 Q-9-5), so every other entry keeps one page per file.
-          ...wasmDeps('chapter'),
+          // No default scope: the menu sends one explicitly for the formats that consolidate a book
+          // ('book' for "Download book as", 'chapter' for the rest), and none for docx, odt, pptx, html.
+          ...wasmDeps(undefined),
           save: saveBlob,
           onPdf: (pdf, info) => pdfListeners.forEach((l) => l(pdf, info)),
         });

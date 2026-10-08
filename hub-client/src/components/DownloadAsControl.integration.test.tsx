@@ -46,13 +46,23 @@ describe('DownloadAsControl: book chapters (R9)', () => {
     ]);
   });
 
-  it('selecting passes the scope: auto for the book, chapter for this chapter only; ordinary entries pass the format alone', () => {
+  it('selecting passes the scope: book for the book, chapter for this chapter only; ordinary entries pass the format alone', () => {
     const { onSelect } = setup({ formats: [DOCX, EPUB], book: { chapter: true } });
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: /Download book as EPUB/ }));
-    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'auto');
+    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'book');
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: /This chapter only/ }));
+    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'chapter');
+    open();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Word' }));
+    expect(onSelect).toHaveBeenLastCalledWith(DOCX);
+  });
+
+  it('the plain entry of a format that consolidates a book (a page that is not a chapter) sends chapter; docx sends nothing', () => {
+    const { onSelect } = setup({ formats: [DOCX, EPUB], book: { chapter: false } });
+    open();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'EPUB (.epub)' }));
     expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'chapter');
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Word' }));

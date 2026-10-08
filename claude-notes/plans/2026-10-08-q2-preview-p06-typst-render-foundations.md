@@ -12,6 +12,20 @@ Part of the epic [`2026-10-08-q2-preview-hub-parity-epic.md`](2026-10-08-q2-prev
 - **Unlocks:** Plan 9 (routes), Plan 10 (book downloads).
 - **Next in lane:** Plan 9 (`2026-10-08-q2-preview-p09-preview-routes`); the next agent starts only when its own start gate passes.
 
+## Inputs from Plan 2 (landed; read its Handoff log)
+
+Integration tip `d2beb810d` or later. Verify each point against the code before relying on it.
+
+- **Capture plots.** `RenderToFileOptions::capture_materialize_dir: Option<PathBuf>` exists (default `None`), threaded to `RenderContext` and `StageContext`; `PandocWriteStage` adds it as an extra repeated `--resource-path`. This plan sets it.
+- **Typst request directories are "not in place"** (`render_to_file::output_in_place`). Their image hrefs are written relative to the real output directory and climb to the source file. `LinkRewriteTransform` leaves a relative image alone only if the file already exists in the output (request) directory when the rewrite runs, so capture plots must be written there **before** the link rewrite transform runs. Verify the ordering in the pipeline; if the plots cannot be materialized that early, stop and tell Gordon.
+- **No output-tree image copies for typst out of place** (`ResourceCollectorTransform` skips them), so the `.typ` references images in place (`../../../sub/pic.png`) and is not self-contained. For `typst_target: Source` the downloaded `.typ` has broken image paths outside the request directory. Decide before building the Source target: bundle the referenced images next to the `.typ`, or document the limitation; if neither is in this plan, say which of Plans 9 and 13 owns it. Bring it to Gordon as a design question, framed from the user's side (what someone who downloads the `.typ` sees).
+- Typst output outside the discovered project dir still fails on typst's `--root` rule (`Q-21-3`); the request directory under `<ProjectContext::discover(abs_path).dir>/.quarto/preview-out/` avoids it. A default project with no `_quarto.yml` uses the document's own directory as the project dir.
+- docx/odt/epub/pptx in an OS temp dir use Plan 2's mirror resolver (source-relative hrefs; pandoc finds them through `--resource-path <doc dir>` plus the materialize dir).
+- Mock runtimes must not return a real path from `temp_dir` (`StageContext` now deletes its temp dir on drop); use a nonexistent path like the existing mocks (`/nonexistent/q2-mock-temp-dir`).
+- `RenderToFileOptions { .. }` literals without `..Default::default()` need the new field.
+- The wasm32 build was not checked in Plan 2 (the machine could not build the wasm C dependencies); if this plan touches wasm code, confirm `source_mirroring_resolver` (native-only) compiles cleanly there.
+- Workspace baseline: use the epic's ledger (`Ledger: ba50c1655: 16025 passed, 202 skipped`, valid for the tip; later commits are docs only).
+
 ## Goal
 
 The quarto-core pieces every typst preview or download needs: choosing the typst output (`pdf` or source), splicing captured cell outputs into the AST without kernels, counting unexecuted cells, and rendering into a per-request directory under the discovered project.
