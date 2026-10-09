@@ -67,12 +67,12 @@ cargo nextest run -p pampa <new test name>      # round-trip test fails
 - [x] T2.1 Added `CAPTION_START` to the externals enum in `scanner.c` (at the END of the enum, not in the middle — keeps preceding token IDs stable)
 - [x] T2.2 Added `"CAPTION_START"` to the token_names debug array
 - [x] T2.3 Added `$._caption_start` to the externals array in `grammar.js`
-- [x] T2.4 Added the emission in `parse_fenced_div_marker`'s `level < 3` branch
+- [x] T2.4 Added the emission in `parse_fenced_div_marker`\'s `level < 3` branch
 - [x] T2.5 Replaced `":"` with `$._caption_start` in the `caption` rule body
 - [x] T2.6 `tree-sitter generate` succeeded
 - [x] T2.7 (n/a — `cargo build` regenerates the C library via build.rs)
 - [x] T2.8 `tree-sitter test` — 485/485 pass (was 484/485 pre-fix with the new failing test)
-- [x] **T2.X (added during work):** Discovered that the caption disambiguation alone left `:::` absorbed as a pipe_table_row (1 cell, 3 × pandoc_str). Added a second scanner change in the PIPE_TABLE_LINE_ENDING dispatch (line ~2350): peek-without-mark_end for `:::` followed by inline-whitespace / newline / EOF, and route to `LINE_ENDING` instead of `PIPE_TABLE_LINE_ENDING` when seen. This terminates the table so the next scan-call can handle `:::` as `FENCED_DIV_END` (or surface a clean error for bare `:::` with no open div).
+- [x] **T2.X (added during work):** Discovered that the caption disambiguation alone left `:::` absorbed as a pipe_table_row (1 cell, 3 × pandoc_str). Added a second scanner change in the PIPE_TABLE_LINE_ENDING dispatch (line \~2350): peek-without-mark_end for `:::` followed by inline-whitespace / newline / EOF, and route to `LINE_ENDING` instead of `PIPE_TABLE_LINE_ENDING` when seen. This terminates the table so the next scan-call can handle `:::` as `FENCED_DIV_END` (or surface a clean error for bare `:::` with no open div).
 - [ ] T2.9 `cargo nextest run -p pampa` — pampa tests pass
 - [x] T2.10 Repro end-to-end:
   - Input: `::: foo / | | | / |:-:|:-:| / | a | b | / :::`
@@ -88,11 +88,11 @@ cargo nextest run -p pampa <new test name>      # round-trip test fails
 - [x] T3.X `cargo check --workspace` — clean
 - [x] T3.X `cargo xtask lint` — clean
 - [ ] T3.3 `cargo xtask verify` (full hub-client/WASM build). **Blocked on env** — `npm install` not run from repo root, so `vitest` / `tsc` are missing for trace-viewer and hub-client. Hub-client tests not exercised. Pre-existing on this worktree, not introduced by this fix. Recommend running `npm install` from repo root before pushing.
-- [x] T3.4 WASM `cargo check` from `crates/wasm-qmd-parser` errored with a workspace-boundary issue (`current package believes it's in a workspace when it's not`) — pre-existing structural issue with running `cargo` directly inside a worktree on the WASM crate, not caused by this fix. The WASM build picks up the regenerated `parser.c` via `tree-sitter-qmd`'s `build.rs`, which is the same path as the native build; no WASM-specific changes were made.
+- [x] T3.4 WASM `cargo check` from `crates/wasm-qmd-parser` errored with a workspace-boundary issue (`current package believes it's in a workspace when it's not`) — pre-existing structural issue with running `cargo` directly inside a worktree on the WASM crate, not caused by this fix. The WASM build picks up the regenerated `parser.c` via `tree-sitter-qmd`\'s `build.rs`, which is the same path as the native build; no WASM-specific changes were made.
 
 ### Phase 4 — real-world verification
 
-- [x] T4.1 Fetched `quarto-dev/quarto-web` (main branch) `docs/websites/website-navigation.qmd` (~34KB). Section L155-L159 is exactly the bug pattern (`::: column-screen-inset-shaded` opening a div, a 2-row pipe table inside, then `:::` directly closing it).
+- [x] T4.1 Fetched `quarto-dev/quarto-web` (main branch) `docs/websites/website-navigation.qmd` (\~34KB). Section L155-L159 is exactly the bug pattern (`::: column-screen-inset-shaded` opening a div, a 2-row pipe table inside, then `:::` directly closing it).
 - [x] T4.2 End-to-end verification record:
   - Invocation: `cargo run --bin pampa -- < /tmp/website-navigation.qmd 2>&1 | grep -ci "Error: Parse error"`
   - Result: **0** parse errors on the whole file

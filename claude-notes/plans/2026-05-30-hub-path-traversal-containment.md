@@ -55,7 +55,7 @@ client bypasses them entirely by mutating the CRDT directly, so validating
 there gives zero security value against the actual threat. And the server
 never produces an unsafe key itself: both non-test callers (`context.rs:607`,
 `context.rs:653`) pass paths from `project_files`, which are already
-`strip_prefix(project_root)`'d filesystem-walk paths. Validating `add_file`
+`strip_prefix(project_root)`\'d filesystem-walk paths. Validating `add_file`
 would guard a bug that cannot currently occur, at the cost of turning two
 infallible-in-practice methods fallible plus their own test matrix. Skip it.
 
@@ -82,10 +82,10 @@ use std::path::{Component, Path, PathBuf};
 fn contained_join(project_root: &Path, rel: &str) -> Option<PathBuf>;
 ```
 
-**Do not reuse `quarto-core`'s `lexical_clean` (`output_sink.rs:444`).** It
+**Do not reuse `quarto-core`\'s `lexical_clean` (`output_sink.rs:444`).** It
 *normalizes* (`..` at the root is kept as a `ParentDir` component) whereas we
 need *reject-on-escape*; different semantics, and reaching across a crate
-boundary for a ~15-line pure function is not worth the coupling.
+boundary for a \~15-line pure function is not worth the coupling.
 
 Implementation rules (cross-platform — must use `std::path::Component`,
 never string `".."` matching, per `.claude/rules/cross-platform.md`):

@@ -26,7 +26,7 @@ This separates *what* is highlighted from *how* it is rendered, mirroring skylig
 
 - **Pandoc/skylighting** never modifies the AST: `CodeBlock` stays a `CodeBlock`, and each writer calls skylighting at emit time to produce literal markup (`Html`, `Text`, etc.). Token taxonomy: 25 fixed types derived from KDE Kate (`KeywordTok`, `DataTypeTok`, …). HTML classes: short 2-letter (`kw`, `dt`, `co`). ([pandoc research](../research/syntax-highlighting-pandoc.md))
 - **Hugo/chroma** has a richer Pygments-style hierarchical taxonomy (`KeywordDeclaration`, `NameFunction`, `LiteralStringDouble`) with numeric parent/category arithmetic. HTML: short classes (`k`, `nf`, `s1`). Themes are XML. Line-number/highlight are **formatter options**, not token-level. ([chroma research](../research/syntax-highlighting-hugo-chroma.md))
-- **tree-sitter-highlight** is the natural Rust API: ~45 canonical capture names (`keyword`, `function.builtin`, `string.escape`, `markup.*`, etc.), longest-match resolution, nested event stream (`HighlightStart` / `HighlightEnd` / `Source`), language injection, locals tracking. Used in production at github.com. ([tree-sitter research](../research/syntax-highlighting-tree-sitter.md))
+- **tree-sitter-highlight** is the natural Rust API: \~45 canonical capture names (`keyword`, `function.builtin`, `string.escape`, `markup.*`, etc.), longest-match resolution, nested event stream (`HighlightStart` / `HighlightEnd` / `Source`), language injection, locals tracking. Used in production at github.com. ([tree-sitter research](../research/syntax-highlighting-tree-sitter.md))
 - **Ecosystem**: Three families — Pygments-derived (skylighting, chroma, rouge), TextMate-grammar (Shiki), tree-sitter. GitHub migrated from Pygments to tree-sitter. Tree-sitter is strictly more accurate (multi-line, context-aware, injections). ([survey](../research/syntax-highlighting-ecosystem-survey.md))
 
 ## Design sketch
@@ -110,14 +110,14 @@ Replace the current `<pre><code>{escaped_text}</code></pre>` path in `crates/pam
   - [x] Queries sourced from crate-exposed `HIGHLIGHTS_QUERY` constants (drift-free). Only Julia is vendored under `resources/highlights/julia/` because the `tree-sitter-julia` crate doesn't expose a query constant. JS/TS/TSX compose multiple constants at runtime.
   - [x] Native user-grammar loader via `tree_sitter::WasmStore` (wasmtime always included on native). Scans a parent directory for grammar sub-dirs; each sub-dir has a `<name>.wasm` + `highlights.scm`. API: `UserGrammars::new()`, `load_from_directory()`, `load_all_from_parent()`. Public function `highlight_with_user()` composes with user grammars overriding built-ins on class collision. End-to-end test uses tree-sitter-toml v0.7.0 as a fixture (not in built-in set).
   - [x] Pipeline stage: `CodeHighlightStage` in `quarto-core`. Runs between `UserFiltersStage::post()` and `RenderHtmlBodyStage`. Annotation walker lives in `quarto_highlight::annotate_pandoc` (CodeBlock + inline Code + recursion through container blocks/inlines). Filter-authored annotations win (skip if `data-hl-spans` is already set). Highlighting failures become warning diagnostics instead of aborting the pipeline.
-  - [x] **WASM/hub-client scope note**: `quarto-highlight` is gated as a native-only dep in `quarto-core` because grammar-crate scanners (e.g. `tree-sitter-html`'s `towupper`) don't compile against the hub-client's wasm32 sysroot. On wasm32 the `CodeHighlightStage` is absent from the pipeline and the HTML writer emits plain `<pre><code>`. This is consistent with Phase 3's scope: browser built-ins ship later, after wasm32 scanner issues are addressed.
+  - [x] **WASM/hub-client scope note**: `quarto-highlight` is gated as a native-only dep in `quarto-core` because grammar-crate scanners (e.g. `tree-sitter-html`\'s `towupper`) don't compile against the hub-client's wasm32 sysroot. On wasm32 the `CodeHighlightStage` is absent from the pipeline and the HTML writer emits plain `<pre><code>`. This is consistent with Phase 3's scope: browser built-ins ship later, after wasm32 scanner issues are addressed.
   - [x] Golden `insta` snapshots for all 13 user-facing class names + one user-grammar fixture (tree-sitter-toml). `tests/golden.rs` + `tests/snapshots/`. Locks exact capture names + byte ranges per tiny fixture snippet — upstream grammar-crate bumps surface as reviewable diffs.
 
 **Phase 1 complete.** 22 tests in `quarto-highlight` across encoding, python-basic, all-languages smoke, annotate walker, user-grammar-toml, and golden snapshots. Workspace build/tests/lint all green.
 
 - **Phase 2 — HTML writer**:
   - [x] New `quarto-highlight-encoding` crate holds the wire-format types (`HighlightSpan`, `encode`/`decode`, `SPANS_ATTR_KEY`) with no heavy deps so pampa can decode on wasm32 without pulling tree-sitter / wasmtime. `quarto-highlight` re-exports from it.
-  - [x] Nested span emission in `pampa`'s HTML writer (`crates/pampa/src/writers/html.rs`). Reads `data-hl-spans`, walks triples as a depth-ordered event stream, emits `<span class="hl-<capture-with-dots-as-hyphens>">`. Filters the raw attr off the container so it doesn't leak. 6 unit tests cover nesting, fallback, malformed JSON, inline `Code`, and dot-to-hyphen class names.
+  - [x] Nested span emission in `pampa`\'s HTML writer (`crates/pampa/src/writers/html.rs`). Reads `data-hl-spans`, walks triples as a depth-ordered event stream, emits `<span class="hl-<capture-with-dots-as-hyphens>">`. Filters the raw attr off the container so it doesn't leak. 6 unit tests cover nesting, fallback, malformed JSON, inline `Code`, and dot-to-hyphen class names.
   - [x] Container marked with `sourceCode` class whenever spans are emitted (Pandoc-compatible theming hook).
   - [x] Default `resources/scss/html/templates/highlight.scss` covering the standard tree-sitter capture set (keyword/function/string/number/comment/type/variable/property/operator/tag/markup/…) with a solarized-inspired palette. Loaded as a built-in user layer after title-block, before user theme layers, in both `assemble_theme_scss` and `compile_default_css`.
   - [x] End-to-end integration test in `quarto-core::pipeline::tests::test_render_code_block_is_syntax_highlighted` — qmd → full HTML pipeline → verified nested `hl-keyword` / `hl-function-builtin` spans in the output HTML with no `data-hl-spans=` leak.
@@ -176,7 +176,7 @@ branch *and* run the binary.
 
 - **Phase 3 — browser built-ins**:
   - [x] Statically linked grammar crates compile clean into `wasm-quarto-hub-client`
-  - [x] Bundle-size recorded: **~32.8 MB** uncompressed WASM (~16 MB over the 17 MB pre-highlighting baseline, per-grammar average ~1.3 MB). No numeric threshold set per user guidance.
+  - [x] Bundle-size recorded: **\~32.8 MB** uncompressed WASM (\~16 MB over the 17 MB pre-highlighting baseline, per-grammar average \~1.3 MB). No numeric threshold set per user guidance.
   - [x] Same highlighting code path exercised from the WASM harness via a test-only `quarto_highlight_for_test` export that calls through to `Registry::global().highlight()`. Per-grammar coverage in `hub-client/src/services/highlight.wasm.test.ts` consumes the same fixture JSON as native `golden.rs`.
   - [x] **End-to-end verification (2026-04-20)**: user rendered `claude-notes/fixtures/phase3-highlight-check.qmd` (no `theme:` frontmatter) via `cd hub-client && npm run dev:fresh` in Firefox. Observed `<span class="hl-keyword">def</span>` / `<span class="hl-function-builtin">print</span>` spans with colors applied; `pre > code { display: block }` honored; inline highlighted code visible. Output inspected in DevTools.
 
@@ -223,8 +223,8 @@ Motivated by the requirement to support **user-supplied tree-sitter grammars** (
 
 ### Where the cost lives
 
-- **Native `quarto` binary**: adding the wasmtime runtime adds ~8–12 MB. The current `quarto` CLI is already ~95 MB (batteries-included); wasmtime is noise against that baseline. **No Cargo feature gate** — wasm grammar loading is always compiled in. Downstream library consumers (LSP, hub server) who don't need user grammars can depend on a thinner subcrate if that becomes necessary later, but we don't pre-build that split.
-- **Browser hub-client**: web-tree-sitter adds ~1.5–2 MB compressed. Acceptable.
+- **Native `quarto` binary**: adding the wasmtime runtime adds \~8–12 MB. The current `quarto` CLI is already \~95 MB (batteries-included); wasmtime is noise against that baseline. **No Cargo feature gate** — wasm grammar loading is always compiled in. Downstream library consumers (LSP, hub server) who don't need user grammars can depend on a thinner subcrate if that becomes necessary later, but we don't pre-build that split.
+- **Browser hub-client**: web-tree-sitter adds \~1.5–2 MB compressed. Acceptable.
 - **Per user grammar**: 50–200 KB for a typical grammar `.wasm` file on disk; loaded on demand.
 
 ### User grammar workflow (target v1 UX)
@@ -272,13 +272,13 @@ All locked 2026-04-19 unless otherwise noted. Rationale condensed; see conversat
 
 5. **Pandoc-bridge writers**: v1 no-op. Pandoc runs its own skylighting for typst/latex/docx when we eventually add those output paths. `data-hl-spans` passes through and is ignored by Pandoc. Parity work deferred to Phase 7.
 
-6. **Highlight query provenance**: start with each built-in grammar's own upstream `highlights.scm`, vendored under `resources/highlights/<lang>/` with commit-hash + license provenance comments. Upgrade per language to [Helix](https://github.com/helix-editor/helix/tree/master/runtime/queries)'s (MPL-2.0), [Zed](https://github.com/zed-industries/zed)'s (MIT), or [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)'s (Apache-2.0) curated version only when a specific grammar's shipped queries prove inadequate. Keeps licensing decision per-file.
+6. **Highlight query provenance**: start with each built-in grammar's own upstream `highlights.scm`, vendored under `resources/highlights/<lang>/` with commit-hash + license provenance comments. Upgrade per language to [Helix](https://github.com/helix-editor/helix/tree/master/runtime/queries)'s (MPL-2.0), [Zed](https://github.com/zed-industries/zed)'s (MIT), or [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)\'s (Apache-2.0) curated version only when a specific grammar's shipped queries prove inadequate. Keeps licensing decision per-file.
 
 7. **New `quarto-highlight` crate**: yes. Isolates grammar crate deps + wasmtime from `quarto-core`. Exports the pipeline stage + encoding + (on native) the `WasmStore`-based loader.
 
 8. **Browser user grammars in v1** (revised 2026-04-21): web-tree-sitter npm dep + wasm-bindgen JS-interop shim + `UserGrammarProvider` trait unifying native/browser paths + hub-client auto-discovery of `_quarto/grammars/*` from the project file tree. Distribution between Automerge peers is not a grammar-specific concern (grammar files ride the same sync path as images/PDFs/etc). Generic file-upload UX is tracked separately under bd-eity. Sub-plan: `claude-notes/plans/2026-04-21-syntax-highlighting-phase-4.md`.
 
-9. **Wasmtime binary-size budget**: accepted as noise against the ~95 MB batteries-included baseline. No Cargo feature gate; wasm-grammar-loading always compiled into native builds.
+9. **Wasmtime binary-size budget**: accepted as noise against the \~95 MB batteries-included baseline. No Cargo feature gate; wasm-grammar-loading always compiled into native builds.
 
 ## Out-of-scope for v1
 

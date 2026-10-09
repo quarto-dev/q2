@@ -18,7 +18,7 @@
 | finalize-combined-1 | Combined finalizations | None | None |
 | finalize-wrapped-writer | Wrapped writer setup | None | None |
 
-*Dependencies processing may involve file writes depending on the format.
+\*Dependencies processing may involve file writes depending on the format.
 
 ---
 
@@ -69,7 +69,7 @@ Processes accumulated dependencies (CSS, JS, etc.) and writes them to appropriat
 | Pandoc API | 0 |
 | WASM Blocked | 0* |
 
-*File writes could be redirected to virtual filesystem in WASM.
+\*File writes could be redirected to virtual filesystem in WASM.
 
 **WASM Notes**:
 - `mediabag_filter`: Writes image files - could use VFS or data URIs

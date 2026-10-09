@@ -14,7 +14,7 @@ pipeline can't use it: the original Phase C.4 design routed capture
 bytes through `EngineRegistry::with_replay`, which uses byte-equality
 against the recorded `input_qmd`. Any prose edit (or mtime drift from
 `listing-item.date-modified`) misses, and the user sees raw `{r}`
-source instead of `cat("Hello, world")`'s output.
+source instead of `cat("Hello, world")`\'s output.
 
 ## What changed in the design (2026-05-18 review)
 
@@ -380,8 +380,8 @@ All cases use `quarto_ast_reconcile::compute_block_hash_fresh` and
    should be lossless, but if a token escape differs the structural
    hashes won't match and every cell falls through to raw source.
    Mitigation: a round-trip test in Phase 1 that parses
-   `input_qmd` and asserts the cells' structural hashes equal
-   `A2`'s for an unedited document.
+   `input_qmd` and asserts the cells\' structural hashes equal
+   `A2`\'s for an unedited document.
 2. **Block-level walk assumption.** The algorithm assumes the engine
    transforms only at the block level. True for knitr/jupyter today
    in Q2; would break if an engine emitted inline-only transforms.

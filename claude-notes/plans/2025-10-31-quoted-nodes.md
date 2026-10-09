@@ -217,7 +217,7 @@ Test cases needed:
 - Phase 4 (imports): 2 minutes
 - Phase 5 (tests): 30 minutes
 - Phase 6 (verification): 5 minutes
-- **Total**: ~1 hour
+- **Total**: \~1 hour
 
 ## Notes
 
@@ -238,7 +238,7 @@ Test cases needed:
 
 | Feature | Emph | Strong | Quoted |
 |---------|------|--------|--------|
-| Delimiters | Yes (*/_) | Yes (**/__) | Yes ('/") |
+| Delimiters | Yes (\*/\_) | Yes (\*\*/\_\_) | Yes (\'/\") |
 | Content | Inlines | Inlines | Inlines |
 | Attributes | No | No | No |
 | Nesting | Yes | Yes | Yes |

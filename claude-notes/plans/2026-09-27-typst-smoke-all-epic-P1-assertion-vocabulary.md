@@ -79,7 +79,7 @@ checklist) — worth an explicit note since P2/P3 both need one for their own
 
 ## Checklist
 
-- [x] Add `ensureTypstFileRegexMatches` assertion type to `spec.rs`'s parser, reusing
+- [x] Add `ensureTypstFileRegexMatches` assertion type to `spec.rs`\'s parser, reusing
       the shared two-array parsing logic for `ensureFileRegexMatches`, `ensureCssRegexMatches`,
       and the new Typst/PDF assertions, against the render output's `.typ` sibling path
       (`output_path.with_extension("typ")`). Fail clearly if the intermediate is missing,

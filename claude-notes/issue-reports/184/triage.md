@@ -3,7 +3,7 @@
 - **GH:** https://github.com/quarto-dev/q2/issues/184
 - **Reporter:** @rundel (2026-05-11)
 - **Branch:** `issue-184`
-- **Verdict:** Real bug. Project policy (per @cscheid's comment on the issue) is that Quarto Markdown does **not** support 4-space indented code blocks; the parser must reject them with a high-quality error message rather than silently rewriting them.
+- **Verdict:** Real bug. Project policy (per @cscheid\'s comment on the issue) is that Quarto Markdown does **not** support 4-space indented code blocks; the parser must reject them with a high-quality error message rather than silently rewriting them.
 - **Plan:** `claude-notes/plans/2026-05-14-q-2-35-indented-code-block-error.md`
 - **Beads:** [bd-7l1u](.beads) — _Q-2-35: Reject 4-space indented code blocks with a custom parse error (issue #184)_
 
@@ -65,7 +65,7 @@ There is **no existing diagnostic** for this case. The scanner silently consumes
 Adopt the **same scheme** the parser already uses for Q-2-32 (`***` triple-star emphasis):
 
 1. Detect the disallowed construct in `scanner.c`.
-2. Emit an external token that is declared in `grammar.js`'s `externals` list **but never consumed by any rule body**.
+2. Emit an external token that is declared in `grammar.js`\'s `externals` list **but never consumed by any rule body**.
 3. The grammar then has nowhere to shift the token, so tree-sitter raises a parse error at exactly that point.
 4. The Merr-style error table in `crates/quarto-parse-errors/` maps the resulting `(state, sym)` pair to a templated user-facing message rendered through `quarto-error-reporting`.
 

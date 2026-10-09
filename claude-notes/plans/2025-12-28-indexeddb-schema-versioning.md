@@ -433,7 +433,7 @@ When users with existing `quarto-hub` IndexedDB visit the updated app:
 
 ## Success Criteria
 
-1. Existing users' project lists preserved after update
+1. Existing users\' project lists preserved after update
 2. New userSettings store created and initialized
 3. Migration errors handled gracefully with recovery path
 4. Schema version tracked and queryable

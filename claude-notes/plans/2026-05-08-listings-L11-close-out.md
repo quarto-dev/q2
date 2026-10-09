@@ -123,7 +123,7 @@ per:
 ### `bd-fvuy` — Q-12-10 catalog title/message broaden (chore, p4)
 
 **Site:** `crates/quarto-error-reporting/error_catalog.json`,
-`Q-12-10` entry (line ~799–805).
+`Q-12-10` entry (line \~799–805).
 
 The current catalog title is *Listing Markdown Re-parse
 Diagnostics*, but the same code is emitted for two distinct
@@ -144,7 +144,7 @@ Two mechanical options:
 **Recommendation:** broaden, not split — splitting adds
 noise without changing user behavior, and Q2's diagnostic
 catalog policy isn't strict enough to require per-class codes
-yet. ~10-line change, no test churn.
+yet. \~10-line change, no test churn.
 
 ### `bd-varx` — Hoist two helpers to a shared util (task, p4)
 
@@ -164,7 +164,7 @@ roughly:
 2. Update both call sites to use the shared form.
 3. Delete the duplicate test in `link_inject.rs` (or move it).
 
-~50 lines diff, no behavior change, refactor-only.
+\~50 lines diff, no behavior change, refactor-only.
 
 ### `bd-2vl0` — Q-12-15 dedup per-project (task, p4)
 
@@ -185,7 +185,7 @@ Two shapes:
   self-contained): rely on a near-end pass that elides
   duplicate `Q-12-15` entries before user emission.
 
-The second is a localized one-file change (~30 lines + a
+The second is a localized one-file change (\~30 lines + a
 test); the first requires a tiny addition to project-shared
 state plumbing.
 
@@ -204,7 +204,7 @@ the CDATA terminates early and the XML is malformed.
 
 The standard XML fix is to split the body at every `]]>` and
 emit two CDATA sections joined at the boundary:
-`]]><![CDATA[`. ~5-line change, ~1 unit test (a body
+`]]><![CDATA[`. \~5-line change, \~1 unit test (a body
 containing `]]>` produces parseable XML).
 
 **Recommendation:** this is the strongest quick-win

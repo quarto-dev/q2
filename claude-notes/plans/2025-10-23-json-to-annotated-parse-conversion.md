@@ -103,7 +103,7 @@ Key insight: The serialized metadata already tracks the source location (start/e
 - `components`: `[]` (empty - current implementation cannot track internal locations; future enhancement)
 - `start/end`: From SourceInfo offsets
 
-**Note on components:** MetaInlines has a **complex JSONValue in result** but **empty components[]**, indicating the implementation cannot yet navigate into the inline structure. This will be enhanced in the future without breaking changes.
+**Note on components:** MetaInlines has a **complex JSONValue in result** but **empty `components[]`**, indicating the implementation cannot yet navigate into the inline structure. This will be enhanced in the future without breaking changes.
 
 **MetaBlocks → AnnotatedParse:**
 - `result`: The JSON array of block nodes AS-IS
@@ -426,7 +426,7 @@ Test cases (implemented alongside code, but passing tests not required before im
 ### D2: Components for MetaInlines/MetaBlocks
 
 **Decision:** Initially empty, future enhancement.
-- MetaInlines/MetaBlocks have **complex JSONValue in result** but **empty components[]**
+- MetaInlines/MetaBlocks have **complex JSONValue in result** but **empty `components[]`**
 - This indicates the current implementation cannot track internal inline/block locations
 - Future enhancement can populate components without breaking changes
 - Existing code already handles this pattern (validated by compatibility analysis)
@@ -544,7 +544,7 @@ ts-packages/rust-qmd-json/
 |--------|------------------|---------------------|
 | MetaInlines result | Reconstructed plain text string | JSON array of inline nodes AS-IS |
 | Text extraction | Complex recursive inline traversal | Not needed! |
-| Code complexity | 3 phases, ~300 lines | 2 phases, ~150 lines |
+| Code complexity | 3 phases, \~300 lines | 2 phases, \~150 lines |
 | Data fidelity | Text only, formatting lost | Full structure preserved |
 | Performance | Slower (text reconstruction) | Faster (direct mapping + caching) |
 | Future inline navigation | Need to re-parse | Already have structure in result |

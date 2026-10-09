@@ -168,8 +168,8 @@ DocToHubMsgPayload::DocumentServed { connection_id, document_id } => {
 
 ### 2a: Re-export `DocumentServed`
 
-- [x] Re-export `DocumentServed` from `samod-core`'s public API (so `samod` and downstream crates can import it)
-- [x] Re-export from `samod`'s public API (so `quarto-hub` can import it)
+- [x] Re-export `DocumentServed` from `samod-core`\'s public API (so `samod` and downstream crates can import it)
+- [x] Re-export from `samod`\'s public API (so `quarto-hub` can import it)
 
 ### 2b: Surface in samod runtime
 

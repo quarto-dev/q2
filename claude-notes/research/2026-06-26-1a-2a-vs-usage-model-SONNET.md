@@ -129,7 +129,7 @@ Plan2a acknowledges the vendored `@quarto/types` as a copy of Q1's published pac
 
 **Severity:** Medium. Marimo's PDF/LaTeX render path would fail at this stub. For the current epic scope (julia engine integration), it is not blocking. But Plan 3's marimo story depends on it.
 
-**Recommended action:** After Item A lands, change `system.pandoc`'s stub from `requiresLaunchContextError` to `notYetImplementedError` (or implement it — the pandoc binary path is in the ambient Init config per Item A's design, so implementation is straightforward). Add a "Plan 2" recovery tag. Document in plan2a or plan2A §2aa.
+**Recommended action:** After Item A lands, change `system.pandoc`\'s stub from `requiresLaunchContextError` to `notYetImplementedError` (or implement it — the pandoc binary path is in the ambient Init config per Item A's design, so implementation is straightforward). Add a "Plan 2" recovery tag. Document in plan2a or plan2A §2aa.
 
 ---
 
@@ -155,7 +155,7 @@ Plan2a acknowledges the vendored `@quarto/types` as a copy of Q1's published pac
 
 **Model evidence:** model B.7 + C.1: both knitr (rmd.ts:341) and jupyter (jupyter.ts:627) call `postProcessRestorePreservedHtml(options)`. Julia (julia-engine.ts:155) and marimo (marimo-engine.ts:395) have no-op `postprocess`. Model Part C rank 1 (the highest-ranked non-Julia gap).
 
-**Assessment:** The DROP is **architecturally sound** for the standalone engine use case (which is what Plans 1a–3 target). The latent gap is that neither return-to-q1 nor any 1a plan names the recovery path for q2's built-in knitr/jupyter preserve-restore functionality. FC-1 adds `preserve: HashMap<String,String>` and `post_process: bool` as wire carriers — that is the right seam — but no plan says: "when q2 implements HTML preserve-restore for built-in engines, it will use the `preserve` wire field + an AST transform at [stage]."
+**Assessment:** The DROP is **architecturally sound** for the standalone engine use case (which is what Plans 1a–3 target). The latent gap is that neither return-to-q1 nor any 1a plan names the recovery path for q2's built-in knitr/jupyter preserve-restore functionality. FC-1 adds `preserve: HashMap<String,String>` and `post_process: bool` as wire carriers — that is the right seam — but no plan says: "when q2 implements HTML preserve-restore for built-in engines, it will use the `preserve` wire field + an AST transform at \[stage\]."
 
 **Severity:** Low for Plan 3 scope. Standalone engines don't need it. The risk is a future engineer implementing the built-in preserve-restore feature without awareness of the FC-1 wire carrier.
 
@@ -244,7 +244,7 @@ All claims below are grounded in source I read directly in this session:
 
 | Source | What I extracted |
 |---|---|
-| `claude-notes/research/2026-06-26-engine-api-usage-model.md` (full, 445 lines) | Parts A–D: all five engines' PROVIDES + CONSUMES, Julia-bias ledger, q2 gap table |
+| `claude-notes/research/2026-06-26-engine-api-usage-model.md` (full, 445 lines) | Parts A–D: all five engines\' PROVIDES + CONSUMES, Julia-bias ledger, q2 gap table |
 | `claude-notes/plans/2026-04-16-plan1a-protocol.md` (full, 958 lines) | Protocol types, `partitionedMarkdown` drop rationale, TsExecuteResult shape |
 | `claude-notes/plans/2026-04-16-plan1a-host.md` (first 749 lines) | Subprocess management, demux design, execution status |
 | `claude-notes/plans/2026-04-16-plan1a-engine.md` (first 766 lines) | Trait extensions, TsEngine struct, HtmlDependency handling |

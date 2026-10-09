@@ -102,7 +102,7 @@ metadata).
 
 `Q2_PREVIEW_STAGE_EXCLUDED` (`pipeline.rs:356`) currently excludes
 three stages by name: `math-js`, `render-html-body`, and
-`apply-template`. `MathJsStage`'s exclusion means `meta.math` never
+`apply-template`. `MathJsStage`\'s exclusion means `meta.math` never
 appears under this pipeline and contributes nothing to the meta
 hash; `RenderHtmlBodyStage` and `ApplyTemplateStage` produce
 HTML/text side outputs that wouldn't reach the AST anyway, so their
@@ -267,9 +267,9 @@ Two distinct properties get loosely called "non-idempotence":
 Plan 3 deliberately scopes to (1) because:
 
 - (2) isn't exercised by today's pipeline.
-- (2)'s test conflates writer-lossiness with filter-non-idempotence.
+- (2)\'s test conflates writer-lossiness with filter-non-idempotence.
 - For built-ins, the universe is small (one Lua filter +
-  ~36 Rust transforms, all under our control), so the accepted-gap
+  \~36 Rust transforms, all under our control), so the accepted-gap
   risk is low.
 
 ## Design decisions (settled in conversation)
@@ -558,9 +558,9 @@ first run in both applicable modes.
 
 **Existing fixtures (carry forward from prior plan draft):**
 
-- [x] `meta-single` — `{{< meta foo >}}` with single-string foo →
+- [x] `meta-single` — `{{{< meta foo >}}}` with single-string foo →
   shortcode-resolve, metadata-normalize.
-- [x] `meta-markdown` — `{{< meta foo >}}` with `**Bold** title` →
+- [x] `meta-markdown` — `{{{< meta foo >}}}` with `**Bold** title` →
   shortcode-resolve (PandocInlines branch).
 - [x] `include-trivial` — `{{< include child.qmd >}}` →
   include-expansion stage, shortcode-resolve.
@@ -584,7 +584,7 @@ first run in both applicable modes.
 
 **New fixtures (gap audit):**
 
-- [x] `code-block-fenced` — fenced ``` ```python ``` block with content
+- [x] `code-block-fenced` — fenced ```` ```python ```` block with content
   → code-block-generate, code-block-render, code-highlight stage.
 - [x] `lua-shortcode-version` — `{{< version >}}` → shortcode-resolve
   (Lua-loaded handler path; simplest deterministic case — returns
@@ -720,7 +720,7 @@ are the triage backlog.
   lookup), or other transforms that record absolute paths into meta
   MUST use only paths that resolve relative to the fixture root,
   never absolute process paths. Reason: the built-in extensions
-  resource bundle extracts to a `temp_dir()`'d location whose
+  resource bundle extracts to a `temp_dir()`\'d location whose
   absolute path differs across processes (stable within a single
   process — fine for Plan 3's two-runs-compare contract, but a
   latent issue for any future stored-snapshot variant). The
@@ -825,7 +825,7 @@ convenience for navigating, not a contract.
   Each transform's `name()` matches the kebab-case strings listed in
   §"What 'built-in' covers."
 - `crates/quarto-core/src/transforms/code_highlight.rs:126`
-  `CodeHighlightStage`'s native user-grammar disk scan
+  `CodeHighlightStage`\'s native user-grammar disk scan
   (`ctx.project.dir.join("_quarto").join("grammars")`). OS-order-
   dependent if a grammar directory is present; not exercised by
   Plan 3 fixtures (see §"Noted, not actively tested").
@@ -886,8 +886,8 @@ convenience for navigating, not a contract.
 - `resources/extensions/quarto/video/video-filter.lua` — the one
   built-in Lua filter today.
 - `claude-notes/plans/lua-filter-pipeline/00-index.md` — Carlos's
-  2025-12-21 analysis of **TypeScript Quarto**'s `run_as_extended_ast()`
-  Lua filter pipeline (~78 stages classified by side-effect category).
+  2025-12-21 analysis of **TypeScript Quarto**\'s `run_as_extended_ast()`
+  Lua filter pipeline (\~78 stages classified by side-effect category).
   This is porting reference material for the broader epic, **not** the
   inventory Plan 3 tests. Plan 3's universe is enumerated in §"What
   'built-in' covers." Useful when porting an additional TS filter into
@@ -945,7 +945,7 @@ convenience for navigating, not a contract.
   (see §"What gets tested concretely" for the body).
 - [x] Implement `run_single_file(project_dir, active) -> DocumentAst`
   using `ProjectContext::discover` + `build_q2_preview_pipeline_stages`
-  + `run_pipeline`. (~50 lines; the only genuinely new driver.)
+  + `run_pipeline`. (\~50 lines; the only genuinely new driver.)
 - [x] Implement `run_orchestrator(project_dir, active) -> DocumentAst`
   by delegating to the existing `render_active_page_preview` helper
   at `crates/quarto-core/tests/render_page_in_project.rs:660` and
@@ -956,7 +956,7 @@ convenience for navigating, not a contract.
   change is needed.
 - [x] Implement `pandoc_to_document_ast(pandoc) -> DocumentAst` — the
   small field-shuffle between the re-parsed `Pandoc` and the
-  hashing helpers' expected shape. Land inline in `idempotence.rs`;
+  hashing helpers\' expected shape. Land inline in `idempotence.rs`;
   do not promote to library code until a second caller appears.
 - [x] Create `crates/quarto-core/tests/fixtures/idempotence/`
   directory with a README listing the fixture-format rules:
@@ -1154,7 +1154,7 @@ explicitly says so. Do not silently disable.
   per Phase 5; **leave failing + file a sub-agent investigation prompt**
   (see §"CI failure policy & sub-agent prompt template"). `#[ignore]`
   only when the user explicitly says so.
-- **Hash stability across binary versions**: `FxHasher`'s output is
+- **Hash stability across binary versions**: `FxHasher`\'s output is
   stable within a Rust process but not across versions. Tests compare
   hashes computed in the same process, not stored as constants. This is
   the natural shape of "run pipeline twice and compare" anyway.
@@ -1168,7 +1168,7 @@ explicitly says so. Do not silently disable.
   scaffolding rather than transform coverage. Mitigation: reuse the
   existing pattern (write `_quarto.yml` + page contents into a
   `TempDir`, call `ProjectContext::discover`) — the same recipe
-  used by ~10 sibling tests in `crates/quarto-core/tests/`. No
+  used by \~10 sibling tests in `crates/quarto-core/tests/`. No
   parameterized builder is needed. See §"Decisions" /
   "ProjectContext setup for website fixtures."
 
@@ -1179,7 +1179,7 @@ test suite isn't expected to flake on either; they're recorded here so
 the next person who *does* hit a hash divergence in their neighborhood
 has a head start:
 
-- **`CodeHighlightStage`'s native disk scan for user grammars**
+- **`CodeHighlightStage`\'s native disk scan for user grammars**
   (`crates/quarto-core/src/transforms/code_highlight.rs:126-129`).
   On native, when no `user_grammar_provider` is supplied (CLI
   default), the stage falls back to scanning
@@ -1205,23 +1205,23 @@ has a head start:
 
 | Component | Lines (rough) |
 |---|---|
-| `compute_meta_hash_fresh` + excluding-rendered variant + tests | ~140 |
-| `find_first_divergence` + `DivergencePoint` + tests | ~80 |
-| Test crate scaffolding — `Fixture` struct, `run_single_file`, `run_orchestrator` (thin wrapper over existing helper), `pandoc_to_document_ast` shuffle | ~100 |
-| Per-fixture `.qmd` files / inline literals (~25 fixtures, 5-30 lines each) | ~280 |
-| Per-fixture (fixture, mode) test assertions (mostly one-liners; ~25 fixtures × 1-2 modes ≈ 40 pairs) | ~120 |
-| `idempotence-contract.md` + fixtures README | ~80 |
-| **Total** | **~800** |
+| `compute_meta_hash_fresh` + excluding-rendered variant + tests | \~140 |
+| `find_first_divergence` + `DivergencePoint` + tests | \~80 |
+| Test crate scaffolding — `Fixture` struct, `run_single_file`, `run_orchestrator` (thin wrapper over existing helper), `pandoc_to_document_ast` shuffle | \~100 |
+| Per-fixture `.qmd` files / inline literals (\~25 fixtures, 5-30 lines each) | \~280 |
+| Per-fixture (fixture, mode) test assertions (mostly one-liners; \~25 fixtures × 1-2 modes ≈ 40 pairs) | \~120 |
+| `idempotence-contract.md` + fixtures README | \~80 |
+| **Total** | **\~800** |
 
-The scaffolding line item dropped from an earlier estimate of ~260
-to ~100 after pinning the orchestrator path on the existing
+The scaffolding line item dropped from an earlier estimate of \~260
+to \~100 after pinning the orchestrator path on the existing
 `render_active_page_preview` helper and choosing option (a) for
 `DocumentAst` extraction — neither requires a new orchestrator
 driver, a `make_website_project_ctx` builder, or production
 plumbing changes. `PreviewAstOutput::ast` plumbing is no longer
-needed (was ~20 lines in the earlier draft).
+needed (was \~20 lines in the earlier draft).
 
-**Inventory note**: an earlier draft estimated "~10-20 built-in filters"
+**Inventory note**: an earlier draft estimated "\~10-20 built-in filters"
 in `resources/extensions/`. That was wrong — `resources/extensions/`
 contains one Lua filter (`video-filter.lua`) plus five shortcodes
 (kbd, video, lipsum, version, placeholder). The bulk of the universe

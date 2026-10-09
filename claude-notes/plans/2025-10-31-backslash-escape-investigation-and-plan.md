@@ -77,7 +77,7 @@ Possible reasons:
 
 ## User's Requirements
 
-> "We want backslash escapes to simply be a mechanism for typing characters that would otherwise be used in quarto-markdown syntax (like [, {, etc)."
+> "We want backslash escapes to simply be a mechanism for typing characters that would otherwise be used in quarto-markdown syntax (like \[, \{, etc)."
 
 > "Pandoc will often try to convert some backslash sequences to RawBlocks. We do _not_ want that."
 

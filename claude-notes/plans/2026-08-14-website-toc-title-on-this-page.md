@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-14
 **Braid:** bd-website-toc-title-wn80ymab (bug, p3, label `toc`)
-**Branch:** `braid/bd-website-toc-title-wn80ymab`, off `main` @ `094c0a80`
+**Branch:** `braid/bd-website-toc-title-wn80ymab`, off `main` \@ `094c0a80`
 **Status:** **Complete** — all phases done. Full `cargo xtask verify` green (14/14 steps,
 12077/12077 tests). Ready for PR.
 
@@ -12,7 +12,7 @@
 
 ## Pre-flight state at HEAD
 
-`cargo xtask verify --skip-hub-build` on `main` @ `094c0a80`: build clean, **11259/12063 tests passed, 1 failed** —
+`cargo xtask verify --skip-hub-build` on `main` \@ `094c0a80`: build clean, **11259/12063 tests passed, 1 failed** —
 `quarto-preview::integration config_endpoint::config_reports_embedded_asset_manifest_hashes`
 ("a real embedded viewer dist must advertise assets.viewer", `config_endpoint.rs:311`).
 
@@ -59,7 +59,7 @@ toc-title-website: "On this page"         # website pages
 
 q2's `TocGenerateTransform` always consults `toc-title-document`.
 
-Real-world impact: every Posit Connect docs page with a TOC (~324 of 352) shows the wrong string. The porting project currently masks it in visual-comparison sweeps with `--mask '^(On this page|Table of contents)$'`.
+Real-world impact: every Posit Connect docs page with a TOC (\~324 of 352) shows the wrong string. The porting project currently masks it in visual-comparison sweeps with `--mask '^(On this page|Table of contents)$'`.
 
 ## Dependency graph
 
@@ -117,7 +117,7 @@ Three conditions, and two of them matter for us:
 
 **Reproducible at HEAD — confirmed end-to-end.** Repro at `/Users/cscheid/repos/github/cscheid/q2-connect-docs/llms-info/repros/website-toc-title/` (one-page website; `_site/` and `_site-q1/` both committed for comparison). Not duplicated into this repo — see "Risks" on end-to-end verification below.
 
-Rendered with a binary freshly built from `main` @ `094c0a80`:
+Rendered with a binary freshly built from `main` \@ `094c0a80`:
 
 ```
 $ /Users/cscheid/rooms/room-2/q2/target/debug/q2 render .
@@ -143,7 +143,7 @@ Output inspected directly, not inferred from exit status. Note the CLI itself re
 
 ## Work items
 
-**Branch:** `braid/bd-website-toc-title-wn80ymab`, off `main` @ `094c0a80`.
+**Branch:** `braid/bd-website-toc-title-wn80ymab`, off `main` \@ `094c0a80`.
 (`main` was reset back to `origin/main` so the two plan commits live only on this branch,
 per the PR #529 convention.)
 
@@ -188,7 +188,7 @@ confirms `_language-pt.yml` loads and the tests fail purely on **key selection**
 broken catalog. Without that check a passing post-fix assertion could have been a false green.
 
 Harness note: `render_index_with_toc` / `toc_nav` in `toc_markup.rs` were widened to
-`pub(crate)` and reused rather than cloning ~50 lines of `ProjectPipeline` setup. Both files are
+`pub(crate)` and reused rather than cloning \~50 lines of `ProjectPipeline` setup. Both files are
 sibling modules of the single `integration` binary (`.claude/rules/integration-tests.md`), so
 this is an ordinary intra-binary import.
 

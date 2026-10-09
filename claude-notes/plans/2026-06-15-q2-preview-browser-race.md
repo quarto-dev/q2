@@ -59,7 +59,7 @@ starts" side of the boundary as the URL print.
 ### Where the server actually becomes reachable
 
 `quarto_preview::run` → `run_with_on_ready` → `quarto_hub::server::run_server_with`
-(`crates/quarto-hub/src/server.rs`, ~1161-1304):
+(`crates/quarto-hub/src/server.rs`, \~1161-1304):
 
 1. `~1181` `HubContext::new(storage, config).await` — **the expensive, size-dependent
    step**: samod repo init, project discovery (directory walk), index load, initial
@@ -115,13 +115,13 @@ quarto_preview::run(config).await
 (returns `true`) or the **total** timeout elapses (returns `false`). Backoff between
 attempts starts tight and decays to a 1s cap:
 
-- start ~20ms, grow ~1.6× per miss, **cap at 1s**;
+- start \~20ms, grow \~1.6× per miss, **cap at 1s**;
 - **10s total ceiling**; on ceiling, open anyway (degrade to today's behavior rather
   than never opening) **and `tracing::warn!`** so a pathologically slow start is
   visible instead of silent.
 
 Rationale for these numbers comes from the benchmark below: the common case is
-~250ms, so the tight early interval opens the tab with no perceptible delay; the 1s
+\~250ms, so the tight early interval opens the tab with no perceptible delay; the 1s
 cap bounds post-ready latency on a slow project to ≤1s; the 10s ceiling + warn turns
 "server eventually works but browser errored" into a logged, diagnosable event.
 
@@ -143,7 +143,7 @@ accepts. `docs/` has 167 `.qmd` files (a medium project).
 **min 248.5 / median 250.0 / max 280.8 ms (n=5).**
 
 Takeaways:
-- The race window is **~250ms even on a medium project** — comfortably long enough for
+- The race window is **\~250ms even on a medium project** — comfortably long enough for
   a launching/running browser to connect-and-fail, which is exactly the reported bug.
   This is the first quantification of the window.
 - The tight clustering (variance &lt;35ms) suggests a **fixed-cost** startup component
@@ -193,7 +193,7 @@ is the real cost, not "breaking an external API"):
 - Test ripple depends on *where* the new param lands. The signal has to reach the CLI
   through `run` → `run_with_on_ready` → `run_server_with`. `PreviewConfig` is built
   with full struct literals in the integration tests (no `..Default::default()`), so:
-  - param on `run_with_on_ready`'s signature **or** on `PreviewConfig` → breaks every
+  - param on `run_with_on_ready`\'s signature **or** on `PreviewConfig` → breaks every
     builder: `config_endpoint.rs`, `diagnostics_capture_failure.rs`,
     `diagnostics_endpoint.rs`, `eager_capture.rs`, `staleness.rs`, plus `boot.rs` —
     **≈6 test files** of mechanical edits.
@@ -206,7 +206,7 @@ is the real cost, not "breaking an external API"):
 callback — `on_ready` fires at `server.rs:1186`, *before* bind, so reusing it leaves
 the exact connection-refused window we're fixing. Bind is the correct threshold (not,
 as an earlier draft of this plan claimed, "after `axum::serve` is polled once"):
-`tokio`'s `TcpListener::bind` performs both `bind()` and `listen()`, so once it returns
+`tokio`\'s `TcpListener::bind` performs both `bind()` and `listen()`, so once it returns
 the kernel completes TCP handshakes into the accept backlog on its own. A client that
 connects between line 1204 and the `axum::serve` accept loop at line 1273 gets a
 *successful* connection whose request just waits a few ms in the backlog — not a
@@ -269,7 +269,7 @@ sufficient. Before closing:
       Confirmed red first (E0425: function not found).
 - [x] Implement `wait_until_accepting` (TCP connect + decaying backoff 20ms→1s cap +
       total-timeout fallback). Green: 3/3, timings match design (9ms fast path,
-      ~161ms timeout, ~205ms late-bind unblock).
+      \~161ms timeout, \~205ms late-bind unblock).
 - [x] Move the browser open behind the readiness gate on a spawned task; keep
       `--no-browser` semantics (the spawn is guarded by `if !args.no_browser`). 10s
       ceiling + `tracing::warn!` on miss. Full preview unit set: 15/15.
@@ -301,16 +301,16 @@ Observed log lines (inspected, not inferred):
 2026-06-15T20:05:21.834530Z  INFO q2::commands::preview: preview server accepting connections; opening browser host=127.0.0.1 port=54622
 ```
 
-The browser-open log is **~62ms after** the listener bound, and the harness's
+The browser-open log is **\~62ms after** the listener bound, and the harness's
 independent `connect()` poll succeeded in the same window. A browser tab opened against
 the live preview. **Result: PASS** — the open is gated on real readiness through the
-actual CLI path. (Pre-fix, `open::that` fired at URL-print, ~250ms *before* this point —
+actual CLI path. (Pre-fix, `open::that` fired at URL-print, \~250ms *before* this point —
 see the benchmark above.)
 
 ## Follow-ups (out of scope for this fix)
 
-- **Constant ~250ms preview startup floor.** The benchmark above shows `q2 preview docs/`
-  takes ~250ms to accept connections with variance &lt;35ms across trials, despite 167
+- **Constant \~250ms preview startup floor.** The benchmark above shows `q2 preview docs/`
+  takes \~250ms to accept connections with variance &lt;35ms across trials, despite 167
   `.qmd` files — consistent with a fixed-cost startup step (samod repo init, or a
   debounce/sleep) rather than per-file work. Worth profiling `HubContext::new`
   (`server.rs:1181`) to confirm where the floor comes from and whether it can be cut.
@@ -323,5 +323,5 @@ see the benchmark above.)
   `open_browser_or_log` / `probe_free_port` helpers.
 - `crates/quarto-preview/src/lib.rs:129-284` — `run` / `run_with_on_ready`; the
   existing `on_ready` seam (fires before bind — see caveat).
-- `crates/quarto-hub/src/server.rs:~1161-1304` — `run_server_with`; bind at ~1204,
-  accept at ~1273.
+- `crates/quarto-hub/src/server.rs:~1161-1304` — `run_server_with`; bind at \~1204,
+  accept at \~1273.

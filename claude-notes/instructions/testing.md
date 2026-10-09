@@ -119,19 +119,19 @@ Smoke-all test fixtures live in `crates/quarto/tests/smoke-all/`. Each `.qmd` fi
 ```bash
 cargo nextest run -p quarto --test integration smoke_all
 ```
-Fastest (~1s). Renders via `quarto-core` directly. Runs all assertion types including `ensureHtmlElements` (CSS selectors via `scraper`), `ensureCssRegexMatches`, `ensureFileRegexMatches`, etc.
+Fastest (\~1s). Renders via `quarto-core` directly. Runs all assertion types including `ensureHtmlElements` (CSS selectors via `scraper`), `ensureCssRegexMatches`, `ensureFileRegexMatches`, etc.
 
 ### 2. WASM Vitest (jsdom)
 ```bash
 cd hub-client && npm run test:wasm
 ```
-~3s. Renders via WASM module in Node.js with jsdom for HTML assertions. Runs the full smoke-all suite plus other WASM tests.
+\~3s. Renders via WASM module in Node.js with jsdom for HTML assertions. Runs the full smoke-all suite plus other WASM tests.
 
 ### 3. Playwright E2E (browser)
 ```bash
 cd hub-client && npx playwright test --config=playwright.smoke-all.config.ts e2e/smoke-all.spec.ts
 ```
-~12s. Full pipeline: Automerge sync → hub server → browser → WASM render → preview iframe. Tests the complete hub-client integration. (The base `playwright.config.ts`'s `testIgnore` excludes `smoke-all.spec.ts`, so the dedicated `playwright.smoke-all.config.ts` is required — a bare `npx playwright test e2e/smoke-all.spec.ts` silently runs zero tests.)
+\~12s. Full pipeline: Automerge sync → hub server → browser → WASM render → preview iframe. Tests the complete hub-client integration. (The base `playwright.config.ts`\'s `testIgnore` excludes `smoke-all.spec.ts`, so the dedicated `playwright.smoke-all.config.ts` is required — a bare `npx playwright test e2e/smoke-all.spec.ts` silently runs zero tests.)
 
 **CRITICAL prerequisites for Playwright tests:**
 
@@ -265,7 +265,7 @@ the design and budget rationale.
 ### On-disk format
 
 - **Compressed compact JSON** at `.quarto/trace/<stem>/latest.json.gz`.
-  Pretty-print accounted for ~80% of bytes on real traces; gzip on top
+  Pretty-print accounted for \~80% of bytes on real traces; gzip on top
   collapses what's left.
 - **Schema version 2** with content-addressed AST dedup: every unique
   AST is stored once in a top-level `asts` map, and pipeline entries

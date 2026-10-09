@@ -98,7 +98,7 @@ ergonomically support multi-page renders without one of:
 - (C) **`Arc<Mutex<…>>`.** Same as B but `Send`/`Sync`. The pipeline
   is `?Send` already; this would over-restrict.
 
-The bd-izfv description hints at (B): *"Arc<Mutex<Option<JsUserGrammars>>>
+The bd-izfv description hints at (B): *"`Arc<Mutex<Option<JsUserGrammars>>>`
 (or similar)"* — though `Mutex` is wrong for the WASM single-thread
 case, `Arc<RefCell<…>>` would be a closer fit if we want sharability
 on wasm32. `Rc<RefCell<…>>` is also a candidate.

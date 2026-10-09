@@ -8,16 +8,16 @@
 resolving all 14 merge conflicts correctly and leaving `cargo xtask verify`
 green.
 
-**Precondition (done separately — NOT part of this plan):** the ~515-commit
-branch has already been squashed **chronologically into a reasonable dozen (~12)
+**Precondition (done separately — NOT part of this plan):** the \~515-commit
+branch has already been squashed **chronologically into a reasonable dozen (\~12)
 commits** on top of the merge-base, using the executor's own technique
-(`git revise`). This plan starts from those ~12 commits and does **not** perform
+(`git revise`). This plan starts from those \~12 commits and does **not** perform
 any squash — but it imposes **one hard grouping constraint** on how they are
 drawn (see next).
 
 **REQUIRED grouping constraint (from the commit analysis):** the
 engine-registry/pipeline conflict cluster is **not** contiguous — it lives in
-**two tight clusters** in the replay order, ~116 unrelated commits apart:
+**two tight clusters** in the replay order, \~116 unrelated commits apart:
 
 - **Cluster A — the 06-24 day** (replay positions 74/78/86/87): the `Arc`
   migration + `TsEngineHost` transport + stage wiring. Of the hard files, this
@@ -31,7 +31,7 @@ engine-registry/pipeline conflict cluster is **not** contiguous — it lives in
   length/order assertions), plus `stage/mod.rs`, `text_execute.rs` (cede/claim),
   `replay_engine.rs`, and the day's `dev_setup.rs`/`test-suite.yml`.
 
-Collapsing both into one bucket would mean squashing **143 commits (~28% of the
+Collapsing both into one bucket would mean squashing **143 commits (\~28% of the
 branch)** into one opaque commit — not worth it. **The constraint is therefore
 weaker and easier: keep the 06-24 day as one coherent bucket and the 06-30 day
 as one coherent bucket — do NOT fragment either day.** Natural day-granular
@@ -53,7 +53,7 @@ blocks and the `engine_registry` field region — are exactly what **`git rerere
 before `EngineClaimsFileStage` exists; 24 at stop 06-30 after it lands) — that is
 correct, not a mistake.
 
-**Mechanic:** the rebase-onto-main replays ~12 commits sequentially and **stops
+**Mechanic:** the rebase-onto-main replays \~12 commits sequentially and **stops
 only at the buckets that conflict.** The engine resolution is split across the
 **two stops above** (Task 2 is annotated per-stop); the profile-version conflict
 is its own stop; the rest are cheap single-touch stops (see "How conflicts
@@ -124,7 +124,7 @@ main's new feature.
 
 > 35 further files touched on both sides auto-merge cleanly and need no action.
 
-## How conflicts surface across the ~12 buckets
+## How conflicts surface across the \~12 buckets
 
 Under a multi-commit rebase the 14 conflicts do **not** all appear at once —
 each surfaces at the bucket that touches its file. Distribution (from the commit
@@ -193,7 +193,7 @@ already-committed).
 
 ## Task 0: Verify the squashed precondition, then start the rebase
 
-**Files:** none (git plumbing). **Assumes the branch is already ~12 chronological
+**Files:** none (git plumbing). **Assumes the branch is already \~12 chronological
 commits** (produced separately via `git revise`), **with the 06-24→06-30 engine
 window collapsed into one commit** (the REQUIRED grouping constraint).
 
@@ -206,7 +206,7 @@ git merge-base HEAD main                                    # expect: 61e2d2276.
 git rev-list --count "$(git merge-base HEAD main)"..HEAD    # expect: ~12 (a dozen-ish)
 git log --oneline --reverse "$(git merge-base HEAD main)"..HEAD   # eyeball the buckets
 ```
-  If this is still ~500 commits, the squash has not been done — **stop**. This
+  If this is still \~500 commits, the squash has not been done — **stop**. This
   plan does not squash.
 
 - [ ] **Step 2: VERIFY neither engine day was fragmented** (the load-bearing
@@ -230,7 +230,7 @@ git log --format='%cs' "$mb"..HEAD -- crates/quarto-core/src/pipeline.rs | sort 
   two engine-bucket days. If any file shows `3+`, go back and re-coalesce that
   day in `git revise` (keep each of 06-24 and 06-30 as one bucket) before
   rebasing. (Collapsing both days into a *single* bucket also works but squashes
-  ~143 commits into one — the analysis advises against it; two stops is cheaper.)
+  \~143 commits into one — the analysis advises against it; two stops is cheaper.)
 
 - [ ] **Step 3: Confirm the safety net exists**
 
@@ -249,7 +249,7 @@ git status --short | grep -E '^(UU|AA|DU|UD)'    # the conflicted set FOR THIS S
 git log -1 --oneline REBASE_HEAD                 # which bucket you're on
 ```
   Unlike a single-commit rebase, this pauses **several times**. At each pause,
-  consult "How conflicts surface across the ~12 buckets" above, apply only the
+  consult "How conflicts surface across the \~12 buckets" above, apply only the
   Task(s) for the files in *this* stop's conflict set, `git add`, then
   `git rebase --continue`. Keep going until the rebase completes; **Task 7 is the
   final `--continue` + verification.** (Merge topology alternative: `git merge
@@ -315,7 +315,7 @@ This is the core of the merge. Apply the resolution rule: **branch structure
 > constraint). Do the steps in *stop order*, not numeric order:
 > - **At stop A (06-24, the Arc/transport bucket):** Steps 3, 5, 7 — the
 >   `Arc`/field-type half. `stage/mod.rs` here is a light transport-wiring
->   union (take both sides' additions); `EngineClaimsFileStage` does not exist
+>   union (take both sides\' additions); `EngineClaimsFileStage` does not exist
 >   yet, so leave the import/length work for stop B.
 > - **At stop B (06-30, the stateless-stage/claims bucket):** Steps 1, 2, 4, 6 —
 >   the structural half.
@@ -547,14 +547,14 @@ git add crates/quarto-core/src/engine/jupyter/text_execute.rs
 
 **Files:**
 - `crates/quarto-core/tests/integration/main.rs` — `pub mod` list: keep **both**
-  sides' new module declarations, alphabetized.
+  sides\' new module declarations, alphabetized.
 - `crates/quarto-util/src/lib.rs` — keep main's widened export
   `pub use path::{is_rooted, to_forward_slashes};` (superset of base). Confirm
   the branch did not intentionally remove an export; if unsure, keep the union.
-- `crates/xtask/src/dev_setup.rs` — keep **both** sides' added setup steps
+- `crates/xtask/src/dev_setup.rs` — keep **both** sides\' added setup steps
   (additive list; take the union).
-- `.github/workflows/test-suite.yml` — keep both sides' job/step additions.
-- `hub-client/vite.config.ts` — keep both sides' config additions.
+- `.github/workflows/test-suite.yml` — keep both sides\' job/step additions.
+- `hub-client/vite.config.ts` — keep both sides\' config additions.
 
 - [ ] **Step 1: Resolve each by taking the union of both additions** (drop
   markers; no side is discarded). For `quarto-util`, prefer main's

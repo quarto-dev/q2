@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/205
 - **Reporter**: @rundel (Colin Rundel), 2026-05-15
 - **Triage date**: 2026-05-15
-- **Worktree**: `.worktrees/issue-205` (branch `issue-205`, based on `main` @ `09b2de7e`)
+- **Worktree**: `.worktrees/issue-205` (branch `issue-205`, based on `main` \@ `09b2de7e`)
 - **Beads issue**: bd-nsb9 (filed; see Outcome)
 - **Scope**: covers the writer-only escape gap described in the issue
   body. The reader's smart-quote classification is **not** in scope —
@@ -122,7 +122,7 @@ rejects.
 **Q1.** Does the issue's first-command output (`pampa <input>`
 producing `[Code "x", Str "'s", …]` from raw `` `x`'s end ``)
 reproduce today?
-*Experiment.* Ran exactly that command on `main` @ `09b2de7e`.
+*Experiment.* Ran exactly that command on `main` \@ `09b2de7e`.
 *Result.* No — the reader now rejects with Q-2-7 at parse time. The
 reader's classifier has tightened (or always was strict and the issue
 was written from an older snapshot). This **does not** invalidate the
@@ -213,7 +213,7 @@ cargo build --bin pampa
 ## Cross-references
 
 - #201 / bd-8lcm — original apostrophe-escape fix; introduced
-  `escape_markdown`'s intra-`Str` `prev_char/next_char` logic at
+  `escape_markdown`\'s intra-`Str` `prev_char/next_char` logic at
   `crates/pampa/src/writers/qmd.rs:1388`.
 - `claude-notes/issue-reports/201/triage.md` — sibling triage.
 - `claude-notes/plans/2026-05-15-issue-201-apostrophe-escape.md` —

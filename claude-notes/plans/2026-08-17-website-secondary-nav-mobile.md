@@ -42,7 +42,7 @@ Strand's stated scope:
 - `.quarto-sidebar-collapse-item` on the sidebar + Bootstrap collapse plumbing,
 - the mobile breadcrumb instance (no extra classes; rendered even for length-1
   trails; `bread-crumbs: false` fallback to a collapsed `h1.quarto-secondary-nav-title`),
-- SCSS: Q1 `quarto-nav.scss` ~411–450 and ~470–520.
+- SCSS: Q1 `quarto-nav.scss` \~411–450 and \~470–520.
 
 ## Dependency graph
 
@@ -74,11 +74,11 @@ Edges that exist in substance but not in the skein:
   `.quarto-banner nav.quarto-secondary-nav` rule is the only consumer of
   `#quarto-header.quarto-banner`, and q2 has neither. Should become a `blocks`
   edge or be folded in.
-- **`bd-6cme` — "[websites] Sidebar search integration"** (open, p2). q2 has no
+- **`bd-6cme` — "\[websites\] Sidebar search integration"** (open, p2). q2 has no
   search: `navbar_to_html` emits a bare `<div class="quarto-search"></div>`
   placeholder and there is no `window.quartoOpenSearch`. The strand's third
   bullet (search button) is a shell until this lands.
-- **`bd-49ar` — "[websites] Sidebar collapse/expand JS"** (open, p2) — sibling
+- **`bd-49ar` — "\[websites\] Sidebar collapse/expand JS"** (open, p2) — sibling
   concern for in-sidebar section collapse, same Bootstrap-JS dependency.
 
 ## What the code looks like today
@@ -145,7 +145,7 @@ the surrounding facts it does not mention are the interesting ones.
    `#[cfg(not(target_arch = "wasm32"))]` with the reasoning spelled out: the
    hub-client reinitializes its iframe every render tick, so Bootstrap component
    state would be blown away. So in `q2 preview` the toggle would render and do
-   nothing — and the preview pane is *most often* at half-width (~850 px), i.e.
+   nothing — and the preview pane is *most often* at half-width (\~850 px), i.e.
    precisely the band this feature targets (`2026-05-01-website-sidebar-breakpoints.md`,
    "hub-client perspective"). Native `q2 render` output is fine.
 
@@ -178,7 +178,7 @@ against.
    will overlap content.
 
 3. **Preview — skip entirely.** Suppress the secondary nav under
-   `target_arch = "wasm32"`, matching `bootstrap_js.rs`'s existing gate, and
+   `target_arch = "wasm32"`, matching `bootstrap_js.rs`\'s existing gate, and
    leave Decision A's `display: none` in force there. Carlos's rationale: the
    near-term goal is dogfooding q2 on Posit Connect's docs, and a period without
    mobile nav in preview is acceptable given q2's speed advantage over Q1. No
@@ -325,7 +325,7 @@ is therefore byte-parity with Q1's output, not a deviation from it.
 
 ## Work items
 
-Branch: `braid/bd-26bf3j1y-website-mobile-secondary-nav`, off `main` @ `7de02ea2`.
+Branch: `braid/bd-26bf3j1y-website-mobile-secondary-nav`, off `main` \@ `7de02ea2`.
 
 Phase ordering is deliberate: Phase 1 (header wrapper) is the DOM change with the
 widest snapshot blast radius, so it goes first and alone. Phases 3+4 must land
@@ -348,7 +348,7 @@ and become load-bearing once the markup exists.
       banner mode, and the F1 title-block pin. 2 fail / 3 absence-pins pass.
 - [x] `crates/quarto-core/tests/integration/secondary_nav_pipeline.rs` (7 tests,
       registered in `main.rs`), driving the real `ProjectPipeline` on temp-dir
-      website fixtures per `CLAUDE.md`'s end-to-end rule. 5 fail / 2 pass.
+      website fixtures per `CLAUDE.md`\'s end-to-end rule. 5 fail / 2 pass.
 - [x] The SCSS cliff test —
       `quarto-sass::compile::tests::test_sidebar_stays_visible_at_lg_despite_collapse_class`.
       Compiles the real default CSS, brace-matches every `min-width:992px`
@@ -370,7 +370,7 @@ and become load-bearing once the markup exists.
 - [x] Port the Q1 SCSS that selects through the wrapper: `#quarto-header > nav`
       padding (`quarto-nav.scss:63-66`) — ported as the paired rule Q1 writes,
       alongside `footer.footer .nav-footer`.
-- [x] Update `title_banner.rs`'s module doc, which currently states q2 has no
+- [x] Update `title_banner.rs`\'s module doc, which currently states q2 has no
       `#quarto-header`.
 - [x] Re-run snapshots; **documented per `CLAUDE.md`** — see below.
 
@@ -482,7 +482,7 @@ bar shows the title and the document shows it again right below.
 - [x] Close `bd-xva3f8uy` (folded in); `bd-ersobfbt` re-read against what
       shipped.
 
-**End-to-end record** (per `CLAUDE.md`'s requirement to record the invocation,
+**End-to-end record** (per `CLAUDE.md`\'s requirement to record the invocation,
 a snippet, and an explicit note that output was inspected).
 
 Invocation: `cargo run --bin q2 -- render /tmp/q2-secnav-fixture`, then

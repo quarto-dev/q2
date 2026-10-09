@@ -232,9 +232,9 @@ For each table element, the reconciliation follows this pattern:
 ## Estimated Complexity
 
 This is a moderate-complexity change:
-- ~100-150 lines for types
-- ~100-150 lines for compute
-- ~150-200 lines for apply
+- \~100-150 lines for types
+- \~100-150 lines for compute
+- \~150-200 lines for apply
 - Similar pattern to existing list reconciliation
 
 The main complexity is the multi-level nesting (table → section → rows → cells), but each level is straightforward.

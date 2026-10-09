@@ -1,6 +1,6 @@
 # Cargo dependency upgrade survey — 2026-05-04
 
-**Worktree:** `.worktrees/cargo-upgrade-2026-05-04` (branch `cargo-upgrade-2026-05-04`, based on `main` @ `3e0bc4c5`)
+**Worktree:** `.worktrees/cargo-upgrade-2026-05-04` (branch `cargo-upgrade-2026-05-04`, based on `main` \@ `3e0bc4c5`)
 **Skill:** `.claude/skills/upgrade-cargo-deps/SKILL.md`
 **Beads epic:** bd-hb8h
 **Previous survey:** none (first run)
@@ -12,7 +12,7 @@
 - **Skipped: 7** (vendored — consumed only by `crates/wasm-bindgen-futures-patch/`).
 - **Surfaced but not filed: 28** patch/minor out-of-range deltas (workspace declares narrower ranges than the version constraint of upstream allows). These are non-breaking and listed below for reference; per the v1 skill, they don't get individual beads.
 - **Duplicates baseline:** 49 distinct crates appear at multiple versions (108 crate-version entries). No after-state to compare since lockfile didn't change.
-- **Verification:** pre-flight `cargo xtask verify --skip-hub-build` passed on `main` @ `3e0bc4c5`. Worktree verify was skipped because the lockfile is identical to main's — see "Notes" below for the skill refinement this surfaced.
+- **Verification:** pre-flight `cargo xtask verify --skip-hub-build` passed on `main` \@ `3e0bc4c5`. Worktree verify was skipped because the lockfile is identical to main's — see "Notes" below for the skill refinement this surfaced.
 
 ## Applied & verified
 
@@ -104,7 +104,7 @@ After: same — lockfile unchanged.
 
 The skill worked end-to-end, but two refinements should land in v2:
 
-1. **Skip worktree verify when `cargo update` is a no-op.** The skill's step 7 says "skip to step 8" if `Locking 0 packages`, but step 8 (full `cargo xtask verify`) on an unchanged lockfile is redundant — pre-flight already validated `main`, and the worktree branches from `main`. We saved ~10 minutes by skipping it. Update the skill to say: if no lockfile diff, skip directly to step 11 (file beads).
+1. **Skip worktree verify when `cargo update` is a no-op.** The skill's step 7 says "skip to step 8" if `Locking 0 packages`, but step 8 (full `cargo xtask verify`) on an unchanged lockfile is redundant — pre-flight already validated `main`, and the worktree branches from `main`. We saved \~10 minutes by skipping it. Update the skill to say: if no lockfile diff, skip directly to step 11 (file beads).
 2. **Distinguish "major candidates" from "out-of-range patch/minor" in step 11.** The skill literally says "for each major-upgrade candidate from step 3, file a `chore` issue", and step 3 lumps patch/minor-out-of-range together with majors as "needs review". Filing 28+ beads issues for patch deltas like `libc 0.2.185 → 0.2.186` would be noise. The implicit rule applied here: only **major** + **pre-1.0 minor** entries get individual beads; patch/minor-out-of-range get a section in the plan. Make this explicit in the skill.
 
 A third minor refinement: the worktree's `npm install` (skill step 6) wasn't needed for this run since no hub-client work happens in the no-change case. Conditional: only run `npm install` if step 8's verify will actually run.

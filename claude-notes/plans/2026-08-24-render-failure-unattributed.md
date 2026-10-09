@@ -43,7 +43,7 @@ outcomes follow from where the offset lands:
 
 - **Past EOF** (the common case — engine output is much larger than the
   source): `map_offset` fails, so ariadne renders nothing *and*
-  `to_text_with_renderer`'s `at <file>:<row>:<col>` fallback is skipped too.
+  `to_text_with_renderer`\'s `at <file>:<row>:<col>` fallback is skipped too.
   Output is a bare title + problem with no file, line, or frame. This is the
   shape the strand reports.
 - **Inside the source file** (a long `.qmd`): a fully-formed, confident
@@ -107,7 +107,7 @@ Decided with Gordon 2026-08-24:
       (d) a span resolving to an engine intermediate gains the line,
       (e) multi-file groups are left to their `Affected files:` tail,
       (f) matching survives mixed path separators (Windows).
-- [x] knitr-gated e2e (following `marimo_engine_e2e.rs`'s
+- [x] knitr-gated e2e (following `marimo_engine_e2e.rs`\'s
       `rscript_available()` / `knitr_r_package_available()` pattern): project
       render whose R chunk emits a bad shortcode names the `.qmd`.
 
@@ -180,7 +180,7 @@ passed in the with-changes workspace run.
 
 ### End-to-end, through the real binary
 
-`q2 render` in a project whose R chunk emits `{{< fa envelope size=1x >}}`.
+`q2 render` in a project whose R chunk emits `{{{< fa envelope size=1x >}}}`.
 
 Before — the page dies unnamed:
 
@@ -191,7 +191,7 @@ Shortcode parameter values starting with digits must be quoted.
 
 After — output inspected, both the page and the offending line are named:
 
-```
+```{shortcodes="false"}
 error: while rendering /…/t2/knit.qmd
 Error: [Q-2-34] Unquoted shortcode parameter starting with digit
      ╭─[ /…/t2/knit.knitr.rmarkdown:138:23 ]

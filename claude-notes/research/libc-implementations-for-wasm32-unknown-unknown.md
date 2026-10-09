@@ -233,7 +233,7 @@ With the `mem` feature enabled:
 - Requires JavaScript host functions
 - Some functions are stubs (calloc, realloc, free)
 - Math uses WASM builtins (good!)
-- Only ~5,300 lines of code
+- Only \~5,300 lines of code
 
 **For Lua:** Interesting because it has `atof`, but requires JavaScript integration and has stub implementations.
 
@@ -290,7 +290,7 @@ Functions Lua needs that aren't in the above:
    - Might need to use Lua's panic/catch_unwind strategy instead
 
 3. **stdio functions** (if Lua uses them)
-   - Most libcs don't provide FILE* operations for wasm32-unknown-unknown
+   - Most libcs don't provide FILE\* operations for wasm32-unknown-unknown
    - May need to stub out or redirect to Rust I/O
 
 ---

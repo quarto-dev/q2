@@ -1,6 +1,6 @@
 # Investigation notes — bd-ve916wr8
 
-**Date:** 2026-09-08, main @ `b7e7c96a` (investigation ran in the main checkout; no worktree created).
+**Date:** 2026-09-08, main \@ `b7e7c96a` (investigation ran in the main checkout; no worktree created).
 
 Fixtures (committed, outputs gitignored):
 

@@ -6,7 +6,7 @@
 
 ## Problem
 
-`NativeRuntime::fetch_url` uses `reqwest`'s async client, which requires
+`NativeRuntime::fetch_url` uses `reqwest`\'s async client, which requires
 a tokio reactor (I/O driver) to poll network sockets. However, the
 native render pipeline is driven by `pollster::block_on` in multiple
 places:
@@ -67,7 +67,7 @@ Using `reqwest::blocking` is appropriate here because:
 - [x] **3** Checked — `reqwest` import still needed for
   `reqwest::blocking::get`, no dead imports
 
-- [x] **4** Test native CLI: rendered `{{< placeholder 200 format=png >}}`
+- [x] **4** Test native CLI: rendered `{{{< placeholder 200 format=png >}}}`
   — HTML output contains embedded PNG image
 
 - [x] **5** `cargo nextest run --workspace` — 7232 passed, 0 failed

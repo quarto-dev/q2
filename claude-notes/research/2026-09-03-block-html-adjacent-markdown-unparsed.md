@@ -53,7 +53,7 @@ once `native_divs` is off, which is precisely the configuration PR #646 put
 q2 into. Dropping `native_divs` alone was safe; dropping it *and* lifting
 verbatim was not.
 
-`syntax-notes.md`'s objection is specifically to *parsing HTML into AST
+`syntax-notes.md`\'s objection is specifically to *parsing HTML into AST
 structure* via backtracking parser combinators — i.e. `native_divs`. It does
 not speak to `markdown_in_html_blocks`. The strand is right that the
 constraint does not block this fix.
@@ -179,7 +179,7 @@ HTML block type 1 raw-text set — keep their content **verbatim** in pandoc.
 All four are in q2's `BLOCK_TAGS`. A blanket split would newly break them by
 parsing markdown inside a `<script>`. Every other tag probed (`title`,
 `iframe`, `noscript`, `svg`, `canvas`, `object`, `section`, `table`/`tr`/`td`,
-`div`, `details`) splits. So the ~60-tag whitelist partitions cleanly 4 / 56,
+`div`, `details`) splits. So the \~60-tag whitelist partitions cleanly 4 / 56,
 and the guard is a first-inline check — no state needed.
 
 **Test blast radius, whole workspace, both spikes applied:**

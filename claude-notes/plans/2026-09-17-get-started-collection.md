@@ -223,7 +223,7 @@ Decisions:
 - Resources under `resources/templates/examples/<name>/`, all
   `static_text` (no `$title$`; the example content carries its own titles).
   Meeting Notes, Article and Presentation are `Default + template`;
-  `get_scaffold`'s `Default` arm gains a template match. Website is
+  `get_scaffold`\'s `Default` arm gains a template match. Website is
   `Website + template`. The deck's `fork_icon.png` becomes the text
   `fork-icon.svg` (the connector cannot fetch binaries); the same SVG is
   what the other three already use.
@@ -514,7 +514,7 @@ gathered by comparing hub preview against native `q2 render` of the same file:
 
 Template edits from the review: the article table caption no longer uses a
 crossref (works around bd-daa1nw40's visible artifact), and every template's
-"Make it yours" section (or meeting-notes' customization tail) now points at
+"Make it yours" section (or meeting-notes\' customization tail) now points at
 the getting started guide:
 https://quarto-dev.github.io/quarto-hub/get-started.html
 

@@ -43,7 +43,7 @@ apps/lsp/
 
 ### 1. **Text Document Synchronization**
 - **Type**: Incremental (`TextDocumentSyncKind.Incremental`)
-- **Implementation**: Uses `vscode-languageserver`'s `TextDocuments` manager
+- **Implementation**: Uses `vscode-languageserver`\'s `TextDocuments` manager
 - **Location**: `src/index.ts`
 
 ### 2. **Completion** (`textDocument/completion`)
@@ -71,10 +71,10 @@ apps/lsp/
 - **LaTeX/Math completions** (`completion-latex.ts`)
   - LaTeX commands
   - Math symbols
-  - MathJax-based completions (~48KB JSON data)
+  - MathJax-based completions (\~48KB JSON data)
 
 - **Shortcode completions** (`completion-shortcode.ts`)
-  - Quarto shortcodes (`{{< shortcode >}}`)
+  - Quarto shortcodes (`{{{< shortcode >}}}`)
 
 - **Reference completions** (`refs/`)
   - **Crossref** (`completion-crossref.ts`) - `@fig-id`, `@tbl-id`, etc.
@@ -98,7 +98,7 @@ apps/lsp/
   - Link target preview
 
 - **Image hover** (`hover-image.ts`)
-  - Image preview (commented out due to size cap ~75KB)
+  - Image preview (commented out due to size cap \~75KB)
   - Currently handled client-side
 
 ### 4. **Go to Definition** (`textDocument/definition`)

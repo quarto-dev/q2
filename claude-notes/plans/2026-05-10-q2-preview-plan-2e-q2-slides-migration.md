@@ -18,7 +18,7 @@ After 2E:
 - `attributesToProps`, `parseStyleString` consolidate into `q2-slides/attributesToProps.ts` (used by every leaf that handles HTML attribute passthrough).
 - `AspectRatioScaler.tsx` moves from the top-level into `q2-slides/`; q2-slides is the only consumer.
 - `q2-slides/SlideContext.tsx` carries slide-control state (`currentSlide`, `setCurrentSlide`, `totalSlides`) — the parent (Editor) mounts the Provider above the registered `Ast` component, mirroring the precedent set by `q2-preview/PreviewContext.tsx`.
-- `ReactRenderer.tsx`'s slide branch (lines 209-233) collapses to one mount: `<Ast registry={isRevealjs ? revealjsRegistry : q2SlidesRegistry} {...astProps} />`.
+- `ReactRenderer.tsx`\'s slide branch (lines 209-233) collapses to one mount: `<Ast registry={isRevealjs ? revealjsRegistry : q2SlidesRegistry} {...astProps} />`.
 - External consumers (`useCursorToSlide.ts`, `useSlideThumbnails.tsx`) retarget their imports from `./ReactAstSlideRenderer` to `./q2-slides`.
 - `ReactAstSlideRenderer.tsx` and `RevealjsReactAstSlideRenderer.tsx` are deleted at the end of Phase 2.
 - The `parity-with-q1` question for revealjs (whether to ever route `format: revealjs` through a Rust-side HTML renderer instead of the React-side reveal.js wrapper) is **explicitly out of scope** — Plan 2E preserves both React paths as first-class.
@@ -78,11 +78,11 @@ The five questions below are unresolved. Each has a recommended pick, but the us
 
 ### §1. Iframe boundary — in-page, single iframe, or two iframes?
 
-q2-debug and q2-preview each have their own iframe + HTML page + `entry.tsx`. The slide renderers today render in-page directly inside `ReactPreview`'s React tree. Three options:
+q2-debug and q2-preview each have their own iframe + HTML page + `entry.tsx`. The slide renderers today render in-page directly inside `ReactPreview`\'s React tree. Three options:
 
-- **(a) Stay in-page** *(Recommended for v1)*. `<Ast registry={…}>` mounts inside `ReactRenderer.tsx`'s slide branch the same way `SlideAst`/`RevealjsSlideAst` mount today. No iframe, no postMessage, no `q2-slides.html` / `revealjs.html` needed. The parent's slide-control hooks (`useCursorToSlide`, `useSlideThumbnails`) keep working without cross-frame plumbing. Iframing is a follow-up plan.
+- **(a) Stay in-page** *(Recommended for v1)*. `<Ast registry={…}>` mounts inside `ReactRenderer.tsx`\'s slide branch the same way `SlideAst`/`RevealjsSlideAst` mount today. No iframe, no postMessage, no `q2-slides.html` / `revealjs.html` needed. The parent's slide-control hooks (`useCursorToSlide`, `useSlideThumbnails`) keep working without cross-frame plumbing. Iframing is a follow-up plan.
 - **(b) Single iframe `/q2-slides.html`** that branches on `meta.format` to mount either `SlideAst` or `RevealjsAst`. One HTML page, one `entry.tsx`, cross-frame plumbing for slide-control state. Symmetric with q2-preview / q2-debug.
-- **(c) Two iframes** (`/q2-slides.html`, `/revealjs.html`). Maximum separation; doubled boilerplate. Useful only if the two formats' iframe-host concerns end up genuinely different (e.g. revealjs needs `<script type="module">` setup that q2-slides doesn't).
+- **(c) Two iframes** (`/q2-slides.html`, `/revealjs.html`). Maximum separation; doubled boilerplate. Useful only if the two formats\' iframe-host concerns end up genuinely different (e.g. revealjs needs `<script type="module">` setup that q2-slides doesn't).
 
 Recommended (a) for 2E. Rationale: the iframe boundary's main wins (sandboxing, theme isolation, separate bundle entry) don't currently apply to the slide formats — there's no per-format theme injection, no user-supplied TSX surface, no security boundary justifying it. Adding it would inflate Plan 2E from "format-registry migration" to "format-registry migration + cross-frame slide-control plumbing" without solving an active problem. If iframing becomes desirable later (e.g. when slide editing lands and we want the same sandboxing q2-preview has), it's a single follow-up plan against the post-2E directory layout.
 
@@ -112,13 +112,13 @@ interface SlideContextValue {
 }
 ```
 
-Recommended **(A)**. Keyboard/prev/next navigation stays local to `SlideAst` / `RevealjsAst`'s internal state (each consumes the narrow triplet and computes prev/next inline). External consumers (`useCursorToSlide`, `useSlideThumbnails`) only need to read `currentSlide` / `setCurrentSlide`; the narrow shape covers them.
+Recommended **(A)**. Keyboard/prev/next navigation stays local to `SlideAst` / `RevealjsAst`\'s internal state (each consumes the narrow triplet and computes prev/next inline). External consumers (`useCursorToSlide`, `useSlideThumbnails`) only need to read `currentSlide` / `setCurrentSlide`; the narrow shape covers them.
 
 Trade-off: if a future feature (e.g. presenter mode, slide-jump-from-thumbnail UI) wants to reuse the navigation primitives across multiple sibling components, option (B) lifts that wiring once. But adding fields later is mechanical (`SlideContext.tsx` is small); narrowing fields once they're consumed is harder.
 
 ### §4. Image asset resolution — VFS-direct, or migrate to manifest pattern?
 
-`SlideAst`'s `Image` case (`ReactAstSlideRenderer.tsx:780-835`) reads VFS files synchronously inside the render path: `vfsReadFile` for `/.quarto/` paths, `vfsReadBinaryFile` for project-relative paths, base64-encodes the result, sets a `data:` URL. q2-preview pre-walks images in the parent and distributes a `Record<origPath, blobUrl>` via `AssetManifestContext`.
+`SlideAst`\'s `Image` case (`ReactAstSlideRenderer.tsx:780-835`) reads VFS files synchronously inside the render path: `vfsReadFile` for `/.quarto/` paths, `vfsReadBinaryFile` for project-relative paths, base64-encodes the result, sets a `data:` URL. q2-preview pre-walks images in the parent and distributes a `Record<origPath, blobUrl>` via `AssetManifestContext`.
 
 - **(a) Keep VFS-direct** *(Recommended for v1)*. Mechanical migration: `q2-slides/inlines/Image.tsx` carries the same `vfsReadFile` / `vfsReadBinaryFile` calls. Stays sync, no parent-side walker added.
 - **(b) Migrate to manifest pattern.** Adds an `AssetManifestContext` consumer to q2-slides; requires a parent-side walker (which q2-preview has via `assetWalker.ts`) to populate the manifest before mount. Symmetric with q2-preview but adds non-trivial wiring.
@@ -130,14 +130,14 @@ Recommended (a) on minimum-scope grounds. Manifest migration is most valuable wh
 Slide leaves currently can't edit content. The framework's `NodeArgs<T>` type includes `setLocalAst`; q2-preview's leaves use it for live edits.
 
 - **(a) Read-only — pass `setLocalAst: () => {}`** *(Recommended for v1)*. Each q2-slides leaf accepts the framework's `NodeArgs` shape but doesn't wire writes back. Mirrors the slide renderer's current "read-only preview" semantics.
-- **(b) Wire `setLocalAst` per-leaf for parity with q2-preview.** Each leaf implements the spread-and-replace pattern (e.g. `Header` rewrites `node.c[2]` when its inlines change). Rote work: ~22 leaves × ~5 LOC of write-back per leaf. Enables future "edit slide titles in-place" without a structural follow-up.
+- **(b) Wire `setLocalAst` per-leaf for parity with q2-preview.** Each leaf implements the spread-and-replace pattern (e.g. `Header` rewrites `node.c[2]` when its inlines change). Rote work: \~22 leaves × \~5 LOC of write-back per leaf. Enables future "edit slide titles in-place" without a structural follow-up.
 
-Recommended (a). Slide editing is a feature, not a refactor concern. (b)'s plumbing inflates the plan ~110 LOC for a feature that has no consumer today; landing it as part of the slide-editing feature plan is cleaner.
+Recommended (a). Slide editing is a feature, not a refactor concern. (b)\'s plumbing inflates the plan \~110 LOC for a feature that has no consumer today; landing it as part of the slide-editing feature plan is cleaner.
 
 ### §6. Migration strategy — phased shim like 2pre, or single-shot?
 
 - **(a) 2pre-style shim** *(Recommended)*. Phase 1 builds `q2-slides/` additively while `ReactAstSlideRenderer.tsx` becomes a re-export barrel exposing `parseSlides`, `renderBlock`, `Slide`, `SlideAst` under their old names. Phase 2 migrates each consumer (ReactRenderer, RevealjsReactAstSlideRenderer first since it's adjacent, then useCursorToSlide and useSlideThumbnails) one commit at a time. Phase 3 deletes the shim. Tree green after every commit.
-- **(b) Single big-bang.** Create `q2-slides/`, retarget all four consumers in one commit, delete the old files. Faster (~5 commits vs ~12), harder to revert.
+- **(b) Single big-bang.** Create `q2-slides/`, retarget all four consumers in one commit, delete the old files. Faster (\~5 commits vs \~12), harder to revert.
 
 Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisection / partial-revert affordance for a 1140-LOC migration touching four external consumers.
 
@@ -153,14 +153,14 @@ Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisect
 ### Phase 10 — Build q2-slides directory behind a shim
 
 - [ ] **10.1** Create `q2-slides/` directory. Add `q2-slides/index.ts` as the barrel that re-exports public symbols (`SlideAst`, `RevealjsAst`, `parseSlides`, `Slide` type, `q2SlidesRegistry`, `revealjsRegistry`, `SlideContext`).
-- [ ] **10.2** Create `q2-slides/styles.ts`. Pull the inline-style constants out of `renderBlock`'s switch arms: `paraStyle` (margin/lineHeight), `headerStyles` (per-level fontSize), `codeBlockStyle`, `bulletListStyle`, etc. ~50 LOC of style constants moved verbatim from the switch.
+- [ ] **10.2** Create `q2-slides/styles.ts`. Pull the inline-style constants out of `renderBlock`\'s switch arms: `paraStyle` (margin/lineHeight), `headerStyles` (per-level fontSize), `codeBlockStyle`, `bulletListStyle`, etc. \~50 LOC of style constants moved verbatim from the switch.
 - [ ] **10.3** Create `q2-slides/attributesToProps.ts`. Move `attributesToProps` (lines 441-510) and `parseStyleString` (lines 485-510). Drop the leading underscore prefix on locals where present. Keep the function signatures — leaves consume them as before.
 - [ ] **10.4** Create `q2-slides/parseSlides.ts`. Move `parseSlides`, `extractSections`, `splitByHeaders`, `flattenBlocks` (lines 203-345). Drop the local `extractMetaString` definition (lines 350-371) — replaced by the framework helper post-2D.
 - [ ] **10.5** Create `q2-slides/AspectRatioScaler.tsx`. Move from top-level `components/render/AspectRatioScaler.tsx`. Files are character-identical; only the path changes.
 - [ ] **10.6** Create `q2-slides/SlideContext.tsx`. Define `SlideContextValue = { currentSlide: number; setCurrentSlide: (n: number) => void; totalSlides: number }` and the React context. Mirror the `q2-preview/PreviewContext.tsx` shape (default `null`, leaves treat absence as a bug). See §3 for the open question about which fields belong here.
-- [ ] **10.7** Create `q2-slides/blocks/*.tsx` per-block leaves: `Para.tsx`, `Plain.tsx`, `Header.tsx`, `CodeBlock.tsx`, `BulletList.tsx`, `OrderedList.tsx`, `BlockQuote.tsx`, `Div.tsx`, `RawBlock.tsx`, `HorizontalRule.tsx`, `Figure.tsx`. Each takes `NodeArgs<T>` from the framework. Each consumes `attributesToProps` and `styles` from siblings. Each renders inline children via `renderChildren(args)` (the framework's traversal helper, which dispatches per-tag through the registry's `'Inline'` and per-block-tag entries). Eleven files, ~30 LOC each. **Per §5, `setLocalAst` is a no-op today; leaves accept the field but don't wire writes back.** Add `q2-slides/blocks/index.ts` re-exporting all eleven by Pandoc-tag name (`Para`, `Plain`, `Header`, …).
+- [ ] **10.7** Create `q2-slides/blocks/*.tsx` per-block leaves: `Para.tsx`, `Plain.tsx`, `Header.tsx`, `CodeBlock.tsx`, `BulletList.tsx`, `OrderedList.tsx`, `BlockQuote.tsx`, `Div.tsx`, `RawBlock.tsx`, `HorizontalRule.tsx`, `Figure.tsx`. Each takes `NodeArgs<T>` from the framework. Each consumes `attributesToProps` and `styles` from siblings. Each renders inline children via `renderChildren(args)` (the framework's traversal helper, which dispatches per-tag through the registry's `'Inline'` and per-block-tag entries). Eleven files, \~30 LOC each. **Per §5, `setLocalAst` is a no-op today; leaves accept the field but don't wire writes back.** Add `q2-slides/blocks/index.ts` re-exporting all eleven by Pandoc-tag name (`Para`, `Plain`, `Header`, …).
 - [ ] **10.8** Create `q2-slides/inlines/*.tsx` per-inline leaves: `Str.tsx`, `Space.tsx`, `SoftBreak.tsx`, `LineBreak.tsx`, `Emph.tsx`, `Strong.tsx`, `Quoted.tsx`, `Code.tsx`, `Link.tsx`, `Image.tsx`, `Span.tsx`, `Math.tsx`. Twelve files. Same NodeArgs shape; `Math.tsx` is the only one with an external dep (`katex.renderToString`). `Image.tsx` keeps the `vfsReadFile` / `vfsReadBinaryFile` synchronous reads (per §4 option A). Add `q2-slides/inlines/index.ts`.
-- [ ] **10.9** Create `q2-slides/dispatchers.tsx`. Define `Block` and `Inline` per the framework contract — each does `registry[node.t]` lookup; on miss, render the slide-formats' default fallback (currently a gray `[NodeType]` span — `ReactAstSlideRenderer.tsx:876-879` for inlines; the block path doesn't have an equivalent today, so define one symmetrically). Registered under the framework-reserved keys `'Block'` and `'Inline'` in both registries.
+- [ ] **10.9** Create `q2-slides/dispatchers.tsx`. Define `Block` and `Inline` per the framework contract — each does `registry[node.t]` lookup; on miss, render the slide-formats\' default fallback (currently a gray `[NodeType]` span — `ReactAstSlideRenderer.tsx:876-879` for inlines; the block path doesn't have an equivalent today, so define one symmetrically). Registered under the framework-reserved keys `'Block'` and `'Inline'` in both registries.
 - [ ] **10.10** Create `q2-slides/SlideAst.tsx`. The carousel document-root, registered as `'Ast'` in `q2SlidesRegistry`. Reads `currentSlide` / `setCurrentSlide` / `totalSlides` from `SlideContext` (or from controlled-mode props during the migration if §1 keeps the parent-side state shape unchanged — see §3 for the precise context shape). Mounts `<AspectRatioScaler>` + the dark-frame chrome + the prev/next buttons + the slide counter. For each slide's content, walks `slide.blocks` via the framework's `renderChildren` — which dispatches through `q2SlidesRegistry['Block']` → `q2SlidesRegistry[node.t]`. Title-slide rendering uses the same inline-styled `<h1>` / `<p>` as today (extracted to a local helper component shared with `RevealjsAst`).
 - [ ] **10.11** Create `q2-slides/RevealjsAst.tsx`. The reveal.js document-root, registered as `'Ast'` in `revealjsRegistry`. Identical to today's `RevealjsSlideAst` (the reveal.js Deck, the plugin imports, the menu CSS override) but: walks `slide.blocks` via `renderChildren` instead of importing `renderBlock` from the old top-level file. Title-slide rendering shares the helper from 10.10.
 - [ ] **10.12** Create `q2-slides/registry.ts` per the §2 source listing above. Both registries spread the same `Blocks` / `Inlines` modules and the same `Block` / `Inline` dispatchers; they differ only on `'Ast'`.
@@ -169,7 +169,7 @@ Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisect
 ### Phase 11 — Migrate consumers (one commit each)
 
 - [ ] **11.1** `RevealjsReactAstSlideRenderer.tsx`-side migration is already covered by Phase 10.13's shim conversion. Verify by deleting the file's body (keeping only the re-export) and confirming `npm run build:all` is green. Commit.
-- [ ] **11.2** Migrate `ReactRenderer.tsx`'s slide branch. Replace lines 209-233 with:
+- [ ] **11.2** Migrate `ReactRenderer.tsx`\'s slide branch. Replace lines 209-233 with:
 
   ```tsx
   const ast = JSON.parse(astJson);
@@ -211,26 +211,26 @@ Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisect
 
 | Component | Lines (rough) |
 |---|---|
-| `q2-slides/styles.ts` (NEW — extracted constants) | ~50 |
-| `q2-slides/attributesToProps.ts` (NEW — moved) | ~70 |
-| `q2-slides/parseSlides.ts` (NEW — moved + slimmed; minus `extractMetaString`) | ~140 |
-| `q2-slides/AspectRatioScaler.tsx` (moved verbatim from top-level) | ~92 |
-| `q2-slides/SlideContext.tsx` (NEW) | ~25 |
-| `q2-slides/blocks/*.tsx` (NEW — 11 leaves @ ~30 LOC each) | ~330 |
-| `q2-slides/inlines/*.tsx` (NEW — 12 leaves @ ~25 LOC each, except Image and Math which are ~50) | ~340 |
-| `q2-slides/blocks/index.ts` + `inlines/index.ts` | ~25 |
-| `q2-slides/dispatchers.tsx` (NEW — Block, Inline) | ~50 |
-| `q2-slides/SlideAst.tsx` (NEW — carousel chrome only; leaves are dispatched) | ~120 |
-| `q2-slides/RevealjsAst.tsx` (NEW — reveal.js chrome only) | ~110 |
-| `q2-slides/registry.ts` (NEW — both registries + sharedLeaves spread) | ~30 |
-| `q2-slides/index.ts` (NEW — public barrel) | ~10 |
+| `q2-slides/styles.ts` (NEW — extracted constants) | \~50 |
+| `q2-slides/attributesToProps.ts` (NEW — moved) | \~70 |
+| `q2-slides/parseSlides.ts` (NEW — moved + slimmed; minus `extractMetaString`) | \~140 |
+| `q2-slides/AspectRatioScaler.tsx` (moved verbatim from top-level) | \~92 |
+| `q2-slides/SlideContext.tsx` (NEW) | \~25 |
+| `q2-slides/blocks/*.tsx` (NEW — 11 leaves \@ \~30 LOC each) | \~330 |
+| `q2-slides/inlines/*.tsx` (NEW — 12 leaves \@ \~25 LOC each, except Image and Math which are \~50) | \~340 |
+| `q2-slides/blocks/index.ts` + `inlines/index.ts` | \~25 |
+| `q2-slides/dispatchers.tsx` (NEW — Block, Inline) | \~50 |
+| `q2-slides/SlideAst.tsx` (NEW — carousel chrome only; leaves are dispatched) | \~120 |
+| `q2-slides/RevealjsAst.tsx` (NEW — reveal.js chrome only) | \~110 |
+| `q2-slides/registry.ts` (NEW — both registries + sharedLeaves spread) | \~30 |
+| `q2-slides/index.ts` (NEW — public barrel) | \~10 |
 | `ReactAstSlideRenderer.tsx` shim → deletion | -885 |
 | `RevealjsReactAstSlideRenderer.tsx` shim → deletion | -163 |
 | Top-level `AspectRatioScaler.tsx` deletion | -92 |
-| `ReactRenderer.tsx` slide-branch rewrite | ~10 |
-| `useCursorToSlide.ts` import path update | ~1 |
-| `useSlideThumbnails.tsx` import path update | ~1 |
-| **Net** | **~+250 LOC, distributed across 30+ small files** |
+| `ReactRenderer.tsx` slide-branch rewrite | \~10 |
+| `useCursorToSlide.ts` import path update | \~1 |
+| `useSlideThumbnails.tsx` import path update | \~1 |
+| **Net** | **\~+250 LOC, distributed across 30+ small files** |
 
 The line-count *grows* slightly because per-tag leaves are explicit (one file per Pandoc tag) rather than buried in a switch arm. The structural payoff is exactly that: each leaf is independently editable, importable, testable, and overridable. q2-debug and q2-preview already pay that file-count cost; q2-slides catching up is the point.
 
@@ -260,7 +260,7 @@ Nothing immediately. Possible follow-ups it unblocks:
 - **External-consumer signature drift**. Phase 10.13 keeps the old `renderBlock(block, key, currentFilePath, onNavigateToDocument) → ReactNode` signature exposed for `useSlideThumbnails`'s use. After Phase 11.4 nothing should be calling that old signature, but the q2-slides `index.ts` continues to export it as a thumbnail-rendering helper. If a future plan wants to switch thumbnails to the registry-based dispatch, that's the natural follow-up; until then the imperative export is a deliberate convenience. Document the dual contract in `index.ts`'s doc-comment.
 - **Slide-control state ownership**. The parent (`Editor.tsx`) owns `currentSlideIndex` state today and threads it through `ReactPreview` → `ReactRenderer` → `SlideAst` / `RevealjsSlideAst` as props. Switching to `SlideContext` keeps the parent ownership but moves the read-side from props to context. Verify there's no stale-closure bug when `currentSlideIndex` updates while a leaf is mid-render. (Should be fine — context updates re-render consumers; the existing prop-drilling did the same.)
 - **AspectRatioScaler tests**. The top-level `ReactRenderer.integration.test.tsx` references `AspectRatioScaler` directly. After Phase 12.1's move, the import path changes. Verify the test still passes against the new location.
-- **Reveal.js dependency footprint**. `revealjsRegistry`'s `Ast: RevealjsAst` static-imports `@revealjs/react`, reveal.js plugins, and reveal.js CSS. Even if a user only ever opens `format: q2-slides` documents, the bundle pulls reveal.js because `q2-slides/registry.ts` exports both registries side-by-side. Today's tree has the same coupling (`ReactRenderer.tsx` imports `RevealjsSlideAst` unconditionally), so this is not a regression — just a known cost of the unified module. If bundle size becomes a concern, dynamic-import `RevealjsAst` in a follow-up.
+- **Reveal.js dependency footprint**. `revealjsRegistry`\'s `Ast: RevealjsAst` static-imports `@revealjs/react`, reveal.js plugins, and reveal.js CSS. Even if a user only ever opens `format: q2-slides` documents, the bundle pulls reveal.js because `q2-slides/registry.ts` exports both registries side-by-side. Today's tree has the same coupling (`ReactRenderer.tsx` imports `RevealjsSlideAst` unconditionally), so this is not a regression — just a known cost of the unified module. If bundle size becomes a concern, dynamic-import `RevealjsAst` in a follow-up.
 - **Title-slide rendering shared between SlideAst and RevealjsAst**. Pulled into a local helper in 10.10 / 10.11. Verify the helper doesn't accidentally pull format-specific styling from one chrome that doesn't apply in the other.
 
 ## References
@@ -278,7 +278,7 @@ Nothing immediately. Possible follow-ups it unblocks:
 
 ### hub-client side (read-only references during implementation)
 
-- `hub-client/src/components/render/q2-preview/PreviewContext.tsx` — precedent for `SlideContext`'s shape.
+- `hub-client/src/components/render/q2-preview/PreviewContext.tsx` — precedent for `SlideContext`\'s shape.
 - `hub-client/src/components/render/q2-preview/registry.ts` — precedent for the registry layout (single registry; q2-slides has two but the layout is parallel).
 - `hub-client/src/components/render/q2-debug/registry.ts` — second precedent.
 - `hub-client/src/components/render/framework/index.ts` — what the leaves and dispatchers consume (`Node`, `renderChildren`, `RegistryContext`, `extractMetaString` post-2D 6.0).

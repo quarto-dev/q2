@@ -86,10 +86,10 @@ Two shipped; the type system caught none; review caught two.
 
 | # | instance | status | fix |
 |---|---|---|---|
-| 1 | `preimage_in`'s `Substring` arm (Rust) | shipped | Plan 1, 0.1.2 — **refuse** (`None`) |
-| 2 | `resolveChain`'s `Substring` arm (`annotated-qmd`, `source-map.ts:301-315`) | shipped | Plan 2 Phase 4 |
+| 1 | `preimage_in`\'s `Substring` arm (Rust) | shipped | Plan 1, 0.1.2 — **refuse** (`None`) |
+| 2 | `resolveChain`\'s `Substring` arm (`annotated-qmd`, `source-map.ts:301-315`) | shipped | Plan 2 Phase 4 |
 | 3 | a length-preserving predicate proposed as the `preimage_in` fix | caught in review | withdrawn |
-| 4 | `ProvenanceBuilder::finish()`'s length-matching collapse rule | caught in review | now "exactly one piece and it is verbatim" |
+| 4 | `ProvenanceBuilder::finish()`\'s length-matching collapse rule | caught in review | now "exactly one piece and it is verbatim" |
 
 ### The watch-item: it is not the arithmetic
 
@@ -118,8 +118,8 @@ at the site that looked defective:
 
 | the site that looked wrong | where the answer actually was |
 |---|---|
-| `preimage_in`'s `Substring` arm | one level *down*: the arithmetic is byte-identical to `resolve_byte_range`'s; the difference is what the **parent's `Concat` arm** hands back |
-| `incremental.rs:171`'s `preimage_in` call | one level *up*: whether the **baseline capture** can ever contain a fold-bearing `Concat` (`pipeline.rs:1013`) — it cannot, so the site is latent |
+| `preimage_in`\'s `Substring` arm | one level *down*: the arithmetic is byte-identical to `resolve_byte_range`\'s; the difference is what the **parent's `Concat` arm** hands back |
+| `incremental.rs:171`\'s `preimage_in` call | one level *up*: whether the **baseline capture** can ever contain a fold-bearing `Concat` (`pipeline.rs:1013`) — it cannot, so the site is latent |
 | the `shortcode_string` closure's range arithmetic | one call *up*: `process_shortcode_string` destructures the range away (`shortcode.rs:36`), so the arithmetic is dead and the site cannot drift by construction |
 
 The shape that misleads is always the same — *a decoded string paired with a raw
@@ -184,11 +184,11 @@ and never slices text.
 
 > **Classified 2026-08-23 (Plan 3 Phase 1).** All 26 are now classified; the
 > table is in Plan 3 § Evidence → Phase 1. The result corrects the count above:
-> there are **three** copy sites, not one. `assemble_inline_content`'s
-> `InlineAlignment::KeepBefore` arm and `assemble_recursed_container`'s
+> there are **three** copy sites, not one. `assemble_inline_content`\'s
+> `InlineAlignment::KeepBefore` arm and `assemble_recursed_container`\'s
 > verbatim early return also emit a hull's bytes as a node's text. Both are
 > latent for exactly the reason `:171` is — verified at the consumer, since
-> `incremental_write`'s only two production callers both supply an
+> `incremental_write`\'s only two production callers both supply an
 > untransformed, parent-less baseline (one of which is test-pinned, the other
 > only argued — see the note under § Reachability below). Every remaining site is *locate*,
 > including seven that slice `original_qmd` at **complement** ranges (gap,
@@ -209,12 +209,12 @@ Three findings, each closing one producer:
    sanitize one it is *given*, because `Concat::length()` is content length.)
 2. **So a fold piece exists only in content provenance** — which *does* reach
    body nodes by design: `parse_yaml_string_as_markdown_to_config`
-   (`pampa/src/pandoc/meta.rs`, arms at ~`:303` and ~`:316`) yields
+   (`pampa/src/pandoc/meta.rs`, arms at \~`:303` and \~`:316`) yields
    `PandocInlines` **and** `PandocBlocks`, and every node beneath them carries
    `Substring { parent: content_source_info }` because the nested reader
    threads the parent through `node_source_info_with_options`
    (`pampa/src/pandoc/location.rs:214-217`).
-3. **But they cannot reach the copy site.** `incremental_write`'s baseline is
+3. **But they cannot reach the copy site.** `incremental_write`\'s baseline is
    `capture_untransformed_ast_json` (`quarto-core/src/pipeline.rs:1006-1022`,
    called at `:920`), which (a) **re-parses the raw bytes** through
    `pampa::wasm_entry_points::qmd_to_pandoc(content)` (`:1007`) with a fresh,
@@ -231,7 +231,7 @@ protects `incremental.rs:171`; the shape of the preview capture does. That is
 what Plan 3's guard exists to preserve. The guard's reach is narrower than the
 class, though, and Plan 3 § Evidence Phase 1 states the split: it pins the
 `capture_untransformed_ast_json` artifact (`apply_node_edit` inherits it);
-`incremental_write_qmd`'s own raw-byte re-parse
+`incremental_write_qmd`\'s own raw-byte re-parse
 (`wasm-quarto-hub-client/src/lib.rs:2952`) is latent by an **analogous
 invariant that no test exercises**.
 
@@ -248,7 +248,7 @@ invariant that no test exercises**.
 
 145 hits across 69 files; **17 production across 10 files.** 128 are test code
 (inside a `#[cfg(test)]` module, under `tests/`, or in `*_tests.rs`). The
-original draft's "~132 untriaged across ~53 files" was a `grep -c` line count.
+original draft's "\~132 untriaged across \~53 files" was a `grep -c` line count.
 
 | verdict | sites |
 |---|---|
@@ -269,7 +269,7 @@ next raw byte.
 
 **`quarto_xml::parse_with_parent` is dead code.** Zero callers anywhere,
 including tests. The only references are its definition (`parser.rs:55`), its
-re-export (`lib.rs:86`) and a doc mention (`lib.rs:74`). (`pampa`'s
+re-export (`lib.rs:86`) and a doc mention (`lib.rs:74`). (`pampa`\'s
 `table_caption_provenance.rs` defines a local helper of the same name —
 unrelated.) `quarto-xml` is workspace-internal, not one of the externalized
 published crates, so there are no outside consumers either. `XmlParser::parent`
@@ -279,9 +279,9 @@ branch always runs.
 
 **`quarto-csl` and `quarto-citeproc` do no offset arithmetic.** Exhaustive grep
 for `SourceInfo::substring|original|concat`, `map_offset`, `start_offset()`,
-`end_offset()`, `preimage_in`, `resolve_byte_range` across both crates' `src/`:
+`end_offset()`, `preimage_in`, `resolve_byte_range` across both crates\' `src/`:
 **no matches.** They only `.clone()` whole `SourceInfo`s —
-`attr.value_source.clone()` at ~15 sites in `quarto-csl/src/parser.rs`.
+`attr.value_source.clone()` at \~15 sites in `quarto-csl/src/parser.rs`.
 `quarto-citeproc/src/locale_parser.rs` has no `SourceInfo` mention at all.
 
 **The mismatch is nonetheless real, if anyone revives the dead path:**
@@ -298,7 +298,7 @@ YAML instance, its base being `filter_source_info(lua)`
 (`pampa/src/lua/types.rs:2291`) = `Generated { by: By::filter(…), from: [] }`.
 Inert on three independent grounds, any one sufficient:
 
-1. `map_offset`'s `Generated` arm returns `None` **unconditionally**
+1. `map_offset`\'s `Generated` arm returns `None` **unconditionally**
    (`mapping.rs:73-77`) — not conditionally on an empty anchor list. Adding an
    anchor would not make this live.
 2. **Zero production `append_anchor` call sites.** All 7
@@ -315,7 +315,7 @@ Inert on three independent grounds, any one sufficient:
 > `AnchorRole::Invocation` anchor in `filter_source_info`
 > (`pampa/src/lua/types.rs:2291`) in place of `from: SmallVec::new()`:
 > `resolve_byte_range()` on a `quarto.config.md('x')` node went from `None` to
-> `Some((0, 0, 1))`. So ground 1 — `map_offset`'s `Generated` arm returning
+> `Some((0, 0, 1))`. So ground 1 — `map_offset`\'s `Generated` arm returning
 > `None` unconditionally — is sufficient for **`map_offset` only**, and its
 > closing sentence ("Adding an anchor would not make this live") is true of
 > that accessor and false of `resolve_byte_range`. `resolve_byte_range` rests
@@ -360,12 +360,12 @@ Inert on three independent grounds, any one sufficient:
 >
 > Note the version gap: this document was measured against `quarto-source-map`
 > **0.1.1**, the correction above against the currently-locked **0.1.3**. Both
-> accessor behaviours were re-read there — `map_offset`'s `Generated` arm at
-> `mapping.rs:75-79` (cited above as `:73-77`), `resolve_byte_range`'s at
+> accessor behaviours were re-read there — `map_offset`\'s `Generated` arm at
+> `mapping.rs:75-79` (cited above as `:73-77`), `resolve_byte_range`\'s at
 > `source_info.rs:404-406`.
 >
 > **This is now guarded.** `quarto_config_md_yields_no_byte_range` (T8, in
-> `pampa/src/lua/config_value.rs`'s `mod tests`) asserts the
+> `pampa/src/lua/config_value.rs`\'s `mod tests`) asserts the
 > `resolve_byte_range() == None` half and goes red under exactly the hunk
 > above; the constructor carries a comment stating the two accessors
 > separately. Nothing else in this subsection is amended. In particular, this
@@ -415,7 +415,7 @@ Four independent authors hit this bug class and routed around it.
 >
 > **(1) A seventh site.** Plan 2's final whole-branch review found and fixed a
 > decoded/raw pairing this table predates:
-> `crates/quarto-core/src/project/website_post_render.rs`'s `copy_footer_images`
+> `crates/quarto-core/src/project/website_post_render.rs`\'s `copy_footer_images`
 > re-parsed `cv.as_plain_text()` against `&cv.source_info` — the *raw* span —
 > under a comment claiming to parse "the same way" as `ConfigMarkdownTransform`,
 > which stopped being true once that transform moved to content provenance. It
@@ -440,7 +440,7 @@ Four independent authors hit this bug class and routed around it.
 > `block_text.find(&cb.text)`), guarded by
 > `body_source_for_locates_the_body_not_the_info_string`. Its row still
 > describes the pre-fix state. The other five original rows were cross-checked
-> against the tree on 2026-08-23 and each still reads true: `callout.rs`'s match
+> against the tree on 2026-08-23 and each still reads true: `callout.rs`\'s match
 > block is gone (the function now ends at `:418`, `#[cfg(test)]` at `:420`, and
 > its bd-3aolj guard survives at `:400-412`); `use_cmd/config.rs:229`
 > `scalar_value_span` is still present and still returns `None` on mismatch, and
@@ -482,7 +482,7 @@ tightens a span; it does not correct a wrong byte position. Scope it
 accordingly, and note that the dead range computation at `:1000-1005` can simply
 be deleted rather than corrected.
 
-**`cell_options`' constraint, named:** a language's option-line syntax may only
+**`cell_options`\' constraint, named:** a language's option-line syntax may only
 *elide* spans, never *transform* them, because every byte of the reassembled
 YAML must be a real source byte. Plan 1's reversal to **store** zero-content
 pieces makes a deletion expressible, so `replacement(src_range, 0)` would lift
@@ -517,7 +517,7 @@ adjacent `Text` siblings while extending `sourcepos.end`, and — with
 `parse.escaped_char_spans` and `render.escaped_char_spans` false — splices
 `Escaped` children into their neighbours, extending `sourcepos.end` again.
 
-Two consequences: **`inline.rs:94`'s `NodeValue::Escaped` arm is dead code**
+Two consequences: **`inline.rs:94`\'s `NodeValue::Escaped` arm is dead code**
 under `Options::default()` — do not build a fix on it. And **comrak already
 solves this internally and discards it**:
 `postprocess_text_node_with_context` builds
@@ -561,7 +561,7 @@ any `--to` value (`json`, `raw-json`, `native`, `markdown`/`qmd`, `html`,
 writer's `r`/`p` output: `writers/json.rs:357-361` emits the `Substring`'s
 content-relative pair, `:363-379` emits `(0, sum_of_piece_lengths)` for the
 parent. **Do not infer from `r` alone that a reader breaks** — Plan 2 retracted
-exactly that inference after finding `annotated-qmd`'s `resolveChain` treats
+exactly that inference after finding `annotated-qmd`\'s `resolveChain` treats
 `info.r` as an error path and walks the pieces properly
 (`source-map.ts:317-375`). The observable is the pool chain and snapshot churn.
 
@@ -625,7 +625,7 @@ mistaken for call counts. These are line-classified:
 ## 9. Glossary
 
 - **preimage** — the byte range in an original file that a `SourceInfo` covers.
-- **hull** — the smallest single range containing all of a `Concat`'s pieces.
+- **hull** — the smallest single range containing all of a `Concat`\'s pieces.
   Exists only when the pieces tile the source without gaps.
 - **fold** (*fold piece*, *fold-shaped*) — a `Concat` piece whose source run and
   content run have **equal length but different bytes**. YAML's line folding

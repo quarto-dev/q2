@@ -40,7 +40,7 @@ pub trait ErrorCollector {
 **Error Collection During Parsing**:
 - `postprocess.rs` uses `ErrorCollector` to collect warnings and errors during AST transformation
 - Example warnings: "Caption found without a preceding table at 35:1"
-- Example errors: "Found attr in postprocess: {...} - this should have been removed"
+- Example errors: "Found attr in postprocess: \{...\} - this should have been removed"
 
 **Top-level Error Handling**:
 - `qmd.rs` reader creates either `TextErrorCollector` or `JsonErrorCollector` based on `error_formatter` parameter
@@ -410,7 +410,7 @@ Once all error sites use DiagnosticCollector:
 - **Phase C** (Switch): 1-2 hours
 - **Testing**: 2-3 hours
 
-**Total for basic migration**: ~10-15 hours
+**Total for basic migration**: \~10-15 hours
 
 **Gradual enhancement**: Ongoing as features/bugs are addressed
 

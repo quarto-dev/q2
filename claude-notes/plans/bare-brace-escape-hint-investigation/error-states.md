@@ -1,6 +1,6 @@
 # Parser error-state captures for bare-brace inputs
 
-Captured 2026-08-09 at `main` @ `ec8a35f9` via:
+Captured 2026-08-09 at `main` \@ `ec8a35f9` via:
 
 ```
 printf '<input>\n' | cargo run --bin pampa -- --_internal-report-error-state | jq '.errorStates'

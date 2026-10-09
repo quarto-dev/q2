@@ -809,7 +809,7 @@ crates/
 5. Verify parser works correctly
 
 **Phase 4: Template error corpus** (1 week)
-1. Create error corpus for templates (T-*.json files)
+1. Create error corpus for templates (T-\*.json files)
 2. Write build script (calls shared script)
 3. Generate error table
 4. Test error messages

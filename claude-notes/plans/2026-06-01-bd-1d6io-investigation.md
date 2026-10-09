@@ -51,7 +51,7 @@ npm run build`.)
 
 ### Failure #1 — code-span scanner absorbs preceding whitespace
 
-Concrete syntax tree for `a \`x = 5\` b` at HEAD (`pampa -v`):
+Concrete syntax tree for ``a `x = 5` b`` at HEAD (`pampa -v`):
 
 ```
 pandoc_code_span      (0,1)-(0,9)
@@ -65,8 +65,8 @@ Control cases prove it is whitespace-absorption, not a fixed offset:
 | input | opening delimiter | Code range | verdict |
 |---|---|---|---|
 | `` `x = 5` b `` (col 0) | (0,0)-(0,1) | `[0,7]` | correct |
-| `a \`x = 5\` b` (1 space) | (0,1)-(0,3) | `[1,9]` | absorbs 1 space |
-| `a  \`x = 5\` b` (2 spaces) | (0,1)-(0,4) | `[1,10]` | absorbs **both** spaces |
+| ``a `x = 5` b`` (1 space) | (0,1)-(0,3) | `[1,9]` | absorbs 1 space |
+| ``a  `x = 5` b`` (2 spaces) | (0,1)-(0,4) | `[1,10]` | absorbs **both** spaces |
 
 No Pandoc semantic wants this (the Pandoc one-space-strip rule concerns spaces
 *inside* the backticks). `advance()` in
@@ -132,9 +132,9 @@ multi-kv attribute parsing was first written. **Not a regression; an original
 defect.**
 
 Oracles + logs live in `/tmp/bd-1d6io/` (oracle_code2.py, oracle_attr2.py,
-oracle_code_min.py, bisect-*.log).
+oracle_code_min.py, bisect-\*.log).
 
-## Why CI stayed green for ~7 months (answers the "snapshots" question)
+## Why CI stayed green for \~7 months (answers the "snapshots" question)
 
 Three artifacts could in principle have caught this; each had a blind spot.
 
@@ -237,7 +237,7 @@ This is a separate task for someone comfortable with the external scanner +
 grammar precedence, done TDD: (a) add byte-offset regression tests
 (inline-`Code`-in-prose, multi-kv attr) to the CI-resident
 `crates/pampa/snapshots/json/` family *first*; (b) run a deliberate regression
-sweep, because a shared-preamble change can shift many other tokens' ranges
+sweep, because a shared-preamble change can shift many other tokens\' ranges
 simultaneously and current coverage is too thin to catch that automatically.
 
 Escalation note: failure #1 lands in the same inline-parser rewrite that was
@@ -265,8 +265,8 @@ a temp path and `diff`, not overwrite the committed fixtures.)
 - [x] Identify root cause + fix side for each (scanner; writers are correct).
 - [x] Explain the snapshot/CI-coverage gap.
 - [ ] (fix, separate work) Add CI-resident byte-offset regression tests
-      (inline-code-in-prose, multi-kv attr) — TDD, before the scanner fixes.
+  (inline-code-in-prose, multi-kv attr) — TDD, before the scanner fixes.
 - [ ] (fix, separate work) Scanner fix #1: code-span token starts at backtick.
 - [ ] (fix, separate work) Scanner fix #2: key token starts at key char.
 - [ ] (fix, separate work) CI guard: diff live writer vs committed
-      annotated-qmd example JSON in `cargo xtask verify`.
+  annotated-qmd example JSON in `cargo xtask verify`.

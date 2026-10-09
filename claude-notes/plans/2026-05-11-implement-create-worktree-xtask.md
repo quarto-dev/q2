@@ -1789,7 +1789,7 @@ Next:
 ```
 
 Issue title fetched via `gh issue view`. `CLAUDE.local.md` includes a
-self-documenting `**Beads:** _none yet — run \`br search 184\` ..._` placeholder
+self-documenting ``**Beads:** _none yet — run `br search 184` ..._`` placeholder
 and `**Skill:** /triage ...` continuation hint.
 
 #### Upgrade mode

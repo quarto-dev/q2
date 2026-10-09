@@ -88,7 +88,7 @@ Open questions for the implementation session:
    need a second loop (`$for(body-scripts)$` or `include-after` style).
 
 7. **Which Bootstrap components do we ship?** Full `bootstrap.bundle.min.js`
-   (includes Popper for tooltips/popovers) is ~80KB gzipped. Custom
+   (includes Popper for tooltips/popovers) is \~80KB gzipped. Custom
    subsets (only Collapse + Dropdown) are smaller but more fragile to
    maintain as features land. Ship the full bundle initially; optimize
    later if it's a real cost.

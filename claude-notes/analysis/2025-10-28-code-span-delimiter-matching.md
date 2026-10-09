@@ -59,14 +59,14 @@ Attempted fix:
 common.punctuation_without($, ['`'])  // Exclude backticks
 ```
 
-**Result:** Parse errors, because when the scanner correctly rejects ``` as a 1-backtick closer, the grammar has no rule to consume those backticks.
+**Result:** Parse errors, because when the scanner correctly rejects \`\`\` as a 1-backtick closer, the grammar has no rule to consume those backticks.
 
 ### Scanner Logic
 
 The scanner has two responsibilities:
 
-1. **Finding openers:** When `valid_symbols[CODE_SPAN_START]` is true, scan ahead to verify a matching closer exists
-2. **Matching closers:** When `valid_symbols[CODE_SPAN_CLOSE]` is true, check if current position has exactly the right number of delimiters
+1. **Finding openers:** When `valid_symbols\[CODE\_SPAN\_START\]` is true, scan ahead to verify a matching closer exists
+2. **Matching closers:** When `valid_symbols\[CODE\_SPAN\_CLOSE\]` is true, check if current position has exactly the right number of delimiters
 
 The problem is in the closer-matching logic (lines 159-170 of scanner.c):
 ```c
@@ -95,7 +95,7 @@ This works correctly when called at the START of a backtick sequence, but fails 
 **Location:** Lines 165-178 of scanner.c (attempted but reverted)
 
 ### Fix Attempt 3: Exclude backticks from code span content
-**Change:** Modified grammar to use `common.punctuation_without($, ['`'])`
+**Change:** Modified grammar to use ``common.punctuation_without($, ['`'])``
 **Result:** Parse errors - no rule to consume backticks that aren't valid closers
 **Location:** grammar.js line 454 (attempted but reverted)
 
@@ -125,7 +125,7 @@ Users can work around this limitation by using more backticks in the delimiter:
 
 This works because:
 - Opens with 4 backticks
-- The ``` sequence (3 backticks) doesn't match 4, so grammar can consume them individually
+- The \`\`\` sequence (3 backticks) doesn't match 4, so grammar can consume them individually
 - Closes with 4 backticks at the end
 
 ## Recommendation

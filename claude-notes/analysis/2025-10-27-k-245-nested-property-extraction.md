@@ -333,7 +333,7 @@ Could we simplify by parsing annotations only from the OUTERMOST layer?
 - **Testing with real schemas**: 30 minutes
 - **Documentation update**: 15 minutes
 
-**Total**: ~2.5 hours
+**Total**: \~2.5 hours
 
 ## Files to Modify
 

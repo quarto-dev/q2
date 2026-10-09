@@ -270,7 +270,7 @@ field added to the profile JSON, populated by a dedicated stage.
 
 #### Option C4 — Embed QuickJS, ship Q1-verbatim EJS
 
-The 2025-12-20 analysis covers this path. ~1–2 MB binary cost, full
+The 2025-12-20 analysis covers this path. \~1–2 MB binary cost, full
 template compatibility with Q1 templates as written. Pulls in a JS
 runtime alongside the Lua runtime we already have. Significant scope
 expansion.
@@ -520,7 +520,7 @@ Three smaller pieces, none architecturally novel given the above:
    Deno's path module. We'd want a deterministic, project-relative
    glob expander; there's likely already one in pampa or `quarto-core`
    for `_quarto.yml` `project.render`. Verify before committing.
-3. **Reading-time / word-count cost on Pass-1.** Cheap (~linear in
+3. **Reading-time / word-count cost on Pass-1.** Cheap (\~linear in
    AST size); already done during render. Adding it to the profile
    means doing it once per profile build. Acceptable.
 4. **Custom template path: do we punt or design now?** Recommendation
@@ -711,7 +711,7 @@ implementation choice.
 
 User asked: assuming the C5 design (named `listing_item` profile
 field with `extra: BTreeMap<String, ConfigValue>`), can custom
-listings be implemented using `quarto-doctemplate`'s Pandoc-style
+listings be implemented using `quarto-doctemplate`\'s Pandoc-style
 `$var$` syntax instead of EJS? This would avoid embedding a JS
 runtime and keeps hub-client safe to render listings in a browser
 context without sandbox concerns.
@@ -902,7 +902,7 @@ markdown features work inside listing items.
 
 ### Why this is strictly better than EJS
 
-- **No JS runtime.** No QuickJS, no rquickjs, no ~1–2 MB binary
+- **No JS runtime.** No QuickJS, no rquickjs, no \~1–2 MB binary
   cost. Same renderer drives native and WASM.
 - **Hub-client safety.** A doctemplate template cannot execute
   arbitrary code; it can only interpolate values, branch on

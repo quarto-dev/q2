@@ -42,7 +42,7 @@ calls `quarto_core::render_to_file::render_to_file` — a **single-file** entry 
 each file independently. There is no project-fixture concept anywhere in
 `crates/quarto-test/src/`.
 
-`override-orange-book`, `orange-book-lang`, and `orange-book`'s non-index chapters
+`override-orange-book`, `orange-book-lang`, and `orange-book`\'s non-index chapters
 don't need this (single-file-in-project already works, or they carry
 `_quarto.tests.run.skip`, already supported per `spec.rs:24,55-57,89`). What needs
 building: **whole-book rendering**, triggered by `render-project: true` in a file's
@@ -93,7 +93,7 @@ use. Add this to the checklist explicitly so it isn't rediscovered mid-implement
 
 ## Checklist
 
-- [x] In `smoke_all.rs`, discover each `.qmd`'s project root via
+- [x] In `smoke_all.rs`, discover each `.qmd`\'s project root via
       `ProjectContext::discover`, group real project files by root, and report
       discovery failures as test failures. Single-file pseudo-projects are not
       grouped. The suite is serial, so grouping has no synchronization concerns.

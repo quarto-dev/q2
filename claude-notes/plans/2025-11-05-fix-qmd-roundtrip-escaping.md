@@ -65,7 +65,7 @@ Testing confirms multiple characters are affected:
 | `\*test\*` | `\*test\*` | `*test*` | ❌ BROKEN |
 | `\_underscore\_` | `\_underscore\_` | `_underscore_` | ❌ BROKEN |
 | `\[bracket\]` | `\[bracket\]` | `[bracket]` | ❌ BROKEN |
-| `\`backtick\`` | `\`backtick\`` | `` `backtick` `` | ❌ BROKEN |
+| `` `backtick` `` | `` `backtick` `` | `` `backtick` `` | ❌ BROKEN |
 
 ## Pandoc's Approach
 

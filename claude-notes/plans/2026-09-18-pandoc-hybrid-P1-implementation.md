@@ -4,7 +4,7 @@
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
 **Depends on:** nothing (per the epic's graph, P1/P2/P3 are parallel immediately). **Consumed by:**
-P5 (needs the `Pandoc`-kind exclude-list decision — specifically that `panel-tabset`'s sugar half
+P5 (needs the `Pandoc`-kind exclude-list decision — specifically that `panel-tabset`\'s sugar half
 stays enabled), P7 (needs the `PipelineProfile` seam), and P7-foundation (needs the B3
 shared-services segment).
 **Status:** Ready for subagent-driven execution. All nine tasks are dispatchable; none is blocked.
@@ -62,7 +62,7 @@ behavioral change to any existing format.**
   `pub pipeline_profile: PipelineProfile` field; derived inside `RenderContext::new`
   (`render.rs:442`), which already receives `&format`. **This is why the field is not a ripple:**
   266 `RenderContext::new(...)` call sites exist workspace-wide (including
-  `crates/quarto-lsp-core/src/analysis.rs:68` and ~40 integration-test helpers) and none needs to
+  `crates/quarto-lsp-core/src/analysis.rs:68` and \~40 integration-test helpers) and none needs to
   change if the derivation happens inside `new()`.
 - `crates/quarto-core/src/pipeline.rs:1144` (`build_transform_pipeline`) — takes the profile as an
   explicit parameter; the internal `let is_revealjs = crate::format::is_revealjs_target(...)`
@@ -116,7 +116,7 @@ behavioral change to any existing format.**
 - **T1.3** — Revert ⟨the `pipeline_profile: …` initializer in `RenderContext::new`,
   `render.rs:442`, replacing it with `PipelineProfile::HtmlRender`⟩ →
   ⟨`assert_eq!(ctx.pipeline_profile, PipelineProfile::Pandoc("docx".into()))`⟩ RED.
-- **T1.4** — Revert ⟨any reordering or omission inside `build_transform_pipeline`'s
+- **T1.4** — Revert ⟨any reordering or omission inside `build_transform_pipeline`\'s
   `HtmlRender` path — e.g. drop `pipeline.push(Box::new(SectionizeTransform::new()))` at
   `pipeline.rs:1276`⟩ → ⟨the `assert_eq!` on the exact ordered name list⟩ RED.
 - **T1.5** — Revert ⟨the `RevealjsRender`/`RevealjsPreview` arm at `pipeline.rs:1264`, making every
@@ -135,7 +135,7 @@ corrected expected value still discriminates: `RevealjsRender != RevealjsPreview
 their surviving name lists differ too (the preview exclude-list is applied to one and not the
 other) — so T2.5 is the behavioral second anchor for the same cell.
 
-**A sibling trap the five-variant shape does not close, found here:** `q2-slides`'s *base* format
+**A sibling trap the five-variant shape does not close, found here:** `q2-slides`\'s *base* format
 is `"html"`, not `"revealjs"` (`format.rs:122`, `"q2-slides" => Some(("html", Some("preview")))`).
 Its reveal-family membership comes only from `is_revealjs_target` matching the **string**. So a
 `from_format` implementation that derives family from `format.identifier` instead of from
@@ -204,13 +204,13 @@ absent** (diverges from Preview's list, per design §6's `panel-tabset` row). `c
 
 After Task 5 lands, the list grows by exactly one: the Footnotes HTML-half's new `name()`.
 
-**`title-block` sub-item (P1 checklist "Fix `title_block.rs`'s non-HTML branch or confirm the
+**`title-block` sub-item (P1 checklist "Fix `title_block.rs`\'s non-HTML branch or confirm the
 exclude-list makes it moot").** Confirmed moot at the pipeline level by T2.3's exact-list
 assertion. The premise was re-verified empirically here against real pandoc **3.8.1** (the plan's
 verification was against an unnamed version): `pandoc -s t.md -t docx` on a document whose only
 metadata is `title: My Doc Title` and whose body has no heading emits
 `<w:pStyle w:val="Title"/>` carrying `My Doc Title`, and `-t pptx` emits the same title into
-`ppt/slides/slide1.xml`. So `should_add_h1`'s non-HTML `true` branch (`title_block.rs:65-75`,
+`ppt/slides/slide1.xml`. So `should_add_h1`\'s non-HTML `true` branch (`title_block.rs:65-75`,
 reached via `title_block.rs:97`) would genuinely duplicate the title. The *output-level* proof
 (no duplicate title in a real `.docx`) is **deferred — seam deferred until P7's per-format
 invocation builder**; P1 can only assert the transform does not run.
@@ -221,14 +221,14 @@ invocation builder**; P1 can only assert the transform does not run.
 2. `PANDOC_TRANSFORM_EXCLUDED` contains **every** transform in the HtmlRender pipeline whose
    `phase() == TransformPhase::Navigation` — asserted by a `phase()` query, with the resulting set
    asserted to have length 20 (T2.2).
-3. `build_transform_pipeline(Pandoc("docx"))`'s surviving ordered name list equals an exact
+3. `build_transform_pipeline(Pandoc("docx"))`\'s surviving ordered name list equals an exact
    `&[&str]` literal that **does** contain `conditional-content`, `callout`, `panel-tabset`,
    `shortcode-resolve`, `metadata-normalize`, `date-normalize`, `authors-normalize`,
    `code-block-generate`, `example-embed`, `theorem-sugar`, `proof-sugar`,
    `float-ref-target-sugar`, `equation-label`, `crossref-index`, `crossref-resolve`,
    `example-embed-render`, `link-rewrite`, `appendix-structure`, `resource-collector`, and does
    **not** contain any of the 38 (T2.3).
-4. `build_transform_pipeline(HtmlPreview)`'s surviving name list equals today's
+4. `build_transform_pipeline(HtmlPreview)`\'s surviving name list equals today's
    `build_q2_preview_transform_pipeline(...)` name list, captured as a literal pre-refactor (T2.5)
    — the preview-parity gate for "one mechanism serves Preview and Pandoc".
 5. `cargo nextest run -p quarto-core` green; zero `.snap` changes.
@@ -239,7 +239,7 @@ invocation builder**; P1 can only assert the transform does not run.
 |---|---|---|---|---|---|
 | T2.1 | U | `PANDOC_TRANSFORM_EXCLUDED` ∩ `build_transform_pipeline` | build `HtmlRender` pipeline, collect `name()`s → every exclude-list entry is present in that set (`unknown.is_empty()`) | `make_test_runtime()` | the const's own entries (a typo'd/renamed entry is the failure this guards) |
 | T2.2 | U | `AstTransform::phase` + the const | build `HtmlRender`, filter `phase() == Navigation` → that set has len 20 **and** is a subset of `PANDOC_TRANSFORM_EXCLUDED` | same | any Navigation name deleted from the const |
-| T2.3 | U | `build_transform_pipeline` + `retain_excluding` | build `Pandoc("docx")` → `assert_eq!` the **exact** ordered surviving name list against a literal | same | the `retain_excluding(PANDOC_TRANSFORM_EXCLUDED)` application inside `build_transform_pipeline`'s `Pandoc(_)` arm |
+| T2.3 | U | `build_transform_pipeline` + `retain_excluding` | build `Pandoc("docx")` → `assert_eq!` the **exact** ordered surviving name list against a literal | same | the `retain_excluding(PANDOC_TRANSFORM_EXCLUDED)` application inside `build_transform_pipeline`\'s `Pandoc(_)` arm |
 | T2.5 | U | same, Preview axis | build `HtmlPreview` → `assert_eq!` exact ordered name list against the pre-refactor `build_q2_preview_transform_pipeline` capture | same | the `HtmlPreview`/`RevealjsPreview` arm that applies `Q2_PREVIEW_TRANSFORM_EXCLUDED` |
 
 **Revert hunks, stated exactly:**
@@ -290,7 +290,7 @@ since its absence from an absence-list is not an assertion.
 
 ---
 
-## Task 3: Widen `panel_tabset.rs`'s self-gate — and only that one
+## Task 3: Widen `panel_tabset.rs`\'s self-gate — and only that one
 
 **Scope.** Widen the one self-gate whose early return defeats a deliberate, load-bearing inclusion,
 and add the positive regression test the plan calls for. Do **not** widen `draft_alert.rs`,
@@ -336,7 +336,7 @@ that keeps `panel-tabset` enabled). Neither is external to this plan.
 
 **Revert hunks, stated exactly:**
 
-- **T3.1** — Revert ⟨`panel_tabset.rs:109`'s widened first term back to the bare
+- **T3.1** — Revert ⟨`panel_tabset.rs:109`\'s widened first term back to the bare
   `!ctx.format.identifier.is_html_based()`⟩ → ⟨`assert!(ast_contains_custom_node(&ast, "Tabset"))`⟩
   RED. `is_html_based()` is `matches!(self, Html | Revealjs)` (`format.rs:66-68`), so for a docx
   `Format` the transform returns at `:113` and builds nothing — **while Task 2's exclude-list
@@ -346,10 +346,10 @@ that keeps `panel-tabset` enabled). Neither is external to this plan.
 
 ### Refactor-induced vacuity check
 
-**Only `panel_tabset.rs`'s self-gate is widened — not `draft_alert.rs`/`format_css.rs`/
+**Only `panel_tabset.rs`\'s self-gate is widened — not `draft_alert.rs`/`format_css.rs`/
 `responsive_image.rs`.** That scope choice means the vacuity question here is about the
 **absence** of three tests. There is deliberately **no**
-test asserting `format_css.rs`'s gate is un-widened, because such a test would have to assert the
+test asserting `format_css.rs`\'s gate is un-widened, because such a test would have to assert the
 *absence* of a code change, which no runtime surface distinguishes: with `format-css` on the
 exclude-list, its gate never executes for a Pandoc profile, so widened or not, every behavioral
 assertion reads identically. The state this would need to distinguish — "stray `.css` files staged
@@ -381,7 +381,7 @@ Block::RawBlock(RawBlock {
 })
 ```
 
-`render_embed`'s snippet/caption path and the `with_number_label` "Demo N: " prepend follow
+`render_embed`\'s snippet/caption path and the `with_number_label` "Demo N: " prepend follow
 immediately after (`example_embed.rs:410+`). The sugar half is `"example-embed"` (`:125-127`),
 registered at `pipeline.rs:1303`; the render half at `pipeline.rs:1475`.
 
@@ -460,7 +460,7 @@ document:
   The `NoteReference`→`Note` reconstruction the design doc's §6 SPLIT row describes
   ("B1: `NoteRef`+`Def` → native Pandoc `Note`") must be **written**, not carved out. Its inputs
   are all present (`definitions: HashMap<String, NoteContent>`, with `NoteContent::Inlines` needing
-  a `Paragraph`/`Plain` wrap to become `Note`'s `Blocks`), so the work is small and local — but it
+  a `Paragraph`/`Plain` wrap to become `Note`\'s `Blocks`), so the work is small and local — but it
   is new behavior, and the seam for T5.1 therefore does not exist until this task creates it.
 
 **The shape: two registered transforms, not an in-transform profile branch.** This is the shape
@@ -541,7 +541,7 @@ detached definition content. The split's marker-based dedup (keyed on the named 
 does not have this collision, so both footnotes now render correctly. This is a genuine, beneficial
 bug fix — not a regression, and not reverted — but it is an undocumented exception to the "byte-
 identical to today" bar until this note. Pinned by
-`crates/quarto-core/tests/integration/footnotes_dedup.rs`'s
+`crates/quarto-core/tests/integration/footnotes_dedup.rs`\'s
 `inline_note_and_numerically_named_footnote_do_not_collide`.
 
 ### Test Seam Spec
@@ -549,10 +549,10 @@ identical to today" bar until this note. Pinned by
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T5.1 | I (`tests/integration/pandoc_profile_cut.rs`) | the footnotes B1 half inside the real `Pandoc("docx")` pipeline | parse a two-footnote fixture, run the `Pandoc("docx")` pipeline → `Inline::Note` count == 2; no `id == "footnotes"` block; no `fnref\d+` Span | test `SystemRuntime` | **H5a**, the B1 half's `NoteReference`→`Note` resolution |
-| T5.5 | I (same file) | `collect_note_definitions`' placement in the B1 half | same fixture, `Pandoc("docx")` → zero `NoteDefinitionPara` / `NoteDefinitionFencedBlock` blocks survive | same | **H5c**, `collect_note_definitions`'s call site in the B1 half |
-| T5.6 | U (`pipeline.rs::tests`) | both halves' registration | build `HtmlRender` → the name list contains `"footnotes"` **then** `"footnotes-resolve"`, adjacent and in that order; build `Pandoc("docx")` → contains `"footnotes"` and **not** `"footnotes-resolve"` | `make_test_runtime()` | **H5b**, the `footnotes-resolve` push site / its exclude-list entry |
+| T5.5 | I (same file) | `collect_note_definitions`\' placement in the B1 half | same fixture, `Pandoc("docx")` → zero `NoteDefinitionPara` / `NoteDefinitionFencedBlock` blocks survive | same | **H5c**, `collect_note_definitions`\'s call site in the B1 half |
+| T5.6 | U (`pipeline.rs::tests`) | both halves\' registration | build `HtmlRender` → the name list contains `"footnotes"` **then** `"footnotes-resolve"`, adjacent and in that order; build `Pandoc("docx")` → contains `"footnotes"` and **not** `"footnotes-resolve"` | `make_test_runtime()` | **H5b**, the `footnotes-resolve` push site / its exclude-list entry |
 | T5.2 | U (`footnotes.rs::tests`, extending the existing tests at `:652+`) | `FootnotesTransform` HTML path | `HtmlRender` profile, same fixture → exact `Span#fnref1[Superscript[Link…]]` shape + `Div#footnotes` classes `["footnotes","section"]` | none | `create_footnote_ref` (`:473-514`) / `create_footnotes_section` (`:527+`) |
-| T5.3 | U | `FootnotesTransform::transform`'s early return | `reference-location: block`, then `section`, each under `HtmlRender` **and** `Pandoc("docx")` → AST unchanged (`Inline::Note` still standing, no `Div#footnotes`) | none | `footnotes.rs:109-114` |
+| T5.3 | U | `FootnotesTransform::transform`\'s early return | `reference-location: block`, then `section`, each under `HtmlRender` **and** `Pandoc("docx")` → AST unchanged (`Inline::Note` still standing, no `Div#footnotes`) | none | `footnotes.rs:109-114` |
 
 **Revert hunks, stated exactly:**
 
@@ -567,7 +567,7 @@ The three hunks this task creates, named now so the implementer cannot substitut
   `pipeline.push(...)` immediately after the existing `FootnotesTransform` push, and its
   `"footnotes-resolve"` entry in `PANDOC_TRANSFORM_EXCLUDED`. It owns `create_footnote_ref`
   (`:473-514`) and `create_footnotes_section` (`:527+`), moved rather than copied.
-- **H5c** — `collect_note_definitions`'s call site (`:118`) staying in the **B1** half.
+- **H5c** — `collect_note_definitions`\'s call site (`:118`) staying in the **B1** half.
 
 **Revert hunks, stated exactly:**
 
@@ -581,7 +581,7 @@ The three hunks this task creates, named now so the implementer cannot substitut
   block at all, so a fixture's inline footnote can satisfy T5.1's count while its `[^1]`/`[^1]:`
   pair silently leaks `NoteDefinitionPara` into the wire format. The fixture must contain **both
   forms** (the acceptance criterion says so) and T5.5 is the assertion that uses the second one.
-- **T5.6** — Revert ⟨**H5b**'s exclude-list entry⟩ → ⟨the `Pandoc("docx")` half of T5.6's
+- **T5.6** — Revert ⟨**H5b**\'s exclude-list entry⟩ → ⟨the `Pandoc("docx")` half of T5.6's
   assertion⟩ RED (the HTML chrome would run for docx). Separately revert ⟨H5b's push site⟩ →
   ⟨T5.6's `HtmlRender` adjacency assertion⟩ RED **and** T5.2 RED (no chrome is produced at all).
   **Note the adjacency assertion is doing real work**: if `footnotes-resolve` were registered at
@@ -736,7 +736,7 @@ while §6 and the real classification both drifted. Declare it in the module pro
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T7.1 | U | `build_transform_pipeline` + the bucket classification | build `Pandoc("docx")` → every surviving name's bucket ∈ {B1, B3} | `make_test_runtime()` | any B2/B4 name removed from `PANDOC_TRANSFORM_EXCLUDED` |
+| T7.1 | U | `build_transform_pipeline` + the bucket classification | build `Pandoc("docx")` → every surviving name's bucket ∈ \{B1, B3\} | `make_test_runtime()` | any B2/B4 name removed from `PANDOC_TRANSFORM_EXCLUDED` |
 | T7.2 | U | the bucket classification vs. `build_transform_pipeline` | build `HtmlRender`, collect names → each appears exactly once in the classification, and the classification has no entry that is not a pipeline member | same | a bucket entry deleted, duplicated, or left stale |
 | T7.3 | U | `test_build_transform_pipeline_phase_ordering` (existing, `pipeline.rs:3829`) | extend the loop to the five profiles → the existing exhaustiveness (`phase() != Unclassified`) and monotonicity assertions hold | same | a transform added to the pipeline without a `phase()` override |
 
@@ -758,7 +758,7 @@ while §6 and the real classification both drifted. Declare it in the module pro
 
 ### Refactor-induced vacuity check
 
-**`test_build_transform_pipeline_phase_ordering`'s monotonicity assertion goes vacuous for every
+**`test_build_transform_pipeline_phase_ordering`\'s monotonicity assertion goes vacuous for every
 Pandoc profile, by construction.** Read at `pipeline.rs:3829-3880`: it loops
 `for format in ["html", "revealjs"]` (`pipeline.rs:3834`), builds the pipeline, and asserts (1) no member is
 `TransformPhase::Unclassified` and (2) `prev_phase <= next_phase` for every adjacent pair. After the
@@ -930,7 +930,7 @@ Silent omission would read as "covered."
      execute for a Pandoc profile, so there is nothing else to assert in P1.
    - **`toc_generate.rs:85` is not a gate.** It is inside `fn toc_title_term(ctx)` selecting
      between the `toc-title-website` and `toc-title-document` language terms — no early return.
-     `toc-generate`'s real early return, if any, is elsewhere in the file. Moot for the decision
+     `toc-generate`\'s real early return, if any, is elsewhere in the file. Moot for the decision
      (`toc-generate` is excluded either way).
    - `accepted-untested: the "a self-gated transform left on the exclude-list is invisible to a
      membership test" case. Correct, and unfixable in P1 — with the transform excluded there is no
@@ -980,17 +980,17 @@ Silent omission would read as "covered."
    **Bound: T1.1** (the `"gfm" → Pandoc("gfm")` row). The `render.rs:680-685` `is_native()` gate
    still rejects all of them at the CLI until **P7-foundation** relaxes it, so this is shape, not
    reachability.
-7. **`retain_excluding`'s silent unknown-name drop** (`transform.rs:230-233`). A renamed transform
+7. **`retain_excluding`\'s silent unknown-name drop** (`transform.rs:230-233`). A renamed transform
    silently un-excludes itself from both lists. **Bound: T2.1 and T6.1** (the two "names exist"
    validators). This is the single highest-value pair of tests in P1 relative to their cost.
 8. **`reference-location: block|section` no-op** (`footnotes.rs:109-114`). A safety branch that
    must survive the split under the Pandoc profile too. **Bound: T5.3.**
-9. **The `is_minimal_html` and `is_revealjs_target` terms of `panel_tabset.rs`'s gate.**
+9. **The `is_minimal_html` and `is_revealjs_target` terms of `panel_tabset.rs`\'s gate.**
    **Bound: T3.2** (minimal-HTML term). The `is_revealjs_target` term: `accepted-untested: reveal's
    tabset story is explicitly a future strand (bd-y5j0m776) and the term is unchanged by this task;
    T1.5's RevealjsRender name list already pins that panel-tabset is registered for reveal, so a
    widening that accidentally enabled it would surface as a reveal-leg output change in T8.1.`
-10. **`RenderContext`'s 266 construction sites and the wasm leg.** The field addition compiles or
+10. **`RenderContext`\'s 266 construction sites and the wasm leg.** The field addition compiles or
     it does not — the build is the test. `accepted-untested: adding a field with an in-new()
     derivation is compiler-enforced; a test asserting "no call site changed" is not expressible.
     The gate is criterion 6 of Task 1: full cargo xtask verify (not --skip-hub-build), per the

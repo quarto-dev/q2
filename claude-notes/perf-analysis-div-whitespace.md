@@ -4,14 +4,14 @@
 **Profiling Tool:** samply + flamegraph
 **Build Mode:** Release with debug symbols (`CARGO_PROFILE_RELEASE_DEBUG=true`)
 **Test Corpus:** `external-sites/**/*.qmd` (509 files)
-**Total Runtime:** ~12 seconds
+**Total Runtime:** \~12 seconds
 **Total Samples:** 7,501
 
 ## Executive Summary
 
 The div-whitespace rule's performance is dominated by **parsing time** (tree-sitter), not by the offset calculation algorithm. The O(N²) bug fixed earlier only manifests when files have actual div-whitespace errors to process. Since the test corpus has zero files with div-whitespace issues, the performance is almost entirely spent in the parsing phase.
 
-**Key Finding:** ~95% of execution time is spent in `tree_sitter` parsing (`ts_parser_parse`), not in the div-whitespace detection logic itself.
+**Key Finding:** \~95% of execution time is spent in `tree_sitter` parsing (`ts_parser_parse`), not in the div-whitespace detection logic itself.
 
 ## Performance Breakdown
 
@@ -35,22 +35,22 @@ The div-whitespace rule's performance is dominated by **parsing time** (tree-sit
 
 ### Time Distribution by Phase
 
-1. **Parsing (tree-sitter):** ~75% of total time
+1. **Parsing (tree-sitter):** \~75% of total time
    - Tree-sitter core parsing: 5,611 samples (75%)
    - Logging overhead: 3,707 samples (49%)
    - Lexing: 274 samples (4%)
 
-2. **AST Conversion:** ~8% of total time
+2. **AST Conversion:** \~8% of total time
    - `treesitter_to_pandoc`: 611 samples (8%)
    - HashMap operations: 615 samples (8%)
 
-3. **String Formatting (logging):** ~12% of total time
+3. **String Formatting (logging):** \~12% of total time
    - `snprintf`/`vsnprintf`: 927+892 = 1,819 samples (24%)
    - Note: This is part of tree-sitter logging overhead
 
-4. **Memory Management:** ~4% of total time
+4. **Memory Management:** \~4% of total time
    - `_nanov2_free`: 272+204 = 476 samples (6%)
-   - Various malloc/realloc: ~200 samples (3%)
+   - Various malloc/realloc: \~200 samples (3%)
 
 5. **Div-Whitespace Logic:** <1% of total time
    - `find_div_whitespace_errors`: Negligible (not in top 50)
@@ -61,7 +61,7 @@ The div-whitespace rule's performance is dominated by **parsing time** (tree-sit
 ### Why Parsing Dominates
 
 The `div-whitespace` rule works by:
-1. **Parse the file** with `quarto_markdown_pandoc::readers::qmd::read` (~95% of time)
+1. **Parse the file** with `quarto_markdown_pandoc::readers::qmd::read` (\~95% of time)
 2. **Extract errors** from parsing diagnostics
 3. **Find div fence patterns** in the errors (< 1% of time)
 4. **Calculate byte offsets** for fixes (< 1% of time)
@@ -73,7 +73,7 @@ Since step #1 dominates, the overall performance appears slow. However, this is 
 
 ### Logging Overhead
 
-The `TreeSitterLogObserver::log` function accounts for ~49% of samples (3,707/7,501). This is significant overhead that could be eliminated in production by:
+The `TreeSitterLogObserver::log` function accounts for \~49% of samples (3,707/7,501). This is significant overhead that could be eliminated in production by:
 - Disabling tree-sitter logging when not in verbose mode
 - Using conditional compilation to remove logging code entirely
 
@@ -93,7 +93,7 @@ The O(N²) bug we fixed (pre-computing line start offsets) doesn't show up in th
 
 ### Memory Allocation Patterns
 
-Memory operations (`_nanov2_free`, `malloc`, etc.) account for ~6-9% of time. This is reasonable for a program that:
+Memory operations (`_nanov2_free`, `malloc`, etc.) account for \~6-9% of time. This is reasonable for a program that:
 - Builds ASTs for 509 files
 - Creates diagnostic message objects
 - Manages hash maps for symbol resolution
@@ -105,14 +105,14 @@ No obvious memory allocation bottlenecks.
 ### Immediate Optimizations (If Needed)
 
 1. **Disable tree-sitter logging in non-verbose mode**
-   - Remove ~49% overhead
+   - Remove \~49% overhead
    - Change `quarto_markdown_pandoc::readers::qmd::read` to accept logging flag
-   - Expected speedup: ~2x
+   - Expected speedup: \~2x
 
 2. **Parse files in parallel**
-   - Currently sequential: 509 files × ~24ms/file = 12s
-   - With 8-core parallelism: 509 files / 8 × 24ms = ~1.5s
-   - Expected speedup: ~8x (on 8-core machine)
+   - Currently sequential: 509 files × \~24ms/file = 12s
+   - With 8-core parallelism: 509 files / 8 × 24ms = \~1.5s
+   - Expected speedup: \~8x (on 8-core machine)
 
 3. **Cache parse results**
    - If files are checked multiple times, cache the parse tree
@@ -148,10 +148,10 @@ The O(N²) fix we implemented is still valuable and correct - it just doesn't sh
 
 ### Performance in Context
 
-**Current:** 12 seconds for 509 files = ~24ms/file
-**With logging disabled:** ~6 seconds (est.)
-**With 8-core parallelism:** ~0.75 seconds (est.)
-**With both optimizations:** ~0.4 seconds (est.) = **30x speedup**
+**Current:** 12 seconds for 509 files = \~24ms/file
+**With logging disabled:** \~6 seconds (est.)
+**With 8-core parallelism:** \~0.75 seconds (est.)
+**With both optimizations:** \~0.4 seconds (est.) = **30x speedup**
 
 The performance is reasonable for a syntax checking tool. Most users won't notice 24ms per file unless processing thousands of files.
 

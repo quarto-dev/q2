@@ -45,11 +45,11 @@ CodeMirror uses character offsets natively—no line/column conversion needed.
 
 ### automerge-codemirror Source Structure
 
-The plugin consists of ~150 lines across 3 files:
+The plugin consists of \~150 lines across 3 files:
 
-- **`plugin.ts`** (~80 lines): ViewPlugin that intercepts transactions, manages `reconciledHeads`
-- **`amToCodemirror.ts`** (~50 lines): Converts Automerge patches to CodeMirror ChangeSpecs
-- **`codeMirrorToAm.ts`** (~30 lines): Converts CodeMirror transactions to Automerge splices
+- **`plugin.ts`** (\~80 lines): ViewPlugin that intercepts transactions, manages `reconciledHeads`
+- **`amToCodemirror.ts`** (\~50 lines): Converts Automerge patches to CodeMirror ChangeSpecs
+- **`codeMirrorToAm.ts`** (\~30 lines): Converts CodeMirror transactions to Automerge splices
 
 ### Patch Conversion Logic
 
@@ -118,7 +118,7 @@ This creates subtle race conditions because Monaco is "uncontrolled" (owns its s
 
 ### What Would Be Required
 
-1. **Track Automerge heads in sync with Monaco state** (~100 lines of state management)
+1. **Track Automerge heads in sync with Monaco state** (\~100 lines of state management)
 2. **Use `A.diff()` instead of `fast-diff`** (requires head tracking to work)
 3. **Convert patch positions to line/column** (still needed, O(n) per patch)
 
@@ -132,9 +132,9 @@ Even with patch-based sync, Monaco still requires the O(n) `offsetToPosition()` 
 
 | Operation | Diff-based | Patch-based |
 |-----------|-----------|-------------|
-| Single char insert | ~0.5ms | ~0.1ms |
-| 10 char insert | ~0.5ms | ~0.1ms |
-| 1KB paste | ~1ms | ~0.2ms |
+| Single char insert | \~0.5ms | \~0.1ms |
+| 10 char insert | \~0.5ms | \~0.1ms |
+| 1KB paste | \~1ms | \~0.2ms |
 
 The absolute times are imperceptible. The diff-based approach is fine for typical documents.
 
@@ -159,7 +159,7 @@ The diff-based approach handles edge cases that patch-based can't:
 
 ### Current Implementation
 
-hub-client's `diffToMonacoEdits.ts` (~110 lines):
+hub-client's `diffToMonacoEdits.ts` (\~110 lines):
 
 ```typescript
 export function diffToMonacoEdits(
@@ -197,7 +197,7 @@ export function diffToMonacoEdits(
 
 1. **Position format mismatch** — Monaco's line/column format requires O(n) conversion regardless of sync approach
 2. **State ownership model** — Monaco is uncontrolled; can't intercept transactions like CodeMirror's ViewPlugin
-3. **Complexity vs benefit ratio** — Head tracking adds ~100 lines with subtle race conditions for negligible performance gain
+3. **Complexity vs benefit ratio** — Head tracking adds \~100 lines with subtle race conditions for negligible performance gain
 
 ### Recommendation
 

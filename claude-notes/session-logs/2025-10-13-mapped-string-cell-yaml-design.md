@@ -4,7 +4,7 @@
 
 Design a comprehensive solution for MappedString/SourceInfo that handles location tracking for YAML parsing across three increasingly complex scenarios in Quarto:
 
-1. Standalone YAML files (_quarto.yml, _variables.yml)
+1. Standalone YAML files (\_quarto.yml, \_variables.yml)
 2. YAML metadata blocks in .qmd files
 3. YAML in executable code cell options (the hardest case: non-contiguous text extraction)
 
@@ -117,7 +117,7 @@ impl SourceInfo {
 }
 ```
 
-**Complexity**: O(pieces * depth), typically <10 pieces and <5 depth
+**Complexity**: O(pieces \* depth), typically <10 pieces and <5 depth
 
 ### 5. Integration with yaml-rust2
 
@@ -245,7 +245,7 @@ Each test scenario from the design:
 - ✅ **Debuggable**: Can inspect enum structure
 - ✅ **Type-safe**: Compile-time guarantees
 - ✅ **Multi-file**: FileId system scales better
-- ⚠️ **More code**: ~600 LOC vs ~450 LOC (but clearer)
+- ⚠️ **More code**: \~600 LOC vs \~450 LOC (but clearer)
 
 ### vs. Always Parsing in Context
 **Alternative**: Keep text in original context, don't extract

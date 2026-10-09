@@ -279,7 +279,7 @@ Quarto CLI (Rust) with "quarto lsp" command
 **Note**: rust-analyzer uses its own synchronous `lsp-server` crate, not tower-lsp. However, rust-analyzer's team recommends tower-lsp for async implementations. We choose tower-lsp because our unified LSP+hub architecture benefits from async (sharing Tokio runtime with axum for the hub HTTP/WebSocket server).
 
 **Important**: tower-lsp is a *protocol framework only* - it does NOT provide document management. Unlike the TypeScript `vscode-languageserver` which includes `TextDocuments`, tower-lsp requires us to implement our own document storage. Options:
-- [lsp-textdocument](https://lib.rs/crates/lsp-textdocument) - Third-party crate (~27K downloads/month), UTF-16 only
+- [lsp-textdocument](https://lib.rs/crates/lsp-textdocument) - Third-party crate (\~27K downloads/month), UTF-16 only
 - [ropey](https://crates.io/crates/ropey) - Rope data structure for efficient text manipulation
 - Custom implementation (recommended for our automerge integration needs)
 
@@ -546,11 +546,11 @@ jobs:
 ## Performance Goals
 
 **Startup Time**:
-- Current (Node): ~500-1000ms
+- Current (Node): \~500-1000ms
 - Target (Rust): <100ms
 
 **Memory Usage**:
-- Current: ~50-100MB
+- Current: \~50-100MB
 - Target: <30MB
 
 **Response Time** (for typical requests):

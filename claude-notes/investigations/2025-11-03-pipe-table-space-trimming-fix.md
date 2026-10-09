@@ -47,7 +47,7 @@ The `trim_inlines` function from `postprocess.rs` already exists and is used thr
 - ✅ Removes leading spaces
 - ✅ Removes trailing spaces
 - ✅ Preserves spaces in the middle of content
-- ✅ Returns a cleaned Vec<Inline> ready to use
+- ✅ Returns a cleaned `Vec<Inline>` ready to use
 
 This is a better solution than manual loop-based trimming because:
 1. It's more comprehensive (handles both leading and trailing)

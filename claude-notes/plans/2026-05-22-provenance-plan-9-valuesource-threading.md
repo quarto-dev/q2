@@ -39,8 +39,8 @@ pipeline-produced metadata-derived node fully attributable.
 Thread per-value `SourceInfo` to where synthesizers can stamp it as
 `ValueSource` anchors. Three target consumers:
 
-1. **Meta/var shortcode resolutions** (closes bd-129m3) — `{{< meta
-   footer >}}` → `Generated { by: shortcode("meta"), from:
+1. **Meta/var shortcode resolutions** (closes bd-129m3) — `{{{< meta
+   footer >}}}` → `Generated { by: shortcode("meta"), from:
    [Invocation -> token_si, ValueSource -> value_si] }`.
 2. **DocumentProfile.title → nav-text** (closes bd-8pmq3) — sidebar /
    navbar entries built from `profile.title` carry a `ValueSource`
@@ -86,7 +86,7 @@ there are producers, the incremental writer correctly walks only the
   through the provenance-aware version.
 
 - `DocumentProfile` gains `title_source_info: Option<SourceInfo>`
-  (per bd-8pmq3's detailed plan: ~30–50 LOC including `extract`
+  (per bd-8pmq3's detailed plan: \~30–50 LOC including `extract`
   change + `Default` impl at `crates/quarto-core/src/document_profile.rs`).
   Uses `#[serde(default, skip_serializing_if = "Option::is_none")]`
   — same pattern as `order: Option<i32>`. **No
@@ -188,7 +188,7 @@ fixture these exercise.
   Call `preimage_in(FileId(0))` and assert it returns `None` (NOT the
   byte range of the meta-key — that would copy YAML into the body).
   Pins the invariant against the real `By::appendix(...)` shape that
-  Plan 9 introduces. Lives in `quarto-source-map`'s test module.
+  Plan 9 introduces. Lives in `quarto-source-map`\'s test module.
 
 - **Appendix-license end-to-end round-trip test**: build a project
   fixture with frontmatter `license: MIT` and a synthesized
@@ -379,7 +379,7 @@ must be pinned:
   own source_info (the parsed positions inside the YAML string).
   Under the node-edit architecture, editing the resolved inline
   resolves (via the wrapper's `Invocation` anchor) to the
-  `{{< meta … >}}` token, not the rendered value — the `ValueSource`
+  `{{{< meta … >}}}` token, not the rendered value — the `ValueSource`
   is ignored by the writer. Confirm the attribution surfaces the
   value origin without affecting the edit target.
 
@@ -500,13 +500,13 @@ integration tests by phase:
 
 | Phase | Lines (rough) |
 |---|---|
-| 1: Infrastructure (`config_value_to_inlines_with_provenance` + `DocumentProfile.title_source_info` + `AppendixSection` enum) | ~150 |
-| 2: Meta/var shortcode (bd-129m3) | ~80 |
-| 3: Nav-text ValueSource (bd-8pmq3) | ~60 |
-| 4: Appendix sub-Div ValueSource | ~180 |
-| 5: ValueSource role-asymmetry tests | ~100 |
-| Tests across phases | ~250 |
-| **Total** | **~820** |
+| 1: Infrastructure (`config_value_to_inlines_with_provenance` + `DocumentProfile.title_source_info` + `AppendixSection` enum) | \~150 |
+| 2: Meta/var shortcode (bd-129m3) | \~80 |
+| 3: Nav-text ValueSource (bd-8pmq3) | \~60 |
+| 4: Appendix sub-Div ValueSource | \~180 |
+| 5: ValueSource role-asymmetry tests | \~100 |
+| Tests across phases | \~250 |
+| **Total** | **\~820** |
 
 One focused session, possibly two if Phase 4's per-section
 discrimination surfaces unexpected interactions. Comparable scope to

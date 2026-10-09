@@ -3,17 +3,17 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/180
 - **Reporter**: @rundel (Colin Rundel), 2026-05-11
 - **Triage date**: 2026-05-12
-- **Worktree**: `.worktrees/issue-180` (branch `issue-180`, based on `main` @ `c5770004`)
+- **Worktree**: `.worktrees/issue-180` (branch `issue-180`, based on `main` \@ `c5770004`)
 - **Beads issue**: bd-cpzp
 - **Scope**: Covers both reports in the issue — the original body ("Figure + Para collapse") and the comment ("layout/subfigure div children collapse"). They are the same root cause; this triage treats them as one bug.
 
 ## Summary
 
-Both reports reproduce exactly as filed at `main` @ c5770004. They share a single root cause: in `write_figure`, the implicit-figure branch delegates to `write_image` and returns directly, skipping the trailing newline that every block writer is expected to emit. When such a Figure is followed by any other block (top-level *or* as a child of a `Div`), only one `\n` ends up between the two — not a blank line — and the re-parser glues the two blocks into one `Para`. Fix is one line in `write_figure`; the existing roundtrip corpus does not cover "implicit figure followed by another block," which is why this slipped through.
+Both reports reproduce exactly as filed at `main` \@ c5770004. They share a single root cause: in `write_figure`, the implicit-figure branch delegates to `write_image` and returns directly, skipping the trailing newline that every block writer is expected to emit. When such a Figure is followed by any other block (top-level *or* as a child of a `Div`), only one `\n` ends up between the two — not a blank line — and the re-parser glues the two blocks into one `Para`. Fix is one line in `write_figure`; the existing roundtrip corpus does not cover "implicit figure followed by another block," which is why this slipped through.
 
 ## Reproduction
 
-All commands run from the worktree root, `main` @ c5770004.
+All commands run from the worktree root, `main` \@ c5770004.
 
 ### Bug A — top-level Figure + Para collapses (issue body)
 
@@ -123,7 +123,7 @@ fn write_figure(
 }
 ```
 
-The block-writer contract in this file: each top-level block writer ends its output with exactly one `\n`. See `write_paragraph` (`qmd.rs:2197`), `write_plain` (`qmd.rs:2209`), `write_figure`'s own fallback path that closes with `writeln!(buf, "\n:::")?` (`qmd.rs:805`), etc. The top-level driver `write_impl` (`qmd.rs:2331`) and `write_div` (`qmd.rs:442`) both rely on this: they emit *one* additional `\n` between blocks, which only becomes a blank line if the previous block already ended in `\n`.
+The block-writer contract in this file: each top-level block writer ends its output with exactly one `\n`. See `write_paragraph` (`qmd.rs:2197`), `write_plain` (`qmd.rs:2209`), `write_figure`\'s own fallback path that closes with `writeln!(buf, "\n:::")?` (`qmd.rs:805`), etc. The top-level driver `write_impl` (`qmd.rs:2331`) and `write_div` (`qmd.rs:442`) both rely on this: they emit *one* additional `\n` between blocks, which only becomes a blank line if the previous block already ended in `\n`.
 
 `write_image` (`qmd.rs:1490`) is an inline writer and correctly does *not* emit a trailing newline. The bug is the early-return in `write_figure`: it bypasses the block-level wrap-up and reuses the inline writer's output verbatim as a block.
 
@@ -181,4 +181,4 @@ br show bd-emr4 --json                      # confirmed scope differs
 
 ## Pre-flight note
 
-`cargo xtask verify --skip-hub-build` fails at the hub-client test step on `main` @ c5770004 with `Cannot find package 'compression'` (vitest config can't resolve a transitive dep). This is unrelated to the qmd writer and appears to be an `npm install` state issue. The Rust portion (`cargo build --workspace`, `cargo nextest run --workspace`) plus trace-viewer build + tests pass cleanly under `cargo xtask verify --skip-hub-build --skip-hub-tests`. Mentioning here so a follow-up agent doesn't get derailed by it.
+`cargo xtask verify --skip-hub-build` fails at the hub-client test step on `main` \@ c5770004 with `Cannot find package 'compression'` (vitest config can't resolve a transitive dep). This is unrelated to the qmd writer and appears to be an `npm install` state issue. The Rust portion (`cargo build --workspace`, `cargo nextest run --workspace`) plus trace-viewer build + tests pass cleanly under `cargo xtask verify --skip-hub-build --skip-hub-tests`. Mentioning here so a follow-up agent doesn't get derailed by it.

@@ -49,16 +49,16 @@ The plan is reasoned a priori; these four assertions are load-bearing. All are v
   | 1. `Div` / 1 `p` | `0 / 0 / 0 / 0` | **coincide (exact)** | margin collapse; zero border-box gap |
   | 2. `BlockQuote` / `p` | `+25.25 / +10.62 / −21.25 / −10.63` | differ | 4px left rule + padding |
   | 3. `Div` / 3 `p` | up to `±85` top/bottom | differ | container spans all three |
-  | 4. `Callout` / body `p` | `+12.64 / +25.45 / −8.64 / −1` | differ | ~25px title bar + 5px left border |
+  | 4. `Callout` / body `p` | `+12.64 / +25.45 / −8.64 / −1` | differ | \~25px title bar + 5px left border |
   | 5. `ul` / `li` | `+34 / 0 / 0 / 0` | differ | 34px left marker gutter |
 
   The prediction that mattered most holds: **#1 coincides at 0px** (Bootstrap reboot adds no
   stray div/p margins). **Two consequences pinned into §2a:** (i) coincidence must compare **all
   four edges** — the list case (#5) differs *only* on the left gutter, so a vertical-only check
   would misclassify it; (ii) true coincidence is **exactly 0px** and the nearest deciding edge in
-  any "differ" case is ≥~12px, so the epsilon is **tight (~1px)**, not the old loose "~1–2px."
+  any "differ" case is ≥\~12px, so the epsilon is **tight (\~1px)**, not the old loose "\~1–2px."
 - [x] **B. `r[0]` uniqueness** — in real Q2 pool output, a container and its first child
-  have **distinct** `r[0]`, and all Original blocks' `r[0]` are unique. *Underpins the
+  have **distinct** `r[0]`, and all Original blocks\' `r[0]` are unique. *Underpins the
   `anchorR0` identity (§2b).* **VERIFIED 2026-06-12** via `cargo run --bin pampa -- f.qmd
   -t json` (pool at `.astContext.p`): Div `0` vs Para `7`; BlockQuote `0` vs Para `2`;
   list `0` vs items `2/8/14` — all distinct, container range opens at its marker before
@@ -201,7 +201,7 @@ chrome) resolves by plain deepest-wins, identically in both modes — so a singl
 rule, while its text-click goes to the child. **Chrome-as-handle falls out for free.**
 
 Coincidence is a **screen-extent** property — compare bounding rects on **all four edges**
-within a **~1px** epsilon (assumption A: true coincidence is exactly 0px; the list case
+within a **\~1px** epsilon (assumption A: true coincidence is exactly 0px; the list case
 proves single-edge chrome must count) — not an AST child count. This dissolves the old
 "what is an editable child" question entirely.
 
@@ -279,7 +279,7 @@ precedence** (prefixing-atomic dominates — see the resolution model):
    `OrderedList`/`DefinitionList`, the target is the **outermost** such container (never
    its children) — full stop, skip step 2.
 2. **Coincidence climb (else):** from the deepest pool-id element, climb while the parent
-   surface's bounding rect coincides with the child's on **all four edges within ~1px**;
+   surface's bounding rect coincides with the child's on **all four edges within \~1px**;
    the topmost coincident ancestor is the target. (Chrome-less single-child wrapper → the
    wrapper; otherwise → the leaf.) Epsilon is tight because assumption A measured true
    coincidence at exactly 0px; a hairline-border fixture pins the border→leaf boundary
@@ -483,7 +483,7 @@ but keep the position. Reuse the existing "don't steal focus if a new edit start
   - *Detection.* Textareas don't expose a caret rect. Use a **mirror div** (a hidden element
     styled identically — font, line-height, padding, `clientWidth` so a scrollbar doesn't
     desync wrapping, `white-space:pre-wrap`): copy the value up to `selectionStart`, append a
-    marker span, read its `offsetTop`. First visual row ⇒ top within ~one line-height of 0;
+    marker span, read its `offsetTop`. First visual row ⇒ top within \~one line-height of 0;
     last ⇒ within one line-height of the mirror's `scrollHeight`. Build it as a small tested
     utility. **Geometry only exists in a real browser — Playwright, not jsdom.**
   - *Caret placement.* Capture the exit logical column (`selectionStart − lineStart`); on
@@ -524,11 +524,11 @@ longer re-writes the wrong block on blur).
   multi-child, click anywhere — text *or* rule) → the **whole blockquote**
   (prefixing-atomic); a list (any size) → the **whole list** (prefixing-atomic); nested
   prefixing containers (list-in-blockquote, blockquote-in-list-item) → the **outermost**
-  prefixing container. Coincidence epsilon (~1px, all four edges) pinned with a
+  prefixing container. Coincidence epsilon (\~1px, all four edges) pinned with a
   hairline-border fixture (→ leaf). *(Confirmed 2026-06-13: blockquote is atomic in
   locked mode like lists; the earlier "blockquote text → child" line was stale — full
   per-layer descent is the Phase 3 unlock. Reason: only the outermost prefixing
-  container has a clean byte-slice; inner targets' slices carry the outer `> `/indent.)*
+  container has a clean byte-slice; inner targets\' slices carry the outer `> `/indent.)*
 - [x] **Ordered tiles** (RTL; enumerate P2.2, next/prev scan P2.4b): next/prev derived from live `[data-block-pool-id]` at
   event time, locked-resolved, linear-scanned; a `HorizontalRule` between paras is
   skipped; partition has no container-then-child redundancy.
@@ -563,7 +563,7 @@ longer re-writes the wrong block on blur).
   block* (content mismatch) **closes** the editor and discards the draft; drop-focus best-effort.
   *(DROP + no-spurious are genuinely covered + fail-on-revert verified. KEEP and the commit-on-drop
   corruption are the fix below.)*
-- [~] **Active editor goes hidden** (collapsed region → drop): **DEFERRED 2026-06-13.** The original
+- \[\~\] **Active editor goes hidden** (collapsed region → drop): **DEFERRED 2026-06-13.** The original
   tile-based visibility check was *exactly* what broke KEEP — while editing, the active block is a
   textarea wrapper with **no `data-block-pool-id`**, so `tileForAnchorR0` can never find it → always
   reads "hidden" → spurious drop. The fix below **removed** that broken check (restoring KEEP). The
@@ -602,7 +602,7 @@ fiction) and writing the test against the **real `PreviewRoot`** exposed that th
 data-integrity feature is broken in production. Two bugs:
 
 - **Bug 1 — KEEP is unreachable; self-heal drops on (essentially) every external re-render.** The
-  self-heal effect (`PreviewRoot.tsx` ~:214–253) re-anchors correctly (Step 1, pure pool/content),
+  self-heal effect (`PreviewRoot.tsx` \~:214–253) re-anchors correctly (Step 1, pure pool/content),
   then in Step 2 checks visibility via `tileForAnchorR0(host, pool, cand.r0, {exactOnly:true})`. But
   while editing, the active block is a **textarea wrapper with no `data-block-pool-id`**, so that
   tile lookup can never find it → returns `null` → read as "hidden" → drop. The re-anchor is
@@ -617,7 +617,7 @@ data-integrity feature is broken in production. Two bugs:
   already correct) vs *"is my block currently visible?"* (DOM). Step 2's visibility check must use
   the active editor's **own wrapper** via `activeEditRegionRef` (set by the Phase-1 fix), **not**
   `tileForAnchorR0`. And it must run **after** the re-anchor (re)mounts the textarea — i.e. a
-  **follow-up layout effect** keyed on the open editor, checking `activeEditRegionRef.current`'s box
+  **follow-up layout effect** keyed on the open editor, checking `activeEditRegionRef.current`\'s box
   (`offsetParent`/zero-rect = collapsed region → drop). The self-heal effect itself just re-anchors
   (KEEP) or drops on content-mismatch/no-candidate — no DOM visibility check inline.
   *(Fallback if the follow-up timing proves fiddly: ship KEEP-correctness first by removing the
@@ -638,7 +638,7 @@ reimplementation; fail-on-revert mandatory):**
   Fail-on-revert verified (reverting the guard → stale draft committed). Plus a follow-up hoisted the
   guard to the top of `commitIfDirty` so the *cancel* branch can't fire on a stale textarea either
   (commit `2e6e1133`; hardening — the race is not jsdom-reproducible, test kept as a regression guard).
-- [~] **Collapsed-region drop (reworked)**: **DEFERRED → P2.5/Phase-3 Playwright** (jsdom has no
+- \[\~\] **Collapsed-region drop (reworked)**: **DEFERRED → P2.5/Phase-3 Playwright** (jsdom has no
   layout; the `activeEditRegionRef`-box check can't be tested without real rects). The broken
   tile-based check was removed; this correct version is the remaining piece. Documented in code + ↑.
 - [x] Existing **DROP (content mismatch)** and **no-spurious-on-fresh-open** stay green; fail-on-revert
@@ -670,7 +670,7 @@ and the writer uses the un-healed one.
   genuine focus-leaves-to-elsewhere, an explicit move/click-switch) from a React-unmount `blur`; the
   latter must never write.
 
-**Scope:** small + localized — the commit call sites (`EditTextarea`'s commit, `commitSubtreeEdit`)
+**Scope:** small + localized — the commit call sites (`EditTextarea`\'s commit, `commitSubtreeEdit`)
 + the lifecycle gating. Not a rearchitecture; it **completes** the identity migration that reads
 already finished. **Phase 3 should adopt this from the start:** the regenerated-buffer commit (§3c)
 is a *new* write path — wire it to the live identity, don't inherit the closure pattern.
@@ -729,7 +729,7 @@ cursors close the **cross-actor** window (the rare, hard one).
   `usePreviewEdit` path, no active text editor → live-identity doesn't apply).
 - [x] **No regression:** preview-renderer **355 unit + 368 integration + typecheck** green; existing
   `p2-3b` KEEP/DROP/commit-guard tests stay green. Rust-free (no Rust/WASM delta).
-- [~] **Browser-tier self-heal-KEEP guard — REVEALED A REAL BUG, deferred (bd-k1evg0g1).** The reshaped
+- \[\~\] **Browser-tier self-heal-KEEP guard — REVEALED A REAL BUG, deferred (bd-k1evg0g1).** The reshaped
   `q2-preview-self-heal-on-write.spec.ts` (real hub + Automerge) asserts self-heal KEEP survives a real
   collaborator shift. It FAILS — exposing that `findReanchorCandidate` DROPs a TOP-LEVEL block when a
   preceding block shifts past the active block's old `anchorR0` (see the corrected watch-item below). Left
@@ -754,7 +754,7 @@ editor. **Only here is AST regeneration reachable, so only here is its cost paid
   `usePreference`** (per-device localStorage, like `errorOverlayCollapsed`), *not* a server
   flag. The new work is the **`ReactPreview` → `ReactRenderer` → `Q2PreviewIframe`** pass-through:
   hub-client threads no such flag today (only the SPA does, and it bypasses `ReactRenderer`),
-  so `ReactRenderer`'s props interface gains its first preference-driven row. `usePreference`
+  so `ReactRenderer`\'s props interface gains its first preference-driven row. `usePreference`
   is reactive (`ReactPreview.tsx:266` precedent), so toggling mid-session re-renders and posts
   a fresh `UPDATE_AST`.
 - **Both hosts opt in — hub-client via the setting, the SPA via a query param** *(revised
@@ -830,7 +830,7 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   **once at click time** (current render → correct `siKey`); the draft then lives in state and
   is never re-derived from the shifting table. So the shift is a non-issue for the active editor.
 - **Plumbing:** `nestedEditBuffers?: Record<string,string>` (and `unlockNestingCursor?: boolean`) are
-  **optional** fields onto `Q2PreviewIframe`'s UPDATE_AST payload + deps, through
+  **optional** fields onto `Q2PreviewIframe`\'s UPDATE_AST payload + deps, through
   `entry.tsx`/`PreviewContext`. **Each host computes/passes them when ITS opt-in is on, else omits
   them** (omitted optional field → iframe reads as locked → zero-touch). Compute via the same gated
   `useMemo` on both hosts: `unlockNestingCursor && rendered ? regenerateNestedBuffers(content,
@@ -915,8 +915,8 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   `regenerate_nested_buffers` includes multi-line prefixed children (single- and
   multi-child), excludes single-line items and fenced-div children, keyed by `siKey`.
   *(P3.1, `f5cb3132` + `8a51bb92`. Restriction predicate: prefixing ancestor ∈
-  {BlockQuote,BulletList,OrderedList,DefinitionList} ∧ multi-line. + WASM export
-  + JS wrapper `regenerateNestedBuffers`. 14 integration tests; review APPROVED.)*
+  \{BlockQuote,BulletList,OrderedList,DefinitionList\} ∧ multi-line. + WASM export
+  \+ JS wrapper `regenerateNestedBuffers`. 14 integration tests; review APPROVED.)*
 - [x] Rust **`siKey` contract**: exact `"0:<r0>-<r1>:0"`. *(P3.1)*
 - [x] Rust **source fidelity**: a blockquote child with shortcode + inline math + raw
   span → buffer is source form, not expanded. *(P3.1)*
@@ -1015,13 +1015,13 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
   it reaches the iframe bundle via the chip tooltip). Fail-on-revert verified cold (orchestrator-run):
   removing the chip `preventDefault`/`eat` reds (A) (host tears the editor down on the click), and
   disabling the dispatchers chord branch reds (B)+(C). Restore → 3/3 green.)*
-- [~] **(cross-ref) Collapsed-region drop** (from P2.3b — see the §2b/Self-heal deferral notes):
+- \[\~\] **(cross-ref) Collapsed-region drop** (from P2.3b — see the §2b/Self-heal deferral notes):
   a collaborator re-render that moves the active *unchanged* edited block into a `display:none`
-  region → drop, measuring `activeEditRegionRef`'s box after the re-anchor remount. Needs real
+  region → drop, measuring `activeEditRegionRef`\'s box after the re-anchor remount. Needs real
   layout. Already removed from the P2.3b inline check; this is the remaining browser-tier piece.
   **STILL DEFERRED — blocked by bd-k1evg0g1 (decided 2026-06-13, P3.5).** This item needs *new*
   production code (the follow-up visibility layout effect was never written — see the
-  `PreviewRoot.tsx` ~:287-295 comment), so it is genuine TDD, not pure verification. But it
+  `PreviewRoot.tsx` \~:287-295 comment), so it is genuine TDD, not pure verification. But it
   **cannot be made fail-on-revert at the browser tier while bd-k1evg0g1 is out of scope.** Any
   collaborator re-render that moves the active block into a `display:none` region must shift the
   block's `r0` and insert an intervening container/header pool entry; `findReanchorCandidate`
@@ -1037,7 +1037,7 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
 - [x] **SPA nesting-cursor e2e** (§3a/§3b; `q2-preview-spa/e2e`, real `q2 preview` binary — Playwright
   *against the binary*): with `?nestingCursor=1`, load a nested-blockquote fixture → confirm leaf-click
   resolution + a clean nested-blockquote-child edit; load **without** the param → confirm locked
-  (whole-quote). Extends `basic-preview.spec.ts`'s `startPreviewServer()`. (Boot path already covered
+  (whole-quote). Extends `basic-preview.spec.ts`\'s `startPreviewServer()`. (Boot path already covered
   at jsdom: `q2-preview-spa/src/p3-2-nesting-cursor-spa.integration.test.tsx`.) *(P3.5 DONE —
   `q2-preview-spa/e2e/nesting-cursor.spec.ts` (2 tests) + a `startPreviewServer({allowEdit})` test-infra
   extension. With `?nestingCursor=1` the leaf-click yields the clean child buffer (no `>`); without it,
@@ -1087,7 +1087,7 @@ plus the hub-client JS suites suffice.
   tracked in **bd-k1evg0g1** with the e2e as its `test.fail()` tripwire. Original mechanism (still
   accurate): Self-heal identifies the active node by `findReanchorCandidate` (`lockedTiles.ts`):
   the *single* nearest pool entry `r[0] >= anchorR0`, then content-verify against `anchorSlice`. For a
-  NESTED child (nesting-edited), a concurrent edit inserting ≥ the marker gap (~2 bytes) ABOVE the
+  NESTED child (nesting-edited), a concurrent edit inserting ≥ the marker gap (\~2 bytes) ABOVE the
   container shifts the *container's* `r[0]` into the "nearest" slot; it fails content-verify (whole-
   container ≠ child) and there is **no scan onward to the child** → the child's in-flight edit is
   **dropped**, even though the child still exists unchanged. **The same single-nearest flaw drops
@@ -1106,8 +1106,8 @@ plus the hub-client JS suites suffice.
   `[data-block-pool-id]` to its locked tile (a rect-climb per element), and `wrap` needs
   the global first/last. Cheap at normal sizes (cached layout); a watch-item for very large
   documents; the visible-only filter trims it.
-- **Coincidence epsilon** — pinned at ~1px on all four edges (assumption A: true coincidence
-  is exactly 0px, nearest deciding "differ" edge ≥~12px). The only tuning is the hairline-border
+- **Coincidence epsilon** — pinned at \~1px on all four edges (assumption A: true coincidence
+  is exactly 0px, nearest deciding "differ" edge ≥\~12px). The only tuning is the hairline-border
   fixture (1px border → leaf). Tune in Playwright, not jsdom.
 - **`pendingLanding` vs a concurrent collaborator re-render (documented, out of scope).**
   postMessage has no request/response channel, so the iframe cannot tell *your* commit's

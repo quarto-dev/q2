@@ -302,7 +302,7 @@ fn adjust_paths_recursive(
 
 **File**: `crates/quarto-core/src/project.rs`
 
-Update `directory_metadata_for_document()` at line ~133 (after `yaml_to_config_value` call, before `layers.push`):
+Update `directory_metadata_for_document()` at line \~133 (after `yaml_to_config_value` call, before `layers.push`):
 
 ```rust
 // Current code around line 132-137:

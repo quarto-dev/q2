@@ -14,7 +14,7 @@ Measure the PDF download budget, then build a standalone typst compiler worker f
 ## Decisions
 
 - Budget set before measuring: a first-use PDF download of at most 40 MB gzipped in total (pandoc ~16 MB + typst ~11 MB + fonts 4-8 MB + the 2.3 MB package `index.json` + the `pdfjs-dist` pair (~0.5 MB gzipped; H9's stock viewer is a lazy fetch on first PDF view, measured there), four wasm modules in play: Rust, Automerge, pandoc, typst). If the measurement exceeds it, report to a human; nothing is auto-trimmed. The typst wasm is served like pandoc's, from `public/typst/` outside `assets/`, so the service worker's `wasm-cache` route (`maxEntries: 8`) is untouched.
-- The typst compiler follows D2: its wasm is compiled on the main thread and the `Module` posted to one short-lived worker per compile, with the same wall timeout and idle drop as pandoc, so an abort terminates the worker without discarding the compile. typst.ts 0.7.0 accepts one: its init options' `getModule()` may return a `WebAssembly.Module` (`wasm.mts`), which the worker's init returns.
+- The typst compiler follows D2: its wasm is compiled on the main thread and the `Module` posted to one short-lived worker per compile, with the same wall timeout and idle drop as pandoc, so an abort terminates the worker without discarding the compile. typst.ts 0.7.0 accepts one: its init options\' `getModule()` may return a `WebAssembly.Module` (`wasm.mts`), which the worker's init returns.
 
 - The package-registry callback is synchronous (typst's `World` resolves packages synchronously), so the host prefetches the document's package set into memory before compile.
 

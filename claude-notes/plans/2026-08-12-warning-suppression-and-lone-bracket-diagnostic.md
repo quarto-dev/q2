@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-12
 **Braid:** bd-lone-bracket-diagnostic-mxu41qbt
-**Branch:** `braid/bd-lone-bracket-diagnostic-warning-suppression`, based on `main` @ `593f2785` (no worktree — investigation ran in the room-3 checkout)
+**Branch:** `braid/bd-lone-bracket-diagnostic-warning-suppression`, based on `main` \@ `593f2785` (no worktree — investigation ran in the room-3 checkout)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
@@ -101,7 +101,7 @@ Confirmed by search across `crates/quarto-config/src`, `crates/quarto-core/src`,
 
 `claude-notes/plans/2026-07-02-strict-mode-warnings-as-errors.md` is the map. Its findings, re-verified at HEAD:
 
-- **No emission chokepoint.** Warnings are pushed into `StageContext.diagnostics`, `RenderContext.diagnostics` (`render.rs:233`), pampa's `DiagnosticCollector`, ~15 transforms taking a bare `&mut Vec<DiagnosticMessage>`, and Lua `quarto.warn()` harvesting. Filtering at emission would be unsustainable.
+- **No emission chokepoint.** Warnings are pushed into `StageContext.diagnostics`, `RenderContext.diagnostics` (`render.rs:233`), pampa's `DiagnosticCollector`, \~15 transforms taking a bare `&mut Vec<DiagnosticMessage>`, and Lua `quarto.warn()` harvesting. Filtering at emission would be unsustainable.
 - **Everything converges on `ProjectRenderSummary`** (`crates/quarto-core/src/project/orchestrator.rs:481`) through exactly four fields: `pass1_failures[].diagnostics`, `pass2_failures[].diagnostics`, `project_diagnostics`, and per-output `outputs[].render_output.diagnostics` (via the `OutputDiagnostics` trait, `:546`).
 - **The policy hook is already written and shipped**: `ProjectRenderSummary::promote_warnings_to_errors()` (`orchestrator.rs:617`) walks all four sources post-run, pre-print. `OutputDiagnostics::diagnostics_mut()` exists specifically so policies can rewrite diagnostics in place. `should_exit_nonzero` (`render.rs:1118`) is the one exit gate.
 
@@ -122,7 +122,7 @@ That 37 overcounts somewhat (it includes in-file `#[cfg(test)]` blocks and sites
 - A `warnings:` key that silently fails to suppress an uncoded warning is a bad user experience, so v1 needs a story: either backfill first, or make the failure legible.
 - Going forward, an xtask lint ("every `DiagnosticMessage::warning`/`::error` must carry a code") would keep the gap from reopening — the same sustainability argument the strict-mode plan made.
 
-**2. Not every user-visible diagnostic flows through the summary.** `crates/quarto/src/commands/render.rs:897-905` prints `underscore_typo_diagnostics`, `project_kind_diagnostics`, and `project.config.config_diagnostics` with a bare `eprintln!("{}", diagnostic.to_text(None))` — **before and outside** `print_render_diagnostics`. A summary-boundary filter would not see them. Either route them into `project_diagnostics` (arguably correct independent of this work) or declare them out of scope in v1. Separately, the strict-mode plan's count of ~552 `eprintln!` / ~63 `tracing::warn!` sites remains true and remains structurally out of reach.
+**2. Not every user-visible diagnostic flows through the summary.** `crates/quarto/src/commands/render.rs:897-905` prints `underscore_typo_diagnostics`, `project_kind_diagnostics`, and `project.config.config_diagnostics` with a bare `eprintln!("{}", diagnostic.to_text(None))` — **before and outside** `print_render_diagnostics`. A summary-boundary filter would not see them. Either route them into `project_diagnostics` (arguably correct independent of this work) or declare them out of scope in v1. Separately, the strict-mode plan's count of \~552 `eprintln!` / \~63 `tracing::warn!` sites remains true and remains structurally out of reach.
 
 **3. There is no config schema layer.** `render.rs:894` says it outright: *"Q2 has no schema layer; unknown keys are otherwise silently ignored."* Good news: a new `_quarto.yml` key costs no schema work. Bad news: a typo in a suppression list is silent unless we validate it ourselves — which makes the "unknown code" validation in the design below load-bearing rather than a nicety.
 
@@ -181,7 +181,7 @@ Why a **per-code severity map** rather than a flat `suppress: [Q-2-49]` list: it
 
 Once A ships: add a third trigger to `reference_link_diagnostics.rs` for a lone `is_bare_span`, under a new code (**Q-2-49** — Q-2-48 is the current maximum in `error_catalog.json`), pointing at `\[`/`\]` escaping as the fix. Then rewrite the module docs, whose central claim ("no way to tell it apart from a deliberate span") is what A dissolves.
 
-Downstream: `qmd-syntax-helper`'s `literal-brackets` rule (`crates/qmd-syntax-helper/src/conversions/literal_brackets.rs`) can become a diagnostic-code-keyed `q_2_49.rs` rule like its siblings, instead of the run-`check`-first special case it is today. It should probably **stay** opt-in for `convert -r all` regardless — the rule's own header explains why (an escape is a source edit that cannot afterwards be distinguished from author intent), and that reasoning is independent of the diagnostic.
+Downstream: `qmd-syntax-helper`\'s `literal-brackets` rule (`crates/qmd-syntax-helper/src/conversions/literal_brackets.rs`) can become a diagnostic-code-keyed `q_2_49.rs` rule like its siblings, instead of the run-`check`-first special case it is today. It should probably **stay** opt-in for `convert -r all` regardless — the rule's own header explains why (an escape is a source edit that cannot afterwards be distinguished from author intent), and that reasoning is independent of the diagnostic.
 
 Before shipping B, **measure the noise**: run the detection over a real corpus (`docs/`, the Connect docs, `crates/pampa` fixtures) and count how many lone bare spans exist in documents nobody considers broken. If the count is near zero, B is uncontroversial. If it is large, the count itself is the argument for how good A's ergonomics have to be.
 
@@ -286,7 +286,7 @@ the only signal, and only because each side wrote a docs page.
 ### Follow-up strands filed
 
 - **bd-91rgxmav** — warning-suppression v1 follow-ups (validation, rot control, `--show-suppressed`, globs, per-line, project-scoped coverage, the codes lint, additional levels).
-- **bd-cljk1g5p** — re-key `qmd-syntax-helper`'s `literal-brackets` rule to the `q_2_49.rs` convention.
+- **bd-cljk1g5p** — re-key `qmd-syntax-helper`\'s `literal-brackets` rule to the `q_2_49.rs` convention.
 
 Both linked `discovered-from` this strand.
 
@@ -294,7 +294,7 @@ Both linked `discovered-from` this strand.
 
 Unknown-code validation, unused-suppression reporting, `--show-suppressed`, per-path globs, per-line suppression, project-scoped-diagnostic coverage, and the xtask lint requiring codes on new warnings.
 
-**Also deferred: re-keying `qmd-syntax-helper`'s `literal-brackets` rule to the `q_2_NN.rs` convention.** Now that Q-2-49 exists the rule *could* become `q_2_49.rs` like its siblings, which was one of the strand's stated motivations. It is deliberately not part of this change: the rename touches a user-visible CLI surface (`-r literal-brackets`, which appears in the `Q-2-46` docs page, the rule's own header, and the new `Q-2-49` page), and the sibling rules derive violations from parse errors while this one derives them from its own `bracket_analysis` — so it is a real refactor rather than a rename. The rule works as-is; `-r literal-brackets` remains the correct invocation everywhere it is documented.
+**Also deferred: re-keying `qmd-syntax-helper`\'s `literal-brackets` rule to the `q_2_NN.rs` convention.** Now that Q-2-49 exists the rule *could* become `q_2_49.rs` like its siblings, which was one of the strand's stated motivations. It is deliberately not part of this change: the rename touches a user-visible CLI surface (`-r literal-brackets`, which appears in the `Q-2-46` docs page, the rule's own header, and the new `Q-2-49` page), and the sibling rules derive violations from parse errors while this one derives them from its own `bracket_analysis` — so it is a real refactor rather than a rename. The rule works as-is; `-r literal-brackets` remains the correct invocation everywhere it is documented.
 
 The rule should also **stay opt-in** for `convert -r all` regardless of the re-keying, for the reason its own header gives: an escape is a source edit that cannot afterwards be distinguished from an author's intent.
 
@@ -302,8 +302,8 @@ The rule should also **stay opt-in** for `convert -r all` regardless of the re-k
 
 1. **Config shape:** per-code map, reason *encouraged* (short form `Q-2-49: off`, long form `{level:, reason:}`). Chosen over a flat `suppress:` list so per-code severity (`error`, `warning`) is reachable later without a second key.
 2. **Sequencing:** minimal suppression (`off` only) **plus** Q-2-49 ship together. Unknown-code validation, unused-suppression reporting, and `--show-suppressed` are deferred to a follow-up strand.
-3. **Scope:** suppression applies **everywhere**, including `q2 preview` and hub-client — deliberately diverging from `--strict`'s Decision-D1 exclusion, because an author who has declared a construct legitimate should not be nagged in the editor.
-4. **Uncoded warnings:** ship anyway; the ~25–30 uncoded warnings are simply unsuppressible in v1, documented as such, with bd-m2w7a linked as `related`. No xtask lint in v1.
+3. **Scope:** suppression applies **everywhere**, including `q2 preview` and hub-client — deliberately diverging from `--strict`\'s Decision-D1 exclusion, because an author who has declared a construct legitimate should not be nagged in the editor.
+4. **Uncoded warnings:** ship anyway; the \~25–30 uncoded warnings are simply unsuppressible in v1, documented as such, with bd-m2w7a linked as `related`. No xtask lint in v1.
 
 ### What decision 3 changes about the design
 
@@ -315,12 +315,12 @@ The seam that satisfies decision 3 is **`run_pipeline`** (`crates/quarto-core/sr
 .map(|d| (d, stage_ctx.diagnostics))
 ```
 
-(:811) is the one place every per-document diagnostic passes through, for *every* frontend: `render_qmd_to_html` (:920), `parse_qmd_to_ast`, and `render_qmd_to_preview_ast` (:998) all funnel through it. Filtering there covers CLI single-doc, CLI project (per-page), preview, and WASM in one edit — and, because it happens inside the render, it lands strictly *before* `--strict`'s promotion at the CLI boundary, so the suppress-then-promote ordering of A3 falls out for free rather than needing to be enforced.
+(:811) is the one place every per-document diagnostic passes through, for *every* frontend: `render_qmd_to_html` (:920), `parse_qmd_to_ast`, and `render_qmd_to_preview_ast` (:998) all funnel through it. Filtering there covers CLI single-doc, CLI project (per-page), preview, and WASM in one edit — and, because it happens inside the render, it lands strictly *before* `--strict`\'s promotion at the CLI boundary, so the suppress-then-promote ordering of A3 falls out for free rather than needing to be enforced.
 
 Resolution and application are split:
 
 - **Resolve** in `MetadataMergeStage`, right after `activate_trace_from_metadata` (`metadata_merge.rs:420`) — the point where merged metadata exists. Project → directory → document precedence comes free from the existing merge, so `_quarto.yml` and front matter both work with no new precedence machinery.
-- **Apply** in `run_pipeline`'s tail, via a new `StageContext.diagnostic_policy` field.
+- **Apply** in `run_pipeline`\'s tail, via a new `StageContext.diagnostic_policy` field.
 
 **Known v1 gap, accepted:** *project-scoped* diagnostics (`project_diagnostics` in `ProjectRenderSummary`, plus the `eprintln!` config-diagnostic path at `render.rs:897`) do not pass through `run_pipeline` and are therefore not suppressible in v1. Per-document diagnostics — which is what Q-2-49 is — are fully covered, including when the suppression is written in `_quarto.yml`, because project config is merge layer 1.
 
@@ -336,13 +336,13 @@ Resolution and application are split:
 
 5. ~~**Preview / hub scope.**~~ *Answered: decision 3.*
 
-<details><summary>Original wording of the answered questions</summary>
+`<details>`{=html}`<summary>`{=html}Original wording of the answered questions`</summary>`{=html}
 
 1. **Sequencing.** Confirm: suppression fully first (A, phases 1–5), then the diagnostic (B, phases 6–7)? Or interleave — ship a minimal `off`-only suppression and Q-2-49 together, deferring validation/rot-control to a follow-up?
 
 2. **Config shape.** Per-code severity map (`diagnostics: {Q-2-49: off}`, generalizes to `error`/`warning`, clippy/ESLint-shaped) versus a flat list (`diagnostics: {suppress: [Q-2-49]}`, simpler)? And: should a **reason** be *encouraged*, *required*, or *unavailable*? Requiring one is unusual but makes every suppression self-documenting, which is precisely the "a project has no way to say so" gap the strand identifies.
 
-3. **The uncoded-warning gap.** ~25–30 warnings carry no code and would be silently unsuppressible. Options: (a) make bd-m2w7a a hard prerequisite; (b) ship suppression first and let uncoded warnings be unsuppressible, tracked as follow-up; (c) ship a lint requiring codes so the gap stops growing while bd-m2w7a drains it. Recommendation: (c) plus (b), with bd-m2w7a linked as `related`.
+3. **The uncoded-warning gap.** \~25–30 warnings carry no code and would be silently unsuppressible. Options: (a) make bd-m2w7a a hard prerequisite; (b) ship suppression first and let uncoded warnings be unsuppressible, tracked as follow-up; (c) ship a lint requiring codes so the gap stops growing while bd-m2w7a drains it. Recommendation: (c) plus (b), with bd-m2w7a linked as `related`.
 
 4. **Granularity in v1.** Project-wide + per-document (free from the metadata merge) only? Or also per-path globs (`Q-2-49: {level: off, files: ["legacy/**"]}`)? Per-*line* suppression (a `<!-- quarto: allow Q-2-49 -->` comment) is the ergonomic ideal but needs comment-to-node attachment that does not exist — propose deferring, with a note that HTML comments now survive as `RawInline`, so it is reachable later.
 

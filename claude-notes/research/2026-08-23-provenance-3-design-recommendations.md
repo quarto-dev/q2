@@ -81,9 +81,9 @@ provenance should come from**.
    consists solely of fence characters (a `` ``` `` body under a `` ```` `` fence), which is the
    one hole and should be named in the comment. The blockquote/list fallback stays as it is
    (`text` lacks the continuation markers, so the contiguous search fails and we return the
-   block — coarse, never wrong). ~10 lines; T7 from the seam spec binds it, with its revert hunk
+   block — coarse, never wrong). \~10 lines; T7 from the seam spec binds it, with its revert hunk
    rewritten as "the bounded search → back to whole-block `find`".
-2. **Producer-side, the principled fix.** Keep `code_fence_content`'s provenance: build it with
+2. **Producer-side, the principled fix.** Keep `code_fence_content`\'s provenance: build it with
    `ProvenanceBuilder` (verbatim runs between `block_continuation` gaps — the deletion shape Plan
    1 made expressible) and carry it on `CodeBlock` as a `text_source: SourceInfo` (the
    `attr_source` precedent). Then `body_source_for` becomes `cb.text_source.clone()` and
@@ -117,13 +117,13 @@ Phase 5 already classifies as out-of-epic.
 > `pampa::readers::qmd::read` + `body_source_for` on the landed bounded search:
 >
 > 1. **"A body consisting solely of fence characters" is not a hole** when the
->    closing fence is present. ```` ````{python}\n```\n```` ```` resolves to
+>    closing fence is present. ````` ````{python}\n```\n```` ````` resolves to
 >    `13..16`, the true body — because the region ends *at* the closing fence
 >    line, so the body's ```` ``` ```` matches at region offset 0.
 > 2. **The real hole is narrower, and its degradation is coarser than stated.**
 >    It is a body whose *last line* is made only of fence characters in a block
 >    that tree-sitter error recovery left **without** a closing fence
->    (```` ````{python}\n```\n ```` → `0..17`; ```` ````{python}\nx\n```\n ````
+>    (````` ````{python}\n```\n ````` → `0..17`; ````` ````{python}\nx\n```\n `````
 >    → `0..19`, truths `13..16` and `13..18`). The last-line test reads the
 >    body's own final line as the closing fence, the contiguous search then
 >    fails, and we take the **block-span fallback** — the whole block, not a span
@@ -194,12 +194,12 @@ doc § 6 already settled scope (wrong-span, not drifting); the plan asks only "d
 
 ### Options
 
-1. **Delete the dead computation and simplify the seam.** Change `process_shortcode_string`'s
+1. **Delete the dead computation and simplify the seam.** Change `process_shortcode_string`\'s
    parameter to `&dyn Fn() -> String`, have the closure return the decoded string, drop the
    `let … else { panic!() }`, and add a two-line comment at the construction site: *the arg's
    range is the quote-inclusive node span paired with the decoded string; no consumer offsets
    into it (`shortcode_resolve.rs:135, :171, :837, :848, :2232, :2265` take the string only)*.
-   ~15 lines, no behaviour change, no snapshot movement (the surviving range is unchanged).
+   \~15 lines, no behaviour change, no snapshot movement (the surviving range is unchanged).
 2. **Tighten for real:** drive `ProvenanceBuilder` here so the arg carries content provenance
    like attribute values do after Plan 2 Phase 4. No consumer wants it (Plan 2's deferred-minor
    #5 says the same: "the only unescaper in the tree producing no provenance; if that bothers
@@ -221,7 +221,7 @@ Plan 2 Phase 4's attribute-value path is the template.
 
 ---
 
-## 3. A splice-safety guard for `q_2_28`'s `end_offset()` reader
+## 3. A splice-safety guard for `q_2_28`\'s `end_offset()` reader
 
 ### What is actually being asked
 
@@ -322,11 +322,11 @@ every row: `cd repro-fixture && rm -rf _site && ../../target-v0240/debug/q2 rend
 | cfg | `quarto-error-reporting` | helper | `quarto-source-map` | result |
 |---|---|---|---|---|
 | A | 0.2.1 crates.io (pre-fix) | — (no helper; ariadne spans unclamped) | 0.1.0 | **abort 101** |
-| B | path @ `922b09c` | full: (1)+(2)+(3) | 0.1.0 | clean 0 |
+| B | path \@ `922b09c` | full: (1)+(2)+(3) | 0.1.0 | clean 0 |
 | C | path | (1)+(2) clamp kept, (3) snap removed | 0.1.0 | **abort 101** |
 | D | path | (3) snap kept, (1)+(2) clamp removed | 0.1.0 | clean 0 |
 | E | path | pass-through | 0.1.0 | **abort 101** |
-| F | path | pass-through | path @ `09ec6d1` (0.1.3, floor) | clean 0 |
+| F | path | pass-through | path \@ `09ec6d1` (0.1.3, floor) | clean 0 |
 | G | current branch `d6ee475be`, stock lock (0.2.2 / 0.1.3), Plan 2 mapping fix | full | 0.1.3 | clean 0, carets **correct** (`:7:16`, `:7:37`) |
 
 Verbatim observed lines (from `.scratch/run-{A..F}.log`; identical text in A, C, E):
@@ -462,7 +462,7 @@ is refused. The helper documents this as a "conservative over-approximation"
 
 ### Options
 
-1. **Narrow** to the touched pieces (~25 lines in `is_gapless`/`concat_pieces_are_contiguous`,
+1. **Narrow** to the touched pieces (\~25 lines in `is_gapless`/`concat_pieces_are_contiguous`,
    taking an optional content sub-range), bound by flipping the NOTE above into an assertion.
 2. **Leave it**, documented as it already is. Real: nothing user-visible depends on it.
 
@@ -507,7 +507,7 @@ crossref id → exactly one `Q-15-1` error.
 
 ### Options
 
-1. **Add the test** (~20 lines): `render_exit_codes`'s fixture +
+1. **Add the test** (\~20 lines): `render_exit_codes`\'s fixture +
    `QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER=0` → assert `!status.success()`, stderr contains
    `internal error rendering diagnostic Q-15-1`, and does **not** contain the `Q-15-1` text
    rendering (so the fault really hit that diagnostic).
@@ -588,7 +588,7 @@ the answer.
 ### Options
 
 1. **Wrap it now** in `render_diagnostic_guarded(code, || diagnostic.to_text(None))` — uniform
-   with the other eight, ~3 lines, and Plan 2's `grep -c = 8` evidence becomes 9.
+   with the other eight, \~3 lines, and Plan 2's `grep -c = 8` evidence becomes 9.
 2. **Comment only**: record why `None` is safe and that binding `config_sources` here requires
    the guard.
 3. Nothing.
@@ -649,7 +649,7 @@ rewritten so the fix is not (a).** Re-scope to (c): "`toMappedString` cannot der
 provenance because provenance is a map, not a store; callers that need the decoded string
 already have it on the node." That is an `annotated-qmd` API decision and belongs to the TS
 source-tracking line (`bd-1d6io`, branch `braid/bd-1d6io-annotated-qmd-source-tracking`),
-whose owner is already changing `SourceInfoReconstructor`'s contract. Priority stays 2/latent.
+whose owner is already changing `SourceInfoReconstructor`\'s contract. Priority stays 2/latent.
 
 Suggested replacement body for the strand:
 
@@ -708,7 +708,7 @@ for the reasons the review gave.
 **Not in the list, worth one line each:**
 
 - `q_2_33.rs:74-75` reads `start_offset()` *and* `end_offset()` — Q3's sibling; same fix.
-- `to_text_with_renderer`'s no-context branch prints `loc.start_offset()` as "at offset N"
+- `to_text_with_renderer`\'s no-context branch prints `loc.start_offset()` as "at offset N"
   (`diagnostic.rs:516`) — content-offset `0` for any `Concat`-rooted location. Harmless, but it
   is the accessor rule's exact shape inside the crate that owns the renderer; `root_file_id` +
   `map_offset` need a ctx, so the honest fix is to omit the line when the span is not
@@ -727,7 +727,7 @@ for the reasons the review gave.
 | 3 | `q_2_28` splice guard | No generic guard. Replace `end_offset()` with `resolve_byte_range()` here and in `q_2_33`; comment the `== ">}}}"` check as the splice guard | Plan 3 Phase 6 | high |
 | 4 | what prevents the founding crash | **Mis-framed twice.** Snap (3) was load-bearing at the crashing version (C aborts, D clean); today the upstream `offset_to_location` floor alone suffices (F clean). Rewrite the helper's doc to say it is defense in depth; add an end-to-end q2 pin over the README fixture; keep the snap; the pin asserts carets too | Plan 3 Phase 6 (both the upstream doc PR and the pin) | high — six-config experiment, restored |
 | 5 | narrow `is_gapless` | Narrow to touched pieces, bound by the existing NOTE-test; low priority; leaving it is acceptable | Plan 3 Phase 6 | medium |
-| 6 | caught panic on error-severity | Add the ~20-line pin using the `Q-15-1` fixture; **correct the ordering claim** (print precedes the gate; immutability is the invariant) | Plan 3 Phase 6 | high |
+| 6 | caught panic on error-severity | Add the \~20-line pin using the `Q-15-1` fixture; **correct the ordering claim** (print precedes the gate; immutability is the invariant) | Plan 3 Phase 6 | high |
 | 7 | `render.rs:904` unguarded `to_text(None)` | Wrap it now + one comment naming `config_sources` as what would change the calculus; evidence count 8 → 9 | Plan 3 Phase 6 | high |
 | 8 | `bd-g7qh1ltt` boundary | Boundary right (outside the epic); root cause mis-stated — provenance is a map, not a store; re-scope to caller-supplied content; owner `bd-1d6io` | `bd-1d6io` (edit the strand) | medium-high |
 | — | sweep | Plan 3's gating table is stale (all gates closed); add the sixth site to the Phase 8 census cross-check; no deferred-minor becomes a strand | Plan 3 | high |

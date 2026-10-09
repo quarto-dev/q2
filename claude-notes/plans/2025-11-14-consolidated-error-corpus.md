@@ -31,7 +31,7 @@ Same error in different contexts hits different parser states:
   - All have identical: code, title, message, notes
   - Only differ in: test content, capture coordinates, resulting (state, sym)
   - States: 683, 735, 736, 666, 678, 654, 719, 666, 728, 708, 708, 708, 666, 709, 652, 682, 683
-  - All have sym: "_whitespace"
+  - All have sym: "\_whitespace"
 
 Examples:
 - `010.qmd`: `a' b.` → state 683
@@ -253,7 +253,7 @@ Deno.writeTextFileSync("resources/error-corpus/_autogen-table.json",
 ### Phase 1: Design & Validate (1-2 hours)
 
 1. **Define JSON Schema**
-   - Write formal schema for new Q-*.json format
+   - Write formal schema for new Q-\*.json format
    - Document all fields (including optional ones)
    - Create schema validation function
 
@@ -315,11 +315,11 @@ Deno.writeTextFileSync("resources/error-corpus/_autogen-table.json",
 
 1. **Backup**
    - Create `resources/error-corpus/old/` directory
-   - Copy all NNN.{qmd,json} files there
+   - Copy all NNN.\{qmd,json\} files there
 
 2. **Run Migration**
    - Execute migration script
-   - Generate Q-*.json files
+   - Generate Q-\*.json files
    - Run new build script
    - Compare autogen tables
 
@@ -345,7 +345,7 @@ Deno.writeTextFileSync("resources/error-corpus/_autogen-table.json",
    - Remove backwards compatibility code
    - Add helper scripts:
      - `add_error_case.ts` - add case to existing error
-     - `new_error_code.ts` - create new Q-*.json file
+     - `new_error_code.ts` - create new Q-\*.json file
 
 ### Phase 6: Enhancement Opportunities (Future)
 

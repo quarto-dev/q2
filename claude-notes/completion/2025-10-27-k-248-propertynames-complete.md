@@ -184,7 +184,7 @@ When validation is implemented:
 - Analysis: 20 minutes (created analysis document)
 - Implementation: 45 minutes
 - Testing: 15 minutes
-- **Total**: ~1.5 hours (matched low end of estimate)
+- **Total**: \~1.5 hours (matched low end of estimate)
 
 ## Compatibility
 

@@ -93,7 +93,7 @@ L7 ships:
 - **Diagnostics with source spans.** The post-render step
   operates on rendered HTML, not source qmd; spans for
   Q-12-13 would require carrying the listing's source span
-  through the placeholder comment (~feasible, but L9 will
+  through the placeholder comment (\~feasible, but L9 will
   also want this and a separate pass to add it across all
   listing diagnostics is cleaner). Filed as a follow-up.
 
@@ -193,7 +193,7 @@ These are decisions, not open questions:
   templates) and the substitution.
 - **Empty-firstPara semantics: strip markers, keep L1, emit
   `Q-12-13`.** User-confirmed 2026-05-07. The warning surfaces
-  through the project diagnostics channel (`post_render`'s
+  through the project diagnostics channel (`post_render`\'s
   `&mut Vec<DiagnosticMessage>` arg, already wired to
   `ProjectRenderSummary.project_diagnostics`).
 - **No-preview-image cascade: listing.image-placeholder →
@@ -213,7 +213,7 @@ These are decisions, not open questions:
   User-confirmed 2026-05-07. Bracketing rule 1 ("single home").
   The reader is a private sub-module within the same file (or a
   sibling `reader.rs` inside `post_render_upgrade/` if the file
-  grows past ~600 LOC; the L7 author can split if needed but
+  grows past \~600 LOC; the L7 author can split if needed but
   must keep both files under `project/listing/post_render_upgrade*`).
 - **`scraper` is a target-gated dep.** User-confirmed 2026-05-07.
   `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -256,7 +256,7 @@ fix: L7 needs to know what region to delete.
 
 **The new envelope shape**:
 
-```pandoc
+````pandoc
 $if(description)$
 ::: {.delink .listing-description}
 ```{=html}
@@ -270,7 +270,7 @@ $description-placeholder-end$
 ```
 :::
 $endif$
-```
+````
 
 After Pandoc renders this, the HTML carries:
 
@@ -336,7 +336,7 @@ The existing `image-html` helper is unchanged (still emits the
 `<img>` markup or empty string from L1's `image`); the image-
 placeholder block fires in the template's `$else$` branch:
 
-```pandoc
+````pandoc
 $if(image-html)$
 ::: thumbnail
 [$image-html$]($path$){.no-external}
@@ -350,7 +350,7 @@ $image-placeholder-end$
 ```
 :::
 $endif$
-```
+````
 
 `item-default.template` and `item-grid.template` both get this
 treatment. `item-table.template` does **not** — Q1's table view
@@ -497,9 +497,9 @@ For each non-overlapping match:
     whole match with `s`.
   - Else: substitute whole match with `inner` (strip markers,
     keep L1). Emit `Q-12-13` "no preview content found in
-    rendered output for {href}".
+    rendered output for \{href\}".
 - Else (file missing): substitute with `inner`. Emit
-  `Q-12-13` "listing target {href} did not produce a rendered
+  `Q-12-13` "listing target \{href\} did not produce a rendered
   output file" (different wording but same code, since both
   are "L1 fallback retained for this listing item").
 
@@ -572,7 +572,7 @@ character).
 
 ### Determinism
 
-`scraper`'s parse output is deterministic given input. The
+`scraper`\'s parse output is deterministic given input. The
 cache traversal order is "first reference wins"; since the
 cache value never changes for a given key, any order produces
 identical substitutions. Multiple listing hosts referencing the
@@ -672,7 +672,7 @@ single-function reader has been stable for years).
 
 L7 adds:
 
-- **`Q-12-13`**: `warning`, "Listing item from {relative-source-path}
+- **`Q-12-13`**: `warning`, "Listing item from \{relative-source-path\}
   produced no preview content; using the static fallback
   description." Fired when a sibling output file is missing,
   unparseable, or has no usable `<p>` in `main.content`.
@@ -717,7 +717,7 @@ audit trail; no decisions left for the L7 session.
    we write the full buffer in one `file_write` call; partial
    writes are a filesystem concern handled by the runtime. If
    write fails, we propagate the error and the post_render
-   hook aborts — same as `write_sitemap`'s contract.
+   hook aborts — same as `write_sitemap`\'s contract.
 5. **Whether to embed the `image-placeholder` URL or read from
    the source profile at L7-time.** Settled (embed in the
    marker), but the alternative is documented here in case a
@@ -833,7 +833,7 @@ audit trail; no decisions left for the L7 session.
 - **D17 (single canonical Q-12-13 message):** user-confirmed
   2026-05-07. Whether the sibling output file is missing or
   present-but-empty, the diagnostic uses one wording:
-  *"Listing item from {href} produced no preview content; using
+  *"Listing item from \{href\} produced no preview content; using
   static fallback description."* Easier to grep, easier to
   document. The cause distinction (file missing vs file empty)
   is recoverable from filesystem inspection if the user needs it.
@@ -976,7 +976,7 @@ per CLAUDE.md.
 
 ### Phase 3 — reader
 
-In `post_render_upgrade.rs`'s test module:
+In `post_render_upgrade.rs`\'s test module:
 
 14. **`extract_first_para_returns_first_p_text`** — given
     `<main class="content"><p>Hello.</p></main>`, returns
@@ -1011,7 +1011,7 @@ In `post_render_upgrade.rs`'s test module:
 
 ### Phase 4 — substitution: description
 
-In `post_render_upgrade.rs`'s test module:
+In `post_render_upgrade.rs`\'s test module:
 
 26. **`substitute_description_replaces_envelope_with_engine_first_para`**
     — given a host HTML containing the envelope and a sibling
@@ -1369,32 +1369,32 @@ watch pass.
 ### Preparation
 
 - [x] Re-read `claude-notes/instructions/testing.md` and
-      `claude-notes/instructions/coding.md`.
+  `claude-notes/instructions/coding.md`.
 - [x] Re-read `.claude/rules/wasm.md` (`?Send`, WASM-cfg gating).
 - [x] Re-read epic plan §"L7" + §"Bracketing rules". The
-      bracketing rules are load-bearing; the L7 file header
-      must include them per the epic plan.
+  bracketing rules are load-bearing; the L7 file header
+  must include them per the epic plan.
 - [x] Confirm `feature/listings` head is the post-L6 merge
-      (record HEAD hash + baseline test count).
-      **HEAD: `cd4b77fd`. Baseline tests: 8647.**
+  (record HEAD hash + baseline test count).
+  **HEAD: `cd4b77fd`. Baseline tests: 8647.**
 - [x] Create the worktree at
-      `.worktrees/bd-qf7r-listings-post-render-upgrade/` per
-      §"Branch / worktree". Branch
-      `beads/bd-qf7r-listings-post-render-upgrade`.
+  `.worktrees/bd-qf7r-listings-post-render-upgrade/` per
+  §"Branch / worktree". Branch
+  `beads/bd-qf7r-listings-post-render-upgrade`.
 - [x] `npm install` in the worktree.
 - [x] Add `.beads/redirect` per worktree rules.
 - [x] Baseline: `cargo xtask verify --skip-hub-build
-      --skip-hub-tests`; record test count. **Clean ✓ (8647).**
+  --skip-hub-tests`; record test count. **Clean ✓ (8647).**
 
 ### TDD phase 1 — placeholders
 
 - [x] Write tests #1–6 in `placeholders.rs`. Fail.
 - [x] Implement the new builders + regex constants. Tests pass.
 - [x] Decide (per §"Open questions" #1) whether to remove the
-      old single-comment helper. Recommend remove now; ensure
-      no remaining callers. **Decision: keep through Phase 1
-      so helpers.rs/binding.rs callers continue to compile;
-      Phase 2 deletes them atomically with the migration.**
+  old single-comment helper. Recommend remove now; ensure
+  no remaining callers. **Decision: keep through Phase 1
+  so helpers.rs/binding.rs callers continue to compile;
+  Phase 2 deletes them atomically with the migration.**
 - [x] Add `Q-12-13` to `error_catalog.json`.
 
 **Phase 1 status:** ✓ 11/11 placeholder tests pass; workspace
@@ -1403,22 +1403,22 @@ builds clean; error_catalog tests still 43/43.
 ### TDD phase 2 — binding + templates
 
 - [x] Write tests #7–13 in `binding.rs` and the listing-render
-      transform tests. Fail.
+  transform tests. Fail.
 - [x] Update `helpers.rs` with the four new helper functions.
 - [x] Update `binding.rs` to insert the four new keys; remove
-      the `description-placeholder` single-comment key.
+  the `description-placeholder` single-comment key.
 - [x] Update `templates/item-default.template` and
-      `templates/item-grid.template` to use the new keys
-      (description envelope; image $else$ branch).
-      `item-table.template` is unchanged.
+  `templates/item-grid.template` to use the new keys
+  (description envelope; image $else$ branch).
+  `item-table.template` is unchanged.
 - [x] Snapshot tests for L3 will diff. Run `cargo insta review`,
-      confirm the diff is exactly the begin/end marker
-      addition, accept. **Document the snapshot count + summary
-      in the eventual commit message.**
-      **No `.snap` files reference these placeholders — Phase 2
-      only required updating in-source `assert!` checks (3 sites:
-      `helpers.rs`, `binding.rs`, `transforms/listing_render.rs`,
-      `tests/listing_pipeline.rs`).**
+  confirm the diff is exactly the begin/end marker
+  addition, accept. **Document the snapshot count + summary
+  in the eventual commit message.**
+  **No `.snap` files reference these placeholders — Phase 2
+  only required updating in-source `assert!` checks (3 sites:
+  `helpers.rs`, `binding.rs`, `transforms/listing_render.rs`,
+  `tests/listing_pipeline.rs`).**
 
 **Implementation notes (Phase 2 deviations from plan):**
 
@@ -1446,15 +1446,15 @@ workspace tests pass (+18 new tests over the 8647 baseline).
 ### TDD phase 3 — reader
 
 - [x] Add `scraper` to `crates/quarto-core/Cargo.toml` as a
-      target-gated dep.
+  target-gated dep.
 - [x] Create `post_render_upgrade.rs` with module-level
-      `#![cfg(not(target_arch = "wasm32"))]`. Includes the
-      load-bearing bracketing-rule header comment (epic plan
-      §L7 §"Bracketing rules").
+  `#![cfg(not(target_arch = "wasm32"))]`. Includes the
+  load-bearing bracketing-rule header comment (epic plan
+  §L7 §"Bracketing rules").
 - [x] Add the module gate to `crates/quarto-core/src/project/listing/mod.rs`.
 - [x] Write reader tests #14–25. Fail.
 - [x] Implement `extract_first_para` and `extract_preview_image`
-      with `ReaderOptions`. Tests pass.
+  with `ReaderOptions`. Tests pass.
 
 **Implementation note:** v1 returns plain text from
 `extract_first_para` (the `<p>` element's concatenated `.text()`)
@@ -1475,8 +1475,8 @@ caller).
 
 - [x] Write substitution tests #26–37. Fail.
 - [x] Implement `substitute_listing_placeholders` with the
-      per-call cache and the description / image substitution
-      logic. Tests pass.
+  per-call cache and the description / image substitution
+  logic. Tests pass.
 
 **Implementation notes (Phase 4):**
 
@@ -1487,7 +1487,7 @@ caller).
   cache-key simple (path-only) without losing per-envelope
   precision.
 - **Single canonical Q-12-13 message** (per D17): "Listing item
-  from {href} produced no preview content; using static fallback
+  from \{href\} produced no preview content; using static fallback
   description." Fires for both `NotFound` and "file present but
   no first-para" paths.
 - **`CountingRuntime` test fake** delegates 24 SystemRuntime
@@ -1496,7 +1496,7 @@ caller).
   absence of cross-call caching.
 - **URL resolution** for the substituted `<img src=…>`: relative
   preview srcs are joined onto the sibling's directory then
-  `pathdiff::diff_paths`'d against the host's directory. Absolute
+  `pathdiff::diff_paths`\'d against the host's directory. Absolute
   URLs (`http://`, `https://`, `data:`, `mailto:`, `//`,
   leading-slash) pass through unchanged.
 
@@ -1509,7 +1509,7 @@ until Phase 5 wires the call site.
 
 - [x] Write tests #38–39. Fail.
 - [x] Add the call site in
-      `WebsiteProjectType::post_render`'s native-only block.
+  `WebsiteProjectType::post_render`\'s native-only block.
 - [x] Tests pass. Verify default-project type is unaffected.
 
 **Implementation note:** the existing `listing_pipeline.rs`
@@ -1530,19 +1530,19 @@ new tests for L7 orchestration + 27 new for reader/substitute +
 ### TDD phase 6 — End-to-end CLI
 
 - [x] Write tests #40–42. **In-process project-pipeline tests
-      cover #40 (description success), #41 (L1 fallback +
-      Q-12-13), and #42 (image substitution via raw-HTML img to
-      bypass L1's auto-fill).** Test #42 uses the raw-HTML-img
-      pattern instead of the replay engine: it produces
-      identical observable behavior (rendered sibling has an
-      `<img>` in `main.content` that L7 picks up via the named-
-      pattern selector) without depending on a real engine. Per
-      D18, the replay-engine route is also viable; the raw-HTML
-      route is simpler and exercises the same L7 code path.
+  cover #40 (description success), #41 (L1 fallback +
+  Q-12-13), and #42 (image substitution via raw-HTML img to
+  bypass L1's auto-fill).** Test #42 uses the raw-HTML-img
+  pattern instead of the replay engine: it produces
+  identical observable behavior (rendered sibling has an
+  `<img>` in `main.content` that L7 picks up via the named-
+  pattern selector) without depending on a real engine. Per
+  D18, the replay-engine route is also viable; the raw-HTML
+  route is simpler and exercises the same L7 code path.
 - [x] All tests pass once the call site is wired. (Phase 5
-      landed the wiring; Phase 6 is the e2e verification.)
+  landed the wiring; Phase 6 is the e2e verification.)
 - [x] Build the inline fixture, run `cargo run --bin q2 --
-      render`, inspect output by hand. Record below.
+  render`, inspect output by hand. Record below.
 
 **Phase 6 status:** ✓ 14/14 website_post_render tests pass
 (12 pre-existing + 2 new for L7 description + 1 new for L7
@@ -1564,51 +1564,51 @@ place. Two regression tests added to lock the new behavior.
 
 - [x] `cargo build --workspace` clean.
 - [x] `cargo nextest run --workspace` — all pass.
-      **8697/8697 (+50 over the 8647 baseline).**
+  **8697/8697 (+50 over the 8647 baseline).**
 - [x] `cargo xtask lint` clean (696 files checked).
 - [x] `cargo xtask verify` (full, including hub-client + WASM
-      build) — all 9 steps green. **Scraper does not leak into
-      the WASM dep tree:**
+  build) — all 9 steps green. **Scraper does not leak into
+  the WASM dep tree:**
 
-      ```
-      $ cargo tree --target wasm32-unknown-unknown \
-          -p wasm-quarto-hub-client | grep -ci scraper
-      0
-      ```
+  ```
+  $ cargo tree --target wasm32-unknown-unknown \
+      -p wasm-quarto-hub-client | grep -ci scraper
+  0
+  ```
 
 - [ ] **Hub-client browser smoke** per §"Hub-client smoke":
-      load a listing fixture, confirm L1 fallbacks are visible
-      without L7 running. **Deferred to user verification** —
-      this Claude session can't drive a real browser. The WASM
-      build passing in `cargo xtask verify` is necessary
-      evidence; visual confirmation is the user's call. The L1
-      fallback contract is testable in code: removing the L7
-      call from `WebsiteProjectType::post_render` and re-running
-      the `pipeline_website_post_render_substitutes_listing_placeholders`
-      test would surface the L1 fallback (description text from
-      frontmatter) in the rendered HTML — that's the same
-      content the hub-client preview displays since L7 is gated
-      to native-only.
+  load a listing fixture, confirm L1 fallbacks are visible
+  without L7 running. **Deferred to user verification** —
+  this Claude session can't drive a real browser. The WASM
+  build passing in `cargo xtask verify` is necessary
+  evidence; visual confirmation is the user's call. The L1
+  fallback contract is testable in code: removing the L7
+  call from `WebsiteProjectType::post_render` and re-running
+  the `pipeline_website_post_render_substitutes_listing_placeholders`
+  test would surface the L1 fallback (description text from
+  frontmatter) in the rendered HTML — that's the same
+  content the hub-client preview displays since L7 is gated
+  to native-only.
 - [x] End-to-end CLI verification fixture rendered; output
-      inspected; recorded above in
-      §"End-to-end CLI verification record". Three fixtures:
-      success path, L1-fallback path, image-substitution path.
+  inspected; recorded above in
+  §"End-to-end CLI verification record". Three fixtures:
+  success path, L1-fallback path, image-substitution path.
 - [x] L7 module file's top-of-file comment carries the
-      bracketing rules per epic plan §"L7" §"Bracketing rules"
-      rule 2 verbatim. **Confirmed in
-      `crates/quarto-core/src/project/listing/post_render_upgrade.rs`
-      header.**
+  bracketing rules per epic plan §"L7" §"Bracketing rules"
+  rule 2 verbatim. **Confirmed in
+  `crates/quarto-core/src/project/listing/post_render_upgrade.rs`
+  header.**
 - [x] **Skip user-facing `docs/` callout** (D13). Filed as
-      follow-up bd-399t.
+  follow-up bd-399t.
 - [ ] Stop and request user permission before any push (per
-      CLAUDE.md §"GIT PUSH POLICY"). **← awaiting user
-      approval.**
+  CLAUDE.md §"GIT PUSH POLICY"). **← awaiting user
+  approval.**
 - [ ] After user approval: `br update bd-qf7r --status closed`.
 - [ ] `br sync --flush-only && git add .beads/ && git commit`
-      from the **main repo** (per `.claude/rules/worktrees.md`).
+  from the **main repo** (per `.claude/rules/worktrees.md`).
 - [ ] Update the listings epic table
-      (`claude-notes/plans/2026-05-05-listings-epic.md`) to
-      mark L7 closed with the merge commit hash.
+  (`claude-notes/plans/2026-05-05-listings-epic.md`) to
+  mark L7 closed with the merge commit hash.
 
 **Phase 7 status:** ✓ all automated verification green; manual
 hub-client browser smoke deferred to user.

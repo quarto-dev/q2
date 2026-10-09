@@ -66,7 +66,7 @@ semantics:
   This is where the residual crux — **number injection alone, not category-registry seeding**
   (see §4 C below) — lives.
 
-The field-map is mechanical and verified 1:1 for callout (`callout.rs` doc ↔ `callout.lua`'s
+The field-map is mechanical and verified 1:1 for callout (`callout.rs` doc ↔ `callout.lua`\'s
 **constructor**, `quarto.Callout(...)` — `parse` itself calls the same constructor internally,
 so the mapping holds for both the historical Route-L framing and the current Route-R one): Q2
 `plain_data.{type,appearance,icon}` + `slots.{title,content}` → Q1
@@ -186,7 +186,7 @@ template/writer).
 |---|---|---|
 | Callout (sugar only); ShortcodeResolve; Metadata/Date/Authors Normalize; CodeBlockGenerate; ExampleEmbed (sugar), **ExampleEmbedRender**, Theorem/Proof/FloatRefTarget sugar, EquationLabel; CrossrefIndex, CrossrefResolve | **B1** | ShortcodeResolve is format-*parameterized*; CodeBlockGenerate output is a RenderContext **sideband** (does NOT cross the cut). Only the *sugar* half of Callout (`callout`, builds the CustomNode) is B1 — `CalloutResolve` is B4, see below. `ExampleEmbedRender`'s iframe is already emitted as `Block::RawBlock(format: "html", ...)` — the identical Pandoc primitive a hand-authored raw-HTML iframe would use, which non-HTML writers already drop by convention — so it is format-*parameterized* like ShortcodeResolve: emit the iframe only for iframe-capable profiles (`HtmlRender`/`HtmlPreview`/`RevealjsRender`/`RevealjsPreview`); for `Pandoc(fmt)`, emit the `snippet`/numbered-caption content only, omitting just the iframe. `ExampleEmbed` never reaches the Lua shim as a raw `CustomNode` for Pandoc targets, so it needs no Route N handling in P5. For CodeBlockGenerate's sideband: no bridge from Q2's sideband to Q1 is needed for either currently-implemented decoration. `filename` is independently re-derived by Q1's own `code-filename.lua`, which reads the identical Pandoc `CodeBlock` attribute Q2's `CodeBlockGenerate` reads — two independent mechanisms that happen to converge on the same source data, not a Q2→Q1 handoff. `copy` (copy-to-clipboard) is an HTML/JS-only presentation feature with no docx/pptx equivalent to lose. **This surfaces a real, separate content-loss gap:** `decoratedcodeblock.lua` has renderers for html/markdown/latex only; docx and pptx fall through to the generic default renderer, which drops the `filename` header entirely — so even though the *data* needs no bridge, the *filename header* is currently silently lost for docx/pptx regardless. This needs an explicit v1 scope decision (accept the loss vs. contribute a docx/pptx renderer upstream vs. some other approach), tracked as an open question, not assigned to any plan yet. |
 | **Footnotes** | **SPLIT** | B1: `NoteRef`+`Def` → native Pandoc `Note`. B2/4: HTML `<section>`+backlinks |
-| TitleBlock; Sectionize; TitleBanner; Website{TitlePrefix,Favicon,BootstrapIcons,CanonicalUrl} | **B2** | HTML-family (title-block via template from Meta; section-divs is HTML-only) |
+| TitleBlock; Sectionize; TitleBanner; Website\{TitlePrefix,Favicon,BootstrapIcons,CanonicalUrl\} | **B2** | HTML-family (title-block via template from Meta; section-divs is HTML-only) |
 | RevealColumns, RevealSlides, RevealFooterAlias, RevealFootnotes | **B2** | revealjs-family scaffolding |
 | entire Navigation phase (toc/navbar/sidebar/pagenav/footer, listings, feeds, categories) | **B4** | HTML/website chrome — Pandoc skips wholesale. Includes `breadcrumbs-render`, `quarto-nav-js`, `repo-actions-render`, `secondary-nav-render`, `listing-feed-stage`, `listing-feed-link`. |
 | CrossrefRender, **CalloutResolve**, Mermaid, CodeBlockRender, TableBootstrapClass, reveal auto-stretch, **AttributionRender** | **B4** | HTML writer's copy of the renderer trinity. `CalloutResolve` destroys the `Callout` CustomNode into Bootstrap-specific HTML DOM, already excluded from `Q2_PREVIEW_TRANSFORM_EXCLUDED` for exactly that reason (`pipeline.rs:1595`; confirmed by `Callout.tsx`'s own comment). `AttributionRender` populates `ctx.format_options` fields consumed only by the HTML/JSON writers (per-node attribution records for hover badges) — no Pandoc consumer exists or is planned. Note: `AttributionGenerate` is **not** a member of this table — it is the `name()` of a `PipelineStage` (`stage/stages/attribution_generate.rs`), not a member of `build_transform_pipeline`; it has no `phase()` override and `const BUCKETS` correctly omits it. Task 6's T6.3 pins this classification so it cannot be silently re-added as a transform. |
@@ -206,11 +206,10 @@ template/writer).
 
 **This table is advisory documentation of intent; the authoritative classification lives in
 code.** The classification is maintained as `const BUCKETS: &[(&str, Bucket)]` in
-`crates/quarto-core/src/pipeline.rs`, whose totality over `build_transform_pipeline(HtmlRender)`
 is asserted by `bucket_classification_is_total_over_the_html_pipeline` (**Task 7, T7.2** — the
 mechanical guard over the const), and whose B1/B3-only survival to the Pandoc cut is asserted by
 `neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut`. **Where this table and that const
-disagree, the const is correct and this table is stale.** T7.2 guards `BUCKETS`'s totality
+disagree, the const is correct and this table is stale.** T7.2 guards `BUCKETS`\'s totality
 against `build_transform_pipeline`; it does **not** guard this table against `BUCKETS` — nothing
 does. This table is kept in sync by hand, as bookkeeping, the next time §6 is touched; a green
 T7.2 is evidence the *Rust classification* is total, not evidence this *table* is current.
@@ -283,11 +282,11 @@ PR link; the P5 contract test flags if a Q1 bump moves the gate.
 **Dependencies:**
 - **Parallel immediately:** P1, P2, P3 (no cross-dependencies once the frozen decisions in this
   doc land).
-- **P4** — after P2 (needs the wire-format schema to build `PandocWriteStage`'s serialization
+- **P4** — after P2 (needs the wire-format schema to build `PandocWriteStage`\'s serialization
   step), though it can start against the *frozen schema decision* before P2's implementation
   fully lands.
 - **P5** — after P1 (needs the `Pandoc`-kind exclude-list decision, specifically that
-  `panel-tabset`'s sugar half stays enabled, for its Tabset field-map to be valid), P2 (schema),
+  `panel-tabset`\'s sugar half stays enabled, for its Tabset field-map to be valid), P2 (schema),
   and P4 (transport, for its Layer-2 golden render).
 - **P6** — after P3 (external-numbering mode) and P5 (Route-R construction + order-assignment
   mechanism, reused for Callout).
@@ -315,7 +314,7 @@ PR link; the P5 contract test flags if a Q1 bump moves the gate.
   which never reads `node.filename`. Q2's job is only to arrive at the shim boundary with correct
   data, which it already does with no bridge needed (see §6); a missing Q1-side renderer for one
   specific format pair is Q1's gap to fix, not something this epic should work around (e.g. by
-  duplicating `decoratedcodeblock.lua`'s rendering logic Rust-side or patching the vendored Lua
+  duplicating `decoratedcodeblock.lua`\'s rendering logic Rust-side or patching the vendored Lua
   beyond the already-scoped crossref patch). Filed upstream:
   [quarto-dev/quarto-cli#14906](https://github.com/quarto-dev/quarto-cli/issues/14906). No plan
   needs a checklist item for this; if upstream fixes it, the fix arrives for free on the next
@@ -366,10 +365,10 @@ someone picks it up later.
   Q1's own Lua) but ignored by Q2's native HTML renderer, which hard-codes English defaults
   (`crossref_render.rs:28-31`). Same source document, different reader-visible caption/ref text
   per format. **This means the epic's crossref-identity promise is about *numbers*, not
-  *presentation*** (see the Definition of done correction in the epic doc). Tracked as
+  _presentation_** (see the Definition of done correction in the epic doc). Tracked as
   `bd-wqdi1pd2`. **This is not just "different wording" — it's silently wrong for a user who is
   explicit.** Zero Q2 readers of `crossref.title-delim`/`fig-prefix`/`ref-hyperlink` exist
-  anywhere in `crates/` (only `crossref_render.rs:29`'s own comment admits the gap), while on the
+  anywhere in `crates/` (only `crossref_render.rs:29`\'s own comment admits the gap), while on the
   Q1 side `crossrefOption()` reads the user's own metadata **ahead of** any param default. So a
   document with an *explicit* `crossref: {fig-prefix: "Abb.", title-delim: " —"}` override
   renders "Abb. 1 — caption" in docx and "Figure 1: caption" in HTML from the same source, **with
@@ -386,14 +385,14 @@ someone picks it up later.
   and P7's golden-harness fixture selection (which deliberately excludes mermaid fixtures) each
   independently make this case invisible — no transform runs, no warning is emitted, and no test
   would ever move. This repo has independently converged, three times recently, on treating
-  "accepted-but-inert" as deserving a signal rather than silence (`Q-5-18`'s
+  "accepted-but-inert" as deserving a signal rather than silence (`Q-5-18`\'s
   `project: type: book` warning; `warn_aliases_ignored`; the `website.llms-txt` warning, whose
   own code comment states the policy outright: "an accepted-but-inert key deserves a signal, not
   silence"). P7 captures one mermaid fixture as a labeled accepted-divergence golden so the gap
   is at least a committed, reviewable artifact rather than purely a design-doc sentence; a
   runtime warning remains deferred.
 - **A user Lua filter resolving to a `Post` entry point cannot see or traverse into any
-  `CustomNode`'s content for a Pandoc-target render** (Callout, Tabset, Theorem, Proof,
+  `CustomNode`\'s content for a Pandoc-target render** (Callout, Tabset, Theorem, Proof,
   FloatRefTarget are all still standing at that point, unlike native Q1 or Q2's own HTML path,
   where nothing custom remains by then). A filter that would normally transform text anywhere in
   the document silently skips everything inside those constructs. The **default** `Pre`-position
@@ -408,8 +407,8 @@ someone picks it up later.
   `bd-5aklrxgi` lands (a general, pre-existing Q2 gap, not new to this epic — see §11).
 - **Q2's native HTML crossref renderer never numbers Callout at all** — verified 2026-09-20
   (P6 Task 5): rendering a labeled, titled callout to HTML produces no "Note N:" prefix
-  whatsoever (`crossref_render.rs`'s `CrossrefRenderTransform` explicitly does not touch
-  `CustomNode("Callout")`; `callout_resolve.rs`'s `is_crossref` flag only suppresses a redundant
+  whatsoever (`crossref_render.rs`\'s `CrossrefRenderTransform` explicitly does not touch
+  `CustomNode("Callout")`; `callout_resolve.rs`\'s `is_crossref` flag only suppresses a redundant
   screen-reader span). The Pandoc leg (docx/pptx, via P5's shim + real Q1 Lua) *does* render the
   number correctly for the same source document. Unlike the presentation-only divergence above,
   this is a genuine **numbers** gap, not a presentation one — there is no number on the HTML side
@@ -440,7 +439,7 @@ someone picks it up later.
 
 ## 13. Project-mode Pandoc rendering — preparing without implementing
 
-**Q2 has no book-project support at all yet** (independent of this epic — see `Q-5-18`'s existing
+**Q2 has no book-project support at all yet** (independent of this epic — see `Q-5-18`\'s existing
 disclaimer, "Quarto 2 does not implement book projects yet"), and this epic does not add
 project-mode Pandoc rendering as new functionality. But the epic should not close off the future
 work, and should fill in the part of the design that's legitimately ours to define now, even
@@ -465,7 +464,7 @@ hybrid" is really "book support for typst/latex," a later epic's problem, not th
 **What's ours to prepare now, without building it:**
 - **v1 stance:** `q2 render <project> --to docx|pptx` for a website/book/manuscript project type
   must not silently proceed into project post-processing that assumes HTML output exists. The
-  minimal containment (not full project-mode support): gate `WebsiteProjectType::post_render`'s
+  minimal containment (not full project-mode support): gate `WebsiteProjectType::post_render`\'s
   hook sequence on `format.identifier.is_html_based()` — this matches Q1's own established
   behavior, not new functionality, and removes the actual risk (bogus sitemap/redirect artifacts)
   without requiring anyone to design project-mode Pandoc rendering. This gate is landed in
@@ -479,7 +478,7 @@ hybrid" is really "book support for typst/latex," a later epic's problem, not th
 
 ## 14. Multi-format render guardrail
 
-Relaxing `render.rs:680-684`'s format check (needed to admit docx/pptx at all) removes the
+Relaxing `render.rs:680-684`\'s format check (needed to admit docx/pptx at all) removes the
 *only* existing signal that Q2 renders one format per invocation. Today, `format: {docx:
 default, html: default}` fails loudly ("Format 'docx' is not yet supported") — a side effect of
 the refusal, not its purpose, but a real guardrail nonetheless. After the relaxation, the same

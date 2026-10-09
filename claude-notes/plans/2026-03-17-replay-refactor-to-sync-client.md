@@ -145,7 +145,7 @@ These are done together as a single change since the removed automergeSync funct
 - [x] Remove the `@automerge/automerge` imports (`free`, `clone`, `view`) from automergeSync.ts
 - [x] Remove the `decodeHeads` import from `@automerge/automerge-repo` (only used by viewText)
 - [x] Verify no other hub-client code imports these removed functions
-- [x] Update `useReplayMode.test.ts` mocks: mock `@quarto/quarto-sync-client`'s `createReplaySession` instead of individual automergeSync functions
+- [x] Update `useReplayMode.test.ts` mocks: mock `@quarto/quarto-sync-client`\'s `createReplaySession` instead of individual automergeSync functions
 - [x] Verify `useReplayMode.test.ts` tests pass with updated mocks
 
 ### Phase 3: Integration verification

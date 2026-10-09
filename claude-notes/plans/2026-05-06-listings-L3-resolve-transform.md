@@ -479,9 +479,9 @@ from Pandoc's doctemplates library):
 | `nowrap`     | —           | Returns the value unchanged in v1. Pandoc's nowrap controls fill-mode in plain text output; for our use case (markdown output) it's a no-op. |
 | `alpha`      | —           | Integer-string → letter form (1→a, 2→b, …, 26→z, 27→aa).       |
 | `roman`      | —           | Integer-string → lowercase Roman numeral.                      |
-| `left`       | width [pad] | Pad-right string to width chars (no-op if longer).             |
-| `center`     | width [pad] | Center string within width.                                    |
-| `right`      | width [pad] | Pad-left string to width chars.                                |
+| `left`       | width `[pad]` | Pad-right string to width chars (no-op if longer).             |
+| `center`     | width `[pad]` | Center string within width.                                    |
+| `right`      | width `[pad]` | Pad-left string to width chars.                                |
 
 Tests:
 - Each pipe in isolation (input → output table).
@@ -688,7 +688,7 @@ reminder"). L3 leaves a `// TODO(bd-XXXX): no Lua hook
 between generate and render today` comment at three
 locations: this transform site, `navbar_generate.rs`
 (the precedent with the same latent assumption), and
-`pipeline.rs`'s navigation-phase comment block.
+`pipeline.rs`\'s navigation-phase comment block.
 
 ## Placeholder emission and the L1 fallback contract
 
@@ -748,14 +748,14 @@ template-compile time) and by L7's regex.
 ## Vendored client-side assets (Phase 5 artifact store)
 
 L3 vendors three Q1 client-side assets that the built-in
-templates' markup depends on, all routed through Phase
+templates\' markup depends on, all routed through Phase
 5's `Project`-scoped artifact store and emitted into
 `_site/site_libs/listing/` (or the WASM equivalent under
 the resolver's VFS root):
 
 | Asset                  | Q1 path                                                                    | Role                                                                                  |
 |------------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
-| `list.min.js`          | `src/resources/projects/website/listing/list.min.js`                       | Third-party (~25KB, MIT). Backs the sort/filter UI markup the templates emit.        |
+| `list.min.js`          | `src/resources/projects/website/listing/list.min.js`                       | Third-party (\~25KB, MIT). Backs the sort/filter UI markup the templates emit.        |
 | `quarto-listing.js`    | `src/resources/projects/website/listing/quarto-listing.js`                 | Q1-owned glue. Provides `window.quartoListingCategory(...)` (clicked from category items). Without it, category clicks are dead JS references. |
 | `quarto-listing.scss`  | `src/resources/projects/website/listing/quarto-listing.scss`               | Layout styles for `.quarto-listing`, `.quarto-post`, the grid layout, the table view. |
 
@@ -833,7 +833,7 @@ Two builders need updating:
 - `build_wasm_html_pipeline` (hub-client / WASM path).
 
 In both, insert `ListingGenerateTransform` and
-`ListingRenderTransform` into the `AstTransformsStage`'s
+`ListingRenderTransform` into the `AstTransformsStage`\'s
 transform list, between the existing generate transforms
 and the existing render transforms. The exact slot is in
 `build_transform_pipeline` /
@@ -1064,7 +1064,7 @@ resolve them inline rather than punt:
   resolved listings under `meta.listings.<id>` for Lua-
   mutation forward-compat. Per D13 there is no Lua slot
   today, and the `Listing`/`ListingItem` ConfigValue
-  round-trip would be ~200 lines of boilerplate that
+  round-trip would be \~200 lines of boilerplate that
   drifts. We follow the `crossref_index` precedent
   instead: a `pub resolved_listings: Vec<ResolvedListing>`
   field on `RenderContext`, populated by
@@ -1260,7 +1260,7 @@ See §"Filing reminder" for descriptions. During impl:
 - [x] Implement `pipes.rs` with `apply_pipe` /
       `apply_pipes` dispatch and individual
       implementations.
-- [x] Wire into `evaluator.rs`'s two `// TODO: Apply
+- [x] Wire into `evaluator.rs`\'s two `// TODO: Apply
       pipes` sites — variable path and partial-output
       path.
 - [x] Fix latent parser bug: outer `pipe` rule arm was
@@ -1365,7 +1365,7 @@ See §"Filing reminder" for descriptions. During impl:
       multi-paragraph link wrappers around metadata
       sections (markdown can't represent them); each
       field gets its own block. Per-item interactivity
-      (the `metadata-attrs` data-* attrs in the wrapper
+      (the `metadata-attrs` data-\* attrs in the wrapper
       Div) lands in phase 7 alongside `list.min.js`.
 - [x] Implement `ListingRenderTransform` at
       `crates/quarto-core/src/transforms/listing_render.rs`:
@@ -1481,7 +1481,7 @@ Per D5: ship `list.min.js`, `quarto-listing.js`, and
       registered both as `Project`-scoped artifacts
       keyed `js:listing:<name>` from
       `ListingRenderTransform` (only when at least one
-      listing is rendered). `ApplyTemplateStage`'s
+      listing is rendered). `ApplyTemplateStage`\'s
       Phase-5 auto-emission picks up the `js:` prefix
       and emits `<script>` tags via the resolver, so
       depth-N pages get relative `../site_libs/...`
@@ -1670,7 +1670,7 @@ they trigger)
    rewrites it via the active resolver:
    - native CLI → page-relative `.html`
    - hub-client / VFS resolver → artifact-rooted URL
-     that `iframePostProcessor.ts`'s case-3 anchor handler
+     that `iframePostProcessor.ts`\'s case-3 anchor handler
      reverse-maps to `.qmd` for in-app navigation.
    `outputHref` is preserved separately for templates
    that need the post-render URL (L7 description
@@ -1688,7 +1688,7 @@ they trigger)
      hardcoded inside `createNewProject`.
    - Has a `--verify` flag that does a fresh-client
      round-trip read-back as a safety check.
-   - Has known quirks with `wss://sync.automerge.org`'s
+   - Has known quirks with `wss://sync.automerge.org`\'s
      latency: the internal 1-second peer-wait timeout
      fires almost always, the script handles the
      offline-mode-then-reconnect path correctly. The

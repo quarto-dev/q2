@@ -7,8 +7,8 @@ quarto-source-map 0.1.0/0.1.1 (checkouts under `external-sources/`).
 **Method:** four parallel code sweeps (config-diagnostic binding sites;
 `resolve_byte_range` consumers; FileId-namespace mapping; quarto-yaml internals),
 with every high-severity finding re-verified by direct reading of the cited
-lines. Findings marked **[verified]** were confirmed first-hand in this session;
-**[agent]** findings were reported by a sweep with line citations but not
+lines. Findings marked **\[verified\]** were confirmed first-hand in this session;
+**\[agent\]** findings were reported by a sweep with line citations but not
 independently re-read.
 
 ---
@@ -46,14 +46,14 @@ constructed, transported, and re-bound independently:
 5. **`resolve_byte_range()` returns `(usize, usize, usize)`**
    (`source_info.rs:388-408`) — it unwraps the newtype, so every consumer
    juggles a raw usize and re-wraps it (or forgets to, as in
-   `attribution_render.rs`'s `file_id != 0` gate).
+   `attribution_render.rs`\'s `file_id != 0` gate).
 6. **Content is (re)read from disk at render time.** `add_file(path, None)`
    reads for `FileInformation` at registration; the ariadne renderer
    (`quarto-error-reporting/src/diagnostic.rs:794-800`) and `map_offset`
    (`quarto-source-map/src/mapping.rs:31-35`) read *again* at render. Under
    watch/preview, offsets computed against parse-time content can be rendered
    against newer disk content — the same wrong-text failure with no wrong
-   binding anywhere. **[verified]**
+   binding anywhere. **\[verified\]**
 
 Consequences observed: confidently-wrong ariadne spans, silently dropped
 snippets, and (outside diagnostics) mis-sliced bytes in the incremental writer
@@ -62,7 +62,7 @@ and misattributed provenance in the engine pipeline.
 One more span-level representable bad state: `map_offset` on a `Concat`
 resolves each piece independently, so a single diagnostic's start and end can
 land in **different files** (`mapping.rs:54-73`); the renderer draws the
-excerpt from `root_file_id()` regardless. **[verified]**
+excerpt from `root_file_id()` regardless. **\[verified\]**
 
 ---
 
@@ -74,24 +74,24 @@ excerpt from `root_file_id()` regardless. **[verified]**
 |---|------|--------|
 | D1 | `render_scripts.rs` `script_error` | **fixed** on PR branch via `bind_config_source` (candidates: `config_path` + `extension_manifest_paths`; list proven complete for scripts) |
 | D2 | `project_resources.rs` project-level (Q-5-1) | **fixed** on PR branch (`resource_error_to_config_parse_error`) |
-| D3 | `project_resources.rs:864` doc-level `resource_error_to_parse_error`, callers at `:1035`/`:1060` (PR branch) | **SUSPECT — real, reachable.** Doc-level `resources:` patterns come from *merged* metadata (`document_profile.rs:117-124` ← `doc.ast.meta` post-`MetadataMergeStage`), so a pattern written in `blog/_metadata.yml` (or `_quarto.yml`, or an extension's `contributes.metadata`) carries that file's hash FileId while the call binds `doc_source_abs` (the `.qmd`). Same two symptoms as bd-m6wmztln. The PR's own docstring names this caveat and defers it here. **[agent, matches PR docstring]** |
-| D4 | `project/mod.rs:903` `project_type_error` (Q-5-17) | **Correct today only by call ordering** — both error returns provably happen before any extension-fragment merge, so the fid always equals `hash(config_path)`. Unchecked, undocumented at the site, no guarding test; breaks silently if the merge moves or the helper is reused post-merge. **[agent, data-flow traced]** |
+| D3 | `project_resources.rs:864` doc-level `resource_error_to_parse_error`, callers at `:1035`/`:1060` (PR branch) | **SUSPECT — real, reachable.** Doc-level `resources:` patterns come from *merged* metadata (`document_profile.rs:117-124` ← `doc.ast.meta` post-`MetadataMergeStage`), so a pattern written in `blog/_metadata.yml` (or `_quarto.yml`, or an extension's `contributes.metadata`) carries that file's hash FileId while the call binds `doc_source_abs` (the `.qmd`). Same two symptoms as bd-m6wmztln. The PR's own docstring names this caveat and defers it here. **\[agent, matches PR docstring\]** |
+| D4 | `project/mod.rs:903` `project_type_error` (Q-5-17) | **Correct today only by call ordering** — both error returns provably happen before any extension-fragment merge, so the fid always equals `hash(config_path)`. Unchecked, undocumented at the site, no guarding test; breaks silently if the merge moves or the helper is reused post-merge. **\[agent, data-flow traced\]** |
 | D5 | `commands/render.rs:1078` (`config_source_context`) and `:1086-1119` (`attach_config_source`) | **Correct** — `attach_config_source` re-derives the hash and refuses to bind on mismatch (`:1113`). Candidate list is `{config_path}` only → extension/`_metadata.yml` spans degrade span-less (coverage gap, not corruption). |
 | D6 | `theme_diagnostic.rs:69` + `compile_theme_css.rs:633-643` | **Correct** (the original precedent). Candidates: `{config_path (N2), document input (N1 FileId(0))}`. A theme set in `_metadata.yml` or an extension format degrades span-less. |
 | D7 | `metadata_merge.rs:299-313` `register` | **Correct pattern** — id, path, and content all derived from one path (this is the shape the API *should* force). Gap: extension manifests are never registered, so doc-scoped diagnostics anchored in `_extension.yml` are span-less. |
 | D8 | `glob_resolve.rs:92`, `glob/provenance.rs:154`, `span_assert.rs:142` | Test-only, self-consistent. |
-| D9 | `pipeline.rs:800-802` (also `:834`, `:1006`) | **Coverage gap:** the `StageError` fallback arm builds a fresh single-file context, discarding the real multi-file context `MetadataMergeStage` populated — any stage diagnostic anchored in a config file or include loses its snippet. Not a mis-bind. **[agent]** |
+| D9 | `pipeline.rs:800-802` (also `:834`, `:1006`) | **Coverage gap:** the `StageError` fallback arm builds a fresh single-file context, discarding the real multi-file context `MetadataMergeStage` populated — any stage diagnostic anchored in a config file or include loses its snippet. Not a mis-bind. **\[agent\]** |
 
 ### 2.2 Wrong-file offsets outside the diagnostics path
 
 | # | Site | Finding |
 |---|------|---------|
-| P1 | `engine_execution.rs:498,518,528-530` | **Live structural bug in every project render with an executable engine. [verified]** Main pipeline order is ParseDocument → **MetadataMerge** → … → IncludeExpansion → … → **EngineExecution** (`pipeline.rs:279-323`). `MetadataMergeStage` registers `_quarto.yml`/`_metadata.yml` into the *same* `source_context` via `add_file_with_id`, growing `files` but not `ast_context.filenames`. `engine_execution.rs:498` then computes the intermediate's slot as `FileId(filenames.len())` — while `add_file` actually assigns `FileId(files.len())`, larger by the number of config registrations — and remaps every executed-AST id by `id.0 + new_slot.0`. Engine-produced blocks end up pointing at the dense slot occupied by `_quarto.yml` (or an include). The comment at `:333-334` ("files are added in lock-step with filenames") is false after MetadataMerge. Downstream: trace attribution wrong; any diagnostic anchored in an engine-produced block renders against config-file text; JSON writer's positional pairing (P4) compounds it. Also the additive remap applied to a tree that *could* contain hash ids is only safe because the executed AST is a fresh parse — an unwritten invariant with no assertion. |
-| P2 | `writers/incremental.rs:704-708`, `:747-766` | **[verified at 704-708]** `preimage_in(target_file_id).unwrap_or_else(|| inline_source_span(..))` then `result.push_str(&original_qmd[range])`. `preimage_in` returns `None` for an Original inline **in a different file**, at which point the fallback supplies that foreign file's offsets and slices them out of `original_qmd` — wrong bytes copied into the rewritten qmd, or a panic on out-of-range/char-boundary. The comment justifies the fallback for Concat/Generated sentinels but it also catches the foreign-file case. `target_file_id` itself is guessed from the first block that reports one (`:238-243`). `assemble_recursed_container` (`:747-766`) slices with no file check at all. |
-| P3 | `treesitter_utils/section.rs:126-139`, `pipe_table.rs:253-261` | **[verified at section.rs]** Caption-hull construction stamps `SourceInfo::original(table.root_file_id().unwrap_or(FileId(0)), table.start, caption.end)` — no check that the caption resolves to the same file, raw `end_offset()` (sentinel 0 for Concat/Generated), and `unwrap_or(FileId(0))` mints the dummy id in-tree. `hull_source_infos` (`postprocess.rs:301-315`) is the same computation done correctly. |
-| P4 | `writers/json.rs:1825-1845` (dup at `:4260`), `readers/json.rs:1503-1562` | JSON writer emits the file table by pairing `filenames[idx]` with `files[idx]` **positionally**; reader re-densifies with `add_file`/`add_file_with_info` in array order. Any N2 hash id surviving into the serialized AST (post-MetadataMerge, or the desynced state from P1) is silently lost or mis-paired on round-trip. WASM entry points (`wasm-quarto-hub-client/src/lib.rs:903-908`) construct `filenames: vec!["/input.qmd"]` against a multi-file context. **[agent]** |
-| P5 | `transforms/attribution_render.rs:176-181` | Gates blame attribution on the raw literal `file_id != 0` — a cross-namespace comparison relying on "slot 0 = the blamed doc" with no assertion; `AttributionMap` carries no file identity to catch mismatch. Degrades to silent misattribution if slot 0 changes meaning. **[agent]** |
-| P6 | `pampa/src/lua/types.rs:1042-1053` + `lua/quarto_api.rs:387-392` | `si:byte_range()` hands Lua `{start, end}` with the fid discarded; `quarto.attribution.lookup_range(start, end)` is a public primitive, so the natural filter idiom silently misattributes include-spliced nodes. The bundled `lookup` thunk guards; user filters must each rediscover the rule. **[agent]** |
+| P1 | `engine_execution.rs:498,518,528-530` | **Live structural bug in every project render with an executable engine. \[verified\]** Main pipeline order is ParseDocument → **MetadataMerge** → … → IncludeExpansion → … → **EngineExecution** (`pipeline.rs:279-323`). `MetadataMergeStage` registers `_quarto.yml`/`_metadata.yml` into the *same* `source_context` via `add_file_with_id`, growing `files` but not `ast_context.filenames`. `engine_execution.rs:498` then computes the intermediate's slot as `FileId(filenames.len())` — while `add_file` actually assigns `FileId(files.len())`, larger by the number of config registrations — and remaps every executed-AST id by `id.0 + new_slot.0`. Engine-produced blocks end up pointing at the dense slot occupied by `_quarto.yml` (or an include). The comment at `:333-334` ("files are added in lock-step with filenames") is false after MetadataMerge. Downstream: trace attribution wrong; any diagnostic anchored in an engine-produced block renders against config-file text; JSON writer's positional pairing (P4) compounds it. Also the additive remap applied to a tree that *could* contain hash ids is only safe because the executed AST is a fresh parse — an unwritten invariant with no assertion. |
+| P2 | `writers/incremental.rs:704-708`, `:747-766` | **\[verified at 704-708\]** `preimage_in(target_file_id).unwrap_or_else(|| inline_source_span(..))` then `result.push_str(&original_qmd[range])`. `preimage_in` returns `None` for an Original inline **in a different file**, at which point the fallback supplies that foreign file's offsets and slices them out of `original_qmd` — wrong bytes copied into the rewritten qmd, or a panic on out-of-range/char-boundary. The comment justifies the fallback for Concat/Generated sentinels but it also catches the foreign-file case. `target_file_id` itself is guessed from the first block that reports one (`:238-243`). `assemble_recursed_container` (`:747-766`) slices with no file check at all. |
+| P3 | `treesitter_utils/section.rs:126-139`, `pipe_table.rs:253-261` | **\[verified at section.rs\]** Caption-hull construction stamps `SourceInfo::original(table.root_file_id().unwrap_or(FileId(0)), table.start, caption.end)` — no check that the caption resolves to the same file, raw `end_offset()` (sentinel 0 for Concat/Generated), and `unwrap_or(FileId(0))` mints the dummy id in-tree. `hull_source_infos` (`postprocess.rs:301-315`) is the same computation done correctly. |
+| P4 | `writers/json.rs:1825-1845` (dup at `:4260`), `readers/json.rs:1503-1562` | JSON writer emits the file table by pairing `filenames[idx]` with `files[idx]` **positionally**; reader re-densifies with `add_file`/`add_file_with_info` in array order. Any N2 hash id surviving into the serialized AST (post-MetadataMerge, or the desynced state from P1) is silently lost or mis-paired on round-trip. WASM entry points (`wasm-quarto-hub-client/src/lib.rs:903-908`) construct `filenames: vec!["/input.qmd"]` against a multi-file context. **\[agent\]** |
+| P5 | `transforms/attribution_render.rs:176-181` | Gates blame attribution on the raw literal `file_id != 0` — a cross-namespace comparison relying on "slot 0 = the blamed doc" with no assertion; `AttributionMap` carries no file identity to catch mismatch. Degrades to silent misattribution if slot 0 changes meaning. **\[agent\]** |
+| P6 | `pampa/src/lua/types.rs:1042-1053` + `lua/quarto_api.rs:387-392` | `si:byte_range()` hands Lua `{start, end}` with the fid discarded; `quarto.attribution.lookup_range(start, end)` is a public primitive, so the natural filter idiom silently misattributes include-spliced nodes. The bundled `lookup` thunk guards; user filters must each rediscover the rule. **\[agent\]** |
 
 ### 2.3 Namespace-collision exposure (latent)
 
@@ -100,7 +100,7 @@ excerpt from `root_file_id()` regardless. **[verified]**
   (`fid == 0`), register the config file at *dense index 0* — making a
   genuinely-dummy span render as a real location. `render.rs:1104-1115` is the
   only site whose hash-equality guard also rejects dummies.
-- `quarto_xml::parse`'s `FileId(0)` spans (N3′) are in production; if an XML
+- `quarto_xml::parse`\'s `FileId(0)` spans (N3′) are in production; if an XML
   diagnostic ever reaches a renderer with a populated context, it renders
   against the primary document.
 - Bare `quarto_yaml::parse()` (N3) is test-only in q2 today — one production
@@ -114,12 +114,12 @@ excerpt from `root_file_id()` regardless. **[verified]**
 
 | # | Finding |
 |---|---------|
-| Y1 | **`parse_with_parent`'s contract is unchecked** (`parser.rs:92-94`): the parent must describe exactly `content` (origin at byte 0 of `content`, length = `content.len()`), but nothing validates it, `SourceInfo::substring` stores offsets verbatim, and `resolve_byte_range` composes with **no clamp to the parent's end** (`source-map/source_info.rs:400-403`). A misaligned parent yields plausible in-file offsets at the wrong place. **The crate's own doc example violates the contract** (`parser.rs:69-87`: narrates "extracted at offset 10-50" while passing a `0..1000` parent; `rust,no_run` so never executed). q2's two call sites are correct by carefully-maintained convention: `cell_options/mod.rs:203-222` (parallel push loops, no length assertion), `jupyter/text_execute.rs:272-274` (sound only while engine input is byte-identical through the frontmatter). |
-| Y2 | **The `FileId(0)` dummy** (`parser.rs:357,373,483`) — see N3 above. Combined with `get_file`'s positional fallback this is the crate's contribution to the aliasing hazard. |
-| Y3 | `error.rs`: all variants carry `location: Option<SourceInfo>` but `Display` drops it and the only live error path (`From<ScanError>`, `:67-74`) sets `location: None` — so no wrong-file risk *and* no location at all. Trap for a future fix: `ScanError`'s index is a **character** index; the parser's own `byte_offset_of_char` (`parser.rs:264-298`) exists for this conversion. |
-| Y4 | `hasher.finish() as usize` truncates to 32 bits on wasm32. `add_file_with_id` **panics** on duplicate ids, so a birthday collision (~2^16 files) becomes a crash in the hub client. q2 guards at exactly one site (`metadata_merge.rs:305-312`). |
+| Y1 | **`parse_with_parent`\'s contract is unchecked** (`parser.rs:92-94`): the parent must describe exactly `content` (origin at byte 0 of `content`, length = `content.len()`), but nothing validates it, `SourceInfo::substring` stores offsets verbatim, and `resolve_byte_range` composes with **no clamp to the parent's end** (`source-map/source_info.rs:400-403`). A misaligned parent yields plausible in-file offsets at the wrong place. **The crate's own doc example violates the contract** (`parser.rs:69-87`: narrates "extracted at offset 10-50" while passing a `0..1000` parent; `rust,no_run` so never executed). q2's two call sites are correct by carefully-maintained convention: `cell_options/mod.rs:203-222` (parallel push loops, no length assertion), `jupyter/text_execute.rs:272-274` (sound only while engine input is byte-identical through the frontmatter). |
+| Y2 | **The `FileId(0)` dummy** (`parser.rs:357,373,483`) — see N3 above. Combined with `get_file`\'s positional fallback this is the crate's contribution to the aliasing hazard. |
+| Y3 | `error.rs`: all variants carry `location: Option<SourceInfo>` but `Display` drops it and the only live error path (`From<ScanError>`, `:67-74`) sets `location: None` — so no wrong-file risk *and* no location at all. Trap for a future fix: `ScanError`\'s index is a **character** index; the parser's own `byte_offset_of_char` (`parser.rs:264-298`) exists for this conversion. |
+| Y4 | `hasher.finish() as usize` truncates to 32 bits on wasm32. `add_file_with_id` **panics** on duplicate ids, so a birthday collision (\~2^16 files) becomes a crash in the hub client. q2 guards at exactly one site (`metadata_merge.rs:305-312`). |
 | Y5 | Public constructors accept arbitrary span combinations with zero consistency checks: `YamlHashEntry::new` takes five independent spans (`yaml_with_source_info.rs:254-268`); `new_hash`/`new_array` accept children from other files; `with_tag` attaches any span to any node. In-parser use is safe; the API invites hand-assembled inconsistent trees. |
-| Y6 | `create_contiguous_span` (`parser.rs:159-201`): the same-file assert in the Original arm is unreachable today (single builder, fixed parent), but the Substring arm silently drops `end_info`'s parent — the arm that *would* mint a hybrid span if per-node parents ever appear. |
+| Y6 | `create_contiguous_span` (`parser.rs:159-201`): the same-file assert in the Original arm is unreachable today (single builder, fixed parent), but the Substring arm silently drops `end_info`\'s parent — the arm that *would* mint a hybrid span if per-node parents ever appear. |
 
 ### quarto-yaml-validation (latent for q2 — q2 does not depend on it; verified)
 
@@ -178,7 +178,7 @@ Honest assessment: this fixes every *known* site and prevents the known
 pattern, but the bad state stays representable; new call sites in new shapes
 (P1 was not a diagnostic site at all) will keep appearing.
 
-### Option B — mid: kill the split at the API seam (quarto-source-map + quarto-yaml, ~1-2 weeks)
+### Option B — mid: kill the split at the API seam (quarto-source-map + quarto-yaml, \~1-2 weeks)
 
 1. **Move the path→id derivation into quarto-source-map.** The filename-hash
    scheme is not YAML-specific. Add `FileId::for_path(&str)` (same recipe,
@@ -225,7 +225,7 @@ This constrains B in three ways, none of which raise its risk:
   fallback). The caller reads via its runtime (host FS or VFS) and hands over
   the string. This *removes* filesystem awareness from quarto-source-map
   relative to today — the library's current disk touchpoints (`add_file(path,
-  None)`, `map_offset`'s and the renderer's render-time re-reads) are exactly
+  None)`, `map_offset`\'s and the renderer's render-time re-reads) are exactly
   what already degrades in WASM.
 - **Prefer the uniform-lookup variant of B.3** (have `add_file` also record
   its id in the sparse map) over deleting the positional fallback outright:

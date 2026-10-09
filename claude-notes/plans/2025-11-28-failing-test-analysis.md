@@ -39,7 +39,7 @@ Actual:   "This IS A Pen That Is A Cat/mouse smith Pencil"
 ```
 
 **Fix Complexity**: Medium - Need proper English title-case rules
-**Impact**: ~30-40 tests
+**Impact**: \~30-40 tests
 
 ### 2. Moving Punctuation (13 punctuation + some bugreports)
 
@@ -55,7 +55,7 @@ Actual:   "colon:: colon"
 ```
 
 **Fix Complexity**: Medium-High - Need to implement CSL punctuation exchange
-**Impact**: ~15-20 tests
+**Impact**: \~15-20 tests
 
 ### 3. Citation Position (13 position tests)
 
@@ -65,7 +65,7 @@ Actual:   "colon:: colon"
 - Position tracking across citations
 
 **Fix Complexity**: Medium - Need position tracking state
-**Impact**: ~15-20 tests
+**Impact**: \~15-20 tests
 
 ### 4. Flip-Flop Formatting (15 flipflop tests)
 
@@ -75,7 +75,7 @@ Actual:   "colon:: colon"
 ```
 
 **Fix Complexity**: Medium - Need to track formatting state
-**Impact**: ~15-20 tests
+**Impact**: \~15-20 tests
 
 ### 5. Label Formatting (17 label tests)
 
@@ -86,7 +86,7 @@ Actual:   "colon:: colon"
 - Empty label suppression
 
 **Fix Complexity**: Medium
-**Impact**: ~17 tests
+**Impact**: \~17 tests
 
 ### 6. Number/Ordinal Formatting (15 number tests)
 
@@ -97,7 +97,7 @@ Actual:   "colon:: colon"
 - Ordinal spacing options
 
 **Fix Complexity**: Medium
-**Impact**: ~15 tests
+**Impact**: \~15 tests
 
 ### 7. Locale Handling (16 locale tests)
 
@@ -108,7 +108,7 @@ Actual:   "colon:: colon"
 - Non-existent locale fallback
 
 **Fix Complexity**: Low-Medium
-**Impact**: ~16 tests
+**Impact**: \~16 tests
 
 ## Recommended Priority Order
 

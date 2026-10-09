@@ -7,7 +7,7 @@
 
 ## Overview
 
-The hub-client has a solid foundation: ~110 CSS custom-property tokens with
+The hub-client has a solid foundation: \~110 CSS custom-property tokens with
 light/dark themes, a recent WCAG 2.2 pass (e71b1ac5), and a coherent visual
 language — white surfaces + hairlines in light, desaturated slate in dark,
 teal primary actions — introduced by the July 2026 projects-home rework
@@ -209,7 +209,7 @@ deferred to Phase 5.
       and active-accent-row mixins (as documented shared classes).
       **Done (7ea60da9):** `.qh-truncate` (5 exact-trio sites),
       `.qh-row-hover`, `.qh-active-accent-row` (logical
-      border-inline-start). `.file-item`'s margin-offset variant of the
+      border-inline-start). `.file-item`\'s margin-offset variant of the
       active row is left for Phase 1 — unifying it is an alignment change,
       not a value-preserving one.
 - [x] Burn down the `lint:css` exceptions list to empty for color/z-index rules.
@@ -522,7 +522,7 @@ scroll, no clipped controls.
       320px viewport — at ≤480px it now spans its anchor's full width
       (the row/card is always inside the viewport). The row-menu submenu
       needed no fix: `.qh-row .qh-menu` (specificity 0,2,0) overrides
-      `.qh-submenu`'s rightward `left: calc(100% + 4px)`, anchoring
+      `.qh-submenu`\'s rightward `left: calc(100% + 4px)`, anchoring
       submenus to each item's right edge — inside the viewport at 320
       and 1280 alike (measured, then pinned by a matrix spec).
 - [x] ProjectsHome grid: extend the existing 980/760 breakpoints for
@@ -540,10 +540,10 @@ scroll, no clipped controls.
       `overflow: hidden` changes the span's baseline alignment, and the
       1280px baselines must stay pixel-identical). ≤480px: sidebar width
       floor 180px → 120px (rows/labels already truncate); MinimalHeader
-      wraps to two rows — previously `.header-left` collapsed to ~9px flex
+      wraps to two rows — previously `.header-left` collapsed to \~9px flex
       width while its icon buttons painted on, ending up *under*
       `.header-right` (later in paint order): an overlap no viewport-bounds
-      assertion catches, pinned by asserting `.header-left`'s own
+      assertion catches, pinned by asserting `.header-left`\'s own
       scrollWidth. Layout redesigns (sidebar drawer, split-view collapse,
       header overflow menu) remain Phase 5 design work.
 - [x] Fix any reflow failures the 320px matrix row surfaces (no horizontal
@@ -561,7 +561,7 @@ value-preserving); build:all green. New 320/480px snapshots inspected
 visually (wrapped headers, single-column rows, internal dialog scroll all
 render correctly in both themes). **Trap recorded:** Playwright's
 `--update-snapshots` skips rewrites when the new capture is within the
-spec's `maxDiffPixelRatio` tolerance — the row-name fix (a ~0.5% pixel
+spec's `maxDiffPixelRatio` tolerance — the row-name fix (a \~0.5% pixel
 change) silently kept the stale capture; force-regenerate by deleting the
 PNG and running `--update-snapshots=missing`. **CI follow-up:** the new
 routes need `chromium-linux` baselines via the `recreate-all-snapshots`
@@ -652,7 +652,7 @@ commit, and can be individually approved, held, or reverted.
       into a kebab overflow menu ≤700px (Phase 1 Menu).
 - [x] Alignment pass: type scale (23d57bd78 — half-pixel sizes onto the
       scale, new `--text-2xs: 10px`; 7.5px facepile glyph documented
-      exception), radius scale (c5c5f23d0 — new xs/xl steps; ~70
+      exception), radius scale (c5c5f23d0 — new xs/xl steps; \~70
       declarations migrated; buttons 7→8, menus 9→8, cards 10→12),
       truncation + icons (ed09d1a3e — eight ad-hoc trios onto
       `.qh-truncate`; `.qh-btn` gains inline-flex for future icon+text).

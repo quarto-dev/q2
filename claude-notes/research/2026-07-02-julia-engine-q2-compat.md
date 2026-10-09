@@ -23,7 +23,7 @@ bare-specifier aliases that `julia-engine.ts` relies on for its bare
 imports (`"path"`, `"fs/exists"`, `"encoding/base64"`). Added, matching
 Q1's `src/resources/extension-build/import-map.json` and plan1c's config
 spec (`claude-notes/plans/2026-04-16-plan1c-extension-integration.md`
-~L421-446) exactly:
+\~L421-446) exactly:
 
 ```jsonc
 "path":       "jsr:@std/path@1.0.8",
@@ -84,7 +84,7 @@ forbids inventing a new one):
 No secrets found. `grep -ril "token|secret|api_key|apikey|password"`
 across the upstream tree hit only: bundled third-party JS
 (`bootstrap.min.js`, `clipboard.min.js` — excluded anyway via
-`example_files/`) and `src/julia-engine.ts`'s `secret: string` HMAC
+`example_files/`) and `src/julia-engine.ts`\'s `secret: string` HMAC
 parameter name (crypto-signing API, not an embedded credential) — no
 exclusion needed beyond the above.
 
@@ -117,7 +117,7 @@ contributes:
         - .jl
 ```
 
-Exact text from the plan (Phase 4A, ~L79-87). `claims-files` deliberately
+Exact text from the plan (Phase 4A, \~L79-87). `claims-files` deliberately
 **not** declared — Julia's dynamic `claimsFile` is content-inspecting
 (`# %%` percent scripts), so leaving it undeclared keeps Pass-1 zero-spawn
 resolution intact (`file-extensions` is only a can-handle pre-filter).
@@ -155,7 +155,7 @@ inside _extensions/julia-engine.
 ```
 
 Neither failure is a `deno` error and neither is fixed by editing
-`julia-engine.ts` — both are `q2 build-ts-extension`'s own directory-
+`julia-engine.ts` — both are `q2 build-ts-extension`\'s own directory-
 resolution assumptions failing to match a real Q1 extension repo's shape.
 Per the brief, `crates/` source is out of scope for this task, so the
 build was made to work via a **local, non-committed, one-time symlink**:
@@ -164,7 +164,7 @@ build was made to work via a **local, non-committed, one-time symlink**:
 _extensions/julia-engine/src -> ../../src     # created only for the build, removed after
 ```
 
-This satisfies `find_entry_ts`'s convention without duplicating or moving
+This satisfies `find_entry_ts`\'s convention without duplicating or moving
 any committed file. `deno bundle` canonicalizes the symlinked entry path
 before resolving relative imports, so the emitted module-path banner
 comments read `src/julia-engine.ts` / `src/constants.ts` (the *real*
@@ -285,7 +285,7 @@ level, only that P1.1b landed the wiring).
 
 ## 8. Open items / concerns carried to 4B
 
-1. **`build-ts-extension`'s directory-resolution convention doesn't fit
+1. **`build-ts-extension`\'s directory-resolution convention doesn't fit
    real Q1 extension repos.** Both failure modes in §4 are structural, not
    config: (a) the CLI can't take a `.ts` file as `PATH` (only a directory
    or an `_extension.yml` path), and (b) it hardcodes TS source living
@@ -327,7 +327,7 @@ Reconciled §7's flag: all **25 distinct `quarto.*` members** julia-engine.ts
 calls exist in the assembled global. Crucially, the 6 `quarto.jupyter.*` members
 used (`assets`, `isPercentScript`, `percentScriptToMarkdown`,
 `resultEngineDependencies`, `resultIncludes`, `toMarkdown`) are ALL among
-`makeJupyter`'s 7 *implemented* methods (`ts-packages/quarto-api/src/jupyter/index.ts`)
+`makeJupyter`\'s 7 *implemented* methods (`ts-packages/quarto-api/src/jupyter/index.ts`)
 — none hit the 15 `NotImplemented` throwers. `console.withSpinner` exists
 (`console/index.ts`). No missing-member risk. (Namespace count: the "8th" in
 the plan's prose is `crypto.subtle` — native Web Crypto, not a `quarto.*`
@@ -408,7 +408,7 @@ host shim; deliberately deferred.
 `<div id="cell-1" class="cell">` with the echoed source `1 + 1` and
 `<div class="cell-output cell-output-display">…<code>2</code>…</div>`.
 Cold start: QNR's Julia project was already instantiated on this machine (no
-multi-minute install observed); the control server started in ~4s per render
+multi-minute install observed); the control server started in \~4s per render
 (`daemon: false` → oneShot, server closed after each render — no detached
 server escaped; no transport-file cleanup needed).
 
@@ -447,7 +447,7 @@ inline rather than file-based. Root cause: `displayDataMimeType`
 (`ts-packages/quarto-api/src/jupyter/display-data.ts`) is a faithful,
 documented port of Q1's own priority-list quirk — for HTML-family targets,
 `text/html` is unconditionally unshifted to the FRONT of the MIME priority
-list, ahead of `image/png`/`image/svg+xml`. `Plots.jl`'s default GR-backend
+list, ahead of `image/png`/`image/svg+xml`. `Plots.jl`\'s default GR-backend
 plot object IS `showable` as `text/html` (confirmed empirically:
 `showable(MIME("text/html"), plot(1:10, rand(10)))` → `true`), and its
 `text/html` show method itself emits a self-contained
@@ -472,7 +472,7 @@ not scoped to `figure-html`. `julia-engine.ts` sends
 `supporting: [join(assets.base_dir, assets.supporting_dir)]`
 UNCONDITIONALLY (`src/julia-engine.ts:287`); `assets.figures_dir` is created
 eagerly by `host.fs.ensureDir` (`assets.ts:91`) regardless of whether any
-figure ever lands inside it, and `assets.ts`'s walk check resolved
+figure ever lands inside it, and `assets.ts`\'s walk check resolved
 `supporting_dir` to the whole `files_dir` (not `figures_dir`) because nothing
 else existed under it at execute time. An initial guess of `supporting=[]`
 (reasoning from "no file was written") was WRONG and corrected only after
@@ -502,7 +502,7 @@ assertion (`message.contains("this should fail gracefully")` alone) did NOT
 redden against the named revert (the `FromEngine::Error` arm in
 `TsEngineHost::request`, `ts_process.rs:~693`) — it stayed falsely GREEN.
 Cause: after the revert, `request()` returns `Ok(FromEngine::Error{..})`
-instead of `Err`; `TsEngine::execute`'s OWN fallback arm
+instead of `Err`; `TsEngine::execute`\'s OWN fallback arm
 (`other => Err(ExecutionError::other(format!("unexpected response to
 Execute: {other:?}")))`) then produces an error whose `{:?}` Debug dump of
 the `FromEngine::Error` struct still happens to embed the original message
@@ -554,7 +554,7 @@ Landed as `julia_engine_e2e::j3_exeflags_and_env_through_julia_block`.
 `FOO=BAR`.
 
 **Schema stop-point (resolved).** Confirmed against the INSTALLED
-QuartoNotebookRunner 0.17.4 source (`~/.julia/packages/QuartoNotebookRunner/
+QuartoNotebookRunner 0.17.4 source (`\~/.julia/packages/QuartoNotebookRunner/
 evCNi/src/server.jl`, exactly the version the fixture's `Project.toml` pins):
 `_exeflags_and_env(options)` reads `options["format"]["metadata"]["julia"]
 ["exeflags"]` and `["env"]` (`server.jl:151-168`); `env` entries are
@@ -626,7 +626,7 @@ with `execute: daemon: false`), output inspected:
   the warning text appears ONLY in the echoed source. Warning suppressed,
   normal output kept.
 
-These bind `jupyterToMarkdown`'s cell-option path (`#|` options travel
+These bind `jupyterToMarkdown`\'s cell-option path (`#|` options travel
 inside cell source through QNR back into `cell.options`), complementing
 J2's document-level binding.
 
@@ -646,8 +646,8 @@ Observations (full invocations + timings in the 4E task report):
 1. **Cold `daemon: false` render**: q2 starts the DETACHED control server
    anyway (transport file written, server PID 96341, port 8001). First
    attempt failed with `Execution failed in julia: undefined` — the fresh
-   runtime env ran `Pkg.update()` (~2.5 min) and the server needed ~12 s
-   more to write the transport file, exceeding julia-engine.ts's ~10.5 s
+   runtime env ran `Pkg.update()` (\~2.5 min) and the server needed \~12 s
+   more to write the transport file, exceeding julia-engine.ts's \~10.5 s
    15-try poll (`pollTransportFile` rejects with no value → "undefined").
    Environment-induced cold-start flake, exactly the masquerade the plan's
    CI-gating note warns about; retry succeeded (49.6 s — first worker pays
@@ -689,11 +689,11 @@ runs: `executeJulia` only sends the oneShot `close` AFTER a successful
 `run` (`julia-engine.ts:742-749`), so when the run errors (J4's
 `error(...)` doc) the throw skips the close and the notebook's worker
 stays open on the global control server. Verified by `lsof`: the two
-lingering workers' CWDs were the (deleted) nextest TempDirs of this
+lingering workers\' CWDs were the (deleted) nextest TempDirs of this
 session's J4 executions. Same code shape upstream in Q1 — candidate
 upstream report. Filed as **bd-l9jhy5u0** (fix sketch: try/finally). This
 also explains the pool of mystery workers observed hanging off the shared
-control server at session start (earlier agents' J4 runs), and why that
+control server at session start (earlier agents\' J4 runs), and why that
 server never reaches its 300 s idle timeout.
 
 ### 4H addendum — bd-677297ca fixed (supporting DIRECTORY → files at add_engine_files)
@@ -716,7 +716,7 @@ inherit `with_default` scopes). No change to julia-engine.ts.
 ### Hardening pass (4H review minors, landed ahead of 4I)
 
 Three Minor findings from the 4H code review, fixed in
-`crates/quarto-core/src/project_resources.rs`'s `add_engine_files` (the
+`crates/quarto-core/src/project_resources.rs`\'s `add_engine_files` (the
 directory-expansion walk added for bd-677297ca):
 
 1. **Symlink-cycle guard.** `NativeRuntime::is_dir` follows symlinks and the
@@ -785,7 +785,7 @@ Built `q2` (`cargo build --bin q2`) and rendered a temp copy of the committed
 `julia-website` fixture (the two `.qmd` pages + `_quarto.yml`, with the
 `julia-engine` extension and its notebook `Project.toml`/`Manifest.toml`
 copied in from the sibling `julia-engine` fixture, mirroring
-`setup_julia_website_project`'s runtime assembly):
+`setup_julia_website_project`\'s runtime assembly):
 
 ```
 $ RUST_LOG=engine_host=info,engine_resolution=info \
@@ -807,7 +807,7 @@ Confirms: exactly one `engine-host spawned` line (`grep -c "engine-host
 spawned"` → 1); it orders strictly after BOTH `engine resolution complete`
 lines; and the very next `engine_host`-target line is the child's own
 execute-time stderr forward (`Running [1/1] at line 27...`, the first line of
-`plot.qmd`'s cell), i.e. the spawn happens at first execute, not during
+`plot.qmd`\'s cell), i.e. the spawn happens at first execute, not during
 resolution. Output inspected: `_site/index.html`, `_site/plot.html`, and
 `_site/plot_files/figure-html/cell-2-output-1.png` all present on disk.
 
@@ -815,7 +815,7 @@ No new orphan processes attributable to this render were left behind beyond
 the pre-existing pool of leaked `startup.jl` QNR workers already tracked
 under **bd-l9jhy5u0** (§11 4E addendum — the J4 error path's missing
 try/finally close; this render's cell did not error, so it isn't a new
-instance of that leak, but the pre-existing pool from earlier sessions'
+instance of that leak, but the pre-existing pool from earlier sessions\'
 error-path runs was not touched/cleaned as part of 4I, which is test-only
 per the plan).
 
@@ -935,7 +935,7 @@ This is the `re_execute.rs:309` call site — a **second, independent**
 `engine_host` spawn (pid 28808, distinct from the eager capture's pid 28215;
 pid 28215 had already exited by this point). New cache file appeared:
 
-```
+````
 $ gunzip -c /tmp/…/captures/d1a28c5b….bin | jq -r '.[0].result.markdown'
 …
 ::: {#cell-1 .cell execution_count=1}
@@ -949,7 +949,7 @@ $ gunzip -c /tmp/…/captures/d1a28c5b….bin | jq -r '.[0].result.markdown'
 ```
 :::
 :::
-```
+````
 
 `5` confirmed. **4J checklist item 2 (live re-execution result 5 through
 `/api/preview/re-execute`): confirmed.**
@@ -1035,7 +1035,7 @@ Rendered 1 of 1 files to /private/tmp/q2-preview-julia-4j.Fl0jKx
 
 Identical result content (`5`) to the preview-spliced capture's markdown
 (`::: {.cell-output .cell-output-display} ``` 5 ``` :::`). No divergence
-between `q2 render` and `q2 preview`'s captured/spliced output for this doc.
+between `q2 render` and `q2 preview`\'s captured/spliced output for this doc.
 No new julia process left behind by this render either (still 25).
 
 ### Summary — 4J checklist
@@ -1089,7 +1089,7 @@ Rendered each with `quarto render <doc>.qmd` from the temp project root.
 | multi-cell.qmd (`x=42` → `println("x is $x")`) | cell 2 stdout `x is 42` (V-5) | cell 2 stdout `x is 42` (`grep` confirms) | **Yes** — state persists across cells in both |
 | error-doc.qmd (`error("this should fail gracefully")`) | render errors, message contains `Execution failed in julia:` + `this should fail gracefully`; host not wedged (subsequent render still works) (J4) | render exits 1, stderr contains `this should fail gracefully` + full Julia stacktrace; a subsequent `quarto render minimal.qmd` in the same process still succeeds (host not wedged) | **Yes** — error surfaced, non-zero exit, host not wedged, in both |
 | echo-false.qmd (document-level `execute: echo: false`) | source token (`j2_hidden_source_variable`) absent, output token (`j2 output present`) present (J2) | source token absent (`grep -c` → 0), output token present (`grep -c` → 1) | **Yes** — identical semantics |
-| plot.qmd (Plots.jl figure, MIME priority) | inline `data:image/png;base64,…` (not a file), traced to `displayDataMimeType`'s HTML-target `text/html`-first quirk (§10) | not re-rendered here (Plots.jl install is not cheap — see below); **verified via source comparison instead** | **Yes** (same quirk, confirmed at the source level — see below) |
+| plot.qmd (Plots.jl figure, MIME priority) | inline `data:image/png;base64,…` (not a file), traced to `displayDataMimeType`\'s HTML-target `text/html`-first quirk (§10) | not re-rendered here (Plots.jl install is not cheap — see below); **verified via source comparison instead** | **Yes** (same quirk, confirmed at the source level — see below) |
 
 ### Corrected finding: the "HTML hides source by default" divergence noted in §9 is narrower than stated
 
@@ -1142,7 +1142,7 @@ level (equivalent evidence, zero Julia install cost):
   kApplicationJavascript, kTextHtml]` onto the front of `displayPriority`,
   regardless of `options.toMarkdown` — i.e. `text/html` always outranks
   `image/png`/`image/svg+xml` for an HTML target.
-- q2: `ts-packages/quarto-api/src/jupyter/display-data.ts`'s
+- q2: `ts-packages/quarto-api/src/jupyter/display-data.ts`\'s
   `displayDataMimeType`, whose doc comment states it reproduces this exact
   "effective behavior" (unconditional front-unshift for `toHtml`) rather
   than re-deriving the duplicate-entry array Q1 builds.
@@ -1174,7 +1174,7 @@ inferred as untested).
   dash-sequence strings through frontmatter).
 - **bd-l9jhy5u0** (existing, confirmed still open) — julia-engine leaks a
   QNR worker on execute error. **Observed reproducing under Q1 itself**
-  this session: after `error-doc.qmd`'s failed Q1 render, a new Julia
+  this session: after `error-doc.qmd`\'s failed Q1 render, a new Julia
   worker process (`cwd` = the temp Q1 project dir, confirmed via `lsof`)
   was left running on the shared global control server, matching the exact
   shape bd-l9jhy5u0 already describes for q2 (missing try/finally around
@@ -1242,7 +1242,7 @@ hash changed.
 
 ### Bug A — oneShot close/busy discarded captures (`Q-PREVIEW-CAP-1`)
 
-`executeJulia`'s pre-run (`:703-718`) and post-run (`:742-749`) closes had zero
+`executeJulia`\'s pre-run (`:703-718`) and post-run (`:742-749`) closes had zero
 busy handling. When a prior client vanished mid-run (EPIPE) and left the shared
 server's worker orphaned-busy, a fresh oneShot render's `close` failed with the
 bare QNR `"worker is busy"` protocol error and the whole capture was discarded.
@@ -1317,7 +1317,7 @@ NOT bundled into this fixture (separate scope, tracked as bd-l9jhy5u0).
   forced close propagates unchanged (fail-on-revert proven). **This test + its
   contract comment did NOT change the bundle bytes** — `deno bundle` strips
   comments and the test is not bundled, so `julia-engine.js` stays `82bff64…`.
-- **q2 fixture (PC4a, live julia):** `pc4a_abandoned_worker_close_busy`'s frozen
+- **q2 fixture (PC4a, live julia):** `pc4a_abandoned_worker_close_busy`\'s frozen
   assertion flipped to the YES-branch (fresh `record_capture` **succeeds** with a
   real capture). RED against the pre-fix bundle (`d9d5120…` → `Err … "worker is
   busy"`), GREEN against the rebundled fixture (`82bff64…` → recovers via

@@ -77,7 +77,7 @@ Read these before starting implementation:
 | `hub-client/src/services/projectStorage.ts` | IndexedDB API for project entries (`addProject()`) |
 | `hub-client/src/types/project.ts` | `ProjectEntry` type definition |
 | `hub-client/src/utils/routing.ts` | URL scheme (`#/project/<id>/file/<path>`) |
-| `hub-client/src/components/DoubleBufferedIframe.tsx` | Render marker comment (line ~172) |
+| `hub-client/src/components/DoubleBufferedIframe.tsx` | Render marker comment (line \~172) |
 | `hub-client/src/utils/iframePostProcessor.ts` | CSS post-processing (link→data URI conversion) |
 | `hub-client/src/services/smokeAll.wasm.test.ts` | WASM smoke-all test — port assertions from here |
 | `hub-client/src/services/wasmRenderer.ts` | WASM renderer wrapper (VFS access, render API) |
@@ -186,7 +186,7 @@ Reuse existing infrastructure from `ts-packages/sync-test-harness/`.
 ### Phase 2: Project creation and loading through Automerge
 
 - [x] Write a helper `createProjectOnServer(serverUrl, files[])` in
-      `e2e/helpers/projectFactory.ts`. Use `@quarto/quarto-sync-client`'s
+      `e2e/helpers/projectFactory.ts`. Use `@quarto/quarto-sync-client`\'s
       `createSyncClient()` + `createNewProject()` (same pattern as
       `sync-test-helpers.ts::createTestProject()`). Returns the `indexDocId`.
       The helper must:
@@ -201,7 +201,7 @@ Reuse existing infrastructure from `ts-packages/sync-test-harness/`.
       dynamic import (`await import('/src/services/projectStorage.ts')`).
       Returns `entry.id` (the local UUID used in URLs).
 - [x] Write `e2e/project-loading.spec.ts` that:
-      1. Creates a simple project (single .qmd + _quarto.yml) on the server
+      1. Creates a simple project (single .qmd + \_quarto.yml) on the server
       2. Navigates to app root (`/`) first to initialize the page
       3. Seeds the project in the browser's IndexedDB
       4. Navigates to `#/project/<localId>/file/index.qmd`
@@ -345,7 +345,7 @@ The `DoubleBufferedIframe` component (used by Preview) injects a unique
 
 1. Wait for `iframe.preview-active` to exist in the DOM
 2. Wait for a `<!-- render-XXX -->` comment to appear in its content
-3. Allow ~50ms for CSS post-processing (data URI conversion by `iframePostProcessor.ts`)
+3. Allow \~50ms for CSS post-processing (data URI conversion by `iframePostProcessor.ts`)
 
 The Preview component also has a state machine (`START` → `GOOD` | `ERROR_AT_START`)
 but the render comment is more directly observable from Playwright.

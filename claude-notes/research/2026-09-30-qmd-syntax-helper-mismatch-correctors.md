@@ -1,4 +1,4 @@
-# Research: `qmd-syntax-helper`'s unclosed-delimiter autofix rules
+# Research: `qmd-syntax-helper`\'s unclosed-delimiter autofix rules
 
 **Date:** 2026-09-30
 **Status:** Research only — no decision made, no strand filed for the new
@@ -82,7 +82,7 @@ this **cannot be fixed by making the rule smarter** — nothing distinguishes
 - **(b) flip to escape** — insert `\` before the *opening* `$` instead of
   appending a closing one. The diagnostic already carries the opening
   mark's location (the `math-start` capture, surfaced as the blue "This is
-  the opening '$' mark." note) — `q_2_23.rs` just doesn't use it. This
+  the opening '\$' mark." note) — `q_2_23.rs` just doesn't use it. This
   matches how Q-2-7 and `apostrophe-quotes` already behave, and is what
   `docs/errors/markdown/Q-2-23.qmd` already tells users to do by hand.
   Trade-off: a genuinely-unclosed math span becomes visibly-wrong literal
@@ -140,7 +140,7 @@ If accurate and currently in effect, a bare `2^10` with no matching second
 `^` before whitespace wouldn't trigger Q-2-16 at all — it'd already parse
 as literal text, same as Q-1's tolerant behavior. That would mean Q-2-16
 only fires in narrower cases (e.g. a closer accidentally swallowed by an
-adjacent code span, as in the case file's `^a`b^`` example), which is a
+adjacent code span, as in the case file's `` `^a`b^` `` example), which is a
 much smaller and rarer surface than "any trailing `$`." **This needs
 empirical confirmation** — `bd-star-as-str-qigl02pz` is still
 `in_progress` in braid, not closed, so it's unclear whether the guard
@@ -163,7 +163,7 @@ tracked — **but as a grammar bug, not an autofix-corruption bug**:
   whitespace-flanked `*`/`^`/`~` silently open emphasis/sup/sub.
 
 None of these three describe what happens *after* the parse fails and
-`qmd-syntax-helper`'s Q-2-17/Q-2-18 autofix runs on the resulting
+`qmd-syntax-helper`\'s Q-2-17/Q-2-18 autofix runs on the resulting
 diagnostic — which, per the inventory above, would append a bogus closing
 `~`/`~~` the same way Q-2-23 appends a bogus closing `$`. The same
 `bd-star-as-str-qigl02pz` caveat noted for caret applies here too (same
@@ -205,7 +205,7 @@ escape happen to be the only two ever audited for this problem.
   landing separately?
 - **Verify before prioritizing**: does Q-2-16/17 actually still fire on a
   bare unclosed `^`/`~` in ordinary prose today, or did
-  `bd-star-as-str-qigl02pz`'s whitespace-flanking rule already close that
+  `bd-star-as-str-qigl02pz`\'s whitespace-flanking rule already close that
   door for these two specifically (unlike dollar, which has no such
   guard — `bd-dollar-math-flanking-wzjx4hn8` is still open)? This changes
   how urgent caret/tilde are relative to dollar.

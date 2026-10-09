@@ -14,7 +14,7 @@ there, so the command *naturally* fails with what are now errors — and so
 zero per-call-site work**.
 
 **Verdict: feasible, and cheap.** The architecture already has the seam we
-need. The recommended design touches ~4 places, all policy-side (CLI +
+need. The recommended design touches \~4 places, all policy-side (CLI +
 summary type); the diagnostic engine stays policy-free, consistent with
 Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
 ("the caller decides").
@@ -32,7 +32,7 @@ Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
    into `StageContext.diagnostics` (`crates/quarto-core/src/stage/context.rs:94`),
    `RenderContext.diagnostics` (`crates/quarto-core/src/render.rs:233`),
    pampa's `DiagnosticCollector`
-   (`crates/pampa/src/utils/diagnostic_collector.rs`), and ~15 transforms
+   (`crates/pampa/src/utils/diagnostic_collector.rs`), and \~15 transforms
    that take a bare `&mut Vec<DiagnosticMessage>`. Lua `quarto.warn()` is
    harvested into real `DiagnosticMessage`s
    (`crates/pampa/src/lua/diagnostics.rs:354`), so filter warnings ride the
@@ -56,7 +56,7 @@ Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
    returns true iff pass1/pass2 failures exist or a *project-level*
    diagnostic has `kind == Error`.
 
-5. **Precedent already in-tree:** `quarto-doctemplate`'s `EvalContext` has a
+5. **Precedent already in-tree:** `quarto-doctemplate`\'s `EvalContext` has a
    working `strict_mode` flag with `warn_or_error_at` /
    `warn_or_error_with_code` (`crates/quarto-doctemplate/src/eval_context.rs:125-232`).
    That's the emission-side pattern; we deliberately do **not** generalize
@@ -71,7 +71,7 @@ Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
   exit-gate extension, otherwise a promoted warning on a successful render
   would print as `error` and still exit 0. (This is arguably a latent
   inconsistency even without strict mode — see Open Questions.)
-- **~552 `eprintln!` and ~63 `tracing::warn!` call sites bypass the
+- **\~552 `eprintln!` and \~63 `tracing::warn!` call sites bypass the
   structured system entirely.** Strict mode structurally cannot see these.
   That is acceptable (they are logging, not user-facing diagnostics), but
   it makes the convention "user-visible warnings must be
@@ -147,7 +147,7 @@ Nothing in `quarto-error-reporting` (external crate) changes.
   CLI-render policy. If browser strictness is ever wanted, the promotion
   point would be where the WASM response assembles its
   `warnings`/`diagnostics` fields.
-- **`quarto-doctemplate`'s internal `strict_mode`: untouched.** Its
+- **`quarto-doctemplate`\'s internal `strict_mode`: untouched.** Its
   warnings surface upward as ordinary `DiagnosticMessage` warnings and get
   promoted at the boundary like everything else.
 - **`eprintln!`/`tracing` output: out of scope** (not structurally
@@ -165,7 +165,7 @@ Nothing in `quarto-error-reporting` (external crate) changes.
   explicitly "what are now errors".
 - **Emission-point promotion** (generalize doctemplate's
   `warn_or_error_*` everywhere): no central emission chokepoint exists
-  (~15 bare-`Vec` pushes, several sink types, plus Lua harvesting); every
+  (\~15 bare-`Vec` pushes, several sink types, plus Lua harvesting); every
   future warning author would need to remember the strict-aware API —
   exactly the unsustainable shape we're avoiding. It would also let strict
   mode alter mid-render control flow (`has_errors()` checks, fail-fast
@@ -179,56 +179,56 @@ Nothing in `quarto-error-reporting` (external crate) changes.
 ### Phase 1 — tests first
 
 - [x] Pick/build a fixture with a stable, successful-render warning:
-      an unresolved crossref (`@fig-nonexistent`) — confirmed empirically
-      to render successfully with one warning, exit 0.
+  an unresolved crossref (`@fig-nonexistent`) — confirmed empirically
+  to render successfully with one warning, exit 0.
 - [x] CLI integration tests:
-      `crates/quarto/tests/integration/strict_mode.rs` (7 tests).
-      Verified failing first: 6 failed with clap's
-      `unexpected argument '--strict'`, baseline test passed.
+  `crates/quarto/tests/integration/strict_mode.rs` (7 tests).
+  Verified failing first: 6 failed with clap's
+  `unexpected argument '--strict'`, baseline test passed.
 - [x] Unit tests for `promote_warnings_to_errors` covering all four
-      summary sources; `Info`/`Note` untouched (orchestrator.rs tests).
+  summary sources; `Info`/`Note` untouched (orchestrator.rs tests).
 - [x] Unit tests for the `should_exit_nonzero` strict arm (render.rs
-      tests: warning-only, promoted, clean, info-only).
+  tests: warning-only, promoted, clean, info-only).
 - [x] `--json-errors --strict` test: emitted JSON `kind` is `"error"`.
 - [x] Project-render variant (multi-file, warning in one file).
 
 ### Phase 2 — implementation
 
 - [x] `RenderArgs.strict` + clap wiring (`--strict`, global to the render
-      subcommand, modeled on `--fail-fast`) + `--help` text.
+  subcommand, modeled on `--fail-fast`) + `--help` text.
 - [x] `OutputDiagnostics::diagnostics_mut` (native + wasm impls) +
-      `ProjectRenderSummary::promote_warnings_to_errors`.
+  `ProjectRenderSummary::promote_warnings_to_errors`.
 - [x] Promotion call + `should_exit_nonzero(summary, strict)` in both
-      execute paths. The strict arm defensively checks `warnings > 0` too,
-      so the gate stays correct even if a caller forgets to promote.
+  execute paths. The strict arm defensively checks `warnings > 0` too,
+  so the gate stays correct even if a caller forgets to promote.
 - [x] `cargo build --workspace` clean; `cargo nextest run --workspace`:
-      9884 passed. Full `cargo xtask verify` (WASM leg) run as well.
+  9884 passed. Full `cargo xtask verify` (WASM leg) run as well.
 
 ### Phase 3 — end-to-end + docs
 
 - [x] End-to-end verification (2026-07-02, real binary, output inspected):
 
-      ```
-      $ q2 render warn.qmd --strict        # warn.qmd contains @fig-nonexistent
-      Error: unresolved crossref `@fig-nonexistent`: no target with this identifier was found.
-      1 error
-      EXIT: 1                              # warn.html still written (905 bytes)
+  ```
+  $ q2 render warn.qmd --strict        # warn.qmd contains @fig-nonexistent
+  Error: unresolved crossref `@fig-nonexistent`: no target with this identifier was found.
+  1 error
+  EXIT: 1                              # warn.html still written (905 bytes)
 
-      $ q2 render warn.qmd                 # without --strict: unchanged
-      Warning: unresolved crossref `@fig-nonexistent`: ...
-      1 warning
-      EXIT: 0
+  $ q2 render warn.qmd                 # without --strict: unchanged
+  Warning: unresolved crossref `@fig-nonexistent`: ...
+  1 warning
+  EXIT: 0
 
-      $ q2 render warn.qmd --strict --json-errors
-      {"$schema":".../json-diagnostic.json","kind":"error","title":"unresolved crossref ..."}
-      ```
+  $ q2 render warn.qmd --strict --json-errors
+  {"$schema":".../json-diagnostic.json","kind":"error","title":"unresolved crossref ..."}
+  ```
 
 - [x] User-facing docs: "Rendering in CI" section in
-      `docs/guides/publishing/index.qmd`; page verified to render via
-      `q2 render docs/guides/publishing/index.qmd`.
+  `docs/guides/publishing/index.qmd`; page verified to render via
+  `q2 render docs/guides/publishing/index.qmd`.
 - [x] Close the loop on GH #220: PR
-      https://github.com/quarto-dev/q2/pull/362 closes it on merge and
-      links this plan + strand bd-yjs54ptg.
+  https://github.com/quarto-dev/q2/pull/362 closes it on merge and
+  links this plan + strand bd-yjs54ptg.
 
 ## Decisions (Carlos, 2026-07-02)
 

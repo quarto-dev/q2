@@ -62,7 +62,7 @@
 
 **Total**: Exactly 12 sequences
 
-**Examples**: 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ #️⃣ *️⃣
+**Examples**: 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ #️⃣ \*️⃣
 
 **Regex**: `[0-9#*]\uFE0F?\u20E3`
 
@@ -90,7 +90,7 @@
 
 **Status**: Already supported for pictographic bases
 
-**Note**: There are ~1,400+ ZWJ sequences total, but current pattern handles the common cases
+**Note**: There are \~1,400+ ZWJ sequences total, but current pattern handles the common cases
 
 ---
 
@@ -105,7 +105,7 @@
 
 **Regex**: `[\u{1F1E6}-\u{1F1FF}]{2}`
 
-**Total**: ~258 valid two-letter country codes
+**Total**: \~258 valid two-letter country codes
 
 **Why Might Be Covered**: Regional indicators ARE in `\p{Extended_Pictographic}`, so the current regex might already handle pairs
 
@@ -170,7 +170,7 @@
 
 ❌ **Extended ZWJ Coverage**
 - Current pattern already handles common cases
-- Full coverage requires ~1,400+ sequence list
+- Full coverage requires \~1,400+ sequence list
 - Would need data file generation
 - Probably overkill for markdown
 

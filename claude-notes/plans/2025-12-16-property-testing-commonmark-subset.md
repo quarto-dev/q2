@@ -195,7 +195,7 @@ Testing proceeds through progressively more complex generators. Each level inclu
 | L0 | `PLAIN_TEXT` | Str, Space, SoftBreak | `hello world` |
 | L1 | `WITH_EMPH` | + Emph | `hello *world*` |
 | L2 | `WITH_STRONG` | + Strong | `hello **world**` |
-| L3 | `WITH_CODE` | + Code | `hello `code`` |
+| L3 | `WITH_CODE` | + Code | `` hello `code` `` |
 | L4 | `WITH_LINK` | + Link | `[text](url)` |
 | L5 | `WITH_IMAGE` | + Image | `![alt](url)` |
 | L6 | `WITH_AUTOLINK` | + Autolink | `<https://example.com>` |

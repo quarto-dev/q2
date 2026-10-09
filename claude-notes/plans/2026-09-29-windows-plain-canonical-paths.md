@@ -94,7 +94,7 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Classify every § Flip results cluster as test oracle vs product mixing (§ Flip classification)
 - [x] Route `quarto-preview/src/config.rs:403` (+ `:423/:447/:536`) through the shared function; flip-RED = `config::tests::single_file_deps_resources_glob` (RED from the `932313dc` flip run; GREEN in the flip re-run, § Flip re-run). Audit rows 29-32 corrected to R
 - [x] Fix every product site the classification finds: none beyond config.rs
-- [x] Oracle sweep (`111e2cf7`): the failing files' std helpers and inline std canonicalizes now call the shared function
+- [x] Oracle sweep (`111e2cf7`): the failing files\' std helpers and inline std canonicalizes now call the shared function
 - [x] Re-run the flip on all six crates (§ Flip re-run): no failure outside the baseline set; flip reverted, `Cargo.lock` == HEAD, `.snap.new` deleted
 
 Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
@@ -165,7 +165,7 @@ Baseline tests that pass under the flip (run-to-run variation, not attributed): 
 
 ### Unflipped regression run (layer tip `954c341a`, same six crates and caps)
 
-Two earlier attempts failed at link (LNK2019 on compiler-internal `.llvm.*`/`anon.*` locals) for the `quarto-core` lib test and the `q2` bin test. They linked after deleting those units' incremental dirs in the shared build-dir. 6676 run, **51 failed** (387 s test phase), set built from the log's post-`Summary` `FAIL` lines. Every one is in the 53-failure after-routing set above: the 23 named tests minus the two load-sensitive `ts_process` tests (bd-j5ij00i0), which passed this run, plus the counted groups at their recorded sizes (12 spin, 7 `glob::expand`, 6 julia, 3 `orange_book_lua`, 2 `listing_pipeline`). No failure outside that set. The two known `.snap.new` files were deleted.
+Two earlier attempts failed at link (LNK2019 on compiler-internal `.llvm.*`/`anon.*` locals) for the `quarto-core` lib test and the `q2` bin test. They linked after deleting those units\' incremental dirs in the shared build-dir. 6676 run, **51 failed** (387 s test phase), set built from the log's post-`Summary` `FAIL` lines. Every one is in the 53-failure after-routing set above: the 23 named tests minus the two load-sensitive `ts_process` tests (bd-j5ij00i0), which passed this run, plus the counted groups at their recorded sizes (12 spin, 7 `glob::expand`, 6 julia, 3 `orange_book_lua`, 2 `listing_pipeline`). No failure outside that set. The two known `.snap.new` files were deleted.
 
 ### Flip classification (sonnet sweep, static; central claims checked in the main session)
 
@@ -218,7 +218,7 @@ Coverage cross-checked in the main session: the production `canonicalize(` hit l
 | 24 | `quarto-hub/src/main.rs:216` | hub (n) | std | R (bail text) | |
 | 25 | `quarto-hub/src/main.rs:370` | hub (n) | std | R (tracing) | |
 | 26-28 | `quarto-hub/src/sync.rs:631,816,907` | hub (n) | std | L (self-consistent containment) | |
-| 29-31 | `quarto-preview/src/config.rs:403,423,447` | preview (y) | std | L (self-consistent) | **R** (flip): `:403`'s root meets runtime-canonical matches in `expand_patterns`; `:423/:447` compare against that root, so all move together |
+| 29-31 | `quarto-preview/src/config.rs:403,423,447` | preview (y) | std | L (self-consistent) | **R** (flip): `:403`\'s root meets runtime-canonical matches in `expand_patterns`; `:423/:447` compare against that root, so all move together |
 | 32 | `config.rs:536` | preview (y) | std | R? (rel paths rejoined onto a seam root?) | **R** with 29-31 (same `to_in_tree_rel` root) |
 | 33 | `quarto-preview/src/deps.rs:102` | preview (y) | std | L | |
 | 34-35 | `quarto-preview/src/lib.rs:443,444` | preview (y) | std | L (deliberate pair) | |
@@ -317,7 +317,7 @@ Linux/macOS CI covers the rest, including the portable guard test.
 
 Layer 2 title: `Route canonical paths through one shared function`
 
-~~~~markdown
+````markdown
 Prepares the switch to plain Windows paths in the PR stacked on top of this one. On Windows, `std::fs::canonicalize` returns the verbatim `\\?\C:\…` form, and q2 canonicalizes in about 60 production call sites, most of them directly rather than through `SystemRuntime::canonicalize`. Changing the spelling in the runtime alone leaves plain and verbatim paths meeting in comparisons, prefix strips and map keys. A prototype of that switch failed about 130 tests on Windows and hid a product bug: `resources:` declared for a single-file preview dropped out of its dependency set.
 
 The shared function added here still calls `std::fs::canonicalize`, so no path spelling changes in this PR. The one behavior change is the overwrite guard below.
@@ -343,7 +343,7 @@ The guard in `render_to_file.rs` refused an `--output` equal to the input only l
 - [x] Same six crates with the shared function temporarily switched to plain paths: same results, `single_file_deps_resources_glob` fixed
 - [x] `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown`
 - [ ] Linux and macOS CI, including the hub-client WASM build that compiles the routed `quarto-core` modules
-~~~~
+\~\~\~\~
 
 Layer 3 title: `Canonicalize to plain paths on Windows`
 
@@ -380,4 +380,4 @@ This also turns `json_errors::ipynb_parse_error_json_carries_cell_origin` from #
 - [x] Windows, the same six crate suites as the PR below: same results
 - [x] `cargo build --workspace` on Windows; `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown`
 - [ ] Linux and macOS CI
-~~~~
+````

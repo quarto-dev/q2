@@ -86,7 +86,7 @@ investigation (`0f243f64c` on `julia-orphan-triage`).
   needed — q2's extension-contributed engines are registry-only).
 - **Step 3 done (2026-09-23, q2 branch `extension-subtree-infra`):** F5 fixed
   in q2 — `parse_claims_map` now lowercases claim keys at parse time (both the
-  map-entry and list-shorthand forms, mirroring `normalize_ext`'s
+  map-entry and list-shorthand forms, mirroring `normalize_ext`\'s
   file-extensions precedent) and `lookup_static_claim` lowercases the language
   at lookup, so a `{Julia}` cell hits the static/zero-load resolution path it
   already claimed dynamically. TDD: three new tests
@@ -297,7 +297,7 @@ q2 should subtree the full repo into `resources/extension-subtrees/julia-engine/
 (git cost only, mirroring Q1) but point `include_dir!` at just its
 `_extensions/` subdirectory — 68K in the binary. **Open: is 14M in q2's git
 history acceptable, or should we vendor a curated copy instead and give up
-`git subtree`'s merge tracking?**
+`git subtree`\'s merge tracking?**
 
 The genuinely new work is therefore the **maintenance command**, not the
 runtime: port `pull-git-subtree` as `cargo xtask pull-extension-subtree`. xtask
@@ -511,7 +511,7 @@ Work items (first pass, not scoped):
   the infra plan, 2026-09-23 — resolved there as **D1: list of roots**,
   mirroring Q1.)*
 - **Q8.** Is 14M of vendored repo acceptable in q2's git history for the sake of
-  `git subtree`'s merge tracking, or do we vendor a curated 68K copy and accept
+  `git subtree`\'s merge tracking, or do we vendor a curated 68K copy and accept
   manual syncing? *(Scoped 2026-09-23: the infra plan's **D2** sets the
   whole-repo/merge-tracking precedent with the KB-sized fake; the julia-size
   sign-off stays here, owned by Step 4.)*

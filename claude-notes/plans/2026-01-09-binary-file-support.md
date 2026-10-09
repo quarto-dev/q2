@@ -183,7 +183,7 @@ This heuristic is for display optimization only; the document content is the sou
 When two users upload images concurrently:
 1. User A uploads `diagram.png` (their version)
 2. User B uploads `diagram.png` (different content)
-3. Both users' clients add to the index simultaneously
+3. Both users\' clients add to the index simultaneously
 
 ### Solution: Content-Addressable Naming
 

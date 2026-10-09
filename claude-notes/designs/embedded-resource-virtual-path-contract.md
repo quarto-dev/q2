@@ -57,9 +57,9 @@ to base CSS (`compile_theme_css.rs:547`). Chain:
    `\vendor/rfs.scss` never matches `vendor/rfs.scss` → miss.
 
 Empirically verified: `PathBuf::from("/__quarto_resources__/bootstrap/scss")
-.join("vendor/_rfs.scss").to_string_lossy()` = `…/scss\vendor/_rfs.scss` on
+.join("vendor/\_rfs.scss").to_string_lossy()` = `…/scss\vendor/\_rfs.scss` on
 Windows; `str::lines`-style stripping leaves the leading `\`. Real OS load
-paths (custom themes, reveal SCSS) are immune — `RuntimeFs`'s `std::fs`
+paths (custom themes, reveal SCSS) are immune — `RuntimeFs`\'s `std::fs`
 fallback is separator-tolerant on Windows, and reveal SCSS is fully inlined
 (no `find_import`).
 
@@ -115,7 +115,7 @@ exactly the proliferation to avoid — consolidate on the `quarto-util` one.
 
 - **Add `quarto-util` as a dependency of `quarto-sass`** (it is not one
   today). `quarto-util::path` is pure `std` and already reasons about
-  `wasm32` behavior (`is_rooted`), so it is safe in `quarto-sass`'s WASM
+  `wasm32` behavior (`is_rooted`), so it is safe in `quarto-sass`\'s WASM
   build. Verify the WASM build during implementation.
 - **Placement — `EmbeddedResources` only.** Call `to_forward_slashes` at
   the top of `strip_prefix` (which every `is_file`/`is_dir`/`read`/`read_str`

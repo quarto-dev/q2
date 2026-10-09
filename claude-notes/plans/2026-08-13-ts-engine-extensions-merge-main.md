@@ -42,7 +42,7 @@ merge surfaces all 23 once.
 
 `git config rerere.enabled false` is set in this worktree. **Leave it.**
 
-The repo's `.git/rr-cache` holds ~90 resolutions from 2026-06-05 and 2026-07-24.
+The repo's `.git/rr-cache` holds \~90 resolutions from 2026-06-05 and 2026-07-24.
 When rerere was enabled for a trial merge on 2026-08-13 it replayed 17 of the 23
 conflicts from that historical cache, and because those resolutions predate
 main's last 340 commits they **systematically reverted main's newer work**.
@@ -472,7 +472,7 @@ main.
       `SourceInfo::generated(By::programmatic_config())`, **excluding the native
       set unconditionally**. Do **not** touch the `render_pattern_diagnostics`
       path.
-- [x] Update `Q-5-13`'s message text — it hard-codes "No renderable source file
+- [x] Update `Q-5-13`\'s message text — it hard-codes "No renderable source file
       (`.qmd` or `.md`) in the project matches this pattern", which becomes wrong
       once engine-claimed extensions are renderable
 - [x] Re-port the branch's T6/T6b/T7 tests against the new function names, and
@@ -536,7 +536,7 @@ Keep both sides at each hunk.
 
 ## A8. Compile-landmine sweep
 
-Merge-tree flags only **textual** conflicts. The branch adds ~100k lines calling
+Merge-tree flags only **textual** conflicts. The branch adds \~100k lines calling
 `quarto-core` APIs that main changed underneath, so expect clean-merged-but-broken
 call sites.
 

@@ -31,15 +31,15 @@ scope here.
   CPU on a single thread today; parallelizing across documents lets a
   modern laptop (8–10 performance cores) work them concurrently.
 
-Expected ceiling on quarto-web (574 files, ~2.3 s today):
-- 4 cores: ~0.6–0.8 s
-- 8 cores: ~0.4–0.5 s
+Expected ceiling on quarto-web (574 files, \~2.3 s today):
+- 4 cores: \~0.6–0.8 s
+- 8 cores: \~0.4–0.5 s
 - diminishing returns past that due to Amdahl (the cache write step,
   pre/post-render hooks, and Pass-2 are still serial).
 
 ## State audit (why Pass-1 is parallelizable)
 
-The body of `pass_one`'s loop is:
+The body of `pass_one`\'s loop is:
 
 ```rust
 for doc_info in &self.project.files {
@@ -83,7 +83,7 @@ Pipeline stages are `#[async_trait(?Send)]` (per `.claude/rules/wasm.md`)
 because `StageContext` carries `Option<Rc<RefCell<dyn UserGrammarProvider>>>`
 (`crates/quarto-core/src/stage/context.rs:198`) — needed by the
 hub-client's Pass-2 path. The trait bound is global; it makes
-`run_pipeline`'s future `!Send` even though Pass-1 stages don't actually
+`run_pipeline`\'s future `!Send` even though Pass-1 stages don't actually
 use the `!Send` fields. We can't multi-thread `tokio::spawn` it.
 
 This is a hard constraint we should not relax. Working around it (Option
@@ -204,7 +204,7 @@ single-threaded). WASM working version is preserved verbatim.
    isolation we already have for `Err`, wrap each worker body in
    `std::panic::catch_unwind` and convert a caught panic to a
    `FileFailure` with a "internal error during Pass-1" message.
-4. **Stack size.** Rayon's default worker stack is ~2 MB. Tree-sitter
+4. **Stack size.** Rayon's default worker stack is \~2 MB. Tree-sitter
    on pathological inputs can recurse deeply. The sequential path uses
    the main-thread stack today, which is typically larger. If we see
    stack overflows in CI, `ThreadPoolBuilder::stack_size` is the knob.
@@ -219,7 +219,7 @@ single-threaded). WASM working version is preserved verbatim.
    doc either) — no regression. Documented for ops.
 7. **`available_parallelism()` can fail** (rare, e.g. cgroups with no
    info). Default to 4 on error.
-8. **Debug-build overhead.** Per-`par_iter` dispatch is ~10–100 µs in
+8. **Debug-build overhead.** Per-`par_iter` dispatch is \~10–100 µs in
    debug. Invisible for hundreds of docs; flag for tiny unit tests not
    to over-interpret debug-mode wall times.
 9. **Test isolation across binaries.** nextest already runs each
@@ -321,7 +321,7 @@ Per the perf-profiling playbook ("don't remove diagnostic counters"):
 
 - **Tempdir storm.** Each `StageContext::new` calls
   `runtime.temp_dir("quarto-pipeline")` (mkdtemp-style on native). N
-  workers in flight ⇒ N concurrent mkdtemps. `tempfile`'s `TempDir::new`
+  workers in flight ⇒ N concurrent mkdtemps. `tempfile`\'s `TempDir::new`
   is thread-safe and uses unique paths, so this is fine — but profile to
   confirm the inode-creation cost doesn't dominate.
 - **Tree-sitter logger memory.** Each parser allocates its own
@@ -436,7 +436,7 @@ Per the perf-profiling playbook ("don't remove diagnostic counters"):
       Pass-1 2230 → 1280 ms (1.74×), total 3.73 → 2.81 s (1.33×).
       Warm cache: Pass-1 800 → 520 ms (1.54×), total 2.29 → 2.03 s
       (1.13×). Lower than the optimistic 8× target — Pass-1 is now
-      FS-bound (cache atomic-rename per doc, source/_metadata.yml
+      FS-bound (cache atomic-rename per doc, source/\_metadata.yml
       reads), and the still-sequential Pass-2 caps overall speedup
       (Amdahl).
 - [x] samply profile captured at
@@ -470,7 +470,7 @@ Per the perf-profiling playbook ("don't remove diagnostic counters"):
    fallback 4 on error.** Env override: `QUARTO_JOBS` (generic name,
    reusable for Pass-2 in the future).
 3. **`threads_used` accumulator: `Mutex<HashSet<ThreadId>>`.** Simpler;
-   ~574 lock acquisitions per render is invisible.
+   \~574 lock acquisitions per render is invisible.
 4. **Panic handling:** wrap each worker in `catch_unwind` to convert
    panics to `FileFailure` — matches the per-file `Result::Err`
    isolation we already have.

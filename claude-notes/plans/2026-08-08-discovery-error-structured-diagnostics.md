@@ -14,14 +14,14 @@ unknown-project-type error, or any `_quarto.yml` parse failure —
 `to_string()` is the fully *rendered* diagnostic (ANSI colors,
 Ariadne snippet and all), which then gets re-wrapped:
 
-- **Text path** (`execute`, line ~668): `Err(anyhow!("{}", e))` →
+- **Text path** (`execute`, line \~668): `Err(anyhow!("{}", e))` →
   anyhow's top level prints `Error: ` + `Display for
   DispatchError::Discover` prints `Project discovery failed: ` + the
   embedded rendering starts with its own `Error: [Q-5-17]`. Net:
   `Error: Project discovery failed: Error: [Q-5-17] …` — double
   prefix plus a wrapper that adds nothing.
 - **`--json-errors` path** (`emit_dispatch_error_json` →
-  `dispatch_error_to_diagnostic`, line ~1404): everything becomes a
+  `dispatch_error_to_diagnostic`, line \~1404): everything becomes a
   generic **Q-7-8 "Project Discovery Failed"** diagnostic whose
   `problem` field contains the ANSI-escape-soaked rendered text.
   The real code (Q-5-17), the span, and the file are all buried in
@@ -29,7 +29,7 @@ Ariadne snippet and all), which then gets re-wrapped:
   worse than cosmetic.
 
 The right pattern already exists 60 lines away: for *pipeline-stage*
-parse errors, `execute_single_doc` (line ~740) matches
+parse errors, `execute_single_doc` (line \~740) matches
 `Err(QuartoError::Parse(parse_error))` and either
 `eprintln!("{parse_error}")` + exit 1 (bare rendered diagnostic, no
 wrapper) or `emit_parse_error_json(&parse_error, …)` (one JSON line
@@ -50,7 +50,7 @@ it into the existing printers.
    `QuartoError::Parse(pe) => DiscoverParse(pe)`, everything else →
    `Discover(e.to_string())`. The `path_exists` sites keep the plain
    string mapping (their errors aren't `QuartoError`).
-3. **Text path**: in `execute`'s classify error arm, mirror
+3. **Text path**: in `execute`\'s classify error arm, mirror
    `execute_single_doc`: on `DiscoverParse(pe)`, `eprintln!("{pe}")`
    and `std::process::exit(1)` instead of bubbling through anyhow.
    Output becomes exactly the bare rendered diagnostic — single

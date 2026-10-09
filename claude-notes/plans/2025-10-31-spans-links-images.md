@@ -390,7 +390,7 @@ Test cases needed:
 - ✅ Spans parse correctly with attributes
 - ✅ Images parse as `!` + Link (matching Pandoc)
 - ✅ All existing tests still pass
-- ✅ No "[TOP-LEVEL MISSING NODE]" warnings for these nodes
+- ✅ No "\[TOP-LEVEL MISSING NODE\]" warnings for these nodes
 - ✅ Output matches Pandoc native format exactly
 
 ## Estimate
@@ -401,7 +401,7 @@ Test cases needed:
 - Phase 4 (pandoc_span handler): 30 minutes
 - Phase 5 (pandoc_image handler): 20 minutes
 - Phase 6 (testing): 60 minutes
-- **Total**: ~2.5-3 hours
+- **Total**: \~2.5-3 hours
 
 ## Notes
 

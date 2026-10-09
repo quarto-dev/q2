@@ -106,7 +106,7 @@ fidelity and deciding the scope of "any `Plain`" vs. "only list-item `Plain`".
 
 3. **Multi-block tight items.** A tight list item can be `Plain` + nested
    `BulletList` (a tight item with a sublist). The edit target for the leading
-   `Plain` should cover only that `Plain`'s range, leaving the sublist intact.
+   `Plain` should cover only that `Plain`\'s range, leaving the sublist intact.
    Confirm the leading-`Plain` edit target does not swallow the sublist on
    commit. → **Test:** nested tight list, edit the parent item text, assert the
    sublist survives unchanged.
@@ -160,7 +160,7 @@ fidelity and deciding the scope of "any `Plain`" vs. "only list-item `Plain`".
       pampa). Guards the exact `astToDoc([Plain], …)` seed the RichTextEditor
       uses: a lone `Plain` → one paragraph → serializes to the bare inline text
       (marks incl. `**bold**`/`_italic_`), no dropped nodes, no list marker.
-- [~] Tightness-on-commit is **already** covered by the Rust suite
+- \[\~\] Tightness-on-commit is **already** covered by the Rust suite
       (`text_edit_preserves_{bullet,ordered}_list_tightness`, Phase 0). The rich
       editor commits through that same text channel, so no new Rust test is
       needed; Phase 3 confirms it live.

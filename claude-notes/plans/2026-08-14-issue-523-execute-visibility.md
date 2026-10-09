@@ -5,11 +5,11 @@
 Related: bd-1tl09 / bd-g1prx (code-fold), bd-moef1ec4 (`eval`), bd-cymkcyaf (format-level
 execute defaults).
 **Reported against:** q2 0.20.0 (macOS arm64 release tarball)
-**Verified against:** `main` @ `3ac596e0` (0.21.0-dev) — `git log v0.20.0..HEAD` touches neither
+**Verified against:** `main` \@ `3ac596e0` (0.21.0-dev) — `git log v0.20.0..HEAD` touches neither
 `engine/jupyter/text_execute.rs` nor `engine/knitr/`, so 0.20.0 and today's `main` behave
 identically on this path.
 **Q1 reference:** `quarto` on PATH, version `99.9.9` (dev checkout at `external-sources/quarto-cli`
-@ `45caede32`).
+\@ `45caede32`).
 
 ## TL;DR
 
@@ -172,7 +172,7 @@ planned.** Recorded here only so the issue can be answered accurately.
   bd-cymkcyaf that plain HTML does *not* default echo off; only revealjs/beamer/pptx/dashboard do).
 - `shouldHide(...)` + `keepHidden`: under `render: keep-hidden: true`, hidden content is still
   emitted but tagged with the `.hidden` class rather than dropped.
-- `echo: "fenced"` is a third value (emit the cell as a fenced ```` ```` ```` block including its
+- `echo: "fenced"` is a third value (emit the cell as a fenced \`\`\`\` \`\`\`\` \`\`\`\` block including its
   YAML options) — `echoFenced()` in the same file.
 - `src/resources/filters/quarto-post/foldcode.lua` — folding applies only to blocks classed
   `cell-code`, honours a document-level `param("code-fold")` default plus per-block override,
@@ -195,7 +195,7 @@ behaviour, so the tests below assert on semantics, not on Q1's exact fences.
 | cell option vs doc scope | cell wins (`shouldInclude`) | same |
 
 The last two rows are the subtle ones. Q1 builds the div opener but only writes it "if there is
-actually content in the div" (`jupyter.ts` ~1466), so a cell whose code *and* outputs are all
+actually content in the div" (`jupyter.ts` \~1466), so a cell whose code *and* outputs are all
 suppressed leaves no wrapper behind. q2's `render_cell` currently emits the wrapper
 unconditionally, so this is a real behavioural item, not a formatting detail.
 
@@ -230,19 +230,19 @@ TDD throughout: every phase writes its failing test first and confirms it fails.
 ### Phase 0 — Tests first
 
 - [x] New `crates/quarto-core/tests/integration/engine_visibility.rs` (registered in
-      `main.rs`), modelled on `engine_error_policy.rs`: real engines via `record_capture`,
-      skipping when the engine is unavailable.
+  `main.rs`), modelled on `engine_error_policy.rs`: real engines via `record_capture`,
+  skipping when the engine is unavailable.
 - [x] Jupyter matrix — for each of `echo`/`output`/`warning`/`include`, one doc-scope and one
-      cell-scope test.
+  cell-scope test.
 - [x] Precedence: `execute: echo: false` + `#| echo: true` ⇒ source shown (and the mirror,
-      doc-true + cell-false).
+  doc-true + cell-false).
 - [x] No-empty-wrapper: `#| echo: false` + `#| output: false` ⇒ no `.cell` div at all.
 - [x] Knitr matrix — doc-scope `echo`/`warning`/`include`/`output`; cell-scope already works, so
-      one cell-scope test as a regression guard.
+  one cell-scope test as a regression guard.
 - [x] Regression test pinned to the issue's exact fixture (`code-fold: true` + `echo: false`)
-      asserting no `.cell-code` survives.
+  asserting no `.cell-code` survives.
 - [x] Confirm every new test fails before touching implementation, and that each fails for the
-      *expected* reason (not a harness error).
+  *expected* reason (not a harness error).
 
 **Phase 0 result (2026-08-14):** 19 tests, **15 fail / 4 pass**. Every failure is semantic
 ("expected source echoed = false, got true", "warning must be filtered out", "cell must leave no
@@ -261,51 +261,51 @@ plus everything nested in it.
 
 - [x] Add `execute_scope: Option<ConfigValue>` + `with_execute_scope()` to `ExecutionContext`.
 - [x] Populate it in `engine_execution.rs` from the merged metadata already held there — read
-      per-iteration from `ast.meta`, so a second engine in a sequence sees the front matter of
-      the input it is actually handed (exactly what the old re-parse gave it).
-- [x] Retire `text_execute.rs::document_execute_scope()`'s front-matter re-parse in favour of the
-      field. `front_matter_range` had no other consumer; both are deleted (−1940 bytes), along
-      with the now-unused `InterpretationContext` import.
+  per-iteration from `ast.meta`, so a second engine in a sequence sees the front matter of
+  the input it is actually handed (exactly what the old re-parse gave it).
+- [x] Retire `text_execute.rs::document_execute_scope()`\'s front-matter re-parse in favour of the
+  field. `front_matter_range` had no other consumer; both are deleted (−1940 bytes), along
+  with the now-unused `InterpretationContext` import.
 
 ### Phase 2 — Jupyter honours the visibility family
 
 - [x] `resolve_cell_options()` (replacing `resolve_allow_errors`) returns the merged map once;
-      `resolved_flag()` reads individual keys off it. `error:` now goes through the same path.
+  `resolved_flag()` reads individual keys off it. `error:` now goes through the same path.
 - [x] `CellVisibility { echo, output, warning }` + `resolve()`, mirroring `shouldInclude`: cell
-      option, else doc scope, else `true`.
+  option, else doc scope, else `true`.
 - [x] `include: false` ⇒ emit nothing for the cell (`CellVisibility::HIDDEN` collapses the rest,
-      matching Q1's early bail in `mdFromCodeCell`).
+  matching Q1's early bail in `mdFromCodeCell`).
 - [x] `echo: false` ⇒ no source fence; `output: false` ⇒ no output divs; `warning: false` ⇒ drop
-      stderr-stream outputs (`is_warning_output`, Q1's `isWarningOutput`).
+  stderr-stream outputs (`is_warning_output`, Q1's `isWarningOutput`).
 - [x] `output: false` also silences warnings — Q1 suppresses every output under it, so the
-      warning channel must not leak past a cell whose outputs were switched off.
+  warning channel must not leak past a cell whose outputs were switched off.
 - [x] Suppress the `.cell` wrapper when neither code nor any output survives.
 - [x] 9 new unit tests in `text_execute.rs` covering resolution and emission without a kernel.
 
 ### Phase 3 — Knitr receives the document's execute options
 
 - [x] `ExecuteConfig::overlay_document_scope()` (in `format.rs`, beside the struct it maps) and
-      `build_format_config()` applies it over `with_defaults()` — overlay, not replace.
+  `build_format_config()` applies it over `with_defaults()` — overlay, not replace.
 - [x] Forwards exactly the keys the R scripts read. `freeze` is deliberately skipped: nothing on
-      the R side consumes it (it is resolved before an engine runs).
+  the R side consumes it (it is resolved before an engine runs).
 - [x] String reads go through `as_plain_text()`, not `as_str()`: `echo: fenced` in front-matter
-      context is stored as `PandocInlines`, for which `as_str()` returns `None` and the option
-      would vanish (the `metadata-as-str` lint documents this trap).
+  context is stored as `PandocInlines`, for which `as_str()` returns `None` and the option
+  would vanish (the `metadata-as-str` lint documents this trap).
 - [x] `error:` now agrees across engines, and gained two tests in `engine_error_policy.rs`:
-      doc-level `execute: error: true` lets a failing knitr chunk render (it could not before —
-      `with_defaults` pinned `error: false`), and the mirror, that an un-annotated knitr error
-      still fails the render.
+  doc-level `execute: error: true` lets a failing knitr chunk render (it could not before —
+  `with_defaults` pinned `error: false`), and the mirror, that an un-annotated knitr error
+  still fails the render.
 
 ### Phase 4 — Verification
 
 - [x] `cargo nextest run --workspace` — **11954 passed**, 197 skipped, 0 failed.
 - [x] Full `cargo xtask verify` (not `--skip-hub-build`, since `ExecutionContext` is in
-      `wasm-quarto-hub-client`'s dependency closure) — **all 14 steps passed**.
+  `wasm-quarto-hub-client`\'s dependency closure) — **all 14 steps passed**.
 - [x] **End-to-end through the binary** — see the evidence section below.
 - [x] Spot-check `q2 preview` on a visibility-bearing document (full WASM chain via
-      `cargo xtask verify`, then `cargo build --bin q2` to re-embed) — see below.
+  `cargo xtask verify`, then `cargo build --bin q2` to re-embed) — see below.
 - [x] File the deferred follow-ups: **bd-tskkw5dq** (`keep-hidden` + jupyter `echo: "fenced"`)
-      and **bd-42202ipf** (pre-existing capture-splice mis-pairing, found during Phase 2).
+  and **bd-42202ipf** (pre-existing capture-splice mis-pairing, found during Phase 2).
 
 ## End-to-end evidence (2026-08-14)
 
@@ -356,7 +356,7 @@ splitting content markers across a concatenation — the e2e fixture should have
 
 - Add `execute_scope: Option<ConfigValue>` + `with_execute_scope()` to `ExecutionContext`.
 - Populate it in `engine_execution.rs` from the merged metadata already held there.
-- Retire `text_execute.rs::document_execute_scope()`'s front-matter re-parse in favour of the
+- Retire `text_execute.rs::document_execute_scope()`\'s front-matter re-parse in favour of the
   field (it exists only because the field did not). Keep `front_matter_range` if still used
   elsewhere; delete if not.
 

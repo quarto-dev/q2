@@ -1,9 +1,9 @@
 ---
 date: 2026-05-11
 branch: feature/q2-preview
-status: v3 — all open items resolved (2026-05-11 review #2). Ready to
+status: "v3 — all open items resolved (2026-05-11 review #2). Ready to
         spin up the hub-client decomposition sub-epic, after which
-        Phase A planning can begin.
+        Phase A planning can begin."
 beads: bd-kw93 (epic).
 ---
 
@@ -12,7 +12,7 @@ beads: bd-kw93 (epic).
 ## Goal
 
 Build `q2 preview` as a native CLI that wraps an ephemeral local
-hub-client instance, using `feature/q2-preview`'s React-driven
+hub-client instance, using `feature/q2-preview`\'s React-driven
 incremental renderer as the in-browser view. The user runs
 `q2 preview [path]` from a Quarto project directory, a browser tab
 opens, and edits to local files appear in the rendered page within a
@@ -46,7 +46,7 @@ Everything below is in `main` (or in this branch, where called out):
 | `quarto-hub` samod-based sync server | shipped | Drop-in for the ephemeral preview server. Already has `--no-project` / standalone / project modes (`bd-3aga`, `crates/quarto-hub/src/{server,context}.rs`). |
 | `FileWatcher` (`crates/quarto-hub/src/watch.rs`) | shipped (`.qmd` only) | Reuse; extend to cover `_quarto.yml`, `_metadata.yml`, `_extensions/`, images, `.tsx`. |
 | `StorageManager::new_standalone` + `default_standalone_data_dir` | shipped | Use with an ephemeral temp dir so storage is wipe-on-exit. |
-| `quarto-trace-server`'s `include_dir!("$QUARTO_TRACE_VIEWER_EMBED_DIR")` pattern | shipped | Direct precedent for embedding the pared-down hub-client bundle into the `q2` binary. Same `<env>_DIR` override for live UI iteration. |
+| `quarto-trace-server`\'s `include_dir!("$QUARTO_TRACE_VIEWER_EMBED_DIR")` pattern | shipped | Direct precedent for embedding the pared-down hub-client bundle into the `q2` binary. Same `<env>_DIR` override for live UI iteration. |
 | `q2-preview` format | this branch | Pipeline + `render_qmd_to_preview_ast` already produce the AST the React renderer consumes (`crates/quarto-core/src/{format,pipeline}.rs`, `ast_transforms.rs:139`). |
 | `PreviewRouter` + `Q2PreviewIframe` + `ReactRenderer` | this branch | The React-in-iframe path that survives DOM-stateful JS across edits. Already wired into `hub-client/src/components/render/`. |
 | `DocumentProfile` + `ProjectDependencyGraph` (Phase 8) | shipped | Forward + reverse `edges` between docs. Phase 8 gives us *exactly* the "when X changes, re-render Y" mapping we need for cross-doc preview invalidation. |
@@ -106,7 +106,7 @@ What is **missing** is the glue, summarized in §"Phases" below.
    into the file's automerge doc. This already exists.
 4. **(new)** If `foo.qmd` is the currently-previewed page or in its
    forward dep-graph closure, the server compares the new file's
-   code-cell content against the last `EngineCapture`'s
+   code-cell content against the last `EngineCapture`\'s
    `input_qmd`:
    - if code-equal, the existing capture is still valid; nothing
      to do (the qmd-text change re-renders via replay).
@@ -186,7 +186,7 @@ replay/engine work is Phase C.
 
 ### Phase B — File-watcher and remap broadening
 
-- [ ] **B.1** Extend `FileWatcher`'s `is_qmd_file` filter to a
+- [ ] **B.1** Extend `FileWatcher`\'s `is_qmd_file` filter to a
   policy that includes `.qmd`, `_quarto.yml`, `_metadata.yml`,
   everything under `_extensions/`, image extensions, and `.tsx`
   custom-component files. Keep `.qmd`-only as a feature gate so
@@ -377,7 +377,7 @@ automatic path is reserved for users who explicitly opt in
 
 Open sub-question (not blocking the epic): what counts as a "code
 cell change"? The current proposal is byte-equality of cell
-content (matching `ReplayEngine`'s miss policy). Whitespace-only
+content (matching `ReplayEngine`\'s miss policy). Whitespace-only
 diffs would trip staleness; that may be acceptable, or it may want
 to be smarter later. Defer to Phase C planning.
 
@@ -592,7 +592,7 @@ distribution.
 1. **WASM pipeline ↔ EngineCapture wiring depth.** Phase C requires
    the WASM entry point `render_page_in_project` to accept an
    `EngineRegistry` override. Today it doesn't. The override has
-   to be plumbed through `wasm-quarto-hub-client`'s
+   to be plumbed through `wasm-quarto-hub-client`\'s
    `RenderToHtmlRenderer` / `Pass2Renderer` chain. Phase 2C of the
    q2-preview plans already plumbed configuration through these,
    so the seam is reachable, but the registry type isn't

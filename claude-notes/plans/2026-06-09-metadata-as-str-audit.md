@@ -60,7 +60,7 @@ base branch.
 Verified by reading each site (not a blanket replace). Line numbers are on
 `main` / the #265 base; re-confirm after switching branches.
 
-### SWITCH — real user-front-matter reads (~10 sites)
+### SWITCH — real user-front-matter reads (\~10 sites)
 
 | File | Line | Option | Notes |
 |------|------|--------|-------|
@@ -78,7 +78,7 @@ Verified by reading each site (not a blanket replace). Line numbers are on
 **Removed from SWITCH after per-site verification:**
 
 - `transforms/shortcode_resolve.rs:169` (`config_value_to_inlines`, the
-  `{{< meta key >}}` shortcode) → **LEAVE**. The `as_str()` is a fast-path;
+  `{{{< meta key >}}}` shortcode) → **LEAVE**. The `as_str()` is a fast-path;
   `PandocInlines` is explicitly handled at line 192 (`inlines.clone()`), so a
   bare front-matter string already resolves. Switching to `as_plain_text()`
   would be a **regression** — it would flatten inline markdown the meta

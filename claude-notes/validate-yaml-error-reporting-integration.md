@@ -16,7 +16,7 @@
 - **Phase 1 Complete**: Core types (DiagnosticMessage, builder API, error codes)
 - **Phase 2 Planned**: Rendering integration (ariadne, JSON)
 - Provides structured, tidyverse-style error messages
-- Error code system (Q-<subsystem>-<number>)
+- Error code system (Q-\<subsystem>-\<number>)
 
 ## Design Goals
 

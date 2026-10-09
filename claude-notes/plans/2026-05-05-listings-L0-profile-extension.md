@@ -385,7 +385,7 @@ listing-item:
 The extraction copies the `extra` sub-map's `ConfigValue` entries
 verbatim into `ListingItemInfo::extra` as a `BTreeMap<String,
 ConfigValue>`. No type coercion. Custom templates (L8) handle the
-typed access at render time via `quarto-doctemplate`'s
+typed access at render time via `quarto-doctemplate`\'s
 `TemplateValue` conversion.
 
 ### Version bump
@@ -468,7 +468,7 @@ test"; do not expand L0 to cover schema runtime wiring.
 
 | Field | Guarantee |
 |---|---|
-| `listing_item` | A [`ListingItemInfo`] holding per-document advertisement for listings consumers. **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; L1's `ListingItemInfoStage` fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the only open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
+| `listing_item` | A \[`ListingItemInfo`\] holding per-document advertisement for listings consumers. **Scoped feature surface — listings only**; non-listing consumers must use the corresponding top-level fields (`title`, `description`, `image`, …). Author-supplied values populate during `DocumentProfile::extract`; L1's `ListingItemInfoStage` fills holes. The nested `extra: BTreeMap<String, ConfigValue>` is the only open-shape field in the profile and is forbidden to non-listing consumers — see §"Scoped feature surfaces". Default empty (`ListingItemInfo::is_empty()`). |
 
 ### New §"Scoped feature surfaces"
 
@@ -648,7 +648,7 @@ pass.
       not the trivial `is_empty()`.
 - [x] Write unit tests 1–13 + the C6 namespace-distinct test
       (#9b) + three D7 `categories_raw` tests in
-      `document_profile.rs`'s test module. Observed:
+      `document_profile.rs`\'s test module. Observed:
       5 extraction tests fail (curated fields, extra
       passthrough, namespace-distinct, two `categories_raw`
       tests). Mechanics + version-mismatch + is_empty tests
@@ -694,7 +694,7 @@ pass.
       sub-plan.
 - [x] Added `listing-item` schema entry to
       `crates/pampa/test-fixtures/schemas/definitions.yml`
-      (~50 lines — slightly over the 30-line guidance, but
+      (\~50 lines — slightly over the 30-line guidance, but
       mechanical and contained in the test fixture; pampa
       tests still pass).
 
@@ -747,7 +747,7 @@ normalizing the input-stem-derived asset paths
 `diff` of the two raw outputs shows only the legitimate
 filename-prefix difference (line 8–9, asset-link `href`).
 Confirms: L0's new field doesn't affect rendering. Listings
-rendering is L3+'s job.
+rendering is L3+\'s job.
 
 **Baseline regression check.** Rendering the existing
 `phase5-single-doc-baseline` fixture (a richer document with
@@ -880,7 +880,7 @@ disagrees with any, push back before implementation starts.
   cross-link from each typed top-level field's doc comment
   ("see §Scoped feature surfaces for what listings get
   instead")? Probably overkill; one link from
-  `listing_item`'s doc comment back to the section is
+  `listing_item`\'s doc comment back to the section is
   sufficient.
 
 ## Filing reminder

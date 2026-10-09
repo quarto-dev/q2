@@ -309,7 +309,7 @@ assert!(!result.contains("CaptionBlock"), "Should not contain standalone Caption
 - Phase 3: 1 hour (post-processing logic + testing)
 - Phase 4: 1.5 hours (comprehensive tests)
 
-**Total**: ~3 hours
+**Total**: \~3 hours
 
 ## Files to Modify
 

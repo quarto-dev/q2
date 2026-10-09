@@ -23,7 +23,7 @@
 > `claude-notes/plans/2026-06-29-yaml-stack-extraction-handoff.md`** — it is the
 > up-to-date, self-contained plan: the YAML stack ships as **one repo
 > `posit-dev/quarto-yaml`, a workspace with two crates** (decided 2026-06-29; the
-> foundation crates' "one repo per crate" rule does *not* apply here), and the
+> foundation crates\' "one repo per crate" rule does *not* apply here), and the
 > foundation extraction it depends on is **done** (source-map + error-reporting
 > published, PRs #348/#349/#350). This design doc remains the rationale for the
 > error-code discipline applied to YAML.
@@ -54,7 +54,7 @@ YAML-specific application of that philosophy.
   embedders today — the YAML validator becomes the **proving ground** for the
   general cross-package philosophy rather than a forced q2 integration.
 - **"TypeScript" = the language/compiler, not TS Quarto.** The `Q-*` scheme was
-  inspired by the TypeScript *compiler*'s flat numeric `TSxxxx` catalog. That is a
+  inspired by the TypeScript *compiler*\'s flat numeric `TSxxxx` catalog. That is a
   good template for the *presentation* layer but offers nothing for the
   cross-package case (it is a monolith with a central allocator). The composable
   precedents are Clippy (`clippy::needless_return`) and ESLint plugin namespacing —
@@ -82,7 +82,7 @@ and `quarto-yaml`. Reading the code, it is not interchangeable:
   `JsonDiagnostic::SCHEMA_URL` (`https://quarto.org/schemas/v1/...`).
 - The catalog is reached as a **global static + free functions**
   (`ERROR_CATALOG`, `get_docs_url`, `get_error_info`, `get_subsystem`) called
-  from ~19 crates — not as an injected dependency.
+  from \~19 crates — not as an injected dependency.
 
 So "externalize `quarto-error-reporting`" is really two separable things welded
 together: a **catalog-agnostic reporting core** (reusable, belongs outside) and
@@ -111,7 +111,7 @@ q2 keeps / gains:
 | Crate (in q2) | Was | Role |
 |---|---|---|
 | `quarto-error-catalog` | **split** out of `quarto-error-reporting` | the `Q-*` `error_catalog.json`, quarto.org URLs, the audit, the `CatalogProvider` impl |
-| `quarto-error-reporting` (façade) | shrinks to a re-export shim | re-exports `error-reporting-core` + installs the q2 catalog, so the ~19 existing `use quarto_error_reporting::…` call sites keep compiling |
+| `quarto-error-reporting` (façade) | shrinks to a re-export shim | re-exports `error-reporting-core` + installs the q2 catalog, so the \~19 existing `use quarto_error_reporting::…` call sites keep compiling |
 
 **Rationale.** Option 1 is the only strategy that delivers the actual goal — a
 crate non-Quarto developers can `cargo add` without a Quarto identity. Options 2
@@ -128,7 +128,7 @@ crate non-Quarto developers can `cargo add` without a Quarto identity. Options 2
 YAML — now renders through an externally-owned `error-reporting-core`. Cross-repo
 coordination on the diagnostic builder/render is the standing tax. We mitigate
 it by keeping a thin `quarto-error-reporting` façade in q2 so day-to-day q2 code
-does not change its imports, and by making `error-reporting-core`'s surface
+does not change its imports, and by making `error-reporting-core`\'s surface
 deliberately small and slow-moving.
 
 > **Override point.** If that tax is judged too high right now, the fallback is
@@ -187,7 +187,7 @@ pub fn install() { error_reporting_core::install_catalog(Box::new(QuartoCatalog:
 
 **Rationale — why a global registry rather than threading the provider through
 every call site.** Today the catalog is a `Lazy<HashMap>` global reached by free
-functions from ~19 crates. Converting all of those to take a `&dyn
+functions from \~19 crates. Converting all of those to take a `&dyn
 CatalogProvider` parameter is a large, invasive churn with no behavioural payoff.
 A `OnceLock`-installed global keeps every existing call site (`get_docs_url(code)`)
 source-compatible; only the *initialization* changes (q2 calls
@@ -270,7 +270,7 @@ its own errors uses the same pattern (own ids → q2 remap table). That is a
 reusable architectural seam, not a one-off.
 
 **Migration safety net.** The existing `error_code()` (returning `Q-1-x`) and its
-~15 unit tests in `error.rs` are the regression oracle, but the check **splits**
+\~15 unit tests in `error.rs` are the regression oracle, but the check **splits**
 across the boundary once the crate leaves:
 
 - *Upstream (library):* a unit test pins `kind.code()` → origin-code string for
@@ -474,7 +474,7 @@ Each phase is independently shippable and leaves the workspace green.
       `error-reporting-core` (catalog-agnostic) + `quarto-error-catalog` (Q-*
       policy) + the `CatalogProvider` registry; turn `quarto-error-reporting` into
       the re-export façade that calls `install()`. Move `json.rs` to its q2 home
-      (Q4). Workspace stays green; ~19 dependents unchanged. **This is the bulk of
+      (Q4). Workspace stays green; \~19 dependents unchanged. **This is the bulk of
       the work and is valuable even if the repo move never happens.**
 - [ ] **P2 — Re-point `quarto-yaml-validation` to library-local ids.** Replace
       `error_code()`’s `Q-1-x` with `code() -> "yaml-schema/*"`; move the
@@ -501,5 +501,5 @@ catalog-pluggable diagnostics stack and decide the repo move on its own merits.
 2. **Q7 naming:** keep `quarto-*` / `quarto-yaml-schema`, or rebrand neutral?
 3. **Publish channel:** crates.io vs. git deps for q2→external consumption (P5).
 4. Whether `quarto-error-reporting` keeps its name as the façade, or the façade is
-   removed and the ~19 dependents migrate to `error-reporting-core` directly
+   removed and the \~19 dependents migrate to `error-reporting-core` directly
    (more churn, cleaner end state).

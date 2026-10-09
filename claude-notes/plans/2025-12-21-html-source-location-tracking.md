@@ -47,7 +47,7 @@ Format: `data-loc="file_id:start_line:start_col-end_line:end_col"`
 - Directly actionable for editor integration
 
 **Cons:**
-- Increases HTML size (adds ~20-30 bytes per element)
+- Increases HTML size (adds \~20-30 bytes per element)
 - Loses transformation chain information (usually not needed)
 - Some synthetic nodes have no meaningful location
 

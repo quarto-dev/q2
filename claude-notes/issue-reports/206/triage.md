@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/206
 - **Reporter**: @rundel (Colin Rundel), 2026-05-15
 - **Triage date**: 2026-05-15
-- **Worktree**: `.worktrees/issue-206` (branch `issue-206`, based on `main` @ `09b2de7e`)
+- **Worktree**: `.worktrees/issue-206` (branch `issue-206`, based on `main` \@ `09b2de7e`)
 - **Beads issue**: bd-expy
 - **Scope**: the specific parse failure when a `:::` line directly follows a pipe table row. Adjacent oddities found during triage (pipe table absorbing trailing block content as cells) are flagged but **not** in scope for this issue.
 
@@ -74,7 +74,7 @@ So the commit point is the shift of the first `:`. After that, tree-sitter canno
 
 The reasonable fix shapes (to be decided in the fix issue, not here):
 
-1. **Tighten `caption`'s first token via the external scanner.** Have the scanner emit a `_caption_start` token only when it sees a `:` that is *not* immediately followed by another `:` (and is followed by whitespace). The internal `caption` rule then keys off `_caption_start` rather than the literal `:`. This is the most surgical fix and matches the spirit of how the scanner already disambiguates `_pipe_table_delimiter` from prose `|`.
+1. **Tighten `caption`\'s first token via the external scanner.** Have the scanner emit a `_caption_start` token only when it sees a `:` that is *not* immediately followed by another `:` (and is followed by whitespace). The internal `caption` rule then keys off `_caption_start` rather than the literal `:`. This is the most surgical fix and matches the spirit of how the scanner already disambiguates `_pipe_table_delimiter` from prose `|`.
 2. **Have the scanner refuse `_pipe_table_newline` when the next non-blank line starts with `:::`.** Lets the pipe_table close before the parser commits to a caption start. Slightly broader — it also helps the table-rows-absorbing-following-content issue below.
 3. **Refuse to shift `:` as the start of `caption` when followed by another `:`.** Could be done with a GLR/multi-version branch but tree-sitter handles ambiguity via the external scanner, so this collapses to (1).
 

@@ -80,14 +80,14 @@ it to surface tagged-PDF marked-content (MCID) data, which is a prerequisite for
   `orange-book` book PDF (`external-sources/quarto-cli/tests/docs/smoke-all/typst/orange-book/_book/Test-Typst-Book.pdf`,
   23,057 bytes of extracted text). **Result: byte-for-byte identical output on all
   5**, no panics, no stderr output either version. This substantially de-risks (but,
-  being 5 fixed PDFs rather than the actual 6 test fixtures' generated PDFs, doesn't
+  being 5 fixed PDFs rather than the actual 6 test fixtures\' generated PDFs, doesn't
   fully replace) this phase's own `cargo nextest run -p quarto-core` regression gate
   below — treat that gate as still required, now with high prior confidence it'll
   pass rather than a genuine unknown.
 
 ## Checklist
 
-- [x] Updated `crates/quarto-core/Cargo.toml`'s `[dev-dependencies]` entry to the pinned git revision; it remains dev-only.
+- [x] Updated `crates/quarto-core/Cargo.toml`\'s `[dev-dependencies]` entry to the pinned git revision; it remains dev-only.
 - [x] `cargo build -p quarto-core` — passed against the pinned fork and current usage. The regression suite covers the six files using `pdf_extract` (ten call sites): `book_theorem_crossref.rs`, `book_citations.rs`, `book_appendix_letter_parity.rs`, `book_numbering_torture.rs`, `book_part_appendix.rs`, and `book_numbering_pipeline.rs`. This set differs from P10's coexistence set.
 - [x] `cargo nextest run -p quarto-core` — 5,282 passed, 32 skipped, including all six files above; no text-extraction drift.
 - [x] `cargo clippy -p quarto-core --all-targets -- -D warnings` — passed.

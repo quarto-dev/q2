@@ -120,7 +120,7 @@ Highlight.js is a close cousin to Prism: regex-based, can run client or server-s
 | **Token Taxonomy** | Semantic captures (`@keyword`, `@function`) | Scope hierarchy (`source.lang.type`) | Flat semantic classes (`.keyword`, `.string`) |
 | **Context Awareness** | Yes (locals query tracks scopes) | Limited (line-scoped) | No |
 | **Accuracy** | Highest (multi-line, nested constructs) | High (ecosystem proven) | Medium (known edge cases) |
-| **Language Coverage** | ~100 (curated; GitHub-driven) | ~1000+ (VS Code + community) | ~200+ (community-driven) |
+| **Language Coverage** | \~100 (curated; GitHub-driven) | \~1000+ (VS Code + community) | \~200+ (community-driven) |
 | **Extension Ease** | High (new tree-sitter grammar) | High (adopt existing TextMate grammar) | Medium (regex authoring) |
 | **Ecosystem Size** | Small but growing | Large (VS Code backing) | Medium (mature, stable) |
 | **Multi-line Regex** | Yes (AST-based) | No (single-line rule limit) | No |
@@ -162,7 +162,7 @@ GitHub migrated code highlighting from Linguist (Pygments-based) to tree-sitter-
 5. **Extensibility:** New languages and annotations (via query files) are author-friendly compared to regex lexer authoring.
 
 **Caveats:**
-- Language coverage is smaller than TextMate grammars (~100 vs. ~1000+). Consider a fallback or hybrid strategy if broad language support is critical.
+- Language coverage is smaller than TextMate grammars (\~100 vs. \~1000+). Consider a fallback or hybrid strategy if broad language support is critical.
 - Build-time dependency (tree-sitter parser for each language). Slightly heavier than Prism.js for lightweight deployments, but negligible for modern build pipelines.
 
 ---

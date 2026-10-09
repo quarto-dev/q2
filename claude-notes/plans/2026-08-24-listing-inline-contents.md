@@ -11,13 +11,13 @@
 **Spec:** this file — §"Design decisions" and §"Investigation record" below. Strand: `bd-listing-inline-contents-tyy446ze` (p1 bug, parent epic bd-61cd). Follow-up already filed: `bd-hj1ehfn8` (YAML-file item source).
 
 **Braid:** bd-listing-inline-contents-tyy446ze
-**Worktree:** `.worktrees/workspace-5` (branch `braid/bd-listing-inline-contents-tyy446ze-listing-inline-contents`, based on `main` @ `596ceb572`)
+**Worktree:** `.worktrees/workspace-5` (branch `braid/bd-listing-inline-contents-tyy446ze-listing-inline-contents`, based on `main` \@ `596ceb572`)
 **Status:** Plan written 2026-08-24 after design alignment with the user; **awaiting go-ahead to execute.**
 
 ## Global Constraints
 
 - TDD: every behavioural task writes its failing test first and runs it before implementing (`CLAUDE.md` §"CRITICAL - TEST-DRIVEN DEVELOPMENT").
-- Per-task gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` and `cargo nextest run -p quarto-core`. Per-phase gate and before any push: `cargo nextest run --workspace` (~3 min; report the delta against the live baseline **13130 passed / 199 skipped** at `596ceb572`).
+- Per-task gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` and `cargo nextest run -p quarto-core`. Per-phase gate and before any push: `cargo nextest run --workspace` (\~3 min; report the delta against the live baseline **13130 passed / 199 skipped** at `596ceb572`).
 - `cargo xtask verify` **full** (not `--skip-hub-build`) before the final commit: `quarto-core` feeds the WASM leg.
 - Pre-commit checklist: `claude-notes/instructions/review.md`. Plan-driven execution the user has approved → commit-and-continue at clean phase boundaries. **Never push without explicit approval.**
 - Determinism: no `std::collections::HashMap` in anything serialized or iterated for output; `BTreeMap` for `extra` (already the convention).
@@ -63,7 +63,7 @@ Q1 has all three link states (glob/`path:`-to-document, `path:` to a non-documen
 **D3. Ordering: declared position.** A record occupies its own slot in `contents:`; glob items keep the index of their first matching pattern. Mechanically the sort key is `(index, is_glob)`: a glob item's index is the first *positive pattern* that matched it (unchanged from today), a record's is the count of `Glob` entries declared before it, and `is_glob` breaks the tie so a record written before a glob sorts before that glob's items. Deliberately **not** derived from provenance — `SourceInfo::for_test()` and `By::programmatic_config()` are constants, so equal-comparing sources would collapse every glob to index 0. Differs from Q1 (records appended after all glob matches) only under `sort: false` with a record written before a glob, and diverges toward what the YAML says. Documented in the guide. A record whose `path:` names a document a glob also matches yields **two items** (Q1 parity, no dedupe).
 
 > **Amended during execution (Task 5, fix rounds 1-2).** The wording above —
-> "a record's [index] is the count of `Glob` entries declared before it" — is
+> "a record's \[index\] is the count of `Glob` entries declared before it" — is
 > wrong wherever a `contents:` entry does not survive into
 > `resolution.positives()`. A glob item's index is its *ordinal in
 > `positives()`*, which excludes negated patterns and patterns dropped as
@@ -567,7 +567,7 @@ git commit -m "Give listing items an explicit link target instead of assuming a 
 **Interfaces:**
 - Produces: `pub enum UnknownKeyPolicy { Drop, IntoExtra { except: &'static [&'static str] } }`; `pub const LISTING_ITEM_KEYS: &[&str]`; `impl ListingItemInfo { pub fn from_map(li: &ConfigValue, unknown: UnknownKeyPolicy) -> Self }`. Front-matter behaviour unchanged.
 
-- [x] **Step 1: Write the failing tests** (in `document_profile.rs`'s `tests` module; build values with the crate's `ConfigValue` constructors):
+- [x] **Step 1: Write the failing tests** (in `document_profile.rs`\'s `tests` module; build values with the crate's `ConfigValue` constructors):
 
 ```rust
     fn cv_s(v: &str) -> ConfigValue {
@@ -1303,7 +1303,7 @@ git commit -m "Parse inline listing records into items, with near-miss and no-ti
 - Produces: `pub(crate) fn is_remote_src(&str) -> bool` in `helpers.rs`.
 - Produces: `pub(crate) fn is_markdown_document_path(p: &str) -> bool` in `config.rs`; private `item_visible(&DocumentProfile) -> bool` seam.
 
-- [x] **Step 1: Write the failing tests** — append to `listing_generate.rs`'s `tests` module (helpers `s`, `b`, `arr`, `map`, `make_profile`, `run_transform` exist there):
+- [x] **Step 1: Write the failing tests** — append to `listing_generate.rs`\'s `tests` module (helpers `s`, `b`, `arr`, `map`, `make_profile`, `run_transform` exist there):
 
 ```rust
     fn contents_listing(entries: Vec<ConfigValue>) -> ConfigValue {
@@ -1902,7 +1902,7 @@ literal path behaves like any other resolved pattern once it reaches the
 profile — not a regression guard. The config test is this task's only real
 coverage; do not water it down.
 
-- [x] **Step 3: Implement** — `flatten_content_globs`'s tail becomes:
+- [x] **Step 3: Implement** — `flatten_content_globs`\'s tail becomes:
 
 ```rust
     listings
@@ -1966,7 +1966,7 @@ git commit -m "Treat a listing record's document path as a dependency edge (bd-l
 **Interfaces:**
 - Produces: template map has each `extra` key at top level (curated keys win) and still nested under `extra`; `description-placeholder-begin/end` and `image-placeholder-begin/end` are empty strings unless `item.origin == ItemOrigin::Document`.
 
-- [x] **Step 1: Write the failing tests** — in `binding.rs`'s `tests` module, which already provides `item(title) -> ListingItem` and `listing() -> Listing` and reads items back through `build_listing_context(…).get("items")` (see `item_binding_extra_passes_through_via_pampa_bridge` at `:1030` for the exact access pattern):
+- [x] **Step 1: Write the failing tests** — in `binding.rs`\'s `tests` module, which already provides `item(title) -> ListingItem` and `listing() -> Listing` and reads items back through `build_listing_context(…).get("items")` (see `item_binding_extra_passes_through_via_pampa_bridge` at `:1030` for the exact access pattern):
 
 ```rust
     /// The first item's template map from a one-item listing context.
@@ -2071,7 +2071,7 @@ git commit -m "Bind listing custom fields flat and skip L7 placeholders for reco
 
 **Interfaces:** none new. Uses the `path` absence from Task 7.
 
-- [x] **Step 1: Write the failing test** — in `listing_render.rs`'s tests. The module's helpers are `make_item(title: &str, date: Option<&str>) -> ListingItem`, `make_listing(kind: ListingType) -> Listing`, `empty_pandoc() -> Pandoc`, and `run_transform(ast: Pandoc, resolved: Vec<ResolvedListing>) -> (Pandoc, Vec<DiagnosticMessage>)`; existing tests inspect output through `format!("{:?}", ast)` (see `table_fields_subset_renders_single_column_without_diagnostics` at `:672`):
+- [x] **Step 1: Write the failing test** — in `listing_render.rs`\'s tests. The module's helpers are `make_item(title: &str, date: Option<&str>) -> ListingItem`, `make_listing(kind: ListingType) -> Listing`, `empty_pandoc() -> Pandoc`, and `run_transform(ast: Pandoc, resolved: Vec<ResolvedListing>) -> (Pandoc, Vec<DiagnosticMessage>)`; existing tests inspect output through `format!("{:?}", ast)` (see `table_fields_subset_renders_single_column_without_diagnostics` at `:672`):
 
 ```rust
     #[tokio::test]
@@ -2342,7 +2342,7 @@ git commit -m "End-to-end tests for inline listing records (bd-listing-inline-co
 
 - [x] **Step 2: Write `docs/guides/projects/listings.qmd`** (user-facing, usage not internals), sections:
 
-```markdown
+````markdown
 ---
 title: "Listings"
 description: "Generate lists of pages or hand-written entries with `listing:`."
@@ -2399,7 +2399,7 @@ placed all records after all glob matches.)
 YAML files in `contents:` (Quarto 1's `contents: items.yml`) are skipped
 with a warning ([`Q-12-23`](/docs/errors/listing/Q-12-23.qmd)); move the
 records inline.
-```
+````
 
 - [x] **Step 3: Verify the docs build with Q2** (never Q1):
 

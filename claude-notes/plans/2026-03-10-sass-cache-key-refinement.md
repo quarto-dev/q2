@@ -23,7 +23,7 @@ into `CompileThemeCssStage`, which was the right architectural move. However, th
 caching strategy changed in ways that were expedient rather than necessary:
 
 1. **Hash function**: SHA-256 → `DefaultHasher` (64-bit, unstable across Rust versions)
-2. **Hash input**: individual theme files → full assembled SCSS (~224KB)
+2. **Hash input**: individual theme files → full assembled SCSS (\~224KB)
 3. **LRU eviction**: present → absent (both WASM IndexedDB and native filesystem)
 
 These changes were not required by the new architecture. This plan restores SHA-256
@@ -137,26 +137,26 @@ full assembled SCSS as input (meaning assembly must happen before cache check).
 ### Phase 1: Move SCSS_RESOURCES_HASH to quarto-sass
 
 - [x] Add `sha2` as a build-dependency of `quarto-sass` in `crates/quarto-sass/Cargo.toml`:
-      ```toml
-      [build-dependencies]
-      sha2 = "0.10"
-      ```
-      Check workspace `Cargo.toml` for existing `sha2` version to use `.workspace = true`
-      if available.
+  ```toml
+  [build-dependencies]
+  sha2 = "0.10"
+  ```
+  Check workspace `Cargo.toml` for existing `sha2` version to use `.workspace = true`
+  if available.
 - [x] Create `crates/quarto-sass/build.rs` — move the `compute_scss_resources_hash()` and
-      `collect_scss_files()` logic from `crates/wasm-quarto-hub-client/build.rs`.
-      The relative path `../../resources/scss` is the same from both `crates/quarto-sass/`
-      and `crates/wasm-quarto-hub-client/`. Include `cargo:rerun-if-changed` directives.
+  `collect_scss_files()` logic from `crates/wasm-quarto-hub-client/build.rs`.
+  The relative path `../../resources/scss` is the same from both `crates/quarto-sass/`
+  and `crates/wasm-quarto-hub-client/`. Include `cargo:rerun-if-changed` directives.
 - [x] Write the hash to `$OUT_DIR/scss_resources_hash.txt`
 - [x] Expose as `pub const SCSS_RESOURCES_HASH: &str` in `quarto-sass/src/lib.rs`
-      (via `include_str!`). Also add it to the `pub use` exports.
+  (via `include_str!`). Also add it to the `pub use` exports.
 - [x] Update `wasm-quarto-hub-client/build.rs` to remove the duplicated hash computation.
-      The build.rs can be deleted entirely if the hash was its only purpose. Then update
-      `wasm-quarto-hub-client/src/lib.rs`: the `get_scss_resources_version()` function
-      should use `quarto_sass::SCSS_RESOURCES_HASH` instead of its own `include_str!`.
-      (The function itself is removed later in Phase 4, but keep it working for now.)
+  The build.rs can be deleted entirely if the hash was its only purpose. Then update
+  `wasm-quarto-hub-client/src/lib.rs`: the `get_scss_resources_version()` function
+  should use `quarto_sass::SCSS_RESOURCES_HASH` instead of its own `include_str!`.
+  (The function itself is removed later in Phase 4, but keep it working for now.)
 - [x] Verify: `cargo build -p quarto-sass` and `cargo build -p wasm-quarto-hub-client`
-      both succeed. Run `cargo nextest run -p quarto-sass` to check nothing broke.
+  both succeed. Run `cargo nextest run -p quarto-sass` to check nothing broke.
 
 ### Phase 2: SHA-256 hash-before-assemble in CompileThemeCssStage
 
@@ -176,19 +176,19 @@ The test file is at the bottom of `compile_theme_css.rs` (line 249+). It has a
 `MockRuntime` that returns `Ok(vec![])` for `file_read`. Tests to update/add:
 
 - [x] Update existing `test_cache_key_deterministic`, `test_cache_key_differs_for_minified`,
-      `test_cache_key_differs_for_content` to use new signature (tests first — they will
-      fail until implementation)
+  `test_cache_key_differs_for_content` to use new signature (tests first — they will
+  fail until implementation)
 - [x] Add test: same theme name with different `SCSS_RESOURCES_HASH` → different key
 - [x] Add test: same custom file path with different content → different key
 - [x] Add test: built-in theme cache key does NOT require file reads (only name + build hash)
 - [x] Add `sha2` as a dependency of `quarto-core` in `crates/quarto-core/Cargo.toml`
 - [x] Implement new `cache_key()` in `compile_theme_css.rs`:
-      - Input: `SCSS_RESOURCES_HASH` + for each theme spec: identity string (built-in name
-        or resolved custom path) + custom file contents (read via runtime) + `minified`
-      - Output: SHA-256 hex string (full 64 hex chars is fine)
-      - Uses `sha2::{Sha256, Digest}`
+  - Input: `SCSS_RESOURCES_HASH` + for each theme spec: identity string (built-in name
+    or resolved custom path) + custom file contents (read via runtime) + `minified`
+  - Output: SHA-256 hex string (full 64 hex chars is fine)
+  - Uses `sha2::{Sha256, Digest}`
 - [x] Restructure `CompileThemeCssStage::run()` to match the target flow described above
-      (ThemeContext creation moved up, cache key before assembly)
+  (ThemeContext creation moved up, cache key before assembly)
 - [x] Verify: `cargo nextest run -p quarto-core` — all tests pass including updated ones
 - [x] Verify: `cargo nextest run --workspace` — no regressions in other crates
 
@@ -206,22 +206,22 @@ Tests use `fake-indexeddb/auto` (already a dev dependency). Run with:
 `cd hub-client && npm test -- --run src/wasm-js-bridge/cache.test.ts`
 
 - [x] Write new tests in `cache.test.ts` first (they will fail):
-      - Eviction test: fill cache past entry limit, verify oldest entries evicted first
-      - Cross-namespace eviction: entries from any namespace can be evicted
-      - Touch-on-read test: read an old entry, verify it survives eviction of newer unread entries
-      - Size tracking: verify stored record has correct `size` field
+  - Eviction test: fill cache past entry limit, verify oldest entries evicted first
+  - Cross-namespace eviction: entries from any namespace can be evicted
+  - Touch-on-read test: read an old entry, verify it survives eviction of newer unread entries
+  - Size tracking: verify stored record has correct `size` field
 - [x] Redesign IndexedDB schema in `cache.js`:
-      - Keep DB_VERSION=1 (no bump needed)
-      - Record format: `{ namespace, key, value, timestamp, size }`
-      - Create index on `timestamp` (for ordered eviction — iterate oldest-first)
-      - Compute `size` from `value.length` in `jsCacheSet`
+  - Keep DB_VERSION=1 (no bump needed)
+  - Record format: `{ namespace, key, value, timestamp, size }`
+  - Create index on `timestamp` (for ordered eviction — iterate oldest-first)
+  - Compute `size` from `value.length` in `jsCacheSet`
 - [x] Add LRU eviction to `jsCacheSet`:
-      - After storing, query total entry count and total size **globally** (all namespaces)
-      - If over limits (e.g., 50MB total, 200 entries), open cursor on `timestamp`
-        index (oldest first), delete entries regardless of namespace until under limits
-      - Global eviction is simpler and avoids one namespace starving another
+  - After storing, query total entry count and total size **globally** (all namespaces)
+  - If over limits (e.g., 50MB total, 200 entries), open cursor on `timestamp`
+    index (oldest first), delete entries regardless of namespace until under limits
+  - Global eviction is simpler and avoids one namespace starving another
 - [x] Touch-on-read: in `jsCacheGet`, on a cache hit, update the record's `timestamp`
-      to `Date.now()` so that actively-used entries are not evicted (true LRU, not FIFO)
+  to `Date.now()` so that actively-used entries are not evicted (true LRU, not FIFO)
 - [x] Add `MAX_ENTRIES` / `MAX_TOTAL_SIZE` constants at top of module
 - [x] Update `cache.d.ts` if any exported function signatures changed
 - [x] Verify: all cache tests pass
@@ -235,26 +235,26 @@ Use grep to confirm zero references outside the files being deleted.
 - [x] Remove `hub-client/src/services/sassCache.test.ts` (entire file)
 - [x] Remove `SassCacheEntry` from `hub-client/src/services/storage/types.ts`
 - [x] Remove the `sassCache` store creation from `hub-client/src/services/storage/migrations.ts`
-      (lines 95-98 area). Check if removing it requires adjusting migration version numbering.
-      → Kept as no-op migration to maintain DB version compatibility.
+  (lines 95-98 area). Check if removing it requires adjusting migration version numbering.
+  → Kept as no-op migration to maintain DB version compatibility.
 - [x] Remove `SassCacheEntry` re-export from `hub-client/src/services/storage/index.ts`
 - [x] In `hub-client/src/services/wasmRenderer.ts`:
-      - Remove `import { getSassCache, computeHash } from './sassCache'`
-      - **Inline `computeHash`** as a module-private function
-      - Remove `checkAndInvalidateSassCache()` function and its call in `initWasm()`
-      - Remove `SCSS_VERSION_STORAGE_KEY` constant
-      - Remove functions: `compileScss()`, `compileScssWithBootstrap()`,
-        `compileThemeCssByName()`, `compileDefaultBootstrapCss()`,
-        `clearSassCache()`, `getSassCacheStats()`
-      - Remove types: `SassCompileOptions`, `SassCompileResponse`, `ThemeCssResponse`
+  - Remove `import { getSassCache, computeHash } from './sassCache'`
+  - **Inline `computeHash`** as a module-private function
+  - Remove `checkAndInvalidateSassCache()` function and its call in `initWasm()`
+  - Remove `SCSS_VERSION_STORAGE_KEY` constant
+  - Remove functions: `compileScss()`, `compileScssWithBootstrap()`,
+    `compileThemeCssByName()`, `compileDefaultBootstrapCss()`,
+    `clearSassCache()`, `getSassCacheStats()`
+  - Remove types: `SassCompileOptions`, `SassCompileResponse`, `ThemeCssResponse`
 - [x] Remove `compileScss` mock method from `hub-client/src/test-utils/mockWasm.ts`
 - [x] Remove `get_scss_resources_version` WASM export from
-      `crates/wasm-quarto-hub-client/src/lib.rs` (only caller was
-      `checkAndInvalidateSassCache`, now removed)
+  `crates/wasm-quarto-hub-client/src/lib.rs` (only caller was
+  `checkAndInvalidateSassCache`, now removed)
 - [x] Remove `get_scss_resources_version` declaration from
-      `hub-client/src/types/wasm-quarto-hub-client.d.ts`
+  `hub-client/src/types/wasm-quarto-hub-client.d.ts`
 - [x] Remove `get_scss_resources_version` from the `WasmModuleExtended` interface
-      in `wasmRenderer.ts`
+  in `wasmRenderer.ts`
 - [x] Grep for any remaining references to removed symbols. Fix any stragglers.
 - [x] Verify: `cd hub-client && npm test` — all tests pass (300 passed)
 - [x] Verify: `cd hub-client && npm run preflight` — builds cleanly (WASM + typecheck)

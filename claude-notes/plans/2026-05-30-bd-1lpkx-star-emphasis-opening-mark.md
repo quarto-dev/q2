@@ -1,4 +1,4 @@
-# bd-1lpkx — Fix Q-2-12 "opening '*' mark" diagnostic pointing at the preceding word
+# bd-1lpkx — Fix Q-2-12 "opening `'*'` mark" diagnostic pointing at the preceding word
 
 **Issue:** bd-1lpkx
 **Date:** 2026-05-30

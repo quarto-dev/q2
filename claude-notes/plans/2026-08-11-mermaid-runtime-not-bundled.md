@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-11
 **Braid:** `bd-mermaid-runtime-not-bundled-vxejw159`
-**Branch:** `main` @ `001cb6a5` (investigated in place; no worktree created)
+**Branch:** `main` \@ `001cb6a5` (investigated in place; no worktree created)
 **Status:** **Implemented** on `braid/bd-mermaid-runtime-not-bundled-vxejw159` (commits `095cb39c`, `eeb1eb7d`). All phases complete; full `cargo xtask verify` green. Not pushed — awaiting review.
 
 ## Triage verdict
@@ -25,7 +25,7 @@ Nearly empty, which is itself informative:
 - **`related` → `bd-yvz2xqrm`** (closed): the same class of problem for the hub client — Monaco loaded from jsDelivr, editor hung when the CDN was slow/blocked/offline; fixed in PR #411 by bundling via `loader.config({ monaco })` + worker wiring, with an e2e guard that blocks jsDelivr. Comment `c-j1zq3nyv` on that strand says explicitly: *"Mermaid's lazy jsDelivr import noted as out of scope."* So this dependency was seen and deliberately deferred, not judged acceptable. This strand is that follow-up.
 - No **incoming `blocks`** edges — nothing is formally waiting on this. Urgency comes from the Connect-docs port, not from the graph.
 
-Worth carrying forward from `bd-yvz2xqrm`: bundling Monaco pushed the vite build past the default ~2 GB Node heap and needed `--max-old-space-size=4096` (comment `c-iw7g59gg`). If we also bundle mermaid into the *preview/hub-client* path (see Question 3), expect a similar build-memory conversation. The `q2 render` path proposed here does not go through vite and does not carry that risk.
+Worth carrying forward from `bd-yvz2xqrm`: bundling Monaco pushed the vite build past the default \~2 GB Node heap and needed `--max-old-space-size=4096` (comment `c-iw7g59gg`). If we also bundle mermaid into the *preview/hub-client* path (see Question 3), expect a similar build-memory conversation. The `q2 render` path proposed here does not go through vite and does not carry that risk.
 
 ## What the code looks like today
 
@@ -67,7 +67,7 @@ This is the crux, and it makes the strand's "vendor the ESM build" option much w
 
 | Artifact | Size | Self-contained? |
 | --- | ---: | --- |
-| `dist/mermaid.esm.min.mjs` (what q2 imports today) | 26 KB | **No** — 10 static chunk imports + ~25 dynamic ones |
+| `dist/mermaid.esm.min.mjs` (what q2 imports today) | 26 KB | **No** — 10 static chunk imports + \~25 dynamic ones |
 | `dist/chunks/mermaid.esm.min/` (146 files) | 13 MB | — |
 | `dist/mermaid.min.js` (UMD) | **2,748,992 B (2.62 MiB)** | **Yes** — 0 dynamic imports, 0 chunk refs |
 
@@ -240,7 +240,7 @@ The WASM number is the one worth flagging, and it was **not** anticipated in the
 
 Today those bytes are dead weight in the client: the preview pipeline excludes the mermaid transform (`Q2_PREVIEW_TRANSFORM_EXCLUDED`) and `MermaidCodeBlock.tsx` fetches its own copy from a CDN. But this **helps** `bd-1vwtdwtq` rather than complicating it — the direction chosen there (serve the vendored bytes as a per-project HTML dependency instead of bundling mermaid into the client) can read the bytes that are *already embedded*, adding nothing further to the client. It also raises the value of `bd-43gpsd7c` (compressed embedding), which would shrink the native binary and the WASM together.
 
-Deliberately **not** addressed here by `#[cfg(not(target_arch = "wasm32"))]`-gating the constant: that would make `bd-1vwtdwtq`'s intended design harder, and WASM-side HTML export would then silently produce CDN-dependent output. Worth revisiting only if `bd-1vwtdwtq` concludes otherwise.
+Deliberately **not** addressed here by `#[cfg(not(target_arch = "wasm32"))]`-gating the constant: that would make `bd-1vwtdwtq`\'s intended design harder, and WASM-side HTML export would then silently produce CDN-dependent output. Worth revisiting only if `bd-1vwtdwtq` concludes otherwise.
 
 ## Resolved decisions (2026-08-11)
 
@@ -263,7 +263,7 @@ So "vendored bytes served to preview as a per-project HTML dependency" is a **ne
 
 ## Open design questions for the user *(answered — see §Resolved decisions)*
 
-1. **Is 2.62 MiB in the `q2` binary acceptable, unconditionally?** `include_str!`/`include_bytes!` is compile-time, so every `q2` binary carries mermaid whether or not the user ever writes a diagram — this is how reveal.js already works, but reveal is ~175 KB and this is ~15×. Debug `q2` is currently 164 MB, so it's small in relative terms; release is the number that matters for the download. Accept it, or is a `--features` / download-on-first-use escape hatch wanted?
+1. **Is 2.62 MiB in the `q2` binary acceptable, unconditionally?** `include_str!`/`include_bytes!` is compile-time, so every `q2` binary carries mermaid whether or not the user ever writes a diagram — this is how reveal.js already works, but reveal is \~175 KB and this is \~15×. Debug `q2` is currently 164 MB, so it's small in relative terms; release is the number that matters for the download. Accept it, or is a `--features` / download-on-first-use escape hatch wanted?
 
 2. **Bundle by default, or opt-in?** The strand floats an opt-in project/format key as a fallback "if bundling by default is judged too heavy." My read is that default-on is the right call — it is what Q1 does, it is what makes a rendered site self-contained, and an opt-in key means the airgapped-docs case stays broken for anyone who doesn't know the key exists. But it is your call, and a `mermaid-runtime: bundled|cdn` key is cheap to add either way.
 

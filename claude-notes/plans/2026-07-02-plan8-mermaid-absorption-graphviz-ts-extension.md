@@ -45,7 +45,7 @@ extension stack for Part B). Part A (mermaid) is independent of the TS-engine
 subprocess and can land first; Part B (graphviz) needs Plans 1a–c + 1b + 2A.
 **Depends on:** Part A — `claims_language` / `LanguageClaim` + `resolve_engines`
 (plan1a-engine, landed) and PR **#241** (`feature/mermaid-engine`). Part B — the
-full TS-engine extension path (plan1a-*, 1b, 1c, 2A) + `q2 build-ts-extension`.
+full TS-engine extension path (plan1a-\*, 1b, 1c, 2A) + `q2 build-ts-extension`.
 **Enables:** Plan 6 Q4 (draining `HANDLED_LANGUAGES` so languages are not
 hard-coded).
 
@@ -111,7 +111,7 @@ today **only** by explicit `engine: mermaidjs` because `mermaid` is a
       Match `{mermaid}` + optional attribute list so the *transform* predicate
       matches the *claim* predicate (which is language-only). Without this, an
       attributed cell would be selected but silently passed through unrendered.
-- [ ] **Update the hard-coded lists in `jupyter/text_execute.rs`** (lines ~415,
+- [ ] **Update the hard-coded lists in `jupyter/text_execute.rs`** (lines \~415,
       451, 496, 558) that repeat `["ojs","mermaid","dot"]` — route them through
       the `HANDLED_LANGUAGES` constant (or the ownership projection) so there is
       one source of truth, not three. (These are the leave-alone lists jupyter

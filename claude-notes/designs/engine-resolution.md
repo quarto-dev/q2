@@ -242,7 +242,7 @@ a dedicated per-Vec comparator (`ClaimKind::combine_rank` in
 cross-engine "kind dominates priority" rule below, but a separate, explicit
 implementation scoped to one language key's Vec, not a reuse of the
 cross-engine tiering. The universal `fallback:` key is combined the identical
-way (`ts_engine.rs`'s two fallback call sites both route through the Vec
+way (`ts_engine.rs`\'s two fallback call sites both route through the Vec
 combiner), so a fallback engine can itself carry more than one claim.
 
 **Top-level list shorthand (disambiguated from 4c0's per-language sequence).**
@@ -273,7 +273,7 @@ payoff of static claims (§7).
 
 **Claim tables from metadata (`engine:`/`engines:` sugar).** Metadata may
 also supply an engine's complete claim table — same schema as
-`_extension.yml`'s `claims:` — via a per-entry `claims:` key on either the
+`_extension.yml`\'s `claims:` — via a per-entry `claims:` key on either the
 `engine:` or `engines:` metadata key (`engine-and-engines-keys.md` §2/§3 owns
 the user-facing grammar; this is the resolution-side contract for what such a
 table does). A table is a **whole-table replacement**, winner takes all: it
@@ -305,7 +305,7 @@ order, and — per §4.3 — it turns T4 (implicit fallback) off. A per-entry
 already-named engine; the reserved `claims` key is stripped from the rest of
 the entry's config before it reaches the engine at execute time. `engines:`
 *configures without naming*: a Q1-syntax-compatible project-level array whose
-single-key-map entries' `claims:` values supply tables for engines already in
+single-key-map entries\' `claims:` values supply tables for engines already in
 the registry, without ever touching T4 gating, engine presence, or sequence.
 **q2-divergence:** both keys are read from *merged* metadata (project +
 document layers), not only from the one layer Q1 read each from (frontmatter
@@ -678,7 +678,7 @@ engine. That required the resolver to know the file's *native* language (which
 it can't infer from an engine name alone), and the landed `resolution.rs`
 silently never implemented the seed (it only marked the seed "present"),
 leaving a real theft hole (a generic `Primary(1)` python extension would steal
-a jupyter-`Fallback(0)` `.ipynb`'s cells). The single-engine rule is simpler,
+a jupyter-`Fallback(0)` `.ipynb`\'s cells). The single-engine rule is simpler,
 removes that hole by construction, needs no native-language plumbing, and is
 what Q1 actually does. Multi-engine remains a **`.qmd`-authoring** feature
 (`engine: [a, b]`); converted non-`.qmd` files are single-engine.
@@ -839,7 +839,7 @@ case-4. **Deliberate divergence from Q1's eager
      display-only markdown cell — verified 2026-06-28), never a loud failure.
      This is full Q1 parity (Q1 is always single-engine and always passes
      through); case 4 is the deliberate q2 *multi-engine* divergence.
-     **Landed-code consequence:** `engine/jupyter/text_execute.rs`'s
+     **Landed-code consequence:** `engine/jupyter/text_execute.rs`\'s
      `partition_cells` currently raises `NoHandlerForLanguage` for *any*
      owned-but-unrunnable cell regardless of sequence length — it must gate the
      loud branch on `|sequence| > 1`, ceding (passing through) in the
@@ -868,7 +868,7 @@ case-4. **Deliberate divergence from Q1's eager
   intermediate-slot FileIds). Thread the accumulating merged context into each
   engine's per-position `source_map`, designed once for built-in + TS.
 - **bd-r8n4r** (nested-handoff splice) — **tangential, increased exposure.** Our
-  cede mechanism re-emits at top level (within `splice_cells`' reach), so the
+  cede mechanism re-emits at top level (within `splice_cells`\' reach), so the
   nested-in-`Div.cell` case it tracks is not produced by ceding; but auto-split
   makes handoff more common, so it stays a live preview limitation.
 

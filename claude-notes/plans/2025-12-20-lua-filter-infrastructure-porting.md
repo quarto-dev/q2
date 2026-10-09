@@ -13,18 +13,18 @@ This document analyzes Quarto's Lua filter infrastructure and proposes a design 
 
 ### Overview
 
-The Lua filter infrastructure consists of ~2,500 lines across 8 core files:
+The Lua filter infrastructure consists of \~2,500 lines across 8 core files:
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `customnodes.lua` | ~800 | Custom node handler system |
-| `emulatedfilter.lua` | ~150 | Filter wrapping and integration |
-| `runemulation.lua` | ~300 | Filter orchestration and execution |
-| `parse.lua` | ~100 | Div/Span → custom node conversion |
-| `render.lua` | ~150 | Custom node → Pandoc AST rendering |
-| `scopedwalk.lua` | ~400 | Alternative tree traversal |
-| `init.lua` (datadir) | ~1,070 | Bootstrap and core utilities |
-| `_utils.lua` (datadir) | ~640 | AST manipulation utilities |
+| `customnodes.lua` | \~800 | Custom node handler system |
+| `emulatedfilter.lua` | \~150 | Filter wrapping and integration |
+| `runemulation.lua` | \~300 | Filter orchestration and execution |
+| `parse.lua` | \~100 | Div/Span → custom node conversion |
+| `render.lua` | \~150 | Custom node → Pandoc AST rendering |
+| `scopedwalk.lua` | \~400 | Alternative tree traversal |
+| `init.lua` (datadir) | \~1,070 | Bootstrap and core utilities |
+| `_utils.lua` (datadir) | \~640 | AST manipulation utilities |
 
 ### The Dual Representation Problem
 
@@ -214,8 +214,8 @@ pub enum Slot {
 - `content: Blocks` - the callout body
 
 **Example: PanelTabset** has slots:
-- `titles: Inlines` - Vec<Inline> where i-th element is a Span for tab i's title
-- `contents: Blocks` - Vec<Block> where i-th element is a Div for tab i's content
+- `titles: Inlines` - `Vec<Inline>` where i-th element is a Span for tab i's title
+- `contents: Blocks` - `Vec<Block>` where i-th element is a Div for tab i's content
 
 This **parallel array storage** matches the Lua implementation. Filters must maintain the invariant that parallel arrays have matching lengths.
 
@@ -609,13 +609,13 @@ Based on the Lua filter analysis, these are the most important custom nodes:
 
 ### Tier 1 - Critical (Implement First)
 
-1. **FloatRefTarget** (~1,080 LOC in Lua)
+1. **FloatRefTarget** (\~1,080 LOC in Lua)
    - Figures and tables with cross-reference support
    - Subfloat hierarchies
    - Caption locations (top, bottom, margin)
    - Multiple format renderers
 
-2. **Callout** (~427 LOC in Lua)
+2. **Callout** (\~427 LOC in Lua)
    - Note, warning, tip, caution, important
    - Collapsible, icon options
    - Bootstrap HTML, LaTeX tcolorbox renderers

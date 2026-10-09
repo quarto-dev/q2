@@ -111,7 +111,7 @@ bundles its `.jl` scripts).
   notebook (collision-suffixed) via `quartoMdToJupyter`; kernelspec resolved
   from YAML/languages (`jupyterKernelspecFromMarkdown`).
 - `execute()`: recreate transient nb if missing; `ensureYamlKernelspec` can
-  rewrite an `.ipynb`'s kernelspec on disk; daemon decision (`execute.daemon`;
+  rewrite an `.ipynb`\'s kernelspec on disk; daemon decision (`execute.daemon`;
   default interactive&&!CI; forced off for shell-magic notebooks); oneshot vs
   keepalive; `notebookFiltered` (ipynb-filters, **real `.ipynb` sources
   only**); shinylive fixup; `jupyterAssets`; `toMarkdown`; deps inline or
@@ -127,7 +127,7 @@ bundles its `.jl` scripts).
 `jupyter-kernel.ts` + `resources/jupyter/jupyter.py` (socket-server shell) +
 `notebook.py` (actual execution via **nbclient**; papermill only for param
 injection; optional **jupyter-cache**):
-- TCP-only transport; daemon keyed by md5(abs input)[:20] transport file in
+- TCP-only transport; daemon keyed by `md5(abs input)[:20]` transport file in
   runtime `jt/`; `{port,secret}` JSON; detached double-spawn (`start`→`serve`);
   default 300s keepalive self-exit; 5-consecutive-error exit.
 - Wire: client→daemon `{command: execute|abort|file|start|serve, secret,
@@ -151,13 +151,13 @@ injection; optional **jupyter-cache**):
 Namespace ships 7 real methods + `notebookExtensions`; **15 `NotImplemented`
 throwers** deferred as "Phase 3E": isJupyterNotebook, kernelspecFromMarkdown,
 kernelspecForLanguage, fromJSON, markdownFromNotebookFile/JSON,
-quartoMdToJupyter, notebookFiltered, pythonExec, capabilities{,Message,Json},
+quartoMdToJupyter, notebookFiltered, pythonExec, capabilities\{,Message,Json\},
 installationMessage, unactivatedEnvMessage, pythonInstallationMessage.
 Julia and marimo were validated **without Plan 3**, so none of the shipped
 jupyter code has had a real engine consumer yet.
 
 ### Strategic read (jupyter execution layer)
-The cleanest Q1-parity path: the ts-jupyter extension **bundles Q1's
+The cleanest Q1-parity path: the ts-jupyter extension **bundles Q1\'s
 `jupyter.py` + `notebook.py` as engine resources and drives them over TCP
 from Deno** — exactly the detached-daemon + transport-file pattern the Julia
 engine already proved under the q2 host. That inherits daemon keepalive,
@@ -181,7 +181,7 @@ The native Rust engine remains the pure-Rust/WASM-path fallback.
   wire + TS handler exist; **no production Rust sender** (book-feature-owned).
   v1 ports use `dependencies: true` (inline) — Q1's single-doc default.
 - **`handledLanguages` trap (FINDING #4)**: the wire field is the
-  **leave-alone** set (built-ins ∪ other engines' owned languages), not
+  **leave-alone** set (built-ins ∪ other engines\' owned languages), not
   "assigned to me". marimo read it backwards → silent no-execute. Q1 knitr's
   `execute.R` uses `handledLanguages` to register pass-through knit_engines;
   Q1 jupyter's `notebook.py` cedes non-owned cells similarly. Directive:
@@ -212,7 +212,7 @@ The native Rust engine remains the pure-Rust/WASM-path fallback.
     knitr and `.ipynb` ingestion for built-in jupyter remain **outside** Plan 7.)
   - **Phase 7D (A′ faithful remap)** upgrades TS-engine `markdown_for_file`
     provenance: today the wire `source_map` gives C′ (converted-buffer)
-    provenance only. The reference engines' percent/spin conversions are
+    provenance only. The reference engines\' percent/spin conversions are
     functional without Plan 7 (C′ matches the julia/marimo precedent), but
     error columns point at the original `.py`/`.jl`/`.R` only after 7D.
   - **Phase 7C** adds `SourceInfo::NotebookCell` + sidecar maps for ipynb
@@ -351,7 +351,7 @@ question-surfacing activity, and the two highest-unknown clusters go first:
 
 Rationale: the risk is concentrated in 11d (novel daemon bundling) and in the
 shared contracts 11c ratifies; front-loading a 11c-author + 11d-spike pair puts
-~all design questions on the table in the first step, while 11a/11b (mostly
+\~all design questions on the table in the first step, while 11a/11b (mostly
 mechanical) can be specced last without hiding surprises.
 
 ### Cross-plan coordination

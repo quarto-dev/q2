@@ -1,4 +1,4 @@
-# Fix _scope: lexical Regression
+# Fix \_scope: lexical Regression
 
 **Date**: 2025-10-21
 **Issue**: Regression in handling `_scope: lexical` block metadata

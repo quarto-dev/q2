@@ -1,7 +1,7 @@
 # Snyk PR remediation skill
 
 **Braid strand:** bd-t8bwkr64
-**Immediate motivation:** PR #637 ([Snyk] Upgrade katex from 0.18.2 to 0.18.4) is red on CI with the same failure signature as every previous katex Snyk PR.
+**Immediate motivation:** PR #637 (\[Snyk\] Upgrade katex from 0.18.2 to 0.18.4) is red on CI with the same failure signature as every previous katex Snyk PR.
 
 ## Overview
 
@@ -53,13 +53,13 @@ Four surfaces must name one exact version:
    lockfile delta.
 3. `DEFAULT_KATEX_URL_BASE` in `crates/quarto-core/src/stage/stages/math_js.rs:85`
    (`https://cdn.jsdelivr.net/npm/katex@X.Y.Z/dist/`).
-4. `hub-client/public/q2-sandboxed-preview.html` — a **committed** ~1.8 MB
+4. `hub-client/public/q2-sandboxed-preview.html` — a **committed** \~1.8 MB
    single-file bundle with KaTeX inlined. The guard test covers the three
    version *declarations*, not the bundled bytes, and there is no
    `git diff --exit-code` freshness gate for this artifact (unlike
    quarto-engine-host-deno). Regenerate with `cd hub-client && npm run
    build:sandboxed`; the rebuild is deterministic. Inspect the diff — for a
-   pure version bump it should be ~2 bytes of version string; a larger delta
+   pure version bump it should be \~2 bytes of version string; a larger delta
    means the bundle was already stale (as with #573) and deserves a callout in
    the commit message.
 
@@ -116,7 +116,7 @@ Verification for the katex case:
 - The skill must state the invariants explicitly: never weaken or skip the
   guard tests; never `npm install` from hub-client; exact pins (no carets);
   push requires user approval.
-- Description/trigger phrases: "snyk PR", "posit-snyk-bot", "[Snyk] Upgrade",
+- Description/trigger phrases: "snyk PR", "posit-snyk-bot", "\[Snyk\] Upgrade",
   "snyk-upgrade-" branch names, "make the snyk PR mergeable".
 
 ## Work items
@@ -126,7 +126,7 @@ Verification for the katex case:
 - [x] Write `.claude/skills/snyk-pr/SKILL.md` (generic workflow) +
       `references/katex.md` + `references/paired-packages.md`; add the
       `.agents/skills/` symlink
-- [x] Commit the skill (repo artifact, so colleagues' sessions get it)
+- [x] Commit the skill (repo artifact, so colleagues\' sessions get it)
 
 ### Phase 2 — validate on PR #637 (dogfood)
 
@@ -134,7 +134,7 @@ Verification for the katex case:
       origin/main (clean), bumped root pin + lockfile, bumped
       `DEFAULT_KATEX_URL_BASE` to 0.18.4, normalized the sub-project
       lockfile caret, regenerated `q2-sandboxed-preview.html`
-      (~19-line delta — real 0.18.3/0.18.4 KaTeX code changes plus minifier
+      (\~19-line delta — real 0.18.3/0.18.4 KaTeX code changes plus minifier
       renumbering, unlike the 2-byte 0.18.2 bump; lockfile diffs katex-only).
       Commits on the branch: `e4a72819` (alignment), `8d584e04` (changelog).
 - [x] Verification battery: guard test passes; `cargo nextest run

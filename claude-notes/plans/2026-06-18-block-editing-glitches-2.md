@@ -87,7 +87,7 @@ scratch on a clean worktree under TDD. Continues the glitch namespace of
 
 ### Symptom
 
-The G9 reland-fade — a ~0.1 s blur applied to the outgoing cell during the
+The G9 reland-fade — a \~0.1 s blur applied to the outgoing cell during the
 deterministic settle-gate gap on a **dirty nest-in / nest-out** — sometimes does
 **not** go away: a stale blur lingers, occasionally on a cell unrelated to the
 move.
@@ -116,7 +116,7 @@ self-reverts, so any reland-conclusion that bypasses them leaks the blur:
    `commitAndArmReland`, read in the apply effect, never written back. It stayed
    *sticky* across moves.
 2. **The apply effect fired for *any* pending landing, and only `intent:'open'`
-   landings clear.** `executeLanding`'s `intent:'focus'` branch (a plain close)
+   landings clear.** `executeLanding`\'s `intent:'focus'` branch (a plain close)
    focuses the outer block and returns **without** `openEditTarget` → no
    `clearRelandFade`.
 
@@ -188,7 +188,7 @@ effect.
 - **B (`closeSettleGate`):** new helper
   `closeSettleGate = () => { preCommitContentRef.current = null; clearRelandFade(); }`,
   routed through all three reland-conclusion sites — `openEditTarget` (land),
-  `cancelPendingLand` (abort), and **`executeLanding`'s `'focus'` branch** (the
+  `cancelPendingLand` (abort), and **`executeLanding`\'s `'focus'` branch** (the
   previously-untouched path, covering all its exits).
 - **D (watchdog):** `FADE_WATCHDOG_MS = 1000` + a `fadeTimeoutRef`. The apply
   effect arms it when it fades a cell; `clearRelandFade` cancels it on a normal
@@ -266,7 +266,7 @@ remains the *only* site that arms the fade, which is what makes the A invariant 
 
 | # | Tier | Real unit mounted | Seam · assertion | Named revert hunk → RED |
 |---|------|-------------------|------------------|--------------------------|
-| **G14-1** | jsdom integration | `PreviewRoot` reland-fade reset (A) | **Added to `g9-reland-fade.integration.test.tsx`.** Dirty nest-out → settled rerender lands on the blockquote (fade cleared, ref reset). Then **plain blur** the blockquote editor (→ a `'focus'` landing). **Assert IMMEDIATELY (no timer advance): no `.q2-reland-fade` anywhere** — binds the reset, not B's focus-branch clear. | Restore the sticky ref (remove `fadeSourceR0Ref.current = null` from `clearRelandFade`) → the plain-close apply effect re-fades pool[1] (stale r0=2) → `expected 0, got 1` → **RED** (proven 2026-06-18; T7 stays green). |
+| **G14-1** | jsdom integration | `PreviewRoot` reland-fade reset (A) | **Added to `g9-reland-fade.integration.test.tsx`.** Dirty nest-out → settled rerender lands on the blockquote (fade cleared, ref reset). Then **plain blur** the blockquote editor (→ a `'focus'` landing). **Assert IMMEDIATELY (no timer advance): no `.q2-reland-fade` anywhere** — binds the reset, not B's focus-branch clear. | Restore the sticky ref (remove `fadeSourceR0Ref.current = null` from `clearRelandFade`) → the plain-close apply effect re-fades `pool[1]` (stale r0=2) → `expected 0, got 1` → **RED** (proven 2026-06-18; T7 stays green). |
 | **G14-T7** (pre-existing) | jsdom integration | G9 apply/clear with a nested source | Unchanged — still green under A+B+D. | (its three original hunks) |
 
 > **Mock boundary:** `getBoundingClientRect` on `[data-block-pool-id]` tiles
@@ -360,7 +360,7 @@ affected; lists merely make single-line content the common case.
    `max(contentHeight, scrollHeight)` picked `scrollHeight` the instant it expanded.
    Tuning the monospace line box to sit just **below** the rendered line makes `max`
    stay at `contentHeight` → no grow. **Live-tuned 2026-06-18: 0.9 → 0.85 → 0.825**
-   (user chose 0.825). `caretGeometry`'s measurement mirror copies the textarea's
+   (user chose 0.825). `caretGeometry`\'s measurement mirror copies the textarea's
    *computed* font size (`caretGeometry.ts:57`), so `isOnLastVisualLine` /
    `isOnFirstVisualLine` track this automatically — no second edit.
 
@@ -383,7 +383,7 @@ and keep the Playwright height assertion as **optional real-engine confirmation*
 |---|------|-----------|------------------|--------------------------|
 | **G15-0** (binding) | jsdom integration | `EditTextarea` mount | **In `useEditableBlock.integration.test.tsx`.** Mount the editor textarea; assert `ta.rows === 1`. | Remove `rows={1}` → `ta.rows === 2` (HTML default) → `expected 1, got 2` → **RED**. Mechanical, no layout engine needed. |
 | **G15-font** (mandatory edit, NOT new coverage) | jsdom integration | same file | **Loosen** the existing strict assertion `expect(ta.style.fontSize).toBe('0.9em')` → `expect(ta.style.fontSize).toMatch(/^[0-9.]+em$/)`. | n/a — this is a *required* edit, not a binding: once `EDITOR_FONT_SIZE='0.825em'` ships, the strict `'0.9em'` assertion **breaks**. Loosening keeps it green without pinning the tuned value. |
-| **G15-1** ⏳ deferred/optional | Playwright (real layout) | `EditTextarea` sizing on expand | **Expand `hub-client/e2e/q2-preview-item-edit-size.spec.ts`.** Activate a **single-line** list item; trigger expand (type a char / second-click); **first assert the editor actually entered the expanded state**, THEN assert its height stays ≈ one line, NOT ~2×. | Remove `rows={1}` → `height:'auto'` resolves to the 2-row default → editor expands to ~2 lines → height assertion **RED**. |
+| **G15-1** ⏳ deferred/optional | Playwright (real layout) | `EditTextarea` sizing on expand | **Expand `hub-client/e2e/q2-preview-item-edit-size.spec.ts`.** Activate a **single-line** list item; trigger expand (type a char / second-click); **first assert the editor actually entered the expanded state**, THEN assert its height stays ≈ one line, NOT \~2×. | Remove `rows={1}` → `height:'auto'` resolves to the 2-row default → editor expands to \~2 lines → height assertion **RED**. |
 
 > **Why G15-0 is the binding, not G15-1.** G15-0 binds the *mechanism* the named
 > revert removes (`rows={1}`) at the cheap jsdom tier and reddens deterministically
@@ -469,7 +469,7 @@ L4 > 2.  dear               Plain [43,53]  span was [4,6]  → should be [4,4]
 
 `oh` (line 2, 1-line draft) → `destLine = 2+1 = 3`; with span `[2,4]`,
 `surfaceAtLine(3)` re-resolved to `oh` itself → "caught". (Latent bonus bug:
-`surfaceAtLine(4)` — `dear`'s own content line — resolved to `oh` because the
+`surfaceAtLine(4)` — `dear`\'s own content line — resolved to `oh` because the
 inflated spans overlap.)
 
 ### Chosen fix (`nestingNav.ts` `surfaceLineSpan`) — VERBATIM
@@ -570,8 +570,8 @@ For **G16-at**, the `surfaceAtLine` surface SET is the inline array
 `[{r0:0,r1:65} /*BlockQuote*/, {r0:27,r1:65} /*OrderedList*/, {r0:31,r1:39} /*oh*/,
 {r0:43,r1:53} /*dear*/]` (add `{r0:57,r1:65}` for the item-3 leaf if exercising
 line 6). With the fixed `>`-aware span, line 3's deepest containing surface is the
-OrderedList **container** whose only leaf children (`oh`→[2,2], `dear`→[4,4]) do
-**not** cover line 3 → `surfaceAtLine`'s A2 container-gap check returns `null`
+OrderedList **container** whose only leaf children (`oh`→`[2,2]`, `dear`→`[4,4]`) do
+**not** cover line 3 → `surfaceAtLine`\'s A2 container-gap check returns `null`
 (verified against the real container structure 2026-06-18).
 
 | # | Real unit | Assertion surface | Named revert → RED |
@@ -831,7 +831,7 @@ live validation (2026-06-18). Revertable in one line if we later build that harn
 
 ### Layer 2 (deferred — spurious dirty writes, an audit)
 
-The *trigger* in the reported clean scenario: `handleClickSwitchBlur`'s dirty check
+The *trigger* in the reported clean scenario: `handleClickSwitchBlur`\'s dirty check
 (`:1087`) compares the draft against the **raw** `et.anchorSlice`, while every other
 dirty check uses the P3.3 clean-buffer-aware `normalizeLineEndings(seededDraft ??
 anchorSlice).trimEnd()`. For a nested block the seeded clean buffer (`"oh"`) differs

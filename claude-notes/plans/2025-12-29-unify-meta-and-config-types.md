@@ -498,7 +498,7 @@ and convert at boundaries that still need MetaValueWithSourceInfo.
 - [x] `quarto-pandoc-types/src/config_value.rs` - Added `new_string()` helper method
 - [x] All 2668 tests pass
 
-**Remaining work for full migration** (~289 occurrences across 17 files):
+**Remaining work for full migration** (\~289 occurrences across 17 files):
 
 Still using `MetaValueWithSourceInfo` internally:
 - [ ] `quarto-pandoc-types/src/meta.rs` - Core type definition (28 uses) - Keep for backward compat
@@ -624,7 +624,7 @@ pampa, quarto-core, etc.
 3. **Lua filter compatibility**: Do Lua filters expect specific structure?
    - Need to verify Lua readwrite produces compatible data
 
-4. **Performance**: Is Vec<ConfigMapEntry> slower than IndexMap?
+4. **Performance**: Is `Vec<ConfigMapEntry>` slower than `IndexMap`?
    - Likely negligible; measure if concerned
 
 ## Success Criteria

@@ -2,13 +2,13 @@
 
 ## Overview
 
-Add support for resolving `{{< meta key >}}` shortcodes when computing document outlines in `quarto lsp` and hub-client. Currently, if a header contains a meta shortcode like `# {{< meta title >}}`, the outline displays the literal shortcode text instead of the resolved value from the document's frontmatter.
+Add support for resolving `{{{< meta key >}}}` shortcodes when computing document outlines in `quarto lsp` and hub-client. Currently, if a header contains a meta shortcode like `# {{{< meta title >}}}`, the outline displays the literal shortcode text instead of the resolved value from the document's frontmatter.
 
 ## Problem Statement
 
 Given this QMD document:
 
-```yaml
+```{.yaml shortcodes="false"}
 ---
 title: "My Document"
 author: "Alice"
@@ -307,6 +307,6 @@ pub fn analyze_document(doc: &Document) -> DocumentAnalysis {
 This architecture supports future analysis transforms:
 
 1. **Crossref resolution** - Resolve `@fig-name` to figure titles in outline
-2. **Variable shortcodes** - `{{< var name >}}` resolution
-3. **Environment shortcodes** - `{{< env VAR >}}` resolution (if appropriate for LSP)
+2. **Variable shortcodes** - `{{{< var name >}}}` resolution
+3. **Environment shortcodes** - `{{{< env VAR >}}}` resolution (if appropriate for LSP)
 4. **Include expansion** - Partial expansion for outline purposes (careful with I/O)

@@ -57,8 +57,8 @@ This test satisfies **BOTH** conditions:
 ## Key Observations
 
 1. **Each list item has 2 blocks**: paragraph + code block (`blocks.len() == 2`)
-2. **Paragraph range includes blank line**: [0, 4] - [2, 4] includes the blank line via `block_continuation`
-3. **Items are adjacent in tree**: First item ends at [6, 0], second starts at [6, 0]
+2. **Paragraph range includes blank line**: `[0, 4]` - `[2, 4]` includes the blank line via `block_continuation`
+3. **Items are adjacent in tree**: First item ends at `[6, 0]`, second starts at `[6, 0]`
 4. **Blank line 5 is "between" them but not explicitly represented**
 
 ## Code Analysis: process_list() in treesitter.rs
@@ -99,9 +99,9 @@ if let Some(last_end) = last_item_end_row {
 
 With the new tree-sitter grammar:
 - `last_item_end_row` for item 1 = row where code block ends
-- Code block range is [2, 4] - [6, 0]
+- Code block range is `[2, 4]` - `[6, 0]`
 - `map_offset(source_info.length())` maps to end position
-- If code block ends at [6, 0], then `last_item_end_row` = 5 (last actual line) or 6 (exclusive end)?
+- If code block ends at `[6, 0]`, then `last_item_end_row` = 5 (last actual line) or 6 (exclusive end)?
 - `child_range.start.row` for item 2 = 6
 - Check: `6 > ?` depends on how we calculate last_item_end_row
 

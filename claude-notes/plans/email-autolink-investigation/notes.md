@@ -1,6 +1,6 @@
 # Investigation notes — bd-email-autolink-dropped-2jj38iiv
 
-Date: 2026-08-10, at main @ 46cacc88.
+Date: 2026-08-10, at main \@ 46cacc88.
 
 ## Reproduction at HEAD
 
@@ -16,7 +16,7 @@ $ echo 'Contact <mailto:sales@example.com> now.' | cargo run -q --bin pampa -- -
 Confirms the strand: the bare email form becomes `RawInline html` (invisible in
 browsers), the `mailto:` URI form works but keeps the prefix as visible text.
 
-## Pandoc reference behavior (pandoc @ /opt/homebrew/bin/pandoc)
+## Pandoc reference behavior (pandoc \@ /opt/homebrew/bin/pandoc)
 
 ```
 $ echo 'Contact <sales@example.com> now.' | pandoc -f markdown -t native

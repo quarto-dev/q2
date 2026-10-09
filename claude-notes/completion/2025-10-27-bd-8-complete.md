@@ -21,7 +21,7 @@ Successfully completed the entire bd-8 project: implementing quarto-cli-compatib
 
 ### ✅ Refactoring (k-243)
 - Split 1299-line schema.rs into 13 focused modules
-- Largest file after refactor: ~250 lines
+- Largest file after refactor: \~250 lines
 - Improved maintainability and reduced token usage
 - All tests passing after refactor
 - **Deliverable**: Clean module structure in `src/schema/`
@@ -97,7 +97,7 @@ Created comprehensive documentation:
 ## Final Statistics
 
 **Code**:
-- 13 focused modules (largest ~250 lines)
+- 13 focused modules (largest \~250 lines)
 - 56 tests (all passing)
 - Zero compiler warnings
 - Zero regressions

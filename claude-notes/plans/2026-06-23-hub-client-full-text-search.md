@@ -207,7 +207,7 @@ Design notes for the eventual Phase 2 (NOT built now):
   Rationale: first-class incremental `add`/`replace`/`discard`/`vacuum` maps
   directly onto our `onFileContent`/`onFilesChange` event stream; per-field
   `boost` + `boostDocument` covers Phase B title/heading weighting; prefix +
-  fuzzy built in; ~7KB gzip; excellent TS types. FlexSearch's raw-throughput
+  fuzzy built in; \~7KB gzip; excellent TS types. FlexSearch's raw-throughput
   edge buys nothing at one-project corpus scale while costing removal/TS
   ergonomics; Orama is heavier than Phase 1 needs (its stemming is replicable
   via MiniSearch `processTerm` in Phase B).

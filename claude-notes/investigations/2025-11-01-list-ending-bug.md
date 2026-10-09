@@ -80,7 +80,7 @@ Created minimal test files and compared parse trees:
       (pandoc_str [2, 0] - [2, 1]))))
 ```
 
-The list_item extends to [2, 1] and incorrectly contains both paragraphs.
+The list_item extends to `[2, 1]` and incorrectly contains both paragraphs.
 
 ### 3. Scanner Code Analysis
 
@@ -311,7 +311,7 @@ List items require continuation content to be indented by at least 2 spaces (for
 - Test 8: Blank line + list marker should be one list, creates two ✗
 - Various GFM spec tests (exact count TBD) ✗
 
-**Overall Test Suite**: ~25 failures out of ~365 tests
+**Overall Test Suite**: \~25 failures out of \~365 tests
 
 ## Possible Solutions
 

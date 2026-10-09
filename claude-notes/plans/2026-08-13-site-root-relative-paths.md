@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-13
 **Braid:** bd-root-relative-paths-design-fc5pvkcv (type: question, priority 1, label: websites)
-**Checkout:** main @ `81d31cbc` (investigation committed to `main`; implementation branch TBD by user)
+**Checkout:** main \@ `81d31cbc` (investigation committed to `main`; implementation branch TBD by user)
 **Status:** MERGED & CLOSED 2026-08-18. All four phases on `main`
 (`1d17a9ce`, `0b4683fc`, `5da1e5f4`, `8bdb97c6`). Remaining field
 breakage (page-footer item images dropped/unrebased) tracked in
@@ -186,7 +186,7 @@ Minimal repro committed at
 At HEAD, `cargo run --bin q2 -- render <repro>` then inspecting
 `_site/deep/deeper/index.html`:
 
-| construct | Q1 | q2 @ 81d31cbc |
+| construct | Q1 | q2 \@ 81d31cbc |
 |---|---|---|
 | `[root](/index.qmd)` | `../../index.html` | `../../index.html` ✓ |
 | `![](/images/x.svg)` | `../../images/x.svg` | **`/images/x.svg`** |
@@ -214,7 +214,7 @@ Implementation notes settled during pre-implementation reading:
   `collect_referenced_asset_urls` (preview single-file asset sync,
   bd-kpuweafo — runs on raw pre-transform blocks with empty anchors)
   implements the decree too.
-- `LinkRewriteTransform`'s standalone short-circuit becomes
+- `LinkRewriteTransform`\'s standalone short-circuit becomes
   "no index AND no resolver": Link rewriting still requires the index
   (Decision 7 of phase-6 unchanged); Image rewriting only needs the
   resolver. In single-doc mode `page_url_for` collapses `/x.png` to
@@ -244,7 +244,7 @@ Work items:
       canonicalized its input while `ProjectContext::discover` does,
       so a symlinked input (macOS `/var/folders` tempdirs) put
       `output_path` and project roots on different spellings and
-      `page_url_for`'s pathdiff emitted `../..`-laden URLs escaping
+      `page_url_for`\'s pathdiff emitted `../..`-laden URLs escaping
       the site. Surfaced by `shortcode_text_contexts::image_src_substitutes`
       the moment image targets first routed through pathdiff. Fixed
       with defensive `runtime.canonicalize` at entry (idempotent for

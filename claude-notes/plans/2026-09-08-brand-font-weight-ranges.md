@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-08
 **Braid:** bd-5fseopxy (bug, p2, labels: css, diagnostics, theming)
-**Checkout:** `~/rooms/room-1/q2`, branch `main` @ `b7e7c96a` (no worktree/branch created; the
+**Checkout:** `~/rooms/room-1/q2`, branch `main` \@ `b7e7c96a` (no worktree/branch created; the
 user picks where the fix lands)
 **Status:** Merged to `main` 2026-09-08 via https://github.com/quarto-dev/q2/pull/663. Nothing left
 to do in the repo; the strand is closed in braid once the user approves.

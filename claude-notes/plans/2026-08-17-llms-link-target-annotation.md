@@ -36,12 +36,14 @@ cannot express:
 Proposed mechanism (from the strand): a link attribute honored by both
 transforms —
 
-    [text](guide/index.md){link-format="html"}   # companion keeps .html
-    [text](guide/index.md){link-format="llms"}   # HTML page links companion
+```
+[text](guide/index.md){link-format="html"}   # companion keeps .html
+[text](guide/index.md){link-format="llms"}   # HTML page links companion
+```
 
 Absent the attribute, behavior is exactly today's — purely opt-in.
 
-Real-world motivation for case 2: the Posit Connect docs' "Copy for LLM /
+Real-world motivation for case 2: the Posit Connect docs\' "Copy for LLM /
 View as Markdown" button pair computes the companion URL by string surgery
 on `window.location.pathname` in client-side JS, because Quarto (1 and 2)
 exposes no way to obtain a companion href. It hardcodes Q1's `.llms.md` and
@@ -50,7 +52,7 @@ exposes no way to obtain a companion href. It hardcodes Q1's `.llms.md` and
 — resolved as decision 5 (follow-up bd-3n4fpr3g).
 
 Origin context: first proposed as a fix for companion-shadows-source-path
-namespace overlap, and rejected for that (measured ~100% false-positive rate
+namespace overlap, and rejected for that (measured \~100% false-positive rate
 on the Connect docs; full analysis preserved at
 `claude-notes/plans/llms-link-target-annotation-investigation/origin-repro-README.md`).
 The expressiveness gap stands on its own; the strand asks only for that.
@@ -165,105 +167,105 @@ implementation (15 tests: 13 red for missing behavior, 2 trivially
 green pins — attr-survival and the D6 static fallthrough).
 
 - [x] Unit tests, capture side (llms.rs): a Link carrying
-      `link-format="html"` is not retargeted in the llms view and the
-      attr is absent from both views; undecorated sibling link still
-      retargets (control).
+  `link-format="html"` is not retargeted in the llms view and the
+  attr is absent from both views; undecorated sibling link still
+  retargets (control).
 - [x] Unit tests, rewrite side (link_rewrite.rs): source-path link with
-      `link-format="llms"` resolves to the companion href (page-relative,
-      depth ≥ 1 case included); attr stripped; fragment/query tails
-      preserved.
+  `link-format="llms"` resolves to the companion href (page-relative,
+  depth ≥ 1 case included); attr stripped; fragment/query tails
+  preserved.
 - [x] Unit tests, diagnostics: `link-format="llms"` with llms-txt off /
-      draft target / 404 / unresolvable source path / unknown attr value
-      each warn with the new Q-code and fall back to the html resolution;
-      undecorated links never warn (pin).
+  draft target / 404 / unresolvable source path / unknown attr value
+  each warn with the new Q-code and fall back to the html resolution;
+  undecorated links never warn (pin).
 - [x] Unit test, hygiene: with llms-txt off, `link-format` (both values)
-      is stripped by `LinkRewriteTransform` and behavior is exactly
-      today's.
+  is stripped by `LinkRewriteTransform` and behavior is exactly
+  today's.
 - [x] E2E additions to `crates/quarto-core/tests/integration/llms_txt.rs`:
-      render the investigation repro extended with decorated links; assert
-      the html page links the `.md` companion under `link-format="llms"`,
-      the companion keeps `.html` under `link-format="html"`, and neither
-      output contains the string `link-format`.
+  render the investigation repro extended with decorated links; assert
+  the html page links the `.md` companion under `link-format="llms"`,
+  the companion keeps `.html` under `link-format="html"`, and neither
+  output contains the string `link-format`.
 - [x] Pinning test: in a `.qmd`-source project a literal
-      `[x](guide/index.md)` (undecorated) still falls through silently as
-      a static resource (bd-6d2wj4zp D6 — must not regress).
+  `[x](guide/index.md)` (undecorated) still falls through silently as
+  a static resource (bd-6d2wj4zp D6 — must not regress).
 - [x] Q-code catalog entry + `docs/errors/` page (error-docs lint green).
 
 ### Phase 1 — `link-format="html"` (opt out of companion retarget)
 
-- [x] Attr check at the Link call site (`clean_inline`'s Link arm) —
-      reads the pin before `sanitize_attr` (whose `kv_noise` now also
-      consumes `link-format`), skips `retarget_href` when pinned; the
-      html-bound AST is scrubbed by a `strip_kv` in
-      `keep_inline_in_html`'s Link arm.
+- [x] Attr check at the Link call site (`clean_inline`\'s Link arm) —
+  reads the pin before `sanitize_attr` (whose `kv_noise` now also
+  consumes `link-format`), skips `retarget_href` when pinned; the
+  html-bound AST is scrubbed by a `strip_kv` in
+  `keep_inline_in_html`\'s Link arm.
 - [x] Listing synthesizer call site untouched (synthesized links carry
-      no authored attrs; existing listing tests unchanged and green).
+  no authored attrs; existing listing tests unchanged and green).
 
 ### Phase 2 — `link-format="llms"` (target the companion from HTML)
 
 - [x] `LinkRewriteTransform::apply_link_format`: resolves the source
-      path via `resolve_doc_relative_target` + `lookup_by_source`, gates
-      on `llms_view_active` + `profile_has_companion`, maps through
-      `companion_href` and the resolver's `page_url_for` (tail
-      preserved); strips the attr; Q-13-9 on every unsatisfiable case
-      with fallback to `resolve_undecorated`. Satisfiable `html` pins
-      keep the attr for `LlmsCaptureTransform`.
+  path via `resolve_doc_relative_target` + `lookup_by_source`, gates
+  on `llms_view_active` + `profile_has_companion`, maps through
+  `companion_href` and the resolver's `page_url_for` (tail
+  preserved); strips the attr; Q-13-9 on every unsatisfiable case
+  with fallback to `resolve_undecorated`. Satisfiable `html` pins
+  keep the attr for `LlmsCaptureTransform`.
 - [x] Capture pass leaves the resulting `.md` link untouched in the
-      companion (retarget only touches `.html` paths; pinned by
-      `llms_link_format_llms_links_companion_from_html`).
+  companion (retarget only touches `.html` paths; pinned by
+  `llms_link_format_llms_links_companion_from_html`).
 - [x] **Refinement discovered during implementation (TDD'd
-      2026-08-17):** the `llms`-pin gate is *config-level*
-      (`llms_companions_enabled` = website + `llms-txt: true`), not
-      the linking page's own format — a revealjs deck legitimately
-      links another page's companion
-      (`link_format_llms_from_revealjs_page_succeeds`). And
-      `profile_has_companion` now requires
-      `lua_format_for(format_id) == "html"`: a revealjs page renders
-      to `.html` but capture never runs for it, so it has no
-      companion. This also fixes a **pre-existing** hole where the
-      blanket retarget pointed companion links at a slide deck's
-      nonexistent `.md` sibling
-      (`retarget_leaves_revealjs_targets_alone`).
+  2026-08-17):** the `llms`-pin gate is *config-level*
+  (`llms_companions_enabled` = website + `llms-txt: true`), not
+  the linking page's own format — a revealjs deck legitimately
+  links another page's companion
+  (`link_format_llms_from_revealjs_page_succeeds`). And
+  `profile_has_companion` now requires
+  `lua_format_for(format_id) == "html"`: a revealjs page renders
+  to `.html` but capture never runs for it, so it has no
+  companion. This also fixes a **pre-existing** hole where the
+  blanket retarget pointed companion links at a slide deck's
+  nonexistent `.md` sibling
+  (`retarget_leaves_revealjs_targets_alone`).
 
 ### Phase 3 — Attribute hygiene when llms-txt is off
 
 - [x] Eager strip in `LinkRewriteTransform` when `llms_view_active` is
-      false (decision 4), including the warn-on-`llms`-value diagnostic;
-      the transform's no-index/no-resolver early return was removed so
-      the walk always consumes the attribute (pure no-op otherwise —
-      both helpers return `raw` verbatim without index/resolver).
+  false (decision 4), including the warn-on-`llms`-value diagnostic;
+  the transform's no-index/no-resolver early return was removed so
+  the walk always consumes the attribute (pure no-op otherwise —
+  both helpers return `raw` verbatim without index/resolver).
 
 ### Phase 4 — E2E verification + docs
 
 - [x] `cargo run --bin q2 -- render <scratch>/link-format-e2e` (the
-      investigation repro extended with decorated links; `.md`-source
-      website, `llms-txt: true`). Output inspected. `_site/index.html`:
-      `<a href="index.md">View this page as Markdown</a>` (llms
-      self-pin), `<a href="guide/index.md">guide markdown</a>` (llms
-      cross-pin), `<a href="guide/index.html">guide pinned</a>` (html
-      pin), `<a href="guide/index.html">guide</a>` (undecorated).
-      `_site/index.md` companion: `(index.md)`, `(guide/index.md)`,
-      html pin kept `(guide/index.html)`, undecorated retargeted
-      `(guide/index.md)`. `grep -c link-format` = 0 in both outputs.
-      Second fixture without `llms-txt`: render succeeds with
-      `Warning: [Q-13-9]` carrying the exact source span of the URL
-      (`index.md:5:6`) plus problem + hint.
+  investigation repro extended with decorated links; `.md`-source
+  website, `llms-txt: true`). Output inspected. `_site/index.html`:
+  `<a href="index.md">View this page as Markdown</a>` (llms
+  self-pin), `<a href="guide/index.md">guide markdown</a>` (llms
+  cross-pin), `<a href="guide/index.html">guide pinned</a>` (html
+  pin), `<a href="guide/index.html">guide</a>` (undecorated).
+  `_site/index.md` companion: `(index.md)`, `(guide/index.md)`,
+  html pin kept `(guide/index.html)`, undecorated retargeted
+  `(guide/index.md)`. `grep -c link-format` = 0 in both outputs.
+  Second fixture without `llms-txt`: render succeeds with
+  `Warning: [Q-13-9]` carrying the exact source span of the URL
+  (`index.md:5:6`) plus problem + hint.
 - [x] User-facing docs: "Choosing a link's target: `link-format`"
-      section in `docs/guides/projects/llms-txt.qmd`; error page
-      `docs/errors/navigation/Q-13-9.qmd`. Verified:
-      `cargo run --bin q2 -- render docs/` → 244/244 rendered; the
-      section and Q-13-9 page appear in `_site`; the 31 warnings are
-      pre-existing (`brand.qmd` / `figures.qmd` Q-13-4/Q-5-6, none in
-      the touched pages, no Q-13-9 fired).
+  section in `docs/guides/projects/llms-txt.qmd`; error page
+  `docs/errors/navigation/Q-13-9.qmd`. Verified:
+  `cargo run --bin q2 -- render docs/` → 244/244 rendered; the
+  section and Q-13-9 page appear in `_site`; the 31 warnings are
+  pre-existing (`brand.qmd` / `figures.qmd` Q-13-4/Q-5-6, none in
+  the touched pages, no Q-13-9 fired).
 - [x] Discovered while rendering docs from the worktree:
-      `cargo xtask stage-doc-examples` resolves `repo_root()` via
-      `--git-common-dir` and stages the **main checkout**, not the
-      worktree. Filed **bd-u7kdy6fy** (discovered-from this strand);
-      worked around by copying the main checkout's staged
-      `docs/examples/` (gitignored).
+  `cargo xtask stage-doc-examples` resolves `repo_root()` via
+  `--git-common-dir` and stages the **main checkout**, not the
+  worktree. Filed **bd-u7kdy6fy** (discovered-from this strand);
+  worked around by copying the main checkout's staged
+  `docs/examples/` (gitignored).
 - [x] Full `cargo xtask verify` green in the worktree, 2026-08-17
-      (all 14 steps, including the WASM/hub-client legs), after
-      commit `d33e82c3`. Ready for push pending user approval.
+  (all 14 steps, including the WASM/hub-client legs), after
+  commit `d33e82c3`. Ready for push pending user approval.
 
 ## Risks / tradeoffs (draft)
 
@@ -277,7 +279,7 @@ green pins — attr-survival and the D6 static fallthrough).
 - **WASM surface.** No `RenderOutput`/wire-shape changes anticipated — this
   is AST-transform-internal — but `quarto-core` changes still require full
   `cargo xtask verify` before push (CLAUDE.md).
-- **`.qmd`-source projects' accidental `.md` pass-through.** Today a
+- **`.qmd`-source projects\' accidental `.md` pass-through.** Today a
   literal `[x](guide/index.md)` in a `.qmd` project reaches the companion
   by falling through to static-resource resolution. Once `link-format="llms"`
   exists, that accidental path becomes redundant but must not regress

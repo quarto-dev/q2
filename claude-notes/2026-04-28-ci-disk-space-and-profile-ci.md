@@ -8,11 +8,11 @@ If you stumbled here from a `target/` directory growing unexpectedly, or wondere
 
 ## TL;DR
 
-- CI on `ubuntu-latest` has very little disk space (~14 GB free after the runner image, partially recovered by a cleanup action).
+- CI on `ubuntu-latest` has very little disk space (\~14 GB free after the runner image, partially recovered by a cleanup action).
 - The default `dev` profile emits full debuginfo, which roughly **doubles** `target/` size on a workspace this big.
 - We added a `[profile.ci]` profile (inherits from `dev`, strips most debuginfo) and the CI workflow uses it via `cargo nextest run --cargo-profile ci`.
 - We also removed the redundant `cargo build` step from CI — `cargo nextest run --tests` already builds everything `cargo build` does, plus the test artifacts. (We initially tried `--all-targets` but that pulls in `harness = false` benches which nextest can't enumerate as tests; `--tests` is the correct flag.)
-- We freed ~10 GB more on the runner by enabling `remove_tool_cache: true` on the existing free-disk-space step (no step uses `/opt/hostedtoolcache/`) and by pruning Docker images right after that step.
+- We freed \~10 GB more on the runner by enabling `remove_tool_cache: true` on the existing free-disk-space step (no step uses `/opt/hostedtoolcache/`) and by pruning Docker images right after that step.
 - **Locally, nothing changed.** `cargo build`, `cargo test`, and `cargo nextest run` (without `--cargo-profile ci`) still use the default `dev` profile with full debuginfo.
 
 ## What triggered this
@@ -110,15 +110,15 @@ That last clause is the key one — it confirms test-mode and non-test-mode rlib
 
 #### Why `--tests`, not `--all-targets`
 
-`--all-targets` is officially defined as `--lib --bins --tests --benches --examples`. We tried it first, but it caused CI to fail on `quarto-yaml`'s benches: `crates/quarto-yaml/benches/{memory_overhead,scaling_overhead}.rs` are declared `harness = false` and print prose reports rather than libtest output. Nextest enumerates each bench binary with `--list --format terse` and errors on the unrecognized output (`line "..." did not end with the string ": test" or ": benchmark"`).
+`--all-targets` is officially defined as `--lib --bins --tests --benches --examples`. We tried it first, but it caused CI to fail on `quarto-yaml`\'s benches: `crates/quarto-yaml/benches/{memory_overhead,scaling_overhead}.rs` are declared `harness = false` and print prose reports rather than libtest output. Nextest enumerates each bench binary with `--list --format terse` and errors on the unrecognized output (`line "..." did not end with the string ": test" or ": benchmark"`).
 
 The previous CI never built benches anyway — plain `cargo build` excludes them by default — so `--tests` matches the prior coverage exactly while still consolidating compilation into one nextest-driven step.
 
 #### Why this is safe (verified against Cargo docs)
 
-1. **Compilation coverage matches what `cargo build` was producing.** `cargo nextest run --tests` builds the lib (both as unittest and as a non-test dep for bins/integration tests), all bins (also as unittests), and all integration tests. That is a strict superset of plain `cargo build`'s default targets (lib + bins, non-test). Examples without `test = true` and benches were not built before either.
+1. **Compilation coverage matches what `cargo build` was producing.** `cargo nextest run --tests` builds the lib (both as unittest and as a non-test dep for bins/integration tests), all bins (also as unittests), and all integration tests. That is a strict superset of plain `cargo build`\'s default targets (lib + bins, non-test). Examples without `test = true` and benches were not built before either.
 2. **`-D warnings` still fires.** `RUSTFLAGS` is a rustc env var, applied to every rustc invocation regardless of which cargo subcommand drives the build. Nextest invokes `cargo test --no-run` internally, which picks up `RUSTFLAGS` exactly as `cargo build` would.
-3. **The redundancy that disappears:** `cargo build` and `cargo nextest run` share `target/debug/` (or in our case `target/ci/`) but **not artifacts** — library crates compiled with `--cfg test` have a different fingerprint and produce **separate `.rlib`s** alongside the dev-build ones. With ~35 crates, that duplication ran into multi-GB at peak disk.
+3. **The redundancy that disappears:** `cargo build` and `cargo nextest run` share `target/debug/` (or in our case `target/ci/`) but **not artifacts** — library crates compiled with `--cfg test` have a different fingerprint and produce **separate `.rlib`s** alongside the dev-build ones. With \~35 crates, that duplication ran into multi-GB at peak disk.
 
 #### Edge case to be aware of
 
@@ -151,7 +151,7 @@ Cargo always places the test binary in `target/<profile>/deps/`, so backing up t
 
 `assert_cmd::cargo::cargo_bin("q2")` is the idiomatic crate-based answer and does exactly the same thing internally (with friendlier error handling and Windows `.exe` suffix logic). We chose the stdlib version for this fix because:
 
-- The LSP test does **not** use any of `assert_cmd`'s value — no `.assert()`, no stdout/stderr matchers, no exit-code checks. It speaks JSON-RPC over stdio.
+- The LSP test does **not** use any of `assert_cmd`\'s value — no `.assert()`, no stdout/stderr matchers, no exit-code checks. It speaks JSON-RPC over stdio.
 - The only function we'd touch is `cargo_bin()`, replacing 4 lines of stdlib with one dev-dep.
 
 If a future test wants `cargo run --` style command-driving with output assertions, **switch to `assert_cmd` then** — `cargo_bin()` is its standard binary-discovery helper and pays for itself once `.assert()` joins the picture.
@@ -160,13 +160,13 @@ If a future test wants `cargo run --` style command-driving with output assertio
 
 | Lever | Disk saving | Status |
 |---|---|---|
-| A. `[profile.ci]` debuginfo strip | ~30–50% of `target/` | Done. Biggest single lever, preserves panic backtraces. |
+| A. `[profile.ci]` debuginfo strip | \~30–50% of `target/` | Done. Biggest single lever, preserves panic backtraces. |
 | B. Drop redundant `cargo build` | Multi-GB peak reduction | Done via `cargo nextest run --tests`. |
-| C. `remove_tool_cache: true` on free-disk-space | ~6 GB | Done. Safe — no step uses `/opt/hostedtoolcache/`. |
-| D. `docker image prune` + `docker builder prune` | ~3–8 GB | Done. Pre-pulled docker images aren't used by this job. |
-| E. `remove_swap: true` on free-disk-space | ~4 GB | Held in reserve — small OOM risk for heavy linkers (deno_core, large LTO). |
+| C. `remove_tool_cache: true` on free-disk-space | \~6 GB | Done. Safe — no step uses `/opt/hostedtoolcache/`. |
+| D. `docker image prune` + `docker builder prune` | \~3–8 GB | Done. Pre-pulled docker images aren't used by this job. |
+| E. `remove_swap: true` on free-disk-space | \~4 GB | Held in reserve — small OOM risk for heavy linkers (deno_core, large LTO). |
 | F. `df -h` diagnostic step | 0 GB | Held in reserve — adds log noise; useful for next failure triage if disk pressure returns. |
-| G. Larger runner | 150 GB / 45 GB | Held in reserve — Posit `ubuntu-latest-4x` ($0.012/min) or `ubuntu-24.04-arm` (free for public repos, requires arm64 Rust toolchain). |
+| G. Larger runner | 150 GB / 45 GB | Held in reserve — Posit `ubuntu-latest-4x` (\$0.012/min) or `ubuntu-24.04-arm` (free for public repos, requires arm64 Rust toolchain). |
 
 ## Cross-references
 
@@ -180,5 +180,5 @@ If a future test wants `cargo run --` style command-driving with output assertio
 - nextest: [How it works](https://nexte.st/docs/design/how-it-works/) — confirms nextest delegates compilation to `cargo test --no-run`.
 - Cargo book: [`cargo test` target selection](https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection) — what gets built by default.
 - Cargo book: [Profiles](https://doc.rust-lang.org/cargo/reference/profiles.html) — `inherits`, `debug` levels, per-package overrides.
-- Kobzol, June 2025: [Reducing Cargo target directory size with `-Zno-embed-metadata`](https://kobzol.github.io/rust/rustc/2025/06/02/reduce-cargo-target-dir-size-with-z-no-embed-metadata.html) — measured ~2× target size from debuginfo on a comparable workspace.
+- Kobzol, June 2025: [Reducing Cargo target directory size with `-Zno-embed-metadata`](https://kobzol.github.io/rust/rustc/2025/06/02/reduce-cargo-target-dir-size-with-z-no-embed-metadata.html) — measured \~2× target size from debuginfo on a comparable workspace.
 - `endersonmenezes/free-disk-space` action documentation — option semantics for `tool_cache`, `swap_storage`, etc.

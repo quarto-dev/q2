@@ -113,10 +113,10 @@ async). So the preview can compile the reveal theme on WASM.
     2. **`_brand.yml` VFS sync** (`quarto-hub/discovery.rs`): the preview server
        never synced `_brand.yml` into the VFS (only `_quarto.yml`/`_metadata.yml`
        were recognized as config), so brand resolution died with "Path not found:
-       /project/_brand.yml" — for HTML brand decks too, not just reveal. Added
+       /project/\_brand.yml" — for HTML brand decks too, not just reveal. Added
        `_brand.yml`/`_brand.yaml` to config-file discovery.
   - **E2E evidence** (`cargo run --bin q2 -- preview <deck>`, computed styles read
-    from the live iframe via Chrome DevTools; compared to `q2 render`'s compiled
+    from the live iframe via Chrome DevTools; compared to `q2 render`\'s compiled
     `theme-*.css`):
     - **default** (`.e2e-reveal/default.qmd`): heading `text-transform: none`,
       content `text-align: left`, `font-family: "Source Sans Pro"`, color `#222` —
@@ -133,7 +133,7 @@ async). So the preview can compile the reveal theme on WASM.
       resolves when the deck lives in a *project* (`_quarto.yml` present). Same
       for HTML brand decks. Tracked separately.
     - **`[Q-1-20] "Failed to parse metadata value as markdown"`** on `brand:
-      _brand.yml` — pre-existing, appears identically in render *and* preview (so
+      \_brand.yml` — pre-existing, appears identically in render *and* preview (so
       itself a parity success); unrelated to theming.
 
 ### Notes / gotchas

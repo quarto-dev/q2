@@ -8,7 +8,7 @@ bd-96fswwce (combining marks, `\p{M}`)
 entity reference — folded into this PR, Phase 1b); bd-5rr4lgj1 (leading BOM
 not stripped — follow-up, out of scope)
 **GitHub:** https://github.com/quarto-dev/q2/issues/672
-**Checkout:** main @ `7ef59618` (investigated in place; no worktree yet)
+**Checkout:** main \@ `7ef59618` (investigated in place; no worktree yet)
 **Status:** Implemented 2026-09-11 on branch
 `braid/bd-wuiu1of7-zero-width-entities` — `caa29d6c` (writer + grammar) and
 `b15868ed` (`&` escaping, bd-i18zoy4n). Full `cargo xtask verify` green for
@@ -76,7 +76,7 @@ tolerates (cf. `&#34;` → `\"`, `---` → em dash).
 
 ### Writer: which characters, which spelling
 
-- **Set:** Unicode general category `Cf` (format), ~170 codepoints in ~20
+- **Set:** Unicode general category `Cf` (format), \~170 codepoints in \~20
   ranges. Rust's `std` has no general-category query, so add a small
   `is_format_char(c) -> bool` over an explicit sorted range table in a new
   `crates/pampa/src/writers/unicode_format.rs` (or a sibling module of
@@ -149,48 +149,48 @@ alternative, keeping emphasis/underscore boundary logic untouched.
 ### Phase 0 — Tests first (TDD)
 
 - [x] **Grammar corpus** `test/corpus/format_characters.txt` (new file): prose
-      with raw U+200B mid-word, U+00AD mid-word, U+200E after a space,
-      U+2060 at line start, U+FEFF mid-word, and U+200B inside a heading
-      superscript. Verified 2026-09-11: all 7 produce `ERROR` nodes pre-fix.
+  with raw U+200B mid-word, U+00AD mid-word, U+200E after a space,
+  U+2060 at line start, U+FEFF mid-word, and U+200B inside a heading
+  superscript. Verified 2026-09-11: all 7 produce `ERROR` nodes pre-fix.
 - [x] **Rust parser coverage** in
-      `crates/pampa/tests/integration/test_treesitter_coverage.rs`: verbatim
-      `Str` for each case above (model on `test_combining_mark_*`). Verified
-      2026-09-11: all 8 fail pre-fix with parse errors.
+  `crates/pampa/tests/integration/test_treesitter_coverage.rs`: verbatim
+  `Str` for each case above (model on `test_combining_mark_*`). Verified
+  2026-09-11: all 8 fail pre-fix with parse errors.
 - [x] **Writer unit tests** (in the `mod tests` of `qmd.rs`):
-      `escape_markdown("a\u{200B}b")` → `a&ZeroWidthSpace;b`; `&shy;`,
-      `&lrm;`, `&rlm;`, `&NoBreak;`, `&ApplyFunction;`, `&InvisibleTimes;`,
-      `&InvisibleComma;`; `&af;` and `&ApplyFunction;` in the same paragraph
-      both come out as `&ApplyFunction;`; `\u{2064}` →
-      `&#x2064;`; ZWNJ/ZWJ stay raw; emoji ZWJ sequence stays raw. Verified
-      2026-09-11: the 3 encoding tests fail pre-fix; the 2 stay-raw guards
-      pass before and after by design.
+  `escape_markdown("a\u{200B}b")` → `a&ZeroWidthSpace;b`; `&shy;`,
+  `&lrm;`, `&rlm;`, `&NoBreak;`, `&ApplyFunction;`, `&InvisibleTimes;`,
+  `&InvisibleComma;`; `&af;` and `&ApplyFunction;` in the same paragraph
+  both come out as `&ApplyFunction;`; `\u{2064}` →
+  `&#x2064;`; ZWNJ/ZWJ stay raw; emoji ZWJ sequence stays raw. Verified
+  2026-09-11: the 3 encoding tests fail pre-fix; the 2 stay-raw guards
+  pass before and after by design.
 - [x] **Round-trip fixtures** under
-      `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/`:
-      - extend `named_entities.qmd` with `&ZeroWidthSpace;`, `&shy;`,
-        `&NoBreak;`, `&lrm;` and a numeric `&#x200B;`;
-      - new `format_characters_raw.qmd` with the raw codepoints (exercises the
-        parser side and the deliberate text-level non-canonicity);
-      - new `zero_width_in_heading_superscript.qmd` reproducing the
-        quarto-web heading (the issue's cascade).
-      Verified 2026-09-11: `test_qmd_roundtrip_consistency` panics pre-fix
-      at "Failed to parse original QMD" on `format_characters_raw.qmd` (the
-      harness stops at the first fixture that fails to parse, so the two
-      writer-only fixtures are checked once the parser change lands).
+  `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/`:
+  - extend `named_entities.qmd` with `&ZeroWidthSpace;`, `&shy;`,
+    `&NoBreak;`, `&lrm;` and a numeric `&#x200B;`;
+  - new `format_characters_raw.qmd` with the raw codepoints (exercises the
+    parser side and the deliberate text-level non-canonicity);
+  - new `zero_width_in_heading_superscript.qmd` reproducing the
+    quarto-web heading (the issue's cascade).
+  Verified 2026-09-11: `test_qmd_roundtrip_consistency` panics pre-fix
+  at "Failed to parse original QMD" on `format_characters_raw.qmd` (the
+  harness stops at the first fixture that fails to parse, so the two
+  writer-only fixtures are checked once the parser change lands).
 - [x] **Format-table pin tests:** the `Cf` range table matches `\p{Cf}` from
-      the `regex` crate; every preferred entity name is in
-      `HTML_ENTITIES_JSON` and decodes to the expected char.
+  the `regex` crate; every preferred entity name is in
+  `HTML_ENTITIES_JSON` and decodes to the expected char.
 
 ### Phase 1a — Writer: format characters → entities
 
 - [x] Add `is_format_char` + range table + preferred-name table, with a
-      comment linking the WHATWG named-character-references table and
-      stating the alias rule.
+  comment linking the WHATWG named-character-references table and
+  stating the alias rule.
 - [x] New arms in `escape_markdown`; doc comment explaining the choice and
-      the ZWNJ/ZWJ carve-out.
+  the ZWNJ/ZWJ carve-out.
 - [x] Writer unit tests + round-trip fixtures that only need the writer
-      (`named_entities.qmd`, heading-superscript fixture) go green (verified
-      via `pampa -t qmd | pampa` AST diff before Phase 2 landed, then via
-      the harness).
+  (`named_entities.qmd`, heading-superscript fixture) go green (verified
+  via `pampa -t qmd | pampa` AST diff before Phase 2 landed, then via
+  the harness).
 
 ### Phase 1b — Writer: escape `&` that would lex as a reference (bd-i18zoy4n)
 
@@ -200,44 +200,44 @@ literal `Str "&ZeroWidthSpace;"` and a `Str "\u{200B}"` must not produce the
 same bytes.
 
 - [x] **Tests first:** unit tests for `escape_markdown`: `"&copy;"` → `\&copy;`,
-      `"&#34;"` → `\&#34;`, `"&#x200B;"` → `\&#x200B;`, `"AT&T"` → `AT&T`
-      (unchanged), `"a & b"` → unchanged, `"&AM;"` → unchanged (not a
-      semicolon-terminated WHATWG name), `"&amp"` (no `;`) → unchanged.
-      Round-trip fixture `ampersand_escaped_entities.qmd` with `\&copy;`,
-      `\&#62;`, `\&ZeroWidthSpace;` and plain `AT&T` / `a & b`. Verified
-      2026-09-11: 3 escaping tests + the fixture fail pre-fix (AST differs
-      after regeneration); the stay-raw guard passes before and after.
-      Numeric-reference expectations use the inline `WhereMeaningful` mode,
-      because block mode already escapes every `#` (`\&\#34;`, also
-      asserted).
+  `"&#34;"` → `\&#34;`, `"&#x200B;"` → `\&#x200B;`, `"AT&T"` → `AT&T`
+  (unchanged), `"a & b"` → unchanged, `"&AM;"` → unchanged (not a
+  semicolon-terminated WHATWG name), `"&amp"` (no `;`) → unchanged.
+  Round-trip fixture `ampersand_escaped_entities.qmd` with `\&copy;`,
+  `\&#62;`, `\&ZeroWidthSpace;` and plain `AT&T` / `a & b`. Verified
+  2026-09-11: 3 escaping tests + the fixture fail pre-fix (AST differs
+  after regeneration); the stay-raw guard passes before and after.
+  Numeric-reference expectations use the inline `WhereMeaningful` mode,
+  because block mode already escapes every `#` (`\&\#34;`, also
+  asserted).
 - [x] Implement: in `escape_markdown`, on `&` look ahead for
-      `&#[0-9]{1,7};`, `&#[xX][0-9a-fA-F]{1,6};` (the grammar's
-      `numeric_character_reference` regex) or `&<name>;` where `&<name>;` is a
-      key of the shared WHATWG table (`entity_table()` in
-      `treesitter_utils/entity_reference.rs` — make it `pub(crate)` or expose
-      a `is_entity_name` helper so writer and reader share one source of
-      truth). Emit `\&` in that case, `&` otherwise. Done 2026-09-11:
-      `starts_character_reference` in `qmd.rs`, lookup via the reader's
-      `entity_table()` (made `pub(crate)`).
+  `&#[0-9]{1,7};`, `&#[xX][0-9a-fA-F]{1,6};` (the grammar's
+  `numeric_character_reference` regex) or `&<name>;` where `&<name>;` is a
+  key of the shared WHATWG table (`entity_table()` in
+  `treesitter_utils/entity_reference.rs` — make it `pub(crate)` or expose
+  a `is_entity_name` helper so writer and reader share one source of
+  truth). Emit `\&` in that case, `&` otherwise. Done 2026-09-11:
+  `starts_character_reference` in `qmd.rs`, lookup via the reader's
+  `entity_table()` (made `pub(crate)`).
 - [x] Expect snapshot / fixture churn wherever writer output contained a
-      literal `&name;`; review each change is a *correct* re-escaping.
-      Prefer landing 1b as its own commit for reviewability (user's call
-      2026-09-11: not strict — judge at implementation time). Outcome: no
-      existing test or snapshot changed at all; landed as its own commit
-      `b15868ed`.
+  literal `&name;`; review each change is a *correct* re-escaping.
+  Prefer landing 1b as its own commit for reviewability (user's call
+  2026-09-11: not strict — judge at implementation time). Outcome: no
+  existing test or snapshot changed at all; landed as its own commit
+  `b15868ed`.
 
 ### Phase 2 — Parser
 
 - [x] `grammar.js` class change + comment; `tree-sitter generate`;
-      `tree-sitter build`; `tree-sitter test` green — 625/625 (only the new
-      corpus file is added; its heading case was updated with `-u` to the
-      real tree shape: explicit `superscript_delimiter` nodes, no space).
+  `tree-sitter build`; `tree-sitter test` green — 625/625 (only the new
+  corpus file is added; its heading case was updated with `-u` to the
+  real tree shape: explicit `superscript_delimiter` nodes, no space).
 - [x] Coverage tests + `format_characters_raw.qmd` round-trip go green
-      (`cargo nextest run -p pampa -p tree-sitter-qmd --no-fail-fast`:
-      4755 passed).
+  (`cargo nextest run -p pampa -p tree-sitter-qmd --no-fail-fast`:
+  4755 passed).
 - [x] Watch `parser.c` size / generation time for state growth: generate
-      took 0.26 s; `parser.c` diff is +496/−489 lines (character-class table
-      rows only, no state growth).
+  took 0.26 s; `parser.c` diff is +496/−489 lines (character-class table
+  rows only, no state growth).
 
 ### Phase 3 — Verification + bookkeeping
 
@@ -247,29 +247,29 @@ Phases 1a + 2 committed as `caa29d6c` after a green full `cargo xtask verify`
 - [x] `cargo nextest run -p pampa -p tree-sitter-qmd` (4761 passed after 1b).
 - [x] `cargo nextest run --workspace` (inside verify, both commits).
 - [x] **Full `cargo xtask verify`** (not `--skip-hub-build`): green for
-      `caa29d6c` and again for `b15868ed`. (Needs fnm's Node 24 selected;
-      two clippy nits — `unreadable_literal`, `unnested_or_patterns` — were
-      caught by it and fixed before committing.)
+  `caa29d6c` and again for `b15868ed`. (Needs fnm's Node 24 selected;
+  two clippy nits — `unreadable_literal`, `unnested_or_patterns` — were
+  caught by it and fixed before committing.)
 - [x] End-to-end, output inspected 2026-09-11 (`b15868ed`):
 
-      ```
-      $ cargo run --bin q2 -- render gh672.qmd      # quarto-web heading + raw U+200B/U+00AD + \&copy;
-      <h1 class="mt-1">Welcome to Quarto<sup>​<span class="trademark">®</span></sup></h1>
-      <p>Raw zero-width: a​b and soft hy­phen.</p>        # bytes e2 80 8b / c2 ad verified with od
-      <p>Literal reference kept as text: &amp;copy; and &amp;ZeroWidthSpace;.</p>
+  ```
+  $ cargo run --bin q2 -- render gh672.qmd      # quarto-web heading + raw U+200B/U+00AD + \&copy;
+  <h1 class="mt-1">Welcome to Quarto<sup>​<span class="trademark">®</span></sup></h1>
+  <p>Raw zero-width: a​b and soft hy­phen.</p>        # bytes e2 80 8b / c2 ad verified with od
+  <p>Literal reference kept as text: &amp;copy; and &amp;ZeroWidthSpace;.</p>
 
-      $ printf 'a&ZeroWidthSpace;b\n' | pampa -t qmd | pampa
-      [ Para [Str "a​b"] ]                                # was: Parse error
+  $ printf 'a&ZeroWidthSpace;b\n' | pampa -t qmd | pampa
+  [ Para [Str "a​b"] ]                                # was: Parse error
 
-      $ printf 'a&ZeroWidthSpace;b\n' | pampa -t qmd
-      a&ZeroWidthSpace;b                                       # was: raw U+200B
-      ```
+  $ printf 'a&ZeroWidthSpace;b\n' | pampa -t qmd
+  a&ZeroWidthSpace;b                                       # was: raw U+200B
+  ```
 
-      And `pampa gh672.qmd` vs `pampa -t qmd gh672.qmd | pampa` produce
-      identical native ASTs.
+  And `pampa gh672.qmd` vs `pampa -t qmd gh672.qmd | pampa` produce
+  identical native ASTs.
 - [x] Commit (Rust + regenerated `parser.c` + fixtures); close bd-wuiu1of7
-      with the commit hash. GH #672 comment/close left for the PR (not pushed
-      yet).
+  with the commit hash. GH #672 comment/close left for the PR (not pushed
+  yet).
 
 ## Scope decisions (settled with the user, 2026-09-11)
 

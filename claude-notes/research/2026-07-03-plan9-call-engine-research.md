@@ -305,7 +305,7 @@ Alias map handles unnamed extensions whose runtime name is only known post-LoadE
 alphabetical. **Note the order difference vs Q1's `knitr, jupyter, markdown, julia`
 for the `Available engines:` message — see deviation D-? (§8).**
 
-### 6.5 Native engines' daemon-like state (Part 2 substrate)
+### 6.5 Native engines\' daemon-like state (Part 2 substrate)
 
 - **jupyter**: real in-process daemon — `JupyterDaemon` global singleton
   (`daemon.rs`), sessions keyed `(kernel_name, working_dir)`, ZeroMQ + connection file
@@ -388,7 +388,7 @@ the engine's `populateCommand(command)` accepts it directly) with the descriptio
 Rust side: `commands/call/mod.rs` gains a `Some("engine")` arm → project/registry
 discovery (no Deno spawn; registry construction is static) → gate 1 Rust-side
 (`Unknown engine: <name>` + `Available engines: <list>`, exit 1) → dispatch through
-the Part-2 trait hook (§9.4). `TsEngine`'s override spawns the call-mode process,
+the Part-2 trait hook (§9.4). `TsEngine`\'s override spawns the call-mode process,
 passing the engine bundle path, engine name, `HostGlobalConfig` (the actions need
 `quarto.path.runtime("julia")`), and the raw args.
 

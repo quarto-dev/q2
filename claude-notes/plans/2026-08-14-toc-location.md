@@ -37,7 +37,7 @@ locations (`left` first among them), not byte-for-byte Q1 parity.
    location is exactly `left`. The `left-body` question is recorded on the
    `*-body` follow-up strand (when it lands, the gate should cover
    `left-body` too, fixing Q1's latent inconsistency).
-7. **Preview parity is a follow-up strand** — `q2 preview`'s `TocSlot`
+7. **Preview parity is a follow-up strand** — `q2 preview`\'s `TocSlot`
    keeps showing the TOC on the right until that strand lands; flagged
    there explicitly.
 
@@ -229,7 +229,7 @@ implementation.
       the website wrapper (no `floating`).
 - [x] Body-class precedence (`render_with_compiled_template`): confirm the
       four existing cases still hold; standalone-left rides the existing
-      "TOC present → empty class" case (grid comes from `#quarto-content`'s
+      "TOC present → empty class" case (grid comes from `#quarto-content`\'s
       `toc-left`, not body).
 - [x] Update the stale comments: template.rs:296-298 ("which Q2 doesn't
       support yet") and title_banner.rs:41-43.
@@ -284,12 +284,12 @@ implementation.
 
 ## Risks / tradeoffs
 
-- `FULL_HTML_TEMPLATE`'s `#quarto-content` class list is baked in; the new
+- `FULL_HTML_TEMPLATE`\'s `#quarto-content` class list is baked in; the new
   `toc-left` template variable touches the body-class precedence logic
   (`template.rs:697-733`) — the subtle `fullcontent`-vs-empty fallback has
   bitten before (bd-mgoh); Phase 0 pins all precedence cases.
 - The synthesized floating sidebar interacts with
-  `SidebarRenderTransform`'s skip conditions and the `nav-sidebar`
+  `SidebarRenderTransform`\'s skip conditions and the `nav-sidebar`
   body-class consumers — audit before choosing the class list.
 - Snapshot churn: keep `right` byte-stable so the diff stays reviewable.
 - Preview/template shape drift until the preview follow-up lands — the

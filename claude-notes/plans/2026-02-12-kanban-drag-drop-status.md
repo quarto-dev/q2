@@ -16,7 +16,7 @@ In the BoardView, card status is currently displayed redundantly: each card has 
 ### Drag-and-drop approach: @dnd-kit
 - Use `@dnd-kit/core` and `@dnd-kit/sortable` for drag-and-drop
 - Provides touch/pointer support (works on tablets), keyboard accessibility, smooth drop animations, and customizable drag overlays
-- ~15KB gzipped for core + sortable — reasonable for a real application
+- \~15KB gzipped for core + sortable — reasonable for a real application
 - Clean React hooks API (`useDraggable`, `useDroppable`, `DndContext`)
 
 ### Conditional status dropdown hiding

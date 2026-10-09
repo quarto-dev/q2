@@ -92,7 +92,7 @@ When `hub` runs without a project, it needs a place to store:
 - `sync-state.json` — not needed (no filesystem to sync with)
 
 The `--data-dir` flag controls this. A sensible default would be platform-specific
-(XDG on Linux, ~/Library/Application Support on macOS), but for simplicity we
+(XDG on Linux, \~/Library/Application Support on macOS), but for simplicity we
 can start with requiring it explicitly in standalone mode and add defaults later.
 
 ### What "sync-only" means

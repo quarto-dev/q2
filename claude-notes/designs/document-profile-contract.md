@@ -94,7 +94,7 @@ What a profile **does not** contain:
   filters would introduce (Lua, JSON, citeproc).
 - **Theme CSS, code highlighting, rendered HTML body, applied
   template.** All of those are downstream of the checkpoint.
-- **Resolved shortcodes.** `{{< meta … >}}` and friends are resolved
+- **Resolved shortcodes.** `{{{< meta … >}}}` and friends are resolved
   during `AstTransformsStage`, after the checkpoint.
 - **Cross-document information.** A `DocumentProfile` describes a
   single file. Merged across siblings by Phase 1's `ProjectIndex`
@@ -159,10 +159,10 @@ must continue to use the typed top-level fields. If a future
 feature finds itself wanting to read `listing_item`, that is a
 **redesign trigger** — either widen the typed top-level field set
 with a versioned bump, or define a new scoped feature surface. Do
-not silently broaden listings' scope.
+not silently broaden listings\' scope.
 
 The discipline is enforced by code review, not the type system.
-The `listing_item` field is `pub` for serde and for listings' own
+The `listing_item` field is `pub` for serde and for listings\' own
 use; the contract above is the boundary that matters.
 
 This is the same discipline `bd-fegm` (Phase 8) used when it
@@ -402,7 +402,7 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
     feature surfaces".
   - `categories_raw: Option<ConfigValue>` — tagged form of the
     top-level `categories:` value, preserving `!prefer` /
-    `!concat` merge tags for listings consumers' tag-aware
+    `!concat` merge tags for listings consumers\' tag-aware
     merging via `quarto_config::MergedConfig`. Most consumers
     keep reading the flattened `categories: Vec<String>`;
     only listings reach for the raw form. Default `None`.
@@ -524,7 +524,7 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   Plan: `claude-notes/plans/2026-08-12-aliases-redirect-stubs.md`.
 
 - **2026-08-13 — v11 (`bd-toc-smart-quotes-6nro57ed`).** Changes
-  `outline`'s entry titles from `String` to `Inlines`
+  `outline`\'s entry titles from `String` to `Inlines`
   (`pampa::toc::TocEntry::title`).
 
   The flattened title was lossy in a way that produced a visible
@@ -559,7 +559,7 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   per-document engine resolution, additive at the on-disk layer
   (`skip_serializing_if` keeps default profiles compact), stamped only
   when Pass-1 can resolve it without loading an engine
-  (`engine-resolution.md`'s needs-no-load predicate, §3.3/§7/§9.1).
+  (`engine-resolution.md`\'s needs-no-load predicate, §3.3/§7/§9.1).
   `None` means the doc falls through to Pass-2's existing resolution —
   not an error. Names only, no `ConfigValue` blobs: `sequence` is the
   resolved engine names in run order, `ownership` is the

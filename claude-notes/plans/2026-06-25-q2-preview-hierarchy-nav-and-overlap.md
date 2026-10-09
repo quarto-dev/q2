@@ -191,7 +191,7 @@ pinned at the block's left edge regardless of breadcrumb width.
      (e.g. `ctx.richEditorActive` state). Simpler to wire but risks a
      one-frame flash of the standalone chip before the flag lands.
 
-4. **Styling.** The inline breadcrumb sits in `.q2-rt-toolbar`'s solid pill, so
+4. **Styling.** The inline breadcrumb sits in `.q2-rt-toolbar`\'s solid pill, so
    the standalone chip's opaque-pill / shadow / `z-index` styling is not needed
    inline — just spacing (a separator + small gap). Keep the crumb category
    colors (`.q2-crumb-cat-*`).

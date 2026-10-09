@@ -50,7 +50,7 @@ fixtures and walked the tree to classify each line:
    line.
 
 **Result — confirmed, both invariants hold:**
-- Case 2: byte-position lookup against `root.has_error() == false`'s tree
+- Case 2: byte-position lookup against `root.has_error() == false`\'s tree
   correctly excludes the string-embedded `#'` line (classified non-matchable)
   and includes the real marker after the string closes.
 - Case 3: `root_node().has_error()` is `true` for the malformed R, and the

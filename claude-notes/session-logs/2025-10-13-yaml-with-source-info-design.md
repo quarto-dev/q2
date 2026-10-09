@@ -80,7 +80,7 @@ enum Children {
 - The `yaml` field provides fast, direct access to yaml-rust2's types
 - The `children` field enables source-tracked traversal
 - Downstream code can use yaml-rust2 methods directly
-- Yes, this duplicates data (~3x overhead), but it's the price of having both access patterns
+- Yes, this duplicates data (\~3x overhead), but it's the price of having both access patterns
 
 **Rejected Alternative**: Store only children, build Yaml on demand
 - Would require repeated Yaml construction (defeats "don't reconstruct" goal)
@@ -141,14 +141,14 @@ YamlWithSourceInfo {
 
 ### Overhead Estimate
 
-- Small config (~50 keys): ~5KB raw → ~15KB in memory (**~3x**)
-- Large config (~500 keys): ~50KB raw → ~150KB in memory (**~3x**)
+- Small config (\~50 keys): \~5KB raw → \~15KB in memory (**\~3x**)
+- Large config (\~500 keys): \~50KB raw → \~150KB in memory (**\~3x**)
 
 ### Is This Acceptable?
 
 ✅ **Yes** for Quarto:
 - Configs are typically <10KB
-- Overhead is ~20-30KB per document
+- Overhead is \~20-30KB per document
 - Modern machines have GB of RAM
 - Alternative (no duplication) requires complex lifetimes or repeated reconstruction
 - Trade-off enables: direct Yaml access + source tracking + config merging
@@ -288,7 +288,7 @@ pub fn merge_yaml_with_source_info(
 - Background on the lifetime tension
 - Detailed type definitions with complete API
 - Construction, access (dual patterns), parsing, validation, merging
-- Memory overhead analysis (~3x duplication)
+- Memory overhead analysis (\~3x duplication)
 - Comparison table with all alternatives
 - 6-phase implementation plan (3-4 weeks)
 - Open questions and success criteria
@@ -323,7 +323,7 @@ Can't avoid duplication if you want:
 
 ### 3. Memory Overhead is Acceptable
 
-- ~3x overhead for configs is negligible (KB not MB)
+- \~3x overhead for configs is negligible (KB not MB)
 - Trade-off enables critical functionality
 - Can optimize later if profiling shows issues
 
@@ -362,9 +362,9 @@ Avoids conversion layer between our types and yaml-rust2's types
 
 ### Q: Memory overhead acceptable?
 
-**Answer**: Yes, ~3x for configs is fine
+**Answer**: Yes, \~3x for configs is fine
 
-**Reasoning**: Configs are small (<10KB), overhead is ~20-30KB per document, enables critical functionality.
+**Reasoning**: Configs are small (<10KB), overhead is \~20-30KB per document, enables critical functionality.
 
 ## Next Steps
 
@@ -389,7 +389,7 @@ Avoids conversion layer between our types and yaml-rust2's types
 
 2. **Parallel structures are necessary** - Need both complete Yaml tree and source tracking
 
-3. **Memory overhead is acceptable** - ~3x for small configs is negligible
+3. **Memory overhead is acceptable** - \~3x for small configs is negligible
 
 4. **yaml-rust2 types directly** - Avoid conversion, enable downstream usage
 
@@ -407,7 +407,7 @@ Avoids conversion layer between our types and yaml-rust2's types
 
 ## Conclusion
 
-The `YamlWithSourceInfo` design with owned data and parallel children provides the best balance for Quarto's requirements. While it incurs ~3x memory overhead, this trade-off enables:
+The `YamlWithSourceInfo` design with owned data and parallel children provides the best balance for Quarto's requirements. While it incurs \~3x memory overhead, this trade-off enables:
 
 1. ✅ Config merging from different sources
 2. ✅ Direct yaml-rust2::Yaml access

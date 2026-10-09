@@ -138,7 +138,7 @@ Total: ~100 full copies of the parent chain
   "node_100": {"parent": {full_chain...}}
 }
 ```
-**Size**: ~100 copies of parent chain in JSON
+**Size**: \~100 copies of parent chain in JSON
 
 ### With Rc
 
@@ -157,7 +157,7 @@ Total: 1 copy of parent chain + 100 ref-count increments
   "node_100": {"parent": {full_chain...}} // ← Again!
 }
 ```
-**Size**: Still ~100 copies of parent chain in JSON
+**Size**: Still \~100 copies of parent chain in JSON
 
 ### Key Insight: Serialization Size is THE SAME
 

@@ -149,7 +149,7 @@ discovery questions. The following are **immutable** for v1:
     — this is the live rule for every real Google token today;
   - if `aud` single-valued and `azp` absent: accept on `aud` alone.
 
-  `jsonwebtoken`'s `set_audience` only enforces `aud`; `azp` is a
+  `jsonwebtoken`\'s `set_audience` only enforces `aud`; `azp` is a
   custom post-decode check.
 - **Hub validator issuer/algorithm policy:** unchanged. Single issuer
   (`https://accounts.google.com`); algorithms from JWKS.
@@ -203,7 +203,7 @@ discovery questions. The following are **immutable** for v1:
     (b) connection-manager observed `lastObservedAuthMode === 'no-auth'`.
   - `authenticate_finish({}) -> string` — **one** poll against
     Google's `/token`. Returns `pending`/`slow_down` text on those
-    responses; persists bundle + returns "Authenticated as <email>"
+    responses; persists bundle + returns "Authenticated as \<email>"
     on success; typed error on terminal failure.
 
   Single-poll-per-call is deliberate: MCP tool calls have client
@@ -211,7 +211,7 @@ discovery questions. The following are **immutable** for v1:
 - **`device_code` is process-local**, never persisted. Cached state
   carries `nextPollAllowedAt` for RFC 8628 §3.5 rate-limiting,
   initialised to `start_time + interval`, bumped by 5 s per `slow_down`.
-  Second `authenticate_start` within ~5 s returns the cached
+  Second `authenticate_start` within \~5 s returns the cached
   device_code; outside that window overwrites.
 - **First-run trigger.** When connect attempt with no creds hits the
   hub's 401, the typed error names `authenticate_start`.
@@ -233,7 +233,7 @@ with new audience allowlist; test JWKS via a `MockOidcProvider` helper.
 - [x] `bearer_with_unknown_audience_returns_401`
 - [x] `bearer_with_no_audience_returns_401` — via
   `validation.set_required_spec_claims(&["exp", "aud"])`. Without
-  that, `jsonwebtoken@10`'s default `validate_aud=true` is silently
+  that, `jsonwebtoken@10`\'s default `validate_aud=true` is silently
   skipped for no-aud tokens (`validation.rs:325-350`).
 - [x] `bearer_with_aud_array_and_matching_azp_authenticates`
 - [x] `bearer_with_aud_array_and_missing_azp_returns_401` — OIDC
@@ -389,7 +389,7 @@ Landed on `feature/hub-mcp-device-flow`:
 - `AuthConfig` now carries `additional_audiences: Vec<String>` with
   an `audiences()` iterator that lists primary `client_id` first,
   then additional. `set_audience` + `set_required_spec_claims(&["exp",
-  "aud"])` plumbed in [`build_auth_state_from_parts`] —
+  "aud"])` plumbed in \[`build_auth_state_from_parts`\] —
   `build_auth_state` retains its discovery wrapper and now delegates
   to it. The test-only `build_auth_state_from_parts` skips OIDC
   discovery so integration tests can drive a mock OIDC provider on
@@ -517,7 +517,7 @@ Landed on `feature/hub-mcp-device-flow`:
 - **Follow-up fix (2026-05-22):** `initiateDeviceFlow` now wraps the
   device-auth response through `normaliseDeviceAuthResponse`, which
   copies `verification_url` → `verification_uri` when only the
-  Google-shape field is present. Without this, `oauth4webapi@3.8.6`'s
+  Google-shape field is present. Without this, `oauth4webapi@3.8.6`\'s
   `processDeviceAuthorizationResponse` throws `OperationProcessingError`
   on every live Google response. Two new specs pin the behaviour:
   `initiateDeviceFlow > normalises Google's verification_url to RFC 8628
@@ -710,7 +710,7 @@ Landed on `feature/hub-mcp-device-flow`:
 - `CredentialStore` accepts an optional `KeyringBackend` parameter
   so unit tests inject in-memory or failing backends without
   touching the platform keyring. The default backend wraps
-  `@napi-rs/keyring`'s `AsyncEntry(SERVICE_NAME, '<issuer>:<client_id>')`.
+  `@napi-rs/keyring`\'s `AsyncEntry(SERVICE_NAME, '<issuer>:<client_id>')`.
 - On-disk blob is `schema_version: 1`, with `issuer`, `client_id`,
   `id_token`, `refresh_token`, `id_token_expires_at` (ISO 8601),
   and `scopes` exactly per the Phase 1 lock-in. `parseBundle`
@@ -848,7 +848,7 @@ Landed on `feature/hub-mcp-device-flow`:
   refresh) leak.
 
 Tests live at `src/auth/refresh-manager.test.ts` (co-located, same
-convention Phases 4–5 established). They stub `oauth4webapi`'s
+convention Phases 4–5 established). They stub `oauth4webapi`\'s
 `customFetch` symbol so no live Google call is ever made. The
 fake-id_token helper fills in `iss`/`aud`/`azp`/`iat` defaults
 because `oauth4webapi.processRefreshTokenResponse` validates those
@@ -910,7 +910,7 @@ Tests in `ts-packages/quarto-hub-mcp/test/auth/auth-tools.test.ts`.
 - [x] `start_initiates_device_flow_when_auth_mode_unknown` — only
   positive `'no-auth'` triggers short-circuit.
 - [x] `start_overwrites_prior_unconsumed_device_code` — outside the
-  ~5 s coalescing window.
+  \~5 s coalescing window.
 - [x] `finish_without_prior_start_returns_typed_error`
 - [x] `finish_pending_returns_user_actionable_text`
 - [x] `finish_slow_down_returns_user_actionable_text_with_wait`
@@ -929,7 +929,7 @@ Tests in `ts-packages/quarto-hub-mcp/test/auth/auth-tools.test.ts`.
   call `oauth4webapi.deviceCodeGrantRequest`.
 - [x] `finish_after_interval_elapsed_polls_google`
 - [x] `start_called_repeatedly_within_window_short_circuits` — two
-  calls within ~5 s return same `device_code` without calling Google.
+  calls within \~5 s return same `device_code` without calling Google.
 - [x] `slow_down_response_increases_subsequent_interval` — bumps
   `nextPollAllowedAt` by 5 s per RFC 8628 §3.5.
 
@@ -944,7 +944,7 @@ Landed on `feature/hub-mcp-device-flow`:
   `LastObservedAuthModeSource` / `AuthFlowConfig` types.
 - `AuthToolsState.handleStart` walks the documented 3-step short-
   circuit chain: (1) `RefreshManager.getValidIdToken()` succeeds →
-  "Already authenticated as <email>." with no Google call; (2)
+  "Already authenticated as \<email>." with no Google call; (2)
   `connectionManager.lastObservedAuthMode() === 'no-auth'` → "The
   configured hub does not require authentication; no action needed."
   with no Google call; (3) otherwise initiates the device flow and
@@ -973,7 +973,7 @@ Landed on `feature/hub-mcp-device-flow`:
   (the SLOW_DOWN_BUMP constant). On success it decodes the `email`
   claim from the id_token (and nothing else from the JWT body),
   writes a fresh `CredentialBundle` to the store, clears the cached
-  device_code, and returns "Authenticated as <email>." Terminal
+  device_code, and returns "Authenticated as \<email>." Terminal
   errors (`DeviceFlowDeniedError` / `DeviceFlowExpiredError` /
   generic `DeviceFlowError`) clear the cache and surface a
   redacted error message — `redactTokens` runs on every error
@@ -1036,14 +1036,14 @@ the `@modelcontextprotocol/sdk` already on the workspace
   Accessor clears when `expiresAt < now`.
 - **Rate limiting** (RFC 8628 §3.5):
   - `authenticate_start`: if non-expired `device_code` exists and was
-    created within ~5 s, return cached values without re-initiating.
+    created within \~5 s, return cached values without re-initiating.
   - `authenticate_finish`: gate on `nextPollAllowedAt`; bump by 5 s on
     `slow_down`; if too soon, return "still pending" text without
     calling Google.
   - Clear cached state on success and on terminal errors.
 - `authenticate_start`:
   1. `RefreshManager.getValidIdToken()` succeeds → decode email,
-     return "Already authenticated as <email>".
+     return "Already authenticated as \<email>".
   2. `connectionManager.lastObservedAuthMode() === 'no-auth'` → return
      "The configured hub does not require authentication; no action
      needed." (no Google call). Only positive observation triggers
@@ -1069,7 +1069,7 @@ the `@modelcontextprotocol/sdk` already on the workspace
      - `pending` → "Still waiting for browser approval…"
      - `slow_down` → similar with recommended brief wait.
      - `tokens` → `CredentialStore.write(bundle)`, decode email,
-       clear cached device_code, return "Authenticated as <email>".
+       clear cached device_code, return "Authenticated as \<email>".
      - `DeviceFlowDeniedError` / `DeviceFlowExpiredError` → clear,
        return typed tool error.
 - Canonical URL `https://www.google.com/device` is a hard-coded
@@ -1083,7 +1083,7 @@ can detect "no credentials" and instruct the agent to call
 
 ## Phase 8 — quarto-sync-client + connection-manager integration (TDD)
 
-`@automerge/automerge-repo-network-websocket@2.5.1`'s
+`@automerge/automerge-repo-network-websocket@2.5.1`\'s
 `BrowserWebSocketClientAdapter` does **not** accept custom headers
 (constructor `(url, retryInterval = 5000)` → `new WebSocket(this.url)`,
 `WebSocketClientAdapter.ts:53-59,82`). Ship a local
@@ -1246,7 +1246,7 @@ verification when `list_files` surfaced the same error to the agent.
   options. A getter so retry loop sees the refreshed token.
 - New `quarto-sync-client/src/NodeWebSocketClientAdapter.ts`
   implementing the upstream `NetworkAdapter` contract but with
-  `new WebSocket(url, [], { headers: { Authorization: \`Bearer ${token}\` } })`.
+  ``new WebSocket(url, [], { headers: { Authorization: `Bearer ${token}` } })``.
 - `client.ts` selects adapter at `:336` and `:722` based on
   `auth.getBearer` presence.
 - **`connection-manager.ts` try-then-fallback policy:**
@@ -1296,7 +1296,7 @@ Tests passing is necessary but not sufficient. Before declaring done:
      `verification_uri`, the `user_code`, and canonical URL
      `https://www.google.com/device`.
    - Open canonical URL; type code; approve consent screen.
-   - Agent calls `authenticate_finish` → "Authenticated as <email>".
+   - Agent calls `authenticate_finish` → "Authenticated as \<email>".
    - Re-issue action; succeeds.
    - **Inspect credential store:**
      - macOS: `security find-generic-password -s dev.quarto.hub-mcp

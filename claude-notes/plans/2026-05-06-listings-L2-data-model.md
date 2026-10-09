@@ -464,7 +464,7 @@ config from `ast.meta` directly, applying the defaults above,
 and emits diagnostics for shape mismatches it encounters.
 
 When Q2 gains a runtime YAML validator (no bd issue filed for
-this; tracked informally in `quarto-yaml-validation`'s
+this; tracked informally in `quarto-yaml-validation`\'s
 roadmap), the schema entries become the source of truth that
 the validator enforces. L2's schema is therefore "schema as
 documentation" today, "schema as enforcement" later, with no
@@ -732,7 +732,7 @@ Recording here so reviewers don't relitigate.
   consumer (out of scope for the listings epic).
 - **D2 (Rust types live in `quarto-core`):** under
   `crates/quarto-core/src/project/listing/`. Not its own
-  crate. Rationale: the types are read by `quarto-core`'s
+  crate. Rationale: the types are read by `quarto-core`\'s
   Pass-2 transforms and write nothing engine- or
   format-specific; an extra crate boundary has no payoff.
 - **D3 (top-level `listing:` key):** confirmed against
@@ -754,7 +754,7 @@ Recording here so reviewers don't relitigate.
 
 This sub-plan corresponds to `bd-j60g`. Once approved:
 
-1. Update `bd-j60g`'s description with a one-line link to
+1. Update `bd-j60g`\'s description with a one-line link to
    this file.
 2. After hand-off / approval, close `bd-j60g` with a reason
    that says "Closed at draft approval; no Rust code; L3

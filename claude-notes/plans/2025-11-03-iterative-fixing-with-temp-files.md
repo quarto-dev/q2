@@ -904,7 +904,7 @@ EXAMPLES:
 
 #### User Guide Section
 
-```markdown
+````markdown
 ## How Iteration Works
 
 qmd-syntax-helper uses an iterative approach to fix issues in your files:
@@ -947,7 +947,7 @@ Most files converge in 1-3 iterations. Files with many issues may
 require more iterations. Use `--max-iterations` to limit this if needed.
 
 For the old single-pass behavior, use `--no-iteration`.
-```
+````
 
 ---
 

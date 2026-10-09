@@ -67,19 +67,19 @@ text with `code`    ->   Plain [ ... Code ... ]
 
 - [x] `test_html_block_lift` — three tests asserting merged behaviour
 - [x] `test_warnings::test_block_level_html_elements` — asserts the split tags,
-      not a changed diagnostic (see the correction above)
+  not a changed diagnostic (see the correction above)
 - [x] `incremental_writer_tests::roundtrip_comment_in_blockquote`
-- [x] Snapshot review (expect ~1); report count + summary per CLAUDE.md
+- [x] Snapshot review (expect \~1); report count + summary per CLAUDE.md
 - [x] Document the `Plain`/`Para` and `native_divs` divergences
 
 ## Phase 5 — Verify
 
 - [x] `cargo clippy -p pampa --all-targets -- -D warnings`
 - [x] `cargo nextest run --workspace` — 13684 passed / 199 skipped / 0 failed.
-      Baseline 13676 passed; +8 is exactly the tests added here.
+  Baseline 13676 passed; +8 is exactly the tests added here.
 - [x] `cargo xtask lint`
 - [x] `cargo xtask verify` — full run (not `--skip-hub-build`), all 14 steps pass,
-      including the WASM/hub-client leg, since pampa is in that dependency chain
+  including the WASM/hub-client leg, since pampa is in that dependency chain
 - [x] Both repros green simultaneously
 - [x] End-to-end through the `q2` binary; inspect output (see below)
 
@@ -108,16 +108,20 @@ so a ```` ```{=html} ```` fence is never pulled tight against its neighbour.
 
 ## End-to-end verification
 
-    $ q2 render index.qmd --to html
+```
+$ q2 render index.qmd --to html
+```
 
 on the reported shape (`<details>`/`<summary>` then prose with no blank line):
 
-    <details>
-    <summary>
-    Example custom instructions
-    </summary>
-    This example demonstrates how a <code>quarto.instructions.md</code> file shapes Positron
-    Assistant behavior for anything ending with <code>.instructions.md</code>.
+```
+<details>
+<summary>
+Example custom instructions
+</summary>
+This example demonstrates how a <code>quarto.instructions.md</code> file shapes Positron
+Assistant behavior for anything ending with <code>.instructions.md</code>.
+```
 
 Output inspected: the code spans are parsed and no literal backticks remain
 (`grep -c` for the backticked forms returns 0). Both repro fixtures are green
@@ -168,7 +172,7 @@ and never when a blank line would end the block. The writer and the blank-line
 rule now share one predicate, `html_writes_bare`, so they cannot drift.
 
 **Important — `write_orderedlist` was missed.** It has its own block loop,
-separate from `write_bulletlist`'s, so an ordered item's split interior came
+separate from `write_bulletlist`\'s, so an ordered item's split interior came
 back as a `Paragraph` while a bullet item's stayed `Plain`. The plan's claim of
 "every block container" was wrong. Fixed.
 

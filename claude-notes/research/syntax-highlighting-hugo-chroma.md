@@ -17,7 +17,7 @@ Chroma resolves language names through a **layered fallback system** (`external-
 Registration maps are case-normalized for lookup robustness (`registry.go:201-206`). Each lexer has:
 - `Name`: primary identifier (e.g., "Python")
 - `Aliases`: shortcuts (e.g., "py", "py3", "python3")
-- `Filenames`: glob patterns (e.g., "*.py")
+- `Filenames`: glob patterns (e.g., \"\*.py\")
 - `AliasFilenames`: secondary patterns
 - `Priority`: float32 to break ties; lexers with higher priority win if multiple match
 
@@ -128,7 +128,7 @@ HTML formatter (`html/html.go:93-125`):
 - `WithLinkableLineNumbers(prefix string)`: add `id="prefix1"`, `id="prefix2"`, etc., making lines linkable via `#prefix5`
 - `BaseLineNumber(n int)`: start numbering at `n` instead of 1
 
-These are **not exposed in fenced-code info strings** by chroma itself. Hugo (or a markdown processor) would need to parse code-fence attributes and pass them to the formatter. For example, Goldmark (Go markdown) supports HTML-like attributes: `\`\`\`python {linenos=inline,hl_lines=[2,3]}\`.
+These are **not exposed in fenced-code info strings** by chroma itself. Hugo (or a markdown processor) would need to parse code-fence attributes and pass them to the formatter. For example, Goldmark (Go markdown) supports HTML-like attributes: `` ```python {linenos=inline,hl_lines=[2,3]} ``.
 
 ## G. Pygments Heritage and Industry Standing
 

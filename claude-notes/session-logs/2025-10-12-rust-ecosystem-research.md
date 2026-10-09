@@ -2,7 +2,7 @@
 
 **Date**: 2025-10-12
 **Type**: Research Session
-**Duration**: ~1 hour
+**Duration**: \~1 hour
 
 ## Session Goals
 

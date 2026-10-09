@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/183
 - **Reporter**: @rundel (Colin Rundel), 2026-05-11
 - **Triage date**: 2026-05-14
-- **Worktree**: `.worktrees/issue-183` (branch `issue-183`, based on `main` @ `76b8fe3e`)
+- **Worktree**: `.worktrees/issue-183` (branch `issue-183`, based on `main` \@ `76b8fe3e`)
 - **Beads issue**: bd-oxsr
 - **Scope**: Writer bug in `write_list_table` (qmd writer). Related to #174 and #180 only in the broad category of "writer produces qmd that the reader rejects"; mechanism is independent.
 
@@ -158,7 +158,7 @@ The analogous *working* model — first block inline with the marker, blank line
 
 ## Fix sketch (for the beads issue)
 
-In `write_list_table`'s cell-emission loop:
+In `write_list_table`\'s cell-emission loop:
 
 1. **Multi-block case**: if the first block is `Plain` or `Paragraph`, emit its inlines on the marker line. Then for each subsequent block (or for all blocks if the first wasn't `Plain`/`Paragraph`):
    - emit a blank line
@@ -196,7 +196,7 @@ Fix landed on this branch. Plan: `claude-notes/plans/2026-05-14-list-table-multi
 
 Summary of the change in `crates/pampa/src/writers/qmd.rs`:
 
-- Replaced the cell-emission block in `write_list_table` (~lines 1069-1116 of the pre-fix file) with a uniform three-shape algorithm: empty cell / first block is `Plain`/`Paragraph` / first block is anything else. Subsequent blocks (2nd … nth) within any cell are emitted as blank-line-separated 4-space-indented stanzas.
+- Replaced the cell-emission block in `write_list_table` (\~lines 1069-1116 of the pre-fix file) with a uniform three-shape algorithm: empty cell / first block is `Plain`/`Paragraph` / first block is anything else. Subsequent blocks (2nd … nth) within any cell are emitted as blank-line-separated 4-space-indented stanzas.
 - Added two helpers: `write_cell_block_on_marker_line` (for the first block when it is not `Plain`/`Paragraph` — puts its first line on the marker line, indents continuation lines) and `write_cell_block_indented` (for every subsequent block).
 
 One refinement vs. the triage's original fix sketch: the case where the first block is non-`Plain`/non-`Paragraph` (e.g. a `CodeBlock`-only cell) does **not** leave the marker line empty followed by a blank line — that shape introduced a phantom empty `Paragraph` in the reparsed AST. Instead the block's first line continues the marker line, mirroring how a regular CommonMark list item with non-`Plain` content looks. Verified by probing the reader before committing.

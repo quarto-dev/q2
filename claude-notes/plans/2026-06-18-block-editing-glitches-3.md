@@ -44,8 +44,8 @@ should show **no diff** at all.
 
 - [x] **G20 — nested list-item editor opens too tall.** Range path measured the
   leading line with `getBoundingClientRect()` (the union of all client rects,
-  incl. the inter-block gap → ~32.6px) instead of the first client rect
-  (~25.5px). Fix: `getClientRects()[0]`. File: `outerBlocks.ts`.
+  incl. the inter-block gap → \~32.6px) instead of the first client rect
+  (\~25.5px). Fix: `getClientRects()[0]`. File: `outerBlocks.ts`.
 - [x] **G21 — commit navigates focus to the next block.** Post-commit focus
   restore called `outerBlockForAnchorR0` (outer-blocks-only, with a next-block
   fallback) for a nested anchor → jumped past the list. Fix: mode-aware
@@ -89,7 +89,7 @@ line *plus* whitespace/gap fragments down to the sublist boundary:
 ```
 
 So the editor's `contentHeight` came out **32.57px** while the rendered leading
-line is **25.5px** (`= lineHeight = getClientRects()[0].height`). The extra ~7px
+line is **25.5px** (`= lineHeight = getClientRects()[0].height`). The extra \~7px
 is the inter-block gap the union swallowed. List items carry **0** vertical
 padding (the user's initial "inside padding" hypothesis was disproven by the
 probe) — it is purely a measurement artifact unique to the Range path.
@@ -159,7 +159,7 @@ height from a range.
 - **Tier:** jsdom unit (no real layout).
 - **Seam / file:** `src/q2-preview/s0-list-item-surfaces.integration.test.tsx`
   (the existing §0 list-item-surface suite, which already stubs `Range`
-  prototype methods and exercises `measureLeadingBlockBox`'s `rangeUsed` flag).
+  prototype methods and exercises `measureLeadingBlockBox`\'s `rangeUsed` flag).
 - **Real unit mounted:** the actual `measureLeadingBlockBox` export (not a copy).
 - **Mock boundary:** jsdom implements neither `Range.prototype.getClientRects`
   nor `getBoundingClientRect`; stub **both** on the prototype for the test:
@@ -289,7 +289,7 @@ export function refocusTargetForAnchorR0(
 
 ### Chosen fix — part 2: call site in `PreviewRoot.tsx` `executeLanding` — VERBATIM
 
-Add `refocusTargetForAnchorR0` to the `./outerBlocks` import. In `executeLanding`'s
+Add `refocusTargetForAnchorR0` to the `./outerBlocks` import. In `executeLanding`\'s
 `intent === 'focus'` branch, replace the `outerBlockForAnchorR0` call:
 
 ```ts
@@ -359,7 +359,7 @@ None.
 
 ### Status
 
-Implemented & confirmed live (Cmd-Enter and margin-click blur, unlock mode; non-nested edits still refocus correctly; ArrowDown roving continues from the edited item). **Clean-slate rebuild DONE (2026-06-19)** — `refocusTargetForAnchorR0` added to `outerBlocks.ts`, call site rewired in `PreviewRoot.tsx` `executeLanding`. Three TDD tests added to `outerBlocks.integration.test.ts` (unlock exact-match → B; unlock no-match → null [the optional hardening from accepted-untested]; locked delegates → outer block). RED `refocusTargetForAnchorR0 is not a function`; revert-RED returns null (binding proven); GREEN after. Integration suite 461 passed / 1 skipped, tsc clean.
+Implemented & confirmed live (Cmd-Enter and margin-click blur, unlock mode; non-nested edits still refocus correctly; ArrowDown roving continues from the edited item). **Clean-slate rebuild DONE (2026-06-19)** — `refocusTargetForAnchorR0` added to `outerBlocks.ts`, call site rewired in `PreviewRoot.tsx` `executeLanding`. Three TDD tests added to `outerBlocks.integration.test.ts` (unlock exact-match → B; unlock no-match → null \[the optional hardening from accepted-untested\]; locked delegates → outer block). RED `refocusTargetForAnchorR0 is not a function`; revert-RED returns null (binding proven); GREEN after. Integration suite 461 passed / 1 skipped, tsc clean.
 
 ---
 
@@ -391,7 +391,7 @@ parse fail / applyNodeEdit throw           → ERROR
 
 So the indicator **hooks the funnel, not the sources**: classify in
 `handleSetAst`, store one status state, render one overlay. The bulb lives in
-`ReactPreview`'s own `position:relative` container (it already hosts
+`ReactPreview`\'s own `position:relative` container (it already hosts
 `PreviewErrorOverlay`), so it is a parent-side overlay on the preview iframe —
 **no new cross-boundary messaging**. The spurious case is the only real
 behavior change (previously `onContentRewrite` was called unconditionally; the
@@ -697,7 +697,7 @@ export function classifyCommitOutcome(
 ### Two-commit changelog requirement
 
 G22 touches `hub-client/`. Per repo policy, the implementation needs **two
-commits**: (1) the code; (2) `hub-client/changelog.md` referencing commit (1)'s
+commits**: (1) the code; (2) `hub-client/changelog.md` referencing commit (1)\'s
 short hash, one user-facing sentence (e.g. "Add a commit-status indicator and
 surface block-edit errors in the preview").
 

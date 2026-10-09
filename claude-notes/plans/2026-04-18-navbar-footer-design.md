@@ -524,7 +524,7 @@ Phases are ordered for TDD: each starts with tests, then implementation.
 
 ### Footer layout SCSS ported from Q1 (landed)
 
-- [x] Ported Q1's footer layout rules (three-region flex, responsive stacking, font sizes, border, backgrounds) from `src/resources/projects/website/navigation/quarto-nav.scss:806-926` into Q2's `resources/scss/bootstrap/_bootstrap-rules.scss` (~115 lines appended).
+- [x] Ported Q1's footer layout rules (three-region flex, responsive stacking, font sizes, border, backgrounds) from `src/resources/projects/website/navigation/quarto-nav.scss:806-926` into Q2's `resources/scss/bootstrap/_bootstrap-rules.scss` (\~115 lines appended).
 - [x] All variables (`$footer-bg`, `$footer-fg`, `$footer-border`, `$footer-*-font-size`) already exist in Q2's `_bootstrap-variables.scss` and the `theme-contrast` function is present in `_bootstrap-functions.scss` — no variable/function shims needed.
 - [x] Updated the footer HTML renderer (`quarto-navigation::render_html`) to emit `<ul class="nav footer-items">` on item regions so Q1's selectors match Q2's DOM without further template surgery.
 - [x] Assertions added to `test_compile_default_css` that the compiled default CSS ships `.nav-footer`, `.nav-footer-left`, `.footer-items`.
@@ -537,7 +537,7 @@ Phases are ordered for TDD: each starts with tests, then implementation.
 - [x] New field `ThemeConfig.suppress_bootstrap: bool`, set only when `theme:` literal string `none` is seen (case-insensitive). `theme: null` and missing `theme:` both hit the compile-default path.
 - [x] `compile_default` helper in the stage wraps `quarto_sass::compile_default_css` for native (sync) and WASM (async).
 - [x] 5 new tests (3 in stage, 2 in pipeline); 3 new tests in `quarto-sass::config`; existing `test_null_theme_uses_default_css` rewritten to assert the new semantics.
-- [x] Sample render now ships ~302 KB of Bootstrap 5.3.1 including `.navbar`, `.navbar-brand`, `.dropdown`, `.btn`, etc. Full workspace 7532 tests + `cargo xtask verify` green.
+- [x] Sample render now ships \~302 KB of Bootstrap 5.3.1 including `.navbar`, `.navbar-brand`, `.dropdown`, `.btn`, etc. Full workspace 7532 tests + `cargo xtask verify` green.
 - [ ] **Remaining behaviors blocked on `bd-ulgr`**: navbar dropdown and hamburger collapse still do nothing at runtime because Bootstrap JS is not shipped. Tracked in `bd-ulgr`; outline at `claude-notes/plans/2026-04-18-html-js-deps-design.md`.
 - [ ] **`theme: pandoc` sentinel**: Q1 also supports `theme: pandoc` (skip Quarto CSS entirely). Deferred; not requested in this session. File follow-up if users need it.
 
@@ -561,7 +561,7 @@ Points to preserve so we don't paint ourselves into a corner (answering q10):
 - **Schema nesting for books/websites.** This session uses top-level `navbar:` / `page-footer:`. A future project-type session may want to accept the same keys under `website:` / `book:` for compatibility. The design of the Generate transforms reads only from the merged `ast.meta`, so nothing in this implementation prevents a future metadata pre-step that promotes `website.navbar` → `navbar`. Do not hard-code "navbar only lives at top level" anywhere.
 - **Sidebar.** Not in v1. But the `navigation.*` namespace reserves space for `navigation.sidebar`. Keep `quarto-navigation` open for adding a `Sidebar` type without restructuring.
 - **Per-page "prev/next" pagination.** A separate navigation concept; belongs alongside sidebar.
-- **Cross-document title resolution.** Today `navigation-item` supports `text` falling back to target document's title. In a single-document context we can't resolve other documents' titles. Deferred: treat missing `text` as "use href as display text" with a TODO; real resolution happens when project context is threaded through.
+- **Cross-document title resolution.** Today `navigation-item` supports `text` falling back to target document's title. In a single-document context we can't resolve other documents\' titles. Deferred: treat missing `text` as "use href as display text" with a TODO; real resolution happens when project context is threaded through.
 - **Merge semantics documentation.** Quarto 2's `!prefer` / `!concat` are the right primitives, but user-facing docs do not yet exist. Phase 7 adds a stub; a future docs session should write a full "metadata merge" explainer that covers these tags across all config.
 - **HTML pipeline variants.** Slideshows (reveal.js) and dashboards will have different body templates and likely different navbar/footer behavior. The Generate/Render split means they can reuse `quarto-navigation` types and Generate transforms while providing their own Render or skipping it.
 - **WASM / hub-client.** The hub-client consumes the HTML pipeline via `wasm-quarto-hub-client`. Verify Phase 6 includes `cargo xtask verify` so WASM builds stay green. No hub-client UI changes expected for v1 (no preview surface for navbar/footer yet).

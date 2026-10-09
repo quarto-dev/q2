@@ -182,12 +182,12 @@ If pursued as a follow-up plan (call it "Plan 9"):
 
 | Component | Lines (rough) |
 |---|---|
-| Reconciler `RecurseIntoCustomNode` alignment + slot plans | ~200 |
-| Writer `CustomNodeSplice` coarsen variant + assemble | ~250 |
-| Per-CustomNode-type slot-shape registry (initial 5 types) | ~300 |
-| React component updates (Callout, Theorem, Proof, FloatRefTarget, Equation) — slot-level setLocalAst forwarding | ~200 |
-| Tests | ~400 |
-| **Total** | **~1350** |
+| Reconciler `RecurseIntoCustomNode` alignment + slot plans | \~200 |
+| Writer `CustomNodeSplice` coarsen variant + assemble | \~250 |
+| Per-CustomNode-type slot-shape registry (initial 5 types) | \~300 |
+| React component updates (Callout, Theorem, Proof, FloatRefTarget, Equation) — slot-level setLocalAst forwarding | \~200 |
+| Tests | \~400 |
+| **Total** | **\~1350** |
 
 Comparable in scope to Plan 7. Builds on these plans rather than
 rewriting them.

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-footer-link-attrs-dropped-1axx82op
-**Checkout:** invoked in the bd-nn2fou8h worktree, on `main` @ `87c0e21a` (v0.25.0) — no dedicated branch created; user decides where implementation lands.
+**Checkout:** invoked in the bd-nn2fou8h worktree, on `main` \@ `87c0e21a` (v0.25.0) — no dedicated branch created; user decides where implementation lands.
 **Status:** Design aligned 2026-08-20; implementation approved and in progress on branch `braid/bd-footer-link-attrs-dropped-1axx82op`.
 
 ## Triage verdict
@@ -13,7 +13,7 @@
 
 Filed 2026-08-20 (UTC) by Claude (q2-connect-docs), bug, P2, labels `navigation`/`parity`, status open. Config-authored markdown in nav/footer text regions renders links without their `{#id .cls key=val}` attributes and unwraps attributed spans entirely, while images keep every attribute. Happens identically at region level (`page-footer.center`) and item level (`item.text`), in the same render where body markdown keeps everything.
 
-Real-world hit: the Connect docs' cookie-preferences footer control is a link whose `#open_preferences_center` id is what the cookie-consent JS hooks on; written as markdown the id is silently dropped and the cookie dialog dies on every page. The port currently works around it with raw ``` `<a ...>`{=html} ``` inline HTML.
+Real-world hit: the Connect docs\' cookie-preferences footer control is a link whose `#open_preferences_center` id is what the cookie-consent JS hooks on; written as markdown the id is silently dropped and the cookie dialog dies on every page. The port currently works around it with raw ``` `<a ...>`{=html} ``` inline HTML.
 
 Q1 parity target: Q1 preserves link id/class/title and attributed spans at region level. (Q1 doesn't parse item-level `text:` as markdown at all, so q2's item-level parsing is an improvement; the attr drop is still a defect on both levels.)
 
@@ -28,7 +28,7 @@ No incoming `blocks` pressure; urgency is the Connect-docs port's workaround (P1
 
 ## What the code looks like today
 
-All description claims verified at `main` @ `87c0e21a`:
+All description claims verified at `main` \@ `87c0e21a`:
 
 - `crates/quarto-navigation/src/render_html.rs::push_inline` (the strand says `inline_to_html`; actual names are `push_inline` + wrapper `inlines_to_html` — minor drift, same code):
   - **Link arm** (`:1019`): emits `href` and the *target* title only; never reads `l.attr`.

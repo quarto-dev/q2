@@ -85,7 +85,7 @@ Recorded so the decisions are durable.
    `marimo-deprecated.lua` filter → **omit it from the fixture** (a deprecation
    shim irrelevant to validation).
 
-8. **`breakQuartoMd`'s custom-regex arg is supported** (`markdownRegex/index.ts:764`,
+8. **`breakQuartoMd`\'s custom-regex arg is supported** (`markdownRegex/index.ts:764`,
    4th param `startCodeCellRegex?: RegExp`).
 
 9. **q2 hard-errors on static-vs-dynamic claim mismatch** (`ts_engine.rs:242-293`,
@@ -116,7 +116,7 @@ Recorded so the decisions are durable.
     `extract.py` receives raw markdown on stdin with **no** ownership signal, so
     the ownership gate must be threaded **TS-side** (see 4c0-eng).
 
-12. **Spike (2026-07-02) — bare-`{sql}` execution is FEASIBLE with a ~3-line
+12. **Spike (2026-07-02) — bare-`{sql}` execution is FEASIBLE with a \~3-line
     `extract.py` change; `{sql .marimo}`/`{sql.marimo}` already execute today.**
     `extract.py` hands the doc to marimo's own parser (`MarimoMdParser`) — there
     is **no `.marimo` gate in `extract.py`**; the gate is entirely TS-side
@@ -241,10 +241,10 @@ builtins are the units.
 | SC3 | 4c0 | unit-rs | `claims_language` fallback-key path (`ts_engine.rs:604-607`) | registry (real parsed claims) with a `fallback` key + a normal claim → lookup an unclaimed lang | mock transport (no load) | Revert the `map.get("fallback")` site to the pre-Vec single-claim `static_claim_to_language_claim(fb,…)` call → `claims_language(unclaimed)==Fallback(n)` RED (compile-error against the Vec type counts as RED) |
 | SC4 | 4c0-eng | unit-ts | `claimsLanguage` | `claimsLanguage("sql",undefined)` **and** `("python",undefined)` → return value | none | New `if(lang==="sql") return {kind:"interop"}` → `("sql",undefined)` `toEqual({kind:"interop"})` RED (`false`) |
 | SC5 | 4c0-eng | unit-ts | **new** gated predicate `cellOwnedByMarimo(cell, handledLanguages)` (a *new* fn — do NOT overload the existing `isMarimoCell(cell)` at `is-marimo-cell.ts:9`, which is called `isMarimoCell(cell)` at `marimo-engine.ts:271`) | bare-sql cell with `handled=["sql"]` **and** `[]`; plain-python cell with `["sql"]` | none | `handled.includes("sql")` gate → `pred(bareSql,[])===false` RED (returns true) | (2026-07-02, task 4cB2-fix, FINDING #4: **semantics corrected, controller-ratified.** `handledLanguages` is q2's leave-alone set, not positive ownership — bare-sql `handled=[]` (sql NOT left alone) → OWNED (`true`); `handled=["sql"]` (sql left alone for someone else) → NOT owned (`false`) — the inverse of the row's original fed values/expectations above. RED captured against the flipped `cellOwnedByMarimo` implementation with the OLD (pre-correction) test file: 81 passed/2 failed, exactly the two direct-gate assertions; corrected assertions then GREEN, 83/83. See `~/src/quarto-marimo` commit fixing FINDING #4 and `.superpowers/sdd/task-4cB2-fix-report.md`.) |
-| SC6 | 4c0-eng | unit-py | `rewrite_bare_sql(text,enabled)` (factored from `convert_from_md_to_pandoc_export`) | bare `{sql}` @`enabled=True`/`False`; `{sql.marimo}`, `{python}` @`True` | none | `BARE_SQL_FENCE_REGEX.sub` → `enabled=True` output contains `sql {.marimo` RED |
+| SC6 | 4c0-eng | unit-py | `rewrite_bare_sql(text,enabled)` (factored from `convert_from_md_to_pandoc_export`) | bare `{sql}` \@`enabled=True`/`False`; `{sql.marimo}`, `{python}` \@`True` | none | `BARE_SQL_FENCE_REGEX.sub` → `enabled=True` output contains `sql {.marimo` RED |
 | SC7 | 4c0-eng | unit-ts | `containsMarimoFence` | `containsMarimoFence("```{sql}\n…")` → `false`; `("```{python .marimo}…")`→`true` | none | **B1 guard**: dropping the `(?=.*\.marimo)` lookahead from the shared regex → bare-sql `===false` RED (true) |
 | SC8 | 4cB | e2e | full render pipeline + marimo subprocess | `q2 render` a `{python .marimo}` `1+1` doc → grep HTML | marimo/uv (env skip) | Revert the marimo `python` claim → HTML lacks a **marimo-specific** marker RED. **Assert the marimo signature, not just `2`** (jupyter also emits `2`): the injected `include-in-header` marimo header / `<marimo-code` / `__MARIMO_EXPORT_CONTEXT__` (extract.py 293-327) **and** `2` (2026-07-02: named revert corrected to `claims-files:[]` + python-claim removal; original single-part revert non-binding due to `EngineClaimsFileStage` whole-file `claimsFile` short-circuit at `engine_execution.rs:225`; RED verified) |
-| SC9 | 4cB2 | e2e | dynamic path (`ts_engine.rs:625` else) + subprocess | render `{python .marimo}`+`{sql}` doc via **claims-less** fixture → `ownership["sql"]` | marimo/uv (env skip) | SC4 (claimsLanguage interop) → dynamic `ownership["sql"]=="marimo"` RED (jupyter); parity with static breaks | (2026-07-02, task 4cB2: **NOT GREEN — BLOCKED, NEEDS_CONTEXT.** The resolver-level assertion IS achievable and confirmed correct (`ownership["sql"]=="marimo"` via the dynamic path, after the pre-authorized `claims-files:[]` fix), but the *behavioral* observable this row implies — marimo's rendered output showing it executed the sql cell — is blocked by a second, independent defect: `marimo-engine.ts`'s `bareSqlOwned` gate reads the wire `handledLanguages` (a leave-alone set) with inverted sense, so it never fires when marimo genuinely owns bare sql. See `marimo_engine_e2e.rs`'s SC9 doc comment and compat doc §13 for the full evidence trail. Not committed as a passing test pending controller adjudication.) (2026-07-03, task 4cB2-completion: **GREEN — CLOSED.** FINDING #4 fixed and controller-ratified (`~/src/quarto-marimo` `77c15c8`, rebundled into this fixture at q2 `b4f4f52bf`): `bareSqlOwned`/`cellOwnedByMarimo` flipped to `!handledLanguages.includes("sql")`. `write_claims_less_extension_yml` now always appends `claims-files: []` (the anti-vacuity correction this row's own evidence justified), so every dynamic-path test — including this one — genuinely exercises per-language resolution, never the whole-file short-circuit. Committed test: `sc9_bare_sql_interop_dynamic_path_marimo_executes_sql_cell` in `marimo_engine_e2e.rs`. Behavioral-proxy observable (unchanged from the original choice): rendered HTML contains a `<marimo-table>` island with `data-data` carrying the computed `{"x":2}` row, inside `<marimo-cell-output>` — firsthand-inspected. RED-by-revert (SC4's named revert, run against the SAME claims-files:[]-fixed variant): reverting the TEMPDIR bundle's `claimsLanguage` bare-sql branch to `false` reproduces the exact same hard failure as before the fix — `Error: Engine 'jupyter' is registered but its runtime is not available...` — captured verbatim in the test's doc comment; fixture restored byte-identical, re-confirmed GREEN. `cargo nextest run -p quarto-core -E 'test(marimo_engine_e2e)'`: 3/3 green.) |
+| SC9 | 4cB2 | e2e | dynamic path (`ts_engine.rs:625` else) + subprocess | render `{python .marimo}`+`{sql}` doc via **claims-less** fixture → `ownership["sql"]` | marimo/uv (env skip) | SC4 (claimsLanguage interop) → dynamic `ownership["sql"]=="marimo"` RED (jupyter); parity with static breaks | (2026-07-02, task 4cB2: **NOT GREEN — BLOCKED, NEEDS_CONTEXT.** The resolver-level assertion IS achievable and confirmed correct (`ownership["sql"]=="marimo"` via the dynamic path, after the pre-authorized `claims-files:[]` fix), but the *behavioral* observable this row implies — marimo's rendered output showing it executed the sql cell — is blocked by a second, independent defect: `marimo-engine.ts`'s `bareSqlOwned` gate reads the wire `handledLanguages` (a leave-alone set) with inverted sense, so it never fires when marimo genuinely owns bare sql. See `marimo_engine_e2e.rs`'s SC9 doc comment and compat doc §13 for the full evidence trail. Not committed as a passing test pending controller adjudication.) (2026-07-03, task 4cB2-completion: **GREEN — CLOSED.** FINDING #4 fixed and controller-ratified (`~/src/quarto-marimo` `77c15c8`, rebundled into this fixture at q2 `b4f4f52bf`): `bareSqlOwned`/`cellOwnedByMarimo` flipped to `!handledLanguages.includes("sql")`. `write_claims_less_extension_yml` now always appends `claims-files: []` (the anti-vacuity correction this row's own evidence justified), so every dynamic-path test — including this one — genuinely exercises per-language resolution, never the whole-file short-circuit. Committed test: `sc9_bare_sql_interop_dynamic_path_marimo_executes_sql_cell` in `marimo_engine_e2e.rs`. Behavioral-proxy observable (unchanged from the original choice): rendered HTML contains a `<marimo-table>` island with `data-data` carrying the computed `{"x":2}` row, inside `<marimo-cell-output>` — firsthand-inspected. RED-by-revert (SC4's named revert, run against the SAME `claims-files:[]`-fixed variant): reverting the TEMPDIR bundle's `claimsLanguage` bare-sql branch to `false` reproduces the exact same hard failure as before the fix — `Error: Engine 'jupyter' is registered but its runtime is not available...` — captured verbatim in the test's doc comment; fixture restored byte-identical, re-confirmed GREEN. `cargo nextest run -p quarto-core -E 'test(marimo_engine_e2e)'`: 3/3 green.) |
 | SC10 | 4cC | e2e | render + `include-in-header` wiring | render a `mo.ui`/plot doc → grep HTML for header content + raw-`{=html}` figure | marimo/uv (env skip) | engine `includes["include-in-header"]` (300-310) → header markup present RED | (2026-07-03, task 4cC: **GREEN — CLOSED.** Committed test `sc10_widget_render_shows_header_include_and_body_island` in `marimo_engine_e2e.rs`, static-claims path, conjunctive assertions (header marker in `<head>` AND `<marimo-island>`/`<marimo-ui-element>` in `<body>`). RED-by-revert (TEMPDIR-only bundle copy, neutered the `include-in-header` population) reproduces exactly the header-marker half failing while the body island half still passes — captured verbatim in the test's doc comment; fixture restored byte-identical, re-confirmed GREEN. See compat doc §14.) |
 | SC11 | 4cD | int-rs | real registry: parsed fixture claims + `JupyterEngine` builtin | doc A `{python .marimo}`-only → `ownership["python"]`; doc B `{python}`-only → same | none (real builtins) | (a) python claim → A `=="marimo"` RED; (b) `whenClass` guard → **B `=="jupyter"` RED** |
 | SC12 | 4cD | int-rs | `resolve` | `{python.marimo}` / `{sql.marimo}` cells → ownership | none | dotted claim keys → `ownership["python.marimo"]=="marimo"` RED |
@@ -297,7 +297,7 @@ builtins are the units.
       Vec at **both** sites. The `lookup_static_claim` callers at `256`/`603`
       themselves are otherwise logic-unaffected (signature unchanged).
 - [x] `ts_engine.rs` map type at `141`/`170` + test helpers `935`/`961-975`:
-      **keep `single_claim`** (return a 1-element-Vec map — ~6 existing tests use
+      **keep `single_claim`** (return a 1-element-Vec map — \~6 existing tests use
       it: `test_p1_12`, `test_hint_prefilter_no_load`, …) **and add `multi_claim`**
       for the Vec cases.
 - [x] `cargo nextest run -p quarto-core` green; document the Vec form + combine
@@ -335,9 +335,9 @@ Upstreamable. No marimo-internal work.
       stdin with no ownership signal, so push a **new positional** after the
       existing three at `marimo-engine.ts:247` (`input`, `mime`, `eval`) — a
       `bare_sql: yes|no` derived from `handledLanguages.includes("sql")` (argv
-      index 4). **Widen `extract.py`'s arity assert** (`assert len(sys.argv) in
+      index 4). **Widen `extract.py`\'s arity assert** (`assert len(sys.argv) in
       (…)` near `extract.py:459`) to accept the extra positional and parse
-      argv[4], or the render `AssertionError`s at runtime *past* SC6's pure-regex
+      `argv[4]`, or the render `AssertionError`s at runtime *past* SC6's pure-regex
       test. `extract.py` applies `BARE_SQL_FENCE_REGEX` only when `yes`. Update
       `is-marimo-cell.test.ts` / `cell-execution-regex.test.ts`.
       **(Mechanism corrected 2026-07-02, task 4cB2-fix, FINDING #4:**
@@ -352,7 +352,7 @@ Upstreamable. No marimo-internal work.
 - [x] **Python `extract.py`**: add a `BARE_SQL_FENCE_REGEX` sibling to the
       existing `SQL_DOT_FENCE_REGEX`, rewriting a bare `{sql …}` fence (no
       `.marimo`) into marimo's qmd-form `sql {.marimo …}`, applied in
-      `convert_from_md_to_pandoc_export` before the existing SQL rewrite. ~3 lines
+      `convert_from_md_to_pandoc_export` before the existing SQL rewrite. \~3 lines
       atop the already-complete SQL bridge (`sql_code_to_python`). Use lookaheads
       `(?![\w.])` and `(?![^}]*\.marimo)` so `{sql.marimo}`, `{sqlfoo}`,
       `{python}`, and already-qmd-form `sql {.marimo}` are left untouched (exact
@@ -365,7 +365,7 @@ Upstreamable. No marimo-internal work.
       `pyarrow` or `pandas`) in the eval env. The 4cD sql fixture qmd must declare
       them in its front-matter `pyproject` block (marimo inline-script metadata:
       `dependencies = ["duckdb","sqlglot","polars","pyarrow"]`), which
-      `command.py`'s `construct_uv_flags` turns into `uv run --with …` flags.
+      `command.py`\'s `construct_uv_flags` turns into `uv run --with …` flags.
       Tests skip when the environment can't resolve them (like the `julia`-absent
       skips).
 - [x] Re-bundle and confirm test suites green (done cumulatively: rebundles at 4cA/8f9→fcfd26a50, finding-#4 fix b4f4f52bf, SC19 b3b432344; deno 83→87/87, pytest 47/47 at upstream 2a2f312; version pin-check: uv resolved marimo 0.23.13 vs spike's 0.23.1, recorded compat doc §9) — deno: `deno test --no-check
@@ -413,7 +413,7 @@ Upstreamable. No marimo-internal work.
       + sibling `_quarto.yml` (`project: type: default`), mirroring the julia
       fixture's root layout. No `pyproject`/dependency frontmatter needed — the
       engine's `uv run --with marimo` path supplies marimo itself, and
-      `command.py`'s `PyProjectReader.from_script` accepts an empty header.
+      `command.py`\'s `PyProjectReader.from_script` accepts an empty header.
 - [x] `cargo run --bin q2 -- render <file>.qmd`; debug first failure (Deno start,
       bundle, `uv`/`marimo`/`command.py`, protocol). Render now SUCCEEDS (exit
       0, HTML produced) after the pampa writer fix (`411380777`) — but the
@@ -447,21 +447,21 @@ Upstreamable. No marimo-internal work.
 **BLOCKING FINDING #3 (2026-07-02, 4cB attempt 3) — RESOLVED (controller
 sign-off received) — SC8's specified named revert ("remove the `python`
 claim from `_extension.yml`") is VACUOUS; a DIFFERENT mechanism
-(`EngineClaimsFileStage`'s whole-file dynamic `claims_file`) already assigns
+(`EngineClaimsFileStage`\'s whole-file dynamic `claims_file`) already assigns
 marimo ownership independent of the per-language `claims:` map.**
 Empirically proven, not a guess — see the task report's "Final completion"
 section for the full trace. The corrected two-part revert (`claims-files:
 []` + remove the `python:` claim) is now SC8's official named revert (see
 the Test Seam Spec table's in-row annotation); RED evidence captured
-verbatim in `marimo_engine_e2e.rs`'s doc comment; fixture restored
+verbatim in `marimo_engine_e2e.rs`\'s doc comment; fixture restored
 byte-identical.
 
 - Applying exactly the brief's specified revert (deleting the `python:` key
-  from `_extension.yml`'s `claims:` map, everything else unchanged) does
+  from `_extension.yml`\'s `claims:` map, everything else unchanged) does
   **NOT** redden `sc8_minimal_marimo_render_shows_marimo_signature_and_result`
   — it stays GREEN. Confirmed by direct `RUST_LOG=debug` render trace: marimo's
   subprocess still runs ("Executing marimo cells...").
-- Root cause: `crates/quarto-core/src/stage/stages/engine_claims_file.rs`'s
+- Root cause: `crates/quarto-core/src/stage/stages/engine_claims_file.rs`\'s
   `EngineClaimsFileStage` runs BEFORE any per-language tier resolution and
   asks every registered engine `claims_file(file, ext)` — "first claimer
   wins" — for the **whole file**, regardless of extension (`.qmd` included).
@@ -471,7 +471,7 @@ byte-identical.
   like an explicit `engine: marimo` declaration, bypassing the per-language
   `claims:` map (T1-T4 in `resolution.rs`) entirely.
 - The marimo fixture's `_extension.yml` declares no `claims-files:` key, so
-  `TsEngine.claims_files` is `None` → `ts_engine.rs:716-717`'s
+  `TsEngine.claims_files` is `None` → `ts_engine.rs:716-717`\'s
   content-inspecting DYNAMIC path fires: it loads the (unmodified,
   excluded-from-editing) engine module and calls its live `claimsFile`,
   which does its own independent regex scan
@@ -509,10 +509,10 @@ controller triage, full evidence in `.superpowers/sdd/task-4cB-report.md`.
 - Confirmed the temp file itself DOES contain the expected markers
   (`__MARIMO_EXPORT_CONTEXT__` script + `<marimo-code hidden>…</marimo-code>`)
   — read directly off disk before pipeline cleanup. So `extract.py`/
-  `marimo-engine.ts`'s header-construction is correct; the break is entirely
+  `marimo-engine.ts`\'s header-construction is correct; the break is entirely
   in how q2 consumes `ExecuteResult.includes["include-in-header"]`.
 - Root cause: `crates/quarto-core/src/engine/ts_engine.rs::translate_includes`
-  (~line 440) passes each wire string straight through into
+  (\~line 440) passes each wire string straight through into
   `PandocIncludes.header_includes` with no file read. This is CORRECT per the
   current architecture: `IncludeResolveStage`'s module doc
   (`crates/quarto-core/src/stage/stages/include_resolve.rs:1-56`) explicitly
@@ -522,7 +522,7 @@ controller triage, full evidence in `.superpowers/sdd/task-4cB-report.md`.
   `append_pandoc_includes`, `include_resolve.rs:262-278`, called from both
   `IncludeResolveStage` and `ApplyTemplateStage`'s late drain — neither path
   reads files for this channel).
-- But `marimo-engine.ts`'s `execute()` (line ~340-346) writes header content
+- But `marimo-engine.ts`\'s `execute()` (line \~340-346) writes header content
   to a temp file and sends **the file's path** as the wire value — "(like
   Jupyter does)", per its own comment — i.e. it assumes Q1/Pandoc-style
   file-path semantics (matching knitr's native-Rust `convert_includes`,
@@ -558,7 +558,7 @@ reported here for controller triage, full evidence in
   first class as the literal string `"{python}"` (braces included) — see
   `crates/quarto-core/src/engine/capture_splice.rs:74` (`engine_cell_lang`),
   which strips the `{…}` wrapper back off when resolving the cell's language.
-  But `crates/pampa/src/writers/qmd.rs`'s `write_attr` (line 431:
+  But `crates/pampa/src/writers/qmd.rs`\'s `write_attr` (line 431:
   `write!(writer, ".{}", class)?;`) doesn't know about this special encoding —
   for a 2+-class `CodeBlock` (`write_codeblock`, lines 664-672, takes the
   `write_attr` branch whenever more than one class is present, which is always
@@ -568,7 +568,7 @@ reported here for controller triage, full evidence in
 - Confirmed via `cargo run --bin pampa -- -f markdown -t qmd`: round-tripping
   `{python .marimo}` produces the malformed fence above; round-tripping the
   dotted form `{python.marimo}` (single class `"{python.marimo}"`, hits
-  `write_codeblock`'s single-class bare-word branch) round-trips correctly.
+  `write_codeblock`\'s single-class bare-word branch) round-trips correctly.
 - Impact on the render: `serialize_ast_to_qmd`
   (`crates/quarto-core/src/stage/stages/engine_execution.rs:569`) is what feeds
   `target.markdown` to every TS engine — so the malformed fence is what marimo's
@@ -580,7 +580,7 @@ reported here for controller triage, full evidence in
   matches), so `execute()` splices nothing back in and passes the malformed
   fence straight through in `processedMarkdown`. That text then fails
   downstream tree-sitter re-parse with the generic pampa fallback
-  (`quarto-parse-errors`'s `"Parse error" / "unexpected character or token
+  (`quarto-parse-errors`\'s `"Parse error" / "unexpected character or token
   here"`), which is the error `q2 render` surfaces.
 - This blocks **any** TS engine consuming a `{lang .firstclass}`-syntax cell via
   the standard `serialize_ast_to_qmd` path — not marimo-specific, and not
@@ -591,7 +591,7 @@ reported here for controller triage, full evidence in
   `crates/pampa/src/writers/qmd.rs` to detect a bracket-wrapped first class
   (`class.starts_with('{') && class.ends_with('}')`) and emit it as a bare
   unprefixed language token (mirroring the reader's encoding and
-  `engine_cell_lang`'s unwrap), then re-attempt 4cB.
+  `engine_cell_lang`\'s unwrap), then re-attempt 4cB.
 
 ### Phase 4cB2: Dynamic-claims fixture
 - [x] Second fixture: identical engine, **`claims:` removed** from `_extension.yml`
@@ -626,7 +626,7 @@ reported here for controller triage, full evidence in
       `<marimo-table>` island whose `data-data` carries the computed
       `{"x":2}` row (the bare `{sql}` cell's result), conjunctive with the
       python cell's markers. RED-by-revert (SC4's named revert, same
-      claims-files:[]-fixed variant): reverting `claimsLanguage`'s bare-sql
+      `claims-files:[]`-fixed variant): reverting `claimsLanguage`'s bare-sql
       branch to `false` reproduces the exact pre-fix hard failure
       (`Error: Engine 'jupyter' is registered but its runtime is not
       available...`), captured verbatim in the test's doc comment; fixture
@@ -663,7 +663,7 @@ reported here for controller triage, full evidence in
       is a quarto-core wire-protocol change outside this task's scope. Full
       evidence trail (both directions of the SC4-revert experiment, exact
       HTML snippets, confirmatory failure mode) in
-      `marimo_engine_e2e.rs`'s doc comment ahead of the (uncommitted, not-
+      `marimo_engine_e2e.rs`\'s doc comment ahead of the (uncommitted, not-
       passing) SC9 section, and in `.superpowers/sdd/task-4cB2-report.md`.
       **Controller decision needed** before SC9 can be completed as
       literally specified (see the Test Seam Spec row annotation below and
@@ -691,7 +691,7 @@ reported here for controller triage, full evidence in
       RED-by-revert: in a TEMPDIR-ONLY bundle copy, neutered the engine's
       `include-in-header` population (`if (outputFormat === "html" &&
       marimoExecution.header)` → `if (false && ...)`, corresponding to
-      upstream `marimo-engine.ts` ~300-310) — re-render still SUCCEEDS
+      upstream `marimo-engine.ts` \~300-310) — re-render still SUCCEEDS
       (unlike SC8/SC9's revert) but `<head>` loses both header markers while
       `<body>` still shows the island, reproducing the exact
       conjunctive-assertion failure the test is written to catch (verbatim
@@ -773,7 +773,7 @@ reported here for controller triage, full evidence in
       dynamic-claims-less fixture derivation (`setup_marimo_project_dynamic`,
       same machinery SC9/SC14 use) instead. RED-by-revert: the brief's two
       suggested single edits (widen the cell-split regex; neuter
-      `cellOwnedByMarimo`'s sql-only check for "r") were BOTH tried and found
+      `cellOwnedByMarimo`\'s sql-only check for "r") were BOTH tried and found
       VACUOUS (no spare `marimoExecution.output` exists to inject wrong
       content for an over-claimed cell with no real output, so the fallback
       always reconstructs the original text byte-identical); the actual
@@ -798,7 +798,7 @@ reported here for controller triage, full evidence in
       `<pre class="marimo-error">SyntaxError: ...</pre>` with a normal exit
       0. Used an unresolvable `pyproject` dependency name instead, which
       fails at the `uv run` SUBPROCESS level and genuinely reaches
-      `execute()`'s outer try/catch, producing the "Error executing marimo"
+      `execute()`\'s outer try/catch, producing the "Error executing marimo"
       substring this row specifies. RED-by-revert: neuter the catch
       (rethrow) → render fails outright, captured verbatim in the test's doc
       comment.)
@@ -888,7 +888,7 @@ history):** the original GREEN case is UNIMPLEMENTABLE — architectural FINDING
 `derive_cell_outputs`/`is_cell_wrapper`) anchors only on `::: {.cell}` wrappers;
 marimo emits bare `{=html}` islands with no wrapper, so its capture records
 server-side but never splices — the pane shows inert source regardless of the
-delivery chain's health. Additionally the original assertion (b)'s premise was
+delivery chain's health. Additionally the original assertion (b)\'s premise was
 wrong: the literal source ALSO survives in the include-in-header
 `notebookCode:` script, not only URL-encoded. **SC21 is REFRAMED as SC21-NEG, a
 limitation-pinning canary** (controller adjudication, user asked, AFK —
@@ -904,7 +904,7 @@ best-judgment per recommended option; reversible):
   breaking (b)) — at which point the fixer flips it into the positive splice
   test (marimo-cell-output + 42 present; literal-absent check scoped to the
   pane body EXCLUDING the head script, per the corrected premise). The
-  marimo-leg fixture revert (remove python claim + claims-files:[]) still
+  marimo-leg fixture revert (remove python claim + `claims-files:[]`) still
   binds (a): with it applied, no marimo capture is recorded → (a) reddens —
   implementer must prove that RED once.
 - sql-in-preview remains accepted-untested; the inherited set_capture hunk
@@ -921,7 +921,7 @@ best-judgment per recommended option; reversible):
   (distinctive literal `40 + 2`, distinctive result `42` — avoids the ambient-`2` regex-dodging the julia preview spec needed for its `1 + 1` doc).
 - **Seam (mount + wait + assertion surface):** new
   `q2-preview-spa/e2e/engine-capture-splice-marimo.spec.ts`, mirroring
-  `engine-capture-splice-julia.spec.ts`'s shape. Gates: deno+uv presence AND
+  `engine-capture-splice-julia.spec.ts`\'s shape. Gates: deno+uv presence AND
   opt-in `QUARTO_SC21_LIVE=1` (user directive; same pattern as the julia
   spec's `QUARTO_PC6_LIVE`). Wait via `waitForFunction` on the pane
   (NO reload — the eager capture is recorded at server startup, so the first SPA render may already be spliced; the echo spec documents these semantics in its header). CONJUNCTIVE

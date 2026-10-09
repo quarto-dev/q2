@@ -31,7 +31,7 @@ issues, 1051 dependencies)** was performed and inspected:
 
 | check | result |
 |---|---|
-| `braid import` wall time | ~0.7s CPU (sync timeout dominates wall) |
+| `braid import` wall time | \~0.7s CPU (sync timeout dominates wall) |
 | whole automerge doc on disk | **460 KB** |
 | `braid list --all --json` | 1145 strands, sub-second |
 | dependencies preserved | **1051 / 1051** (all four types: `blocks`, `parent-child`, `discovered-from`, `related`) |
@@ -57,7 +57,7 @@ Import preserving ids means **none of those references need editing**. The
 "force a specific id" capability the migration hinges on is really "import
 preserves ids" — note that `braid create` has *no* `--id` flag, and doesn't
 need one: with a CRDT, parallel workers never need to pre-agree on ids to
-avoid collision (beads' `create --id worker1-100` pattern becomes obsolete).
+avoid collision (beads\' `create --id worker1-100` pattern becomes obsolete).
 
 ---
 
@@ -77,7 +77,7 @@ avoid collision (beads' `create --id worker1-100` pattern becomes obsolete).
    periodic `braid export` snapshot to the repo for grep/diff/recovery, but:
    - The snapshot flows **automerge → file only**. It is **never** a sync or
      import source back into the skein (except the *one-time* initial
-     migration import, which reads beads' JSONL, not this snapshot).
+     migration import, which reads beads\' JSONL, not this snapshot).
    - On any git conflict in the snapshot file, **resolve by pulling fresh
      `braid export` from automerge** — even if that means "cross-branch
      contamination" (the snapshot on branch A showing issue state created on
@@ -142,7 +142,7 @@ is a known-good replay, not a one-off.
       sync server) — copied from `.braid.toml` without printing the secret
 - [x] Committed-marker mechanism: `.braid-project` (contents: `q2`) created;
       verified a clean dir with only the marker resolves to 1145 strands via
-      the user config (replaces beads' `.beads/redirect` entirely)
+      the user config (replaces beads\' `.beads/redirect` entirely)
 - [x] Final `br sync --flush-only`; `braid import .beads/issues.jsonl` →
       "imported 1145 strands (skipped 2 tombstones)"
 - [x] Re-ran assertions on the real skein: 1145 strands, 1053 deps, 0
@@ -221,7 +221,7 @@ the canonical tracker.
 - [x] Final `br sync --flush-only` + final `braid import` done (idempotent;
       synced the `bd-sjk4t` close). This was **the** final re-import — beads is
       now frozen, so braid-only edits are safe (no future import will overwrite).
-- [ ] `beads.db`/`beads.db-wal` (~28 MB WAL) left in place for now; harmless
+- [ ] `beads.db`/`beads.db-wal` (\~28 MB WAL) left in place for now; harmless
       (gitignored working files). Can be removed in a later cleanup.
 - [ ] CI / hooks that touch `.beads/`: none found writing to it; revisit if any
       surface. (The post-edit `cargo fmt` hook is unrelated.)

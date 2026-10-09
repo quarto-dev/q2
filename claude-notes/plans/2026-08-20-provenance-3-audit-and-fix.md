@@ -32,7 +32,7 @@ lockfiles (`Cargo.lock`, `crates/wasm-quarto-hub-client/Cargo.lock`):
 
 | former gate | status |
 |---|---|
-| `quarto-source-map` 0.1.2 (the four behaviour fixes incl. `preimage_in`'s blanket-`None`) | in the lock as **0.1.3** |
+| `quarto-source-map` 0.1.2 (the four behaviour fixes incl. `preimage_in`\'s blanket-`None`) | in the lock as **0.1.3** |
 | `quarto-source-map` 0.1.3 (`ProvenanceBuilder`: `in_file`, `in_parent`, `verbatim`, `replacement`, `finish`) | in the lock |
 | Plan 1's `preimage_in` doc-comment rewrite | shipped in 0.1.3, `source_info.rs:410-457` ("a `Some(hull)` licenses *locating*… it does not license *copying*") |
 | Plan 2 Phases 3–4 (q2 consumes `content_source_info`; attribute path drives the builder) | landed on `feature/yaml-provenance` (Plan 2 § EXECUTION STATUS, session 4) |
@@ -46,7 +46,7 @@ classification pass. Phase 6 discharges Plan 2's hand-off (cheap guards and tigh
 runs **before** the comrak fix (Phase 7), which the plan itself ranks lowest-value. Phase 8
 closes the epic.
 
-**Before writing any Phase 7 code, read Plan 1 § The shared builder** — `ProvenanceBuilder`'s
+**Before writing any Phase 7 code, read Plan 1 § The shared builder** — `ProvenanceBuilder`\'s
 signature lives only there (and in `quarto-source-map-0.1.3/src/provenance_builder.rs`), so
 Phase 7 is not implementable from this plan alone.
 
@@ -65,7 +65,7 @@ tests failed the binding check and were corrected — see § Vacuity findings.
 | **T2** | e2e, real binary | `q2 render` | fold-shaped `_quarto.yml` (`aaa`⏎`bbb` plain scalar) → render → assert emitted bytes are the **content** (`aaa bbb`) not the **source** (`aaa\nbbb`) | none | whichever newly-classified copy site is fixed; **only write T2 if Phase 1's classification finds one.** If all 24 are `locate`, T2 has no hunk and must not be written |
 | **T3** | unit, in-crate | `comrak_to_pandoc::empty_source_info` | convert a node with no location → assert `matches!(si, SourceInfo::Generated { .. })` | none | `lib.rs:31` back to `SourceInfo::original(FileId(0), 0, 0)` ⇒ RED |
 | **T5** | unit, in-crate | `comrak_to_pandoc` `Text` conversion + `ProvenanceBuilder` | `aa\*bb cc &amp; dd ee` → convert → assert `map_offset(0)` of the **`dd`** and **`ee`** `Str`s resolves to **16** and **19** | none | the lockstep walker → back to `base_offset + byte_idx` (`text.rs:99`, inside `tokenize_text_with_source` `:91-160`) ⇒ `dd` resolves to 11 ⇒ RED |
-| **T8** | unit, in-crate (`config_value.rs` tests; harness `quarto_config_md_inline` at `:1475`) | `quarto.config.md` through a Lua filter | `quarto.config.md("x")` → take the node's `SourceInfo` → assert `resolve_byte_range() == None` (also assert `map_offset(0, ctx) == None`, for documentation — it cannot redden, the `Generated` arm returns `None` unconditionally) | none | attach an `Invocation` anchor in `filter_source_info` (`types.rs:2291`) ⇒ `resolve_byte_range`'s `Generated` arm delegates to `invocation_anchor()` (0.1.3 `source_info.rs:403-406`) ⇒ `Some` ⇒ RED |
+| **T8** | unit, in-crate (`config_value.rs` tests; harness `quarto_config_md_inline` at `:1475`) | `quarto.config.md` through a Lua filter | `quarto.config.md("x")` → take the node's `SourceInfo` → assert `resolve_byte_range() == None` (also assert `map_offset(0, ctx) == None`, for documentation — it cannot redden, the `Generated` arm returns `None` unconditionally) | none | attach an `Invocation` anchor in `filter_source_info` (`types.rs:2291`) ⇒ `resolve_byte_range`\'s `Generated` arm delegates to `invocation_anchor()` (0.1.3 `source_info.rs:403-406`) ⇒ `Some` ⇒ RED |
 | **T7** | unit, in-crate | `quarto_core::crossref::codeblock_shorthand::body_source_for` | a cell whose entire body is the word `python`, fenced ```` ```{python} ```` → assert the resolved span is `12..18` (the body), not `4..10` (inside `{python}`; measured 2026-08-23) | none | the **bounded between-fences search** → back to whole-block `block_text.find(&cb.text)` (`:486`) ⇒ span lands in the info string ⇒ RED. (An earlier revision named "the `map_offset` pair" as the hunk; that pair on `cb.source_info` is the whole-block hull and cannot locate the body — it bound nothing.) |
 | **T10** | e2e, real binary (`crates/quarto/tests/integration/`) | `q2 render` over the founding repro: `_quarto.yml` website with navbar `text: '<span id="x">Ask AI ✨</span>'`, `index.qmd` with a title | assert exit 0, two `Q-2-9` warnings, **and their caret positions** `_quarto.yml:7:16` and `_quarto.yml:7:37` (measured 2026-08-23, recommendations § 4 config G) | none | the carets bind to Plan 2 Phase 3's `content_source_info` consumption in the config path (`meta.rs:255`, `config_markdown.rs:326`): revert either `.unwrap_or(&…)` base to the raw span ⇒ the second caret moves to `:7:36` (one byte left, onto `✨`) ⇒ RED. The exit-0 half is an **upstream pin** (see next table) and has no q2 hunk |
 | **T11** | unit, in-crate | `quarto_config::span_assert::resolve_span` | the existing `codeblock_shorthand.rs:~1417-1440` test whose 20-line NOTE explains why it *cannot* call `resolve_span`: replace the NOTE + hand-rolled `map_offset` pair with `resolve_span(inner, &sources).expect(..)` and assert the same text | none | the `is_gapless` narrowing (Phase 6) → back to whole-`Concat` contiguity ⇒ `Err(SpanProblem::Concat)` ⇒ RED |
@@ -118,11 +118,11 @@ q2). They are legitimate but must not be counted as guarding anything:
 
 | id | what it actually is | why no hunk |
 |---|---|---|
-| **T1** (Phase 1) | an **invariant pin** | unit, in-crate (`pipeline.rs` test module, harness as in `render_qmd_to_preview_ast_emits_inline_footnote_section` at `:3202`): render a document with **one inline footnote** through `render_qmd_to_preview_ast`, parse `output.untransformed_ast_json`, assert **every** `astContext.p` entry is wire-code `0` (`Original`) with the document's own `file_id`. **No line-level hunk exists**: the pool is all-`Original` because `capture_untransformed_ast_json` re-parses the raw bytes with a fresh context (`pipeline.rs:1007`) — *not* because of `:1013`'s `parent_source_info: None`, which is built after the parse and read only by the JSON writer (`parent_source_info` is consumed at parse time, `location.rs:214`). The honest hunk is the rewrite the comment at `:914-919` invites — "derive the baseline from the pipeline's own parse" — under which the footnote transform's `Generated { by: footnotes() }` section (code `4`) appears in the pool ⇒ RED. That is why the fixture is a footnote, not a navbar: `footnotes` runs in the preview pipeline (`:1534-1536`), `title-block` does not (`:1533`), and no project config is needed. |
-| **T9** (Phase 6) | an **invariant pin** | e2e, real binary (`crates/quarto/tests/integration/diagnostic_render_panic_boundary.rs`): `q2 render` + `QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER=0` over `render_exit_codes.rs:28-69`'s duplicate-crossref fixture (exactly one `Q-15-1` **error**) → assert `!status.success()`, stderr contains `internal error rendering diagnostic Q-15-1`, and does **not** contain the diagnostic's title text. **No guard mutation can redden it**: `should_exit_nonzero(&summary)` (`render.rs:848`) counts the immutable summary, not what was printed (`:836`). The only hunk is "compute exit status from printed diagnostics", a refactor someone could make. |
+| **T1** (Phase 1) | an **invariant pin** | unit, in-crate (`pipeline.rs` test module, harness as in `render_qmd_to_preview_ast_emits_inline_footnote_section` at `:3202`): render a document with **one inline footnote** through `render_qmd_to_preview_ast`, parse `output.untransformed_ast_json`, assert **every** `astContext.p` entry is wire-code `0` (`Original`) with the document's own `file_id`. **No line-level hunk exists**: the pool is all-`Original` because `capture_untransformed_ast_json` re-parses the raw bytes with a fresh context (`pipeline.rs:1007`) — *not* because of `:1013`\'s `parent_source_info: None`, which is built after the parse and read only by the JSON writer (`parent_source_info` is consumed at parse time, `location.rs:214`). The honest hunk is the rewrite the comment at `:914-919` invites — "derive the baseline from the pipeline's own parse" — under which the footnote transform's `Generated { by: footnotes() }` section (code `4`) appears in the pool ⇒ RED. That is why the fixture is a footnote, not a navbar: `footnotes` runs in the preview pipeline (`:1534-1536`), `title-block` does not (`:1533`), and no project config is needed. |
+| **T9** (Phase 6) | an **invariant pin** | e2e, real binary (`crates/quarto/tests/integration/diagnostic_render_panic_boundary.rs`): `q2 render` + `QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER=0` over `render_exit_codes.rs:28-69`\'s duplicate-crossref fixture (exactly one `Q-15-1` **error**) → assert `!status.success()`, stderr contains `internal error rendering diagnostic Q-15-1`, and does **not** contain the diagnostic's title text. **No guard mutation can redden it**: `should_exit_nonzero(&summary)` (`render.rs:848`) counts the immutable summary, not what was printed (`:836`). The only hunk is "compute exit status from printed diagnostics", a refactor someone could make. |
 | **T4** (Phase 5) | a **characterization probe** | Its own checklist says "if it goes red, file a strand" — i.e. it exists to *discover* whether a writer-provenance defect exists, not to guard a fix. If it goes green it guards nothing. Run it, record the result, keep it `#[ignore]`d if red. |
 | **T6** (Phase 7 blockquote) | an **upstream-behavior pin** on comrak | Nothing in q2 makes drift reset at `SoftBreak`; comrak's per-line `Text` nodes do. Its "revert" is a comrak version bump. Keep it, and say so in the test name/comment, so nobody reads it as covering our code. |
-| **T10**'s exit-0 half (Phase 6) | an **upstream-behavior pin** on `quarto-source-map`'s `offset_to_location` floor + `quarto-error-reporting`'s snap | Measured 2026-08-23 (recommendations § 4): the abort returns only if q2's mapping regresses **and** both upstream guards are gone. The caret half of T10 (table above) is what binds to q2; the exit-code half is the only witness of the founding abort anywhere, which is why it is asserted too. |
+| **T10**\'s exit-0 half (Phase 6) | an **upstream-behavior pin** on `quarto-source-map`\'s `offset_to_location` floor + `quarto-error-reporting`\'s snap | Measured 2026-08-23 (recommendations § 4): the abort returns only if q2's mapping regresses **and** both upstream guards are gone. The caret half of T10 (table above) is what binds to q2; the exit-code half is the only witness of the founding abort anywhere, which is why it is asserted too. |
 | **Phase 6's `q_2_28`/`q_2_33` accessor swap** | **accepted-untested** | Both codes are corpus-only (no Rust emission site) and `find_violation_offsets` takes an offset, not a location, so a `Concat`-rooted diagnostic cannot be injected. The `== ">}}}"` content check is the real splice guard; the comment is the artifact. |
 | **Phase 6's `render.rs:904` wrap** | **accepted-untested** | The path cannot panic today (`ctx = None` never reaches a renderer); the wrap is uniformity, not a fix. |
 
@@ -179,83 +179,83 @@ fix: the site is not broken; what is missing is anything that would notice if
 the invariant moved.
 
 - [x] **Classify the 24 unclassified calls** as **locate** (computes a position,
-      compares identity, or bounds a search) or **copy** (slices source text
-      that is then emitted). The enumerated call list is in § 3. Output: a
-      **26-row** table (the two rows below are already classified and lead it)
-      appended to § Evidence — the deliverable even if every answer is
-      "locate".
+  compares identity, or bounds a search) or **copy** (slices source text
+  that is then emitted). The enumerated call list is in § 3. Output: a
+  **26-row** table (the two rows below are already classified and lead it)
+  appended to § Evidence — the deliverable even if every answer is
+  "locate".
 
-      | file:line | locate / copy | what it does with the range |
-      |---|---|---|
-      | `incremental.rs:171` | copy | slices `original_qmd` → `CoarsenedEntry::Verbatim` |
-      | `postprocess.rs:660` | locate | min/max span over a run |
+  | file:line | locate / copy | what it does with the range |
+  |---|---|---|
+  | `incremental.rs:171` | copy | slices `original_qmd` → `CoarsenedEntry::Verbatim` |
+  | `postprocess.rs:660` | locate | min/max span over a run |
 
-      Plan 1's hypothesis, to test rather than assume: the split falls along the
-      incremental-writer / span-computation line, with `incremental.rs`'s
-      `Verbatim` arms the only copies.
+  Plan 1's hypothesis, to test rather than assume: the split falls along the
+  incremental-writer / span-computation line, with `incremental.rs`\'s
+  `Verbatim` arms the only copies.
 - [x] **T1 — pin the invariant that makes the copy site safe** (seam spec: an
-      invariant pin, footnote fixture, no line-level hunk). Mount it on
-      `render_qmd_to_preview_ast` via the in-crate harness. One test, because
-      one assertion covers both failure modes: **every `SourceInfo` in the
-      captured baseline pool must be an `Original` rooted at the document's own
-      `FileId`.** A parent threaded into the baseline parse makes them
-      `Substring`; a transform-injected node carries `Generated`
-      (`shortcode_resolve.rs:1175`, `appendix.rs`, `footnotes.rs`,
-      `title_block.rs`) or a foreign file id. So the single pool-shape assertion
-      catches both "someone added a parent" and "the capture moved after the
-      stages" — which is why it beats asserting source order, a claim about a
-      function body rather than about a value.
-      The failure message must name **both** causes and point at
-      `incremental.rs:171`, so whoever trips it lands on the copy site rather
-      than on the capture. In the same commit, correct findings § 3 item 3(a):
-      the baseline is parent-less because `capture_untransformed_ast_json`
-      re-parses raw bytes through `qmd_to_pandoc` (`pipeline.rs:1007`), not
-      because of the writer-only `ASTContext` at `:1013`. Note in the test that this invariant load-bears for
-      provenance correctness while living in `quarto-core`, which neither
-      `quarto-source-map` nor `quarto-yaml` owns.
+  invariant pin, footnote fixture, no line-level hunk). Mount it on
+  `render_qmd_to_preview_ast` via the in-crate harness. One test, because
+  one assertion covers both failure modes: **every `SourceInfo` in the
+  captured baseline pool must be an `Original` rooted at the document's own
+  `FileId`.** A parent threaded into the baseline parse makes them
+  `Substring`; a transform-injected node carries `Generated`
+  (`shortcode_resolve.rs:1175`, `appendix.rs`, `footnotes.rs`,
+  `title_block.rs`) or a foreign file id. So the single pool-shape assertion
+  catches both "someone added a parent" and "the capture moved after the
+  stages" — which is why it beats asserting source order, a claim about a
+  function body rather than about a value.
+  The failure message must name **both** causes and point at
+  `incremental.rs:171`, so whoever trips it lands on the copy site rather
+  than on the capture. In the same commit, correct findings § 3 item 3(a):
+  the baseline is parent-less because `capture_untransformed_ast_json`
+  re-parses raw bytes through `qmd_to_pandoc` (`pipeline.rs:1007`), not
+  because of the writer-only `ASTContext` at `:1013`. Note in the test that this invariant load-bears for
+  provenance correctness while living in `quarto-core`, which neither
+  `quarto-source-map` nor `quarto-yaml` owns.
 - [x] **Fix the call-site comment at `incremental.rs:162-168`** (`:169` is the `match` head). It asserts the
-      byte-identity reading Plan 1 is retracting upstream, so once 0.1.2 lands
-      the codebase asserts both readings — worse than asserting only the wrong
-      one. (Plan 1's ninth hand-off obligation, `7d799d623`.) Say the `.get()`
-      guard checks **bounds, not identity**, and that the arm is safe only
-      because the baseline AST is untransformed and parent-less.
+  byte-identity reading Plan 1 is retracting upstream, so once 0.1.2 lands
+  the codebase asserts both readings — worse than asserting only the wrong
+  one. (Plan 1's ninth hand-off obligation, `7d799d623`.) Say the `.get()`
+  guard checks **bounds, not identity**, and that the arm is safe only
+  because the baseline AST is untransformed and parent-less.
 - [ ] **T2 — failing test first, for any *newly* discovered copy site:** a
-      fold-shaped end-to-end fixture (`aaa`⏎`bbb` as a plain scalar) driven
-      through the real binary, asserting the emitted bytes are the *content* and
-      not the *source*. Observe red before fixing.
+  fold-shaped end-to-end fixture (`aaa`⏎`bbb` as a plain scalar) driven
+  through the real binary, asserting the emitted bytes are the *content* and
+  not the *source*. Observe red before fixing.
 
-      **Not written.** The classification did find two new copy sites
-      (`assemble_inline_content`'s `KeepBefore` arm and
-      `assemble_recursed_container`'s verbatim early return), but both are
-      latent members of the very class this phase guards rather than fixes, so
-      no fix exists to observe RED against and T2 would be bound to nothing.
-      They are named alongside the original copy site in T1's failure message
-      and in the corrected call-site comments instead. See § Evidence →
-      Phase 1 → "T2 — not written". Box left unchecked deliberately: the work
-      was resolved, not performed.
+  **Not written.** The classification did find two new copy sites
+  (`assemble_inline_content`\'s `KeepBefore` arm and
+  `assemble_recursed_container`\'s verbatim early return), but both are
+  latent members of the very class this phase guards rather than fixes, so
+  no fix exists to observe RED against and T2 would be bound to nothing.
+  They are named alongside the original copy site in T1's failure message
+  and in the corrected call-site comments instead. See § Evidence →
+  Phase 1 → "T2 — not written". Box left unchecked deliberately: the work
+  was resolved, not performed.
 - [x] **Confirm Plan 1's 0.1.2 blanket-`None` is regression-free.** 0.1.3 is in
-      the lock and the branch is green, so this is answerable **now by
-      inspection** (run `cargo nextest run -p pampa` and read the snapshot
-      list), not by a future measurement. Two shapes:
-      **(a)** `postprocess.rs:660` documents at `:651-652` that it *relies* on
-      `preimage_in` returning `Some(hull)` for a contiguous `Concat`, falling
-      back to `combine(first, last)` on `None`. **Success condition:** state, in
-      § Evidence, whether that fallback moves any existing snapshot, and if so
-      which. If none move, say so — that is the answer. (Do not cite the
-      `:1845-1852` module doc as evidence of harm: that bug was
-      `combine(self, self)` specifically.)
-      **(b)** `cell_options` is the one production `Concat` producer with
-      length-matched pieces, but multi-option cells are *gappy*
-      (`option_content_ranges` returns `content_start..line.len()`, skipping the
-      next line's `#| ` prefix — `crates/quarto-core/src/cell_options/mod.rs:247-263`), so they already
-      return `None`. Only a **single-option cell** yields one piece with a hull
-      that blanket-`None` removes. Plan 1 asserts both shapes in its own
-      Phase 1; confirm the q2 side agrees.
+  the lock and the branch is green, so this is answerable **now by
+  inspection** (run `cargo nextest run -p pampa` and read the snapshot
+  list), not by a future measurement. Two shapes:
+  **(a)** `postprocess.rs:660` documents at `:651-652` that it *relies* on
+  `preimage_in` returning `Some(hull)` for a contiguous `Concat`, falling
+  back to `combine(first, last)` on `None`. **Success condition:** state, in
+  § Evidence, whether that fallback moves any existing snapshot, and if so
+  which. If none move, say so — that is the answer. (Do not cite the
+  `:1845-1852` module doc as evidence of harm: that bug was
+  `combine(self, self)` specifically.)
+  **(b)** `cell_options` is the one production `Concat` producer with
+  length-matched pieces, but multi-option cells are *gappy*
+  (`option_content_ranges` returns `content_start..line.len()`, skipping the
+  next line's `#| ` prefix — `crates/quarto-core/src/cell_options/mod.rs:247-263`), so they already
+  return `None`. Only a **single-option cell** yields one piece with a hull
+  that blanket-`None` removes. Plan 1 asserts both shapes in its own
+  Phase 1; confirm the q2 side agrees.
 - [x] **Cite the corrected `preimage_in` doc comment** — shipped in 0.1.3
-      (`quarto-source-map-0.1.3/src/source_info.rs:410-457`: a `Concat` hull is
-      "an offset claim, not a byte-identity claim"; a `Substring` over a `Concat`
-      returns `None`). Quote from the registry source or `~/src/quarto-source-map`
-      at tag 0.1.3; do not quote a remembered replacement.
+  (`quarto-source-map-0.1.3/src/source_info.rs:410-457`: a `Concat` hull is
+  "an offset claim, not a byte-identity claim"; a `Substring` over a `Concat`
+  returns `None`). Quote from the registry source or `~/src/quarto-source-map`
+  at tag 0.1.3; do not quote a remembered replacement.
 
 ## Phase 2 — the `SourceInfo::original(` surface
 
@@ -264,49 +264,49 @@ Five are Phase 7's comrak defect; the rest are safe by shape or are the three
 drift amplifiers below.
 
 - [x] **Comment the three drift amplifiers** (`postprocess.rs:317`, `:669`,
-      `:1833`) with the ordering constraint from § 4: fix producers before these
-      consumers, or the fix silently does not reach the output. Record it in the
-      code; do not restructure.
+  `:1833`) with the ordering constraint from § 4: fix producers before these
+  consumers, or the fix silently does not reach the output. Record it in the
+  code; do not restructure.
 - [x] Separately at `postprocess.rs:1833`: note the hardcoded `attr_end + 1`
-      assumption in the same comment.
+  assumption in the same comment.
 - [x] **Discharge Plan 1's hand-off** — its Phase 1 audit shipped no fixes
-      outside `quarto-source-map`. Examine `offset_to_location_bytes`
-      (`quarto-parse-errors/src/error_generation.rs:330`, a documented
-      "bytes-aware sibling") plus `quarto-yaml`'s own `Location` uses
-      (`~/src/quarto-yaml`). Plan 1 measured the two `offset_to_location`
-      implementations in `quarto-source-map` disagreeing by one column for a
-      mid-character offset; a third with its own rule is the same hazard.
-      **Output:** for each, one line in § Evidence stating what it returns for a
-      mid-character offset — floored, ceiled, raw, or overcounted — and whether
-      that agrees with `FileInformation::offset_to_location` after Plan 1's fix.
-      Examine `~/src/quarto-yaml` **at the tag q2 consumes** (`Cargo.lock`:
-      0.1.3), not its HEAD. **Routing:** a q2-side disagreement is fixed here;
-      a `quarto-yaml`-side one is **out of scope** — file a strand against
-      `posit-dev/quarto-yaml` (Plan 1 is closed; there is no one to notify).
-- [x] **T3 first, then change** `comrak-to-pandoc/src/lib.rs:31`'s
-      `empty_source_info()` from `SourceInfo::original(FileId(0), 0, 0)` to a
-      `Generated`, so "no location" stops being indistinguishable from "start of
-      file 0" — the shape `span_assert` flags as `SpanProblem::SuspiciousDefault`
-      (variant `quarto-config/src/span_assert.rs:74`, check at `:265`). Out of
-      this bug class but cheap and adjacent. ~~**Expect snapshot movement** in
-      `comrak-to-pandoc` tests~~ — **corrected 2026-08-23 (measured).**
-      `crates/comrak-to-pandoc` contains **zero** `.snap` files; its only
-      dependent is `pampa` (`crates/pampa/Cargo.toml:49`), which has 212, so
-      any movement would land there. **None did, in either crate**, and the
-      reason is structural, not luck: every `empty_source_info()` call sits on
-      a `source_ctx == None` branch (`block.rs:26`, `inline.rs:23`,
-      `text.rs:25`-`:90`), and pampa's only entry point
-      (`readers/commonmark.rs:47`) always passes `Some(&source_ctx)`. The
-      helper is therefore unreachable from every render and snapshot path;
-      **this crate's own no-source tests are its only callers.**
-      (*Corrected 2026-08-23, fix round 1:* an earlier revision also named
-      `normalize.rs` as a caller. It is not one — its `empty_source_info` is a
-      separate `#[cfg(test)]`-local helper still on the old `Original` shape,
-      and the file has no `use crate` imports at all. Dropping the phantom
-      caller makes the reachability conclusion **stronger**, not weaker: the
-      helper's entire live surface is the three no-source branches, every one
-      of which pampa's entry point bypasses.)
-      Phase 7 is a different matter — see its item.
+  outside `quarto-source-map`. Examine `offset_to_location_bytes`
+  (`quarto-parse-errors/src/error_generation.rs:330`, a documented
+  "bytes-aware sibling") plus `quarto-yaml`\'s own `Location` uses
+  (`~/src/quarto-yaml`). Plan 1 measured the two `offset_to_location`
+  implementations in `quarto-source-map` disagreeing by one column for a
+  mid-character offset; a third with its own rule is the same hazard.
+  **Output:** for each, one line in § Evidence stating what it returns for a
+  mid-character offset — floored, ceiled, raw, or overcounted — and whether
+  that agrees with `FileInformation::offset_to_location` after Plan 1's fix.
+  Examine `~/src/quarto-yaml` **at the tag q2 consumes** (`Cargo.lock`:
+  0.1.3), not its HEAD. **Routing:** a q2-side disagreement is fixed here;
+  a `quarto-yaml`-side one is **out of scope** — file a strand against
+  `posit-dev/quarto-yaml` (Plan 1 is closed; there is no one to notify).
+- [x] **T3 first, then change** `comrak-to-pandoc/src/lib.rs:31`\'s
+  `empty_source_info()` from `SourceInfo::original(FileId(0), 0, 0)` to a
+  `Generated`, so "no location" stops being indistinguishable from "start of
+  file 0" — the shape `span_assert` flags as `SpanProblem::SuspiciousDefault`
+  (variant `quarto-config/src/span_assert.rs:74`, check at `:265`). Out of
+  this bug class but cheap and adjacent. ~~**Expect snapshot movement** in
+  `comrak-to-pandoc` tests~~ — **corrected 2026-08-23 (measured).**
+  `crates/comrak-to-pandoc` contains **zero** `.snap` files; its only
+  dependent is `pampa` (`crates/pampa/Cargo.toml:49`), which has 212, so
+  any movement would land there. **None did, in either crate**, and the
+  reason is structural, not luck: every `empty_source_info()` call sits on
+  a `source_ctx == None` branch (`block.rs:26`, `inline.rs:23`,
+  `text.rs:25`-`:90`), and pampa's only entry point
+  (`readers/commonmark.rs:47`) always passes `Some(&source_ctx)`. The
+  helper is therefore unreachable from every render and snapshot path;
+  **this crate's own no-source tests are its only callers.**
+  (*Corrected 2026-08-23, fix round 1:* an earlier revision also named
+  `normalize.rs` as a caller. It is not one — its `empty_source_info` is a
+  separate `#[cfg(test)]`-local helper still on the old `Original` shape,
+  and the file has no `use crate` imports at all. Dropping the phantom
+  caller makes the reachability conclusion **stronger**, not weaker: the
+  helper's entire live surface is the three no-source branches, every one
+  of which pampa's entry point bypasses.)
+  Phase 7 is a different matter — see its item.
 
 ## Phase 3 — `quarto-xml`
 
@@ -322,13 +322,13 @@ arithmetic at all and need no work.
 that whoever revives it learns the precondition.
 
 - [x] Note at `quarto-xml/src/parser.rs:55` (`parse_with_parent`) that it has no
-      callers, and that its precondition if revived is: the content handed to it
-      must be a **byte-identical slice** of the parent, because
-      `make_source_info`'s `Substring` branch composes affinely. Say that
-      attribute values are entity-decoded (`parser.rs:469` calls
-      `unescape_value()`) while `value_source` spans raw text *including the
-      quotes* (`parser.rs:548-558`), so an attribute value is exactly the input
-      that would break it.
+  callers, and that its precondition if revived is: the content handed to it
+  must be a **byte-identical slice** of the parent, because
+  `make_source_info`\'s `Substring` branch composes affinely. Say that
+  attribute values are entity-decoded (`parser.rs:469` calls
+  `unescape_value()`) while `value_source` spans raw text *including the
+  quotes* (`parser.rs:548-558`), so an attribute value is exactly the input
+  that would break it.
 
 ## Phase 4 — the `quarto.config.md` Lua path
 
@@ -338,27 +338,27 @@ to map into, so the fix would be an ephemeral `SourceFile`. The original "if
 live, fix as in Phase 1" branch is deleted, not deferred.
 
 - [x] **T8 — guard the inertness, which is currently untested.** Three
-      independent grounds hold today and nothing notices if one fails, so the
-      comment below asks a reader to trust an unguarded invariant. Call
-      `quarto.config.md("x")` through a Lua filter and assert the resulting
-      node's `SourceInfo` yields **`resolve_byte_range() == None`** (assert
-      `map_offset(0, ctx) == None` too, for documentation, but note it cannot
-      redden — the `Generated` arm returns `None` unconditionally, so only
-      `resolve_byte_range` discriminates). **Revert hunk:** attach an
-      `Invocation` anchor in `filter_source_info` (`types.rs:2291`) ⇒
-      `resolve_byte_range` starts resolving through it ⇒ RED.
+  independent grounds hold today and nothing notices if one fails, so the
+  comment below asks a reader to trust an unguarded invariant. Call
+  `quarto.config.md("x")` through a Lua filter and assert the resulting
+  node's `SourceInfo` yields **`resolve_byte_range() == None`** (assert
+  `map_offset(0, ctx) == None` too, for documentation, but note it cannot
+  redden — the `Generated` arm returns `None` unconditionally, so only
+  `resolve_byte_range` discriminates). **Revert hunk:** attach an
+  `Invocation` anchor in `filter_source_info` (`types.rs:2291`) ⇒
+  `resolve_byte_range` starts resolving through it ⇒ RED.
 - [x] Add a comment at `config_value.rs:613-642` (the `quarto.config.md`
-      constructor; `filter_source_info(lua)` is the base at `:626`) recording *why* it is safe — the
-      unconditional `None` in `map_offset`'s `Generated` arm, and the absence of
-      production anchor mutation — and pointing at T8 as the thing that notices
-      if it changes. The safety depends on facts several crates away; the next
-      auditor should not have to re-derive it.
+  constructor; `filter_source_info(lua)` is the base at `:626`) recording *why* it is safe — the
+  unconditional `None` in `map_offset`\'s `Generated` arm, and the absence of
+  production anchor mutation — and pointing at T8 as the thing that notices
+  if it changes. The safety depends on facts several crates away; the next
+  auditor should not have to re-derive it.
 - [x] Name the forward risk in the same comment. `filter_source_info` returning
-      `from: SmallVec::new()` is exactly what someone will later "improve" by
-      anchoring to the filter invocation site, and
-      `quarto-core/src/transforms/shortcode_resolve.rs:1175` already establishes
-      that pattern in production. Say that doing so makes `resolve_byte_range`
-      live on a base with no byte extent.
+  `from: SmallVec::new()` is exactly what someone will later "improve" by
+  anchoring to the filter invocation site, and
+  `quarto-core/src/transforms/shortcode_resolve.rs:1175` already establishes
+  that pattern in production. Say that doing so makes `resolve_byte_range`
+  live on a base with no byte extent.
 
 ## Phase 5 — the engine `map_offset` pair
 
@@ -366,17 +366,17 @@ Findings: § 6. Two production sites, not three; the existing test is vacuous;
 and the invariant is **writer provenance**, not this bug class.
 
 - [x] **T4 — a characterization probe, not a regression test.** Extend
-      `test_build_source_map_maps_lines_to_file_provenance` (`ts_engine.rs:2977`)
-      with a non-identity fixture: a document the QMD writer normalizes, so
-      `input`'s coordinate space genuinely differs from `ctx.source_info`'s. One
-      test covers both production sites. **It has no revert hunk** — it exists
-      to find out whether a defect is there. If it goes green it guards nothing;
-      say so rather than counting it as coverage.
+  `test_build_source_map_maps_lines_to_file_provenance` (`ts_engine.rs:2977`)
+  with a non-identity fixture: a document the QMD writer normalizes, so
+  `input`\'s coordinate space genuinely differs from `ctx.source_info`\'s. One
+  test covers both production sites. **It has no revert hunk** — it exists
+  to find out whether a defect is there. If it goes green it guards nothing;
+  say so rather than counting it as coverage.
 - [x] **If it goes red, do not fix it here** — that is a writer-provenance
-      defect, outside this epic. Record the observed drift in § Evidence, file a
-      strand citing `engine_execution.rs:732` and
-      `pampa/src/writers/qmd.rs:2880-2903`, and leave the new test `#[ignore]`d
-      with a comment pointing at the strand rather than deleting it.
+  defect, outside this epic. Record the observed drift in § Evidence, file a
+  strand citing `engine_execution.rs:732` and
+  `pampa/src/writers/qmd.rs:2880-2903`, and leave the new test `#[ignore]`d
+  with a comment pointing at the strand rather than deleting it.
 
 ## Phase 6 — discharge Plan 2's hand-off: guards and tightenings
 
@@ -387,106 +387,106 @@ owner on 2026-08-23 in two rounds (eleven choices in all; the T1/T10/T12/
 before the comrak fix because it is worth more.
 
 - [x] **T7 first, then fix `codeblock_shorthand.rs:486`** (`body_source_for`,
-      `crates/quarto-core/src/crossref/codeblock_shorthand.rs:470-490`). Replace
-      the whole-block `find` with a search **bounded to the region between the
-      fence lines** (and rewrite the function's doc comment, which currently
-      describes the whole-block search): start after the first `\n` of `block_text`; end before the
-      closing fence line when the block text ends with one (tree-sitter error
-      recovery can omit it). Keep the existing fallback to the block span when
-      the search fails (blockquote/list continuations). Comment the one
-      remaining hole — a body consisting solely of fence characters — and that
-      the span is then a few bytes off but still inside the block. **Do not**
-      use the `map_offset(0)`/`map_offset(length())` pair on `cb.source_info`:
-      that is the whole-block hull (measured: `4..10` vs truth `12` for a
-      `python`-only cell).
-      **Correction 2026-08-23 (in execution).** The hole named in this item is
-      wrong in two ways, both measured in Phase 6a: a body consisting solely of
-      fence characters resolves **correctly** when the closing fence is present
-      (```` ````{python}\n```\n```` ```` → `13..16`); the real hole is a body
-      whose *last line* is fence-only in a block with **no** closing fence, and
-      it degrades to the **whole block**, not "a few bytes off". The landed doc
-      comment states the measured shape. Same correction on
-      `claude-notes/research/2026-08-23-provenance-3-design-recommendations.md`
-      § 1, where it originated; full evidence in § Evidence → Phase 6 → 6a.
+  `crates/quarto-core/src/crossref/codeblock_shorthand.rs:470-490`). Replace
+  the whole-block `find` with a search **bounded to the region between the
+  fence lines** (and rewrite the function's doc comment, which currently
+  describes the whole-block search): start after the first `\n` of `block_text`; end before the
+  closing fence line when the block text ends with one (tree-sitter error
+  recovery can omit it). Keep the existing fallback to the block span when
+  the search fails (blockquote/list continuations). Comment the one
+  remaining hole — a body consisting solely of fence characters — and that
+  the span is then a few bytes off but still inside the block. **Do not**
+  use the `map_offset(0)`/`map_offset(length())` pair on `cb.source_info`:
+  that is the whole-block hull (measured: `4..10` vs truth `12` for a
+  `python`-only cell).
+  **Correction 2026-08-23 (in execution).** The hole named in this item is
+  wrong in two ways, both measured in Phase 6a: a body consisting solely of
+  fence characters resolves **correctly** when the closing fence is present
+  (\`\`\`\` \`\`\`\`\{python\}\n\`\`\`\n\`\`\`\` \`\`\`\` → `13..16`); the real hole is a body
+  whose *last line* is fence-only in a block with **no** closing fence, and
+  it degrades to the **whole block**, not "a few bytes off". The landed doc
+  comment states the measured shape. Same correction on
+  `claude-notes/research/2026-08-23-provenance-3-design-recommendations.md`
+  § 1, where it originated; full evidence in § Evidence → Phase 6 → 6a.
 - [x] **Draft the producer-side strand** (outside this epic; title/body in
-      recommendations § 1): carry `code_fence_content`'s provenance on
-      `CodeBlock` as `text_source`, built with `ProvenanceBuilder` so elided
-      `block_continuation` markers become gaps; `process_fenced_code_block`
-      (`pampa/src/pandoc/treesitter_utils/fenced_code_block.rs:30`) currently
-      discards that range. 74 construction sites + wire + TS schema — a type
-      change, not a consumer fix. File it with `--deps discovered-from:bd-mxa44voa`.
+  recommendations § 1): carry `code_fence_content`\'s provenance on
+  `CodeBlock` as `text_source`, built with `ProvenanceBuilder` so elided
+  `block_continuation` markers become gaps; `process_fenced_code_block`
+  (`pampa/src/pandoc/treesitter_utils/fenced_code_block.rs:30`) currently
+  discards that range. 74 construction sites + wire + TS schema — a type
+  change, not a consumer fix. File it with `--deps discovered-from:bd-mxa44voa`.
 - [x] **Delete the dead range computation in the `shortcode_string` closure**
-      — `crates/pampa/src/pandoc/treesitter.rs:1002-1005` (**not** `:1000-1001`,
-      which is the tail of the live `text` binding). Narrow
-      `process_shortcode_string` (`treesitter_utils/shortcode.rs:31-46`) to take
-      `&dyn Fn() -> String`, make the closure return `text` (so `:1006`'s
-      `IntermediateBaseText(text, range)` goes too), drop the callee's
-      `let … else { panic!() }`, and comment at
-      the construction site that the arg's range is the quote-inclusive node span
-      paired with the decoded string, and that no consumer offsets into it
-      (`shortcode_resolve.rs:135, :171, :837, :848, :2232, :2265` take the
-      string). No behaviour change, no snapshot movement. Closes Plan 2
-      deferred-minor #5.
+  — `crates/pampa/src/pandoc/treesitter.rs:1002-1005` (**not** `:1000-1001`,
+  which is the tail of the live `text` binding). Narrow
+  `process_shortcode_string` (`treesitter_utils/shortcode.rs:31-46`) to take
+  `&dyn Fn() -> String`, make the closure return `text` (so `:1006`\'s
+  `IntermediateBaseText(text, range)` goes too), drop the callee's
+  `let … else { panic!() }`, and comment at
+  the construction site that the arg's range is the quote-inclusive node span
+  paired with the decoded string, and that no consumer offsets into it
+  (`shortcode_resolve.rs:135, :171, :837, :848, :2232, :2265` take the
+  string). No behaviour change, no snapshot movement. Closes Plan 2
+  deferred-minor #5.
 - [x] **`q_2_28.rs:80` and `q_2_33.rs:74-75`: replace `end_offset()` /
-      `start_offset()` with `resolve_byte_range()`** — it returns
-      `Option<(file_id, start, end)>`; use `end` / `start` respectively, and
-      `continue` on `None` (the accessor rule, findings § 1). The `file_id` can
-      be ignored: both conversions parse exactly one file, so a resolved span
-      is in it. Comment in `q_2_28.rs` that the `== ">}}}"` comparison at
-      `:121` is the splice-safety guard and must not be removed as redundant. **No generic "refuse non-`Original`" guard.**
-      Accepted-untested (seam spec).
+  `start_offset()` with `resolve_byte_range()`** — it returns
+  `Option<(file_id, start, end)>`; use `end` / `start` respectively, and
+  `continue` on `None` (the accessor rule, findings § 1). The `file_id` can
+  be ignored: both conversions parse exactly one file, so a resolved span
+  is in it. Comment in `q_2_28.rs` that the `== ">}}}"` comparison at
+  `:121` is the splice-safety guard and must not be removed as redundant. **No generic "refuse non-`Original`" guard.**
+  Accepted-untested (seam spec).
 - [x] **T11 first, then narrow `is_gapless`**
-      (`crates/quarto-config/src/span_assert.rs:234`; walker
-      `concat_pieces_are_contiguous` `:199-227`; caller `resolve_span` `:252`):
-      for a `Substring` over a `Concat`, check contiguity only of the pieces the
-      queried content sub-range overlaps. Piece *selection* uses the declared
-      per-piece content `length` (content offsets against content lengths — the
-      one place that is right); piece *positions* stay `map_offset`. Test-only
-      blast radius (`span-assert` is a `[dev-dependencies]`-only feature). Update
-      the helper's "conservative over-approximation" comment (`:187-191`).
+  (`crates/quarto-config/src/span_assert.rs:234`; walker
+  `concat_pieces_are_contiguous` `:199-227`; caller `resolve_span` `:252`):
+  for a `Substring` over a `Concat`, check contiguity only of the pieces the
+  queried content sub-range overlaps. Piece *selection* uses the declared
+  per-piece content `length` (content offsets against content lengths — the
+  one place that is right); piece *positions* stay `map_offset`. Test-only
+  blast radius (`span-assert` is a `[dev-dependencies]`-only feature). Update
+  the helper's "conservative over-approximation" comment (`:187-191`).
 - [x] **T9 — the caught-panic-on-error-severity pin** (seam spec). Use the
-      existing `run_q2_render_with_fault` helper (project invocation, `render .`).
-      For "the rendered body is absent" assert the absence of the diagnostic's
-      *title* text (the guard's own line contains the code string `Q-15-1`, so
-      the code is not a usable discriminator). In the same commit, **append a
-      dated correction** to Plan 2 § Hand-off item 9 (do not rewrite the
-      record): printing (`render.rs:836`) precedes the exit gate (`:848`); the
-      invariant is that both read `&summary` and the guard's closures are
-      `UnwindSafe` (`:1264-1269`), not that counting happens first. The guard's
-      own doc (`:1255-1256`) is already right.
-      *(Anchor stale as of 2026-08-23 — noted, not rewritten: the claim holds,
-      but on HEAD the guard's doc comment is `:1268-1270`, the `UnwindSafe`
-      bound `:1290-1293`, and the rationale paragraph `:1278-1283`. See
-      § Evidence → Phase 6 → 6d.)
+  existing `run_q2_render_with_fault` helper (project invocation, `render .`).
+  For "the rendered body is absent" assert the absence of the diagnostic's
+  *title* text (the guard's own line contains the code string `Q-15-1`, so
+  the code is not a usable discriminator). In the same commit, **append a
+  dated correction** to Plan 2 § Hand-off item 9 (do not rewrite the
+  record): printing (`render.rs:836`) precedes the exit gate (`:848`); the
+  invariant is that both read `&summary` and the guard's closures are
+  `UnwindSafe` (`:1264-1269`), not that counting happens first. The guard's
+  own doc (`:1255-1256`) is already right.
+  \*(Anchor stale as of 2026-08-23 — noted, not rewritten: the claim holds,
+  but on HEAD the guard's doc comment is `:1268-1270`, the `UnwindSafe`
+  bound `:1290-1293`, and the rationale paragraph `:1278-1283`. See
+  § Evidence → Phase 6 → 6d.)
 - [x] **Wrap `render.rs:904`** in `render_diagnostic_guarded(code, ||
-      diagnostic.to_text(None))`, with a one-line comment: safe today because
-      `None` never reaches a renderer (`to_text_with_renderer`, upstream
-      `diagnostic.rs:461-481`); `config_sources` is built at `:884-889` and the
-      day it is bound and passed here, this site needs the guard like the other
-      eight. Update Plan 2 Phase 5's `grep -c` evidence 8 → 9. Optionally append
-      the document name to the `internal error rendering diagnostic` line (Plan 2
-      deferred-minor #6) — two lines, same commit.
+  diagnostic.to_text(None))`, with a one-line comment: safe today because
+  `None` never reaches a renderer (`to_text_with_renderer`, upstream
+  `diagnostic.rs:461-481`); `config_sources` is built at `:884-889` and the
+  day it is bound and passed here, this site needs the guard like the other
+  eight. Update Plan 2 Phase 5's `grep -c` evidence 8 → 9. Optionally append
+  the document name to the `internal error rendering diagnostic` line (Plan 2
+  deferred-minor #6) — two lines, same commit.
 - [x] **T10 — the founding-crash e2e pin, with carets** (seam spec), in
-      `crates/quarto/tests/integration/`. Write the fixture inline (the shape
-      is in the seam spec; do not reference the external repro path). Comment
-      it as two halves: the carets bind q2's config-path provenance; the exit
-      code is an upstream pin.
+  `crates/quarto/tests/integration/`. Write the fixture inline (the shape
+  is in the seam spec; do not reference the external repro path). Comment
+  it as two halves: the carets bind q2's config-path provenance; the exit
+  code is an upstream pin.
 - [x] **T12 — selective replay of Plan 2's audit row 3** (seam spec): one
-      mutation per path, record both outcomes in § Evidence, add a guard only
-      if a path has none. Closes Plan 2 hand-off (g).
+  mutation per path, record both outcomes in § Evidence, add a guard only
+  if a path has none. Closes Plan 2 hand-off (g).
 - [ ] **Upstream doc-only PR in `~/src/quarto-error-reporting`** rewriting
-      `snap_span_to_char_boundaries`' doc comment (`src/diagnostic.rs:654-670`):
-      keep the two-renderer panic claim (still true — ariadne 0.6.0 aborts on a
-      mid-char end index; measured A/C/E in recommendations § 4); state that since
-      `quarto-source-map` 0.1.2 every offset arriving via `map_offset` is already
-      floored (`file_info.rs:116-125`), so the snapping half is defense in depth
-      and the clamp half guards the `length() - 1` fallback (`:842-851`) and
-      inversion; point at commit `5e48166` and at q2's T10. No release, no floor
-      bump. **Keep the snap.**
+  `snap_span_to_char_boundaries`\' doc comment (`src/diagnostic.rs:654-670`):
+  keep the two-renderer panic claim (still true — ariadne 0.6.0 aborts on a
+  mid-char end index; measured A/C/E in recommendations § 4); state that since
+  `quarto-source-map` 0.1.2 every offset arriving via `map_offset` is already
+  floored (`file_info.rs:116-125`), so the snapping half is defense in depth
+  and the clamp half guards the `length() - 1` fallback (`:842-851`) and
+  inversion; point at commit `5e48166` and at q2's T10. No release, no floor
+  bump. **Keep the snap.**
 - [x] **Strand `bd-g7qh1ltt` re-scoped** (2026-08-23, comment `c-2edupaog`,
-      `related` → `bd-1d6io`): provenance is a map, not a store; the fix is
-      caller-supplied content, not decoded bytes on the wire nor a source-text
-      fallback. It stays outside this epic; nothing further here.
+  `related` → `bd-1d6io`): provenance is a map, not a store; the fix is
+  caller-supplied content, not decoded bytes on the wire nor a source-text
+  fallback. It stays outside this epic; nothing further here.
 
 ## Phase 7 — comrak `NodeValue::Text`
 
@@ -496,90 +496,90 @@ here. The fix is **lockstep**, not re-deriving comrak's escape rules; § 7 has
 the three measured facts that make it well-posed and the worked tiling.
 
 - [x] **Failing test first — T5.** The drift is measured (§ 8) but has no
-      permanent test. `map_offset` needs a `SourceContext`; the seven existing
-      `text.rs` tests pass only a `FileId`, so T5 registers the fixture text in
-      a context first. Assert the **`dd`** and **`ee`** `Str`s, **not `aa*bb`**:
-      pre-fix `aa*bb` already resolves correctly, so asserting it passes without
-      the fix. Expected values in § 7's table. Observe red.
+  permanent test. `map_offset` needs a `SourceContext`; the seven existing
+  `text.rs` tests pass only a `FileId`, so T5 registers the fixture text in
+  a context first. Assert the **`dd`** and **`ee`** `Str`s, **not `aa*bb`**:
+  pre-fix `aa*bb` already resolves correctly, so asserting it passes without
+  the fix. Expected values in § 7's table. Observe red.
 - [x] **T6 — the upstream pin, with the corrected discriminator.** The
-      blockquote fixture. Assert `dd` **and** `ee`; only `ee` discriminates,
-      because `dd` reports 14..16 correctly *before* the fix — resetting at
-      `SoftBreak` is precisely what it does, so `assert dd == 14..16` survives
-      its own revert. Name the test and comment it as a **comrak-behaviour pin**
-      (its "revert" is a comrak version bump, not a q2 hunk), so nobody reads it
-      as covering our code. If the reset property ever breaks, lockstep needs a
-      deletion rule and this design is wrong — it should fail loudly.
+  blockquote fixture. Assert `dd` **and** `ee`; only `ee` discriminates,
+  because `dd` reports 14..16 correctly *before* the fix — resetting at
+  `SoftBreak` is precisely what it does, so `assert dd == 14..16` survives
+  its own revert. Name the test and comment it as a **comrak-behaviour pin**
+  (its "revert" is a comrak version bump, not a q2 hunk), so nobody reads it
+  as covering our code. If the reset property ever breaks, lockstep needs a
+  deletion rule and this design is wrong — it should fail loudly.
 - [x] Implement the lockstep walker in `comrak-to-pandoc`, driving
-      `ProvenanceBuilder::in_file(file_id, anchor)` with two segmentation rules
-      (backslash-punct; entity reference to its `;`), **escape before verbatim**.
+  `ProvenanceBuilder::in_file(file_id, anchor)` with two segmentation rules
+  (backslash-punct; entity reference to its `;`), **escape before verbatim**.
 - [x] Have `tokenize_text_with_source` (`comrak-to-pandoc/src/text.rs:91`,
-      currently `(text, base_offset: usize, file_id: FileId)`) derive each
-      token's span as a `substring` of the content provenance rather than
-      `base + byte_idx` (`:99`). **This changes its signature**: update the one
-      production caller (`inline.rs:52`) and the seven in-file unit tests that
-      pass the arguments positionally (`text.rs:263, 273, 292, 301, 309, 324,
-      339`).
-      **PLAN DEFECT (found in execution 2026-08-23, resolved; not an open
-      item).** "Derive each token's span as a `substring` of the content
-      provenance" is **incompatible as written** with this plan's
-      frozen-test-seam rule. Taken literally —
-      `SourceInfo::substring(whole_node_si, c0, c1)` — every commonmark text
-      token becomes a `Substring` whose `start_offset()` is *content*-relative,
-      and all **seven** of the frozen `text.rs` assertions named in this very
-      item read `start_offset()`/`end_offset()` and expect **absolute file
-      offsets**. The literal wording reddens the seams the same item orders to
-      be preserved. It also changes the emitted shape for **all** unescaped
-      text, not only for escaped paragraphs — the churn scope this phase
-      predicts one item below. Resolved in favour of the binding constraint
-      over the literal wording: a token's span is the **restriction of the
-      node's tiling** to that token's content range, built with a fresh
-      `ProvenanceBuilder::in_file`. Same semantics under `map_offset`; and a
-      token lying wholly inside one verbatim run collapses back to a plain
-      `Original`, so unescaped text keeps the shape it had and the seven
-      assertions stay true **as written, unedited**.
-      Ruled correct by the plan owner on 2026-08-23. Recorded here as a defect
-      in the plan text rather than only as an executor deviation, so **Phase
-      8's reconciliation does not read the ticked box as diverging from the
-      checklist** — it satisfies its intent, not its letter. This is the third
-      such pair in this plan (Phase 5's T4 "extend … / leave it `#[ignore]`d",
-      and Phase 6's half-open "overlaps"). Nothing further is owed on it.
+  currently `(text, base_offset: usize, file_id: FileId)`) derive each
+  token's span as a `substring` of the content provenance rather than
+  `base + byte_idx` (`:99`). **This changes its signature**: update the one
+  production caller (`inline.rs:52`) and the seven in-file unit tests that
+  pass the arguments positionally (`text.rs:263, 273, 292, 301, 309, 324,
+  339`).
+  **PLAN DEFECT (found in execution 2026-08-23, resolved; not an open
+  item).** "Derive each token's span as a `substring` of the content
+  provenance" is **incompatible as written** with this plan's
+  frozen-test-seam rule. Taken literally —
+  `SourceInfo::substring(whole_node_si, c0, c1)` — every commonmark text
+  token becomes a `Substring` whose `start_offset()` is *content*-relative,
+  and all **seven** of the frozen `text.rs` assertions named in this very
+  item read `start_offset()`/`end_offset()` and expect **absolute file
+  offsets**. The literal wording reddens the seams the same item orders to
+  be preserved. It also changes the emitted shape for **all** unescaped
+  text, not only for escaped paragraphs — the churn scope this phase
+  predicts one item below. Resolved in favour of the binding constraint
+  over the literal wording: a token's span is the **restriction of the
+  node's tiling** to that token's content range, built with a fresh
+  `ProvenanceBuilder::in_file`. Same semantics under `map_offset`; and a
+  token lying wholly inside one verbatim run collapses back to a plain
+  `Original`, so unescaped text keeps the shape it had and the seven
+  assertions stay true **as written, unedited**.
+  Ruled correct by the plan owner on 2026-08-23. Recorded here as a defect
+  in the plan text rather than only as an executor deviation, so **Phase
+  8's reconciliation does not read the ticked box as diverging from the
+  checklist** — it satisfies its intent, not its letter. This is the third
+  such pair in this plan (Phase 5's T4 "extend … / leave it `#[ignore]`d",
+  and Phase 6's half-open "overlaps"). Nothing further is owed on it.
 - [x] Record the JSON-writer snapshot churn per CLAUDE.md — count, summary, file
-      list — and state in the commit message that `r` changes coordinate space
-      for escaped paragraphs on `--from commonmark`. ~~This is the **second**
-      `comrak-to-pandoc` snapshot wave (Phase 2's `empty_source_info` change was
-      the first)~~ — **corrected 2026-08-23 (measured in Phase 2).**
-      `crates/comrak-to-pandoc` has **no `.snap` files at all**; the snapshots
-      to watch are **pampa's** 212. Phase 2 moved **none** of them, so there is
-      no first wave to be the second of — say only what this phase moves. Note
-      the asymmetry that explains it: Phase 2's `empty_source_info` is reachable
-      only on the `source_ctx == None` branch, which pampa never takes, whereas
-      **`tokenize_text_with_source` (`text.rs:91`-`:151`) is the `Some(ctx)`
-      branch pampa does take** (`inline.rs:52`, from
-      `readers/commonmark.rs:47`). Expect real pampa movement here — commonmark
-      reader tests and any JSON-writer snapshot over `--from commonmark`.
-      **Corrected 2026-08-23 (measured in Phase 7): this phase moved zero
-      snapshots either.** The `Some(ctx)` reasoning above is right about
-      *reachability* and wrong about *coverage*: reaching pampa is not the same
-      as reaching a pampa snapshot. `convert_document_with_source`'s only
-      non-test caller in the workspace **that passes `Some(ctx)`** is
-      `readers/commonmark.rs:48` (`block.rs:37`'s `convert_document` is a second
-      production caller, but it passes `None`, which routes `NodeValue::Text` to
-      `tokenize_text` and never reaches the walker), whose
-      only non-test caller is `main.rs:332`'s `--from commonmark` arm — and no
-      snapshot test in the workspace invokes that arm. (Enumerated over every
-      `.rs` file under `crates/`; `crates/pampa` has 212 `.snap` files and none
-      moved.)
-      **Do not read "no churn" as evidence the walker did nothing.** The two are
-      unrelated: the walker's output changed, and the `--from commonmark` path
-      simply has no snapshot coverage to record it. What the change *was* is
-      recorded instead by direct observation through the binary — see
-      § Evidence, Phase 7, where `pampa --from commonmark --to json` shows `dd`
-      and `ee` moving to 16 and 19 and `aa*bb` emitting § 7's worked three-piece
-      `Concat`. A future phase that wants snapshot coverage of this path has to
-      add a `--from commonmark` snapshot test first; there is none to update.
+  list — and state in the commit message that `r` changes coordinate space
+  for escaped paragraphs on `--from commonmark`. ~~This is the **second**
+  `comrak-to-pandoc` snapshot wave (Phase 2's `empty_source_info` change was
+  the first)~~ — **corrected 2026-08-23 (measured in Phase 2).**
+  `crates/comrak-to-pandoc` has **no `.snap` files at all**; the snapshots
+  to watch are **pampa's** 212. Phase 2 moved **none** of them, so there is
+  no first wave to be the second of — say only what this phase moves. Note
+  the asymmetry that explains it: Phase 2's `empty_source_info` is reachable
+  only on the `source_ctx == None` branch, which pampa never takes, whereas
+  **`tokenize_text_with_source` (`text.rs:91`-`:151`) is the `Some(ctx)`
+  branch pampa does take** (`inline.rs:52`, from
+  `readers/commonmark.rs:47`). Expect real pampa movement here — commonmark
+  reader tests and any JSON-writer snapshot over `--from commonmark`.
+  **Corrected 2026-08-23 (measured in Phase 7): this phase moved zero
+  snapshots either.** The `Some(ctx)` reasoning above is right about
+  *reachability* and wrong about *coverage*: reaching pampa is not the same
+  as reaching a pampa snapshot. `convert_document_with_source`\'s only
+  non-test caller in the workspace **that passes `Some(ctx)`** is
+  `readers/commonmark.rs:48` (`block.rs:37`\'s `convert_document` is a second
+  production caller, but it passes `None`, which routes `NodeValue::Text` to
+  `tokenize_text` and never reaches the walker), whose
+  only non-test caller is `main.rs:332`\'s `--from commonmark` arm — and no
+  snapshot test in the workspace invokes that arm. (Enumerated over every
+  `.rs` file under `crates/`; `crates/pampa` has 212 `.snap` files and none
+  moved.)
+  **Do not read "no churn" as evidence the walker did nothing.** The two are
+  unrelated: the walker's output changed, and the `--from commonmark` path
+  simply has no snapshot coverage to record it. What the change *was* is
+  recorded instead by direct observation through the binary — see
+  § Evidence, Phase 7, where `pampa --from commonmark --to json` shows `dd`
+  and `ee` moving to 16 and 19 and `aa*bb` emitting § 7's worked three-piece
+  `Concat`. A future phase that wants snapshot coverage of this path has to
+  add a `--from commonmark` snapshot test first; there is none to update.
 - [x] Add code comments, do not fix: the entity sub-character offset, and the
-      two `Code` / `Link` span caveats from § 7, so the next consumer of those
-      spans is warned.
+  two `Code` / `Link` span caveats from § 7, so the next consumer of those
+  spans is warned.
 
 ## Phase 8 — close the epic
 
@@ -587,53 +587,53 @@ Findings: § 6, "The workaround census". Six sites, **one deletion** — "the
 workarounds collapse" is a claim about capability, not deletions.
 
 - [x] Record the `cell_options` constraint (§ 6) in
-      `crates/quarto-core/src/cell_options/mod.rs`'s file-header comment (`:1-…`,
-      the "Shared cell-options facility" block) and close the question. **Do not
-      lift it** — there is no consumer.
+  `crates/quarto-core/src/cell_options/mod.rs`\'s file-header comment (`:1-…`,
+  the "Shared cell-options facility" block) and close the question. **Do not
+  lift it** — there is no consumer.
 - [x] **Cross-check Plan 2's dispositions against § 6's census table.** Confirm:
-      the `callout.rs` workaround match block is gone (it is — `transforms/callout.rs`
-      now has the bd-3aolj guard at `:400-412`, function ending `:418`, `#[cfg(test)]`
-      at `:420`; do not delete the guard); `use_cmd/config.rs:229`
-      (`scalar_value_span`) still compiles and still returns `None` on mismatch
-      (it is *kept*, so a deletion would be the regression). **Decision
-      (2026-08-23): the `map_offset`-hull simplification Plan 2 declined (R-8,
-      hand-off item 1) is declined permanently** — the function refuses rather
-      than mis-points, and its `start_offset()`/`end_offset()` reads at
-      `:233-234` are safe only because of the byte-equality check at `:235`;
-      add that sentence as a comment at the site, no strand; `transforms/theorem.rs`
-      / `transforms/proof.rs` changed output as Plan 2 Phase 4 predicts (tighter
-      spans on decoded values — Plan 2 § Evidence Phase 4 is the only record of
-      the prediction; quote it). **Add the sixth site to the census**: Plan 2's
-      final fix wave found and fixed a decoded/raw pairing at
-      `crates/quarto-core/src/project/website_post_render.rs:213-222` (FIX-2) that
-      § 6's table predates; append it to the findings doc's table.
+  the `callout.rs` workaround match block is gone (it is — `transforms/callout.rs`
+  now has the bd-3aolj guard at `:400-412`, function ending `:418`, `#[cfg(test)]`
+  at `:420`; do not delete the guard); `use_cmd/config.rs:229`
+  (`scalar_value_span`) still compiles and still returns `None` on mismatch
+  (it is *kept*, so a deletion would be the regression). **Decision
+  (2026-08-23): the `map_offset`-hull simplification Plan 2 declined (R-8,
+  hand-off item 1) is declined permanently** — the function refuses rather
+  than mis-points, and its `start_offset()`/`end_offset()` reads at
+  `:233-234` are safe only because of the byte-equality check at `:235`;
+  add that sentence as a comment at the site, no strand; `transforms/theorem.rs`
+  / `transforms/proof.rs` changed output as Plan 2 Phase 4 predicts (tighter
+  spans on decoded values — Plan 2 § Evidence Phase 4 is the only record of
+  the prediction; quote it). **Add the sixth site to the census**: Plan 2's
+  final fix wave found and fixed a decoded/raw pairing at
+  `crates/quarto-core/src/project/website_post_render.rs:213-222` (FIX-2) that
+  § 6's table predates; append it to the findings doc's table.
 
-      > **Corrected 2026-08-23 (execution).** Three citation slips in this item,
-      > none of which changes what it asks for; all three are measured in
-      > § Evidence → Phase 8.
-      > **(i)** The `callout.rs` guard's *aggregate* extent `:400-412` is exact,
-      > but two interior ranges are not: the `debug_assert!` is `:404-409`, not
-      > `:404-410`, and the `if … return generated()` is `:410-412`, not
-      > `:412-414`. Function end `:418` and `#[cfg(test)]` `:420` are exact.
-      > **(ii)** `website_post_render.rs` is the **seventh** site of the census,
-      > not the sixth — § 6's table already listed six *sites* across five rows
-      > (`theorem.rs` / `proof.rs` is one row, two sites). The heading was
-      > updated from "six sites" to "seven sites"; "one deletion" is unchanged.
-      > **(iii)** Plan 2's § Evidence Phase 4 does **not** mention
-      > `theorem.rs`/`proof.rs`. The prediction is recorded in Plan 2's Phase 4
-      > *checklist* (`:1197-1200`, and the corollary at `:1179-1182`) and in its
-      > prose at `:340-342`; § Evidence Phase 4 holds the *measurement* for the
-      > shared attribute path (column 27 vs 26) instead. Both are quoted in
-      > § Evidence.
-- [x] Record in § Evidence that `bd-49cbyqbt` (hand-off 4(c)'s second half) was
-      closed 2026-08-22 as a duplicate of `bd-1d6io` — nothing to do here.
+  > **Corrected 2026-08-23 (execution).** Three citation slips in this item,
+  > none of which changes what it asks for; all three are measured in
+  > § Evidence → Phase 8.
+  > **(i)** The `callout.rs` guard's *aggregate* extent `:400-412` is exact,
+  > but two interior ranges are not: the `debug_assert!` is `:404-409`, not
+  > `:404-410`, and the `if … return generated()` is `:410-412`, not
+  > `:412-414`. Function end `:418` and `#[cfg(test)]` `:420` are exact.
+  > **(ii)** `website_post_render.rs` is the **seventh** site of the census,
+  > not the sixth — § 6's table already listed six *sites* across five rows
+  > (`theorem.rs` / `proof.rs` is one row, two sites). The heading was
+  > updated from "six sites" to "seven sites"; "one deletion" is unchanged.
+  > **(iii)** Plan 2's § Evidence Phase 4 does **not** mention
+  > `theorem.rs`/`proof.rs`. The prediction is recorded in Plan 2's Phase 4
+  > *checklist* (`:1197-1200`, and the corollary at `:1179-1182`) and in its
+  > prose at `:340-342`; § Evidence Phase 4 holds the *measurement* for the
+  > shared attribute path (column 27 vs 26) instead. Both are quoted in
+  > § Evidence.
+- [x] Record in § Evidence that `bd-49cbyqbt` (hand-off 4(c)\'s second half) was
+  closed 2026-08-22 as a duplicate of `bd-1d6io` — nothing to do here.
 - [x] Close `bd-mxa44voa` once all three plans are done. Its four children
-      (`bd-gx2mal69`, `bd-jmquuiqh`, `bd-th2ah982`, `bd-x0o0pem3`) are already
-      closed (checked 2026-08-23), so the plans are the only remaining gate.
+  (`bd-gx2mal69`, `bd-jmquuiqh`, `bd-th2ah982`, `bd-x0o0pem3`) are already
+  closed (checked 2026-08-23), so the plans are the only remaining gate.
 
-      **Closed 2026-08-23T18:30:46Z.** All four children re-verified closed
-      individually *before* the close was attempted, and `braid dep tree` was
-      read to confirm those four are the only children.
+  **Closed 2026-08-23T18:30:46Z.** All four children re-verified closed
+  individually *before* the close was attempted, and `braid dep tree` was
+  read to confirm those four are the only children.
 
 ## Definition of done
 
@@ -688,7 +688,7 @@ production behaviour changed.
 
 #### Line-number rebase
 
-The findings' enumeration was taken at `816f4ed47`. Two rebases apply:
+The findings\' enumeration was taken at `816f4ed47`. Two rebases apply:
 
 1. `c9a77d18c` ("config_value: sweep call sites for Scalar's new struct-variant
    shape") added two lines at `incremental.rs:553`, moving every call site
@@ -759,7 +759,7 @@ comparison, not a copy.
 #### Plan 1's hypothesis: **half right, and the correction matters**
 
 The hypothesis was "the split falls along the incremental-writer /
-span-computation line, with `incremental.rs`'s `Verbatim` arms the only
+span-computation line, with `incremental.rs`\'s `Verbatim` arms the only
 copies." The *line* holds exactly — all six `postprocess.rs` sites and all ten
 tiling-auditor sites are `locate`, and every copy is in the incremental writer.
 The *enumeration* did not: findings § 3 named one copy site, and there are
@@ -768,7 +768,7 @@ The *enumeration* did not: findings § 3 named one copy site, and there are
 - `incremental.rs:816` — `InlineAlignment::KeepBefore` in
   `assemble_inline_content`. The inline analogue of `:171`, one nesting level
   down.
-- `incremental.rs:868` — `assemble_recursed_container`'s two early returns
+- `incremental.rs:868` — `assemble_recursed_container`\'s two early returns
   (`nested_plan` is `None`, or `orig_children` is empty), which keep the whole
   container verbatim.
 
@@ -784,7 +784,7 @@ production callers, and both hand it an `original_ast` of the protected shape.
 **The split is by path, not by site: all three copy arms sit on both paths.**
 
 **Pinned by T1.** `pampa/src/apply_node_edit.rs:120` deserializes
-`untransformed_ast_json` — which *is* `capture_untransformed_ast_json`'s
+`untransformed_ast_json` — which *is* `capture_untransformed_ast_json`\'s
 output, round-tripped through the frontend. T1 asserts that artifact's pool
 shape at the producer, so this path **inherits** the guard. Naming the
 inheritance matters: nothing on the `apply_node_edit` side is itself asserted.
@@ -914,8 +914,8 @@ The old comment asserted the byte-identity reading Plan 1 retracted upstream
 `preimage_in` is an offset claim only (0.1.3 doc comment, quoted below); and
 the arm is safe only because the baseline AST is untransformed and parent-less
 — with a pointer to T1 and to the two sibling copy sites. Both siblings got a
-short note of their own at `assemble_inline_content`'s `KeepBefore` arm and
-`assemble_recursed_container`'s verbatim early return, each pointing back to
+short note of their own at `assemble_inline_content`\'s `KeepBefore` arm and
+`assemble_recursed_container`\'s verbatim early return, each pointing back to
 the long note rather than restating it. All three notes name *functions and
 arms* rather than line numbers **for the copy sites**, so a rebase cannot make
 them point at the wrong arm. They do cite line numbers for cross-file
@@ -936,7 +936,7 @@ source hull:
 | `block_source_span` (`:550`) | `:552` | one — `assemble`, via `first_block_start` (`:369`) |
 | `inline_source_span` (`:1033`, `pub`) | `:1035` | **none**; only `tests/integration/inline_splice_safety_tests.rs` |
 
-`inline_source_span`'s callers were checked because it is `pub`: every one is
+`inline_source_span`\'s callers were checked because it is `pub`: every one is
 in that single test file, none outside the crate. So nothing in production
 inherits the risk from it — worth stating, because it changes who the guard
 has to cover.
@@ -977,7 +977,7 @@ The shipped `preimage_in` (0.1.3, `source_info.rs:458-503`) makes the
 `Substring`-over-`Concat` arm return `None`; the bare `Concat` arm still
 returns `Some(hull)` for byte-contiguous pieces.
 
-**(a) `postprocess.rs:660`'s `combine(first, last)` fallback moves no
+**(a) `postprocess.rs:660`\'s `combine(first, last)` fallback moves no
 snapshot.** `77bd9d6c0` ("chore: refresh lock onto quarto-source-map 0.1.3 and
 quarto-yaml 0.1.3") touched `Cargo.lock` and `Cargo.toml` only — **zero `.snap`
 files** — and the branch has been green since. `contiguous_hull_for_run` takes
@@ -993,7 +993,7 @@ matched by construction**, the one production producer of that shape. Multi-
 option cells are **gappy**: `option_content_ranges` returns
 `content_start..line.len()` for a prefix-only language (`:260`), so the
 next line's piece starts *after* its own `#| ` prefix and the two ranges are
-not adjacent — `preimage_in`'s contiguity check already returned `None` before
+not adjacent — `preimage_in`\'s contiguity check already returned `None` before
 Plan 1's change. Only a **single-option cell** yields one piece whose hull the
 blanket-`None` removes, and only for nodes *beneath* the
 `parse_with_parent(&yaml_text, yaml_parent)` re-parse (`:229`), which are
@@ -1004,7 +1004,7 @@ blanket-`None` removes, and only for nodes *beneath* the
 Quoted verbatim from
 `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quarto-source-map-0.1.3/src/source_info.rs:410-424`:
 
-> Byte range in `target` that this `SourceInfo`'s preimage covers, if any.
+> Byte range in `target` that this `SourceInfo`\'s preimage covers, if any.
 >
 > A `Some(hull)` licenses **locating** a position in `target` — it does not
 > license **copying** bytes from it. For an `Original` or a `Substring` chain
@@ -1027,7 +1027,7 @@ and the `Substring` clause at `:431-435`:
 **The three drift amplifiers are commented, not restructured.**
 `hull_source_infos` (`postprocess.rs`) carries the full note — § 4's sentence
 quoted verbatim, plus the mechanism (the two numbers `preimage_in` reports are
-baked into a fresh `Original` and the inputs' chains dropped, so a producer
+baked into a fresh `Original` and the inputs\' chains dropped, so a producer
 whose offsets drift yields a *confidently wrong* flat range with nothing left
 downstream to say it was derived) and the operative instruction: **verify a
 producer's provenance fix upstream of these calls**, because their output
@@ -1040,7 +1040,7 @@ only) and while the grammar admits nothing between the last attribute and the
 closing `}`.
 
 **The false sentence is corrected; the code is not touched.**
-`hull_source_infos`'s pre-existing doc comment claimed it was "the only correct
+`hull_source_infos`\'s pre-existing doc comment claimed it was "the only correct
 way to fuse two spans into one `Original`", using `preimage_in` for the hull —
 false under findings § 1, whose rule is the `map_offset(0)` /
 `map_offset(length())` pair, *never* `preimage_in` for a hull. Correcting a
@@ -1061,7 +1061,7 @@ so those inputs silently take the coarse `combine()` fallback where the
 change on pampa's live postprocess path with real snapshot risk, outside a
 comments-only phase. All three doc comments name the strand, and it carries
 § 4's safe-by-shape triage as the reason it is latent rather than broken, plus
-the instruction to re-derive `math_with_attr_span_source_info`'s `+ 1` rather
+the instruction to re-derive `math_with_attr_span_source_info`\'s `+ 1` rather
 than carry it across the migration.
 
 **Plan 1's hand-off — the third and fourth `offset_to_location` rules, measured.**
@@ -1238,7 +1238,7 @@ neutralized, `map_offset(0, &ctx) == None` still passed — so that assertion
 genuinely cannot redden, as the plan states.
 
 **One narrowing.** Findings § 6 frames the three grounds as "any one
-sufficient". Ground 1 (`map_offset`'s `Generated` arm returns `None`
+sufficient". Ground 1 (`map_offset`\'s `Generated` arm returns `None`
 unconditionally) is sufficient for `map_offset` only. `resolve_byte_range` is
 safe *contingently*, on `from` staying empty — grounds 2 and 3 are what keep
 it empty, and ground 1 does not cover it. The mutation above is the evidence.
@@ -1336,7 +1336,7 @@ derived `Substring` at a fixed zero offset, not the provenance at arbitrary
 offsets.
 
 The conclusion survives (a `Substring` over a `Concat` inherits the drift), but
-the old wording *hid* something: the `Substring`'s bounds are
+the old wording *hid* something: the `Substring`\'s bounds are
 `block.code_start .. + block.code.len()`, and `code_start` comes from
 `parse_code_blocks` regex-matching the **written** QMD
 (`text_execute.rs:124-147`, `code_start: code_match.start()` at `:147`). Those
@@ -1476,12 +1476,12 @@ its content.
 | fixture | `cb.text` | new span | truth |
 |---|---|---|---|
 | ```` ```{python}\npython\n``` ```` | `python` | 12..18 | 12..18 ✅ |
-| ```` ````{python}\n```\n```` ```` | ```` ``` ```` | 13..16 | 13..16 ✅ |
-| ```` ````{python}\n```\n ```` (no closing fence) | ```` ``` ```` | 0..17 (whole block) | 13..16 ⚠️ |
-| ```` ````{python}\nx\n```\n ```` (no closing fence) | `` x\n``` `` | 0..19 (whole block) | 13..18 ⚠️ |
-| `` - item\n\n  ```{python}\n    x\n  ```\n `` | `  x` | 24..27 | 24..27 ✅ |
-| `` > ```{python}\n> > x\n> ```\n `` | `> x` | 16..19 | 16..19 ✅ (see below — this row does **not** exercise the fence bound) |
-| `` ```{python}\nprint('hi')\n `` (no closing fence) | `print('hi')` | 12..23 | 12..23 ✅ |
+| ````` ````{python}\n```\n```` ````` | ```` ``` ```` | 13..16 | 13..16 ✅ |
+| ````` ````{python}\n```\n ````` (no closing fence) | ```` ``` ```` | 0..17 (whole block) | 13..16 ⚠️ |
+| ````` ````{python}\nx\n```\n ````` (no closing fence) | ```` x\n``` ```` | 0..19 (whole block) | 13..18 ⚠️ |
+| ```` - item\n\n  ```{python}\n    x\n  ```\n ```` | `  x` | 24..27 | 24..27 ✅ |
+| ```` > ```{python}\n> > x\n> ```\n ```` | `> x` | 16..19 | 16..19 ✅ (see below — this row does **not** exercise the fence bound) |
+| ```` ```{python}\nprint('hi')\n ```` (no closing fence) | `print('hi')` | 12..23 | 12..23 ✅ |
 
 **Row 7 is the reassuring one, and it belongs in the record.** An error-recovery
 block with an *ordinary* body still resolves exactly (`12..23`), so rows 3–4's
@@ -1517,7 +1517,7 @@ now says the uniqueness is *unbroken by these probes*, not proven.
 
 **The `:1375` test did not move — measured, not assumed.**
 `nested_concat_cell_options_caption_resolves_correctly` consumes
-`body_source_for`'s output. Probing its fixture under both the new bounded
+`body_source_for`\'s output. Probing its fixture under both the new bounded
 search and the reverted whole-block search gives the **identical** span:
 
 ```
@@ -1549,7 +1549,7 @@ T7 hazard is LF-specific *in that fixture*: with CRLF `cb.text` is `"python\r"`,
 which the info string's `python}` does not contain, so even the whole-block
 search would have landed correctly there. The bounded search is right either way.
 
-Only the last row **discriminates** `is_fence_line`'s `\r` trim: it falls back to
+Only the last row **discriminates** `is_fence_line`\'s `\r` trim: it falls back to
 the whole block exactly as its LF twin does, whereas an untrimmed `"```\r"` would
 not have read as a fence, the region would have run to the block's end, and the
 search would have succeeded at `14..21`. The three well-formed rows resolve
@@ -1575,7 +1575,7 @@ T7).
 **Part A — the dead range computation.** `treesitter.rs:1002-1005` (the
 `range` binding plus the `IntermediateBaseText(text, range)` wrap) is
 deleted; `extract_quoted_text` now returns `String` directly. Narrowed
-`process_shortcode_string`'s parameter to `&dyn Fn() -> String` and dropped
+`process_shortcode_string`\'s parameter to `&dyn Fn() -> String` and dropped
 the callee's `let … else { panic!() }` — that `else` arm called
 `extract_quoted_text_fn()` a **second time** just to format the panic
 message, so narrowing the signature incidentally removes that double
@@ -1614,7 +1614,7 @@ both: each conversion's `read_violations`/`get_violations` path calls
 `pampa::readers::qmd::read` on exactly one file's content, so every
 diagnostic location it produces is necessarily in that file — a second
 file_id could never appear to be silently mismatched. Added the
-splice-safety-guard comment at `q_2_28.rs`'s `== ">}}}"` check (now
+splice-safety-guard comment at `q_2_28.rs`\'s `== ">}}}"` check (now
 :129-134): even a wrong `error_offset` cannot splice wrong bytes, because
 the check either finds the real `>}}}` shape or finds nothing.
 
@@ -1766,7 +1766,7 @@ measured it rather than accepting the reading: a single-piece `Concat` wrapping
 bytes, silently including the gap's `"AB"`; the honest content is `"6789CDE"` and
 the honest answer is `Err(Concat)`. (Probe run and reverted; not committed.)
 
-The hole **predates** this phase — `concat_pieces_are_contiguous`'s loop body is
+The hole **predates** this phase — `concat_pieces_are_contiguous`\'s loop body is
 unchanged by `63936764b` — but the same monotonicity that makes the narrowing
 safe makes the hole *more reachable*: a top-level `Substring` over a gappy
 `Concat` used to be refused wholesale, and now resolves whenever the touched
@@ -1888,7 +1888,7 @@ routed here; on HEAD the guarded block is `:904-919`, the call at `:916`). The p
 `config_diagnostics` in `execute_project` now reads
 `render_diagnostic_guarded(code, || diagnostic.to_text(None))`, with a comment
 saying the guard is **uniformity, not a fix**: `ctx = None` takes
-`to_text_with_renderer`'s structured-text branch and never reaches a renderer,
+`to_text_with_renderer`\'s structured-text branch and never reaches a renderer,
 so the byte-slicing path — the only known panic mechanism — is structurally
 unreachable here today. The comment also names what changes that:
 `config_sources` is built just above (`:884-889`), and the day it is bound and
@@ -1930,7 +1930,7 @@ post-wrap e2e backtrace above shows index 0 still reaching the Q-15-1 render.
 
 **(b) No existing fixture is perturbed.** The whole `quarto` suite is green
 after the wrap. Note this is suite-level evidence, not an enumeration of every
-fixture's config diagnostics; ground (a)'s producer analysis is what makes it a
+fixture's config diagnostics; ground (a)\'s producer analysis is what makes it a
 reason rather than a coincidence.
 
 **Plan 2 correction 1 — § Hand-off item 9** (appended as a dated block quote
@@ -2208,7 +2208,7 @@ content range**, not `SourceInfo::substring` over the whole-node provenance.
 The two agree at **run** granularity, not byte-exactly: a token whose `c0`
 falls *inside* a replacement maps to that run's `src.start` under the
 restriction and to `src.start + (c0 - run_start)` under a literal wrapper.
-Both land inside the same replacement's source range, which `span_for`'s
+Both land inside the same replacement's source range, which `span_for`\'s
 sub-character caveat already licenses, so this is a precision point rather than
 a difference in correctness. The restriction additionally keeps a token that
 lies wholly inside one verbatim run collapsing back to a plain `Original`, so
@@ -2254,7 +2254,7 @@ no reference, so its tiling is one verbatim run and its output is unchanged).
                             p[1]=[0,2] p[2]=[2,4] p[3]=[4,6]
 ```
 
-`dd` and `ee` now resolve to 16 and 19, and `aa*bb`'s three-piece `Concat` is
+`dd` and `ee` now resolve to 16 and 19, and `aa*bb`\'s three-piece `Concat` is
 § 7's worked tiling restricted to that token. This is the `r` coordinate-space
 change for escaped paragraphs on `--from commonmark`, observed rather than
 inferred.
@@ -2324,7 +2324,7 @@ newline ranges for suffix languages — so the suffix is elided, never rewritten
 and block-comment alike; it says nothing about languages q2 does not support.
 
 **Not lifted, and the reason is a missing consumer, not a missing capability.**
-`ProvenanceBuilder`'s `replacement(range, 0)` would express the deletion that
+`ProvenanceBuilder`\'s `replacement(range, 0)` would express the deletion that
 lifting it needs. No q2 language has a transforming option-line syntax, so
 there is no consumer. The header comment says this in those terms.
 
@@ -2435,12 +2435,12 @@ $ … | jq -c '.astContext.p[2], .astContext.p[7], .astContext.p[3,4,5,6]'
 The opening quote is file byte 20 and the closing quote byte 38: the value's
 source extent is **21..38**, quotes excluded, with each escape carried as its
 own piece. That is the value `theorem.rs:345` / `proof.rs:182` clone into the
-`Str`'s `source_info`. Output inspected directly; no test asserts these
+`Str`\'s `source_info`. Output inspected directly; no test asserts these
 numbers, and none was added — this is a cross-check, not a new seam.
 
 **The seventh site, appended to the census.** Plan 2's final fix wave (FIX-2)
 fixed a decoded/raw pairing in
-`crates/quarto-core/src/project/website_post_render.rs`'s `copy_footer_images`
+`crates/quarto-core/src/project/website_post_render.rs`\'s `copy_footer_images`
 that § 6's table predates. Verified 2026-08-23: `:222` now reads
 `let base = content_source_info.as_ref().unwrap_or(&cv.source_info);` and the
 comment at `:208-217` cites `config_markdown.rs:326`, which is byte-identical
@@ -2459,7 +2459,7 @@ restored. The row is appended to the findings doc's table with a dated note.
 > enumerations cannot be conflated.
 
 > **One census row is now stale, and the note says so.**
-> `codeblock_shorthand.rs:486`'s disposition still describes the pre-fix state;
+> `codeblock_shorthand.rs:486`\'s disposition still describes the pre-fix state;
 > Plan 3 Phase 6a fixed it (bounded between-fences search, guarded by
 > `body_source_for_locates_the_body_not_the_info_string`). Recorded in the
 > dated note rather than by rewriting the row, per that document's convention.
@@ -2470,7 +2470,7 @@ Closed **2026-08-22T22:20:45Z** as a **duplicate of `bd-1d6io`** (failure #2,
 "attr key range absorbs the inter-pair separator"); `bd-1d6io` is the superset
 and its close reason records this strand's three durable contributions in
 comment `c-qn11q3g6`. Verified by `braid show bd-49cbyqbt --json`. This is
-hand-off 4(c)'s second half, and it needed **no work in this plan**. Note that
+hand-off 4(c)\'s second half, and it needed **no work in this plan**. Note that
 `bd-1d6io` itself is **`in_progress`, not closed** — it is outside this epic
 (branch `braid/bd-1d6io-annotated-qmd-source-tracking`) and does not gate it.
 

@@ -1,7 +1,7 @@
 # Session Log: Surface Syntax Converter Design
 
 **Date**: 2025-10-13
-**Duration**: ~2 hours
+**Duration**: \~2 hours
 **Focus**: Analyzing and designing separation of surface syntax conversion from execution engines
 
 ## Session Overview
@@ -57,8 +57,8 @@ markdownForFile(file: string): Promise<MappedString>;
 - Lines 77-83: `markdownForFile()` converts R spin scripts
 
 **Conversion implementations**:
-- `src/core/jupyter/jupyter-filters.ts:33` - markdownFromNotebookJSON (~10 lines, pure JS)
-- `src/execute/jupyter/percent.ts:34` - markdownFromJupyterPercentScript (~60 lines, pure JS)
+- `src/core/jupyter/jupyter-filters.ts:33` - markdownFromNotebookJSON (\~10 lines, pure JS)
+- `src/execute/jupyter/percent.ts:34` - markdownFromJupyterPercentScript (\~60 lines, pure JS)
 - `src/execute/rmd.ts:428` - markdownFromKnitrSpinScript (calls R's knitr::spin())
 
 ### 3. Key Observations
@@ -66,9 +66,9 @@ markdownForFile(file: string): Promise<MappedString>;
 **Conversion characteristics**:
 | Format | Lines | Complexity | Dependencies |
 |--------|-------|------------|--------------|
-| .ipynb | ~10 | Low | None |
-| Percent | ~60 | Medium | None |
-| R spin | ~20 | Medium | **R runtime** |
+| .ipynb | \~10 | Low | None |
+| Percent | \~60 | Medium | None |
+| R spin | \~20 | Medium | **R runtime** |
 
 **Current coupling problems**:
 1. Engines must know about ALL surface syntaxes they support
@@ -128,7 +128,7 @@ pub struct ConvertedSource {
 ## Deliverables
 
 ### Main Document
-Created **surface-syntax-converter-design.md** (~600 lines) with:
+Created **surface-syntax-converter-design.md** (\~600 lines) with:
 - Current architecture analysis (file claiming, conversion locations, coupling points)
 - Proposed Rust API design (SourceConverter trait, ConvertedSource, registry)
 - Complete file processing flow with code examples
@@ -148,7 +148,7 @@ Created **surface-syntax-converter-design.md** (~600 lines) with:
 
 1. **Converters are pure**: 2 of 3 current converters are pure text transformation with zero runtime dependencies
 
-2. **Engine simplification**: Removing claimsFile/markdownForFile saves ~200-300 LOC from engines
+2. **Engine simplification**: Removing claimsFile/markdownForFile saves \~200-300 LOC from engines
 
 3. **Performance wins**: Conversion caching (hash-based) + parallel conversion in projects
 
@@ -206,7 +206,7 @@ For next session:
 - Created: `claude-notes/surface-syntax-converter-design.md`
 - Updated: `claude-notes/00-INDEX.md` (added to pipeline architecture section + session log)
 - Created: `claude-notes/session-logs/2025-10-13-surface-syntax-converter-design.md` (this file)
-- **Updated** (after user feedback): Added "Future Converter Example: Rustdoc" section showing how .rs files with doc comments could convert to qmd for multi-format output (revealjs, PDF, typst). Demonstrates extensibility value proposition with concrete example (~150 lines of implementation sketch, before/after examples, design implications)
+- **Updated** (after user feedback): Added "Future Converter Example: Rustdoc" section showing how .rs files with doc comments could convert to qmd for multi-format output (revealjs, PDF, typst). Demonstrates extensibility value proposition with concrete example (\~150 lines of implementation sketch, before/after examples, design implications)
 
 ## Follow-up: Rustdoc Converter Example
 
@@ -215,7 +215,7 @@ For next session:
 **Rationale**: Rust source files with rustdoc comments (`///`, `//!`) could serve as Quarto source, enabling multi-format output (revealjs presentations, PDF, typst) beyond rustdoc's HTML-only output.
 
 **Added to design document**:
-- Complete converter implementation sketch (~100 lines)
+- Complete converter implementation sketch (\~100 lines)
 - Before/after example (lib.rs → qmd → multiple formats)
 - Value proposition: Source code as single source of truth for presentations/docs
 - Design implications: Shows converter independence, source mapping, format flexibility
@@ -227,11 +227,11 @@ For next session:
 
 ## Time Breakdown
 
-- Research & code reading: ~45 min
-- Design & API iteration: ~45 min
-- Documentation writing: ~30 min
-- Follow-up (rustdoc example): ~15 min
-- **Total**: ~2 hours 15 min
+- Research & code reading: \~45 min
+- Design & API iteration: \~45 min
+- Documentation writing: \~30 min
+- Follow-up (rustdoc example): \~15 min
+- **Total**: \~2 hours 15 min
 
 ## Notes for Future Sessions
 

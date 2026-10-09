@@ -75,7 +75,7 @@ impl LanguageServer for QuartoLsp {
 ### 5. **dashmap** - Concurrent HashMap
 - **Version**: 5.5+
 - **Purpose**: Thread-safe caching (TOC, links, symbols)
-- **Why**: Better than RwLock<HashMap> for concurrent access
+- **Why**: Better than `RwLock<HashMap>` for concurrent access
 - **Features**:
   - Lock-free reads when possible
   - Async-friendly
@@ -642,7 +642,7 @@ async fn run_lsp_stdio() {
 | Aspect | TypeScript (Current) | Rust (Proposed) |
 |--------|---------------------|-----------------|
 | **Startup** | 500-1000ms (Node.js) | <100ms (native) |
-| **Memory** | ~50-100MB | ~20-40MB |
+| **Memory** | \~50-100MB | \~20-40MB |
 | **Performance** | Good | Excellent |
 | **Type Safety** | TypeScript | Rust |
 | **Async** | Promises | Tokio async/await |

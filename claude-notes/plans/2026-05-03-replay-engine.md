@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-03
 **Beads:** bd-45yw
-**Worktree:** `.worktrees/45yw-replay-engine` (branch `beads/45yw-replay-engine`, based on `main` @ `b77c5674`)
+**Worktree:** `.worktrees/45yw-replay-engine` (branch `beads/45yw-replay-engine`, based on `main` \@ `b77c5674`)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
@@ -68,7 +68,7 @@ Recording is the symmetric story: activated by `trace: true` (existing) plus a n
 
 The plan now extends the existing `quarto-trace` framework rather than inventing a parallel fixture format. Touch points:
 
-- `crates/quarto-trace/src/lib.rs` — `TraceEntry` (currently per-stage, ~108) gains an optional engine-execution payload, OR a sibling type (e.g. `EngineCapture`) is added on `TraceDocument` carrying `(engine_name, input_qmd, ExecuteResult)`. Whichever design keeps `TraceEntry` clean.
+- `crates/quarto-trace/src/lib.rs` — `TraceEntry` (currently per-stage, \~108) gains an optional engine-execution payload, OR a sibling type (e.g. `EngineCapture`) is added on `TraceDocument` carrying `(engine_name, input_qmd, ExecuteResult)`. Whichever design keeps `TraceEntry` clean.
 - `crates/quarto-core/src/stage/trace.rs` — `JsonTraceObserver` already serializes pipeline state; extend its `on_stage_end` (or equivalent) for `EngineExecutionStage` to capture the `ExecuteResult` if recording is enabled.
 - `crates/quarto-core/src/stage/stages/metadata_merge.rs:294` — `activate_trace_from_metadata` is the existing entry point; either extend it to also activate replay-recording, or factor out a sibling `activate_replay_from_metadata`.
 - The replay-input side is read at orchestrator/CLI level (before pipeline construction) — when `--replay <path>` is set, parse the trace and substitute `ReplayEngine` in the registry handed to `EngineExecutionStage::with_registry`.

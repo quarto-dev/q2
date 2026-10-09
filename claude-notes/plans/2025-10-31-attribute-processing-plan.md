@@ -206,7 +206,7 @@ Create tests for:
 
 ## Success Criteria
 
-- ✅ No "[TOP-LEVEL MISSING NODE]" warnings for attribute nodes
+- ✅ No "\[TOP-LEVEL MISSING NODE\]" warnings for attribute nodes
 - ✅ Code spans with attributes parse correctly
 - ✅ All attribute components (id, classes, key-value) extracted correctly
 - ✅ Output matches Pandoc native format
@@ -235,7 +235,7 @@ Create tests for:
 - Phase 3 (commonmark_specifier): 15 minutes
 - Phase 4 (attribute_specifier): 15 minutes
 - Phase 5 (testing): 45 minutes
-- **Total**: ~2 hours
+- **Total**: \~2 hours
 
 ## References
 

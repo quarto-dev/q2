@@ -9,7 +9,7 @@
 Every process that executes a Jupyter document — the test suite *and* the
 production `q2 render` CLI — leaks one ipykernel process per
 `(kernel_name, working_dir)` pair. The kernel reparents to launchd
-(PPID 1), idles forever holding ~6 listening TCP sockets, and leaves its
+(PPID 1), idles forever holding \~6 listening TCP sockets, and leaves its
 `kernel-<uuid>.json` connection file behind in `~/Library/Jupyter/runtime/`.
 On 2026-08-10 a dev machine had accumulated 2338 orphans and 4932 stale
 connection files.
@@ -54,7 +54,7 @@ Both leak paths were reproduced by diffing
    → exactly 1 new PPID-1 orphan, 6 listening sockets (`lsof -i`),
    connection file intact (proving `Drop` never ran). nextest is
    process-per-test, so **each python-executing test leaks one
-   kernel**. The observed ~15 orphans per `cargo nextest run
+   kernel**. The observed \~15 orphans per `cargo nextest run
    --workspace` matches the python-executing tests that go through the
    render path with no shutdown: `engine_error_policy` (7) +
    `engine_output_parity` (7–8) + `capture_splice_engines` (2–3).
@@ -120,9 +120,9 @@ Phase 2 — fix the lifecycle:
 - [x] Full jupyter test set green (24/26; the 2 failures are
       pre-existing rot in `#[ignore]`d tests that nested-runtime-panic
       on main too — filed as bd-yaccefzk). Zero new orphans after the
-      run (was ~15).
+      run (was \~15).
 - [x] `cargo nextest run --workspace` green (11273/11273) with zero
-      new orphans across the full run (was ~15); full
+      new orphans across the full run (was \~15); full
       `cargo xtask verify` (incl. WASM leg) and `cargo xtask lint`
       green. Manual end-to-end: `q2 render` of a two-python-doc
       website → correct output, zero orphans, no stale

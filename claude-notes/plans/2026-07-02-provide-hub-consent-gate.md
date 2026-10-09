@@ -90,7 +90,7 @@ Key structural facts that shape the design:
   Node auth bridge pipes the *Node child's* stdio (`token_bridge.rs`),
   not the provider process's terminal. (`--token` dev mode has no child
   at all.)
-- **samod exposes `Repo::stop() -> impl Future`** which "wait[s] until
+- **samod exposes `Repo::stop() -> impl Future`** which "wait\[s\] until
   all storage tasks have completed" — but does **not** documentedly
   guarantee outbound *network* sync has been acked by the server. The
   existing execute integration test confirms sync with sleep-based
@@ -377,7 +377,7 @@ sleep-based workaround was needed.** `Provider::flush_to_hub`:
 4. The whole confirmation is wrapped in a **15 s `tokio::time::timeout`**
    as a pure safety net for a slow/dropped link; on timeout it logs and
    returns so one-shot still exits. In practice it resolves in
-   milliseconds (the integration test completes in ~0.02 s).
+   milliseconds (the integration test completes in \~0.02 s).
 
 So the guarantee is: one-shot does not exit until the hub has
 acknowledged **both** the sidecar pointer and the capture doc — exactly

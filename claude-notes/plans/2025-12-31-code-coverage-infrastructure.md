@@ -196,7 +196,7 @@ For a project of this size, initial coverage might be:
 - `quarto-system-runtime/native.rs`: 92.22%
 
 **Medium coverage (50-90%)**:
-- `quarto-core`: ~80%
+- `quarto-core`: \~80%
 - `quarto-yaml-validation`: 61-87%
 - `quarto-pandoc-types`: 50-93% (varies by module)
 

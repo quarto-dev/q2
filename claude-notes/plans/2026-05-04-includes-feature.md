@@ -98,7 +98,7 @@ Sources:
 - Body envelope:
   `external-sources/quarto-cli/src/command/render/pandoc.ts:1702-1731`
   (writes website-navbar HTML to a temp file, prepends/appends to
-  the include-* lists)
+  the include-\* lists)
 - User docs for the **shortcode** include:
   `external-sources/quarto-web/docs/authoring/includes.qmd` (note: Q1
   does not have a dedicated docs page for the slot includes —
@@ -334,7 +334,7 @@ layers:
    - End-to-end render via `render_qmd_to_html` (or
      `render_document_to_file` for CLI parity, per CLAUDE.md
      §End-to-end verification) showing that `include-in-header:
-     foo.html` results in `foo.html`'s content appearing inside
+     foo.html` results in `foo.html`\'s content appearing inside
      `<head>` of the produced HTML.
    - Same for `include-before-body`, `include-after-body`.
    - Smart-include object forms.
@@ -343,7 +343,7 @@ layers:
      migration).
 
 3. **Fixture-based CLI smoke** under `crates/quarto/tests/smoke-all/`:
-   - A fixture document with all three include-* keys set, plus
+   - A fixture document with all three include-\* keys set, plus
      legacy `header-includes`, plus a custom favicon. Snapshot the
      rendered HTML. Phase 7's `/tmp/q2-phase7-smoke/` style
      end-to-end inspection per CLAUDE.md.
@@ -355,116 +355,116 @@ splits naturally into checkpoints. Starting from existing
 `build_transform_pipeline` and `set_includes_list`:
 
 - [x] **0. Tests first (TDD).** New-feature license per CLAUDE.md
-      §TDD lets us co-develop tests + implementation; 8 unit tests
-      in `crates/quarto-core/src/stage/stages/include_resolve.rs`
-      cover bare-string / `{file:..}` / `{text:..}` / array of
-      mixed forms / missing-file warning / legacy-key fold /
-      engine-`PandocIncludes` fold / Q1-parity ordering.
+  §TDD lets us co-develop tests + implementation; 8 unit tests
+  in `crates/quarto-core/src/stage/stages/include_resolve.rs`
+  cover bare-string / `{file:..}` / `{text:..}` / array of
+  mixed forms / missing-file warning / legacy-key fold /
+  engine-`PandocIncludes` fold / Q1-parity ordering.
 - [x] **1. `IncludeResolveStage`** — new pipeline stage (not
-      transform; it needs `StageContext.runtime` for file reads).
-      Reads `include-in-header` / `include-before-body` /
-      `include-after-body` plus the legacy inline keys, resolves
-      smart-includes, writes flat string arrays to
-      `meta.rendered.includes.{header, before-body, after-body}`.
-      Records file-slot dependencies on `DocumentAst.recorded_includes`
-      so the next stage drains them into the profile. Diagnostics
-      `Q-5-4` (missing file) and `Q-5-5` (invalid form). Pipeline
-      placement: between `IncludeExpansionStage` and
-      `DocumentProfileStage` so file deps reach `profile.includes`
-      for cache invalidation.
+  transform; it needs `StageContext.runtime` for file reads).
+  Reads `include-in-header` / `include-before-body` /
+  `include-after-body` plus the legacy inline keys, resolves
+  smart-includes, writes flat string arrays to
+  `meta.rendered.includes.{header, before-body, after-body}`.
+  Records file-slot dependencies on `DocumentAst.recorded_includes`
+  so the next stage drains them into the profile. Diagnostics
+  `Q-5-4` (missing file) and `Q-5-5` (invalid form). Pipeline
+  placement: between `IncludeExpansionStage` and
+  `DocumentProfileStage` so file deps reach `profile.includes`
+  for cache invalidation.
 - [x] **2. Template wiring** — `set_includes_list` reads
-      from `meta.rendered.includes.<slot>` and feeds the existing
-      `$header-includes$` / `$include-before$` / `$include-after$`
-      template variables (names kept stable per Resolved-question
-      #2). Dropped the `&PandocIncludes` parameter from
-      `render_with_compiled_template`. `ApplyTemplateStage::run`
-      drains any post-resolve `ctx.includes` (engine output that
-      lands during the engine stage, plus shortcode/Lua
-      contributions) into `rendered.includes.*` via a new
-      `append_pandoc_includes` helper before rendering. Updated
-      callers in `apply_template.rs` and `tests/navigation_e2e.rs`.
+  from `meta.rendered.includes.<slot>` and feeds the existing
+  `$header-includes$` / `$include-before$` / `$include-after$`
+  template variables (names kept stable per Resolved-question
+  #2). Dropped the `&PandocIncludes` parameter from
+  `render_with_compiled_template`. `ApplyTemplateStage::run`
+  drains any post-resolve `ctx.includes` (engine output that
+  lands during the engine stage, plus shortcode/Lua
+  contributions) into `rendered.includes.*` via a new
+  `append_pandoc_includes` helper before rendering. Updated
+  callers in `apply_template.rs` and `tests/navigation_e2e.rs`.
 - [x] **3. Migrate contributors** — `WebsiteFaviconTransform`
-      now appends to `rendered.includes.header` instead of the
-      authored top-level `header-includes` key. Inline tests
-      updated to read from the new location. Pipeline order
-      naturally guarantees `IncludeResolveStage` runs first
-      (pre-checkpoint) and the favicon/canonical-url transforms
-      run later in `AstTransformsStage`. `WebsiteCanonicalUrlTransform`
-      did not need migration (it writes the top-level
-      `canonical-url` key, separate from include slots).
+  now appends to `rendered.includes.header` instead of the
+  authored top-level `header-includes` key. Inline tests
+  updated to read from the new location. Pipeline order
+  naturally guarantees `IncludeResolveStage` runs first
+  (pre-checkpoint) and the favicon/canonical-url transforms
+  run later in `AstTransformsStage`. `WebsiteCanonicalUrlTransform`
+  did not need migration (it writes the top-level
+  `canonical-url` key, separate from include slots).
 - [x] **4. Cache-key invalidation for file-slot includes** —
-      `IncludeResolveStage` runs before `DocumentProfileStage`,
-      so `recorded_includes` (now containing both shortcode and
-      file-slot entries) is drained into `profile.includes` by
-      the existing path. `bd-r82e` cache hashing already includes
-      every entry. Decision: deferred the optional
-      `IncludeKind { Shortcode, FileSlot }` discriminator; the
-      cache-key contract works without a tag and bumping
-      `DOCUMENT_PROFILE_VERSION` for diagnostic-only metadata
-      would invalidate every existing on-disk cache for marginal
-      benefit. Filed as a follow-up note (no separate `bd` issue
-      until a consumer needs it). Integration test
-      `crates/quarto-core/tests/include_resolve_pipeline.rs::file_slot_include_lands_in_profile_includes`
-      pins the contract.
+  `IncludeResolveStage` runs before `DocumentProfileStage`,
+  so `recorded_includes` (now containing both shortcode and
+  file-slot entries) is drained into `profile.includes` by
+  the existing path. `bd-r82e` cache hashing already includes
+  every entry. Decision: deferred the optional
+  `IncludeKind { Shortcode, FileSlot }` discriminator; the
+  cache-key contract works without a tag and bumping
+  `DOCUMENT_PROFILE_VERSION` for diagnostic-only metadata
+  would invalidate every existing on-disk cache for marginal
+  benefit. Filed as a follow-up note (no separate `bd` issue
+  until a consumer needs it). Integration test
+  `crates/quarto-core/tests/include_resolve_pipeline.rs::file_slot_include_lands_in_profile_includes`
+  pins the contract.
 - [x] **5. End-to-end verification** — CLI render of fixture, eyeball
-      generated HTML, record observed snippet in this plan
-      (per CLAUDE.md §End-to-end verification).
+  generated HTML, record observed snippet in this plan
+  (per CLAUDE.md §End-to-end verification).
 
-      **Fixture:** `target/q2-includes-smoke/` (gitignored, under
-      `target/`). Files:
-      - `head.html` — `<meta name="q2-smoke" content="in-header-from-file">` plus a small `<style>`.
-      - `banner.html` — `<aside class="q2-banner">BEFORE-BODY-FROM-FILE</aside>`.
-      - `test.qmd` exercising **all four user-facing forms** plus a legacy inline key:
-        ```yaml
-        include-in-header: head.html               # bare-string path
-        include-before-body:
-          file: banner.html                          # smart {file: ...}
-        include-after-body:
-          text: "<script>console.log('AFTER-BODY-FROM-TEXT');</script>"  # smart {text: ...}
-        header-includes: '<meta name="legacy-inline" content="from-header-includes">'
-        ```
+  **Fixture:** `target/q2-includes-smoke/` (gitignored, under
+  `target/`). Files:
+  - `head.html` — `<meta name="q2-smoke" content="in-header-from-file">` plus a small `<style>`.
+  - `banner.html` — `<aside class="q2-banner">BEFORE-BODY-FROM-FILE</aside>`.
+  - `test.qmd` exercising **all four user-facing forms** plus a legacy inline key:
+    ```yaml
+    include-in-header: head.html               # bare-string path
+    include-before-body:
+      file: banner.html                          # smart {file: ...}
+    include-after-body:
+      text: "<script>console.log('AFTER-BODY-FROM-TEXT');</script>"  # smart {text: ...}
+    header-includes: '<meta name="legacy-inline" content="from-header-includes">'
+    ```
 
-      **Invocation:** `cargo run --bin q2 -- render test.qmd`
-      (from `target/q2-includes-smoke/`).
+  **Invocation:** `cargo run --bin q2 -- render test.qmd`
+  (from `target/q2-includes-smoke/`).
 
-      **Observed output** (`test.html`, abbreviated to the
-      include-relevant portions):
+  **Observed output** (`test.html`, abbreviated to the
+  include-relevant portions):
 
-      ```html
-      <head>
-        ...
-        <meta name="legacy-inline" content="from-header-includes">      <!-- legacy header-includes -->
-        <meta name="q2-smoke" content="in-header-from-file">             <!-- include-in-header file content -->
-        <style>p.q2-mark { color: rebeccapurple; }</style>               <!-- second line of head.html -->
-      </head>
-      <body class="fullcontent">
-      <aside class="q2-banner">BEFORE-BODY-FROM-FILE</aside>             <!-- include-before-body file content -->
-      ...
-      <main>...<p>This is the rendered document body.</p>...</main>
-      ...
-      <script>console.log('AFTER-BODY-FROM-TEXT');</script>              <!-- include-after-body text content -->
-      </body>
-      ```
+  ```html
+  <head>
+    ...
+    <meta name="legacy-inline" content="from-header-includes">      <!-- legacy header-includes -->
+    <meta name="q2-smoke" content="in-header-from-file">             <!-- include-in-header file content -->
+    <style>p.q2-mark { color: rebeccapurple; }</style>               <!-- second line of head.html -->
+  </head>
+  <body class="fullcontent">
+  <aside class="q2-banner">BEFORE-BODY-FROM-FILE</aside>             <!-- include-before-body file content -->
+  ...
+  <main>...<p>This is the rendered document body.</p>...</main>
+  ...
+  <script>console.log('AFTER-BODY-FROM-TEXT');</script>              <!-- include-after-body text content -->
+  </body>
+  ```
 
-      Each include lands in the correct slot. Inspection performed
-      manually; the HTML was regenerated after fixing two issues
-      uncovered by this run:
-      - A `RawInline`-vs-`Str` round-trip in the YAML reader meant
-        that user-authored HTML in inline-style keys (`header-includes`
-        with an embedded `<meta>`) was being dropped because
-        `as_plain_text()` skips `RawInline`. Fixed by introducing a
-        `literal_html_text` helper that walks `PandocInlines`
-        preserving raw markup and original quote characters.
-      - The same issue affected `{text: "<script>…'…'…</script>"}` —
-        the YAML reader parsed it as markdown, and the smart-quote
-        conversion was producing unicode quotes. Fixed in the same
-        helper by emitting the original `'` / `"` characters from
-        `Inline::Quoted` nodes.
+  Each include lands in the correct slot. Inspection performed
+  manually; the HTML was regenerated after fixing two issues
+  uncovered by this run:
+  - A `RawInline`-vs-`Str` round-trip in the YAML reader meant
+    that user-authored HTML in inline-style keys (`header-includes`
+    with an embedded `<meta>`) was being dropped because
+    `as_plain_text()` skips `RawInline`. Fixed by introducing a
+    `literal_html_text` helper that walks `PandocInlines`
+    preserving raw markup and original quote characters.
+  - The same issue affected `{text: "<script>…'…'…</script>"}` —
+    the YAML reader parsed it as markdown, and the smart-quote
+    conversion was producing unicode quotes. Fixed in the same
+    helper by emitting the original `'` / `"` characters from
+    `Inline::Quoted` nodes.
 - [ ] **6. Docs note** — file an entry under `bd-tr81` (the docs
-      epic) or write a Q2-side `docs/authoring/includes.qmd`-style
-      page covering both the shortcode form (already documented in
-      Q1) and the slot form (not documented in Q1). Deferred to a
-      separate session — the docs epic owns user-facing docs work.
+  epic) or write a Q2-side `docs/authoring/includes.qmd`-style
+  page covering both the shortcode form (already documented in
+  Q1) and the slot form (not documented in Q1). Deferred to a
+  separate session — the docs epic owns user-facing docs work.
 
 ## Resolved questions
 

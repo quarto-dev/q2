@@ -14,7 +14,7 @@ quarto render --output-dir _site-q1
 
 ## `repro/` — the strand's case
 
-**q2 @ `0dcd7e83`**, `_site/index.html`:
+**q2 \@ `0dcd7e83`**, `_site/index.html`:
 
 ```html
 <nav id="TOC" role="doc-toc" class="toc-active">
@@ -58,7 +58,7 @@ strand bd-heading-id-drops-inline-content-fl84n3ql, not this one.)
 
 ## `markup-probe/` — does the TOC keep inline markup at all?
 
-Headings: `## Use \`code\` and *em* and **strong**` and
+Headings: ``## Use `code` and *em* and **strong**`` and
 `## Math $x+y$ and a [link](https://example.com)`.
 
 **Quarto 1** keeps the markup:

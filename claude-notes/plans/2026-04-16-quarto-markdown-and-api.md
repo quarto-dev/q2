@@ -3,7 +3,7 @@
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plan 2A — both the **foundation** (`@quarto/api` shell + `./config` + vendored `@quarto/types`) and **§2aa** (the runtime surface: the `text`/`markdownRegex`/`mappedString`/`format`/`path`/`system`/`console`/`crypto` namespaces + `@quarto/api/platform`), both implemented. **Phase A also depends on Plan 1b** (#8) — its `buildQuartoAPI(global, host)` assembly (`@quarto/engine-host-deno/src/quarto-api.ts`, landed) is the integration point that threads `Init { global }` into the factories Phase A gives bodies; Phase A lands the `global`-param seam Plan 1b already stubbed (the `_global` it accepts but ignores). Phase B (types) is otherwise independent. Phase A fills stubs that §2aa shipped, so it follows §2aa.
 **Blocks:** Plan 4 (Julia Validation) needs all of Plan 2.
-**Estimated sessions:** 2-3 (revised up from ~1 — Phase A's `global`+`fs` seam + ensureDir port + Model-1 comment cleanup, B1's full `core/process.ts` port + two-tier tests, B2's derive-all + onCleanup reconciliation + negative type test, and Phase B as the coherence gate are materially more than the original "fill the stubs" estimate).
+**Estimated sessions:** 2-3 (revised up from \~1 — Phase A's `global`+`fs` seam + ensureDir port + Model-1 comment cleanup, B1's full `core/process.ts` port + two-tier tests, B2's derive-all + onCleanup reconciliation + negative type test, and Phase B as the coherence gate are materially more than the original "fill the stubs" estimate).
 
 ## Scope (reconciled after §2aa landed)
 
@@ -180,7 +180,7 @@ referenced by the import map.
   - `EngineProjectContext`
   - **`LanguageClaim`** — the kind-tagged claim returned by `claimsLanguage`:
     `{ kind: "primary" | "interop" | "fallback"; priority?: number }`.
-    `ExecutionEngineDiscovery.claimsLanguage`'s return type widens to
+    `ExecutionEngineDiscovery.claimsLanguage`\'s return type widens to
     `boolean | number | LanguageClaim | null` — the `boolean`/`number` forms
     stay Q1-compatible (the harness normalizes them; a bare `number` is always
     a `primary`, never interop), and `interop`/`fallback` are reachable only via
@@ -425,7 +425,7 @@ needed).
 mergeOutput?: "stderr>stdout"|"stdout>stderr", stderrFilter?, respectStreams?, timeout?)` (6-param).
 knitr `rmd.ts:440-458` calls it with `"stdout>stderr"` **and** a `stderrFilter` closure — real
 engine-author use. q2 runtime `system/index.ts:97-100` is 2-param `(options, stdin?)`;
-`ExecProcessOptions` (`:43-58`) and `platform/index.ts:25-32`'s `ExecOptions = {cwd?, env?, stdin?}`
+`ExecProcessOptions` (`:43-58`) and `platform/index.ts:25-32`\'s `ExecOptions = {cwd?, env?, stdin?}`
 carry **neither** knob — they have no home below the seam. The vendored
 `@quarto/types/quarto-api.ts:616-623` keeps the full 6-param signature → **runtime and vendored
 signatures disagree**, so the `QuartoAPI` aggregation can't typecheck until reconciled. Engine
@@ -444,7 +444,7 @@ already correct, and it is the *runtime* that is under-built (2-param). Reconcil
 the runtime to the six-positional shape (no change to the vendored type) and thread the knobs through
 the seam internally. There is **no technical reason to flatten**: `execProcess` is an **in-process**
 call (the `stderrFilter` *closure* proves it never crosses the wire), so there is no serde/wire
-pressure, and `host.process.exec`'s `ExecOptions` carries the knobs below the seam regardless of how
+pressure, and `host.process.exec`\'s `ExecOptions` carries the knobs below the seam regardless of how
 the public parameters are spelled. Flattening would only buy named-options ergonomics while
 *regressing* the Q1 parity this section ("return-to-Q1") exists to preserve — and under B2#3 (derive
 `SystemNamespace = QuartoAPI["system"]`) it would lock that regression into the single source of
@@ -458,7 +458,7 @@ truth.
   `stderrFilter`; `respectStreams` is the two stream-passthrough ternaries at `:168,183`; `timeout` is
   `Promise.race` + `process.kill()` at `:32,55-59`). **Implement all four, not half:** under B2#3 the
   derived signature carries all six params regardless, so a "present but ignored" knob is a silent
-  no-op trap — and they all live in the *same* ~70-line function, so half-porting saves almost
+  no-op trap — and they all live in the *same* \~70-line function, so half-porting saves almost
   nothing. Do **not** flatten the knobs into `ExecProcessOptions`.
 - [x] **Types (Phase B / B2#3).** No change to the vendored `@quarto/types` `execProcess` — it is
   already Q1-shaped. Under B2#3 the runtime `SystemNamespace` *derives* from `QuartoAPI["system"]`, so
@@ -485,7 +485,7 @@ truth.
 
 Plan 1b's `buildQuartoAPI` assembles the §2aa namespaces and asserts the result with a
 broad **`as unknown as QuartoAPI`** cast (`quarto-engine-host-deno/src/quarto-api.ts:243`)
-because `@quarto/api`'s per-namespace interfaces (`SystemNamespace`, …) and the loosely-typed
+because `@quarto/api`\'s per-namespace interfaces (`SystemNamespace`, …) and the loosely-typed
 stubs **do not structurally conform** to the vendored `QuartoAPI` (`@quarto/types/src/quarto-api.ts`).
 The cast is correct today (the final 1b review verified it hides no mis-wiring) but it **suppresses
 compile-time checking on the whole assembly** — a future mis-wired namespace would not be caught.
@@ -517,7 +517,7 @@ the *remaining* divergences and deletes the cast:
   (it does file IO via `PlatformHost` — a natural Phase-A-style body when a consumer appears). This
   lets the harness drop its local stub.
 - [x] **Make conformance compiler-enforced (the durable fix — Fix B), split by namespace category.**
-  Have `@quarto/api`'s interfaces *derive from* the SDK contract instead of redefining it — but
+  Have `@quarto/api`\'s interfaces *derive from* the SDK contract instead of redefining it — but
   respect the two factory categories `index.ts` defines (a naive "derive everything from
   `QuartoAPI[ns]`" does **not** compile for the mostly-pure namespaces):
   - **Fully-host namespaces** (`console`, `system`) — the factory returns the *whole* namespace, so
@@ -614,8 +614,8 @@ durable justification for those choices.
 ### Why rewrite instead of extract?
 
 Quarto 1's markdown utilities are tangled with the YAML schema/validation
-system (~30+ files), tree-sitter, mapped-text infrastructure, and lodash.
-Clean rewrites of the actual logic are ~50-300 lines per function, vs.
+system (\~30+ files), tree-sitter, mapped-text infrastructure, and lodash.
+Clean rewrites of the actual logic are \~50-300 lines per function, vs.
 extracting would require bringing 30+ files and stubbing their dependencies.
 The logic itself is straightforward — it's the plumbing that's tangled.
 
@@ -675,7 +675,7 @@ This plan:
   (`ExecutionEngineDiscovery`/`Instance`, `ExecuteOptions`/`Result`/`Target`,
   `QuartoAPI` with namespace signatures + the pure/host-only/ambient jsdoc
   classification, `MappedString`, `EngineProjectContext`, `LanguageClaim`, and the jupyter namespace
-  signatures incl. `widgetDependencyIncludes`→`PandocIncludes`). The engine packages' per-package
+  signatures incl. `widgetDependencyIncludes`→`PandocIncludes`). The engine packages\' per-package
   `tsc --noEmit` are green with all *present* consumers (1b's `buildQuartoAPI`, an author-fixture
   source unit) — no `tsc -b` graph exists over ts-packages; the wire-dual types have a TS↔Rust
   parity check; sequencing is 1b → 2 → 3. (See "coherence gate" above.)
@@ -686,7 +686,7 @@ This plan:
   two-tier seams green (fake-host wiring + deno-tier behavior).
 - [x] **B2 (QuartoAPI conformance — retires Plan 1b's cast):** `checkRender`/
   `runExternalPreviewServer` typed to their real returns + throw (no `...args: unknown[]`);
-  `text.postProcessRestorePreservedHtml` exported (real-typed stub); `@quarto/api`'s namespace
+  `text.postProcessRestorePreservedHtml` exported (real-typed stub); `@quarto/api`\'s namespace
   interfaces derive from `QuartoAPI['<ns>']` (conformance compiler-enforced); the harness's
   `as unknown as QuartoAPI` cast + local `postProcessRestorePreservedHtml` stub **deleted**
   (`buildQuartoAPI` typed `: QuartoAPI` with no cast, except the `jupyter` Proxy pending Plan 3);

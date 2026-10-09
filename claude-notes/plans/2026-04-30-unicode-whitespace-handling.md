@@ -173,7 +173,7 @@ are byte-literals inline in a `tests/test_*.rs` file (see
 
 `crates/tree-sitter-qmd` is a **unified** grammar — block + inline
 in one parser, contrary to the older `CLAUDE.md` description of two
-grammars. There is one external scanner (`scanner.c`, ~2381 lines,
+grammars. There is one external scanner (`scanner.c`, \~2381 lines,
 purely block-structural) and one grammar (`grammar.js`) whose
 `pandoc_str` rule is a JS regex with Unicode flag. There is no
 separate `tree-sitter-markdown-inline` directory in the repo, despite

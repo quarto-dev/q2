@@ -44,7 +44,7 @@ In this view:
 ## The Reality Check
 
 Looking at our actual use case in 002.qmd:
-- "There" + "'" + "s" are CONTIGUOUS in the original source
+- "There" + \"\'\" + "s" are CONTIGUOUS in the original source
 - They're from the SAME original file at ADJACENT positions
 - The "virtual text" is literally identical to a contiguous span in original!
 

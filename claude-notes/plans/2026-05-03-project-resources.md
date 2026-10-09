@@ -359,7 +359,7 @@ alongside the code that supports them in their respective phases.
 - [x] End-to-end fixture: project with `_quarto.yml` declaring
       `resources: ["data/*.csv", "extras/notes.txt"]`, plus a
       document with `resources: [include.html]`. Run `quarto
-      render`, assert files land in `_site/` at expected locations.
+      render`, assert files land in `\_site/` at expected locations.
       *(Implemented as `project_resources_literal_paths_copy_to_output_dir`,
       `project_resources_glob_expansion`,
       `project_resources_single_scalar`,

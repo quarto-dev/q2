@@ -31,7 +31,7 @@ This plan describes the implementation of shortcode resolution in Rust Quarto. T
 
 ### Current State
 
-1. **Parsing is complete**: `pampa` already parses `{{< name args... >}}` into `Inline::Shortcode`
+1. **Parsing is complete**: `pampa` already parses `{{{< name args... >}}}` into `Inline::Shortcode`
 2. **Types exist**: `Shortcode` and `ShortcodeArg` are defined in `quarto-pandoc-types`
 3. **Shortcodes are skipped**: `MetadataNormalizeTransform` and `ResourceCollectorTransform` currently skip shortcodes
 4. **Span conversion exists**: `pampa/src/pandoc/shortcode.rs` has `shortcode_to_span()` for Lua filter compatibility
@@ -200,7 +200,7 @@ impl ShortcodeResolveTransform {
 
 ### `meta` Shortcode Handler
 
-```rust
+```{.rust shortcodes="false"}
 use quarto_error_reporting::DiagnosticMessageBuilder;
 
 pub struct MetaShortcodeHandler;
@@ -493,7 +493,7 @@ This is the same pattern already used in this codebase for handling `inline_note
 
 ### Test
 
-```bash
+```{.bash shortcodes="false"}
 echo 'Text {{< meta title >}} more {{< meta author >}} end' | cargo run --bin pampa -- --to json
 # Now shows Space nodes before shortcodes
 
@@ -519,8 +519,8 @@ cargo run --bin quarto -- render --to html test.qmd
 
 ### Integration Tests
 
-1. **Simple document**: Single `{{< meta title >}}` shortcode
-2. **Nested metadata**: `{{< meta author.name >}}`
+1. **Simple document**: Single `{{{< meta title >}}}` shortcode
+2. **Nested metadata**: `{{{< meta author.name >}}}`
 3. **Multiple shortcodes**: Multiple shortcodes in one document
 4. **Shortcodes in various contexts**: In headers, lists, links, callouts
 5. **Escaped shortcodes**: `{{{< meta title >}}}`

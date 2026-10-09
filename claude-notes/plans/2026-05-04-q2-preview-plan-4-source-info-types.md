@@ -378,7 +378,7 @@ items keep "anchor" in their name (`invocation_anchor`,
 field name and any Lua-table key use `from`. `by` / `from` reads cleanly
 in both Rust and Lua serializations — preserve that pairing throughout.
 
-```rust
+```{.rust shortcodes="false"}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SourceInfo {
     Original { file_id: FileId, start_offset: usize, end_offset: usize },
@@ -774,7 +774,7 @@ Migration table (Phase 3):
 | test `root_file_id` (apply_template.rs) | `info.root_file_id()` (delete local fn) |
 | test `walk_source_info` (engine_execution.rs) | `si.collect_file_ids(out)` (delete inner fn) |
 
-Net effect: ~60 LOC of duplicate walkers removed, two latent
+Net effect: \~60 LOC of duplicate walkers removed, two latent
 production bugs fixed (nested-Substring fall-through to FileId(0)),
 and the Generated arm is defined exactly once.
 
@@ -941,7 +941,7 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
   with that accessor in `quarto-source-map`.)
 - `remap_file_ids()` for `Generated`: build a
   `Generated { from: [Invocation -> Original{FileId(0), …}, ValueSource -> Original{FileId(3), …}] }`,
-  apply `|id| FileId(id.0 + 10)`, assert both anchors' source_info
+  apply `|id| FileId(id.0 + 10)`, assert both anchors\' source_info
   carry remapped FileIds. This catches the "no-op like FilterProvenance"
   regression — `Generated` must NOT be a no-op since it can hold FileIds.
 - `root_file_id()` coverage on every variant. Generated with an
@@ -998,11 +998,11 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
 
 - **Migration scope**: 15 files pattern-match `SourceInfo::FilterProvenance`
   (27 occurrences total — verified by grep against the worktree).
-  Phase 3's file-id-walker consolidation retires ~6 of those by
+  Phase 3's file-id-walker consolidation retires \~6 of those by
   replacing entire match expressions (the file-id-extraction sites in
   `diagnostic.rs`, `location.rs`, `pipe_table.rs`, `section.rs`,
   `apply_template.rs`, `engine_execution.rs`). Phase 5 sweeps the
-  ~21 remaining arms. Most are mechanical: the `Generated` arm
+  \~21 remaining arms. Most are mechanical: the `Generated` arm
   returns what `FilterProvenance` did today (`0`/`0`/`None` for
   offset/length accessors; delegates to `invocation_anchor()` for
   `resolve_byte_range`). File-id traversals are handled exactly once,
@@ -1020,14 +1020,14 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
     - two anchors (Invocation + ValueSource for `meta`/`var` once
       bd-129m3 lands; Invocation + Dispatch for Lua-handler shortcodes
       once bd-36fr9 lands).
-  Cap=2 grows the `SmallVec<[Anchor; …]>` field by ~40 bytes (the size
-  of one inline `Anchor` slot — `AnchorRole`'s largest variant
+  Cap=2 grows the `SmallVec<[Anchor; …]>` field by \~40 bytes (the size
+  of one inline `Anchor` slot — `AnchorRole`\'s largest variant
   `Other(String)` is 32 bytes, plus 8 for `Arc<SourceInfo>`). Because
   the `SourceInfo` enum's stack size is dictated by its largest
   variant, **every** `SourceInfo` value in the AST grows by that 40
   bytes — not just `Generated` instances. For a doc with thousands of
   Block/Inline nodes (each carrying a `SourceInfo` by value, not
-  Arc-boxed), the cap=1 → cap=2 step costs ~40 bytes per node, i.e.
+  Arc-boxed), the cap=1 → cap=2 step costs \~40 bytes per node, i.e.
   tens-to-hundreds of KB on a large document. The trade is paid in
   exchange for eliminating the heap spill cap=1 would incur on every
   multi-anchor shortcode in the steady state. Three-or-more-anchor
@@ -1054,7 +1054,7 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
 - **`Default` on containers of `SourceInfo`**: verified no struct in
   `quarto-pandoc-types/src/{block,inline}.rs` derives `Default` (each
   `SourceInfo`-bearing struct is constructed explicitly), so changing
-  `SourceInfo`'s arm set can't cascade into a broken
+  `SourceInfo`\'s arm set can't cascade into a broken
   `#[derive(Default)]`. The hand-written `Default for SourceInfo` impl
   (the `Original { FileId(0), 0, 0 }` zero-value) stays unchanged.
 - **`combine()` with a `Generated` operand**: structurally valid (it
@@ -1074,17 +1074,17 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
 
 | Component | Lines (rough) |
 |---|---|
-| `Generated` variant + `Anchor` + `AnchorRole` types | ~80 |
-| Accessors (invocation_anchor, value_source_anchor, etc.) | ~60 |
-| `By` struct + builders + `is_atomic_kind` | ~120 |
-| `resolve_byte_range` / `map_offset` / `remap_file_ids` updates | ~40 |
-| `root_file_id` + `collect_file_ids` accessors | ~50 |
+| `Generated` variant + `Anchor` + `AnchorRole` types | \~80 |
+| Accessors (invocation_anchor, value_source_anchor, etc.) | \~60 |
+| `By` struct + builders + `is_atomic_kind` | \~120 |
+| `resolve_byte_range` / `map_offset` / `remap_file_ids` updates | \~40 |
+| `root_file_id` + `collect_file_ids` accessors | \~50 |
 | File-id walker consolidation (6 sites → 2 methods, net delete) | **-30** |
-| Pattern-match migrations (~9 files, ~21 occurrences post-consolidation) | ~140 |
-| FilterProvenance construction site migrations | ~30 |
-| Lua serde extension + back-compat | ~80 |
-| Test updates and new tests | ~280 |
-| **Total** | **~850** |
+| Pattern-match migrations (\~9 files, \~21 occurrences post-consolidation) | \~140 |
+| FilterProvenance construction site migrations | \~30 |
+| Lua serde extension + back-compat | \~80 |
+| Test updates and new tests | \~280 |
+| **Total** | **\~850** |
 
 One to two focused sessions. The unified-variant design reduces the
 total cost vs. the previous Synthetic-plus-Derived dual-variant draft
@@ -1105,7 +1105,7 @@ Plan 5+ readers can adjust expectations.
 
 - **Phase 1's "compiles cleanly" holds only for `quarto-source-map`,
   not the workspace.** Adding the `Generated` variant immediately
-  triggered non-exhaustive-match errors across ~10 crates. Phase 3's
+  triggered non-exhaustive-match errors across \~10 crates. Phase 3's
   six-walker consolidation rescues part of it, but the workspace
   doesn't build green again until **Phase 5** lands. The phase boundary
   semantics are "the source-map crate plus directly-touched
@@ -1119,7 +1119,7 @@ Plan 5+ readers can adjust expectations.
   callers were the function's four dedicated tests plus one
   commented-out reference in `pampa/src/writers/json.rs`. Deleted the
   function and the four tests entirely; the equivalent coverage now
-  lives in `quarto-source-map`'s `test_root_file_id_per_variant`.
+  lives in `quarto-source-map`\'s `test_root_file_id_per_variant`.
   Cleaner than the plan anticipated. Future grep-and-replace plans
   should re-verify caller counts at start-of-implementation, not just
   at planning time.

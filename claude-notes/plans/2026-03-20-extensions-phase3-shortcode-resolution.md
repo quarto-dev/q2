@@ -21,13 +21,13 @@ Remaining work:
 
 ### q2 shortcode infrastructure
 
-- **Parser**: Tree-sitter grammar parses `{{< name args >}}` into `Inline::Shortcode` nodes.
+- **Parser**: Tree-sitter grammar parses `{{{< name args >}}}` into `Inline::Shortcode` nodes.
   Shortcodes are always inline — there is no `Block::Shortcode` variant.
 - **AST type**: `Shortcode` struct in `quarto-pandoc-types/src/shortcode.rs` with `is_escaped`,
   `name`, `positional_args`, `keyword_args`, `source_info`.
 - **Transform**: `ShortcodeResolveTransform` in `quarto-core/src/transforms/shortcode_resolve.rs`
   walks the AST and dispatches to `ShortcodeHandler` trait implementations.
-- **Built-in handlers**: Only `MetaShortcodeHandler` (`{{< meta key >}}`).
+- **Built-in handlers**: Only `MetaShortcodeHandler` (`{{{< meta key >}}}`).
 - **Pipeline position**: Runs in `AstTransformsStage`, after callout resolution, before metadata
   normalization. The transform pipeline is built statically by `build_transform_pipeline()`.
 - **Result type**: `ShortcodeResult` has `Inlines(Vec<Inline>)`, `Error(ShortcodeError)`, `Preserve`.
@@ -581,7 +581,7 @@ and extension lookup.
 
 - [x] **3.4.6** Tests:
   - `test_lua_shortcode_from_metadata_paths`: Lua script path in metadata → handler works
-  - `test_lua_shortcode_by_extension_name`: `{{< my-ext >}}` with matching extension →
+  - `test_lua_shortcode_by_extension_name`: `{{{< my-ext >}}}` with matching extension →
     extension's shortcode scripts loaded and handler called
   - `test_rust_handler_overrides_lua`: both Rust `meta` and Lua `meta` handler →
     Rust handler wins
@@ -605,18 +605,18 @@ and extension lookup.
 ### Phase 3.6: Smoke tests
 
 - [x] **3.6.1** Create `crates/quarto/tests/smoke-all/extensions/shortcode-extension/`:
-  Extension with `contributes.shortcodes: [hello.lua]`. Document uses `{{< hello >}}`.
+  Extension with `contributes.shortcodes: [hello.lua]`. Document uses `{{{< hello >}}}`.
   `hello.lua` returns `pandoc.Inlines{pandoc.Str("HELLO-SHORTCODE-ACTIVE")}`.
   Assert: `ensureFileRegexMatches: [["HELLO-SHORTCODE-ACTIVE"]]`.
 
 - [x] **3.6.2** Create `crates/quarto/tests/smoke-all/extensions/format-with-shortcodes/`:
   Format extension with `contributes.formats.html.shortcodes: [greeting.lua]`.
-  Document uses test key `myext-html` and `{{< greeting >}}`.
+  Document uses test key `myext-html` and `{{{< greeting >}}}`.
   Assert: shortcode output appears in HTML.
 
 - [x] **3.6.3** Create smoke test for block-level shortcode:
   Extension shortcode that returns `pandoc.RawBlock("html", "<hr class=\"ext-break\">")`.
-  Document has `{{< break >}}` alone on a line.
+  Document has `{{{< break >}}}` alone on a line.
   Assert: `ensureHtmlElements: [["hr.ext-break"]]`.
 
 - ~~**3.6.4**~~ Removed — lipsum is a future built-in shortcode (see Future Work section),
@@ -656,7 +656,7 @@ document may contain dozens of shortcodes — creating a Lua state per invocatio
 be expensive.
 
 The transform pipeline is also rebuilt per render (in `AstTransformsStage::run()`).
-This is negligible — it allocates a `Vec` of ~11 small structs. The shortcode transform's
+This is negligible — it allocates a `Vec` of \~11 small structs. The shortcode transform's
 `with_lua_support()` constructor stores only owned data; no Lua initialization happens
 until `transform()` is called.
 

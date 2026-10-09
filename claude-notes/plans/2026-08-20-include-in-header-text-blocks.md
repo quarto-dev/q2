@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-20
 **Braid:** bd-include-in-header-text-blocks-ins2v6za
-**Branch:** `main` @ `87c0e21a` (investigated in the main checkout; no worktree created)
+**Branch:** `main` \@ `87c0e21a` (investigated in the main checkout; no worktree created)
 **Status:** Implemented 2026-08-20 (design questions answered by the user the same day; see "Decisions").
 
 ## Triage verdict
@@ -82,7 +82,7 @@ HEAD run.
 
 ## Proposed phases (draft)
 
-- [x] **Phase 0 — Test plan (TDD).** Unit tests in `include_resolve.rs`'s test
+- [x] **Phase 0 — Test plan (TDD).** Unit tests in `include_resolve.rs`\'s test
   module: (a) `text:` holding `PandocBlocks` with a `RawBlock{html}` reaches the
   rendered list verbatim; (b) multi-paragraph blocks are joined; (c) a `Map`
   with neither `file:` nor `text:` still gets the "invalid form" code; (d) the
@@ -123,7 +123,7 @@ HEAD run.
    embed transform (what the catalog documents) or the include stage (the
    original user)? I'd leave embed as documented and move include to `Q-5-30`
    / `Q-5-31`.
-4. **Q-1-20 on bare `<style>`.** Out of scope here (it's `meta.rs`'s markdown
+4. **Q-1-20 on bare `<style>`.** Out of scope here (it's `meta.rs`\'s markdown
    parse warning), but once the fence works the Connect docs no longer need
    the bare form. Confirm we leave Q-1-20 alone.
 
@@ -148,19 +148,23 @@ fix with Q-5-5, pass after.
 
 Real binary, repro project:
 
-    cargo run --bin q2 -- render claude-notes/plans/include-in-header-text-blocks-investigation/repro
-    grep -o 'marker-[a-d]' _site/*.html
+```sh
+cargo run --bin q2 -- render claude-notes/plans/include-in-header-text-blocks-investigation/repro
+grep -o 'marker-[a-d]' \_site/*.html
 
-    index (fence):      marker-a   (was: none + Q-5-5)
-    multi-para:         marker-d   (was: none + Q-5-5)
-    bare-html:          marker-b   (unchanged, still Q-1-20)
-    inline-raw:         marker-c   (unchanged)
+index (fence):      marker-a   (was: none + Q-5-5)
+multi-para:         marker-d   (was: none + Q-5-5)
+bare-html:          marker-b   (unchanged, still Q-1-20)
+inline-raw:         marker-c   (unchanged)
+```
 
 `_site/index.html` lines 14–17, inspected:
 
-    <style type="text/css">
-      .marker-a { color: rebeccapurple; }
-    </style>
-    </head>
+```
+<style type="text/css">
+  .marker-a { color: rebeccapurple; }
+</style>
+</head>
+```
 
-No Q-5-5 in the render output; no ``` fence markers leak into the HTML.
+No Q-5-5 in the render output; no \`\`\` fence markers leak into the HTML.

@@ -53,7 +53,7 @@ Distinct bugs:
    glob string containing `*` in front-matter `contents:` — DocumentMetadata
    context tries to parse the string as markdown before the listing parser's
    `as_plain_text` fallback recovers it.
-6. **Silent glob corruption when the markdown parse *succeeds*** (fixture
+6. **Silent glob corruption when the markdown parse _succeeds_** (fixture
    `p6-glob-corruption`, verified 2026-08-06): `contents: ["p*osts*.qmd"]`
    parses as emphasis, `as_plain_text` reconstructs `posts.qmd` (asterisks
    lost), the listing renders empty, and **no diagnostic fires at all**. Same
@@ -102,7 +102,7 @@ Q1-inherited inconsistency where some globs default to `*.qmd` and others to
 follow-up strand (`discovered-from:bd-v7ixzsp5`) when the API shape settles.
 
 Consequence (intentional behavior change, shipping **silently** — Carlos,
-2026-08-06: q2 is 0.*, no stability promises): a subdirectory host using a
+2026-08-06: q2 is 0.\*, no stability promises): a subdirectory host using a
 project-relative glob (`posts/*.qmd` meaning root-level `posts/` from
 `sub/index.qmd`) stops matching. This aligns with both Q1 and the new
 provenance semantics. No transition diagnostic.
@@ -168,131 +168,131 @@ to the stage/render context. Keep the helper synchronous and pure.
 
 ### Phase 0 — investigation residue (small, before tests)
 - [x] Confirm how pampa assigns the document's own FileId (assumed `FileId(0)`)
-      and that `_quarto.yml`'s metadata layer retains `parse_file` provenance
-      through `resolve_format_config` + merging. **Confirmed 2026-08-06:**
-      front matter = `Substring` into the RawBlock's source (doc `FileId(0)`,
-      `pampa/src/pandoc/meta.rs:355-361`); `_quarto.yml` parsed via
-      `parse_file(<full path>)` → hash FileId, `config_path` retained
-      (`project/mod.rs:621-699`); `_metadata.yml` same scheme
-      (`directory_metadata_for_document`), chain re-derivable by walking
-      root→doc dir. Merge preserves leaf `source_info` (theme diagnostics
-      pointing into `_quarto.yml` post-merge are the existing proof;
-      `compile_theme_css.rs:368-388`).
+  and that `_quarto.yml`\'s metadata layer retains `parse_file` provenance
+  through `resolve_format_config` + merging. **Confirmed 2026-08-06:**
+  front matter = `Substring` into the RawBlock's source (doc `FileId(0)`,
+  `pampa/src/pandoc/meta.rs:355-361`); `_quarto.yml` parsed via
+  `parse_file(<full path>)` → hash FileId, `config_path` retained
+  (`project/mod.rs:621-699`); `_metadata.yml` same scheme
+  (`directory_metadata_for_document`), chain re-derivable by walking
+  root→doc dir. Merge preserves leaf `source_info` (theme diagnostics
+  pointing into `_quarto.yml` post-merge are the existing proof;
+  `compile_theme_css.rs:368-388`).
 - [x] Check `docs/` site and existing test corpus. **Confirmed 2026-08-06:**
-      docs/ has one listing host (`errors/index.qmd`, glob `*/Q-*.qmd`) which
-      matches via the host-relative view — unaffected. All existing
-      project-relative tests (dep-graph #15/#15b, transform
-      `project_relative_glob_matches_files_in_subdir`) use hosts at the
-      project root, where host-relative == project-relative — they survive
-      unchanged (doc comments need updating).
+  docs/ has one listing host (`errors/index.qmd`, glob `*/Q-*.qmd`) which
+  matches via the host-relative view — unaffected. All existing
+  project-relative tests (dep-graph #15/#15b, transform
+  `project_relative_glob_matches_files_in_subdir`) use hosts at the
+  project root, where host-relative == project-relative — they survive
+  unchanged (doc comments need updating).
 - [x] Confirm `Q-13-4` origin. **Confirmed 2026-08-06:** emitted by
-      `resolve_doc_relative_href` (`transforms/navigation_href.rs`) once per
-      phantom-item link (thumbnail + title = the observed pair). Fixing bug 1
-      removes them; no separate change needed.
+  `resolve_doc_relative_href` (`transforms/navigation_href.rs`) once per
+  phantom-item link (thumbnail + title = the observed pair). Fixing bug 1
+  removes them; no separate change needed.
 
 ### Phase 1 — tests first (TDD)
 - [x] Fixture projects as **inline-written temp-dir fixtures** (the repo's
-      established convention in `listing_pipeline.rs` — no committed fixture
-      dirs needed): `tests/integration/listing_glob_resolution.rs`, registered
-      in `main.rs`.
+  established convention in `listing_pipeline.rs` — no committed fixture
+  dirs needed): `tests/integration/listing_glob_resolution.rs`, registered
+  in `main.rs`.
 - [x] Failing integration tests (8, all verified failing for the right
-      semantic reasons at 59500cf1): host-dir resolution, dual-view removal,
-      `_metadata.yml` base dir, `_quarto.yml` base dir, `../` traversal,
-      root-escape `Q-12-17`, negation, negation-only default. Bonus finding
-      pinned by `projmeta` test: cross-directory items currently get
-      non-relativized hrefs (`href="posts/a.qmd"` verbatim) — the fix must
-      produce page-relative hrefs for items outside the host's directory.
+  semantic reasons at 59500cf1): host-dir resolution, dual-view removal,
+  `_metadata.yml` base dir, `_quarto.yml` base dir, `../` traversal,
+  root-escape `Q-12-17`, negation, negation-only default. Bonus finding
+  pinned by `projmeta` test: cross-directory items currently get
+  non-relativized hrefs (`href="posts/a.qmd"` verbatim) — the fix must
+  produce page-relative hrefs for items outside the host's directory.
 - [x] Unit tests for the resolver (provenance → base dir, incl. fallback) and
-      the single-view matcher (incl. `..` normalization; escaping the project
-      root matches nothing AND emits the new diagnostic code) — in
-      `glob_resolve.rs`.
+  the single-view matcher (incl. `..` normalization; escaping the project
+  root matches nothing AND emits the new diagnostic code) — in
+  `glob_resolve.rs`.
 - [x] Unit tests for negation partition semantics (`glob_resolve.rs` +
-      dep-graph test #22b).
+  dep-graph test #22b).
 - [x] Dep-graph tests updated: #15/#19 rewritten for resolved patterns, #22b
-      added for negation; the rest were root-host tests that survive
-      unchanged.
+  added for negation; the rest were root-host tests that survive
+  unchanged.
 
 ### Phase 2 — resolver + data model
 - [x] Provenance-resolver helper: `project/listing/glob_resolve.rs`
-      (`resolve_content_globs`, `item_matches`; pure, WASM-safe).
-      `MetadataMergeStage` registers `_quarto.yml`/`_metadata.yml` in BOTH
-      document SourceContexts (hash FileIds; symmetric append preserves
-      `IncludeExpansionStage`'s FileId-parity invariant — a full-suite run
-      caught the one-context version).
+  (`resolve_content_globs`, `item_matches`; pure, WASM-safe).
+  `MetadataMergeStage` registers `_quarto.yml`/`_metadata.yml` in BOTH
+  document SourceContexts (hash FileIds; symmetric append preserves
+  `IncludeExpansionStage`\'s FileId-parity invariant — a full-suite run
+  caught the one-context version).
 - [x] `ListingContents::Glob { pattern, source }` — carries `SourceInfo`
-      rather than a pre-resolved base dir (resolution happens at the two
-      consumption points, which own the context).
+  rather than a pre-resolved base dir (resolution happens at the two
+  consumption points, which own the context).
 - [x] `DocumentProfile` v7 → v8: `listing_content_globs:
-      Vec<ListingContentGlob>` (resolved pattern + negated), populated by
-      `DocumentProfileStage` (extract stays pure).
+  Vec<ListingContentGlob>` (resolved pattern + negated), populated by
+  `DocumentProfileStage` (extract stays pure).
 
 ### Phase 3 — matcher swap
 - [x] Shared single-view matcher in both consumers; dual-view logic and
-      `relative_to_dir` deleted. Bonus fix surfaced by the tests:
-      `host_relative_qmd` in `binding.rs` now emits `../`-style hrefs for
-      items outside the host's directory (page-relative links were broken
-      for cross-directory items).
+  `relative_to_dir` deleted. Bonus fix surfaced by the tests:
+  `host_relative_qmd` in `binding.rs` now emits `../`-style hrefs for
+  items outside the host's directory (page-relative links were broken
+  for cross-directory items).
 - [x] Negation applied in both sites (render + dep graph). `Q-12-17`
-      registered in the catalog + docs stub page; audit script clean.
+  registered in the catalog + docs stub page; audit script clean.
 
 ### Phase 4 — verification
 - [x] `cargo nextest run --workspace` — 10890 passed at 359ad0c2 (includes
-      the 8 new integration tests, all green).
+  the 8 new integration tests, all green).
 - [x] End-to-end: `./target/debug/q2 render <fixture>` on all six scratchpad
-      fixtures at 359ad0c2; HTML inspected. Observed listing items
-      (href/title extracted from the rendered pages):
-      - `p1-basic` sub/index.html → `p1.html P1` only; **zero Q-13-4** (was:
-        Home + About phantoms + 2 warnings). Q-1-20 still fires (Phase 5).
-      - `p2-dirmeta` blog/deep/index.html → `p1.html Deep P1` (was empty).
-      - `p3-projmeta` index.html → `sub/p1.html Sub P1`.
-      - `p4-root-host` index.html → posts a+b unchanged (no regression).
-      - `p5-parent-glob` sub/index.html → `../rootpost.html Root Post`
-        (was empty; href correctly page-relative).
-      - `p6-glob-corruption` → still empty, fixed by Phase 5.
+  fixtures at 359ad0c2; HTML inspected. Observed listing items
+  (href/title extracted from the rendered pages):
+  - `p1-basic` sub/index.html → `p1.html P1` only; **zero Q-13-4** (was:
+    Home + About phantoms + 2 warnings). Q-1-20 still fires (Phase 5).
+  - `p2-dirmeta` blog/deep/index.html → `p1.html Deep P1` (was empty).
+  - `p3-projmeta` index.html → `sub/p1.html Sub P1`.
+  - `p4-root-host` index.html → posts a+b unchanged (no regression).
+  - `p5-parent-glob` sub/index.html → `../rootpost.html Root Post`
+    (was empty; href correctly page-relative).
+  - `p6-glob-corruption` → still empty, fixed by Phase 5.
 - [x] Render `docs/` with q2 and diff against main (clean caches, both
-      sides). The errors-reference listing (`docs/errors/index.qmd`, glob
-      `*/Q-*.qmd`) is **more correct on the branch**: main's render dropped
-      `crossref/Q-15-1`, `project/Q-5-6`, `project/Q-5-7` from the listing
-      data; the branch lists all 147 on-disk `Q-*.qmd` pages exactly
-      (verified by `comm` against the file tree; includes the new
-      `Q-12-17`). No entries were lost. The legacy drop mechanism wasn't
-      chased further — the code path that caused it is deleted.
+  sides). The errors-reference listing (`docs/errors/index.qmd`, glob
+  `*/Q-*.qmd`) is **more correct on the branch**: main's render dropped
+  `crossref/Q-15-1`, `project/Q-5-6`, `project/Q-5-7` from the listing
+  data; the branch lists all 147 on-disk `Q-*.qmd` pages exactly
+  (verified by `comm` against the file tree; includes the new
+  `Q-12-17`). No entries were lost. The legacy drop mechanism wasn't
+  chased further — the code path that caused it is deleted.
 - [x] `cargo xtask verify` (full, all 14 steps incl. hub-client WASM build +
-      tests) — passed at a4c5c1e2 (post-clippy-fix commit; two clippy lints from
-      the first run fixed: `same_item_push` in binding.rs,
-      `manual_string_new` in a glob_resolve test).
+  tests) — passed at a4c5c1e2 (post-clippy-fix commit; two clippy lints from
+  the first run fixed: `same_item_push` in binding.rs,
+  `manual_string_new` in a glob_resolve test).
 
 ### Phase 5 — `listing.contents` interpretation (defects #5 + #6)
 - [x] Failing tests first (pampa unit tests, verified failing with the
-      emphasis-corrupted value visible in the assert output; +
-      `glob_with_markdown_parseable_asterisks_survives` integration test).
+  emphasis-corrupted value visible in the assert output; +
+  `glob_with_markdown_parseable_asterisks_survives` integration test).
 - [x] Annotation-source table: `crates/pampa/src/pandoc/meta_annotations.rs`
-      (`listing.contents` + `format.*.listing.contents` → `Glob`;
-      exact-length matching, single-segment wildcard, arrays transparent,
-      maps extend the path; explicit tags always win; module doc marks it
-      delete-on-schema-arrival). `yaml_to_config_value` threads a key path
-      internally; public signature unchanged.
+  (`listing.contents` + `format.*.listing.contents` → `Glob`;
+  exact-length matching, single-segment wildcard, arrays transparent,
+  maps extend the path; explicit tags always win; module doc marks it
+  delete-on-schema-arrival). `yaml_to_config_value` threads a key path
+  internally; public signature unchanged.
 - [x] `parse_listings` recovery chain: **kept as defensive fallback** rather
-      than removed — PandocInlines/string-shaped values can still arrive from
-      non-YAML sources (programmatic construction, runtime metadata), and the
-      fallback is harmless; comment updated to reflect the new primary path.
+  than removed — PandocInlines/string-shaped values can still arrive from
+  non-YAML sources (programmatic construction, runtime metadata), and the
+  fallback is harmless; comment updated to reflect the new primary path.
 - [x] Regression tests: zero `Q-1-20` asserted in the integration suite;
-      E2E: `p1-basic`, `p4-root-host`, `p6-glob-corruption` all render with
-      **zero warnings** at c7b475cb and p6's listing contains `Should Match`.
-      Full workspace suite: 10911 passed.
+  E2E: `p1-basic`, `p4-root-host`, `p6-glob-corruption` all render with
+  **zero warnings** at c7b475cb and p6's listing contains `Should Match`.
+  Full workspace suite: 10911 passed.
 
 ### Phase 6 — bookkeeping
 - [ ] `braid close bd-v7ixzsp5`; comment on GH #456 with the fix summary
-      (after PR review/merge).
+  (after PR review/merge).
 - [x] docs/ website: **deferred to bd-2nb6i1qv** (discovered-from) — docs/
-      has no listings guide at all to host the semantics write-up; the
-      Q-12-17 error page documents the project-boundary rule meanwhile.
+  has no listings guide at all to host the semantics write-up; the
+  Q-12-17 error page documents the project-boundary rule meanwhile.
 - [x] Follow-up strand for migrating other glob consumers onto the
-      glob-resolve API: bd-mt7a6uc4 (discovered-from).
+  glob-resolve API: bd-mt7a6uc4 (discovered-from).
 
 ## Decisions (Carlos, 2026-08-06)
 
-1. **Behavior change ships silently.** q2 is 0.*; no stability promises. Fix
+1. **Behavior change ships silently.** q2 is 0.\*; no stability promises. Fix
    it properly, no transition diagnostic.
 2. **Escaping the project root warns** via a new diagnostic code registered in
    `quarto-error-catalog`, so warnings-as-errors mode fails loudly.

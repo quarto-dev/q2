@@ -9,7 +9,7 @@ gets 401 from the hub. The SPA never notices:
 
 - Browsers hide the HTTP status of a failed WS upgrade from JS, and nothing
   probes `/auth/me` out-of-band when sync drops.
-- `useAuth`'s visibilitychange handler resets `cookieSetAt = Date.now()` on
+- `useAuth`\'s visibilitychange handler resets `cookieSetAt = Date.now()` on
   every refocus where `/auth/me` still returns 200, drifting the assumed
   expiry up to an hour past the real one, so the `cookieExpired()` guards and
   the App's auth-lost effect never fire.
@@ -81,10 +81,10 @@ Related: bd-ey6jg70f (hub-minted sliding sessions, out of scope here).
 
 ## Design details
 
-- Probe three-way split maps directly onto `fetchAuthMe()`'s contract:
+- Probe three-way split maps directly onto `fetchAuthMe()`\'s contract:
   `AuthState` = valid, `null` = definitive 401/403, throw = network/5xx.
 - Strike-2 semantics: first 401 triggers renewal; only a second 401 on the
-  next probe cycle (~30 s later) clears auth. Avoids racing One Tap and
+  next probe cycle (\~30 s later) clears auth. Avoids racing One Tap and
   avoids relying on One Tap callbacks ever firing (they may not when GIS is
   blocked — the coalesced `isRefreshing` flag would otherwise wedge).
 - Cold-starting the app while fully offline still lands on login (mount-time
@@ -102,5 +102,5 @@ Related: bd-ey6jg70f (hub-minted sliding sessions, out of scope here).
   One Tap blocked) was NOT exercised end-to-end in a browser — it needs a live
   Google session. Manual recipe: sign in, delete the `quarto_hub_token` cookie
   in DevTools → Application, restart the hub (drops the established WS); the
-  client should attempt renewal within ~30 s and land on the login screen with
-  the "session expired" message within ~60 s, instead of retrying forever.
+  client should attempt renewal within \~30 s and land on the login screen with
+  the "session expired" message within \~60 s, instead of retrying forever.

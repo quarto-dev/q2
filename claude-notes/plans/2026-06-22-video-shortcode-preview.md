@@ -112,7 +112,7 @@ pub fn lua_format_for(target_format: &str) -> &str {
 ```
 
 Then in `build_transform_pipeline` (`crates/quarto-core/src/pipeline.rs`
-~L1108-1124), compute `let lua_format = lua_format_for(&target_format).to_string();`
+\~L1108-1124), compute `let lua_format = lua_format_for(&target_format).to_string();`
 **before** `target_format` is moved, and pass `lua_format` to
 `ShortcodeResolveTransform::with_lua_support(...)` instead of `target_format`.
 Keep the existing `is_revealjs = is_revealjs_target(&target_format)` line as-is.
@@ -159,7 +159,7 @@ consider a separate strand if it grows.
 ### Phase 1 — Normalize Lua FORMAT (fixes video + all format-gated shortcodes)
 - [x] Add `lua_format_for` to `crates/quarto-core/src/format.rs`.
 - [x] Use it in `build_transform_pipeline` for the shortcode transform
-      (`crates/quarto-core/src/pipeline.rs` ~L1116). `target_format` is kept for
+      (`crates/quarto-core/src/pipeline.rs` \~L1116). `target_format` is kept for
       `is_revealjs`; only the Lua-facing value is normalized.
 - [x] Ran new + unit tests: all 3 video tests pass, both `lua_format_for` unit
       tests pass.
@@ -227,7 +227,7 @@ Findings so far:
 - `q2 render` `format: revealjs` emits a **bare** `<iframe>` (video.lua skips the
   `quarto-video`/`ratio` wrapper for reveal) with no width/height.
 - Reveal core CSS only sets `.reveal iframe { z-index: 1 }` (reveal.scss:224) —
-  no sizing — so the iframe falls back to the browser default (~300×150) and
+  no sizing — so the iframe falls back to the browser default (\~300×150) and
   renders tiny on the slide. TS Quarto's `quarto.scss` has **no** `iframe`
   rule either, so the sizing must come from elsewhere (still to pin down).
 - [x] Reproduced + measured (render reveal, browser): the video `<iframe>` is a
@@ -278,7 +278,7 @@ Findings so far:
 - [x] Rebuilt WASM→SPA→binary; checked the slides **preview** in the browser.
       **Finding (honest):** the preview AST correctly carries
       `<iframe class="r-stretch">`, BUT it is **not** visually stretched in
-      q2-slides preview (stays ~222×111). Cause: the q2-preview SPA reveal
+      q2-slides preview (stays \~222×111). Cause: the q2-preview SPA reveal
       renderer wraps the RawBlock iframe in a bare `<div>` —
       `section > div > iframe.r-stretch` — so reveal's direct-child stretch
       selector (`section > .r-stretch`) misses it, and the preview doesn't run

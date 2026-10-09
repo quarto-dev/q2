@@ -41,7 +41,7 @@ Result:
 Any code that later:
 1. Validates these nodes and creates diagnostics
 2. Serializes and expects accurate source tracking
-3. Uses these nodes' SourceInfo for error messages
+3. Uses these nodes\' SourceInfo for error messages
 4. Transforms the AST and needs to preserve locations
 
 ...will get **incorrect source locations**.

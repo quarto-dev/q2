@@ -54,7 +54,7 @@ overrides has a real recovery path for whatever q2 actually honors.
 
 ## Bottom line
 
-q2 honors **~18 of ~37** `FormatPandoc` options — the **semantic layer** (toc/toc-depth,
+q2 honors **\~18 of \~37** `FormatPandoc` options — the **semantic layer** (toc/toc-depth,
 citeproc, filters, include-in-header/before/after, reference-location, html-math-method,
 css, template, slide-level, columns, number-sections) — and drops the options that need an
 external binary (pdf-engine\*), post-processing (self-contained/embed-resources), or

@@ -235,12 +235,12 @@ Per `prevalidating-test-seams`: each row names the **real unit** (the new/change
 pampa method, native Rust, **no mocks**), the **seam** (input qmd · call ·
 assertion on the returned `(bytes, spans|SourceInfo)`), and the **named revert →
 RED**. Tests live in `crates/pampa/tests/integration/` (registered in `main.rs`).
-The N*/E* fixtures are the research note's, with their observed-wrong numbers
+The N\*/E\* fixtures are the research note\'s, with their observed-wrong numbers
 flipped to **correct**. RED-first.
 
 ### Nest-in (Projection B — `write_block_with_line_spans`)
 
-| # | Fixture (research N*) | Assertion surface | Named revert → RED |
+| # | Fixture (research N\*) | Assertion surface | Named revert → RED |
 |---|---|---|---|
 | T-N1 | `> > A / > > / > > / > > B` (nested BlockQuote, double-blank) | the span for `B` resolves to **source line 3** (was Ls=2) | remove the `Paragraph` leaf bracket → no span / wrong anchor → RED |
 | T-N2 | `- outer / ⟂ - b / ∅ / ∅ / ⟂ - c` (BulletList sublist, loose) | the span covering `c` resolves to **source line 4** (was Ls=2) | drop the gap→synthesized handling → blank lines counted → wrong line → RED |
@@ -251,25 +251,25 @@ flipped to **correct**. RED-first.
 
 ### Engine (Projection A — `write_with_source_info`)
 
-| # | Fixture (research E*) | Assertion surface | Named revert → RED |
+| # | Fixture (research E\*) | Assertion surface | Named revert → RED |
 |---|---|---|---|
-| T-E1 | `Div` + prose + collapsing blanks + code (`BOOM`) | `map_offset(byteof BOOM)` resolves to **BOOM's source line** (was the fence line above) | revert recursion (track only top-level blocks) → BOOM inherits the Div's linear piece → wrong line → RED |
-| T-E2 | `BlockQuote` + blanks + code | `map_offset(BOOM)` → BOOM's source line | same revert → RED |
-| T-E3 | `Div` + `BulletList` + blanks + code | `map_offset(BOOM)` → BOOM's source line | same revert → RED |
+| T-E1 | `Div` + prose + collapsing blanks + code (`BOOM`) | `map_offset(byteof BOOM)` resolves to **BOOM\'s source line** (was the fence line above) | revert recursion (track only top-level blocks) → BOOM inherits the Div's linear piece → wrong line → RED |
+| T-E2 | `BlockQuote` + blanks + code | `map_offset(BOOM)` → BOOM\'s source line | same revert → RED |
+| T-E3 | `Div` + `BulletList` + blanks + code | `map_offset(BOOM)` → BOOM\'s source line | same revert → RED |
 | T-E-glue | any nested-code fixture | `map_offset` of a fence/separator byte returns `None` (glue is `Generated`) | fold-glue-into-piece variant → returns Some → RED (pins the §5.3 decision) |
-| T-ENG-compat | `# Title\n\nBody…` (existing engine fixture) | `map_offset(byteof "Body")` still resolves to Body's source line; **update** the old "last byte resolves" assertion to a content byte | n/a (compat pin; guards we didn't regress top-level mapping) |
+| T-ENG-compat | `# Title\n\nBody…` (existing engine fixture) | `map_offset(byteof "Body")` still resolves to Body\'s source line; **update** the old "last byte resolves" assertion to a content byte | n/a (compat pin; guards we didn't regress top-level mapping) |
 | T-E-tiling | mixed doc | the SourceInfo tiles `[0,len)` with no gaps; leaf pieces are `Original`, glue pieces are `Generated` | weaken assembly → hole/overlap → RED |
 
 ### Shared
 
 | # | Assertion | Revert → RED |
 |---|---|---|
-| T-classify | leaf/container split matches `write_block`'s arms | misclassify a container as leaf → spurious span/piece → RED |
+| T-classify | leaf/container split matches `write_block`\'s arms | misclassify a container as leaf → spurious span/piece → RED |
 | T-table | §6.1 default: a table yields a single span/piece anchored at its source start (documents the caveat) | n/a (behavior pin) |
 
 **Vacuity guards:** T-N2/T-N3 discriminate on *the collapsed-blank line being
-synthesized*, not "a span exists." T-N3 keeps parent/child source lines distinct.
-T-E1–E3 discriminate on the *mapped line equalling BOOM's actual line*, with the
+synthesized*, not \"a span exists.\" T-N3 keeps parent/child source lines distinct.
+T-E1–E3 discriminate on the *mapped line equalling BOOM\'s actual line*, with the
 "revert recursion" hunk proving the bug returns.
 
 ---
@@ -277,26 +277,26 @@ T-E1–E3 discriminate on the *mapped line equalling BOOM's actual line*, with t
 ## 7. Checklist (TDD order)
 
 - [ ] **Caller audit:** grep every `write_with_source_info` use; confirm the engine
-      path is the only consumer; record findings.
+  path is the only consumer; record findings.
 - [ ] **Sink + ctx plumbing:** counting bottom-sink adapter + `ctx.out_pos()` /
-      `record_leaf` accumulator on `QmdWriterContext` (qmd.rs:39); no-op on the
-      untracked path. Build only.
+  `record_leaf` accumulator on `QmdWriterContext` (qmd.rs:39); no-op on the
+  untracked path. Build only.
 - [ ] **T-N-parity / text-parity** RED→GREEN: stand up `write_block_with_line_spans`
-      returning `(bytes, vec![])`; assert byte-parity with `write_single_block`.
+  returning `(bytes, vec![])`; assert byte-parity with `write_single_block`.
 - [ ] **T-N1** RED → instrument `Paragraph`/`Plain` leaves → GREEN.
 - [ ] **T-N2/T-N3** RED → recurse instrumentation through list/quote containers +
-      gap→synthesized assembly → GREEN. *(Headline nest-in bug.)*
+  gap→synthesized assembly → GREEN. *(Headline nest-in bug.)*
 - [ ] **T-N-multiline / T-N-coverage** RED→GREEN.
 - [ ] **Recursive `SourceInfo` core:** assemble `Concat` (leaf `Original` + glue
-      `Generated`); **reimplement `write_with_source_info`** on it.
+  `Generated`); **reimplement `write_with_source_info`** on it.
 - [ ] **T-ENG-compat** GREEN first (update the stale last-byte assertion), to prove
-      top-level engine mapping is preserved.
+  top-level engine mapping is preserved.
 - [ ] **T-E1/T-E2/T-E3** RED→GREEN (nested code now maps to the right line).
 - [ ] **T-E-glue / T-E-tiling** RED→GREEN.
 - [ ] **T-classify / T-table** per §4/§6.1.
 - [ ] Full pampa suite: `cargo nextest run -p pampa`.
 - [ ] **quarto-core engine tests:** `cargo nextest run -p quarto-core`
-      (the `engine_execution` map_offset tests are the live consumers).
+  (the `engine_execution` map_offset tests are the live consumers).
 - [ ] Workspace regression: `cargo nextest run --workspace`.
 - [ ] `cargo xtask verify --skip-hub-build` (`-D warnings`).
 

@@ -53,7 +53,7 @@ under § *Discovery strategies*. The five top-level approaches:
 5. **Inspect static-asset roots** (`hub-client/public/`,
    `trace-viewer/public/`).
 6. **Find sub-package `package.json`s** outside `hub-client/` —
-   they often produce JS bundles `include_str!`'d into Rust.
+   they often produce JS bundles `include_str!`\'d into Rust.
 7. **Note tree-sitter parser grammar forks** (those are massive;
    they appear in the inventory only to silence repeated discovery,
    not as audit candidates).
@@ -89,7 +89,7 @@ The `upgrade-cargo-deps` skill should grow a sibling phase — call it
     `npm outdated --prefix crates/quarto-system-runtime/js` and
     capture the result.
   - For quarto-cli-derived assets (extensions, knitr R, Pandoc HTML
-    template): compare against `external-sources/quarto-cli`'s
+    template): compare against `external-sources/quarto-cli`\'s
     current SHA *if* it's checked out; otherwise note as "no
     upstream check available this run".
 - **Update** the `Last reviewed` date on each entry in the inventory

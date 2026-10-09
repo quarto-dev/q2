@@ -44,8 +44,8 @@ the durable improvement the strand is really about.
 `docs/guides/authoring/figures.qmd` has **two** code cells both labeled
 `#| label: fig-charts`:
 
-- line ~428 — a **Jupyter** (`{python}`) cell, inside a `::: panel-tabset`
-- line ~448 — a **Knitr** (`{r}`) cell, the sibling tab in the same tabset
+- line \~428 — a **Jupyter** (`{python}`) cell, inside a `::: panel-tabset`
+- line \~448 — a **Knitr** (`{r}`) cell, the sibling tab in the same tabset
 
 They are the "Subcaptions" example shown in two engines (Jupyter tab / Knitr
 tab). Because both panels live in the rendered DOM simultaneously (tabsets are

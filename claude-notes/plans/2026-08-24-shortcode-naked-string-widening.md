@@ -137,8 +137,8 @@ the naked charset, so the writer already quotes it.
 **Why `size=2x` is not a valid test fixture.** `shortcode_number` is
 `token(prec(3, …))` (`grammar.js:696`) and beats the naked token's `prec(1)` on
 lexical precedence regardless of match length. So digit-initial values keep
-erroring as `Q-2-34` after the widening — verified — and `{{< fa envelope
-size=2x >}}` is a committed *error* fixture
+erroring as `Q-2-34` after the widening — verified — and `{{{< fa envelope
+size=2x >}}}` is a committed *error* fixture
 (`resources/error-corpus/Q-2-34.json`), not a success case. Any test needing a
 working `key=value` must use a non-digit value.
 
@@ -438,7 +438,7 @@ stop erroring, that test reddens here — and it is *not* something Task 2 fixes
 
 Analysis says the three shortcode error codes are safe: `Q-2-27`/`Q-2-28` are
 unterminated shortcodes (`{{< hello` with no close — still an error), and
-`Q-2-34` is governed by `shortcode_number`'s `prec(3)` (verified: `size=2x`
+`Q-2-34` is governed by `shortcode_number`\'s `prec(3)` (verified: `size=2x`
 still reports `Q-2-34` under the widened parser). But a case file testing some
 *other* code could contain a shortcode incidentally. If one newly passes,
 diagnose it individually and record the finding; do not blanket-update.
@@ -514,7 +514,7 @@ Append to `crates/pampa/tests/integration/test_shortcode.rs`. The helpers
 `parse_qmd` (:13), `get_first_shortcode` (:33), `get_positional_strings` (:59)
 and `get_keyword_arg` (:74) already exist, and `ShortcodeArg` is imported at :11.
 
-```rust
+```{.rust shortcodes="false"}
 // ============================================================================
 // Naked-argument widening (bd-shortcode-escaped-gt-fatal-2u79bqp1,
 // bd-shortcode-naked-value-nonascii-47fzbmow)
@@ -979,7 +979,7 @@ cd /Users/gordon/src/q2/.worktrees/workspace-1
 cargo build --bin q2
 ```
 
-- [x] **Step 2: Run both strands' committed repros through the CLI**
+- [x] **Step 2: Run both strands\' committed repros through the CLI**
 
 Per the repo's end-to-end rule, tests passing is not sufficient — drive the
 binary a user would run and inspect the output. Remove the stale `_site/` first
@@ -1046,7 +1046,7 @@ cargo xtask lint
 cargo xtask verify
 ```
 
-Full `verify`, not `--skip-hub-build`: `pampa` is in `wasm-quarto-hub-client`'s
+Full `verify`, not `--skip-hub-build`: `pampa` is in `wasm-quarto-hub-client`\'s
 dependency closure, so the WASM leg can break even when the workspace build is
 clean.
 
@@ -1126,7 +1126,7 @@ demonstrably wrong wording for an unterminated shortcode. Three other probes
 (`{{< kbd = >}}`, `{{< kbd > >}}`, `{{< kbd "x >}}`) now fail with **no**
 catalog code at all (generic "unexpected character or token" parse error) —
 a different but related symptom. The digit-initial control case
-(`{{< fa envelope size=2x >}}`) correctly still reports `Q-2-34`. Full table
+(`{{{< fa envelope size=2x >}}}`) correctly still reports `Q-2-34`. Full table
 in the Task 4 report.
 
 **Step 3 — Q1 comparison:**
@@ -1155,7 +1155,7 @@ counted once, plus 4 new writer unit tests in `crates/pampa/src/writers/qmd.rs`
 (Task 3, same method) counted twice (compiled into both `pampa` and
 `pampa::bin/pampa`). This was cross-checked against an independent
 diff-scoped derivation (Task 1 touches zero `.rs` files, so pampa's count
-after Task 1 equals `main`'s: 4572/2 skipped; pampa after Task 3 is 4590;
+after Task 1 equals `main`\'s: 4572/2 skipped; pampa after Task 3 is 4590;
 4590 − 4572 = +18, implying the same `main` total of 13329) — both methods
 agree exactly. See the Task 4 report for a fuller discussion, including a
 noted disagreement about whether the isolated-worktree measurement is fully

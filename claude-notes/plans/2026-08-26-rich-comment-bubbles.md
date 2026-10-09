@@ -23,9 +23,9 @@ Surfaces (all in
 `ts-packages/preview-renderer/src/q2-preview/custom/CommentBlock.tsx`):
 
 1. **Compact bubble** — first comment, single line,
-   `nowrap + ellipsis` (`commentSpanText(comments[0])`, ~line 995).
+   `nowrap + ellipsis` (`commentSpanText(comments[0])`, \~line 995).
 2. **Expanded rows** — one row per comment in expand mode / clicked-open
-   bubbles (`commentSpanText(c)`, ~line 908).
+   bubbles (`commentSpanText(c)`, \~line 908).
 
 Out of scope: the experimental example components
 (`comments.tsx.txt`, `comments_rc.jsx`) stay plain-text — they are
@@ -79,7 +79,7 @@ listener on `document.body`** (`installLinkHandlers`,
 `utils/iframeLinkHandlers.ts:82`): external links →
 `window.open(_blank)`, `#frag` → scroll, artifact/qmd hrefs →
 `onQmdLinkClick`. But the comment chrome deliberately calls
-`e.stopPropagation()` on click (CommentBlock ~line 847) so bubble
+`e.stopPropagation()` on click (CommentBlock \~line 847) so bubble
 clicks don't reach the *other* document-level delegate — click-to-edit.
 A bare `<a>` rendered inside the bubble therefore never reaches the
 body listener, and its click falls through to **native navigation of
@@ -104,7 +104,7 @@ click-to-edit and open the enclosing block's editor). Proposal:
 
 ### 2. Un-inline-ish content can break the bubble's geometry
 
-The bubble is a ~140–160px-wide floating chip that participates in the
+The bubble is a \~140–160px-wide floating chip that participates in the
 force layout (it re-measures on mount/expansion, not on async content
 growth). Two offenders:
 
@@ -127,7 +127,7 @@ Proposal — three-part containment, so no comment content of any kind
 can move layout outside the chip:
 
 1. **Clamp the image**: scoped rule injected alongside the existing
-   `.q2-comment-input` style (idempotent style-tag IIFE, ~line 98);
+   `.q2-comment-input` style (idempotent style-tag IIFE, \~line 98);
    bubble gets a `q2-comment-bubble` class and
    `.q2-comment-bubble img { max-width: 100%; max-height: 2.5em;
    object-fit: contain; }` (aspect preserved; `100%` resolves against
@@ -258,7 +258,7 @@ it is the bubble-content contract suite):
 - [ ] An ordinary `[text]{.mark}` span in a comment renders normally
       (interceptor is class-scoped, not all-Spans).
 - [ ] New unit test for `routeLinkClick` (external / `#frag` /
-      qmd-path cases) in `iframeLinkHandlers`' existing test home, plus
+      qmd-path cases) in `iframeLinkHandlers`\' existing test home, plus
       an assertion that the body listener still works (existing tests).
 
 Verification gates: preview-renderer `npm test` + `test:integration`;

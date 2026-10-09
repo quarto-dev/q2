@@ -18,7 +18,7 @@ An auth review surfaced three real gaps. This plan fixes them:
    ledger. Bans and `logout-everywhere` only affect session cookies — in a
    no-allowlist public deployment, a banned user keeps full MCP access
    indefinitely, and a stolen Google ID token survives `logout-everywhere`
-   for up to ~1 h. Already noted as future work ("`sub_denylist`") in
+   for up to \~1 h. Already noted as future work ("`sub_denylist`") in
    `2026-05-28-hub-mcp-loopback-pkce.md`; the ledger shipped since (C5), so
    the fix is now a wiring job, not a new store.
 2. **F2 (robustness, MCP client):** a 401/403 on the WS upgrade — or a
@@ -34,7 +34,7 @@ An auth review surfaced three real gaps. This plan fixes them:
    path, with nothing in the response distinguishing them
    (`server.rs:1268-1288`). Latent trap for any future Bearer caller; also
    the SPA still carries the dead pre-sliding `DEFAULT_SESSION_MS = 1 h`
-   fallback (`useAuth.ts:42`), which would mis-schedule (~168× too often) if
+   fallback (`useAuth.ts:42`), which would mis-schedule (\~168× too often) if
    it ever fired.
 
 Sequencing: **F1 → F2** (F2's end-to-end "banned mid-session" case and its
@@ -47,7 +47,7 @@ lightly.
 ### Design
 
 - **Where:** the Bearer *credential* path only — i.e. the path reached from
-  `authenticate_credential`'s `Credential::Bearer` arm
+  `authenticate_credential`\'s `Credential::Bearer` arm
   (`context.rs:823-840`). **Not** the mint-time validation path:
   `auth_callback`/`auth_session` validate an incoming Google token through
   the same `authenticate_claims` machinery, and they must keep their existing
@@ -277,7 +277,7 @@ errors never do*):
       driving the real `q2 mcp` launcher (embed fresh; no fallback notice).
       Observed outputs: `create_project` after revocation → "…credentials
       have expired or were revoked. Ask me to authenticate again." ;
-      post-ban stderr → "[hub-mcp] Your account is not allowed on this
+      post-ban stderr → "\[hub-mcp\] Your account is not allowed on this
       Quarto Hub…" ; post-ban `read_file` → the same denial message.
 
 ## F3 — discriminate `/auth/me` `exp` (`bd-aw8f3sp8`)
@@ -309,10 +309,10 @@ errors never do*):
 - [x] Tests first, hub-client (both observed failing pre-fix):
       `authService.test.ts` gains a `fetchAuthMe` mapping test
       (`exp` → `expiresAt` ms + `credential` passthrough);
-      `useAuth.test.tsx`'s two 1 h-fallback-pinned tests rewritten to
+      `useAuth.test.tsx`\'s two 1 h-fallback-pinned tests rewritten to
       schedule from an explicit server `expiresAt` (behavior coverage
       kept), plus a new spec: absent `exp` → zero re-checks across a
-      simulated week (the retired fallback would have fired ~168×).
+      simulated week (the retired fallback would have fired \~168×).
 - [x] Implemented: `AuthMeResponse.credential: &'static str`
       (`"session"`/`"bearer"`, mirroring the `AuthenticatedUser`
       variants) with `exp` re-documented as the presented credential's
@@ -372,7 +372,7 @@ E2E evidence per finding is recorded in each Work-items section above.
   `ReauthRequired`. Window is ≤1 s plus NTP-level skew; consequence is one
   re-run of `authenticate`. Documented here so nobody "fixes" it with a
   leeway that re-opens the revocation window.
-- **F3 back-compat:** additive field only; do not change `exp`'s presence on
+- **F3 back-compat:** additive field only; do not change `exp`\'s presence on
   either path.
 
 ## References

@@ -9,7 +9,7 @@ Current SourceInfo JSON serialization produces **30-55x blowup** in file size co
 
 **Key Findings**:
 - **Worst case**: Siblings at same depth → **51-55x constant blowup** (each duplicates parent chain)
-- **Best case**: Deep single-path nesting → **~30x blowup** (amortized over content size)
+- **Best case**: Deep single-path nesting → **\~30x blowup** (amortized over content size)
 - **Balanced trees**: **30-50x blowup** depending on depth (O(n) serialization overhead)
 - **Critical insight**: Sibling count has the biggest impact, not depth
 

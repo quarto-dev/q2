@@ -75,7 +75,7 @@ In `LuaInline::set_field()`:
 - [x] Create helper `create_string_list_table(lua, strings)` in `list.rs` that
       creates a table with the List metatable applied
 - [x] Create helper `create_list_table(lua, values)` in `list.rs` for
-      wrapping Vec<Value> in a List table
+      wrapping `Vec<Value>` in a List table
 - [x] Replace all `classes` field construction in `LuaInline::get_field()` with
       the helper (8 locations)
 - [x] Replace `classes` field construction in `LuaBlock::get_field()` (3 locations)

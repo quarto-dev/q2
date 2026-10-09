@@ -52,10 +52,10 @@ glob `dir/**/*`. The quarto-web entry hits the second branch
 
 `crates/quarto-core/src/project_resources.rs`:
 
-- **Glob branch (`expand_one`, ~line 196)**: already filters
+- **Glob branch (`expand_one`, \~line 196)**: already filters
   `path.is_dir() { continue; }` — only files come through. A
   user-written `/data/**/*` works correctly today.
-- **Literal branch (`expand_one`, ~line 230)**: resolves the path,
+- **Literal branch (`expand_one`, \~line 230)**: resolves the path,
   validates project-containment, and returns a single PathBuf. No
   `is_dir` check; downstream `file_copy` fails.
 

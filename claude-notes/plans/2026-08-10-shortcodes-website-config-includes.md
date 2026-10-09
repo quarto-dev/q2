@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Braid:** bd-shortcodes-in-metadata-bp06aub8
-**Checkout:** `main` @ `0c5d0abe` (investigation committed in place; no worktree created)
+**Checkout:** `main` \@ `0c5d0abe` (investigation committed in place; no worktree created)
 **Status:** Complete. Implemented on `braid/bd-shortcodes-in-metadata-bp06aub8`, merged to `main` via PR #487 (2026-08-10); strand closed. Follow-ups: bd-1fue1ly5, bd-fz6gwfq0.
 
 ## Triage verdict
@@ -26,7 +26,7 @@ shortcodes through literally in project-level contexts that Quarto 1 evaluates:
    injected verbatim).
 
 No warning in any of the three. Real-world hit: Posit Connect docs use
-`{{< env CONNECT_VERSION >}}` in all three contexts — all 352 pages affected.
+`{{{< env CONNECT_VERSION >}}}` in all three contexts — all 352 pages affected.
 
 ## Dependency graph
 
@@ -49,7 +49,7 @@ All file paths in the strand are current. Reproduced at HEAD (`0c5d0abe`); local
 external fixture with a `website.navbar` so the navbar-brand path actually fires);
 observed output in `../observations.md`. Summary:
 
-```
+```{shortcodes="false"}
 <title>Home – My Site <small>Version {{< env REPRO_VERSION >}}</small></title>
 <a class="navbar-brand" href="./">My Site &lt;small&gt;Version {{&lt; env REPRO_VERSION &gt;}}&lt;/small&gt;</a>
 You are viewing version <strong>{{< env REPRO_VERSION >}}</strong>.        <!-- include -->
@@ -83,7 +83,7 @@ registered at `pipeline.rs:1198`) calls `resolve_blocks(&mut ast.blocks, …)` o
 (`shortcode_resolve.rs:1217-1224`); `ast.meta` is read-only input. Hence the `?env`
 subtitle. Downstream, `MetadataNormalizeTransform::inlines_to_plain_text` **silently
 drops** `Inline::Shortcode` when deriving `pagetitle`
-(`metadata_normalize.rs:184`), and `quarto-navigation`'s `push_inline`
+(`metadata_normalize.rs:184`), and `quarto-navigation`\'s `push_inline`
 (`crates/quarto-navigation/src/render_html.rs:730-818`) has no `Shortcode` arm (falls
 into escaped-plain-text catch-all).
 
@@ -124,7 +124,7 @@ You are viewing version <strong>2026.08.0</strong>. **md-test** `code-test` <!--
 Q1's five mechanisms:
 
 1. **Reader-level text preprocessing.** `readqmd.lua` runs the lpeg shortcode parser
-   over the *entire* source text — frontmatter included — turning `{{< … >}}` into
+   over the *entire* source text — frontmatter included — turning `{{{< … >}}}` into
    `quarto-shortcode__` spans, which become custom `Shortcode` AST nodes wherever
    markdown is parsed (including metadata values).
 2. **The shortcode filter walks metadata.** `pre-shortcodes-filter`
@@ -177,7 +177,7 @@ they inherit all of it — no separate book pipeline):
 inline, markup kept; `website.sidebar.contents[].text` (all levels; also feeds
 next/prev page text and breadcrumbs); `website.navbar.left/right[].text` incl. nested
 menus; navbar/tools/about `href`s (rendered then **innerText**-extracted so
-`{{< var >}}` works in hrefs); `website.page-footer` regions — bare-string and
+`{{{< var >}}}` works in hrefs); `website.page-footer` regions — bare-string and
 per-region strings as **blocks**, nav-item `text` too; `website.sidebar.header/footer`,
 `website.margin-header/footer` (merged with page frontmatter), `website.body-header/footer`
 — blocks, entries may be *file paths* (`.md`/`.html` read from disk);
@@ -217,7 +217,7 @@ avoids both.
    `Normalization` transform ordered before `ShortcodeResolveTransform`), not at
    project-config load: one site, provenance-independent (project config, profiles,
    frontmatter overrides all pass through), no `InterpretationContext` change, and
-   `ConfigValue`'s `SourceInfo` gives the re-parse correct spans (precedent:
+   `ConfigValue`\'s `SourceInfo` gives the re-parse correct spans (precedent:
    `listing_render.rs`). Downstream consumers keep using `as_plain_text()` /
    `render_text`, which already handle both shapes.
 3. **`<title>`: substitute, then flatten to plain text.** Verified against the real
@@ -235,7 +235,7 @@ avoids both.
    diagnostic in metadata, navbar, footer, `<title>` flattening, and include files
    alike. (Deliberately noisier than Q1, which is silent in text contexts.)
 6. **Env-files strand (`bd-environment-files-372u9qbs`): parallel, expect rebase.**
-   Tests here must be independent of environment-file changes: use `{{< meta >}}`
+   Tests here must be independent of environment-file changes: use `{{{< meta >}}}`
    (fully self-contained) as the primary shortcode in tests; the few env-specific
    tests set process env explicitly (process env wins over `_environment` files in
    both designs, so they stay valid after the other strand lands).
@@ -245,23 +245,23 @@ avoids both.
 ### Phase 0 — Test plan (TDD; write first, verify each fails at HEAD)
 
 - [x] Project-render integration test (real render path, repro-shaped fixture with
-      navbar): asserts substituted `<title>` (plain text, tags stripped), navbar
-      brand (markup un-escaped, shortcode substituted), page-footer region, sidebar
-      title, include file content, and doc `subtitle`/`title` — primary shortcode
-      `{{< meta >}}`, one env case with explicitly set process env.
-      → `crates/quarto-core/tests/integration/shortcode_config_pipeline.rs`;
-      12/13 fail at branch point (verified 2026-08-10), the 13th is the
-      plain-strings no-regression guard which passes by design.
+  navbar): asserts substituted `<title>` (plain text, tags stripped), navbar
+  brand (markup un-escaped, shortcode substituted), page-footer region, sidebar
+  title, include file content, and doc `subtitle`/`title` — primary shortcode
+  `{{{< meta >}}}`, one env case with explicitly set process env.
+  → `crates/quarto-core/tests/integration/shortcode_config_pipeline.rs`;
+  12/13 fail at branch point (verified 2026-08-10), the 13th is the
+  plain-strings no-regression guard which passes by design.
 - [x] Unresolved-shortcode tests: visible marker in website.title contexts and in
-      include files (Q-16-5 diagnostic assertions live at unit level in the
-      transform's test module, added with each phase's implementation).
+  include files (Q-16-5 diagnostic assertions live at unit level in the
+  transform's test module, added with each phase's implementation).
 - [ ] Include lazy-Lua test: include with extension shortcode resolves via Lua when
-      configured (added in Phase 3 with the text expander; with the revised
-      architecture — expansion inside `ShortcodeResolveTransform` — laziness is
-      inherited from the transform's existing engine gating).
+  configured (added in Phase 3 with the text expander; with the revised
+  architecture — expansion inside `ShortcodeResolveTransform` — laziness is
+  inherited from the transform's existing engine gating).
 - [x] Regression: `{text: …}` smart-includes with shortcodes (currently silently
-      dropped), escaped shortcodes in include files, plain scalar config strings
-      unaffected.
+  dropped), escaped shortcodes in include files, plain scalar config strings
+  unaffected.
 
 **Architecture revision discovered during Phase 0 scouting:** include text is already
 in metadata (`rendered.includes.*`, written by `IncludeResolveStage` which runs
@@ -275,16 +275,16 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
 ### Phase 1 — Metadata shortcode resolution (mechanism B) ✅
 
 - [x] `resolve_config_value` walker over `ConfigValue` trees (PandocInlines →
-      `resolve_inlines`, PandocBlocks → `resolve_blocks`, recursing maps/arrays;
-      scalars untouched).
+  `resolve_inlines`, PandocBlocks → `resolve_blocks`, recursing maps/arrays;
+  scalars untouched).
 - [x] `ShortcodeResolveTransform::transform` walks `ast.meta` (all values) using a
-      pre-walk snapshot as handler context — meta walk runs BEFORE the blocks walk
-      so body-level `{{< meta k >}}` sees resolved values. Runs before
-      `MetadataNormalizeTransform`, so `pagetitle` derivation sees resolved text.
+  pre-walk snapshot as handler context — meta walk runs BEFORE the blocks walk
+  so body-level `{{{< meta k >}}}` sees resolved values. Runs before
+  `MetadataNormalizeTransform`, so `pagetitle` derivation sees resolved text.
 - [x] Silent-drop concern in `inlines_to_plain_text` resolved without changing the
-      helper: after the meta walk, unresolved shortcodes are already replaced by
-      `?key` marker Str nodes (`make_error_inline`) + Q-16-5 diagnostics, so the
-      flattener never sees a `Shortcode` node from walked metadata.
+  helper: after the meta walk, unresolved shortcodes are already replaced by
+  `?key` marker Str nodes (`make_error_inline`) + Q-16-5 diagnostics, so the
+  flattener never sees a `Shortcode` node from walked metadata.
 - Result: `doc_subtitle` and `doc_title` (h1 + pagetitle) tests pass; full
   workspace run 11218 passed / 10 failed — the 10 are exactly the still-open
   Phase 2/3 tests. No regressions from walking all metadata.
@@ -292,27 +292,27 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
 ### Phase 2 — Website presentation strings (mechanism A) ✅
 
 - [x] `ConfigMarkdownTransform` (`transforms/config_markdown.rs`), `Normalization`,
-      registered immediately before `ShortcodeResolveTransform`; applies the
-      `MARKDOWN_CONFIG_PATHS` registry (path patterns with `*` array wildcard) to
-      merged metadata via a new public pampa entry point
-      (`pampa::pandoc::meta::parse_config_string_as_markdown` — untagged-value
-      semantics, Q-1-20 warning on parse failure). Only `Scalar(String)` values are
-      re-parsed; the parse auto-detects inline (single paragraph) vs block, which
-      preserves q2's current footer DOM shape — the plan's per-entry "flavor" field
-      proved unnecessary. Documented limitation: `!str` in project config is
-      indistinguishable post-load, so it can't opt a blessed key out.
+  registered immediately before `ShortcodeResolveTransform`; applies the
+  `MARKDOWN_CONFIG_PATHS` registry (path patterns with `*` array wildcard) to
+  merged metadata via a new public pampa entry point
+  (`pampa::pandoc::meta::parse_config_string_as_markdown` — untagged-value
+  semantics, Q-1-20 warning on parse failure). Only `Scalar(String)` values are
+  re-parsed; the parse auto-detects inline (single paragraph) vs block, which
+  preserves q2's current footer DOM shape — the plan's per-entry "flavor" field
+  proved unnecessary. Documented limitation: `!str` in project config is
+  indistinguishable post-load, so it can't opt a blessed key out.
 - [x] Seed registry: `website.title`, `navbar.title` + `sidebar.title` +
-      `page-footer` (bare + left/center/right string form), each in both top-level
-      and `website.`-scoped forms where applicable.
+  `page-footer` (bare + left/center/right string form), each in both top-level
+  and `website.`-scoped forms where applicable.
 - [x] `brand_title_fallback` passes the `ConfigValue` through to `render_text`
-      (with a `is_renderable_title` gate preserving the old `title: false`
-      behavior); `navbar_to_html` fallback param is now `Option<&ConfigValue>`.
+  (with a `is_renderable_title` gate preserving the old `title: false`
+  behavior); `navbar_to_html` fallback param is now `Option<&ConfigValue>`.
 - [x] `push_inline`: `Shortcode` arm renders the `<strong>?name</strong>` marker
-      instead of silently dropping (defense-in-depth — the meta walk normally
-      replaces unresolved shortcodes before rendering).
+  instead of silently dropping (defense-in-depth — the meta walk normally
+  replaces unresolved shortcodes before rendering).
 - [x] Consumer audit: all blessed-key readers use `as_plain_text()` (handles
-      PandocInlines, drops RawInline — which is exactly Q1's `<title>` innerText
-      semantics) or preserve the ConfigValue; no `as_str()` hazards found.
+  PandocInlines, drops RawInline — which is exactly Q1's `<title>` innerText
+  semantics) or preserve the ConfigValue; no `as_str()` hazards found.
 - Result: all five config-string tests green (title, navbar brand, sidebar,
   footer, unresolved marker). Workspace: 11228 passed / 5 failed — exactly the
   Phase-3 include tests. No regressions.
@@ -320,69 +320,69 @@ by `ApplyTemplateStage` are engine output and deliberately not expanded (Q1's
 ### Phase 3 — Include files (mechanism C) ✅
 
 - [x] Text-level shortcode parser (`transforms/shortcode_text.rs`): literal/
-      shortcode segmentation with quoted strings, `key=value` keyword args, nested
-      shortcodes, escaped `{{{< … >}}}` → single-brace literal, malformed →
-      literal passthrough. 11 unit tests. Building block for bd-fz6gwfq0.
+  shortcode segmentation with quoted strings, `key=value` keyword args, nested
+  shortcodes, escaped `{{{< … >}}}` → single-brace literal, malformed →
+  literal passthrough. 11 unit tests. Building block for bd-fz6gwfq0.
 - [x] Expansion wired into `ShortcodeResolveTransform` (per the Phase-0
-      architecture revision — NOT in the stage): after both walks, the transform
-      expands `rendered.includes.{header,before-body,after-body}` strings through
-      its ordinary handler registry against the fully-resolved metadata. Errors:
-      plain `?key` marker (no markup — arbitrary HTML positions) + Q-16-5.
-      Lua: the transform's existing conditionally-created engine is reused —
-      verified by `test_lua_shortcode_in_include_slot`.
+  architecture revision — NOT in the stage): after both walks, the transform
+  expands `rendered.includes.{header,before-body,after-body}` strings through
+  its ordinary handler registry against the fully-resolved metadata. Errors:
+  plain `?key` marker (no markup — arbitrary HTML positions) + Q-16-5.
+  Lua: the transform's existing conditionally-created engine is reused —
+  verified by `test_lua_shortcode_in_include_slot`.
 - [x] `inlines_to_html_literal` `Shortcode` arm reconstructs source text via new
-      `pampa::writers::qmd::shortcode_source_text` (escaped keep triple braces),
-      so `{text: …}` smart-includes and `header-includes` values survive to the
-      text-level pass instead of being dropped.
+  `pampa::writers::qmd::shortcode_source_text` (escaped keep triple braces),
+  so `{text: …}` smart-includes and `header-includes` values survive to the
+  text-level pass instead of being dropped.
 - [x] Unit tests: meta-walk resolve + Q-16-5, include-slot expand/unresolved/
-      escaped, Lua-in-include-slot (the Phase-0 lazy-Lua item).
+  escaped, Lua-in-include-slot (the Phase-0 lazy-Lua item).
 - Result: all 13 integration tests pass; workspace 11250/11250 green.
 
 ### Phase 4 — End-to-end verification + docs
 
 - [x] End-to-end through the real binary (output inspected 2026-08-10):
 
-      ```bash
-      REPRO_VERSION=2026.08.0 cargo run --bin q2 -- render \
-        claude-notes/plans/shortcodes-website-config-includes-investigation/repro
-      ```
+  ```bash
+  REPRO_VERSION=2026.08.0 cargo run --bin q2 -- render \
+    claude-notes/plans/shortcodes-website-config-includes-investigation/repro
+  ```
 
-      `_site/index.html` (all five contexts substituted; matches the Q1 reference
-      render exactly on title/navbar/banner/subtitle, footer content identical
-      modulo q2's footer DOM shape):
+  `_site/index.html` (all five contexts substituted; matches the Q1 reference
+  render exactly on title/navbar/banner/subtitle, footer content identical
+  modulo q2's footer DOM shape):
 
-      ```
-      7:<title>Home – My Site Version 2026.08.0</title>
-      17:    <a class="navbar-brand" href="./">My Site <small>Version 2026.08.0</small></a>
-      29:  You are viewing version <strong>2026.08.0</strong>.
-      39:<p class="subtitle lead">Subtitle version 2026.08.0</p>
-      47:<p>Body-text shortcode (works in q2): version is 2026.08.0.</p>
-      55:    <div class="nav-footer-center">My Product 2026.08.0</div>
-      ```
+  ```
+  7:<title>Home – My Site Version 2026.08.0</title>
+  17:    <a class="navbar-brand" href="./">My Site <small>Version 2026.08.0</small></a>
+  29:  You are viewing version <strong>2026.08.0</strong>.
+  39:<p class="subtitle lead">Subtitle version 2026.08.0</p>
+  47:<p>Body-text shortcode (works in q2): version is 2026.08.0.</p>
+  55:    <div class="nav-footer-center">My Product 2026.08.0</div>
+  ```
 
-      Note: the render emits two Q-2-9 warnings ("HTML element converted to raw
-      HTML") for the `<small>` tags in `website.title`, with correct
-      `_quarto.yml` source spans. This is q2's uniform raw-HTML-in-markdown
-      behavior (body text warns identically) — not new noise from this feature;
-      the documented `` `<element>`{=html} `` form silences it.
+  Note: the render emits two Q-2-9 warnings ("HTML element converted to raw
+  HTML") for the `<small>` tags in `website.title`, with correct
+  `_quarto.yml` source spans. This is q2's uniform raw-HTML-in-markdown
+  behavior (body text warns identically) — not new noise from this feature;
+  the documented `` `<element>`{=html} `` form silences it.
 - [x] Full workspace verification: `cargo nextest run --workspace` 11250/11250;
-      clippy clean after two collapsible-if fixes; full `cargo xtask verify`
-      (WASM leg included) — see result below.
+  clippy clean after two collapsible-if fixes; full `cargo xtask verify`
+  (WASM leg included) — see result below.
 - [x] docs/: wrote `docs/guides/authoring/shortcodes.qmd` (was a "TBD" stub) —
-      built-ins, evaluation contexts incl. the new ones, escaping, unresolved
-      markers. Display technique relies on code contexts not substituting;
-      fragility note recorded on bd-fz6gwfq0 (comment c-7cdp80ld).
+  built-ins, evaluation contexts incl. the new ones, escaping, unresolved
+  markers. Display technique relies on code contexts not substituting;
+  fragility note recorded on bd-fz6gwfq0 (comment c-7cdp80ld).
 - [x] Reconciled with `bd-environment-files-372u9qbs` (landed on main as PR #486
-      while PR #487 was in flight — the anticipated parallel-work rebase).
-      Textual merge was clean; one semantic conflict: `with_lua_support` gained a
-      6th `project_env` parameter, fixed at the one new call site
-      (`test_lua_shortcode_in_include_slot`). Added a compose test
-      (`environment_file_var_resolves_in_include_and_title`) proving
-      `_environment`-sourced variables now resolve in include files and
-      `website.title` through the shared handler plumbing — the two features
-      compose with zero additional glue. Workspace after merge: 11308/11308.
+  while PR #487 was in flight — the anticipated parallel-work rebase).
+  Textual merge was clean; one semantic conflict: `with_lua_support` gained a
+  6th `project_env` parameter, fixed at the one new call site
+  (`test_lua_shortcode_in_include_slot`). Added a compose test
+  (`environment_file_var_resolves_in_include_and_title`) proving
+  `_environment`-sourced variables now resolve in include files and
+  `website.title` through the shared handler plumbing — the two features
+  compose with zero additional glue. Workspace after merge: 11308/11308.
 - [x] Braid: strand closed after PR #487 merged (2026-08-10). Still open: re-check discovered strands
-      (bd-1fue1ly5, bd-fz6gwfq0) against the shared expander.
+  (bd-1fue1ly5, bd-fz6gwfq0) against the shared expander.
 
 ## Design questions — all resolved
 

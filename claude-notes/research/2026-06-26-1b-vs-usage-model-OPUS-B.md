@@ -17,7 +17,7 @@ must serialize to.
 load-bearing.** The plan's `target()` `data`-cookie fold (EQ1) is **adequate** —
 it explicitly carries the opaque cookie (good, jupyter/julia-safe). The
 **`dependencies()` fold-in (EQ2) is shaped to Julia's inline-resolve and gets
-the actual return shape *structurally wrong*** for the two engines that use the
+the actual return shape _structurally wrong_** for the two engines that use the
 deferred path (jupyter, knitr): Q1's `engineDependencies` is a **map keyed by
 engine name**, iterated by `render.ts`, and **knitr's `dependencies()` re-spawns
 an R subprocess** — neither the wire nor the fold-in models this. That is
@@ -107,7 +107,7 @@ widget files to `lib_dir` and returns `DependenciesResult`" (plan line 664-667)
 **Q1 evidence (verified by me).** knitr's `dependencies()` does **not** resolve
 inline — it re-enters the R subprocess via `callR<DependenciesResult>("dependencies", …)`
 (`~/src/quarto-cli/src/execute/rmd.ts:329-337`). That is a second round-trip to a
-daemon, distinct from `execute()`'s. Julia's and marimo's `dependencies()` are
+daemon, distinct from `execute()`\'s. Julia's and marimo's `dependencies()` are
 trivial inline stubs (`julia-engine.ts:147-152`, `marimo-engine.ts:389-393`) —
 again the Julia/marimo lens hides the re-spawn case.
 

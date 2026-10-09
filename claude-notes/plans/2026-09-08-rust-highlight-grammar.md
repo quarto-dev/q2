@@ -96,7 +96,7 @@ Class choice: canonical key `rust`, alias `rs` (mirrors `python`/`py`,
 
 ## Details
 
-### Measured baseline (2026-09-08, main @ b7e7c96a4)
+### Measured baseline (2026-09-08, main \@ b7e7c96a4)
 
 Probe (`probe.qmd`: a ```` ```rust ```` block, a ```` ```rs ```` block, and a
 ```` ```python ```` control block), rendered with

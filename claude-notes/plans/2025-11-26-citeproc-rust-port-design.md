@@ -7,7 +7,7 @@
 
 This report analyzes the feasibility and design of porting the Haskell citeproc library to Rust, with a key enhancement: **source location tracking for CSL style files**. This enables precise error messages when CSL styles contain errors or when citations fail to render correctly.
 
-The port is feasible but substantial. The Haskell implementation is ~7,000 lines of dense code with complex algorithms for disambiguation, sorting, and name formatting. The recommended approach is phased implementation starting with CSL parsing (the novel contribution) and progressively adding citation processing features.
+The port is feasible but substantial. The Haskell implementation is \~7,000 lines of dense code with complex algorithms for disambiguation, sorting, and name formatting. The recommended approach is phased implementation starting with CSL parsing (the novel contribution) and progressively adding citation processing features.
 
 ## Background
 
@@ -110,7 +110,7 @@ The `Eval.hs` module implements:
 2. **Disambiguation** (year-suffix, add-names, add-givenname)
 3. **Position tracking** (first, ibid, subsequent, near-note)
 4. **Sorting** with Unicode collation
-5. **Grouping and collapsing** (e.g., [1-3] instead of [1,2,3])
+5. **Grouping and collapsing** (e.g., \[1-3\] instead of \[1,2,3\])
 6. **Name formatting** (particles, initials, et al.)
 7. **Date formatting** with locale-specific patterns
 
@@ -1165,7 +1165,7 @@ Tests will be organized by category (matching upstream):
 | collapse | 21 | 0 | Phase 4 |
 | position | 16 | 0 | Phase 5 |
 
-**MVP Target:** ~150 tests enabled (covering Phases 1-3)
+**MVP Target:** \~150 tests enabled (covering Phases 1-3)
 
 ### Unit Tests (Hand-Written)
 

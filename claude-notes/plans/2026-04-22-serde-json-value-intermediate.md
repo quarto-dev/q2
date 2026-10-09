@@ -75,7 +75,7 @@ head docstring documents both the profile and sidecar formats.
 
 ## Findings
 
-### Wall time scales ~linearly in the driver
+### Wall time scales \~linearly in the driver
 
 | Size | JSON bytes | user CPU |  ratio |
 |------|-----------:|---------:|-------:|
@@ -84,7 +84,7 @@ head docstring documents both the profile and sidecar formats.
 | 4×   |  4,831,709 |   0.54 s |   2.35× |
 | 8×   |  9,826,609 |   1.37 s |   2.54× |
 
-Growth per doubling is ~2.1–2.5×. Slightly super-linear in the tail,
+Growth per doubling is \~2.1–2.5×. Slightly super-linear in the tail,
 consistent with allocator/cache effects as the output buffer grows
 past L2/L3 cache sizes. No quadratic pathology — the work is genuinely
 linear in AST node count, just with a high constant factor.
@@ -113,15 +113,15 @@ Observations:
    across 1× → 8×. Pure memory copying. Something is moving increasing
    volumes of bytes per AST node as the document grows; constant
    overhead hypothesis is rejected.
-2. **Allocator churn is a flat ~13–15% tax** regardless of size. Many
+2. **Allocator churn is a flat \~13–15% tax** regardless of size. Many
    small allocations (Values, Strings, IndexMap buckets) at a steady
    per-node rate.
-3. **`indexmap::Core::insert_full` is ~5–7% on its own.** Every AST
+3. **`indexmap::Core::insert_full` is \~5–7% on its own.** Every AST
    node builds a `Value::Object` backed by `IndexMap<String, Value>`;
    each insert hashes and inserts its key.
 4. **Tree-sitter parsing is <2% at every scale.** The parser is not
    the bottleneck.
-5. **`__vfprintf` at ~3%** — likely number formatting inside the
+5. **`__vfprintf` at \~3%** — likely number formatting inside the
    serde_json output path (f64 / integer → decimal text). Not dominant
    but visible.
 
@@ -130,10 +130,10 @@ Observations:
 `pampa::writers::json::write_with_config` operates in two passes:
 
 1. **Build pass**: constructs a `serde_json::Value` tree. Every AST
-   node becomes a `Value::Object` (IndexMap<String, Value>) with
+   node becomes a `Value::Object` (`IndexMap<String, Value>`) with
    freshly-allocated `String` keys (`"c"`, `"s"`, `"t"`, `"attrS"`,
    `"targetS"`, etc.) and `Value::*` leaves. For a document producing
-   ~10 MB of JSON, this tree is on the order of tens of megabytes in
+   \~10 MB of JSON, this tree is on the order of tens of megabytes in
    memory, distributed across tens of thousands of allocations.
 
 2. **Serialize pass**: `serde_json::to_writer(&mut buf, &value)` walks
@@ -146,7 +146,7 @@ every Value and memcpys its bytes into the output buffer; the output
 buffer itself doubles in capacity as it grows past thresholds,
 memcpying its entire current contents each time. Large documents
 amortize this cost across a larger working set with poorer cache
-locality — which is why `_platform_memmove`'s *fraction* climbs with
+locality — which is why `_platform_memmove`\'s *fraction* climbs with
 size.
 
 ### Why we do this today
@@ -197,7 +197,7 @@ Even inside the current Value-tree pattern, replacing `String::from("c")`
 string allocations. But if F1 lands, this mostly goes away — direct
 serializers emit `&'static str` keys naturally.
 
-**Tertiary — investigate `__vfprintf` (~3%).**
+**Tertiary — investigate `__vfprintf` (\~3%).**
 
 Likely f64 number formatting inside serde_json's `fmt::Display for
 Number`. Could be swapped for `ryu` if it's not already. Only worth
@@ -262,7 +262,7 @@ user CPU):
 | 4×   | 0.54 s  | 0.27 s | 2.0×    | 4,831,709   |
 | 8×   | 1.37 s  | 0.83 s | 1.65×   | 9,826,609   |
 
-~2× speedup on small fixtures, tapering toward 1.6× at 8× — the
+\~2× speedup on small fixtures, tapering toward 1.6× at 8× — the
 remaining cost becomes dominated by the output buffer's amortized
 memcpy as it grows past cache (see next section).
 
@@ -277,14 +277,14 @@ memcpy as it grows past cache (see next section).
 | `__vfprintf` | 2.3% | 4.7% |
 | `JsonStreamWriter::key` | — | 0.65% |
 | `write_escaped_str` | — | 0.74% |
-| tree-sitter parse | 1.7% | ~5% |
-| allocator family (total) | ~13% | ~3% |
+| tree-sitter parse | 1.7% | \~5% |
+| allocator family (total) | \~13% | \~3% |
 
 IndexMap and allocator churn are gone entirely. The **absolute**
 memmove time dropped (40% less total wall time, even though memmove's
 *share* rose to 68% of what's left), but now serialization is bottlenecked
 on "move 10 MB of bytes into the output `Vec<u8>`" — the buffer's
-amortized doubling copies ~20 MB total to produce 10 MB of output.
+amortized doubling copies \~20 MB total to produce 10 MB of output.
 
 Tree-sitter parse as a % rose because the denominator shrank; absolute
 parse time is unchanged. Parse is still not the bottleneck.
@@ -313,7 +313,7 @@ parse time is unchanged. Parse is still not the bottleneck.
       `crates/perf-harness/scripts/analyze_profile.py`. Full
       before/after table recorded under Phase 2's Findings section
       above — `indexmap::insert_full` gone, allocator churn collapsed
-      from ~13% → ~3%, `_platform_memmove` share rose to 69% because
+      from \~13% → \~3%, `_platform_memmove` share rose to 69% because
       its absolute cost dropped less than the total (the output
       `Vec<u8>` doubling now dominates). Total wall time on 8×
       dropped 1.37s → 0.83s (1.65×).
@@ -333,7 +333,7 @@ parse time is unchanged. Parse is still not the bottleneck.
 With the Value tree gone, the post-Phase-2 profile is dominated by
 `_platform_memmove` (69% on 8×). Root cause is no longer interning or
 serialization — it's the output `Vec<u8>` growing via capacity
-doublings to hold ~10 MB of JSON, which copies ~20 MB in aggregate.
+doublings to hold \~10 MB of JSON, which copies \~20 MB in aggregate.
 Candidate directions for a future session (each worth its own beads
 issue):
 
@@ -351,7 +351,7 @@ issue):
   views instead of going through an intermediate `Vec<u8>` + JS
   string. Biggest potential win but a bigger architectural change.
 - **Second-tier symbols worth revisiting once memmove is addressed:**
-  `__vfprintf` (~5%) likely from serde_json number formatting — could
+  `__vfprintf` (\~5%) likely from serde_json number formatting — could
   swap to `ryu`/`itoa` directly in the CompactFormatter wrapper.
 
 ## Reproducing this investigation

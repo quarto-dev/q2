@@ -141,7 +141,7 @@ async fn compile_scss(
 }
 ```
 
-This calls `SystemRuntime::compile_sass()`. Check `WasmRuntime`'s impl of
+This calls `SystemRuntime::compile_sass()`. Check `WasmRuntime`\'s impl of
 this method. It likely bridges to a JS function. Verify it's wired up and
 actually called. The old JS-side `compileAndInjectThemeCss` also used SASS
 compilation and worked — so SASS is available, but maybe the runtime context
@@ -256,7 +256,7 @@ test's `beforeAll()`, wiring VFS read/isFile operations to the WASM module's
 
 The metadata merge was working correctly — themes were being extracted from
 `_quarto.yml` and `_metadata.yml` files. The SCSS was being assembled
-correctly (~240KB). Only the final compilation step failed silently
+correctly (\~240KB). Only the final compilation step failed silently
 (falling back to `DEFAULT_CSS`).
 
 ## Work Items

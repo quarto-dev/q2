@@ -181,7 +181,7 @@ Tests first, in this order.
       is a stage here, not a Finalization transform.
 - [x] (2026-09-21; placed in `docs/guides/authoring/lua-filters.qmd` as its own section, since that is where filter authors look; the cross-reference page in that directory is misnamed `cross-references.cmd`, flagged to the user) Docs (user-facing):
       one short "for filter authors" note on `quarto-eq-number`.
-- [x] (2026-09-21) Update the `Equation.tsx` comment that cites `render_equation`'s
+- [x] (2026-09-21) Update the `Equation.tsx` comment that cites `render_equation`\'s
       line numbers and the `\tag` port, so the two stay traceable.
 - [x] (2026-09-21: full `cargo xtask verify` green — 14049 Rust tests, ts-packages, hub-client build + tests. Two collateral test updates: the HTML stage-list/count assertions in `pipeline.rs` (25 → 26 stages) and the `styles.css` byte-identity baseline in `tests/fixtures/phase5-single-doc-baseline/expected_hashes.txt`, re-captured with a dated note because the new SCSS layer is additive to every compiled stylesheet.) `cargo xtask verify` (full: `quarto-core` changed). Record the
       end-to-end invocation and the inspected output here.

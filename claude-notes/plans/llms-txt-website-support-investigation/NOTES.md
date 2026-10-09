@@ -1,6 +1,6 @@
 # Investigation notes — bd-llms-txt-unimplemented-oih6z6j7
 
-**2026-08-14, main @ 3ac596e0.**
+**2026-08-14, main \@ 3ac596e0.**
 
 Repro in `repro/` (copied from the connect-docs skein repro at
 `~/repos/github/cscheid/q2-connect-docs/llms-info/repros/llms-txt-unimplemented/`).

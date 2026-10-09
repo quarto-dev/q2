@@ -1082,7 +1082,7 @@ Assume 100-file website project:
 | 11.5 Index Page | 10ms | Check/create redirect |
 | **Total** | **100-2000s** | Dominated by file rendering |
 
-**Bottleneck:** Individual file rendering (stages 2-10). For 100 files at 10s each = ~17 minutes.
+**Bottleneck:** Individual file rendering (stages 2-10). For 100 files at 10s each = \~17 minutes.
 
 **Optimization opportunities:**
 1. **Parallelize file rendering** (within constraints)
@@ -1507,7 +1507,7 @@ Website project rendering extends the single-document pipeline with:
 
 The Rust port needs:
 - **ProjectType trait** with pre/post-render hooks
-- **Thread-safe navigation state** (Arc<RwLock<>>)
+- **Thread-safe navigation state** (`Arc<RwLock<>>`)
 - **Dependency graph analysis** for safe parallelization
 - **Incremental update support** for sitemap/search
 - **HTML parsing** for search indexing (scraper crate)

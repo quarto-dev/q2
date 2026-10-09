@@ -29,7 +29,7 @@ connects seconds later.
    offline fallback). Hub-client's offline-first flow is intentional
    and stays.
 3. **No regression in other browsers.** Every change is pure
-   robustness: an indefinite peer wait resolves in ~60 ms when the
+   robustness: an indefinite peer wait resolves in \~60 ms when the
    handshake is fast (Chrome today, clean Firefox today); memory
    storage is strictly faster than IndexedDB; health-gated reconnects
    only kick in when the connection actually drops.
@@ -46,7 +46,7 @@ The adapter's silent retry interval (5 s) equals the SPA's peer budget
 (5 s), so any first-attempt failure is fatal by construction; raising
 the budget to 15 s only moves the cliff. The hung-slot condition can
 persist for minutes (a perpetually-retrying stale tab holds the slot
-~100 % of the time), so any finite WS deadline picks a wrong answer.
+\~100 % of the time), so any finite WS deadline picks a wrong answer.
 The right deadline lives on `/health`, not on the socket.
 
 ## Phases & work items
@@ -71,7 +71,7 @@ Write the tests first against the existing vitest harness
       `indexedDB` global touched even when one exists); default
       remains IndexedDB.
 - [x] Tests: `retryIntervalMs` is forwarded to
-      `BrowserWebSocketClientAdapter`'s constructor.
+      `BrowserWebSocketClientAdapter`\'s constructor.
 - [x] Tests: `findDoc` unavailable-recovery — first `repo.find()`
       rejects "unavailable", a peer then connects, retry succeeds;
       no retry with zero peers (offline fast-fail); bounded attempts;
@@ -126,7 +126,7 @@ boot controller if extracted.
       post-failure health confirmation (3 strikes, 500 ms spacing),
       capped exponential backoff (1 s → 10 s), `ServerGoneError`
       terminal, cooperative cancellation.
-- [x] Implement: thread `ConnectOptions` through `preview-runtime`'s
+- [x] Implement: thread `ConnectOptions` through `preview-runtime`\'s
       `connect()` (+ re-export from quarto-sync-client index, which
       was missing); doc comments updated.
 - [x] Implement: `BootLoadingScreen` component (initializing copy,
@@ -188,7 +188,7 @@ boot controller if extracted.
       masks it). Pinned at 8 s, documented in spec + config.
 - [x] Watch-it-fail: against the Jun-10 binary (pre-fix embedded
       SPA): fails with the exact production failure ("Render Error —
-      Document automerge:<id> is unavailable"). After
+      Document automerge:\<id> is unavailable"). After
       `cargo xtask build-q2-preview-spa` + `cargo build -p quarto
       --bin q2`: passes in 9.1 s (one 8 s queue-release cycle +
       render). Chromium control + full chromium e2e suite: 31 passed;
@@ -211,7 +211,7 @@ boot controller if extracted.
 suites missed** (vindicating the CLAUDE.md e2e policy):
 
 1. **Zombie adapters.** With the server dead, the SPA still made WS
-   attempts every ~3 s ("zero WS churn" check failed). Two causes,
+   attempts every \~3 s ("zero WS churn" check failed). Two causes,
    both fixed:
    - the boot controller abandoned in-flight attempts without
      tearing down their transport → new `teardown` option, called on
@@ -244,7 +244,7 @@ stale copies (now excluded from the build).
       - `verify-kill-restart.mjs`: render → SIGKILL server → banner
         "Reconnecting to the preview server…" with content retained →
         restart on same port (new doc id `35mH6uaQ…`) → banner
-        cleared ~1 s later, heading re-rendered, no reload. PASS.
+        cleared \~1 s later, heading re-rendered, no reload. PASS.
       - `verify-no-ws-churn.mjs`: 1 WS attempt at boot; **0** WS
         attempts during a 12 s window with the server dead (HTTP
         /health polling only). PASS.
@@ -292,7 +292,7 @@ stale copies (now excluded from the build).
   to cover the cold-start sync race already documented in
   `client.ts`.
 - **Not in scope:** patching/vendoring
-  `BrowserWebSocketClientAdapter`'s abandon-without-close retry
+  `BrowserWebSocketClientAdapter`\'s abandon-without-close retry
   behavior. Health-gating makes the SPA stop driving that loop;
   upstreaming a `socket.close()`-before-replace fix is a separate
   nice-to-have. Target for that PR: `automerge/automerge-repo` on

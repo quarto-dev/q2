@@ -3,7 +3,7 @@
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** the npm workspace (no epic dependency — independent root, peer of plan1a-protocol)
 **Blocks:** Plan 1b (imports `@quarto/api/config`; depends on `@quarto/types` to typecheck/bundle; its contract tests need the §2aa runtime surface below), Plan 2 (rest of `@quarto/api`; Plan 2E refines `@quarto/types`), Plan 3 (`@quarto/api/jupyter` needs the skeleton)
-**Estimated sessions:** ~1 for the foundation (done) + ~1 for §2aa (the runtime surface, **landed**)
+**Estimated sessions:** \~1 for the foundation (done) + \~1 for §2aa (the runtime surface, **landed**)
 **Status:** the **foundation** (config + `@quarto/types` + package shell) **and** the **§2aa** runtime surface below — the `platform` seam + pure/host-only namespaces — are **landed** on `feature/ts-engine-extensions` (npm build clean; 217 tests pass / 1 skip).
 
 ## Overview
@@ -65,7 +65,7 @@ partition** — annotate it `// not used by metadataAsFormat partition; present
 for parity` in `src/config/`.
 
 Note also that `kPandocDefaultsKeys` is **not purely symbol references** in Q1:
-it mixes imported symbols (`kFilters`, …) with ~30 inline string literals
+it mixes imported symbols (`kFilters`, …) with \~30 inline string literals
 (`"defaults"`, `"metadata"`, `"file-scope"`, `"trace"`, …). The transcription
 must capture the inline literals too — following only symbol imports would miss
 them.
@@ -89,7 +89,7 @@ them.
   is its own top-level namespace), and **Plan 3 adds `./jupyter`**, each as they
   create the module so the package builds clean before those land.
   `dependencies: { "yaml": "^2.0.0" }` (the
-  package's single dep list; `yaml`'s first consumer is Plan 2's `markdown/`, but
+  package's single dep list; `yaml`\'s first consumer is Plan 2's `markdown/`, but
   it is declared here so the dep list is set once). Run `npm install` from the
   repo root. `@quarto/api` is published to jsr/npm (see the grand plan's
   "Distribution of the engine-author SDK"); the registry identity is set here,
@@ -192,7 +192,7 @@ subprocess, project context) and launch-context method *bodies* stay in
     isCI: boolean;
   }
   ```
-  `@quarto/api`'s host-only namespaces take a `PlatformHost` (constructor-
+  `@quarto/api`\'s host-only namespaces take a `PlatformHost` (constructor-
   injected or passed per call) rather than importing `Deno.*`, so the package
   stays platform-neutral and a `@quarto/engine-host-wasm` can supply a
   VFS-backed host later. No `Deno.*` / `node:*` in `@quarto/api` itself.

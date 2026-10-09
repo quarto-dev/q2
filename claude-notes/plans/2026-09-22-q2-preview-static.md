@@ -93,7 +93,7 @@ Reference: `external-sources/quarto-cli/src/command/preview/{cmd,preview}.ts`,
 | Startup renders only stale inputs (`isModifiedAfter`) unless `--render` | Startup always renders fully | Simpler and honest; a stale-only startup is a follow-up once someone needs it. |
 | Polling watcher over explicit file lists (200 ms+) | `notify`-based recursive watch via the existing `quarto_hub::watch::FileWatcher` | Already in tree and used by the hub preview. |
 | WebSocket devserver channel; every log line streamed to the browser; React progress dialog with an ANSI terminal | Server-sent events (`axum::response::sse`); a small vanilla-JS client with a status badge and an error panel showing the plain-text diagnostics | No new features on axum; `EventSource` auto-reconnects for free (so a restarted server reloads the page); no React in a Rust crate. |
-| IDE control channel (`QUARTO_RENDER_TOKEN`, RStudio render URL), `--timeout`, external `preview.serve.cmd`, PDF via pdf.js, presentations' `postMessage` bridge | Out of scope | Nothing consumes them yet. Listed in § Deferred. |
+| IDE control channel (`QUARTO_RENDER_TOKEN`, RStudio render URL), `--timeout`, external `preview.serve.cmd`, PDF via pdf.js, presentations\' `postMessage` bridge | Out of scope | Nothing consumes them yet. Listed in § Deferred. |
 | Client script appended after `</html>` from a file at a relative URL | Inline script inserted before `</body>` (append if absent) | No extra request and no path-prefix sensitivity. |
 
 ## User-facing surface
@@ -148,7 +148,7 @@ warning so a Q1 project's config does not silently do nothing.
    becomes `/`), and serve the output directory (§ Static server).
 3. **Watch** (unless `--no-watch`). Project mode watches the project root
    recursively; single-file mode watches the file plus its resolved
-   dependency closure, reusing `FileWatcher`'s existing single-file
+   dependency closure, reusing `FileWatcher`\'s existing single-file
    allow-list. Events are classified (§ Watch policy) into *ignore*, *subset
    re-render*, or *full re-render*, coalesced while a render is in flight,
    and executed one at a time on a blocking thread.
@@ -286,7 +286,7 @@ pub enum ReloadEvent {
 ```
 
 SSE events are named `render-start`, `render-stop`, `reload`, data is JSON.
-The client (`client.js`, ~60 lines, no framework):
+The client (`client.js`, \~60 lines, no framework):
 
 - opens `new EventSource("/__q2-preview/events")`;
 - `render-start`: shows a small fixed-position "Rendering…" badge;
@@ -342,7 +342,7 @@ Rules, in order (each a unit test):
    "resource → affected pages" refinement is a follow-up strand.
 
 **Events are not edits (added after PR #712's first CI round).** The
-watcher reports filesystem *events*; on Linux `notify`'s inotify backend
+watcher reports filesystem *events*; on Linux `notify`\'s inotify backend
 subscribes to `OPEN`, so every file a render reads raises one, and a
 re-render that reads its own input re-triggers itself forever (observed
 as an hour of back-to-back renders on the ubuntu leg after one save;
@@ -423,7 +423,7 @@ has viewed; starts empty.
 | Event | Policy used | After |
 |---|---|---|
 | Boot | `Only(E)` = `None` | serve; browser opens the initial page |
-| `GET` of an HTML output whose input ∈ `unexecuted` ∖ E | `Subset({input})`, `Only(E ∪ {input})` | E ∪= {input}; `reload` with that target |
+| `GET` of an HTML output whose input ∈ `unexecuted` ∖ E | `Subset({input})`, `Only(E ∪ {input})` | E ∪= \{input\}; `reload` with that target |
 | Edit of input X | `Subset({X})`, `Only(E)` | unchanged (X executes only if it was viewed) |
 | Config / resource change | `Full`, `Only(E)` | unchanged |
 | `preview.engine: off` in `_quarto.yml` | always `None` | never executes (Q7) |
@@ -533,7 +533,7 @@ the user wants otherwise.
   the output dir either; `--no-clean` is parsed and ignored today).
 - `--timeout` (exit when no clients for N seconds) and an IDE control
   channel; `preview.serve.cmd` external servers.
-- PDF (typst) output via an embedded viewer; presentations' `postMessage`
+- PDF (typst) output via an embedded viewer; presentations\' `postMessage`
   bridge for IDE slide control.
 - Honouring `site-path` / `site-url` absolute-link prefixes in the 404
   handler (Q1 `serve.ts:687-718`), once `q2 render` emits such links.
@@ -575,7 +575,7 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
   `String` with a `color` parameter; keep every `process::exit` in
   `execute`. (Shape as built: `render_once(args, present)` where the
   `present` callback runs once with the finished report, after the
-  pipeline and before post-render scripts, so `execute`'s stderr order
+  pipeline and before post-render scripts, so `execute`\'s stderr order
   is unchanged. `color: false` also disables OSC 8 hyperlinks and
   strips ANSI escapes, because `quarto-error-reporting` 0.2.2 has no
   color switch — upstream follow-up bd-6d9ew2up.)

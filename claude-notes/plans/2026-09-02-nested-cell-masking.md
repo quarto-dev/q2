@@ -2,7 +2,7 @@
 
 **Strand:** bd-knitr-executes-nested-display-fence-atbtktdj (epic: bd-98m98wg8)
 **Branch:** `braid/bd-knitr-executes-nested-display-fence-atbtktdj-mask` off
-`origin/main` @ `85e98fb02`.
+`origin/main` \@ `85e98fb02`.
 
 The **minimal, forward-compatible slice** of a larger epic. The epic plan, the
 full design-decision table, the open questions and the
@@ -26,9 +26,11 @@ Measured at `eac0c7acf` and **independently reproduced at `85e98fb02`** on
 
 The reader is shown knitr's intermediate markup instead of the example:
 
-    ::: {.cell}
-    ...{.r .cell-code}
-    ::: {.cell-output .cell-output-stdout}
+```
+::: {.cell}
+...{.r .cell-code}
+::: {.cell-output .cell-output-stdout}
+```
 
 ### Two symptoms worse than "wrong output"
 
@@ -36,10 +38,12 @@ The reader is shown knitr's intermediate markup instead of the example:
 render.** Verified at `85e98fb02`: a document with one live `{r}` cell and a
 ` ````markdown ` block displaying a `{python}` example exits with
 
-    reticulate (local) python_not_found("Installation of Python not found…")
-    Quitting from pyfail.rmarkdown:131-133 [unnamed-chunk-2]
-    Execution halted
-    error: while rendering pyfail.qmd
+```
+reticulate (local) python_not_found("Installation of Python not found…")
+Quitting from pyfail.rmarkdown:131-133 [unnamed-chunk-2]
+Execution halted
+error: while rendering pyfail.qmd
+```
 
 knitr hands the *displayed* example to reticulate. This is the most
 user-visible face of the defect and the one a documentation page hits first.
@@ -111,7 +115,7 @@ The marker exists only so the unmask knows which openers were ours, and never
 rewrites an author's own `{.r}`.
 
 **Prefix handling is asymmetric, and the asymmetry is the point.** Mask
-operates on a `CodeBlock`'s `text`, from which the reader has *already
+operates on a `CodeBlock`\'s `text`, from which the reader has *already
 stripped* any blockquote `> ` — the writer re-adds it on serialize. Only
 **unmask**, which runs textually over engine output, ever sees a `> `. So the
 mask side needs no prefix handling; the unmask side must not be `^`-anchored,
@@ -131,8 +135,8 @@ themselves executable cells.
 
 **Correction (found during task 2, bd-rbpkzqjo):** the empty-classes case
 does **not** include a 4-space indented code block — qmd has no
-indented-code-block grammar production at all. `grammar.js`'s
-`_indented_code_block_error` (~1223-1231) documents this as a deliberate,
+indented-code-block grammar production at all. `grammar.js`\'s
+`_indented_code_block_error` (\~1223-1231) documents this as a deliberate,
 blanket known limitation, and the scanner emits
 `INDENTED_CODE_BLOCK_DISALLOWED` (`scanner.c:2664`) rather than an
 indented-code-block node — verified to fire in every context (top-level and
@@ -188,7 +192,7 @@ pick) and an `Other("nested-cell-mask/origin")` anchor. `map_offset` on
 a confident wrong answer — and `build_source_map` already tolerates that
 (`.and_then`, emits `source: None`). `Other` rather than `Invocation` is
 deliberate:
-`preimage_in`'s `Generated` arm walks only `Invocation`
+`preimage_in`\'s `Generated` arm walks only `Invocation`
 (`source_info.rs:500`), so the anchor is provably inert to any byte-copying
 writer. That inertness means no test can observe the anchor *choice* except by
 inspecting the `SourceInfo` directly.
@@ -317,7 +321,7 @@ assertions and harness are frozen — never edited to go green.
 ### The runtime-only marker rule
 
 **Every render-tier fixture must make its executed marker impossible to satisfy
-by an echo**, following `assert_fence_rendered`'s existing trick: the source
+by an echo**, following `assert_fence_rendered`\'s existing trick: the source
 says `cat(paste0("DISPLAY", "-RAN"))`, so the string `DISPLAY-RAN` exists in
 the HTML **only if the cell actually ran**. Counting occurrences of a literal
 that appears in both source and output is fragile and, in one case below,
@@ -349,7 +353,7 @@ outright vacuous.
 | T20 | C | capture | doc **with** a display block → `compute_input_qmd` bytes == `capture.input_qmd` | **H10** → RED. *Existing invariant fixture has no display block, so it stays green either way* |
 | T21 | C | `write_review_file` | doc with a display block → review file contents | **H11** → contains the marker, not `{r}` → RED |
 | T22 | C | two engines | `FixtureEngine` ×2 in sequence → second engine's received input | **H8** (hoist mask out of the loop) → second input unmasked → RED |
-| T23 | U | `mask`+`unmask` | `\r\n`-terminated display block → `unmask(mask(x)) == x` bytes | **H12** (drop the `R` flag) → `mask` reports no change → RED. *Found in task 5 review (round 1): CRLF reaches the pipeline unnormalized, and plain `(?m)`'s `$` never matches before a bare `\r`, so masking silently became a no-op on any CRLF checkout* |
+| T23 | U | `mask`+`unmask` | `\r\n`-terminated display block → `unmask(mask(x)) == x` bytes | **H12** (drop the `R` flag) → `mask` reports no change → RED. *Found in task 5 review (round 1): CRLF reaches the pipeline unnormalized, and plain `(?m)`\'s `$` never matches before a bare `\r`, so masking silently became a no-op on any CRLF checkout* |
 | T24 | U | `mask` | display block nested in a table's long-form caption → block text carries the marker | **H13** (drop the `table.caption.long` walk) → RED. *Found in task 5 review (round 1): `mask_table` walked head/bodies/foot but not the table's own `Caption`, unlike the `Figure` arm which does walk its caption* |
 
 ### Vacuity notes
@@ -412,7 +416,7 @@ installed.
   T13 still guards the real property ("mask must never touch a genuine
   executable cell"), bound to the classes conjunct instead (revert-bound hunk
   above). The `engine_cell_lang` check is retained deliberately — see the
-  scope note in `nested_cell_mask.rs`'s module doc — because it becomes
+  scope note in `nested_cell_mask.rs`\'s module doc — because it becomes
   load-bearing the moment the display-class predicate widens (e.g. to
   ` ```qmd `, flagged above as a separate decision), not because it does
   anything today.
@@ -426,7 +430,7 @@ Per-task gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` and
 ### Phase 0 — Don't measure the wrong binary
 
 - [x] **`cargo build --bin q2` from a clean tree at this branch's HEAD before measuring anything.** `target/` in this worktree has held binaries built from a spike branch that already contains the fix; measuring without rebuilding records the fix as the baseline. Confirm `.scratch/nested/r1.qmd` gives `DISPLAY-BLOCK-RAN` = **2**.
-- [x] Investigate the QNR risk before committing to the top-level-ancestor rule: `build_source_map`'s doc warns that an all-unmappable input makes the Julia engine send an empty `sourceRanges`, crashing QuartoNotebookRunner. A document that is one top-level Div containing one display block would mark its only body piece `Generated`. Determine whether that can actually reach QNR; record the finding here and mitigate only if it can.
+- [x] Investigate the QNR risk before committing to the top-level-ancestor rule: `build_source_map`\'s doc warns that an all-unmappable input makes the Julia engine send an empty `sourceRanges`, crashing QuartoNotebookRunner. A document that is one top-level Div containing one display block would mark its only body piece `Generated`. Determine whether that can actually reach QNR; record the finding here and mitigate only if it can.
 
 **Phase 0 findings (2026-09-02).**
 
@@ -448,7 +452,7 @@ line unmappable. Unverified link: QuartoNotebookRunner is not vendored here, so
 `compute_line_file_lookup` was not read directly; the in-repo doc comment is the authority.
 
 *Decision (Gordon, 2026-09-02): **ship the ancestor rule as planned and defend that invariant
-separately**.* It is `build_source_map`'s own documented contract, not the mask's job. Filed as
+separately**.* It is `build_source_map`\'s own documented contract, not the mask's job. Filed as
 **bd-quydz82t**. Phase 3 therefore implements H7 unchanged — no guard in `build_source_map`,
 no degenerate-case special-casing. A mitigation that was considered and rejected: anchoring
 the first entry at file offset 0 when every entry is unmappable, which fixes the class but
@@ -495,7 +499,7 @@ implementation that does not exist yet.
   an over-broad predicate nothing to rewrite, so the test passed with the predicate correct
   *or* broken. Note 2 is rewritten above.
 - **T20 and T21** were vacuously green at baseline: with nothing masking yet,
-  `compute_input_qmd`'s bytes and `capture.input_qmd` are identical unmasked bytes, so the
+  `compute_input_qmd`\'s bytes and `capture.input_qmd` are identical unmasked bytes, so the
   equality assertion held for the wrong reason — likewise "the review file shows `{r}`, not the
   marker". Each test keeps its literal invariant assertion (which discriminates its hunk once
   the transform lands) and gained a second, currently-false assertion so it is genuinely RED
@@ -580,7 +584,7 @@ forward: T1, T2, T4–T8, T19, T20, T22 in `quarto-core`, plus T21 in
 - [x] Mask the clone inside the per-engine loop, before `serialize_ast_to_qmd`; unmask `result.markdown` before the capture emit
 - [x] `compute_input_qmd` masks; `write_review_file` unmasks before writing the consent artifact
 - [x] Test: `compute_input_qmd` bytes equal `capture.input_qmd` for a document **containing a display block** — the gap in the existing invariant fixture
-- [x] Test: `write_review_file`'s output contains `{r}` and not the marker
+- [x] Test: `write_review_file`\'s output contains `{r}` and not the marker
 - [x] Test: the display block lands in `blocks_kept` and retains its original source_info (not the intermediate's)
 - [x] Test: two engines in sequence both receive masked input
 - [x] Phase 1 render-level tests green
@@ -590,7 +594,7 @@ forward: T1, T2, T4–T8, T19, T20, T22 in `quarto-core`, plus T21 in
 total, no test edited. `EngineExecutionStage` masks a **clone** of the AST *inside* the
 per-engine loop, per iteration, before `serialize_ast_to_qmd`, and unmasks `result.markdown`
 immediately after `engine.execute()` — before the capture emit, the reparse and reconcile. The
-capture's `input_qmd` stays masked, so `ReplayEngine`'s byte-compare still holds.
+capture's `input_qmd` stays masked, so `ReplayEngine`\'s byte-compare still holds.
 `compute_input_qmd` masks before serializing, which covers *both* its masked-wanting consumers
 (the staleness compare in `capture_driver.rs` and the cache key in `cache.rs`) with no change at
 either site; `write_review_file` unmasks those bytes before writing the operator-facing consent
@@ -777,7 +781,7 @@ cat(&quot;AUTHOR-DOTTED\n&quot;)
 
 The final case in this fixture — "Author writes our marker verbatim (collision probe)",
 `` ```{.r q2-nested-executable} `` — is the one documented, deliberately-accepted limitation in
-`crates/quarto-core/src/engine/nested_cell_mask.rs`'s module doc ("Known limitation": `unmask`
+`crates/quarto-core/src/engine/nested_cell_mask.rs`\'s module doc ("Known limitation": `unmask`
 pattern-matches on the marker text; an author who writes it verbatim inside a display block gets
 it rewritten as if it were one of ours; "measured negligible in practice... not fixed here; not
 tested here"). Confirmed exactly that behaviour and nothing worse: the fence header is rewritten
@@ -815,13 +819,13 @@ surrounding context), not inferred from a clean exit code.
 
 - [x] `cargo nextest run --workspace`, delta accounted for against the live baseline
 - [x] `cargo xtask verify` (full, no skip flags — **corrected from an earlier
-      draft of this item that read `--skip-hub-build --skip-hub-tests`**; per
-      CLAUDE.md's Git Push Policy, the full run is required "when the WASM leg
-      could be affected (any change under `quarto-core`, `quarto-pandoc-types`,
-      or anything else hub-client depends on)", and this plan's entire
-      implementation is in `quarto-core`. The skip-flag form would never have
-      compiled `quarto-core` to `wasm32-unknown-unknown` and would have shipped
-      a broken hub build undetected — see Phase 7 findings below)
+  draft of this item that read `--skip-hub-build --skip-hub-tests`**; per
+  CLAUDE.md's Git Push Policy, the full run is required "when the WASM leg
+  could be affected (any change under `quarto-core`, `quarto-pandoc-types`,
+  or anything else hub-client depends on)", and this plan's entire
+  implementation is in `quarto-core`. The skip-flag form would never have
+  compiled `quarto-core` to `wasm32-unknown-unknown` and would have shipped
+  a broken hub build undetected — see Phase 7 findings below)
 - [x] Reconcile this checklist against what landed; commit
 - [x] Comment the outcome on the strand
 
@@ -829,7 +833,7 @@ surrounding context), not inferred from a clean exit code.
 
 *The WASM leg is not optional — the skip-flag form of this item was wrong.*
 The full `cargo xtask verify` turned the branch red at the hub-build leg.
-`nested_cell_mask.rs` uses `regex::Regex`, but `quarto-core`'s `Cargo.toml`
+`nested_cell_mask.rs` uses `regex::Regex`, but `quarto-core`\'s `Cargo.toml`
 declared `regex` only under
 `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` — a native-only
 dependency for a module the WASM preview pipeline also runs, since it must

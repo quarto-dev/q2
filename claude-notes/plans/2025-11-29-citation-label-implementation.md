@@ -333,6 +333,6 @@ Enable the 5 CSL conformance tests:
 
 ## Estimated Complexity
 
-- **Low-Medium**: ~100-150 lines of new code
+- **Low-Medium**: \~100-150 lines of new code
 - **Risk**: Low - isolated feature with clear specification
 - **Dependencies**: None - uses existing infrastructure

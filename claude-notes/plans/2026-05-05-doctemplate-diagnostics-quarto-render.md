@@ -162,7 +162,7 @@ file IDs in their `SourceInfo` resolve against the
       compiles the template into the same source context the AST uses;
       if `ApplyTemplateStage` does not, the ariadne renderer will
       have nothing to slice from and we will get
-      "<unknown source>" output instead of a caret.
+      "\<unknown source>" output instead of a caret.
 
 ### Phase 4: end-to-end verification
 
@@ -194,7 +194,7 @@ Per `CLAUDE.md` "End-to-end verification before declaring success":
 4. **Hub-client.** In scope. `wasm-quarto-hub-client` already routes
    structured diagnostics through `JsonDiagnostic` /
    `diagnostics_to_json` (`crates/wasm-quarto-hub-client/src/lib.rs`,
-   ~lines 600/756/952/1102/1225). Once template diagnostics land in
+   \~lines 600/756/952/1102/1225). Once template diagnostics land in
    `RenderOutput.diagnostics`, they ride those existing rails to
    Monaco markers and the in-app diagnostics panel — no shim needed,
    just the API update plus a hub-client smoke test.
@@ -238,7 +238,7 @@ $variable/left 20 "| "$
 ```
 
 (see `crates/tree-sitter-doctemplate/grammar/grammar.js`, the `pipe`
-rule and the `/` repetitions on lines ~84–86).
+rule and the `/` repetitions on lines \~84–86).
 
 `?` is currently unused as a sigil and would not collide with any
 existing pipe name (`pairs`, `first`, `last`, `rest`, `allbutlast`,
@@ -294,7 +294,7 @@ with `$if(...)$` except for variables that are always populated by
 - `version` (always inserted, line 393)
 - `page-layout` (default-set if missing, line 397)
 
-`pampa`'s built-in `main.html` has unguarded `$lang$` and
+`pampa`\'s built-in `main.html` has unguarded `$lang$` and
 `$pagetitle$` (lines 2 / 19), plus unguarded `$idprefix$` and
 `$abstract-title$` inside outer guards. These are only used by the
 `pampa` CLI, which already calls `render_with_diagnostics`. Out of
@@ -376,7 +376,7 @@ not blocking this fix.
       `Undefined variable`, `author-greeting`, and `custom.html`.
       *Failure signal:* compiles; will fail at runtime because
       production code drops the diagnostic before stderr.
-- [~] Hub-client smoke test: **scope adjusted.**
+- \[\~\] Hub-client smoke test: **scope adjusted.**
       `wasm-quarto-hub-client` has no Rust-side `tests/` dir and
       its WASM-bound `render_qmd_content` requires a JS test
       harness to exercise. The crate already routes
@@ -447,7 +447,7 @@ not blocking this fix.
 - [x] Full `cargo xtask verify` (Rust + hub-client +
       trace-viewer): all steps passed.
 - [x] Real `q2 render` invocation captured below.
-- [~] Hub-client browser smoke-test: deferred. The structured
+- \[\~\] Hub-client browser smoke-test: deferred. The structured
       diagnostic flows through `RenderOutput.diagnostics` /
       `diagnostics_to_json` / `JsonDiagnostic.warnings` (existing
       rails), so no new code-path on the WASM side. A live UI

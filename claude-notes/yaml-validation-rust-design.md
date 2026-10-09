@@ -52,13 +52,13 @@
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `yaml-validation/validator.ts` | ~750 | Core validation logic |
-| `yaml-validation/errors.ts` | ~1000 | Error creation and improvement |
-| `yaml-schema/types.ts` | ~330 | Schema type definitions |
-| `yaml-schema/from-yaml.ts` | ~750 | Schema compiler |
-| `resources/schema/*.yml` | ~4000 | Schema definitions |
+| `yaml-validation/validator.ts` | \~750 | Core validation logic |
+| `yaml-validation/errors.ts` | \~1000 | Error creation and improvement |
+| `yaml-schema/types.ts` | \~330 | Schema type definitions |
+| `yaml-schema/from-yaml.ts` | \~750 | Schema compiler |
+| `resources/schema/*.yml` | \~4000 | Schema definitions |
 
-**Total**: ~7000 LOC (excluding schema YAMLs)
+**Total**: \~7000 LOC (excluding schema YAMLs)
 
 ### Schema Type Hierarchy
 
@@ -1481,7 +1481,7 @@ fn main() -> Result<()> {
 
 **Deliverables**:
 - YAML to Schema compiler (`schema/compiler.rs`)
-- Schema registry with $ref resolution
+- Schema registry with \$ref resolution
 - Support for all Quarto schema extensions (maybeArrayOf, closed, etc.)
 
 **Tests**:

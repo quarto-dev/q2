@@ -6,9 +6,9 @@
 
 **Verdict:** The *core* resolution algorithm (`resolve_engines` in `resolution.rs`) and ownership enforcement machinery are correctly implemented against the design contract. The `first_class` path, multi-engine ownership, and the four tiers are all present and tested with coverage that matches (and in some places exceeds) the plan spec. However, three genuine gaps remain — all plan-spec gaps, not landed-code bugs — each shaped by a non-Julia engine behavior that the plan text does not fully cover:
 
-1. **[GAP-1 — plan-spec] `claimsFile` content inspection path has no equivalent in the Rust plan** for jupyter's non-extension-only logic (`isPercentScript(file)` with no extensions arg), and the built-in knitr/jupyter `claims_file` is explicitly deferred ("Future Work" section of 1c) with no test stub.
-2. **[GAP-2 — plan-spec] Marimo's `claimsFile: false` return (always false, marimo:219)** and its exclusive `firstClass`-gated selection pattern are not tested as a *negative* case in any plan test item — tests confirm `first_class` is *passed*, but no test guards against an engine that returns `false` from `claimsFile` still being selected (relevant to marimo's architecture).
-3. **[GAP-3 — landed code] `KNOWN_ENGINES` and `is_known_engine()` still present in `detection.rs`** despite being slated for deletion in plan Phase 2 ("Remove the `KNOWN_ENGINES` constant…"). The plan item is unchecked. The top-level-key scan in `detect_engines` (lines 236-248) still iterates `KNOWN_ENGINES`, which means extension-engine top-level YAML keys (e.g. `marimo: {…}` or `julia: {…}`) are **never detected by the top-level scan path** — it only triggers for `knitr`/`jupyter`. This is a landed-code gap.
+1. **\[GAP-1 — plan-spec\] `claimsFile` content inspection path has no equivalent in the Rust plan** for jupyter's non-extension-only logic (`isPercentScript(file)` with no extensions arg), and the built-in knitr/jupyter `claims_file` is explicitly deferred ("Future Work" section of 1c) with no test stub.
+2. **\[GAP-2 — plan-spec\] Marimo's `claimsFile: false` return (always false, marimo:219)** and its exclusive `firstClass`-gated selection pattern are not tested as a *negative* case in any plan test item — tests confirm `first_class` is *passed*, but no test guards against an engine that returns `false` from `claimsFile` still being selected (relevant to marimo's architecture).
+3. **\[GAP-3 — landed code\] `KNOWN_ENGINES` and `is_known_engine()` still present in `detection.rs`** despite being slated for deletion in plan Phase 2 ("Remove the `KNOWN_ENGINES` constant…"). The plan item is unchecked. The top-level-key scan in `detect_engines` (lines 236-248) still iterates `KNOWN_ENGINES`, which means extension-engine top-level YAML keys (e.g. `marimo: {…}` or `julia: {…}`) are **never detected by the top-level scan path** — it only triggers for `knitr`/`jupyter`. This is a landed-code gap.
 
 ---
 
@@ -101,7 +101,7 @@ Tests that cover non-Julia, non-markdown shapes:
 
 **Missing test in the plan (not a landed-code gap, a plan-spec gap):**
 Plan Phase 2 (plan1c.md:706-708): "Write test: implicit `{r}`+`{python}` → `[knitr]` (knitr `Interop` python; reticulate preserved)" — ✓ present.
-Plan Phase 2 (plan1c.md:707-708): "Write test: explicit `engine: [knitr, jupyter]`, `{r}`+`{python}` → `[knitr, jupyter]` with `ownership` = {r→knitr, python→jupyter}" — ✓ present.
+Plan Phase 2 (plan1c.md:707-708): "Write test: explicit `engine: [knitr, jupyter]`, `{r}`+`{python}` → `[knitr, jupyter]` with `ownership` = \{r→knitr, python→jupyter\}" — ✓ present.
 Plan Phase 2 (plan1c.md:712-713): "Write test: file-claim seed — a claimed `.echo`/`.jl` file makes the claimer `Primary`, and a second-language cell still resolves to its own owner (secondary)" — `- [ ]` in plan, not yet landed.
 
 The missing file-claim seed test is the only spec-level test gap directly named in the plan. It does not affect the landed code's correctness (seed logic is in `resolve_engines` and is code-covered via mock), but the E2E path (EngineClaimsFileStage → claimed_engine_name → resolve_engines) is covered only by the echo Phase 3 test (also not yet landed — it's a Phase 3 plan item).

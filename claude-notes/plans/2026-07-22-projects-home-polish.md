@@ -31,7 +31,7 @@ Three UI improvements to `hub-client/src/components/ProjectsHome.tsx` / `.css`:
 ## Design decisions
 
 - **Scoped dark tokens, not global.** `ProjectsHome.css` already routes all
-  colors through theme tokens; we redefine ~8 of them on
+  colors through theme tokens; we redefine \~8 of them on
   `:root.dark .projects-home` with a darker, desaturated slate ramp
   (hue kept slightly blue, chroma way down). Light mode untouched.
 - **Sort comparator extracted for testability.** The three-way comparator

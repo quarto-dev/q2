@@ -47,7 +47,7 @@ baked `expected` value from an old `generated_csl_tests.rs`, not a real data
 divergence.
 
 Two research passes (Opus, repo-specific; Sonnet, ecosystem-wide) looked at
-*why* `build.rs`'s `cargo:rerun-if-changed=test-data/csl-suite` (a directory,
+*why* `build.rs`\'s `cargo:rerun-if-changed=test-data/csl-suite` (a directory,
 not per-file) failed to trigger a rebuild, and disagree on mechanism:
 
 - **Opus**: cited [rust-lang/cargo#2599](https://github.com/rust-lang/cargo/issues/2599)

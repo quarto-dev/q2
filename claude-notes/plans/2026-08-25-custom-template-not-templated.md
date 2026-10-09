@@ -12,7 +12,7 @@
 
 **Braid:** bd-custom-template-not-templated-e5t6m0i0 — parent bd-61cd (listings epic); related bd-hzsi (L10 migration docs + LLM skill), bd-u4ow (custom-template reference page), bd-lu16jgxq (Q-12-7 wording); supersedes bd-oywyaouf.
 
-**Worktree:** `.worktrees/workspace-2`, branch `braid/bd-custom-template-not-templated-e5t6m0i0-custom-template-not-templated`, based on `origin/main` @ `05b6fd75c`. Pre-flight `cargo xtask verify --skip-hub-build --skip-hub-tests` green at that base: 13380 Rust tests passed, 199 skipped.
+**Worktree:** `.worktrees/workspace-2`, branch `braid/bd-custom-template-not-templated-e5t6m0i0-custom-template-not-templated`, based on `origin/main` \@ `05b6fd75c`. Pre-flight `cargo xtask verify --skip-hub-build --skip-hub-tests` green at that base: 13380 Rust tests passed, 199 skipped.
 
 ## Decisions (settled with Gordon, 2026-08-25)
 
@@ -30,7 +30,7 @@
 - **`cargo nextest run`, never `cargo test`; never pipe nextest through `tail`.**
 - Per-task gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` and `cargo nextest run -p quarto-core` (plus `-p xtask` / `cargo xtask lint` where a task touches the catalog or docs). The controller runs `cargo nextest run --workspace` at phase boundaries.
 - **Error-code lints** (`cargo xtask lint`): every catalog code needs `docs/errors/<subsystem>/<code>.qmd` with `docs_url` `https://quarto.org/docs/errors/listing/<code>`, **and** a sidebar entry in `docs/_quarto.yml` inside the `listing` section, entries ascending by code number. Catalog entry + page + sidebar entry land in the **same commit**.
-- Error page front matter: `title` must equal the catalog `title`; `since` must equal the catalog `since_version` (`"99.9.9"`); `subsystem: listing`; `categories: [listing]`; body follows the template in `docs/errors/README.md` (`# \`Q-X-Y\` — title`, `> description`, `## What this means`, `## Why this happens`, `## How to fix`, `## Related`).
+- Error page front matter: `title` must equal the catalog `title`; `since` must equal the catalog `since_version` (`"99.9.9"`); `subsystem: listing`; `categories: [listing]`; body follows the template in `docs/errors/README.md` (``# `Q-X-Y` — title``, `> description`, `## What this means`, `## Why this happens`, `## How to fix`, `## Related`).
 - All `Q-12-*` diagnostics in `listing_render.rs` go through the existing `push_diag(diags, code, message)` (warning severity). In `config.rs` the existing four-arg `push_diag(diagnostics, code, message, &entry.value)` blames the YAML value.
 - Diagnostic message wording (verbatim, so tests and docs agree):
   - Q-12-24, no directives: ``Listing `{id}`: template `{path}` contains no doctemplate directives (`$var$`, `$for(…)$`, `$if(…)$`), so it would be copied into the page unchanged. Quarto 2 custom listing templates use doctemplate syntax; see the Listings guide, “Custom templates”. Listing skipped.``
@@ -46,10 +46,10 @@
 ### Task 1: Q-12-24 — detect an untemplated custom template, warn, skip
 
 **Files:**
-- Modify: `crates/quarto-core/src/transforms/listing_render.rs` (the `render_one` Custom arm at ~`:187-200`; `compile_and_render` at ~`:453-497`; tests module from ~`:499`; the existing test `custom_template_with_ejs_md_extension_attempts_load_and_fails_compile` at ~`:1220-1253`)
+- Modify: `crates/quarto-core/src/transforms/listing_render.rs` (the `render_one` Custom arm at \~`:187-200`; `compile_and_render` at \~`:453-497`; tests module from \~`:499`; the existing test `custom_template_with_ejs_md_extension_attempts_load_and_fails_compile` at \~`:1220-1253`)
 - Modify: `crates/quarto-error-catalog/error_catalog.json` (add `Q-12-24` after `Q-12-23`)
 - Create: `docs/errors/listing/Q-12-24.qmd`
-- Modify: `docs/_quarto.yml` (sidebar: add `- errors/listing/Q-12-24.qmd` directly after the `Q-12-23.qmd` line, ~`:213`)
+- Modify: `docs/_quarto.yml` (sidebar: add `- errors/listing/Q-12-24.qmd` directly after the `Q-12-23.qmd` line, \~`:213`)
 
 **Interfaces:**
 - Consumes: `quarto_doctemplate::{Template, TemplateNode}` (both re-exported at the crate root; `Template::nodes(&self) -> &[TemplateNode]` is public), `LoadedCustomTemplate { source, template_path, resolver }`, `push_diag`.
@@ -516,7 +516,7 @@ listing (same path as a Q-12-10 compile error)."
 ### Task 2: Widen Q-12-9 to `.ejs` and reframe it as "Quarto 1 EJS template"
 
 **Files:**
-- Modify: `crates/quarto-core/src/project/listing/config.rs` (`"template"` arm at ~`:515-528`; tests near `template_ejs_md_extension_emits_q_12_9` at ~`:1712`)
+- Modify: `crates/quarto-core/src/project/listing/config.rs` (`"template"` arm at \~`:515-528`; tests near `template_ejs_md_extension_emits_q_12_9` at \~`:1712`)
 - Modify: `crates/quarto-error-catalog/error_catalog.json` (`Q-12-9` entry: `title` and `message_template`)
 - Modify: `docs/errors/listing/Q-12-9.qmd` (full rewrite — the current page says "templates are EJS, full stop", the opposite of the truth)
 

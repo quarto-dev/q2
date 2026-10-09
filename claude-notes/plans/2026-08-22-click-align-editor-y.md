@@ -101,13 +101,13 @@ it is **not** test-bound yet, which is this phase's real work.
       (`Q2PreviewIframe`), and `onPreviewClickAtLine` likewise
       (`ReactRenderer` → `ReactPreview`). Thread the prop **before** changing the
       handler, or `tsc -b` is red between steps.
-- [x] `Q2PreviewIframe`'s capture-phase `pointerup` handler: resolve the nearest
+- [x] `Q2PreviewIframe`\'s capture-phase `pointerup` handler: resolve the nearest
       `[data-loc]` block, add its `getBoundingClientRect().top` to the iframe
       element's own top, pass as `hostY`.
 - [x] `useScrollSync`: `revealEditorLine(line, hostY?)` performs the computation
       above, keeping the `isSyncingRef` bracketing (A5 — ratio sync stays, so the
       overwrite race stays reachable).
-- [x] Rewrite the doc comments the scratch left stale: `useScrollSync`'s header
+- [x] Rewrite the doc comments the scratch left stale: `useScrollSync`\'s header
       still says `revealEditorLine` "calls `editor.revealLineInCenterIfOutsideViewport`".
 - [x] Delete every `TEMPORARY LOCAL EXPERIMENT` marker (none carried into the
       real implementation — it was written fresh from the plan, not by applying
@@ -127,7 +127,7 @@ Playwright 6/6.
 
 **A1g's tolerance is 6px, justified by measurement, not feel.** Reverting
 `revealEditorLine` to the old centring call and running A1g alone failed it by
-**~13px** — comfortably outside the tolerance, so the row discriminates rather
+**\~13px** — comfortably outside the tolerance, so the row discriminates rather
 than merely passing. It targets `Paragraph 20.` (source line 45 of 80),
 deliberately away from the document's start and end where the clamp would mask a
 wrong computation.
@@ -169,7 +169,7 @@ The HTML preview reaches the editor through a *different* path, and it is alread
 doing more than the q2 one: `useSelectionSync.handlePreviewSelection` runs on
 `selectionchange` with **no collapsed-selection guard**, so a plain click already
 does `setSelection` + `revealRangeInCenter` + `focus()`. (Measured in the previous
-plan: clicking `Paragraph 35.` moved the editor to lines ~45–77 and Monaco took
+plan: clicking `Paragraph 35.` moved the editor to lines \~45–77 and Monaco took
 focus.) So this phase **replaces the centring**, and per A4 leaves the cursor move
 and focus alone.
 
@@ -178,7 +178,7 @@ and focus alone.
 - **`hostY` comes from widening `onSelectionChange` to `(startPos, endPos, hostY?)`**,
   computed inline in `MorphIframe.handleSelectionChange` as
   `anchorNode.parentElement.getBoundingClientRect().top + iframeRef.getBoundingClientRect().top`
-  — symmetric with `Q2PreviewIframe`'s existing `blockTop + iframeTop`. The
+  — symmetric with `Q2PreviewIframe`\'s existing `blockTop + iframeTop`. The
   alternative (compute in `useSelectionSync` from `previewRef`) was rejected:
   `MorphIframeHandle` exposes only imperative methods, so it would mean adding one
   purely to read back a value computed a line earlier.
@@ -201,10 +201,10 @@ and focus alone.
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| A7 | **The reveal-then-overwrite race exists on this path too, and threading `revealEditorLine` is what closes it.** | `Preview.tsx:395` wires ratio scroll sync, so a post-click reflow lets `syncPreviewToEditor` replace the alignment ~50 ms later. `revealEditorLine` brackets **`useScrollSync`'s** `isSyncingRef` — the flag `syncPreviewToEditor` actually reads. Extracting the arithmetic into a shared pure helper called from `useSelectionSync` would instead set that hook's *own* unrelated `isSyncingRef` and leave the race wide open. So the callback is threaded deliberately; **do not "decouple the hooks".** Pinned by the HTML-path analogue of U2e. |
+| A7 | **The reveal-then-overwrite race exists on this path too, and threading `revealEditorLine` is what closes it.** | `Preview.tsx:395` wires ratio scroll sync, so a post-click reflow lets `syncPreviewToEditor` replace the alignment \~50 ms later. `revealEditorLine` brackets **`useScrollSync`\'s** `isSyncingRef` — the flag `syncPreviewToEditor` actually reads. Extracting the arithmetic into a shared pure helper called from `useSelectionSync` would instead set that hook's *own* unrelated `isSyncingRef` and leave the race wide open. So the callback is threaded deliberately; **do not "decouple the hooks".** Pinned by the HTML-path analogue of U2e. |
 | A8 | **The pre-existing `fileId` bug in `useSelectionSync` is fixed in this phase**, in its own commit, rather than deferred to a strand. | `handlePreviewSelection` builds a Monaco range from `startPos` and never checks `fileId`, so selecting inside *included* content moves the caret to a bogus line of the currently-open file. Same class as the q2-side defect fixed on-branch two days ago, and materially worse: that one produced a wrong *scroll*, this produces a wrong *caret and selection*, so a user who then types edits the wrong location. Leaving it would also make the paths asymmetric right as they converge — q2 inert, HTML mis-positioning. The site already calls `lineForClickTarget`, so the guard is one condition in a function this phase edits. No strand filed: resolved in the same breath. |
 
-- [x] **Investigate first, and report before implementing:** `MorphIframe`'s
+- [x] **Investigate first, and report before implementing:** `MorphIframe`\'s
       `onSelectionChange` reports only `(startPos, endPos)` — no anchor rect. Decide
       where the anchor Y comes from. Candidates: widen `onSelectionChange` to carry
       it (symmetric with `onClickAtLine`), or compute it in `useSelectionSync` from
@@ -226,7 +226,7 @@ and focus alone.
 - [x] A Playwright row equivalent to A1g on the HTML preview path. T3 in the
       existing spec is the HTML-preview control and must stay green. (P2a, its own
       dedicated `htmlAlignFixture()` — a wrapping paragraph, since a single-line
-      one like `fixture()`'s can't discriminate span- from block-anchored `hostY`.
+      one like `fixture()`\'s can't discriminate span- from block-anchored `hostY`.
       Fail-on-revert confirmed: measuring the containing `<p>` instead of the
       clicked span reddens this row.)
 - [x] Reuse `lineForClickTarget`/`parseDataLoc` rather than adding a parallel

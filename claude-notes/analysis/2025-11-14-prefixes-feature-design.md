@@ -9,7 +9,7 @@ The error message system requires test cases in different parser contexts to cap
 - `*a` at column 0 produces lr_state = 758
 - `[*a` with `*` at column 1 produces lr_state = 863
 
-Because runtime capture matching uses `(lr_state, sym)` pairs, we need separate test cases for each context. With 17 inline types and ~16 possible prefix contexts, this creates 272 potential combinations - too many to maintain manually.
+Because runtime capture matching uses `(lr_state, sym)` pairs, we need separate test cases for each context. With 17 inline types and \~16 possible prefix contexts, this creates 272 potential combinations - too many to maintain manually.
 
 ## Proposed Solution
 
@@ -303,7 +303,7 @@ for (const testCase of cases) {
 The prefixes feature is a clean extension to the existing architecture that:
 - Solves the exponential case growth problem
 - Maintains backward compatibility
-- Requires minimal code changes (refactor + ~15 new lines)
+- Requires minimal code changes (refactor + \~15 new lines)
 - Automates error-prone manual processes
 - Enables systematic coverage of parser contexts
 - Uses simple counter-based naming (no character mapping needed)

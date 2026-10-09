@@ -73,23 +73,23 @@ What a Q1 shortcode extension author was promised:
    `RawInline`/`RawBlock`, `Math`, element attributes (single-quoted),
    `Link.target`, `Image.src`. Opt-outs: `cell-code` class (engine output) and
    `{shortcodes=false}` attribute.
-7. **Escaping:** `{{{< … >}}}` renders the literal `{{< … >}}`; `{{</* … */>}}`
+7. **Escaping:** `{{{< … >}}}`{shortcodes="false"} renders the literal `{{{< … >}}}`; `{{{</* … */>}}}`
    comment form ditto.
 8. **Helpers:** `quarto.shortcode.read_arg(args, n)` and
    `quarto.shortcode.error_output(name, msg_or_args, context)`; ambient
    script-dir state (`withScriptFile`) drives `quarto.utils.resolve_path`,
    sibling-module `require`, and relative HTML dependencies.
-9. **Unknown shortcode:** warn + pass through the original `{{< … >}}` text as a
+9. **Unknown shortcode:** warn + pass through the original `{{{< … >}}}` text as a
    raw inline/block (silently, in text context). Documented as a *feature* for
    Hugo interop ("shortcodes not recognized by Quarto are passed through
    unmodified to Hugo").
 10. **Built-ins:** `meta`, `var`, `env`, `pagebreak`, `kbd`, `video`, `include`,
     `embed`, `lipsum`, `placeholder`, `contents`, `version`, `brand` (the last
-    missing from the docs' own table). `include`/`embed` are **not** Lua handlers
+    missing from the docs\' own table). `include`/`embed` are **not** Lua handlers
     in Q1 — they're TS text-level directives at pre-/post-engine stages.
 
 Q1 quirks we get to *not* port (see § Design decisions): the undocumented paired
-shortcode syntax (`{{< name >}}…{{< /name >}}`, 1.4, zero docs); the shadowed
+shortcode syntax (`{{{< name >}}}…{{{< /name >}}}`, 1.4, zero docs); the shadowed
 `local result` bug in `shortcodes.lua:172-173` that drops some nested results;
 grid-table non-support caused by Q1's text-level pre-parse (Q2 parses shortcodes
 in-grammar, so this restriction may simply not apply — verify in Phase 0).
@@ -98,9 +98,9 @@ in-grammar, so this restriction may simply not apply — verify in Phase 0).
 
 | # | Q1 contract item | Q2 status | Gap |
 |---|---|---|---|
-| 1 | Syntax `{{< … >}}` incl. nesting, escapes | ✅ in-grammar (`grammar.js:623-666`), `Inline::Shortcode` | Verify `{{</* … */>}}` comment-escape form; newlines inside shortcodes (Q1 allows) — Q-2-27/28 currently *reject* line breaks: deliberate strictness, keep, but confirm messaging |
+| 1 | Syntax `{{{< … >}}}` incl. nesting, escapes | ✅ in-grammar (`grammar.js:623-666`), `Inline::Shortcode` | Verify `{{{</* … */>}}}` comment-escape form; newlines inside shortcodes (Q1 allows) — Q-2-27/28 currently *reject* line breaks: deliberate strictness, keep, but confirm messaging |
 | 2 | Extension discovery + manifest | ✅ `extension/discover.rs`, `read.rs` | **bd-8b0af414**: Q2 hard-requires `title`/`author`/`contributes`; real Q1 extensions omit these and silently fail to load. **bd-nzdm1wry**: load failure → `tracing::warn!` only, then misattributed "unknown shortcode" at use site |
-| 3 | Auto-activation of shortcode extensions | ❌ **correctness bug** — on-demand load keyed by shortcode name (`dispatch_shortcode` → `find_extension(&shortcode.name)`, `shortcode_resolve.rs:370`) | Any extension whose shortcode names differ from its extension id is never loaded — the common case (`quarto-tiers` contributes `tier`, `fontawesome` contributes `fa`). Q2's built-ins work only because their ids coincide with their shortcode names. **Confirmed live**: `external-sources/connect-docs/docs-quarto-2` — `{{< tier … >}}` → "Unknown shortcode" despite a valid, discovered `_extensions/quarto-tiers/`. Fix: Q1's eager model — on first shortcode dispatch, load *all* discovered extensions' `contributes.shortcodes` scripts, then dispatch by handler name. Also: conflict/shadowing silent; Q1's `filterBuiltInExtensions` shadow-warning has no analogue |
+| 3 | Auto-activation of shortcode extensions | ❌ **correctness bug** — on-demand load keyed by shortcode name (`dispatch_shortcode` → `find_extension(&shortcode.name)`, `shortcode_resolve.rs:370`) | Any extension whose shortcode names differ from its extension id is never loaded — the common case (`quarto-tiers` contributes `tier`, `fontawesome` contributes `fa`). Q2's built-ins work only because their ids coincide with their shortcode names. **Confirmed live**: `external-sources/connect-docs/docs-quarto-2` — `{{{< tier … >}}}` → "Unknown shortcode" despite a valid, discovered `_extensions/quarto-tiers/`. Fix: Q1's eager model — on first shortcode dispatch, load *all* discovered extensions\' `contributes.shortcodes` scripts, then dispatch by handler name. Also: conflict/shadowing silent; Q1's `filterBuiltInExtensions` shadow-warning has no analogue |
 | 4 | Handler signature 5-tuple | ✅ `shortcode.rs:298` TS-compatible; kwargs empty-Inlines metatable present | `meta` lazy dotted lookup: verify parity; `raw_args` shape: verify |
 | 5 | Return-value coercions | ✅ `convert_return_value`/`classify_table_result` | Verify against Q1's table (esp. blocks→inlines in inline ctx, `nil` handling) via corpus |
 | 6 | `context = "text"` | ⚠️ `ShortcodeCallContext::Text` exists in pampa, **unreachable** — quarto-core only dispatches Block/Inline | Shortcodes in code blocks, attributes, link targets, image src are **not resolved**. Grammar already parses shortcodes in link destinations + quoted attr strings; resolve wiring missing |
@@ -111,18 +111,18 @@ in-grammar, so this restriction may simply not apply — verify in Phase 0).
 | 11 | `shortcodes:` YAML key | ✅ `extract_shortcode_paths` | Also accepts only paths; Q1 also allowed extension *names* in format-contributed `shortcodes:` — defer |
 | 12 | `quarto add/remove/list/update` | ❌ 8-line `NotImplemented` stubs | CLI installation story (bd-5edooc78 pins the remove-guard requirement) |
 | 13 | `quarto.shortcode.{read_arg,error_output}` | ✅ `shortcode.rs:384` | Verify exact semantics against `init.lua:1002-1032` |
-| 14 | Escaped shortcode round-trip | ✅ `is_escaped` → Preserve | Corpus-verify writer output renders literal `{{< … >}}` |
+| 14 | Escaped shortcode round-trip | ✅ `is_escaped` → Preserve | Corpus-verify writer output renders literal `{{{< … >}}}` |
 
 ## Design decisions (Q2-native improvements)
 
 These are the places where we deliberately diverge from Q1, following the
 project's porting principles: *strictness is acceptable when the diagnostic is
 source-mapped and actionable; prefer explicit declaration over inference.*
-Each is flagged **[decided]** (follows an existing Q2 policy) or **[needs user
-sign-off]**.
+Each is flagged **\[decided\]** (follows an existing Q2 policy) or **\[needs user
+sign-off\]**.
 
 **D1. Unknown shortcode → coded, source-mapped diagnostic; no silent drop.
-[decided 2026-07-31]**
+\[decided 2026-07-31\]**
 Q1 warns and passes the raw text through (silently, in text context) — partly a
 Hugo-interop feature. Decision: warning-level diagnostic with a new `Q-*` code,
 `.with_location()` pointing at the invocation (we have `SourceInfo` on every
@@ -134,7 +134,7 @@ Unknown-shortcode-as-*error* needs no dedicated flag: `q2 render --strict`
 (warnings-as-errors, already shipped) composes with this warning.
 
 **D2. Extension load failure is a real diagnostic, never a downstream
-misattribution. [decided — this is bd-nzdm1wry]**
+misattribution. \[decided — this is bd-nzdm1wry\]**
 A malformed `_extension.yml` or a Lua file that fails to load must produce a
 coded diagnostic naming the extension file and cause, at load/first-use time.
 The current behavior (silent `tracing::warn!`, then "unknown shortcode ?greet"
@@ -142,7 +142,7 @@ pointing at the *user's document*) is precisely the Q1-style misattribution this
 port should eliminate.
 
 **D3. Manifest strictness: relax to Q1-compat intake, validate loudly.
-[decided 2026-07-31 — proposal approved as written]**
+\[decided 2026-07-31 — proposal approved as written\]**
 Q1 requires no named fields in `_extension.yml`. Q2 hard-requires
 `title`/`author`/`contributes` (bd-8b0af414), so real Q1 extensions
 (julia-engine, marimo) fail to load — and per D2 today they fail *silently*.
@@ -152,8 +152,8 @@ nothing is an error, matching Q1's `validateExtension`); missing
 as semver *when present*, with a source-mapped error into the YAML file when
 malformed (we have quarto-yaml source locations; Q1 didn't).
 
-**D4. Handler-name conflicts are diagnosed, not silent. [decided 2026-07-31,
-conditional on practicality]**
+**D4. Handler-name conflicts are diagnosed, not silent. \[decided 2026-07-31,
+conditional on practicality\]**
 Keep a deterministic precedence (matching Q1: built-ins win; among extensions,
 more-local wins; document `shortcodes:` files lowest). The shadowing diagnostic
 (naming both files) is approved *if practical* — user flagged a feasibility
@@ -164,27 +164,27 @@ already tracks the script being loaded), a file-level (not span-level)
 diagnostic should be cheap; if it turns out invasive, ship the precedence rule
 documented but undiagnosed and file a follow-on strand.
 
-**D5. `include` stays a Rust pre-stage, not a Lua handler. [decided]**
+**D5. `include` stays a Rust pre-stage, not a Lua handler. \[decided\]**
 Q2's `include_expansion.rs` already mirrors Q1's TS-side design (and Q1 itself
 never had a Lua `include`). Keep circular-include detection and source-mapped
 missing-file errors as coded diagnostics (verify they have `Q-*` codes; add if
 not).
 
-**D6. `embed` is out of scope for this plan. [confirmed 2026-07-31]**
+**D6. `embed` is out of scope for this plan. \[confirmed 2026-07-31\]**
 Q1 `embed` drags in notebook rendering, `notebook-links`/`notebook-view`, and
-the jupyter-embed placeholder machinery. User: `{{< embed >}}` needs a more
+the jupyter-embed placeholder machinery. User: `{{{< embed >}}}` needs a more
 drastic redesign for Q2 — deferred to its own strand/epic, dependent on Q2's
 engine story.
 
-**D7. Paired shortcodes not ported. [confirmed 2026-07-31 — deferred]**
+**D7. Paired shortcodes not ported. \[confirmed 2026-07-31 — deferred\]**
 Shipped in Q1 1.4 (`#5902`), never documented, zero occurrences in quarto-web.
 User: these likely exist purely for Hugo passthrough — which means if we ever
 implement the D1 passthrough config for Hugo interop, paired syntax belongs to
 *that* feature (pass the paired form through verbatim), not to the handler
 dispatch machinery. File a backlog strand recording this framing.
 
-**D8. In-grammar parsing is the single source of truth. [decided — already Q2
-reality; text-position scanning deferred 2026-07-31]**
+**D8. In-grammar parsing is the single source of truth. \[decided — already Q2
+reality; text-position scanning deferred 2026-07-31\]**
 Q1 has *four* shortcode parsers (LPeg grammar, sentinel encoder, AST-level
 metadata re-parser, TS regex parser) because it had to smuggle shortcodes past
 Pandoc's reader. Q2 parses them in the tree-sitter grammar with real
@@ -231,12 +231,12 @@ where the study only has static reads.
       (code block / attribute / link target / image src / grid table /
       metadata values) deferred with Phase 3 — still unwritten, revisit when
       Phase 3 opens.
-- [~] Real published extensions: `quarto-tiers` (Posit, real-world) verified
+- \[\~\] Real published extensions: `quarto-tiers` (Posit, real-world) verified
       end-to-end via connect-docs (badge spans render, 0 warnings). Adding
       copied fixtures of fontawesome-class extensions remains open — good
       first item for a follow-up session.
 - [ ] Real-world acceptance target: `external-sources/connect-docs/docs-quarto-2`
-      (Posit Connect docs). Known failure today: `{{< tier … >}}` from
+      (Posit Connect docs). Known failure today: `{{{< tier … >}}}` from
       `_extensions/quarto-tiers/` → "Unknown shortcode" (gap row 3). Copy the
       minimal extension shape into a local fixture (never reference
       `external-sources/` from tests); use the full project as a manual
@@ -246,7 +246,7 @@ where the study only has static reads.
 
 - [x] **Fix the name-keyed activation bug (gap row 3)** — done, commit
       08f29f89. `LuaEngineState` wraps engine + one-shot flag; eager load of
-      all extensions' scripts on first Lua-stage dispatch; D4 precedence
+      all extensions\' scripts on first Lua-stage dispatch; D4 precedence
       (doc `shortcodes:` < extensions in discovery order < Rust built-ins);
       per-script load failures warn naming extension id + script path.
       Verified end-to-end on connect-docs (`tier` renders, 0 warnings).
@@ -286,7 +286,7 @@ where the study only has static reads.
 - [x] `read_arg` verified matching Q1; `error_output` now accepts table
       message_or_args (Q1 contract; error_args case ported into
       contract-doc-shortcodes). Message text deviates from Q1's `?name:msg`
-      ([Shortcode Error (name): msg]) — accepted deviation.
+      (\[Shortcode Error (name): msg\]) — accepted deviation.
 - [x] `shortcode_to_span` `process::exit(1)` removed: nested kv values
       encode Q1-style recursive param spans (commit 7c3b2f10).
 
@@ -297,7 +297,7 @@ Q1's parsing mess may partly return, and it is not needed for the current
 acceptance targets. Phase 0's baseline probes document the gap. Content kept
 below for the eventual follow-on strand:
 
-- Tests: `{{< meta k >}}` in CodeBlock text, Code inline, element attribute
+- Tests: `{{{< meta k >}}}` in CodeBlock text, Code inline, element attribute
   (single-quoted, per Q1), `Link.target`, `Image.src`; `{shortcodes=false}`
   and `cell-code` opt-outs; unknown shortcode in text context.
 - Add `ResolutionContext::Text` in quarto-core; wire traversal over the

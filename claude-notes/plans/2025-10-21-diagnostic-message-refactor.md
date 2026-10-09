@@ -57,7 +57,7 @@ pub fn read<T: Write>(
 3. **meta.rs** (3 sites)
    - Lines 223, 668, 759: Recursive parsing calls - need DiagnosticCollector threaded through
 
-4. **Tests** (~20 sites)
+4. **Tests** (\~20 sites)
    - test_metadata_source_tracking.rs: 2 calls
    - test_nested_yaml_serialization.rs: 4 calls
    - test_json_errors.rs: 3 calls
@@ -70,7 +70,7 @@ pub fn read<T: Write>(
 
 ### Step 1: Update read() function signature
 - Remove error_formatter parameter and generic F
-- Change return type to include Vec<DiagnosticMessage> in both Ok and Err cases
+- Change return type to include `Vec<DiagnosticMessage>` in both Ok and Err cases
 - Handle recursive call for missing newline case
 
 ### Step 2: Update error handling in read()
@@ -117,7 +117,7 @@ Replace eprintln! with collector.add(diagnostic)
 ## Challenges
 
 1. **Recursive calls**: Metadata parsing calls read() recursively - need to thread DiagnosticCollector
-2. **Many call sites**: ~26 call sites need updating
+2. **Many call sites**: \~26 call sites need updating
 3. **Backward compatibility**: This is a breaking API change for any external users
 
 ## Notes

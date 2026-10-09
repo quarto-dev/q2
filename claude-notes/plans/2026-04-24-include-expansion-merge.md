@@ -73,10 +73,10 @@ In scope:
 Out of scope for this session:
 
 - Pushing the merged branch (user will approve separately).
-- Shortcode resolution beyond `include` — e.g. `{{< meta … >}}` or
+- Shortcode resolution beyond `include` — e.g. `{{{< meta … >}}}` or
   user-defined shortcodes in Lua — is intentionally not moved
   relative to the checkpoint. That remains
-  `ShortcodeResolveTransform`'s responsibility inside
+  `ShortcodeResolveTransform`\'s responsibility inside
   `AstTransformsStage`, well after the profile. If the user wants
   general shortcode resolution pre-profile later, it is a separate
   design conversation.
@@ -201,213 +201,213 @@ push-approval gate.
 ### Phase A — Scaffolding before the merge
 
 - [x] **A0. Create a worktree** `.worktrees/include-merge` off
-      `feature/websites` so the merge can be aborted cleanly without
-      disturbing the main working tree. Add the beads redirect per
-      `.claude/rules/worktrees.md`.
-      *Done:* branch `merge/include-expansion`; `br where` confirms
-      the redirect resolves to the main repo's `.beads/`.
+  `feature/websites` so the merge can be aborted cleanly without
+  disturbing the main working tree. Add the beads redirect per
+  `.claude/rules/worktrees.md`.
+  *Done:* branch `merge/include-expansion`; `br where` confirms
+  the redirect resolves to the main repo's `.beads/`.
 - [x] **A1. Add a TDD-style regression test** exercising
-      the ordering contract we want to land. The test lives in
-      `crates/quarto-core/src/pipeline.rs` (or a new test file if the
-      existing module is crowded) and:
-        1. Writes `parent.qmd` and `child.qmd` to a temp dir; the
-           child contains a `## Section A` heading and a `## Section B`
-           heading; the parent contains `{{< include child.qmd >}}`.
-        2. Builds the HTML pipeline, runs it up to the profile
-           checkpoint (this is already exercised by the existing
-           `AtProfile` clone-and-resume test in Phase 0 — reuse its
-           halting idiom; if it halts by stopping at a given stage,
-           halt right after `DocumentProfileStage`).
-        3. Asserts the extracted `DocumentProfile.outline` contains
-           "Section A" and "Section B".
-      Expected failure on `feature/websites` HEAD: the test fails
-      because there is no `IncludeExpansionStage`, so the `{{< include
-      >}}` shortcode is still present as an unresolved paragraph at
-      profile time and the heading does not appear in `outline`.
-      **Do not proceed to the merge until this test has been verified
-      to fail for exactly that reason.** (This is the key TDD check
-      that the merge fix actually fixes something.)
-      *Done:* test `profile_sees_heading_from_included_file` added in
-      `crates/quarto-core/tests/document_profile_pipeline.rs`. Landed
-      with one heading (`## Child Heading`) rather than two sections —
-      same contract, lighter fixture. Verified RED on
-      `merge/include-expansion` (pre-merge HEAD): fails with
-      `got outline titles: []` — the `{{< include >}}` shortcode is
-      not expanded and the parent has no headings of its own.
+  the ordering contract we want to land. The test lives in
+  `crates/quarto-core/src/pipeline.rs` (or a new test file if the
+  existing module is crowded) and:
+    1. Writes `parent.qmd` and `child.qmd` to a temp dir; the
+       child contains a `## Section A` heading and a `## Section B`
+       heading; the parent contains `{{< include child.qmd >}}`.
+    2. Builds the HTML pipeline, runs it up to the profile
+       checkpoint (this is already exercised by the existing
+       `AtProfile` clone-and-resume test in Phase 0 — reuse its
+       halting idiom; if it halts by stopping at a given stage,
+       halt right after `DocumentProfileStage`).
+    3. Asserts the extracted `DocumentProfile.outline` contains
+       "Section A" and "Section B".
+  Expected failure on `feature/websites` HEAD: the test fails
+  because there is no `IncludeExpansionStage`, so the
+  `{{{< include >}}}` shortcode is still present as an unresolved paragraph at
+  profile time and the heading does not appear in `outline`.
+  **Do not proceed to the merge until this test has been verified
+  to fail for exactly that reason.** (This is the key TDD check
+  that the merge fix actually fixes something.)
+  *Done:* test `profile_sees_heading_from_included_file` added in
+  `crates/quarto-core/tests/document_profile_pipeline.rs`. Landed
+  with one heading (`## Child Heading`) rather than two sections —
+  same contract, lighter fixture. Verified RED on
+  `merge/include-expansion` (pre-merge HEAD): fails with
+  `got outline titles: []` — the `{{{< include >}}}` shortcode is
+  not expanded and the parent has no headings of its own.
 - [x] **A2. Also add a stage-ordering assertion** to
-      `test_build_html_pipeline_stages`: the position of
-      `"include-expansion"` must be strictly less than the position
-      of `"document-profile"`. This is a cheap structural guard
-      against future refactors silently reordering the two stages.
-      *Done:* `include_expansion_precedes_document_profile` added to
-      `tests/document_profile_pipeline.rs` (kept with the other
-      pipeline-shape assertions rather than in `pipeline.rs` unit
-      tests). Verified RED pre-merge: panics on
-      `.expect("include-expansion stage must be present ...")`.
+  `test_build_html_pipeline_stages`: the position of
+  `"include-expansion"` must be strictly less than the position
+  of `"document-profile"`. This is a cheap structural guard
+  against future refactors silently reordering the two stages.
+  *Done:* `include_expansion_precedes_document_profile` added to
+  `tests/document_profile_pipeline.rs` (kept with the other
+  pipeline-shape assertions rather than in `pipeline.rs` unit
+  tests). Verified RED pre-merge: panics on
+  `.expect("include-expansion stage must be present ...")`.
 
 ### Phase B — Perform the merge
 
 - [x] **B0. Fetch** latest `main` (no working-tree mutation beyond
-      the fetch).
-      *Done:* `git fetch origin main` → FETCH_HEAD at `349148ae`.
+  the fetch).
+  *Done:* `git fetch origin main` → FETCH_HEAD at `349148ae`.
 - [x] **B1. From the worktree**, run `git merge --no-ff --no-commit
-      main` to produce a merge commit buffer with conflicts surfaced
-      but nothing yet recorded.
-      *Done:* two conflicts reported, in `pipeline.rs` and
-      `stage/mod.rs`. `stage/stages/mod.rs` and `.beads/issues.jsonl`
-      auto-merged.
+  main` to produce a merge commit buffer with conflicts surfaced
+  but nothing yet recorded.
+  *Done:* two conflicts reported, in `pipeline.rs` and
+  `stage/mod.rs`. `stage/stages/mod.rs` and `.beads/issues.jsonl`
+  auto-merged.
 - [x] **B2. Resolve conflicts** file-by-file, using the merge-target
-      pipeline order from the §Goal section. Specifically:
-        - `pipeline.rs`: imports union; doc comments renumbered for
-          the final order; three builder functions each get both
-          `IncludeExpansionStage::new()` *and* `DocumentProfileStage`
-          / `UnwrapProfileStage` inserted in the target order; tests
-          updated with the new stage counts. Target counts after
-          merge:
-            - native HTML: **14** stages (current `feature/websites`
-              has 13 — inserts `IncludeExpansionStage` at position
-              3, shifting `DocumentProfileStage` to 4, etc.).
-            - WASM: **13** stages (current `feature/websites` has
-              12 — same insertion; WASM still has no
-              `EngineExecutionStage`).
-            - analysis: **5** stages (current `feature/websites`
-              has 4 — insertion between `MetadataMergeStage` and
-              `PreEngineSugaringStage`).
-        - `stage/mod.rs` and `stage/stages/mod.rs`: accept both
-          sides' additions.
-        - `.beads/issues.jsonl`: union of both sides; `br import
-          --resolve-collisions` after the textual resolution to
-          reconcile.
-        - Any incidental conflicts in `CLAUDE.md`,
-          `claude-notes/plans/*`, etc.: prefer the `main` version for
-          files that main substantially rewrote (e.g. TS-engine
-          plans) and the `feature/websites` version for website-epic
-          plans.
+  pipeline order from the §Goal section. Specifically:
+    - `pipeline.rs`: imports union; doc comments renumbered for
+      the final order; three builder functions each get both
+      `IncludeExpansionStage::new()` *and* `DocumentProfileStage`
+      / `UnwrapProfileStage` inserted in the target order; tests
+      updated with the new stage counts. Target counts after
+      merge:
+        - native HTML: **14** stages (current `feature/websites`
+          has 13 — inserts `IncludeExpansionStage` at position
+          3, shifting `DocumentProfileStage` to 4, etc.).
+        - WASM: **13** stages (current `feature/websites` has
+          12 — same insertion; WASM still has no
+          `EngineExecutionStage`).
+        - analysis: **5** stages (current `feature/websites`
+          has 4 — insertion between `MetadataMergeStage` and
+          `PreEngineSugaringStage`).
+    - `stage/mod.rs` and `stage/stages/mod.rs`: accept both
+      sides\' additions.
+    - `.beads/issues.jsonl`: union of both sides; `br import
+      --resolve-collisions` after the textual resolution to
+      reconcile.
+    - Any incidental conflicts in `CLAUDE.md`,
+      `claude-notes/plans/*`, etc.: prefer the `main` version for
+      files that main substantially rewrote (e.g. TS-engine
+      plans) and the `feature/websites` version for website-epic
+      plans.
 - [x] **B3. Do not commit yet.** Leave the merge in-progress; move
-      to Phase C to verify before committing.
-      *Done:* merge left in-progress until C0-C3 passed.
+  to Phase C to verify before committing.
+  *Done:* merge left in-progress until C0-C3 passed.
 
 ### Phase C — Verification
 
 - [x] **C0. `cargo build --workspace`** — compiles cleanly.
-      *Done:* 2m 30s, exit 0.
+  *Done:* 2m 30s, exit 0.
 - [x] **C1. `cargo nextest run --workspace`** — all tests pass.
-      Special attention to:
-        - The new regression test from A1 (must now pass — this is
-          the green half of the TDD cycle).
-        - The new structural assertion from A2.
-        - `test_build_html_pipeline_stages`,
-          `test_build_html_pipeline`, `test_build_wasm_html_pipeline`,
-          `test_build_analysis_pipeline` — stage counts.
-        - Phase-0 profile-checkpoint clone-and-resume tests (the
-          byte-identical-resume guarantee must still hold; adding
-          IncludeExpansion before the checkpoint does not change
-          this because include expansion is deterministic).
-        - Phase-2 sidebar / Phase-3 navbar/footer project-integration
-          tests (they read the profile; adding headings via include
-          must not break them).
-      *Done:* 7750 tests, 0 failed, 195 skipped. Focused re-run of
-      `document_profile_pipeline` confirmed:
-      `profile_sees_heading_from_included_file` and
-      `include_expansion_precedes_document_profile` both PASS
-      (the TDD GREEN); Phase-0
-      `pipeline_at_profile_to_end_produces_expected_html`
-      (clone-and-resume byte-identical invariant) still PASSes.
+  Special attention to:
+    - The new regression test from A1 (must now pass — this is
+      the green half of the TDD cycle).
+    - The new structural assertion from A2.
+    - `test_build_html_pipeline_stages`,
+      `test_build_html_pipeline`, `test_build_wasm_html_pipeline`,
+      `test_build_analysis_pipeline` — stage counts.
+    - Phase-0 profile-checkpoint clone-and-resume tests (the
+      byte-identical-resume guarantee must still hold; adding
+      IncludeExpansion before the checkpoint does not change
+      this because include expansion is deterministic).
+    - Phase-2 sidebar / Phase-3 navbar/footer project-integration
+      tests (they read the profile; adding headings via include
+      must not break them).
+  *Done:* 7750 tests, 0 failed, 195 skipped. Focused re-run of
+  `document_profile_pipeline` confirmed:
+  `profile_sees_heading_from_included_file` and
+  `include_expansion_precedes_document_profile` both PASS
+  (the TDD GREEN); Phase-0
+  `pipeline_at_profile_to_end_produces_expected_html`
+  (clone-and-resume byte-identical invariant) still PASSes.
 - [x] **C2. `cargo xtask verify`** — full workspace + hub-client
-      build + hub-client tests. Required because `quarto-core` is on
-      the conflict path.
-      *Done:* `cargo xtask verify --skip-rust-tests` (since C1
-      already covered Rust). Initially failed on a pre-existing
-      nightly-rustc issue (`VaList::next_arg` rename from
-      `f866c65e` required a rustc newer than local `1.94.0-nightly
-      2026-01-14`). After `rustup update nightly` →
-      `1.97.0-nightly 2026-04-23` and a root `npm install` (fresh
-      worktree had no `node_modules/`), verify reported
-      **"All verification steps passed!"**
+  build + hub-client tests. Required because `quarto-core` is on
+  the conflict path.
+  *Done:* `cargo xtask verify --skip-rust-tests` (since C1
+  already covered Rust). Initially failed on a pre-existing
+  nightly-rustc issue (`VaList::next_arg` rename from
+  `f866c65e` required a rustc newer than local `1.94.0-nightly
+  2026-01-14`). After `rustup update nightly` →
+  `1.97.0-nightly 2026-04-23` and a root `npm install` (fresh
+  worktree had no `node_modules/`), verify reported
+  **"All verification steps passed!"**
 - [x] **C3. End-to-end CLI smoke** per the CLAUDE.md
-      end-to-end-verification rule.
-      *Done:* `cargo run --bin q2 -- render
-      crates/quarto/tests/smoke-all/includes/basic/basic.qmd`
-      produced `basic.html` (782 bytes). Inspected — the rendered
-      HTML contains the three expected paragraphs in order:
-      ```
-      <p>Parent content before include.</p>
-      <p>This line contains BASIC-CHILD-MARKER-XYZ from the included file.</p>
-      <p>Parent content after include.</p>
-      ```
-      confirming `{{< include _child.qmd >}}` was resolved during
-      render (and, by construction of the pipeline order,
-      *before* the profile checkpoint). Build artifacts (`basic.html`,
-      `basic_files/`) removed after inspection; not staged.
-      (Plan note: CLI binary is `q2`, not `quarto` — the earlier
-      draft of this step said `--bin quarto`, corrected at execution
-      time.)
+  end-to-end-verification rule.
+  *Done:* `cargo run --bin q2 -- render
+  crates/quarto/tests/smoke-all/includes/basic/basic.qmd`
+  produced `basic.html` (782 bytes). Inspected — the rendered
+  HTML contains the three expected paragraphs in order:
+  ```
+  <p>Parent content before include.</p>
+  <p>This line contains BASIC-CHILD-MARKER-XYZ from the included file.</p>
+  <p>Parent content after include.</p>
+  ```
+  confirming `{{{< include _child.qmd >}}}` was resolved during
+  render (and, by construction of the pipeline order,
+  *before* the profile checkpoint). Build artifacts (`basic.html`,
+  `basic_files/`) removed after inspection; not staged.
+  (Plan note: CLI binary is `q2`, not `quarto` — the earlier
+  draft of this step said `--bin quarto`, corrected at execution
+  time.)
 - [ ] **C4. Finalize the merge commit.** `git commit` (the merge
-      buffer is still in progress). Use a descriptive message along
-      the lines of:
+  buffer is still in progress). Use a descriptive message along
+  the lines of:
 
-      ```
-      Merge main into feature/websites
+  ```
+  Merge main into feature/websites
 
-      Threads include-shortcode expansion (main, 215482fb) through the
-      DocumentProfile checkpoint (feature/websites, e8674612): the
-      merged HTML pipeline runs IncludeExpansionStage immediately after
-      MetadataMergeStage and immediately before DocumentProfileStage,
-      so statically-knowable content declared via {{< include … >}}
-      (headings, code blocks, crossref targets) is visible in the
-      profile that downstream project features consume.
+  Threads include-shortcode expansion (main, 215482fb) through the
+  DocumentProfile checkpoint (feature/websites, e8674612): the
+  merged HTML pipeline runs IncludeExpansionStage immediately after
+  MetadataMergeStage and immediately before DocumentProfileStage,
+  so statically-knowable content declared via {{< include … >}}
+  (headings, code blocks, crossref targets) is visible in the
+  profile that downstream project features consume.
 
-      See claude-notes/plans/2026-04-24-include-expansion-merge.md
-      for the merge plan and rationale.
-      ```
+  See claude-notes/plans/2026-04-24-include-expansion-merge.md
+  for the merge plan and rationale.
+  ```
 
 ### Phase D — Follow-ups and handoff
 
 - [x] **D0. `br sync --flush-only`** in the main repo (not the
-      worktree); `git add .beads/ && git commit -m "sync beads"`.
-      *Partial:* `bd-xfwx` closed in the local beads DB (via
-      `br --no-auto-import close bd-xfwx --reason …`). A standard
-      `br sync --flush-only` is blocked by a pre-existing prefix
-      config issue: the jsonl contains both `bd-`-prefixed and
-      123 `k-`-prefixed issues, and `br sync` (post-rebuild) rejects
-      with "Prefix mismatch at line 124: expected 'bd', found issue
-      'k-02o9'". A `--force` flush was attempted but would have
-      deleted `bd-2mxo` and `bd-tjbr` (present in the committed
-      jsonl but absent from the local DB). Reverted the jsonl to
-      its post-merge state to preserve those two issues; the DB's
-      knowledge of `bd-xfwx:closed` is therefore unflushed.
-      Follow-up: fix the beads prefix config (or import the k-
-      prefixed issues into the DB) before the next sync.
+  worktree); `git add .beads/ && git commit -m "sync beads"`.
+  *Partial:* `bd-xfwx` closed in the local beads DB (via
+  `br --no-auto-import close bd-xfwx --reason …`). A standard
+  `br sync --flush-only` is blocked by a pre-existing prefix
+  config issue: the jsonl contains both `bd-`-prefixed and
+  123 `k-`-prefixed issues, and `br sync` (post-rebuild) rejects
+  with "Prefix mismatch at line 124: expected 'bd', found issue
+  'k-02o9'". A `--force` flush was attempted but would have
+  deleted `bd-2mxo` and `bd-tjbr` (present in the committed
+  jsonl but absent from the local DB). Reverted the jsonl to
+  its post-merge state to preserve those two issues; the DB's
+  knowledge of `bd-xfwx:closed` is therefore unflushed.
+  Follow-up: fix the beads prefix config (or import the k-
+  prefixed issues into the DB) before the next sync.
 - [x] **D1. Update the epic plan file**
-      (`claude-notes/plans/2026-04-23-website-project-epic.md`) §Work
-      items with a note that this merge landed and the checkpoint
-      contract now includes post-expansion content. Reference this
-      plan.
-      *Done:* added an "Interphase merge" work item entry between
-      Phase 3 and Phase 4 pointing at `bd-xfwx` + follow-up
-      `bd-r82e`. Also added a §Epic-wide follow-ups bullet for
-      `bd-r82e` during the pre-merge prep commit.
+  (`claude-notes/plans/2026-04-23-website-project-epic.md`) §Work
+  items with a note that this merge landed and the checkpoint
+  contract now includes post-expansion content. Reference this
+  plan.
+  *Done:* added an "Interphase merge" work item entry between
+  Phase 3 and Phase 4 pointing at `bd-xfwx` + follow-up
+  `bd-r82e`. Also added a §Epic-wide follow-ups bullet for
+  `bd-r82e` during the pre-merge prep commit.
 - [x] **D2. File a follow-up beads issue** if the regression tests
-      surface that the profile contract should gain a field (e.g.
-      "is this document an include target of any other document in
-      the project?" — a question that becomes meaningful once
-      project orchestration inspects profiles). Only file if
-      actually needed; don't pre-file speculatively.
-      *Done during pre-merge prep:* `bd-r82e` filed for the
-      `DocumentProfile.includes: Vec<…>` field needed for Phase-8
-      incremental-rebuild cache invalidation. Not a blocker for
-      Phases 4-7.
+  surface that the profile contract should gain a field (e.g.
+  "is this document an include target of any other document in
+  the project?" — a question that becomes meaningful once
+  project orchestration inspects profiles). Only file if
+  actually needed; don't pre-file speculatively.
+  *Done during pre-merge prep:* `bd-r82e` filed for the
+  `DocumentProfile.includes: Vec<…>` field needed for Phase-8
+  incremental-rebuild cache invalidation. Not a blocker for
+  Phases 4-7.
 - [ ] **D3. Propose push to the user.** Do not push without explicit
-      approval. `git push origin feature/websites` only after the
-      user says yes.
-      *Pending user approval.* Feature branch is at
-      `c3bcfb76 bd-xfwx: merge main into feature/websites`, local
-      only.
+  approval. `git push origin feature/websites` only after the
+  user says yes.
+  *Pending user approval.* Feature branch is at
+  `c3bcfb76 bd-xfwx: merge main into feature/websites`, local
+  only.
 - [ ] **D4. Delete the worktree** once the merge is on
-      `feature/websites` proper:
-      `git worktree remove .worktrees/include-merge`.
-      *Deferred until after push approval, in case the plan file
-      needs further edits in the same worktree.*
+  `feature/websites` proper:
+  `git worktree remove .worktrees/include-merge`.
+  *Deferred until after push approval, in case the plan file
+  needs further edits in the same worktree.*
 
 ## Test strategy (recap)
 
@@ -431,11 +431,11 @@ push-approval gate.
 - **Risk:** Phase 2/3 tests hard-code the parent-document-only view
   of the AST and break if an included heading shows up in the
   outline. *Mitigation:* Phase 2/3 tests use in-memory fixtures
-  without `{{< include >}}` shortcodes — they won't trigger the new
+  without `{{{< include >}}}` shortcodes — they won't trigger the new
   behavior. Verify in C1.
 - **Risk:** `build_analysis_pipeline` (LSP) gains IncludeExpansion,
   and some LSP operation that previously saw the unresolved
-  `{{< include >}}` paragraph now sees the spliced content,
+  `{{{< include >}}}` paragraph now sees the spliced content,
   surprising an LSP test. *Mitigation:* LSP outline wants the
   spliced content (that's what a user expects to see in the
   outline), so this is the right behavior. If tests catch a

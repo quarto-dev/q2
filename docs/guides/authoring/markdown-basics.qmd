@@ -232,8 +232,10 @@ PowerPoint output ignores authors on insertions and deletions.
 
 ### Lists
 
-### Syntax Characters (FIXME we need a better name)
+### Escaping syntax characters
 
-Explain how escaping works for most characters that could be used as Markdown
+A backslash makes any character that qmd uses for markup literal: `\*`, `\_`, `\$`, `\{`, `\[`, `\<`, `\'`.
+Quarto 2 is stricter than Pandoc about incomplete markup (a lone `*` is an error, not literal text), so documents written for other Markdown processors sometimes need a few of these.
+[Migrating Markdown to Quarto 2](migrating-markdown.qmd) lists every case and its fix.
 
 ### Error messages

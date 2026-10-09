@@ -135,7 +135,7 @@ first. All in q2; no hub deployment required until rollout.
      against the `IndexDocument` schema (the hub does not keep a
      project registry; all docs are stored uniformly).
    - Runs **offline against a copy** of the data dir (the live store
-     is lock-guarded; `/mnt/hub-data` is ~20 MB, and DLM snapshots
+     is lock-guarded; `/mnt/hub-data` is \~20 MB, and DLM snapshots
      exist) — zero interaction with the running server. A live admin
      endpoint is a possible later convenience, not v1.
    - Immediate use once built: run against quarto-hub.com's storage
@@ -151,7 +151,7 @@ first. All in q2; no hub deployment required until rollout.
 
 ### Part 2 — self-heal failed opens on the online transition (D2)
 
-In `connect()`'s `onPeerConnect` (and the matching handler in the
+In `connect()`\'s `onPeerConnect` (and the matching handler in the
 `createNewProject` path), when transitioning offline→online:
 re-run `loadFileDocuments` for documents that previously failed
 (track failures during the initial pass), firing the normal
@@ -164,7 +164,7 @@ without calling `connect()` again.
 ### Part 3 — honest connection policy for hub-client (D3)
 
 Replace the bare 1 ms default at hub-client's call site (via
-`preview-runtime`'s `automergeSync.connect`) with the
+`preview-runtime`\'s `automergeSync.connect`) with the
 health-arbitrated pattern q2-preview already uses: probe `/health`
 (HTTP, immune to websocket handshake stalls); if the server is
 reachable, wait for the peer with a realistic budget (seconds) before
@@ -260,7 +260,7 @@ mutation. Then D1 durability (prevents new mintings), doctor
 (blast-radius + standing health check), D2/D3 as planned.
 
 **Recorded latent-risk note (evidence-downgraded, kept honest):**
-while chasing a wrong hypothesis we found that `findDoc`'s retry loop
+while chasing a wrong hypothesis we found that `findDoc`\'s retry loop
 bails immediately when `connectedPeers.size === 0` (added in
 e326eb5c, bd-jit6pdwq Phase 1). For cold-cache boots this converts
 "slow but successful" (retry until the peer arrives) into "instant
@@ -395,7 +395,9 @@ production restart scenario).
 
 (none currently)
 
+```{=html}
 <details><summary>Resolved 2026-06-12 (see above)</summary>
+```
 
 1. **Hub-side accept policy** (if Phase 1 lands on (b)): should the
    hub accept any announced document from an authenticated client
@@ -411,4 +413,6 @@ production restart scenario).
    Part 1 fix) or recreate-and-clean? If the content was throwaway,
    recreate is zero-effort once the scan tool exists.
 
+```{=html}
 </details>
+```

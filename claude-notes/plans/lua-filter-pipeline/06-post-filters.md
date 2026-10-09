@@ -8,7 +8,7 @@
 
 ## Stages Overview
 
-This is the largest filter group with ~29 stages. Many are format-conditional.
+This is the largest filter group with \~29 stages. Many are format-conditional.
 
 ### Side-Effectful Stages
 
@@ -84,12 +84,12 @@ Uses `pandoc.write()` for table rendering in notebooks.
 
 | Metric | Value |
 |--------|-------|
-| Total Stages | ~29 |
-| Pure | ~22 |
+| Total Stages | \~29 |
+| Pure | \~22 |
 | File Read | 2 (email templates, book markdown) |
 | File Write | 3 (cites JSON, email files) |
 | Subprocess | 1 (rsvg-convert) |
-| Pandoc API | ~8 (`pandoc.read`, `pandoc.write`) |
+| Pandoc API | \~8 (`pandoc.read`, `pandoc.write`) |
 | WASM Blocked | 2 (pdf-images, email) |
 
 **WASM Notes**:

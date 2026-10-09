@@ -143,7 +143,7 @@ This creates a nice dogfooding opportunity for the validation infrastructure.
 | Markdown and Parsing | 2 | Q-2-301: Unclosed code block |
 | Engines and Execution | 3 | Q-3-405: Jupyter execution failed |
 | Rendering and Formats | 4 | Q-4-102: Invalid PDF config |
-| Projects and Structure | 5 | Q-5-201: Missing _quarto.yml |
+| Projects and Structure | 5 | Q-5-201: Missing \_quarto.yml |
 | Extensions and Plugins | 6 | Q-6-234: Filter error |
 | CLI and Tools | 7 | Q-7-301: LSP error |
 | Publishing and Deployment | 8 | Q-8-234: Authentication failed |
@@ -275,11 +275,11 @@ pub struct DiagnosticMessage {
 
 ## Metrics
 
-- **Lines of Code**: ~500 LOC (diagnostic.rs: 272, catalog.rs: 136, lib.rs: 61, JSON: 8)
+- **Lines of Code**: \~500 LOC (diagnostic.rs: 272, catalog.rs: 136, lib.rs: 61, JSON: 8)
 - **Tests**: 13 unit tests + 5 doc tests passing
 - **Dependencies**: 3 new (ariadne, once_cell, existing serde/serde_json)
 - **Documentation**: Comprehensive (lib, module, inline, README, design doc)
-- **Time**: ~2 hours (design research + implementation + testing + documentation)
+- **Time**: \~2 hours (design research + implementation + testing + documentation)
 
 ## Lessons Learned
 

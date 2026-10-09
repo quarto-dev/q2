@@ -459,7 +459,7 @@ Deliverables:
 - WASM API surface: `build_project_nav`, `render_page_in_project`.
 - Hub-client state: project-scoped nav cache, invalidation on profile-
   affecting edits.
-- Live preview: editing a page's title updates siblings' sidebars within one
+- Live preview: editing a page's title updates siblings\' sidebars within one
   render cycle.
 - End-to-end smoke test in a real browser session (per CLAUDE.md policy).
 
@@ -488,7 +488,7 @@ resources website). See `bd-tr81` for its own plan.
   - `shared-theme/` — exercises scoped artifact relocation.
 - **End-to-end CLI verification** per CLAUDE.md §"End-to-end verification"
   for every phase that produces user-visible output (cargo run --bin quarto
-  -- render <fixture>; inspect output).
+  -- render \<fixture>; inspect output).
 - **Snapshot tests** for rendered HTML fragments (sidebar, page-nav) with
   explicit call-outs when snapshots change.
 - **Hub-client smoke test** in phase 9: real browser session showing a
@@ -498,7 +498,7 @@ resources website). See `bd-tr81` for its own plan.
 
 ## Open questions to resolve during phase 0
 
-- **Naming** (Document* type, Trait, Stage).
+- **Naming** (Document\* type, Trait, Stage).
 - **Crate placement:** does `DocumentProfile` + `ProjectType` live in
   `quarto-core`, or a new `quarto-project` crate that depends on
   `quarto-core`? Depends on circular-dep analysis.
@@ -663,7 +663,7 @@ phases above.
       resolver), 9.3 (`render_page_in_project` WASM entry point
       with new `RenderMode::ActivePage` variant), 9.4 (hub-client
       switch — `renderToHtml` now drives the project-aware
-      renderer; `Preview`'s re-render `useEffect` depends on
+      renderer; `Preview`\'s re-render `useEffect` depends on
       `fileContents` so any sibling edit triggers a re-render),
       9.5 (hub-smoke fixture + native integration tests
       pinning the WASM code path), 9.6 (close-out). Closes
@@ -726,7 +726,7 @@ relevant design work starts.
   Phase 4 scoping (see `2026-04-24-websites-phase-4.md` Decision 9).
   The flatten-the-sidebar / dedupe-by-href / separator-as-boundary /
   section-header-as-neighbor rules are all non-obvious. Should land
-  in `bd-tr81`'s docs site. Not a blocker for the epic; user
+  in `bd-tr81`\'s docs site. Not a blocker for the epic; user
   explicitly flagged the need.
 - ~~**`br` tool blocked on stale `k-02o9` JSONL entry.**~~
   *Resolved 2026-04-24.* `br` was upgraded from 0.1.28 → 0.1.45;

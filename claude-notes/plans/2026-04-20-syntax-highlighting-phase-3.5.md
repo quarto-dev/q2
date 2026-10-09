@@ -22,7 +22,7 @@ This phase fills those four gaps using fixtures that **double as tests and as fu
 
 1. Fill the four gaps above with end-to-end tests that exercise the CLI path (not in-process helpers with default config), per the Phase 2 post-mortem lesson.
 2. Produce `.qmd` fixtures that are readable as examples — suitable for lifting into `docs/` when user-facing documentation is written.
-3. Keep everything in `crates/quarto/tests/smoke-all/`'s existing pattern (`ensureFileRegexMatches` frontmatter) so we inherit its CI integration for free.
+3. Keep everything in `crates/quarto/tests/smoke-all/`\'s existing pattern (`ensureFileRegexMatches` frontmatter) so we inherit its CI integration for free.
 4. Settle the `theme: none` question explicitly.
 
 Out of scope:

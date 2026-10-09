@@ -147,7 +147,7 @@ fully absorbed by parsing, which has already happened on both sides.
 
 ### Adjacent gap, folded in (same machinery)
 
-On the *success* path, `pampa::readers::qmd::read`'s returned
+On the *success* path, `pampa::readers::qmd::read`\'s returned
 `_warnings` for the included file are silently dropped
 (`include_expansion.rs`, the `(… , _warnings)` binding). That is the
 success-side sibling of the bug fixed in bd-qpvoamvu. Since the fix is

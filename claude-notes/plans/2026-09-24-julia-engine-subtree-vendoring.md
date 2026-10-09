@@ -20,7 +20,7 @@ places that both added a table/registration row:
 `crates/xtask/src/pull_extension_subtree.rs`'s `subtrees()` table and
 `crates/quarto-core/src/extension/mod.rs`'s `EXTENSION_SUBTREE_PAYLOADS` /
 `EXTENSION_SUBTREE_NAMES` — both now list both subtrees, and
-`wasm-quarto-hub-client`'s `populate_extension_subtrees` (this plan's F1 fix)
+`wasm-quarto-hub-client`\'s `populate_extension_subtrees` (this plan's F1 fix)
 now embeds both per-subtree `_extensions/` dirs, since `main` had never
 gotten the WASM fix for `orange-book`.
 
@@ -33,7 +33,7 @@ that side. also the percent script transformations / processor field have
 landed." Concretely:
 
 1. Added `claims-files: [{extension: .jl, processor: {name: percent,
-   language: julia}}]` to `gordonwoodhull/quarto-julia-engine`'s
+   language: julia}}]` to `gordonwoodhull/quarto-julia-engine`\'s
    `q2-static-declarations` branch (commit `0a2b98f`), matching the syntax
    Plan 7b's own Phase 7 commit (`de2e64b52`) already used for the committed
    `tests/fixtures/extensions/julia-engine` manifest. Pushed to the fork.
@@ -73,7 +73,7 @@ landed." Concretely:
    unreferenced by any test (the file-existence grep came up empty except
    for this file, and this file no longer uses it). Left in place, not
    deleted — Phase 4 below still owns the "fixture vs. bundled" decision
-   explicitly, including whether to fold `worker-busy-recovery`'s hardening
+   explicitly, including whether to fold `worker-busy-recovery`\'s hardening
    into the fork so the bundled copy is the same, since dropping the fixture
    now would preempt that call.
 
@@ -140,7 +140,7 @@ Q9 diagnostic, and decides the hand-maintained fixture's future.
 `wasm-quarto-hub-client/src/lib.rs::populate_extension_subtrees` embeds
 **all of `resources/extension-subtrees/`** (would be 14M once julia is
 vendored, tests and CI config included), and
-`builtin_extension_subtree_roots`'s WASM branch returns the
+`builtin_extension_subtree_roots`\'s WASM branch returns the
 `extension-subtrees` VFS dir itself as a root — but
 `discover_extensions` scans each root with `scan_extensions_dir`, i.e. a
 root's **children must be extensions**. Native is correct (per-subtree
@@ -192,7 +192,7 @@ mirroring native.**
         exercise of the real `EXTENSION_SUBTREE_PAYLOADS` /
         `ResourceBundle` extraction leg (flagged as untested in PR #717).
         *(`builtin_extension_subtree_roots_extracts_bundled_julia_payload`.)*
-  - [x] static-claim test: the bundled `_extension.yml`'s `claims:` /
+  - [x] static-claim test: the bundled `_extension.yml`\'s `claims:` /
         `file-extensions:` reach the engine registry (pass-1 resolution,
         no engine load). *(`bundled_julia_engine_discovered_with_static_declarations`.)*
 - [x] `extension/mod.rs`: `JULIA_ENGINE_SUBTREE` `include_dir!` static scoped
@@ -218,7 +218,7 @@ mirroring native.**
       `cargo nextest run -p quarto-core` (targeted collision +
       `julia_engine_e2e` rows: 11/11 green, live deno+julia). Full workspace
       `cargo nextest run --workspace` run at this phase boundary per
-      `CLAUDE.md`'s testing rule (result recorded below); full
+      `CLAUDE.md`\'s testing rule (result recorded below); full
       `cargo xtask verify` (hub-client build + WASM leg end-to-end via the
       npm scripts) not run — out of scope for this pass, left for Phase 4's
       wrap-up gate.
@@ -257,7 +257,7 @@ mirroring native.**
       (Gordon, 2026-09-29): delete the fixture, do not merge the fork's
       `worker-busy-recovery` hardening.** `julia_engine_e2e.rs` already
       resolves purely from the bundled subtree (Phase 2); the one remaining
-      user, `ts_engine.rs`'s `julia_fixture_jl_percent_converts_natively`,
+      user, `ts_engine.rs`\'s `julia_fixture_jl_percent_converts_natively`,
       now reads the bundled subtree's `_extension.yml` instead (identical
       `claims-files` shape). J7 (failed-run leak check) passes live against
       the bundled copy without the hardening, confirming plain upstream

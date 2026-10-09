@@ -309,7 +309,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
     `.ts`, etc. with the same actionable error: `Engine extension
     '{name}' has 'path: {path}'; only pre-built lowercase '.js' bundles
     are loadable. Run 'q2 build-ts-extension' to produce
-    {expected_js_path} and update _extension.yml.` The runtime subprocess
+    {expected_js_path} and update \_extension.yml.` The runtime subprocess
     uses `deno run --allow-all <engine-host.js>` with no import map; a
     raw `.ts` (or `.mjs`/etc.) path would fail to resolve `@quarto/api`,
     `@quarto/types`, and other engine-extension imports.
@@ -527,7 +527,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
   4. **Determine the registry key — via `TsEngine::name()`, not a key arg.**
      The landed `EngineRegistry::register(&mut self, engine: Arc<dyn
      ExecutionEngine>)` is **keyless** (registry.rs:99) — it keys by
-     `engine.name()`. So set the `TsEngine`'s `name` field **at construction**
+     `engine.name()`. So set the `TsEngine`\'s `name` field **at construction**
      to the registration key: the declared `name` if `Some` (no subprocess
      spawn), else the **extension-id placeholder** (e.g. the extension dir name
      like `julia-engine`). `TsEngine::name()` returns that field
@@ -568,7 +568,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
   3. **Validate every name in the user-specified order is registered.**
      If a Reorder hint names an engine that's not in the registry,
      error out at config-resolve time with the live registry listed
-     (matches Q1 engine.ts:275–283: `'X' was specified in the list of
+     (matches Q1 engine.ts:275–283: `\'X' was specified in the list of
      engines... but it is not a valid engine. Available engines are
      ...`). No silent skip.
   4. **Final order:** user-specified entries first (deduplicated, in
@@ -577,7 +577,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
      (`resolution.rs:57`, Q1-faithful per engine.ts:49–53), then any
      remaining (extension) registry engines sorted by name. **NB the
      built-in tiebreak is this `BUILTIN_ORDER` constant in `resolution.rs`
-     (consulted by `candidate_engines`), NOT `EngineRegistry::new()`'s
+     (consulted by `candidate_engines`), NOT `EngineRegistry::new()`\'s
      registration order** — that order is `markdown → knitr → jupyter` and
      is irrelevant, because the registry stores engines in a `HashMap`, so
      registration order is neither preserved nor consulted by resolution.
@@ -640,7 +640,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
      `2026-03-16-extensions-grand-plan.md` Phase 12, an epic above this one.
      (The spoof: q2's real version is `0.x` while Q1 engines declare
      `quartoRequired: ">=1.9"`/`">=1.10"`; Phase 12 isolates a spoofed compat
-     version behind a single `engine_compat_version() -> "1.11.0"` so Q1 engines'
+     version behind a single `engine_compat_version() -> "1.11.0"` so Q1 engines\'
      requirements pass — a clearly-commented stopgap, one place to revisit.
      That `1.11.0`/`engine_compat_version()` choice is recorded in Phase 12's
      notes so the gate work inherits it.)
@@ -693,7 +693,7 @@ artifact (design doc §9), not a single engine.
 **Current state (post-rebase main):** `detect_engine_sequence(meta) ->
 EngineSequence` already exists (multi-engine, bd-5yff4) but is **metadata-only**
 — it reads the `engine:` array / top-level key and has no language-based or
-claims-based resolution (`detection.rs`'s old "Future Enhancements" comment has
+claims-based resolution (`detection.rs`\'s old "Future Enhancements" comment has
 since been amended to point at `resolution.rs`). `EngineExecutionStage` owns the
 `EngineRegistry` (an `Arc<EngineRegistry>` field) plus a `spliced_engines:
 HashSet<String>` (bd-sauc9iiq, preview capture-splice) and its `run()` takes
@@ -786,7 +786,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
      host holds only the *global*). Fields: `resource_dir`, `runtime_dir`
      (via `quarto_util::quarto_runtime_dir()` — plan1a-host), `data_dir`
      (via `quarto_util::quarto_data_dir()` — **prerequisite: this leaf does not
-     exist yet; add it to `quarto-util` mirroring `runtime_dir.rs`'s *shape* (a
+     exist yet; add it to `quarto-util` mirroring `runtime_dir.rs`\'s *shape* (a
      pure `*_dir_from(...)` branch helper + `create_dir_all`), resolving via
      `dirs::data_dir()` namespaced under `quarto`. Unlike `runtime_dir.rs`,
      which has no env override, `quarto_data_dir()` checks a `QUARTO_DATA_DIR`
@@ -891,9 +891,9 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   **Registry `Arc` ownership (the Clone-drop already happened in plan1a-engine).**
   plan1a-engine adds `aliases` / `diagnostics` `Mutex` fields (not `Clone`), so
   **plan1a-engine already dropped `#[derive(Clone)]` and introduced
-  `Arc<EngineRegistry>` at the ~25–30 mechanical clone sites** (incl.
+  `Arc<EngineRegistry>` at the \~25–30 mechanical clone sites** (incl.
   `HtmlRenderConfig` / `with_engine_registry` and the `quarto-preview`
-  pass-through chain — see plan1a-engine's "Migration from `main`'s registry"
+  pass-through chain — see plan1a-engine's "Migration from `main`\'s registry"
   note for the verified site list; mandatory-to-compile there, not optional
   cleanup). **Plan 1c does the *deeper* ownership move on top of that `Arc`:**
   hoist it to `ProjectContext`, build once, thread per-file via `StageContext`.
@@ -1270,7 +1270,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   - **File-claim short-circuit**: when `claimed` is `Some(name)`,
     `resolve_engines` returns that single engine as the whole sequence and does
     **not** run the tiers (design doc §8, Q1-faithful). *(This replaces the
-    landed `resolution.rs` seed handling — ~`:344-414`, which marks the seed
+    landed `resolution.rs` seed handling — \~`:344-414`, which marks the seed
     "present" + disables T4 but never short-circuits, leaving a theft hole; the
     revert is a net deletion of the `explicit_with_seed`/seed-present logic.)*
   - **AST language extraction**: extract `(language, first_class)` of executable
@@ -1327,7 +1327,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
 - [x] Write test: extension engine registered in context, discoverable by name
 - [x] Write test: implicit `{r}`+`{python}` → `[knitr]` (knitr `Interop` python; reticulate preserved)
 - [x] Write test: explicit `engine: [knitr, jupyter]`, `{r}`+`{python}` → `[knitr, jupyter]`
-  with `ownership` = {r→knitr, python→jupyter} and knitr's `handled_languages` ⊇ {python}
+  with `ownership` = \{r→knitr, python→jupyter\} and knitr's `handled_languages` ⊇ \{python\}
 - [x] Write test: pure `{python}`, no python extension → `[jupyter]` (knitr **not** dragged in)
 - [x] Write test: claimed file → **single engine** — a claimed `.echo`/`.jl`
   file resolves to exactly the claiming engine (`sequence == [claimer]`); a
@@ -1380,7 +1380,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   loud failure. Full Q1 parity (Q1 is always single-engine); case 4 is the
   deliberate q2 *multi-engine* divergence.
   **Landed-code change (1c owns it, alongside the `resolution.rs` revert):**
-  `engine/jupyter/text_execute.rs`'s `partition_cells` currently raises
+  `engine/jupyter/text_execute.rs`\'s `partition_cells` currently raises
   `NoHandlerForLanguage` for *any* owned-but-unrunnable cell regardless of
   sequence length. Note it has **no sequence parameter today** —
   `partition_cells(blocks, handled_languages)` — so gating on `|sequence| > 1`
@@ -1580,8 +1580,8 @@ send and `TsEngine::launch` are implementable.
 | `runtime_dir` | `quarto_util::quarto_runtime_dir()` (plan1a-host — user-level XDG/cache dir, **not** project-relative; matches construction step 1) | created on demand by the helper. (`project_dir` is per-render under DQ-7, so it cannot live in the process-stable `global`.) |
 | `data_dir` | `quarto_util::quarto_data_dir()` (NEW — `dirs::data_dir()` namespaced under `quarto`, `QUARTO_DATA_DIR` override first; see step 1) | mirrors `quarto_runtime_dir()`'s shape |
 | `pandoc_path` | `ProjectContext`'s `BinaryDependencies.pandoc` (the `pandoc: Option<PathBuf>` field at `render.rs:130`), stringified — discovered by `BinaryDependencies::discover` (`render.rs:150`, which internally calls `runtime.find_binary("pandoc", "QUARTO_PANDOC")` at `render.rs:154`); matches construction step 1 | `Option<String>` — `None` is fine; engines that need pandoc fail with a clear error only if they actually call it. q2 itself does not invoke pandoc on the main render path (pampa replaces it). |
-| `is_interactive_session` | new `SystemRuntime::is_interactive(&self) -> bool` (NativeRuntime checks `IsTerminal` on stdin; WasmRuntime returns `false`) | small new method; ~10 lines |
-| `running_in_ci` | new `SystemRuntime::running_in_ci(&self) -> bool` (reads `CI` env var via existing `env_get`) | small new method; ~5 lines |
+| `is_interactive_session` | new `SystemRuntime::is_interactive(&self) -> bool` (NativeRuntime checks `IsTerminal` on stdin; WasmRuntime returns `false`) | small new method; \~10 lines |
+| `running_in_ci` | new `SystemRuntime::running_in_ci(&self) -> bool` (reads `CI` env var via existing `env_get`) | small new method; \~5 lines |
 
 **`LaunchEngine { project }`** (per render):
 
@@ -1723,7 +1723,7 @@ test-deletion obligation); `read.rs:159` `parse_contributes`).
   (`load_engine_count()`, `markdown_for_file_count()`) and a spawn observable. P1-5/P1-12/P2-17/P3-3
   assert against these committed surfaces — they are no longer "maybe expose."
 - **Pure mock-table tier lives with `resolve_engines`, NOT here.** The plan already says the
-  tier/priority pure-logic tests live with the function (`resolution.rs` unit tests, line ~1092). 1c's
+  tier/priority pure-logic tests live with the function (`resolution.rs` unit tests, line \~1092). 1c's
   resolution seams are the **integration** tier (real registry + real AST). Do **not** restate the
   mock-table priority tests in 1c — P2-3 below is logged as covered-there, not duplicated.
 - **Deno subprocess required** — Phase-3 echo E2E, dynamic-fallback, teardown, crash. These are the

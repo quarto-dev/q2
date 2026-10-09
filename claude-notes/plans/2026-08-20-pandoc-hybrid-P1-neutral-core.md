@@ -45,7 +45,7 @@ no render/preview split (no q2-pandoc-preview concept is planned).
 
 1. **Module:** `crates/quarto-core/src/format.rs`, next to `FormatIdentifier` (`Copy, Clone,
    PartialEq, Eq` derives — it's matched, not owned).
-2. **`Pandoc(fmt)`'s payload is `String`** (the raw `target_format`, e.g. `"docx"`/`"pptx"`), not
+2. **`Pandoc(fmt)`\'s payload is `String`** (the raw `target_format`, e.g. `"docx"`/`"pptx"`), not
    `FormatIdentifier`. `Docx` and `Pptx` are both variants of `FormatIdentifier` (`format.rs:29`,
    `:31`); the genuinely exhaustive matches on the enum are `as_str()` and the free function
    `output_extension_for()` (`format.rs:279-291`) — adding a variant is a two-arm change.
@@ -72,7 +72,7 @@ no render/preview split (no q2-pandoc-preview concept is planned).
    if a `Pandoc(fmt)` profile reaches the wasm32 build (it shouldn't — hub-client never requests
    it), the stage is simply absent, a compile-time non-issue.
 
-### `title-block`'s non-HTML branch
+### `title-block`\'s non-HTML branch
 
 `title_block.rs:65-75` (`should_add_h1`) unconditionally adds an h1 for any non-HTML format
 ("since there's no template-based title block"). Verified against real pandoc (`pandoc -s test.md
@@ -157,7 +157,7 @@ Audited against the real exclude-list membership:
 | `format_css.rs:93` | `!ctx.format.is_html()` → return | on the exclude-list |
 | `responsive_image.rs:152` | `!format.is_html()` → return | on the exclude-list |
 
-**Only `panel_tabset.rs`'s self-gate is widened** — its inclusion is deliberate and load-bearing
+**Only `panel_tabset.rs`\'s self-gate is widened** — its inclusion is deliberate and load-bearing
 (P5's shim needs the `Tabset` CustomNode it builds). `draft-alert`, `format-css`, and
 `responsive-image` are on the exclude-list instead of being widened: widening `format-css`, for
 example, would stage stray `.css` files next to a `.docx`. Add a regression test that positively
@@ -210,7 +210,7 @@ raw `CustomNode` for Pandoc targets — it's resolved to plain Pandoc blocks ups
 - Split `FootnotesTransform`: B1 half (`NoteRef`+`Def` → native Pandoc `Note`) stays in the core;
   HTML `<section>`+backlinks half is excluded for `Pandoc`.
 - AppendixStructure classified B3: keep in the shared core, running for `Pandoc(fmt)` too.
-- Replace `q2-preview`'s deny-list-and-note with a single named `PipelineProfile` dispatch that
+- Replace `q2-preview`\'s deny-list-and-note with a single named `PipelineProfile` dispatch that
   also serves `Pandoc(fmt)` — one mechanism.
 - Verify no macro `PipelineStage` (not just `AstTransform`) carries a hidden HTML assumption the
   neutral-core invariant would otherwise miss.
@@ -225,14 +225,14 @@ raw `CustomNode` for Pandoc targets — it's resolved to plain Pandoc blocks ups
   `CodeHighlightStage` is harmless to leave in (pandoc's docx writer drops its `data-hl-spans`
   attributes) but is wasted work. Write the list as `name()` strings — `&["math-js",
   "render-html-body", "apply-template", "compile-theme-css", "bootstrap-js", "clipboard-js",
-  "tabsets-js", "code-highlight"]`, matching `Q2_PREVIEW_STAGE_EXCLUDED`'s convention
+  "tabsets-js", "code-highlight"]`, matching `Q2_PREVIEW_STAGE_EXCLUDED`\'s convention
   (`pipeline.rs:395`), with its own "names exist" validator (`pipeline.rs:4007`).
   `attribution-generate` is the `name()` of both a transform (excluded above) and a distinct stage
   (`stage/stages/attribution_generate.rs:67`, `stages[16]`, `pipeline.rs:2198`) — the stage
   self-gates on `is_feature_disabled(meta, "attribution")`, off by default. This list is owned
   jointly with P4, which introduces `PandocWriteStage`.
 - A byte-identity corpus + capture/diff harness for the "HTML/revealjs/q2-preview byte-identity"
-  review bar (`quarto-core`'s fragment-level snapshots don't cover a whole rendered document). Name
+  review bar (`quarto-core`\'s fragment-level snapshots don't cover a whole rendered document). Name
   a corpus (e.g. `docs/` + the crossref fixture set), capture output before/after, diff.
 
 ## Out of scope (deferred / other plans)
@@ -254,7 +254,7 @@ raw `CustomNode` for Pandoc targets — it's resolved to plain Pandoc blocks ups
   field per the seam definition above, landed in `crates/quarto-core/src/format.rs`.
 - [x] `Pandoc`-kind exclude-list (Task 2): `PANDOC_TRANSFORM_EXCLUDED` (`pipeline.rs:1746`) plus
   T2.1 ("names exist") and T2.2 (Navigation-completeness) validator tests.
-- [x] Widen `panel_tabset.rs`'s self-gate only (Task 3): T3.1/T3.2 pin the widened gate and the
+- [x] Widen `panel_tabset.rs`\'s self-gate only (Task 3): T3.1/T3.2 pin the widened gate and the
   other terms left intact; `draft_alert.rs`/`format_css.rs`/`responsive_image.rs` were left
   un-widened and are on the exclude-list instead.
 - [x] `Pandoc`-kind stage-level exclude list (Task 6): `PANDOC_STAGE_EXCLUDED` (`pipeline.rs:455`)
@@ -283,7 +283,7 @@ raw `CustomNode` for Pandoc targets — it's resolved to plain Pandoc blocks ups
   type level; `PandocWriteStage` compiles only under `#[cfg(not(target_arch = "wasm32"))]`.
 - [x] `ConditionalContentTransform` in design doc §6 bucket table as B1.
 - [x] Design doc §5 `PipelineProfile` shorthand matches the landed five-variant shape (Task 9).
-- [ ] **Open:** fix `title_block.rs`'s non-HTML branch, or confirm the exclude-list makes it moot
+- [ ] **Open:** fix `title_block.rs`\'s non-HTML branch, or confirm the exclude-list makes it moot
   (it does — `title-block` is on `PANDOC_TRANSFORM_EXCLUDED`, `pipeline.rs:1755`, pinned by
   T2.1/T2.3); add a regression test proving no duplicate title in a docx/pptx smoke fixture. Owned
   by **P7**, which introduces the per-format invocation builder this test needs — there is no

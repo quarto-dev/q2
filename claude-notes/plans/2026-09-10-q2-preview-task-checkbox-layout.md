@@ -25,7 +25,7 @@ list bullet) on the line below.
 Fixture: the snippet above as `tasklist.qmd`, served with
 `target/debug/q2 preview tasklist.qmd --no-browser`, inspected with a headless
 Playwright script (`inspect.mjs`, scratchpad) that finds the checkbox in the
-preview frame and dumps its `<li>`'s outerHTML plus bounding rects. Live DOM of
+preview frame and dumps its `<li>`\'s outerHTML plus bounding rects. Live DOM of
 the item:
 
 ```html
@@ -67,7 +67,7 @@ There is no CSS involved; the only rules matching are bootstrap's
 Comments v1 (#441, 2026-07-30 — nine days *after* the task-list work in #407,
 2026-07-21) is `CommentBlock`. For every commentable block whose source
 resolves, `CommentBlock` renders a positioned `<div>` wrapper around the block
-so the comment bubble can anchor to it (`custom/CommentBlock.tsx` ~line 980).
+so the comment bubble can anchor to it (`custom/CommentBlock.tsx` \~line 980).
 That `<div>` lands *inside* the inline `<label>`, after the `<input>`: a
 block-level box inside an inline container forces the text onto its own line.
 The `<li>` marker attaches to the first line box, which is now the text line

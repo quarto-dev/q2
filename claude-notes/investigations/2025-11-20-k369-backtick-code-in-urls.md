@@ -11,14 +11,14 @@ Users are attempting to use inline code execution (backtick syntax) inside image
 ## Corpus Search Results
 
 Searched 1,939 .qmd files in external-sites corpus for patterns:
-- `![](\`{python}` - image with inline code execution
-- `[](\`{python}` - link with inline code execution
-- `![](abc\`{python}` - image with text + inline code
-- `[](abc\`{python}` - link with text + inline code
+- ``![](`{python}`` - image with inline code execution
+- ``[](`{python}`` - link with inline code execution
+- ``![](abc`{python}`` - image with text + inline code
+- ``[](abc`{python}`` - link with text + inline code
 
 **Found**: 1 instance
 - File: `external-sites/lino-galiana/python-datascientist/content/manipulation/04_api/_exo3_solution.qmd:61`
-- Pattern: `![](\`{python} url_image\`)`
+- Pattern: ``![](`{python} url_image`)``
 
 ### Context from Found Instance
 
@@ -34,10 +34,10 @@ url_image = get_products_api(5449000000996, col = ["image_front_small_url"])["im
 
 Created 4 minimal test cases in `/tmp/kyoto-k369-tests/`:
 
-1. **image-backtick-code.qmd**: `![](\`{python} url_variable\`)`
-2. **link-backtick-code.qmd**: `[Click here](\`{python} url_variable\`)`
-3. **image-mixed-backtick-code.qmd**: `![](https://example.com/\`{python} url_variable\`)`
-4. **link-mixed-backtick-code.qmd**: `[Click here](https://example.com/\`{python} url_variable\`)`
+1. **image-backtick-code.qmd**: ``![](`{python} url_variable`)``
+2. **link-backtick-code.qmd**: ``[Click here](`{python} url_variable`)``
+3. **image-mixed-backtick-code.qmd**: ``![](https://example.com/`{python} url_variable`)``
+4. **link-mixed-backtick-code.qmd**: ``[Click here](https://example.com/`{python} url_variable`)``
 
 ## Current Parser Behavior
 

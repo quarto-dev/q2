@@ -103,7 +103,7 @@ Source code cloned to: `external-sources/runtimed/`
 - Actively maintained (commits from 2026-01-07)
 - Used by Zed editor (production validation)
 - BSD-3-Clause license
-- ~400 lines in runtimelib, ~2500 in jupyter-protocol
+- \~400 lines in runtimelib, \~2500 in jupyter-protocol
 
 **What runtimelib provides:**
 - Kernelspec discovery (`list_kernelspecs()`, `read_kernelspec_jsons()`)

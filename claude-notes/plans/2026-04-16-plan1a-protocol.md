@@ -61,8 +61,8 @@ Define the message types used between Rust and Deno. Both sides need matching de
   Every message (except `Shutdown`) carries an `engine: String` field to route
   to the correct engine. Engine lifecycle in the subprocess is **two-step**:
   `LoadEngine` runs the engine module's `import()` and returns its discovery
-  surface (cheap — ~10–50ms); `LaunchEngine` calls `engine.launch(context)` to
-  construct the `ExecutionEngineInstance` object — cheap (~0), matching Q1,
+  surface (cheap — \~10–50ms); `LaunchEngine` calls `engine.launch(context)` to
+  construct the `ExecutionEngineInstance` object — cheap (\~0), matching Q1,
   where `launch()` is a synchronous object-literal construction that starts no
   daemon. The expensive engine startup (Julia control server / Jupyter kernel:
   5+s) happens lazily inside the engine's `execute()` on the **first** call.
@@ -345,7 +345,7 @@ Define the message types used between Rust and Deno. Both sides need matching de
     — not a bare constant. (The `HANDLED_LANGUAGES` constant remains the
     cell-handler contribution to the union; see plan1a-engine.)
 
-  No Ts* protocol type is constructed outside `ts_engine.rs`. The trait,
+  No Ts\* protocol type is constructed outside `ts_engine.rs`. The trait,
   `ExecutionContext`, and `ExecuteResult` see only q2-native types.
 
   Fields used by the Julia engine (our validation target) — all reads
@@ -952,7 +952,7 @@ are converted at the boundary per the appendix table.
 - `TsMetadataValue` ↔ `ConfigValue` (see "ConfigValue → TsMetadataValue" below)
 - `TsFormatInfo` ← q2's `Format`
 - `TsPandocAttr` ↔ `quarto_pandoc_types::Attr` (Vec→LinkedHashMap)
-- `TsHtmlDependency` ↔ q2's `HtmlDependency` (Vec<String>→Vec<PathBuf>)
+- `TsHtmlDependency` ↔ q2's `HtmlDependency` (`Vec<String>`→`Vec<PathBuf>`)
 - `TsSourceMapEntry[]` ↔ `SourceInfo::Concat`
 - `Option<TsLanguageClaim>` ↔ q2's `LanguageClaim` (`None` ↔ `LanguageClaim::None`;
   `Primary/Interop/Fallback{priority}` ↔ the same-named enum arms — see plan1a-engine)

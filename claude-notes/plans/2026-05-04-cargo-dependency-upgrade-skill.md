@@ -94,9 +94,9 @@ decide what to apply.
 
 Options:
 
-- **Survey only** — just list outdated deps, don't apply anything. Fast (~seconds).
-- **Apply patch/minor + `cargo build --workspace`** — moderate (~minutes).
-- **Apply + full `cargo xtask verify`** — slow (~10+ minutes including hub-client).
+- **Survey only** — just list outdated deps, don't apply anything. Fast (\~seconds).
+- **Apply patch/minor + `cargo build --workspace`** — moderate (\~minutes).
+- **Apply + full `cargo xtask verify`** — slow (\~10+ minutes including hub-client).
 - **Apply each upgrade in isolation** — slowest, but gives per-dep verification.
 
 My instinct: **apply patch/minor in a worktree, run `cargo xtask verify
@@ -132,10 +132,10 @@ But this might be a "let's run it once and see what comes out" question.
 
 A few things the skill needs to know about:
 
-- **Workspace inheritance**: many deps are declared in the root `Cargo.toml`'s
+- **Workspace inheritance**: many deps are declared in the root `Cargo.toml`\'s
   `[workspace.dependencies]`. Upgrades should prefer the workspace level.
 - **WASM target**: `wasm-qmd-parser` and `wasm-quarto-hub-client` build to
-  `wasm32-unknown-unknown`. Some crates' upgrades break on WASM but not native.
+  `wasm32-unknown-unknown`. Some crates\' upgrades break on WASM but not native.
   Verification needs to include the WASM build path (per CLAUDE.md, `cargo xtask
   verify` covers this).
 - **Tree-sitter crates**: pinned versions matter; upgrading these often means

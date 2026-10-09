@@ -37,13 +37,13 @@ alone — its leading block already renders its own pool-id'd, activatable, meas
 `data-block-pool-id` and the inner `<p>` keeps the sole id (no duplicate). Added as **0.g**.
 
 **A2 — §1 must skip *container-gap* lines (the structural-line case).** `surfaceLineSpan` trims, but
-a `BulletList`'s trimmed span still covers an empty item's marker line, and a `<dl>`'s span covers
+a `BulletList`\'s trimmed span still covers an empty item's marker line, and a `<dl>`\'s span covers
 its `<dt>` term lines. So C1's "deepest surface whose trimmed span contains L" resolves those lines
 to the **container** — the exact drop-into-whole-list outcome Rule B's table (row 1) was built to
 prevent. (The current `outerByLine` resolver only dodges this because it iterates *blocks*, not
 lines, `PreviewRoot.tsx:560-581`; §1's line walk loses that.) **Rule:** advance past line L when the
 deepest surface whose trimmed span contains L is **not a leaf for L** — it is a container *and* L
-lies in none of its descendant surfaces' spans (inter-item markers, blank lines inside a container,
+lies in none of its descendant surfaces\' spans (inter-item markers, blank lines inside a container,
 empty items, `<dt>` term lines). Equivalently: only land when `surfaceAtLine(L)` is a leaf in the
 active set; otherwise treat L as contentless and continue to L±1. **Decision recorded:** `<dt>` term
 lines are non-landable (consistent with "terms are out"); the alternative (land on the whole `<dl>`)
@@ -54,7 +54,7 @@ A `::: definition-list` fenced div is rewritten by `postprocess.rs:803` into a `
 carrying the div's `source_info`; the qmd grammar has no separate def-list rule. Parsed:
 `DefinitionList s:0` (editable), each definition body leads with a `Plain` (`s:2`) — the A1 happy
 path. The `<dt>` term is `[[Str]]` (inlines, no block node) → correctly out. **The A1 predicate and
-the §0.f empty-guard apply unchanged to each `<dd>`'s leading block** (a definition body that leads
+the §0.f empty-guard apply unchanged to each `<dd>`\'s leading block** (a definition body that leads
 with a `Para`/sublist must not borrow).
 
 **A4 — centralize the proxy measure in the helper (don't enumerate sites).** C3's "everywhere a
@@ -82,7 +82,7 @@ breadcrumb-visual-design (prereq, ~done)
 §7  expand-on-edit                  (independent editor state; any time)
 ```
 
-Load-bearing edges: **§0 → {§1, §2, §6}** and **§4 → §6**; §3 and §7 float.
+Load-bearing edges: **§0 → \{§1, §2, §6\}** and **§4 → §6**; §3 and §7 float.
 
 **A6 — emptied items are "not their own surface," not "non-refillable" (corrects §6 Consequences).**
 Parsed `- foo\n-\n- bar`: the empty item is `[]` with no node, no `s`, and no pool entry on the bare
@@ -110,7 +110,7 @@ All eight sections (§0–§7) are implemented and green at the jsdom/Rust tier:
   · **§0** list-item surfaces (incl. the A4 dead-code wiring gap caught + fixed) · **§1** line-anchored
   nav (locked behavior-preserving except wrap→clamp) · **§2** roving over the C1 partition · **§6**
   delete-by-emptying (Rust round-trips + frontend, 6.r honestly accepted-untested) · **§7** expand-on-edit.
-- Suites green: **preview-renderer 441 unit / ~444 integration / typecheck clean**; **pampa node_edit
+- Suites green: **preview-renderer 441 unit / \~444 integration / typecheck clean**; **pampa node_edit
   round-trips pass** (1 *pre-existing, unrelated* pampa failure: `test_fenced_div_multiline_child_excluded`).
 - Production build **`npm run build:all` passes (exit 0)**.
 
@@ -237,7 +237,7 @@ For navigation and roving we need "the surface that owns visible line L." Define
 > `surfaceAtLine(set, L)` = among surfaces in `set` whose **trimmed line-span**
 > (`surfaceLineSpan`, `nestingNav.ts:287`) contains L, the one of **greatest containment depth**
 > (`depthOfSurface`, `nestingNav.ts:169`). **(Amendment A2)** If that surface is a *container* (it has
-> a descendant surface) and L lies in **none** of its descendant surfaces' spans, L is a
+> a descendant surface) and L lies in **none** of its descendant surfaces\' spans, L is a
 > *container-gap* line (inter-item marker, empty item, blank-in-container, `<dt>` term) — return
 > `null` so §1 skips it. Only a **leaf for L** is a valid landing.
 
@@ -274,7 +274,7 @@ when `item[0]` is editable), making the existing element the leading block's DOM
 > - Single-block item → that extent *is* the whole `<li>` → measure the element (today's
 >   `measureBlockBox`).
 > - Text-with-sublist item → that extent is the leading text run, ending where the sublist begins →
->   a DOM **`Range`** from the `<li>`'s start to its first child carrying a block pool-id.
+>   a DOM **`Range`** from the `<li>`\'s start to its first child carrying a block pool-id.
 
 **Governing invariant:** *for an `<li>`/`<dd>` proxy, the leading block's visual extent is the
 Range, not the element box.* **(Amendment A4 — preferred wiring: put this detection *inside*
@@ -311,7 +311,7 @@ their **own** items (precedent: their existing incremental-revealjs branches alr
   whole list render; empty items already exist in authored source (`- ` with nothing) and **§6's
   uniform-delete makes them routine** (every "delete a bullet's text"). This must not regress the
   framework walk's current empty-item handling.
-- `DefinitionList.tsx`: add the same borrow to each `<dd>`'s leading block. `<dt>` (terms are
+- `DefinitionList.tsx`: add the same borrow to each `<dd>`\'s leading block. `<dt>` (terms are
   *inlines*, not block nodes) stays out — definitions are editable, terms are not (documented
   asymmetry).
 
@@ -319,7 +319,7 @@ their **own** items (precedent: their existing incremental-revealjs branches alr
 - `snapshotOuterBlockGeometry` (`outerBlocks.ts:506`) and the snapshot-miss fallback must, for an
   `<li>`/`<dd>` proxy, measure the **leading-block extent** (Range when the element has a nested
   block child; whole element otherwise), keyed by the borrowed pool-id's range. Add a `Range`-aware
-  measure helper beside `measureBlockBox` (a `Plain`'s box model is empty → `contentHeight` = rect
+  measure helper beside `measureBlockBox` (a `Plain`\'s box model is empty → `contentHeight` = rect
   height, trivial `boxStyle`).
 - Snapshot keys are unchanged (block-relative `(r0−topR0, r1−topR0)`); the leading block's range is
   the borrowed pool-id's range, so nest-in to that block hits the snapshot. The §1 key-uniqueness
@@ -341,7 +341,7 @@ their **own** items (precedent: their existing incremental-revealjs branches alr
 - [x] **0.b** Integration (jsdom): a tight single-block list renders `<li data-block-pool-id>`;
   `snapshotOuterBlockGeometry` keys the item by its leading block's range; a click in unlock mode
   activates the item (editTarget = the `Plain`), and locked mode still activates the whole list.
-- [x] **0.c** Integration: a text-with-sublist item — the `<li>` borrows the leading `Plain`'s
+- [x] **0.c** Integration: a text-with-sublist item — the `<li>` borrows the leading `Plain`\'s
   pool-id; the leading-block Range measure excludes the sublist height (assert the measured height
   < the full `<li>` height when the element has a sublist child). → plus a **wiring-proof** `0.c-wiring`
   test driving `snapshotOuterBlockGeometry` (the production path), which caught a dead-code A4 gap (now fixed, commit `8486b4c1`).
@@ -390,7 +390,7 @@ line-based rule is "deepest visible surface at the adjacent line." (Full example
 decisions* below.)
 
 ### Implementation
-Generalize `resolveLanding`'s `outerByLine` kind (`PreviewRoot.tsx:554-587`) into a
+Generalize `resolveLanding`\'s `outerByLine` kind (`PreviewRoot.tsx:554-587`) into a
 `lineSurface` resolver parameterized by the surface set:
 - **Locked** passes `enumerateOuterBlocks` → behavior-preserving (the up/down edge asymmetry pinned
   by prior-plan Reflection #21 is just "exit from bottom edge / top edge" and survives).
@@ -478,9 +478,9 @@ positions on the *same* line should not diverge. Candidate causes:
   descent — `readLiveCaret` derives `bufferLine` by counting `\n` bytes only (column-invariant), so
   `Ls` is identical for begin-vs-inside on the same source line; trailing-blank overshoot resolves
   correctly via the nearest-child fallback. Verified independently (opus spec review). Commit `444590db`.
-- [~] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span — **N/A (Cause 1):**
+- \[\~\] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span — **N/A (Cause 1):**
   no overshoot bug exists; `surfaceLineSpan` already trims and the fallback resolves correctly.
-- [~] **3.c** Align/retire the non-trimming byte fallback — **N/A (Cause 1):** the byte-space
+- \[\~\] **3.c** Align/retire the non-trimming byte fallback — **N/A (Cause 1):** the byte-space
   `childSurfaceToward` fallback is only reached in the **no-caret** branch, so it cannot diverge for a
   trailing-whitespace caret.
 - [x] **3.d** If the repro is cause 1, **don't "fix" it** — document that descent is caret-line-driven
@@ -498,7 +498,7 @@ clean vs dirty in/out can differ by a column.
 - [x] **4.a** TDD: dirty nest-in/out lands on the same column as the equivalent clean move (assert
   caret column after a dirty round-trip). → `s4-dirty-caret-col.integration.test.tsx` (col 5→3, binds). Commit `2efb0bde`.
 - [x] **4.b** Route the dirty path's column through `prefixWidth` like the clean path. → dirty reland now
-  shares `cleanCaretHint`'s `(bufferCol→Cs→destCol)` projection (var names aligned for §6 reuse). Commits `2efb0bde`, `d009fff5`.
+  shares `cleanCaretHint`\'s `(bufferCol→Cs→destCol)` projection (var names aligned for §6 reuse). Commits `2efb0bde`, `d009fff5`.
 
 ---
 
@@ -529,7 +529,7 @@ the first delete affordance for block editing (we have no other way to remove an
    reconciliation + `incremental_write` delete it from the QMD source.
 
 So the only blocker is the **frontend cancel-on-empty guard** (intentional today,
-`dispatchers.tsx:204-212`: *"An empty draft would delete the block … we restore [the guard] here"*).
+`dispatchers.tsx:204-212`: *"An empty draft would delete the block … we restore \[the guard\] here"*).
 
 ### Behavior (resolved with the user)
 **Delete is uniform — never blocked.** Emptying a block and committing it *in any way*
@@ -646,7 +646,7 @@ interaction (typing or in-surface cursoring).
   as long as the editor stays open.
 
 ### Implementation (frontend only)
-- **`EditTarget` type** (`PreviewContext.tsx`, the `contentHeight` struct ~`:51-66`): add
+- **`EditTarget` type** (`PreviewContext.tsx`, the `contentHeight` struct \~`:51-66`): add
   `expandOnOpen?: boolean`. Set `true` at the **keyboard** `activate` site, `false`/absent everywhere
   else.
 - **`activate`** (`useBlockEditHover.tsx:64`): thread an `opts?: { keyboard?: boolean }`. The
@@ -833,7 +833,7 @@ in jsdom; pixel growth is asserted only in the e2e tier (real layout).
 | **6.h** | e2e | full chain + §0 list render; 2-item bullet fixture · activate item-1 text · clear+commit · **list still renders; item-1 `<li>` present but textless; item-2 intact** | none | (i) §0 empty-item guard → list render crashes → RED; (ii) §6 delete branch → item-1 keeps text → RED |
 | **7.a** | jsdom | `EditTextarea` opened via **pointer** · printable keydown `'a'` · **`data-expanded` absent before, present after** | none | the `setExpanded(true)` trigger in `onKeyDown` → never set → RED. *Gating (shape): before-type height stays `contentHeight`.* |
 | **7.b** | jsdom | `useBlockEditHover.activate` keyboard path + `EditTextarea` · roving Enter vs pointer-down · **`data-expanded` present (keyboard) / absent (pointer) at open** | none | the `{keyboard:true}`→`expandOnOpen` wiring on the Enter/Space activate path → roving-Enter opens collapsed → RED |
-| **7.c** | jsdom | `EditTextarea` `onKeyDown`, start collapsed · fire **each** leave key (edge ↓ [edge mocked], nesting chord, Esc, Cmd/Ctrl+Enter) · **`data-expanded` stays absent after each; AND the leave action fired (e.g. `requestMove` called for edge ↓)** | mock edge detection; stub `requestMove`/`requestNestingMove`/`setEditTarget` | move `setExpanded(true)` *before* the leave-key returns (i.e. drop the exclusion) → a leave key expands → RED. **Vacuity guard:** the "leave action fired" assert proves the key was exercised in the leaving state, not a no-op state |
+| **7.c** | jsdom | `EditTextarea` `onKeyDown`, start collapsed · fire **each** leave key (edge ↓ \[edge mocked\], nesting chord, Esc, Cmd/Ctrl+Enter) · **`data-expanded` stays absent after each; AND the leave action fired (e.g. `requestMove` called for edge ↓)** | mock edge detection; stub `requestMove`/`requestNestingMove`/`setEditTarget` | move `setExpanded(true)` *before* the leave-key returns (i.e. drop the exclusion) → a leave key expands → RED. **Vacuity guard:** the "leave action fired" assert proves the key was exercised in the leaving state, not a no-op state |
 | **7.d** | jsdom | the height `useLayoutEffect`, `expanded=true`, `contentHeight=100`, **stub `ta.scrollHeight=40`** · trigger via draft change · **`ta.style.height === '100px'`** | stub `scrollHeight` (deterministic clamp arithmetic, not real layout) | the `Math.max(contentHeight,…)` clamp (revert to bare `scrollHeight`) → `'40px'` → RED |
 | **7.e** | e2e (real layout) | `EditTextarea` in browser; **fixture where source is taller than render** (multi-source-line para rendering as fewer visual lines) · click-activate · type 1 char · delete the added lines · **height ≈ `contentHeight` on open; grows >50px after type; shrinks back but never < `contentHeight`** | none | height effect expand (revert to fixed `contentHeight`) → no growth → RED. **Fixture is load-bearing:** if collapsed==expanded height the "grows" assert is vacuous |
 | **7.f** | e2e | full roving + keyboard activate; same source>render fixture · roving + Enter · **textarea opens tall (expanded), not `contentHeight`** | none | `{keyboard:true}`/`expandOnOpen` wiring → opens collapsed → RED (same fixture caveat as 7.e) |

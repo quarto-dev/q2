@@ -158,7 +158,7 @@ successfully.
   their *resolved offsets* do when the underlying doc changes (local or
   remote). Without a re-render, decorations would stick at stale offsets
   until the next presence message arrived. Remote edits reach this path
-  via `automergeSync.ts`' `immediateFileChangeCallback`, which applies
+  via `automergeSync.ts`\' `immediateFileChangeCallback`, which applies
   remote diffs to Monaco and triggers `onDidChangeContent`, so the same
   bump covers both local and remote edits.
 
@@ -166,7 +166,7 @@ successfully.
 
 Today, `usePresence.ts` talks only to `presenceService.ts`. To resolve
 cursor strings it now needs the current Automerge doc, which lives on
-the handle returned by `automergeSync`'s `getFileHandle(path)`. Rather
+the handle returned by `automergeSync`\'s `getFileHandle(path)`. Rather
 than push resolution into `presenceService` (which would need to
 re-resolve whenever the doc changes, duplicating the `modelVersion`
 bump), add an import in `usePresence.ts`:
@@ -321,7 +321,7 @@ Extend Phase 1 tests to verify the new implementation:
       Receive a presence message whose cursor string references an op
       not yet present in our doc; assert that `getCursorPosition` throws
       `RangeError` and the hook skips the decoration for this render
-      (no crash, no other peers' decorations affected). Then apply the
+      (no crash, no other peers\' decorations affected). Then apply the
       content change and assert the cursor resolves to the intended
       offset on the next render.
 - [x] **Test: two concurrent remote edits** — two peers insert into the
@@ -407,7 +407,7 @@ in the *same* commit.
       Monaco decorations from the resolved offsets. Wrap each call in
       `try/catch (RangeError)` and `continue` on throw — an unsynced
       cursor should drop the decoration for this render, not crash the
-      effect or block other peers' decorations.
+      effect or block other peers\' decorations.
 - [x] Add Phase-3 tests and verify them pass.
 - [x] Verify Phase-1 tests still pass under the new implementation.
 - [x] Commit as "refactor(presence): replace OT offset tracking with
@@ -446,18 +446,18 @@ refactor can't quietly break it.
       by eye — specifically the scenarios PR #94 added: deleting in one
       paragraph while another peer has a cursor in a later paragraph.
 - [ ] **Performance check**: profile keystroke latency in the hub-client
-      dev server before and after the refactor, using Chrome devtools'
+      dev server before and after the refactor, using Chrome devtools\'
       Performance panel.
       - **Simulating peers**: open 3 browser tabs against the same
         project (two peers + one recorder). Move the cursor to different
         locations in the two non-recording tabs so their cursor
         decorations render on the recorder. This exercises the
         per-render resolution loop over multiple peers.
-      - **Document**: use a ~10k-char qmd file (copy a real project
+      - **Document**: use a \~10k-char qmd file (copy a real project
         README or a paragraph-repeated fixture; commit as
         `hub-client/test-fixtures/perf-10k.qmd` if one doesn't exist).
       - **Measurement**: on the recorder, start the Performance panel
-        recording, hold a key to auto-repeat for ~5 s in the editor,
+        recording, hold a key to auto-repeat for \~5 s in the editor,
         stop recording, and read the mean "Scripting" time per
         keystroke.
       - **Target**: the added cost of

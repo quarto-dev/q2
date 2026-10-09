@@ -1,4 +1,4 @@
-# bd-oejuizi9 — declaration-site resolution for theme / include-* config paths
+# bd-oejuizi9 — declaration-site resolution for theme / include-\* config paths
 
 **Date:** 2026-08-19
 **Braid:** bd-oejuizi9 (in_progress). Also partially resolves bd-rdcvjy2s
@@ -25,7 +25,7 @@ metadata-merge layer, while the declaring base is still known, mark matching
 string values as `ConfigValueKind::Path` rebased to document-relative form
 (leading `/` anchored at the project root via `candidate_path`). Consumers
 then work **unchanged**: `as_plain_text()`/`as_str()` pass `Path`-kind values
-through, so `include_resolve`'s `doc_dir.join` and `ThemeContext.resolve_path`
+through, so `include_resolve`\'s `doc_dir.join` and `ThemeContext.resolve_path`
 become correct as written.
 
 ### Key table (FORMAT_PATH_KEYS)
@@ -54,7 +54,7 @@ Policy rationale:
 2. `include-in-header: /x.html` = project-root-relative (bd-rdcvjy2s for
    these keys; previously OS-absolute, matching neither Q1 nor the contract).
 3. Project-level `theme: [cosmo, custom.scss]` compiles `custom.scss` into
-   subdirectory pages' bundles.
+   subdirectory pages\' bundles.
 4. Q-5-4 messages for missing includes name the declaration-resolved path.
 
 ### Out of scope (tracked elsewhere)
@@ -128,11 +128,11 @@ Policy rationale:
 ## Contract feedback (filled during implementation)
 
 - **Convergence prediction held exactly:** generalizing mechanism 3 made
-  `include_resolve`'s `doc_dir.join` and `ThemeContext.resolve_path` correct
+  `include_resolve`\'s `doc_dir.join` and `ThemeContext.resolve_path` correct
   with zero consumer changes — the whole diff is the marking module + call
   sites + tests.
 - **One contract addition made:** the registry needs a per-key *marking
-  policy* dimension the contract text didn't anticipate — some keys'
+  policy* dimension the contract text didn't anticipate — some keys\'
   strings are only sometimes paths (`theme` shares its namespace with
   builtin names → existence-driven silent; `include-*` → unconditional).
   Recorded in the contract's mechanism-3 entry.

@@ -73,7 +73,7 @@ Two subtleties this model encodes:
 ## The invariant
 
 > **Format-agnostic semantic structure is fully established before any transform
-> that consumes it.** Concretely, in the built pipeline the transforms' phase
+> that consumes it.** Concretely, in the built pipeline the transforms\' phase
 > ranks are **non-decreasing by position** (a transform never precedes one of a
 > lower rank).
 

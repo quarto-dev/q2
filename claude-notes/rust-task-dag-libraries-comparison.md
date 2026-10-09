@@ -676,7 +676,7 @@ Here are three approaches, ordered by complexity:
 - ✅ Good for understanding the pattern
 - ✅ Low code churn
 
-**Implementation effort:** ~6-8 hours
+**Implementation effort:** \~6-8 hours
 
 **Example structure:**
 ```rust
@@ -715,7 +715,7 @@ graph.run().await;
 - ✅ Eliminates parse duplication automatically
 - ✅ Combines well with Rayon for parallelism
 
-**Implementation effort:** ~10-12 hours (includes learning curve)
+**Implementation effort:** \~10-12 hours (includes learning curve)
 
 **Example structure:**
 ```rust
@@ -765,7 +765,7 @@ paths.par_iter().flat_map(|path| {
 - ✅ Incremental compilation support (reuse across runs)
 - ✅ Best for long-term scalability
 
-**Implementation effort:** ~16-20 hours (steeper learning curve)
+**Implementation effort:** \~16-20 hours (steeper learning curve)
 
 **Example structure:**
 ```rust
@@ -866,7 +866,7 @@ paths.par_iter().flat_map(|path| {
 | **salsa** | High | Production | ✅ | ✅ | ✅ | Query-based systems |
 | **timely** | Very High | Production | ❌ | ❌ | ✅ | Distributed streams |
 
-*Comemo doesn't provide parallelism itself, but composes with Rayon.
+\*Comemo doesn't provide parallelism itself, but composes with Rayon.
 
 ---
 

@@ -11,8 +11,8 @@ grand plan's sub-plans table still lists **both Plan 3 and Plan 4** as remaining
 — stale, fix when touching that file.)
 **Blocks:** Plan 6 execution (ratified sequencing 2026-07-06: this plan runs
 first — see § Coordination with Plan 6 in Phase 4b-C). Otherwise nothing.
-**Estimated sessions:** 3–4 (revised up from 2–3 — Phase A ships ~7 fixtures, each with a
-committed `q2 build-ts-extension` bundle, feeding ~30 assertions plus Phase C's implementation
+**Estimated sessions:** 3–4 (revised up from 2–3 — Phase A ships \~7 fixtures, each with a
+committed `q2 build-ts-extension` bundle, feeding \~30 assertions plus Phase C's implementation
 leg; two independent reviews flagged the original estimate as optimistic).
 
 ## Overview
@@ -42,7 +42,7 @@ Two failure modes motivate this plan:
 
 Plan 4b needs **no second heavyweight engine**. It uses two cheap mechanisms:
 
-- **A synthetic contending-engine fixture matrix** — a handful of ~50–100-line TS
+- **A synthetic contending-engine fixture matrix** — a handful of \~50–100-line TS
   test engines with *no daemon* (echo-engine-shaped: they transform cells in-process),
   declaring different `claims` kinds/priorities/languages. These make the tier model
   observable at pennies. They live beside the existing `echo-engine` / `echo-legacy`
@@ -85,7 +85,7 @@ One item that looks like a 4b candidate is **not**: `set_project` / per-render
 
 ## Phase 4b-A: Synthetic contending-engine fixtures
 
-The test substrate the rest of the plan builds on. Each mirrors `echo-engine`'s layout —
+The test substrate the rest of the plan builds on. Each mirrors `echo-engine`\'s layout —
 `src/<name>.ts` source + a committed `dist/<name>.js` bundle built with `q2 build-ts-extension`,
 `_extension.yml` `path: dist/<name>.js` (the parser requires a `.js` path). The first group are
 *resolution-shaped* (they make the tier model observable); the second group are *behavioral*
@@ -172,7 +172,7 @@ The test substrate the rest of the plan builds on. Each mirrors `echo-engine`'s 
   // rejectAbort throws an Error whose .name === "AbortError" — REQUIRED to hit host.ts:750's
   // clean {type:'cancelled'} branch; any other name becomes an `error` response, not a cancel.
   ```
-  **Load-bearing caveat:** the **Rust** host (`ts_process.rs::request`, ~`:637-739`) decides
+  **Load-bearing caveat:** the **Rust** host (`ts_process.rs::request`, \~`:637-739`) decides
   `Cancelled`/`Timeout` and calls `poison_instance()` (`ts_engine.rs:805-815`) **independently of
   whether the engine cooperates** — on a cancel-token flip or timeout-window elapse it sends
   `Cancel{target}` fire-and-forget and returns immediately without awaiting the engine's
@@ -200,7 +200,7 @@ and resolves end-to-end today.
 
 Each row is a document + engine-set → asserted resolved sequence/ownership, with a named
 revert hunk (TDD: write the assertion, revert the tier logic, watch it redden). These
-extend `resolution.rs`'s unit tables and add end-to-end renders where the sequence is
+extend `resolution.rs`\'s unit tables and add end-to-end renders where the sequence is
 observable in output.
 
 **Two different keys — read this before writing any row.** `engine:` (**singular**) and
@@ -228,7 +228,7 @@ revert comment before writing code.
 **Doc composition rule for the fallback/interop rows.** For rows that assert a *fallback* picks
 up an "unclaimed" language (T2, T4), choose the doc's cell language(s) so that `interop-r` is
 **not** independently present — i.e. use a token claimed by *no* `Primary` (e.g. a fresh
-`orphan` language that only `fallback-univ`'s universal `Fallback` catches), and do **not**
+`orphan` language that only `fallback-univ`\'s universal `Fallback` catches), and do **not**
 also include `{rsynth}` (which would make `interop-r` present and let it extend to `pysynth`
 first). Pin each row's exact cell languages in the fixture doc so the intended tier — not
 presence-gating — is what fires.
@@ -342,7 +342,7 @@ is dual-purpose (order + claims) will save a future reader the double-take.
   **Landed as `c1_project_engines_key_orders_beta_before_alpha`
   (`crates/quarto-core/tests/integration/engine_registry_build.rs`).** First attempt (two
   sibling `_extensions/alpha`, `_extensions/beta` dirs) landed green with ZERO implementation —
-  `fs::read_dir`'s filesystem-dependent order happened to return beta before alpha, an
+  `fs::read_dir`\'s filesystem-dependent order happened to return beta before alpha, an
   incidental pass unrelated to the splice. Fixed by installing alpha+beta as two
   `contributes.engines` entries of a SINGLE "combo" extension (`install_combo_alpha_beta_extension`),
   whose YAML array order is deterministic — confirmed genuinely RED
@@ -357,7 +357,7 @@ is dual-purpose (order + claims) will save a future reader the double-take.
   single-key `{<name>: …}` map contributes its key as a name; a `{path: …}` map is
   reserved/skipped (no ordering entry). A helper that maps an entry → `Option<name>`
   keeps this phase and Plan 6's table reader consistent.
-  **Landed:** `build_engine_registry`'s existing `config: Option<&ProjectConfig>` parameter
+  **Landed:** `build_engine_registry`\'s existing `config: Option<&ProjectConfig>` parameter
   already carried the parsed `_quarto.yml` (it was only being read for the wire `config` map,
   `build_engine_config_map`) — no signature change was needed. Added `engine_entry_name`
   (`project/mod.rs`, just above `build_engine_registry`) as the entry→`Option<name>` helper,
@@ -393,7 +393,7 @@ is dual-purpose (order + claims) will save a future reader the double-take.
   is **ignored** in 4b) must still promote `beta` in the candidate order exactly as the bare string
   `beta` would. Assert `beta` wins the `alpha`/`beta` tie via the map-form entry. This binds the
   parse branch that would otherwise ship untested until Plan 6 (see the *Latent tie-flip note*
-  above). Revert seam: the single-key-map name-extraction arm → `beta`'s name not extracted → `beta`
+  above). Revert seam: the single-key-map name-extraction arm → `beta`\'s name not extracted → `beta`
   does not order first → assertion RED.
   **Landed as `c4_single_key_map_entry_orders_beta_first_payload_ignored`.**
 - [x] **Cross-check** — (a) the existing `p1_2` / `p1_3` extension-contribution tests still
@@ -450,7 +450,7 @@ flows). Test at the TS unit level (`quarto-api` has vitest) or via the `behave` 
   assertion is on the **harness-normalized wire form** — the Rust
   `LanguageClaim` enum (`Primary`/`Interop`/`Fallback`) that `@quarto/engine-host-deno` produces from
   the author value per the normalization table in `engine-resolution.md §3.2`. **Layer note:** the
-  author SDK constructors return `@quarto/types`' `LanguageClaim` (`{kind, priority?}`), *not*
+  author SDK constructors return `@quarto/types`\' `LanguageClaim` (`{kind, priority?}`), *not*
   `TsLanguageClaim` (an earlier draft conflated the two); assert that each `kind` survives normalization
   into the correct wire-enum variant, not that a type named `TsLanguageClaim` round-trips.
 - [x] **`env.get` / `realPath` PlatformHost members** (RTQ B3b) — verified no production caller
@@ -504,7 +504,7 @@ markdown out). Same principle as Phase D: don't assert a not-yet-built limitatio
   treat this as required; the notebook JSON + expected include are not pre-pinned here on purpose.
 - [x] **The jupyter `NotImplemented` throwers** (`jupyter/index.ts:38-49`, **15 throwers**) — loose
   guard that they fail loud (so the namespace object is total and a silent no-op can't slip in);
-  record that no q2 TS runtime consumer needs them. **Testable now** via `quarto-api`'s vitest.
+  record that no q2 TS runtime consumer needs them. **Testable now** via `quarto-api`\'s vitest.
 
 ---
 
@@ -548,7 +548,7 @@ independently of engine cooperation. So this is **three** separate bindings, bel
     process PID changed. Without this the test is theater.
 - [x] **F-crash — basic crash-path relaunch (real-Deno) — folds in 1c's optional crash E2E (P3-4).**
   Keep it **basic** (per request): a `behave` sentinel branch that `Deno.exit(1)`s mid-execute
-  (mirroring `echo-engine`'s `QUARTO_ECHO_CRASH`; the existing `t13_crash_mid_execute_yields_
+  (mirroring `echo-engine`\'s `QUARTO_ECHO_CRASH`; the existing `t13_crash_mid_execute_yields_
   process_crashed_with_stderr` in `echo_engine_e2e.rs:908` already asserts `ProcessCrashed` + stderr)
   — assert `ProcessCrashed`, then assert the **next** execute transparently relaunches. **Same
   relaunch-witness guard as F-relaunch** (fresh `LaunchEngine` / new PID between the crash and the
@@ -581,7 +581,7 @@ independently of engine cooperation. So this is **three** separate bindings, bel
   **The generation guard was driven by a review-caught Critical.** The first fix (`70fcf6264`)
   cleared the transport unconditionally in `reset_after_crash`. Review found that production shares
   **one `Arc<TsEngineHost>` per engine across parallel document renders** (`pass2_renderer.rs`
-  `docs.par_iter()` + `stage/context.rs`'s `registry.clone()`), so a crash broadcasts
+  `docs.par_iter()` + `stage/context.rs`\'s `registry.clone()`), so a crash broadcasts
   `ProcessCrashed` to *every* in-flight page. A **stale** observer arriving after a sibling had
   already respawned would tear down the *healthy new* transport — hanging on a `.join()` of a live
   reader thread (while holding the coarse lock → freezing the host) and possibly `kill()`ing a
@@ -593,7 +593,7 @@ independently of engine cooperation. So this is **three** separate bindings, bel
   (`test_reset_after_crash_generation_guard_ignores_stale_observer`) binds it.
 
   **Known benign residual (documented, not fixed).** There is a narrow TOCTOU: if a sibling
-  completes a full respawn in the ~two-instruction window between a request's generation capture
+  completes a full respawn in the \~two-instruction window between a request's generation capture
   and its send, and that newer generation then crashes with this observer as the *sole* witness,
   its stale-generation `reset_after_crash` no-ops and the crash goes unrecovered (next execute =
   broken pipe). This equals the *pre-fix* behavior for that one observer (a crash that isn't

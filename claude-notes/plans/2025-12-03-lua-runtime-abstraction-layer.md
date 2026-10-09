@@ -1894,7 +1894,7 @@ Current design is per-filter. Future consideration:
 | os | difftime | Safe | (passthrough) |
 | package | require | High | (disabled) |
 | package | loadlib | Critical | (disabled) |
-| debug | * | Critical | (disabled) |
+| debug | \* | Critical | (disabled) |
 
 ### Pandoc API
 
@@ -1921,6 +1921,6 @@ Current design is per-filter. Future consideration:
 | pandoc.system | arch | Safe | arch |
 | pandoc.system | cputime | Safe | cpu_time |
 | pandoc.path | exists | Low | path_exists |
-| pandoc.path | * (others) | Safe | (pure functions) |
+| pandoc.path | \* (others) | Safe | (pure functions) |
 | pandoc.mediabag | fetch | High | fetch_url |
-| pandoc.mediabag | * (others) | Low | (memory only) |
+| pandoc.mediabag | \* (others) | Low | (memory only) |

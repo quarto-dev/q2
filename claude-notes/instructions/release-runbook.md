@@ -95,7 +95,7 @@ cargo build --bin q2 --locked && ./target/debug/q2 --version        # must print
 ```
 
 `cargo update --workspace` (not a full `cargo update`) touches only the
-workspace members' own version entries — external deps stay pinned. The
+workspace members\' own version entries — external deps stay pinned. The
 `--locked` build is the real check: CI builds with `--locked`, so the
 lockfile must already be in sync or every build leg fails.
 
@@ -105,7 +105,7 @@ which means it carries a *separate* `Cargo.lock` recording the versions
 of every path dependency it pulls from `crates/`. A root
 `cargo update --workspace` does not touch it. Miss it and nothing fails
 loudly — the WASM build simply rewrites the file, so the next person to
-run `cargo xtask verify` (without `--skip-hub-build`) finds ~17 lines of
+run `cargo xtask verify` (without `--skip-hub-build`) finds \~17 lines of
 unrequested churn in their working tree. The v0.17.0 bump missed it;
 v0.15.0 and v0.16.0 did not. Both locks should appear in the bump commit.
 
@@ -123,7 +123,7 @@ the new version, or it just breaks again next cadence (bd-yomgkxoc).
 
 ### 3. Tag the merged commit and push
 
-After the bump PR is merged, tag `origin/main`'s new HEAD:
+After the bump PR is merged, tag `origin/main`\'s new HEAD:
 
 ```bash
 git switch main && git pull --ff-only
@@ -244,7 +244,7 @@ if `main` has unreleased changes**, builds it through the same
 prerelease**. Nothing here changes the release procedure above; this
 section is what to know when the two interact.
 
-- **What "unreleased" means.** `scripts/nightly-gate.sh` skips iff `main`'s
+- **What "unreleased" means.** `scripts/nightly-gate.sh` skips iff `main`\'s
   HEAD is exactly the newest `v*` tag (you just released) or exactly the
   current `nightly` tag (last night already built it). Any other HEAD
   builds — a docs-only commit included. A skipped night is one small
@@ -269,12 +269,12 @@ section is what to know when the two interact.
   `install.ps1 -Nightly` (README has the one-liners); the installers
   resolve the `nightly` release by tag and pick the platform asset by
   name. Same signing key.
-- **It is also the installers' only CI.** After publishing, the
+- **It is also the installers\' only CI.** After publishing, the
   `install-smoke` job runs both README one-liners on linux, macOS and
   Windows against the fresh nightly and asserts `q2 --version`. A red
   `install-smoke` with a green pipeline means the installers or the
   release-notes contract regressed, not the build. The smoke steps pass
-  the job's `GH_TOKEN` so the installers' API lookup is not subject to
+  the job's `GH_TOKEN` so the installers\' API lookup is not subject to
   the shared-runner anonymous rate limit, and the installers retry the
   lookup through the seconds right after the release is replaced
   (bd-n9yh30c8). The installer's error names the HTTP status: a 403
@@ -307,7 +307,7 @@ section is what to know when the two interact.
   no glibc floor, Alpine works with no `gcompat` shim. **There is no gnu
   artifact** — anyone who needs a dynamically-linked build uses
   `install.sh --from-source`. Both legs build *natively*, so
-  `musl-tools`' `musl-gcc` is the right compiler on each runner; the
+  `musl-tools`\' `musl-gcc` is the right compiler on each runner; the
   `Install musl-tools` step is gated `if: contains(matrix.target,
   'musl')`. History worth knowing: musl was originally blocked by
   `rusty_v8` (via `deno_core` → `quarto-system-runtime`), which shipped
@@ -331,7 +331,7 @@ section is what to know when the two interact.
   particular `aws-lc-sys` — long feared to be the hard part — is a
   non-issue at v0.40.0: it ships pregenerated bindings for both musl
   triples, so there is **no `bindgen` step and no `libclang`
-  requirement**, and it compiled in ~17 s per leg in the bd-dofxhzaj
+  requirement**, and it compiled in \~17 s per leg in the bd-dofxhzaj
   spike (run 30375857883). If a future `aws-lc-sys` bump ever *does*
   start wanting cmake or libclang, that is a real regression worth
   pinning rather than papering over with extra apt packages.

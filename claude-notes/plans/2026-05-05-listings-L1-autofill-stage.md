@@ -22,7 +22,7 @@ in the relevant sections below. Summary:
   becomes a `quarto-core` dep. Reused for L9's RFC 822 RSS dates.
 - **D13 — shortcode-bearing image `src` is out of scope.** L1 runs
   before pre-engine sugaring, so an `Image` whose `src` was
-  originally `{{< meta thumbnail >}}.png` still carries the literal
+  originally `{{{< meta thumbnail >}}}.png` still carries the literal
   shortcode text in `target.0`. Filed `bd-8h9o` as a discovered-from
   follow-up to study the problem in isolation; L1 does not filter
   these today.
@@ -51,8 +51,8 @@ auto-derived values when the author hasn't supplied them. The stage:
      (full text, **not truncated**; per D11 the listing host's
      `max-description-length` is L3's concern).
    - `image` — first `Inline::Image` `target.0` from `ast.blocks`
-     (document order). Shortcode-bearing `src` (e.g. `{{< meta
-     thumb >}}.png`) is **not** filtered here; tracked separately
+     (document order). Shortcode-bearing `src` (e.g. `{{{< meta
+     thumb >}}}.png`) is **not** filtered here; tracked separately
      under `bd-8h9o` (see D13).
    - `word_count` — tokenized scan of `ast.blocks` plain text.
    - `reading_time_minutes` — `word_count / 200` (200 wpm
@@ -128,7 +128,7 @@ Read before writing code:
   L1's job.
 - Pipeline assembly:
   `crates/quarto-core/src/pipeline.rs` — both
-  `build_html_pipeline_stages_with_apply_config` (line ~217)
+  `build_html_pipeline_stages_with_apply_config` (line \~217)
   and `build_wasm_html_pipeline` insert
   `IncludeExpansionStage` immediately before
   `DocumentProfileStage`. L1 inserts between them, in both
@@ -145,7 +145,7 @@ write into `ast.meta` (the same `ConfigValue` map that
 Reasons:
 
 1. **Single extraction path.** With L1 writing to `meta`, all of
-   `listing_item`'s population — author-supplied *and* auto-
+   `listing_item`\'s population — author-supplied *and* auto-
    filled — flows through `extract_listing_item` at the
    checkpoint. There is exactly one site that decides "what does
    `listing_item` look like." A side-channel would split that
@@ -257,7 +257,7 @@ fn autofill_listing_item(doc: &mut DocumentAst, ctx: &StageContext) {
 ```
 
 (Exact `ctx.runtime` accessor name is TBD — verify against
-`StageContext`'s actual fields in the worktree.)
+`StageContext`\'s actual fields in the worktree.)
 
 The shapes `ensure_map_entry`, `fill_if_absent_string`, etc. are
 **not** implied to exist — they're the API L1 wants. The
@@ -325,7 +325,7 @@ divergences:
 | `quarto-lsp-core/src/analysis.rs`           | (separate fn) | (separate fn) | recurse | recurse | …           | …              | …           | drop        |
 
 A "consolidate to one shared helper" pass requires either
-choosing one shape (and silently changing the others' output —
+choosing one shape (and silently changing the others\' output —
 a snapshot-churn risk on five render paths) or building an
 options-driven helper with five booleans plus a per-site
 audit. That is a separate hygiene project, deliberately
@@ -365,7 +365,7 @@ It needs to:
 - Skip footnote blocks for word-count (Q1 parity — footnote
   text doesn't count toward reading time).
 
-The block walker is small (~50 lines) and L1-specific. Don't
+The block walker is small (\~50 lines) and L1-specific. Don't
 try to reuse `metadata_normalize::blocks_to_plain_text`; its
 needs are different (full block-text rendering for metadata
 keys, with footnote inclusion).
@@ -676,7 +676,7 @@ success":
       noting L1 is the second consumer and pointing at
       `bd-zzke` for any future third consumer. **Do not**
       audit or consolidate the other five sites — that is
-      `bd-zzke`'s job, deliberately deferred.
+      `bd-zzke`\'s job, deliberately deferred.
 - [x] **`ConfigValue` mutation idioms — cleared 2026-05-06.**
       `ConfigValue::insert_path` (auto-creates intermediate
       maps), `contains_path`, `get_path`, `get_path_mut` are
@@ -694,7 +694,7 @@ success":
 - [ ] Add `ListingItemInfoStage` skeleton with a no-op
       `autofill_listing_item` so tests compile.
 - [ ] Write unit tests 1–16 in
-      `crates/quarto-core/src/stage/stages/listing_item_info.rs`'s
+      `crates/quarto-core/src/stage/stages/listing_item_info.rs`\'s
       test module. Run; observe expected failures.
 - [ ] Write stage trait tests 17–18.
 - [ ] Write integration tests 19–21 in
@@ -770,7 +770,7 @@ success":
   effect of the new stage.** *Mitigation:* L1 doesn't mutate
   AST blocks, only metadata not consumed by render today. If
   snapshots move, investigate per CLAUDE.md before proceeding.
-- **Risk: `metadata_normalize::inlines_to_plain_text`'s
+- **Risk: `metadata_normalize::inlines_to_plain_text`\'s
   decision to recurse into footnotes and to wrap
   `Inline::Quoted` in quote characters surprises listings
   consumers later.** *Mitigation:* L1's word-count walker
@@ -887,7 +887,7 @@ success":
   wrong — `chrono` is not a workspace dependency.
 - **D13 (shortcode-bearing image src out of scope; 2026-05-06):**
   L1 does not filter images whose `src` carries an
-  unresolved shortcode (e.g. `{{< meta thumb >}}.png`). L1
+  unresolved shortcode (e.g. `{{{< meta thumb >}}}.png`). L1
   runs after `IncludeExpansionStage` but before
   `PreEngineSugaringStage`, so such images are present in
   `target.0` as literal text. `bd-8h9o` (discovered-from

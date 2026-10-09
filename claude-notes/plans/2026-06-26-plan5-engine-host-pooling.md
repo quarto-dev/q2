@@ -89,7 +89,7 @@ jitter. Plan 5 keeps the host warm across re-computes.
     before reusing).
   - **Why field-level reset is NOT the lever** (see the reworded comment at `ts_engine.rs`
     `project:` field, 1c.2 P1): a launched instance holds its `EngineProjectContext` in its
-    closure behind **two** caches — Rust `ensure_launched`'s instance cache and the host's
+    closure behind **two** caches — Rust `ensure_launched`\'s instance cache and the host's
     `launchedByName` — so `set_project`-style writes can never reach it. Rebuilding the
     registry per re-compute (the session-owns-host model above) does **not** refresh instances
     either: the host cache keys by engine name and returns the old closure.
@@ -106,8 +106,8 @@ jitter. Plan 5 keeps the host warm across re-computes.
 ## Open before writing (research)
 
 1. **MEASURE FIRST — the win is bounded.** The *kernel* (Julia control server / Jupyter kernel —
-   the *seconds*-scale cost) **already survives a subprocess respawn** because it's transport-file
-   keyed. So pooling saves only **Deno-spawn + module-`import()`** (~hundreds of ms), not the kernel
+   the *seconds*-scale cost) **already survives a subprocess respawn** because it\'s transport-file
+   keyed. So pooling saves only **Deno-spawn + module-`import()`** (\~hundreds of ms), not the kernel
    rewarm. Measure the real re-compute respawn cost first; if it's small relative to the engine run,
    the complexity isn't justified. **This gates the plan.**
 2. Confirm the capture/replay flow is untouched (pooling only speeds capture-production).
@@ -134,7 +134,7 @@ built-ins-only — the engine vanishes on edit.
 
 **Plan 5 owns the *latency* of the last two.** The `re_execute.rs` / `recompute_staleness(Auto)`
 re-compute path is exactly what the warm host keeps fast (no Deno respawn + module-`import()` per
-edit). The boundary: **R5 makes re-compute *correct*** (the right registry runs); **Plan 5 makes it
-*interactive*** (the host is already warm). The measure-first gate (§Open #1) applies to this path
+edit). The boundary: **R5 makes re-compute _correct_** (the right registry runs); **Plan 5 makes it
+_interactive_** (the host is already warm). The measure-first gate (§Open #1) applies to this path
 specifically — the kernel already survives a respawn, so the win is bounded to the Deno-spawn +
 `import()` cost on each re-compute.

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-09
 **Status:** Complete — all 138 built-in filters cataloged (11 stage groups), 10% evidence spot-check passed
-**Purpose:** Systematically map every built-in Quarto 1 Lua filter (~138 files across
+**Purpose:** Systematically map every built-in Quarto 1 Lua filter (\~138 files across
 8 stage dirs) onto its Quarto 2 (Rust) equivalent, to (a) find genuine porting gaps
 for the formats Q2 emits today (HTML + revealjs), and (b) surface where built-in work
 clusters into seams that might motivate **new user-filter injection points** in the Q2
@@ -15,7 +15,7 @@ synthesis; turning them into tracked work is a separate decision.
 
 ## The Q2 pipeline (three nested layers)
 
-Q2 does **not** have Q1's ~7 internal filter groups + 8 user entry points. It has:
+Q2 does **not** have Q1's \~7 internal filter groups + 8 user entry points. It has:
 
 ### Layer 1 — macro `PipelineStage`s (`quarto-core/src/pipeline.rs:277`, `build_html_pipeline_stages_with_options`)
 ```
@@ -60,7 +60,7 @@ point.
 | `post-quarto` | after numbers assigned | end of **Crossref** phase | ❌ |
 | `pre-render` | before format presentation | start of **Navigation** | ❌ |
 | `post-render` | after presentation | end of `AstTransformsStage` | ✅ = current `post` |
-| `pre-finalize` | before deps/cleanup | between `AstTransformsStage` and tail stages | ~ (≈ current `post`) |
+| `pre-finalize` | before deps/cleanup | between `AstTransformsStage` and tail stages | \~ (≈ current `post`) |
 | `post-finalize` | after everything | after tail stages, before write | ❌ |
 
 Exposing any of the six unexposed rows is mechanical, not architectural: add a
@@ -72,7 +72,7 @@ of Crossref) is the highest-value single addition — see the synthesis.
 
 ### The reframe
 The 2026-03-16 extensions plan collapsed Q1's 8 **user entry points** → 2 positions.
-That was correct *for user/extension filters*. But the ~138 **built-in** filters map onto
+That was correct *for user/extension filters*. But the \~138 **built-in** filters map onto
 the much richer target above. Group-level correspondence:
 
 | Q1 group | Q2 target region |
@@ -99,7 +99,8 @@ the much richer target above. Group-level correspondence:
 `render.rs:626-633` hard-fails any `--to` target other than HTML/revealjs today, so
 "format-not-in-q2" is a large and expected bucket.
 
----
+***
+
 ## Catalog
 
 Each row: **file** · **format scope** · **status** · **Q2 location (ported) / recommended landing (gap)**. `⚑` = new-seam signal (would need a user-filter injection point Q2 lacks, or a whole missing subsystem). Evidence `file:line` anchors are in the per-agent notes; representative ones kept inline.
@@ -136,7 +137,7 @@ Each row: **file** · **format scope** · **status** · **Q2 location (ported) /
 | book-numbering.lua | typst/latex/epub + book | format-not-in-q2 / not-ported ⚑ | needs per-chapter "book item" context Q2 lacks |
 | code-annotation.lua | agnostic (+ presentation) | not-ported | → `code-block-generate` (parse) + new Finalization render (DL) |
 | code-filename.lua | agnostic | partial | ported via `code_block_decorations` sideband (`code_block_render.rs:187`). Missing Div-wraps-CodeBlock rule |
-| contentsshortcode.lua | agnostic | not-ported ⚑ | `{{< contents id >}}` needs two-pass doc-wide shortcode resolution; current `ShortcodeHandler` is single-pass |
+| contentsshortcode.lua | agnostic | not-ported ⚑ | `{{{< contents id >}}}` needs two-pass doc-wide shortcode resolution; current `ShortcodeHandler` is single-pass |
 | engine-escape.lua | agnostic | not-ported | backtick-escaped engine fences → likely `native:parse` (grammar); unconfirmed |
 | figures.lua | html / latex | not-ported / format-not-in-q2 | `fig-alt`→`alt` propagation missing → `crossref-render`/`float-ref-target` |
 | hidden.lua | agnostic | not-ported | `keep/remove/clear-hidden` class strip + note-strip → early Normalization |
@@ -241,7 +242,7 @@ Dominated by the format axis — **13 files target formats Q2 doesn't emit** (`r
 | callout.lua | agnostic(+fmt) | **ported** | `customnode:Callout`, `callout.rs`/`callout_resolve.rs`. (revealjs/epub DOM variant not branched — fidelity check) |
 | content-hidden.lua | agnostic | not-ported | `content-visible/-hidden` + `when/unless-format/meta/profile` — **entirely absent**; needs profile plumbing → Normalization transform |
 | decoratedcodeblock.lua | agnostic(+fmt) | **ported** | sideband map, deliberate (`render.rs:350`) |
-| floatreftarget.lua | agnostic(+fmt) | **ported** | `customnode:Float`, full crossref pipeline; ~9/11 format branches format-not-in-q2 |
+| floatreftarget.lua | agnostic(+fmt) | **ported** | `customnode:Float`, full crossref pipeline; \~9/11 format branches format-not-in-q2 |
 | htmltag.lua | html | not-ported | leaf helper for tabset/panel; obviated by direct RawBlock construction |
 | latexcmd.lua | pdf/latex | format-not-in-q2 | — |
 | latexenv.lua | pdf/latex | format-not-in-q2 | — |
@@ -306,7 +307,7 @@ The catalog was produced by 11 parallel agents classifying against a shared taxo
 | **obsolete** | 14 | 10% | Q1-engine machinery Q2 needs by design (filter-chain wiring, skip-flags, JSON side-channels, scaffold round-trips, reader-state smuggling) |
 | **ported** | 12 | 9% | working equivalent with cited evidence |
 
-So **~59%** of built-in Q1 filters (ported + partial + not-ported − the writer-blocked ones) are *about* the formats Q2 ships; **~32%** are simply waiting on writers; **~10%** will never be needed because Q2's architecture (native tree-sitter reader, real Rust CustomNodes, single-process `RenderContext`, small named-transform pipeline) dissolves the problem they solved.
+So **\~59%** of built-in Q1 filters (ported + partial + not-ported − the writer-blocked ones) are *about* the formats Q2 ships; **\~32%** are simply waiting on writers; **\~10%** will never be needed because Q2's architecture (native tree-sitter reader, real Rust CustomNodes, single-process `RenderContext`, small named-transform pipeline) dissolves the problem they solved.
 
 ### The headline answer: do the built-in filters motivate new Lua *stages*?
 
@@ -322,7 +323,7 @@ Only **6 files** raised a genuine `⚑` signal, and every one is a **missing sub
 | `table-captions.lua` | which-executed-cell-produced-this-table provenance, available only right after `EngineExecutionStage` |
 | `contentsshortcode.lua` | **two-pass** document-wide shortcode resolution (current `ShortcodeHandler` is single-pass) |
 
-The one finding that genuinely touches the *filter-extension* seam question is **`contentsshortcode` + shortcode-in-metadata**: the `ShortcodeResolveTransform` resolves inline, single-pass, and only over `ast.blocks` (`shortcode_resolve.rs:891`). A `{{< contents >}}`-style relocation shortcode and `{{< meta … >}}` inside metadata both need capabilities the current resolver lacks. That's an argument for evolving the **shortcode resolver**, not for adding user-filter positions.
+The one finding that genuinely touches the *filter-extension* seam question is **`contentsshortcode` + shortcode-in-metadata**: the `ShortcodeResolveTransform` resolves inline, single-pass, and only over `ast.blocks` (`shortcode_resolve.rs:891`). A `{{{< contents >}}}`-style relocation shortcode and `{{{< meta … >}}}` inside metadata both need capabilities the current resolver lacks. That's an argument for evolving the **shortcode resolver**, not for adding user-filter positions.
 
 **Implication for the extensions plan.** The 2026-03-16 plan's 8→2 collapse for *user* filters remains sound: the built-in catalog gives no evidence that authors of built-in work needed intermediate positions, so it's weak evidence that *user* filters need them either. If a case for a mid-pipeline user-filter seam is ever made, it should come from a concrete extension use-case (e.g. "run after crossref numbering but before navigation"), which `bd-0fd0` already gestures at — not from this catalog.
 

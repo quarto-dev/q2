@@ -46,7 +46,7 @@ The commit 274a1c5 contains a **partial implementation** of the DiagnosticMessag
 ## The Two Distinct Work Streams
 
 ### Stream 1: k-103 (In-Memory Content for Ariadne)
-**Goal:** Support <anonymous> and <unknown> files in ariadne diagnostics
+**Goal:** Support \<anonymous> and \<unknown> files in ariadne diagnostics
 
 **Changes (appears complete):**
 - `quarto-error-reporting/src/builder.rs` - New builder API

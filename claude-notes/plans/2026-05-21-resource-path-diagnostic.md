@@ -83,7 +83,7 @@ pub enum ResourceError {
 In the orchestrator, instead of `QuartoError::other(e.to_string())`,
 build a `DiagnosticMessage` using
 `DiagnosticMessageBuilder::error(...)` with a label at
-`source_info`'s span, e.g.:
+`source_info`\'s span, e.g.:
 
 ```
 error: resource path resolves outside the project root

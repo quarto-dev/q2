@@ -25,7 +25,7 @@ sidebar** at Pass-1 time (read-only, no engine / filter / Pass-2
 transform involvement) so it can:
 
 1. Add a co-membership edge for every pair of pages that share a
-   sidebar (a title change to one ripples to siblings'
+   sidebar (a title change to one ripples to siblings\'
    rendered output).
 2. Identify prev/next neighbors from the sidebar's flattened
    member order.
@@ -169,7 +169,7 @@ For a fixed `(meta, index)`:
 
 ## When to bump this contract
 
-Any change to `expand_auto`'s behavior that would alter the set
+Any change to `expand_auto`\'s behavior that would alter the set
 of pages a `auto:` directive resolves to, or to the
 `collect_member_paths` walk, requires:
 

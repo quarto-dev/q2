@@ -66,7 +66,7 @@ where "leave it alone" becomes "report clean".
 | `literal-brackets` | `literal_brackets.rs:82` (check), `:133` (convert) | via `analyze()` → default = clean |
 | `q-2-30` | `diagnostics/q_2_30.rs:70` | `Err(_) => return Ok(Vec::new())` — same masking, independent of `analyze()` |
 
-**Not affected:** the ~20 `q_2_*` conversion rules, `apostrophe-quotes`,
+**Not affected:** the \~20 `q_2_*` conversion rules, `apostrophe-quotes`,
 `attribute-ordering`, `div-whitespace` are *diagnostic-driven* — a parse `Err`
 is their **input** (they scan the returned diagnostics for their code), so
 `Ok(_) => clean` is correct for them. `parse` and `syntax` obviously report

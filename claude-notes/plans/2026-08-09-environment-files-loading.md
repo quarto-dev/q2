@@ -23,15 +23,15 @@ env (`std::env::var`) remains fine; it always wins over file-defined values.
 
 ## Issue context
 
-q2 never reads Quarto 1's project environment-variable files (`_environment`, `_environment.local`, `_environment.required`, `_environment-<profile>`). `EnvShortcodeHandler` resolves `{{< env NAME >}}` against `std::env::var` only, so a variable defined solely in `_environment` renders the unresolved marker `?env:NAME` plus a Q-16-5 warning per use.
+q2 never reads Quarto 1's project environment-variable files (`_environment`, `_environment.local`, `_environment.required`, `_environment-<profile>`). `EnvShortcodeHandler` resolves `{{{< env NAME >}}}` against `std::env::var` only, so a variable defined solely in `_environment` renders the unresolved marker `?env:NAME` plus a Q-16-5 warning per use.
 
-Real-world hit: the Posit Connect docs port (352 pages) sets `CONNECT_VERSION` etc. in `_environment`; every `{{< env … >}}` use renders `?env:CONNECT_VERSION` site-wide unless the caller exports the variables manually.
+Real-world hit: the Posit Connect docs port (352 pages) sets `CONNECT_VERSION` etc. in `_environment`; every `{{{< env … >}}}` use renders `?env:CONNECT_VERSION` site-wide unless the caller exports the variables manually.
 
 Strand filed 2026-08-10 (yesterday, UTC) by Carlos from the connect-docs porting effort (origin strand in that skein: `br-environment-files-n0joqkug`). Fresh — no stale assumptions.
 
 ## Dependency graph
 
-- **related (incoming):** bd-shortcodes-in-metadata-bp06aub8 (open, P1) — filed alongside this one from the same connect-docs port. Shortcodes in `website.title` / `page-footer` / include files are not expanded at all (a *different* failure: config strings never pass through `ShortcodeResolveTransform`). The two compose: even after this strand is fixed, `{{< env CONNECT_VERSION >}}` in `website.title` stays literal until that one is fixed too. Whatever mechanism this strand introduces (project env map vs. process env) must be consumable from wherever that strand ends up expanding config-string shortcodes — worth designing with one eye on it.
+- **related (incoming):** bd-shortcodes-in-metadata-bp06aub8 (open, P1) — filed alongside this one from the same connect-docs port. Shortcodes in `website.title` / `page-footer` / include files are not expanded at all (a *different* failure: config strings never pass through `ShortcodeResolveTransform`). The two compose: even after this strand is fixed, `{{{< env CONNECT_VERSION >}}}` in `website.title` stays literal until that one is fixed too. Whatever mechanism this strand introduces (project env map vs. process env) must be consumable from wherever that strand ends up expanding config-string shortcodes — worth designing with one eye on it.
 
 No blocks edges, no discovered-from in the braid skein (origin context lives in the connect-docs skein).
 
@@ -92,13 +92,13 @@ Confirmed at HEAD (`8518ac79`); pre-flight `cargo xtask verify --skip-hub-build`
 
 Question: can `dotenvy` give us event-based parsing we could hang
 `quarto-source-map` annotations on (the way `quarto-yaml` builds
-`YamlWithSourceInfo` from `yaml-rust2`'s `MarkedEventReceiver` events, each
+`YamlWithSourceInfo` from `yaml-rust2`\'s `MarkedEventReceiver` events, each
 carrying a `Marker`)? Answer: **no — hand-roll.**
 
 **dotenvy** (inspected from git `allan2/dotenvy`, scratchpad clone; released
 0.15.7 is 2023-03-22, git main is an unreleased 0.16 rework):
 
-- The parser (`dotenvy/src/parse.rs`, ~620 lines) is an internal
+- The parser (`dotenvy/src/parse.rs`, \~620 lines) is an internal
   **line-oriented** recursive-descent parser: `parse_line(&str, …) ->
   Option<(String, String)>`. Not event-based; there is no callback/visitor
   surface to intercept. The public API is an iterator of `(String, String)`
@@ -213,7 +213,7 @@ Q1 accepts them).
 
 ### Phase 3 — env shortcode consults the map
 
-- [x] Tests: `{{< env NAME >}}` resolves from map when real env unset (map
+- [x] Tests: `{{{< env NAME >}}}` resolves from map when real env unset (map
   beats fallback arg); real env wins over map; Q-16-5 still fires when
   absent everywhere (hint updated to mention `_environment`).
 - [x] `EnvShortcodeHandler::new(project_env)` plumbed like `variables`
@@ -234,7 +234,7 @@ Q1 accepts them).
   spawn-tested (no R/jupyter in CI; replay bypasses spawning).
 - [x] Injection at all sites, real-env-wins preserved by pre-filtering with
   `env_for_subprocess` (children inherit the real env; we only add keys it
-  lacks): knitr `CallROptions::project_env` → `call_r`'s `Command::envs`;
+  lacks): knitr `CallROptions::project_env` → `call_r`\'s `Command::envs`;
   jupyter `JupyterDaemon::get_or_start_session(..., extra_env)` →
   `start_kernel` spawn (spawn-time input; session key unchanged — a reused
   session keeps its birth env, fine while a process serves one project);

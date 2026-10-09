@@ -2,14 +2,14 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-navbar-logo-unstyled-gbzd8vcu
-**Checkout:** main @ `f387bd68` (investigation ran in the main checkout; no worktree created)
+**Checkout:** main \@ `f387bd68` (investigation ran in the main checkout; no worktree created)
 **Status:** Plan finalized after design alignment with Carlos (2026-08-19). Awaiting go-ahead to implement.
 
 ## Design decisions (settled with Carlos, 2026-08-19)
 
-1. **Companion CSS:** port `.navbar-logo` sizing, the `.navbar-brand-container` layout rules (`min-width: 0; display: flex; align-items: center` + the `lg` `margin-right: 1em`), `.navbar-brand.navbar-brand-logo { margin-right: 4px; display: inline-flex }`, `.navbar-brand { overflow: hidden; text-overflow: ellipsis }`, and `.navbar-container { width: 100% }`. **Omit** the `max-width: calc(100% - 115px)` clamp for now — it reserves ~115px for the hamburger toggler + search icon so an over-wide brand truncates instead of pushing them off-screen on narrow viewports; it only bites in narrow-viewport layouts q2 hasn't fully ported, so it moves to the follow-up strand below.
+1. **Companion CSS:** port `.navbar-logo` sizing, the `.navbar-brand-container` layout rules (`min-width: 0; display: flex; align-items: center` + the `lg` `margin-right: 1em`), `.navbar-brand.navbar-brand-logo { margin-right: 4px; display: inline-flex }`, `.navbar-brand { overflow: hidden; text-overflow: ellipsis }`, and `.navbar-container { width: 100% }`. **Omit** the `max-width: calc(100% - 115px)` clamp for now — it reserves \~115px for the hamburger toggler + search icon so an over-wide brand truncates instead of pushing them off-screen on narrow viewports; it only bites in narrow-viewport layouts q2 hasn't fully ported, so it moves to the follow-up strand below.
 2. **Q1's navbar ordering system** (`$navbar-title-order` / `$navbar-toggler-order` `order:` rules + the `margin !important` pair): **skip here**. q2 already parses `navbar.toggle-position` into `Navbar::toggle_position` but nothing consumes it in SCSS. Follow-up strand filed: wire toggle-position into the ordering variables, port the `order:`/margin rules, and pick up the width clamp from (1). → **bd-navbar-ordering follow-up** (see § Strands).
-3. **`navbar-container` class:** add it — `navbar_to_html`'s wrapper (render_html.rs:84) becomes `class="navbar-container container-fluid"`. Only that site: the footer (line 183) and secondary-nav (line 315) `container-fluid` wrappers are different components, untouched.
+3. **`navbar-container` class:** add it — `navbar_to_html`\'s wrapper (render_html.rs:84) becomes `class="navbar-container container-fluid"`. Only that site: the footer (line 183) and secondary-nav (line 315) `container-fluid` wrappers are different components, untouched.
 4. **Href fallback:** keep q2's relative `logo_href || home_url` fallback for **both** anchors (consistent with the root-relative-paths design, bd-root-relative-paths-design-fc5pvkcv). We adopt Q1's class hooks, not its absolute `/index.html` fallback.
 5. **Light/dark logo variants: in scope.** The light/dark epic (PR #537, bd-0pic6 phases A–E) already landed the machinery this needs: `body.quarto-light .dark-content { display: none !important }` / `body.quarto-dark .light-content { … }` ship in `resources/scss/bootstrap/dist/scss/_light-dark.scss`, the toggle syncs the body class, and `Navbar::dark_mode_toggle` already tells the navbar transform whether the format has a dark variant. So the logo work is config parsing + markup + asset copying — no new CSS machinery.
 
@@ -63,7 +63,7 @@ Q1 accepts `logo:` as `false` | string | `{path, alt}` | `{light: <string|{path,
 
 ## What the code looks like today
 
-- `crates/quarto-navigation/src/navbar.rs:106-117` — `logo: Option<String>` + `logo_alt` + `logo_href`, each path paired with a `SourceInfo` (`logo_source`, `logo_href_source`) so the path resolver knows the authoring file. Parsing at lines 181-193 (`as_plain_text()`); config round-trip serialization at ~275-310.
+- `crates/quarto-navigation/src/navbar.rs:106-117` — `logo: Option<String>` + `logo_alt` + `logo_href`, each path paired with a `SourceInfo` (`logo_source`, `logo_href_source`) so the path resolver knows the authoring file. Parsing at lines 181-193 (`as_plain_text()`); config round-trip serialization at \~275-310.
 - `crates/quarto-navigation/src/render_html.rs:497-543` — `render_brand` builds the single-anchor markup; called from `navbar_to_html` at line 87 inside the line-84 `container-fluid` div.
 - Consumers of `navbar.logo` downstream: `copy_navbar_logo` (`quarto-core/src/project/website_post_render.rs:128`) copies the logo file into `_site`; `NavbarRenderTransform` (`quarto-core/src/transforms/navbar_render.rs`) rebases the logo src per page; `metadata_path_resolution` tests pin the authoring-dir resolution behavior via `logo_source`.
 - Light/dark infra (from the epic): `_light-dark.scss` content rules; `compile_theme_css.rs` dual-variant compile + `quarto-color-scheme` link attributes; `template.rs:955-975` appends `quarto-light`/`quarto-dark` body class; `Navbar::dark_mode_toggle` set by `NavbarGenerateTransform` when the format has a dark variant.

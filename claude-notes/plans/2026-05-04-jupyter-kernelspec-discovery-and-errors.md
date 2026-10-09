@@ -88,17 +88,17 @@ Sequence:
 Status: complete in this session, awaiting commit.
 
 - [x] Bump `runtimelib = "1.4"` → `"2.0"`, `jupyter-protocol = "1.4"` →
-      `"2.0"` in `crates/quarto-core/Cargo.toml`.
+  `"2.0"` in `crates/quarto-core/Cargo.toml`.
 - [x] Add a `_ => (mime_type, Value::Null)` fallback arm in
-      `media_type_to_mime_entry` (`execute.rs:262`) — `MediaType` is now
-      `#[non_exhaustive]` in `jupyter-protocol` 2.0.
+  `media_type_to_mime_entry` (`execute.rs:262`) — `MediaType` is now
+  `#[non_exhaustive]` in `jupyter-protocol` 2.0.
 - [x] `cargo build --workspace` clean.
 - [x] `cargo nextest run --workspace`: 8360 passed.
 - [x] `cargo xtask verify --skip-hub-build`: all steps green.
 - [x] Reproduced the original failure end-to-end on
-      `convert-test-3.qmd` to confirm the upgrade alone does not fix
-      the bug (expected — `dirs.rs` is byte-identical between 1.6 and
-      2.0).
+  `convert-test-3.qmd` to confirm the upgrade alone does not fix
+  the bug (expected — `dirs.rs` is byte-identical between 1.6 and
+  2.0).
 
 Beads: **bd-fu0l** (covers the parent bug; this phase is a sub-step).
 
@@ -107,36 +107,36 @@ Beads: **bd-fu0l** (covers the parent bug; this phase is a sub-step).
 - [ ] Fork `runtimed/runtimelib` → `cscheid/runtimelib`.
 - [ ] Branch off the `v2.0.0` tag as `feat/venv-kernelspec-discovery`.
 - [ ] **Test (failing first)** in `runtimelib/src/kernelspec.rs`:
-      `find_kernelspec` for a kernel name that lives only in a
-      `data_dirs_with_jupyter_paths()` entry (e.g. a temp dir with
-      `<dir>/kernels/fake/kernel.json`) succeeds when
-      `ask_jupyter()` reports that dir. Use a small fixture-script-as-
-      jupyter helper, or stub at the `data_dirs()` level by injecting
-      via `JUPYTER_PATH` for the unit test (cleanest).
+  `find_kernelspec` for a kernel name that lives only in a
+  `data_dirs_with_jupyter_paths()` entry (e.g. a temp dir with
+  `<dir>/kernels/fake/kernel.json`) succeeds when
+  `ask_jupyter()` reports that dir. Use a small fixture-script-as-
+  jupyter helper, or stub at the `data_dirs()` level by injecting
+  via `JUPYTER_PATH` for the unit test (cleanest).
 - [ ] **Test (failing first)**: `RuntimeError::KernelNotFound` carries a
-      `searched_paths: Vec<PathBuf>` field; `Display` includes the
-      paths.
+  `searched_paths: Vec<PathBuf>` field; `Display` includes the
+  paths.
 - [ ] In `runtimelib/src/dirs.rs`, add
-      `pub async fn data_dirs_with_jupyter_paths() -> Vec<PathBuf>`
-      that:
-        1. starts from `data_dirs()`,
-        2. calls `ask_jupyter()` with a short timeout (≤2s) and
-           gracefully degrades on error,
-        3. extracts each path from `paths["data"]` (array of strings),
-        4. de-duplicates while preserving order.
-      Keep `data_dirs()` unchanged — the new function is additive.
+  `pub async fn data_dirs_with_jupyter_paths() -> Vec<PathBuf>`
+  that:
+    1. starts from `data_dirs()`,
+    2. calls `ask_jupyter()` with a short timeout (≤2s) and
+       gracefully degrades on error,
+    3. extracts each path from `paths["data"]` (array of strings),
+    4. de-duplicates while preserving order.
+  Keep `data_dirs()` unchanged — the new function is additive.
 - [ ] In `runtimelib/src/kernelspec.rs`, add
-      `list_kernelspecs_with_jupyter_paths()` and have
-      `find_kernelspec()` use the augmented dirs. Populate
-      `searched_paths` on `KernelNotFound`.
+  `list_kernelspecs_with_jupyter_paths()` and have
+  `find_kernelspec()` use the augmented dirs. Populate
+  `searched_paths` on `KernelNotFound`.
 - [ ] In `runtimelib/src/error.rs`, extend `RuntimeError::KernelNotFound`
-      with `searched_paths: Vec<PathBuf>` and update its `thiserror`
-      `#[error(...)]` template (multi-line message: name, searched
-      paths, available kernels).
+  with `searched_paths: Vec<PathBuf>` and update its `thiserror`
+  `#[error(...)]` template (multi-line message: name, searched
+  paths, available kernels).
 - [ ] Match upstream conventions: keep the `// TODO: sys.prefix` line
-      in place (separate concern), `#[cfg(feature = "tokio-runtime")]`
-      gating, the `Result<T>` alias, the same `thiserror` style, and
-      tests parallel to `test_list_kernelspec_jsons`.
+  in place (separate concern), `#[cfg(feature = "tokio-runtime")]`
+  gating, the `Result<T>` alias, the same `thiserror` style, and
+  tests parallel to `test_list_kernelspec_jsons`.
 - [ ] `cargo test` clean inside the fork.
 - [ ] Push branch to `cscheid/runtimelib`.
 
@@ -146,31 +146,31 @@ runtimelib fork".
 ## Phase 3 — Wire the fork into Quarto 2
 
 - [ ] In the workspace root `Cargo.toml`, add:
-      ```toml
-      [patch.crates-io]
-      runtimelib = { git = "https://github.com/cscheid/runtimelib", branch = "feat/venv-kernelspec-discovery" }
-      ```
-      Pin to a specific commit (`rev = "..."`) once the branch is
-      stable to avoid lockfile drift.
+  ```toml
+  [patch.crates-io]
+  runtimelib = { git = "https://github.com/cscheid/runtimelib", branch = "feat/venv-kernelspec-discovery" }
+  ```
+  Pin to a specific commit (`rev = "..."`) once the branch is
+  stable to avoid lockfile drift.
 - [ ] `cargo update -p runtimelib`; confirm the patched version
-      resolves.
+  resolves.
 - [ ] Update `crates/quarto-core/src/engine/jupyter/kernelspec.rs` to
-      call `list_kernelspecs_with_jupyter_paths()`.
+  call `list_kernelspecs_with_jupyter_paths()`.
 - [ ] Update `JupyterError::KernelspecNotFound` to carry `searched:
-      Vec<PathBuf>` and `available: Vec<String>`; flesh out its
-      `Display` to render searched paths, available kernels, and a
-      `hint:` line pointing at `jupyter kernelspec list` and the
-      `JUPYTER_PATH` env var.
+  Vec<PathBuf>` and `available: Vec<String>`; flesh out its
+  `Display` to render searched paths, available kernels, and a
+  `hint:` line pointing at `jupyter kernelspec list` and the
+  `JUPYTER_PATH` env var.
 - [ ] **End-to-end verification** (per CLAUDE.md): in a venv that has
-      `ipykernel` installed, run
-      `cargo run --bin q2 -- render <fixture>.qmd` from a shell where
-      `jupyter` resolves to that venv, confirm the render succeeds.
-      Record the invocation and a snippet of output here or in the
-      session transcript.
+  `ipykernel` installed, run
+  `cargo run --bin q2 -- render <fixture>.qmd` from a shell where
+  `jupyter` resolves to that venv, confirm the render succeeds.
+  Record the invocation and a snippet of output here or in the
+  session transcript.
 - [ ] Negative path: with no kernel installed, confirm the new error
-      lists searched paths, lists what was found, and shows the hint.
+  lists searched paths, lists what was found, and shows the hint.
 - [ ] Full verify: `cargo nextest run --workspace`, `cargo xtask
-      verify --skip-hub-build`.
+  verify --skip-hub-build`.
 
 Beads: **bd-fu0l** discovered-from child, "Wire venv-aware kernelspec
 discovery and improve error in Quarto".
@@ -193,13 +193,13 @@ Entry criteria:
 - No outstanding "we'll change the fork API" follow-ups.
 
 - [ ] Squash/clean the fork branch history if it accumulated
-      validation-driven churn.
+  validation-driven churn.
 - [ ] Open PR from `cscheid/runtimelib:feat/venv-kernelspec-discovery`
-      against `runtimed/runtimelib:main`.
+  against `runtimed/runtimelib:main`.
 - [ ] If accepted, replace the `[patch.crates-io]` block with a normal
-      version bump once a release ships.
+  version bump once a release ships.
 - [ ] If rejected or stalled, leave the patch in place and document
-      the situation in `CLAUDE.md`.
+  the situation in `CLAUDE.md`.
 
 Beads: **bd-875x**, blocked by bd-34wy *and* bd-ij1l (deliberately —
 upstream waits on validated wiring, not just on the fork existing).
@@ -228,4 +228,4 @@ initial fix.
 - [ ] `cargo xtask verify --skip-hub-build`
 - [ ] End-to-end render of `convert-test-3.qmd` from a venv shell
 - [ ] Error output for an *intentionally* missing kernel renders the
-      diagnostic sections (regression check)
+  diagnostic sections (regression check)

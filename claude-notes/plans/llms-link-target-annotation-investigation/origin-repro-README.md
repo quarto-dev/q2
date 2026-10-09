@@ -54,7 +54,7 @@ hrefs in the sources. Exactly one link escapes — `quarto-tiers.url:
 "/admin/licensing/index.md#product-tiers"` in `_quarto.yml`, a *custom
 metadata key* read by the posit-docs project type, which q2 has no way to
 recognize as a link. That one entry accounts for all 49 affected pages,
-and it is already `br-root-absolute-assets-1o6yy4mx`'s subject.
+and it is already `br-root-absolute-assets-1o6yy4mx`\'s subject.
 
 So q2 rewrites every link it owns. The cost of the shadowing is not wrong
 rendering — it is lost *detectability*: that link used to 404.
@@ -87,11 +87,11 @@ detection is feasible — `LinkRewriteTransform` holds the `ProjectIndex`,
 the website config, and each resolved target — but the mechanism aims at
 the wrong population. The 1670 links that could carry an attribute are the
 ones already correct; the single escapee is custom metadata that cannot
-carry a Pandoc attribute. The warning would fire at ~100% false positive.
+carry a Pandoc attribute. The warning would fire at \~100% false positive.
 
 Worth pursuing separately: there is no way to author a link that
 *deliberately* targets a companion, nor to opt out of
-`LlmsCaptureTransform`'s blanket `.html`→`.md` retarget (its only escapes
+`LlmsCaptureTransform`\'s blanket `.html`→`.md` retarget (its only escapes
 are drafts, 404, external URLs, and non-page resources). An attribute
 would fit that architecture cleanly — as an expressiveness feature, not as
 a fix for this.

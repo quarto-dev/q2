@@ -213,7 +213,7 @@ const { source, start, end } =
   this.sourceReconstructor.getAnnotatedParseSourceFields(inline.s);
 ```
 
-**Locations:** Every case in `convertInline()` switch statement (~15 cases)
+**Locations:** Every case in `convertInline()` switch statement (\~15 cases)
 
 **Special cases:**
 - `convertAttr()` - attr components (id, classes, kvs)
@@ -230,7 +230,7 @@ const { source, start, end } =
 
 **Same pattern:** Replace source/start/end extraction in every case
 
-**Locations:** Every case in `convertBlock()` switch statement (~15 cases)
+**Locations:** Every case in `convertBlock()` switch statement (\~15 cases)
 
 **Special cases:**
 - `convertCaption()` - caption structure

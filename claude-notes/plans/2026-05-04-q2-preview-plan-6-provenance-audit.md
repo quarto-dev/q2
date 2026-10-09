@@ -21,8 +21,8 @@ Implementation order. The plan body (Scope / Implementation notes / Test plan)
 holds the design details; this list is the work-tracking surface.
 
 ### Phase 0 — prerequisite
-- [x] Add `Inline::source_info_mut` (~33 LOC) + `Block::source_info_mut`
-  (~24 LOC) accessors in `quarto-pandoc-types`, with round-trip unit tests
+- [x] Add `Inline::source_info_mut` (\~33 LOC) + `Block::source_info_mut`
+  (\~24 LOC) accessors in `quarto-pandoc-types`, with round-trip unit tests
   for one representative variant of each.
 
 ### Audit
@@ -38,7 +38,7 @@ holds the design details; this list is the work-tracking surface.
 - [x] Implement `stamp_shortcode_anchors` + mutable AST walkers in
   `shortcode_resolve.rs` (model on existing `recurse_inline` /
   `resolve_block`).
-- [x] Wire the stamper into `resolve_shortcode`'s dispatch funnel so every
+- [x] Wire the stamper into `resolve_shortcode`\'s dispatch funnel so every
   Rust / Lua / extension dispatch is post-walked.
 - [x] Thread `shortcode_owned.source_info` into `make_error_inline` and
   `shortcode_to_literal` from their four call sites.
@@ -65,7 +65,7 @@ holds the design details; this list is the work-tracking surface.
   empty case is "no provenance" (not a bug); only populated-but-
   misaligned input is a bd-3aolj/bd-1e6a5 sync error.
 - [x] `pampa::pandoc::treesitter_utils::postprocess` synthetic Space
-  (~line 1348): emit `Generated { by: By::tree_sitter_postprocess(), from: [] }`.
+  (\~line 1348): emit `Generated { by: By::tree_sitter_postprocess(), from: [] }`.
 
 ### Tests
 - [x] Shortcode required-anchor invariant
@@ -80,7 +80,7 @@ holds the design details; this list is the work-tracking surface.
   Invocation appended).
 - [x] Multi-inline shortcode anchor test
   (`multi_inline_shortcode_resolution_shares_invocation_source` —
-  Strong[Str], Space, Str all share the same Invocation source_info).
+  `Strong[Str]`, Space, Str all share the same Invocation source_info).
 - [x] Escaped-shortcode regression test
   (`escaped_shortcode_keeps_original_source_info`).
 - [x] Error-inline regression test
@@ -122,7 +122,7 @@ holds the design details; this list is the work-tracking surface.
   ```
   Fixture: a `.qmd` with `title:` (drives title-block), two `## `
   headers (drive sectionize), a footnote `^[…]` (drives footnotes
-  transform + appendix container), and a `{{< meta title >}}`
+  transform + appendix container), and a `{{{< meta title >}}}`
   shortcode (drives the resolver + stamper). Observed HTML
   (inspected, snippet preserved):
   ```html
@@ -204,8 +204,8 @@ impl Block {
 }
 ```
 
-Pure mechanical mirror of the existing read accessors — ~33 LOC for
-`Inline` + ~24 LOC for `Block`. Add a unit test that round-trips a
+Pure mechanical mirror of the existing read accessors — \~33 LOC for
+`Inline` + \~24 LOC for `Block`. Add a unit test that round-trips a
 mutation through the accessor on one representative variant of each.
 
 ## Scope
@@ -227,8 +227,8 @@ with the correct provenance:
     Lua machinery attached (`filter_path`, `line` — Plan 4's filter
     `by.data` shape) are preserved by promoting the kind from
     `filter` to `shortcode`, renaming to `lua_path` / `lua_line` in
-    `by.data` to reflect the new context. See "Lua-shortcode
-    enrichment" below.
+    `by.data` to reflect the new context. See \"Lua-shortcode
+    enrichment\" below.
   - The post-walk recurses into nested blocks/inlines (model on
     `recurse_inline` / `resolve_block` in this file) so every node in
     the dispatch output gets the anchor.
@@ -250,12 +250,11 @@ with the correct provenance:
       footnote `<sup>` multi-node-overlap case (round-trip-friendly
       via block-level Verbatim).
     - `shortcode_to_literal` (lines 1043-1109): the literal-text Str
-      produced for escaped `{{</ ... >}}` shortcodes. Today it emits
+      produced for escaped `{{{</ ... >}}}` shortcodes. Today it emits
       `SourceInfo::default()`. Fix: pass `shortcode_owned.source_info`
       through from call sites at lines 665 and 920, and use it as the
       Str's `source_info`. This is required to satisfy the
-      "Escaped-shortcode regression test" (line 453: "its source_info
-      stays Original (not Generated)") — without this fix, the
+      \"Escaped-shortcode regression test\" (line 453: `"its source_info stays Original (not Generated)"`) — without this fix, the
       regression test would fail on Plan 6's own implementation.
 - **`TitleBlockTransform`** (line 183-185): synthesizes a level-1 Header
   from `title:` metadata. Fix: emit `Generated { by: By::title_block(), from: smallvec![] }`
@@ -299,7 +298,7 @@ with the correct provenance:
 
   **Positional-alignment safeguards** (review-pass 2026-05-22): the
   fix relies on the invariant *"`AttrSourceInfo.attributes[i]` is the
-  `(key_src, val_src)` for the i-th entry in `Attr.2`'s insertion
+  `(key_src, val_src)` for the i-th entry in `Attr.2`\'s insertion
   order."* This invariant holds in the parser's main path but **is
   not documented and is broken in two preexisting code paths**
   (duplicate-key handling in `commonmark_attribute.rs:41-49`;
@@ -411,8 +410,8 @@ comprehensive grep.
   `ShortcodeResolveTransform::resolve_shortcode`. General Lua filter
   dispatches (`UserFiltersStage`) leave `Generated { by: filter, ... }`
   intact — that is the steady-state for filter constructions, per
-  Plan 4 §"Filter constructions become Generated { by: filter, from:
-  [] }". The post-walk is not wired into the filter stage and should
+  Plan 4 §"Filter constructions become Generated \{ by: filter, from:
+  `[]` \}". The post-walk is not wired into the filter stage and should
   not be.
 - **Most transforms just need to preserve ctx.source_info**. The
   "audit and fix" is mostly bug fixes — ctx already has the info; the
@@ -454,7 +453,7 @@ shortcode-resolved content **with no attribution-code changes**:
   `AttributionMap::query_byte_range` picks the latest author covering
   the token's bytes.
 
-For multi-author shortcodes: if author A wrote `{{< meta foo >}}` at
+For multi-author shortcodes: if author A wrote `{{{< meta foo >}}}` at
 T1 and author B changed `foo` to `bar` at T2 > T1, the byte range
 covers bytes touched by both; `query_byte_range` picks the latest
 (B). This is the policy specified in the 2026-05-20 design
@@ -622,9 +621,9 @@ below.)
   blocks: Div, BlockQuote, OrderedList, BulletList, DefinitionList,
   Figure, Table (cells), Custom (slot contents). The canonical
   reusable shape is in
-  `crates/quarto-core/src/transforms/shortcode_resolve.rs`'s own
-  `recurse_inline` (~lines 945-1027) and `resolve_block`
-  (~lines 710-863), which already cover this set including Image's
+  `crates/quarto-core/src/transforms/shortcode_resolve.rs`\'s own
+  `recurse_inline` (\~lines 945-1027) and `resolve_block`
+  (\~lines 710-863), which already cover this set including Image's
   alt/caption content and Note's nested blocks. Model the new mutable
   walkers on these — drop the async + shortcode-resolution logic,
   keep the match-arm dispatch and Image/Note recursion. The narrower
@@ -741,7 +740,7 @@ Lua-handler filter & shortcode").
 - `crates/quarto-core/src/transforms/footnotes.rs` — container Div
   synthesis (around line 495 / `create_footnotes_section`).
 - `crates/quarto-core/src/transforms/appendix.rs` — appendix container
-  Div synthesis (`create_appendix_container` ~line 257).
+  Div synthesis (`create_appendix_container` \~line 257).
 - `crates/quarto-core/src/transforms/theorem.rs:313` and
   `crates/quarto-core/src/transforms/proof.rs:167` — name-attr title
   extraction in `extract_name_attr`. Both pass `&div.attr_source`
@@ -814,29 +813,29 @@ Lua-handler filter & shortcode").
   resulting `[Strong[Str], Space, Str]` ALL have `Generated` with
   `Invocation` anchors whose `source_info` is the same shortcode
   token's range.
-- **Attribution interaction test**: render a doc with `{{< meta foo >}}`
+- **Attribution interaction test**: render a doc with `{{{< meta foo >}}}`
   through two commits by different authors (author A wrote the line at
   T1; author B changed `foo` → `bar` at T2). With Plan 6 stamped and a
   `GitBlameProvider` installed, the resulting `astContext.attribution`
   for the resolved Str references author B's identity (the latest
   author of the token bytes). This is the multi-author latest-wins
   policy.
-- **Escaped-shortcode regression test**: `{{</ meta foo >}}` resolves
+- **Escaped-shortcode regression test**: `{{{</ meta foo >}}}` resolves
   to literal text; its source_info stays Original (not Generated).
-- **Error-inline regression test**: an unknown shortcode `{{< bogus >}}`
+- **Error-inline regression test**: an unknown shortcode `{{{< bogus >}}}`
   resolves via `make_error_inline` to `Strong[Str("?bogus")]`. Both
   layers carry `Original` source_info pointing at the bogus
   shortcode's token bytes (NOT `Default`, NOT `Generated`).
   `is_atomic_kind()` does not fire; round-trip through the
   incremental writer Verbatim-copies the original token bytes.
 - **Error / escaped round-trip test**: full incremental-writer
-  round-trip on a fixture containing both `{{</ meta foo >}}` and
-  `{{< bogus >}}`. After Plan 6's stamping + the incremental writer, the
+  round-trip on a fixture containing both `{{{</ meta foo >}}}` and
+  `{{{< bogus >}}}`. After Plan 6's stamping + the incremental writer, the
   output qmd should byte-equal the input for those regions
   (verbatim-copy via the Original anchor in both cases).
 - **Shortcode-inside-include composition test**: `parent.qmd`
   contains `{{< include foo.qmd >}}`; `foo.qmd` contains
-  `{{< meta title >}}`. After Plan 6 stamping (and Plan 8's wrapper),
+  `{{{< meta title >}}}`. After Plan 6 stamping (and Plan 8's wrapper),
   the resolved Str inside the IncludeExpansion wrapper has
   `Generated { by: { kind: "shortcode", data: { name: "title" } },
   from: [Invocation -> Original{file_id: <foo.qmd's FileId>, ...}] }`.
@@ -920,22 +919,22 @@ Lua-handler filter & shortcode").
 
 | Component | Lines (rough) |
 |---|---|
-| Phase 0: `Inline::source_info_mut` + `Block::source_info_mut` accessors + unit tests | ~70 |
-| Audit pass (grep + categorize) | ~30 (mostly notes) |
-| `stamp_shortcode_anchors` helper + mutable recursion walks (modeled on `shortcode_resolve.rs::recurse_inline` / `resolve_block`) | ~220 |
-| Shortcode resolver dispatch-site fixes — 12 production sites: `config_value_to_inlines` ×7, `flatten_blocks_to_inlines` ×1, `lua_result_to_shortcode_result::Text` ×1, `make_error_inline` ×2, `shortcode_to_literal` ×1. Most covered by the stamper; `make_error_inline` and `shortcode_to_literal` need call-site source_info threading. | ~70 |
-| TitleBlock fix | ~20 |
-| Sectionize fix | ~20 |
-| Footnotes fix | ~30 |
-| Appendix fix | ~30 |
-| Theorem + proof title-from-attr fix (thread `attr_source` through `extract_name_attr` in both files) | ~30 |
-| TreeSitter postprocess fix | ~10 |
-| Tests | ~280 |
-| **Total** | **~810** |
+| Phase 0: `Inline::source_info_mut` + `Block::source_info_mut` accessors + unit tests | \~70 |
+| Audit pass (grep + categorize) | \~30 (mostly notes) |
+| `stamp_shortcode_anchors` helper + mutable recursion walks (modeled on `shortcode_resolve.rs::recurse_inline` / `resolve_block`) | \~220 |
+| Shortcode resolver dispatch-site fixes — 12 production sites: `config_value_to_inlines` ×7, `flatten_blocks_to_inlines` ×1, `lua_result_to_shortcode_result::Text` ×1, `make_error_inline` ×2, `shortcode_to_literal` ×1. Most covered by the stamper; `make_error_inline` and `shortcode_to_literal` need call-site source_info threading. | \~70 |
+| TitleBlock fix | \~20 |
+| Sectionize fix | \~20 |
+| Footnotes fix | \~30 |
+| Appendix fix | \~30 |
+| Theorem + proof title-from-attr fix (thread `attr_source` through `extract_name_attr` in both files) | \~30 |
+| TreeSitter postprocess fix | \~10 |
+| Tests | \~280 |
+| **Total** | **\~810** |
 
-The earlier "~540" estimate omitted the Phase-0 mut accessors (~70 LOC),
+The earlier "\~540" estimate omitted the Phase-0 mut accessors (\~70 LOC),
 under-counted the recursion walkers (mutable walks over the full
-inline/block container set are ~220 LOC, not ~80), and missed the
+inline/block container set are \~220 LOC, not \~80), and missed the
 `make_error_inline` / `shortcode_to_literal` / `proof.rs` fix sites.
 
 ## Notes
@@ -962,7 +961,7 @@ cross-file FileId issue genuinely requires anchoring at the
 parent-file level.
 
 The shortcode-resolution provenance change propagates to: q2-preview
-rendering (Plan 2A's framework atomic gate in `dispatch.tsx`'s `Node`
+rendering (Plan 2A's framework atomic gate in `dispatch.tsx`\'s `Node`
 detects `shortcode` kind via `ATOMIC_KINDS` and the
 JS-side `isAtomicSourceInfo` accessor), writer round-trip (the
 incremental writer Verbatim-copies the shared shortcode token bytes via

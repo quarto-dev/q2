@@ -6,7 +6,7 @@
 ## Overview
 
 A brand-new hub-client user (no collection pointer in IndexedDB, no
-legacy projects) currently lands on `ProjectSetSetup`'s "fresh" screen
+legacy projects) currently lands on `ProjectSetSetup`\'s "fresh" screen
 after signing in: a card with the tagline, a "Sync Server URL" input
 pre-filled with `DEFAULT_SYNC_SERVER`, and two buttons, **Create New
 Project Set** and **Link to Existing Project Set**. Every new user has
@@ -20,11 +20,11 @@ Quarto project, or connect to one a collaborator shared").
 
 Two code paths already do exactly this, each behind its own gate:
 
-- **Collection/document invites** (bd-fxdcxbpq): `App.tsx` ~L349, an
+- **Collection/document invites** (bd-fxdcxbpq): `App.tsx` \~L349, an
   effect that fires `createProjectSet(DEFAULT_SYNC_SERVER)` on
   `needs-setup` (and `migrateProjects` on `needs-migration`) while an
   invite landing is showing.
-- **Ephemeral `q2 preview` boots** (bd-zf4ryvuq): `App.tsx` ~L451, the
+- **Ephemeral `q2 preview` boots** (bd-zf4ryvuq): `App.tsx` \~L451, the
   identical effect gated on `ephemeralHub`. Its plan
   (`2026-08-07-preview-editor-skip-project-setup.md`, decision 2)
   already argued for *silent auto-setup over a bare gate skip* so the
@@ -42,10 +42,10 @@ connect → "No projects yet".
 | --- | --- | --- |
 | Status machine | `hub-client/src/hooks/useCollectionSets.ts` | `loading → needs-setup \| needs-migration \| connecting → connected \| error`. `needs-setup` = no pointers and no legacy IDB projects. |
 | Setup actions | same file | `createProjectSet(syncServer)`, `linkProjectSet`, `migrateProjects`, `mergeIntoProjectSet`; all call `establishRoot` (pointer array + legacy singleton). |
-| Gate | `hub-client/src/App.tsx` ~L1043–L1080 | Renders `ProjectSetSetup` on `needs-setup`/`needs-migration` unless `ephemeralHub`; renders it again (fresh mode, with the error) on `error`. |
+| Gate | `hub-client/src/App.tsx` \~L1043–L1080 | Renders `ProjectSetSetup` on `needs-setup`/`needs-migration` unless `ephemeralHub`; renders it again (fresh mode, with the error) on `error`. |
 | Screen | `hub-client/src/components/ProjectSetSetup.tsx` (353 lines) + `.css` (198) | Four modes: fresh, link, migration, merge. |
-| Silent copies | `App.tsx` ~L349 (invite) and ~L451 (ephemeral) | Same effect body, two refs, two `eslint-disable` lines. |
-| Inbound linking | `App.tsx` ~L597, route `#/link-project-set/<id>?server=` | Route handler calls `linkProjectSet`/`mergeIntoProjectSet`, which *establish the root*. Built by "Link another browser…" in the ProjectsHome avatar menu. |
+| Silent copies | `App.tsx` \~L349 (invite) and \~L451 (ephemeral) | Same effect body, two refs, two `eslint-disable` lines. |
+| Inbound linking | `App.tsx` \~L597, route `#/link-project-set/<id>?server=` | Route handler calls `linkProjectSet`/`mergeIntoProjectSet`, which *establish the root*. Built by "Link another browser…" in the ProjectsHome avatar menu. |
 | Dev harness | `DevHarness.tsx` pages `setup-fresh`, `setup-migration`, `setup-migration-error` | Scanned by `e2e/baseline-a11y.harness.spec.ts`. |
 | E2E bootstrap | `e2e/helpers/projectFactory.ts` (`bootstrapProjectSetVariant`), `e2e/import-zip.spec.ts`, `e2e/share-link-project-set.spec.ts` | Fill `#setup-sync-server` with the local hub URL, click **Create New Project Set**. 31 spec files go through the shared helper. |
 | Default server | `hub-client/.env` → `wss://sync.automerge.org`; production build sets `VITE_DEFAULT_SYNC_SERVER=wss://public-preview.quarto-hub.com/ws`; preview-embed sets `/ws` | The e2e build does **not** override it — tests reach the local hub only by typing its URL into the setup input. |
@@ -56,7 +56,7 @@ connect → "No projects yet".
    fires `createProjectSet(DEFAULT_SYNC_SERVER)` exactly once when
    status enters `needs-setup`. No screen. The home renders its
    skeleton during `connecting` (already implemented at
-   `ProjectsHome.tsx` ~L1105) and then the empty state.
+   `ProjectsHome.tsx` \~L1105) and then the empty state.
 2. **Boot-time exception: `#/link-project-set/…`.** If the boot URL is
    an inbound project-set link, the route handler owns setup (as
    today) and the auto-create must not fire — otherwise the linked set
@@ -98,7 +98,7 @@ connect → "No projects yet".
   local development. See Q2.
 - **The e2e build points the default at the local hub.** Set
   `VITE_DEFAULT_SYNC_SERVER=/ws` on the `test:e2e` / `test:e2e:ui`
-  scripts and in `.github/workflows/hub-client-e2e.yml`'s build env
+  scripts and in `.github/workflows/hub-client-e2e.yml`\'s build env
   (next to `VITE_E2E: '1'`). `resolveSyncServerUrl` expands `/ws` to
   the page origin (`ws://localhost:5174/ws`), and `vite preview`
   already proxies `/ws` (with `ws: true`) to the hub that
@@ -113,9 +113,9 @@ connect → "No projects yet".
   classic variant still waits for the "Your Projects" heading and the
   collections variant for the search box.
 - **No new `ProjectsHome` prop surface.** The retry card is a
-  standalone component (`ProjectSetError.tsx`, ~40 lines, reusing the
+  standalone component (`ProjectSetError.tsx`, \~40 lines, reusing the
   `.qh-error` / `.qh-btn` classes so it needs little or no new CSS);
-  it does not route through `ProjectsHome`'s `error`/`onRetry`, which
+  it does not route through `ProjectsHome`\'s `error`/`onRetry`, which
   are about *project* connection failures and assume a connected set.
 
 ## Resolved questions (Carlos, 2026-09-15)
@@ -169,7 +169,7 @@ connect → "No projects yet".
 - [x] Add `useAutoEstablishRoot` hook; wire it in `App.tsx` with
       `enabled: bootRoute.type !== 'link-project-set'` (boot route
       captured once in `useState`, next to `ephemeralHub`).
-- [x] Delete the invite (~L349) and ephemeral (~L451) effects and their
+- [x] Delete the invite (\~L349) and ephemeral (\~L451) effects and their
       refs/`eslint-disable` lines.
 - [x] Add `retry` to `CollectionSetsActions`; reset `initRef` and re-run
       the init body (factor the init body into a `useCallback`).
@@ -253,7 +253,7 @@ that redirects every `WebSocket` to `ws://127.0.0.1:1/` while
 > Couldn't connect to the sync server
 > Your project list lives on the sync server, and it did not answer.
 > (Could not reach sync server. Please check your connection and try again.)
-> [Try again]
+> \[Try again\]
 
 Set `window.__wsBlock = false`, clicked **Try again**: the home's
 "No projects yet" state appeared, root created. Screenshot:

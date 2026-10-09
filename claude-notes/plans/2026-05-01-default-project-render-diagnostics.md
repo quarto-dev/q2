@@ -38,7 +38,7 @@ regression manifests in three user-visible ways, all reproducible on
 
 2. **`q2 render index.qmd`** fails with
    `Error: …/index.qmd is excluded from the render list of project
-   …/default-project-test (check `project.render` in `_quarto.yml`
+   …/default-project-test (check `project.render` in `\_quarto.yml`
    and the underscore/hidden file conventions).` This is a
    misleading error: the user did not configure any `project.render`
    list, and the file is not hidden, underscore-prefixed, or a

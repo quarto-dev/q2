@@ -59,7 +59,7 @@ be reused:
 - **Writer pool** — `SourceInfoSerializer` (`writers/json.rs:271-447`):
   interns `SourceInfo` into a flat topologically-ordered pool (`astContext.p`),
   dedups shared `Substring` parents / `Generated` anchors by `Arc::as_ptr`
-  (~93% size reduction), `perf.intern` gauge under `QUARTO_PERF_STATS=1`.
+  (\~93% size reduction), `perf.intern` gauge under `QUARTO_PERF_STATS=1`.
 - **Reader pool** — `SourceInfoDeserializer` (`readers/json.rs:102-480`):
   rebuilds each pool entry exactly once (forward-reference guard), children
   clone earlier entries — the clone shares the entry's *inner* Arcs, so the
@@ -75,7 +75,7 @@ be reused:
 
 ### The raw mode
 
-Rather than forking the ~8600 lines of writer+reader (or building a parallel
+Rather than forking the \~8600 lines of writer+reader (or building a parallel
 serde format), **add a mode to the existing code path**:
 
 - **Writer**: a `raw` flag on `JsonConfig` (or a sibling entry point
@@ -186,114 +186,114 @@ either way. Action: comment findings on k-42; keep it open for the cleanup;
 ### Phase 0 — decisions (this document)
 
 - [x] Wire shape: reuse existing pooled machinery via raw mode (v2 decision,
-      supersedes v1's serde-derived Option A)
+  supersedes v1's serde-derived Option A)
 - [x] Format name: **`raw-json`** (matches issue #11)
 - [x] Marker shape: **`"pampa-json-format": {"version": 1}`** — no
-      `producer` field; the key name itself identifies the producer, and a
-      version-bearing string would churn snapshots on every release
+  `producer` field; the key name itself identifies the producer, and a
+  version-bearing string would churn snapshots on every release
 - [x] Meta fidelity table above; native tags: `Attr`, `NoteReference`,
-      `Insert`, `Delete`, `Highlight`, `EditComment`, `Shortcode`,
-      `CaptionBlock`; meta kind tags: `Path`, `Glob`, `Expr`
+  `Insert`, `Delete`, `Highlight`, `EditComment`, `Shortcode`,
+  `CaptionBlock`; meta kind tags: `Path`, `Glob`, `Expr`
 - [x] `example_list_counter` carried in the raw envelope's `astContext`
 - [x] Raw-reader rejections: new **`JsonReadError` variants** (targeted
-      messages), NOT new Q-3-XX codes — the entire JSON reader path reports
-      plain `JsonReadError` without catalog codes today (`main.rs:314-317`),
-      and a one-off catalog integration for three new errors would be
-      inconsistent; reader-wide Q-code integration is a separate,
-      pre-existing gap (file a low-priority strand). The error-corpus item
-      previously listed under Phase 2 is dropped — that corpus is for merr
-      parse errors, not reader errors.
+  messages), NOT new Q-3-XX codes — the entire JSON reader path reports
+  plain `JsonReadError` without catalog codes today (`main.rs:314-317`),
+  and a one-off catalog integration for three new errors would be
+  inconsistent; reader-wide Q-code integration is a separate,
+  pre-existing gap (file a low-priority strand). The error-corpus item
+  previously listed under Phase 2 is dropped — that corpus is for merr
+  parse errors, not reader errors.
 
 ### Phase 1 — tests first (TDD) — DONE 2026-07-17
 
 - [x] `tests/integration/test_raw_json_roundtrip.rs`: AST-level identity
-      roundtrip covering **every** extension: standalone `Attr`,
-      `NoteReference`, all four CriticMarkup inlines, `Shortcode`,
-      `CaptionBlock`, `BlockMetadata`, both note-definition blocks, block +
-      inline `Custom` nodes; `ConfigValue` metadata with `Path`/`Glob`/
-      `Expr`, `merge_op`, non-string scalars, map entry order; source-info
-      preservation incl. shared `Substring` parents (assert sharing survives:
-      structural equality of parent chains) and `Concat`/`Generated`
+  roundtrip covering **every** extension: standalone `Attr`,
+  `NoteReference`, all four CriticMarkup inlines, `Shortcode`,
+  `CaptionBlock`, `BlockMetadata`, both note-definition blocks, block +
+  inline `Custom` nodes; `ConfigValue` metadata with `Path`/`Glob`/
+  `Expr`, `merge_op`, non-string scalars, map entry order; source-info
+  preservation incl. shared `Substring` parents (assert sharing survives:
+  structural equality of parent chains) and `Concat`/`Generated`
 - [x] Issue #11's exact repro: `test_raw_json_roundtrip_issue_11_document`
-      parses the exact document with the qmd reader and roundtrips the
-      parser-produced AST. (Note learned en route: a *trailing* paragraph
-      `Attr` is representable in Pandoc-superset JSON via the para-`attr`
-      hoist, bd-aeyss6p5 — only a mid-paragraph Attr exercises Q-3-32.)
+  parses the exact document with the qmd reader and roundtrips the
+  parser-produced AST. (Note learned en route: a *trailing* paragraph
+  `Attr` is representable in Pandoc-superset JSON via the para-`attr`
+  hoist, bd-aeyss6p5 — only a mid-paragraph Attr exercises Q-3-32.)
 - [x] Marker tests: raw reader rejects Pandoc-style JSON with the targeted
-      diagnostic; rejects wrong version; `-f json` rejects raw-json input
-      (and vice versa)
+  diagnostic; rejects wrong version; `-f json` rejects raw-json input
+  (and vice versa)
 - [x] Meta fidelity regression tests pinned to the table above
 - [x] ~~Fixture dirs `tests/writers/raw-json/` + `tests/readers/raw-json/`~~
-      Replaced by `test_raw_json_roundtrip_writer_fixture_corpus`: sweeps
-      the existing `tests/writers/json/*.md` corpus through a raw-json
-      identity roundtrip. Identity assertions subsume snapshots for this
-      format, and reusing the existing corpus avoids a parallel fixture
-      tree.
+  Replaced by `test_raw_json_roundtrip_writer_fixture_corpus`: sweeps
+  the existing `tests/writers/json/*.md` corpus through a raw-json
+  identity roundtrip. Identity assertions subsume snapshots for this
+  format, and reusing the existing corpus avoids a parallel fixture
+  tree.
 - [x] Ran tests before implementing; failed for the expected reasons
-      (unresolved `writers::raw_json`, missing `UnexpectedRawJsonMarker`)
+  (unresolved `writers::raw_json`, missing `UnexpectedRawJsonMarker`)
 
 ### Phase 2 — implementation — DONE 2026-07-17
 
 - [x] Raw mode through `JsonConfig::raw` + streaming writer (marker-first
-      envelope; native tags in the eight extension arms via
-      `stream_write_span_like_raw` / `stream_write_shortcode_body`;
-      faithful `stream_write_config_value` raw branches incl. `m` merge-op
-      key and Q-3-57 for non-scalar YAML in `Scalar`)
+  envelope; native tags in the eight extension arms via
+  `stream_write_span_like_raw` / `stream_write_shortcode_body`;
+  faithful `stream_write_config_value` raw branches incl. `m` merge-op
+  key and Q-3-57 for non-scalar YAML in `Scalar`)
 - [x] Reader: marker validation (`read_raw_pandoc`) + raw arms guarded by
-      `SourceInfoDeserializer.raw` + faithful meta read-back;
-      pool/`read_ast_context` shared untouched (astContext gains
-      `exampleListCounter`, read leniently in both modes)
+  `SourceInfoDeserializer.raw` + faithful meta read-back;
+  pool/`read_ast_context` shared untouched (astContext gains
+  `exampleListCounter`, read leniently in both modes)
 - [x] `writers/raw_json.rs` / `readers/raw_json.rs` thin public entry
-      points; registered in `readers/mod.rs`, `writers/mod.rs`, `main.rs`
-      reader+writer arms, `options.rs` format tables
+  points; registered in `readers/mod.rs`, `writers/mod.rs`, `main.rs`
+  reader+writer arms, `options.rs` format tables
 - [x] **Bonus fidelity fixes found by the corpus sweep** (shared reader,
-      improves `-f json` too): `Link`/`Image` `target_source` (`targetS`)
-      and `Citation.id_source` (`citationIdS`) were written but dropped
-      on read-back; now restored (`read_target_source`,
-      `read_opt_source_ref`) with a dedicated regression test
-      (`test_raw_json_roundtrip_sidecar_source_infos`).
+  improves `-f json` too): `Link`/`Image` `target_source` (`targetS`)
+  and `Citation.id_source` (`citationIdS`) were written but dropped
+  on read-back; now restored (`read_target_source`,
+  `read_opt_source_ref`) with a dedicated regression test
+  (`test_raw_json_roundtrip_sidecar_source_infos`).
 - [x] All 21 raw-json tests green; full workspace suite green
-      (10099 passed)
+  (10099 passed)
 
 ### Phase 3 — end-to-end + docs
 
 - [x] End-to-end through the real binary (output inspected):
 
-      ```
-      $ echo 'Hello. {#free-floating-attribute} Here?' | pampa -t raw-json
-      {"pampa-json-format":{"version":1},"blocks":[{"c":[{"c":"Hello.","s":1,"t":"Str"},
-      {"s":2,"t":"Space"},{"a":{...},"c":["free-floating-attribute",[],[]],"s":3,"t":"Attr"},
-      {"s":5,"t":"Space"},{"c":"Here?","s":6,"t":"Str"}],"s":0,"t":"Para"}],
-      "meta":{"c":[],"s":7,"t":"MetaMap"},"astContext":{"files":[...],
-      "exampleListCounter":1,"p":[...]}}
-      ```
+  ```
+  $ echo 'Hello. {#free-floating-attribute} Here?' | pampa -t raw-json
+  {"pampa-json-format":{"version":1},"blocks":[{"c":[{"c":"Hello.","s":1,"t":"Str"},
+  {"s":2,"t":"Space"},{"a":{...},"c":["free-floating-attribute",[],[]],"s":3,"t":"Attr"},
+  {"s":5,"t":"Space"},{"c":"Here?","s":6,"t":"Str"}],"s":0,"t":"Para"}],
+  "meta":{"c":[],"s":7,"t":"MetaMap"},"astContext":{"files":[...],
+  "exampleListCounter":1,"p":[...]}}
+  ```
 
-      Piped back through `-f raw-json -t raw-json` twice: gen1 == gen2 ==
-      gen3 **byte-identical** (stronger than the contract requires for
-      this document), and `-f raw-json -t qmd` reproduces
-      `Hello. {#free-floating-attribute} Here?` exactly. The old
-      `-t json` path still errors with Q-3-32 on the same input
-      (asserted in tests).
+  Piped back through `-f raw-json -t raw-json` twice: gen1 == gen2 ==
+  gen3 **byte-identical** (stronger than the contract requires for
+  this document), and `-f raw-json -t qmd` reproduces
+  `Hello. {#free-floating-attribute} Here?` exactly. The old
+  `-t json` path still errors with Q-3-32 on the same input
+  (asserted in tests).
 - [x] Full `cargo xtask verify` (WASM leg required — pampa is in the
-      hub-client dependency chain). First run caught the classic
-      out-of-workspace trap: `wasm-quarto-hub-client/src/lib.rs` had an
-      exhaustive `JsonConfig` initializer (fixed with struct-update
-      syntax). Second run: all legs green except the 20 "live"
-      `hub-mcp.test.ts` tests, which require `wss://sync.automerge.org` —
-      down on 2026-07-17 (unrelated to this change; they are connection
-      timeouts in quarto-hub-mcp, which has no pampa dependency).
+  hub-client dependency chain). First run caught the classic
+  out-of-workspace trap: `wasm-quarto-hub-client/src/lib.rs` had an
+  exhaustive `JsonConfig` initializer (fixed with struct-update
+  syntax). Second run: all legs green except the 20 "live"
+  `hub-mcp.test.ts` tests, which require `wss://sync.automerge.org` —
+  down on 2026-07-17 (unrelated to this change; they are connection
+  timeouts in quarto-hub-mcp, which has no pampa dependency).
 - [ ] Design doc `claude-notes/designs/raw-json-format.md`: contract,
-      envelope, versioning policy, native tag vocabulary; cross-link from
-      `wire-format-source-info-codes.md` (raw-json is a second consumer of
-      the pool codes — same allocation policy applies)
+  envelope, versioning policy, native tag vocabulary; cross-link from
+  `wire-format-source-info-codes.md` (raw-json is a second consumer of
+  the pool codes — same allocation policy applies)
 - [ ] File low-priority strand: JSON reader errors lack Q-codes
-      (pre-existing; noted in Phase 0 decisions)
+  (pre-existing; noted in Phase 0 decisions)
 - [x] Comment findings on k-42 (done at design time)
 - [ ] Close the loop on GH issue #11 (after review/merge)
 
 ## Notes / references (2026-07-17 code study)
 
-- Writer: `crates/pampa/src/writers/json.rs` (~5200 lines; streaming
+- Writer: `crates/pampa/src/writers/json.rs` (\~5200 lines; streaming
   `stream_write_pandoc` :3926 is the production path; Q-3-32 emit :922-934;
   pool `SourceInfoSerializer` :271; meta `write_config_value` :1662).
 - Reader: `crates/pampa/src/readers/json.rs` (strict `read` :1267 / lenient

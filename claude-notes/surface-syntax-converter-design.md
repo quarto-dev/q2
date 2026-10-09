@@ -50,8 +50,8 @@ knitrEngine.markdownForFile(file)
   - Converts via `markdownFromKnitrSpinScript()` (line 80)
 
 **Conversion function locations**:
-- `core/jupyter/jupyter-filters.ts:33` - `markdownFromNotebookJSON()` (pure JS, ~10 lines)
-- `execute/jupyter/percent.ts:34` - `markdownFromJupyterPercentScript()` (pure JS, ~60 lines)
+- `core/jupyter/jupyter-filters.ts:33` - `markdownFromNotebookJSON()` (pure JS, \~10 lines)
+- `execute/jupyter/percent.ts:34` - `markdownFromJupyterPercentScript()` (pure JS, \~60 lines)
 - `execute/rmd.ts:428` - `markdownFromKnitrSpinScript()` (calls R's `knitr::spin()`)
 
 ### Current Coupling Points
@@ -102,9 +102,9 @@ Current tests must:
 
 | Format | Implementation | Lines | Complexity | Engine Dependency |
 |--------|---------------|-------|------------|-------------------|
-| `.ipynb` | Pure JS | ~10 | Low | None (just extracts markdown/raw cells) |
-| Percent scripts | Pure JS | ~60 | Medium | None (text parsing) |
-| R spin scripts | Calls R | ~20 | Medium | **R runtime required** |
+| `.ipynb` | Pure JS | \~10 | Low | None (just extracts markdown/raw cells) |
+| Percent scripts | Pure JS | \~60 | Medium | None (text parsing) |
+| R spin scripts | Calls R | \~20 | Medium | **R runtime required** |
 
 **Key observation**: 2 of 3 converters are pure text transformation with NO runtime dependencies. R spin could be implemented in Rust (similar complexity to percent scripts).
 
@@ -882,7 +882,7 @@ impl SourceConverter for RSpinConverter {
 
 **Phase 2** (optimization): Pure Rust implementation
 - Parse R spin syntax (similar to percent scripts)
-- ~100-200 lines of parsing code
+- \~100-200 lines of parsing code
 - 10-100x faster than calling R
 
 **Impact**: Don't block on optimization, ship with R subprocess initially.
@@ -949,9 +949,9 @@ impl SourceConverter for LegacyEngineAdapter {
 ### Phase 2: Core Converters (2-3 weeks)
 
 **Deliverables**:
-- `IpynbConverter` (pure Rust, ~100 lines)
-- `PercentScriptConverter` (pure Rust, ~150 lines)
-- `RSpinConverter` (calls R subprocess, ~50 lines)
+- `IpynbConverter` (pure Rust, \~100 lines)
+- `PercentScriptConverter` (pure Rust, \~150 lines)
+- `RSpinConverter` (calls R subprocess, \~50 lines)
 
 **Tests**: Each converter gets comprehensive test suite with fixtures.
 
@@ -962,7 +962,7 @@ impl SourceConverter for LegacyEngineAdapter {
 - Remove `markdownForFile()` from engine trait
 - Update engine implementations (jupyter, knitr, markdown)
 
-**Impact**: ~200-300 lines removed from engine code.
+**Impact**: \~200-300 lines removed from engine code.
 
 ### Phase 4: Pipeline Integration (2-3 weeks)
 
@@ -992,7 +992,7 @@ impl SourceConverter for LegacyEngineAdapter {
 | **Performance** | Sequential | Cacheable + parallel |
 | **Third-party support** | Complex | Simple trait impl |
 | **LSP support** | Limited | Full source mapping |
-| **Code size** | ~500 lines | ~800 lines (more explicit) |
+| **Code size** | \~500 lines | \~800 lines (more explicit) |
 
 ## Critical Design Questions
 

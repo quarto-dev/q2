@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-27
 **Braid:** bd-9fwn1504
-**Checkout:** worktree for bd-en2hvrwn (branch `main` @ `78d55deb`) — investigation only; the fix should land on its own branch.
+**Checkout:** worktree for bd-en2hvrwn (branch `main` \@ `78d55deb`) — investigation only; the fix should land on its own branch.
 **Status:** Design settled (2026-07-27, see "Design decisions") — ready to implement on its own branch.
 
 ## Triage verdict
@@ -20,7 +20,7 @@ Filed 2026-07-24 by Carlos (priority 1, bug). CI on PR #415 hit a failing random
 
 ## What the code looks like today
 
-Verified at `main` @ 78d55deb: `cargo xtask verify --skip-hub-build` is green **except** exactly this test once the seed file is present (7744 passed, 1 failed, fail-fast stopped the rest).
+Verified at `main` \@ 78d55deb: `cargo xtask verify --skip-hub-build` is green **except** exactly this test once the seed file is present (7744 passed, 1 failed, fail-fast stopped the rest).
 
 **Root cause (confirmed):** the `needs_plan` optimization in `compute.rs` drops a nested plan when every executed-side alignment is `KeepBefore` and no nested plans exist, inferring "contents identical." But alignments are per-*executed* item: the check misses **extra original items** (deletions) and **reordering** (`KeepBefore` matches by hash at any position). With the plan dropped, apply-side fallbacks use the *original* content wholesale, resurrecting deleted content.
 
@@ -74,7 +74,7 @@ compute saving that does not exist. Rationale, from the consumer audit:
   identity plan *moves* the original nodes, exactly like the fallback —
   bit-identical results. (b) changes behavior only in the buggy
   deletion/reorder cases, which is the fix.
-- **Cost:** transient plan storage ~200-400 bytes per cell/caption/slot
+- **Cost:** transient plan storage \~200-400 bytes per cell/caption/slot
   (a pathological 10k-cell table → a few MB, per preview keystroke in WASM);
   apply does O(n) pointer moves instead of one wholesale Vec move. Assessed
   as negligible; no benchmark deemed necessary. If measurement ever says
@@ -101,7 +101,7 @@ both-sides-present cases — caption `apply.rs:713-719`, cells
 entry remains possible, e.g. exec-only cells from row/column growth). Their
 "no plan means content matched exactly" comments encode the false invariant;
 leaving them as live-looking code invites the bug class back through a
-future compute site. (b)'s "simpler" claim is only true with this cleanup
+future compute site. (b)\'s "simpler" claim is only true with this cleanup
 done.
 
 ### Phase 2 scope: deferred
@@ -129,7 +129,7 @@ confirms it.
 
 - Phase 0 — Test plan (TDD):
   - Commit `proptest-regressions/lib.txt` as the regression pin (fails first).
-  - Unit tests, 4 sites × {deletion, reorder} (matrix above).
+  - Unit tests, 4 sites × \{deletion, reorder\} (matrix above).
   - Verify each fails before the fix.
 - Phase 1 — Remove `needs_plan` at the 4 compute sites **and** delete/reduce
   the corresponding apply-side fallbacks (required cleanup above). Update
@@ -175,10 +175,10 @@ Implementation (branch `braid/bd-9fwn1504-quarto-ast-reconcile-proptest`):
 - [x] Phase 2: `cargo nextest run --workspace` — 10508/10508 passed, 0 regressions
 - [x] Phase 2: full `cargo xtask verify` (WASM closure) — all steps passed
 - [x] Pre-commit review checklist (`claude-notes/instructions/review.md`):
-      HashMap greps clean, clippy clean, fmt via hook, TDD fail-first
-      verified for all 8 tests, no TODOs added
+  HashMap greps clean, clippy clean, fmt via hook, TDD fail-first
+  verified for all 8 tests, no TODOs added
 - [x] Committed (804a1b38), pushed as
-      `bugfix/bd-9fwn1504-quarto-ast-reconcile-proptest`, PR #422 opened
+  `bugfix/bd-9fwn1504-quarto-ast-reconcile-proptest`, PR #422 opened
 - [ ] CI green on PR #422, then merge (close strand on merge)
 
 Note on end-to-end verification: this fix is library-internal (the

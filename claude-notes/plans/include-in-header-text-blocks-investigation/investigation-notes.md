@@ -1,4 +1,4 @@
-# HEAD run (2026-08-20, main @ 87c0e21a)
+# HEAD run (2026-08-20, main \@ 87c0e21a)
 
 Invocation: `cargo run --bin q2 -- render claude-notes/plans/include-in-header-text-blocks-investigation/repro`
 then `grep -o 'marker-[a-d]' _site/<file>.html`.

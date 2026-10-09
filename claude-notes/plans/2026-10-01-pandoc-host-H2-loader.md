@@ -64,7 +64,7 @@ Append-only. Update it in the commit that ends each task and before any stop; a 
   - **A bare `for (;;);` is deleted by esbuild's minifier**, so H1's hang fault did nothing in a production bundle (the Playwright hang test caught it). `execute.ts` now spins on `performance.now()`; the package `dist/` was rebuilt. Any new "hang" must survive minification.
   - `@quarto/pandoc-host` resolves to `ts-packages/pandoc-host/dist` in a vite *build* (source only under vitest aliases): after editing the package, `npm run build -w ts-packages/pandoc-host` before building hub-client, as CI does.
   - Added host diagnostic codes (`pandoc-timeout`, `wasm-unsupported`, `worker-blocked`, `compile-blocked`, `download-failed`, `checksum-mismatch`, `offline`) to `HostDiagnosticCode`. `uiStateFor(outcome)` maps each failure class to one UI state for H5.
-  - The Playwright page hook `window.__quartoTest.pandoc` builds the request in the page (see the note on the Playwright task). Wait for `window.__quartoTestReady` to be *assigned* (`waitForFunction`) before awaiting it: `goto`'s load event can precede main.tsx.
+  - The Playwright page hook `window.__quartoTest.pandoc` builds the request in the page (see the note on the Playwright task). Wait for `window.__quartoTestReady` to be *assigned* (`waitForFunction`) before awaiting it: `goto`\'s load event can precede main.tsx.
   - `-M256k` makes a trivial document exit 251; `-M1m` does not.
   - vitest `toEqual` on two 16 MB typed arrays exhausts the heap; use `Buffer.equals`.
   - The Cache API is optional (proceeds uncached with a notice); `DecompressionStream`, `crypto.subtle` and exnref are hard errors with their own messages. Peak memory budget is still H3's job; measured here: ~8 MB RSS growth over 20 renders (Node).

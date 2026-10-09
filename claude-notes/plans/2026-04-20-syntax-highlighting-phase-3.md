@@ -23,7 +23,7 @@ Explicitly out of scope for Phase 3: user grammars on wasm32 (Phase 4), Playwrig
   - `crates/quarto-core/Cargo.toml:40-49` — `quarto-highlight` is gated to native-only. Move to unconditional `[dependencies]`.
   - `crates/quarto-core/src/stage/stages/mod.rs:23-36` — `mod code_highlight` / `pub use CodeHighlightStage` are wasm-gated out. Remove the gate.
   - `crates/quarto-core/src/pipeline.rs:169-170` and `:244-245` — two `#[cfg(not(target_arch = "wasm32"))] stages.push(CodeHighlightStage…)` calls. Remove the gate.
-- **Emit side**: `pampa`'s HTML writer already decodes `data-hl-spans` via the deps-light `quarto-highlight-encoding` crate. No changes needed on the emit side.
+- **Emit side**: `pampa`\'s HTML writer already decodes `data-hl-spans` via the deps-light `quarto-highlight-encoding` crate. No changes needed on the emit side.
 
 ## Work phases
 
@@ -38,13 +38,13 @@ Explicitly out of scope for Phase 3: user grammars on wasm32 (Phase 4), Playwrig
     ISO C99 and later do not support implicit function declarations
   ```
 
-  This was the only C-side failure; no other grammar crate produced a compile error. The error originated in `tree-sitter-html-0.23.2`'s `src/scanner.c`. After this is fixed, Rust-side errors (if any) will become visible.
+  This was the only C-side failure; no other grammar crate produced a compile error. The error originated in `tree-sitter-html-0.23.2`\'s `src/scanner.c`. After this is fixed, Rust-side errors (if any) will become visible.
 
 - [x] Un-gate quarto-highlight in `crates/quarto-core/Cargo.toml`, `stage/stages/mod.rs`, and `pipeline.rs` (done together with the observation step so the failing path existed).
 
 - [x] Add `towupper` shim to `c_shim.rs` + declaration in `wasm-sysroot/wctype.h`. C-side compile succeeds after this.
 
-- [x] **Unanticipated issue**: link stage fails with 8 duplicate-symbol errors on `snprintf`, `vsnprintf`, `fclose`, `fdopen`, `fputc`, `fputs`, `fwrite`, `fprintf`. Root cause: `tree-sitter-lua 0.5.0` and `tree-sitter-css 0.25.0` each compile `tree-sitter-language`'s upstream `wasm/src/stdio.c` on wasm32, which defines the same 8 symbols our `c_shim.rs` already defines (originally for the Lua runtime). See sub-plan **`claude-notes/plans/2026-04-20-wasm-shim-merge.md`** for the full analysis and fix (local patch of `tree-sitter-language` to empty `wasm/src/*.c` + merge our c_shim superset).
+- [x] **Unanticipated issue**: link stage fails with 8 duplicate-symbol errors on `snprintf`, `vsnprintf`, `fclose`, `fdopen`, `fputc`, `fputs`, `fwrite`, `fprintf`. Root cause: `tree-sitter-lua 0.5.0` and `tree-sitter-css 0.25.0` each compile `tree-sitter-language`\'s upstream `wasm/src/stdio.c` on wasm32, which defines the same 8 symbols our `c_shim.rs` already defines (originally for the Lua runtime). See sub-plan **`claude-notes/plans/2026-04-20-wasm-shim-merge.md`** for the full analysis and fix (local patch of `tree-sitter-language` to empty `wasm/src/*.c` + merge our c_shim superset).
 
 - [x] Completed the wasm-shim-merge sub-plan (`2026-04-20-wasm-shim-merge.md`). Summary:
   - Created `crates/tree-sitter-language-wasm-shim/` as a `[patch.crates-io]` drop-in that ships empty `wasm/src/*.c` files, so `tree-sitter-lua` / `tree-sitter-css` contribute no conflicting stdio symbols.
@@ -53,7 +53,7 @@ Explicitly out of scope for Phase 3: user grammars on wasm32 (Phase 4), Playwrig
   - Changed `fputc`/`fputs`/`fwrite` from panic to no-op returning success-like values, matching upstream `tree-sitter-language` convention.
 - [x] `cargo build --workspace` green.
 - [x] `cargo nextest run --workspace` green (7626 tests pass, up from 7597 — +29 wasm-printf-fmt tests).
-- [x] `cargo build --target wasm32-unknown-unknown --release` green for `wasm-quarto-hub-client`. Bundle size: **32.8 MB** uncompressed (~16 MB larger than the 17 MB pre-highlighting baseline from the research note, which matches the per-grammar estimate of ~1.5 MB × 12 grammars).
+- [x] `cargo build --target wasm32-unknown-unknown --release` green for `wasm-quarto-hub-client`. Bundle size: **32.8 MB** uncompressed (\~16 MB larger than the 17 MB pre-highlighting baseline from the research note, which matches the per-grammar estimate of \~1.5 MB × 12 grammars).
 - [ ] Add `towupper` (c_int → c_int) implementation to `wasm-quarto-hub-client/src/c_shim.rs` using `char::to_uppercase` on the ASCII-or-passthrough case, matching the existing `towlower` shim shape.
 - [ ] Add `wint_t towupper(wint_t wc);` declaration to `wasm-quarto-hub-client/wasm-sysroot/wctype.h`.
 - [ ] Move `quarto-highlight` out of `target.'cfg(not(target_arch = "wasm32"))'.dependencies` and into unconditional `[dependencies]` in `crates/quarto-core/Cargo.toml`. Update the comment above the block to reflect the new reality.
@@ -87,7 +87,7 @@ Explicitly out of scope for Phase 3: user grammars on wasm32 (Phase 4), Playwrig
 
 ### Phase 3.4 — Wrap-up
 
-- [x] Recorded bundle size: WASM binary ~32.8 MB (~16 MB over the 17 MB pre-highlighting baseline). Matches the per-grammar estimate from the research note. No numeric threshold was set per user guidance.
+- [x] Recorded bundle size: WASM binary \~32.8 MB (\~16 MB over the 17 MB pre-highlighting baseline). Matches the per-grammar estimate from the research note. No numeric threshold was set per user guidance.
 - [x] End-to-end verification recorded:
   - `cd hub-client && npm run dev:fresh` used to rebuild WASM + start dev server.
   - User loaded `claude-notes/fixtures/phase3-highlight-check.qmd` (no `theme:` frontmatter) in Firefox.
@@ -101,7 +101,7 @@ Phase 3 turned out to have four follow-on bugs that weren't predicted in the ori
 
 ### Unplanned 1: wasm-shim-merge
 
-First unplanned complication. tree-sitter-lua and tree-sitter-css ship their own `stdio.c` at compile time (via tree-sitter-language's wasm32 upstream), colliding with our `c_shim.rs`'s stdio stubs. Resolved via the `crates/tree-sitter-language-wasm-shim` local patch plus merging our shim to cover the union of format specifiers both callers need. See `2026-04-20-wasm-shim-merge.md`.
+First unplanned complication. tree-sitter-lua and tree-sitter-css ship their own `stdio.c` at compile time (via tree-sitter-language's wasm32 upstream), colliding with our `c_shim.rs`\'s stdio stubs. Resolved via the `crates/tree-sitter-language-wasm-shim` local patch plus merging our shim to cover the union of format specifiers both callers need. See `2026-04-20-wasm-shim-merge.md`.
 
 ### Unplanned 2: WASM default CSS missed the highlight layer
 
@@ -113,7 +113,7 @@ MorphIframe's `document.open(); document.write(html); document.close();` pattern
 
 ### Unplanned 4: Persistent IndexedDB cache served stale CSS after Rust-side upgrades
 
-The deepest and most educational. `CompileThemeCssStage`'s no-theme path uses an IndexedDB cache keyed on `"default_minified"`, with generational-purge sentinel `SCSS_RESOURCES_HASH`. That hash only covers `.scss` files; Rust-side changes to `compile_default_css` don't touch it. Users who'd warmed their IDB with pre-Phase-3 Quarto got served the old CSS forever (no purge trigger) while users on fresh profiles got the new CSS. Asymmetric and confusing; took multiple diagnostic rounds to pin down.
+The deepest and most educational. `CompileThemeCssStage`\'s no-theme path uses an IndexedDB cache keyed on `"default_minified"`, with generational-purge sentinel `SCSS_RESOURCES_HASH`. That hash only covers `.scss` files; Rust-side changes to `compile_default_css` don't touch it. Users who'd warmed their IDB with pre-Phase-3 Quarto got served the old CSS forever (no purge trigger) while users on fresh profiles got the new CSS. Asymmetric and confusing; took multiple diagnostic rounds to pin down.
 
 Two-step fix:
 - Immediate (`2824fceb`): bump the cache key suffix to `_v2` so stale entries become orphans.
@@ -121,16 +121,16 @@ Two-step fix:
 
 ### Unplanned 4a: Attempted cache-warm at WASM init broke Monaco
 
-A follow-on attempt to hide the per-deploy recompile cost: fire `compile_default_bootstrap_css(true)` during `initWasm()` as a fire-and-forget warm. On both Firefox and Chrome, this produced "too much recursion" errors inside Monaco's chunk — the warm forced `import("sass")` (a ~5 MB dynamic import that `sass.js` is specifically designed to lazy-load) to race with Monaco's own ~3 MB CDN load via Vite's module graph.
+A follow-on attempt to hide the per-deploy recompile cost: fire `compile_default_bootstrap_css(true)` during `initWasm()` as a fire-and-forget warm. On both Firefox and Chrome, this produced "too much recursion" errors inside Monaco's chunk — the warm forced `import("sass")` (a \~5 MB dynamic import that `sass.js` is specifically designed to lazy-load) to race with Monaco's own \~3 MB CDN load via Vite's module graph.
 
 Reverted in `35eb3828`. A comment in `wasmRenderer.ts` (`5b79af69`) warns future contributors not to re-add warm hooks at init-time.
 
 ## Open follow-up: a safer warm path (deferred)
 
-We still pay a one-time ~500 ms SASS compile on the first render after a deploy that touches `CSS_BUILD_ID`. That's acceptable for interactive use, but if future telemetry shows it as a real pain point, the right shape for a warm hook is:
+We still pay a one-time \~500 ms SASS compile on the first render after a deploy that touches `CSS_BUILD_ID`. That's acceptable for interactive use, but if future telemetry shows it as a real pain point, the right shape for a warm hook is:
 
 1. **Wait until Monaco (and other critical-path JS chunks) are fully loaded.** The warm must not compete with dynamic imports on the critical path.
-2. **Trigger from an app-level idle signal, not from `initWasm()`.** Candidates: a React effect that fires once the first project's file list has mounted and the user has a file choice to make; or `requestIdleCallback` (with `setTimeout` fallback for Safari) with a minimum delay (~3 s) to let the critical path finish.
+2. **Trigger from an app-level idle signal, not from `initWasm()`.** Candidates: a React effect that fires once the first project's file list has mounted and the user has a file choice to make; or `requestIdleCallback` (with `setTimeout` fallback for Safari) with a minimum delay (\~3 s) to let the critical path finish.
 3. **Treat dart-sass import-triggering as a scheduling concern, not a free call.** Anything that indirectly causes `import("sass")` is potentially the same class of bug. The comment in `wasmRenderer.ts` (`5b79af69`) documents this.
 
 Track as a separate beads issue if the compile cost becomes visible; otherwise leave alone.

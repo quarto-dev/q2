@@ -230,7 +230,7 @@ D.5 (docs) should be last so it reflects the final UX. D.6 can land in parallel 
 
 **Test plan:**
 
-1. Unit (server): given a dep graph (`a.qmd` includes `b.qmd`), a content change to `c.qmd` should NOT signal `a.qmd`'s SPA listener. Use a fake `ProjectDependencyGraph`.
+1. Unit (server): given a dep graph (`a.qmd` includes `b.qmd`), a content change to `c.qmd` should NOT signal `a.qmd`\'s SPA listener. Use a fake `ProjectDependencyGraph`.
 2. Unit (SPA): same, client-side filter variant if we go with that.
 3. Integration (e2e, lifts bd-0mji acceptance #2): edit an unrelated sibling, assert `__renderTicks` doesn't increment.
 4. Integration (e2e, bd-0mji acceptance #1): edit a true dependency, assert `__renderTicks` increments.

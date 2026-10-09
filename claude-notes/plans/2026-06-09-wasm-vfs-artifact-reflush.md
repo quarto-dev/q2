@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-09
 **Beads:** bd-q3bxnq2e
-**Worktree:** main checkout (branch `main`, based on `main` @ `ade34bed`)
+**Worktree:** main checkout (branch `main`, based on `main` \@ `ade34bed`)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
@@ -40,14 +40,14 @@ read-back contract.
 
 ## What the code looks like today
 
-All paths verified at `main` @ `ade34bed`. Pre-flight
+All paths verified at `main` \@ `ade34bed`. Pre-flight
 `cargo xtask verify --skip-hub-build` is green.
 
 ### Three flush sites, all unconditional
 
 1. **Single-doc render tail** — `crates/wasm-quarto-hub-client/src/lib.rs:1417-1425`
    (exactly as the strand quotes). Used by `render_qmd` /
-   `render_qmd_content` and by `render_page_in_project`'s no-project
+   `render_qmd_content` and by `render_page_in_project`\'s no-project
    fall-through. Flushes **all** of `ctx.artifacts` (page- and project-scope;
    the single-doc path never drains): one `content.clone()` + insert per
    artifact per render.
@@ -76,11 +76,11 @@ producers re-store them into `ctx.artifacts` every render:
 
 | Artifact | Producer | Size | Per-render source |
 | --- | --- | ---: | --- |
-| Theme CSS `quarto/quarto-theme-<fp>.css` | `compile_theme_css.rs` | ~200–400 KB (Bootstrap-based) | SASS LRU cache hit → clone of cached bytes (compile itself **is** cached) |
+| Theme CSS `quarto/quarto-theme-<fp>.css` | `compile_theme_css.rs` | \~200–400 KB (Bootstrap-based) | SASS LRU cache hit → clone of cached bytes (compile itself **is** cached) |
 | `bootstrap.bundle.min.js` | `bootstrap_js.rs:77` | 81 KB | `include_bytes!` static → `.to_vec()` |
 | bootstrap-icons CSS | `website_bootstrap_icons.rs:37` | 99 KB | `include_bytes!` static → `.to_vec()` |
 | bootstrap-icons woff | `website_bootstrap_icons.rs:41` | 180 KB | `include_bytes!` static → `.to_vec()` |
-| clipboard JS ×2 | `clipboard_js.rs:71,81` | ~10 KB | `include_bytes!` static → `.to_vec()` |
+| clipboard JS ×2 | `clipboard_js.rs:71,81` | \~10 KB | `include_bytes!` static → `.to_vec()` |
 | listing JS/CSS | `listing_render.rs:153-159` | small | per render |
 | plot images, resource copies | engines / `ResourceCollectorTransform` | unbounded | page-scoped |
 
@@ -99,7 +99,7 @@ sweep, 2026-06-09):
   (`ts-packages/preview-runtime/src/automergeSync.ts:88-108`: `onFileAdded` /
   `onFileChanged` / `onBinaryChanged` / `onFileRemoved` all call `vfsAddFile`-family;
   no reverse callback exists).
-- `WasmRuntime`'s VFS is a `HashMap<PathBuf, Vec<u8>>` behind an `RwLock`
+- `WasmRuntime`\'s VFS is a `HashMap<PathBuf, Vec<u8>>` behind an `RwLock`
   (`crates/quarto-system-runtime/src/wasm.rs:229`), no persistence hooks.
 - The only VFS artifact read-backs are the iframe post-processor
   (`hub-client/src/components/render/ReactAstSlideRenderer.tsx:770-775`, →
@@ -112,12 +112,12 @@ caps the severity: the "much worse" branch of the strand did not materialize.
 
 ### Severity caveat (why we measure before fixing)
 
-Memcpy of ~1–2 MB is sub-millisecond native and low-single-digit ms in WASM.
+Memcpy of \~1–2 MB is sub-millisecond native and low-single-digit ms in WASM.
 That is real per-keystroke waste but plausibly **not** the dominant preview
 cost (each render also re-runs the whole project pipeline). Per
 `claude-notes/instructions/performance-profiling.md`, Phase 1 quantifies with
 a scaled fixture *before* the fix is designed in detail; if the flush turns
-out to be <~5% of per-render time, we report that honestly and still decide
+out to be <\~5% of per-render time, we report that honestly and still decide
 (question 1 below) whether the cheap fix is worth landing.
 
 ## Proposed fix direction (draft, pending measurements)
@@ -143,7 +143,7 @@ Alternatives considered and deprioritized:
   still needs change detection — it collapses into the same mechanism with
   more bookkeeping.
 - **Content-hash registry**: avoids O(n) compare but adds state and hashing;
-  memcmp on equal bytes is already ~as fast as hashing one side.
+  memcmp on equal bytes is already \~as fast as hashing one side.
 
 ## Proposed phases (draft)
 
@@ -218,8 +218,8 @@ Raw output preserved at
 | skip | 3,677,492 | 69.8 | 0 | 3,677,492 | 51.3* |
 | skip | 6,954,292 | 131.2 | 0 | 6,954,292 | 52.8 |
 
-(*50.6 measured; table shows medians of independent runs — render time
-is flat ~51 ms throughout, as expected.)
+(\*50.6 measured; table shows medians of independent runs — render time
+is flat \~51 ms throughout, as expected.)
 
 Conclusions:
 
@@ -227,8 +227,8 @@ Conclusions:
    bytes** (both modes; ratios track byte ratios to within noise).
    No accidental quadratic behavior.
 2. **The flush was never a meaningful native cost.** At the realistic
-   400 KB themed-doc size it is ~11 µs against a ~51 ms render —
-   **0.02 %**. Even inflated to 7 MB of artifacts it is ~0.1–0.26 %.
+   400 KB themed-doc size it is \~11 µs against a \~51 ms render —
+   **0.02 %**. Even inflated to 7 MB of artifacts it is \~0.1–0.26 %.
    The per-keystroke latency lives in the render itself, not the flush.
    The strand's "suspected to contribute to observed preview perf
    issues" is **not supported** for the native proxy; any WASM-side
@@ -244,8 +244,8 @@ Conclusions:
    decision 1 the fix lands regardless, with this share stated
    honestly.
 4. **Producer-side cost (bd-w5qyuzeg) is the same magnitude** —
-   `producer_bytes` equals flushed bytes (~400 KB/render realistic),
-   i.e. another ~10–100 µs/render of memcpy natively. Recommendation
+   `producer_bytes` equals flushed bytes (\~400 KB/render realistic),
+   i.e. another \~10–100 µs/render of memcpy natively. Recommendation
    recorded on the strand: deprioritize to backlog unless a WASM
    browser profile shows allocation pressure mattering.
 - **Phase 1 — Test plan (TDD).** Committed red at `f2e328e8`; all five
@@ -336,7 +336,7 @@ chain (`npm run build:wasm` → `cargo xtask build-q2-preview-spa` →
 2. **Native proxy: yes**, un-gate `VirtualFileSystem` (not `WasmRuntime`) for
    native builds so the perf-harness driver exercises the actual flush code.
    Framing note from the user: the perf concern is **entirely hub-client
-   per-keystroke latency feel** — native builds are ~40–50× faster than
+   per-keystroke latency feel** — native builds are \~40–50× faster than
    Quarto 1 and not a worry. The native proxy exists to measure/iterate, not
    because native has a problem to fix.
 3. **Scope of site 3: change detection only in the in-memory VFS layer**;

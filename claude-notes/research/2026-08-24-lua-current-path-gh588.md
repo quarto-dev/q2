@@ -40,7 +40,7 @@ cwd; nothing in Lua mutates it during filter execution.
 Pandoc sets `PANDOC_SCRIPT_FILE` once per Lua state to the filter script it
 loaded (for Q1's single emulated state, that is quarto's own `main.lua`).
 Extension scripts are loaded into a sandbox env whose `PANDOC_SCRIPT_FILE` is
-the extension script (`wrapped-filter.lua:48`), but `init.lua`'s own machinery
+the extension script (`wrapped-filter.lua:48`), but `init.lua`\'s own machinery
 reads the state-global one — it serves only as the *bottom fallback* of
 `scriptDir()`.
 
@@ -134,7 +134,7 @@ time — equivalent outcome). The fourth is the divergence: Q1 has no analogue.
 | `quarto.utils.resolve_path` (`quarto_api.rs:490-511`) | `resolvePathExt` |
 | `quarto.doc` dependency path resolution (`quarto_doc.rs:137`) | `init.lua:898-934` |
 | WASM `dofile`/`loadfile` relative resolution (`dofile_wasm.rs:39`) | native cwd semantics |
-| the scoped `require`'s candidate walk (`quarto_api.rs:222-240`) | Q1 `scriptDirs()` in `package.path` |
+| the scoped `require`\'s candidate walk (`quarto_api.rs:222-240`) | Q1 `scriptDirs()` in `package.path` |
 
 The scoped `require` (only installed in the **shortcode** state,
 `shortcode.rs:117` — filters lack it entirely, which is #587) resolves a
@@ -287,7 +287,7 @@ Generalizing the #112 `dofile` decision (recorded in `dofile_wasm.rs:1-14`):
 > directory*, exactly as Quarto 1's `scriptFile` stack does.
 
 This should land as the header comment of the script-dir-stack section in
-`quarto_api.rs` (and `dofile_wasm.rs`'s header can point at it).
+`quarto_api.rs` (and `dofile_wasm.rs`\'s header can point at it).
 
 ## Test plan sketch (TDD, per repo policy)
 

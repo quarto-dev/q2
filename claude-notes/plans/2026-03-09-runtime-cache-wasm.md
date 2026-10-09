@@ -17,7 +17,7 @@ its `SystemRuntime` impl. This file is guarded by
 The file already has two sets of `#[wasm_bindgen]` extern declarations for
 JS bridge functions:
 
-1. **Template bridge** (lines ~51-80):
+1. **Template bridge** (lines \~51-80):
    ```rust
    #[wasm_bindgen(raw_module = "/src/wasm-js-bridge/template.js")]
    extern "C" {
@@ -27,7 +27,7 @@ JS bridge functions:
    }
    ```
 
-2. **SASS bridge** (lines ~92-120):
+2. **SASS bridge** (lines \~92-120):
    ```rust
    #[wasm_bindgen(raw_module = "/src/wasm-js-bridge/sass.js")]
    extern "C" {
@@ -201,5 +201,5 @@ deferred to the first consumer plan):**
 ## Reference
 
 See parent plan (`claude-notes/plans/2026-03-09-runtime-cache.md`) for API
-design, conventions, and design decisions (async rationale, Vec<u8> rationale,
+design, conventions, and design decisions (async rationale, `Vec<u8>` rationale,
 IndexedDB key format rationale, etc.).

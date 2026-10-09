@@ -364,7 +364,7 @@ cross-engine accumulator, and it happens host-side after the engine returned.)
 ### 4.1 Per-instance state — minimal
 
 An `ExecutionEngineInstance` is a closure literal. The only state it captures is:
-- the `EngineProjectContext` (`launch`'s parameter) — read-mostly project info:
+- the `EngineProjectContext` (`launch`\'s parameter) — read-mostly project info:
   `dir`, `isSingleFile`, `config`, `getOutputDirectory`, `resolveFullMarkdownForFile`,
   and a `fileInformationCache` (`src/project/types.ts:164-199`). The cache is the only
   mutable member, used by jupyter for transient-notebook tracking
@@ -422,7 +422,7 @@ fully completes before the next file begins. `renderFile` (single-file path) lik
 awaits one `renderFileInternal` (`render-files.ts:373-399`).
 
 Consequences:
-- Different files' / different engines' `execute()` calls **do not overlap**.
+- Different files\' / different engines\' `execute()` calls **do not overlap**.
 - The `quarto` API object's state is never *written* (it is immutable; §2), so the
   question of concurrent writers is moot — but even the serial loop never mutates it.
 - Daemon concurrency (a keepalive kernel staying warm across files) is an

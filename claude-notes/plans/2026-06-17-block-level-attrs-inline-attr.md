@@ -73,7 +73,7 @@ arms are left as-is.
       `pampa -t json cap.qmd | pampa -f json -t html` → `<p class="caption">…</p>`.
       Test `test_paragraph_trailing_attr_roundtrips`.
   - **Q-3-32 still live (no docs change).** The Para writer no longer errors, but
-      `native.rs` and `json.rs`' non-Para `Inline::Attr` paths (stray attr in a
+      `native.rs` and `json.rs`\' non-Para `Inline::Attr` paths (stray attr in a
       `Plain`, mid-content, etc.) still emit `Q-3-32`, so the error code stays
       emitted — the docs/ page needs no "no longer emitted" note.
 - [ ] List items (`<li class>`) — distinct hoist mechanism (attr rides on the

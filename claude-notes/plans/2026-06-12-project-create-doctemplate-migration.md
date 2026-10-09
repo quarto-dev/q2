@@ -11,9 +11,9 @@
 what it does:
 
 - **Native:** `render_ejs` is implemented by `js_native.rs` via embedded
-  deno_core/V8 — pulling rusty_v8 (~100MB prebuilt downloads, no musl
+  deno_core/V8 — pulling rusty_v8 (\~100MB prebuilt downloads, no musl
   prebuilts) into every native binary. **No native code path ever calls it**
-  (`quarto-project-create`'s only dependent is `wasm-quarto-hub-client`).
+  (`quarto-project-create`\'s only dependent is `wasm-quarto-hub-client`).
 - **WASM:** `render_ejs` goes through `wasm_bindgen` externs
   (`crates/quarto-system-runtime/src/wasm.rs`) into hub-client's
   `src/wasm-js-bridge/template.js`, backed by an esbuild EJS bundle

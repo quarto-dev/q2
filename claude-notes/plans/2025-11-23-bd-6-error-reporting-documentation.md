@@ -128,7 +128,7 @@ Create runnable examples in `examples/` directory:
 - [ ] Test DiagnosticCollector workflow
 
 #### 4.2 Catalog Validation Tests
-- [ ] All error codes follow Q-{subsystem}-{number} format
+- [ ] All error codes follow Q-\{subsystem\}-\{number\} format
 - [ ] Subsystem numbers are in valid range (0-9)
 - [ ] All catalog entries have required fields
 - [ ] All docs URLs are well-formed
@@ -184,7 +184,7 @@ A Quarto contributor should be able to:
 
 3. **Writer Error Pattern** (ansi.rs):
    - AnsiWriterContext accumulates errors during traversal
-   - Returns Result with Vec<DiagnosticMessage> on failure
+   - Returns Result with `Vec<DiagnosticMessage>` on failure
    - Allows continuing on non-fatal errors
 
 4. **Generic Migration Pattern** (used widely):
@@ -198,7 +198,7 @@ From claude-notes/error-reporting-design-research.md:
 1. Structured, machine-readable errors (JSON)
 2. Human-friendly terminal output (ANSI + ariadne)
 3. Tidyverse four-part structure
-4. TypeScript-style error codes (Q-{subsystem}-{number})
+4. TypeScript-style error codes (Q-\{subsystem\}-\{number\})
 5. Semantic markup with Pandoc spans
 
 ## Dependencies

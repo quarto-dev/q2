@@ -36,7 +36,7 @@ Sub-task status. Each line tracks one filed bd-issue; check off as merged.
   - [x] New `quarto_hub::server::OnFileChangedCallback` (fifth param of `run_server_with`). quarto-preview wires it from `run_with_on_ready`; dispatches via `spawn_blocking` + `pollster::block_on` since pipeline futures are `?Send`. Canonicalizes both project_root and the watcher path to survive macOS `/tmp` vs `/private/tmp`.
   - [x] 9 new unit tests (5 staleness + 4 canonicalization). All `cargo xtask verify --skip-hub-build` 12 steps green.
   - [x] Binary smoke against /tmp/c2-smoke confirms watcher path fires through to `on_file_changed`. Real-engine path (jupyter/knitr) not exercised in smoke; unit tests cover the toggle exhaustively against the test-passthrough engine.
-  - [x] In-process Rust integration test for the full watcher→staleness loop (bd-u3ze, 2026-05-14). `crates/quarto-preview/tests/staleness.rs` boots the full server, waits for the eager capture, atomically rewrites the cell body, and asserts the sidecar's staleness flag flips within 15 s. The original flake (timeout under `cargo nextest run` default capture on macOS) reproduced and was traced to multiple notify-rs FSEvents watchers running concurrently across nextest's per-test processes — confirmed by `--test-threads=1` making the entire suite pass. Worked around with a new `.config/nextest.toml` that serializes the three integration test binaries that arm a watcher (`staleness`, `eager_capture`, `boot`) into a `max-threads = 1` test group. Adds ~2-3 seconds to workspace runs; 5/5 reruns stable.
+  - [x] In-process Rust integration test for the full watcher→staleness loop (bd-u3ze, 2026-05-14). `crates/quarto-preview/tests/staleness.rs` boots the full server, waits for the eager capture, atomically rewrites the cell body, and asserts the sidecar's staleness flag flips within 15 s. The original flake (timeout under `cargo nextest run` default capture on macOS) reproduced and was traced to multiple notify-rs FSEvents watchers running concurrently across nextest's per-test processes — confirmed by `--test-threads=1` making the entire suite pass. Worked around with a new `.config/nextest.toml` that serializes the three integration test binaries that arm a watcher (`staleness`, `eager_capture`, `boot`) into a `max-threads = 1` test group. Adds \~2-3 seconds to workspace runs; 5/5 reruns stable.
 - [x] **C.5** (bd-kw93.5) — Stale-capture UX overlay + `/api/preview/re-execute`. Merged 2026-05-14.
   - [x] Server: new `POST /api/preview/re-execute` in `crates/quarto-preview/src/re_execute.rs`. Validates path (400), claims in-flight slot (409), kicks off `record_capture` on a blocking worker, writes new capture binary doc + sidecar update on success. Sidecar `state: error` + `lastError` on failure.
   - [x] Hub router refactor: `build_router_with_state` returns `Router<SharedContext>` so `extend_router` can register routes that consume `State<SharedContext>`. Final `with_state(ctx)` moves into `run_server_with`.
@@ -150,7 +150,7 @@ The epic says "byte-for-byte cell content vs last capture's `input_qmd`." Two fo
   - The whole serialized QMD (matches the input `EngineExecutionStage` already feeds to engines).
   - Just the code-cell content, ignoring prose changes.
 
-  The first matches `ReplayEngine`'s validation (byte-equality on input), but it makes *prose-only edits* appear to invalidate the engine capture. That's wrong — prose edits don't affect cell output, but they'd flip `staleness: true` and force the user to re-execute for no reason.
+  The first matches `ReplayEngine`\'s validation (byte-equality on input), but it makes *prose-only edits* appear to invalidate the engine capture. That's wrong — prose edits don't affect cell output, but they'd flip `staleness: true` and force the user to re-execute for no reason.
 
   The second requires a more careful parse-and-canonicalize step but matches the user's intuition.
 
@@ -178,7 +178,7 @@ C.1 wants the browser to show "Executing code…" while the server runs the firs
 
 The epic says "keyed by content hash." Open: hash what?
 
-- The full `input_qmd` bytes (matches `ReplayEngine`'s replay check).
+- The full `input_qmd` bytes (matches `ReplayEngine`\'s replay check).
 - A canonicalized "engine input" (would let prose-only edits keep using the cache without a re-execute prompt).
 
 **Recommendation:** **hash the full `input_qmd`** for v1, matching Q-C3's whole-QMD policy. Keep the cache key and the staleness check using the *same* canonicalization function so they never drift. Refinements come in a follow-up.
@@ -231,7 +231,7 @@ On every doc-content change (server-side), if a capture exists for that doc, com
 **Test plan:**
 
 1. Unit: the canonicalization function returns identical bytes for two equal QMDs; differing bytes for edits.
-2. Integration: load a fixture with an existing capture; edit a code cell on disk; assert `staleness: true` is written to the sidecar within the watcher debounce window (~600 ms after the edit).
+2. Integration: load a fixture with an existing capture; edit a code cell on disk; assert `staleness: true` is written to the sidecar within the watcher debounce window (\~600 ms after the edit).
 3. Integration: edit *prose* in a fixture with a capture. **Expected behaviour for v1 (per Q-C3):** `staleness: true` is also written, because we use whole-QMD byte-equality. Document this in the spec; a follow-up issue will refine.
 
 **Acceptance:** unit + both integration tests; the prose-staleness behaviour is documented as a known v1 limitation (see Q-C3).
@@ -377,7 +377,7 @@ Each sub-task lives on a `beads/<id>-<slug>` topic branch off `feature/q2-previe
 - **Shiny / observable / interactive runtimes.** Replay doesn't apply.
 - **PDF preview.** Q6 keeps Phase C HTML-only.
 - **Freeze integration.** Phase C captures live in samod + tempdir cache; honouring `freeze` is a future epic.
-- **Cross-doc capture invalidation.** A code-cell edit in `helper.qmd` doesn't currently invalidate `index.qmd`'s capture even if `index.qmd` includes `helper.qmd`. The dep-graph machinery for this exists (used by `q2 render` Phase 8) but isn't wired into Phase C's staleness check. Worth a Phase D follow-up; the simplest interpretation in v1 is "each doc's capture invalidates only on its own content changes."
+- **Cross-doc capture invalidation.** A code-cell edit in `helper.qmd` doesn't currently invalidate `index.qmd`\'s capture even if `index.qmd` includes `helper.qmd`. The dep-graph machinery for this exists (used by `q2 render` Phase 8) but isn't wired into Phase C's staleness check. Worth a Phase D follow-up; the simplest interpretation in v1 is "each doc's capture invalidates only on its own content changes."
 - **Phase D dep-graph filter for re-renders.** Tracked under bd-0mji from the Phase B follow-up. Independent of Phase C.
 
 ## Risks

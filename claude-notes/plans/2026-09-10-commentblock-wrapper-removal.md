@@ -1,4 +1,4 @@
-# q2-preview: remove `CommentBlock`'s per-block wrapper `<div>` (bd-q2wqj24c)
+# q2-preview: remove `CommentBlock`\'s per-block wrapper `<div>` (bd-q2wqj24c)
 
 **Date:** 2026-09-10
 **Braid:** bd-q2wqj24c (P2 bug; labels `parity`, `preview-renderer`)
@@ -86,7 +86,7 @@ Three findings that **narrow or redirect** the handoff's design:
    node never get chrome today. So the contract touches **five** components,
    and only `Plain` (a fragment, `blocks/Plain.tsx`) lacks a host element.
 2. **Reveal decks do not render `PreviewDocument`.** `RevealDeck.tsx:396-437`
-   renders `@revealjs/react`'s `<Deck>` directly under a `RegistryContext`; there
+   renders `@revealjs/react`\'s `<Deck>` directly under a `RegistryContext`; there
    is no `#quarto-content` in a deck. A layer "inside `#quarto-content`" would
    simply not exist for decks. This pushes the design toward a layer that does
    not depend on either document root (Q1 below), which as a side effect puts
@@ -142,7 +142,7 @@ after `npm run build:wasm` the file passes 7/7 (2026-09-10).
   accepted; the override infrastructure is expected to change and is not worth
   designing around now.
 - **D3 — `Plain`.** Option (a): the components that host a `Plain` in an
-  element provide that element through a `PlainHostContext`, and a `Plain`'s
+  element provide that element through a `PlainHostContext`, and a `Plain`\'s
   `CommentBlock` anchors to it. Blast radius today (see below): `BulletList`
   and `OrderedList` `<li>`s are the only sites where a `Plain` can *get* chrome;
   `DefinitionList` `<dd>`/`<dt>` only matter for read-only display of comments
@@ -279,7 +279,7 @@ nothing.
   then `cargo build --bin q2` before any browser check.
 - **Node.** All npm/vitest commands must run under Node 24
   (`fnm exec --using=24 …`); the shell's default Node 26 fails the verify
-  preflight and breaks ~23 hub-client unit tests spuriously.
+  preflight and breaks \~23 hub-client unit tests spuriously.
 
 ## Verification record (2026-09-10)
 
@@ -305,7 +305,7 @@ deck font/size fix).
 
 - DOM: `blockquote > h4` and `blockquote > p` hold; `.callout-body-container.callout-body`
   has `p` as first child with computed `margin-top: 0px` and last child
-  `margin-bottom: 0px` — the same values `q2 render`'s output computes for
+  `margin-bottom: 0px` — the same values `q2 render`\'s output computes for
   the same document (checked in the browser on `doc.html`); 3 `li > p`;
   tight `<li>`s have no child elements; no `.q2-comment-bubble` and no
   `position: relative` div inside `main#quarto-document-content`.
@@ -342,7 +342,7 @@ deck font/size fix).
 - Read-only `q2 preview` (`--port 4323`, no `--ui editor`, `?page=doc.qmd`):
   the five existing comments render as bubbles in the body-level layer, none
   inside `main`; `blockquote > h4` computes `margin-top: 25.5px` — the same
-  as `q2 render`'s `doc.html` in the same browser; callout body margins 0/0
+  as `q2 render`\'s `doc.html` in the same browser; callout body margins 0/0
   as above; the chrome's `font-family` equals the body's.
 - Gotcha met on the way: after rebuilding the embed, the already-open tab
   kept a **browser-cached** `q2-preview.html` whose asset URL now fell

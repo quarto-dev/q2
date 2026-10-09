@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-13
 **Braid:** `bd-heading-id-drops-inline-content-fl84n3ql` (bug, p3, label `markdown`)
-**Checkout:** main checkout `~/rooms/room-2/q2`, branch `main` @ `b677afd4`.
+**Checkout:** main checkout `~/rooms/room-2/q2`, branch `main` \@ `b677afd4`.
 No worktree or branch was created — `/investigate-beads` works in place.
 **Status:** **Implemented.** Scope settled with the user on 2026-08-13; see
 **Settled scope** and the **Phase log** at the bottom. The "Open design
@@ -123,7 +123,7 @@ leading character up to the first *letter*. q2's slug filter
 | `## 1 leading digit` | `leading-digit` | `1-leading-digit` |
 | `## .leading dot` | `leading-dot` | `.leading-dot` |
 
-This is in `auto_generated_id`'s filter, not in `collect_text` — a *different*
+This is in `auto_generated_id`\'s filter, not in `collect_text` — a *different*
 defect that happens to live in the same function. Raised as a scope question
 rather than assumed in.
 
@@ -222,7 +222,7 @@ Skeleton only — contents wait on the design discussion below.
    `pampa/src/citeproc_filter.rs:935` — plus `quarto-config/src/format.rs:129`,
    which has the same content-losing catch-all) is how this bug class keeps
    reappearing, and today all of them disagree. But consolidation is
-   `bd-zzke`'s job, it is `deferred`, and the TOC strand's scope note
+   `bd-zzke`\'s job, it is `deferred`, and the TOC strand's scope note
    deliberately sequences it *after* the TOC epic.
    **Recommendation: fix `autoid.rs` in place with an exhaustive match, and
    leave bd-zzke to absorb it later.** An id-slug helper has genuinely
@@ -291,7 +291,7 @@ Skeleton only — contents wait on the design discussion below.
   value. Worth one round-trip test.
 - **No conflict with `bd-toc-smart-quotes-6nro57ed`.** That epic changes
   `TocEntry.title` from `String` to inlines and rewires `toc_render`; it does
-  not touch `autoid.rs` or `postprocess.rs`'s header filter. The two can land
+  not touch `autoid.rs` or `postprocess.rs`\'s header filter. The two can land
   in either order. Doing this one first is cheap and makes the TOC epic's
   "TOC label and the anchor it targets disagree" symptom half-resolved.
 
@@ -403,7 +403,7 @@ every inline kind plus the dedup sequences `section`/`section-1`/… and
 **Phase 6 — user-facing blast radius. Zero.** `docs/` was rendered before and
 after and the full set of `<section id=…>` values diffed: **1250 ids across
 238 files, no change.** The one docs heading that looked at risk
-(`## \`--force\` and \`--trust\` are different permissions`) turns out to be a
+(`` ## `--force` and `--trust` are different permissions ``) turns out to be a
 callout title, not a section heading, so it never becomes an anchor.
 
 ## Strand outcomes

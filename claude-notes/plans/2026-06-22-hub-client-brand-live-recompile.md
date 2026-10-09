@@ -86,7 +86,7 @@ The fix is *only* the missing trigger; the rest of the chain is already correct:
    from already has the new brand bytes. (The agent's "sibling VFS sync" concern
    is moot — the live sync client does it; the only per-active-file `vfsAddFile`
    in `Editor.tsx:450-473` is the *replay* path, a separate mode.)
-2. **A re-render recompiles the theme.** `CompileThemeCssStage`'s cache key
+2. **A re-render recompiles the theme.** `CompileThemeCssStage`\'s cache key
    includes the resolved brand's YAML
    (`crates/quarto-core/src/stage/stages/compile_theme_css.rs:202-214`), so a
    brand change yields a **different `css:theme:<fp>` key** → cache miss →
@@ -102,7 +102,7 @@ So: trigger the re-render, and correct brand CSS follows automatically.
 
 ### Primary (recommended): parity with the HTML path
 
-Add `fileContents` to `ReactPreview`'s re-render effect dependency array
+Add `fileContents` to `ReactPreview`\'s re-render effect dependency array
 (`ReactPreview.tsx:650-657`), mirroring `Preview.tsx`:
 
 ```ts
@@ -128,7 +128,7 @@ Add `fileContents` to `ReactPreview`'s re-render effect dependency array
 
 ### Optional follow-up (not required): fine-grained dependency tracking
 
-The user framed it as "know that `slides.qmd`'s style depends on `_brand.yml`
+The user framed it as "know that `slides.qmd`\'s style depends on `_brand.yml`
 and recompile when *that* changes." That's a real optimization — re-render only
 when a file the active doc actually depends on (config/brand siblings, included
 files) changes, rather than on every sibling keystroke. But it adds a
@@ -140,17 +140,17 @@ extra deck re-renders matter. File as a separate optimization strand if desired.
 ## Verification plan (TDD) — DONE
 
 - [x] Integration test `ReactPreview.rerender.integration.test.tsx`: rendering
-      `ReactPreview` (format: revealjs) and swapping `fileContents` to a new Map
-      identity (a `_brand.yml` edit) must re-invoke `renderPageForPreview`. Red
-      before the one-line fix, green after. (commit `f4e2c25e`)
+  `ReactPreview` (format: revealjs) and swapping `fileContents` to a new Map
+  identity (a `_brand.yml` edit) must re-invoke `renderPageForPreview`. Red
+  before the one-line fix, green after. (commit `f4e2c25e`)
 - [x] **Live two-window check** on the running hub-client (the user's own two
-      windows on project `8e957fe2`): edited `_brand.yml`'s `palette.blue`
-      `#447099`→`#00cc00` in window B; window A's deck headings recompiled
-      `rgb(68,112,153)`→`rgb(0,204,0)` with **no reload**, theme blob URL
-      refreshed (`69cec62d…`→`96bc445d…`); reverted → headings back to blue
-      immediately. Project restored to original.
+  windows on project `8e957fe2`): edited `_brand.yml`\'s `palette.blue`
+  `#447099`→`#00cc00` in window B; window A's deck headings recompiled
+  `rgb(68,112,153)`→`rgb(0,204,0)` with **no reload**, theme blob URL
+  refreshed (`69cec62d…`→`96bc445d…`); reverted → headings back to blue
+  immediately. Project restored to original.
 - [x] hub-client `tsc -b`, `npm run test` (614), `npm run test:integration`
-      (75), `npm run build` (production) — all green. No regressions.
+  (75), `npm run build` (production) — all green. No regressions.
 - [x] No Rust/WASM change — pure TS.
 
 ## References

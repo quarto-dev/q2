@@ -27,7 +27,7 @@ rendering engine (`wasm-quarto-hub-client`). This build targets
 already compiles to WASM using Homebrew LLVM clang + a stub sysroot + Rust libc
 shims in `c_shim.rs`.
 
-The Lua filter engine in `pampa/src/lua/` (~24,600 lines) uses mlua (Rust
+The Lua filter engine in `pampa/src/lua/` (\~24,600 lines) uses mlua (Rust
 bindings to Lua 5.4 via C FFI). It's gated behind a `lua-filter` cargo feature,
 which was disabled for the WASM build because Lua's C implementation requires
 `setjmp`/`longjmp`.
@@ -168,7 +168,7 @@ upstream without significant discussion. A local fork keeps the experiment
 moving.
 
 **Cleanup path**: Contribute the wasm32 support upstream to `lua-src-rs`, or
-maintain as a `[patch.crates-io]` indefinitely. The patch is small (~50 lines
+maintain as a `[patch.crates-io]` indefinitely. The patch is small (\~50 lines
 in the build script + 29-line header).
 
 ### 2. `crates/wasm-bindgen-futures-patch/` — Patched wasm-bindgen-futures
@@ -378,7 +378,7 @@ pcall, and end-to-end filter through the full render pipeline.
 - **Upstream wasm-bindgen-futures fix**: The `UnwindSafe` bound removal is
   a reasonable change for the `panic=unwind` WASM use case.
 
-- **Binary size**: The WASM binary grew from ~10MB to ~14MB with Lua. Investigate
+- **Binary size**: The WASM binary grew from \~10MB to \~14MB with Lua. Investigate
   what can be trimmed (e.g., `wasm-opt`, LTO, excluding unused Lua source files).
 
 ### Nice to have

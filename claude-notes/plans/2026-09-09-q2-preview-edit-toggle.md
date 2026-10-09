@@ -132,7 +132,7 @@ adds an explicit effect (decision D6).
   `.default(true)` so stored prefs from before the key parse cleanly (same
   treatment as `richText`). *Rationale:* read mode is a way of working
   (reviewing, following links) rather than a one-off inspection like the
-  Authors overlay, and `q2 preview`'s equivalent is a per-session setting;
+  Authors overlay, and `q2 preview`\'s equivalent is a per-session setting;
   someone who turns editing off wants it to stay off across reloads.
   *Alternative:* session-only `useState` like Authors/Comments — one less
   schema change, but resets on every reload.

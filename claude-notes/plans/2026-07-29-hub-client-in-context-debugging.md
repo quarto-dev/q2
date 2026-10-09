@@ -198,7 +198,7 @@ A visual inspector mounted **inside the SPA**, over the **live repo**:
 construction. To observe the **editor's own** sync traffic:
 
 - Add an optional network-adapter wrap hook (or diagnostics event emitter) to
-  `quarto-sync-client`'s repo construction; reuse `LoggingNetworkAdapter`
+  `quarto-sync-client`\'s repo construction; reuse `LoggingNetworkAdapter`
   (move it from `src/debug/services/` to a shared location).
 - Ring buffer (e.g. last 500 messages, payloads summarized: type, docId,
   byte-size, timestamp) exposed as `quartoDebug.am.messages()` and rendered
@@ -296,7 +296,7 @@ Upstream accessors (each with tests first):
       `src/doc-inventory.test.ts` against the real test-hub (6 tests,
       incl. heads-advance-on-edit and dangling-entry cases)
 - [x] `preview-runtime` (`automergeSync.ts`): null-safe re-exports
-      (`getRepo` → null, `getDocInventory` → [] before connect); also
+      (`getRepo` → null, `getDocInventory` → `[]` before connect); also
       re-exported the `SyncDiagnostics`/`DocInventoryEntry` types from
       the barrel; mockSyncClient extended
 - [x] `projectSetService`: `getProjectSetDebugSnapshot()` via pure
@@ -460,7 +460,7 @@ Scope decisions at phase start:
   `openInspector()`.
 - `debug.css` has global selectors (`*`, `body`, `h1`, `button`…), so
   the panel gets its **own stylesheet scoped under
-  `.quarto-debug-inspector`**, restyling the reused components' class
+  `.quarto-debug-inspector`**, restyling the reused components\' class
   names; debug.html's file is untouched.
 - Panel covers the **sync-client repo only** (RepoContext mount);
   project-set/collections state appears in the Sync pane as JSON. The
@@ -484,7 +484,7 @@ Checklist:
 - [x] Component tests (5) mounting the panel with a storage-less Repo
 - [x] Playwright e2e `e2e/debug-inspector.spec.ts` — passing
 - [x] Suites + build:all green; panel splits into its own lazy assets
-      (`DebugInspectorPanel-*.js` ~ separate chunk, not in main bundle)
+      (`DebugInspectorPanel-*.js` \~ separate chunk, not in main bundle)
 - [x] Close bd-lb1cxprv
 
 #### Phase 3 end-to-end evidence (2026-07-30)
@@ -506,7 +506,7 @@ assertion (the first protocol message is a doc `request`, not `sync`)
 
 Branch: `braid/bd-09aja9gl-phase-4-iframe-embed`. Scope note: plain-DOM
 overlay (header + close + iframe), no React and no lazy chunk needed —
-the payload IS the iframe; `debug.html`'s existing `#doc=` hash seed
+the payload IS the iframe; `debug.html`\'s existing `#doc=` hash seed
 does the rest. Verification is unit tests + a manual local-prod pass
 (a Playwright spec would mostly re-test debug.html, which has its own
 coverage).

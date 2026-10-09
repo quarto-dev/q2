@@ -250,7 +250,7 @@ and gives up — which is why the fallback is a small change once a resolved
 2. **Seam: option (b)** — add a resolved `Option<Brand>` (+ its `brand_dir`) to
    `ProjectContext`, populated in `ProjectContext::discover` (which already
    takes a `&dyn SystemRuntime`, `crates/quarto-core/src/project/mod.rs:443`),
-   and thread it through `website_config`'s readers. Derived data stays out of
+   and thread it through `website_config`\'s readers. Derived data stays out of
    the user's config tree, and bd-hp3tx (navbar logo) inherits the same seam.
 
 3. **Rebasing: a pure helper in `quarto-brand`, no directory fields on `Brand`.**
@@ -292,7 +292,7 @@ path-valued keys (`template`, `template-partials`, `shortcodes`, `filters`) from
 (`metadata_merge.rs:216-227`). That is the whole pattern, in production, today.
 
 **The blocker is upstream of the rebaser: `_brand.yml` never becomes a
-`ConfigValue`.** `quarto-brand`'s dependencies are `quarto-util`, `serde`,
+`ConfigValue`.** `quarto-brand`\'s dependencies are `quarto-util`, `serde`,
 `serde_yaml`, `thiserror` — no `quarto-pandoc-types`, no `quarto-source-map`.
 `Brand::from_yaml_str` is a bare `serde_yaml::from_str`
 (`crates/quarto-brand/src/lib.rs:27`). A `Brand` therefore carries **no
@@ -303,7 +303,7 @@ back down to a `serde_yaml::Value` via `config_value_to_yaml_value`
 
 So routing brand logo paths through the `!path` machinery means first parsing
 `_brand.yml` into a `ConfigValue` and marking `logo.*` path-valued, à la
-`mark_path_valued_keys` — a real change to `quarto-brand`'s shape, well beyond
+`mark_path_valued_keys` — a real change to `quarto-brand`\'s shape, well beyond
 this strand.
 
 **Two caveats on the "reasons about where it came from" framing.** First, the
@@ -341,18 +341,18 @@ Implementation started 2026-07-27. Phases run in order; each ends green
 Tests 40–46 in `crates/quarto-core/tests/integration/website_post_render.rs`.
 
 - [x] Test 40 — brand `logo.small` → `<link rel="icon">` when `website.favicon`
-      is unset, correct page-relative href on a nested page — **fails at HEAD**
+  is unset, correct page-relative href on a nested page — **fails at HEAD**
 - [x] Test 41 — the logo file is copied into `_site/` — **fails at HEAD**
 - [x] Test 42 — brand in a subdirectory (`brand: _brand/_brand.yml`), the
-      rebasing case — **fails at HEAD**
+  rebasing case — **fails at HEAD**
 - [x] Test 45 — external `logo.small` URL → `<link>` emitted verbatim, **no**
-      copy attempted — **fails at HEAD**
+  copy attempted — **fails at HEAD**
 - [x] Test 43 — explicit `website.favicon` still wins over the brand logo —
-      *passes at HEAD* (guard: must keep passing)
+  *passes at HEAD* (guard: must keep passing)
 - [x] Test 44 — `logo.small` as a light/dark pair → no favicon, no diagnostic
-      (deferred to bd-v5z8w) — *passes vacuously at HEAD* (guard)
+  (deferred to bd-v5z8w) — *passes vacuously at HEAD* (guard)
 - [x] Test 46 — no `brand:` key → unchanged behavior — *passes vacuously at
-      HEAD* (guard)
+  HEAD* (guard)
 
 **Baseline run** (`cargo nextest run -p quarto-core -E 'binary(integration) &
 test(website_post_render::)'`): `20 tests run: 16 passed, 4 failed`. All four
@@ -392,16 +392,16 @@ explicit-`website.favicon` external case in Phase 3.
 
 - [x] Add `quarto-brand` as a dependency of `quarto-core`.
 - [x] `ResolvedBrand { brand, dir }` in **`quarto-brand`**
-      (`crates/quarto-brand/src/resolved.rs`).
+  (`crates/quarto-brand/src/resolved.rs`).
 - [x] `quarto_sass::resolve_brand(config, runtime, base_dir)` — one entry point
-      for "what brand does this config name?", reusing the existing
-      `extract_brand_ref` rules; `resolve_brand_layers` refactored onto it.
+  for "what brand does this config name?", reusing the existing
+  `extract_brand_ref` rules; `resolve_brand_layers` refactored onto it.
 - [x] `ProjectConfig::brand: Option<ResolvedBrand>`, resolved in `parse_config`.
 - [x] Failure is silent here; the theme stage keeps the diagnostic (note 1).
 - [x] Unit tests (`project::tests::project_brand`, 5/5 pass): no key → `None`;
-      root brand → `dir` = project root; subdirectory brand → `dir` =
-      the subdirectory; inline block → `dir` = `None`; unresolvable brand →
-      `discover` succeeds with `None`.
+  root brand → `dir` = project root; subdirectory brand → `dir` =
+  the subdirectory; inline block → `dir` = `None`; unresolvable brand →
+  `discover` succeeds with `None`.
 
 **Two design choices worth recording.**
 
@@ -411,8 +411,8 @@ all but one already using `..Default::default()`. So the field costs one real
 edit instead of 192 mechanical ones. It is also the better semantic home — the
 resolved brand *is* parsed project configuration, sitting next to `metadata`
 and `config_path`, and `parse_config` is the single place a `_quarto.yml`
-becomes a `ProjectConfig`, so "`config.brand` agrees with `config.metadata`'s
-`brand:` key" holds by construction.
+becomes a `ProjectConfig`, so \"`config.brand` agrees with `config.metadata`\'s
+`brand:` key\" holds by construction.
 
 *`ResolvedBrand` lives in `quarto-brand`, not `quarto-sass`.* "A brand plus
 where it came from" is a brand concept; `quarto-sass` merely happens to be
@@ -435,15 +435,15 @@ Flagged in Phase 5 rather than assumed.
 
 - [x] `quarto_util::is_external_url` — one shared predicate (6 unit tests).
 - [x] `ResolvedBrand::path_prefix_relative_to` /
-      `logo_resource_relative_to` / `favicon_relative_to`.
+  `logo_resource_relative_to` / `favicon_relative_to`.
 - [x] `LogoEntry::single()` exposed so a rebased logo keeps its alt text;
-      `single_path()` reimplemented on top of it.
+  `single_path()` reimplemented on top of it.
 - [x] 18 unit tests in `crates/quarto-brand/tests/integration/resolved_test.rs`
-      (50/50 in the crate pass): root, subdirectory, nested subdirectory,
-      logo path with its own subdirectory, sibling directory (upward `..`),
-      inline brand, external URL, protocol-relative URL, rooted path, no small
-      logo, light/dark pair, named logo with alt, `logo.images.*`, unknown
-      name, and the three prefix cases.
+  (50/50 in the crate pass): root, subdirectory, nested subdirectory,
+  logo path with its own subdirectory, sibling directory (upward `..`),
+  inline brand, external URL, protocol-relative URL, rooted path, no small
+  logo, light/dark pair, named logo with alt, `logo.images.*`, unknown
+  name, and the three prefix cases.
 
 **Built on what was already there, rather than beside it.** Two discoveries
 changed the shape of this phase:
@@ -487,18 +487,18 @@ Pinned by `light_dark_named_size_does_not_fall_through_to_images`.
 ### Phase 3 — The fallback itself ✅
 
 - [x] `website_config::resolved_website_favicon(meta, project)` — the single
-      answer to "what is this site's favicon", covering precedence, the brand
-      fallback, leading-slash normalization, URL passthrough, and project-kind
-      gating.
+  answer to "what is this site's favicon", covering precedence, the brand
+  fallback, leading-slash normalization, URL passthrough, and project-kind
+  gating.
 - [x] `WebsiteFaviconTransform` consumes it; `apply_favicon` now takes the
-      resolved value instead of re-reading the key.
+  resolved value instead of re-reading the key.
 - [x] `copy_favicon` consumes it, with an external-URL guard.
 - [x] 14 unit tests for `resolved_website_favicon`; the 11
-      `apply_favicon` unit tests reworked to be about link *emission* only,
-      plus 2 new URL cases.
+  `apply_favicon` unit tests reworked to be about link *emission* only,
+  plus 2 new URL cases.
 - [x] **Test 47** (new): a *default* project with a brand emits no favicon.
 - [x] `cargo nextest run --workspace`: **10577 passed, 0 failed**. All four
-      Phase 0 failures now pass.
+  Phase 0 failures now pass.
 
 **One function, not two edits.** `website_config.rs` was already documented as
 the one place `website.*` keys are read (Phase 7 Decision 7). Adding
@@ -517,7 +517,7 @@ project has no brand), so test 47 was added first. The explicit
 means, and gating it would be a regression.
 
 **Caught in self-review: the missing-file warning blamed the wrong key.**
-`copy_favicon`'s warning was hardcoded to `website.favicon refers to missing
+`copy_favicon`\'s warning was hardcoded to `website.favicon refers to missing
 file '…'`. Under the fallback that key doesn't exist anywhere in the project,
 so a typo'd brand logo would have sent the reader hunting for a `website.favicon`
 they never wrote. `resolved_website_favicon` now returns a `ResolvedFavicon`
@@ -539,30 +539,30 @@ from being flattened into the site-rooted `/host/f.ico`.
 ### Phase 4 — Docs ✅
 
 - [x] New "Brand logo as favicon" section (`#brand-favicon`) in
-      `docs/guides/authoring/brand.qmd`: the fallback, `website.favicon`
-      precedence, brand-relative paths, URLs, and the two no-favicon cases
-      (light/dark pair, non-website project).
+  `docs/guides/authoring/brand.qmd`: the fallback, `website.favicon`
+  precedence, brand-relative paths, URLs, and the two no-favicon cases
+  (light/dark pair, non-website project).
 - [x] Corrected the logo-preference table row from `website`/`book` to
-      `website`. Q2's fallback gates on `ProjectKind::Website`, and the book
-      project type is explicitly out of the websites-epic MVP — the row
-      described Q1. This one line is in scope because it documents *this*
-      feature; the page-wide "Q1 or Q2?" audit is bd-qnylgu69.
+  `website`. Q2's fallback gates on `ProjectKind::Website`, and the book
+  project type is explicitly out of the websites-epic MVP — the row
+  described Q1. This one line is in scope because it documents *this*
+  feature; the page-wide "Q1 or Q2?" audit is bd-qnylgu69.
 - [x] Rendered with Q2 (`cargo run --bin q2 -- render docs/guides/authoring/brand.qmd`)
-      and the output inspected: section renders, `#brand-favicon` anchor
-      exists, and the cross-link to `#light-and-dark-logos` resolves. The two
-      `Q-13-4` warnings on that page are pre-existing broken links at lines 977
-      and 1036, unrelated to this change.
+  and the output inspected: section renders, `#brand-favicon` anchor
+  exists, and the cross-link to `#light-and-dark-logos` resolves. The two
+  `Q-13-4` warnings on that page are pre-existing broken links at lines 977
+  and 1036, unrelated to this change.
 
 ### Phase 5 — Verification
 
 - [x] E2E through `cargo run --bin q2 -- render` on three fixtures; output
-      inspected and recorded in `repro-output.md`.
+  inspected and recorded in `repro-output.md`.
 - [x] `cargo nextest run --workspace`: **10577 passed, 0 failed**.
 - [x] Full `cargo xtask verify` (**not** `--skip-hub-build`): **all 14 steps
-      passed**, including the WASM rebuild and the hub-client build + tests.
-      This is the step that matters for the WASM risk below — `quarto-brand`
-      and the new `ProjectConfig` field both compile for
-      `wasm32-unknown-unknown`.
+  passed**, including the WASM rebuild and the hub-client build + tests.
+  This is the step that matters for the WASM risk below — `quarto-brand`
+  and the new `ProjectConfig` field both compile for
+  `wasm32-unknown-unknown`.
 - [x] `cargo xtask lint`: all checks passed (883 files).
 - [x] `cargo fmt --check`: clean.
 
@@ -631,7 +631,7 @@ proved nothing — the explicit key and the fallback would both have produced
 - **WASM.** `copy_favicon` is `#[cfg(not(target_arch = "wasm32"))]`; the
   transform is not. Whatever carries the brand must compile for
   `wasm32-unknown-unknown` (hub-client / `q2 preview`). `quarto-brand` already
-  does — it is in `quarto-sass`'s tree, which builds for WASM — but this needs
+  does — it is in `quarto-sass`\'s tree, which builds for WASM — but this needs
   `cargo xtask verify` (full, not `--skip-hub-build`) before push.
 - **Light/dark.** `Brand::favicon()` returns `None` for a `logo.small`
   light/dark pair by design, deferring the choice to the caller. Doing anything
@@ -639,7 +639,7 @@ proved nothing — the explicit key and the fallback would both have produced
 - **Docs drift — now tracked as bd-qnylgu69** (`related` to this strand).
   `docs/guides/authoring/brand.qmd` appears to be largely a port of Q1's brand
   documentation and describes behavior Q2 may not have — e.g. the
-  `{{< brand logo … >}}` shortcode (line 734ff) and navbar logo suppression via
+  `{{{< brand logo … >}}}` shortcode (line 734ff) and navbar logo suppression via
   `_quarto.yml` (line 483ff), the latter being bd-hp3tx, which is open. The
   audit strand also owns documenting that Q2 requires an explicit `brand:` key.
 - **Possibly related, not investigated:** bd-k5rxujiy — "`q2 preview`: logo

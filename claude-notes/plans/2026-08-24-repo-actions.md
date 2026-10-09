@@ -21,7 +21,7 @@
 - **Q1 reference implementation:** `external-sources/quarto-cli/src/project/types/website/website-navigation.ts` — `handleRepoLinks` (line 647) and `repoActionLinks` (line 830); config helpers in `website-config.ts` (`websiteRepoInfo` 227, `websiteRepoBranch` 255, `repoUrlIcon` 263, `websiteConfigActions` 271). Read these before changing URL construction.
 - **Testing:** `cargo nextest run`, never `cargo test`. Never pipe nextest through `tail` — it hangs.
 - **Per-task gate:** `cargo clippy -p <crate> --all-targets -- -D warnings` and `cargo nextest run -p <crate>`.
-- **Per-phase gate:** `cargo nextest run --workspace` (~3 min) at each phase boundary and before any push. Report its pass/skip delta against the live baseline captured in Task 0.
+- **Per-phase gate:** `cargo nextest run --workspace` (\~3 min) at each phase boundary and before any push. Report its pass/skip delta against the live baseline captured in Task 0.
 - **Integration tests** go in `crates/<crate>/tests/integration/<name>.rs` and are registered in `tests/integration/main.rs` as `pub mod <name>;`, alphabetized. **Never** add a new top-level `tests/<name>.rs` — see `.claude/rules/integration-tests.md`.
 - **`as_plain_text()`, never `as_str()`** when reading document metadata. A bare YAML string in front-matter context is `ConfigValueKind::PandocInlines`, for which `as_str()` returns `None`. The `metadata-as-str` lint rule enforces this.
 - **Every new error code needs its docs page and sidebar entry in the same commit** — the `error-docs-page-missing` and `error-docs-sidebar-unlisted` lint rules both fail otherwise. Sidebar entries within a section must ascend by code number.
@@ -92,11 +92,11 @@ Each of these was settled deliberately. Do not silently revisit them; if one loo
 
 - **D-3 — `page-footer: false` suppresses the footer copy, at *either* scope (deliberate divergence).** Q1's `handleRepoLinks` never checks `page-footer`, so with `page-footer: false` it synthesizes a footer anyway — arguably a Q1 bug. q2 honours the disable. Signed off.
 
-  **This does not fall out for free, and the obvious implementation gets it wrong.** `FooterRenderTransform`'s existing gate is `is_feature_disabled(&ast.meta, "page-footer")`, which reads the **top level only** (`transforms/config.rs:23`). Website-scoped `page-footer: false` never reaches it — it is handled further down by `resolve_page_footer`, which goes through `resolve_website_value` and returns `None` (`quarto-navigation/src/footer.rs:246-250`), leaving `navigation.footer` **absent**. Since D-2's synthesis branch fires precisely on "absent", a naive implementation would synthesize a footer for exactly the config that asked for none. Task 8 therefore gates synthesis on the **website-aware** form. Both scopes must be tested; Task 8 and Task 10 each cover both.
+  **This does not fall out for free, and the obvious implementation gets it wrong.** `FooterRenderTransform`\'s existing gate is `is_feature_disabled(&ast.meta, "page-footer")`, which reads the **top level only** (`transforms/config.rs:23`). Website-scoped `page-footer: false` never reaches it — it is handled further down by `resolve_page_footer`, which goes through `resolve_website_value` and returns `None` (`quarto-navigation/src/footer.rs:246-250`), leaving `navigation.footer` **absent**. Since D-2's synthesis branch fires precisely on "absent", a naive implementation would synthesize a footer for exactly the config that asked for none. Task 8 therefore gates synthesis on the **website-aware** form. Both scopes must be tested; Task 8 and Task 10 each cover both.
 
   The TOC copy is unaffected at either scope.
 
-- **D-4 — Page-level `repo-actions: true` is not supported; `false` is.** In Q1, `forceRepoActions` cannot enable the feature — the action list always comes from `website.repo-actions` — its only effect is `if (repoTargets.length === 0 && forceRepoActions)`, falling back to `#quarto-margin-sidebar` on a page with no TOC. Supporting it would require duplicating the `#quarto-margin-sidebar` div across an if/else in `FULL_HTML_TEMPLATE`'s hottest conditional **and** suppressing the `fullcontent` body class (`template.rs:903-915`), whose margin segments sum to ~0.28 × margin-width (~70px) and would squash the links. Disproportionate for a placement preference. Degradation is graceful: the page still shows all three links in the footer at every width. Announced via `Q-13-13` (severity `info`).
+- **D-4 — Page-level `repo-actions: true` is not supported; `false` is.** In Q1, `forceRepoActions` cannot enable the feature — the action list always comes from `website.repo-actions` — its only effect is `if (repoTargets.length === 0 && forceRepoActions)`, falling back to `#quarto-margin-sidebar` on a page with no TOC. Supporting it would require duplicating the `#quarto-margin-sidebar` div across an if/else in `FULL_HTML_TEMPLATE`\'s hottest conditional **and** suppressing the `fullcontent` body class (`template.rs:903-915`), whose margin segments sum to \~0.28 × margin-width (\~70px) and would squash the links. Disproportionate for a placement preference. Degradation is graceful: the page still shows all three links in the footer at every width. Announced via `Q-13-13` (severity `info`).
 
 - **D-5 — No diagnostic for the non-GitHub `.ipynb` edit drop; match Q1's silence.** Git archaeology shows the suppression is *deliberate*, not an oversight: `5c2186680` ("dont show edit source for ipynb", JJ Allaire, 2022-04-13 09:50) suppresses `edit` for all notebooks, and `967197b12` ("generate notebook edit urls for github.com", same author, 10:54 the same morning) carves out GitHub because `github.dev` can edit a notebook where GitHub's plain `/edit/` cannot. The rule is "don't offer an edit link that won't work"; what is stale is its allowlist. q2 also has no warn-once machinery, so a diagnostic would fire once per notebook page. The real gap is multi-host support — Task 15 files a strand referencing Q1 issue [#5301](https://github.com/quarto-dev/quarto-cli/issues/5301) (open; dups [#7155](https://github.com/quarto-dev/quarto-cli/issues/7155), [#12138](https://github.com/quarto-dev/quarto-cli/issues/12138)).
 
@@ -104,7 +104,7 @@ Each of these was settled deliberately. Do not silently revisit them; if one loo
 
 - **D-7 — `none` anywhere in the list clears it (deliberate divergence).** Q1 only special-cases `none` in the *string* form; `repo-actions: [none]` reaches Q1's `default:` branch and warns "Unknown repo action 'none'". But `[none]` is schema-legal (`definitions.yml:705` declares `maybeArrayOf: enum [none, edit, source, issue]`), and warning on schema-legal input is bad behavior. q2 treats `none` as clearing the list wherever it appears. Task 2 tests this.
 
-  **`none` clears the list outright — it also suppresses `issue-url`'s forced
+  **`none` clears the list outright — it also suppresses `issue-url`\'s forced
   link (revised 2026-08-25, deliberate divergence).** Q1 pushes `issue` onto the
   action list unconditionally whenever `issue-url` is set, immediately after
   `websiteConfigActions` has returned `[]` for `none`
@@ -1399,7 +1399,7 @@ git commit -m "Add Q-13-11/12/13 for repo-action misconfiguration (bd-repo-actio
 
 Create the module with only the test block, and **declare it in `mod.rs` in this same step** — add `mod repo_actions_render;` to `crates/quarto-core/src/transforms/mod.rs` now, not in Step 4. An undeclared file is never compiled, so without this Step 2 runs zero tests and exits 0 instead of failing. (The `pub use` for the transform still waits until Step 4, when the type exists.)
 
-**Copy the harness; you cannot import it.** `footer_render.rs`'s helpers are private to its own `#[cfg(test)] mod tests`. Copy `make_test_project`, `config_map`, `s`, and `b` verbatim from `crates/quarto-core/src/transforms/footer_render.rs:184-228`, and `arr` from `crates/quarto-core/src/transforms/footer_generate.rs:225` (it is not among footer_render's helpers):
+**Copy the harness; you cannot import it.** `footer_render.rs`\'s helpers are private to its own `#[cfg(test)] mod tests`. Copy `make_test_project`, `config_map`, `s`, and `b` verbatim from `crates/quarto-core/src/transforms/footer_render.rs:184-228`, and `arr` from `crates/quarto-core/src/transforms/footer_generate.rs:225` (it is not among footer_render's helpers):
 
 ```rust
 fn arr(items: Vec<ConfigValue>) -> ConfigValue {
@@ -1407,7 +1407,7 @@ fn arr(items: Vec<ConfigValue>) -> ConfigValue {
 }
 ```
 
-The copied helpers need the same imports `footer_render.rs`'s test module carries (`:184-195`) — `use super::*;` alone will not do:
+The copied helpers need the same imports `footer_render.rs`\'s test module carries (`:184-195`) — `use super::*;` alone will not do:
 
 ```rust
 use super::*;
@@ -1438,7 +1438,7 @@ async fn run(meta: ConfigValue, source: &str) -> (ConfigValue, Vec<DiagnosticMes
 }
 ```
 
-This mirrors `footer_render.rs`'s `run_with` (`:243-263`), with the document path parameterised so `page_relative_source` yields the `source` each test asks for. The tests:
+This mirrors `footer_render.rs`\'s `run_with` (`:243-263`), with the document path parameterised so `page_relative_source` yields the `source` each test asks for. The tests:
 
 ```rust
 #[cfg(test)]
@@ -2796,7 +2796,7 @@ Run: `cargo nextest run -p quarto --test integration smoke_all`
 
 - [x] **Step 5: Prove the assertions are live**
 
-A smoke-all fixture that silently fails to assert looks identical to one that passes. Temporarily add an impossible selector (`"div.this-cannot-exist"`) to `actions.qmd`'s must-match list, re-run the filtered command, confirm it **fails**, then remove it. Do not skip this — it is the only thing distinguishing a real fixture from a decorative one.
+A smoke-all fixture that silently fails to assert looks identical to one that passes. Temporarily add an impossible selector (`"div.this-cannot-exist"`) to `actions.qmd`\'s must-match list, re-run the filtered command, confirm it **fails**, then remove it. Do not skip this — it is the only thing distinguishing a real fixture from a decorative one.
 
 - [x] **Step 6: Keep the render output out of git**
 

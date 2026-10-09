@@ -64,14 +64,14 @@ A button to create a new card with form fields.
 
 The top of the connected view currently has three layers of redundant info:
 1. `App.tsx` h1: "Quarto Hub - Kanban"
-2. `App.tsx` connection bar: description, filePath, syncServer, [Disconnect]
-3. `KanbanApp.tsx` toolbar: "Live from filePath — N cards", [+ New Card], [Board], [Calendar]
+2. `App.tsx` connection bar: description, filePath, syncServer, \[Disconnect\]
+3. `KanbanApp.tsx` toolbar: "Live from filePath — N cards", \[+ New Card\], \[Board\], \[Calendar\]
 
 The file path appears 3 times and the sync server is shown but rarely needed.
 
 **Target layout**: A single compact toolbar row with:
 - Left side: "Kanban — kanban.qmd — N cards" + clickable index doc ID (copies to clipboard)
-- Right side: [Disconnect] [+ New Card] [Board|Calendar] (joined toggle group)
+- Right side: \[Disconnect\] \[+ New Card\] \[Board|Calendar\] (joined toggle group)
 
 **Implementation approach**: Move `onDisconnect` and connection metadata into `KanbanApp` as props,
 so it owns the single unified toolbar. Remove the h1 and connection bar from `App.tsx`.

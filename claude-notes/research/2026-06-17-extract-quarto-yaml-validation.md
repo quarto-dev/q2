@@ -26,14 +26,14 @@ the Quarto-specific error-code catalog.
    This makes extraction low-risk: nothing in the engine breaks if the crate moves.
 
 3. **The three *foundation* crates are heavily used inside q2.** `quarto-source-map`
-   (~26 dependents), `quarto-error-reporting` (~19), and `quarto-yaml` (8) are core
+   (\~26 dependents), `quarto-error-reporting` (\~19), and `quarto-yaml` (8) are core
    infrastructure. They **cannot simply be relocated** — q2 still needs them. The
    split therefore has to be a *publish-and-consume* arrangement (q2 depends on the
    externalized crates), not a move.
 
 4. **The hard design problem is error-code identity.** `quarto-yaml-validation`
    hard-codes Quarto error codes (`Q-1-10`, `Q-1-11`, …) and leans on
-   `quarto-error-reporting`'s centralized `error_catalog.json` (titles, docs URLs at
+   `quarto-error-reporting`\'s centralized `error_catalog.json` (titles, docs URLs at
    `https://quarto.org/docs/errors/...`). Outside q2 those codes and URLs are
    meaningless. The standalone library needs a *pluggable error-code / catalog
    provider*; the q2-embedded build keeps the existing `Q-1-x` codes. This is both a
@@ -88,8 +88,8 @@ All four share the workspace `[workspace.package]` metadata
 |---|---|---|
 | `quarto-yaml-validation` | `validate-yaml` only | **Trivial** — move freely; only the CLI follows |
 | `quarto-yaml` | pampa, quarto-core, quarto-config, quarto-error-reporting, quarto-lsp-core, validate-yaml (8) | q2 still needs it → must depend on externalized crate |
-| `quarto-error-reporting` | ~19 crates (pampa, quarto-core, quarto-config, quarto-csl, quarto-citeproc, quarto-doctemplate, quarto-lsp-core, quarto-preview, quarto-publish, quarto, wasm-quarto-hub-client, …) | Deeply embedded → cannot move; must be a shared dependency |
-| `quarto-source-map` | ~26 crates (most of the workspace, incl. WASM client) | Core infra → cannot move; must be a shared dependency |
+| `quarto-error-reporting` | \~19 crates (pampa, quarto-core, quarto-config, quarto-csl, quarto-citeproc, quarto-doctemplate, quarto-lsp-core, quarto-preview, quarto-publish, quarto, wasm-quarto-hub-client, …) | Deeply embedded → cannot move; must be a shared dependency |
+| `quarto-source-map` | \~26 crates (most of the workspace, incl. WASM client) | Core infra → cannot move; must be a shared dependency |
 
 **Consequence:** the only crate that *leaves* q2 cleanly is `quarto-yaml-validation`
 itself. The three foundation crates have to become shared/published dependencies that
@@ -110,13 +110,13 @@ validation crate uses it pervasively:
 - `ValidationDiagnostic` (in `diagnostic.rs`) calls `source_info.map_offset(...)` and
   `source_ctx.get_file(...)` to produce a `SourceRange` (filename + offset +
   line/col) for machine-readable JSON, and hands the `SourceInfo` to
-  `quarto-error-reporting`'s ariadne renderer for human text.
+  `quarto-error-reporting`\'s ariadne renderer for human text.
 
 The public `quarto-source-map` surface in play:
 `SourceContext`, `SourceFile`, `SourceInfo`, `FileId`, `Location`, `MappedLocation`,
 `map_offset`, `get_file`, `start_offset`/`end_offset`. This surface is general (it is
 not Quarto-specific in any way) — externalizing `quarto-source-map` is conceptually
-clean; the only cost is that ~26 q2 crates must now consume it as an external crate.
+clean; the only cost is that \~26 q2 crates must now consume it as an external crate.
 
 ## How `quarto-yaml-validation` couples to error reporting / the catalog
 
@@ -138,7 +138,7 @@ non-Quarto-specific in shape — it could move to the external library as-is.
   `Q-1-10` (missing required property), `Q-1-11` (type mismatch),
   `Q-1-12` (invalid enum), `Q-1-13`, `Q-1-14`, `Q-1-15`, `Q-1-16`, `Q-1-17`,
   `Q-1-18`, `Q-1-19`, `Q-1-20`, `Q-1-29`, `Q-1-99` (other).
-- These strings are looked up at render time in `quarto-error-reporting`'s
+- These strings are looked up at render time in `quarto-error-reporting`\'s
   **catalog**: `catalog.rs` loads `error_catalog.json` via `include_str!` into a
   `HashMap<String, ErrorCodeInfo>` where `ErrorCodeInfo { subsystem, title,
   message_template, docs_url, since_version }`. `DiagnosticMessage::docs_url()` does

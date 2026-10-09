@@ -77,9 +77,9 @@ inherits a clean answer.
     `type: "module"`, no build scripts — the files are loaded
     directly by Vite at each consumer).
   - `src/sass.js`, `sass.d.ts`, `cache.js`, `cache.d.ts`,
-    `fetch.js`, `template.js` — `git mv`'d from
+    `fetch.js`, `template.js` — `git mv`\'d from
     `hub-client/src/wasm-js-bridge/`.
-- Register the new workspace in root `package.json`'s
+- Register the new workspace in root `package.json`\'s
   `workspaces`.
 - Consumer wiring — `hub-client/vite.config.ts`,
   `hub-client/vitest.{,integration,wasm}.config.ts`, and
@@ -91,7 +91,7 @@ inherits a clean answer.
   }
   ```
   (For hub-client the path is `../ts-packages/...`; for the SPA
-  it's `../ts-packages/...` from `q2-preview-spa/`.) `wasm-bindgen`'s
+  it's `../ts-packages/...` from `q2-preview-spa/`.) `wasm-bindgen`\'s
   `raw_module = "/src/wasm-js-bridge/sass.js"` is unchanged — the
   alias rewrites where `/src/wasm-js-bridge/` resolves at consumer
   build time.
@@ -99,7 +99,7 @@ inherits a clean answer.
   (already has a similar one pointing at hub-client's copy from
   Phase 4 — retarget it to the new package). Drop the hub-client
   fallback.
-- Remove `hub-client/src/wasm-js-bridge/` (after `git mv`'s done
+- Remove `hub-client/src/wasm-js-bridge/` (after `git mv`\'s done
   its work — the directory should be empty).
 
 **Acceptance:**
@@ -118,7 +118,7 @@ inherits a clean answer.
   Confirms the subcommand is registered before any of it does anything.
 
 **Implementation:**
-- New `crates/quarto/src/commands/preview.rs` mirroring `commands/hub.rs`'s
+- New `crates/quarto/src/commands/preview.rs` mirroring `commands/hub.rs`\'s
   shape (`PreviewArgs` struct + `execute(args) -> Result<()>`).
 - `execute()` is a stub that prints "preview not implemented yet" and
   exits — A.5 wires it to actually boot.
@@ -200,7 +200,7 @@ This is the "engine-less render" path. Code cells appear as source
 
 **Implementation:**
 - New `src/services/connection.ts` in q2-preview-spa that wraps
-  `@quarto/preview-runtime`'s `connect()` and exposes file state to
+  `@quarto/preview-runtime`\'s `connect()` and exposes file state to
   the React tree (`useSyncedFiles()` hook or similar — the simpler
   shape, not a full Editor-level subscription).
 - `main.tsx` mounts a tiny `<PreviewApp>` component:
@@ -211,7 +211,7 @@ This is the "engine-less render" path. Code cells appear as source
     relevant automerge change.
 - Bridge resolution is taken care of by A.0 — the SPA's
   `vite.config.ts` aliases `/src/wasm-js-bridge` to
-  `@quarto/wasm-js-bridge`'s src. No per-consumer copy of the bridge
+  `@quarto/wasm-js-bridge`\'s src. No per-consumer copy of the bridge
   files.
 
 **Acceptance:**
@@ -281,14 +281,14 @@ the inspection.
 the real binary via Chrome DevTools — `# Hello, q2 preview!` +
 paragraph content render inside `<Q2PreviewIframe>` with the
 compiled Bootstrap theme applied; on-disk edits propagate to the
-iframe within ~2 s.
+iframe within \~2 s.
 
 The original A.5 work expanded once the binary was driven for the
 first time. Documented here for posterity (these surfaced gaps the
 plan didn't anticipate):
 
 - **A.5.4b — doc-id prefix.** `/health` returns the bare samod doc
-  id (e.g. `4ByAxLmG…`); `@quarto/preview-runtime`'s `connect()`
+  id (e.g. `4ByAxLmG…`); `@quarto/preview-runtime`\'s `connect()`
   expects automerge-repo's `automerge:<id>` form. PreviewApp's
   `fetchIndexDocId` now normalizes. Mirrors how hub-client's
   `App.tsx` normalizes `shareRoute.indexDocId` (App.tsx:287-290).
@@ -312,7 +312,7 @@ plan didn't anticipate):
 
 - **A.5.4d — cold-start peer race + multi-entry Vite build.**
   Two bugs uncovered together:
-  1. `quarto-sync-client.connect()`'s 1 ms `waitForPeer` is too
+  1. `quarto-sync-client.connect()`\'s 1 ms `waitForPeer` is too
      aggressive when there is no IndexedDB cache to fall back to.
      `findDoc()` then fired `handle.request()` before the samod
      handshake completed, the synchronizer saw `#peers` empty,
@@ -323,7 +323,7 @@ plan didn't anticipate):
      renderer host. The SPA's fallback was serving `index.html`
      for that path → recursive SPA load. Added a separate Vite
      rollup input + the matching `q2-preview.html` + entry stub,
-     mirroring `hub-client/vite.config.ts`'s pattern.
+     mirroring `hub-client/vite.config.ts`\'s pattern.
 
 - **A.5.4e — theme styling.** `Q2PreviewIframe` already owns the
   blob-URL + `UPDATE_THEME` plumbing for compiled theme CSS, but

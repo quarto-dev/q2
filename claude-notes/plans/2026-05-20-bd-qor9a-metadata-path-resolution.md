@@ -190,7 +190,7 @@ existing private helper) once we know the source-file directory.
 - [x] Phase 2.4: `SidebarEntry::from_config_value` / `from_plain_string` populates `href_source`
 - [x] Phase 2.5: `to_config_value` round-trip preserves `href_source`
 - [x] Phase 3.1: `resolve_metadata_path` helper in `navigation_href.rs`
-- [x] Phase 3.2: `resolve_metadata_path` unit tests (frontmatter-rooted, _quarto.yml-rooted, default/anonymous, external/fragment, outside-project-root edge case, leading-`/`, Substring chain)
+- [x] Phase 3.2: `resolve_metadata_path` unit tests (frontmatter-rooted, \_quarto.yml-rooted, default/anonymous, external/fragment, outside-project-root edge case, leading-`/`, Substring chain)
 - [x] Phase 3.3: `SidebarGenerateTransform` calls `resolve_metadata_path` on every href before storing `navigation.sidebar`
 - [x] Phase 3.4: `NavbarGenerateTransform` wires `resolve_metadata_path` for left/right items and `logo_href` (Navbar gained paired `logo_href_source` field)
 - [x] Phase 3.5: `FooterGenerateTransform` wires `resolve_metadata_path` for left/center/right `Items` regions
@@ -293,7 +293,7 @@ get the same `resolve_nav_path` call.
 
 Once `NavPath.source` is plumbed end-to-end, the missing-document
 warning helper from bd-8d6rk gets a `with_location(nav_path.source.clone())`
-call. The Q-13-* diagnostics now point at the exact YAML scalar that
+call. The Q-13-\* diagnostics now point at the exact YAML scalar that
 introduced the broken reference.
 
 Update the smoke tests under

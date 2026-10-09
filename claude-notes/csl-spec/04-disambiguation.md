@@ -151,7 +151,7 @@ Collapsing compresses cite groups or numeric ranges.
 
 | Value | Effect | Example |
 |-------|--------|---------|
-| `"citation-number"` | Collapse numeric ranges | "[1, 2, 3, 5]" → "[1–3, 5]" |
+| `"citation-number"` | Collapse numeric ranges | "\[1, 2, 3, 5\]" → "\[1–3, 5\]" |
 | `"year"` | Suppress repeated names | "(Doe 2000, Doe 2001)" → "(Doe 2000, 2001)" |
 | `"year-suffix"` | Also suppress repeated years | "(Doe 2000a, 2000b)" → "(Doe 2000a, b)" |
 | `"year-suffix-ranged"` | Also collapse suffix ranges | "(Doe 2000a, b, c)" → "(Doe 2000a–c)" |

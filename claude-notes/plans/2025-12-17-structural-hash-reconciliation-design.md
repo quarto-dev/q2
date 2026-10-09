@@ -31,7 +31,7 @@ We do **NOT** "transfer source locations" between ASTs. Instead, we **selectivel
 ### Concrete Example
 
 **Pre-engine (AST-A):**
-```markdown
+````markdown
 ## Hello
 
 foo.
@@ -41,10 +41,10 @@ print("Hello world")
 ```
 
 bar.
-```
+````
 
 **Post-engine (AST-B):**
-```markdown
+````markdown
 ## Hello
 
 foo.
@@ -54,7 +54,7 @@ Hello world
 ```
 
 bar.
-```
+````
 
 **Reconciled result:**
 ```
@@ -695,12 +695,12 @@ fn apply_container_reconciliation(
 
 When a container's hash changes because a child changed:
 
-- Original Div: contains [Para("foo"), CodeBlock({py}, "...")]
-- Executed Div: contains [Para("foo"), CodeBlock({}, "output")]
+- Original Div: contains `[Para("foo"), CodeBlock(\{py\}, "...")]`
+- Executed Div: contains `[Para("foo"), CodeBlock(\{\}, "output")]`
 
 The Div's hash changes (because children hashes changed), but we want to:
 1. Keep the Div's source location (it's the same Div structurally)
-2. Keep Para("foo")'s source location (it hasn't changed)
+2. Keep Para("foo")\'s source location (it hasn't changed)
 3. Use the executed CodeBlock (it changed)
 
 The `RecurseIntoContainer` alignment achieves this by:
@@ -886,9 +886,9 @@ We iterate executed blocks **in order**, and for each, find the **first unused**
 
 | exec_idx | exec_hash | Available originals | Chosen | Decision |
 |----------|-----------|---------------------|--------|----------|
-| 0 | H1 | [0, 2] | 0 | `KeepOriginal(0)` |
+| 0 | H1 | `[0, 2]` | 0 | `KeepOriginal(0)` |
 | 1 | C2 | — | — | `UseExecuted(1)` |
-| 2 | H1 | [2] (0 used) | 2 | `KeepOriginal(2)` |
+| 2 | H1 | `[2]` (0 used) | 2 | `KeepOriginal(2)` |
 
 Result: Each "Hello." paragraph keeps its own original source location.
 

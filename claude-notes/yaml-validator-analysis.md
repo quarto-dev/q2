@@ -47,7 +47,7 @@ format:
 ```
 - Navigate to `format.html.theme`
 - Find schema for `theme` (enum of theme names)
-- Return completion items: ["default", "cosmo", "cerulean", ...]
+- Return completion items: `["default", "cosmo", "cerulean", ...]`
 
 ### 2. Annotated YAML Parser (`annotated-yaml.ts`)
 
@@ -119,7 +119,7 @@ AnnotatedParse {
 - `schema-navigation.ts` - Navigate schemas by path
 - `schema-utils.ts` - Schema utilities (completions, walking)
 - `schema.ts` - Schema state management
-- `resolve.ts` - Resolve $ref references
+- `resolve.ts` - Resolve \$ref references
 
 **Validation flow**:
 ```typescript
@@ -236,9 +236,9 @@ interface SchemaAnnotations {
 
 **Key schema files**:
 - `front-matter.ts` - Document frontmatter schema
-- `project-config.ts` - _quarto.yml project config
+- `project-config.ts` - \_quarto.yml project config
 - `chunk-metadata.ts` - Code cell options (#| key: value)
-- `brand.ts` - _brand.yml brand configuration
+- `brand.ts` - \_brand.yml brand configuration
 - `format-schemas.ts` - Format-specific schemas (html, pdf, docx, etc.)
 - `definitions.ts` - Shared schema definitions
 - `from-yaml.ts` - Load schemas from YAML files
@@ -328,10 +328,10 @@ interface EditorContext {
 ### With CLI
 
 CLI uses validation for:
-- Project config validation (_quarto.yml)
+- Project config validation (\_quarto.yml)
 - Document frontmatter validation
-- Extension validation (_extension.yml)
-- Brand validation (_brand.yml)
+- Extension validation (\_extension.yml)
+- Brand validation (\_brand.yml)
 
 Errors are formatted as TidyverseError and displayed to user.
 
@@ -408,7 +408,7 @@ let result = schema.validate(&instance);
 Current TypeScript:
 - Schemas defined in TypeScript code
 - Some loaded from YAML/JSON resources
-- Schema definitions are ~2000 LOC
+- Schema definitions are \~2000 LOC
 
 Rust approach:
 - Define schemas in Rust (most control)
@@ -462,31 +462,31 @@ Must preserve:
 3. **Context-aware completions** (based on formats, position)
 4. **Custom error messages** (from schema annotations)
 5. **Exhaustive completion** (auto-trigger)
-6. **Schema references** ($ref resolution)
+6. **Schema references** (\$ref resolution)
 
 ## Estimation
 
 ### Complexity: **High**
 
 **Why**:
-- Large surface area (~6,500 LOC TypeScript)
+- Large surface area (\~6,500 LOC TypeScript)
 - Complex schema system with many edge cases
 - Error handling must be excellent (user-facing)
 - Integration with MappedString critical
 - Completions need schema navigation logic
 - Must handle malformed input gracefully (IDE features)
 
-### LOC Estimate: ~4,000-5,000 lines Rust
+### LOC Estimate: \~4,000-5,000 lines Rust
 
 **Breakdown**:
-- AnnotatedParse + parsing: ~500 lines
-- Validator core: ~800 lines
-- Error handlers: ~600 lines
-- Schema types: ~400 lines
-- Schema definitions (frontmatter, project, etc.): ~1,500 lines
-- Completion generation: ~400 lines
-- Schema utilities (navigation, walking): ~500 lines
-- Tests: ~300 lines
+- AnnotatedParse + parsing: \~500 lines
+- Validator core: \~800 lines
+- Error handlers: \~600 lines
+- Schema types: \~400 lines
+- Schema definitions (frontmatter, project, etc.): \~1,500 lines
+- Completion generation: \~400 lines
+- Schema utilities (navigation, walking): \~500 lines
+- Tests: \~300 lines
 
 ### Time Estimate: 4-6 weeks
 

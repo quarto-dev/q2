@@ -32,7 +32,7 @@ discipline). The Spec is P6 + the design doc; where this file and the plan disag
 ### L-tier gate policy (stated once; referenced by every L row)
 
 **No silent skip — a silently-skipping test is a vacuous test.** Adopt the existing in-repo
-precedent verbatim: `crates/pampa/tests/integration/test.rs:160-180`'s
+precedent verbatim: `crates/pampa/tests/integration/test.rs:160-180`\'s
 `assert_good_pandoc_version()` **panics** with an actionable message when the local `pandoc` is
 outside its calibrated window (`PANDOC_ORACLE_MIN_VERSION = (3, 6)` /
 `PANDOC_ORACLE_MAX_VERSION = (3, 10)`, `test.rs:117-118`), with one deliberate escape hatch
@@ -75,7 +75,7 @@ discipline.
 
 | Anchor (identifier) | File | Line today | P6's citation | Verdict |
 |---|---|---|---|---|
-| `crossref.categories.all` literal | `mainstateinit.lua` | `categories` 32, `all` 33, closes ~118 | `32-119` | **OK** |
+| `crossref.categories.all` literal | `mainstateinit.lua` | `categories` 32, `all` 33, closes \~118 | `32-119` | **OK** |
 | `setup_crossref_category_indices()` / `add_crossref_category()` | `mainstateinit.lua` | 124 / 133 | (not cited) | added here |
 | `theorem_types` table (`alg` at 48-52) | `customnodes/theorem.lua` | 7-53 | `7-53` | **exact** |
 | `initialize_custom_crossref_categories(meta)` | `crossref/custom.lua` | 6; `add_crossref_category(obj_entry)` at 67; file is **157** lines | `6-158` | **drift (1 line over EOF)** |
@@ -83,7 +83,7 @@ discipline.
 | `title(type, default)` reading `param("crossref-"..type.."-title", default)` | `crossref/format.lua` | 4-7 | `4-7` | **exact** |
 | `crossref_callouts()` (`callout.order = add_crossref(...)` at 477) | `customnodes/callout.lua` | **469-482** | `467-480` | **drift (−2)** |
 | `decorate_callout_title_with_crossref` early return | `modules/callouts.lua` | fn 20, gate 22 | `22` | **exact** |
-| `callout_title_prefix`'s `fail("unknown callout prefix …")` | `modules/callouts.lua` | fn 6, `fail()` 9, `titlePrefix(...)` 17 | `6-11` (via P5) | **OK** |
+| `callout_title_prefix`\'s `fail("unknown callout prefix …")` | `modules/callouts.lua` | fn 6, `fail()` 9, `titlePrefix(...)` 17 | `6-11` (via P5) | **OK** |
 | `prependSubrefNumber(caption_content, float.order)` | `customnodes/floatreftarget.lua` | 221 (sibling at 275) | `221` | **exact** |
 | `local order = thm.order` in the Theorem renderer | `customnodes/theorem.lua` | **222** | `220` (P6 Finding 4) | **drift** — P5 already corrected this to 222; P6 still says 220 |
 | `if order == nil then return el end` | `customnodes/theorem.lua` | 278 | — (P3's) | **exact** |
@@ -102,7 +102,7 @@ Rust side (q2 proper, this worktree):
 | `pub fn read(meta, registry)` — "we map this **verbatim** to the Q1 schema" | `…/crossref/metadata.rs` | doc 14-16, fn 96 | `metadata.rs::read()` | **exact** |
 | `entries.retain(\|e\| e.key != "format")` — the only meta key filtered | `…/stage/stages/metadata_merge.rs` | **460** | `459-460` | **exact** |
 | `has_crossref_plain_data` (the `identifier`+`ref_type`+`kind` triple) | `…/transforms/crossref_index.rs` | 318-333 | by name | **exact** |
-| `index_custom_target` — per-ref-type counter, writes `plain_data.order = {section, order}` | `…/transforms/crossref_index.rs` | 250-311 (order write ~285-296) | by name | **exact** |
+| `index_custom_target` — per-ref-type counter, writes `plain_data.order = {section, order}` | `…/transforms/crossref_index.rs` | 250-311 (order write \~285-296) | by name | **exact** |
 | `parent: None, // subfloats deferred` / `in_appendix: false, // deferred` | `…/transforms/crossref_index.rs` | 304 / 307 | `in_appendix` "deferred" | **exact** — see Findings #2 |
 | `test_callout_with_crossref_id_gets_plain_data_triple` | `…/transforms/callout.rs` | 989 | by name | **exact** |
 | Callout's `plain_data` triple write | `…/transforms/callout.rs` | 277-300 (`ref_type` at 293) | `callout.rs` construction step | **exact** |
@@ -179,7 +179,7 @@ Things that do *not* discriminate, checked and rejected:
 - **`chapters`-scoped numbering / appendix** — Q2 hardcodes `in_appendix: false, // deferred`
   (`crossref_index.rs:307`) and never produces a chapter-scoped order, exactly as P6 Finding 5
   concluded. No live input.
-- **A `Proof`** — Q1's `crossref_theorems` does assign `proof.order`, but `proof.lua`'s renderer
+- **A `Proof`** — Q1's `crossref_theorems` does assign `proof.order`, but `proof.lua`\'s renderer
   never reads it (P3's audit, independently confirmed), so both states render identically.
 - **A duplicate id** — Q2 *skips* numbering the duplicate (`index_custom_target` returns before
   incrementing, `crossref_index.rs:262-271`) where Q1 would number it, so this genuinely
@@ -187,13 +187,13 @@ Things that do *not* discriminate, checked and rejected:
   asserting a diagnostic path as its numbering discriminator. Rejected as too indirect; recorded
   so it is not rediscovered.
 
-### D2 — the second, order-free discriminator: `sections.lua`'s collateral suppression
+### D2 — the second, order-free discriminator: `sections.lua`\'s collateral suppression
 
 Design doc §11/§12: under `crossref-numbering: external` the whole `quarto_crossref_filters`
 group is skipped, and `sections()` is inside it — so `number-sections: true` silently loses
 section numbers. **That loss is the cleanest available proof that the assign-group did not run**,
 because it involves **no order injection at all**: Q2 injects nothing for headers
-(`crossref_index.rs:212-214`'s `visit_header` only advances the counter stack; it never registers
+(`crossref_index.rs:212-214`\'s `visit_header` only advances the counter stack; it never registers
 the header as a target), so the surface changes on the suppression flag *alone*. Used by **T4.2**
 as a **labeled accepted-divergence golden** — the same pattern P7 already uses for mermaid. This
 does not fix, reopen, or relitigate §11; it captures the frozen loss as a reviewable artifact and
@@ -208,7 +208,7 @@ fallback does not fire for an unrelated reason. The guard's corrected predicate 
 strict superset (`refs.lua:198-212` adds every `theorem_types` key plus `"eq"` and `"sec"`).
 Required fixture properties, all three:
 
-1. **`ref_type` must be `nte`/`wrn`/`cau`/`tip`/`imp`** — one of `crossref.categories.all`'s
+1. **`ref_type` must be `nte`/`wrn`/`cau`/`tip`/`imp`** — one of `crossref.categories.all`\'s
    `kind = "Block"` entries, present in `by_ref_type`. `#nte-setup` is the canonical choice.
 2. **A `#thm-…` id on a callout is the trap, not the fixture.** Q2's `classify_cite_id`
    (`registry.rs:178`) splits on the first hyphen with no regard for the div's classes, so
@@ -230,7 +230,7 @@ Two P6 assertions are satisfied trivially by a broken render, and each needs a p
 - **Finding 3's deliberately-unnumbered Proof** (T5.4): "the Proof has no number" is satisfied by
   an empty document, a crashed filter chain, or a dropped node. Companion assertion: the proof's
   **body text** and its **`proof_types` label** ("Proof") are present in the output — the label is
-  produced only by `proof.lua`'s own renderer (`add_renderer("Proof", …)`, which P3 confirmed
+  produced only by `proof.lua`\'s own renderer (`add_renderer("Proof", …)`, which P3 confirmed
   never reads `.order`), so its presence proves the Route-R Proof node reached a real Q1 renderer.
 - **Every "prefix absent" row** (T4.2, T2.2): additionally assert the caption/heading **body text**
   is present, so an empty or failed render cannot pass. This is the same guard P3's companion
@@ -250,7 +250,7 @@ profile sets it). This is the hunk the rest of P6 discriminates against.
   Verified 2026-09-18: `grep -rn 'crossref-numbering' crates/` returns **zero hits**, and
   `grep -rn 'PipelineProfile' crates/` returns **zero hits** — both are introduced by predecessor
   plans (P1 Task 1 for the profile enum, P4 Task 4 for the builder).
-- No Lua changes. No vendored-tree changes. P3 already made `main.lua`'s
+- No Lua changes. No vendored-tree changes. P3 already made `main.lua`\'s
   `assignCrossrefNumbers` predicate read this param (P3 Task 2, anchor
   `if enableCrossRef then`, `main.lua:718`/`:719`-after-P4's-splice).
 
@@ -271,7 +271,7 @@ vendored tree**. Named by capability *and* task number because those companions 
 |---|---|---|---|---|---|
 | T1.1 | U | P4 Task 4's real params-blob builder function | build params for `PipelineProfile::Pandoc("docx")` → `assert_eq!(params["crossref-numbering"], "external")` | none — pure function over a profile value + a `Format` | the profile-gated insert added by this task |
 | T1.2 | U | same builder | build params for `HtmlRender` **and** `Preview` → `assert!(!params.contains_key("crossref-numbering"))` | none | the *gate* on that insert (as opposed to the insert) |
-| T1.3 | L | `PandocWriteStage` → P4's codec → a real `pandoc -L main.lua` run; the param is read by the vendored `main.lua`'s `assignCrossrefNumbers` | drive `render_qmd_to_pandoc` (or the `--to docx` CLI path) on a one-figure fixture → decode the `QUARTO_FILTER_PARAMS` the stage actually built → assert the key is present with value `external` | environment only: `QUARTO_SHARE_PATH`, `--data-dir`, the `pandoc` binary. No Lua and no builder is mocked. | the profile-gated insert, **plus** the fact that the builder is wired into the Pandoc stage at all |
+| T1.3 | L | `PandocWriteStage` → P4's codec → a real `pandoc -L main.lua` run; the param is read by the vendored `main.lua`\'s `assignCrossrefNumbers` | drive `render_qmd_to_pandoc` (or the `--to docx` CLI path) on a one-figure fixture → decode the `QUARTO_FILTER_PARAMS` the stage actually built → assert the key is present with value `external` | environment only: `QUARTO_SHARE_PATH`, `--data-dir`, the `pandoc` binary. No Lua and no builder is mocked. | the profile-gated insert, **plus** the fact that the builder is wired into the Pandoc stage at all |
 
 **Revert hunks, stated exactly:**
 
@@ -340,7 +340,7 @@ whose title begins with the "Note 3:" prefix that
 **Prerequisite.** Requires **P5's Route-R construction + post-construction order-assignment
 mechanism** (P5's checklist item "Route-R reconstruction … then post-construction `order`
 assignment"), **P5's bottom-up traversal contract** (P5's round-4 sub-finding — a `FloatRefTarget`
-inside a `Callout`'s `content` slot must be converted inner-first), **P4 Task 8's shim splice
+inside a `Callout`\'s `content` slot must be converted inner-first), **P4 Task 8's shim splice
 positioned before `quarto_normalize_filters`** (without that position, the wire Div's *retained*
 `callout`/`callout-<type>` classes are picked up by Q1's own class-keyed dispatcher —
 `ast/parse.lua:6-13` — and `Callout.parse()` rebuilds a callout with no `order`: a quiet
@@ -355,20 +355,20 @@ plus the shared post-construction `order` assignment specified in its **Task 2**
 |---|---|---|---|---|---|
 | T2.1 | L | P5's shim `Callout` arm + real `quarto.Callout` constructor + real `decorate_callout_title_with_crossref` + real `callout_title_prefix`/`titlePrefix` | external-mode render of a `#nte-setup` callout with injected `order = {order: 3, section: []}` → assert the callout title contains `Note`+NBSP+`3:` **and** the callout's body text | environment only (pandoc, datadir, blob). No Lua mocked; `quarto.Callout` is the unit under test's collaborator, not a stub. | **H2b** |
 | T2.2 | L | same chain, negative cell | external-mode render of an **unlabeled** `::: {.callout-note}` → assert body text present, assert **no** digit-bearing `Note …:` prefix, assert stderr carries no `unknown callout prefix` | same | the `plain_data.order` presence check guarding H2b (blanket assignment) |
-| T2.3 | L | the shim's **dispatch**, not its field-map | same fixture as T2.1 → assert an output shape only `callout.lua`'s registered renderer produces (for `docx`: the callout's boxed/table wrapper structure; assert it by a marker the generic unwrap path cannot produce) | same | **H2a** |
+| T2.3 | L | the shim's **dispatch**, not its field-map | same fixture as T2.1 → assert an output shape only `callout.lua`\'s registered renderer produces (for `docx`: the callout's boxed/table wrapper structure; assert it by a marker the generic unwrap path cannot produce) | same | **H2a** |
 | T2.4 | L | the nesting contract | a `FloatRefTarget` inside the `#nte-setup` callout's `content` slot, both carrying injected orders → assert **both** the callout's `Note`+NBSP+`3:` **and** the inner float's `Figure`+NBSP+`N:` appear | same | P5's traversal direction (cross-plan) |
 
 **Revert hunks, stated exactly:**
 
 - **T2.1** — Revert ⟨**H2b**, the `tbl.order = plain_data.order` assignment on
-  `quarto.Callout`'s second return value⟩ → `callout.order` is nil →
+  `quarto.Callout`\'s second return value⟩ → `callout.order` is nil →
   `callout_title_prefix` passes nil into `titlePrefix` → ⟨T2.1's `Note`+NBSP+`3:`
   assertion⟩ **RED**. **Updated 2026-09-18 — the RED is now a warn-and-skip, not a crash.**
   P3's companion established that this path had **no nil guard**, so reverting H2b used to abort
   the whole render (`modules/callouts.lua:17` → `titlePrefix` → `numberOption` →
-  `formatNumberOption`'s `local num = order.order`, `crossref/format.lua:124,140`, raising
+  `formatNumberOption`\'s `local num = order.order`, `crossref/format.lua:124,140`, raising
   *attempt to index a nil value*). **Gordon decided to add the guard** — it is now anchor **A7**
-  in P3's upstream patch, mirroring `float_title_prefix`'s
+  in P3's upstream patch, mirroring `float_title_prefix`\'s
   `if float.order == nil then warn(...) return {} end` (`crossref/tables.lua:229-231`). So with
   A7 in place, reverting H2b yields: pandoc exits **0**, stderr carries
   `field 'order' is missing from callout`, and the callout renders **without** the `Note`+NBSP+`3:`
@@ -409,7 +409,7 @@ plus the shared post-construction `order` assignment specified in its **Task 2**
   collapsing.** Three distinct states produce a prefix-free callout: (i) H2b missing (order never
   assigned), (ii) P5's `fail()`-guard fallback firing on an unregistered `ref_type`, (iii) the
   shim not dispatching Callout at all (H2a). **D3 removes (ii) by construction** — `nte` is in
-  `crossref.categories.by_ref_type`, verified against `mainstateinit.lua`'s `kind = "Block"`
+  `crossref.categories.by_ref_type`, verified against `mainstateinit.lua`\'s `kind = "Block"`
   entries — and **T2.3 separates (iii) from (i)**. Without both, a green T2.1 and a red T2.1 are
   each consistent with two different worlds.
 - **The `Note`+NBSP+`3:` form, not the bare word `Note`.** `Note` appears in the callout's own
@@ -441,7 +441,7 @@ and P6's plan states it outright ("no new export code, just the test"). Test fil
 - Production code merely *read*, not changed: `metadata_merge.rs:460`;
   `crates/quarto-core/src/crossref/metadata.rs:96` (`read`, whose doc comment at `:14-16` states
   the verbatim mapping); the serializer `write_config_value_as_meta` on the streaming path
-  (`crates/pampa/src/writers/json.rs`, reached from `stream_write_pandoc:4238`'s `meta` key).
+  (`crates/pampa/src/writers/json.rs`, reached from `stream_write_pandoc:4238`\'s `meta` key).
 
 **Acceptance criterion.**
 1. A fixture with front matter `crossref: {custom: [{key: dia, reference-prefix: Diagram}]}` run
@@ -463,9 +463,9 @@ Task 3/4's blob**, **P5's Route-R `FloatRefTarget`** (to inject an order at all)
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T3.1 | I | `MetadataMergeStage`'s real key-retention logic + `write_config_value_as_meta` | merge a fixture declaring `crossref.custom` → `pampa::writers::json::write` → assert `meta.crossref.custom[0].{key, reference-prefix}` present and verbatim | `ProjectContext`/`DocumentInfo`/`Format` fixtures, as P2 Task 5 already does | **cross-plan / negative-space**: `metadata_merge.rs:460`'s `retain` predicate |
+| T3.1 | I | `MetadataMergeStage`\'s real key-retention logic + `write_config_value_as_meta` | merge a fixture declaring `crossref.custom` → `pampa::writers::json::write` → assert `meta.crossref.custom[0].{key, reference-prefix}` present and verbatim | `ProjectContext`/`DocumentInfo`/`Format` fixtures, as P2 Task 5 already does | **cross-plan / negative-space**: `metadata_merge.rs:460`\'s `retain` predicate |
 | T3.2 | L | Q1's real `quarto_meta_init` → `initialize_custom_crossref_categories(meta)` → `add_crossref_category` → `setup_crossref_category_indices` → `float_title_prefix` | external-mode render of the same fixture with a `#dia-1` float carrying injected `order` → assert `Diagram`+NBSP+`1:` **and** the caption body text | environment only | **cross-plan**: the same `retain` predicate, **or** P2's `meta` emission |
-| T3.3 | I | `crossref/metadata.rs::read` + `RefTypeRegistry::register_custom` | assert the Q2 side registers `dia` with `source == RefTypeSource::CustomFromMetadata` | none | `metadata.rs`'s `register_custom` call at `:161` |
+| T3.3 | I | `crossref/metadata.rs::read` + `RefTypeRegistry::register_custom` | assert the Q2 side registers `dia` with `source == RefTypeSource::CustomFromMetadata` | none | `metadata.rs`\'s `register_custom` call at `:161` |
 
 **Revert hunks, stated exactly:**
 
@@ -477,7 +477,7 @@ Task 3/4's blob**, **P5's Route-R `FloatRefTarget`** (to inject an order at all)
   passthrough": the revert that reddens it is a hypothetical future regression, not a
   reversal of P6 work. Per the section above: negative-space guard, not a binding.
 - **T3.1 (second, cross-plan)** — Revert ⟨P2 Task 5's `meta` emission on the streaming wire path
-  (`json.rs:4238`'s `w.key("meta")`)⟩ → ⟨the same assertion⟩ **RED**. Legitimate cross-plan guard.
+  (`json.rs:4238`\'s `w.key("meta")`)⟩ → ⟨the same assertion⟩ **RED**. Legitimate cross-plan guard.
 - **T3.2** — Revert ⟨either hunk above⟩ → Q1's `initialize_custom_crossref_categories` finds no
   `meta.crossref.custom`, `by_ref_type["dia"]` stays nil, and `float_title_prefix`
   (`crossref/tables.lua:226`) hits its unknown-category `fail()` → the render **aborts** →
@@ -491,7 +491,7 @@ Task 3/4's blob**, **P5's Route-R `FloatRefTarget`** (to inject an order at all)
 - **T3.3** — Revert ⟨the `registry.register_custom(ref_type, kind, Some(src))` call at
   `crates/quarto-core/src/crossref/metadata.rs:161`⟩ → ⟨T3.3's
   `assert_eq!(def.source, RefTypeSource::CustomFromMetadata)`⟩ **RED**. **This one is a genuine
-  local binding** — but of *pre-existing* Q2 code, and `metadata.rs`'s own tests
+  local binding** — but of *pre-existing* Q2 code, and `metadata.rs`\'s own tests
   (`:319-345`) already cover it. **T3.3 is therefore a duplicate; do not write it.** It is listed
   only so the implementer does not "add the missing coverage" and finds the existing test instead.
 
@@ -571,7 +571,7 @@ those land; P6 sits after P3 and P5 in the graph precisely so that this task is 
 **Revert hunks, stated exactly:**
 
 - **T4.1 — this is the single most important seam in P6.** Revert ⟨Task 1's
-  `crossref-numbering: "external"` insertion in P4's params-blob builder⟩ → `main.lua`'s
+  `crossref-numbering: "external"` insertion in P4's params-blob builder⟩ → `main.lua`\'s
   `assignCrossrefNumbers` becomes true → `quarto_crossref_filters` runs →
   `crossref/figures.lua:27-37` overwrites the injected `order` with its own `indexNextOrder("fig")`
   result, which for the only figure is **`1`** → ⟨T4.1's `Figure`+NBSP+`7:` assertion⟩ **RED**.
@@ -594,7 +594,7 @@ those land; P6 sits after P3 and P5 in the graph precisely so that this task is 
   is the **only** per-mechanism assertion in the epic that all four survive external mode. Label
   it in the test as a tripwire, not as coverage.
 - **T4.4** — Revert ⟨P5's `tbl.order` post-construction assignment for **Theorem**⟩ →
-  `theorem.lua:278`'s `if order == nil then return el end` early-returns → no caption prefix →
+  `theorem.lua:278`\'s `if order == nil then return el end` early-returns → no caption prefix →
   ⟨T4.4's `Theorem`+NBSP+`5` assertion⟩ **RED**. **That hunk belongs to P5.** Note the asymmetry
   with Callout that P3's companion surfaced: Theorem's site is a clean `order == nil` guard, so
   its revert is a silent missing prefix; Callout's has **no guard** and its revert is a render
@@ -653,20 +653,20 @@ Proof case and Finding 5's cross-reference.
 **Acceptance criterion.**
 1. Rendering `parity-all-types.qmd` twice — once through the HTML leg, once through the Pandoc
    `--to docx` leg — yields the **same number** for each of the three labeled targets.
-2. The Proof renders with its `proof.lua` label and **no** number (**D4**'s companion assertion
+2. The Proof renders with its `proof.lua` label and **no** number (**D4**\'s companion assertion
    included).
 3. Both snapshots are committed, and the file's module doc states that this task's rows are
    **shape/gating for suppression** and that the discriminating rows live in Task 4 — so a future
    reader does not treat a green parity snapshot as evidence suppression works.
 
-**Prerequisite — and this is where `94f060ae9`'s unschedulable ordering gets resolved, not
+**Prerequisite — and this is where `94f060ae9`\'s unschedulable ordering gets resolved, not
 reintroduced.** P6's plan offers two options; **take option (a)**, with one correction:
 
 - The blocker is real: P7 owns `cargo xtask capture-pandoc-goldens`, and the epic runs P6 before
   P7, so P6 cannot inherit that harness.
 - **The plan's option (a) says "assert at the wire-AST/pandoc-JSON level." Taken literally that
   does not work**, and an implementer would discover it the hard way: `pandoc -f json -t json -L
-  main.lua` sets `FORMAT` to `json`, so `floatreftarget.lua`'s **docx** renderer (registration at
+  main.lua` sets `FORMAT` to `json`, so `floatreftarget.lua`\'s **docx** renderer (registration at
   `:666`) is never selected — the generic fallback at `:183` is, and the decoration path under
   test differs. Verified by reading the 11 `add_renderer("FloatRefTarget", …)` registrations P3's
   audit enumerates.
@@ -691,7 +691,7 @@ Also requires everything Task 4 requires, plus **P1's HTML leg unchanged** (for 
 | T5.2 | I | Q2's native HTML leg (`render_document_to_file`, realistic config per CLAUDE.md's end-to-end rule) | same fixture → HTML → extract the three numbers → assert they equal T5.1's | none | `crossref_index.rs`'s `index_custom_target` order write |
 | T5.3 | L+I | the two legs jointly | assert the **number triple** extracted from T5.1 equals the triple from T5.2, element-wise | environment only | P5's order assignment (cross-plan) |
 | T5.4 | L | P5's Route-R `Proof` + `proof.lua`'s registered renderer | same render → assert the proof's `proof_types` label ("Proof") **and** its body text are present, and that **no digit** follows the label | environment only | **none — Finding 3 is a deliberate absence**; see below |
-| T5.5 | — | Finding 5's Tabset-containing-subfloat nesting | **cross-reference only — no test here.** P5 owns this fixture (its round-4 traversal sub-finding names "a `FloatRefTarget` inside a `Callout`'s `content` slot, exactly P6 Finding 5's fixture"); P6's own nesting coverage is **T2.4**. | — | P5's traversal direction |
+| T5.5 | — | Finding 5's Tabset-containing-subfloat nesting | **cross-reference only — no test here.** P5 owns this fixture (its round-4 traversal sub-finding names "a `FloatRefTarget` inside a `Callout`\'s `content` slot, exactly P6 Finding 5's fixture"); P6's own nesting coverage is **T2.4**. | — | P5's traversal direction |
 
 **Revert hunks, stated exactly:**
 
@@ -716,9 +716,9 @@ Also requires everything Task 4 requires, plus **P1's HTML leg unchanged** (for 
   `has_crossref_plain_data` returns false and the indexer skips it; and Q1's `proof.lua` renderer
   never reads `.order` even when `crossref_theorems` assigns one (P3's audit, independently
   confirmed). **Both sides agree, so "no number" is over-determined and unrevertable.** What *is*
-  bound is **D4**'s companion: revert ⟨P5's `Proof` dispatch arm, or the `plain_data.type` field
+  bound is **D4**\'s companion: revert ⟨P5's `Proof` dispatch arm, or the `plain_data.type` field
   P5 filed with P2 (P2 Task 3)⟩ → either the unwrap path fires (no "Proof" label) or
-  `proof.lua:81`'s `proof_types[proof_tbl.type:lower()]` crashes on nil → T5.4's label assertion
+  `proof.lua:81`\'s `proof_types[proof_tbl.type:lower()]` crashes on nil → T5.4's label assertion
   **RED**. That is the "the path was actually exercised" half, and without it T5.4's no-digit
   assertion passes on a document that never rendered a Proof at all.
 
@@ -767,7 +767,7 @@ Documentation only. Grouped per the instruction to group same-shape mechanical i
     `indexNextChapter` is `crossref/index.lua:31-43`, not `31-41`.
   - Record the schedulability resolution for the number-parity golden — **option (a), corrected**:
     a real `--to docx` render with a P6-local text extractor, *not* a `-t json` round-trip (see
-    Task 5's Prerequisite for why `-t json` selects the wrong renderer). `94f060ae9`'s ordering
+    Task 5's Prerequisite for why `-t json` selects the wrong renderer). `94f060ae9`\'s ordering
     problem is resolved, not deferred.
   - **Re-scope Finding 5's subfloat paragraph to "dormant" (added 2026-09-18, decided with
     Gordon).** Finding 5 currently claims nested subfloats inside a Route-R Tabset "get the same
@@ -792,7 +792,7 @@ Documentation only. Grouped per the instruction to group same-shape mechanical i
 
 **Acceptance criterion.** `grep -n 'callout.lua:467\|theorem.lua:220\|custom.lua:6-158\|index.lua:31-41'
 claude-notes/plans/2026-08-20-pandoc-hybrid-P6-numbering-wiring.md` returns nothing; each of P6's
-four open `- [ ]` items is either `- [x]` with a commit reference or annotated with the task that
+four open ``- [ ]`` items is either ``- [x]`` with a commit reference or annotated with the task that
 owns it; the plan states the golden's extraction mechanism in one sentence.
 
 **Prerequisite.** None for the citation half (schedulable immediately). The checkbox half follows
@@ -810,8 +810,8 @@ Tasks 1-5.
   repo.** The rationale is not "docs don't need tests": the *purpose* of correcting a citation is
   to keep a future reader pointed at the right line, and the behavior those lines describe is
   bound elsewhere — `crossref_callouts()` by **T2.2** (its absence under external mode is why an
-  unlabeled callout stays unnumbered), `theorem.lua:222`'s order read by **T4.4**,
-  `custom.lua`'s registration by **T3.2**, and `indexNextChapter`/`startAppendix` by nothing at
+  unlabeled callout stays unnumbered), `theorem.lua:222`\'s order read by **T4.4**,
+  `custom.lua`\'s registration by **T3.2**, and `indexNextChapter`/`startAppendix` by nothing at
   all, deliberately (Finding 5: no live Q2 input). Adding a `cargo xtask lint` rule for plan-file
   citations is out of P6's scope and is not proposed here. This is the same verdict P3's
   companion reached for its own Task 1.
@@ -833,7 +833,7 @@ Every load-bearing branch and structural contract in P6, with either a bound sea
    and numbered headers if the hunk is reverted). Two discriminators, one hunk, two unrelated
    surfaces — so a RED is attributable.
 
-2. **`sections.lua`'s collateral suppression (design doc §11).** **Bound at T4.2, as a labeled
+2. **`sections.lua`\'s collateral suppression (design doc §11).** **Bound at T4.2, as a labeled
    accepted-divergence golden — and this is a deliberate divergence from P3's companion, which
    logged the same item `accepted-untested`.** P3's three reasons were: (a) it needs P4's transport,
    which P3 cannot reach; (b) it would pin Q1-Lua behavior Q2's own renderer does not match,
@@ -879,13 +879,13 @@ Every load-bearing branch and structural contract in P6, with either a bound sea
    acquire a number** — `accepted-untested` for the absence, explicitly. The **D4** companion
    assertion (the `proof_types` label and the body text are present) *is* bound, and reddens on
    P5's Proof dispatch arm or on the missing `plain_data.type` field (P2 Task 3) — the latter via
-   `proof.lua:81`'s unguarded `proof_types[proof_tbl.type:lower()]`, a crash P5 flagged as a
+   `proof.lua:81`\'s unguarded `proof_types[proof_tbl.type:lower()]`, a crash P5 flagged as a
    confirmed, not conditional, extension request.
 
 6. **Finding 5's Tabset-containing-subfloat fixture — who owns it, and can it exercise what it
    claims?** **One artifact, owned by P5; P6's own nesting coverage is T2.4; and the fixture cannot
    exercise subfloat numbering at all today** — see Findings for Gordon #2. P5's round-4 traversal
-   sub-finding already names the fixture in P5's terms ("a `FloatRefTarget` inside a `Callout`'s
+   sub-finding already names the fixture in P5's terms ("a `FloatRefTarget` inside a `Callout`\'s
    `content` slot, exactly P6 Finding 5's fixture") and P5's Layer-2 goldens own it. **Do not
    create a second one.** T2.4 is P6's contribution: it asserts both the outer Callout's and the
    inner float's numbers appear in one render, which is the property P6 Finding 5 actually cares
@@ -937,7 +937,7 @@ the gap tracked as `bd-plcqhfcn`. Nothing on this plan is open.
    Finding #2) and logged the callout gate `accepted-untested` pending your call; it lands squarely
    in P6's lap because P6 owns both the reclassification (Finding 4) and the external-mode wiring.
    Verified again this pass: `modules/callouts.lua:17` passes `callout.order` straight into
-   `titlePrefix` → `numberOption` → `formatNumberOption`'s `local num = order.order`
+   `titlePrefix` → `numberOption` → `formatNumberOption`\'s `local num = order.order`
    (`crossref/format.lua:124,140`) with **no nil guard on that path** — unlike the float side,
    which guards explicitly at `crossref/tables.lua:229-231`, and unlike Theorem, which guards at
    `customnodes/theorem.lua:278`. So under `crossref-numbering: external`, a `#nte-`-labeled
@@ -953,7 +953,7 @@ the gap tracked as `bd-plcqhfcn`. Nothing on this plan is open.
    correct Finding 4's framing for this site), or fold the guard into P3's PR?
 
    **RESOLVED 2026-09-18, decided with Gordon: fold the guard into P3's PR.** It is anchor **A7**
-   there, mirroring `float_title_prefix`'s order-nil guard line for line. Consequences applied in
+   there, mirroring `float_title_prefix`\'s order-nil guard line for line. Consequences applied in
    this file:
    - **P6's plan's Finding 4 framing needed no weakening — A7 makes it true.** Finding 4 says the
      degradation is "a nil-guarded early return, not an error." That was true of the *gate* at

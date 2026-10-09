@@ -51,7 +51,7 @@ Per this epic's own P5 precedent: **file separately, don't block the port on fix
 them.**
 
 1. **`font-paths:` (and brand.yml file-based fonts) are never wired to Typst's
-   `--font-path`.** `crates/quarto-core/src/stage/stages/typst_compile.rs`'s
+   `--font-path`.** `crates/quarto-core/src/stage/stages/typst_compile.rs`\'s
    `font_path_args()` only ever adds the vendored package-cache fonts dir — it never
    reads the `font-paths` metadata key at all (confirmed: zero matches for
    `"font-paths"` anywhere in `crates/**/*.rs`). Reproduced on 3 independent curated
@@ -83,7 +83,7 @@ them.**
    generated Typst source, which doesn't accept that suffix (needs `pt`/conversion).
 
 6. **`authors.lua` (shared pandoc filter, not typst-specific) crashes on multi-author
-   + `affiliation:`-as-string metadata.** `pandoc-template-features.qmd`:
+   \+ `affiliation:`-as-string metadata.** `pandoc-template-features.qmd`:
    `attempt to index a nil value (field 'integer index')` in
    `modules/authors.lua:358`, called from `processAuthorMeta`. This is a shared-filter
    bug (author normalization runs for every format), just first surfaced here because
@@ -234,7 +234,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
    an empty/missing value somewhere in the generated
    `#set page(background: align(..., box(inset: ..., image("...", width: ...))))` call
    (empty image path, empty inset, empty alignment, empty width, in various
-   combinations — e.g. `customize-without-path.qmd`'s simple `padding: 2rem` produces
+   combinations — e.g. `customize-without-path.qmd`\'s simple `padding: 2rem` produces
    `box(inset: , image("", width: 300px))`, and `posit/brand-logo.qmd` produces
    `align(, box(inset: , image("", width: )))` — nothing from `brand.logo` metadata is
    reaching the generated call). This is a large, close-to-total gap in brand.yml logo
@@ -252,7 +252,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
    copy and Q1's current upstream (`diff` confirmed empty) — it is not broken code, it
    is being fed data in the wrong shape. Confirmed via direct instrumentation
    (`io.stderr:write` probes temporarily added at the crash site and at
-   `processAuthorMeta`'s entry, then reverted — not committed) that:
+   `processAuthorMeta`\'s entry, then reverted — not committed) that:
    - `crates/quarto-core/src/transforms/authors_normalize.rs`'s
      `AuthorsNormalizeTransform` (registered unconditionally in `pipeline.rs` — "Runs
      right after metadata-normalize; format-agnostic like Q1's authors.lua pass", no
@@ -273,7 +273,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
      Q2) succeeds cleanly — Q1 has no Rust-side pre-normalization step, so the shared
      Lua only ever sees raw metadata, its only supported input shape.
    - **Fix is not "small, scoped" as originally estimated** — it's an architecture
-     question, not a one-line patch. `AuthorsNormalizeTransform`'s own outputs
+     question, not a one-line patch. `AuthorsNormalizeTransform`\'s own outputs
      (`by-author`, `labels.abstract`, etc.) are read directly by the typst template
      (`resources/pandoc-filters/typst-template/typst-show.typ:8,10,30` — `$if(by-author)$`/
      `$for(by-author)$`/`$labels.abstract$`), so the transform cannot simply be
@@ -300,7 +300,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
    writing anything). That fixed the crash but broke something not caught until a
    follow-up review: `q2 preview` on a document whose frontmatter declares a
    pandoc-hybrid format (`format: typst`/`docx`/...) doesn't get the `q2-preview`
-   pseudo-format substitution — `map_format_for_preview`'s doc comment says
+   pseudo-format substitution — `map_format_for_preview`\'s doc comment says
    "explicit non-html formats are honoured as-is" — so it falls through to the
    *native HTML pipeline* (`render_qmd_to_html`) with `ctx.format.identifier` still
    `Typst`/`Docx`/etc. `authors.lua` never runs on that leg (no real `pandoc`
@@ -404,13 +404,13 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     real behavior differs between margin/book and plain-document contexts, or whether
     something more specific to these three fixtures is wrong, is unresolved. Do not
     attempt a fix without a dedicated research pass first.
-12. **[Corrected 2026-10-01, fixed by PR #772: pandoc already emits Skylighting output;
-    only plumbing and generated definitions were missing.]**
+12. **\[Corrected 2026-10-01, fixed by PR #772: pandoc already emits Skylighting output;
+    only plumbing and generated definitions were missing.\]**
     **Skylighting-based syntax highlighting for Typst is not implemented at all — the
     single largest capability gap found this session.** Q2's Typst output always uses
     Typst's own native/idiomatic code highlighter (bare ` ```python ` fenced blocks,
     colored by Typst itself at compile time), **regardless of the `syntax-highlighting:`
-    metadata setting**. Quarto's own Skylighting-based highlighting — Q1's *default*
+    metadata setting**. Quarto\'s own Skylighting-based highlighting — Q1\'s *default*
     mode, which generates `#Skylighting(...)`/`#KeywordTok`/`#StringTok`/etc. calls, a
     theme-specific `#show raw.where(block: true): set text(...)` styling block, and
     integrates with brand.yml's `monospace-*` tokens — has no implementation for Typst
@@ -444,15 +444,15 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     or per-element PDF text styling. Only the single-mainfont/basefont case (already
     sampled by the predecessor plan) works.
 16. **Smart-quote heuristic gap: possessive apostrophe in a heading hard-errors.**
-    `## \`P(A|B)\` = Bayes' Rule` fails to parse: `[Q-2-10] Closed Quote Without Matching
+    ``## `P(A|B)` = Bayes' Rule`` fails to parse: `[Q-2-10] Closed Quote Without Matching
     Open Quote`. Real Pandoc's smart-typography heuristic recognizes this extremely
     common English possessive-apostrophe pattern (no matching open quote nearby) and
     treats the `'` as an apostrophe, not a quote-close; Q2 hard-errors instead. Not
     Typst-specific — a general markdown/smart-quotes parser gap. Found via
     `theorem-inline-code-title.qmd`.
 17. **`brand.yml` `source: google` font fetching is not implemented for Typst.**
-    `pandoc-template-features.qmd` (`brand.typography.fonts: [{family: Fira Code,
-    source: google}]`) no longer crashes after bug #6's fix, but now fails
+    `pandoc-template-features.qmd` (`brand.typography.fonts: [\{family: Fira Code,
+    source: google\}]`) no longer crashes after bug #6's fix, but now fails
     `noErrorsOrWarnings` on a `typst compile diagnostic: warning: unknown font family:
     fira code` — the font is never fetched/registered, so Typst falls back silently
     (a warning, not a hard error) instead of rendering with the brand-declared
@@ -471,7 +471,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     extracted PDF document metadata — title/author/keywords/creator — against
     expected values) hits the `other => anyhow::bail!("Unknown assertion type")` arm
     and fails the whole fixture at spec-parse time, before rendering even starts.
-    Found via `pandoc-template-features.qmd`'s original (Q1) `ensurePdfMetadata`
+    Found via `pandoc-template-features.qmd`\'s original (Q1) `ensurePdfMetadata`
     block, which had to be dropped (not adapted — there is no equivalent) when
     porting; the `ensureTypstFileRegexMatches` checks kept in its place verify the
     same title/author/keywords signal at the Typst-source level (the
@@ -485,7 +485,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
 19. **`q2 preview` on a document with an explicit non-HTML `format:` (typst, docx,
     pptx, ...) silently drops TOC, crossref numbering, and apparently figure
     content — not caused by this session's work, found only as a side effect of
-    verifying bug #6's fix didn't regress preview.** `map_format_for_preview`'s doc
+    verifying bug #6's fix didn't regress preview.** `map_format_for_preview`\'s doc
     comment says such formats are "honoured as-is" for `q2 preview` — no pseudo-
     format substitution happens, so the render falls through to the native HTML
     pipeline (`render_qmd_to_html`) with `ctx.format.identifier` still e.g. `Typst`.
@@ -503,7 +503,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     the figure/image itself was entirely absent from the output. **Only
     `authors-normalize` turned out to be load-bearing enough to notice as a crash
     /missing-content bug** (bug #6) because it's the *sole* metadata source for
-    something `ApplyTemplateStage`'s built-in title-block partial reads with no
+    something `ApplyTemplateStage`\'s built-in title-block partial reads with no
     fallback; the other dropped transforms in `PANDOC_TRANSFORM_EXCLUDED` (TOC,
     crossref, navbar, ...) silently degrade preview fidelity instead of crashing,
     which is presumably why this has gone unnoticed. Not scoped or fixed this
@@ -671,7 +671,7 @@ merges, not before.
 **In a draft PR, awaiting a merge decision:**
 - **#8** extra `#block[` wrapper around knitr/pandoc tables — **PR #767**
   (draft, open, mergeable), `bd-gb6u8qsz`.
-- **#4**'s real juice fix — **PR #766** (draft, open, mergeable),
+- **#4**\'s real juice fix — **PR #766** (draft, open, mergeable),
   `bd-sccaj7u4` (see above).
 
 **Still fully open, untouched:**

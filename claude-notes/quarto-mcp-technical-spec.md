@@ -751,7 +751,7 @@ All tools should return errors in this format:
 
 ### Caching Strategy
 
-1. **Project Metadata**: Cache _quarto.yml parsing (invalidate on file change)
+1. **Project Metadata**: Cache \_quarto.yml parsing (invalidate on file change)
 2. **Document Metadata**: Cache frontmatter parsing (invalidate on file change)
 3. **Schema Validation**: Cache schemas (invalidate on Quarto version change)
 4. **Inspection Results**: Cache for 30s (balance freshness vs performance)

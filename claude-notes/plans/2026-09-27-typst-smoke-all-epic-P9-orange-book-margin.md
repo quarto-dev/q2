@@ -22,7 +22,7 @@ Only proceed once **both** print "merged". **Which worktree does this phase**:
 whichever of `workspace-2`/`workspace-5` finished its own track first and is sitting
 idle. If both are idle when you check, default to `workspace-2`. There's no
 correctness difference between the two — this phase's own topic branch starts from
-`feature/typst-testing`'s tip either way, and neither worktree's prior branch state
+`feature/typst-testing`\'s tip either way, and neither worktree's prior branch state
 matters once its own last phase has merged.
 
 ```bash
@@ -50,7 +50,7 @@ Continue directly to P10 in the same worktree you just used for P9.
 `external-sources/quarto-cli/tests/docs/smoke-all/typst/orange-book-margin/` — same
 shape as `orange-book` (P8) but adds `reference-location: margin`,
 `citation-location: margin`, `suppress-bibliography: true`,
-`grid.margin-width/gutter-width`. `index.qmd`'s front matter is the heaviest of the
+`grid.margin-width/gutter-width`. `index.qmd`\'s front matter is the heaviest of the
 four `orange-book*` fixtures: ~170 `ensureTypstFileRegexMatches`, ~180
 `ensurePdfRegexMatches` (body text uses invented Latin-ish anchor words —
 "Heliocircula", "Ankylosaura" — to avoid ambiguity in narrow-margin text), and **~24
@@ -74,7 +74,7 @@ correction to the original analysis**:
   after Normalization) — using the same project-metadata-merged context every
   single-document render gets. Unlike citeproc, this isn't deferred past the merge
   point, so it needs no merge-specific machinery.
-- **`citation-location`/`grid.margin-width`/`grid.gutter-width` (a *different*
+- **`citation-location`/`grid.margin-width`/`grid.gutter-width`** (a *different*
   mechanism — the original "read by `FootnotesResolveTransform`" claim was wrong for
   these): that transform doesn't read `citation-location` at all — grep confirms the
   only other hit in `crates/quarto-core/src/` is an unrelated comment in
@@ -106,7 +106,7 @@ correction to the original analysis**:
   key — Q1's real page-correctness comes entirely from unique-text search plus the
   implicit same-page check between resolved subject/object bboxes, not from this
   annotation. **Q2's port needs to tolerate this decorative extra key** rather than
-  reject it as unrecognized input — worth an explicit check if `spec.rs`'s
+  reject it as unrecognized input — worth an explicit check if `spec.rs`\'s
   deserializer uses anything like `#[serde(deny_unknown_fields)]` on this assertion
   shape (P1/P3's concern, flagging here since this fixture is where it'd first bite).
 
@@ -142,7 +142,7 @@ pandoc's native Typst writer).
 `meta.remove("bibliography"/"csl")` cleanup) whenever the merged doc's
 `citation-location` meta key is `"margin"`, and feed the crossref-phase document
 straight into the Navigation-onward finishing stages instead. This needs **no Lua
-or template changes** — `typst.lua`'s Pass 0 + `Cite` handler already handle
+or template changes** — `typst.lua`\'s Pass 0 + `Cite` handler already handle
 whatever document they're given correctly, and `finishing_stages` already runs
 exactly once on the whole merged AST (not per chapter), so there's no risk of
 reintroducing P8's cross-chapter numbering bug: that bug was about *each chapter*
@@ -204,7 +204,7 @@ assertions (`Ankylosaura`/`Thyreophora` expected `rightOf` on page 11;
 `Orbitsolva`/`Orbitcode` expected `leftOf` on page 12) failed with fully
 inverted measured coordinates (e.g. Subject.Left=91.2 vs Object.Right=474.7 —
 not a near-miss, the opposite relation entirely). Root cause: `chapter1.qmd:54`
-uses `{{< embed notebooks/computations.ipynb#fig-visualization >}}` to embed a
+uses `{{{< embed notebooks/computations.ipynb#fig-visualization >}}}` to embed a
 matplotlib plot (Figure 1.4); Q2 has never implemented the `embed` shortcode
 (`Q-16-3` "Unknown shortcode"), so the whole figure — image, caption, and the
 `@fig-visualization` crossref target — is silently dropped. That removes a real
@@ -221,7 +221,7 @@ decorative `page:` key) are confirmed correct on all 24 assertions.
 `notebook-view`, and the jupyter-embed placeholder machinery... deferred to
 its own strand/epic." That plan's own Phase 6 checklist called for filing that
 strand but never did — confirmed via `braid list`/`braid search`, no strand
-existed. Filed now: **bd-gak8uiza** — "Implement the `{{< embed >}}` notebook
+existed. Filed now: **bd-gak8uiza** — "Implement the `{{{< embed >}}}` notebook
 shortcode for Q2".
 
 Fixed the 2 assertions in place (commit `21c29365e`) to match measured reality
@@ -238,42 +238,42 @@ position assertions pass.
 ## Checklist
 
 - [x] Spike: render `orange-book-margin` with today's (post-P8) harness. Two things
-      to specifically check, not just "does it render": (a) does `reference-location`
-      margin placement work as the code-reading above predicts (should — treat a
-      failure here as a real finding) — **confirmed working**; (b) does
-      `citation-location: margin`/`suppress-bibliography: true`/
-      `grid.margin-width`/`grid.gutter-width` actually reach the merged document's
-      Typst template context — **`citation-location`/`suppress-bibliography` did
-      not work; found and fixed, see "First bug" above.** `grid.margin-width`/
-      `grid.gutter-width` confirmed working.
+  to specifically check, not just "does it render": (a) does `reference-location`
+  margin placement work as the code-reading above predicts (should — treat a
+  failure here as a real finding) — **confirmed working**; (b) does
+  `citation-location: margin`/`suppress-bibliography: true`/
+  `grid.margin-width`/`grid.gutter-width` actually reach the merged document's
+  Typst template context — **`citation-location`/`suppress-bibliography` did
+  not work; found and fixed, see "First bug" above.** `grid.margin-width`/
+  `grid.gutter-width` confirmed working.
 - [x] Copy the fixture directory's **tracked source files** into
-      `crates/quarto/tests/smoke-all/typst/orange-book-margin/` — done (commit
-      `21c29365e`), `smoke_all` auto-discovers it (directory-based, no
-      registration step needed — confirmed).
+  `crates/quarto/tests/smoke-all/typst/orange-book-margin/` — done (commit
+  `21c29365e`), `smoke_all` auto-discovers it (directory-based, no
+  registration step needed — confirmed).
 - [x] Confirm recto/verso-labeled position assertions (24 total, all plain
-      `rightOf`/`leftOf`, no new relation types) are correctly resolved by P3's
-      `/StructTreeRoot` page-scoping work — **confirmed working**, P3's
-      page-keyed map has no bug here. 2 of the 24 (`Ankylosaura`/`Thyreophora`,
-      `Orbitsolva`/`Orbitcode`) initially failed, but root-caused to
-      bd-gak8uiza (missing `{{< embed >}}` figure shifting the whole book by
-      one page, flipping recto/verso parity for content that crosses that
-      boundary) — not a P3/P9 bug. Fixed in place (commit `21c29365e`),
-      commented to revert once bd-gak8uiza lands. Confirmed P1/P3's assertion
-      parser tolerates the decorative `page: N` sibling key on every one of
-      the 24 — none were rejected as malformed.
+  `rightOf`/`leftOf`, no new relation types) are correctly resolved by P3's
+  `/StructTreeRoot` page-scoping work — **confirmed working**, P3's
+  page-keyed map has no bug here. 2 of the 24 (`Ankylosaura`/`Thyreophora`,
+  `Orbitsolva`/`Orbitcode`) initially failed, but root-caused to
+  bd-gak8uiza (missing `{{{< embed >}}}` figure shifting the whole book by
+  one page, flipping recto/verso parity for content that crosses that
+  boundary) — not a P3/P9 bug. Fixed in place (commit `21c29365e`),
+  commented to revert once bd-gak8uiza lands. Confirmed P1/P3's assertion
+  parser tolerates the decorative `page: N` sibling key on every one of
+  the 24 — none were rejected as malformed.
 - [x] Confirm the one `granularity`-based assertion (object form
-      `{text, granularity: "Div"|"P"}`, the `Alignmark`/`Listbody` pair) round-trips
-      correctly through P1's assertion parser — **confirmed working**, passed in
-      every run, never appeared in any failure list.
+  `{text, granularity: "Div"|"P"}`, the `Alignmark`/`Listbody` pair) round-trips
+  correctly through P1's assertion parser — **confirmed working**, passed in
+  every run, never appeared in any failure list.
 - [x] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
-      -p quarto`. Run 2026-09-29: clippy clean (only the pre-existing
-      `agents-docs-dist/llms.txt not found` placeholder warning, not a lint).
-      nextest: 601 passed, 1 failed (`smoke_all::smoke_all`, an aggregate
-      test), 2 skipped — the failure's 6 sub-failures are exactly the known
-      set: the 5 pre-existing P5 `#notefigure\(` margin-layout misses plus the
-      bd-gak8uiza-blocked `{{< embed >}}` content (missing
-      `fig-visualization` crossref/caption/warning), both already understood
-      and out of P9's scope. No new regressions.
+  -p quarto`. Run 2026-09-29: clippy clean (only the pre-existing
+  `agents-docs-dist/llms.txt not found` placeholder warning, not a lint).
+  nextest: 601 passed, 1 failed (`smoke_all::smoke_all`, an aggregate
+  test), 2 skipped — the failure's 6 sub-failures are exactly the known
+  set: the 5 pre-existing P5 `#notefigure\(` margin-layout misses plus the
+  bd-gak8uiza-blocked `{{{< embed >}}}` content (missing
+  `fig-visualization` crossref/caption/warning), both already understood
+  and out of P9's scope. No new regressions.
 
 ## Status
 

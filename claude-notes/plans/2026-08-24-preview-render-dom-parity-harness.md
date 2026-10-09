@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Created:** 2026-08-24 (revised the same day after a blank-slate review)
-**Branch:** `explore/react-parity-harness` (worktree `.worktrees/workspace-1`, off `main` @ `cf9c45cc8`)
+**Branch:** `explore/react-parity-harness` (worktree `.worktrees/workspace-1`, off `main` \@ `cf9c45cc8`)
 **Related strands:** bd-tmb2u5yu (`Math.tsx` drops `math inline|display` —
 found while designing this; blocks opting in any math fixture), bd-qn8yi1su
 (revealjs analogue — *not* in scope, but should extend this harness),
@@ -94,7 +94,7 @@ Evaluated against q2:
 
 - **Sound in its core.** The "React component tree" is real:
   `ts-packages/preview-renderer/src/q2-preview/{blocks,inlines,custom}/` —
-  ~40 components mirroring `crates/pampa/src/writers/html.rs` arm-for-arm
+  \~40 components mirroring `crates/pampa/src/writers/html.rs` arm-for-arm
   (`blocks/CodeBlock.tsx:71` literally says "mirrors `write_highlighted_body`").
   The repo already states the contract in
   `.claude/skills/preview-render-parity/SKILL.md:7` and polices it *by hand*
@@ -177,7 +177,7 @@ must mirror that placement.
 
 | Rule | Why |
 |---|---|
-| Strip attributes `data-loc`, `data-sid` | Preview-only source tracking. The writer emits them only when `include_source_locations` is on (`html.rs` doc block ~L743-748) — off for `q2 render`; the preview AST is written with `include_inline_locations: true` (`PreviewAstOutput.ast_json`, `pipeline.rs:195`) and React forwards them via `dataLocProps`. |
+| Strip attributes `data-loc`, `data-sid` | Preview-only source tracking. The writer emits them only when `include_source_locations` is on (`html.rs` doc block \~L743-748) — off for `q2 render`; the preview AST is written with `include_inline_locations: true` (`PreviewAstOutput.ast_json`, `pipeline.rs:195`) and React forwards them via `dataLocProps`. |
 | Replace the children of `span.math` with one opaque text node `⟨opaque⟩` | `math-js` (excluded from preview) leaves TeX in `\(…\)` delimiters for MathJax; React `inlines/Math.tsx:24` emits KaTeX HTML. Divergent by design; the `<span>` and its classes still compare. **Today `Math.tsx` emits no class at all** (bd-tmb2u5yu), so on the preview side the selector matches nothing and the class diverges — no fixture with math can opt in until that strand closes. The rule is written for the fixed state on purpose. |
 | **Unwrap any `<div>` that has no attributes left after the strip rule, on both sides** (added by the Task 0.2 spike) | React cannot inject raw HTML without a host element, so `blocks/RawBlock.tsx:44` wraps every `RawBlock(format: "html")` in a `<div>` (`dangerouslySetInnerHTML`) that the writer (`html.rs`, `Block::RawBlock`) never emits — most visibly the code-copy button. Must be symmetric: a preview-only variant would false-positive on a `Div` block with an empty `Attr` (render `<div>` vs preview `<div data-loc=…>`); `title-block/simple-default.qmd` has two such divs on both sides. **Accepted cost:** a missing/extra attribute-less `<div>` is invisible to the runner (such a div matches no id/class selector; the render side's `ensureHtmlElements` assertions still cover `div.quarto-title-meta > div`-style structure). The alternative — excluding every fixture with a code block — would gut the corpus. Ordering: after the attribute strip (the wrapper carries `data-loc`), before `normalize()` and the whitespace pass. |
 | **Fail** if `data-hl-spans` is present on either side | Consumed attribute — the writer (`write_code_container_attr`, `html.rs:539`; the "reserved" comment at `:517`) and `blocks/CodeBlock.tsx` both decode it into `<span class="hl-…">` and must not forward it. Leakage is a bug (bd-nxslt); the harness must not normalise it away. |
@@ -214,7 +214,7 @@ are JSON string literals:
 
 Line-oriented on purpose: vitest's `toBe` diff on two such strings shows the
 divergent node with context, and a `diff` of the two `.norm.txt` artifacts
-reads the same way. No tree-diff engine (YAGNI; `quarto-ast-reconcile`'s
+reads the same way. No tree-diff engine (YAGNI; `quarto-ast-reconcile`\'s
 `find_first_divergence`, `hash.rs:677`, exists if we ever want "first
 divergent node").
 
@@ -1240,7 +1240,7 @@ git commit -m "Accept a parity key in the smoke-all test DSL (native runner igno
 
 **Files:**
 - Modify: `hub-client/src/services/smokeAll.wasm.test.ts` — `parseFormatSpec`,
-  the filesystem no-op group (~L270-276 after Task 0.1's move) + `default:`
+  the filesystem no-op group (\~L270-276 after Task 0.1's move) + `default:`
   which today throws `Unknown assertion type` (was `:277` before the move)
 - Modify: `hub-client/e2e/helpers/smokeAllDiscovery.ts:234-240` (the
   `fileExists` no-op group + `default: throw`)
@@ -1290,7 +1290,7 @@ as on `main` (`--list` does not launch a browser or the web server).
 ```bash
 cargo nextest run --workspace 2>&1 | tee /private/tmp/claude-502/-Users-gordon-src-q2/6f5c0c8f-a359-437a-87d6-879b0e289c0e/scratchpad/nextest-phase2.log; grep -E "Summary|passed|failed|skipped" /private/tmp/claude-502/-Users-gordon-src-q2/6f5c0c8f-a359-437a-87d6-879b0e289c0e/scratchpad/nextest-phase2.log | tail -3
 ```
-Expected: green; delta vs the live baseline on `main` @ `cf9c45cc8` is
+Expected: green; delta vs the live baseline on `main` \@ `cf9c45cc8` is
 exactly +2 passed (Task 2.1's two tests). If no baseline log exists, run the
 same command on `main` first and record it.
 
@@ -1654,7 +1654,7 @@ EOF
     `test-results/parity/…`; go to Chrome only for computed-style symptoms;
   - in "TDD workflow", the regression test for a parity fix is the fixture's
     `dom-dom-parity: true` opt-in when the fixture can be made minimal;
-  - replace the integration-branch guidance (lines ~140, 224, 228:
+  - replace the integration-branch guidance (lines \~140, 224, 228:
     `feature/q2-preview-command`, parent epic bd-kw93): bd-kw93 is closed and
     the branch merged via PR #214 (`git log --grep "q2 preview command"` on
     `main`); parity strands branch off `main` and carry the `preview-parity`
@@ -1674,7 +1674,7 @@ git commit -m "Document the preview/render DOM parity runner and harness-first w
   this reruns the workspace nextest, so report its pass/skip counts against
   the Phase-2 baseline: the delta must still be exactly +2).
   **Result (58a8d22e6):** all steps passed; workspace nextest 13217 passed /
-  199 skipped vs baseline 13215 / 199 on `main` @ cf9c45cc8 (= +2, Task 2.1's
+  199 skipped vs baseline 13215 / 199 on `main` \@ cf9c45cc8 (= +2, Task 2.1's
   tests). Final whole-branch review found two one-line Importants
   (`INLINE_TAGS` missing `label`/`input`/`button`/`svg`; stale Playwright
   command in testing.md), fixed in 58a8d22e6; `domParity.test.ts` is 19 tests.
@@ -1731,7 +1731,7 @@ limitations). Summary:
   `<main>`; 1 real bug — inline `Code.tsx` forwards `data-hl-spans`). The
   106 minus the engine fixture `includes/code-cell/code-cell.qmd` were opted
   in (commit `04bd3c2cf`): **`Parity results: 105 compared, 0 failed, 105
-  opted in`**, ~16.5 s of the sweep's 120 s hang-detection budget. 15 of
+  opted in`**, \~16.5 s of the sweep's 120 s hang-detection budget. 15 of
   those fixtures have a `format: html:` block ahead of `_quarto: tests:
   html:`; the opt-in script had to scope to the `_quarto → tests → html`
   chain (the first attempt mis-inserted under `format:` and showed up as

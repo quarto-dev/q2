@@ -183,7 +183,7 @@ implement old-dashes.)
 
 **Chosen rule (simple, faithful):** scan each prose node for maximal runs of
 `-`; consume the run greedily 3-at-a-time as em-dash while ≥3 remain, then a
-trailing 2 as en-dash, leaving a lone 1 as hyphen. This is ~10 lines and
+trailing 2 as en-dash, leaving a lone 1 as hyphen. This is \~10 lines and
 matches the table exactly. Per the user, exact Pandoc parity is low priority;
 this rule happens to *be* Pandoc's, so we take it. `...` → `…` (U+2026) by the
 same scan.

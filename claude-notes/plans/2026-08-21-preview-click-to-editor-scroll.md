@@ -89,7 +89,7 @@ recorded "**NOT verified:** live browser scroll interaction".
 | D1 | **Scroll only.** `revealLineInCenterIfOutsideViewport(line)`. No `setPosition`, no `setSelection`, no `focus()`. | In q2-preview the click *opens an inline editor in the preview*. Pulling focus to Monaco (what `useSelectionSync` does for the HTML preview) would break the gesture the same click just started. Deliberate divergence from the HTML preview. |
 | D2 | **New capture-phase `pointerup` path**, not an extension of `useSelectionSync`. | Works with the block-level `data-loc` q2-preview already stamps. Extending selection sync would require per-inline `<span data-loc>` in q2-preview, reopening the wrapper/theme-CSS parity decision bd-9kzfi deliberately closed. |
 | D3 | **HTML preview untouched.** Its click→ratio path stays, redundant but harmless. | It is the behaviour reported as working; changing it risks the one preview that currently syncs. Recorded as a finding, not a work item. |
-| D4 | **A click that does not resolve an editable block does nothing.** No reveal when the target is inside `#q2-active-edit-region`, when the nearest `[data-loc]` ancestor is a `<section>`, or when nothing resolves. | Without this, every caret-move click inside an open editor yanks Monaco to the enclosing section's heading — see the hazard below. Mirrors the existing active-region guard in `useBlockEditHover`'s `onPointerUp`. |
+| D4 | **A click that does not resolve an editable block does nothing.** No reveal when the target is inside `#q2-active-edit-region`, when the nearest `[data-loc]` ancestor is a `<section>`, or when nothing resolves. | Without this, every caret-move click inside an open editor yanks Monaco to the enclosing section's heading — see the hazard below. Mirrors the existing active-region guard in `useBlockEditHover`\'s `onPointerUp`. |
 | D5 | **Clicking included content scrolls to the `{{< include … >}}` shortcode's line in the current file.** Not a bogus current-file line; not a file switch. | Keeps the editor showing the file the user is editing, and points at the thing that *is* editable there. Feasibility + sequencing: see Phase 4. |
 
 ### The section hazard behind D4
@@ -122,7 +122,7 @@ followed by `BUBBLE pointerup (app activate): replacing node`.
 *ends*, so the reveal follows the user's final position rather than firing at the
 start of a drag; and it is the same event the app activates on, so the reveal
 coincides exactly with the editor opening. (An earlier draft justified this by
-`syncPreviewToEditor`'s focus gate — that reason does not survive D1's
+`syncPreviewToEditor`\'s focus gate — that reason does not survive D1's
 "not focus-gated", and a capture-phase `pointerdown` is equally before-detach.)
 
 **Why not focus-gated:** an explicit click in the preview is unambiguous user
@@ -198,7 +198,7 @@ Both packages run `*.test.ts` in the **node** environment
 | **U1d** | ↑ | ↑ | Target whose nearest `[data-loc]` is the `<section>` itself (inter-block whitespace) → `null` | ↑ | Delete the `<section>` check → RED |
 | **U1e** | ↑ | ↑ | `lineForClickTarget(document)` and `(null)` → `null`, no throw | ↑ | Drop the `instanceof Element` narrowing → throws → RED |
 | **U2a** | jsdom (`useScrollSync.test.ts`, `@vitest-environment jsdom` already present) | real `useScrollSync` | `renderHook`; `result.current.revealEditorLine(73)`; assert `revealLineInCenterIfOutsideViewport` called with **`73`** | Monaco fake (`makeEditor`) — **must be extended**, see below | Remove the reveal call → RED |
-| **U2b** | ↑ | ↑ | `setPosition`, `setSelection`, `focus` **never** called | ↑ | Add `setPosition`/`focus` to the reveal path (i.e. copy `useSelectionSync`'s semantics) → RED. Guards D1 |
+| **U2b** | ↑ | ↑ | `setPosition`, `setSelection`, `focus` **never** called | ↑ | Add `setPosition`/`focus` to the reveal path (i.e. copy `useSelectionSync`\'s semantics) → RED. Guards D1 |
 | **U2c** | ↑ | ↑ | **Harness must be `setup({focus: true})`**; reveal still happens | ↑ | Route `revealEditorLine` through `syncPreviewToEditor` (whose first statement is the focus gate) → RED |
 | **U2d** | ↑ | ↑ | No debounce: reveal happens **without** advancing timers | ↑ | Wrap the reveal in the 50 ms `editorDebounceRef` timer → RED |
 | **U3** | jsdom (`Q2PreviewIframe.integration.test.tsx`) | real `Q2PreviewIframe` | **New harness variant needed** — the existing `renderWithFingerprint` dispatches `IFRAME_READY` internally and exposes no handle on the iframe element. Need: render → wrap `iframe.contentDocument.addEventListener` with a spy → dispatch `IFRAME_READY`. Assert the registration tuple is `('pointerup', fn, true)`, then dispatch a `pointerup` on an injected `[data-loc]` node and assert `onClickAtLine` got `12` | iframe `contentWindow.postMessage` (already faked here) | Restore `doc.addEventListener('click', handleClick)`, or drop the `true` capture arg → RED |
@@ -390,8 +390,8 @@ bite a later reader:
 - The Pinned API block above places `ReactRenderer.tsx` under
   `ts-packages/preview-renderer/`. It is actually
   `hub-client/src/components/render/ReactRenderer.tsx` (its `onPreviewClick`
-  prop is declared ~line 138 and forwarded as `onClick={onPreviewClick}`
-  ~line 337). Prop *names* in that block are correct and frozen; only the
+  prop is declared \~line 138 and forwarded as `onClick={onPreviewClick}`
+  \~line 337). Prop *names* in that block are correct and frozen; only the
   path was wrong.
 - **Phase 4 is investigation-only in this pass.** Its producer-side option is a
   Rust + wire change, which would invalidate Phase 3's explicit "TypeScript-only,
@@ -400,7 +400,7 @@ bite a later reader:
   is blocked; D5's implementation becomes a follow-up.
 
 Out-of-plan defect found and filed separately (**braid bd-s36g9dav**): in this
-worktree `ts-packages/preview-renderer`'s
+worktree `ts-packages/preview-renderer`\'s
 `custom-components.integration.test.tsx > Equation > appends \tag{N}` fails.
 It is not a regression from this branch — root + sandboxed-preview `package.json`
 and the lockfile all pin katex exactly **0.18.1**, under which KaTeX no longer
@@ -431,7 +431,7 @@ stated basis for D4.** The spread *is* unconditional, but its input never exists
 - `dataLocProps` (`framework/sourceLoc.ts`) returns `{}` for any node with no `l`.
 - `crates/pampa/src/transforms/sectionize.rs` builds section Divs with
   `SourceInfo::Generated { by: By::sectionize(), from: smallvec![] }`.
-- `quarto-source-map`'s own docs name **"sectionize wrappers"** as the canonical
+- `quarto-source-map`\'s own docs name **"sectionize wrappers"** as the canonical
   example of pure synthesis with no source-side preimage, and its `map_offset`
   returns `None` for `Generated` unconditionally.
 - so `resolve_location` never emits an `l` for a section, and **no `<section>` in a
@@ -439,7 +439,7 @@ stated basis for D4.** The spread *is* unconditional, but its input never exists
   chain and by dumping a real ancestor chain in the live app
   (`section#callouts[data-loc=null]`).
 
-Consequence: `lineForClickTarget`'s `<section>` null case is **dead code under
+Consequence: `lineForClickTarget`\'s `<section>` null case is **dead code under
 q2-preview today**, and U1d exercises a situation that cannot currently occur. The
 guard is kept as defence-in-depth — one comparison, and correct if a future change
 ever gives sections a resolvable location — but read the D4 rationale as "the
@@ -482,7 +482,7 @@ argument for keeping it.
 then existing passed against a guard that returned `null` for every real click.
 
 **The reveal-then-overwrite race.** `revealEditorLine` did not set `isSyncingRef`, and
-by design it never takes focus — so *both* of `syncPreviewToEditor`'s feedback-loop
+by design it never takes focus — so *both* of `syncPreviewToEditor`\'s feedback-loop
 guards were unarmed after a reveal, and any real preview scroll within 50 ms
 overwrote the correct reveal with a scroll-ratio-derived position. Measured: Monaco
 correctly at 149-189 (containing the clicked line 171) at t=1 ms; a genuine 6 px
@@ -561,7 +561,7 @@ Full writeup: `.superpowers/sdd/2026-08-21-preview-click-to-editor-scroll/task-7
         (Phase 3), and not obviously smaller even as its own project.
       - **(b) client-side.** `files[fileId].name` (the *resolved* path) →
         scan the current file's source text for a `{{< include … >}}` line
-        whose raw path resolves (mirroring `resolve_include_target`'s
+        whose raw path resolves (mirroring `resolve_include_target`\'s
         leading-`/`-is-project-root rule) to the same name. No wire change;
         cost is duplicating that one path-resolution rule in TS.
 - [x] **Decision: route (b).** Reasoning (full version in the report §2):
@@ -569,7 +569,7 @@ Full writeup: `.superpowers/sdd/2026-08-21-preview-click-to-editor-scroll/task-7
       reason; (a) is a schema-level decision with cross-crate blast radius,
       not a small patch, and even fully built still needs the same
       "resolve to the nearest current-file anchor" logic for nested includes
-      that (b) needs anyway. (b)'s heuristic failure modes all degrade to
+      that (b) needs anyway. (b)\'s heuristic failure modes all degrade to
       **inert** — never to a wrong reveal — which is exactly the property
       that made D4's guards acceptable in Phase 2. Stated fallbacks (§1 of
       the report):

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Braid:** bd-named-entities-w6xbfftj (bug, P1, labels `pampa`, `parity`)
-**Checkout:** main @ `0cb8abce` (investigated in place; no worktree created)
+**Checkout:** main \@ `0cb8abce` (investigated in place; no worktree created)
 **Status:** Implemented 2026-08-10; all phases complete, full verify green. Discovered follow-ups: bd-v8qc9zyc (grammar regex), bd-96fswwce (combining-mark parse failure).
 
 ## Triage verdict
@@ -159,13 +159,13 @@ lookup misses gracefully regardless.
 ## Design decisions (settled with user, 2026-08-10)
 
 1. **Table sharing mechanism:** expose `HTML_ENTITIES_JSON` from
-   `tree-sitter-qmd`'s Rust bindings via `include_str!` (same pattern as
+   `tree-sitter-qmd`\'s Rust bindings via `include_str!` (same pattern as
    `NODE_TYPES`; single source of truth).
 2. **Parse strategy:** lazy `OnceLock<HashMap>` + serde_json at first use.
 3. **Lookup-miss behavior:** emit the original text verbatim, **no warning**.
    Rationale: the `entity_reference` regex is generated from the same table
    the converter looks up in, so every node the grammar produces is a known
-   name — the only reachable misses are the ~106 bogus truncated alternatives
+   name — the only reachable misses are the \~106 bogus truncated alternatives
    from the bd-v8qc9zyc regex bug (`&AM;`, `&AEli;`), which essentially never
    occur in real prose and become unreachable once that strand lands.
    Genuinely unknown references (`&foo;`) never match the regex and are

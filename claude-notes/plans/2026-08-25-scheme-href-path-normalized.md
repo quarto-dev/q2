@@ -1,7 +1,7 @@
 # Non-http URI schemes are path-normalized (bd-scheme-href-path-normalized-w5zya82r)
 
 **Strand:** `bd-scheme-href-path-normalized-w5zya82r` (P1 bug, labels `navigation`, `parity`)
-**Branch:** `braid/bd-scheme-href-path-normalized-w5zya82r-scheme-href-path-normalized` (workspace-3, off `main` @ d05e96ee8 = v0.27.0)
+**Branch:** `braid/bd-scheme-href-path-normalized-w5zya82r-scheme-href-path-normalized` (workspace-3, off `main` \@ d05e96ee8 = v0.27.0)
 **Verdict:** Ready — fix direction is unambiguous; implemented in this plan.
 
 ## Overview
@@ -123,7 +123,7 @@ gets its own regression test written first.
   `quarto_util::is_external_url` as the sole classifier instead of
   enumerating schemes; corrected the fixture comment that overstated what
   the `../<scheme>` guards pin. Declined: trimming the `is_external` doc
-  comment (it already defers to `quarto_util`'s docs for the rule; the
+  comment (it already defers to `quarto_util`\'s docs for the rule; the
   bug-class sentence is the part worth keeping at the seam).
 
 ## End-to-end record

@@ -11,9 +11,9 @@ session, separate worktree).
 
 - Engine check semantics — when `checkInstallation` fires, what it verifies per
   engine, what success/failure looks like — must match Q1 exactly.
-- The engine section of `q2 check`'s report should mirror Q1's `quarto check`
+- The engine section of `q2 check`\'s report should mirror Q1's `quarto check`
   structure and wording as closely as q2's existing report format allows.
-- Where `q2 check`'s current output already diverges from Q1's overall report,
+- Where `q2 check`\'s current output already diverges from Q1's overall report,
   do **not** invent new UX to bridge it — document the divergence as an explicit,
   **numbered decision point** for Gordon. Deviations are ratified, never silent.
 - Part 2 (Rust-engine trait method) sits beneath this surface and must not
@@ -186,7 +186,7 @@ for (const engine of executionEngines()) {
   `resolveEngines(context)` dynamically imports `project.config.engines` entries
   (extension-contributed engines flow in via `mergeProjectEngines`,
   `src/project/project-context.ts:764-792`).
-- **So extension engines' `checkInstallation` IS invoked by `quarto check`** —
+- **So extension engines\' `checkInstallation` IS invoked by `quarto check`** —
   provided the extension is discovered/registered for the current context. In Q1
   as shipped: built-in jupyter + knitr always; bundled julia extension when
   loaded; marimo only if installed as a contributing extension. `markdown` does
@@ -296,7 +296,7 @@ per-language in a module-level map. Kernelspecs via `jupyter --paths --json`
    (`knitr.ts:32-41`): knitr >= 1.30, rmarkdown >= 2.3.
    - both version-OK → real test render `"Checking Knitr engine render......"` →
      `OK\n` with a ```` ```{r} 1 + 1 ```` doc.
-   - else → `knitrInstallationMessage` per missing/outdated package: "The <pkg>
+   - else → `knitrInstallationMessage` per missing/outdated package: "The \<pkg>
      package is not available in this R installation." + `Install with
      install.packages("<pkg>")` (or update variant).
 
@@ -483,7 +483,7 @@ jupyter under `#[cfg(not(target_arch = "wasm32"))]`.
 ### Error family + reporting style
 
 - `ExecutionError` (engine/error.rs): `RuntimeNotFound { engine, runtime }`
-  ("Engine runtime not found: {engine} requires {runtime}"),
+  ("Engine runtime not found: \{engine\} requires \{runtime\}"),
   `MissingPackage { engine, package, suggestion }`,
   `PackageVersionTooOld { engine, package, required_version, suggestion }` —
   the vocabulary a structured check result can map onto. **Not** wired to Q-*
@@ -530,7 +530,7 @@ jupyter under `#[cfg(not(target_arch = "wasm32"))]`.
 
 The binding constraint (Q1-identical user-visible behavior) fixes the *what*;
 the options differ in *how* engine check output travels and how much of
-`quarto check`'s surface Plan 10 implements.
+`quarto check`\'s surface Plan 10 implements.
 
 ### Axis 1 — how TS-engine check output reaches the terminal
 
@@ -549,7 +549,7 @@ the engine's console output streams live while the check runs.
 During the check call the host routes the console sink into a capture buffer
 (a swappable "current sink" indirection inside the host's `log` object) and
 returns the transcript; the Rust command prints it in exact report order.
-- \+ Deterministic ordering fully under `q2 check`'s control → Q1-identical
+- \+ Deterministic ordering fully under `q2 check`\'s control → Q1-identical
   report layout is guaranteed and snapshot-testable; plan-1a-conformant typed
   payload; JSON mode later reuses the same data path.
 - \+ Sink-capture is safe in practice: during `q2 check` the command drives one
@@ -733,7 +733,7 @@ are informational rather than prerequisites for q2, and Q1's render-check gate
 (`jupyter_core` present + python kernelspec) technically over-requires.
 Mitigating fact: ipykernel depends on jupyter_core, so "kernelspec exists but
 jupyter_core absent" is practically unreachable. *Recommendation:* keep the Q1
-decision tree and lines verbatim (binding constraint; divergence cost ~nil),
+decision tree and lines verbatim (binding constraint; divergence cost \~nil),
 and treat the test render as the ground truth of "q2 can execute".
 (Knitr analog verified NON-issue: q2's R scripts require both knitr and
 rmarkdown — `rmarkdown::` is called 30+ times in execute.R — so Q1's gates are
@@ -752,7 +752,7 @@ the whole command.
 
 **Consequences noted (no decision needed, will be encoded in the plan):**
 
-- **C1 — cwd-dependence:** `q2 check`'s engine list depends on the directory
+- **C1 — cwd-dependence:** `q2 check`\'s engine list depends on the directory
   it runs in (project extension discovery from cwd, zero-file fallback) —
   identical to Q1's behavior. The command reuses the project/registry setup
   path from `project/mod.rs`.

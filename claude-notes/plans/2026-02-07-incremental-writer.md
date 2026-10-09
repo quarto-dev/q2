@@ -253,7 +253,7 @@ Input:  "## Title\n\nFirst paragraph.\n\nSecond paragraph.\n"
               gap=[9,10)="\n"   gap=[27,28)="\n"
 ```
 
-Each block span includes its own trailing `\n` but NOT the blank-line separator. The gaps are consistently single `\n` characters. **Coverage is ~95%** of the input (the remaining 5% is the inter-block `\n` separators).
+Each block span includes its own trailing `\n` but NOT the blank-line separator. The gaps are consistently single `\n` characters. **Coverage is \~95%** of the input (the remaining 5% is the inter-block `\n` separators).
 
 ### Assembly Strategy for Incremental Writer
 
@@ -460,10 +460,10 @@ This preserves original gaps exactly for unchanged consecutive blocks (ensuring 
 2. The gaps between runs (where blocks were added, removed, or rewritten) become `TextEdit` entries.
 3. Each `TextEdit` specifies: the byte range in the original to replace, and the replacement text (from the writer output).
 
-Example: Original has blocks at spans [0,10), [11,20), [21,30). If block 1 is rewritten:
-- Run 1: Verbatim blocks 0 → no edit for [0,10)
-- Edit: replace [10,20) (gap + block 1) with `\n` + writer output
-- Run 2: Verbatim block 2 → no edit for [20,30)
+Example: Original has blocks at spans \[0,10), \[11,20), \[21,30). If block 1 is rewritten:
+- Run 1: Verbatim blocks 0 → no edit for \[0,10)
+- Edit: replace \[10,20) (gap + block 1) with `\n` + writer output
+- Run 2: Verbatim block 2 → no edit for \[20,30)
 - Result: `[TextEdit { range: 10..20, replacement: "\nnew block 1 text\n" }]`
 
 This produces minimal, non-overlapping edits sorted by position. The Automerge layer can apply these edits efficiently.
@@ -700,7 +700,7 @@ Div (id="todo")
     Item 1: [Plain: [Span([], [Str("x")]), Space, Str("Checked"),  Space, Str("item")]]   ← checked
 ```
 
-The checkbox state lives in the `Span`'s inline content:
+The checkbox state lives in the `Span`\'s inline content:
 - **Unchecked**: `Span(["", [], []], [])` — empty inline content
 - **Checked**: `Span(["", [], []], [Str("x")])` — contains `Str("x")`
 

@@ -5,7 +5,7 @@
 `quarto-preview` embeds the viewer SPA (`q2-preview-spa/dist`) and the
 editor bundle (`hub-client/dist-preview-embed`, post-dedupe) via
 `include_dir!` — identity bytes **plus** per-file `.gz` siblings. That
-is ~107 MiB of the 181.8 MiB release binary (measured 2026-08-13:
+is \~107 MiB of the 181.8 MiB release binary (measured 2026-08-13:
 `__TEXT,__const` = 106.8 MiB).
 
 This plan swaps the embed format to **one tar.zst archive per bundle,
@@ -23,14 +23,14 @@ Measured on the real dists (2026-08-13, this machine):
 - Decompress + tar parse: **94 ms** (zstd), one time per process.
 - Worst-case lazy gzip: the 27 MB wasm, **1.53 s** at `-9` (0.47 s at
   `-6`), once per process per file.
-- Expected binary: 181.8 → ~95 MiB (before the separate
+- Expected binary: 181.8 → \~95 MiB (before the separate
   `strip = "symbols"` lever, −21.6 MiB more).
 
 ## Design decisions
 
 1. **Identity-only archive.** `.gz` siblings stay out of the binary.
    Runtime gzip is the price; the alternative (archive identity + gz)
-   costs ~26 MiB more for zero runtime CPU. Chosen per user direction
+   costs \~26 MiB more for zero runtime CPU. Chosen per user direction
    after reviewing the numbers above.
 2. **Lazy `OnceLock` decompression, per UI bundle.** `q2 render` never
    touches the preview code paths (verified: only
@@ -94,7 +94,7 @@ Measured on the real dists (2026-08-13, this machine):
 
 ## Results (2026-08-13)
 
-- **Embedded preview payload: ~107 MiB → 12.1 MiB**
+- **Embedded preview payload: \~107 MiB → 12.1 MiB**
   (viewer-embed.tar.zst 7.4 MiB + editor-embed.tar.zst 4.7 MiB,
   measured in `target/release/build/quarto-preview-*/out/`).
 - **Release binary: 181.8 → 118.9 MiB (−62.9 MiB, −34.6%)**
@@ -105,7 +105,7 @@ Measured on the real dists (2026-08-13, this machine):
   trace-viewer dist (0.2 MiB). Unrelated drift, not the change
   leaking.
 - Remaining `__const` (47.4 MiB): the two archives (12.1), mcp bundle
-  (10.6), resources (5.3), trace viewer (0.2), ~19 MiB Rust/crypto
+  (10.6), resources (5.3), trace viewer (0.2), \~19 MiB Rust/crypto
   const data predating this change.
 - New dependencies: `tar 0.4`, `zstd 0.13` (zstdmt feature for
   multithreaded build-time compression). `include_dir` dropped from
@@ -116,8 +116,8 @@ Measured on the real dists (2026-08-13, this machine):
 - Background gzip warm-up at server start (erases the 1.5 s worst-case
   first-hit on the wasm).
 - `strip = "symbols"` in `[profile.release]` (−21.6 MiB, measured).
-- `quarto-trace-server`'s viewer embed is a separate, smaller
+- `quarto-trace-server`\'s viewer embed is a separate, smaller
   `include_dir!` — same treatment if it grows.
-- Decompress-to-tempfile + mmap if the ~95 MB heap resident set
+- Decompress-to-tempfile + mmap if the \~95 MB heap resident set
   matters (today's embed is demand-paged; the archive trades that for
   binary size).

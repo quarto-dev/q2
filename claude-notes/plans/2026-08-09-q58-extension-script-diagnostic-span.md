@@ -101,7 +101,7 @@ if let (Some((fid_usize, _, _)), Some(config_path)) =
 ```
 
 It takes whatever `FileId` the script's `SourceInfo` resolves to and
-unconditionally binds **`_quarto.yml`'s path and content** to it.
+unconditionally binds **`_quarto.yml`\'s path and content** to it.
 
 The FileId scheme (quarto-yaml `parse_file` /
 `file_id_for_filename`) hashes the filename string passed at parse
@@ -126,7 +126,7 @@ Two observable symptoms, depending on file sizes:
 
 - **Misleading span** — the offsets fit inside `_quarto.yml`: an
   arbitrary unrelated span is highlighted (the q2-connect-docs case).
-- **Dropped span** — the offsets exceed `_quarto.yml`'s length: the
+- **Dropped span** — the offsets exceed `_quarto.yml`\'s length: the
   snippet silently disappears and the error renders with no location
   at all.
 
@@ -209,7 +209,7 @@ through the real binary in both cases.
 | `project_resources.rs:864` `resource_error_to_parse_error` | **Buggy, same pattern** — `project.resources` is extension-contributable (`FRAGMENT_PATH_PATTERNS`). Filed as bd-p86nlm92. |
 | `theme_diagnostic.rs:51` `sass_error_to_parse_error` | **Correct** — takes `candidate_sources: &[(FileId, &Path)]`, registers only on FileId match. This is the precedent pattern for the fix. |
 | `quarto/src/commands/render.rs:1073/1086` `config_source_context` / `attach_config_source` | **Correct** — verifies `file_id_for_filename(config_path) == fid` before binding. |
-| `project/mod.rs:947` `project_type_error` | **Safe** — `type:` is read from the user's config before fragment merging, so the SourceInfo is always `_quarto.yml`'s. |
+| `project/mod.rs:947` `project_type_error` | **Safe** — `type:` is read from the user's config before fragment merging, so the SourceInfo is always `_quarto.yml`\'s. |
 | `metadata_merge.rs:298` register block | **Gap, not misleading** — extension manifests are never registered in doc SourceContexts, so extension-anchored per-document diagnostics render span-less. Filed as bd-2x0tmd7v (unverified, p3). |
 
 ## Fix plan
@@ -310,7 +310,7 @@ with the attribution info line. Previously it pointed at
    (project_resources) as a follow-up, or fold it into the same PR
    since it reuses the same helper + `ProjectConfig` field? My
    recommendation: same PR — the helper lands once, the second
-   consumer is ~10 lines and shares the test fixture shape.
+   consumer is \~10 lines and shares the test fixture shape.
 2. **Diagnostic wording**: when the script comes from an extension, the
    corrected snippet already names `_extension.yml` in the ariadne
    header. Should the problem text *additionally* say "contributed by

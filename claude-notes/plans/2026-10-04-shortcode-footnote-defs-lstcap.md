@@ -5,12 +5,12 @@ Strand: `bd-xjg7vl6c`. Blocks `claude-notes/plans/2026-10-03-disable-lua-shortco
 
 ## Problem
 
-Rust's `shortcode_resolve` does not expand `{{< meta x >}}` in three qmd-reachable contexts where
+Rust's `shortcode_resolve` does not expand `{{{< meta x >}}}` in three qmd-reachable contexts where
 Quarto 1 does:
 
-1. `NoteDefinitionPara` (`[^1]: Note {{< meta author >}}.`).
+1. `NoteDefinitionPara` (`[^1]: Note {{{< meta author >}}}.`).
 2. `NoteDefinitionFencedBlock` (q2's fenced form `::: ^id`).
-3. The `lst-cap` attribute on a listing code block (`{#lst-a lst-cap="… {{< meta author >}}"}`).
+3. The `lst-cap` attribute on a listing code block (`{#lst-a lst-cap="… {{{< meta author >}}}"}`).
 
 Cause of 1 and 2: both are "leaf" arms in the two body walkers (`resolve_block`, `stamp_block`).
 `FootnotesTransform` runs after `ShortcodeResolveTransform` and moves the definition content into
@@ -18,7 +18,7 @@ Cause of 1 and 2: both are "leaf" arms in the two body walkers (`resolve_block`,
 
 Cause of 3: `CodeBlock` attribute values are not expanded (matching Q1), but
 `FloatRefTargetSugarTransform` runs after the shortcode pass and parses the `lst-cap` string into the
-caption, so a literal `{{< … >}}` becomes an unresolved `Inline::Shortcode` that nothing resolves.
+caption, so a literal `{{{< … >}}}` becomes an unresolved `Inline::Shortcode` that nothing resolves.
 Q1 expands it ("Listing 1: LC Ann").
 
 The pandoc path hides 1 and 2 today only because the vendored Lua shortcodes pass catches them.

@@ -60,7 +60,7 @@ through to raw source in the pane. The capture records server-side (verified in
       Where does the `__MARIMO_EXPORT_CONTEXT__`/`<marimo-code>` header sit
       (it flows through `include-in-header`, NOT the markdown body — confirm it
       is absent from `B1.blocks`)? Record the block-shape verbatim in the plan
-      + `capture_splice_seam.rs`'s doc comment; it defines SC22's synthetic-but-
+      + `capture_splice_seam.rs`\'s doc comment; it defines SC22's synthetic-but-
       faithful `B1`.
 - [x] Write the **RED** first: add the SC22 native seam (below) with a
       marimo-shaped `B1`; confirm it fails today (marimo cell → raw source).
@@ -121,7 +121,7 @@ recommendation follows.
   splice works unchanged. Rejected as the default: changes marimo's render
   output (re-validation of the whole render tier), grows the upstream diff, and
   pushes engine-shape knowledge into the engine instead of keeping the core
-  general. Keep on file as the fallback if (a)'s matcher proves unsafe.
+  general. Keep on file as the fallback if (a)\'s matcher proves unsafe.
 - [x] Present (a) vs (b) with the A0 evidence; implement the ratified option.
       **Gordon ratified Option (a)** — splice-side generalization in
       `capture_splice.rs` (engine-agnostic; marimo render output unchanged).
@@ -132,7 +132,7 @@ recommendation follows.
       hunk: reverting it returns the marimo cell to raw source → SC22 RED.
       Implemented as `is_engine_output_block(block) = is_cell_wrapper(block) ||
       matches!(block, Block::RawBlock(_))`, swapped into the two `is_cell_wrapper`
-      uses in `derive_cell_outputs_walk`'s engine-cell branch. Named-revert
+      uses in `derive_cell_outputs_walk`\'s engine-cell branch. Named-revert
       confirmed: reverting the swap → SC22 RED (`out.blocks[1]` is a `CodeBlock`).
 - [x] Regression guard (refactor-vacuity): the existing wrapped-cell seams
       (`cell_wrapped_capture_splices`, `real_echo_capture_splices`, the julia

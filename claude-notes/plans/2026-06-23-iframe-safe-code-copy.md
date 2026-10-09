@@ -57,7 +57,7 @@ pattern (`ShareDialog.tsx`, `Editor.tsx`, `ProjectTab.tsx`); no clipboard.js
 dependency added. Secure-context only (localhost/https — both preview hosts
 qualify).
 
-**Text extraction:** mirror native `code-copy-init.js`'s `getTextToCopy`: from
+**Text extraction:** mirror native `code-copy-init.js`\'s `getTextToCopy`: from
 the button, `closest('.code-copy-outer-scaffold')` → `querySelector('code')` →
 clone → strip `.code-annotation-*` children → `innerText`.
 
@@ -73,7 +73,7 @@ Bootstrap tooltip (none in preview) — parity with native render v1.
   helper. Unit-testable without React.
 - **Edit** `ts-packages/preview-renderer/src/q2-preview/PreviewRoot.tsx` — one
   `useEffect(() => installCodeCopy(previewHostRef.current!), [])` (guarded for a
-  null ref). ~5 lines.
+  null ref). \~5 lines.
 
 ### Out of scope
 

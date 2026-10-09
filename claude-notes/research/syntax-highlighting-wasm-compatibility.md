@@ -23,7 +23,7 @@ without modification:
 1. **`LazyLock` is fine** — same story as `OnceLock`, which we already use in WASM.
 2. **`AtomicUsize` is fine** — load/store on `usize`-sized atomics is available on wasm32-unknown-unknown; ordering is vacuous in single-threaded mode, which is correct.
 3. **Grammar crates compile fine** — follow the proven tree-sitter-qmd pattern (cc + C parser).
-4. **Bundle size is acceptable** — ~17 MB for full hub-client with existing grammars; each additional grammar adds roughly 150–300 KB uncompressed, ≈ 30–70 KB compressed.
+4. **Bundle size is acceptable** — \~17 MB for full hub-client with existing grammars; each additional grammar adds roughly 150–300 KB uncompressed, ≈ 30–70 KB compressed.
 
 **Bottom line:** We can use tree-sitter-highlight + bundled grammar crates in `wasm-quarto-hub-client` without architectural compromise. The only real cost is **bundle size per bundled language grammar**. If that becomes a concern, the alternative is the separate `web-tree-sitter` JavaScript runtime which loads `.wasm` grammars dynamically on demand — but that's a different architecture and out of scope for v1.
 
@@ -160,7 +160,7 @@ This is **out of scope** for the current architecture and adds significant compl
 
 **wasm-quarto-hub-client (pampa-based, no tree-sitter-highlight):**  
 - `/Users/cscheid/repos/github/quarto-dev/q2/crates/wasm-quarto-hub-client/target/wasm32-unknown-unknown/release/wasm_quarto_hub_client.wasm`
-- **Size: ~17 MB** (uncompressed)
+- **Size: \~17 MB** (uncompressed)
 
 ### Per-Grammar Cost Estimates
 
@@ -168,17 +168,17 @@ Based on C parser sizes and Rust bindings overhead:
 
 | Grammar | Parser Size | Compiled .wasm (Standalone) | Bundled Overhead | Notes |
 |---------|-------------|---------------------------|-----------------|-------|
-| QMD (markdown) | ~180 KB | ~500 KB | +150 KB | Existing; minimal scanner |
-| Python | ~250 KB | ~700 KB | +200 KB | Medium-complexity scanner |
-| Rust | ~280 KB | ~800 KB | +220 KB | Complex features, guards |
-| JavaScript/TypeScript | ~300 KB | ~850 KB | +250 KB | Large grammar, regex scanner |
-| C/C++ | ~320 KB | ~950 KB | +280 KB | Deep nesting, complex types |
+| QMD (markdown) | \~180 KB | \~500 KB | +150 KB | Existing; minimal scanner |
+| Python | \~250 KB | \~700 KB | +200 KB | Medium-complexity scanner |
+| Rust | \~280 KB | \~800 KB | +220 KB | Complex features, guards |
+| JavaScript/TypeScript | \~300 KB | \~850 KB | +250 KB | Large grammar, regex scanner |
+| C/C++ | \~320 KB | \~950 KB | +280 KB | Deep nesting, complex types |
 
 **Estimate per grammar: 150–300 KB per bundled grammar** (including LLVM optimizations and WASM binary overhead).
 
-**For 5 languages:** ~1 MB additional WASM size (uncompressed), ~200–300 KB compressed (gzip/brotli).
+**For 5 languages:** \~1 MB additional WASM size (uncompressed), \~200–300 KB compressed (gzip/brotli).
 
-**Browser delivery:** With HTTP compression, adding 5 grammar crates to hub-client likely increases download size by **~300 KB**, negligible for modern broadband.
+**Browser delivery:** With HTTP compression, adding 5 grammar crates to hub-client likely increases download size by **\~300 KB**, negligible for modern broadband.
 
 ---
 
@@ -254,7 +254,7 @@ Grammar crates are **ready to use as-is** — follow the tree-sitter-qmd pattern
 
 1. **tree-sitter-highlight:** Requires removal of `LazyLock` (replace with `OnceLock` or eager init)
 2. **Grammar crates:** Use as-is; follow proven tree-sitter-qmd pattern
-3. **Bundle cost:** ~150–300 KB per grammar (acceptable)
+3. **Bundle cost:** \~150–300 KB per grammar (acceptable)
 4. **Architectural fit:** Single-threaded WASM model aligns with static linking; no dynamic loading needed
 
 **Effort estimate:** 2–3 days (patch tree-sitter-highlight, integrate 2–3 grammars, test).
@@ -268,4 +268,4 @@ Grammar crates are **ready to use as-is** — follow the tree-sitter-qmd pattern
 - AtomicUsize usage: Lines 175, 300, 534, 905
 - tree-sitter-qmd (working example): `/Users/cscheid/repos/github/quarto-dev/q2/crates/tree-sitter-qmd/`
 - wasm-qmd-parser (proven WASM build): `/Users/cscheid/repos/github/quarto-dev/q2/crates/wasm-qmd-parser/AGENTS.md`
-- Current hub-client WASM size: ~17 MB (uncompressed)
+- Current hub-client WASM size: \~17 MB (uncompressed)

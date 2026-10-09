@@ -48,7 +48,7 @@ transform** that writes plain strings into metadata, keeping
 doctemplates logic-less — is not a compromise; it is structurally the
 same pipeline position Q1 uses. Everything downstream (built-in
 partials, user `template-partials`, the q2-preview React title block,
-listings' doctemplates) gets formatted dates for free.
+listings\' doctemplates) gets formatted dates for free.
 
 ## Q1 feature surface (source + docs study)
 
@@ -198,8 +198,8 @@ matter; both only touch meta). For each of `date`, `date-modified`:
 5. Format selection, matching Q1's precedence: field-local
    `format` > document `date-format` > default. Default is
    **`long` when the styled HTML title block is active**
-   (format-html + `title-block-style` ∉ {plain? see open question
-   Q-c, none}) and **`iso` otherwise** — Q1's
+   (format-html + `title-block-style` ∉ \{plain? see open question
+   Q-c, none\}) and **`iso` otherwise** — Q1's
    `documentTitleMetadata` rule plus its global iso normalization.
 
 ### 3. Listings and feeds consume the same module
@@ -212,7 +212,7 @@ matter; both only touch meta). For each of `date`, `date-modified`:
   time — the doctemplate listing templates keep interpolating plain
   strings, exactly like Q1's EJS.
 - Feeds keep RFC-2822 output (a machine format, not user-styled) but
-  `format_pub_date_rfc822`'s ad-hoc parse is replaced by
+  `format_pub_date_rfc822`\'s ad-hoc parse is replaced by
   `dates::parse_date`, closing the "two parsers drift" hole.
 
 ### 4. Preview (Q9) and testing

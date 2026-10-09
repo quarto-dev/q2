@@ -178,7 +178,7 @@ sample $! 4 -file /tmp/s.txt            # sample the live process for 4s
 # then read /tmp/s.txt — system frames now have names
 ```
 
-Real example (bd-b7eb7): a multithreaded `q2 render` showed ~75 %
+Real example (bd-b7eb7): a multithreaded `q2 render` showed \~75 %
 `__ulock_wait2`/`os_unfair_lock` with the waits charged to tree-sitter's
 `ts_lexer__advance`, and the libc frame below it unsymbolicated. We
 **guessed "malloc" and it was wrong** — swapping in mimalloc (both as
@@ -223,7 +223,7 @@ standalone driver — **not vitest**.
    either — the result is still empty. Run the driver directly with
    `node --cpu-prof` and skip vitest entirely.
 2. Any production code that yields via `requestIdleCallback` will show
-   ~99 % `(idle)` in the profile because Node falls back to
+   \~99 % `(idle)` in the profile because Node falls back to
    `setTimeout(0)` per yield. Override it at the top of the driver
    before importing the code under test:
 
@@ -234,7 +234,7 @@ standalone driver — **not vitest**.
    };
    ```
 
-   Seen in attribution profiling (2026-04-23): vitest reported ~1 s per
+   Seen in attribution profiling (2026-04-23): vitest reported \~1 s per
    1M-char build, actual CPU was 15 ms — the other 985 ms was
    `setTimeout(0)` round trips. Profiling without the override
    measures the scheduler, not your code.
@@ -246,7 +246,7 @@ throwaway. The minimum is a single **driver** that overrides
 calls the hot function in a timed loop over scaled fixtures.
 
 If you also need to shim an ESM dep (e.g. to bypass
-`@automerge/automerge`'s `diff`), add three more pieces, and change the
+`@automerge/automerge`\'s `diff`), add three more pieces, and change the
 driver to import the code under test **dynamically** (`await
 import(...)`) — a static import would resolve before the register hook
 lands:
@@ -300,7 +300,7 @@ node hub-client/scripts/perf/analyze-cpuprofile.mjs \
   line-level hotspots, pre-transpile to `.js` with inline maps and
   profile that.
 - This is a *native proxy* in the Rust-playbook sense, with the same
-  limitation: anything you shim (e.g. `@automerge/automerge`'s `diff`)
+  limitation: anything you shim (e.g. `@automerge/automerge`\'s `diff`)
   disappears from the profile. Design your workload accordingly — if
   the real bottleneck is inside the shimmed dep, you'll need a
   browser profile to see it.

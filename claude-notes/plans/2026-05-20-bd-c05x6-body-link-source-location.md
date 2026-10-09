@@ -5,7 +5,7 @@
 **Issue**: bd-c05x6 (P3, task)
 **Parent (discovered-from)**: bd-hjv5o (item #1 in its checklist)
 **Related precedent**: bd-qor9a (nav-surface SourceInfo plumbing) — done.
-**Related**: bd-8d6rk (structured Q-13-* diagnostic shape) — done.
+**Related**: bd-8d6rk (structured Q-13-\* diagnostic shape) — done.
 
 ## Reproducer
 
@@ -20,7 +20,7 @@ Warning [Q-13-4]: Body link references missing document
 
 There is no `at file:row:col` line — the user has to grep the source
 tree to find which `.qmd` file holds the broken link. Compare with the
-sidebar / navbar / footer Q-13-* diagnostics, which (after bd-qor9a)
+sidebar / navbar / footer Q-13-\* diagnostics, which (after bd-qor9a)
 already render an `at …` line pointing at the offending YAML scalar.
 
 The desired output looks like:
@@ -132,61 +132,61 @@ the right file.
 ## TDD checklist
 
 - [x] **Phase 0.1**: New unit test
-      `link_rewrite_diagnostic_carries_source_location` (alongside
-      the existing `link_rewrite_diagnostic_uses_body_link_label`)
-      stamps a `SourceInfo` into `Link.target_source.url` and asserts
-      that the emitted Q-13-4 carries it. Initial run **failed** with
-      `left: None, right: Some(Original { … })`, confirming the
-      `None`-passed status quo.
+  `link_rewrite_diagnostic_carries_source_location` (alongside
+  the existing `link_rewrite_diagnostic_uses_body_link_label`)
+  stamps a `SourceInfo` into `Link.target_source.url` and asserts
+  that the emitted Q-13-4 carries it. Initial run **failed** with
+  `left: None, right: Some(Original { … })`, confirming the
+  `None`-passed status quo.
 - [x] **Phase 0.2**: Extended the two Q-13-4 assertions in
-      `crates/quarto-core/tests/link_rewriting_pipeline.rs`
-      (`pipeline_body_link_broken_qmd_emits_diagnostic` and
-      `pipeline_body_link_unresolvable_in_website_warns`) with
-      `q_13_4.unwrap().location.is_some()`. Both **failed** with
-      `location: None` before the fix.
+  `crates/quarto-core/tests/link_rewriting_pipeline.rs`
+  (`pipeline_body_link_broken_qmd_emits_diagnostic` and
+  `pipeline_body_link_unresolvable_in_website_warns`) with
+  `q_13_4.unwrap().location.is_some()`. Both **failed** with
+  `location: None` before the fix.
 
 ## Implementation checklist
 
 - [x] **Phase 1.1**: Changed the `None` at
-      `crates/quarto-core/src/transforms/link_rewrite.rs:224` to
-      `link.target_source.url.clone()`.
+  `crates/quarto-core/src/transforms/link_rewrite.rs:224` to
+  `link.target_source.url.clone()`.
 - [x] **Phase 1.2**: Re-ran the unit + integration tests; all three
-      previously-failing tests now pass. Full
-      `cargo nextest run -p quarto-core` clean (2060 passed, 33
-      skipped).
+  previously-failing tests now pass. Full
+  `cargo nextest run -p quarto-core` clean (2060 passed, 33
+  skipped).
 - [x] **Phase 1.3**: Updated the doc-comments on
-      `missing_document_warning`, `resolve_href_for_html`, and
-      `resolve_doc_relative_href` in `navigation_href.rs` so they
-      reflect the post-bd-c05x6 reality — body-link callsite now
-      passes the URL's `SourceInfo`; the "forward-looking, callers
-      pass None" caveats are gone.
+  `missing_document_warning`, `resolve_href_for_html`, and
+  `resolve_doc_relative_href` in `navigation_href.rs` so they
+  reflect the post-bd-c05x6 reality — body-link callsite now
+  passes the URL's `SourceInfo`; the "forward-looking, callers
+  pass None" caveats are gone.
 
 ## End-to-end verification
 
 - [x] **E1**: `q2 render` on `docs/` (the user's reproducer) now
-      emits the Q-13-4 warnings *with* source location:
+  emits the Q-13-4 warnings *with* source location:
 
-      ```
-      Warning: [Q-13-4] Body link references missing document
-          ╭─[ docs/authoring/markdown/index.qmd:89:23 ]
-          │
-       89 │   * [Markdown Basics](./markdown-basics.qmd)
-          │                       ─────────┬──────────
-          │                                ╰── 'authoring/markdown/markdown-basics.qmd'
-          │                                    is not in the project index.
-      ```
+  ```
+  Warning: [Q-13-4] Body link references missing document
+      ╭─[ docs/authoring/markdown/index.qmd:89:23 ]
+      │
+   89 │   * [Markdown Basics](./markdown-basics.qmd)
+      │                       ─────────┬──────────
+      │                                ╰── 'authoring/markdown/markdown-basics.qmd'
+      │                                    is not in the project index.
+  ```
 
-      Both Q-13-4 warnings in the docs/ render carry an Ariadne
-      excerpt pointing at the offending `.qmd:line:col`. Verified
-      with `target/debug/q2 render /…/docs` after `cargo build --bin q2`.
+  Both Q-13-4 warnings in the docs/ render carry an Ariadne
+  excerpt pointing at the offending `.qmd:line:col`. Verified
+  with `target/debug/q2 render /…/docs` after `cargo build --bin q2`.
 - [x] **E2**: Skipped as a separate fixture — the two integration
-      tests in `link_rewriting_pipeline.rs` already exercise the
-      Q-13-4 path through `ProjectPipeline::run` against fixture qmds,
-      and both now assert `location.is_some()`. A fresh fixture would
-      duplicate that coverage without adding signal.
+  tests in `link_rewriting_pipeline.rs` already exercise the
+  Q-13-4 path through `ProjectPipeline::run` against fixture qmds,
+  and both now assert `location.is_some()`. A fresh fixture would
+  duplicate that coverage without adding signal.
 - [x] **E3**: `cargo xtask verify --skip-hub-build` — all 12 steps
-      green (build + lint + workspace tests + WASM + q2-preview-spa
-      bundle).
+  green (build + lint + workspace tests + WASM + q2-preview-spa
+  bundle).
 
 ## What's deliberately out of scope
 

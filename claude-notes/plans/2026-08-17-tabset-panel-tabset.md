@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-17
 **Braid:** bd-toc-tabset-titles-zq93gjvf (feature, p2, label `html`)
-**Branch:** `braid/bd-toc-tabset-titles-zq93gjvf-panel-tabset-support` (in the main checkout, off `main` @ `a29b22ca`, per user)
+**Branch:** `braid/bd-toc-tabset-titles-zq93gjvf-panel-tabset-support` (in the main checkout, off `main` \@ `a29b22ca`, per user)
 **Status:** Implemented 2026-08-17 — all phases complete, verified end-to-end (see § E2E evidence). Pending review/merge.
 
 ## Triage verdict
@@ -18,7 +18,7 @@ Q2 has **no tabset support at all**: a `::: {.panel-tabset}` Div passes through 
 
 The TOC collector is *not* at fault — `collect_toc_entries` (crates/pampa/src/toc.rs:341) correctly recurses into non-section Divs. Q1 has no TOC-exclusion logic either; its tabset filter simply consumes the Headers before the TOC is built. The fix reproduces that ordering, not a TOC special case.
 
-**Grouped tabsets are in scope, not a nice-to-have** — explicit requirement from the Connect docs port: `group="language"` etc. syncs every same-group tabset on the page and persists the choice in localStorage. ~166 of ~185 tabsets in the Connect docs are grouped. Real-world impact: ~115 of 352 Connect-docs pages have tabsets; this is the single largest chrome-sweep noise source in that port (120 of 123 differing pages in the 0.21.0 triage).
+**Grouped tabsets are in scope, not a nice-to-have** — explicit requirement from the Connect docs port: `group="language"` etc. syncs every same-group tabset on the page and persists the choice in localStorage. \~166 of \~185 tabsets in the Connect docs are grouped. Real-world impact: \~115 of 352 Connect-docs pages have tabsets; this is the single largest chrome-sweep noise source in that port (120 of 123 differing pages in the 0.21.0 triage).
 
 ## Dependency graph
 
@@ -32,7 +32,7 @@ Spot-checked at HEAD (`60cc579e`, same commit the strand was verified against to
 - **The pattern to mirror is the callout pair**: `CalloutTransform` (Div → `CustomNode("Callout")`, `TransformPhase::Normalization`) at `crates/quarto-core/src/pipeline.rs:1232`, immediately followed by `CalloutResolveTransform` (CustomNode → structured Divs/RawInlines) at `:1233`. Both run **before** `SectionizeTransform` (`:1317`) and `TocGenerateTransform` (`:1371`) — a tabset pair in the same neighborhood consumes the tab-title Headers before sectionize/TOC ever see them, fixing the TOC for free.
 - **JS-shipping pattern exists**: `BootstrapJsStage` (`crates/quarto-core/src/stage/stages/bootstrap_js.rs`) and especially `ClipboardJsStage` (`clipboard_js.rs`) — embed the file from `resources/js/<name>/` via `include_bytes!`, store a Project-scoped `js:<key>` artifact (gated on `!is_minimal_html` + a metadata/content predicate), and `ApplyTemplateStage` emits `<script>` tags in sorted-key order. `bootstrap.bundle.min.js` already ships on every Bootstrap-themed page, so basic tab switching (`data-bs-toggle="tab"`) needs **no new JS** once the markup exists. Only the grouped-sync module is a new JS asset.
 - Q1 reference implementation read in full:
-  - `external-sources/quarto-cli/src/resources/filters/customnodes/panel-tabset.lua` (368 lines; ~half is Lua proxy-metatable machinery q2 doesn't need). Parse: find first Header inside the Div, its level defines tab boundaries; each same-level Header starts a tab (title = header inlines, `active` = header has `.active` class, default active = first tab). Render: `<ul class="nav nav-tabs" role="tablist">` built from RawInlines + title inlines, then a `tab-content` Div (the original attr with `panel-tabset` class swapped for `tab-content`... note: Q1 actually emits an *outer* `panel-tabset` div wrapping nav + `tab-content` — see captured markup) holding one `tab-pane` Div per tab. Ids: `tabset-<N>-<M>` with a page-global counter N.
+  - `external-sources/quarto-cli/src/resources/filters/customnodes/panel-tabset.lua` (368 lines; \~half is Lua proxy-metatable machinery q2 doesn't need). Parse: find first Header inside the Div, its level defines tab boundaries; each same-level Header starts a tab (title = header inlines, `active` = header has `.active` class, default active = first tab). Render: `<ul class="nav nav-tabs" role="tablist">` built from RawInlines + title inlines, then a `tab-content` Div (the original attr with `panel-tabset` class swapped for `tab-content`... note: Q1 actually emits an *outer* `panel-tabset` div wrapping nav + `tab-content` — see captured markup) holding one `tab-pane` Div per tab. Ids: `tabset-<N>-<M>` with a page-global counter N.
   - Grouped-sync module: Q1's `site_libs/quarto-html/tabsets/tabsets.js` (95 lines, captured at `claude-notes/plans/tabset-panel-tabset-investigation/q1-tabsets-sync-reference.js`). It is an ES module whose `init()` is called by Q1's `quarto.js` (`import * as tabsets` / `tabsets.init()`); q2 has no quarto.js, so the port should self-initialize (mirror `code-copy-init.js`). Sync key is the tab's `innerHTML` value; group comes from `div[data-group]`; persistence key `quarto-persistent-tabsets-data`.
 - **Repro captured locally** at `claude-notes/plans/tabset-panel-tabset-investigation/` (`index.qmd`, `_quarto.yml`, `q1-target-markup.html` with the exact Q1 TOC + tabset markup to match). Original lives in the external q2-connect-docs repo; copied per the external-fixtures policy.
 

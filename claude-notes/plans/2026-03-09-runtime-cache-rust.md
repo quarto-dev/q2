@@ -189,7 +189,7 @@ used for future LRU eviction if needed.
 - [x] `test_cache_invalid_namespace_rejected` — namespace with `/` or `..` is
   rejected
 - [x] `test_cache_empty_value` — storing and retrieving empty bytes works
-- [x] `test_cache_large_value` — storing and retrieving a ~1MB value works
+- [x] `test_cache_large_value` — storing and retrieving a \~1MB value works
 - [x] `test_cache_binary_value` — non-UTF8 bytes roundtrip correctly
 - [x] `test_cache_creates_directories` — set creates namespace directory
   hierarchy if it doesn't exist
@@ -202,5 +202,5 @@ used for future LRU eviction if needed.
 ## Reference
 
 See parent plan (`claude-notes/plans/2026-03-09-runtime-cache.md`) for API
-design, conventions, and design decisions (async rationale, Vec<u8> rationale,
+design, conventions, and design decisions (async rationale, `Vec<u8>` rationale,
 atomic write rationale, etc.).

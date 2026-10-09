@@ -16,27 +16,27 @@ unrelated (CI Playwright caching, a `render --help` wording trim).
 ## Fixture & baseline
 
 - 565 `.qmd` files, 9.4 MB of markdown → Cosmo-themed HTML website.
-- **Baseline: ~4.6 s wall** (`user 4.04 + sys 0.56 ≈ real 4.56`),
-  essentially single-threaded. ~8 ms/file.
+- **Baseline: \~4.6 s wall** (`user 4.04 + sys 0.56 ≈ real 4.56`),
+  essentially single-threaded. \~8 ms/file.
 - Profiled with samply at 1 kHz (`release-perf`), 5073 samples.
 
 ## Findings
 
 ### Self-time buckets (single-threaded profile)
 
-| Bucket | ~% | Notes |
+| Bucket | \~% | Notes |
 |---|---|---|
-| Tree-sitter parsing | ~17% | `ts_parser__advance`, cursor iteration, `ts_lex` — inherent |
-| `memmove` (AST construction) | ~11% | diffuse `String::clone` / `Vec::extend` in tree→Pandoc visitor + postprocess |
-| Filesystem syscalls | ~13% | `open` 5%, `read` 2.6%, `mkdir` 2%, `stat` 1.9%, `rename` 0.8%, `getattrlist` 0.7% |
-| Regex DFA compilation | ~5% | `thompson::compiler` / `Utf8State` — regexes recompiled (a bug) |
-| Hashing | ~4% | SipHash (~3%) + SHA-256 (~1%) for cache keys |
+| Tree-sitter parsing | \~17% | `ts_parser__advance`, cursor iteration, `ts_lex` — inherent |
+| `memmove` (AST construction) | \~11% | diffuse `String::clone` / `Vec::extend` in tree→Pandoc visitor + postprocess |
+| Filesystem syscalls | \~13% | `open` 5%, `read` 2.6%, `mkdir` 2%, `stat` 1.9%, `rename` 0.8%, `getattrlist` 0.7% |
+| Regex DFA compilation | \~5% | `thompson::compiler` / `Utf8State` — regexes recompiled (a bug) |
+| Hashing | \~4% | SipHash (\~3%) + SHA-256 (\~1%) for cache keys |
 
 ### #247 fixed the locale lock (verified, not assumed)
 
 | profile | locale-lock waits |
 |---|---|
-| Old May-31 MT profile (bd-b7eb7 pathology) | **77%** (`__ulock_wait2` 53% + `__ulock_wake` 20% + `os_unfair_lock` ~4%) |
+| Old May-31 MT profile (bd-b7eb7 pathology) | **77%** (`__ulock_wait2` 53% + `__ulock_wake` 20% + `os_unfair_lock` \~4%) |
 | Current profile (post-#247) | **0.65%** |
 
 The previous-session caution that "MT scaling is capped by the locale
@@ -48,10 +48,10 @@ Two-pass rayon architecture:
 
 - **Pass 1** (parallel profile extraction):
   `perf.pass1 docs=565 threads_used=16 wall_ms=19` — fully parallel,
-  ~0.4 % of total wall. The `quarto-pass1-*` worker threads.
+  \~0.4 % of total wall. The `quarto-pass1-*` worker threads.
 - **Pass 2** (qmd→HTML render-to-file): a **serial `for` loop** at
   `crates/quarto-core/src/project/orchestrator.rs:1013`, awaiting each
-  page sequentially on the main thread. **~98 % of the 4.6 s.**
+  page sequentially on the main thread. **\~98 % of the 4.6 s.**
 
 Worker-thread CPU share in the profile: main `q2` thread 93 %, all 16
 `quarto-pass1-*` workers combined 6.9 %.
@@ -81,15 +81,15 @@ project-scoped artifacts into it) — a *mergeable* accumulator.
 
 Re-profiled `q2 render claude-notes/qmd-plans/` with both fixes landed.
 Regex compilation is gone; the parallel profile is clean (16 workers
-~6.2% each, only ~4.7% lock waits — the 7.3× is hardware-bound at
+\~6.2% each, only \~4.7% lock waits — the 7.3× is hardware-bound at
 8 cores, not contention). New serial (`jobs=1`) per-document buckets:
 
-| bucket | ~% | nature |
+| bucket | \~% | nature |
 |---|---|---|
-| tree-sitter parse | ~29% | inherent core |
-| `memmove` / AST construction (`String::clone`) | ~13% | diffuse; largest single lever |
-| filesystem syscalls | ~14% | see below |
-| SHA-256 cache keys | ~1.7% | per-doc |
+| tree-sitter parse | \~29% | inherent core |
+| `memmove` / AST construction (`String::clone`) | \~13% | diffuse; largest single lever |
+| filesystem syscalls | \~14% | see below |
+| SHA-256 cache keys | \~1.7% | per-doc |
 
 Filesystem breakdown surfaced a concrete, easy win:
 
@@ -99,17 +99,17 @@ Filesystem breakdown surfaced a concrete, easy win:
   path, so markdown docs no longer `mkdir` (or leak) a per-page temp
   dir. Verified: `mkdir` frame 3.01% → 0% in the profile; serial wall
   3650 → 3560 ms; 0 leaked `quarto-pipeline_*` dirs (was +565/render).
-- cache layer (`cache_set` tempfile+rename, `cache_get` open): ~3–4%
+- cache layer (`cache_set` tempfile+rename, `cache_get` open): \~3–4%
   — still open (the deferred constant-factor cleanup above).
 
 ### Ranked remaining next steps
 
 1. ✅ Lazy temp dir (bd-tky36) — done.
-2. Cache-layer write churn (~3–4%): redundant per-entry `create_dir_all`,
+2. Cache-layer write churn (\~3–4%): redundant per-entry `create_dir_all`,
    tempfile+rename for content-addressed entries.
-3. AST-construction allocations (~13%, largest lever, architectural):
+3. AST-construction allocations (\~13%, largest lever, architectural):
    `String::clone` / `Vec<Inline>` reallocs in tree→Pandoc + postprocess.
-4. Tree-sitter parse (~29%): inherent core; hardest to move.
+4. Tree-sitter parse (\~29%): inherent core; hardest to move.
 
 ## Experiment results (bd-2ercw regex fix)
 
@@ -149,7 +149,7 @@ fixed) with no lock contention — empirical confirmation that bd-3gj56
 |---|---|
 | buggy | 4720 ms |
 | fixed | 3540 ms |
-| **delta** | **−1180 ms (~−24%)** |
+| **delta** | **−1180 ms (\~−24%)** |
 
 End-to-end beats the isolated-parse delta because a full render parses
 each file **twice** (Pass 1 profile extraction + Pass 2 render), so the
@@ -165,10 +165,10 @@ per-parse regex cost is paid twice: 11.5% × 2 ≈ 23% ≈ measured 24%.
 | **total CPU samples** | **5073** | **4212 (−17%)** |
 
 \* memmove/malloc *percentages* rise only because the denominator
-shrank; their absolute cost is ~flat, confirming the 14.3% regex-compile
+shrank; their absolute cost is \~flat, confirming the 14.3% regex-compile
 was the genuinely removable work. (Note: my first-pass assessment
-under-quoted this as "~5%" — that was only the `determinize` self-time
-line; the full NFA/DFA compiler sums to ~14%.)
+under-quoted this as "\~5%" — that was only the `determinize` self-time
+line; the full NFA/DFA compiler sums to \~14%.)
 
 ## Status
 

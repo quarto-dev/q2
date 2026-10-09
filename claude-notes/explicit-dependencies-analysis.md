@@ -312,7 +312,7 @@ async fn test_execute_engine_step() {
 
 **Deliverable**: Website projects render files concurrently
 
-**Test**: 100-file website renders in ~1/16th time (with 16 cores)
+**Test**: 100-file website renders in \~1/16th time (with 16 cores)
 
 ### Phase 4: Caching (Weeks 13-16)
 

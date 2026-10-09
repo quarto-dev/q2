@@ -2,8 +2,8 @@
 date: 2026-07-20
 branch: TBD (plan phase — no implementation yet)
 status: >
-  v1.1 — ratified by user 2026-07-20 (all five open questions
-  resolved; see § Resolved decisions). Awaiting explicit go-ahead
+  v1.1 - ratified by user 2026-07-20 (all five open questions
+  resolved; see Resolved decisions). Awaiting explicit go-ahead
   to begin implementation.
 braid: bd-5m4ga0s1 (supersedes + related → epic bd-je48v)
 ---
@@ -102,7 +102,7 @@ New file `crates/quarto-core/src/transforms/mermaid.rs`:
 - If ≥1 block matched, append the CDN script to
   `ast.meta.rendered.includes.after-body` (the
   `website_favicon.rs` / `feed/link_inject.rs` precedent, consumed by
-  `IncludeResolveStage`'s `write_rendered_lists` output and
+  `IncludeResolveStage`\'s `write_rendered_lists` output and
   `ApplyTemplateStage`):
 
   ```html
@@ -123,7 +123,7 @@ New file `crates/quarto-core/src/transforms/mermaid.rs`:
 
   **Verify at impl time**: a Finalization-phase transform runs after
   `IncludeResolveStage` has already written `rendered.includes.*` —
-  confirm the favicon/feed-link transforms' exact append target and
+  confirm the favicon/feed-link transforms\' exact append target and
   timing, and do the same. If late appends to
   `rendered.includes.after-body` are NOT picked up by
   `ApplyTemplateStage`, fall back to appending a trailing
@@ -425,7 +425,7 @@ were the freshly rebuilt `target/debug/q2` (SPA re-embedded).
   `crates/quarto-core/src/engine/mermaid.rs`, `tests/mermaid_pipeline.rs`
 - Transform pipeline contract: `claude-notes/designs/transform-pipeline-phases.md`;
   `build_transform_pipeline` at `crates/quarto-core/src/pipeline.rs:1173`,
-  Finalization seams ~1373-1400, `Q2_PREVIEW_TRANSFORM_EXCLUDED` ~1461
+  Finalization seams \~1373-1400, `Q2_PREVIEW_TRANSFORM_EXCLUDED` \~1461
 - Includes mechanism precedents:
   `crates/quarto-core/src/transforms/website_favicon.rs`,
   `crates/quarto-core/src/project/listing/feed/link_inject.rs:38`,

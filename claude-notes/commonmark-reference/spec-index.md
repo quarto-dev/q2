@@ -64,7 +64,7 @@ Lists 14 ambiguous cases that the original Markdown description doesn't resolve:
 - **Unicode whitespace character** - Zs category, tab, LF, FF, CR
 - **tab** - U+0009
 - **space** - U+0020
-- **ASCII punctuation character** - `!-/`, `:-@`, `[-``, `{-~`
+- **ASCII punctuation character** - `!-/`, `:-@`, ``[-` ``, `{-\~`
 - **Unicode punctuation character** - P or S category
 
 ### Tabs (lines 343-478)

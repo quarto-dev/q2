@@ -28,7 +28,7 @@ for each mismatch, and classified each fixture by status. Differences from
 the real runner that matter when reading the numbers: it did not honour
 `shouldError`, it keyed only on the literal `html` tests entry, and its
 "has math" detector was a crude `$` regex (two false positives on `$` in
-comments). Wall time: 126 fixtures rendered in ~16 s of a 22 s run.
+comments). Wall time: 126 fixtures rendered in \~16 s of a 22 s run.
 
 **Results (164 fixtures):**
 
@@ -50,7 +50,7 @@ either a real divergence, intentional, or a limit of the harness/survey.
 
 - **`parity` → `dom-parity`** (commit `d750318b7`): the DSL key, the Rust
   field `TestSpec.dom_parity` and its error text (`dom-parity must be a
-  boolean`), both TS parsers' no-op case, the runner's lookup and assertion
+  boolean`), both TS parsers\' no-op case, the runner's lookup and assertion
   message, the two already-opted-in fixtures, `testing.md`, and the
   preview-render-parity skill. File names and the
   `PARITY_RULES`/`compareParity`/`smokeAllParity` identifiers were kept.
@@ -125,7 +125,7 @@ the method in § 1); the strands carry verbatim snippets.
 
 `extensions/builtin-kbd-shortcode/test.qmd`: the preview wraps the
 shortcode's `RawInline` html in an attribute-less `<span>` — the same
-host-element constraint that made `RawBlock`'s bare `<div>` an unwrap rule.
+host-element constraint that made `RawBlock`\'s bare `<div>` an unwrap rule.
 A symmetric "unwrap attribute-less `<span>`" rule is the obvious analogue,
 but spans are inline: unwrapping changes which siblings the whitespace-edge
 rule sees, so it needs the same reasoning the `<div>` rule got before it is

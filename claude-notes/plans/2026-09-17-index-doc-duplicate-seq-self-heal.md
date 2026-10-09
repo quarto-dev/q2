@@ -64,7 +64,7 @@ field (`CollectionSynchronizer`); `receiveMessage` is a public, documented
 method. Wrapping it at the *instance* level (not the class prototype) gives
 structured access to `message.documentId` — no string parsing — and calls
 through to the original method, tapping its rejection with an additional
-`.catch()` rather than replacing it, so `Repo.ts`'s own existing swallow
+`.catch()` rather than replacing it, so `Repo.ts`\'s own existing swallow
 still fires unchanged. This can't affect any other `Repo` instance, and no
 `automerge-repo` source is edited. The rejected alternative (wrapping global
 `console.log` for the literal `'error receiving message'` string) would
@@ -94,9 +94,9 @@ is materially more code and test surface for a first pass.
   without one), it's a no-op rather than a crash.
 - `recoverIndexDocument(collidedDocumentId)` — guarded against concurrent
   re-entry (`indexRecoveryInFlight`). Does the scoped, automated analog of
-  the manual IndexedDB wipe, entirely through `Repo`'s own public API:
+  the manual IndexedDB wipe, entirely through `Repo`\'s own public API:
   - `repo.delete(collidedDocumentId)` — confirmed against source
-    (`Repo.ts`'s `delete()` + its `"delete-document"` listener) to call
+    (`Repo.ts`\'s `delete()` + its `"delete-document"` listener) to call
     `synchronizer.removeDocument()` (drops the `DocSynchronizer` and all
     its per-peer `SyncState` for that one document — the wedged
     bookkeeping) and `storageSubsystem.removeDoc()` (purges the persisted
@@ -109,7 +109,7 @@ is materially more code and test surface for a first pass.
     subscription, and reconciles file/identity/capture state against the
     fresh doc's current content (a `'change'` event only fires on *future*
     mutations, so a one-time catch-up call is needed).
-  - A race guard mirrors an existing pattern in `findDoc`'s own retry loop:
+  - A race guard mirrors an existing pattern in `findDoc`\'s own retry loop:
     if `state.repo` no longer matches the `Repo` this recovery started
     against (a `disconnect()`/new `connect()` raced it), the stale result
     is discarded rather than applied to unrelated new connection state.
@@ -141,14 +141,14 @@ Per the repo's TDD rule, this was verified red-then-green: the two
 the test was confirmed to fail exactly as expected (collision still
 occurs; no recovery log; the run consumes the full poll timeouts), then
 the fix was restored and the test confirmed green — consistently, across
-repeated runs (~0.4–0.6s each, vs. ~10.3s before the fix, spent waiting on
+repeated runs (\~0.4–0.6s each, vs. \~10.3s before the fix, spent waiting on
 a stall that never resolved).
 
 `actor-id-collision.test.ts` separately proves, at the bare-automerge
 level (no `automerge-repo`, no network, no hub), that reusing one actor id
 across two independently-edited copies of a document reliably produces
 this exact `RangeError` via the real sync-message exchange — the fact
-`installDuplicateSeqRecovery`'s detection regex depends on.
+`installDuplicateSeqRecovery`\'s detection regex depends on.
 
 Full package suite: 140/140 (one existing-test compatibility fix needed:
 three existing test files mock `Repo` without a `.synchronizer`, which
@@ -164,7 +164,7 @@ changed `CollectionSynchronizer#receiveMessage`'s shape — async
 (returning a rejecting `Promise<void>`, swallowed by `Repo`'s own
 `.catch`) in v2.5.6, the version this fix was first written and tested
 against; **synchronous** (`void`, a plain throw caught by a `try/catch`
-around `Repo`'s inbound-message dispatch) from v2.6.0-alpha.5, which
+around `Repo`\'s inbound-message dispatch) from v2.6.0-alpha.5, which
 also moved the log line from `console.log("error receiving message",
 { err, message })` to `console.error("[automerge-repo:repo]", "error
 handling inbound message", err)` (no `message` in the log args anymore).
@@ -173,7 +173,7 @@ The underlying mechanism — automerge's `receiveSyncMessage` still throws
 the identical `RangeError` synchronously either way; automerge-repo
 still only logs and drops it, with no recovery — is unchanged, so the
 fix's *design* didn't need to change, only its *code*:
-`installDuplicateSeqRecovery`'s wrapper now handles both shapes (checks
+`installDuplicateSeqRecovery`\'s wrapper now handles both shapes (checks
 whether `original(message)` returned a `Promise` before deciding whether
 to tap `.catch` or rely on a synchronous `try/catch`), so a *future*
 automerge-repo version bump doesn't silently disable it again. Re-ran

@@ -105,7 +105,7 @@ when to render the textarea; only the trigger changes.
 Both channels are first-class and of equivalent power; they differ in *representation*.
 
 - **Built-in editing → text channel.** The textarea shows the block's **source
-  markdown**, obtained by slicing `content` over `sourceNode`'s range (Plan 1's
+  markdown**, obtained by slicing `content` over `sourceNode`\'s range (Plan 1's
   `sliceBytes`); on commit the component calls `ctx.commitTextEdit(destinationSourceInfoJson, newText)`;
   the parent runs `parseQmdContentSync(newText)` then `apply_node_edit`.
   (The iframe can't run the writer, so text is the right representation for the textarea.)
@@ -209,11 +209,11 @@ exposed on the global — `usePreviewEdit` is the public surface.
 
 The affordance attribute lives on the block's **own root element**, never on a
 framework-added wrapper — because the framework never wraps (D4).
-`useBlockEditHover`'s `closest('[data-block-pool-id]')` finds it there.
+`useBlockEditHover`\'s `closest('[data-block-pool-id]')` finds it there.
 
 Custom components that render the block through `<B>` or `renderChildren`
 preserve the attribute automatically. A component that wraps the block output
-(e.g. `comment`'s `position:relative` div) gets both its overlay UI **and** the
+(e.g. `comment`\'s `position:relative` div) gets both its overlay UI **and** the
 built-in text-edit affordance on the inner element — no extra work needed.
 
 A component that replaces the rendered block entirely (no `<B>` delegation,
@@ -246,8 +246,8 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
     `lookup_finds_block_via_generated_preimage_fallback` (lines 178–200; find
     by function name — line numbers may drift).
   - `claude-notes/plans/2026-06-04-target-incremental-writes.md`: update three
-    spots — data-flow diagram comment (~line 98), editability gate prose
-    (~lines 144–147), and Phase 2 checklist part (b) (~lines 211–218) — to
+    spots — data-flow diagram comment (\~line 98), editability gate prose
+    (\~lines 144–147), and Phase 2 checklist part (b) (\~lines 211–218) — to
     document that property #2 is retired and `Generated` nodes now return `None`.
     Find by content rather than exact line number.
 - [x] **Change `apply_node_edit` step 3** from `.ok_or(DestinationNotFound)?`
@@ -312,7 +312,7 @@ P1 reflow Playwright test. See
   *Roving-tabindex arrow navigation, ARIA, and touch OS gesture suppression are
   in Plan 2c.*
 - [x] `PreviewDocument.tsx` — spread the hook's `hostProps` on the root host
-  after `attr.hostProps` (lines ~263 main / ~238 minimal); render `stylesheet`
+  after `attr.hostProps` (lines \~263 main / \~238 minimal); render `stylesheet`
   node from hook. The two `hostProps` sets are disjoint today (`useAttributionHover`
   uses `onMouseOver`/`onMouseOut`; `useBlockEditHover` uses pointer events) so a
   second spread is correct. If a future handler introduces a key overlap, a

@@ -111,7 +111,7 @@ via `storage: 'memory'`, PreviewApp.tsx:829).
 All three `quarto-hub` consumers funnel through `getDb()`; the IDB
 surface they use is small (`get`/`put`/`delete`,
 `transaction→objectStore→index→{get,getAll}`, `objectStoreNames.contains`,
-`close`). One facade (~100 lines) replaces ~23 branch points across 15
+`close`). One facade (\~100 lines) replaces \~23 branch points across 15
 exported functions, and the node-environment unit tests prove the
 ephemeral path never touches the real `indexedDB` global (it is
 undefined there, so any leak throws).

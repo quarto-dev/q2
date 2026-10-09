@@ -65,9 +65,9 @@ The known producer kinds, defined in
 | Constructor                  | Line | `kind` string             | Purpose                                                                       | Atomic? |
 |------------------------------|------|---------------------------|-------------------------------------------------------------------------------|---------|
 | `By::filter(path, line)`     | 458  | `"filter"`                | Typed Inline/Block constructed inside a user Lua filter (auto-attached).      | yes     |
-| `By::sectionize()`           | 470  | `"sectionize"`            | `SectionizeTransform`'s synthesized section `Div`.                            | no      |
+| `By::sectionize()`           | 470  | `"sectionize"`            | `SectionizeTransform`\'s synthesized section `Div`.                            | no      |
 | `By::user_edit()`            | 479  | `"user-edit"`             | **Dormant.** Was React-constructed edit content; the `stampUserEdits` stamping path was removed and the current write-back model (`target-incremental-writes.md`) does not stamp edits. Constructor retained, currently unused in production. | no      |
-| `By::shortcode(name)`        | 494  | `"shortcode"`             | Result of resolving a `{{< name … >}}` token. **Requires an `Invocation`.**   | yes     |
+| `By::shortcode(name)`        | 494  | `"shortcode"`             | Result of resolving a `{{{< name … >}}}` token. **Requires an `Invocation`.**   | yes     |
 | `By::include()`              | 505  | `"include"`               | **Dormant.** Was for a planned `IncludeExpansion` wrapper; that design (Plan 8) is abandoned — `IncludeExpansionStage` splices flat and includes round-trip without a wrapper (see Plan 8 tombstone). Constructor retained, currently unused. | n/a |
 | `By::title_block()`          | 513  | `"title-block"`           | Title-block stage's synthesized title `h1`.                                   | yes     |
 | `By::footnotes()`            | 521  | `"footnotes"`             | Footnotes stage's container `Div` chrome.                                     | no      |
@@ -307,7 +307,7 @@ flow through the dispatch funnel:**
 - [`make_error_inline`](../../crates/quarto-core/src/transforms/shortcode_resolve.rs)
   (`:1352`) — `?key` Strong wrapping the unknown-shortcode message.
 - [`shortcode_to_literal`](../../crates/quarto-core/src/transforms/shortcode_resolve.rs)
-  (`:1368`) — `{{</ … >}}` escaped-shortcode literal text.
+  (`:1368`) — `{{{</ … >}}}` escaped-shortcode literal text.
 
 Both branches consume their `shortcode_owned.source_info` directly
 and emit an `Original` (the user-visible bytes belong to the token,
@@ -407,7 +407,7 @@ only driver was eleven hand-written snippets in `tiling_phase3_tests.rs`, none
 containing a multi-kv attribute.
 
 `tests/integration/tiling_corpus_tests.rs` (added 2026-08-22, bd-1d6io) is that
-driver: it runs `audit_source_range_tiling` over ~170 real documents and asserts
+driver: it runs `audit_source_range_tiling` over \~170 real documents and asserts
 zero findings, with a `KNOWN` list that must cite a strand per entry. **When you
 add a corpus of documents or a new handler, that test is the safety net — prefer
 extending it over writing a bespoke check.**
@@ -421,7 +421,7 @@ Two lessons worth keeping:
   formulation (boundary bytes, containment, disjointness) is what makes it
   robust.
 - **The abbreviation NBSP substitution is excluded** from the tightness check
-  (`check_tightness`'s `own_text` parameter). Pandoc-parity abbreviation
+  (`check_tightness`\'s `own_text` parameter). Pandoc-parity abbreviation
   handling absorbs the `Space` after an abbreviation into the preceding `Str`
   as U+00A0 so it cannot be separated from its referent, so `e.g. ` gives
   `Str("e.g.\u{a0}")` a range over five source bytes that really are its own
@@ -451,7 +451,7 @@ Sibling leaf ranges are disjoint, and a parent's range contains its children's.
 No source byte is claimed by two sibling nodes, qualified by two refinements:
 
 1. **(Intra-node — NOT a sibling-disjointness exception) the `Concat` hull.**
-   A `Concat`'s pieces tile internally and the node presents as one unit to its
+   A `Concat`\'s pieces tile internally and the node presents as one unit to its
    siblings — exactly one claim, never two. A *contiguous* `Concat` presents
    its hull; a *non-contiguous* one makes no contiguous claim (`preimage_in`
    → `None`). Use `contiguous_hull_for_run` (in `postprocess.rs`) to produce

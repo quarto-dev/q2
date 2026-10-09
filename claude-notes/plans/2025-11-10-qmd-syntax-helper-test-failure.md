@@ -127,7 +127,7 @@ The table was not updated after the grammar changes, so it still references the 
 
 The error table needs to be regenerated to reflect the new parser state numbers. According to the CLAUDE.md documentation in `crates/quarto-markdown-pandoc`:
 
-> After changing any of the resources/error-corpus/*.{json,qmd} files, run the script `scripts/build_error_table.ts`. It's executable with a deno hashbang line.
+> After changing any of the resources/error-corpus/\*.\{json,qmd\} files, run the script `scripts/build_error_table.ts`. It's executable with a deno hashbang line.
 
 The same process must be run whenever the grammar changes, even if the error corpus files themselves haven't changed.
 

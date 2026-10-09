@@ -155,7 +155,7 @@ cargo nextest run -p pampa
 - [ ] Lua filter tests pass
 - [ ] Citeproc tests pass
 - [ ] Template rendering tests pass
-- [ ] All pampa tests pass (should be ~800+ tests)
+- [ ] All pampa tests pass (should be \~800+ tests)
 
 ## Notes
 

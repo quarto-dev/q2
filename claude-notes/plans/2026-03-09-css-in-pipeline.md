@@ -21,7 +21,7 @@ document + runtime) is available. CSS compilation results are cached via the
   sits at top level (not nested under `format.html.theme`).
 - **SystemRuntime cache interface** must be implemented first (see
   `claude-notes/plans/2026-03-09-runtime-cache.md`). SASS compilation is
-  expensive (~200-500ms native, ~1-2s WASM) and the existing codebase caches
+  expensive (\~200-500ms native, \~1-2s WASM) and the existing codebase caches
   results. The cache interface provides platform-abstracted persistent caching:
   per-project filesystem at `{project_dir}/.quarto/cache/` on native, IndexedDB
   on WASM. The native runtime is configured with the cache dir after project
@@ -288,7 +288,7 @@ New native flow:
 - [ ] **Artifact access**: `render_qmd_to_html` currently returns `RenderOutput`
   but artifacts live in `RenderContext`. Check how artifacts are returned.
   The `run_pipeline` function in `pipeline.rs` transfers artifacts back to
-  `RenderContext` (line ~262: `ctx.artifacts = stage_ctx.artifacts`). So after
+  `RenderContext` (line \~262: `ctx.artifacts = stage_ctx.artifacts`). So after
   `render_qmd_to_html`, artifacts should be accessible via `ctx.artifacts`.
   If `render_qmd_to_html` doesn't return the context, we may need to modify it
   to also return the artifact store (or return the full context).

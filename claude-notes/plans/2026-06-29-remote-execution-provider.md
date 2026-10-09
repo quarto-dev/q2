@@ -394,7 +394,7 @@ code execution on the volunteer's machine**.
   execution implicitly extends that capability to everyone in the
   session — a user who runs `provide-hub` is understood to be offering
   their machine to the whole room. We **surface to all players** that
-  "code from this document runs on `<user>`'s machine" (a visible
+  "code from this document runs on `<user>`\'s machine" (a visible
   trust banner / indicator, not buried).
 - **Optional owner-only locked-down mode (follow-on).** A flag (e.g.
   `--owner-only`) restricts requests to *the providing user's own actor
@@ -528,22 +528,22 @@ work (it pairs naturally with Phase 1's capture-consumption port).
 D1–D6 and Q6–Q8 are **resolved** (see "Decisions locked" above). What
 remains genuinely open and needs settling *during* the relevant phase:
 
-1. **Auth bridge (D1=C) [Phase 3]**: token hand-off mechanism from
+1. **Auth bridge (D1=C) \[Phase 3\]**: token hand-off mechanism from
    Node→Rust — env var (simple, but token in process env), inherited
    fd / pipe, or a short-lived local socket. Plus how refresh
    propagates (Node refreshes; Rust must pick up the new token before
    the old one expires on reconnect). Lean fd/pipe for the secret.
-2. **Beacon/claim channel [Phase 2]**: carry the beacon + claim on the
+2. **Beacon/claim channel \[Phase 2\]**: carry the beacon + claim on the
    index `DocHandle` (needs a new exposed broadcast/subscribe method on
    `SyncClient`, since only per-file handles are exposed today) vs a
    convention on a well-known per-file handle. Lean index handle.
-3. **Claim granularity [Phase 2/4]**: per-document vs per-request
+3. **Claim granularity \[Phase 2/4\]**: per-document vs per-request
    (lean per-request keyed by `(path, generation)`; see D5).
-4. **Naming (Q7) [Phase 0/3]**: working name `q2 provide-hub`;
+4. **Naming (Q7) \[Phase 0/3\]**: working name `q2 provide-hub`;
    alternatives `q2 provide`, `q2 provide-execution`, `q2 hub-provide`.
    Avoid `connect` (Posit Connect collision). Final pick before the
    subcommand is user-visible.
-5. **Clear in-flight race (D6 sub-3) [Phase 4]**: confirm
+5. **Clear in-flight race (D6 sub-3) \[Phase 4\]**: confirm
    write-if-not-cleared vs accept-and-document once the executor exists.
 
 ## Phased plan (TDD)
@@ -767,7 +767,7 @@ against the actual dependency** — note it's the **quarto-dev git fork
 - `Transport` + `Transport::new(stream, sink)` are public
   (`pub use transport::Transport`; `transport.rs:32`). `new` accepts a
   `Stream<Item=Result<Vec<u8>, E>>` + `Sink<Vec<u8>, Error=E>`.
-- The only non-public helper is the ~25-line `ws_to_bytes`
+- The only non-public helper is the \~25-line `ws_to_bytes`
   (`websocket.rs:91`) mapping tungstenite `Message` ↔ bytes; we
   replicate it in our crate (filter Binary, drop Close/Ping/Pong, error
   on Text). Trivial.
@@ -818,7 +818,7 @@ Optional future cleanup: upstream a `dial_websocket_with_request` (or
   process-private (not in argv/env), and stream refreshes. Reuses
   `quarto-mcp-launcher` (Node discovery + bundle extraction) to spawn
   the helper; the helper is thin (OAuth loopback + RefreshManager from
-  `quarto-hub-mcp`'s `auth/`, streaming Bearers — it does **not**
+  `quarto-hub-mcp`\'s `auth/`, streaming Bearers — it does **not**
   connect to the hub; that's Rust's job).
 - **File materialization (for Phase 4 execution):** the executor
   materializes the project to a **fresh temp dir from the VFS each
@@ -852,7 +852,7 @@ before the Node auth helper:
         doc; the provider connects **over the real `BearerDialer`
         transport**, syncs, and lists the files. (No auth — the header
         is sent and ignored; the authenticated-acceptance path is
-        `quarto-hub`'s `auth_bearer` tests + the Phase 3C real-binary
+        `quarto-hub`\'s `auth_bearer` tests + the Phase 3C real-binary
         run.) Clippy `-D warnings` clean.
 - **3C — `q2 provide-hub` subcommand + Node auth bridge.**
 
@@ -946,7 +946,7 @@ Phase 1 consumption path).
    c. Write the capture binary doc (`create_binary_document` +
       `CAPTURE_MIME_TYPE` + `repo.create`) and `index.set_capture(path,
       CaptureRef{ capture_doc_id, staleness:false, state:idle })` — the
-      exact functions `quarto-preview`'s `re_execute.rs` uses. A client
+      exact functions `quarto-preview`\'s `re_execute.rs` uses. A client
       peer's `repo.create` + index mutation **sync to the hub and every
       peer**, so the editor sees it via `onCapturesChange`.
    d. On error: `CaptureRef.state = error` + `last_error` (Phase 1
@@ -1022,52 +1022,52 @@ plus an HTTPS fetch from the provider. Per the phase list, "authorization
 #### Phase 4a — implementation checklist (TDD), crate `quarto-hub-provider`
 
 - [x] **4a-1 — exec wire-format mirror + CBOR (`exec_channel.rs`).** ✅ done.
-      `ExecMessage` internally-tagged enum + `to_cbor`/`parse_exec_message`
-      via ciborium; 6 unit tests green, incl. a CBOR-shape assertion proving
-      the bytes are a standard map with the exact camelCase keys the TS
-      `parseExecMessage` checks (ciborium ↔ cbor-x interop confirmed).
-      `ExecMessage` enum mirroring the TS contract (internally tagged on
-      `kind`; camelCase field renames). CBOR encode/decode via `ciborium`
-      (the browser's `DocHandle.broadcast` CBOR-encodes the payload with
-      cbor-x `{useRecords:false}` → standard CBOR maps, so ciborium
-      interops). `BEACON_INTERVAL`/`BEACON_TIMEOUT` consts. Unit tests:
-      round-trip; CBOR shape is a map with the exact keys the TS
-      `parseExecMessage` checks; junk/unknown-kind → None.
+  `ExecMessage` internally-tagged enum + `to_cbor`/`parse_exec_message`
+  via ciborium; 6 unit tests green, incl. a CBOR-shape assertion proving
+  the bytes are a standard map with the exact camelCase keys the TS
+  `parseExecMessage` checks (ciborium ↔ cbor-x interop confirmed).
+  `ExecMessage` enum mirroring the TS contract (internally tagged on
+  `kind`; camelCase field renames). CBOR encode/decode via `ciborium`
+  (the browser's `DocHandle.broadcast` CBOR-encodes the payload with
+  cbor-x `{useRecords:false}` → standard CBOR maps, so ciborium
+  interops). `BEACON_INTERVAL`/`BEACON_TIMEOUT` consts. Unit tests:
+  round-trip; CBOR shape is a map with the exact keys the TS
+  `parseExecMessage` checks; junk/unknown-kind → None.
 - [x] **4a-2 — VFS→temp-dir materializer (`materialize.rs`).** ✅ done.
-      `materialize_project(repo, index, dest)` reads each file doc (text via
-      `doc.text`, binary via `resource::read_binary_content`), `safe_join`
-      guards against `..`/absolute traversal, writes under `<tmp>/<path>`.
-      2 unit tests (safe_join) + 1 integration test (text + nested binary →
-      on-disk bytes) green.
+  `materialize_project(repo, index, dest)` reads each file doc (text via
+  `doc.text`, binary via `resource::read_binary_content`), `safe_join`
+  guards against `..`/absolute traversal, writes under `<tmp>/<path>`.
+  2 unit tests (safe_join) + 1 integration test (text + nested binary →
+  on-disk bytes) green.
 - [x] **4a-3 — execute loop + capability beacon (`execute.rs`).** ✅ done.
-      `AuthzPolicy` (`AllowAll`/`Deny`, seam for Phase 5 `ProviderOnly`),
-      `Provider` (Arc-shared) with `run` = concurrent beacon-broadcast +
-      ephemeral request-listen until a shutdown future fires;
-      `execute_document` (materialize → `ProjectContext::discover` →
-      **uncached** `record_capture` → `write_capture_doc` gzip+binary-doc →
-      `set_capture` idle; running/error status on an existing capture;
-      in-flight dedup; path-safety guard). Local `CAPTURE_MIME_TYPE` with a
-      cross-ref comment (avoids the heavy quarto-preview dep). `join`
-      refactored to return the live `(Repo, IndexDocument)`. 4 unit tests
-      (authz gating, path safety, engine list).
+  `AuthzPolicy` (`AllowAll`/`Deny`, seam for Phase 5 `ProviderOnly`),
+  `Provider` (Arc-shared) with `run` = concurrent beacon-broadcast +
+  ephemeral request-listen until a shutdown future fires;
+  `execute_document` (materialize → `ProjectContext::discover` →
+  **uncached** `record_capture` → `write_capture_doc` gzip+binary-doc →
+  `set_capture` idle; running/error status on an existing capture;
+  in-flight dedup; path-safety guard). Local `CAPTURE_MIME_TYPE` with a
+  cross-ref comment (avoids the heavy quarto-preview dep). `join`
+  refactored to return the live `(Repo, IndexDocument)`. 4 unit tests
+  (authz gating, path safety, engine list).
 - [x] **4a-4 — integration test (`tests/integration/execute.rs`).** ✅ done.
-      Bare samod acceptor + passthrough-engine qmd; the editor side
-      re-broadcasts an `exec/request` on the index handle; the provider
-      (`AllowAll`) materializes, runs the passthrough engine, and writes a
-      capture binary doc + `idle` sidecar that **syncs back to the server**
-      (verified by gunzipping the synced capture doc → `EngineCapture` with
-      `engine_name == "test-passthrough"`). Second test: `Deny` writes no
-      capture over a 3 s broadcast window. Both green.
+  Bare samod acceptor + passthrough-engine qmd; the editor side
+  re-broadcasts an `exec/request` on the index handle; the provider
+  (`AllowAll`) materializes, runs the passthrough engine, and writes a
+  capture binary doc + `idle` sidecar that **syncs back to the server**
+  (verified by gunzipping the synced capture doc → `EngineCapture` with
+  `engine_name == "test-passthrough"`). Second test: `Deny` writes no
+  capture over a 3 s broadcast window. Both green.
 - [x] **4a-5 — wire `--allow-all` into `q2 provide-hub` + verify.** ✅ done.
-      `--allow-all` clap flag; fail-closed default (connect, list files, print
-      guidance, exit); with the flag the command builds a `Provider` (beacon
-      actorId = samod peer id) and runs the serve loop until Ctrl-C
-      (`tokio::signal`). Help renders; 3 unit tests green. **Full
-      `cargo xtask verify` green** (all 14 steps, incl. WASM rebuild + hub-client
-      tests). Two pre-existing environment issues surfaced and were fixed en
-      route — both unrelated to this work: `npm install` (the branch had added
-      uninstalled tiptap/prosemirror deps for `preview-renderer`) and a stale
-      WASM artifact (`captureSplice.wasm.test.ts` needed `npm run build:wasm`).
+  `--allow-all` clap flag; fail-closed default (connect, list files, print
+  guidance, exit); with the flag the command builds a `Provider` (beacon
+  actorId = samod peer id) and runs the serve loop until Ctrl-C
+  (`tokio::signal`). Help renders; 3 unit tests green. **Full
+  `cargo xtask verify` green** (all 14 steps, incl. WASM rebuild + hub-client
+  tests). Two pre-existing environment issues surfaced and were fixed en
+  route — both unrelated to this work: `npm install` (the branch had added
+  uninstalled tiptap/prosemirror deps for `preview-renderer`) and a stale
+  WASM artifact (`captureSplice.wasm.test.ts` needed `npm run build:wasm`).
 
 ### Phase 4a — end-to-end evidence (2026-07-01)
 
@@ -1100,32 +1100,32 @@ button (gated on a live beacon, reflecting `CaptureRef.state`/staleness).
 #### Phase 4b — implementation checklist (TDD), hub-client
 
 The trigger is the ephemeral `channel.requestExecution(path)` (not q2-preview's
-HTTP POST), so we reuse the *pattern* of `q2-preview-spa`'s
+HTTP POST), so we reuse the *pattern* of `q2-preview-spa`\'s
 `StaleCaptureOverlay` (state-reflecting label, disable-while-running, inline
 error) but not the component.
 
 - [x] **4b-1 — `hasExecutableCells(content)` helper.** Pure detector of
-      executable fenced code cells (```` ```{lang} ````) to gate the Run
-      affordance. Unit-tested.
+  executable fenced code cells (```` ```{lang} ````) to gate the Run
+  affordance. Unit-tested.
 - [x] **4b-2 — expose `requestExecution` from `useExecutionChannel`.** Return
-      `{ executors, requestExecution }` (hold the channel in a ref so the
-      callback is stable across renders). Update the hook's integration test +
-      the two App.tsx call sites.
+  `{ executors, requestExecution }` (hold the channel in a ref so the
+  callback is stable across renders). Update the hook's integration test +
+  the two App.tsx call sites.
 - [x] **4b-3 — `RunControl` component (presentational).** Run/Re-run button →
-      `onRun(path)`; disabled + "Executing…" while a local pending flag or
-      `state === 'running'`; `state === 'error'` surfaces `lastError`;
-      `staleness` shows a "code changed" note. Local pending clears when the
-      `captureDocId` changes (new capture arrived), on `error`, or after a
-      timeout (ephemeral request may find no executor). Component test for the
-      states.
+  `onRun(path)`; disabled + "Executing…" while a local pending flag or
+  `state === 'running'`; `state === 'error'` surfaces `lastError`;
+  `staleness` shows a "code changed" note. Local pending clears when the
+  `captureDocId` changes (new capture arrived), on `error`, or after a
+  timeout (ephemeral request may find no executor). Component test for the
+  states.
 - [x] **4b-4 — wire into App + Editor.** App destructures the hook and passes
-      `requestExecution` to Editor; Editor computes `hasExecutableCells(content)`
-      and renders `RunControl` in the preview pane when
-      `executorsOnline && hasExecutableCells`, keeping the plain
-      "Executor online" bar for non-executable docs.
+  `requestExecution` to Editor; Editor computes `hasExecutableCells(content)`
+  and renders `RunControl` in the preview pane when
+  `executorsOnline && hasExecutableCells`, keeping the plain
+  "Executor online" bar for non-executable docs.
 - [x] **4b-5 — build + changelog.** ✅ done. `npm run build:all` green (strict
-      tsc -b + vite); full hub-client suite green (unit 685 / integration 95 /
-      wasm 124). Committed `76a01167` (code) + `6e279c8f` (changelog).
+  tsc -b + vite); full hub-client suite green (unit 685 / integration 95 /
+  wasm 124). Committed `76a01167` (code) + `6e279c8f` (changelog).
 
 **Phase 4b complete → Phase 4 (execute-on-request) complete.** The full loop
 works: a collaborator clicks Run → the editor broadcasts `exec/request` → a
@@ -1199,5 +1199,5 @@ click-through is the manual verification the user can run with
 - Prior plans:
   - `claude-notes/plans/2026-06-11-q2-mcp-hub-auth.md` (auth + launcher; native-Rust findings)
   - `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md` (capture splice)
-  - `claude-notes/plans/2026-05-27-multi-engine-execution.md` (Vec<EngineCapture>)
+  - `claude-notes/plans/2026-05-27-multi-engine-execution.md` (`Vec<EngineCapture>`)
   - `claude-notes/plans/2026-01-06-execution-engine-infrastructure.md` (engine trait)

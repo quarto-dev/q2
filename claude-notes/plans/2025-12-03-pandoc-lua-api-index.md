@@ -81,13 +81,13 @@ Practical filter examples to study:
 
 | Example | Lines | Description |
 |---------|-------|-------------|
-| Macro substitution | ~480 | Simple text replacement |
-| Center images (HTML) | ~530 | Div wrapping |
-| Pagebreaks (LaTeX/HTML) | ~580 | RawBlock insertion |
-| Capitalizing headings | ~640 | text.upper usage |
-| Removing links | ~690 | Replace Link with content |
-| Removing links (preserve) | ~720 | pandoc.walk_inline |
-| Counting words | ~800 | Traverse and count |
+| Macro substitution | \~480 | Simple text replacement |
+| Center images (HTML) | \~530 | Div wrapping |
+| Pagebreaks (LaTeX/HTML) | \~580 | RawBlock insertion |
+| Capitalizing headings | \~640 | text.upper usage |
+| Removing links | \~690 | Replace Link with content |
+| Removing links (preserve) | \~720 | pandoc.walk_inline |
+| Counting words | \~800 | Traverse and count |
 
 ---
 
@@ -406,8 +406,8 @@ Generic list type with methods.
 ### Metamethods
 | Method | Lines | Description |
 |--------|-------|-------------|
-| __concat | 4763-4773 | Concatenate lists |
-| __eq | 4775-4790 | Compare lists |
+| `__concat` | 4763-4773 | Concatenate lists |
+| `__eq` | 4775-4790 | Compare lists |
 
 ### Instance Methods
 | Method | Lines | Description |
@@ -567,7 +567,7 @@ Plain-text document layout (for custom writers).
 | before_non_blank | 6130-6146 | Conditional before non-blank |
 | blanklines | 6148-6163 | Insert blank lines |
 | braces | 6165-6180 | Wrap in {} |
-| brackets | 6182-6197 | Wrap in [] |
+| brackets | 6182-6197 | Wrap in `[]` |
 | cblock | 6199-6219 | Centered block |
 | chomp | 6221-6236 | Remove trailing blanks |
 | concat | 6238-6256 | Concatenate Docs |
@@ -708,6 +708,6 @@ When searching lua-filters.md:
 - **Type definitions**: Search for `## TypeName {#type-`
 - **Constructors**: Search for `### FunctionName {#pandoc.`
 - **Module functions**: Search for `### function_name {#pandoc.module.`
-- **Constants**: Search for `[\`ConstantName\`]`
+- **Constants**: Search for `` [`ConstantName`] ``
 - **Examples**: Look in lines 473-1003
 - **Version requirements**: Search for `*Since:`

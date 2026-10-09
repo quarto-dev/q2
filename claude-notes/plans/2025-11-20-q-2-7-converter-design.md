@@ -10,7 +10,7 @@ File: claude-notes/plans/2025-11-20-q-2-7-converter-design.md
 **Error**: Straight apostrophes (`'`) followed by Markdown syntax are misinterpreted as opening quote marks instead of apostrophes.
 
 **Examples**:
-- `d'`Arrow`` - apostrophe before code span
+- \`d\'\`Arrow\`\` - apostrophe before code span
 - `qu'**on**` - apostrophe before emphasis
 - `l'[link](...)` - apostrophe before link
 
@@ -429,7 +429,7 @@ impl Rule for Q27Converter {
 
 1. **Simple case**: `'Tis` (from corpus)
 2. **In link**: `[`a`'s](b)` (from corpus)
-3. **French text**: `d'`Arrow``
+3. **French text**: ``d'`Arrow``
 4. **Multiple in one line**: `qu'**on**` and `d'[link](...)`
 5. **Edge cases**:
    - Apostrophe at end of line

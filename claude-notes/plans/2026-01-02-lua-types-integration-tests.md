@@ -131,9 +131,9 @@ These tests verify modifying fields on inline elements.
 
 | Test Name | Description | Lines Covered |
 |-----------|-------------|---------------|
-| `test_attr_positional_access` | attr[1], attr[2], attr[3] | 1327-1341 |
+| `test_attr_positional_access` | `attr[1]`, `attr[2]`, `attr[3]` | 1327-1341 |
 | `test_attr_named_access` | attr.identifier, attr.classes, attr.attributes | 1346-1361 |
-| `test_attr_positional_set` | attr[1] = ..., attr[2] = ..., attr[3] = ... | 1374-1385 |
+| `test_attr_positional_set` | `attr[1]` = ..., `attr[2]` = ..., `attr[3]` = ... | 1374-1385 |
 | `test_attr_named_set` | attr.identifier = ..., attr.classes = ..., attr.attributes = ... | 1390-1402 |
 | `test_attr_readonly_tag_error` | attr.tag = ... (should error) | 1403 |
 | `test_attr_unknown_field_error` | attr.unknown = ... (should error) | 1404 |
@@ -175,8 +175,8 @@ These tests verify modifying fields on inline elements.
 | `test_inline_pairs_iteration_with_integer_key` | pairs() with integer control variable | 448-452 |
 | `test_inline_pairs_iteration_all_fields` | Complete pairs() iteration | 432-472 |
 | `test_block_pairs_iteration` | pairs() on Block elements | 853-901 |
-| `test_inline_walk_method` | elem:walk{...} on inlines | 191-196, 1532-1538 |
-| `test_block_walk_method` | elem:walk{...} on blocks | 700-705, 1542-1545 |
+| `test_inline_walk_method` | elem:walk\{...\} on inlines | 191-196, 1532-1538 |
+| `test_block_walk_method` | elem:walk\{...\} on blocks | 700-705, 1542-1545 |
 
 ## Implementation Strategy
 
@@ -219,12 +219,12 @@ Add tests to `lua/filter.rs` in the existing `#[cfg(test)]` module, grouped by p
 
 | Phase | Lines Covered | Estimated Improvement |
 |-------|---------------|----------------------|
-| 1-2   | ~200 lines    | +10% |
-| 3-4   | ~150 lines    | +7% |
-| 5     | ~80 lines     | +4% |
-| 6     | ~200 lines    | +10% |
-| 7     | ~50 lines     | +2% |
-| **Total** | ~680 lines | **+33%** (to ~78%) |
+| 1-2   | \~200 lines    | +10% |
+| 3-4   | \~150 lines    | +7% |
+| 5     | \~80 lines     | +4% |
+| 6     | \~200 lines    | +10% |
+| 7     | \~50 lines     | +2% |
+| **Total** | \~680 lines | **+33%** (to \~78%) |
 
 ## Questions for Review
 

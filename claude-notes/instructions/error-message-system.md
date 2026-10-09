@@ -141,7 +141,7 @@ The build script generates variants using a **nested loop** (for each prefix, tr
 - `Q-2-11-simple.qmd` - base case: `"a`
 - `Q-2-11-simple-1.qmd` - prefix `[`, suffix ` *a*`: `["a *a*`
 - `Q-2-11-simple-2.qmd` - prefix `[`, suffix ` _a_`: `["a _a_`
-- `Q-2-11-simple-3.qmd` - prefix `[`, suffix ` \`a\``: `["a \`a\``
+- `Q-2-11-simple-3.qmd` - prefix `[`, suffix `` `a` ``: `` ["a `a` ``
 - `Q-2-11-simple-4.qmd` - prefix `_`, suffix ` *a*`: `_"a *a*`
 - ... (9 total: 3 prefixes × 3 suffixes)
 
@@ -189,16 +189,16 @@ The build script processes variants in this order (mutually exclusive):
 
 ### Discriminating Two Errors in One State: `guard`
 
-`(parse state, lookahead symbol)` is sometimes not fine enough. `{{< fa
-plus>}}` (a missing space before the closing delimiter) and `{{< fa 2plus
->}}` (a value that starts with a digit) fail in the *same* state on the
+`(parse state, lookahead symbol)` is sometimes not fine enough. `{{{< fa
+plus>}}}` (a missing space before the closing delimiter) and `{{{< fa 2plus
+>}}}` (a value that starts with a digit) fail in the *same* state on the
 *same* lookahead, but they are different mistakes with different remedies.
 Before `Q-2-52` existed, whichever code owned the state answered for both.
 
 A case may therefore carry a `guard`: a regular expression matched against
 the source text from the error position to the end of its line.
 
-```json
+```{.json shortcodes="false"}
 {
   "name": "closing-delimiter",
   "content": "Click the {{< fa plus>}} icon.\n",
@@ -218,7 +218,7 @@ contended; a code-level default would apply "guarded beats unguarded" to
 every case, including the ones that should claim their state outright.
 
 Reach for a guard only when a state is genuinely contended. Prefer finding
-a distinct state first — quoting the value above (`{{< fa "plus">}}`)
+a distinct state first — quoting the value above (`{{{< fa "plus">}}}`)
 reaches its own state and needs no guard.
 
 ### Suppressing a Cascade: `desynchronizes`

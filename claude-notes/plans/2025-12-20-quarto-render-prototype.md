@@ -45,7 +45,7 @@ This aligns with the existing `pico-quarto-render` prototype which already demon
 
 ### Lua Filter Porting Strategy
 
-The TypeScript version relies on ~211 Lua filter files (~31,600 LOC). The detailed analysis and design for porting the Lua filter infrastructure is in a separate document:
+The TypeScript version relies on \~211 Lua filter files (\~31,600 LOC). The detailed analysis and design for porting the Lua filter infrastructure is in a separate document:
 
 **See: [Lua Filter Infrastructure Porting](./2025-12-20-lua-filter-infrastructure-porting.md)** (Issue: k-thpl)
 
@@ -1103,7 +1103,7 @@ Output:
 
 **Rationale**:
 - Core functionality in Rust enables native pipeline
-- ~31,600 LOC of Lua is too much to port all at once
+- \~31,600 LOC of Lua is too much to port all at once
 - Format-specific Lua (LaTeX, DOCX) stays with Pandoc path
 
 ### 3. Dependency Collector Pattern

@@ -94,9 +94,9 @@ is unaffected and always ran in Pass 1.
 
 All TS engine extensions share one Deno subprocess. Engine lifecycle in the
 subprocess is **two-step**: `LoadEngine` runs the engine module's `import()`
-and exposes the discovery surface (~10–50 ms); `LaunchEngine` calls
+and exposes the discovery surface (\~10–50 ms); `LaunchEngine` calls
 `engine.launch(project)`, which **constructs the `ExecutionEngineInstance`
-object — cheap (~0)**, matching Quarto 1, where `launch()` is a synchronous
+object — cheap (\~0)**, matching Quarto 1, where `launch()` is a synchronous
 object-literal construction that starts no daemon. The expensive engine startup
 (Julia control server / Jupyter kernel: 5+ s) happens **lazily inside the
 engine's `execute()` on the first call**, and is amortized across renders by the
@@ -542,7 +542,7 @@ abstraction in Plan 2 is what enables it without rework to `@quarto/api`.
 | Plan | Sessions | Dependencies | Status |
 |------|----------|-------------|--------|
 | [Plan 0: Include Expansion & SourceInfo](2026-04-18-plan0-include-expansion-and-source-info.md) | 2-3 | Nothing | ✓ **Complete** (28/28) |
-| [Plan 2A: TS package foundations (@quarto/api skeleton+config, @quarto/types vendor)](2026-04-16-plan2a-quarto-api-foundation.md) | ~1 + §2aa | Nothing (npm workspace only) — **independent root, peer of plan1a-protocol; blocks Plan 1b, 1b.1, 2, 3** | ✓ **Complete** (24/24; foundation + §2aa runtime surface landed long ago) |
+| [Plan 2A: TS package foundations (@quarto/api skeleton+config, @quarto/types vendor)](2026-04-16-plan2a-quarto-api-foundation.md) | \~1 + §2aa | Nothing (npm workspace only) — **independent root, peer of plan1a-protocol; blocks Plan 1b, 1b.1, 2, 3** | ✓ **Complete** (24/24; foundation + §2aa runtime surface landed long ago) |
 | [Plan 1a-protocol: JSON message types](2026-04-16-plan1a-protocol.md) | 1 | Plan 0 | ✓ **Complete** (13/14; lone open box is a cross-ref note) |
 | [Plan 1a-host: Subprocess + transport](2026-04-16-plan1a-host.md) | 1 | plan1a-protocol | ✓ **Complete** (46/46; LANDED host-side 2026-06-24) |
 | [Plan 1a-engine: TsEngine + trait extensions](2026-04-16-plan1a-engine.md) | 1 | plan1a-protocol, plan1a-host | ✓ **Complete** (49/51; open boxes are a 1c-exercised E2E gate + a cross-ref note) |
@@ -556,7 +556,7 @@ abstraction in Plan 2 is what enables it without rework to `@quarto/api`.
 | [Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements](2026-04-16-quarto-markdown-and-api.md) | 2-3 | Plan 2A §2aa + Plan 1b | ✓ **Complete** (30/31; the one open box is a deliberate forward gate verified at Plan 3, not Plan 2 work) |
 | [Plan 3: @quarto/api/jupyter](2026-04-16-quarto-jupyter.md) | 2-3 | Plan 2A | ✓ **Complete** (41/41; Phase 3E wiring + Plan 2 Phase A both landed) |
 | [Plan 4: Julia Validation](2026-04-16-julia-validation.md) | 1-2 | Plans 1a, 1b, 1c, 2, 3 | ✓ **Complete** (76/80; all 13 success criteria met 2026-07-02; 4 open boxes are machine-specific/example placeholders) |
-| [**Plan 4a: Preview engine-capture delivery (julia close/busy + browser splice e2e)**](2026-07-02-preview-capture-delivery.md) | 1-2 | Plan 4 (fills 4J's browser-tier gap) | ✓ **Complete** (15/15; strand bd-h4rhohhy in_review, review-clean). Debug-and-fix of `q2 preview`'s engine-capture path + the browser-tier e2e Plan 4's 4J deferred (PC1–PC8, PC-C). |
+| [**Plan 4a: Preview engine-capture delivery (julia close/busy + browser splice e2e)**](2026-07-02-preview-capture-delivery.md) | 1-2 | Plan 4 (fills 4J's browser-tier gap) | ✓ **Complete** (15/15; strand bd-h4rhohhy in_review, review-clean). Debug-and-fix of `q2 preview`\'s engine-capture path + the browser-tier e2e Plan 4's 4J deferred (PC1–PC8, PC-C). |
 | [**Plan 4b: Shadow-engine feature validation**](2026-07-01-plan4b-shadow-engine-features.md) | 2-3 | Plan 4 | ✓ **Complete** (60/60; all phases landed — "Landed as …" markers throughout, incl. the `_quarto.yml engines:` splice, Task 9). Validated the tier model + inert surfaces a single-Primary Julia can't reach. Excludes Plan 5/6/7/Phase 12/1.6 work. |
 | [**Plan 4c: Marimo engine validation**](2026-07-02-plan4c-marimo-validation.md) | 1-2 | Plans 1a–c, 1b, 2A, 2 (**not** Plan 3); reuses Plan 4's build scaffolding | ✓ **Complete** (50/50; render tier validated 2026-07-03). Adds `first_class` + shared-language (`{python .marimo}` vs `{python}`) coverage Julia can't reach; canonical non-fully-static engine (Plan 6). |
 | [**Plan 4c.2: Marimo through `q2 preview` (capture-splice fix + browser e2e)**](2026-07-07-plan4c2-marimo-preview-e2e.md) | 1-2 | Plan 4c + Plan 4a (preview capture→splice chain) | ✓ **Complete** (15/15; strand bd-5jxcio5d **closed** 2026-07-07). Fixes the unwrapped-engine-output splice (marimo islands) so marimo reaches the preview pane (Plan 4c FINDING #5) + adds SC21/23/24 preview e2e. Follow-up bd-5m1ni9if filed. |
@@ -753,7 +753,7 @@ backing):
   re-`import()` the module. Single-project, session-scoped behind
   `EngineTransport`; gated by a **measure-first** check (the kernel already
   survives a respawn via its transport file, so pooling only saves the
-  Deno-spawn + import, ~hundreds of ms). Depends on the full stack plus the
+  Deno-spawn + import, \~hundreds of ms). Depends on the full stack plus the
   preview↔TS-engine wiring (plan1c R5 in RTQ) and DQ-7.
 - **Plan 6** (Pass-1 engine resolution, **implemented**) lifts `resolve_engines`
   from Pass 2 into Pass 1 **per-doc**, for docs whose resolution is *provably*
@@ -795,7 +795,7 @@ backing):
 ### Critical path
 
 With parallel execution: Plan 0 is **complete** (so plan1a-protocol is unblocked) and
-Plan 2A (~1 session) is the remaining independent root that can run from the start;
+Plan 2A (\~1 session) is the remaining independent root that can run from the start;
 once plan1a-protocol freezes the
 schema, plan1a-host, plan1a-engine, Plan 1b, Plan 2, and Plan 3 run in parallel
 (Plan 1b also needs Plan 2A, which is finished long before) → Plan 1c (1-2
@@ -819,7 +819,7 @@ sessions) → Plan 4 (1-2 sessions) = **6-10 sessions elapsed**.
 | Component | Path |
 |-----------|------|
 | Julia engine | `src/resources/extension-subtrees/julia-engine/src/julia-engine.ts` |
-| Julia _extension.yml | `src/resources/extension-subtrees/julia-engine/_extensions/julia-engine/_extension.yml` |
+| Julia \_extension.yml | `src/resources/extension-subtrees/julia-engine/_extensions/julia-engine/_extension.yml` |
 | @quarto/types | `packages/quarto-types/` |
 | QuartoAPI types | `packages/quarto-types/src/quarto-api.ts` |
 | ExecutionEngineDiscovery | `src/execute/types.ts` |
@@ -885,7 +885,7 @@ extract the SDK sources.
   code, never embedded.
 - **Embedding Deno in the binary is explicitly off the table** — bd-3e3sam51
   deliberately removed `deno_core`/`rusty_v8` (it blocked musl static builds
-  and added ~100 MB of v8), and the release archive is binary-only. Do not
+  and added \~100 MB of v8), and the release archive is binary-only. Do not
   reintroduce it.
 
 Tests that require Deno are skipped if it's absent, following the

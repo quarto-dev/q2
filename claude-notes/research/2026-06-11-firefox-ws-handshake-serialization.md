@@ -1,7 +1,7 @@
 # Firefox `q2 preview` peer-connection timeout: root cause
 
 **Date:** 2026-06-11
-**Strand:** bd-jit6pdwq (q2 preview: Firefox flaky 'Document automerge:<id> is unavailable' on cold start)
+**Strand:** bd-jit6pdwq (q2 preview: Firefox flaky 'Document automerge:\<id> is unavailable' on cold start)
 **Symptom:** sporadic, Firefox-only `Peer connection failed, continuing in
 offline mode: Error: Timeout waiting for peer connection`, followed by a
 permanent `Document … is unavailable` boot error in the preview SPA.
@@ -29,7 +29,7 @@ Chromium does not serialize handshakes this way and is immune.
    0.5–8 ms. The Rust hub answers WS upgrades instantly.
 
 2. **Clean Firefox exonerated** (`firefox-repro.mjs`): 15/15 cold loads
-   of the preview SPA in a fresh Playwright Firefox connected in ~260 ms.
+   of the preview SPA in a fresh Playwright Firefox connected in \~260 ms.
    The bug does not reproduce in an idle browser → environmental trigger.
 
 3. **Reproduction** (`firefox-serialization-test.mjs` +
@@ -99,7 +99,7 @@ These make a transient handshake delay into a hard, unrecoverable failure:
 
 1. **5 s peer budget == 5 s adapter retry interval.**
    `PreviewApp.tsx` passes `peerTimeoutMs: 5000`;
-   `WebSocketClientAdapter`'s `retryInterval` default is also 5000 ms.
+   `WebSocketClientAdapter`\'s `retryInterval` default is also 5000 ms.
    Any first-attempt failure loses the race by construction — recovery
    at t≥5 s can never beat the deadline at t=5 s.
 

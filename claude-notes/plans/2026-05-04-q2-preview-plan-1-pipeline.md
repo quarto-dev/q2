@@ -21,7 +21,7 @@ type-specific React components for them; Plan 2A lands the iframe foundation
 and Plan 2B adds the framework recursion semantics, asset-manifest plumbing,
 and Pandoc-base leaves those components consume).
 
-Edit-back is **read-only** in v1 — `ReactPreview.tsx`'s `handleSetAst`
+Edit-back is **read-only** in v1 — `ReactPreview.tsx`\'s `handleSetAst`
 early-returns with a console warning for `q2-preview` format. Plan 7 removes
 this guard once the writer-side round-trip lands.
 
@@ -91,7 +91,7 @@ this guard once the writer-side round-trip lands.
   `render_project_active_page_to_preview_response`. Both new
   helpers live in `crates/wasm-quarto-hub-client/src/lib.rs`
   alongside their HTML siblings. Because `render_qmd`,
-  `render_qmd_content`, and `render_page_in_project`'s single-file
+  `render_qmd_content`, and `render_page_in_project`\'s single-file
   branch all delegate to the same single-doc helper after the prep
   refactor, **q2-preview routing is added at exactly two seams**
   (single-doc + project-active), not five. See §"Resolved decisions"
@@ -107,10 +107,10 @@ this guard once the writer-side round-trip lands.
   the TS `RenderResponse` type grows `astJson?: string` and consumers
   pick the right field based on format.
 - `ReactRenderer.tsx` routes `format === 'q2-preview'` through `AstIframe`
-  (alongside the existing `format === 'q2-debug'` branch at line ~141).
+  (alongside the existing `format === 'q2-debug'` branch at line \~141).
   Note: this is `ReactRenderer.tsx`, not `ReactPreview.tsx` — the latter
   passes `format` down but doesn't pick the renderer.
-- **`ReactPreview.tsx`'s `doRender` gains a temporary format switch**:
+- **`ReactPreview.tsx`\'s `doRender` gains a temporary format switch**:
   q2-debug / q2-slides keep using `parseQmdToAst(content)` (path-less,
   in-memory content); q2-preview calls `renderPageInProject(currentFile.path)`
   and reads `astJson` from the response (path-based, reads from VFS —
@@ -120,7 +120,7 @@ this guard once the writer-side round-trip lands.
   in **Plan 7** alongside the read-only-guard removal (see §"Multi-plan
   contract: cleanup owed to Plan 7"). Update the
   `format` prop's type comment in `ReactPreview.tsx` (`format: string;
-  // 'q2-slides' or 'q2-debug'` at line ~39 of that file) to include
+  // 'q2-slides' or 'q2-debug'` at line \~39 of that file) to include
   `'q2-preview'`.
 - **Read-only guard** in `ReactPreview.tsx::handleSetAst`. No-op the
   rewrite path and log a warning when `format === 'q2-preview'`:
@@ -157,7 +157,7 @@ this guard once the writer-side round-trip lands.
   starting-point compatible with q2-debug at the iframe surface (same
   `AstIframe` component, same postMessage protocol) but architecturally
   unrelated at the data-source layer — q2-debug skips the entire transform
-  pipeline; q2-preview runs ~19 of the 31 transforms in
+  pipeline; q2-preview runs \~19 of the 31 transforms in
   `build_transform_pipeline`. The "mirror q2-debug" framing applies only
   to the React-side routing; the WASM entry point and renderer are new.
 - **Read-only in v1**: `handleSetAst` early-returns and logs a
@@ -283,7 +283,7 @@ rationale for each decision.)
 
   Tradeoffs vs. the parallel-struct approach: enum adds a
   one-line `match` at the response builder; parallel-struct would
-  require a near-clone of the ~80-line orchestrator helper for
+  require a near-clone of the \~80-line orchestrator helper for
   every additional payload type (q2-slides, dashboards, future
   formats). With only one shared HTML-specific access in the
   current orchestrator (line 1538), the enum's runtime ceremony
@@ -315,7 +315,7 @@ rationale for each decision.)
   `pub` for cross-crate use, `#[derive(Debug)]` to match
   `RenderOutput`. JSON serialization happens **inside** this
   function (not in the renderer): the function builds an
-  `ASTContext` lifted from `parse_qmd_to_ast`'s consumer
+  `ASTContext` lifted from `parse_qmd_to_ast`\'s consumer
   (`wasm-quarto-hub-client/src/lib.rs:905-910`) plus the
   `JsonConfig { include_inline_locations: true }` from
   `lib.rs:914-916`, then calls
@@ -355,7 +355,7 @@ rationale for each decision.)
   else `merge_into_project`) and the loop at `lib.rs:1386-1391` for
   Page-scoped artifacts (per-key VFS write). Both are required to
   honor the multi-plan contracts below.
-- **Page-scoped artifact handling**: mirror `RenderToHtmlRenderer`'s
+- **Page-scoped artifact handling**: mirror `RenderToHtmlRenderer`\'s
   Page-scoped loop. The loop runs the same artifact-flush as the
   HTML pipeline; for theme CSS / icon CSS / fonts (artifacts with
   real bytes via `Artifact::from_bytes`) this puts loadable bytes
@@ -396,7 +396,7 @@ rationale for each decision.)
   dispatch lives **inside** the existing `render_page_in_project`
   function rather than as a separate `render_page_in_project_to_preview_ast`
   export. Why: format detection already happens internally at
-  `lib.rs:1352, 1434`; a separate export would duplicate ~50 lines of
+  `lib.rs:1352, 1434`; a separate export would duplicate \~50 lines of
   project-discovery scaffolding for no boundary-type win (the
   `RenderResponse` envelope already discriminates payload). It also
   keeps Plan 7's eventual write-back work local to one function, not
@@ -429,7 +429,7 @@ rationale for each decision.)
   helper, no behavior change for HTML. After this lands, the
   q2-preview branch added inside the helper covers all three
   wasm-bindgen entry points (`render_qmd`, `render_qmd_content`,
-  and `render_page_in_project`'s single-file branch) at once. A
+  and `render_page_in_project`\'s single-file branch) at once. A
   fixture using `render_qmd <path>` with `format: q2-preview`
   Just Works as a side effect.
 
@@ -444,7 +444,7 @@ rationale for each decision.)
   ```
 
   Pre-requisites of the helper's contract are already met by both
-  call sites' preludes:
+  call sites\' preludes:
   - `render_qmd`: `runtime.file_read(path)` for content +
     `ProjectContext::discover(path, runtime)` for project.
   - `render_qmd_content`: `Path::new("/input.qmd")` synthetic +
@@ -453,11 +453,11 @@ rationale for each decision.)
     ABI compat; it doesn't reach the helper.
 
   Net effect on `RenderResponse` construction sites: drops from
-  ~16 inline literals today to ~5 (two success paths in the two
+  \~16 inline literals today to \~5 (two success paths in the two
   helpers + three error helpers `error_response` /
   `render_error_response` / `pass_failure_response`). The
   `ast_json: Option<String>` field added later in Plan 1 only
-  needs populating at those ~5 sites instead of every producer.
+  needs populating at those \~5 sites instead of every producer.
 
   The orchestrator path
   (`render_project_active_page_to_response`, `lib.rs:1416`) is
@@ -487,7 +487,7 @@ rationale for each decision.)
 - `crates/wasm-quarto-hub-client/src/lib.rs:1283-1285` — the doc-comment
   contract that `RenderResponse` is the same shape across branches;
   evolves to "payload selected by format."
-- `crates/wasm-quarto-hub-client/src/lib.rs:914-916` — `parse_qmd_to_ast`'s
+- `crates/wasm-quarto-hub-client/src/lib.rs:914-916` — `parse_qmd_to_ast`\'s
   `JsonConfig`, lifted verbatim for q2-preview AST serialization.
 - `crates/wasm-quarto-hub-client/src/lib.rs:1005, 1152` — `render_qmd`
   and `render_qmd_content`, the two wasm-bindgen entry points that
@@ -498,7 +498,7 @@ rationale for each decision.)
   helpers; each constructs `RenderResponse` and needs the new
   `ast_json: None` field.
 - `hub-client/src/components/render/ReactRenderer.tsx` — format dispatch,
-  `AstIframe` mounting (the `format === 'q2-debug'` branch ~line 141 is
+  `AstIframe` mounting (the `format === 'q2-debug'` branch \~line 141 is
   where the q2-preview branch joins).
 - `hub-client/src/components/render/ReactPreview.tsx` — `doRender` (where
   the data-source switch by format lands) and `handleSetAst` (where the
@@ -568,7 +568,7 @@ rationale for each decision.)
   `CodeHighlightStage`, `RenderHtmlBodyStage`, `ApplyTemplateStage`.
 - **End-to-end fixture tests** (two fixtures, both `format: q2-preview`):
   - **Single-file fixture**: no `_quarto.yml` ancestor. Includes a
-    callout, a theorem, a `{{< meta foo >}}` shortcode, and a Lua
+    callout, a theorem, a `{{{< meta foo >}}}` shortcode, and a Lua
     filter. Routes through the single-file branch
     (`render_single_doc_to_preview_response`). Assert:
     - The Callout encoded as `__quarto_custom_node` Div with
@@ -799,7 +799,7 @@ something else) joins the pipeline:
 
 Plan 7 absorbs these cleanups for two reasons. First, Plan 7 is
 already removing related placeholder/stub code in the same files
-(`ReactPreview.tsx`'s read-only guard; the WASM round-trip wiring),
+(`ReactPreview.tsx`\'s read-only guard; the WASM round-trip wiring),
 so the touch surface overlaps. Second, the dispatch interface
 naturally settles when q2-preview becomes editable — Plan 7's
 `pipeline_kind: "preview"` parameter already implies a structured
@@ -817,7 +817,7 @@ populates it from the same lookup table that drives
 instead of comparing on `target_format`. The TS side mirrors this
 with a thin helper (`pipelineKindForFormat(format) -> 'baseline' |
 'preview'`) that's the single source of truth on the JS side; both
-`ReactPreview.tsx::doRender`'s data-source switch and Plan 7's
+`ReactPreview.tsx::doRender`\'s data-source switch and Plan 7's
 edit-back wiring read through it. Plan 7's `incremental_write_qmd`
 parameter is the same value, flowing through the write side.
 
@@ -846,7 +846,7 @@ iframe simply stops referencing them.
   dispatch lives inside the existing function (Option B in §"Resolved decisions").
   Both new helpers (`render_single_doc_to_preview_response`,
   `render_project_active_page_to_preview_response`) must mirror their
-  HTML siblings' single-file/project branching exactly, or else
+  HTML siblings\' single-file/project branching exactly, or else
   q2-preview behaves differently for default-projects vs. websites.
   Lift the shape directly from the HTML versions; share factored
   pieces wherever practical.
@@ -858,7 +858,7 @@ iframe simply stops referencing them.
   helpers (`error_response`, `render_error_response`,
   `pass_failure_response`). All five must populate the new
   `ast_json: Option<String>` field — `None` for every HTML and
-  error path; `Some(...)` only in the two success paths' new
+  error path; `Some(...)` only in the two success paths\' new
   q2-preview branches. The mechanical sweep is smaller after the
   prep refactor than before — but easy to miss one of the helper
   sites. Get the struct field and all five seams updated before
@@ -880,22 +880,22 @@ iframe simply stops referencing them.
 
 | Component | Lines (rough) |
 |---|---|
-| Prep refactor: `render_qmd` + `render_qmd_content` → `render_single_doc_to_response` (HTML-only, behavior-preserving; lands as first commit) | ~50 (net negative) |
-| `build_q2_preview_transform_pipeline` + drift helper + tests | ~100 |
-| `build_q2_preview_pipeline_stages` + tests | ~80 |
-| `Pass2Payload` enum + `WasmPassTwoOutput` field rename + native-test-fixture updates | ~30 |
-| `RenderToPreviewAstRenderer` impl + `PreviewAstOutput` + `render_qmd_to_preview_ast` entry point | ~120 |
-| Orchestrator response-tail dispatch (single match arm at `lib.rs:1538`) + single-doc format dispatch | ~30 |
-| `RenderResponse` `ast_json` field + producer updates (5 seams post-refactor) | ~30 |
-| Format detection update + `AstTransformsStage` dispatch | ~25 |
-| TS `RenderResponse` type + `ReactPreview` doRender switch + read-only guard | ~40 |
-| End-to-end fixture and tests (incl. page-scoped artifact regression) | ~220 |
-| **Total** | **~725** |
+| Prep refactor: `render_qmd` + `render_qmd_content` → `render_single_doc_to_response` (HTML-only, behavior-preserving; lands as first commit) | \~50 (net negative) |
+| `build_q2_preview_transform_pipeline` + drift helper + tests | \~100 |
+| `build_q2_preview_pipeline_stages` + tests | \~80 |
+| `Pass2Payload` enum + `WasmPassTwoOutput` field rename + native-test-fixture updates | \~30 |
+| `RenderToPreviewAstRenderer` impl + `PreviewAstOutput` + `render_qmd_to_preview_ast` entry point | \~120 |
+| Orchestrator response-tail dispatch (single match arm at `lib.rs:1538`) + single-doc format dispatch | \~30 |
+| `RenderResponse` `ast_json` field + producer updates (5 seams post-refactor) | \~30 |
+| Format detection update + `AstTransformsStage` dispatch | \~25 |
+| TS `RenderResponse` type + `ReactPreview` doRender switch + read-only guard | \~40 |
+| End-to-end fixture and tests (incl. page-scoped artifact regression) | \~220 |
+| **Total** | **\~725** |
 
 Likely fits in one focused implementation session if we don't get sidetracked.
 The enum payload + prep refactor together preserve the original
-~725 estimate: the prep refactor saves ~50 LOC, the enum approach
-saves the parallel-orchestrator-helper duplication (~80 LOC vs.
+\~725 estimate: the prep refactor saves \~50 LOC, the enum approach
+saves the parallel-orchestrator-helper duplication (\~80 LOC vs.
 the parallel-struct alternative). Risk: the `RenderResponse`
 extension touches five seams (two success paths + three error
 helpers) — get all five populating `ast_json: None` for HTML/error

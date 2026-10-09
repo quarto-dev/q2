@@ -18,7 +18,7 @@ INFO quarto_hub::server: Periodic sync complete synced=3 no_changes=3 …
 The project uses `tracing` + `tracing_subscriber::EnvFilter`. There is
 no `-v` flag — verbosity is controlled only via `RUST_LOG`. The CLI's
 default filter is `"quarto=info"`, which (via
-`tracing-subscriber`'s `starts_with`-based target matching, see
+`tracing-subscriber`\'s `starts_with`-based target matching, see
 `directive.rs:246` in 0.3.23) catches all workspace crates whose name
 starts with `quarto`, including `quarto_hub` and `quarto_preview`.
 
@@ -74,7 +74,7 @@ a default `EnvFilter` directive:
 | 2 (`-vv`) | `quarto=debug,samod=info` |
 | 3+ (`-vvv`) | `quarto=trace,samod=debug,tower_http=debug` |
 
-Keep `RUST_LOG`'s precedence: if it's set, it wins (today's
+Keep `RUST_LOG`\'s precedence: if it's set, it wins (today's
 `try_from_default_env` path). Factor the count→directive mapping into
 a pure function (`fn verbose_to_filter(count: u8) -> &'static str`)
 that's table-tested.
@@ -97,7 +97,7 @@ to level 3 alongside the q2 case.
 Per CLAUDE.md "end-to-end verification before declaring success":
 
 - Build `q2`, run `cargo run --bin q2 -- preview <fixture>`, leave it
-  running ~15 s. Confirm terminal stays quiet after the startup
+  running \~15 s. Confirm terminal stays quiet after the startup
   banner. Paste the captured output into the commit message.
 - Repeat with `-v`, `-vv`, `-vvv`. Confirm each step adds the
   expected category of messages.
@@ -111,7 +111,7 @@ Per CLAUDE.md "end-to-end verification before declaring success":
 1. **`verbose_to_filter` unit test** — table-driven; assert directive
    strings for `0..=4` (clamped at 3 for `>=3`).
 2. **(Optional, if cheap) integration smoke** — spawn `q2 preview` in
-   a child process with no flag, scrape stderr for ~6 s, assert that
+   a child process with no flag, scrape stderr for \~6 s, assert that
    `Periodic sync complete`, `Sync complete`, `Starting sync of all`
    are *absent*. Re-run with `-vv`, assert at least one appears.
    Skip if the existing preview test harness doesn't make this easy
@@ -157,7 +157,7 @@ Per CLAUDE.md "end-to-end verification before declaring success":
 
 ### Phase 3 — `-v` on `q2 hub`
 - [x] Add `verbose: u8` to `Args` in `quarto-hub/src/main.rs`
-- [x] Add `quarto-util` to `quarto-hub`'s Cargo.toml dependencies (helper is shared from `quarto-util` since Phase 2)
+- [x] Add `quarto-util` to `quarto-hub`\'s Cargo.toml dependencies (helper is shared from `quarto-util` since Phase 2)
 - [x] Replace `"quarto_hub=info,tower_http=debug"` default with the shared mapping
 - [x] Manual end-to-end on standalone `hub --project <fixture>` matrix — identical to Phase 2 output volumes (default=0, -v=14, -vv=33, -vvv=104, `RUST_LOG=error`=0)
 
@@ -226,7 +226,7 @@ merging directives — out of scope. The current behaviour matches the
 expectation that "if you're using `RUST_LOG`, you know what you're
 doing".
 
-### What about `clap`'s `ArgAction::Count`?
+### What about `clap`\'s `ArgAction::Count`?
 
 `Count` returns `u8`. `clap` already gives us `-vvv` parsing for
 free. Clamping at 3 happens in `verbose_to_filter`.

@@ -13,8 +13,8 @@ Stand up q2-preview as a sibling of q2-debug under the directory layout Plan 2pr
   - `entry.tsx` — iframe entry, mirrors q2-debug's pattern.
   - `Q2PreviewIframe.tsx` — iframe wrapper, parallel to `q2-debug/Q2DebugIframe.tsx`.
   - `PreviewContext.tsx` — q2-preview-specific React context (carries `currentFilePath`).
-  - `dispatchers.tsx` — q2-preview's `Block` / `Inline` dispatchers (parallel to `q2-debug/dispatchers.tsx`, established in Plan 2pre). Each does the standard `registry[node.t]` lookup; on miss renders a muted-gray "T (not yet implemented)" placeholder *and recurses into children via `renderChildren(args)`* so nested nodes also surface their own placeholders — without recursion, only top-level blocks would render and inline children would be silenced. Required because Plan 2pre's refined architecture moves `Block`/`Inline` out of framework into format-owned files; framework's `Node` cannot dispatch without them. ~30 LOC.
-  - `PreviewDocument.tsx` — q2-preview's document-root wrapper, registered into `registry.ts` under the `'Ast'` key. Calls `renderChildren({ node: ast, setLocalAst: setAst, ... })` with no debug styling. ~15 LOC.
+  - `dispatchers.tsx` — q2-preview's `Block` / `Inline` dispatchers (parallel to `q2-debug/dispatchers.tsx`, established in Plan 2pre). Each does the standard `registry[node.t]` lookup; on miss renders a muted-gray "T (not yet implemented)" placeholder *and recurses into children via `renderChildren(args)`* so nested nodes also surface their own placeholders — without recursion, only top-level blocks would render and inline children would be silenced. Required because Plan 2pre's refined architecture moves `Block`/`Inline` out of framework into format-owned files; framework's `Node` cannot dispatch without them. \~30 LOC.
+  - `PreviewDocument.tsx` — q2-preview's document-root wrapper, registered into `registry.ts` under the `'Ast'` key. Calls `renderChildren({ node: ast, setLocalAst: setAst, ... })` with no debug styling. \~15 LOC.
   - `registry.ts` — q2-preview registry skeleton with `'Ast'` (`PreviewDocument`), `'Block'`/`'Inline'` (from `dispatchers.tsx` above), and nothing else. **No leaf components ship in 2A.** Plan 2B fills them; until then, every node renders as the muted-gray "not yet implemented" placeholder.
 - `hub-client/public/q2-preview.html` — iframe HTML page parallel to `q2-debug.html`.
 - `ReactRenderer.tsx` routes `format: q2-preview` through `Q2PreviewIframe`; q2-debug stays on `Q2DebugIframe`. The current combined `if (format === 'q2-debug' || format === 'q2-preview')` branch is split into two distinct branches.
@@ -152,7 +152,7 @@ Both q2-debug and q2-preview pass `sourceInfoPool` when available. q2-debug does
 
 - `src="/q2-preview.html"` instead of `/q2-debug.html`.
 - Accepts a new `themeFingerprint?: string | null` prop (three-way semantics — see below). Until item 11 lands, this is always `undefined` and the theme effect is a no-op.
-- Adds a parent-side theme effect that owns the `UPDATE_THEME` lifecycle: reads VFS bytes, creates a blob URL, revokes the previous URL, posts the URL string. Same two-message pattern as `Q2DebugIframe`'s `LOAD_CUSTOM_COMPONENTS` + `UPDATE_AST` split — only URL strings (not bytes) ever cross the postMessage boundary, and the iframe consumes them via a native `<link rel="stylesheet">`.
+- Adds a parent-side theme effect that owns the `UPDATE_THEME` lifecycle: reads VFS bytes, creates a blob URL, revokes the previous URL, posts the URL string. Same two-message pattern as `Q2DebugIframe`\'s `LOAD_CUSTOM_COMPONENTS` + `UPDATE_AST` split — only URL strings (not bytes) ever cross the postMessage boundary, and the iframe consumes them via a native `<link rel="stylesheet">`.
 
   **Three-way `themeFingerprint` semantics** (set by item 11's plumbing in `ReactPreview.tsx`):
 
@@ -255,7 +255,7 @@ Plan 2B's `Image` and other leaf components read `currentFilePath` via `useConte
 
 Two new files.
 
-**`hub-client/src/components/render/q2-preview/dispatchers.tsx`** — q2-preview's `Block` and `Inline` dispatchers, parallel to `q2-debug/dispatchers.tsx` (Plan 2pre). Under Plan 2pre's refined architecture, framework reserves the `'Block'`/`'Inline'` registry keys but provides no implementations; each format must register its own. Both dispatchers do the standard `registry[node.t]` lookup; **on miss they render a muted-gray "(not yet implemented)" placeholder *and recurse into children via `renderChildren`*** so nested nodes also surface their own placeholders:
+**`hub-client/src/components/render/q2-preview/dispatchers.tsx`** — q2-preview's `Block` and `Inline` dispatchers, parallel to `q2-debug/dispatchers.tsx` (Plan 2pre). Under Plan 2pre's refined architecture, framework reserves the `'Block'`/`'Inline'` registry keys but provides no implementations; each format must register its own. Both dispatchers do the standard `registry[node.t]` lookup; **on miss they render a muted-gray "(not yet implemented)" placeholder _and recurse into children via `renderChildren`_** so nested nodes also surface their own placeholders:
 
 ```tsx
 import { renderChildren } from '../framework';
@@ -331,7 +331,7 @@ q2-preview at this point boots and renders every node as the muted-gray "(not ye
 
   **Set the `__Q2_PREVIEW_RENDERER__` global at module top, not inside `loadCustomComponents`.** The renderer-surface object is import-time-stable (no dynamic dependencies), so attaching it to `window` at the top of the module makes the surface available before any postMessage arrives. This is what enables the framework-primitive parity test in §"Test plan" to import the entry module and inspect `window.__Q2_PREVIEW_RENDERER__` directly — no message-firing setup required.
 
-  **q2-debug parallel refactor (bundle with item 9).** q2-debug's existing entry sets its global inside `loadCustomComponents` alongside `window.React`, `window.katex`, and `window.RevealReact`. Refactor: move the renderer-surface assignment to module top; leave `React` / `katex` / `RevealReact` lazy in `loadCustomComponents` since those are tied to dynamic user-TSX imports and that's the right time to set them. ~10 LOC moved, no runtime behavior change in production (the global ends up set in both cases by the time user TSX runs); enables the parity test to read both globals symmetrically.
+  **q2-debug parallel refactor (bundle with item 9).** q2-debug's existing entry sets its global inside `loadCustomComponents` alongside `window.React`, `window.katex`, and `window.RevealReact`. Refactor: move the renderer-surface assignment to module top; leave `React` / `katex` / `RevealReact` lazy in `loadCustomComponents` since those are tied to dynamic user-TSX imports and that's the right time to set them. \~10 LOC moved, no runtime behavior change in production (the global ends up set in both cases by the time user TSX runs); enables the parity test to read both globals symmetrically.
 - Mirrors q2-debug's `loadCustomComponents` pattern: when `LOAD_CUSTOM_COMPONENTS` arrives, sets `window.React = React`, `window.katex = katex` (Plan 2B's Math component will use it), and any other globals user TSX expects, then dynamically imports each transpiled blob and uses `buildCustomRegistry(loadedModules)` (`hub-client/src/utils/customRegistry.ts`) to merge exports. q2-preview does **not** set `window.RevealReact` — that global is q2-debug-specific (the `experimental-components/new/html_slide_rc.jsx` slide-demo template is its only consumer). The accumulator bug originally tracked at bd-3day was fixed and back-ported to q2-debug in commit `1e5a930f` (2026-05-08); both formats now consume the same shared helper. No new bug-fix work in this plan.
 
 - **`UPDATE_THEME` is handled at module top, not inside `PreviewRoot`.** The iframe's top-level `window.addEventListener('message', ...)` (registered before `IFRAME_READY` is posted, mirroring q2-debug's pattern at `q2-debug/entry.tsx:42`) handles `LOAD_CUSTOM_COMPONENTS`, `UPDATE_AST`, **and `UPDATE_THEME`**. The theme handler imperatively manages a single `<link rel="stylesheet" data-q2-theme>` element in `document.head` — pure DOM, no React state involvement, no `useEffect` lifecycle.
@@ -430,12 +430,12 @@ The HTML iframe's per-element listener pattern (`iframePostProcessor.ts:222-237,
 
 Plumb `theme_fingerprint(css)` (already computed at `crates/quarto-core/src/stage/stages/compile_theme_css.rs:447`) onto `RenderResponse`, through the WASM bridge, through `ReactPreview` and `ReactRenderer` state, into the prop `Q2PreviewIframe` reads:
 
-1. **`quarto-core` `RenderResponse`** (`wasm-quarto-hub-client/src/lib.rs:766`): add `theme_fingerprint: Option<String>`. Populate from the active theme artifact's key. Update all 5 constructor sites listed in §"RenderResponse change risk" — they list every field explicitly. ~10 LOC including constructors.
-2. **hub-client TS types** (`hub-client/src/types/diagnostic.ts`, the `RenderResponse` interface at line 56): add `theme_fingerprint?: string` (snake_case to match Rust serde defaults, consistent with existing `ast_json` and `pass1_failures` fields). ~2 LOC.
-3. **`ReactPreview.tsx` extraction** (~line 96, the q2-preview branch): extract `result.theme_fingerprint` from the `RenderResponse` and add `themeFingerprint: string | null` to the normalized object the function returns at ~line 106. **Three-way mapping**: render `success === false` ⇒ omit `themeFingerprint` from the returned object (item 4 will leave state alone); `success === true && result.theme_fingerprint === undefined` ⇒ `themeFingerprint: null`; `success === true && result.theme_fingerprint` is a string ⇒ pass through. ~5 LOC.
-4. **`ReactPreview.tsx` state** (~line 176, alongside `const [ast, setAst] = useState<string>('')`): add `const [themeFingerprint, setThemeFingerprint] = useState<string | null | undefined>(undefined)`. **Initial state is `undefined`** (pre-first-render). At ~line 224 (next to `setAst(result.astJson)`), call `setThemeFingerprint(result.themeFingerprint)` only when the normalized object includes the field — this preserves last-good `themeFingerprint` across render errors (the `success === false` branch from step 3 omits the field, so this branch doesn't fire). ~5 LOC.
-5. **`ReactPreview.tsx` prop** (~line 292, the `<ReactRenderer ... />` invocation): pass `themeFingerprint={themeFingerprint}`. ~1 LOC.
-6. **`ReactRenderer.tsx` prop** (interface at ~line 58): accept `themeFingerprint?: string | null`. Forward to `Q2PreviewIframe` only (the q2-debug branch ignores it). ~3 LOC.
+1. **`quarto-core` `RenderResponse`** (`wasm-quarto-hub-client/src/lib.rs:766`): add `theme_fingerprint: Option<String>`. Populate from the active theme artifact's key. Update all 5 constructor sites listed in §"RenderResponse change risk" — they list every field explicitly. \~10 LOC including constructors.
+2. **hub-client TS types** (`hub-client/src/types/diagnostic.ts`, the `RenderResponse` interface at line 56): add `theme_fingerprint?: string` (snake_case to match Rust serde defaults, consistent with existing `ast_json` and `pass1_failures` fields). \~2 LOC.
+3. **`ReactPreview.tsx` extraction** (\~line 96, the q2-preview branch): extract `result.theme_fingerprint` from the `RenderResponse` and add `themeFingerprint: string | null` to the normalized object the function returns at \~line 106. **Three-way mapping**: render `success === false` ⇒ omit `themeFingerprint` from the returned object (item 4 will leave state alone); `success === true && result.theme_fingerprint === undefined` ⇒ `themeFingerprint: null`; `success === true && result.theme_fingerprint` is a string ⇒ pass through. \~5 LOC.
+4. **`ReactPreview.tsx` state** (\~line 176, alongside `const [ast, setAst] = useState<string>('')`): add `const [themeFingerprint, setThemeFingerprint] = useState<string | null | undefined>(undefined)`. **Initial state is `undefined`** (pre-first-render). At \~line 224 (next to `setAst(result.astJson)`), call `setThemeFingerprint(result.themeFingerprint)` only when the normalized object includes the field — this preserves last-good `themeFingerprint` across render errors (the `success === false` branch from step 3 omits the field, so this branch doesn't fire). \~5 LOC.
+5. **`ReactPreview.tsx` prop** (\~line 292, the `<ReactRenderer ... />` invocation): pass `themeFingerprint={themeFingerprint}`. \~1 LOC.
+6. **`ReactRenderer.tsx` prop** (interface at \~line 58): accept `themeFingerprint?: string | null`. Forward to `Q2PreviewIframe` only (the q2-debug branch ignores it). \~3 LOC.
 7. **`Q2PreviewIframe.tsx`**: receive `themeFingerprint?: string | null`. The CSS-posting effect from item 6 keys on this and implements the three-way semantics (early-return on `undefined`, post empty on `null`, post bytes on string). No further changes — the effect already exists.
 
 **Three-way semantics rationale.** A transient render error (YAML parse error, pipeline crash mid-flight) leaves `themeFingerprint` state untouched (`undefined` if pre-first-render, otherwise its last-good value), so the iframe keeps showing the previous theme rather than dropping to Bootstrap-less rendering. A user removing `theme:` from YAML is a successful render that produces no theme artifact ⇒ `null` ⇒ explicit wipe.
@@ -496,11 +496,11 @@ The existing comment at `ReactRenderer.tsx:140-146` ("Both q2-debug and q2-previ
 - `hub-client/e2e/helpers/smokeAllDiscovery.ts` — fixture format allow-list grows `'q2-preview'`.
 - `hub-client/e2e/smoke-all.spec.ts` — dispatch on the q2-preview kind (skip diagnostic-fetching, target the q2-preview iframe).
 
-Mirrors the q2-debug extension that landed in commit `059dfeab`; ~10 LOC across three files. **No smoke-all spec asserts q2-preview content in 2A** — the extension is plumbing only, consumed by Plan 2B's fixtures once they land. The 2A vitest "Q2PreviewIframe boot smoke test" (in §"Test plan") is the only iframe-boot regression gate at 2A.
+Mirrors the q2-debug extension that landed in commit `059dfeab`; \~10 LOC across three files. **No smoke-all spec asserts q2-preview content in 2A** — the extension is plumbing only, consumed by Plan 2B's fixtures once they land. The 2A vitest "Q2PreviewIframe boot smoke test" (in §"Test plan") is the only iframe-boot regression gate at 2A.
 
 #### 13. `render-components` YAML key gate extension
 
-In `ReactRenderer.tsx:98` (the `useMemo` early-return at the top of `componentPathsKey`), extend the gate from `format !== 'q2-debug'` to `format !== 'q2-debug' && format !== 'q2-preview'` so q2-preview demos can specify custom `.tsx` files. Add a comment explaining the dual coverage. ~5 LOC + a regression test.
+In `ReactRenderer.tsx:98` (the `useMemo` early-return at the top of `componentPathsKey`), extend the gate from `format !== 'q2-debug'` to `format !== 'q2-debug' && format !== 'q2-preview'` so q2-preview demos can specify custom `.tsx` files. Add a comment explaining the dual coverage. \~5 LOC + a regression test.
 
 q2-preview's user TSX overrides target the `__Q2_PREVIEW_RENDERER__` global; q2-debug's overrides target `__REACT_AST_DEBUG_RENDERER__`. Format determines which iframe loads which entry, and each entry sets its own global. Override files that consume only framework primitives can detect either global with a `??` fallback (see §"TSX globals: portability and parity").
 
@@ -525,7 +525,7 @@ Moved to **Plan 2pre** (already shipped before 2A):
 - Deletion of dead `transpileAndImportTSX` from `tsxTranspiler.ts`.
 - PandocAST consolidation into `framework/types.ts`.
 - Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename.
-- Dispatcher `?? componentRegistry` fallback removal; `RegistryContext` default → `{ registry: {} }`; `<Ast>`'s `registry` prop made required.
+- Dispatcher `?? componentRegistry` fallback removal; `RegistryContext` default → `{ registry: {} }`; `<Ast>`\'s `registry` prop made required.
 - `__REACT_AST_DEBUG_RENDERER__` global converted from wholesale spread to explicit-object form (sets the pattern 2A's `__Q2_PREVIEW_RENDERER__` follows).
 
 Deferred to a future "q2-preview layout chrome" plan:
@@ -537,7 +537,7 @@ Deferred to a future "q2-preview layout chrome" plan:
 ## Design decisions (settled in 2026-05-07 review)
 
 - **Parallel formats with shared framework**, not extension/override. q2-debug and q2-preview each own their registry and iframe entry; they share the `framework/` plumbing extracted by Plan 2pre. q2-debug's behavior is unchanged.
-- **q2-preview gets its own iframe HTML page** (`q2-preview.html`) and its own iframe wrapper component (`Q2PreviewIframe`). Two HTML pages + two wrappers, ~30 LOC of duplication, full clarity. The plan rejected URL-param dispatch as more coupling for no real saving.
+- **q2-preview gets its own iframe HTML page** (`q2-preview.html`) and its own iframe wrapper component (`Q2PreviewIframe`). Two HTML pages + two wrappers, \~30 LOC of duplication, full clarity. The plan rejected URL-param dispatch as more coupling for no real saving.
 - **`'Ast'` registry key is preserved across both formats.** q2-debug registers `'Ast': AstRenderer` (the bordered debug wrapper); q2-preview registers `'Ast': PreviewDocument` (or whatever name the component takes — registry key is what matters). Each format owns its own document-root component; the shared key just means `framework/Ast.tsx` does a single `registry['Ast']` lookup that resolves per-format. Preserving the key also keeps user TSX overrides like `~/docs/demo-playground/elliot/slide.tsx`'s `export const Ast` working unchanged. (See 2pre §"Dispatcher fallback removal" for the registry-injection invariant — `<Ast>`'s `registry` prop is now required.)
 - **Keep `__REACT_AST_DEBUG_RENDERER__` global** for q2-debug's existing demos. Add `__Q2_PREVIEW_RENDERER__` for q2-preview. q2-debug demos keep working unchanged.
 - **`PreviewContext` for `currentFilePath`**, not on the framework's `RegistryContext`. q2-debug doesn't need `currentFilePath`; only q2-preview's leaves do (e.g. `Image` resolution).
@@ -657,7 +657,7 @@ Plan 2B's atomic-aware dispatcher reads these. Future features (preimage navigat
 
 - **`DEFAULT_CSS_ARTIFACT_PATH` JS-side mirror — resolved.** Item 0 ships `hub-client/src/types/artifactPaths.ts` as a TS hand-mirror, matching the existing TS↔Rust pattern. The constant is consumed by the parent (`Q2PreviewIframe`, item 6), not the iframe entry.
 
-- **Iframe lifetime claim — resolved.** Researched in 2026-05-07 session. The AST iframe remounts on every document switch (driven by `ReactPreview.tsx:257-260`'s previewState reset). q2-preview uses prop-captured closures, not ref-based context. See §"Iframe lifecycle, researched" in Design decisions.
+- **Iframe lifetime claim — resolved.** Researched in 2026-05-07 session. The AST iframe remounts on every document switch (driven by `ReactPreview.tsx:257-260`\'s previewState reset). q2-preview uses prop-captured closures, not ref-based context. See §"Iframe lifecycle, researched" in Design decisions.
 
 - **Where does the iframe get theme CSS bytes from? — resolved (2026-05-09).** The iframe is sandboxed and does not initialize WASM, so `vfsReadFile` cannot run there. The parent (`Q2PreviewIframe`) reads VFS bytes, wraps them in a blob URL, and posts the URL string in a separate `UPDATE_THEME` message; the iframe consumes via `<link rel="stylesheet" href={cssUrl}>`. Same blob-URL pattern is the contract for Plan 2B's image bytes. See §"Asset bytes flow as blob URLs…" in Design decisions, and items 6 + 9.
 
@@ -701,7 +701,7 @@ CLI render path is unaffected — it doesn't use `RenderResponse` (which is a JS
 - `hub-client/src/components/render/ReactRenderer.tsx:147` — format dispatch (combined branch split by item 12; q2-preview routed to `Q2PreviewIframe`).
 - `hub-client/src/components/render/ReactPreview.tsx:96, 176, 224, 292` — themeFingerprint extraction, state, and prop plumbing (item 11).
 - `hub-client/src/utils/iframePostProcessor.ts:213-281` — source for link-handler logic to extract.
-- `hub-client/src/utils/customRegistry.ts:14` — `buildCustomRegistry` helper consumed by both formats' entries.
+- `hub-client/src/utils/customRegistry.ts:14` — `buildCustomRegistry` helper consumed by both formats\' entries.
 - `hub-client/src/types/diagnostic.ts:56` — `RenderResponse` interface (item 11 adds `theme_fingerprint?: string`).
 - `hub-client/src/types/intelligence.ts` — existing TS↔Rust mirror pattern to follow for `atomicCustomNodes` and `artifactPaths`.
 
@@ -719,7 +719,7 @@ The TDD discipline applies per work-item, not per-plan. Item 10 (link handlers e
 - Iframe loads `/q2-preview.html` and reaches `IFRAME_READY`.
 - Every node renders as muted-gray "T (not yet implemented)" placeholders, visually distinct from q2-debug's bordered boxes.
 - `<link data-q2-theme>` element present in the iframe's `document.head` with `href` resolving to a `blob:` URL (after item 11 lands). Visible in DevTools. **The visual *effect* of theme CSS is not observable in 2A** — there is no real-HTML content for the CSS to style; that lands in 2B.
-- Editing `theme: cosmo` → `theme: flatly` in YAML changes the `<link>`'s `href` to a new blob URL; the old URL is revoked. Same caveat — no visual change without 2B's real-HTML leaves.
+- Editing `theme: cosmo` → `theme: flatly` in YAML changes the `<link>`\'s `href` to a new blob URL; the old URL is revoked. Same caveat — no visual change without 2B's real-HTML leaves.
 
 **Unit-test-only (vitest with synthetic Document):**
 - Link handler routing on synthetic clicks. The plan's Goal previously claimed "links navigate" — in 2A that is true at the handler level only. `Link` AST nodes render as placeholder text with no `<a>` element, so no link can be clicked end-to-end until 2B's `Link` component ships.
@@ -756,7 +756,7 @@ The TDD discipline applies per work-item, not per-plan. Item 10 (link handlers e
   });
   ```
 
-  **Implementation prerequisite**: each entry must set its renderer-surface global at module top level (not lazily inside `loadCustomComponents`) so importing the module is sufficient to populate `window`. q2-preview's `entry.tsx` (item 9) does this in its initial form. q2-debug's entry currently sets the global inside `loadCustomComponents` (alongside `window.React` and `window.katex`); refactor it to set the renderer-surface object at module top — leave only the React/katex globals lazy, since those are tied to dynamic user-TSX imports. The refactor is small (~10 LOC moved) and improves testability without changing runtime behavior in production (the global ends up set in both cases by the time user TSX runs). Bundle the refactor with item 9.
+  **Implementation prerequisite**: each entry must set its renderer-surface global at module top level (not lazily inside `loadCustomComponents`) so importing the module is sufficient to populate `window`. q2-preview's `entry.tsx` (item 9) does this in its initial form. q2-debug's entry currently sets the global inside `loadCustomComponents` (alongside `window.React` and `window.katex`); refactor it to set the renderer-surface object at module top — leave only the React/katex globals lazy, since those are tied to dynamic user-TSX imports. The refactor is small (\~10 LOC moved) and improves testability without changing runtime behavior in production (the global ends up set in both cases by the time user TSX runs). Bundle the refactor with item 9.
 - **Link handler unit tests** (vitest): build a representative `Document`, attach `installLinkHandlers(doc, { currentFilePath: '/foo.qmd', onQmdLinkClick })`, dispatch synthetic clicks on:
   - `<a href="https://example.com">` — assert `window.open` called with `_blank`.
   - `<a href="other.qmd#sec">` — assert `onQmdLinkClick({ path: '/other.qmd', anchor: 'sec' })`.
@@ -805,23 +805,23 @@ The TDD discipline applies per work-item, not per-plan. Item 10 (link handlers e
 
 | # | Component | Lines (rough) |
 |---|---|---|
-| 0 | `types/artifactPaths.ts` (TS hand-mirror) | ~15 |
-| 1 | `types/sourceInfo.ts` | ~50 |
-| 2 | `utils/sourceInfo.ts` (accessors + tests) | ~120 |
-| 3 | `utils/atomicCustomNodes.ts` | ~30 |
-| 4 | Framework `RegistryContext` extension | ~5 |
-| 5 | `q2-preview.html` + `vite.config.ts` rollup input | ~35 |
-| 6 | `Q2PreviewIframe.tsx` (incl. theme-CSS posting effect + fingerprint dedup ref) | ~110 |
-| 7 | `PreviewContext.tsx` | ~15 |
-| 8a | `q2-preview/dispatchers.tsx` (`Block`/`Inline` with muted-gray miss path) | ~30 |
-| 8b | `q2-preview/registry.ts` skeleton (`'Ast'`, `'Block'`, `'Inline'` entries) + `PreviewDocument.tsx` | ~40 |
-| 9 | `q2-preview/entry.tsx` (module-top message listener handling UPDATE_AST + UPDATE_THEME, module-top `<link>` injection, module-top global set, PreviewRoot wrapper for PreviewContext + link handlers + `<Ast>` mount) + q2-debug entry refactor (move global to module top) | ~120 |
-| 10 | `utils/iframeLinkHandlers.ts` extraction | ~120 |
-| 11 | Rust + parent-side `themeFingerprint` plumbing — 5 constructor sites, TS interface, ReactPreview state, ReactRenderer prop, Rust test | ~50 |
-| 12 | `ReactRenderer.tsx` format-dispatch split + smoke-all `PreviewIframeKind` extension (3 files in `e2e/helpers/` + `e2e/smoke-all.spec.ts`) | ~25 |
-| 13 | `render-components` gate extension + regression test | ~20 |
-| 14 | Framework-primitive parity test (`parity.test.tsx`) | ~30 |
-| | **Total** | **~815** |
+| 0 | `types/artifactPaths.ts` (TS hand-mirror) | \~15 |
+| 1 | `types/sourceInfo.ts` | \~50 |
+| 2 | `utils/sourceInfo.ts` (accessors + tests) | \~120 |
+| 3 | `utils/atomicCustomNodes.ts` | \~30 |
+| 4 | Framework `RegistryContext` extension | \~5 |
+| 5 | `q2-preview.html` + `vite.config.ts` rollup input | \~35 |
+| 6 | `Q2PreviewIframe.tsx` (incl. theme-CSS posting effect + fingerprint dedup ref) | \~110 |
+| 7 | `PreviewContext.tsx` | \~15 |
+| 8a | `q2-preview/dispatchers.tsx` (`Block`/`Inline` with muted-gray miss path) | \~30 |
+| 8b | `q2-preview/registry.ts` skeleton (`'Ast'`, `'Block'`, `'Inline'` entries) + `PreviewDocument.tsx` | \~40 |
+| 9 | `q2-preview/entry.tsx` (module-top message listener handling UPDATE_AST + UPDATE_THEME, module-top `<link>` injection, module-top global set, PreviewRoot wrapper for PreviewContext + link handlers + `<Ast>` mount) + q2-debug entry refactor (move global to module top) | \~120 |
+| 10 | `utils/iframeLinkHandlers.ts` extraction | \~120 |
+| 11 | Rust + parent-side `themeFingerprint` plumbing — 5 constructor sites, TS interface, ReactPreview state, ReactRenderer prop, Rust test | \~50 |
+| 12 | `ReactRenderer.tsx` format-dispatch split + smoke-all `PreviewIframeKind` extension (3 files in `e2e/helpers/` + `e2e/smoke-all.spec.ts`) | \~25 |
+| 13 | `render-components` gate extension + regression test | \~20 |
+| 14 | Framework-primitive parity test (`parity.test.tsx`) | \~30 |
+| | **Total** | **\~815** |
 
 One focused session is realistic; possibly two. Natural split:
 - **Session A**: items 1–4 (shared utilities) + items 5–8 (q2-preview surface scaffolding). Verifies the iframe boots empty with placeholders.
@@ -865,7 +865,7 @@ One focused session is realistic; possibly two. Natural split:
   - Goal section updated to reflect URL-on-the-wire wording.
   - Rationale: aligns with future service-worker design (URL fetches all the way down) and unifies theme + image asset transport under one pattern. Plan 2B's image story becomes a thin manifest-consumer instead of a parallel postMessage-bytes design.
 - **2026-05-09 (post-research follow-ups, four points)**:
-  - **`UPDATE_THEME` hoisted to module top in `entry.tsx`** (item 9 restructured). Previously the listener was inside `PreviewRoot`'s `useEffect`, which only attaches after React commits the mount triggered by the first `UPDATE_AST`. The parent's two posts (theme + AST) fire from sibling `useEffect`s on the same `iframeReady` transition; if the theme effect ran first, `UPDATE_THEME` would land before any iframe handler was attached and be silently dropped (the parent's `lastSentThemeFingerprintRef` dedup ref would then block any retry). The fix: register the message listener at module top in `entry.tsx` (before `IFRAME_READY` is posted, mirroring q2-debug's pattern), and have the handler imperatively manage the `<link data-q2-theme>` element directly — no React state, no `useEffect` lifecycle. `PreviewRoot` keeps `PreviewContext.Provider`, link handlers, and the `<Ast>` mount; theme is no longer its concern.
-  - **Placeholder dispatcher recurses on miss** (item 8). The previous sketch returned `<div>{t} (not yet implemented)</div>` without calling `renderChildren`. With 2A's empty registry, every Pandoc base type hits the miss path, so only top-level blocks rendered — inline children (`Str`, `Strong`, etc.) inside an unrecognized `Para` were silenced. The Goal section's "every node renders as a placeholder" claim only held for top-level blocks, and the dispatcher unit test (Para containing Str fixture) couldn't make its inline assertion pass. Fix: dispatchers now call `renderChildren(args)` on miss so nested nodes surface their own placeholders. `renderChildren` covers Pandoc base types via `framework/dispatch.tsx`'s `renderChildrenRegistry`; CustomNodes have no entry there and silently render only the placeholder text, which is fine for 2A (no CustomNodes ship with leaves).
+  - **`UPDATE_THEME` hoisted to module top in `entry.tsx`** (item 9 restructured). Previously the listener was inside `PreviewRoot`\'s `useEffect`, which only attaches after React commits the mount triggered by the first `UPDATE_AST`. The parent's two posts (theme + AST) fire from sibling `useEffect`s on the same `iframeReady` transition; if the theme effect ran first, `UPDATE_THEME` would land before any iframe handler was attached and be silently dropped (the parent's `lastSentThemeFingerprintRef` dedup ref would then block any retry). The fix: register the message listener at module top in `entry.tsx` (before `IFRAME_READY` is posted, mirroring q2-debug's pattern), and have the handler imperatively manage the `<link data-q2-theme>` element directly — no React state, no `useEffect` lifecycle. `PreviewRoot` keeps `PreviewContext.Provider`, link handlers, and the `<Ast>` mount; theme is no longer its concern.
+  - **Placeholder dispatcher recurses on miss** (item 8). The previous sketch returned `<div>{t} (not yet implemented)</div>` without calling `renderChildren`. With 2A's empty registry, every Pandoc base type hits the miss path, so only top-level blocks rendered — inline children (`Str`, `Strong`, etc.) inside an unrecognized `Para` were silenced. The Goal section's "every node renders as a placeholder" claim only held for top-level blocks, and the dispatcher unit test (Para containing Str fixture) couldn't make its inline assertion pass. Fix: dispatchers now call `renderChildren(args)` on miss so nested nodes surface their own placeholders. `renderChildren` covers Pandoc base types via `framework/dispatch.tsx`\'s `renderChildrenRegistry`; CustomNodes have no entry there and silently render only the placeholder text, which is fine for 2A (no CustomNodes ship with leaves).
   - **`window.RevealReact` is q2-debug-only** (items 9 + the q2-debug refactor wording). `RevealReact` has exactly one consumer — `experimental-components/new/html_slide_rc.jsx`, a slide-demo template. q2-preview never sets it. The q2-debug refactor wording corrected: leave `React`, `katex`, *and `RevealReact`* lazy in `loadCustomComponents` after moving `__REACT_AST_DEBUG_RENDERER__` to module top.
   - **`PreviewRootProps` interface added explicitly to the §9 sketch.** Was previously implicit-by-analogy; now a named interface (`{ astJson, currentFilePath, onNavigateToDocument?, setAst }`) appears in the code block. Test-plan iframe-side theme test rewritten to import the entry module and dispatch synthetic events on `window` (no `<PreviewRoot>` mount), since theme is module-top DOM mutation rather than React state.

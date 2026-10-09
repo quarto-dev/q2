@@ -45,7 +45,7 @@ Successfully completed Phase 3 (k-241) comprehensive testing with real quarto-cl
 ### P1 Features (High Priority)
 ✅ **maybeArrayOf** - Verified with contents-auto pattern
 ✅ **record** - Verified with closed object patterns
-✅ **schema wrapper** - Verified across all document-* files
+✅ **schema wrapper** - Verified across all document-\* files
 ✅ **required: "all"** - Verified in kernelspec object (document-execute.yml line 27)
 
 ## Schema Files Tested

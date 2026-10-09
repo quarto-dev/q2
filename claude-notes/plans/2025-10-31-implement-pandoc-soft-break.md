@@ -76,7 +76,7 @@ This is a **trivial** implementation, nearly identical to the `pandoc_space` han
 
 ### Code to Add
 
-**Location**: `crates/quarto-markdown-pandoc/src/pandoc/treesitter.rs` ~line 540 (after `pandoc_space`)
+**Location**: `crates/quarto-markdown-pandoc/src/pandoc/treesitter.rs` \~line 540 (after `pandoc_space`)
 
 ```rust
 "pandoc_soft_break" => {
@@ -241,7 +241,7 @@ The tree-sitter grammar uses `pandoc_soft_break` (with underscore as alias for a
 - Step 3 (Implement handler): 2 minutes
 - Steps 4-7 (Testing & verification): 5 minutes
 
-**Total**: ~15 minutes
+**Total**: \~15 minutes
 
 This is one of the simplest node types to implement!
 

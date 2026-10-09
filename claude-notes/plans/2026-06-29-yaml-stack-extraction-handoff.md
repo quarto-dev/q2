@@ -117,7 +117,7 @@ the crate's filesystem home — q2 root — even inside the WASM build). So:
 >
 > **Consequence:** `quarto-yaml-validation/src/error.rs` is shipped **unchanged**
 > for `0.1.0` — the 14 `ValidationErrorKind::error_code()` mappings (`Q-1-10` …
-> `Q-1-99`) and the ~15 tests asserting them stay exactly as-is and stay green. No
+> `Q-1-99`) and the \~15 tests asserting them stay exactly as-is and stay green. No
 > error-code work in this phase. With no catalog installed in the standalone repo,
 > diagnostics render **code-only** (`EmptyCatalog`); tests assert on the
 > `error_code()` string, not on rendered catalog text, so they are unaffected.
@@ -130,7 +130,7 @@ the crate's filesystem home — q2 root — even inside the WASM build). So:
 returns **Quarto presentation codes** `Q-1-10`, `Q-1-11`, … These do **not** belong
 in a standalone library (they are q2's namespace, per the discipline). It has
 **no** dependency on an installed catalog (no `get_docs_url`/`install_catalog`
-refs), so the change is localized to `error_code()` + the ~15 `error.rs` tests that
+refs), so the change is localized to `error_code()` + the \~15 `error.rs` tests that
 assert `"Q-1-x"`.
 
 Per `cross-package-error-codes.md`, change `error_code()` to **own, namespaced
@@ -195,7 +195,7 @@ the origin codes and may remap to their own presentation codes.
       `quarto-error-reporting` = `"0.1.0"` (default features — no json/coalesce
       use, so json feature not needed).
 - [x] **Error codes:** NO change for `0.1.0` (decision **B** — keep `Q-1-x`).
-      `error.rs` shipped verbatim; the 14 mappings + ~15 tests stay green.
+      `error.rs` shipped verbatim; the 14 mappings + \~15 tests stay green.
 - [x] No `Q-1-x` test/snapshot edits needed: the render path never consults the
       catalog (title "YAML Validation Failed" is hardcoded; no docs URL surfaced),
       so the diagnostic snapshot reproduced **byte-for-byte** with no catalog
@@ -244,7 +244,7 @@ the origin codes and may remap to their own presentation codes.
   (`items_after_test_module` etc.); the standalone repo becomes the single source.
 - **WASM workspace resolution** → §5; verify with full `cargo xtask verify`, never
   `--skip-hub-build`.
-- **`| tail` masks `cargo xtask verify`'s real exit code** → run it without a tail
+- **`| tail` masks `cargo xtask verify`\'s real exit code** → run it without a tail
   pipe (or check the file), or use `run_in_background`.
 - **crates.io / GitHub are user/identity-gated and irreversible** → you prep & dry-
   run; the user publishes and (optionally) `cargo owner --add github:posit-dev:<team>`.

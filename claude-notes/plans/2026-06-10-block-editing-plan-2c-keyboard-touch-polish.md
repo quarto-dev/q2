@@ -56,7 +56,7 @@ box was not reproduced, so:
 
 - **Spacing crunched.** A heading's margins/padding/border (Bootstrap `h2` has
   `padding-bottom: 0.5rem` + a `border-bottom`) vanished, pulling the following
-  blocks up ~9.5px; the gap between a paragraph and a following list collapsed.
+  blocks up \~9.5px; the gap between a paragraph and a following list collapsed.
 - **Decorations disappeared.** The visible rule under an `<h2>` (its
   `border-bottom`) was gone while editing.
 
@@ -68,7 +68,7 @@ inherited automatically; the four types whose root cannot legally contain a
 `<textarea>` (`<ul>`/`<ol>`/`<dl>`/`<table>`) used a synthetic `<div>` with
 captured margins instead. In practice the synthetic-`<div>` (measure-and-set)
 types looked *better* than the element-wrapping ones, and the hybrid added a
-dead `editOverride` branch to ~12 leaf components. **We discarded the hybrid**
+dead `editOverride` branch to \~12 leaf components. **We discarded the hybrid**
 and use measure-and-set for every type; `EditContentContext.tsx` and all the
 `editOverride` lines were removed.
 

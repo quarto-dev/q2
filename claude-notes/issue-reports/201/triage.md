@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/201
 - **Reporter**: @rundel (Colin Rundel), 2026-05-15
 - **Triage date**: 2026-05-15
-- **Worktree**: `.worktrees/issue-201` (branch `issue-201`, based on `main` @ `26b8943c`)
+- **Worktree**: `.worktrees/issue-201` (branch `issue-201`, based on `main` \@ `26b8943c`)
 - **Beads issue**: bd-8lcm (filed during triage)
 - **Scope**: The reader/writer asymmetry around the ASCII apostrophe `'` in the qmd writer (`crates/pampa/src/writers/qmd.rs`). No reader changes are in scope — the reader's behavior is the spec the writer must satisfy.
 
@@ -28,7 +28,7 @@ $ printf -- "reveal.js\\\\' jump-to-slide.\n" | cargo run --bin pampa --
 
 # 2. Writer round-trips the AST as qmd, but DROPS the escape:
 $ printf -- "reveal.js\\\\' jump-to-slide.\n" | cargo run --bin pampa -- -t qmd
-reveal.js' jump-to-slide.
+reveal.js\' jump-to-slide.
 
 # 3. Feeding that output back into the reader fails with Q-2-10:
 $ printf -- "reveal.js\\\\' jump-to-slide.\n" \
@@ -37,7 +37,7 @@ $ printf -- "reveal.js\\\\' jump-to-slide.\n" \
 Error: [Q-2-10] Closed Quote Without Matching Open Quote
    ╭─[ <stdin>:1:11 ]
    │
- 1 │ reveal.js' jump-to-slide.
+ 1 │ reveal.js\' jump-to-slide.
    │          ┬┬
    │          ╰─── This is the opening quote. ...
    │           │
@@ -69,7 +69,7 @@ The reporter cites two quarto-web sources that contain this pattern (`reveal.js'
 
 ## Localization
 
-- **Writer escape table**: `crates/pampa/src/writers/qmd.rs:1379` (`fn escape_markdown`). Currently has no `'` arm — the comment at line 1405 explicitly notes "characters that don't need escaping in most contexts: . , - + ! ? = : ; / ( ) % & ' \""`. That comment is wrong about `'` in the letter-then-whitespace context.
+- **Writer escape table**: `crates/pampa/src/writers/qmd.rs:1379` (`fn escape_markdown`). Currently has no `'` arm — the comment at line 1405 explicitly notes ``characters that don't need escaping in most contexts: . , - + ! ? = : ; / ( ) % & ' "``. That comment is wrong about `'` in the letter-then-whitespace context.
 - **Str writer entry point**: `crates/pampa/src/writers/qmd.rs:1414` (`fn write_str`). Currently has signature `(s: &Str, buf, ctx)` and calls `escape_markdown(reverse_smart_quotes(&s.text))`. A correct fix needs at least lookahead to the next inline (Space vs other) and lookbehind to the previous inline's trailing character. The `ctx: &mut QmdWriterContext` is the natural place to thread that state — or `write_inline` (line 2159) could pre-compute boundary flags and pass them down.
 - **Reverse smart-quote helper**: `crates/pampa/src/writers/qmd.rs:1371` (`fn reverse_smart_quotes`). Already turns U+2019 (`’`) into ASCII `'`. The fix interacts with this: post-conversion, any ASCII `'` produced by this helper is a candidate for escaping based on context.
 - **Reader-side trigger (reference only, not modified)**: `Q-2-10` error corpus at `crates/pampa/resources/error-corpus/Q-2-10.json` defines the canonical trigger `a' b.`. Existing roundtrip test `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/smart_quotes_apostrophes.qmd` only exercises the *safe* contexts (`project's`, `can't`, `it's`, `We're`) and so doesn't catch this regression. A new roundtrip fixture in the same directory (e.g. `apostrophe_before_space.qmd` containing `reveal.js\' jump-to-slide.`) is the obvious TDD entry point.

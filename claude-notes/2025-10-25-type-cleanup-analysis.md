@@ -209,7 +209,7 @@ export interface AnnotatedQmdDocument {
 
 ### Current (Scattered)
 - **types.ts**: RustQmdJson, JsonMetaValue, AnnotatedParse
-- **pandoc-types.ts**: PandocDocument, QmdPandocDocument, Annotated_* types
+- **pandoc-types.ts**: PandocDocument, QmdPandocDocument, Annotated\_* types
 - **document-converter.ts**: AnnotatedPandocDocument
 
 ### Proposed (Organized by Purpose)
@@ -228,7 +228,7 @@ export interface AnnotatedQmdDocument {
 
 #### document-converter.ts - Implementation Only
 - `DocumentConverter` class
-- No exported types (or only internal ones prefixed with _)
+- No exported types (or only internal ones prefixed with \_)
 
 ## Migration Path
 

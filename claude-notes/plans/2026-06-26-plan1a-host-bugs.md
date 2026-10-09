@@ -21,11 +21,11 @@ seams (TDD: write the seam, see RED, fix, GREEN, run the workspace suite).
 
 **Severity:** Low-Med. **Verified 2026-06-26 against `ts_process.rs`.**
 
-stderr is consulted on **exactly one event — a whole-subprocess crash** (`handle_crash` ~L877-908).
+stderr is consulted on **exactly one event — a whole-subprocess crash** (`handle_crash` \~L877-908).
 Per-request failures return `FromEngine::Error{message,stack}` routed by id to one slot
-(`reader_loop` ~L820-828) and **never touch the ring** — so a single engine's failure already sees
+(`reader_loop` \~L820-828) and **never touch the ring** — so a single engine's failure already sees
 only its own structured error. A crash is global (every in-flight request fails at once); today each
-waiter gets an identical copy of the whole `recent_stderr` ring (~L395) stamped with its own engine
+waiter gets an identical copy of the whole `recent_stderr` ring (\~L395) stamped with its own engine
 name. Per-engine *partitioning* is impossible (lines are untagged) **and undesirable** (it would
 hide the culprit if it wasn't the engine you waited on).
 
@@ -35,32 +35,32 @@ hide the culprit if it wasn't the engine you waited on).
 The fix makes the shared-ness explicit so no single engine is falsely blamed. So:
 
 - [x] **Honest crash label:** when `>1` slot is in flight, prefix the snapshot with "recent subprocess
-  stderr (shared across in-flight engines: [...]):" + a sorted, deduplicated roster; when exactly one
+  stderr (shared across in-flight engines: \[...\]):" + a sorted, deduplicated roster; when exactly one
   slot is in flight, emit the bare ring join (no header) — unchanged from today.
 - [x] **Ring hygiene:** `stderr_loop` must **not** push `[INFO]` lines into `recent_stderr` (trace
   them only); ring keeps `[WARN]`/`[ERROR]`/unprefixed — so an env-enabled INFO toggle never degrades
   the crash diagnostic.
 - [x] **Seam-enabling refactor (must land with the test):** `stderr_loop(stderr: ChildStderr, …)` →
-  `stderr_loop(reader: impl BufRead, …)`. The concrete `ChildStderr` (~L931) forces a subprocess
+  `stderr_loop(reader: impl BufRead, …)`. The concrete `ChildStderr` (\~L931) forces a subprocess
   harness and makes the ring un-assertable in a unit; `impl BufRead` lets the test feed a
   `Cursor<&[u8]>`. The `BufReader` wrap currently lives *inside* `stderr_loop` (`let reader =
-  BufReader::new(stderr)`, ~L932); the refactor moves that one wrap to the call site
-  (`stderr_loop(BufReader::new(stderr), recent_stderr)`, ~L539) and drops it from the body — a
+  BufReader::new(stderr)`, \~L932); the refactor moves that one wrap to the call site
+  (`stderr_loop(BufReader::new(stderr), recent_stderr)`, \~L539) and drops it from the body — a
   one-line, behavior-identical production change. `BufRead`/`BufReader` are already imported (L26).
 
 *Residual pollution (accepted):* by default only WARN/ERROR reach stderr, so a chatty notebook's
 **warnings** from engine B can still appear in engine A's crash error — notebook-author hygiene,
 rare. INFO is off unless env-enabled (and now never rings).
 
-*Implementation note — roster ordering in `handle_crash` (~L892):* the in-flight engine names are only
-known after `pending` is drained (currently ~L918, *after* the snapshot at ~L912). **Drain first**, then
+*Implementation note — roster ordering in `handle_crash` (\~L892):* the in-flight engine names are only
+known after `pending` is drained (currently \~L918, *after* the snapshot at \~L912). **Drain first**, then
 build the roster from the drained `PendingSlot.engine` fields (`PendingSlot { engine: String, tx: … }`,
 L363-367), then assemble the label, then send. Reordering drain-before-snapshot is safe (no dependency).
 Roster is `sort_unstable` + `dedup` so two in-flight requests to the *same* engine collapse to one entry
 (H1-a uses two distinct names, so the dedup/order is an explicit decision the seam doesn't pin down).
 
-*Implementation note — drain-grace sleep (~L909):* `handle_crash` sleeps ~250 ms unconditionally to let
-the stderr thread drain. H1-a/H1-b call `handle_crash` directly and each pay it (~0.5 s total). Accepted:
+*Implementation note — drain-grace sleep (\~L909):* `handle_crash` sleeps \~250 ms unconditionally to let
+the stderr thread drain. H1-a/H1-b call `handle_crash` directly and each pay it (\~0.5 s total). Accepted:
 the existing `test_crash_broadcast_on_mock_eof` already eats this once under a 15 s watchdog. Do **not**
 parameterize the grace to `Duration::ZERO` for tests unless it becomes a real friction point — keeping
 the production path untouched is worth the half-second.
@@ -92,8 +92,8 @@ subprocess/browser tier. `Cursor<&[u8]>` is `impl BufRead`, so H1-c drives the r
 
 **Severity:** Low (CLI) / Low-Med (long-running `q2 preview`/hub). **Verified 2026-06-26.**
 
-`static EXTRACTED_BUNDLE_PATH: Mutex<Option<Result<PathBuf, String>>>` (~L63) caches `Err`
-permanently (the comment says "until the process restarts", `extracted_bundle_path` ~L114-143). A
+`static EXTRACTED_BUNDLE_PATH: Mutex<Option<Result<PathBuf, String>>>` (\~L63) caches `Err`
+permanently (the comment says "until the process restarts", `extracted_bundle_path` \~L114-143). A
 transient disk-full / missing-runtime-dir blip then **permanently disables all TS engines** in a
 long-running process. Fix = cache successes only.
 
@@ -178,7 +178,7 @@ Seam tests added (all RED→GREEN demonstrated via named revert):
 **Pre-existing flaky test observed (NOT a regression):**
 `quarto-core engine::ts_engine::tests::test_race_free_instance_exclusive` hit its 15 s
 watchdog once during a full concurrent `nextest --workspace` run, but passes deterministically
-in isolation (5/5 at ~0.29 s each). It uses the `with_transport` mock path (`stderr=None`,
+in isolation (5/5 at \~0.29 s each). It uses the `with_transport` mock path (`stderr=None`,
 no bundle extraction), which this plan's diff does not touch. Load-induced timing flakiness
 in a polling-watcher race test — a candidate digression/strand for the epic, out of scope here.
 

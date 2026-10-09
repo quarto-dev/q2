@@ -9,12 +9,12 @@ Every project-list export surface emits a flat, pre-collections (schemaVersion 4
 shape with no collection information:
 
 - **Projects home "Export list"** — `handleExportJson` in
-  `hub-client/src/components/ProjectsHome.tsx` (~line 894): exports the root
+  `hub-client/src/components/ProjectsHome.tsx` (\~line 894): exports the root
   set's entries only.
 - **Classic selector export** — `handleExport` in
-  `hub-client/src/components/ProjectSelector.tsx` (~line 491): same flat shape.
+  `hub-client/src/components/ProjectSelector.tsx` (\~line 491): same flat shape.
 - **IDB-level `exportData()`** — `hub-client/src/services/projectStorage.ts`
-  (~line 114): `projects` store + `userSettings`; never reads the
+  (\~line 114): `projects` store + `userSettings`; never reads the
   `collections` pointer array from the `projectSet` store.
 
 Consequence: an export → import round trip on a fresh browser restores projects
@@ -50,8 +50,8 @@ Notes:
   pointer record, but import never re-subscribes the root — the importing
   browser already has (or creates) its own root.
 - Import re-subscribes via the existing `subscribeCollection(docId, syncServer)`
-  action (`useCollectionSets.ts` ~line 395), deduped by
-  `addCollectionPointer`'s existing same-docId check.
+  action (`useCollectionSets.ts` \~line 395), deduped by
+  `addCollectionPointer`\'s existing same-docId check.
 - Old exports (schemaVersion 4 / no `collections` field) must import exactly as
   today. New exports importing into old builds degrade gracefully (unknown
   field ignored) — verified by shape, no code needed there.
@@ -75,7 +75,7 @@ the collections half is handled by the caller (needs the React-layer
 
 - `ProjectsHome` gains prop `onSubscribeCollection?: (docId, syncServer) => Promise<void>`;
   `App.tsx` passes `projectSetActions.subscribeCollection` (already exists —
-  today only `JoinCollectionLanding` uses it, App.tsx ~line 733).
+  today only `JoinCollectionLanding` uses it, App.tsx \~line 733).
 - `handleImportJson` (ProjectsHome): after importing projects, loop
   non-root exported collections → `onSubscribeCollection(docId, syncServer)`;
   report `Imported N project(s), subscribed to M collection(s)` (and count
@@ -93,11 +93,11 @@ project(s)" but the home displays none of them.
 
 Mechanism (confirmed by code reading, to be confirmed by live repro):
 - `handleImportJson` → `projectStorage.importData()` writes only to the legacy
-  IDB `projects` store (projectStorage.ts ~line 180); the collections home
+  IDB `projects` store (projectStorage.ts \~line 180); the collections home
   renders from the root ProjectSetDocument's entries.
 - The reconciler that folds IDB → root set
   (`reconcileIntoConnectedProjectSet`) only runs when set status transitions
-  to `connected` (useCollectionSets.ts ~172) — once per page load, so a
+  to `connected` (useCollectionSets.ts \~172) — once per page load, so a
   post-load import is never swept in without a manual reload; a fresh browser
   that hasn't completed setup never reaches that sweep at all.
 

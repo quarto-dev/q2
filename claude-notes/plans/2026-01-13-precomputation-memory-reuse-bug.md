@@ -8,8 +8,8 @@
 
 The `yaml-tags.qmd` snapshot test continues to fail intermittently, despite the fix applied in commit 227acbe (2026-01-03). The symptom is identical to the original bug:
 - The `path` metadata value's Str node gets different `s` values (pool IDs): sometimes `2`, sometimes `4`
-- `s:4` is correct (points to path's source range [33,47])
-- `s:2` is incorrect (points to compute's source range [15,20])
+- `s:4` is correct (points to path's source range `[33,47]`)
+- `s:2` is incorrect (points to compute's source range `[15,20]`)
 
 ## Root Cause: Incomplete Fix
 

@@ -61,7 +61,7 @@ const scriptPath = join(currentDir, "command.py");
 ```
 
 `import.meta.url` resolves to the directory of the **loaded bundle** at
-runtime, i.e. wherever `_extension.yml`'s `path:` points once claimed. So
+runtime, i.e. wherever `_extension.yml`\'s `path:` points once claimed. So
 `extract.py`/`command.py` must sit next to the rebundled
 `marimo-engine.js`, inside `_extensions/marimo/` — exactly the pattern
 julia's `.jl` runtime files use relative to `julia-engine.js` (§7 of the
@@ -124,7 +124,7 @@ Differences from upstream, each an intentional adaptation (not a bug):
    to ask dynamically (mirrors `claimsLanguage` in `marimo-engine.ts`
    line-for-line — see §4 below). Bare `{python}` is intentionally
    **not** claimed (no claims entry for plain `python`), matching
-   `claimsLanguage`'s `return false` fallthrough for that case.
+   `claimsLanguage`\'s `return false` fallthrough for that case.
 3. **`filters:` (the `marimo-deprecated.lua` contribution) dropped.** Per
    the brief: the deprecation shim is irrelevant to a working-engine
    fixture and would need its own file copy for no purpose here.
@@ -142,7 +142,7 @@ Differences from upstream, each an intentional adaptation (not a bug):
 
 ## 4. `claimsLanguage` (dynamic, TS) vs. the fixture's static `claims:` map
 
-Cross-checked line-for-line against `marimo-engine.ts`'s
+Cross-checked line-for-line against `marimo-engine.ts`\'s
 `claimsLanguage` (lines 162-182):
 
 ```ts
@@ -183,7 +183,7 @@ before working around them (read `claude-notes/research/2026-07-02-julia-engine-
    Quarto-1 extension repo's layout — the same reason julia's `src/` lives
    at the fixture root instead of inside the shipped package dir).
 
-Note also a **third**, marimo-specific non-issue: `find_entry_ts`'s naming
+Note also a **third**, marimo-specific non-issue: `find_entry_ts`\'s naming
 convention is `<ext_dir_basename>.ts` (i.e. it would look for
 `_extensions/marimo/src/marimo.ts`, not `marimo-engine.ts`) — but the
 function falls back to "any `.ts` file in `src/`" when the exact-name
@@ -221,7 +221,7 @@ Config resolved via workspace auto-detection (tier 3 — `find_workspace_root`
 walked up from `_extensions/marimo/` to the repo root, which contains
 `ts-packages/quarto-api`), same as julia: `@quarto/types` from local
 workspace source, `@std/*` (`path`) from `jsr:` per
-`resources/extension-build/deno.json`'s existing aliases (no new alias
+`resources/extension-build/deno.json`\'s existing aliases (no new alias
 needed — julia's §1 import-map parity work already added everything
 marimo's imports use: `path` only, no `fs/`, `log`, or `encoding/`
 namespaces are imported by `marimo-engine.ts`).
@@ -270,7 +270,7 @@ edit was needed to make the bundle build or `deno check` pass.
    `import.meta.url` reasoning holds: the bundle correctly resolved
    `command.py`/`extract.py` co-located in `_extensions/marimo/` and `uv run`
    spawned both successfully (see §9). No relocation issue.
-2. **`find_entry_ts`'s naming convention doesn't match `marimo-engine.ts`
+2. **`find_entry_ts`\'s naming convention doesn't match `marimo-engine.ts`
    directly** (§5) — works today only because of the "any `.ts` in `src/`"
    fallback. If a second `.ts` file is ever added to the fixture's `src/`
    (e.g. a `constants.ts` companion, mirroring julia's), the fallback
@@ -284,11 +284,11 @@ edit was needed to make the bundle build or `deno check` pass.
    julia). If marimo's actual maintainers state a preferred display name,
    update this value; it has no behavioral effect beyond satisfying q2's
    required-field check.
-4. **`claimsLanguage`'s dynamic branches were cross-checked, not
+4. **`claimsLanguage`\'s dynamic branches were cross-checked, not
    exercised.** §4 is a static read of the TS source against the fixture's
    `claims:` map; the actual Pass-1 resolver behavior (does q2 correctly
    assign priority-2/priority-1/interop per the map, matching what
-   `claimsLanguage` would return if asked dynamically) is 4cB+'s job to
+   `claimsLanguage` would return if asked dynamically) is 4cB+\'s job to
    verify against a real render, same division of labor as julia's
    4A (static claims declaration) vs. 4B (first real render, §9 of the
    julia log). **Partially confirmed by 4cB attempt 1 (§9): the static
@@ -302,7 +302,7 @@ edit was needed to make the bundle build or `deno check` pass.
 
 **Resolved marimo version:** `marimo==0.23.13` (python 3.13.7,
 `cpython-3.13.7-macos-aarch64-none`), resolved via `uv run --with marimo` —
-consistent with the environment facts' `uv.lock` constraint (`>=0.23.1`).
+consistent with the environment facts\' `uv.lock` constraint (`>=0.23.1`).
 
 **Manual invocation:**
 ```
@@ -344,10 +344,10 @@ literal text, the temp file's *path* (e.g.
 `/var/folders/.../marimo-header-….html`) rather than that file's contents.
 Confirmed by reading the temp file directly off disk — it genuinely does
 contain `__MARIMO_EXPORT_CONTEXT__` and `<marimo-code hidden>` — so the
-break is entirely on the q2-consumption side, not in `extract.py`'s header
+break is entirely on the q2-consumption side, not in `extract.py`\'s header
 construction. Root cause: `ts_engine.rs::translate_includes` treats every
 engine-contributed `include-in-header` wire value as literal content
-(matching `IncludeResolveStage`'s documented architecture — engine-contributed
+(matching `IncludeResolveStage`\'s documented architecture — engine-contributed
 `PandocIncludes` are folded verbatim, never file-read, unlike knitr's
 native-Rust `convert_includes` which does read the file at its own path
 before populating the same struct), while `marimo-engine.ts` sends a
@@ -380,12 +380,12 @@ marker and the executed-output markup).
 **A third, independent finding surfaced proving RED-by-revert**: SC8's
 frozen spec text names the revert "remove the `python` claim from
 `_extension.yml`" — applying exactly that, alone, does **not** redden the
-test. Root cause: `EngineClaimsFileStage`'s whole-file `claims_file` check
+test. Root cause: `EngineClaimsFileStage`\'s whole-file `claims_file` check
 (which runs before, and independent of, per-language `claims:` resolution)
 dynamically loads marimo's own unmodified `claimsFile` JS function, which
 does its own raw-text regex scan for a `.marimo` fence — present in
 `minimal.qmd` regardless of the per-language YAML edit — and that alone
-short-circuits ALL per-language tier evaluation (`engine_execution.rs:225`'s
+short-circuits ALL per-language tier evaluation (`engine_execution.rs:225`\'s
 own comment confirms this is by design, mirroring an explicit `engine:
 marimo` declaration). A corrected revert — adding `claims-files: []`
 alongside removing the `python:` claim, which disables the dynamic
@@ -408,7 +408,7 @@ static, via a declared `claims-files:` key, or dynamic, via the live JS
 engine_claims_file.rs`) runs before `ParseDocumentStage`, asks every
 registered engine whether it claims the **whole input file**, and — first
 claimer wins — records that engine as `ctx.claimed_engine_name`. Per
-`engine_execution.rs:225`'s own comment, that claim **"short-circuits ALL
+`engine_execution.rs:225`\'s own comment, that claim **"short-circuits ALL
 tier evaluation and returns exactly that engine"** — functionally identical
 to an explicit `engine: <name>` frontmatter declaration, entirely bypassing
 whatever the `claims:` map says about individual languages.
@@ -442,7 +442,7 @@ variant (identical engine, `claims:` map dropped from `_extension.yml`,
 derived per-test in `marimo_engine_e2e.rs` rather than committed as a second
 bundle) renders the same python-only `minimal.qmd` SC8 uses with the same
 result: `p4cb2_dynamic_path_parity_minimal_render_matches_static` is GREEN.
-This proves the legacy dynamic path (`ts_engine.rs:668`'s `claims_language`
+This proves the legacy dynamic path (`ts_engine.rs:668`\'s `claims_language`
 else-branch: `ensure_loaded` + a live `ClaimsLanguage` wire call) resolves
 `{python .marimo}` ownership identically to the static `claims:` map.
 
@@ -467,9 +467,9 @@ brief's Risk 1, the evidence-first procedure was run to completion:
    cell** — `<pre class="{sql} code-with-copy"><code>SELECT 1 + 1 AS
    x</code></pre>`, a plain unexecuted code block, not
    `<marimo-cell-output>` — despite `ownership["sql"]=="marimo"` being
-   correct. Root cause: `marimo-engine.ts`'s `execute()` computes
+   correct. Root cause: `marimo-engine.ts`\'s `execute()` computes
    `bareSqlOwned = (options.handledLanguages ?? []).includes("sql")`
-   (mirrored in `lib/is-marimo-cell.ts`'s `cellOwnedByMarimo`), on the
+   (mirrored in `lib/is-marimo-cell.ts`\'s `cellOwnedByMarimo`), on the
    assumption — stated explicitly in that file's doc comment — that
    `handledLanguages` is a *positive* "q2 assigned me this language" set.
    It is not: `EngineResolution::handled_languages_for` (`resolution.rs:292`)
@@ -495,7 +495,7 @@ brief's Risk 1, the evidence-first procedure was run to completion:
 **Why this isn't fixed here.** Both ends of a fix are out of this task's
 authorized scope: `marimo-engine.ts`/`is-marimo-cell.ts` are excluded
 fixture/engine source (only the pre-authorized `claims-files: []` tweak was
-sanctioned, not flipping `bareSqlOwned`'s sense), and the durable fix is
+sanctioned, not flipping `bareSqlOwned`\'s sense), and the durable fix is
 architecturally bigger than a one-line flip anyway — a bare
 `!handledLanguages.includes(lang)` on the engine side cannot distinguish "I
 own this language" from "nobody owns this language" (exactly the ambiguity
@@ -532,11 +532,11 @@ actually arises in practice. A bare complement (`!handledLanguages.includes(lang
 is therefore sound as-is, without a new wire field.
 
 - **Upstream (`~/src/quarto-marimo`, branch `q2-bare-sql-interop`, commit
-  `77c15c8`):** `src/marimo-engine.ts`'s `bareSqlOwned` and
-  `lib/is-marimo-cell.ts`'s `cellOwnedByMarimo` both flipped to
+  `77c15c8`):** `src/marimo-engine.ts`\'s `bareSqlOwned` and
+  `lib/is-marimo-cell.ts`\'s `cellOwnedByMarimo` both flipped to
   `!handledLanguages.includes("sql")`; both doc comments corrected to state
   the leave-alone semantics and point at `resolution.rs:292`.
-  `tests/is-marimo-cell.test.ts`'s two `cellOwnedByMarimo` gate assertions
+  `tests/is-marimo-cell.test.ts`\'s two `cellOwnedByMarimo` gate assertions
   (fed under the old, backwards convention) corrected to match: bare-sql
   cell + `handled=[]` → owned (`true`); + `handled=["sql"]` → NOT owned
   (`false`). RED captured against the flipped implementation with the
@@ -555,7 +555,7 @@ is therefore sound as-is, without a new wire field.
   `grep bareSqlOwned` shows `!(options.handledLanguages ?? []).includes("sql")`;
   `grep handledLanguages.includes` shows the negated
   `cellOwnedByMarimo` expression; `deno check` on the bundle is clean.
-  `crates/quarto-core/src/engine/ts_protocol.rs`'s `TsExecuteOptions::handled_languages`
+  `crates/quarto-core/src/engine/ts_protocol.rs`\'s `TsExecuteOptions::handled_languages`
   field gained a doc comment stating the leave-alone semantics and this
   finding, so the next TS-engine author doesn't repeat it — no logic change
   in q2-core.
@@ -632,12 +632,12 @@ output HTML directly:
 
 - `<head>` (routed via `includes["include-in-header"]`, a `PandocIncludes`
   temp file the engine's bundled `execute()` writes `marimoExecution.header`
-  into — corresponds to upstream `marimo-engine.ts` ~300-310): contains the
+  into — corresponds to upstream `marimo-engine.ts` \~300-310): contains the
   `__MARIMO_EXPORT_CONTEXT__` trust-marker `<script>` and a
   `<marimo-code hidden>...</marimo-code>` tag carrying the URL-encoded
   notebook source, plus the islands runtime `<script type="module"
   src="https://cdn.jsdelivr.net/npm/@marimo-team/islands@.../main.js">`.
-- `<body>`: the widget's raw `{=html}` output (`render-output.ts`'s
+- `<body>`: the widget's raw `{=html}` output (`render-output.ts`\'s
   non-mime-sensitive branch, `result += "```{=html}\n" + output.value +
   "\n```\n\n"`, which becomes a Pandoc `RawBlock` the HTML writer emits
   verbatim — no DOM postprocessor, no `store_html_dependencies`) is a
@@ -671,7 +671,7 @@ SC8/SC9 discriminator-pair style:
 committed `crates/quarto-core/tests/fixtures/extensions/marimo/` stayed
 `git diff`-clean throughout), neutered the engine's `include-in-header`
 population in the bundled `marimo-engine.js` (corresponding to upstream
-`marimo-engine.ts` ~300-310):
+`marimo-engine.ts` \~300-310):
 
 ```diff
 -          if (outputFormat === "html" && marimoExecution.header) {
@@ -742,7 +742,7 @@ reasons.
 SC16 is the first row with a SECOND, *independently owned* engine in the
 same document (`{r}` → knitr). Rendering `{python .marimo}` + `{r}` through
 the unmodified committed fixture confirmed the short-circuit breaks
-coexistence outright: `resolve_engines`'s `claimed` seed collapses the
+coexistence outright: `resolve_engines`\'s `claimed` seed collapses the
 sequence to exactly `[marimo]` (empty ownership map), knitr never runs, and
 the `{r}` cell is spliced back as raw, unexecuted source
 (`<pre class="{r} code-with-copy"><code>1 + 1</code></pre>` — not knitr's
@@ -760,15 +760,15 @@ with no error, just quietly-wrong output. This is a q2-core /
 extension-authoring gotcha independent of marimo specifically; it applies
 to any TS engine whose `_extension.yml` omits `claims-files:`.
 
-### Finding B — `execute()`'s outer catch is unreachable from cell-content
+### Finding B — `execute()`\'s outer catch is unreachable from cell-content
 syntax errors; marimo's own per-cell isolation gets there first
 
-SC18's frozen row names `execute()`'s outer try/catch (marimo-engine.ts
-~319-329) and suggests a syntactically-bad cell body (`def (:`) as the
+SC18's frozen row names `execute()`\'s outer try/catch (marimo-engine.ts
+\~319-329) and suggests a syntactically-bad cell body (`def (:`) as the
 trigger. Empirically, that trigger does NOT reach the outer catch: a
 `{python .marimo}` cell containing `def (:` renders successfully (exit 0)
 and produces `<pre class="marimo-error">SyntaxError: invalid syntax
-(<unknown>, line 1)</pre>` in the body — `extract.py`'s own `_ParseError`
+(<unknown>, line 1)</pre>` in the body — `extract.py`\'s own `_ParseError`
 sentinel (a `try`/`except Exception` wrapped around each `app.add_code(...)`
 call, by its own doc comment written precisely "to surface parse-time
 exceptions... that would otherwise be swallowed") catches it INSIDE the
@@ -779,7 +779,7 @@ marimo's own dataflow-graph execution model, producing
 crash (observed independently while debugging SC13's companion-import-cell
 requirement).
 
-Net effect: `execute()`'s outer catch is reachable only by a failure
+Net effect: `execute()`\'s outer catch is reachable only by a failure
 OUTSIDE marimo's own per-cell/runtime error isolation — i.e. a genuine
 subprocess-level failure (non-zero exit from `uv run`, a bad
 `command.py`/`extract.py` invocation, a `JSON.parse` failure on malformed
@@ -815,17 +815,17 @@ Closes Phase 4cE and the whole plan's engine-fixture-facing work.
 
 Upstream moved `~/src/quarto-marimo` (`q2-bare-sql-interop`) from `77c15c8`
 (the FINDING #4 fix already rebundled at q2 `b4f4f52bf`) to `2a2f312`
-("Factor `buildCommand(metadata)` out of `execute()`'s env-mode branch
+("Factor `buildCommand(metadata)` out of `execute()`\'s env-mode branch
 (SC19)"). Diffed every copied file before touching anything:
 `src/marimo-engine.ts` differs (the `buildCommand` extraction — 28
 insertions/18 deletions, `diff -u` confirms the pre-refactor inline
 `if (useExternalEnv) {...} else {...}` block became a call to a new
 exported `buildCommand(metadata, extractPath, getUvFlags = 
 constructUvCommand)`); `lib/cell-execution-regex.ts`,
-`lib/is-marimo-cell.ts`, `lib/render-output.ts`, `_extensions/marimo/
-command.py`, `_extensions/marimo/extract.py` are all byte-identical
-(`diff` empty) — confirms the brief's prediction that `2a2f312` "touched
-only marimo-engine.ts + a new test file."
+`lib/is-marimo-cell.ts`, `lib/render-output.ts`, `\_extensions/marimo/
+command.py`, `\_extensions/marimo/extract.py` are all byte-identical
+(`diff` empty) — confirms the brief's prediction that `2a2f312` \"touched
+only marimo-engine.ts + a new test file.\"
 
 Recopied `src/marimo-engine.ts` only. Rebundled with the same symlink
 workaround as §5 (`_extensions/marimo/src -> ../../src`, created
@@ -871,7 +871,7 @@ $ uv pip install --python <scratch>/venv/bin/python marimo   # resolved 0.23.13
 
 Document (`external-env.qmd`, front-matter `external-env: true`):
 
-```
+````
 ---
 title: "Marimo External-Env"
 external-env: true
@@ -881,7 +881,7 @@ external-env: true
 import marimo as mo
 21 + 21
 ```
-```
+````
 
 Rendered with `<scratch>/venv/bin` prepended to `PATH`:
 
@@ -896,7 +896,7 @@ Exit 0; rendered HTML contains `42` and the marimo markers
 *entirely absent* from `PATH` (`which uv` → not found, confirmed) — same
 scratch venv only, plus `deno` and `/usr/bin:/bin`. The render still
 succeeded, exit 0, same `42` + markers. This proves the code path taken
-was genuinely `buildCommand`'s `useExternalEnv` branch (`["python",
+was genuinely `buildCommand`\'s `useExternalEnv` branch (`["python",
 extractPath]`) and never fell through to the `uv` branch — if the
 external-env branch were broken or bypassed, this run would have failed
 outright with "uv: command not found."
@@ -1024,7 +1024,7 @@ pane is the inert source cell.
 resolution paths).** SC8's ratified two-part revert removes ONLY the `python:`
 claim ENTRY (keeping the `claims:` key and the other entries) and adds
 `claims-files: []`. That genuinely reddens (render fails jupyter-unavailable):
-with the static `claims:` map still present, `ts_engine`'s static short-circuit
+with the static `claims:` map still present, `ts_engine`\'s static short-circuit
 answers `claims_language` from the map alone — the missing `python` key resolves
 to a static None and marimo does not claim the cell; the dynamic `claimsLanguage`
 wire call fires ONLY when there is no static map at all, so it is never consulted.

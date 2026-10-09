@@ -27,7 +27,7 @@ whether output is *correct* — that's P5–P7).
 
 ## `QUARTO_FILTER_PARAMS` re-derivation (the three deferred open questions — resolved)
 
-`filterParamsJson` (`filters.ts:128-201`) builds the whole blob by spreading ~15 contributor
+`filterParamsJson` (`filters.ts:128-201`) builds the whole blob by spreading \~15 contributor
 calls into one object, then adding a handful of top-level literal keys. Full enumeration,
 grouped by v1 (single-document docx/pptx, no `_quarto.yml` project) relevance:
 
@@ -38,7 +38,7 @@ grouped by v1 (single-document docx/pptx, no `_quarto.yml` project) relevance:
 | `ipynbFilterParams` | `ipynb-title-block-template`; `enable-crossref: false` + `ipynb-produce-source-notebook: true` when that render flag is set | No — ipynb-only |
 | `projectFilterParams` | delegates to `projType.filterParams` (see Q2 below) + `project-output-dir`/`project-offset` when `options.project` is set | **Partially** — the two additional keys only fire under a real `_quarto.yml` project; N/A for a bare single-doc render |
 | `quartoColumnParams` (`extractColumnParams`) | `reference-location: margin`, `citation-location` | No — HTML/typst margin-notes feature |
-| `quartoFilterParams` | ~28 keys (corrected 2026-09-17 — actual enumerated count, not "~20"): `output-divs`, `mediabag-dir`, `fig-align`/`fig-pos`/`fig-env`, `code-fold`, `html-table-processing`, `use-rsvg-convert`, `tbl-colwidths`, `shortcodes` (+extension-contributed), `html-math-method`, `fig-responsive`, `output-location`, `code-line-numbers`, `keep-hidden`, `remove-hidden`, `clear-hidden-classes`, `unroll-markdown-cells`, `clear-cell-options`, `cite-method`, `pdf-engine`, `has-bootstrap`, `has-resource-path`, `quarto-source`, `quarto-profile`, `quarto-version`, `quarto-cli-path`, `code-annotations` | **Yes, the core set** — format-render/metadata derived, no project dependency. **Reads `options.project.isSingleFile` unconditionally** (`filters.ts:663`) — see the "synthetic project" note below |
+| `quartoFilterParams` | \~28 keys (corrected 2026-09-17 — actual enumerated count, not "\~20"): `output-divs`, `mediabag-dir`, `fig-align`/`fig-pos`/`fig-env`, `code-fold`, `html-table-processing`, `use-rsvg-convert`, `tbl-colwidths`, `shortcodes` (+extension-contributed), `html-math-method`, `fig-responsive`, `output-location`, `code-line-numbers`, `keep-hidden`, `remove-hidden`, `clear-hidden-classes`, `unroll-markdown-cells`, `clear-cell-options`, `cite-method`, `pdf-engine`, `has-bootstrap`, `has-resource-path`, `quarto-source`, `quarto-profile`, `quarto-version`, `quarto-cli-path`, `code-annotations` | **Yes, the core set** — format-render/metadata derived, no project dependency. **Reads `options.project.isSingleFile` unconditionally** (`filters.ts:663`) — see the "synthetic project" note below |
 | `crossrefFilterParams` | `listings`, `number-sections`, `number-offset`, `number-depth`; `crossref-index-file` only when **not** `options.project?.isSingleFile` | **Partially** — the first four are format-agnostic and relevant; `crossref-index-file` is project-scoped (cross-document index), N/A for v1 |
 | `citeIndexFilterParams` | `cites-index-file`, only when `options.project && projectIsBook(...)` | **No for v1** — book-project-only |
 | `layoutFilterParams` | `page-width` (if set), `adaptive-text-highlighting`/`text-highlighting` (bool, if the format has adaptive/text highlighting) | Yes — format-derived, no project dependency. **Corrected 2026-09-17:** only `page-width` is `format.render`-derived; the other two keys are derived from the separate `defaults: FormatPandoc` parameter (`hasAdaptiveTheme(defaults)`/`hasTextHighlighting(defaults)`) — doesn't change relevance/scope, but P4's params-blob builder needs both sources plumbed in, not just `format.render`. |
@@ -87,18 +87,18 @@ when/if that becomes real. Nothing here blocks P4's transport smoke.
 
 **Recommendation for what P4 actually needs to build for the transport smoke and for
 docx/pptx v1**, in priority order:
-1. `quartoFilterParams`'s ~28 keys (corrected 2026-09-17, was "~20" here too — the table above
+1. `quartoFilterParams`\'s \~28 keys (corrected 2026-09-17, was "\~20" here too — the table above
    was fixed earlier this pass but this recommendation-list copy wasn't, the same
    never-landed-fix pattern this epic keeps rediscovering) (the core, format-agnostic set) — required.
-2. `languageFilterParams`'s crossref/callout/environment title strings — required (not
+2. `languageFilterParams`\'s crossref/callout/environment title strings — required (not
    optional; without them Q1's category init has nothing to read for caption prefixes).
    **Sourced from Q2's `RefTypeRegistry`** (see the finding below), not from Q1's own vendored
    locale YAML — this is the mechanism, decided with Gordon, that resolves P5's Theorem-`kind`
    question and the general "who owns presentation defaults" policy question.
-3. `crossrefFilterParams`'s 4 non-project keys (`listings`, `number-sections`,
+3. `crossrefFilterParams`\'s 4 non-project keys (`listings`, `number-sections`,
    `number-offset`, `number-depth`) — required once P3's `crossref-numbering` param is added
    alongside them.
-4. `extractIncludeParams`'s include-file plumbing — required (generic).
+4. `extractIncludeParams`\'s include-file plumbing — required (generic).
 5. The top-level literals `results-file`, `format-identifier`, `execution-engine`,
    `quarto-environment` — required (structural, not format-specific).
 6. Everything else in the table (ipynb, columns, custom-format, typst, jats, notebook-context,
@@ -109,7 +109,7 @@ docx/pptx v1**, in priority order:
 
 **The `quarto-filters` note the table above points to (added 2026-09-17 — the table's "N/A, see
 below" pointed at nothing; found by an epic-wide review, I9).** `quarto-filters` carries the
-filter-spec Q1 TS uses to splice **user Lua filters** into `main.lua`'s pipeline via
+filter-spec Q1 TS uses to splice **user Lua filters** into `main.lua`\'s pipeline via
 `inject_user_filters_at_entry_points`. Q2 has its own, independent user-filter mechanism
 (`UserFiltersStage::pre()`/`post()`, bracketing the transform pipeline) and doesn't run user
 filters through Q1's Lua at all — so this key is genuinely N/A, not a gap. **But this has a
@@ -173,7 +173,7 @@ systems that happen to agree today (in English), with no construction forcing th
 agreeing.
 
 **The mechanism is not the constructor.** The obvious-looking fix — pass Q2's `kind` through as
-`theorem.lua`'s `name` field — is wrong: reading `captionPrefix` (`crossref/theorems.lua:79-90`,
+`theorem.lua`\'s `name` field — is wrong: reading `captionPrefix` (`crossref/theorems.lua:79-90`,
 the function that builds the caption for every non-LaTeX/Typst/JATS format, i.e. docx/pptx too)
 shows `name` is an **optional parenthetical suffix** ("Theorem 1 (My Special Title)"), never a
 replacement for the type label. Forcing `kind` through it would render "Theorem 1 (Theorem)" —
@@ -226,10 +226,10 @@ Finding 1's own table).** Concretely: `@thm-pythagoras` renders as **"thm. 1"**,
 in both shipping v1 formats — and for `fig`/`tbl`/`lst` (which *do* have a `by_ref_type` entry),
 the caption localizes via `-title` while the reference stays in Q1's hardcoded English
 `category.prefix`, producing a within-document inconsistency in any non-English render. This is
-not a hypothetical: verified `refPrefix`'s real body directly, and confirmed
+not a hypothetical: verified `refPrefix`\'s real body directly, and confirmed
 `crossref.categories.all` (`mainstateinit.lua:32-119`) carries no theorem entries.
 **Fix: emit both `crossref-<ref_type>-title` and `crossref-<ref_type>-prefix` from
-`RefTypeRegistry`, for every registered type**, mirroring `filters.ts:484`'s own "derive `-prefix`
+`RefTypeRegistry`, for every registered type**, mirroring `filters.ts:484`\'s own "derive `-prefix`
 from `-title`" pattern — same source, same loop, one extra key per type.
 
 ## Finding — five wiring gaps closed (2026-09-18, implementation-feasibility review)
@@ -252,10 +252,10 @@ concretely enough to implement without inventing an answer.
    directory (matters for repeated renders and for a future `q2 preview`-equivalent, if one is
    ever built for Pandoc targets — not planned now).
 2. **The shim needs a loading mechanism, and it's simpler than it first looks.** Route R needs
-   `quarto.Callout`/`quarto.Theorem`/etc., which only exist inside `main.lua`'s own Lua
+   `quarto.Callout`/`quarto.Theorem`/etc., which only exist inside `main.lua`\'s own Lua
    interpreter state — a separate `pandoc --lua-filter shim.lua --lua-filter main.lua` pass
    **cannot work** (separate filter files get separate Lua states in pandoc's filter chain).
-   Read `main.lua`'s actual filter-chain assembly (lines 709-727): `quarto_filter_list` is built
+   Read `main.lua`\'s actual filter-chain assembly (lines 709-727): `quarto_filter_list` is built
    by `tappend`-ing a sequence of named filter-group tables (`quarto_init_filters`,
    `quarto_normalize_filters`, `quarto_pre_filters`, `quarto_crossref_filters`,
    `quarto_layout_filters`, `quarto_post_filters`, `quarto_finalize_filters`), then (line 735)
@@ -267,14 +267,14 @@ concretely enough to implement without inventing an answer.
    review, Reviewer A — the original text below said "add one line"; `quarto_pandoc_shim_filters`
    is a Lua global that exists only once the shim file has itself been `import()`ed, and
    `main.lua` loads every sibling file through its own `import()` helper
-   (`main.lua:8-11`, `dofile`-based, resolved relative to `PANDOC_SCRIPT_FILE`'s directory) —
-   called from a block of ~45 `import("./…")` lines at `main.lua:13-60`. So the patch needs an
+   (`main.lua:8-11`, `dofile`-based, resolved relative to `PANDOC_SCRIPT_FILE`\'s directory) —
+   called from a block of \~45 `import("./…")` lines at `main.lua:13-60`. So the patch needs an
    `import("./<shim>.lua")` line there **in addition to** the `tappend(quarto_filter_list,
    quarto_pandoc_shim_filters)` line at the splice point below): `tappend(quarto_filter_list,
    quarto_pandoc_shim_filters)`, requiring a **new**, non-upstream Lua file (P5's shim). **The
    shim file must live *inside* the vendored filters tree, as a sibling to `customnodes/*.lua`
    (matching P5's own wording), not "alongside" the `v1.11.3` tree as this Finding originally
-   said** — `import()`'s path resolution is relative to `PANDOC_SCRIPT_FILE`'s own directory, so a
+   said** — `import()`\'s path resolution is relative to `PANDOC_SCRIPT_FILE`\'s own directory, so a
    file placed outside that tree needs `package.path` setup nobody has scoped; only the
    inside-the-tree placement works with the mechanism as described. Because the shim lives inside
    the pinned tree, a future re-vendor ("bump the pinned tag, re-run Layer-1/2") must explicitly
@@ -287,16 +287,16 @@ concretely enough to implement without inventing an answer.
    slot contents. **Verified independently in round 4 review (Reviewer B) that this position is
    load-bearing in *both* directions, not just convenient:** after `quarto_init_filters` is
    mandatory because `crossrefOption()` (which Route N calls) indexes `crossref.options`, which is
-   `nil` until `init_crossref_options(meta)` runs inside `quarto_init_filters`'s first entry — a
+   `nil` until `init_crossref_options(meta)` runs inside `quarto_init_filters`\'s first entry — a
    shim spliced any earlier would hard-crash on its first call; before `quarto_normalize_filters`
    is mandatory because the wire wrapper's `Div` **retains its original semantic classes**
-   (`callout`, `callout-note`, `panel-tabset`, etc. — `pampa`'s writer only *prepends*
+   (`callout`, `callout-note`, `panel-tabset`, etc. — `pampa`\'s writer only *prepends*
    `__quarto_custom_node`, it doesn't replace the class list), and at least three Q1
    `parse()`-keyed handlers (`Callout`, `Tabset`, `ConditionalBlock`) key on exactly those classes
    inside `quarto_normalize_filters`; splicing before it means the shim has already replaced the
    wire Div with a class-less Q1 scaffold by the time those handlers would otherwise misfire on
    it. **Anchor this patch by the named group boundary (`quarto_init_filters` /
-   `quarto_normalize_filters`), not a line number**, in the marked-patch comment — `main.lua`'s
+   `quarto_normalize_filters`), not a line number**, in the marked-patch comment — `main.lua`\'s
    group *contents* have been actively refactored for performance twice in the last two years
    (a 2024-11 traversal-engine migration touching every group table, a 2025-01 "combine finalize
    filters" merge), even though the top-level group *ordering* itself has been stable since 2023.
@@ -328,7 +328,7 @@ concretely enough to implement without inventing an answer.
    retired-or-reusable, so `18` is the unambiguous next number, not a judgment call between a gap
    and the top). This repo's lint rules require **two** things in the same commit as the first
    code, not one: a `docs/errors/pandoc/<code>.qmd` page (`error-docs-page-missing`) **and** a new
-   `- section: "pandoc"` block in `docs/_quarto.yml`'s errors sidebar (`error-docs-sidebar-unlisted`
+   `- section: "pandoc"` block in `docs/_quarto.yml`\'s errors sidebar (`error-docs-sidebar-unlisted`
    — this is the exact scenario that rule was created for: `crossref`/`extension` once had no
    `- section:` block at all, making every one of their pages unreachable by navigation). The
    single most load-bearing case to specify: **when the `pandoc` subprocess exits nonzero**, wrap
@@ -377,7 +377,7 @@ concretely enough to implement without inventing an answer.
    implementation: state a bound + fallback (e.g. a temp file + a path param instead of inline
    text past some size) or an explicit accepted limitation — don't leave it undiscovered until a
    real user hits it. Note this risk lives on the one platform (Windows) with no CI test leg at
-   all in this repo today (`test-suite.yml`'s matrix is `[ubuntu-latest, macos-latest]`), so make
+   all in this repo today (`test-suite.yml`\'s matrix is `[ubuntu-latest, macos-latest]`), so make
    the bound check a unit-testable pure function so it's at least covered by
    `cargo nextest run --workspace` on the platforms CI does run.
 
@@ -390,7 +390,7 @@ concretely enough to implement without inventing an answer.
   runtime. Vendor into an in-repo dir (mirror `resources/scss/`, e.g. `resources/pandoc-filters/`)
   + `include_dir!`; pass `cargo xtask lint` (external-sources-in-macro). Include `init.lua` (or a
   trimmed `param()`-only variant). **Two vendoring roots needed, not one — see Finding 1 above**
-  (`init.lua`'s actual tree is `src/resources/pandoc/datadir/`, separate from `src/resources/
+  (`init.lua`\'s actual tree is `src/resources/pandoc/datadir/`, separate from `src/resources/
   filters/`); use `ResourceBundle` to materialize both to disk at invocation time, per Finding 1.
 - **Pin the vendored source to a quarto-cli *release*, not a dev commit** (resolved 2026-09-17,
   decided with Gordon — originally a P5 open question, resolved here since P4 owns the actual
@@ -398,7 +398,7 @@ concretely enough to implement without inventing an answer.
   doc-only commit (`git describe`: `v1.11.3-1-gdcffbfade`; the one commit ahead touches only
   `.claude/rules/filters/overview.md`, zero diff under `src/resources/filters/`) — so **vendor
   from tag `v1.11.3`**, byte-identical to what's on disk today, no dev drift to absorb. Create
-  `resources/pandoc-filters/README.md` mirroring `resources/scss/README.md`'s Source/Updating
+  `resources/pandoc-filters/README.md` mirroring `resources/scss/README.md`\'s Source/Updating
   structure, recording the pinned tag (Bootstrap pins a release *number*; this pins a release
   *tag*, since quarto-cli's Lua filters have no per-file version). Drift detection needs no
   separate mechanism — P5's Layer-1/Layer-2 contract tests are the tripwire (same philosophy as
@@ -446,7 +446,7 @@ concretely enough to implement without inventing an answer.
 - [x] Re-derive the full `QUARTO_FILTER_PARAMS` key set (all three research-doc open questions
       resolved above); decided which keys the smoke/v1 minimally needs (items 1-5) vs. deferred
       (item 6, with reasons).
-- [x] Trace `main.lua`'s transitive require/resource closure; vendor accordingly (not just top-level dirs) — **two roots, not one, see Finding 1**: the filters tree AND `init.lua`'s separate `src/resources/pandoc/datadir/` tree. `include_dir!` for storage, `ResourceBundle` to materialize both to disk at invocation time (`main.lua` needs real files, `include_dir!` alone doesn't extract them); lint green. **Done: Task 1.**
+- [x] Trace `main.lua`\'s transitive require/resource closure; vendor accordingly (not just top-level dirs) — **two roots, not one, see Finding 1**: the filters tree AND `init.lua`\'s separate `src/resources/pandoc/datadir/` tree. `include_dir!` for storage, `ResourceBundle` to materialize both to disk at invocation time (`main.lua` needs real files, `include_dir!` alone doesn't extract them); lint green. **Done: Task 1.**
 - [x] **New (2026-09-18): vendor the shim's loading mechanism** — a small, marked patch to
       `main.lua` inserting `tappend(quarto_filter_list, quarto_pandoc_shim_filters)` between
       `quarto_init_filters` and `quarto_normalize_filters` (per Finding 2), in the same spirit as
@@ -462,14 +462,14 @@ concretely enough to implement without inventing an answer.
       degradation (P3) and P5's unrecognized-`type_name` warning, has no delivery channel; (b) put
       the error-docs work explicitly on this checklist, not just in the Finding prose: author
       `docs/errors/pandoc/` pages for the initial code set, add the new `- section: "pandoc"`
-      block to `docs/_quarto.yml`'s errors sidebar, confirm `cargo xtask lint` green — this is the
+      block to `docs/_quarto.yml`\'s errors sidebar, confirm `cargo xtask lint` green — this is the
       exact "no `- section:` block at all" scenario the sidebar lint rule was created to catch,
       and a Finding-only acknowledgment (as this item previously was) is where obligations in this
       epic have repeatedly gone to be forgotten. **Done: Task 6 (catalog subsystem 18 + docs pages
       + sidebar) and Task 10 (unconditional capture, Q-11-1 reuse, verbatim nonzero-exit wrap,
       temp-JSON retention).**
 - [x] **New (2026-09-18): pin the base64 variant (standard + padded) and state a size bound +
-      fallback for `QUARTO_FILTER_PARAMS`'s included text** (Finding 5) — a Windows correctness
+      fallback for `QUARTO_FILTER_PARAMS`\'s included text** (Finding 5) — a Windows correctness
       risk if left unbounded. **Done: Task 3 (codec + size-bound predicate); the fallback itself
       stays `accepted-untested`/undecided per Findings item 9 — a final decision, not a gap.**
 - [x] Pin the vendored source to a release tag, not a dev commit — **resolved 2026-09-17,
@@ -500,17 +500,17 @@ concretely enough to implement without inventing an answer.
       --workspace` today (pampa's oracle tests `.expect()`-panic if pandoc is absent), and this
       epic is about to add its most environment-sensitive dependency yet with no `verify`
       counterpart. Note separately: Windows has **no CI test leg at all** (`test-suite.yml`'s
-      matrix is `[ubuntu-latest, macos-latest]`), which is exactly the platform Finding 5(b)'s
+      matrix is `[ubuntu-latest, macos-latest]`), which is exactly the platform Finding 5(b)\'s
       32,767-char env-block risk lives on — make that size-bound check a unit-testable pure
       function (e.g. `fn params_blob_exceeds_platform_limit(len) -> bool` with the Windows
       constant as data) so it is at least covered by `cargo nextest run --workspace` on the
       platforms that do run in CI, even though the platform it protects doesn't. **Done: Tasks 7-8.**
 - [x] Document the runtime-environment contract (cwd/temp-file layout/`--resource-path`) Q1's Lua assumes. **Done: Task 2** (`harness.rs` module doc + `resources/pandoc-filters/README.md`).
-- [x] Resolve the source of `languageFilterParams`'s `crossref-<type>-title` family —
+- [x] Resolve the source of `languageFilterParams`\'s `crossref-<type>-title` family —
       **resolved 2026-09-17, decided with Gordon** (see finding above): source from Q2's
       `RefTypeRegistry`, not Q1's own locale files. Closes P5's "constructor default-passthrough
       policy" open question as a standing principle, not just a Theorem-specific fix.
-- [x] Build `languageFilterParams`'s params from `RefTypeRegistry`, one `crossref-<ref_type>-title`
+- [x] Build `languageFilterParams`\'s params from `RefTypeRegistry`, one `crossref-<ref_type>-title`
       **and one `crossref-<ref_type>-prefix`** key per registered type (corrected 2026-09-18,
       round 4 review — see the Critical correction above: `-title` alone leaves the reference-text
       path, `refPrefix()`, reading an unfed param and falling through to a bare literal for every

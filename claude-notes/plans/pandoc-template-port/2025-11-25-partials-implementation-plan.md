@@ -434,7 +434,7 @@ fn evaluate_partial(
 
 ## Error Handling
 
-**Error code namespace**: Template errors use **Q-10-*** codes in quarto-error-reporting.
+**Error code namespace**: Template errors use **Q-10-**\* codes in quarto-error-reporting.
 
 New error variants:
 

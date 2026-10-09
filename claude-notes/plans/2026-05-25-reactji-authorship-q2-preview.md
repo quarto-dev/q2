@@ -92,13 +92,13 @@ Each step has a TDD pair: write the test (or extend Phase 1's diag) → confirm 
 
 ### 2a. Expose `useNodeAttribution` on `__Q2_PREVIEW_RENDERER__`
 
-- [x] Test: from inside `comment.tsx`, `window.__Q2_PREVIEW_RENDERER__.useNodeAttribution` is a function. *Covered by `q2-preview-render-components-comment.spec.ts`'s `diag.hasUseNodeAttribution` soft assertion (passes post-2a).*
+- [x] Test: from inside `comment.tsx`, `window.__Q2_PREVIEW_RENDERER__.useNodeAttribution` is a function. *Covered by `q2-preview-render-components-comment.spec.ts`\'s `diag.hasUseNodeAttribution` soft assertion (passes post-2a).*
 - [x] Implementation: add `useNodeAttribution` + `AttributionLookupContext` to the global surface at `ts-packages/preview-renderer/src/q2-preview/entry.tsx:97-122`.
 - [x] q2-debug parity: skipped (Q4 decision — q2-preview only this session).
 
 ### 2b. Forward current actor id into the iframe
 
-- [x] Test: from inside `comment.tsx`, `useCurrentActor()` returns the value the parent posts. *Covered by `diag.me === TEST_ACTOR_ID` assertion in the spec. The spec injects the actor via `page.addInitScript` + a new `__QUARTO_TEST_ACTOR_ID__` override in `hub-client/src/App.tsx`'s `resolveActorId`, since `getActorId()` is null without auth.*
+- [x] Test: from inside `comment.tsx`, `useCurrentActor()` returns the value the parent posts. *Covered by `diag.me === TEST_ACTOR_ID` assertion in the spec. The spec injects the actor via `page.addInitScript` + a new `__QUARTO_TEST_ACTOR_ID__` override in `hub-client/src/App.tsx`\'s `resolveActorId`, since `getActorId()` is null without auth.*
 
   **Implementation note (Automerge actor-id hex-format gotcha):** the first version of `TEST_ACTOR_ID` used a human-readable placeholder (`'test-actor-7e1f02a3'`). Automerge silently rejected writes against that actor — `page.goto` landed on the project-list screen rather than entering the editor view, with no console error visible. Switching to a 32-hex-char string (`'e2e7e1f02a30000000000000000007e1'`) fixed it immediately. Any test reusing the `__QUARTO_TEST_ACTOR_ID__` override must use a 32-char lowercase hex id.
 - [x] Implementation (option A — piggyback on `UPDATE_AST`, per decision-log Q1):
@@ -111,13 +111,13 @@ Each step has a TDD pair: write the test (or extend Phase 1's diag) → confirm 
 
 ### 2c. Authorship-aware click handler in `comment.tsx`
 
-Relies on the CRDT round-trip (see Decision log Q3): `setLocalAst` already writes back through `incrementalWriteQmd` → Automerge content → WASM reparse, so runtime-added spans get `s` + attribution within ~50–150ms. No session-local bookkeeping. Behaviour is also gated on the user-controlled Attribution toggle being **on** (per decision-log Q1, attribution stays opt-in this session).
+Relies on the CRDT round-trip (see Decision log Q3): `setLocalAst` already writes back through `incrementalWriteQmd` → Automerge content → WASM reparse, so runtime-added spans get `s` + attribution within \~50–150ms. No session-local bookkeeping. Behaviour is also gated on the user-controlled Attribution toggle being **on** (per decision-log Q1, attribution stays opt-in this session).
 
 - [x] Test: `addReaction` is invoked on bubble click and the diagnostic captures `{ me, attributionLookupNull, reactionSpansLen }` for the call. *Covered by `reactji bubble click invokes the Phase 2c addReaction handler` in the spec.*
 
   **Implementation note (test scope pivot from count assertion → invocation assertion):** the original test ambition was the visible "fall-through to add" outcome: `click → bubble text "🤔2" → "🤔3"`. The offline e2e env's `setLocalAst → incrementalWriteQmd → Automerge content update → WASM reparse → iframe re-render` chain didn't reflect the new count within a 5-second budget — Playwright retried the locator 9 times and saw `"🤔2"` every time, even though `__COMMENT_DIAG__.addReactionCalls` confirmed the handler had run with the right `(emoji, me, attributionLookupNull)` triple. The pre-existing `q2-preview-render-components-write.spec.ts` works around the same offline-mode quirk by only asserting "no console.error". We pivoted to asserting the *invocation context* via `__COMMENT_DIAG__.addReactionCalls` — the strongest claim the offline env can reliably support. The actual count-change observation (and the "remove mine" branch) get verified manually in Phase 3 against an authenticated session.
 
-- [x] Implementation: in `comment.tsx`'s `CommentWrapper`, before legacy push:
+- [x] Implementation: in `comment.tsx`\'s `CommentWrapper`, before legacy push:
   1. `findMineSpan(emoji)` walks `reactionSpans` and returns the first span where `attributionLookup.get(span.s).actor === me`.
   2. If a match exists → `removeSpanByS(span.s)` rebuilds the block without that span, `setLocalAst(newBlock)`.
   3. Else → legacy push path. This fires when `me === null` (no auth) OR `attributionLookup === null` (Attribution toggle off). Both cases land in the test env, where the fall-through is the verified behaviour.
@@ -211,5 +211,5 @@ ts-packages/preview-renderer/src/framework/CurrentActorContext.tsx (new)    (Pha
 - **2026-05-25.** Survey claims (`__Q2_PREVIEW_RENDERER__` missing `useNodeAttribution`; `UPDATE_AST` missing `currentActor`; `useNodeAttribution` keyed off `node.s`; producer wired for q2-preview today) all confirmed against current code at start of session.
 - **2026-05-25 (Q1).** Phase 2b channel for current actor id: **option A — piggyback on UPDATE_AST.** Cheapest plumbing; actor id is stable per device so AST-cadence coupling is fine. Option C (inject via astContext) remains the principled long-term home; not now.
 - **2026-05-25 (Q2).** User-TSX surface for attribution + current actor: **hooks** (`__Q2_PREVIEW_RENDERER__.useNodeAttribution(node)` and `.useCurrentActor()`). Matches existing useContext-based implementation and the React shape user TSX already uses.
-- **2026-05-25 (Q3).** No session-local bookkeeping. The `addReaction`/click flow already round-trips through `incrementalWriteQmd` → Automerge content rewrite → WASM reparse, so a runtime-added span gets its `s` (and attribution) back within ~50–150ms. Click logic for `comment.tsx`: walk `comments`, find any span whose `useNodeAttribution(span).actor === me` → remove; else → add. **Known edge case:** fast double-click inside the round-trip window can fall through to a duplicate add because the just-added span doesn't have `s` yet. Acceptable for the demo; if it ever bites we can debounce the click or reintroduce the session-local Map.
+- **2026-05-25 (Q3).** No session-local bookkeeping. The `addReaction`/click flow already round-trips through `incrementalWriteQmd` → Automerge content rewrite → WASM reparse, so a runtime-added span gets its `s` (and attribution) back within \~50–150ms. Click logic for `comment.tsx`: walk `comments`, find any span whose `useNodeAttribution(span).actor === me` → remove; else → add. **Known edge case:** fast double-click inside the round-trip window can fall through to a duplicate add because the just-added span doesn't have `s` yet. Acceptable for the demo; if it ever bites we can debounce the click or reintroduce the session-local Map.
 - **2026-05-25 (Q4).** Mirror to q2-debug renderer surface: **no, q2-preview only this session.** q2-debug already has its own attribution overlay path; user-TSX parity there can wait for a real q2-debug demo need.

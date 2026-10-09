@@ -97,7 +97,7 @@ This directory contains comprehensive documentation of the Pandoc filter system,
 | Type | Execution | Communication | Performance | File |
 |------|-----------|---|---|---|
 | **JSON** | External process | stdin/stdout JSON | -35% overhead | src/Text/Pandoc/Filter/JSON.hs |
-| **Lua** | Embedded VM | Direct marshaling | ~2% overhead | pandoc-lua-engine/src/Text/Pandoc/Lua/Filter.hs |
+| **Lua** | Embedded VM | Direct marshaling | \~2% overhead | pandoc-lua-engine/src/Text/Pandoc/Lua/Filter.hs |
 | **Citeproc** | Built-in | Internal | Negligible | src/Text/Pandoc/Citeproc.hs |
 
 ### Filter Execution Model
@@ -207,7 +207,7 @@ Search in this order:
 ## Terminology
 
 - **AST** - Abstract Syntax Tree (Pandoc's intermediate representation)
-- **Pandoc** - The document type (Meta + [Block])
+- **Pandoc** - The document type (Meta + `[Block]`)
 - **Block** - Top-level document elements (Para, Header, CodeBlock, etc.)
 - **Inline** - Inline elements (Str, Emph, Strong, Link, etc.)
 - **Meta** - Document metadata (title, author, etc.)

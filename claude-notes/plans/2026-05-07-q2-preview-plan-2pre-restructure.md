@@ -18,7 +18,7 @@ After 2pre:
 - Slide-side block/inline type names are consolidated onto the framework's `BlockNode`/`InlineNode` (slide-side currently uses bare `Block`/`Inline`).
 - Dead `ReactAstRenderer.tsx` is deleted.
 - Dead `transpileAndImportTSX` is deleted from `tsxTranspiler.ts` (along with the imports that only existed to support it).
-- The defensive `?? componentRegistry` fallback at four dispatcher sites is dropped; `RegistryContext`'s default becomes `{ registry: {} }` and `<Ast>`'s `registry` prop becomes required.
+- The defensive `?? componentRegistry` fallback at four dispatcher sites is dropped; `RegistryContext`\'s default becomes `{ registry: {} }` and `<Ast>`\'s `registry` prop becomes required.
 - Internal hub-client names rename for cohabitation with q2-preview: `componentRegistry` → `q2DebugRegistry`, `AstIframe` → `Q2DebugIframe`, `/ast-renderer.html` → `/q2-debug.html`. The window global `__REACT_AST_DEBUG_RENDERER__` is preserved (public API consumed by user TSX).
 
 ## Why now
@@ -143,7 +143,7 @@ The architectural contract that emerges from the framework / format split:
 - **Each format must register all three.** q2-debug registers its bordered `Block`/`Inline` dispatchers + bordered `AstRenderer`. q2-preview (Plan 2A) registers its own `Block`/`Inline` with a muted-gray "not yet implemented" miss-fallback + `PreviewDocument` for `'Ast'`.
 - **The format-specific aesthetic of the "Not registered" miss path** lives in the registered `Block`/`Inline` component — never in framework. Framework code never references format-specific styling constants.
 
-This is what makes q2-debug byte-identical across the migration: today's bordered "Not registered: X" comes from `Block`/`Inline`'s else branch (current `ReactAstDebugRenderer.tsx:459, 538`); tomorrow's bordered "Not registered: X" comes from the same code, just relocated to `q2-debug/dispatchers.tsx`. Framework's `renderNode`'s defensive fallback (when even `registry['Block']` is missing) becomes plain unstyled text, but that branch never fires in normal operation — both shipped formats register `'Block'`/`'Inline'`.
+This is what makes q2-debug byte-identical across the migration: today's bordered "Not registered: X" comes from `Block`/`Inline`\'s else branch (current `ReactAstDebugRenderer.tsx:459, 538`); tomorrow's bordered "Not registered: X" comes from the same code, just relocated to `q2-debug/dispatchers.tsx`. Framework's `renderNode`\'s defensive fallback (when even `registry['Block']` is missing) becomes plain unstyled text, but that branch never fires in normal operation — both shipped formats register `'Block'`/`'Inline'`.
 
 ### PandocAST consolidation (extended scope)
 
@@ -236,7 +236,7 @@ q2-preview's eventual Figure (Plan 2B) reads `c[1][1]` and renders `<figcaption>
 
 ### Block/Inline naming consolidation
 
-Slide-side `ReactAstSlideRenderer.tsx` declares its block/inline unions as bare `Block` and `Inline`. Debug-side declares them as `BlockNode` and `InlineNode`. Plan 2pre consolidates on the `Node`-suffixed names: slide-side renames `Block → BlockNode` and `Inline → InlineNode` (~25 mechanical refs in `ReactAstSlideRenderer.tsx`), then drops its local declarations and imports the unions from `framework/types.ts`. Debug-side keeps its existing `BlockNode`/`InlineNode` (no churn).
+Slide-side `ReactAstSlideRenderer.tsx` declares its block/inline unions as bare `Block` and `Inline`. Debug-side declares them as `BlockNode` and `InlineNode`. Plan 2pre consolidates on the `Node`-suffixed names: slide-side renames `Block → BlockNode` and `Inline → InlineNode` (\~25 mechanical refs in `ReactAstSlideRenderer.tsx`), then drops its local declarations and imports the unions from `framework/types.ts`. Debug-side keeps its existing `BlockNode`/`InlineNode` (no churn).
 
 **Why this direction (rather than dropping the `Node` suffix):**
 
@@ -254,15 +254,15 @@ The current renderer has a defensive fallback at four dispatcher sites and one p
 - `Block` (`ReactAstDebugRenderer.tsx:454`), `Inline` (`:533`), `Node` (`:579`), `renderNode` (`:323`) all read `const registry = registries?.registry ?? componentRegistry;`.
 - `Ast` (`:93`) has the prop default `registry = componentRegistry`.
 
-After the split, three of these sites land in framework (`Node`, `renderNode`, `Ast`'s prop default) and two land in q2-debug (`Block`, `Inline` dispatchers). The fallback drops at all five:
+After the split, three of these sites land in framework (`Node`, `renderNode`, `Ast`\'s prop default) and two land in q2-debug (`Block`, `Inline` dispatchers). The fallback drops at all five:
 
 - **Framework sites** *must* drop because `componentRegistry` doesn't exist in framework — it lives in q2-debug, and re-importing it would re-introduce the cross-format coupling 2pre exists to break.
 - **q2-debug sites** drop as redundant defensive code: `q2DebugRegistry` is in scope locally, but the `<Ast>` Provider is always set above the dispatchers in real flow, so `useContext(RegistryContext)` returns the registered registry — the `?? q2DebugRegistry` branch never executes.
 
 **Resolution:** drop all five.
 
-- Change `RegistryContext`'s default from `null` to `{ registry: {} }` in `framework/RegistryContext.tsx`. Dispatchers read `useContext(RegistryContext).registry` directly with no `??`.
-- Make `Ast`'s `registry` prop **required** (no default). Each format's entry passes its own registry: `q2-debug/entry.tsx` continues to pass `mergedRegistry` (typed `FormatRegistry`); q2-preview's entry (Plan 2A) will pass its own.
+- Change `RegistryContext`\'s default from `null` to `{ registry: {} }` in `framework/RegistryContext.tsx`. Dispatchers read `useContext(RegistryContext).registry` directly with no `??`.
+- Make `Ast`\'s `registry` prop **required** (no default). Each format's entry passes its own registry: `q2-debug/entry.tsx` continues to pass `mergedRegistry` (typed `FormatRegistry`); q2-preview's entry (Plan 2A) will pass its own.
 
 **No consumer breaks.** The fallbacks are dead code in every present and historical call site:
 
@@ -280,10 +280,10 @@ After fallback removal, if someone *did* mount a dispatcher outside an `<Ast>` a
 **History (for the curious / for anyone who asks why we removed it):**
 
 - `1e901f03` (2026-03-18, "Add `q2-debug` format with comment prototype") — the file's earliest version. Dispatch used hard-coded `BlockRegistry`/`InlineRegistry` constants imported directly. **No context, no fallback, no dispatcher functions.**
-- `d6eb0604` (2026-03-20, "Experimental q2-debug custom render components") — introduced `RegistryContext`, `<Ast>`'s `registry` prop default, and the first two fallback sites (`renderNode` and `Inline`) wholesale, alongside the entire pluggable-registry architecture for user TSX overrides.
+- `d6eb0604` (2026-03-20, "Experimental q2-debug custom render components") — introduced `RegistryContext`, `<Ast>`\'s `registry` prop default, and the first two fallback sites (`renderNode` and `Inline`) wholesale, alongside the entire pluggable-registry architecture for user TSX overrides.
 - `02721668` (2026-04-15, "Add support for slide render component") — added the `Block` dispatcher (promoted to registry-lookup form) and the new unified `Node`, with the same fallback pattern.
 
-The four fallback sites are character-for-character identical (`const registries = useContext(RegistryContext); const registry = registries?.registry ?? componentRegistry;`). No commit message explains the fallback or describes a standalone-mount use case. No PR exists for either commit. The pattern is defensive copy-paste from `<Ast>`'s prop default, propagated to dispatchers as new ones were added — never load-bearing, never explained.
+The four fallback sites are character-for-character identical (`const registries = useContext(RegistryContext); const registry = registries?.registry ?? componentRegistry;`). No commit message explains the fallback or describes a standalone-mount use case. No PR exists for either commit. The pattern is defensive copy-paste from `<Ast>`\'s prop default, propagated to dispatchers as new ones were added — never load-bearing, never explained.
 
 ### Renames
 
@@ -329,7 +329,7 @@ What 2pre still needs to do in Phase 2.7: move the file from `hub-client/src/ast
 - `hub-client/src/services/tsxTranspiler.ts`: delete `transpileAndImportTSX` and its supporting top-level imports (see §"Deletion" for the full list and rationale). After deletion, the file imports only `{ transform } from '@babel/standalone'` and exports only `transpileTSX`. No new import path from the post-restructure framework or q2-debug barrels is needed.
 - `hub-client/public/q2-debug.html` (new): mirrors the structure of the old `/ast-renderer.html`, but `<script type="module" src="/src/components/render/q2-debug/entry.tsx">` points at the new entry location.
 - `hub-client/vite.config.ts`: update rollup input from `'ast-renderer': path.resolve(__dirname, 'public/ast-renderer.html')` to `'q2-debug': path.resolve(__dirname, 'public/q2-debug.html')`.
-- `hub-client/src/components/render/ReactAstSlideRenderer.tsx`: rename slide-side `Block → BlockNode`, `Inline → InlineNode` (~25 mechanical refs); drop the local block/inline type declarations; import `BlockNode`/`InlineNode` from `framework/types` (see §"Block/Inline naming consolidation").
+- `hub-client/src/components/render/ReactAstSlideRenderer.tsx`: rename slide-side `Block → BlockNode`, `Inline → InlineNode` (\~25 mechanical refs); drop the local block/inline type declarations; import `BlockNode`/`InlineNode` from `framework/types` (see §"Block/Inline naming consolidation").
 - Slide-side hook imports (`hooks/useCursorToSlide.ts`, `hooks/useSlideThumbnails.tsx`) and `RevealjsReactAstSlideRenderer.tsx` get their `PandocAST` import paths updated as listed in §"PandocAST consolidation (extended scope)" above. They reference `PandocAST` only — no `Block`/`Inline` symbol references — so they need no rename work.
 - **Test fixtures and snapshots**: confirmed clean. There is no `__snapshots__/` directory under `hub-client/src/components/render/`. `iframePostProcessor.test.ts` and `iframePostProcessor.integration.test.ts` do not import any of the moved files; verify they pass before and after. Vitest config (`hub-client/vitest.config.ts`) does not reference the renderer module directly.
 - **`ReactPreview.tsx`, `Preview.tsx`, `PreviewRouter.tsx`** — verified by grep: none import from `ReactAstDebugRenderer`, `AstIframe`, or `ast-renderer-entry`. No changes needed.
@@ -341,9 +341,9 @@ Several documents currently reference paths that 2pre changes. Update as part of
 
 - **`~/docs/demo-playground/elliot/render_components.qmd`** — references `/hub-client/src/components/render/ReactAstDebugRenderer.tsx` (4 references at lines 7, 15, 33/37, 51) and `/hub-client/src/components/render/ReactRenderer.tsx`, plus the `componentRegistry` symbol name in the code-block snippet (lines 25-32). **2pre does the path-and-symbol edit, but not blanket:**
   - Lines 7, 15, 33, 37 — references to the renderer-as-implementation. Repoint to `/hub-client/src/components/render/q2-debug/` (the new q2-debug barrel directory).
-  - Line 51 — *"Most/all of that plumbing is in `renderChildrenRegistry` in [ReactAstDebugRenderer.tsx]"*. After 2pre, `renderChildrenRegistry` lives in `framework/dispatch.tsx`, **not** `q2-debug/`. Repoint this one specifically to `/hub-client/src/components/render/framework/dispatch.tsx`.
+  - Line 51 — *"Most/all of that plumbing is in `renderChildrenRegistry` in \[ReactAstDebugRenderer.tsx\]"*. After 2pre, `renderChildrenRegistry` lives in `framework/dispatch.tsx`, **not** `q2-debug/`. Repoint this one specifically to `/hub-client/src/components/render/framework/dispatch.tsx`.
   - Lines 25-32 (code snippet) — rename `componentRegistry` → `q2DebugRegistry` to match the source.
-  - `ReactRenderer.tsx`'s path is unchanged; references to it stay.
+  - `ReactRenderer.tsx`\'s path is unchanged; references to it stay.
 
   The doc's *behavioral* description of the `format !== 'q2-debug'` gating logic is **deliberately left as-is** — 2A reroutes format dispatch and will rewrite that description when format dispatch actually changes. Elliot's doc continues to describe q2-debug only; the q2-preview equivalent is forked to `~/docs/demo-playground/gordon/render-components/render_components.qmd` in Plan 2B, which rewrites the doc for the new format, the new format global, and the built-ins / overrides model.
 - **`claude-notes/research/`** and **`claude-notes/designs/`** — light grep for `ReactAstDebugRenderer`, `AstIframe`, `ast-renderer-entry`, `ReactAstRenderer`, `componentRegistry`. Update where matches are found. Most likely candidates: any architecture / overview docs that name files.
@@ -357,7 +357,7 @@ Several documents currently reference paths that 2pre changes. Update as part of
 - The bytes / DOM produced by q2-debug's render path, **with one deliberate exception**: the literal `// TODO:` text in q2-debug's bordered Figure output disappears (Bug A). The "Caption: ShortCaption" line is preserved by porting it to q2-debug's `Figure` component (see §"Figure entry"). All other DOM is identical.
 - `window.__REACT_AST_DEBUG_RENDERER__` global name and the names it exposes.
 - The `'Ast'` registry key — no rename. User TSX that exports a component named `Ast` (e.g. `~/docs/demo-playground/elliot/slide.tsx`) continues to override the document root.
-- Elliot's demos in `~/docs/demo-playground/elliot/` — including `slide.tsx`'s `export const Ast = …`, which keeps working because the registry key is preserved.
+- Elliot's demos in `~/docs/demo-playground/elliot/` — including `slide.tsx`\'s `export const Ast = …`, which keeps working because the registry key is preserved.
 
 ## `__REACT_AST_DEBUG_RENDERER__` continuity
 
@@ -441,9 +441,9 @@ The continued-passing of these tests *after* the rename is the regression gate f
 
 ## Phase 0: Pre-flight (throwaway branch)
 
-Before starting Phase 1, run a single ~30-minute check on a throwaway branch (e.g. `pre-flight/slide-rename`) to learn the slide-side type-compatibility answer cheaply, before any framework code has moved.
+Before starting Phase 1, run a single \~30-minute check on a throwaway branch (e.g. `pre-flight/slide-rename`) to learn the slide-side type-compatibility answer cheaply, before any framework code has moved.
 
-1. In `hub-client/src/components/render/ReactAstSlideRenderer.tsx`, mechanically rename `Block → BlockNode`, `Inline → InlineNode` (~25 refs). Drop the local block/inline type declarations.
+1. In `hub-client/src/components/render/ReactAstSlideRenderer.tsx`, mechanically rename `Block → BlockNode`, `Inline → InlineNode` (\~25 refs). Drop the local block/inline type declarations.
 2. Add `import type { BlockNode, InlineNode } from './ReactAstDebugRenderer';` (a temporary import path that resolves against the current pre-split file; the real Phase 1 work will move it to `framework/types.ts`).
 3. Run `cd hub-client && npm run build:all`. The TypeScript compile is the actual gate (`tsc -b && vite build` is stricter than `vitest` or `tsc --noEmit`).
 4. **Discard the branch regardless of outcome.** This is a learning exercise, not a step toward landed work.
@@ -497,16 +497,16 @@ Goal at the end of Phase 1: `framework/` and `q2-debug/` exist with all final co
 Each step is one commit, each gated by `npm run build:all` plus the test suites called out below. The shim from step 1.10 keeps every consumer compileable until step 2.14 deletes it. **All previously-manual smoke tests are now covered by the test suites listed in §"Test gates"**; references below point to those gates rather than to elliot-demo browser sessions.
 
 - [x] **2.1** PandocAST import-path consolidation. In `ReactRenderer.tsx`, `useCursorToSlide.ts`, `useSlideThumbnails.tsx`, `RevealjsReactAstSlideRenderer.tsx`, `ReactAstSlideRenderer.tsx`: drop any local `PandocAST` declaration; import `PandocAST` from `./framework/types` (or relative equivalent). One commit. Build + `test:ci`.
-- [x] **2.2** Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename in `ReactAstSlideRenderer.tsx`. ~25 mechanical refs. Drop slide-side local block/inline type declarations; import the unions from `./framework/types`. Slide-side now inherits framework's `MathInline` extension. Build + `test:ci`. (Pre-flight in 0.1 already de-risked this.)
+- [x] **2.2** Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename in `ReactAstSlideRenderer.tsx`. \~25 mechanical refs. Drop slide-side local block/inline type declarations; import the unions from `./framework/types`. Slide-side now inherits framework's `MathInline` extension. Build + `test:ci`. (Pre-flight in 0.1 already de-risked this.)
 - [x] **2.3** Create `public/q2-debug.html` mirroring `public/ast-renderer.html` but with `<script type="module" src="/src/ast-renderer-entry.tsx">` (still pointing at the OLD entry path; entry hasn't moved yet). Add `'q2-debug': path.resolve(__dirname, 'public/q2-debug.html')` to `vite.config.ts` rollup inputs *alongside* the existing `'ast-renderer'` entry. Now both routes are served and load the same entry. Build + `test:ci`. (Both routes serving the same entry is a transitional state; the smoke-all + E2E specs continue to use `/ast-renderer.html` until step 2.5 renames their selectors.)
 - [x] **2.4** Create `q2-debug/Q2DebugIframe.tsx` (verbatim port of `AstIframe.tsx`, renamed component, `src` updated to `/q2-debug.html`). Build + `test:ci`.
-- [x] **2.5** **The iframe-rename gate.** Update `ReactRenderer.tsx` to import `Q2DebugIframe` from `./q2-debug/Q2DebugIframe` and use it in place of `AstIframe`. q2-debug now runs through `/q2-debug.html`. **Update test selectors in lockstep**: `ReactRenderer.integration.test.tsx`'s `vi.mock('./AstIframe')` becomes `vi.mock('./q2-debug/Q2DebugIframe')`; `hub-client/e2e/helpers/previewExtraction.ts`'s `previewIframeSelector` for q2-debug from `iframe[src*="ast-renderer.html"]` to `iframe[src*="q2-debug.html"]`; `hub-client/e2e/q2-debug-render-components.spec.ts`'s `frameLocator` selector likewise. Build + `test:ci` + `test:e2e` (the e2e run is the regression gate confirming the iframe-rename rewired the right path).
+- [x] **2.5** **The iframe-rename gate.** Update `ReactRenderer.tsx` to import `Q2DebugIframe` from `./q2-debug/Q2DebugIframe` and use it in place of `AstIframe`. q2-debug now runs through `/q2-debug.html`. **Update test selectors in lockstep**: `ReactRenderer.integration.test.tsx`\'s `vi.mock('./AstIframe')` becomes `vi.mock('./q2-debug/Q2DebugIframe')`; `hub-client/e2e/helpers/previewExtraction.ts`\'s `previewIframeSelector` for q2-debug from `iframe[src*="ast-renderer.html"]` to `iframe[src*="q2-debug.html"]`; `hub-client/e2e/q2-debug-render-components.spec.ts`\'s `frameLocator` selector likewise. Build + `test:ci` + `test:e2e` (the e2e run is the regression gate confirming the iframe-rename rewired the right path).
 - [x] **2.6** Delete `hub-client/src/components/render/AstIframe.tsx`. Verify no remaining importers via grep. Build + `test:ci`.
 - [x] **2.7** Create `q2-debug/entry.tsx` as the new entry. Use the explicit `__REACT_AST_DEBUG_RENDERER__` object literal from §"`__REACT_AST_DEBUG_RENDERER__` continuity." Annotate `mergedRegistry: FormatRegistry` (with cast at the spread, since `customRegistry` is babel-transpiled user code). The accumulator continues to use `buildCustomRegistry(loadedModules)` from `hub-client/src/utils/customRegistry.ts` — no behavior change there (bd-3day was fixed independently in `409cd404`). Build + `test:ci`. (No runtime change yet — `q2-debug.html` still points at the old entry.)
 - [x] **2.8** Update `public/q2-debug.html` to point its `<script type="module" src=…>` at `/src/components/render/q2-debug/entry.tsx`. Remove the `'ast-renderer'` rollup input from `vite.config.ts`; only `'q2-debug'` remains. Build + `test:ci` + `test:e2e` (smoke-all reactji fixture verifies the explicit-object `__REACT_AST_DEBUG_RENDERER__` setup; `customRegistry.test.ts` continues to lock the multi-module accumulator behavior).
 - [x] **2.9** Delete `hub-client/src/ast-renderer-entry.tsx` (replaced by `q2-debug/entry.tsx`; nothing references it after 2.8). Build + `test:ci`.
 - [x] **2.10** Delete `hub-client/public/ast-renderer.html` (no consumers). Build + `test:ci`.
-- [x] **2.11** Delete `transpileAndImportTSX` and supporting top-level imports in `hub-client/src/services/tsxTranspiler.ts` (see §"Deletion" for the full list). After deletion the file imports only `{ transform } from '@babel/standalone'`. Verify `transpileTSX`'s single caller (`ReactRenderer.tsx`) still resolves. Build + `test:ci`.
+- [x] **2.11** Delete `transpileAndImportTSX` and supporting top-level imports in `hub-client/src/services/tsxTranspiler.ts` (see §"Deletion" for the full list). After deletion the file imports only `{ transform } from '@babel/standalone'`. Verify `transpileTSX`\'s single caller (`ReactRenderer.tsx`) still resolves. Build + `test:ci`.
 - [x] **2.12** Delete `hub-client/src/components/render/ReactAstRenderer.tsx` (already dead; verified by grep). Build + `test:ci`.
 - [x] **2.13** Documentation sweep: update `~/docs/demo-playground/elliot/render_components.qmd` paths and the `componentRegistry` → `q2DebugRegistry` symbol mention; grep `claude-notes/research/` and `claude-notes/designs/` for the old file/symbol names and update; update `claude-notes/plans/2026-05-04-q2-preview-plan-1*.md` if any path references slipped in. Build (no code changes; doc commit only).
 - [x] **2.14** Delete the Phase-1 shim `hub-client/src/components/render/ReactAstDebugRenderer.tsx`. Verify no remaining importers via grep. Build + `test:ci`.
@@ -520,7 +520,7 @@ Behavior preservation is the entire contract. After the 2026-05-08 rebase, the g
 
 Summary of when each suite runs:
 1. **`npm run build:all`** at every commit (TypeScript strict mode is the first gate).
-2. **`npm run test:ci`** at every commit (vitest unit + integration + WASM, ~14 seconds).
+2. **`npm run test:ci`** at every commit (vitest unit + integration + WASM, \~14 seconds).
 3. **`npm run test:e2e`** at the iframe-rename commit (2.5), the entry-rewire commit (2.8), and the final-verification commit (2.15). Skipped at the routine intermediate commits because Playwright is slow and the integration suite already covers the wiring; the e2e run earns its keep at the points where the iframe URL or its consumer actually moves.
 
 The `q2-debug.integration.test.tsx` file added in this branch is the load-bearing behavior-preservation test for q2-debug's render path; if Phase 2 breaks q2-debug's bordered output, the Figure caption-branch port, the Bug-A `// TODO:` removal, the Not-registered miss path, or the override-resolution path, that file fails. The reactji E2E fixture covers the dynamic-import + Block-override + JSX path through a real browser iframe.
@@ -529,8 +529,8 @@ The `q2-debug.integration.test.tsx` file added in this branch is the load-bearin
 
 - **Import-path drift across the codebase.** `npm run build:all` is the canonical safety net at every checklist step; if it passes, the moves are wired correctly. Phase 1's shim guarantees that even when not-yet-migrated consumers still reference old names, they keep compiling.
 - **`__REACT_AST_DEBUG_RENDERER__` global completeness.** Anything user TSX reaches for must resolve. Survey covers `~/docs/demo-playground/elliot/` and `~/docs/demo-playground/gordon/tldraw-shortcode/`; the explicit object in §"`__REACT_AST_DEBUG_RENDERER__` continuity" includes every name destructured at runtime in those trees. If a surprise consumer appears with a name not in the explicit object literal, they'll get `undefined`. Mitigation: the wholesale spread is a cheap rollback option. Risk is low: the surveyed set is comprehensive.
-- **Slide-side type compatibility after the `Block`/`Inline` → `BlockNode`/`InlineNode` rename (step 2.2).** The rename is mechanical, but the import switch from local declarations to framework's union may surface a TypeScript narrowing issue at function boundaries (`splitByHeaders`, `extractSections`, `flattenBlocks`). Both unions terminate in `UnknownBlock`/`UnknownInline` so structural compatibility should hold; if not, the fix is a single cast at the entry point. Mitigated by Phase 0 pre-flight (~30 min) before Phase 1 starts.
-- **`tsxTranspiler.ts` deletion (step 2.11).** Removing `transpileAndImportTSX` deletes ~40 lines of code plus several top-level imports (reveal.js, KaTeX, the renderer module). Verify `transpileTSX`'s single caller (`ReactRenderer.tsx:131`) still resolves and that no test, hub-client component, or external-source TSX references the deleted function (grep confirms zero hits today).
+- **Slide-side type compatibility after the `Block`/`Inline` → `BlockNode`/`InlineNode` rename (step 2.2).** The rename is mechanical, but the import switch from local declarations to framework's union may surface a TypeScript narrowing issue at function boundaries (`splitByHeaders`, `extractSections`, `flattenBlocks`). Both unions terminate in `UnknownBlock`/`UnknownInline` so structural compatibility should hold; if not, the fix is a single cast at the entry point. Mitigated by Phase 0 pre-flight (\~30 min) before Phase 1 starts.
+- **`tsxTranspiler.ts` deletion (step 2.11).** Removing `transpileAndImportTSX` deletes \~40 lines of code plus several top-level imports (reveal.js, KaTeX, the renderer module). Verify `transpileTSX`\'s single caller (`ReactRenderer.tsx:131`) still resolves and that no test, hub-client component, or external-source TSX references the deleted function (grep confirms zero hits today).
 - **Dispatcher fallback removal.** Behavior is preserved because the Provider is always set inside `<Ast>`. See §"Dispatcher fallback removal" — the conclusion is that no consumer breaks; if a future caller mounts a dispatcher outside `<Ast>`, today's silent q2-debug fallback becomes tomorrow's framework "Not registered" path, which is a diagnostic improvement.
 - **Math edge case** (no longer a worry — stating the conclusion). When no user TSX is loaded *and* the AST contains a `Math` node, q2-debug's `Inline` dispatcher matches no registry entry for `'Math'` and falls into its else branch — `<span style={inlineStyle}><strong>Not registered: Math</strong></span>`. That is identical before and after 2pre (same code, different file). With user TSX loaded (`elliot/html.tsx` registers `Math`), the user's component takes over and the fallback path is unreached.
 - **Snapshot tests that encode old paths.** Verified: no `__snapshots__/` directory under `hub-client/src/components/render/`. Risk doesn't materialize.
@@ -539,19 +539,19 @@ The `q2-debug.integration.test.tsx` file added in this branch is the load-bearin
 
 | Step | Lines (rough) |
 |---|---|
-| Phase 1 — framework files (`types.ts`, `RegistryContext.tsx`, `dispatch.tsx`, `Ast.tsx`, `index.ts`) | ~220 (mechanical splits) |
-| Phase 1 — q2-debug files (`styles.ts`, `dispatchers.tsx`, `components.tsx`, `registry.ts`) | ~410 (mechanical splits + Figure caption-branch port) |
-| Phase 1 — barrel shim in `ReactAstDebugRenderer.tsx` | ~30 (re-exports under old names; thrown away in 2.14) |
-| Phase 2 — PandocAST consolidation imports (5 files) | ~15 (path/import updates) |
-| Phase 2 — Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename | ~25 (mechanical refs in `ReactAstSlideRenderer.tsx`) |
-| Phase 2 — Create `Q2DebugIframe.tsx`, `q2-debug.html`, `q2-debug/entry.tsx` (with bd-3day fix) | ~250 (port + rewrite) |
-| Phase 2 — Update `ReactRenderer.tsx` imports | ~3 |
-| Phase 2 — Update `vite.config.ts` rollup input | ~1 |
+| Phase 1 — framework files (`types.ts`, `RegistryContext.tsx`, `dispatch.tsx`, `Ast.tsx`, `index.ts`) | \~220 (mechanical splits) |
+| Phase 1 — q2-debug files (`styles.ts`, `dispatchers.tsx`, `components.tsx`, `registry.ts`) | \~410 (mechanical splits + Figure caption-branch port) |
+| Phase 1 — barrel shim in `ReactAstDebugRenderer.tsx` | \~30 (re-exports under old names; thrown away in 2.14) |
+| Phase 2 — PandocAST consolidation imports (5 files) | \~15 (path/import updates) |
+| Phase 2 — Slide-side `Block`/`Inline` → `BlockNode`/`InlineNode` rename | \~25 (mechanical refs in `ReactAstSlideRenderer.tsx`) |
+| Phase 2 — Create `Q2DebugIframe.tsx`, `q2-debug.html`, `q2-debug/entry.tsx` (with bd-3day fix) | \~250 (port + rewrite) |
+| Phase 2 — Update `ReactRenderer.tsx` imports | \~3 |
+| Phase 2 — Update `vite.config.ts` rollup input | \~1 |
 | Phase 2 — Drop dispatcher `?? componentRegistry` fallbacks (already done in Phase 1's framework + q2-debug new files) | (zero — covered above) |
 | Phase 2 — Add typed format-registry contracts (already in Phase 1's `types.ts`) | (zero — covered above) |
-| Phase 2 — Replace wholesale `__REACT_AST_DEBUG_RENDERER__` spread with explicit object (in q2-debug/entry.tsx) | ~30 |
+| Phase 2 — Replace wholesale `__REACT_AST_DEBUG_RENDERER__` spread with explicit object (in q2-debug/entry.tsx) | \~30 |
 | Phase 2 — Delete `transpileAndImportTSX` and supporting imports | -50 |
-| Phase 2 — Documentation sweep | ~30 (path-only edits) |
+| Phase 2 — Documentation sweep | \~30 (path-only edits) |
 | Phase 2 — Delete `ReactAstRenderer.tsx` | -344 |
 | Phase 2 — Delete `ast-renderer-entry.tsx` (replaced by `q2-debug/entry.tsx`) | -140 |
 | Phase 2 — Delete `public/ast-renderer.html` (replaced by `q2-debug.html`) | -34 |

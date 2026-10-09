@@ -71,7 +71,7 @@ if target.is_none() && is_empty_attr(&attr) {
 ## Why This Works
 
 1. **Reuses battle-tested code** - `make_cite_inline()` already handles all the edge cases
-2. **Minimal code changes** - ~15 lines changed in span_link_helpers.rs
+2. **Minimal code changes** - \~15 lines changed in span_link_helpers.rs
 3. **Covers all patterns**:
    - `[@c1]` - single citation
    - `[@c1; @c2]` - multiple citations

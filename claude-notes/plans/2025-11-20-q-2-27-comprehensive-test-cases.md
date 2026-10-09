@@ -73,7 +73,7 @@ The error occurs when a line break appears in the final `$_shortcode_sep` before
 ## Proposed Test Cases
 
 ### Current Coverage
-- ✅ `simple` - Name only: `{{< hello\n   >}}`
+- ✅ `simple` - Name only: `{{{< hello\n   >}}}`
 
 ### Proposed New Cases
 
@@ -81,85 +81,85 @@ The error occurs when a line break appears in the final `$_shortcode_sep` before
 
 1. **with-naked-param**
    - Description: Line break after naked string parameter
-   - Content: `{{< meta key\n>}}`
+   - Content: `{{{< meta key\n>}}}`
    - Tests: Naked string value type
 
 2. **with-single-quoted-param**
    - Description: Line break after single-quoted parameter
-   - Content: `{{< meta 'value'\n>}}`
+   - Content: `{{{< meta 'value'\n>}}}`
    - Tests: Single-quoted string value type
 
 3. **with-double-quoted-param**
    - Description: Line break after double-quoted parameter
-   - Content: `{{< meta "value"\n>}}`
+   - Content: `{{{< meta "value"\n>}}}`
    - Tests: Double-quoted string value type
 
 4. **with-number-param**
    - Description: Line break after number parameter
-   - Content: `{{< meta 42\n>}}`
+   - Content: `{{{< meta 42\n>}}}`
    - Tests: Number value type
 
 5. **with-multiple-params**
    - Description: Line break after multiple parameters
-   - Content: `{{< meta param1 param2 param3\n>}}`
+   - Content: `{{{< meta param1 param2 param3\n>}}}`
    - Tests: Multiple positional parameters
 
 #### Category 2: Key-Value Attributes
 
 6. **with-kv-naked**
    - Description: Line break after key-value with naked string
-   - Content: `{{< meta key=value\n>}}`
+   - Content: `{{{< meta key=value\n>}}}`
    - Tests: Key-value with naked string value
 
 7. **with-kv-single-quoted**
    - Description: Line break after key-value with single-quoted value
-   - Content: `{{< meta key='value'\n>}}`
+   - Content: `{{{< meta key='value'\n>}}}`
    - Tests: Key-value with single-quoted value
 
 8. **with-kv-double-quoted**
    - Description: Line break after key-value with double-quoted value
-   - Content: `{{< meta key="value"\n>}}`
+   - Content: `{{{< meta key="value"\n>}}}`
    - Tests: Key-value with double-quoted value
 
 9. **with-kv-number**
    - Description: Line break after key-value with number value
-   - Content: `{{< meta key=42\n>}}`
+   - Content: `{{{< meta key=42\n>}}}`
    - Tests: Key-value with number value
 
 10. **with-multiple-kvs**
     - Description: Line break after multiple key-value attributes
-    - Content: `{{< meta key1=val1 key2=val2\n>}}`
+    - Content: `{{{< meta key1=val1 key2=val2\n>}}}`
     - Tests: Multiple key-value attributes
 
 #### Category 3: Mixed Content
 
 11. **mixed-params-and-kvs**
     - Description: Line break after mixed parameters and attributes
-    - Content: `{{< meta param1 key=value\n>}}`
+    - Content: `{{{< meta param1 key=value\n>}}}`
     - Tests: Combination of positional and named arguments
 
 12. **complex-mixed**
     - Description: Line break after complex mixed content
-    - Content: `{{< component "title" 123 key1=value key2='quoted' enabled=true\n>}}`
+    - Content: `{{{< component "title" 123 key1=value key2='quoted' enabled=true\n>}}}`
     - Tests: Multiple parameters and attributes of different types
 
 #### Category 4: Whitespace Variations
 
 13. **with-indented-break**
     - Description: Line break with indentation before close
-    - Content: `{{< hello\n    >}}`
+    - Content: `{{{< hello\n    >}}}`
     - Tests: Whitespace on the line with closing delimiter
 
 14. **with-spaces-then-break**
     - Description: Trailing spaces before line break
-    - Content: `{{< meta key=value   \n>}}`
+    - Content: `{{{< meta key=value   \n>}}}`
     - Tests: Trailing whitespace before the line break
 
 ## Expected JSON Structure
 
 Each test case will add an entry to the `cases` array in `Q-2-27.json`:
 
-```json
+```{.json shortcodes="false"}
 {
   "name": "test-case-name",
   "description": "Description of what this tests",

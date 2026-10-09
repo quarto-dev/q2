@@ -8,7 +8,7 @@ test: observed 12 hard-fails vs 1.9 expected under i.i.d., p ≈ 8e-7).
 
 Two clusters dominate:
 
-- **A — shortcode/extension `[html]`**: every top failure expands a `{{< … >}}`
+- **A — shortcode/extension `[html]`**: every top failure expands a `{{{< … >}}}`
   shortcode (runs the WASM Lua interpreter). The multi-file extension fixtures
   (`block-shortcode` = 3 files, worst with 3 hard-fails) add a VFS-sync race on
   top: nothing gates the first render / the assertion re-render on all project
@@ -50,17 +50,17 @@ smoke-all, `retries:3`.
 - [x] Implement root-cause fix in sync client (6fc040e8): bound repo.find()
       with AbortSignal.timeout(5s) + load file docs concurrently (Promise.all)
 - [x] quarto-sync-client unit suite: 102 pass (no regression)
-- [x] no-contention smoke-all: 78/78, ~30% faster (2.4m vs 3.4m)
-- [x] heavy 10-hog contention (extension subset): ~all-fail → 2/15
+- [x] no-contention smoke-all: 78/78, \~30% faster (2.4m vs 3.4m)
+- [x] heavy 10-hog contention (extension subset): \~all-fail → 2/15
 - [ ] Confirm CI smoke-all green + fast; compare flake counts vs baseline
 
 ## Fix + measurements (commit 6fc040e8)
 
 Root cause (proven by boot-trace): sync client `connect()` →
-`loadFileDocuments()` loaded ~49 file docs **serially**, and `findDoc()`'s
-`repo.find()` had **no deadline** → a single slow doc hung ~60s on
+`loadFileDocuments()` loaded \~49 file docs **serially**, and `findDoc()`\'s
+`repo.find()` had **no deadline** → a single slow doc hung \~60s on
 automerge-repo's internal unavailable timeout → blew the 75s render budget →
-Editor/preview never mounted. (The extension fixtures share one ~49-file
+Editor/preview never mounted. (The extension fixtures share one \~49-file
 project because `extensions/_quarto.yml` roots them all there — more docs =
 higher odds of hitting a slow one, which is why they dominate the flaky list.)
 
@@ -71,14 +71,14 @@ existing `markFileUnavailable` path) + concurrent `Promise.all` loading
 | scenario | before fix | after fix |
 | --- | --- | --- |
 | no contention (full 78) | 78/78 (3.4m) | 78/78 (2.4m) |
-| 10-hog subset (×3) | ~all fail | 2/15 fail |
+| 10-hog subset (×3) | \~all fail | 2/15 fail |
 | 6-hog subset (×3) | n/a | 2/18 fail |
 | 6-hog full (78) | 1 fail | 6 fail* |
 
 \* full-suite 6-hog amplified by the shared hub accumulating load over 78
 tests (a test-infra factor, not the fix). All residual failures are still
 75s render-timeouts (connect slow), NOT dropped-file assertion failures —
-so the 5s timeout is not dropping needed docs. With CI `retries:3` an ~11%
+so the 5s timeout is not dropping needed docs. With CI `retries:3` an \~11%
 per-attempt rate → near-zero hard-fails.
 
 Residual / follow-ups (not done): (a) eager retry-on-peer-arrival for
@@ -154,8 +154,8 @@ Traced the boot path under 10-hog contention. The chain:
 `loadFileDocuments` loads every project file doc **sequentially**, each via
 `findDoc()` → **`repo.find(docId)`** (client.ts:432).
 
-- **Passing run:** all ~49 file docs resolve in <2ms each → connect = 335ms.
-- **Failing run:** ONE file doc's `repo.find()` **hangs ~60s** (automerge-repo
+- **Passing run:** all \~49 file docs resolve in <2ms each → connect = 335ms.
+- **Failing run:** ONE file doc's `repo.find()` **hangs \~60s** (automerge-repo
   2.5.6's default unavailable-doc timeout) before rejecting, then the retry
   loop (attempts=3, fast) gives up and `markFileUnavailable`s it. That single
   60s serial stall blows the 75s `waitForPreviewRender` budget → test fails.
@@ -163,14 +163,14 @@ Traced the boot path under 10-hog contention. The chain:
   (exactly +60.2s).
 
 So the stall is **NOT** render, WASM init, the Preview loop, or the harness —
-it's the sync client waiting ~60s for any single project file doc that's slow
+it's the sync client waiting \~60s for any single project file doc that's slow
 to serve under contention, while loading all docs serially. Real users hit
 this too: opening a project where one doc is slow to sync stalls the whole
 open for 60s.
 
 **Fix surface (clean):** `repo.find<T>(id, options?: RepoFindOptions &
 AbortOptions)` accepts an `AbortSignal` (automerge-repo 2.5.6). Bound
-`findDoc`'s `repo.find` with `AbortSignal.timeout(N)` (e.g. 8s) so an unsynced
+`findDoc`\'s `repo.find` with `AbortSignal.timeout(N)` (e.g. 8s) so an unsynced
 doc fails fast into the existing `isUnavailableError`/retry/`markFileUnavailable`
 path instead of hanging 60s. Likely also: load file docs in parallel, and/or
 don't block the initial render on non-active file docs (load siblings in the
@@ -190,15 +190,15 @@ background; re-subscribe via the index `change` handler when they arrive).
 ## Runtime regression (CI run #1) — root cause + fix
 
 The first barrier waited up to 30s for ALL discovered project files. The
-~20 q2-preview/ fixtures over-include unrelated sibling-project files
-(no _quarto.yml at that dir → roots at parent) that sync slowly/never, so
+\~20 q2-preview/ fixtures over-include unrelated sibling-project files
+(no \_quarto.yml at that dir → roots at parent) that sync slowly/never, so
 each paid the full 30s → smoke-all step ballooned far past its fast
 baseline. Fixed by bounding the barrier (commit 26ab9810):
 - return on exact-match (fast path) OR VFS-count quiesce (escape hatch);
 - cap 30s → 10s;
-- quiesce gated behind 3s grace + ~600ms stable run so it can't preempt a
+- quiesce gated behind 3s grace + \~600ms stable run so it can't preempt a
   still-arriving extension fixture (files push target-last).
-Net: over-broad fixtures cost ~3s instead of 30s.
+Net: over-broad fixtures cost \~3s instead of 30s.
 
 ## Findings / decisions
 

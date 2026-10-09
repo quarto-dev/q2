@@ -77,5 +77,5 @@ replay attribution hover) — see the strand linked
   or disappears FAILS the scan until the baseline is regenerated, so
   the regen step is mandatory, not optional.
 - Phase 5 branch (`hub-client-uiux-phase5`) does NOT contain these
-  fixes (it only adds setup-* entries); no conflict expected, but the
+  fixes (it only adds setup-\* entries); no conflict expected, but the
   token values touched here will need re-review at the Phase 5 gate.

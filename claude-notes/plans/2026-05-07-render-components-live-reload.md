@@ -105,9 +105,9 @@ The 500ms delay is a starting point — debounceable, tunable. Future iterations
 
 #### 3. Iframe entry handles repeat `LOAD_CUSTOM_COMPONENTS`
 
-When debouncedCode reference changes, `AstIframe.tsx:42-54`'s effect fires `LOAD_CUSTOM_COMPONENTS` to the iframe. The iframe entry's `loadCustomComponents` rebuilds `customRegistry` from scratch each time. This already works today for the YAML-twiddle workflow; with the live-reload, it just fires more often.
+When debouncedCode reference changes, `AstIframe.tsx:42-54`\'s effect fires `LOAD_CUSTOM_COMPONENTS` to the iframe. The iframe entry's `loadCustomComponents` rebuilds `customRegistry` from scratch each time. This already works today for the YAML-twiddle workflow; with the live-reload, it just fires more often.
 
-Verify during implementation: after a `LOAD_CUSTOM_COMPONENTS` arrives without an `UPDATE_AST` immediately following, does the iframe re-render with the new registry? If not, the iframe entry needs an explicit re-render trigger after `loadCustomComponents` completes — likely a `root.render(...)` call with the last-known AST. ~5 LOC.
+Verify during implementation: after a `LOAD_CUSTOM_COMPONENTS` arrives without an `UPDATE_AST` immediately following, does the iframe re-render with the new registry? If not, the iframe entry needs an explicit re-render trigger after `loadCustomComponents` completes — likely a `root.render(...)` call with the last-known AST. \~5 LOC.
 
 ### What's not in scope
 
@@ -162,17 +162,17 @@ What this plan does NOT solve:
 
 **Setup.** Create a project containing one qmd with `format: q2-debug` + `render-components: [reactji.tsx]`, plus the `reactji.tsx` from the existing smoke-all q2-debug fixture (or a tiny purpose-built TSX — anything that produces a visible difference between pre/post-edit).
 
-**Test 1: live reload.** Mount the page; assert the iframe renders the pre-edit DOM (e.g., `❤️ 1` from the reactji counter). Programmatically mutate the TSX content via `page.evaluate(({path, content}) => updateFileContent(path, content), { path: 'reactji.tsx', content: editedTsx })` — calling into the hub's automerge layer in-page (the `dev-only `window.quartoDebug` API from commit `0f103490`, or whatever the established mutation handle is at the time). Wait the debounce window plus a small jitter (~700ms total). Assert the iframe DOM updates to reflect the edited TSX (e.g., counter button now shows a different label or different rendered shape).
+**Test 1: live reload.** Mount the page; assert the iframe renders the pre-edit DOM (e.g., `❤️ 1` from the reactji counter). Programmatically mutate the TSX content via `page.evaluate(({path, content}) => updateFileContent(path, content), { path: 'reactji.tsx', content: editedTsx })` — calling into the hub's automerge layer in-page (the `dev-only `window.quartoDebug\` API from commit `0f103490`, or whatever the established mutation handle is at the time). Wait the debounce window plus a small jitter (\~700ms total). Assert the iframe DOM updates to reflect the edited TSX (e.g., counter button now shows a different label or different rendered shape).
 
 **Test 2: syntax-error preserves last-good.** Same setup. Assert pre-edit DOM. Mutate to invalid TSX (`function foo() {`). Wait through the debounce. Assert the iframe DOM is **unchanged** from pre-edit (last-good output preserved). Then mutate to valid TSX with a different output. Wait. Assert the iframe DOM updates to the new output.
 
 This spec covers the end-to-end debounce → load-custom-components → iframe re-render flow. The vitest unit/integration tests above cover the *logic* (cache-hit, content-change, syntax-error, debounce timing); the e2e spec is the safety net for the message-passing path that vitest can't reach.
 
-Cost: ~80 LOC for the spec file. Runs slowly (Playwright spinup) so it's gated behind `npm run test:e2e`, not `test:ci`. Worth the budget because live-reload is the kind of UX that silently degrades in subtle ways (debounce off-by-one, postMessage timing race) without anyone noticing until users complain.
+Cost: \~80 LOC for the spec file. Runs slowly (Playwright spinup) so it's gated behind `npm run test:e2e`, not `test:ci`. Worth the budget because live-reload is the kind of UX that silently degrades in subtle ways (debounce off-by-one, postMessage timing race) without anyone noticing until users complain.
 
 ## Risk areas
 
-- **Iframe re-render after `LOAD_CUSTOM_COMPONENTS` without `UPDATE_AST`.** Today's flow assumes `LOAD_CUSTOM_COMPONENTS` comes before each `UPDATE_AST`. With live reload, `LOAD_CUSTOM_COMPONENTS` arrives mid-session without a fresh AST. The iframe entry needs to re-render the last-known AST against the new registry. Verify during implementation; ~5 LOC fix if not already correct.
+- **Iframe re-render after `LOAD_CUSTOM_COMPONENTS` without `UPDATE_AST`.** Today's flow assumes `LOAD_CUSTOM_COMPONENTS` comes before each `UPDATE_AST`. With live reload, `LOAD_CUSTOM_COMPONENTS` arrives mid-session without a fresh AST. The iframe entry needs to re-render the last-known AST against the new registry. Verify during implementation; \~5 LOC fix if not already correct.
 - **Memory: blob URLs from transpiled modules.** The iframe's `loadCustomComponents` does `URL.createObjectURL(blob)` and `URL.revokeObjectURL(url)` already. With more reloads, more allocs and revokes — verify the revoke fires reliably. Probably fine; mention for awareness.
 - **React StrictMode double-mount in dev.** Mount/unmount/mount cycle may run the debounce effect twice on first render. Cleanup function in the effect should handle it. Test under StrictMode.
 - **Performance on very-large render-components projects.** If a user lists 20 TSX files in `render-components`, the loop iterates 20 times on each invalidation (mostly cache hits, some misses). Bounded but worth measuring on a synthetic stress fixture.
@@ -182,12 +182,12 @@ Cost: ~80 LOC for the spec file. Runs slowly (Playwright spinup) so it's gated b
 
 | Component | Lines (rough) |
 |---|---|
-| Content-keyed transpilation cache logic | ~25 |
-| Debounce useState + useEffect | ~20 |
-| Iframe entry re-render trigger (if needed) | ~5 |
-| Tests (cache-hit, content-change, multi-file, syntax-error, debounce, integration) | ~120 |
-| E2E spec (`q2-debug-render-components-live-reload.spec.ts`) | ~80 |
-| **Total** | **~250** |
+| Content-keyed transpilation cache logic | \~25 |
+| Debounce useState + useEffect | \~20 |
+| Iframe entry re-render trigger (if needed) | \~5 |
+| Tests (cache-hit, content-change, multi-file, syntax-error, debounce, integration) | \~120 |
+| E2E spec (`q2-debug-render-components-live-reload.spec.ts`) | \~80 |
+| **Total** | **\~250** |
 
 One focused session. Tests are the biggest line-count item; the implementation itself is tight.
 
@@ -208,7 +208,7 @@ Nothing. This plan is independent.
 
 ## Related work
 
-- **bd-3day** — `customRegistry` accumulator bug. Same code area (`ast-renderer-entry.tsx`'s `loadCustomComponents`), different correctness issue. Independent fix; could land alongside this plan or separately.
+- **bd-3day** — `customRegistry` accumulator bug. Same code area (`ast-renderer-entry.tsx`\'s `loadCustomComponents`), different correctness issue. Independent fix; could land alongside this plan or separately.
 - **Plan 2A item 9** — q2-preview's `entry.tsx` mirrors q2-debug's pattern but with the bd-3day fix. This plan's iframe-re-render-trigger work (if needed) applies to both entries.
 
 ## Notes

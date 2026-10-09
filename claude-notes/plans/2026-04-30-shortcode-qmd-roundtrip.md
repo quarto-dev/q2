@@ -28,7 +28,7 @@ fn write_shortcode(
 }
 ```
 
-The writer emits only `{{` + name + `}}`. It ignores `is_escaped`, `positional_args`, and `keyword_args`. The format string is also wrong — even for a name-only shortcode, qmd syntax requires `{{< name >}}`, not `{{name}}`.
+The writer emits only `{{` + name + `}}`. It ignores `is_escaped`, `positional_args`, and `keyword_args`. The format string is also wrong — even for a name-only shortcode, qmd syntax requires `{{{< name >}}}`, not `{{name}}`.
 
 The parser side is fine. `process_shortcode` (`crates/pampa/src/pandoc/treesitter_utils/shortcode.rs:48`) populates the `Shortcode` struct (defined in `crates/quarto-pandoc-types/src/shortcode.rs`) with all the data we need:
 
@@ -79,7 +79,7 @@ The parser strips quotes — `width="800"` and `width=800` both end up as `Short
 
 Concrete writer rule for a `ShortcodeArg::String(s)`:
 
-1. If `s` matches `shortcode_number`'s pattern, prefer to quote it (otherwise the round-trip would re-parse it as `ShortcodeArg::Number`, changing the AST type).
+1. If `s` matches `shortcode_number`\'s pattern, prefer to quote it (otherwise the round-trip would re-parse it as `ShortcodeArg::Number`, changing the AST type).
 2. Else if `s` is non-empty and every char is in the naked-string set (and there's no whitespace), emit naked.
 3. Otherwise emit double-quoted, escaping any embedded `"` as `\\"` and any `\\` as `\\\\`.
 
@@ -87,9 +87,9 @@ Edge cases worth a test: empty string (must quote: `""`), value containing `>` (
 
 For `ShortcodeArg::Number`, `f64::to_string` renders `800.0` as `"800"` — that's the round-trip we want. (`shortcode_number` accepts `800` as an integer literal.) Negative / scientific values still match the grammar regex.
 
-For `ShortcodeArg::Boolean`, emit `true` / `false` naked (both match `shortcode_name`'s pattern).
+For `ShortcodeArg::Boolean`, emit `true` / `false` naked (both match `shortcode_name`\'s pattern).
 
-For keyword arg keys: per `_key_specifier_token`, keys are emitted bare. Verify `_key_specifier_token`'s pattern during implementation and reject (panic? warn?) keys outside it — that's an invariant the parser already enforces, so any in-AST key violating it came from a non-parser source (e.g. Lua filter).
+For keyword arg keys: per `_key_specifier_token`, keys are emitted bare. Verify `_key_specifier_token`\'s pattern during implementation and reject (panic? warn?) keys outside it — that's an invariant the parser already enforces, so any in-AST key violating it came from a non-parser source (e.g. Lua filter).
 
 ### Q3. Should we use `source_info` to copy source verbatim? — RESOLVED: no
 
@@ -122,14 +122,14 @@ The grammar treats shortcodes as inline only — a standalone `{{< video ... >}}
 Per `crates/pampa/AGENTS.md`: write tests first, run, see them fail, *then* implement.
 
 - [x] Add a **direct qmd → qmd writer** test (the existing qmd-json-qmd suite does not exercise `write_shortcode`). New fixtures under `tests/snapshots/qmd/shortcode-*.qmd` covered by `unit_test_snapshots_qmd` (`tests/test.rs:293`):
-  - [x] `shortcode-name-only.qmd` — `{{< meta >}}`
+  - [x] `shortcode-name-only.qmd` — `{{{< meta >}}}`
   - [x] `shortcode-positional.qmd` — `{{< video https://youtu.be/abc >}}` (the user's URL case)
   - [x] `shortcode-keyword-args.qmd` — `{{< video https://youtu.be/abc width="800" height="450" >}}` (the user's full case)
   - [x] `shortcode-escaped.qmd` — `{{{< meta >}}}` to verify `is_escaped`
-  - [x] `shortcode-naked-string.qmd` — `{{< meta foo >}}` (unquoted positional, no whitespace)
-  - [x] `shortcode-with-quoted-string.qmd` — `{{< meta "foo bar" >}}` (positional that requires quoting)
+  - [x] `shortcode-naked-string.qmd` — `{{{< meta foo >}}}` (unquoted positional, no whitespace)
+  - [x] `shortcode-with-quoted-string.qmd` — `{{{< meta "foo bar" >}}}` (positional that requires quoting)
 - [x] Add a **round-trip parse-write-parse semantic equivalence** test (`test_qmd_to_qmd_shortcode_roundtrip` in `tests/test.rs`). Parses qmd, writes qmd, re-parses, and compares JSON forms with location fields stripped. Covers the same 6 cases.
-- [x] Confirmed both tests fail. The roundtrip test fails with `failed to parse regenerated QMD ("{{meta}}\n")` — the buggy writer's output is not even valid syntax. Snapshot test produces `{{meta}}` instead of `{{< meta >}}`.
+- [x] Confirmed both tests fail. The roundtrip test fails with `failed to parse regenerated QMD ("{{meta}}\n")` — the buggy writer's output is not even valid syntax. Snapshot test produces `{{meta}}` instead of `{{{< meta >}}}`.
 
 ### Phase 2 — Fix `write_shortcode`
 

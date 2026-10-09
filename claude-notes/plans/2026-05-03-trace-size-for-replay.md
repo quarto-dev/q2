@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-03
 **Beads:** bd-5qnj
-**Worktree:** `.worktrees/5qnj-trace-size` (branch `beads/5qnj-trace-size`, based on `main` @ `2b954d75`)
+**Worktree:** `.worktrees/5qnj-trace-size` (branch `beads/5qnj-trace-size`, based on `main` \@ `2b954d75`)
 **Status:** Design aligned with user 2026-05-03. Ready to implement on user go-ahead. See "Resolved design decisions" below.
 
 ## Triage verdict
@@ -195,7 +195,7 @@ the other.
 ### Phase 2 — DocumentAst dedup under `schema_version: 2`
 
 - [x] Wire format: top-level `asts: { "<hash>": <AST> }` map plus
-      `{ "$ref": "<hash>" }` sentinels inside entries' `data`. Hash:
+      `{ "$ref": "<hash>" }` sentinels inside entries\' `data`. Hash:
       SHA-256 truncated to 16 hex chars (64 bits).
 - [x] Writer (`crates/quarto-trace/src/write.rs`): clones the doc
       before serializing, walks pipeline entries, dedups

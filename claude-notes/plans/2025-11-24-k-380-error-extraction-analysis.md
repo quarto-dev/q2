@@ -349,7 +349,7 @@ Actually, on second thought, keep it simple - just document the command line inv
 
 **Recommendation**: Document the interface:
 
-```markdown
+````markdown
 ## Binary Interface Contract
 
 Your parser binary must support:
@@ -380,15 +380,15 @@ Output format (JSON to stdout):
   ]
 }
 ```
-```
+````
 
 ### 4. Missing from Original Plan: Error Corpus File Format Spec
 
-**Issue**: No formal spec for Q-*.json format.
+**Issue**: No formal spec for Q-\*.json format.
 
 **Recommendation**: Document with schema:
 
-```markdown
+````markdown
 ## Error Corpus File Format
 
 Each error code has one JSON file with this structure:
@@ -425,7 +425,7 @@ Each error code has one JSON file with this structure:
   ]
 }
 ```
-```
+````
 
 ### 5. Missing from Original Plan: Testing Strategy Details
 

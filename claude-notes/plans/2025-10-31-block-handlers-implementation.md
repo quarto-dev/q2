@@ -26,7 +26,7 @@
 - Note references ([^ref])
 - Quotes, superscript, subscript, strikeout
 - Editorial marks (insert, delete, highlight, comment)
-- Shortcodes ({{< shortcode >}})
+- Shortcodes ({{{< shortcode >}}})
 - Links and images
 - Math (inline and display)
 
@@ -297,7 +297,7 @@ For each handler:
 ## Success Criteria
 
 1. ✅ All three block handlers have match arms in treesitter.rs
-2. ✅ No "[TOP-LEVEL MISSING NODE]" warnings for supported constructs
+2. ✅ No "\[TOP-LEVEL MISSING NODE\]" warnings for supported constructs
 3. ✅ All basic tests pass for each handler
 4. ✅ All edge case tests pass for each handler
 5. ✅ Full test suite passes (135+ tests)

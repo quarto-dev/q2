@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-28
 **Braid:** bd-1vlw8 — *Implement quarto use brand scaffolding command*
-**Branch:** `main` @ `581e45c0` (investigated in the primary checkout — no worktree)
+**Branch:** `main` \@ `581e45c0` (investigated in the primary checkout — no worktree)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` — ✓ all steps passed at this HEAD (10593 tests)
 **Status:** Design settled (rounds 1 + 2, 2026-07-28) — no open questions. **Do not start implementation until the user gives the go-ahead.**
 
@@ -73,7 +73,7 @@ writes a config key.
 
 Q2 **deliberately has no auto-discovery**. `crates/quarto-core/src/project/mod.rs:354-376`:
 
-> The **project-level** brand named by `_quarto.yml`'s `brand:` key […] `None`
+> The **project-level** brand named by `_quarto.yml`\'s `brand:` key \[…\] `None`
 > when no `brand:` key is present — Q2 deliberately has no `_brand.yml`
 > auto-discovery, unlike Q1
 
@@ -86,7 +86,7 @@ not a nicety here; it is the load-bearing half of the command.
 
 ### Where a `brand:` declaration can legally live
 
-`quarto-sass`'s `ThemeConfig::from_config_value`
+`quarto-sass`\'s `ThemeConfig::from_config_value`
 (`crates/quarto-sass/src/config.rs:166-238`) reads `config.get("brand")` from the
 **format-flattened merged config**. That merge chain is `_quarto.yml` →
 `_metadata.yml` layers (`quarto-core/src/project/mod.rs:69-107`) → document front
@@ -154,7 +154,7 @@ almost exactly this problem shape:
   before declaring success.
 - **Path extraction for assets.** Q1's `extractBrandFilePaths` (`brand.ts:134-212`)
   walks `logo.images.*`, `logo.{small,medium,large}` (string or `{light,dark}`),
-  and `typography.fonts[].files[]` where `source: file`. `quarto-brand`'s typed
+  and `typography.fonts[].files[]` where `source: file`. `quarto-brand`\'s typed
   model already has all these fields, so the Rust version is a typed traversal
   rather than Q1's untyped probing — strictly less code.
 - **A testable HTTP seam precedent.** `PublishHost::http_get`
@@ -191,7 +191,7 @@ Round 1 (1–8) fixed the command's shape; round 2 (9–14) fixed the fetch surf
    as a rule with both cases spelled out; the command reports which one it chose.
 3. **Refuse if a brand file already exists.** If `_brand.yml` or `_brand.yaml`
    exists at the project root, error out and write nothing. This is stricter than
-   `q2 create`'s skip-existing policy, and it makes a second run a **hard error**
+   `q2 create`\'s skip-existing policy, and it makes a second run a **hard error**
    rather than an idempotent no-op — deliberately, since silently doing nothing
    would be worse than saying so.
 4. **Only `_quarto.yml` is inspected** for an existing brand declaration.
@@ -201,7 +201,7 @@ Round 1 (1–8) fixed the command's shape; round 2 (9–14) fixed the fetch surf
 7. **`theme:` is left alone.** `from_config_value` auto-injects `ThemeSpec::Brand`
    when `brand:` is set, so no `- brand` entry is needed, and adding one where a
    user has hand-written a `theme:` list risks the `Q-14-1` hard error.
-8. **`--json` ships in v1**, mirroring `q2 create`'s machine path.
+8. **`--json` ships in v1**, mirroring `q2 create`\'s machine path.
 9. **Both `.tar.gz` and `.zip` are supported.** The `zip` crate joins `flate2`
    (already present) and `tar` (new). Format is detected by **magic bytes**, not
    by file extension.
@@ -262,7 +262,7 @@ the top-level directory inside the archive, from the ref string.
 `org/repo@feature/foo` that is `repo-feature/foo` — a *two-segment path*. A
 GitHub archive has a single root directory; no flat prefix can produce a nested
 path. So the predicted subdir cannot exist, and the lookup falls through to
-`stageBrand`'s lone-subfolder rescue (`brand.ts:553-571`), which happens to
+`stageBrand`\'s lone-subfolder rescue (`brand.ts:553-571`), which happens to
 work — but only by accident, and only when the archive has exactly one top
 level entry and no loose files.
 
@@ -442,7 +442,7 @@ and existing key order survive untouched. The value is `_brand.yml` or
 - **Shared module** (decision 6): lift the plan/writer/prompter/failure types out
   of `commands/create/` into `commands/common/`, with `create` and `use_cmd`
   both importing them. `CreatePlan` → `FilePlan`, `CreateFailure` →
-  `CommandFailure`, etc. `create.rs`'s integration tests protect the refactor.
+  `CommandFailure`, etc. `create.rs`\'s integration tests protect the refactor.
 - `--json` directive shape, mirroring create's tagged form:
   `{"use": "brand", "target": "org/repo", "dry_run": false, "force": false, "trust": false}`,
   unknown fields rejected. Exactly one result object on stdout; diagnostics as
@@ -470,8 +470,10 @@ implements each is noted.
 - [ ] 15–20 written and failing (network + copy; Phases 6–7)
 - [ ] 10–12 written and failing (copy mode; Phase 7)
 
+```{=html}
 <details>
 <summary>Full case list (the contract)</summary>
+```
 
   1. No `_quarto.yml` anywhere up the tree → non-zero exit, message names the
      missing file, **nothing written** (no `_brand.yml`, no `_quarto.yml`).
@@ -524,11 +526,13 @@ implements each is noted.
       the test that proves the declaration step actually connects — the exact
       failure mode a Q1-faithful copy-only port would have.
 
+```{=html}
 </details>
+```
 
 ### Phase 1 — Shared `commands/common/` module
 
-Pure refactor; `create`'s integration tests must stay green throughout.
+Pure refactor; `create`\'s integration tests must stay green throughout.
 
 - [x] Move plan/writer/prompter/failure types from `commands/create/` to
       `commands/common/`, renaming `CreatePlan` → `FilePlan`, `CreateFailure` →
@@ -618,7 +622,7 @@ inert would have been worse than implementing forty lines.
    rather than inlined — so the assertion searches the whole output tree.
    Worth recording because the first version of the test passed
    vacuously in neither direction: it simply could not find the file.
-6. **`ReplaceRange`'s `expected` is sliced from the config text, not
+6. **`ReplaceRange`\'s `expected` is sliced from the config text, not
    reused from the declaration's display summary.** They are equal
    today; but `value_summary` exists to be *read by a human* (it renders
    an inline block as `(inline brand block)`), and if it ever gained
@@ -959,11 +963,11 @@ plan.
   cares about. Mitigations: parse-then-append (never re-serialize), refuse the
   shapes we cannot safely edit, `--dry-run` that shows the exact resulting text.
 - **The shared-module refactor touches shipped code.** `q2 create` is two weeks
-  old and has real users' first impressions riding on it. Phase 1 is a pure
-  rename/move with no behavior change, and `create.rs`'s integration tests must
+  old and has real users\' first impressions riding on it. Phase 1 is a pure
+  rename/move with no behavior change, and `create.rs`\'s integration tests must
   stay green throughout.
 - **Decision 3 makes re-running an error, not a no-op.** That is intentional but
-  is a UX departure from `q2 create`'s skip-existing merge semantics. The error
+  is a UX departure from `q2 create`\'s skip-existing merge semantics. The error
   message has to be good enough that "run it again" is obviously not the fix.
 - **`Commands::Use` shape change is mildly breaking** for anyone scripting the
   current (unimplemented) flat form. Since it returns `NotImplemented` today,

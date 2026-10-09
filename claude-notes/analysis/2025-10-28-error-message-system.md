@@ -289,7 +289,7 @@ Each error corpus file should demonstrate **exactly one** error. Keep examples a
 
 **Good**:
 - Title: "Unclosed Span"
-- Message: "I reached the end of the block before finding a closing ']' for the span or link."
+- Message: "I reached the end of the block before finding a closing \'\]\' for the span or link."
 
 **Bad**:
 - Title: "Parse error"
@@ -314,9 +314,9 @@ Look at existing error messages for:
 | File | Error Type | State | Sym | Title |
 |------|-----------|-------|-----|-------|
 | 001.qmd | Unclosed span | 1283 | end | Unclosed Span |
-| 002.qmd | Bad attribute delimiter | 2020 | _error | Mismatched Delimiter in Attribute Specifier |
+| 002.qmd | Bad attribute delimiter | 2020 | \_error | Mismatched Delimiter in Attribute Specifier |
 | 003.qmd | Attr ordering | 2678 | class_specifier | Key-value Pair Before Class Specifier in Attribute |
-| 004.qmd | Missing space in div | 932 | { | Missing Space After Div Fence |
+| 004.qmd | Missing space in div | 932 | \{ | Missing Space After Div Fence |
 
 ## Missing Error Messages (Opportunities)
 

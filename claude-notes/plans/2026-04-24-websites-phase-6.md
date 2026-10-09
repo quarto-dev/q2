@@ -501,7 +501,7 @@ We need a lossless walk-and-pop normalizer. Two options:
    workspace) — `pathdiff` doesn't normalize, only diffs;
    `path-clean` would be a new dep.
 
-Recommendation: **inline helper**, ~15 lines. Minimal dependency
+Recommendation: **inline helper**, \~15 lines. Minimal dependency
 footprint, exact semantics we control, easy to test.
 
 ```rust
@@ -750,7 +750,7 @@ New file `link_rewriting_pipeline.rs`:
 48. `pipeline_body_link_in_list` — body has a bullet list with
     a `.qmd` link. Output href is rewritten.
 49. `pipeline_body_link_no_cross_contamination` — rendering
-    `index.qmd` does not affect `about.qmd`'s body links
+    `index.qmd` does not affect `about.qmd`\'s body links
     (regression guard, mirrors Phase 3's navbar
     cross-contamination test).
 
@@ -836,8 +836,7 @@ None — inline asserts over the emitted HTML cover the vocabulary
       separators) — URL paths are forward-slash by convention.
 - [x] Tests 8–28 (all 21 passing).
 
-### `LinkRewriteTransform`
-      (`quarto-core/src/transforms/link_rewrite.rs` — NEW)
+### `LinkRewriteTransform` (`quarto-core/src/transforms/link_rewrite.rs` — NEW)
 
 - [x] New module. Standalone-render skip per Decision 7.
 - [x] Recursive `LinkRewriter` visitor mirroring
@@ -863,8 +862,7 @@ None — inline asserts over the emitted HTML cover the vocabulary
 - [x] Full quarto-core test suite green (1230 tests pass) — no
       regressions in existing transforms or integration tests.
 
-### Integration tests
-      (`quarto-core/tests/link_rewriting_pipeline.rs`)
+### Integration tests (`quarto-core/tests/link_rewriting_pipeline.rs`)
 
 - [x] Tests 39–49 written following the `sidebar_pipeline.rs`
       pattern (11 tests, all passing). Test 46's
@@ -884,12 +882,12 @@ None — inline asserts over the emitted HTML cover the vocabulary
       `AstTransformsStage` rebuilds a fresh `RenderContext` from
       `StageContext` data, so the resolver had to live on
       `StageContext` too and be re-bridged. Adds:
-      * `StageContext.resource_resolver: Option<ResourceResolverContext>`
-        with the same docstring contract as on `RenderContext`.
-      * `run_pipeline` clones `ctx.resource_resolver` into
-        `stage_ctx.resource_resolver` next to `project_index`.
-      * `AstTransformsStage::run` clones it back into
-        `render_ctx.resource_resolver` next to `project_index`.
+  * `StageContext.resource_resolver: Option<ResourceResolverContext>`
+    with the same docstring contract as on `RenderContext`.
+  * `run_pipeline` clones `ctx.resource_resolver` into
+    `stage_ctx.resource_resolver` next to `project_index`.
+  * `AstTransformsStage::run` clones it back into
+    `render_ctx.resource_resolver` next to `project_index`.
       Without this bridge, `LinkRewriteTransform` saw
       `ctx.resource_resolver = None` and emitted bare
       `output_href` strings instead of page-relative URLs.
@@ -900,10 +898,10 @@ None — inline asserts over the emitted HTML cover the vocabulary
 
 - [x] Smoke fixture at `/tmp/q2-phase6-smoke/` (3 pages, root
       + nested + 2-level mix). Observed rendered HTML body links:
-      * `index.html`: `href="about.html"`, `href="docs/api.html"`
-      * `about.html`: `href="index.html"`
-      * `docs/api.html`: `href="../about.html"`,
-        `href="../index.html"`
+  * `index.html`: `href="about.html"`, `href="docs/api.html"`
+  * `about.html`: `href="index.html"`
+  * `docs/api.html`: `href="../about.html"`,
+    `href="../index.html"`
       Matches the plan's example table 1:1.
 - [x] Smoke fixture at `/tmp/q2-phase6-broken-smoke/` exercises
       the broken-link path. Rendered HTML body has
@@ -948,21 +946,21 @@ None — inline asserts over the emitted HTML cover the vocabulary
 - [x] No snapshot files added or modified.
 - [x] Follow-ups filed (each `discovered-from:bd-v30t`,
       verified via `br dep tree`):
-      * `bd-p4sc` — Body-link draft-mode visibility (priority 3,
-        epic-scoped via parent-child to bd-0tr6).
-      * `bd-fo1r` — Body-link index-forgiveness (priority 3,
-        epic-scoped — could be unified with `bd-jbml` /
-        `bd-bobp` from Phases 3 / 4).
-      * `bd-nb32` — `data-noresolveinput` escape hatch
-        (priority 4, epic-scoped — Q1 parity).
-      * `bd-j3a0` — Diagnostic dedup by (page, href) (priority 3,
-        epic-scoped — UX polish).
-      * `bd-gdrv` — Cross-format URL resolution (priority 4,
-        `related` to epic — out of website-epic scope, multi-
-        format projects are a future epic).
-      * `bd-td2a` — Footer Text-region project-link rewriting
-        (priority 3, epic-scoped — `related` to `bd-jfyl` from
-        Phase 5; replaces it once both are reconciled).
+  * `bd-p4sc` — Body-link draft-mode visibility (priority 3,
+    epic-scoped via parent-child to bd-0tr6).
+  * `bd-fo1r` — Body-link index-forgiveness (priority 3,
+    epic-scoped — could be unified with `bd-jbml` /
+    `bd-bobp` from Phases 3 / 4).
+  * `bd-nb32` — `data-noresolveinput` escape hatch
+    (priority 4, epic-scoped — Q1 parity).
+  * `bd-j3a0` — Diagnostic dedup by (page, href) (priority 3,
+    epic-scoped — UX polish).
+  * `bd-gdrv` — Cross-format URL resolution (priority 4,
+    `related` to epic — out of website-epic scope, multi-
+    format projects are a future epic).
+  * `bd-td2a` — Footer Text-region project-link rewriting
+    (priority 3, epic-scoped — `related` to `bd-jfyl` from
+    Phase 5; replaces it once both are reconciled).
 - [x] Updated the epic plan's "Work items" checklist — Phase 6
       marked done, sub-plan linked, `bd-v30t` referenced;
       follow-up beads logged in the running report section.
@@ -1088,14 +1086,14 @@ None — inline asserts over the emitted HTML cover the vocabulary
    browser today — Phase 9 lights it up.
 3. **Diagnostic source-info.** Deferred. Today the helper still
    produces a plain `DiagnosticMessage::warning(text)` (matches
-   the navigation helpers' shape from Phases 2/3/4). When source
+   the navigation helpers\' shape from Phases 2/3/4). When source
    info is plumbed through, both helpers should switch together
    to keep diagnostic shape consistent across navigation /
    body links. Not blocking Phase 6.
 4. **Per-page output href format.** `DocumentProfile.output_href`
    is forward-slash, project-relative, non-empty for renderable
    docs (verified by reading the profile contract doc and
-   inspecting `DocumentProfileStage`'s output). The resolver's
+   inspecting `DocumentProfileStage`\'s output). The resolver's
    `page_url_for` and the helper both treat it as a string and
    pass it through `pathdiff` / segment-walks — no path
    reinterpretation needed.
@@ -1119,7 +1117,7 @@ None — inline asserts over the emitted HTML cover the vocabulary
 7. **Standalone (no `project_index`) render** is a no-op.
 8. **Diagnostic shape**: `source_label = "Body link"`, message
    matches `<label> references unknown document '<path>'`.
-9. **Inline path-normalization helper** (~30 lines) instead of
+9. **Inline path-normalization helper** (\~30 lines) instead of
    adding a `path-clean` crate dep. Walks forward-slash segments
    to dodge OS-specific path surprises.
 10. **Page-relative output URLs** (Q1 parity); the resolver

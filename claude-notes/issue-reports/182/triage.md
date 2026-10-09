@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/182
 - **Reporter**: @rundel (Colin Rundel), 2026-05-11
 - **Triage date**: 2026-05-12
-- **Worktree**: `.worktrees/issue-182` (branch `issue-182`, based on `main` @ `16a8d67c`)
+- **Worktree**: `.worktrees/issue-182` (branch `issue-182`, based on `main` \@ `16a8d67c`)
 - **Beads issue**: bd-nkx4
 - **Scope**: covers the *whitespace-loss* part of the report (reporter's follow-up comment). Explicitly does **not** attempt to fix the underlying ambiguity of two adjacent Code/RawInline spans with no separator in the AST (cscheid's first reply). That case has no unambiguous qmd surface form and isn't the user's actual complaint.
 
@@ -15,7 +15,7 @@ The reporter's qmd-web sources contain inputs like:
 See `func()` <a href="x">link</a> done.
 ```
 
-with a real space between the closing backtick of the inline code span and the `<` of the bare HTML. After parsing, the AST has `Code` immediately followed by `RawInline` with no intervening `Space`, so the qmd writer emits `` `func()``<a href="x">`{=html}…``` and the result is unparseable. The bug is in the **reader**: the space is being dropped during tree-sitter → AST conversion. The writer is innocent.
+with a real space between the closing backtick of the inline code span and the `<` of the bare HTML. After parsing, the AST has `Code` immediately followed by `RawInline` with no intervening `Space`, so the qmd writer emits `` `func()``\<a href="x">`{=html}…`\`\` and the result is unparseable. The bug is in the **reader**: the space is being dropped during tree-sitter → AST conversion. The writer is innocent.
 
 The fix is small and local: the `"html_element"` branch in `crates/pampa/src/pandoc/treesitter.rs` already handles leading/trailing whitespace correctly for the anchor-shorthand case (it splits the whitespace out into adjacent `Space` inlines). The same handling is missing from the sibling RawInline case in the same `match` arm.
 
@@ -23,8 +23,8 @@ The fix is small and local: the `"html_element"` branch in `crates/pampa/src/pan
 
 Fixtures live at:
 
-- `claude-notes/issue-reports/182/repro-with-space.qmd` — `See \`func()\` <a href="x">link</a> done.\n`
-- `claude-notes/issue-reports/182/repro-no-space.qmd`   — `See \`func()\`<a href="x">link</a> done.\n`
+- `claude-notes/issue-reports/182/repro-with-space.qmd` — ``See `func()` <a href="x">link</a> done.\n``
+- `claude-notes/issue-reports/182/repro-no-space.qmd`   — ``See `func()`<a href="x">link</a> done.\n``
 
 ### Observed (pampa @ `16a8d67c`)
 
@@ -136,7 +136,7 @@ The RawInline branch needs the same leading_ws/trailing_ws → `IntermediateInli
 
 **Q3.** Does fixing this regress the "no separator" ambiguity case (cscheid's original reply)?
 
-*Experiment / reasoning.* The fix only adds `Space` inlines when the *html_element node text* actually contained leading/trailing whitespace in the source. The pathological case (`` `foo``<a> ``: two adjacent inline nodes with no whitespace between them) still emits an AST with no `Space`, which is the correct representation and still has no unambiguous qmd surface form. Reporter agrees the "no space" case is a separate, harder problem and out of scope (issue #182 thread, 2026-05-12).
+*Experiment / reasoning.* The fix only adds `Space` inlines when the *html_element node text* actually contained leading/trailing whitespace in the source. The pathological case (``` `foo``<a> ```: two adjacent inline nodes with no whitespace between them) still emits an AST with no `Space`, which is the correct representation and still has no unambiguous qmd surface form. Reporter agrees the "no space" case is a separate, harder problem and out of scope (issue #182 thread, 2026-05-12).
 
 *Conclusion.* No regression for the "truly adjacent" case. Round-trip there remains a known-impossible problem.
 

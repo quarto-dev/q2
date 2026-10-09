@@ -34,7 +34,7 @@ make the fold a no-op or a type error if implemented as written.
 > … and `tempDir` …; plus the optional `libDir` … and the minimal `projectDir`
 > shim. Note `target` and `resourceDir` are mandatory and were easy to miss …"
 
-The plan enumerates `DependenciesOptions`' required fields but **the
+The plan enumerates `DependenciesOptions`\' required fields but **the
 constructed object never carries `dependencies`** — the array of raw engine
 deps. It is mentioned nowhere in step 4.
 
@@ -173,7 +173,7 @@ real risk is purely the argument-shape gap, not the subprocess shape.
 throwing "not yet implemented" pending Plan 3E (plan lines 1013–1017, 1296–1300).
 This is a clean deferral, not an assembly Plan 3 must tear out: the
 state-machine builder `buildQuartoAPI(state, host)` (lines 994–1006) constructs
-*every* namespace closure uniformly, and `jupyter`'s body is simply a stub
+*every* namespace closure uniformly, and `jupyter`\'s body is simply a stub
 swapped for the real one later — same object identity, same wiring. The Julia +
 jupyter **output slice** (`toMarkdown`, `assets`, `resultIncludes`,
 `resultEngineDependencies`) is precisely the slice the model (Part D.2) confirms
@@ -212,7 +212,7 @@ The Phase-0 seam tests are representative, not Julia-shaped doubles:
   right discriminator (it distinguishes render-first from pandoc-first ordering).
 - **T2** exercises `MappedString.map` with `file_offset ≠ start` (so a no-op
   `.map` fails) + the `source: None` tolerance + the `closest` scan — this is the
-  julia-consumed path (`julia-engine.ts:644`'s `line.map(0, true)`), the most
+  julia-consumed path (`julia-engine.ts:644`\'s `line.map(0, true)`), the most
   load-bearing MappedString use across engines.
 - **T3/T5/T6/T7** drive the **real** dispatch loop over an in-memory duplex with
   test-double engines — concurrency, per-engine serialization, cancel, and

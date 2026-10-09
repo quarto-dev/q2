@@ -8,7 +8,7 @@
 On 2026-05-22 the working machine ran out of disk space mid-session
 and blocked all tool execution (the Claude Code harness couldn't
 write tool output to `/tmp`). Root cause: five idle worktrees under
-`.worktrees/` consuming a cumulative ~220 GB.
+`.worktrees/` consuming a cumulative \~220 GB.
 
 Per-worktree breakdown observed before cleanup:
 
@@ -26,7 +26,7 @@ the disk was being held hostage by completed work that nobody
 swept up.
 
 The dominant component in each worktree is `target/` — Rust build
-artifacts. CLAUDE.md cites ~60 GB per repo for a warm Q2 build;
+artifacts. CLAUDE.md cites \~60 GB per repo for a warm Q2 build;
 five warm worktrees is the disk in this incident.
 
 ## Explicit non-goal: shared `CARGO_TARGET_DIR`

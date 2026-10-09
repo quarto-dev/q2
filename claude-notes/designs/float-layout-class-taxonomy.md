@@ -103,7 +103,7 @@ Mechanism options considered:
 
 - **(A) Transform-side construction with native nodes** *(recommended)*:
   `render_float_ref_target` emits the Q1 shape as `Div(outer) >
-  Figure(attrred) > [Div(content), caption]`, using `Block::Figure`'s existing
+  Figure(attrred) > [Div(content), caption]`, using `Block::Figure`\'s existing
   `attr` for the `<figure>` classes. The one gap: Pandoc's `Caption` carries
   no attr, so the **writers** synthesize the figcaption id/classes from
   metadata the transform leaves on the Figure attr (see below).
@@ -137,7 +137,7 @@ value rather than re-derive it).
 
 Both consumers implement the same small synthesis: the pampa HTML writer
 (`writers/html.rs` Figure arm) and the preview React renderer
-(`preview-renderer/src/q2-preview/blocks/Figure.tsx`). The synthesis is ~30
+(`preview-renderer/src/q2-preview/blocks/Figure.tsx`). The synthesis is \~30
 lines each and locked by parity tests (writer snapshot ↔ React render on the
 same AST).
 

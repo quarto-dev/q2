@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-14
 **Braid:** `bd-add-html-dependency-version-5tnub5ds`
-**Branch:** `main` @ `3ac596e0` (investigated in place; no worktree created)
+**Branch:** `main` \@ `3ac596e0` (investigated in place; no worktree created)
 **Status:** Implemented and verified 2026-08-14 (full `cargo xtask verify`
 green, all 14 steps). All design questions settled (§ Decisions, § Settled
 design). One follow-up remains: tell the connect-docs side to drop its
@@ -31,7 +31,7 @@ reported symptom.
    the eventual design is expected to involve reworking the execution-output
    automerge sidecar into a more portable format, likely `.ipynb`-based — but
    whatever lands **will need multi-version dependency support**, so the field
-   has to mean something now rather than be trained out of users' extensions.
+   has to mean something now rather than be trained out of users\' extensions.
 
    This supersedes the "cosmetic parity" framing in Finding 2 below: the
    requirement is real, it just isn't *Q1's* requirement (see the amendment
@@ -138,7 +138,7 @@ script) is genuinely repeated N times — a minor perf note, not part of this fi
 
 Getting to 1 would require diagnostic dedup at a level above the document. The
 natural seam is `ProjectRenderSummary` at the CLI boundary (referenced in
-`diagnostic_policy.rs`'s module docs), but no such dedup infrastructure exists
+`diagnostic_policy.rs`\'s module docs), but no such dedup infrastructure exists
 today — `grep` for `dedup` in `quarto-core` turns up only artifact-bytes dedup.
 
 ### Finding 2 — Q1's `version` is directory naming, *not* multi-version coexistence
@@ -208,7 +208,7 @@ a `quarto-contrib/` change would not.
 
 Q-11-1 is the **generic** Lua-filter diagnostic code — `diagnostics.rs:379,386`
 stamps it on *every* `quarto.warn()`/`quarto.error()` from *any* filter. So the
-Connect docs' `diagnostics: Q-11-1: level: off` silences every Lua warning in the
+Connect docs\' `diagnostics: Q-11-1: level: off` silences every Lua warning in the
 project, not just this one. That is a real cost of the workaround worth stating
 when we close this out, and an argument for fixing the source rather than
 leaning on suppression.
@@ -324,7 +324,7 @@ below; check them off as they land.
 
 ### Phase 3 — Docs + close-out
 
-- [x] Fix `dependency.rs`'s doc-comment: it attributes `libs/{name}/` to "Quarto
+- [x] Fix `dependency.rs`\'s doc-comment: it attributes `libs/{name}/` to "Quarto
       1's `libs/` convention", true for built-in deps but not Lua-registered ones
       (Finding 3). Document the versioned layout and point at this plan.
 - [x] Document `version` wherever the `quarto.doc` Lua API is described.

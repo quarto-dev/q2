@@ -266,25 +266,25 @@ using their existing render paths.
 ### Phase A — Capture the target
 
 - [x] **A.1** Write a fixture in `crates/quarto-core/tests/crossref_fixtures.rs`
-      that asserts over the **rendered AST** (not HTML string) for a
-      minimal theorem with id only, no class. Expected shape:
-      a Div with `classes` = `["theorem"]`, first child Paragraph
-      begins with `Span(classes=["theorem-title"]) > Strong > Str("Theorem\u{a0}1")`.
-      This test should **fail** against today's code (Div is FloatRefTarget-rendered).
-      *Done: `rendered_theorem_id_only_shape`.*
+  that asserts over the **rendered AST** (not HTML string) for a
+  minimal theorem with id only, no class. Expected shape:
+  a Div with `classes` = `["theorem"]`, first child Paragraph
+  begins with `Span(classes=["theorem-title"]) > Strong > Str("Theorem\u{a0}1")`.
+  This test should **fail** against today's code (Div is FloatRefTarget-rendered).
+  *Done: `rendered_theorem_id_only_shape`.*
 - [x] **A.2** Add a fixture for `::: {#lem-x}` → classes `["theorem", "lemma"]`.
-      *Done: `rendered_lemma_id_only_classes`.*
+  *Done: `rendered_lemma_id_only_classes`.*
 - [x] **A.3** Add a fixture that passes a Div with `## Line` header inside
-      — expect Header to be gone from rendered content, title in the
-      Strong as `Theorem\u{a0}1 (Line)`.
-      *Done: `rendered_theorem_header_lifted_into_title`.*
+  — expect Header to be gone from rendered content, title in the
+  Strong as `Theorem\u{a0}1 (Line)`.
+  *Done: `rendered_theorem_header_lifted_into_title`.*
 - [x] **A.4** Add a fixture for the resolved `@thm-x` link — expect link
-      text `Theorem\u{a0}1` (literal nbsp byte).
-      *Done: `rendered_theorem_ref_link_uses_nbsp`.*
+  text `Theorem\u{a0}1` (literal nbsp byte).
+  *Done: `rendered_theorem_ref_link_uses_nbsp`.*
 - [x] **A.5** Add a fixture for an empty theorem (`::: {#thm-x}` with
-      no content) — expect a leading `Para(Str("\u{a0}"))` prepended
-      before the label paragraph.
-      *Done: `rendered_empty_theorem_placeholder_nbsp`.*
+  no content) — expect a leading `Para(Str("\u{a0}"))` prepended
+  before the label paragraph.
+  *Done: `rendered_empty_theorem_placeholder_nbsp`.*
 
 All five fail against current code, as expected:
 
@@ -297,31 +297,31 @@ All five fail against current code, as expected:
 ### Phase B — Detection by id prefix (D1)
 
 - [x] **B.1** Thread `ref_type_registry` into `TheoremSugarTransform`.
-      Read `ctx.ref_type_registry` in `transform()` and pass a reference
-      down through `transform_blocks` / `transform_block`.
-      *Done: `transform` takes the registry out of the context (like
-      `FloatRefTargetSugarTransform`) and plumbs an
-      `Option<&RefTypeRegistry>` + `&mut Vec<DiagnosticMessage>` through
-      the walker.*
+  Read `ctx.ref_type_registry` in `transform()` and pass a reference
+  down through `transform_blocks` / `transform_block`.
+  *Done: `transform` takes the registry out of the context (like
+  `FloatRefTargetSugarTransform`) and plumbs an
+  `Option<&RefTypeRegistry>` + `&mut Vec<DiagnosticMessage>` through
+  the walker.*
 - [x] **B.2** Add a `match_theorem_id(attr, registry)` helper that
-      returns the matching `(ref_type, kind)` entry from `THEOREM_CLASSES`
-      when the id's first segment matches one of the theorem ref types.
-      *Done. Filters on `THEOREM_CLASSES` so only the built-in theorem
-      flavors trigger this path, even if a user registers a custom
-      category with a colliding prefix.*
+  returns the matching `(ref_type, kind)` entry from `THEOREM_CLASSES`
+  when the id's first segment matches one of the theorem ref types.
+  *Done. Filters on `THEOREM_CLASSES` so only the built-in theorem
+  flavors trigger this path, even if a user registers a custom
+  category with a colliding prefix.*
 - [x] **B.3** In `transform_block`, if `match_theorem_class` fails, try
-      `match_theorem_id`. Keep class-match as the primary because that's
-      the explicit author intent.
-      *Done: `class_match.or(id_match)`. Also added the plan §D1
-      inconsistency diagnostic — emitted when a class-match succeeds
-      but the id prefix classifies to a different registered ref-type.
-      Message: "inconsistent cross-reference specification: `<prefix>`
-      id prefix is incompatible with `<class>` class".*
+  `match_theorem_id`. Keep class-match as the primary because that's
+  the explicit author intent.
+  *Done: `class_match.or(id_match)`. Also added the plan §D1
+  inconsistency diagnostic — emitted when a class-match succeeds
+  but the id prefix classifies to a different registered ref-type.
+  Message: "inconsistent cross-reference specification: `<prefix>`
+  id prefix is incompatible with `<class>` class".*
 - [x] **B.4** Fixture **A.2** now passes (id-only `lem-euclid` gets
-      `[theorem, lemma]` classes). **A.1**, **A.3**, **A.4**, **A.5**
-      still fail — the theorem sugar runs now, but the label shape
-      isn't Q1-ish yet and the resolved-ref link still uses a regular
-      space. Those are Phases C and D.
+  `[theorem, lemma]` classes). **A.1**, **A.3**, **A.4**, **A.5**
+  still fail — the theorem sugar runs now, but the label shape
+  isn't Q1-ish yet and the resolved-ref link still uses a regular
+  space. Those are Phases C and D.
 
 Unit tests added to `transforms/theorem.rs::tests`:
 
@@ -334,26 +334,26 @@ Unit tests added to `transforms/theorem.rs::tests`:
 ### Phase C — Rendering shape (D2, D3)
 
 - [x] **C.1** Rewrite `theorem_label_inlines`:
-      - Wrap the existing Strong in a Span with class `theorem-title`.
-      - Replace the space between kind and number with `\u{a0}`.
-      - Remove the trailing period.
-      *Done. Label is now `Span(theorem-title) > Strong > Str("Kind\u{a0}N"
-      [+ " (Title)"])` followed by a plain-space Str.*
+  - Wrap the existing Strong in a Span with class `theorem-title`.
+  - Replace the space between kind and number with `\u{a0}`.
+  - Remove the trailing period.
+  *Done. Label is now `Span(theorem-title) > Strong > Str("Kind\u{a0}N"
+  [+ " (Title)"])` followed by a plain-space Str.*
 - [x] **C.2** Rewrite `render_theorem` class logic: set classes to
-      `["theorem"]` plus (if `env != "theorem"`) the env name. Do
-      not push the bare `ref_type`. Kept the env mapping in a small
-      `theorem_env_for()` helper (renamed from `theorem_class_name` for
-      clarity — now encodes the Q1 env semantics).
-      *Done.*
+  `["theorem"]` plus (if `env != "theorem"`) the env name. Do
+  not push the bare `ref_type`. Kept the env mapping in a small
+  `theorem_env_for()` helper (renamed from `theorem_class_name` for
+  clarity — now encodes the Q1 env semantics).
+  *Done.*
 - [x] **C.3** Handle the empty / non-Paragraph-first case: if the
-      content is empty or the first block isn't a Paragraph, prepend
-      `Para(Str("\u{a0}"))` before the label is inserted.
-      *Done via the new `ensure_leading_paragraph_nbsp` helper, which is
-      a direct port of Q1's `tprepend(el.content, {pandoc.Para({pandoc.Str
-      '\u{a0}'})})` idiom.*
+  content is empty or the first block isn't a Paragraph, prepend
+  `Para(Str("\u{a0}"))` before the label is inserted.
+  *Done via the new `ensure_leading_paragraph_nbsp` helper, which is
+  a direct port of Q1's `tprepend(el.content, {pandoc.Para({pandoc.Str
+  '\u{a0}'})})` idiom.*
 - [x] **C.4** Run fixtures A.1, A.2, A.3, A.5 — they should now pass.
-      *Done. 934/935 tests pass; the only remaining failure is A.4
-      (Phase D — nbsp in resolved link text).*
+  *Done. 934/935 tests pass; the only remaining failure is A.4
+  (Phase D — nbsp in resolved link text).*
 
 Four existing unit tests in `crossref_render::tests` needed label-shape
 updates. Factored the `Div > Paragraph > Span(theorem-title) > Strong`
@@ -363,72 +363,72 @@ readable.
 ### Phase D — Resolved-ref nbsp (D4)
 
 - [x] **D.1** Change `render_resolved_ref` to emit `{kind}\u{a0}{n}`.
-      *Done.*
+  *Done.*
 - [x] **D.2** Run fixture A.4 — passes.
 - [x] **D.3** Re-run the full `crossref_fixtures.rs` suite. The 3
-      existing assertions that used literal `"Figure 1"` / `"Theorem 1"`
-      / `"Equation 1"` in `crossref_render::tests` were updated to use
-      the nbsp form. `crossref_fixtures.rs` itself didn't have any
-      ref-text string assertions to update (they test the index, not
-      the rendered link text). All 935 tests in quarto-core pass.
+  existing assertions that used literal `"Figure 1"` / `"Theorem 1"`
+  / `"Equation 1"` in `crossref_render::tests` were updated to use
+  the nbsp form. `crossref_fixtures.rs` itself didn't have any
+  ref-text string assertions to update (they test the index, not
+  the rendered link text). All 935 tests in quarto-core pass.
 
 ### Phase E — Wider workspace verification
 
 - [x] **E.1** `cargo nextest run --workspace`. 7426 tests passed, 195
-      skipped, 0 failed. No downstream breakage.
+  skipped, 0 failed. No downstream breakage.
 - [x] **E.2** `cargo xtask verify --skip-rust-tests --skip-hub-tests`
-      (to exercise the WASM build quickly). Passed — the hub-client
-      WASM build and trace-viewer tests both succeeded after the
-      crossref render rewrite.
+  (to exercise the WASM build quickly). Passed — the hub-client
+  WASM build and trace-viewer tests both succeeded after the
+  crossref render rewrite.
 - [x] **E.3** Manual end-to-end: rebuilt `q2` release binary and
-      rendered `~/Desktop/today/theorems.qmd`. Output now matches Q1
-      structurally:
+  rendered `~/Desktop/today/theorems.qmd`. Output now matches Q1
+  structurally:
 
-      ```html
-      <!-- Q1 -->
-      <div id="thm-line" class="theorem">
-      <p><span class="theorem-title"><strong>Theorem&nbsp;1 (Line)</strong></span> The equation…</p>
-      <p><span class="math display">\[ y = mx + b \]</span></p>
-      </div>
-      <p>See <a href="#thm-line" class="quarto-xref">Theorem&nbsp;1</a>.</p>
+  ```html
+  <!-- Q1 -->
+  <div id="thm-line" class="theorem">
+  <p><span class="theorem-title"><strong>Theorem&nbsp;1 (Line)</strong></span> The equation…</p>
+  <p><span class="math display">\[ y = mx + b \]</span></p>
+  </div>
+  <p>See <a href="#thm-line" class="quarto-xref">Theorem&nbsp;1</a>.</p>
 
-      <!-- Q2 (now) -->
-      <div id="thm-line" class="theorem">
-      <p><span class="theorem-title"><strong>Theorem 1 (Line)</strong></span> The equation…</p>
-      <p><span class="math display">\[ y = mx + b \]</span></p>
-      </div>
-      <p>See <a href="#thm-line" class="quarto-xref">Theorem 1</a>.</p>
-      ```
+  <!-- Q2 (now) -->
+  <div id="thm-line" class="theorem">
+  <p><span class="theorem-title"><strong>Theorem 1 (Line)</strong></span> The equation…</p>
+  <p><span class="math display">\[ y = mx + b \]</span></p>
+  </div>
+  <p>See <a href="#thm-line" class="quarto-xref">Theorem 1</a>.</p>
+  ```
 
-      The only residual difference is `&nbsp;` vs a literal U+00A0 byte
-      in the nbsp position. Both render identically in browsers —
-      Pandoc's HTML writer chose the UTF-8 byte form; Q1's Lua
-      serialization emits the entity. Semantically equivalent.
+  The only residual difference is `&nbsp;` vs a literal U+00A0 byte
+  in the nbsp position. Both render identically in browsers —
+  Pandoc's HTML writer chose the UTF-8 byte form; Q1's Lua
+  serialization emits the entity. Semantically equivalent.
 - [x] **E.4** Browser inspection: structural match confirmed via
-      HTML diff (step E.3). Skipped opening a live browser because
-      Q2 has not yet wired up the default Quarto theme CSS, so a
-      visual comparison would reveal many unrelated styling
-      differences not in scope for this plan.
+  HTML diff (step E.3). Skipped opening a live browser because
+  Q2 has not yet wired up the default Quarto theme CSS, so a
+  visual comparison would reveal many unrelated styling
+  differences not in scope for this plan.
 
 ### Phase F — Snapshot pass over theorem-like flavors
 
 - [x] **F.1** Add a compact fixture exercising one example of each
-      theorem flavor (thm, lem, cor, prp, cnj, def, exm, exr). Assert
-      the Div class list matches Q1's mapping for each, plus the label
-      kind.
-      *Done: `rendered_all_theorem_flavors_classes_and_labels`. All 8
-      flavors verified:*
+  theorem flavor (thm, lem, cor, prp, cnj, def, exm, exr). Assert
+  the Div class list matches Q1's mapping for each, plus the label
+  kind.
+  *Done: `rendered_all_theorem_flavors_classes_and_labels`. All 8
+  flavors verified:*
 
-      | ref_type | classes | label |
-      |----------|---------|-------|
-      | thm | `["theorem"]` | `Theorem\u{a0}1` |
-      | lem | `["theorem", "lemma"]` | `Lemma\u{a0}1` |
-      | cor | `["theorem", "corollary"]` | `Corollary\u{a0}1` |
-      | prp | `["theorem", "proposition"]` | `Proposition\u{a0}1` |
-      | cnj | `["theorem", "conjecture"]` | `Conjecture\u{a0}1` |
-      | def | `["theorem", "definition"]` | `Definition\u{a0}1` |
-      | exm | `["theorem", "example"]` | `Example\u{a0}1` |
-      | exr | `["theorem", "exercise"]` | `Exercise\u{a0}1` |
+  | ref_type | classes | label |
+  |----------|---------|-------|
+  | thm | `["theorem"]` | `Theorem\u{a0}1` |
+  | lem | `["theorem", "lemma"]` | `Lemma\u{a0}1` |
+  | cor | `["theorem", "corollary"]` | `Corollary\u{a0}1` |
+  | prp | `["theorem", "proposition"]` | `Proposition\u{a0}1` |
+  | cnj | `["theorem", "conjecture"]` | `Conjecture\u{a0}1` |
+  | def | `["theorem", "definition"]` | `Definition\u{a0}1` |
+  | exm | `["theorem", "example"]` | `Example\u{a0}1` |
+  | exr | `["theorem", "exercise"]` | `Exercise\u{a0}1` |
 
 ---
 
@@ -461,7 +461,7 @@ U+00A0 byte, which browsers render the same).
   (`<span class="proof-title"><em>Proof.</em></span>`) and the Q2
   render is already close but not identical. Separate plan.
 - **Theorem **references** (`@thm-x`)** in non-HTML formats. We're
-  only touching `render_resolved_ref`'s text, which produces Pandoc
+  only touching `render_resolved_ref`\'s text, which produces Pandoc
   AST that all writers consume. LaTeX / Typst still need their own
   back-end renderers per the parent plan §D3; out of scope here.
 - **Snapshot tests of the full `theorems.html`** — too noisy with

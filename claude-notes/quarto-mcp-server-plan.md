@@ -75,7 +75,7 @@ quarto mcp [server-name]
 #### A. Resources (Read-only context)
 
 1. **Project Structure**
-   - `project://config` - Project configuration (_quarto.yml)
+   - `project://config` - Project configuration (\_quarto.yml)
    - `project://metadata` - Project metadata and computed config
    - `project://files` - List of project files with types
    - `project://formats` - Available output formats

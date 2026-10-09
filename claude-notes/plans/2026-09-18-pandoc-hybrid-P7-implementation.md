@@ -92,7 +92,7 @@ it has none and why.
 | Staged resources / rewritten links survive into the docx | **Yes** | P7-foundation T4.3 (`E`) |
 | `--to latex` still refuses cleanly (stub, no variant added) | **Yes** | T4.9 (`E`) |
 | pptx hides echoed source + warnings on slides | **No** — `I` only (T5.2/T5.3); see the `accepted-untested` entry in the Missing-test pass (needs a Python/R toolchain) | — |
-| docx/pptx semantic content matches Q1 | **No** — `I` against committed `G`-captured snapshots (T11.*); the `G` half needs a real Q1 binary and is out of CI by policy | — |
+| docx/pptx semantic content matches Q1 | **No** — `I` against committed `G`-captured snapshots (T11.\*); the `G` half needs a real Q1 binary and is out of CI by policy | — |
 
 Everything not in the "Yes" column is stated in the Missing-test pass with a bound seam or an
 explicit `accepted-untested: <rationale>`.
@@ -144,12 +144,12 @@ unassertable.
 
 ### MAY (and MUST) normalize away
 
-1. **`docProps/core.xml`'s `dcterms:created` / `dcterms:modified`.** **(measured)** these are
+1. **`docProps/core.xml`\'s `dcterms:created` / `dcterms:modified`.** **(measured)** these are
    wall-clock timestamps of the render — including them makes every snapshot fail on every run.
 2. **Attribute order** within an element, and XML namespace-prefix declarations.
 3. **Insignificant inter-element whitespace / indentation** in the XML source — i.e. whitespace
    *between* tags, never whitespace *inside* a `<w:t>`/`<a:t>`/`<m:t>` text node. The distinction
-   is the whole ballgame; `quick-xml`'s `Event::Text` inside a run is text, the `Event::Text`
+   is the whole ballgame; `quick-xml`\'s `Event::Text` inside a run is text, the `Event::Text`
    between `</w:p>` and `<w:p>` is not.
 4. **Run splitting.** Pandoc may split one logical string across several `<w:r>`/`<w:t>` runs for
    styling. Concatenate runs within a paragraph *without inserting a separator*, then compare the
@@ -216,7 +216,7 @@ specs, revert hunks, and vacuity checks.
 ## Task 4: The per-format invocation builder — docx + pptx, the pandoc-defaults allow-list, `FORMAT_PATH_KEYS`, the callout-icon PNGs, and the latex stub
 
 This is this document's Task 4, distinct from
-`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`'s own Task 4 (B3 shared services) —
+`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`\'s own Task 4 (B3 shared services) —
 always disambiguate with the plan name when citing either from a third document.
 
 **Scope.** One task for the whole same-shape forwarding family, per the plan's own grouped
@@ -241,7 +241,7 @@ path-shaped keys, the 5 docx callout-icon params + their PNGs, and latex documen
 - `claude-notes/designs/path-resolution-model.md` — add both to the consumption-site inventory, per
   the repo rule in CLAUDE.md ("Path resolution is a bug *class*"). A deliberate scope-out needs a
   strand linked to `bd-oejuizi9`.
-- `resources/formats/docx/{note,tip,warning,caution,important}.png` (new, in-tree) — vendored from
+- `resources/formats/docx/\{note,tip,warning,caution,important\}.png` (new, in-tree) — vendored from
   `v1.11.3:src/resources/formats/docx/`, 5 files, 749-1257 bytes each. They are **outside P4's
   traced `src/resources/filters/` vendoring closure**, so P7 vendors them separately. Consumed via
   the 5 docx callout-icon filter params (`docxCalloutImage` returns `nil` when unset,
@@ -328,7 +328,7 @@ this plan, and this task supplies them).
 
 ---
 
-## Task 5: Format-specific `execute` defaults — pptx's `echo: false` / `warning: false` and both formats' figure sizes
+## Task 5: Format-specific `execute` defaults — pptx\'s `echo: false` / `warning: false` and both formats\' figure sizes
 
 **Scope.** Apply the per-format `execute` defaults, at the one format-aware seam where the engine's
 own defaults and the document's `execute:` scope meet.
@@ -367,17 +367,17 @@ key on.
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T5.1 | U | the format-defaults lookup | `"docx"` → `{fig-width: 5, fig-height: 4}`; `"pptx"` → `{fig-width: 11, fig-height: 5.5, echo: false, warning: false}`; `"html"` → empty | none | each value in the table |
-| T5.2 | I | `EngineExecutionStage`'s scope assembly (real stage, real `RenderContext`) | Run the stage on a pptx render of a cell-bearing fixture → assert the `ExecutionContext.execute_scope` observed by the engine has `echo == false` and `warning == false` | the **engine** is a replay/markdown engine (no Python/R); the unit under test is the *scope assembly*, never the engine | the merge at `engine_execution.rs:481` |
+| T5.2 | I | `EngineExecutionStage`\'s scope assembly (real stage, real `RenderContext`) | Run the stage on a pptx render of a cell-bearing fixture → assert the `ExecutionContext.execute_scope` observed by the engine has `echo == false` and `warning == false` | the **engine** is a replay/markdown engine (no Python/R); the unit under test is the *scope assembly*, never the engine | the merge at `engine_execution.rs:481` |
 | T5.3 | I | same | Same fixture with front matter `execute: {echo: true}` → assert the observed scope has `echo == true` | as above | the merge **order** (format under document) |
 | T5.4 | I | same | An **html** render of the same fixture → assert the observed scope has no `echo` override and knitr's `ExecuteConfig::with_defaults()` still yields `fig_width == 7.0` | as above | the `is html → empty defaults` arm |
-| T5.5 | U | `ExecuteConfig::overlay_document_scope` (existing) | Overlay `{fig-width: 5}` on `with_defaults()` → `fig_width == Some(5.0)`, and every other field unchanged from `with_defaults()` | none | `overlay_document_scope`'s `fig-width` arm at `format.rs:324-326` |
+| T5.5 | U | `ExecuteConfig::overlay_document_scope` (existing) | Overlay `{fig-width: 5}` on `with_defaults()` → `fig_width == Some(5.0)`, and every other field unchanged from `with_defaults()` | none | `overlay_document_scope`\'s `fig-width` arm at `format.rs:324-326` |
 
 **Revert hunks, stated exactly:**
 - T5.1 — Revert ⟨`echo: false` in the pptx row⟩ → ⟨`assert_eq!(pptx["echo"], false)`⟩ RED.
 - T5.2 — Revert ⟨the format-defaults merge at `engine_execution.rs:481`, restoring the bare `ast.meta.get("execute").cloned()`⟩ → ⟨`assert_eq!(observed_echo, Some(false))` in `test_pptx_execute_defaults_reach_engine`⟩ RED.
 - T5.3 — Revert ⟨the merge order, putting format defaults **over** the document scope⟩ → ⟨`assert_eq!(observed_echo, Some(true))` in `test_document_execute_wins_over_format_default`⟩ RED. **This is the row that fails if someone "fixes" the merge by making the format authoritative.**
 - T5.4 — Revert ⟨apply the pptx defaults unconditionally rather than per-format⟩ → ⟨`assert!(observed_scope.get("echo").is_none())` in `test_html_execute_defaults_unchanged`⟩ RED.
-- T5.5 — Revert ⟨`overlay_document_scope`'s `fig-width` arm⟩ → ⟨`assert_eq!(cfg.fig_width, Some(5.0))`⟩ RED.
+- T5.5 — Revert ⟨`overlay_document_scope`\'s `fig-width` arm⟩ → ⟨`assert_eq!(cfg.fig_width, Some(5.0))`⟩ RED.
 
 ### Refactor-induced vacuity check
 
@@ -574,9 +574,9 @@ nothing else in P7 blocks it.
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T9.1 | U | `extract_docx`'s text-node handling | Extract a committed fixture docx built from `Figure\u{a0}1` → `assert_eq!(p.as_bytes(), b"Figure\xc2\xa01 is here.")` | none | any whitespace normalization applied to run text |
+| T9.1 | U | `extract_docx`\'s text-node handling | Extract a committed fixture docx built from `Figure\u{a0}1` → `assert_eq!(p.as_bytes(), b"Figure\xc2\xa01 is here.")` | none | any whitespace normalization applied to run text |
 | T9.2 | U | same, run concatenation | A docx whose logical string is split across three `<w:r>`/`<w:t>` runs → assert the paragraph string has no inserted separator | none | the run-join (a `join(" ")` reddens this) |
-| T9.3 | U | the core-props handling | Extract → assert the output contains `dc:title`'s value and does **not** contain `dcterms:created` or any `T..:..:..Z` timestamp | none | the core-props field allow-list |
+| T9.3 | U | the core-props handling | Extract → assert the output contains `dc:title`\'s value and does **not** contain `dcterms:created` or any `T..:..:..Z` timestamp | none | the core-props field allow-list |
 | T9.4 | U | the media inventory | Two fixture docx files, identical but one with the image resolved and one without → assert the extractions differ, and that the one with the image lists exactly one `word/media/` entry and one `image`-typed relationship | none | the `Type.ends_with("/image")` filter on relationships |
 | T9.5 | U | the `m:oMath` handling | Two fixture docx files: `Equation\u{a0}1` inside `<m:oMath>` vs. no number → assert the extractions differ | none | the `<m:oMath>` flattened-text collection |
 | T9.6 | U | `<w:pStyle>` capture | Extract a title/author/date/body docx → assert the style sequence is exactly `["Title", "Author", "Date", "FirstParagraph"]` | none | the `w:pStyle` read |
@@ -640,7 +640,7 @@ fixtures to docx and pptx, run Task 9's extractor, write `.snap` files under an 
   `crates/xtask/Cargo.toml` gains `quarto-ooxml-extract` and `insta` (workspace, `Cargo.toml:44`,
   `insta = "1.46.3"`).
 - `crates/quarto-core/tests/fixtures/pandoc-goldens/` (new) — the **copied** fixtures. Per the
-  **External Sources Policy**, fixtures are copied in once (mirroring `resources/scss/`'s
+  **External Sources Policy**, fixtures are copied in once (mirroring `resources/scss/`\'s
   "copy in, track locally" pattern) and never read from `~/src/quarto-cli` or `external-sources/`
   at test time. Copy the fixture's **resources too** — `all-docx.qmd` references
   `img/thinker.jpg`, which exists at `v1.11.3:tests/docs/crossrefs/img/thinker.jpg`; copying the
@@ -702,7 +702,7 @@ first-capture diff is diagnosable. A real Q1 `quarto` at the pinned release for 
 | T10.4 | U | the fixture manifest | Assert every manifest entry's `.qmd` **and its declared resources** exist under `tests/fixtures/pandoc-goldens/`, and that the manifest has exactly 10 entries | none | the manifest, and the copied files |
 | T10.5 | **G** | the real pinned `quarto` + Task 9's extractor | Run the full capture → 20 `.snap` files written; a second run produces an empty `git diff` | **nothing mocked** — this is the point | any change in the capture path |
 | T10.6 | X | `xtask::lint::external_sources_in_macro` | `cargo xtask lint` green | none | any `include_str!`/`include_bytes!` pointed at `external-sources/` or `~/src/quarto-cli` |
-| T10.7 | U | the xtask subcommand registration | Assert `capture-pandoc-goldens` is **absent** from `verify.rs`'s step list and from `build_all.rs` | none | any addition of it to `verify` |
+| T10.7 | U | the xtask subcommand registration | Assert `capture-pandoc-goldens` is **absent** from `verify.rs`\'s step list and from `build_all.rs` | none | any addition of it to `verify` |
 
 **Revert hunks, stated exactly:**
 - T10.1 — Revert ⟨the missing-binary `bail!` into `return Ok(())`⟩ → ⟨`assert!(result.is_err())` in `test_capture_fails_without_quarto`⟩ RED. **This is the "a skip must itself be visible" row.**
@@ -870,14 +870,14 @@ strand.** The task must still run the grep against the actual copied set and rec
 4. If it does **not** fire: a strand filed (type `task`, linked `discovered-from` the epic) naming
    both gap sites, and its id recorded in the README section.
 
-**Prerequisite.** **Task 10**'s fixture set must exist (the condition is evaluated *against* it).
+**Prerequisite.** **Task 10**\'s fixture set must exist (the condition is evaluated *against* it).
 Run before Task 10's capture, so a firing condition is fixed before snapshots are taken.
 
 ### Test Seam Spec
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T12.1 | U | `THEOREM_CLASSES` + `BUILTINS` | Assert the current tables' exact contents (8 and 21 entries, listed) — a pin, so the gap's closure or widening is visible | none | any entry added to or removed from either table |
+| T12.1 | U | `THEOREM_CLASSES` + `BUILTINS` | Assert the current tables\' exact contents (8 and 21 entries, listed) — a pin, so the gap's closure or widening is visible | none | any entry added to or removed from either table |
 | T12.2 | U | the fixture set + the evaluation predicate | Walk every `.qmd` under `tests/fixtures/pandoc-goldens/` → assert **none** contains `#alg-`, `@alg-`, or `@Alg-`; the test's doc comment names the strand and says what to do if it reddens | none | *(the fixture set — this reddens when someone adds an `alg` fixture, which is the intent)* |
 | T12.3 | U | `TheoremSugarTransform` | `seam deferred until the condition fires` — if `alg` is added, assert `::: {#alg-gcd}` becomes `CustomNode("Theorem")` with `kind == "Algorithm"` | none | the `("algorithm", "alg", "Algorithm")` row in `THEOREM_CLASSES` |
 | T12.4 | U | `RefTypeRegistry::builtin` | `seam deferred until the condition fires` — assert `registry.kind_for("alg") == Some("Algorithm")` | none | the `("alg", "Algorithm")` row in `BUILTINS` |
@@ -921,7 +921,7 @@ needs a labeled golden, a bound seam, or an `accepted-untested` verdict.
 | 5 | **No project-mode rendering** | **Bound in P7-foundation** — its Task 2 in full (T2.1-T2.6), with T2.2/T2.5 as the "path was actually exercised" rows. |
 | 6 | **One format per invocation, now with a warning** | **Bound in P7-foundation** — its Task 1 (T1.1-T1.3, `U`) + Task 3's T3.4 (`E`, the conjunction). |
 | 7 | **`Post`-position user Lua filters can't see custom-node content** (`bd-o90yz5mg`) | **Bound in P7-foundation** — its Task 3's T3.8 (`I`): for a `Pandoc("docx")` render, assert `UserFiltersStage::post()` observes an AST that still contains `CustomNode` wrappers, and that the **`Pre`** position observes none (`pre()` runs before any sugar transform). Revert ⟨reorder `UserFiltersStage::post()` after the wire-format cut⟩ → ⟨the `Pre`-sees-no-CustomNode assertion⟩ RED. This pins the *documented* shape so a future reorder is a reviewed change, not a surprise. |
-| 8 | **An explicit `crossref:` override is honored on Pandoc and silently ignored on HTML** (`bd-wqdi1pd2`) | `accepted-untested: verified zero Q2 readers of `crossref.title-delim`/`fig-prefix`/`ref-hyperlink` anywhere in `crates/` — only `crossref_render.rs:29`'s own comment admits the gap (`crossref_render.rs:26-31` hard-codes `"<Kind> <N>: "`). A test asserting the asymmetry would pin a *bug* the epic explicitly declines to fix, and would redden the day `bd-wqdi1pd2` lands. The `crossref:`-presentation fixtures are excluded from the golden set for the same reason.` |
+| 8 | **An explicit `crossref:` override is honored on Pandoc and silently ignored on HTML** (`bd-wqdi1pd2`) | `accepted-untested: verified zero Q2 readers of `crossref.title-delim`/`fig-prefix`/`ref-hyperlink` anywhere in `crates/` — only `crossref_render.rs:29`\'s own comment admits the gap (`crossref_render.rs:26-31` hard-codes `"\<Kind> \<N>: "`). A test asserting the asymmetry would pin a *bug* the epic explicitly declines to fix, and would redden the day `bd-wqdi1pd2` lands. The `crossref:`-presentation fixtures are excluded from the golden set for the same reason.` |
 | 9 | **A callout whose crossref category Q2 knows and Q1 doesn't renders unnumbered, with a dangling ref** | `accepted-untested in P7: the `fail()`-fallback, its `by_ref_type` guard and its warning are **P5 companion Task 6**'s hunk and tests (design §12's last bullet, P6 Finding 2). P7's fixture 3 (`tests/docs/crossrefs/callouts.qmd`) exercises only Q1-known categories, so no P7 golden encodes the fallback. If P5 Task 6's tests are ever dropped, nothing in P7 catches it — recorded so that is a known, not a discovered, gap.` |
 
 ### Other load-bearing branches
@@ -930,14 +930,14 @@ needs a labeled golden, a bound seam, or an `accepted-untested` verdict.
 |---|---|
 | **The `algorithm`/`THEOREM_CLASSES` condition** | **Bound** — Task 12 in full, with T12.2 as the expiry mechanism and a committed README artifact (not a memory). |
 | **`--reference-doc` — file missing** | **Bound** — T4.7 (`E`), asserting the Q2-side span-bearing diagnostic, which fires *before* pandoc. **(measured)** without it pandoc 3.8.1 exits 99 with the bare line `File X not found in resource path`. |
-| **`--reference-doc` — file present but malformed** | `accepted-untested: outside `MarkPolicy::ExistenceDiagnose`'s reach (existence, not content), and P7's plan does not name a content check. **(measured)** pandoc 3.8.1 exits **1** with a GHC `CallStack` backtrace (`Data.Binary.Get.runGet at position 4: Did not find end of central directory signature`), which P4 Task 10's verbatim nonzero-exit passthrough would print to the user as-is. A content-validity check (e.g. a `PK\x03\x04` pre-flight on `reference-doc`) would be new functionality nobody has scoped — see Open questions.` |
+| **`--reference-doc` — file present but malformed** | `accepted-untested: outside `MarkPolicy::ExistenceDiagnose`\'s reach (existence, not content), and P7's plan does not name a content check. **(measured)** pandoc 3.8.1 exits **1** with a GHC `CallStack` backtrace (`Data.Binary.Get.runGet at position 4: Did not find end of central directory signature`), which P4 Task 10's verbatim nonzero-exit passthrough would print to the user as-is. A content-validity check (e.g. a `PK\x03\x04` pre-flight on `reference-doc`) would be new functionality nobody has scoped — see Open questions.` |
 | **`pandoc` absent, at the CLI level** | **Bound, by reference.** P4 Task 7 owns the check and its `Q-18-*` code. **P7-foundation's Task 3 adds T3.9 (`E`)**: run `q2 render f.qmd --to docx` with a `PATH` containing no `pandoc` → non-zero exit, stderr contains the `Q-18-*` code and the word `pandoc`, and **no** partial `.docx` is left on disk. Revert ⟨P4's pre-flight check, letting the `Command::new("pandoc")` spawn fail⟩ → ⟨`assert!(stderr.contains("Q-18-"))` and `assert!(!out.join("f.docx").exists())`⟩ RED. This is the row that answers "does the CLI surface it *well*", which P4's own tier cannot: P4's `L`-tier tests *require* pandoc. |
 | **`pandoc` present but below the floor** | `accepted-untested: P4 Task 7 owns the version comparison and its gate, with its own tests. An `E` row would need a stub `pandoc` on `PATH` reporting a low version, which is a second copy of P4's harness; the CLI-surfacing shape is already covered by P7-foundation's T3.9 code-and-message assertion, which shares the diagnostic path.` |
 | **Binary output — the contract beyond "a file exists"** | **Bound, three ways, because "a file exists" is exactly the failure mode.** (a) P7-foundation's T3.1/T3.2 assert the zip magic `PK\x03\x04` and a required internal entry (`word/document.xml` / `ppt/slides/slide1.xml`) — this is what rules out HTML-in-a-`.docx`. (b) **P7-foundation's T3.10 (`E`)**: assert the output file's length is **> 0** and that `Content-Type`-shaped sniffing does not match text — concretely, `assert_ne!(&bytes[..2], b"<!")` and `assert!(bytes.len() > 1000)`, guarding the zero-byte and HTML-written-to-a-binary-path cases. Revert ⟨P4's `content: String::new()` decision into "write `RenderedOutput.content` to the output path"⟩ → ⟨T3.10's length assertion reddens with a 0-byte file⟩ RED. (c) **T9.9 (this document's Task 9)** makes the extractor reject a non-OOXML input with `Err`, so a corrupt output cannot pass Task 11 as an empty extraction. |
 | **The HTML-leg nested-`<p>` symptom** | `accepted-untested: HTML-only, with no docx/pptx surface; the docx-relevant half (the `MetaBlocks`→`MetaInlines` coercion) **is** bound, at T6.2/T6.5. Flagged, not fixed, per Task 8; needs a strand if one does not already exist.` |
 | **The `latex` stub** | **Bound negatively** — T4.9 asserts `--to latex` still refuses. See Task 4's vacuity check for what it deliberately does not assert. |
 | **The `G` tier's own skip** | **Bound** — T10.1/T10.2 make a missing or wrong-version `quarto` a loud failure, never a skip; T10.7 keeps the capture out of `verify`/CI. |
-| **`cargo nextest run --workspace` + `cargo xtask verify`** | **Bound as a task-exit gate, not a test.** Per the user-level instruction, each task gates on `cargo clippy -p <crate> --all-targets -- -D warnings` + `cargo nextest run -p <crate>`; the **workspace** run happens once per phase boundary and before any push, reported as a delta against the live baseline. `RenderContext` gains a field in **P1 Task 1**, so P7's phase-boundary verify must be **full** `cargo xtask verify` (not `--skip-hub-build`) — `quarto-core` is in `wasm-quarto-hub-client`'s closure. |
+| **`cargo nextest run --workspace` + `cargo xtask verify`** | **Bound as a task-exit gate, not a test.** Per the user-level instruction, each task gates on `cargo clippy -p <crate> --all-targets -- -D warnings` + `cargo nextest run -p <crate>`; the **workspace** run happens once per phase boundary and before any push, reported as a delta against the live baseline. `RenderContext` gains a field in **P1 Task 1**, so P7's phase-boundary verify must be **full** `cargo xtask verify` (not `--skip-hub-build`) — `quarto-core` is in `wasm-quarto-hub-client`\'s closure. |
 
 ---
 

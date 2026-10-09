@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-21
 **Braid:** bd-ersobfbt
-**Branch:** `main` @ `587721bb` (investigated in the main checkout; no worktree created)
-**Status:** Implementation in progress on topic branch `braid/bd-ersobfbt-headroom-fixed-top` (off `main` @ `587721bb`; investigation commits included). Started 2026-08-24.
+**Branch:** `main` \@ `587721bb` (investigated in the main checkout; no worktree created)
+**Status:** Implementation in progress on topic branch `braid/bd-ersobfbt-headroom-fixed-top` (off `main` \@ `587721bb`; investigation commits included). Started 2026-08-24.
 
 Reference material collected during the investigation:
 `claude-notes/plans/headroom-fixed-top-investigation/q1-headroom-reference.md`
@@ -80,11 +80,11 @@ Q1's behaviour is two cooperating layers (full quotes in the reference doc):
    direction, `tolerance: 5`. Pure class toggling; the visual is
    `quarto-nav.scss:100-114` (`transform: translateY(-100%)` with a 200 ms
    transition).
-2. **`quarto-nav.js`'s `updateDocumentOffset`** — because the header is
+2. **`quarto-nav.js`\'s `updateDocumentOffset`** — because the header is
    `position: fixed`, *something* has to push the page down by the header's
    measured height. Q1 does this in JS, on load and on every pin/unpin and
    on a `ResizeObserver` of the header: sets `body.style.paddingTop`,
-   every `.sidebar` / `.headroom-target`'s `style.top` + `maxHeight`
+   every `.sidebar` / `.headroom-target`\'s `style.top` + `maxHeight`
    (0 / 100vh when unpinned, headerHeight / `calc(100vh - h)` when pinned),
    `.quarto-container` `minHeight`, and a `section:target::before` spacer
    in a dynamic `<style id="quarto-target-style">` for anchor-jump
@@ -175,7 +175,7 @@ hashchange + ResizeObserver); SCSS ports `navbar-default-offset`,
 - − inherits Q1's known wart: the theme offset table is a guess, so custom
   themes / tall logos / banners get a load-time content jump; Q1 papers over
   it with `.notransition`.
-- − ~170 lines of imperative DOM JS that writes inline `style.top` on every
+- − \~170 lines of imperative DOM JS that writes inline `style.top` on every
   sidebar — a second writer for properties the SCSS also sets, and a
   `quarto-hrChanged` event with no q2 consumer yet.
 
@@ -183,11 +183,11 @@ hashchange + ResizeObserver); SCSS ports `navbar-default-offset`,
 
 Keep `#quarto-header` in normal flow but `position: sticky; top: 0` (no
 body padding, no flash, no per-theme table), still `class="headroom"` so
-headroom.js's `translateY(-100%)` works identically. A ~30-line script sets
+headroom.js's `translateY(-100%)` works identically. A \~30-line script sets
 `--quarto-header-height` on `:root` from a `ResizeObserver` and the SCSS
 consumes it: `.sidebar { top: var(--quarto-header-height, 0) }`,
 `section:target { scroll-margin-top: var(--quarto-header-height) }`
-(replaces the dynamic `<style>` spacer), and `header.headroom--unpinned ~ *
+(replaces the dynamic `<style>` spacer), and `header.headroom--unpinned \~ *
 .sidebar { top: 0 }` for the unpinned case.
 
 - \+ no layout JS on the critical path; no theme lookup table; no
@@ -248,7 +248,7 @@ This is question 1 below.
 - [x] Vendor `resources/js/headroom/headroom.min.js` (v0.12.0, from
       `old-docs/_site/site_libs/quarto-nav/`; version-contract note in
       `resources/js/README.md`).
-- [x] Write `resources/js/quarto-nav/quarto-nav.js` — ~60-line port of Q1's
+- [x] Write `resources/js/quarto-nav/quarto-nav.js` — \~60-line port of Q1's
       header machinery (headerOffset, updateDocumentOffset, Headroom init +
       `quartoToggleHeadroom`, hashchange compensation, ResizeObserver, 250ms
       initial measure). Documented deviations: no `.headroom-target`
@@ -438,7 +438,7 @@ Decision 1's context: B starts soon after (maybe before) this merges, so A
 must be cheap to unwind. Concretely:
 
 - **One JS file.** The entire offset machinery lives in the single vendored
-  `resources/js/quarto-nav/quarto-nav.js` (~60-line port, not the 325-line
+  `resources/js/quarto-nav/quarto-nav.js` (\~60-line port, not the 325-line
   Q1 file). B deletes/replaces one file; `headroom.min.js` survives B
   unchanged (the scroll-away classes work on sticky too).
 - **One compose point for body classes.** The accumulating class list
@@ -453,7 +453,7 @@ must be cheap to unwind. Concretely:
   `nav-fixed` / body padding live together (one module per surface) and are
   named so B's author can find and flip them wholesale, the way this strand
   flips bd-26bf3j1y's absence pins.
-- **The stage/predicate survives B.** `HeadroomJsStage`'s predicate
+- **The stage/predicate survives B.** `HeadroomJsStage`\'s predicate
   (website + navbar/sidebar, `pinned:` opt-out) is mechanism-independent;
   B only changes *which* files it ships.
 
@@ -484,9 +484,9 @@ must be cheap to unwind. Concretely:
   is the `ProjectKind::Website`-gated precedent that stores artifacts the
   same way).
 - **Verbatim `quarto-nav.js` imports dead Q1 code.** Of its 325 lines only
-  ~130 are header/offset related; the rest (sidebar rollup, announcement
+  \~130 are header/offset related; the rest (sidebar rollup, announcement
   bar, `quarto-hrChanged` consumers) target selectors q2 never emits. A
-  ~60-line port (`headerOffset` / `updateDocumentOffset` / Headroom init /
+  \~60-line port (`headerOffset` / `updateDocumentOffset` / Headroom init /
   `ResizeObserver` / `hashchange`) plus vendored `headroom.min.js` is the
   honest minimum; `resources/js/README.md` wants a version-contract note
   per file either way.

@@ -19,7 +19,7 @@ cargo run --release --bin qmd-syntax-helper -- check --rule div-whitespace 'exte
 |--------|--------------------|--------------------|-------------|
 | **User Time** | 11.66s | 4.85s | **-6.81s (58.4% faster)** |
 | **Wall Time** | 12.53s | 5.30s | **-7.23s (57.7% faster)** |
-| **Per File** | ~23ms | ~9.5ms | **-13.5ms (58.7% faster)** |
+| **Per File** | \~23ms | \~9.5ms | **-13.5ms (58.7% faster)** |
 
 ### Speedup Analysis
 
@@ -64,12 +64,12 @@ params.get("version").unwrap().parse::<usize>().unwrap()
 ```
 
 **Cost per call:**
-- 1 HashMap allocation (~96 bytes)
-- 6 String allocations for keys (~192 bytes)
-- 6 String allocations for values (~192 bytes)
-- HashMap bucket allocations (~128 bytes)
+- 1 HashMap allocation (\~96 bytes)
+- 6 String allocations for keys (\~192 bytes)
+- 6 String allocations for values (\~192 bytes)
+- HashMap bucket allocations (\~128 bytes)
 - Hash computations (6× insert + N× lookup)
-- **Total: ~608 bytes heap + hash overhead**
+- **Total: \~608 bytes heap + hash overhead**
 
 ### After
 ```rust
@@ -102,21 +102,21 @@ version.expect("Missing 'version'")
 
 **Cost per call:**
 - 6 Option variables (48 bytes stack)
-- 0-1 String allocation for sym when used (~32 bytes heap, conditional)
+- 0-1 String allocation for sym when used (\~32 bytes heap, conditional)
 - Simple string comparisons (compiler-optimized match)
 - **Total: 48 bytes stack + 0-32 bytes heap**
 
 ## Memory Savings
 
 **Per log call:**
-- Before: ~608 bytes heap
-- After: ~48 bytes stack + 0-32 bytes heap
+- Before: \~608 bytes heap
+- After: \~48 bytes stack + 0-32 bytes heap
 - **Savings: 560-576 bytes (92-95% reduction)**
 
-**For entire benchmark run** (estimated ~10,000 log calls):
-- Before: ~6 MB allocated and immediately freed
-- After: ~0.5 MB (mostly stack reuse)
-- **Savings: ~5.5 MB transient allocations eliminated**
+**For entire benchmark run** (estimated \~10,000 log calls):
+- Before: \~6 MB allocated and immediately freed
+- After: \~0.5 MB (mostly stack reuse)
+- **Savings: \~5.5 MB transient allocations eliminated**
 
 ## Impact on Other Tools
 
@@ -129,7 +129,7 @@ This optimization affects ANY tool that uses `quarto-markdown-pandoc` for parsin
 
 1. **Profiling can underestimate allocation overhead**
    - We predicted 10-15% based on HashMap::insert samples (8.2%)
-   - Actual improvement was 58.4% - allocation overhead was ~50% of total time!
+   - Actual improvement was 58.4% - allocation overhead was \~50% of total time!
    - Allocator locks, cache misses, and memory bandwidth aren't visible in function profiles
 
 2. **Premature generalization is expensive**
@@ -143,7 +143,7 @@ This optimization affects ANY tool that uses `quarto-markdown-pandoc` for parsin
    - Heap allocation involves allocator overhead, cache misses, eventual deallocation
 
 4. **Small allocations add up quickly**
-   - Each log call seemed cheap (~608 bytes)
+   - Each log call seemed cheap (\~608 bytes)
    - But with 10,000+ calls, that's 6+ MB of churn
    - Memory allocator becomes a bottleneck
 

@@ -79,7 +79,7 @@ once-computed offset stays correct under scroll with **no recompute and no lag**
 > `BreadcrumbChip.tsx:34` using `surface.offsetParent` as `host` (a *different* element from the chip's
 > real containing block). The fix: give `#quarto-content` `position: relative` (becomes the chip's
 > offset-parent) and look it up **directly** (`document.getElementById('quarto-content')`), not via
-> `surface.offsetParent`. Both then share `#root`'s scroll → once-computed offset is scroll-stable.
+> `surface.offsetParent`. Both then share `#root`\'s scroll → once-computed offset is scroll-stable.
 >
 > **Stacking-context caveat.** Making `#quarto-content` positioned creates a **stacking context**.
 > Audit its z-indexed children (sidebar, TOC, page-nav, any overlay rendered inside `#quarto-content`)
@@ -93,7 +93,7 @@ content" — *not* CSS `position: fixed`.)
 
 > **No top clamp.** `top` is left un-clamped even at the document top. The page's top margin (page
 > padding + title block above the first editable block) keeps `surfaceTop > chipH`, so `top` stays
-> positive — the chip never paints above `#quarto-content`'s top edge. (Assumption, per the user:
+> positive — the chip never paints above `#quarto-content`\'s top edge. (Assumption, per the user:
 > a document whose very first block is the active surface *and* has near-zero top margin is the only
 > edge case that could push `top` negative; accepted as out of scope.) The old e2e assertion
 > `chipBox.y ≥ 0` becomes a natural consequence, not an explicit CSS clamp.
@@ -132,13 +132,13 @@ the page text-column margin. **Surface-left is the pivot.**
   spills, abutting the surface.)
 - **◀ (out)** sits furthest left of all crumbs (protruding into the margin / toward the page edge).
 - **Hard stop at the page edge**, then **compress**: shrink per-crumb width to a min legible glyph,
-  then collapse middle crumbs to an ellipsis `…`. (Needs more than ~2 zero-indent crumbs to trigger.)
+  then collapse middle crumbs to an ellipsis `…`. (Needs more than \~2 zero-indent crumbs to trigger.)
 - **Right of the pivot** is reserved (empty) for future-crumbs — scaffolding only (see §Forward-crumb
   scaffolding).
 
 **Per-crumb width — how to size to the indent.** Walk the active surface element's **DOM ancestors**
 that carry `[data-block-pool-id]` (the rendered `blockquote`/`ul`/`ol`/`dl`/`div`/`figure` wrappers) and read
-each `getBoundingClientRect().left`; crumb *i*'s band is `[ancestor_i.left, ancestor_{i+1}.left]`
+each `getBoundingClientRect().left`; crumb *i*\'s band is `[ancestor_i.left, ancestor_{i+1}.left]`
 (innermost band ends at the surface left). A **zero/near-zero band ⇒ min-width ⇒ spill left** falls
 out automatically. **Fallback** (a source ancestor with no matching DOM element): approximate by
 container type (list/ordered ≈ list indent, blockquote ≈ quote indent, div ≈ glyph width). All of
@@ -400,7 +400,7 @@ code surfaced four:
 ## Phase 1 — Label/category model (`nestingNav.ts`)
 
 - [x] **1a.** Add `type CrumbCategory = 'container' | 'list' | 'quote' | 'leaf-text' | 'embed'`.
-- [x] **1b.** Add `abbrevForSourceNode(node): string` — pure, mirrors `labelForSourceNode`'s
+- [x] **1b.** Add `abbrevForSourceNode(node): string` — pure, mirrors `labelForSourceNode`\'s
   defensive style; Header level from `c[0]`; **no `§`/section special-case**; first-2-chars fallback.
 - [x] **1c.** Add `categoryForSourceNode(node): CrumbCategory` per the palette table. **Specify the
   default branch:** types not in the palette (e.g. `RawBlock` → `Ra`, `LineBlock` → `Li`, or any future
@@ -417,7 +417,7 @@ code surfaced four:
   `.q2-breadcrumb-chip`, `.q2-crumb`, `.q2-crumb-current`, `.q2-breadcrumb-out/in`, the five category
   color classes (`.q2-crumb-cat-container` etc.), and **`.q2-crumb-future`** (reduced opacity — the
   forward-crumb scaffolding). Direction-B styling: colored glyph text, ghost arrows (no
-  border/background, faint hover bg), ~12px text, current = bold + underline, non-current `:hover`
+  border/background, faint hover bg), \~12px text, current = bold + underline, non-current `:hover`
   underline. **Separators (`›`) are dropped** — spatial position conveys order in the gutter layout.
   **Background treatment (decided):** drop the barrel box. Paint a **faint scrim band behind the
   breadcrumb area** — a subtle translucent backing under the crumb row's occupied region; it does
@@ -462,11 +462,11 @@ code surfaced four:
   which is why we measure rather than assume.)
 - [x] **3c.** **Margin-spill + edge clamp.** Zero/near-zero bands get a min-width and spill left of
   `colLeft` into the outer page margin; `◀` furthest left; **clamp the leftmost crumb at
-  `#quarto-content`'s left edge (x ≈ 0)** — the "page edge" hard stop. This is the rule for "use only
+  `#quarto-content`\'s left edge (x ≈ 0)** — the "page edge" hard stop. This is the rule for "use only
   the left margin we have available": confine the divs + `◀` to `[0, colLeft]`. **Overlapping a left
   sidebar that occupies that band is acceptable** (the chip is `position:absolute` + high z-index, so
   it paints over the sidebar — it does NOT scroll). **Going past x ≈ 0 is NOT acceptable** (it leaves
-  `#root`'s content box → horizontal scrollbar). When the divs + `◀` don't fit `[0, colLeft]`,
+  `#root`\'s content box → horizontal scrollbar). When the divs + `◀` don't fit `[0, colLeft]`,
   compress: min glyph width → ellipsize middle crumbs.
 - [x] **3d.** Confirm it never reflows (already `position:absolute`) and that the chip can paint into
   the outer margin (no clipping — see Phase 4 overflow check).
@@ -478,9 +478,9 @@ code surfaced four:
   `overflow-x: hidden/clip`** (default `visible`). The safe path: `#quarto-content` spans the **full
   screen width** (`grid-column: screen-start/screen-end`), so the outer page margin is a grid column
   *inside* `#quarto-content` — the chip can paint there at a **positive `left`** within
-  `#quarto-content`'s box, **not** a negative one. The edge clamp (3c) is therefore load-bearing:
-  it must keep the leftmost crumb **≥ `#quarto-content`'s left edge (≈ screen x 0)** so nothing
-  spills past `#root`'s content box and triggers a horizontal scrollbar / clip. **Verify in-browser:**
+  `#quarto-content`\'s box, **not** a negative one. The edge clamp (3c) is therefore load-bearing:
+  it must keep the leftmost crumb **≥ `#quarto-content`\'s left edge (≈ screen x 0)** so nothing
+  spills past `#root`\'s content box and triggers a horizontal scrollbar / clip. **Verify in-browser:**
   (i) `#quarto-content` left ≈ 0; (ii) deep margin-spill does not add an `#root` horizontal
   scrollbar. If either fails — **stop and reassess** (Option A is the fallback if margin-spill is cut).
 - [x] **4b.** **Scroll-tracking assertion** (the bug): a **tall** fixture with the active surface
@@ -528,7 +528,7 @@ is kept for history but **this section is authoritative for the shipped behavior
 - **The crumb row fills the indent gutter `[colLeft, surfaceLeft]`** and flexes so its
   right edge **meets the surface left** (the pivot). Crumbs never enter the outer margin.
 - **▶ (in-arrow) + the future placeholder sit just right of `surfaceLeft`** (over content).
-- **`surfaceLeft` is the `<textarea>`'s left, not the `#q2-active-edit-region` wrapper's.**
+- **`surfaceLeft` is the `<textarea>`\'s left, not the `#q2-active-edit-region` wrapper's.**
   The wrapper spans the full text column (left = `colLeft`) for every block, so anchoring
   to it lost the indent; the textarea sits at the block's real (indented) content left.
 - **Per-ancestor band measurement (old 3b) was dropped.** The crumbs share the gutter

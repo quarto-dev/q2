@@ -178,12 +178,12 @@ The plan originally proposed storing `AttributionData` at `meta.attribution`
 as a `ConfigValue::Map`, by analogy with the navbar/footer/sidebar pattern.
 That analogy breaks on volume.
 
-`AttributionRun` records scale with document length (typical: ~1 run per
-~100 bytes of prose after RLE coalescing, so ~500 runs for a 50 KB
-chapter, ~10K for a book-length doc). One run as a `ConfigValue::Map`
-costs ~600–800 B (outer Map wrapper + 4 entries × `ConfigMapEntry`,
+`AttributionRun` records scale with document length (typical: \~1 run per
+\~100 bytes of prose after RLE coalescing, so \~500 runs for a 50 KB
+chapter, \~10K for a book-length doc). One run as a `ConfigValue::Map`
+costs \~600–800 B (outer Map wrapper + 4 entries × `ConfigMapEntry`,
 each with its own `SourceInfo`/`MergeOp`/`ConfigValueKind`); the same
-run as `AttributionRun` is ~40 B. That is a **~20× memory multiplier
+run as `AttributionRun` is \~40 B. That is a **\~20× memory multiplier
 on the hottest data structure in the render pipeline**, and the cost
 lands repeatedly — every Finalization-Phase transform that walks
 `ast.meta` (even just to check a key) pays a slice of it.
@@ -192,9 +192,9 @@ Concretely:
 
 | Doc size | Runs | `meta.attribution` cost | sidecar `Vec<AttributionRun>` |
 |----------|-----:|------------------------:|------------------------------:|
-| 5 KB     |   50 |  ~35 KB                 | ~2 KB                          |
-| 50 KB    |  500 |  ~350 KB                | ~20 KB                         |
-| Book     | 10K  |  ~7 MB                  | ~400 KB                        |
+| 5 KB     |   50 |  \~35 KB                 | \~2 KB                          |
+| 50 KB    |  500 |  \~350 KB                | \~20 KB                         |
+| Book     | 10K  |  \~7 MB                  | \~400 KB                        |
 
 The convention argument (Lua filter introspection of `meta.attribution`)
 doesn't survive scrutiny either:
@@ -516,14 +516,14 @@ either can ship without the other.
       opt-out — symmetrical to the escape-hatch case.)
     - `(Some(Git), Some(Git))` → `Some(Git)`. (Trivial agreement.)
 
-    Then a small integration assertion: when the resolved mode is
-    `Some(Off)` or `None`, the `RenderContext` constructed by
-    `render_document_to_file` has `ctx.attribution_provider.is_none()`
-    — the CLI plumbing must not install a `GitBlameProvider` for
-    either case. (Pure unit test on the resolution function plus one
-    integration test on the `RenderContext` construction; lives next
-    to the `RenderToFileOptions` → `RenderContext` plumbing site
-    introduced in Phase 3c.)
+   Then a small integration assertion: when the resolved mode is
+   `Some(Off)` or `None`, the `RenderContext` constructed by
+   `render_document_to_file` has `ctx.attribution_provider.is_none()`
+   — the CLI plumbing must not install a `GitBlameProvider` for
+   either case. (Pure unit test on the resolution function plus one
+   integration test on the `RenderContext` construction; lives next
+   to the `RenderToFileOptions` → `RenderContext` plumbing site
+   introduced in Phase 3c.)
 10. **WASM byte-identicality fixture sweep.** For every existing
     q2-debug fixture (the corpus that today drives
     `parse_qmd_to_ast`), assert that
@@ -622,7 +622,7 @@ either can ship without the other.
     time: i64 }` and `TransportAttributionData { runs:
     Vec<TransportAttributionRun>, identities: HashMap<String,
     Identity> }`, both with `Serialize + Deserialize`. The wire shape
-    is identical to the canonical types' `Serialize` form (`Arc<str>`
+    is identical to the canonical types\' `Serialize` form (`Arc<str>`
     and `String` both serialize as JSON strings), so round-tripping
     canonical → JSON → transport → builder → canonical preserves data;
     the only thing the transport detour buys is a clean place to
@@ -650,8 +650,8 @@ either can ship without the other.
     method `fn build(&self, ctx: &RenderContext) -> Result<AttributionData>`.
     **The method is sync, not async.** Locked-in rationale:
     - The only blocking implementor is `GitBlameProvider`, which
-      spawns one `git blame --porcelain` subprocess (~tens of ms on
-      typical document-sized files, long-tail ~1s on very large
+      spawns one `git blame --porcelain` subprocess (\~tens of ms on
+      typical document-sized files, long-tail \~1s on very large
       repos). v1's native render is single-document-at-a-time, so
       the calling thread has no other work to compete with.
     - The WASM implementor (`PreBuiltAttributionProvider`) is purely
@@ -666,7 +666,7 @@ either can ship without the other.
     Doc-comment on the method must state: "May block. Implementations
     that spawn subprocesses or do other blocking I/O should document
     expected latency. Currently: `GitBlameProvider` blocks on a
-    `git blame --porcelain` subprocess (tens of ms typical, ~1s on
+    `git blame --porcelain` subprocess (tens of ms typical, \~1s on
     huge repos); `PreBuiltAttributionProvider` is non-blocking."
 
     Each provider returns the data shape that's natural for it
@@ -709,7 +709,7 @@ either can ship without the other.
 - [x] `pub fn format_supports_attribution(format: &Format) -> bool` —
   returns `true` for formats whose writers consume the lookup (HTML and
   q2-debug JSON in v1) and `false` otherwise (PDF, Typst, plain Pandoc
-  native, etc.). Used by `AttributionGenerateTransform`'s skip ladder
+  native, etc.). Used by `AttributionGenerateTransform`\'s skip ladder
   to short-circuit before invoking the provider; opting in to
   attribution on a non-consuming format would otherwise fire a
   `git blame` subprocess whose output goes nowhere visible.
@@ -723,7 +723,7 @@ either can ship without the other.
 **Why a sidecar field on `RenderContext` rather than `meta.attribution`:**
 see the "Why a sidecar, not `meta.attribution`" subsection at the end of
 Vocabulary. Short version: `ConfigValue::Map` representation of `AttributionRun`
-records is ~20× heavier per run than the typed struct, and the
+records is \~20× heavier per run than the typed struct, and the
 hypothetical Lua-filter introspection it would enable wouldn't be useful
 in practice (raw runs aren't a queryable shape; the right Lua surface is
 a `lookup(start, end)` accessor when bd-0fd0 lands). User-authored
@@ -733,7 +733,7 @@ a `lookup(start, end)` accessor when bd-0fd0 lands). User-authored
 
 - [ ] New file `crates/quarto-core/src/transforms/attribution_generate.rs`
   modelled on `navbar_generate.rs`. (The 94-line size cited in an earlier
-  draft is now stale — `navbar_generate.rs` has grown to ~414 lines with
+  draft is now stale — `navbar_generate.rs` has grown to \~414 lines with
   project-index enrichment; attribution-generate has no equivalent
   enrichment step, so target the original "small + tests" footprint, not
   the current navbar size.)
@@ -825,7 +825,7 @@ alternatives:
 
 Shelling out keeps zero new build deps, matches the TS prototype line-for-line,
 honours the user's gitconfig / `.mailmap` / `core.autocrlf`, and adds nothing to
-the WASM build (which doesn't need git). Subprocess overhead (~tens of ms per
+the WASM build (which doesn't need git). Subprocess overhead (\~tens of ms per
 file) is fine for `quarto render`; if project-wide rebuild scaling ever
 matters, revisit then.
 
@@ -987,7 +987,7 @@ matters, revisit then.
   explicitly. The JSON payload is *transport-only* — once parsed it
   lives as a typed Rust struct on the sidecar
   (`ctx.attribution_data`), never visiting `ast.meta`. Pros: no
-  automerge-rs in the WASM bundle (~hundreds of KB saved), no
+  automerge-rs in the WASM bundle (\~hundreds of KB saved), no
   duplicate replay implementations, runs and identities ride one
   channel. Cons: the canonical form is computed in TS, not Rust —
   but the transport JSON is decoded into the same typed shape any
@@ -1000,7 +1000,7 @@ matters, revisit then.
   `quarto-core`), and has no WASM-specific code. Keeping it in
   `quarto-core` lets the producer-invariant tests (Phase 0 test #1
   ptr_eq restoration, Phase 0 test #12 fixture sweep) run as
-  native unit tests on the canonical types' home crate, and lets
+  native unit tests on the canonical types\' home crate, and lets
   any future native caller that has a pre-built JSON payload (e.g.
   `--attribution-from-file=…`) use it without reaching into the
   WASM crate.
@@ -1045,7 +1045,7 @@ matters, revisit then.
   attribution.
 
   Rejected alternatives:
-  - Adding `AstTransformsStage` to `parse_qmd_to_ast`'s stage list —
+  - Adding `AstTransformsStage` to `parse_qmd_to_ast`\'s stage list —
     behavior change as above.
   - Building a new `AstTransformsStage::attribution_only()`
     constructor — adds API surface to the stage just for this case;
@@ -1582,7 +1582,7 @@ surface that ships the producer-side data to WASM.
      `parseQmdToAst(qmdContent)` calling `wasm.parse_qmd_to_ast`)
      gains a `parseQmdToAstWithAttribution(qmdContent, attributionJson)`
      companion. Callers that have attribution payloads to ship
-     (`ReactPreview.tsx`, `PreviewRouter.tsx`'s q2-debug branch) route
+     (`ReactPreview.tsx`, `PreviewRouter.tsx`\'s q2-debug branch) route
      through the new shim; everything else keeps calling
      `parseQmdToAst` unchanged.
 - [ ] `ReactAstDebugRenderer` becomes a much thinner consumer: it reads
@@ -1733,7 +1733,7 @@ surface that ships the producer-side data to WASM.
      colour.
   2. Use the placeholder `Identity { display_name: "<unknown>",
      color: "#888888" }`. The greyscale colour deliberately stands
-     out from `actor_color`'s saturated HSL palette so the
+     out from `actor_color`\'s saturated HSL palette so the
      placeholder is identifiable on sight.
 
   Pinned by Phase 0 tests #6 and #7 (synthetic invariant
@@ -1747,7 +1747,7 @@ surface that ships the producer-side data to WASM.
 - [ ] `time` on the wire is Unix epoch **milliseconds**. Automerge
   uses ms natively; the git provider multiplies its seconds-since-epoch
   timestamp by 1000 before populating `AttributionRun::time`. Document
-  the unit in `AttributionRun`'s doc-comment so a future provider
+  the unit in `AttributionRun`\'s doc-comment so a future provider
   can't silently introduce a 1000× discrepancy.
 
 ## Phase 7 — Documentation
@@ -1816,7 +1816,7 @@ the decision; future v2 work can reopen any of them by reference.
    `automerge-rs` into the WASM crate — exactly the work Option A
    avoids — so deferring the question would save no work, and
    keeping the question open invites a mid-implementation detour.
-   Re-evaluate in v2 if `wasm-quarto-hub-client`'s bundle pressure
+   Re-evaluate in v2 if `wasm-quarto-hub-client`\'s bundle pressure
    changes, or if a future producer needs in-Rust Automerge access
    for reasons beyond attribution.
 
@@ -2237,7 +2237,7 @@ remaining deferred work.
     - `data-attr-time` carries the commit Unix timestamp.
   - Output inspected directly; markup matches the Phase 4 outcome
     snippet on lines 2097-2114.
-- [-] Manual end-to-end (hub-client browser): **not exercisable in v1.**
+- \[-\] Manual end-to-end (hub-client browser): **not exercisable in v1.**
   `ReactPreview.tsx:155` hard-codes `enabled: false`. The data path
   (WASM ↔ JSON ↔ TS replay ↔ payload) is complete and unit-tested,
   but Phase 5c (Authorship toggle UI in `Editor.tsx` + per-node colour
@@ -2283,7 +2283,7 @@ remaining deferred work.
 ## Non-goals for v1
 
 - Caching attribution across renders. Re-blame on every render is fine
-  (git-blame on a 100K-line file completes in ~50 ms).
+  (git-blame on a 100K-line file completes in \~50 ms).
 - Project-wide attribution. Each document's pipeline has its own
   attribution provider; cross-document attribution (a project sidebar
   showing "X contributed to N pages") is a v2 feature that would consume

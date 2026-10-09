@@ -571,7 +571,7 @@ MappingEnd
 | **Error recovery** | tree-sitter | Limited (would need tree-sitter-yaml) |
 | **Performance** | Slower (JS) | Faster (Rust, compiled) |
 | **Serializable** | No (MappedString has closures) | Yes (all data structures) |
-| **Code size** | ~2,500 LOC | Est. ~1,500 LOC (simpler) |
+| **Code size** | \~2,500 LOC | Est. \~1,500 LOC (simpler) |
 
 ## Future: Error Recovery (Optional)
 

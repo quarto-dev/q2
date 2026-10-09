@@ -35,7 +35,7 @@ fn make_source_info(&self, marker: &Marker, len: usize) -> SourceInfo {
 ```
 
 For a YAML document with N nodes:
-- **Current**: O(N * D) where D = depth of parent chain
+- **Current**: O(N \* D) where D = depth of parent chain
 - **With Rc/Arc**: O(N) - just increment reference count
 
 ## Serialization Compatibility
@@ -162,8 +162,8 @@ serde = { version = "1.0", features = ["rc"] }
 ## Expected Performance Improvement
 
 For a typical YAML document with 100 nodes and depth 3:
-- **Before**: ~300 deep clones (100 nodes × depth 3)
-- **After**: ~100 reference count increments
+- **Before**: \~300 deep clones (100 nodes × depth 3)
+- **After**: \~100 reference count increments
 - **Estimated speedup**: 10-50x for documents with deep nesting
 
 ## Migration Checklist

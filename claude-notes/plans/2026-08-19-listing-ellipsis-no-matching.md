@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-listing-ellipsis-no-matching-l963osy1 (bug, p3, label `listings`)
-**Checkout:** main checkout, branch `main` @ `87c0e21a8` (no worktree created — investigation only)
+**Checkout:** main checkout, branch `main` \@ `87c0e21a8` (no worktree created — investigation only)
 **Status:** Design aligned 2026-08-20 (all four questions answered by user; see
 "Design decisions" below). Scope now **includes bd-pcmdb7qg** (explicit
 `description:` truncation) as its own phase. Ready to implement — pending
@@ -36,7 +36,7 @@ Two Q1-parity gaps in listings, both cosmetic, both on every listing page:
    term is `listing-page-no-matches` (already present in q2's vendored
    `resources/language/_language*.yml` — all locales).
 
-Real-world hit: ~14 Posit Connect docs cookbook index pages. Origin strand
+Real-world hit: \~14 Posit Connect docs cookbook index pages. Origin strand
 `br-gny8y5v4` lives in the external connect-docs skein (not in this skein —
 dependency graph here is empty).
 
@@ -68,7 +68,7 @@ All paths in the description are accurate at HEAD:
   `truncateText`. So the feed likely has the same nit (unverified in
   output). See design question 3.
 - Container emission: `crates/quarto-core/src/transforms/listing_render.rs`
-  (`render_one`, ~line 186). Renders the top-level template to markdown,
+  (`render_one`, \~line 186). Renders the top-level template to markdown,
   re-parses with pampa, then either fills a user `::: {#id}` slot or appends
   a wrapper `Div` (id = listing id, class `quarto-listing`,
   `data-listing-rendered="1"`). **There is no pagination/filter/no-matching
@@ -112,7 +112,7 @@ be meaningful. (Phase-0 tests will build their own minimal fixtures in-tree.)
 2. **Markup-parity only.** The List.js init gap stays in **bd-nbv80e33**.
 3. **Feed ellipsis included — via one shared helper.** During scoping we
    found `truncate_plain_at_word_boundary` (`feed/reader_ext.rs:330`) is a
-   verbatim copy of `maybe_truncate`'s body (`reader.rs:187`). Consolidate:
+   verbatim copy of `maybe_truncate`\'s body (`reader.rs:187`). Consolidate:
    one `truncate_text_at_space(s, max)` in the listing module (Q1
    `truncateText(s, n, "space")` parity: cut at last space ≤ max, strip one
    trailing `,`/`/`/`:`, append `…`), with the two existing wrappers keeping
@@ -208,7 +208,7 @@ be meaningful. (Phase-0 tests will build their own minimal fixtures in-tree.)
   that diverges on edge inputs would diff against Q1 forever.
 - **Placeholder div text sits in a `<p>`** inside the div (qmd div →
   Para). Q1 puts the text directly in the div. Invisible while
-  `d-none`; when revealed (bd-nbv80e33), `.listing-no-matching`'s
+  `d-none`; when revealed (bd-nbv80e33), `.listing-no-matching`\'s
   centering/padding applies to the container either way — the inner
   `<p>` only adds its bottom margin.
 

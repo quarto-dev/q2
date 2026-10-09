@@ -96,7 +96,7 @@ hand-constructed tests in §"Test plan" run.
   `si_id` is the source-info pool reference — it points to another
   entry in the pool, typically an `Original` covering the source bytes
   the anchor describes. The name is deliberately distinct from
-  `Substring`'s `parent_id`: a Substring genuinely *has* a parent in
+  `Substring`\'s `parent_id`: a Substring genuinely *has* a parent in
   the chain (the slice's ancestor), but an anchor's reference is a
   sideways pointer, not a containment relationship. `si_id` reads as
   "source-info pool index" with no tree-structure overclaim. Multiple
@@ -504,7 +504,7 @@ build break.
       though the source-map variant is gone, because the interim
       writer arm above still emits it). Verify with
       `git grep -n "SerializableSourceMapping::FilterProvenance" crates/pampa/`
-      — expect ~4 hits (writer's `to_json` arm, the interim `intern`
+      — expect \~4 hits (writer's `to_json` arm, the interim `intern`
       arm above, the streaming writer's two arms in
       `stream_write_source_info_pool`). All four go away in Phase 3+4.
 - [x] Confirm no on-disk JSON snapshots carry code-3 entries that the
@@ -651,14 +651,14 @@ variant at once.
       - Rewrite the header doc-comment to describe Generated, not
         Synthetic/Derived. The current header cites
         `crates/pampa/src/writers/json.rs:54-91`, which is stale (the
-        wire-format types now live at ~lines 109-207 of that file). The
+        wire-format types now live at \~lines 109-207 of that file). The
         new doc-comment should cite **two** sources of truth: the Rust
         enum `SourceInfo` in
         `crates/quarto-source-map/src/source_info.rs` (canonical
         producer-side definition) and the JSON wire mirror in
         `crates/pampa/src/writers/json.rs` (`SerializableSourceMapping`
-        ~lines 193-207, `SourceInfoJson` ~lines 109-116, code-4
-        serializer in `to_json` ~lines 167-190). Do not bake in exact
+        \~lines 193-207, `SourceInfoJson` \~lines 109-116, code-4
+        serializer in `to_json` \~lines 167-190). Do not bake in exact
         line numbers — cite the type names; they will outlast line
         drift.
 - [x] Update `ts-packages/preview-renderer/src/utils/sourceInfo.ts` per
@@ -738,7 +738,7 @@ the writer emits code 4.
       configurations). Hand-written cases (one per shape). See §Test
       plan.
 - [x] Concat-of-Generated round-trip case: a `Concat { pieces }` whose
-      pieces' `source_info` is `Generated`. Serialize → deserialize →
+      pieces\' `source_info` is `Generated`. Serialize → deserialize →
       assert structural equality. Closes a coverage gap — current
       production paths emit this shape (e.g. coalesced filter-emitted
       spans). Sits in the writer-side test module since it exercises
@@ -776,14 +776,14 @@ the writer emits code 4.
       single ID. **Read-side note:** deserialization rebuilds each anchor
       with a fresh `Arc`, so a subsequent re-serialization produces N
       copies — this test verifies the *write-time* optimization keyed
-      on `Arc::as_ptr`. See [[anchor-dedup-invariant]] in §"Risk areas"
+      on `Arc::as_ptr`. See \[\[anchor-dedup-invariant\]\] in §"Risk areas"
       for the broader contract. Test passes Plan-5-alone (no shortcode
       resolver needed — Arc sharing is hand-wired).
 - [x] Streaming-writer parity test. Helper shape:
       `roundtrip_via_stream(ast) -> ast` that calls `stream_write_pandoc`
       into a `Vec<u8>`, reads back via `pampa::readers::json::read`,
       and asserts SourceInfo equality at chosen Generated nodes. The
-      streaming writer's match arms are independent of `to_json`'s;
+      streaming writer's match arms are independent of `to_json`\'s;
       without this coverage, a Phase-4 regression in
       `stream_write_source_info_pool` could slip through.
 - [x] AnchorRole round-trip test: build a `Generated` with each role
@@ -853,7 +853,7 @@ starting Plan 5:
 - **Phase boundary "compiles cleanly" semantics.** Plan 4 found that
   "each phase compiles cleanly" really means "the directly-touched
   crate compiles cleanly" — adding a new `SourceInfo` variant
-  immediately broke `match` exhaustiveness across ~10 crates, and the
+  immediately broke `match` exhaustiveness across \~10 crates, and the
   workspace stayed red between Plan-4 Phase 1 and Phase 5. Plan 5's
   Phase 1 → 2 → 3+4 ordering above explicitly avoids this trap (each
   phase leaves the workspace green); the *atomic* Phase 3+4 squash is
@@ -890,7 +890,7 @@ starting Plan 5:
   **writer-side optimization only** — deserialization rebuilds each
   anchor with a fresh `Arc`, so pool-size is not stable over
   read-write-read. AST content and Plan-3 hashes (which exclude
-  `source_info`) are stable. See [[anchor-dedup-invariant]] in §"Risk
+  `source_info`) are stable. See \[\[anchor-dedup-invariant\]\] in §"Risk
   areas".
 - **TypeScript hand-mirror updates**: see §"TypeScript wire-format
   definitions" above. Settled — code 4's `d` becomes `{ by; from? }`,
@@ -912,7 +912,7 @@ starting Plan 5:
 
 ## References
 
-(Line numbers as of `feature/provenance` @ 4c465768. Plan 4's migration
+(Line numbers as of `feature/provenance` \@ 4c465768. Plan 4's migration
 will shift these; refresh before implementing.)
 
 - `crates/pampa/src/writers/json.rs:115` — `SourceInfoJson.t` field
@@ -953,7 +953,7 @@ Phase 6 for test-file placement and per-phase landing.)
   build a `SourceInfo`, serialize to JSON, deserialize, assert
   equality. Cover the full enum.
 - **Concat-of-Generated round-trip**: a `Concat { pieces }` whose
-  pieces' `source_info` is `Generated` (the shape produced by coalesced
+  pieces\' `source_info` is `Generated` (the shape produced by coalesced
   filter-emitted spans). Serialize → deserialize → assert structural
   equality. Closes a coverage gap not exercised by the per-variant
   property test above.
@@ -991,14 +991,14 @@ Phase 6 for test-file placement and per-phase landing.)
   the shared target exactly once and each Generated entry's
   `from[0].si_id` references it by ID. *Read-side note:* deserialization
   rebuilds each anchor with a fresh `Arc`; this test only verifies the
-  write-time optimization (see [[anchor-dedup-invariant]] in §"Risk
+  write-time optimization (see \[\[anchor-dedup-invariant\]\] in §"Risk
   areas"). Test passes Plan-5-alone (no shortcode resolver needed).
 - **Streaming-writer parity test**: implement helper
   `roundtrip_via_stream(ast) -> ast` that streams the AST via
   `stream_write_pandoc` into a `Vec<u8>` and reads back through
   `pampa::readers::json::read`. Run a representative Generated-bearing
   AST through it; assert equality. The streaming writer's match arms
-  are independent of `to_json`'s, so a Phase-4 regression could
+  are independent of `to_json`\'s, so a Phase-4 regression could
   otherwise slip through.
 - **AnchorRole round-trip test**: build a `Generated` with each role
   (`Invocation`, `ValueSource`, `Other("ext/foo/bar")`) wrapped in
@@ -1070,7 +1070,7 @@ Phase 6 for test-file placement and per-phase landing.)
   `CustomNode` blocks, not the pool; don't confuse them.
 - **Pool ID stability**: changing the format of pool entries shouldn't
   affect their IDs (which are sequential by intern order). Verify.
-- **<a id="anchor-dedup-invariant"></a>Anchor dedup is a writer-side
+- **`<a id="anchor-dedup-invariant"></a>`{=html}Anchor dedup is a writer-side
   optimization, not a round-trip-stable property.** The writer's
   `arc_parent_ids` HashMap is keyed by `Arc::as_ptr`; multiple anchors
   pointing to the same `Arc<SourceInfo>` collapse to one pool entry.
@@ -1114,14 +1114,14 @@ Phase 6 for test-file placement and per-phase landing.)
 
 | Component | Lines (rough) |
 |---|---|
-| Code 4 writer (with anchor interning) | ~80 |
-| Code 4 reader (with anchor decoding) | ~70 |
-| Code 3 dual-shape legacy reader | ~35 |
-| `AnchorRole` ↔ string serialization | ~20 |
-| Streaming writer parity | ~40 |
-| TypeScript type + utils updates | ~30 |
-| Tests (incl. strict-rejection + stream helper + Concat-of-Generated) | ~290 |
-| **Total** | **~565** |
+| Code 4 writer (with anchor interning) | \~80 |
+| Code 4 reader (with anchor decoding) | \~70 |
+| Code 3 dual-shape legacy reader | \~35 |
+| `AnchorRole` ↔ string serialization | \~20 |
+| Streaming writer parity | \~40 |
+| TypeScript type + utils updates | \~30 |
+| Tests (incl. strict-rejection + stream helper + Concat-of-Generated) | \~290 |
+| **Total** | **\~565** |
 
 One focused session.
 

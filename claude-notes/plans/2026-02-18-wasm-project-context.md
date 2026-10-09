@@ -71,11 +71,11 @@ VFS-specific unit tests skipped: `WasmRuntime` only compiles on wasm32 targets. 
 
 Implemented as WASM end-to-end tests in `hub-client/src/services/projectContext.wasm.test.ts` (run with `npm run test:wasm`):
 
-- [x] **renders single file without _quarto.yml**: Verifies backward compatibility
-- [x] **inherits project title from _quarto.yml**: VFS has `_quarto.yml` with title, doc has none — title appears in HTML
+- [x] **renders single file without \_quarto.yml**: Verifies backward compatibility
+- [x] **inherits project title from \_quarto.yml**: VFS has `_quarto.yml` with title, doc has none — title appears in HTML
 - [x] **document title overrides project title**: Both have title — document wins
-- [x] **discovers _quarto.yml from parent directories**: Nested doc at `/project/chapters/intro/doc.qmd` finds `/project/_quarto.yml`
-- [x] **picks up directory metadata from _metadata.yml**: Author from `chapters/_metadata.yml` appears in HTML
+- [x] **discovers \_quarto.yml from parent directories**: Nested doc at `/project/chapters/intro/doc.qmd` finds `/project/_quarto.yml`
+- [x] **picks up directory metadata from \_metadata.yml**: Author from `chapters/_metadata.yml` appears in HTML
 - [x] **merges directory metadata hierarchy correctly**: Two `_metadata.yml` layers both contribute to output
 
 ## Out of Scope

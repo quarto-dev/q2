@@ -120,7 +120,7 @@ output byte oracles would be machine-unstable).
 | P1 | 6 | unit-rs | `find_python` env override | temp dir with executable `python3` stub; `QUARTO_PYTHON=<stub>` → returns stub path (highest priority, beats PATH) | none (real tempdir, `#[cfg(unix)]` chmod helper per cross-platform rule) | Reorder resolution to try PATH before `QUARTO_PYTHON` → returns PATH python → RED |
 | P2 | 6 | unit-rs | `find_python` fallback | empty `QUARTO_PYTHON`, `PATH` = tempdir containing only `python3` stub → returns it; `PATH` = empty tempdir → `None` | none | Drop the `python3` PATH probe (keep only conda) → `None` for first case → RED |
 | J1 | 6 | e2e-rs (python-gated) | jupyter check, python present | `q2 check jupyter`: stderr contains `Checking Python 3 installation....OK` + indented `Version:` + `Path:` + `Jupyter:` lines | none | Skip capabilities-message emission after OK → `Version:` absent → RED |
-| J2 | 6 | e2e-rs | jupyter check, python absent | `PATH` stripped of python*, `QUARTO_PYTHON` unset → `Checking Python 3 installation....(None)` + `Unable to locate an installed version of Python 3.` + `Install Python 3 from https://www.python.org/downloads/`; exit 0 | none | Not-found branch returns `Err` → exit ≠ 0 → RED |
+| J2 | 6 | e2e-rs | jupyter check, python absent | `PATH` stripped of python\*, `QUARTO_PYTHON` unset → `Checking Python 3 installation....(None)` + `Unable to locate an installed version of Python 3.` + `Install Python 3 from https://www.python.org/downloads/`; exit 0 | none | Not-found branch returns `Err` → exit ≠ 0 → RED |
 | J3 | 6 | e2e-rs (python+kernel-gated) | jupyter test render | with jupyter_core + python kernelspec present: `Checking Jupyter engine render....OK` | none | Remove `ctx.render_probe` call from the kernel-present branch → line absent → RED |
 
 **Missing-test pass (logged, accepted-untested with rationale):**
@@ -309,7 +309,7 @@ Design (all in this task):
    ```
    (Late interim frames after cancel/timeout hit the removed-slot path and are
    dropped — same as today's late terminal replies.)
-3. `request_streaming`: clone of `request`'s recv loop with two changes:
+3. `request_streaming`: clone of `request`\'s recv loop with two changes:
    on `Ok(frame)` where `frame.is_interim()` → `on_progress(frame)`, reset
    `deadline = Instant::now() + window`, continue; terminal frame → existing
    error-mapping (`FromEngine::Error` → `execution_failed`) and return.
@@ -375,7 +375,7 @@ fn request_streaming_idle_window_resets_per_frame() {
 ### Task 3: `hasCheckInstallation` in the loaded payload (H1)
 
 **Files:**
-- Modify: `ts-packages/quarto-engine-host-deno/src/host.ts` (loadEngine case, ~line 370)
+- Modify: `ts-packages/quarto-engine-host-deno/src/host.ts` (loadEngine case, \~line 370)
 - Modify: `ts-packages/quarto-engine-host-deno/src/types.ts` (LoadEngineResult mirror)
 - Test: `ts-packages/quarto-engine-host-deno/src/host.deno-test.ts` (or the existing fixture-driven deno test file — follow where the current loadEngine tests live)
 
@@ -402,7 +402,7 @@ hasCheckInstallation: typeof discovery.checkInstallation === "function",
 ### Task 4: `checkInstallation` dispatch case + swappable log sink (H2–H4)
 
 **Files:**
-- Modify: `ts-packages/quarto-engine-host-deno/src/deno-host.ts` (log object ~line 251)
+- Modify: `ts-packages/quarto-engine-host-deno/src/deno-host.ts` (log object \~line 251)
 - Modify: `ts-packages/quarto-engine-host-deno/src/host.ts` (new switch case)
 - Test: same deno test file as Task 3
 
@@ -726,7 +726,7 @@ let probe = |content: &str, _language: &str| -> Result<(), String> {
         .map(|_| ()).map_err(|e| e.to_string())
 };
 ```
-  (Copy the exact runtime/options construction from `commands/render.rs`'s
+  (Copy the exact runtime/options construction from `commands/render.rs`\'s
   simplest path — the implementer reads render.rs and mirrors it; flags
   equivalent to Q1's `quiet: true`.)
 
@@ -750,7 +750,7 @@ let probe = |content: &str, _language: &str| -> Result<(), String> {
   `std::io::stderr().is_terminal()` (std `IsTerminal`, no new dependency):
   while an engine check is in flight, a small helper animates
   `\r<frame> <last emitted line's text>` on stderr (braille or `|/-\` frames,
-  ~80 ms tick, spawned thread + `AtomicBool` stop flag); every arriving
+  \~80 ms tick, spawned thread + `AtomicBool` stop flag); every arriving
   `CheckLine` clears the animation line (`\r` + spaces + `\r`), prints the
   line, and the spinner resumes on the new text. The first frame arrives
   immediately (the engine's own `withSpinner` start message), so the animated

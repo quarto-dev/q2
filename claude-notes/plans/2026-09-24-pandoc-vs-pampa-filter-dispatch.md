@@ -14,13 +14,13 @@ extension's own `_extension.yml` declares.**
 
 `orange-book.lua` declares `at: post-quarto` — one of Q1's five entry-point
 names (`pre-ast`, `post-ast`, `pre-quarto`, `post-quarto`, `pre-render`).
-These names only have real semantic meaning **inside `main.lua`'s own filter
+These names only have real semantic meaning **inside `main.lua`\'s own filter
 list**: `main.lua` seeds a same-named slot in `quarto_filter_list` for each one
-(`post-quarto`'s slot is pre-seeded with `file_metadata()` itself — see
+(`post-quarto`\'s slot is pre-seeded with `file_metadata()` itself — see
 `resources/pandoc-filters/filters/main.lua` around the `quarto_filter_list`
 construction), and `inject_user_filters_at_entry_points`
 (`resources/pandoc-filters/filters/ast/emulatedfilter.lua`) splices a
-matching user filter in right there, so it shares `main.lua`'s Lua VM and
+matching user filter in right there, so it shares `main.lua`\'s Lua VM and
 global state — including the pure-Lua helpers Q1 ports
 (`quarto.doc.file_metadata`, `quarto.utils.combineFilters`,
 `quarto.utils.file_metadata_filter`, all defined in
@@ -43,7 +43,7 @@ the *only* thing an `at:` entry point currently does — it never reaches
 `crates/quarto-core/tests/integration/orange_book_lua.rs`):
 
 1. `orange_book_lua_loads_without_crashing_the_filter_chain` — loading the
-   real, unpatched `orange-book.lua` through `main.lua`'s own `post-quarto`
+   real, unpatched `orange-book.lua` through `main.lua`\'s own `post-quarto`
    entry point (`run_main_lua_capturing_ast` with a `quarto-filters.entryPoints`
    param naming the real vendored file) does not crash.
 2. `orange_book_lua_transforms_a_real_part_divider_via_pandocs_main_lua_chain`
@@ -58,7 +58,7 @@ invent. **Resolved with Gordon (2026-09-24): the split is exactly
 `FilterPosition::Pre` vs. `FilterPosition::Post`, not "any `at:`-qualified
 filter."**
 
-`filter_resolve.rs`'s existing `ENTRY_POINTS` table already maps Q1's five
+`filter_resolve.rs`\'s existing `ENTRY_POINTS` table already maps Q1's five
 names onto Q2's two buckets:
 
 ```rust
@@ -77,14 +77,14 @@ exactly as today; there is no pandoc process yet for them to join.
 Pandoc-hybrid target is at or past the point Q2's pipeline hands off to the
 real `pandoc` subprocess (`PandocWriteStage`, which is what actually invokes
 `-L main.lua`) — so `Position::Post` filters (`post-quarto`/`pre-render`)
-are exactly the ones that should be redirected into `main.lua`'s own
+are exactly the ones that should be redirected into `main.lua`\'s own
 entry-point mechanism instead of pampa, for Pandoc-hybrid-profile targets.
 This is a clean, already-existing boundary — no new three-way classification
 needed, just a different destination for filters already in the `Post`
 bucket when the target is Pandoc-hybrid.
 
 The redirect: for a Pandoc-hybrid-profile render, `Position::Post` filters
-get forwarded into `main.lua`'s `quarto-filters.entryPoints` param (via
+get forwarded into `main.lua`\'s `quarto-filters.entryPoints` param (via
 `PandocWriteStage`, which already has a working precedent for this shape —
 `BookSingleFileContributor`, registered conditionally in
 `PandocWriteStage::run()` when `single-file-book` is set) instead of being
@@ -118,7 +118,7 @@ untouched by this plan.
 
 ### Tests first
 - [x] Two experiment tests already prove the fix direction — keep them as
-      permanent regression guards for `main.lua`'s entry-point mechanism:
+      permanent regression guards for `main.lua`\'s entry-point mechanism:
       `orange_book_lua_loads_without_crashing_the_filter_chain`,
       `orange_book_lua_transforms_a_real_part_divider_via_pandocs_main_lua_chain`
       (`crates/quarto-core/tests/integration/orange_book_lua.rs`).
@@ -168,7 +168,7 @@ untouched by this plan.
       `QuartoFilterEntryPointsContributor`), `stage/stages/pandoc_write.rs`.
 - [x] Confirm path resolution against the real embedded/extracted
       `ORANGE_BOOK_SUBTREE` payload, not just a source-tree fixture path —
-      confirmed by `book_single_file_merge.rs`'s 3 tests: the plain 2-chapter
+      confirmed by `book_single_file_merge.rs`\'s 3 tests: the plain 2-chapter
       fixture has no explicit `_extension.yml`/`filters:` at all, so its
       green pass exercises the auto-default-to-`orange-book` path
       (`TYPST_BOOK_DEFAULT_EXTENSION`) through the real extracted subtree
@@ -182,7 +182,7 @@ untouched by this plan.
       `orange_book_lua.rs`, plus the full `pandoc_*`/`user_filters*`/
       `crossref_numbering*` suites for regressions. 269 tests total
       (`pandoc*` + `user_filters*` + `crossref_numbering*` + `filter_resolve*`
-      = 266, plus `book_single_file_merge`'s 3 run separately), all green.
+      = 266, plus `book_single_file_merge`\'s 3 run separately), all green.
 - [x] `cargo clippy -p quarto-core --all-targets -- -D warnings` — clean.
       `cargo nextest run -p quarto-core --no-fail-fast`: **4976 passed (1
       slow), 31 skipped, 0 failed** — delta from the pre-fix baseline (4970

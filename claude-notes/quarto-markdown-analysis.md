@@ -5,7 +5,7 @@
 **quarto-markdown** is a Rust-based standalone parser for Quarto Markdown (QMD) that converts markdown to Pandoc AST format. It's **not yet integrated into Quarto** but is designed to be the frontend markdown parser for the Rust port.
 
 **Key characteristics**:
-- ~11,262 LOC of Rust code
+- \~11,262 LOC of Rust code
 - Built on tree-sitter grammars (forked from tree-sitter-markdown)
 - Emits syntax errors for malformed documents (unlike standard CommonMark)
 - Outputs Pandoc AST in JSON and native formats
@@ -214,7 +214,7 @@ Parsed as `CodeBlock` with language attribute.
 
 ### 2. **Shortcodes**
 
-Parses `{{< shortcode >}}` syntax:
+Parses `{{{< shortcode >}}}` syntax:
 
 ```rust
 pub enum Shortcode {

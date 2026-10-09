@@ -1,4 +1,4 @@
-# Handoff: remove `CommentBlock`'s per-block wrapper (q2-preview comment chrome as an overlay layer)
+# Handoff: remove `CommentBlock`\'s per-block wrapper (q2-preview comment chrome as an overlay layer)
 
 **Strand:** bd-q2wqj24c (re-scoped 2026-09-10; `related` → bd-j3764r9a parity epic; discovered-from bd-kltzdhle)
 **Written:** 2026-09-10, for a fresh session. Everything below was verified in the
@@ -26,8 +26,8 @@ To do that it wraps each commentable block in
 </div>
 ```
 
-(`CommentBlock.tsx` ~981-1010: the wrapper `<div>` with `onMouseMove` /
-`onMouseLeave`; ~1000-1030: the absolutely positioned chrome container.)
+(`CommentBlock.tsx` \~981-1010: the wrapper `<div>` with `onMouseMove` /
+`onMouseLeave`; \~1000-1030: the absolutely positioned chrome container.)
 
 *(verified)* The wrapper is present in the live q2-preview DOM in **both**
 hub-client (editing on) and read-only `q2 preview`: the smoke-all fixture
@@ -48,7 +48,7 @@ Consequences:
    diverges. Note this blind spot in whatever test you add.
 3. The code already fights the symptom: the chrome is mounted *before* the
    content so the block keeps matching `:last-child` rules (comment at
-   ~1003).
+   \~1003).
 
 The e2e runner currently skips the DOM assertions for that one fixture
 (`DOM_ASSERTIONS_PENDING_PARITY` in `hub-client/e2e/helpers/smokeAllDiscovery.ts`,
@@ -83,9 +83,9 @@ from the block's measured rect.
    a context so each `CommentBlock` can `createPortal` into it. Reveal decks:
    the layer must live inside `.reveal .slides` scaling context or the
    counter-scale math changes — read the `DECK_BUBBLE_FUDGE` / `RevealScaleSync`
-   comments (~370-400) before deciding where the layer sits for decks.
+   comments (\~370-400) before deciding where the layer sits for decks.
 2. **Geometry.** The existing relayout pass (`scheduleBubbleRelayout`,
-   ~400-560) already measures every bubble's anchor rect and solves overlaps
+   \~400-560) already measures every bubble's anchor rect and solves overlaps
    in viewport px; today the anchor is `e.el.parentElement` (the wrapper).
    Change `BubbleEntry` to carry the **block element** as the anchor and have
    the pass write each bubble's `top`/`left` (anchor rect minus layer rect,
@@ -99,7 +99,7 @@ from the block's measured rect.
    root and resolves `[data-block-pool-id]` hosts). Map the pointer to the
    nearest anchor (via the entry set — anchors are known elements; use
    `el.contains(target)` or `elementFromPoint`) and drive the per-block
-   `isHovered` (right-half test, ~989) and `bubbleHovered` through the
+   `isHovered` (right-half test, \~989) and `bubbleHovered` through the
    registry entries. The glow (`box-shadow` on the wrapper) becomes an
    overlay outline over the anchor's rect (`pointer-events:none`), so no
    style is written onto theme elements.
@@ -124,23 +124,23 @@ from the block's measured rect.
      render.
 5. **Comment containers.** Blocks without an inline slot (code blocks, mermaid)
    are wrapped in a `Div.quarto-edit-comment-container` *in the AST* (see
-   `CONTAINER_CLASS`, ~77-83, and `InsideCommentContainer`); that Div is a real
+   `CONTAINER_CLASS`, \~77-83, and `InsideCommentContainer`); that Div is a real
    block and stays. Only the React-side `<div style=position:relative>` goes.
 
 ## Tests to write first (red before the change)
 
 - `CommentBlock.structure.integration.test.tsx` (new): mount with a
   `PreviewContext` (see how `CommentBlock.resolveLast.integration.test.tsx`
-  builds `tree(texts, ctx)` and the `commitSubtreeEdit` stub, ~40-95) and
+  builds `tree(texts, ctx)` and the `commitSubtreeEdit` stub, \~40-95) and
   assert **DOM shape**: `blockquote > h4`, `blockquote > p`,
   `div.callout-body > p:first-child`-style parent/child relations hold with
   comments present and absent, and with the bubble visible; the layer holds
   the bubbles; no element between a block and its parent.
-- Rewrite the existing suites' DOM helpers: `wrapper()` /
-  `wrapperGlows()` in `CommentBlock.resolveLast.integration.test.tsx` (~103-131)
+- Rewrite the existing suites\' DOM helpers: `wrapper()` /
+  `wrapperGlows()` in `CommentBlock.resolveLast.integration.test.tsx` (\~103-131)
   assume `para.parentElement` is the positioned wrapper; the glow assertion
   moves to the overlay outline. `CommentBlock.defensive` (`host = para.parentElement`,
-  line ~96) likewise. `CommentBlock.bubbleText` is mostly bubble-internal and
+  line \~96) likewise. `CommentBlock.bubbleText` is mostly bubble-internal and
   should survive.
 - The parity harness blind spot: add a test that mounts **with**
   `PreviewContext` and compares the article body's element structure against
@@ -158,7 +158,7 @@ from the block's measured rect.
 3. e2e: rebuild the e2e dist (`VITE_E2E=1 npm run build` in hub-client, with
    the hub binary built) and run
    `npx playwright test --config playwright.smoke-all.config.ts -g "div-heading-becomes-section"`
-   plus the full smoke-all config (157 tests, ~2-6 min) and the interactive
+   plus the full smoke-all config (157 tests, \~2-6 min) and the interactive
    comment specs (`q2-preview-render-components-comment.spec.ts`,
    `q2-preview-edit-toggle.spec.ts`).
 4. Real browser: `cargo xtask build-hub-client-embed && cargo build --bin q2`,

@@ -380,7 +380,7 @@ fn validation_error_to_diagnostic(
 ### Performance Benchmarks
 - `map_offset()` speed (should be <1μs for typical chains)
 - Serialization size (should be <10KB for typical docs)
-- Memory overhead (SourceInfo should be ~100 bytes max)
+- Memory overhead (SourceInfo should be \~100 bytes max)
 
 ## Dependencies and Compatibility
 
@@ -407,11 +407,11 @@ criterion = "0.5"  # For benchmarks
 ## Risks and Mitigations
 
 ### Risk 1: Box Overhead
-**Concern**: Nested Box<SourceInfo> could cause performance issues
+**Concern**: Nested `Box<SourceInfo>` could cause performance issues
 
 **Mitigation**:
 - Benchmark early
-- Consider Arc<SourceInfo> if sharing is common
+- Consider `Arc<SourceInfo>` if sharing is common
 - Profile memory usage in real documents
 
 ### Risk 2: Complex Mapping Logic
@@ -482,7 +482,7 @@ criterion = "0.5"  # For benchmarks
 
 1. Should we implement all SourceMapping variants in Phase 1, or start with Original + Substring?
 2. Is 0-indexed (row, column) OK, or should we use 1-indexed like quarto-yaml currently does?
-3. Should SourceContext.content be Option<String> or Arc<String> for sharing?
+3. Should SourceContext.content be `Option<String>` or `Arc<String>` for sharing?
 4. Do we need Transformed variant immediately, or can it be added later?
 5. Should Phase 4 (quarto-markdown-pandoc) be planned in detail now, or wait until Phase 3 complete?
 

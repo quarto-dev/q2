@@ -269,7 +269,7 @@ persists by design; behavior there is unchanged.
   472/472; `cargo xtask verify --skip-hub-build` all 14 steps green.
 - 2026-08-13: E2E verified with the real binary and a real iroh join.
   Host: `target/debug/q2 preview --no-browser --allow-edit --ui editor
-  --share --data-dir <tmp> <fixture>` (fixture: `_quarto.yml` +
+  --share --data-dir <tmp> <fixture>` (fixture: `\_quarto.yml` +
   `index.qmd`; `RUST_LOG=quarto_hub=info`). Guest: `q2 preview --join
   q2preview… --no-browser`, driven by headless Chromium (Playwright)
   through the guest's tunnel proxy port: New File dialog →

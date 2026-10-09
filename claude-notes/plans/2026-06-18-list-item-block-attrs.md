@@ -41,7 +41,7 @@ Mirror the table `rowsS` precedent: a sibling key on the list node, an array
 - **Key name:** `itemAttr` (decided; `rowsS`-style suffix doesn't fit since this
   is an attr, not source info).
 - **Emitted only when at least one item carries a non-empty attr** — so ordinary
-  lists are byte-for-byte unchanged (keeps the ~3900 existing tests inert).
+  lists are byte-for-byte unchanged (keeps the \~3900 existing tests inert).
 - **Key order:** alphabetical, matching the house convention
   (`stream_write_simple_node` emits `c`, then `l?`, `s`, `t`). `itemAttr` sorts
   between `c` and `l`.
@@ -152,7 +152,7 @@ project fears).
       `liItemAttrProps(node.itemAttr?.[i], false)` (edit-drop documented inline).
 - [x] preview-renderer suites green (219 unit + 233 integration); `tsc` clean.
   - **Edit edge case (decided 2026-06-18: accept the drop for v1).** These
-    registry renderers' `setLocalAst` rebuilds `{t:'BulletList', c:newItems}`
+    registry renderers\' `setLocalAst` rebuilds `{t:'BulletList', c:newItems}`
     **without** `itemAttr`, so an in-preview text edit of an attributed item
     drops its class. We apply `itemAttr` on render but do **not** thread it
     through edits in v1 (matches how other sidecar data behaves on edit).
@@ -168,7 +168,7 @@ project fears).
 - [x] React render path covered by vitest **integration** tests driving the real
       `Ast`/registry component tree, both the registry (non-incremental) and the
       `mountInDeck` incremental paths.
-- [~] **Live browser** `q2 preview` (WASM-served) revealjs session: NOT yet run.
+- \[\~\] **Live browser** `q2 preview` (WASM-served) revealjs session: NOT yet run.
       The JSON contract (Rust tests) + React reads (vitest) cover the chain
       piecewise; a live check is the final seal — see status note.
 - [x] Full `cargo xtask verify` — **all 14 steps passed (exit 0):** lints+clippy

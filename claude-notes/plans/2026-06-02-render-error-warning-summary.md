@@ -285,7 +285,7 @@ locale::tests`, then `quarto-error-reporting::schema_drift`) were traced
 to **stale test binaries in the shared `target/`** carrying a baked-in
 `env!("CARGO_MANIFEST_DIR")` pointing at a **deleted worktree**:
 `.worktrees/bd-3klmk-flaky-test-passoneusesmultiplethreads-asserts/…`.
-~26k objects under `target/debug/deps` referenced that dead path; cargo
+\~26k objects under `target/debug/deps` referenced that dead path; cargo
 reused them on fingerprint match. The schema-drift test reported the
 checked-in schema as "no file on disk" because it looked under the
 dead worktree; the locale tests fell back to English because

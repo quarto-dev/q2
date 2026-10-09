@@ -17,7 +17,7 @@ functions on small fixtures (3 examples each, distinct Pandoc elements).
 
 Two different features rely on a "what source line is this?" mapping, and both
 get it **wrong** for the same underlying reason: **the qmd writer does not
-preserve source line *count*** (it collapses blank lines — a loose list becomes
+preserve source line _count_** (it collapses blank lines — a loose list becomes
 tight, a double blank becomes single), but both consumers assume a **linear**
 output↔source correspondence.
 

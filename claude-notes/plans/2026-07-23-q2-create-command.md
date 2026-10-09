@@ -85,7 +85,7 @@ disabled). This is the seam we reproduce in Rust.
 
 - `ensureDirSync(dir)` — creating **into an existing dir is allowed**;
   hard error only if the dir already contains `_quarto.yml`/`_quarto.yaml`
-  ("The directory '<dir>' already contains a quarto project").
+  ("The directory '\<dir>' already contains a quarto project").
 - Scaffold/supporting file writes are individually skipped if the target
   file already exists (merge-into-non-empty-dir semantics).
 - Writes `.gitignore` via `ensureGitignore`: entries `/.quarto/` and
@@ -168,7 +168,7 @@ website-basics.qmd` ("the name will be used as the directory name").
    `index.qmd` + `about.qmd`, `format.html: {theme: cosmo, css: styles.css,
    toc: true}`; add `about.qmd.template` and static `styles.css`. The
    scaffolded `_quarto.yml` also declares `project.resources:
-   [styles.css]` — required for the stylesheet to reach `_site/` until
+   [styles.css]` — required for the stylesheet to reach `\_site/` until
    bd-b87tmmi4 (Q2 doesn't auto-copy `css:`-referenced files) is fixed,
    and harmless after. Two deliberate deviations, called out per-file in
    the tests:
@@ -217,7 +217,7 @@ website-basics.qmd` ("the name will be used as the directory name").
      for default projects output lands in the project root, same as Q1.
    - `q2 preview` writes nothing into the project tree (state lives in a
      `q2-preview-*` system tempdir, `crates/quarto/src/commands/
-     preview.rs:93`), and `_freeze/` is doc-comment-only today — nothing
+     preview.rs:93`), and `\_freeze/` is doc-comment-only today — nothing
      to ignore from either.
 5. **Directory semantics:** exact Q1 parity — create-or-reuse dir, error iff
    `_quarto.yml|_quarto.yaml` present, per-file skip-if-exists.
@@ -233,7 +233,7 @@ hub tooling, other processes) can drive creation without shelling out to
 positional-argument parsing. This is viable and ergonomic with our stack:
 clap adds the flags trivially; the serde wire types largely already exist
 in `quarto-project-create` (shared with the WASM hub-client entry points);
-and the `quarto` crate already enables `quarto-error-reporting`'s `json`
+and the `quarto` crate already enables `quarto-error-reporting`\'s `json`
 feature for structured error output.
 
 **Surface:**
@@ -293,7 +293,7 @@ the warning goes to stderr, never stdout). Unknown fields rejected
   documented.
 - The envelope enum + directive/result types live in the CLI's
   `commands/create/` module for now, with the project payload reusing
-  `quarto-project-create`'s existing serde types. If/when the `extension`
+  `quarto-project-create`\'s existing serde types. If/when the `extension`
   artifact lands and out-of-process consumers want to link the contract
   directly, extract to a small `quarto-create` types crate — not needed
   yet, noted for the follow-up strand.
@@ -342,7 +342,7 @@ the warning goes to stderr, never stdout). Unknown fields rejected
       consolidation); assertions parse the rendered `_quarto.yml` with
       `serde_yaml` (new dev-dep) so they check field values and prove
       validity. `scaffold.rs` gains exact-file-list tests + a
-      compile-all-templates test (replacing `templates.rs`'s, which goes
+      compile-all-templates test (replacing `templates.rs`\'s, which goes
       away with the module in Phase 2).
 - [x] New CLI integration tests at
       `crates/quarto/tests/integration/create.rs` (registered in

@@ -95,7 +95,7 @@ async function compileDocumentCss(content: string, options: Options): Promise<st
 
 ## Assumptions
 
-1. **Built-in themes' imports are stable**: Built-in themes may have `@import`/`@use` statements, but they only reference embedded resources that never change at runtime.
+1. **Built-in themes\' imports are stable**: Built-in themes may have `@import`/`@use` statements, but they only reference embedded resources that never change at runtime.
 
 2. **Custom SCSS files are self-contained**: For now, we assume custom SCSS files don't have `@import` statements (or if they do, we don't track those dependencies). This simplifies the implementation.
 

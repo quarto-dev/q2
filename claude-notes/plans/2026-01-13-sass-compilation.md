@@ -322,7 +322,7 @@ All 59 quarto-sass tests pass:
 **Phase 4: VFS Resource Embedding** - NATIVE COMPLETE (WASM VFS pre-population pending)
 
 1. **Created `EmbeddedResources` type** in `crates/quarto-sass/src/resources.rs`:
-   - Uses `include_dir!` to embed Bootstrap 5.3.1 SCSS (93 files, ~592KB)
+   - Uses `include_dir!` to embed Bootstrap 5.3.1 SCSS (93 files, \~592KB)
    - Provides `is_file()`, `is_dir()`, `read()` methods for file access
    - Supports multiple path formats (relative, prefixed, absolute with `/__quarto_resources__/`)
    - Lazy-initializes file/directory indexes via `OnceLock<HashSet<String>>`
@@ -391,9 +391,9 @@ All 32 quarto-sass tests pass:
 
 **Phase 3: WASM Runtime** - IMPLEMENTATION COMPLETE (needs browser testing)
 - Created JS bridge: `hub-client/src/wasm-js-bridge/sass.js`
-  - Lazy-loads dart-sass (~5MB) on first compilation to avoid blocking startup
+  - Lazy-loads dart-sass (\~5MB) on first compilation to avoid blocking startup
   - Implements custom VFS importer for reading files from the virtual filesystem
-  - Handles SCSS partial resolution (_prefix, .scss extension, index files)
+  - Handles SCSS partial resolution (\_prefix, .scss extension, index files)
   - Suppresses deprecation warnings (same as TS Quarto)
 - Added `sass` npm dependency to hub-client (^1.77.0)
 - Implemented `WasmRuntime::compile_sass()` in `crates/quarto-system-runtime/src/wasm.rs`
@@ -518,8 +518,8 @@ assembly logic (Phase 6).
    - Rules (`bootstrap.scss` - which imports component rules)
 
 2. **Bootstrap Compilation Results**:
-   - Expanded: ~235KB CSS
-   - Minified: ~200KB CSS, <100 newlines
+   - Expanded: \~235KB CSS
+   - Minified: \~200KB CSS, <100 newlines
    - All expected classes present (.btn, .container, .navbar, .modal, etc.)
 
 3. **grass Compatibility**: grass (targeting dart-sass 1.54.3) successfully compiles
@@ -553,8 +553,8 @@ assembly logic (Phase 6).
 Port the SASS bundle compilation system from TypeScript Quarto to Rust Quarto, supporting both native and WASM execution targets. This enables hub-client to render previews with custom SASS styling while maintaining bounded cache sizes in browser storage.
 
 **Key architectural decisions:**
-- **Native**: Use the `grass` crate (pure Rust, ~2x faster than dart-sass)
-- **WASM**: Use dart-sass via JavaScript bridge (lazy-loaded, ~5MB)
+- **Native**: Use the `grass` crate (pure Rust, \~2x faster than dart-sass)
+- **WASM**: Use dart-sass via JavaScript bridge (lazy-loaded, \~5MB)
 - **Bootstrap**: Target version 5.3.1 (matches TS Quarto)
 - **VFS Resources**: Embed Bootstrap/Quarto SCSS via `include_dir!`-like mechanism
 - **Source maps**: Not initially required
@@ -614,14 +614,14 @@ We will target the same version for compatibility.
 
 | Target | Compiler | Method | Notes |
 |--------|----------|--------|-------|
-| **Native** | grass | Pure Rust crate | ~2x faster, no JS engine needed |
+| **Native** | grass | Pure Rust crate | \~2x faster, no JS engine needed |
 | **WASM** | dart-sass | Browser JS bridge | Lazy-loaded, standard npm package |
 
 **Why This Approach:**
 
 1. **Native with grass**:
    - Pure Rust - no JavaScript engine dependency
-   - ~2x faster than dart-sass ([grass benchmarks](https://github.com/connorskees/grass))
+   - \~2x faster than dart-sass ([grass benchmarks](https://github.com/connorskees/grass))
    - Bootstrap 5 compilation verified by CI (byte-for-byte accuracy)
    - Has `Fs` trait that maps perfectly to our `SystemRuntime` abstractions
    - Avoids deno_core/deno_web dependency issues
@@ -1416,7 +1416,7 @@ pub fn compile_themed_bundle(
 ### Phase 4: VFS Resource Embedding
 
 - [x] Create `EmbeddedResources` type
-- [x] Set up include_dir! to embed Bootstrap 5.3.1 SCSS (93 files, ~592KB)
+- [x] Set up include_dir! to embed Bootstrap 5.3.1 SCSS (93 files, \~592KB)
 - [x] Implement VFS pre-population for WASM (code written, browser testing pending)
 - [x] Configure default load paths (`/__quarto_resources__/bootstrap/scss`)
 - [x] Test embedded resource access in native runtime
@@ -1533,14 +1533,14 @@ sass.compileString(source, {
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Native compiler | grass | Pure Rust, ~2x faster, no JS engine |
+| Native compiler | grass | Pure Rust, \~2x faster, no JS engine |
 | WASM compiler | dart-sass | Reference implementation, npm package |
 | Bootstrap version | 5.3.1 | Matches TS Quarto |
-| dart-sass loading | Lazy | Avoid blocking startup (~5MB) |
+| dart-sass loading | Lazy | Avoid blocking startup (\~5MB) |
 | Resource embedding | `include_dir!`-like | Offline support, simplicity |
 | VFS path prefix | `/__quarto_resources__/` | Clear separation from user files |
 | Source maps | Not initially | Can add later if needed |
-| Cache size | 50MB | ~100+ stylesheets, under quota |
+| Cache size | 50MB | \~100+ stylesheets, under quota |
 
 ## Dependencies
 
@@ -1575,7 +1575,7 @@ grass = "0.13"
 |------|------------|--------|------------|
 | grass/dart-sass output differences | Low | Medium | Parity testing in CI (Phase 2b) |
 | Bootstrap 5.3.1 incompatible with grass | Low | High | Verified by grass CI; our parity tests |
-| sass npm bundle size (~5MB) | N/A | Low | Lazy loading; acceptable for web app |
+| sass npm bundle size (\~5MB) | N/A | Low | Lazy loading; acceptable for web app |
 | grass `@use`/`@forward` edge cases | Medium | Low | Most Bootstrap uses simple patterns |
 | Layer boundary parsing edge cases | Medium | Medium | Port TS Quarto's regex exactly |
 | IndexedDB quota exceeded | Low | Low | LRU eviction; configurable limits |

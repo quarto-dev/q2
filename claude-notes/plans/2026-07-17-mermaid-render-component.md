@@ -139,7 +139,7 @@ Studied: `kan_ban.tsx`, `gordon/render-components2/{drag,comment}.tsx`
 > `fileContents` is keyed **with a leading slash** for the `/cscheid/…`
 > subtree (`/cscheid/mermaid/mermaid.tsx`) and `currentFilePath` is
 > `/cscheid/mermaid/hand-written-test.qmd`, but
-> `resolveComponentPath()`'s `normalize()` **always strips the leading
+> `resolveComponentPath()`\'s `normalize()` **always strips the leading
 > slash**, producing the lookup key `cscheid/mermaid/mermaid.tsx` (no
 > slash) → `fileContents.get(...)` misses. Root-level files
 > (e.g. `kan_ban.tsx`) are keyed *without* a leading slash, which is why

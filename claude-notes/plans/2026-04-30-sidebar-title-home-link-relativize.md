@@ -374,7 +374,7 @@ Phase 2 — `sidebar_to_html` signature:
 
 Phase 3 — `navbar_to_html` signature:
 - [x] Update existing navbar tests (incl. the
-      `href="/"` assertion at ~`render_html.rs:903`)
+      `href="/"` assertion at \~`render_html.rs:903`)
 - [x] Add tests 9–11
 - [x] Verify the new tests fail
 - [x] Add `home_url: &str` parameter to `navbar_to_html`,

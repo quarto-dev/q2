@@ -145,7 +145,7 @@ for (node, child) in children {
    ```qmd
    $x$ {.equation}
    ```
-   Expected: Span with classes=["quarto-math-with-attribute", "equation"]
+   Expected: Span with classes=`["quarto-math-with-attribute", "equation"]`
 
 3. **Inline math with multiple attributes**
    ```qmd

@@ -225,7 +225,7 @@ mod tests {
 #### When to Apply This Strategy
 
 Look for these signs that code needs refactoring for testability:
-- Functions longer than ~50 lines mixing I/O and logic
+- Functions longer than \~50 lines mixing I/O and logic
 - Hard-to-test code that "does a lot"
 - 0% coverage on files that clearly have important logic
 - Code where you'd need mocks to test it
@@ -487,7 +487,7 @@ When you encounter code that "can't be tested" or a feature that "doesn't work,"
 During a coverage session, quoted strings in shortcodes appeared to produce empty output:
 
 ```
-{{< include "file with spaces.qmd" >}}
+{{{< include "file with spaces.qmd" >}}}
 → data-value: ""  (empty!)
 ```
 

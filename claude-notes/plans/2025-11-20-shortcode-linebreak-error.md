@@ -8,14 +8,14 @@ File: claude-notes/plans/2025-11-20-shortcode-linebreak-error.md
 The parser cannot handle a line break immediately before the shortcode closing delimiter `>}}`.
 
 **Example that fails:**
-```markdown
+```{.markdown shortcodes="false"}
 {{< hello
    >}}
 ```
 
 **Parser state:**
 - State: 2605
-- Symbol: "_close_block"
+- Symbol: "\_close_block"
 - Location: After "hello" (column 9, row 0)
 
 The parser successfully recognizes:
@@ -59,7 +59,7 @@ Following tidyverse guidelines and existing patterns:
 
 File: `crates/quarto-markdown-pandoc/resources/error-corpus/Q-2-27.json`
 
-```json
+```{.json shortcodes="false"}
 {
   "code": "Q-2-27",
   "title": "Line Break Before Shortcode Close",
@@ -121,7 +121,7 @@ File: `crates/quarto-markdown-pandoc/resources/error-corpus/Q-2-27.json`
 
 ### 1. Find where to emit the error
 
-The error occurs at state 2605 with symbol "_close_block". I need to find where this state is handled in the parser.
+The error occurs at state 2605 with symbol \"\_close_block\". I need to find where this state is handled in the parser.
 
 Look for:
 - Grammar rule that produces state 2605
@@ -149,7 +149,7 @@ Find the shortcode parsing code and add logic to emit Q-2-27 when:
 **Test file**: `~/today/bad-shortcode-linebreak.qmd`
 
 **Expected output**:
-```
+```{shortcodes="false"}
 Error: [Q-2-27] Line Break Before Shortcode Close
 ╭─[bad-shortcode-linebreak.qmd:1:1]
 │
@@ -174,13 +174,13 @@ A `q-2-27` converter rule could automatically fix this by:
 1. Detecting Q-2-27 errors
 2. Finding the newline before `>}}`
 3. Removing the newline and any leading whitespace on the next line
-4. Result: `{{< hello >}}`
+4. Result: `{{{< hello >}}}`
 
 ## Grammar Context
 
 Need to understand:
 - Where is state 2605 in the grammar?
-- What rule produces "_close_block" symbol?
+- What rule produces "\_close\_block" symbol?
 - Why does newline cause this state?
 
 Let me search the grammar files for shortcode handling.

@@ -31,7 +31,7 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 - Created Prompt templates (document creation, debugging, YAML fixing)
 
 ### 4. Implementation Planning
-- Created 4-phase timeline (~12-13 weeks total)
+- Created 4-phase timeline (\~12-13 weeks total)
 - Proposed 2-day spike to validate approach
 - Identified integration points with Kyoto infrastructure
 - Designed security model and performance considerations
@@ -40,14 +40,14 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 
 ### Primary Documents
 
-1. **quarto-mcp-server-plan.md** (~8KB)
+1. **quarto-mcp-server-plan.md** (\~8KB)
    - Executive summary and strategic value proposition
    - Complete architecture and capability specifications
    - 4-phase implementation plan with timelines
    - Risk analysis, success metrics, competitive positioning
    - Recommended next steps
 
-2. **quarto-mcp-technical-spec.md** (~18KB)
+2. **quarto-mcp-technical-spec.md** (\~18KB)
    - Detailed technical specifications
    - JSON schemas for all resources and tools
    - Rust code examples using rmcp SDK
@@ -110,7 +110,7 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 - **Rationale**: Simplest integration with Claude Desktop, Cursor, VS Code; no network config needed
 
 ### Architecture Pattern
-- **Choice**: Tool-based with procedural macros (#[tool] attribute)
+- **Choice**: Tool-based with procedural macros (`#[tool]` attribute)
 - **Rationale**: Clean API, automatic parameter validation, similar to existing Rust patterns
 
 ## Timeline Estimates
@@ -120,7 +120,7 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 - **Phase 2 (Tools)**: 3-4 weeks
 - **Phase 3 (Advanced)**: 3-4 weeks
 - **Phase 4 (Production)**: 2 weeks
-- **Total**: ~12-13 weeks (~3 months)
+- **Total**: \~12-13 weeks (\~3 months)
 
 ### Recommended First Step
 - **2-day spike**: Validate rmcp, build minimal server (1 resource, 1 tool), test with Claude Desktop

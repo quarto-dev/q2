@@ -454,7 +454,7 @@ let bundled_source = asset.source.as_ref().unwrap().source();
 | Challenge | Mitigation |
 |-----------|------------|
 | Pre-1.0 API stability | Pin version, maintain fork if needed |
-| Large dependency tree (~92 crates) | Use feature flags, tree-shaking |
+| Large dependency tree (\~92 crates) | Use feature flags, tree-shaking |
 | Tokio runtime requirement | Already using tokio in quarto-core |
 | Learning curve (webpack model) | Start with minimal config |
 
@@ -722,8 +722,8 @@ In TS Quarto, Pandoc generates the TOC via `--toc` flag. For Rust Quarto, we hav
 | TS Quarto | Rust Quarto | Notes |
 |-----------|-------------|-------|
 | clipboard.min.js | `navigator.clipboard` API | Modern browsers support natively |
-| anchor.min.js | Custom ~50 lines | Simple DOM manipulation |
-| tabby.js | Custom ~100 lines | Simple state management |
+| anchor.min.js | Custom \~50 lines | Simple DOM manipulation |
+| tabby.js | Custom \~100 lines | Simple state management |
 | tippy.js + popper.js | Deferred | Only if hover features needed |
 
 By using native APIs and small custom implementations, we reduce:
@@ -759,7 +759,7 @@ crates/quarto-core/
 
 **Note**: If feature implementations are simple (just trait impls with config checks), they can all live in `js_features.rs`. If they need complex detection logic (AST walking), they can be split into separate modules.
 
-**Total estimated size**: ~500 lines of JS (vs. TS Quarto's thousands + third-party libs)
+**Total estimated size**: \~500 lines of JS (vs. TS Quarto's thousands + third-party libs)
 
 ---
 

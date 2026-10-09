@@ -136,7 +136,7 @@ authors can rely on.
   introspect `debug.getinfo()` can resolve `(source: path, line:
   line_num)` into `SourceInfo::Original { file_id, start, end }`
   where `start..end` covers the line's bytes (via
-  `FileInformation`'s line-break index).
+  `FileInformation`\'s line-break index).
 - Update `get_caller_source_info`
   (`crates/pampa/src/lua/diagnostics.rs:255`) — currently constructs
   `Generated { by: By::filter(path, line), from: SmallVec::new() }`.
@@ -259,7 +259,7 @@ Plan-10-specific mechanism.)
 - **Source range of a Dispatch anchor: line-covering `Original`.**
   `debug.getinfo()` gives line numbers, not byte ranges. Once Lua
   file content is in SourceContext, we compute the byte range of the
-  named line via `FileInformation`'s line-break index. The Dispatch
+  named line via `FileInformation`\'s line-break index. The Dispatch
   anchor's source_info is `Original { file_id: lua_file, start:
   line_start, end: line_end }`. Sub-line precision (specific
   function or expression) is out of scope for v1 — `debug.getinfo()`
@@ -341,7 +341,7 @@ must be pinned:
   `crates/quarto-source-map/src/source_info.rs:715-770` exercise
   `By::filter("foo.lua", 42)` extensively. They migrate to
   `By::filter()` + a Dispatch anchor; the path/line assertions move
-  to the anchor's `source_info`. Mechanical but ~10 test changes.
+  to the anchor's `source_info`. Mechanical but \~10 test changes.
 
 - **Plan 6's Lua post-walk shape (`enrich_or_create`).** Plan 6
   Phase 6's post-walk helper (per the diff in Plan 6 §"The post-walk
@@ -509,7 +509,7 @@ must be pinned:
   pattern (likely `Arc<Mutex<…>>` or `&mut` through the pipeline)
   must accommodate Lua-file additions mid-pipeline. Verify.
 
-- **Migration tests that touch `By::filter("foo.lua", 42)`.** ~10
+- **Migration tests that touch `By::filter("foo.lua", 42)`.** \~10
   unit tests in `source_info.rs` migrate mechanically; if any are
   missed during the signature change, the workspace fails to
   compile. Mitigation: the compiler is the safety net here — `cargo
@@ -519,15 +519,15 @@ must be pinned:
 
 | Phase | Lines (rough) |
 |---|---|
-| 1: `AnchorRole::Dispatch` + Anchor constructor + tests | ~80 |
-| 2: SourceContext Lua-file support (probably minimal) | ~40 |
-| 3: Lua bridge FileId threading + byte-range computation | ~200 |
-| 4: `By::filter` signature shrinkage + call-site migration | ~120 |
-| 5: Lua-handler shortcode Dispatch attachment | ~80 |
-| 6: Wire-format clean break + tests | ~80 |
-| 7: Cache-key surface (`filter_sources_hash`) + smoke test | ~40 |
-| Tests across phases | ~350 |
-| **Total** | **~980** |
+| 1: `AnchorRole::Dispatch` + Anchor constructor + tests | \~80 |
+| 2: SourceContext Lua-file support (probably minimal) | \~40 |
+| 3: Lua bridge FileId threading + byte-range computation | \~200 |
+| 4: `By::filter` signature shrinkage + call-site migration | \~120 |
+| 5: Lua-handler shortcode Dispatch attachment | \~80 |
+| 6: Wire-format clean break + tests | \~80 |
+| 7: Cache-key surface (`filter_sources_hash`) + smoke test | \~40 |
+| Tests across phases | \~350 |
+| **Total** | **\~980** |
 
 Two focused sessions likely; high-complexity due to mlua interop
 and the wire-format migration. The Lua engine bridge work in

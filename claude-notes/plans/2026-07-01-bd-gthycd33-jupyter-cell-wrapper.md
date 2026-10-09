@@ -19,7 +19,7 @@ the `{python}` cell still renders as source. The identical flow with
 
 The bug is **independent of the hub execution-provider feature** and exists on
 `main`: it affects any consumer of the capture-splice path, including `q2
-preview`'s own server-side capture recording (bd-lucp). Reproduced
+preview`\'s own server-side capture recording (bd-lucp). Reproduced
 mechanically on `main` in this worktree (2026-07-01, see below).
 
 ## Root cause (confirmed by reproduction)
@@ -50,7 +50,7 @@ source — exactly the browser symptom.
 
 Test: `crates/quarto-core/tests/integration/repro_gthycd33.rs` (in this
 branch's working tree). It runs `record_capture` with the **real** engine
-(mirroring `quarto-hub-provider`'s `pollster::block_on` calling convention —
+(mirroring `quarto-hub-provider`\'s `pollster::block_on` calling convention —
 the jupyter engine builds its own current-thread tokio runtime, so the test
 must not be `#[tokio::test]`), then replays exactly what `CaptureSpliceStage`
 does: parse `input_qmd` / `result.markdown` with `pampa::readers::qmd::read`
@@ -193,7 +193,7 @@ live cell with the wrapper, and "no output" renders as just the echoed code.
    the `.cell-code` echo fence and `.cell-output` divs too. Ratified
    rationale: **cross-engine congruence of post-engine markdown is a
    correctness requirement in q2**, not cosmetics — any structural divergence
-   between engines' text output is precisely the class of bug bd-gthycd33 is
+   between engines\' text output is precisely the class of bug bd-gthycd33 is
    (the splice, CSS selectors, and future cell-level transforms all key on
    one shared shape). Corollary: where quarto-cli's jupyter emission differs
    *structurally* from knitr's, treat that as a quarto-cli bug and do **not**
@@ -288,140 +288,140 @@ here, tolerated deliberately, or filed as a follow-up.
 ### Phase 1 — tests first (TDD)
 
 - [x] Keep the two repro tests as the engine-gated regression pair —
-      renamed to `capture_splice_engines.rs`
-      (`jupyter_capture_splices_into_preview_ast` /
-      `knitr_capture_splices_into_preview_ast`), extended to assert the
-      spliced AST replaces the cell with a `Div.cell` via `splice_cells`,
-      and gated with a runtime skip (not `#[ignore]` — CI runs without
-      `--run-ignored`, so an ignored fence would never fire anywhere; with
-      runtime gating it runs wherever engines are installed and skips
-      elsewhere). ✅ jupyter FAILS / knitr PASSES (2026-07-02, this
-      worktree off main).
+  renamed to `capture_splice_engines.rs`
+  (`jupyter_capture_splices_into_preview_ast` /
+  `knitr_capture_splices_into_preview_ast`), extended to assert the
+  spliced AST replaces the cell with a `Div.cell` via `splice_cells`,
+  and gated with a runtime skip (not `#[ignore]` — CI runs without
+  `--run-ignored`, so an ignored fence would never fire anywhere; with
+  runtime gating it runs wherever engines are installed and skips
+  elsewhere). ✅ jupyter FAILS / knitr PASSES (2026-07-02, this
+  worktree off main).
 - [x] Add **pure unit tests** (no kernel needed) in `text_execute.rs`:
-      10 exact-string shape tests (echo fence with `.cell-code`, output
-      divs per class, `render_cell` wrapper with/without outputs, fence
-      sizing per Q1's `ticksForCode` — max(3, longest leading backtick
-      run + 1); the current fixed ``` is a latent corruption bug for
-      outputs containing backticks). The three old shape tests
-      (`test_echoed_source_fence_strips_braces`,
-      `test_format_outputs_stream`, `test_format_outputs_error`) replaced
-      by exact-equality versions. ✅ red confirmed 2026-07-02: E0425 for
-      the not-yet-existing `render_cell` (format_outputs assert-reds are
-      masked by the compile error until it exists).
+  10 exact-string shape tests (echo fence with `.cell-code`, output
+  divs per class, `render_cell` wrapper with/without outputs, fence
+  sizing per Q1's `ticksForCode` — max(3, longest leading backtick
+  run + 1); the current fixed \`\`\` is a latent corruption bug for
+  outputs containing backticks). The three old shape tests
+  (`test_echoed_source_fence_strips_braces`,
+  `test_format_outputs_stream`, `test_format_outputs_error`) replaced
+  by exact-equality versions. ✅ red confirmed 2026-07-02: E0425 for
+  the not-yet-existing `render_cell` (format_outputs assert-reds are
+  masked by the compile error until it exists).
 - [x] Add the **cross-engine parity suite** —
-      `crates/quarto-core/tests/integration/engine_output_parity.rs`, 4
-      input pairs (stream, expression value, error, source-only), recursive
-      shape-parity walker (block kinds + semantic classes ∩ {cell,
-      cell-code, cell-output}), runtime-skip unless both engines available.
-      ✅ all 4 FAIL with the expected mismatch (knitr `[Paragraph, Div,
-      Paragraph]` vs jupyter `[Paragraph, CodeBlock, CodeBlock, Paragraph]`),
-      2026-07-02. The error pair uses `#| error: true` in both cells — see
-      discrepancy log entry 2.
+  `crates/quarto-core/tests/integration/engine_output_parity.rs`, 4
+  input pairs (stream, expression value, error, source-only), recursive
+  shape-parity walker (block kinds + semantic classes ∩ \{cell,
+  cell-code, cell-output\}), runtime-skip unless both engines available.
+  ✅ all 4 FAIL with the expected mismatch (knitr `[Paragraph, Div,
+  Paragraph]` vs jupyter `[Paragraph, CodeBlock, CodeBlock, Paragraph]`),
+  2026-07-02. The error pair uses `#| error: true` in both cells — see
+  discrepancy log entry 2.
 - [x] Run: new/updated unit tests fail ✅ (red = E0425 compile error for
-      the not-yet-existing `render_cell`); repro jupyter test fails ✅
-      (map 0 entries); parity suite fails ✅ (all 4 pairs, expected
-      mismatch). knitr splice test passes ✅ (control). 2026-07-02.
+  the not-yet-existing `render_cell`); repro jupyter test fails ✅
+  (map 0 entries); parity suite fails ✅ (all 4 pairs, expected
+  mismatch). knitr splice test passes ✅ (control). 2026-07-02.
 
 ### Phase 2 — implementation
 
 - [x] Rework the emission in `text_execute.rs`: new `render_cell` wraps
-      echoed source + outputs in `::: {.cell}`; `echoed_source_fence` emits
-      `{.<lang> .cell-code}`; `format_outputs` emits
-      `::: {.cell-output .cell-output-{stdout,stderr,display,error}}` divs
-      around plain fences (`fenced_output_div`); all fences sized via
-      `ticks_for_code` (Q1 rule). Also: a guard in `execute_blocks_inner`
-      ensures the `::: {.cell}` opener starts its own block when the source
-      lacked a blank line before the cell (fenced divs can't interrupt a
-      paragraph), and `text/plain`/`text/html` mime values now go through
-      `extract_text_content` (handles nbformat's array-of-lines form the
-      old `as_str()` silently dropped — unit-tested).
+  echoed source + outputs in `::: {.cell}`; `echoed_source_fence` emits
+  `{.<lang> .cell-code}`; `format_outputs` emits
+  `::: {.cell-output .cell-output-{stdout,stderr,display,error}}` divs
+  around plain fences (`fenced_output_div`); all fences sized via
+  `ticks_for_code` (Q1 rule). Also: a guard in `execute_blocks_inner`
+  ensures the `::: {.cell}` opener starts its own block when the source
+  lacked a blank line before the cell (fenced divs can't interrupt a
+  paragraph), and `text/plain`/`text/html` mime values now go through
+  `extract_text_content` (handles nbformat's array-of-lines form the
+  old `as_str()` silently dropped — unit-tested).
 - [x] **AST-path disposition (decision 4): retired.** `JupyterTransform` +
-      `outputs_to_blocks` had **no production consumer** (grep: only
-      `jupyter_integration.rs` tests) — production execution is
-      `ExecutionEngine::execute` → `text_execute.rs`. Deleted
-      `jupyter/transform.rs` + `jupyter/output.rs`; moved the still-used
-      helpers (`strip_ansi_codes`, `extract_text_content`) + their tests
-      into `text_execute.rs`; pruned the transform/inline-expr tests from
-      `jupyter_integration.rs` (their durable coverage lives on: kernel
-      persistence → `parity_dependent_cells` + `test_full_pipeline_multiple_cells`;
-      inline `{python} expr` was a prototype only the retired path had →
-      filed **bd-u996g8g2**). One emission path remains, by construction.
+  `outputs_to_blocks` had **no production consumer** (grep: only
+  `jupyter_integration.rs` tests) — production execution is
+  `ExecutionEngine::execute` → `text_execute.rs`. Deleted
+  `jupyter/transform.rs` + `jupyter/output.rs`; moved the still-used
+  helpers (`strip_ansi_codes`, `extract_text_content`) + their tests
+  into `text_execute.rs`; pruned the transform/inline-expr tests from
+  `jupyter_integration.rs` (their durable coverage lives on: kernel
+  persistence → `parity_dependent_cells` + `test_full_pipeline_multiple_cells`;
+  inline `{python} expr` was a prototype only the retired path had →
+  filed **bd-u996g8g2**). One emission path remains, by construction.
 - [x] Added a 5th parity case, `parity_dependent_cells` (two cells, second
-      reads state from the first) — pins kernel-state persistence through
-      the production path *and* multi-cell shape, for both engines.
+  reads state from the first) — pins kernel-state persistence through
+  the production path *and* multi-cell shape, for both engines.
 - [ ] While consulting `external-sources/quarto-cli`, log any further
-      jupyter-vs-knitr structural discrepancies in this plan (decision 1
-      corollary) — resolve toward the common structure, flag for review when
-      in doubt. (Ongoing through Phase 3/4.)
+  jupyter-vs-knitr structural discrepancies in this plan (decision 1
+  corollary) — resolve toward the common structure, flag for review when
+  in doubt. (Ongoing through Phase 3/4.)
 - [x] All Phase 1 tests pass with real kernels: 19 `text_execute` unit
-      tests, both `capture_splice_engines` tests, all 5 parity cases
-      (2026-07-02). Also ran the `#[ignore]`d kernel suite: 25 pass; the 3
-      failures are **pre-existing on main** (verified by stashing this
-      work and re-running the baseline): `test_full_pipeline_*` panic on a
-      nested tokio runtime in `execute_blocks_async` (filed
-      **bd-2me3cslx**), `test_kernel_execute_matplotlib` needs matplotlib
-      which this venv lacks (environmental).
+  tests, both `capture_splice_engines` tests, all 5 parity cases
+  (2026-07-02). Also ran the `#[ignore]`d kernel suite: 25 pass; the 3
+  failures are **pre-existing on main** (verified by stashing this
+  work and re-running the baseline): `test_full_pipeline_*` panic on a
+  nested tokio runtime in `execute_blocks_async` (filed
+  **bd-2me3cslx**), `test_kernel_execute_matplotlib` needs matplotlib
+  which this venv lacks (environmental).
 
 ### Phase 3 — regression sweep
 
 - [x] `cargo build --workspace` ✅ clean (2026-07-02).
 - [x] `cargo nextest run --workspace` ✅ **10181 passed, 0 failed** (1
-      "leaky" warning — the knitr R child-process handle, passes; also seen
-      intermittently on the standalone run).
+  "leaky" warning — the knitr R child-process handle, passes; also seen
+  intermittently on the standalone run).
 - [x] `cargo xtask verify` (full, WASM leg included) ✅ "All verification
-      steps passed!" (2026-07-02). Also, separately: `cargo clippy -p
-      quarto-core --all-targets` clean, `cargo xtask lint` clean,
-      `cargo fmt --check` clean.
+  steps passed!" (2026-07-02). Also, separately: `cargo clippy -p
+  quarto-core --all-targets` clean, `cargo xtask lint` clean,
+  `cargo fmt --check` clean.
 - [x] Grep for consumers assuming jupyter's old bare-fence shape: **none**.
-      All `cell-output` consumers found expect the *div* form and start
-      matching better with this fix: `resources/scss/bootstrap/
-      _bootstrap-rules.scss` (`.cell .cell-output-stdout pre code`),
-      `quarto-core/src/project/listing/post_render_upgrade/reader.rs`
-      (`div.preview-image div.cell-output-display img`), plus an inert
-      fixture string in `quarto-test/src/assertions/html_elements.rs`.
-      hub-client TS / ts-packages: no `cell-output` references at all.
+  All `cell-output` consumers found expect the *div* form and start
+  matching better with this fix: `resources/scss/bootstrap/
+  \_bootstrap-rules.scss` (`.cell .cell-output-stdout pre code`),
+  `quarto-core/src/project/listing/post_render_upgrade/reader.rs`
+  (`div.preview-image div.cell-output-display img`), plus an inert
+  fixture string in `quarto-test/src/assertions/html_elements.rs`.
+  hub-client TS / ts-packages: no `cell-output` references at all.
 
 ### Phase 4 — end-to-end verification (per CLAUDE.md)
 
 - [x] **CLI e2e through the real binary** (2026-07-02): rendered a
-      two-cell jupyter doc (expression `2 + 3` + `print("streamed
-      output")`) with `./target/debug/q2 render hello.qmd` (the
-      workspace-built binary; scratch fixture). Inspected `hello.html`:
-      two `<div class="cell">` wrappers; `<div class="cell-output
-      cell-output-display"><pre...><code>5</code>`; `<div class="cell-output
-      cell-output-stdout">...<code>streamed output</code>`; echoed source
-      carries `class="sourceCode cell-code code-with-copy"` with highlight
-      spans present. Output inspected directly, not inferred.
+  two-cell jupyter doc (expression `2 + 3` + `print("streamed
+  output")`) with `./target/debug/q2 render hello.qmd` (the
+  workspace-built binary; scratch fixture). Inspected `hello.html`:
+  two `<div class="cell">` wrappers; `<div class="cell-output
+  cell-output-display"><pre...><code>5</code>`; `<div class="cell-output
+  cell-output-stdout">...<code>streamed output</code>`; echoed source
+  carries `class="sourceCode cell-code code-with-copy"` with highlight
+  spans present. Output inspected directly, not inferred.
 - [x] `q2 preview` browser e2e ✅ (2026-07-02). Chain: `cargo xtask verify`
-      (rebuilt WASM + q2-preview-spa dist) → `cargo build --bin q2`
-      (re-embed) → `./target/debug/q2 preview <scratch>/hello.qmd` →
-      opened `http://127.0.0.1:59606` in a real Chrome tab. Inspected the
-      preview iframe DOM: **2 `div.cell` wrappers; `.cell-output
-      .cell-output-display` containing `5`; `.cell-output
-      .cell-output-stdout` containing `streamed output`** — i.e. the
-      server-recorded capture spliced into the WASM-rendered preview,
-      which is exactly the surface that failed in the original report
-      (the WASM markdown engine cannot compute `5` itself). Screenshot
-      captured in the session transcript; the rendered page shows both
-      highlighted cells with their outputs below.
+  (rebuilt WASM + q2-preview-spa dist) → `cargo build --bin q2`
+  (re-embed) → `./target/debug/q2 preview <scratch>/hello.qmd` →
+  opened `http://127.0.0.1:59606` in a real Chrome tab. Inspected the
+  preview iframe DOM: **2 `div.cell` wrappers; `.cell-output
+  .cell-output-display` containing `5`; `.cell-output
+  .cell-output-stdout` containing `streamed output`** — i.e. the
+  server-recorded capture spliced into the WASM-rendered preview,
+  which is exactly the surface that failed in the original report
+  (the WASM markdown engine cannot compute `5` itself). Screenshot
+  captured in the session transcript; the rendered page shows both
+  highlighted cells with their outputs below.
 - [ ] Optional cross-check on the feature branch: re-run the Option-B hub
-      harness (`claude-notes/hub-execution-e2e/`, feature branch only) after
-      this fix merges — `hello.qmd` Run should splice like `r-demo.qmd`.
+  harness (`claude-notes/hub-execution-e2e/`, feature branch only) after
+  this fix merges — `hello.qmd` Run should splice like `r-demo.qmd`.
 
 ### Phase 5 — close out
 
 - [ ] Commit (pre-commit review checklist done; awaiting Carlos's
-      approval), then `braid close bd-gthycd33`.
+  approval), then `braid close bd-gthycd33`.
 - [x] File deferred follow-ups as strands (all `discovered-from:
-      bd-gthycd33`): **bd-ohvl879u** (error-policy divergence: jupyter
-      embeds cell errors and continues where knitr fails the render),
-      **bd-2me3cslx** (pre-existing broken `#[ignore]`d full-pipeline
-      tests: nested tokio runtime), **bd-u996g8g2** (inline `{python}
-      expr` in the text path; the retired prototype is the reference),
-      **bd-5t6wvu7m** (real image outputs instead of the placeholder;
-      TODO in code now carries this id), **bd-vs7sa0qx**
-      (`execution_count` attributes when a consumer appears — decision 3).
-      The AST path did NOT need a follow-up: it was retired in Phase 2.
+  bd-gthycd33`): **bd-ohvl879u** (error-policy divergence: jupyter
+  embeds cell errors and continues where knitr fails the render),
+  **bd-2me3cslx** (pre-existing broken `#[ignore]`d full-pipeline
+  tests: nested tokio runtime), **bd-u996g8g2** (inline `{python}
+  expr` in the text path; the retired prototype is the reference),
+  **bd-5t6wvu7m** (real image outputs instead of the placeholder;
+  TODO in code now carries this id), **bd-vs7sa0qx**
+  (`execution_count` attributes when a consumer appears — decision 3).
+  The AST path did NOT need a follow-up: it was retired in Phase 2.
 
 ## References
 

@@ -15,10 +15,10 @@ warning once per rendered page when the underlying problem lives in a
   'api/index.qmd'` — one identical copy per page, all anchored at the
   same `_quarto.yml` span.
 - Related shapes at smaller counts: `Q-12-7` (template/type fallback,
-  15×), listing `sort:` warnings (~10×), and unknown-shortcode warnings
+  15×), listing `sort:` warnings (\~10×), and unknown-shortcode warnings
   re-reported per includer when the shortcode lives in a shared include
   file (`{{< include ../include/_common.qmd >}}`).
-- (The bulk of the ~75 unknown-shortcode and ~88 `Q-2-9` warnings are
+- (The bulk of the \~75 unknown-shortcode and \~88 `Q-2-9` warnings are
   *distinct* source locations — legitimately separate diagnostics, out
   of scope.)
 
@@ -55,7 +55,7 @@ warning once per rendered page when the underlying problem lives in a
    `_quarto.yml` values get their `FileId` from
    `quarto_yaml::file_id_for_filename` (a hash of the path), so the id
    is stable across all per-document `SourceContext`s.
-   `coalesce_by_source`'s `LocationKey` = `(file_id, start, end)` would
+   `coalesce_by_source`\'s `LocationKey` = `(file_id, start, end)` would
    collapse all 186 into one group.
 
 4. **Hazard: raw `file_id` in the key is unsafe across documents.**
@@ -148,7 +148,7 @@ warning once per rendered page when the underlying problem lives in a
 
 - [x] Integration test (`crates/quarto/tests/integration/` per the
   integration-test layout rule) driving the real binary or
-  `print_render_diagnostics_text`'s input path: 3-page website fixture
+  `print_render_diagnostics_text`\'s input path: 3-page website fixture
   with a broken navbar href → exactly **one** `Q-13-2` block on
   stderr, with an `Affected files:` tail naming 3 pages.
 - [x] Run new tests, verify they fail (red) before implementing.
@@ -196,7 +196,7 @@ warning once per rendered page when the underlying problem lives in a
 - [x] End-to-end on the testbed: re-rendered
   `external-sources/connect-docs/docs-quarto-2`
   (`cargo run --bin q2 -- render …`, output inspected). Q-13-2 went
-  **186 → 1**; stderr 2519 → ~1050 lines; exit code unchanged (1, from
+  **186 → 1**; stderr 2519 → \~1050 lines; exit code unchanged (1, from
   pre-existing Q-5-3 errors). All other repeated classes verified to be
   genuinely distinct locations (Q-12-7's 15 hits = 15 distinct files).
   Observed emission:
@@ -230,6 +230,6 @@ warning once per rendered page when the underlying problem lives in a
 3. Should Phase 4 cover only `_quarto.yml`, or also `_metadata.yml` /
    profile configs / `_variables.yml`? (Same mechanism; just a list of
    candidate paths.)
-4. Priority call: is `q2 preview`'s diagnostic surface in scope? (It
+4. Priority call: is `q2 preview`\'s diagnostic surface in scope? (It
    consumes per-page diagnostics through a different path; coalescing
    there is a UI concern, likely fine to leave per-page.)

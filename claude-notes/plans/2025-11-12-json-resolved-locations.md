@@ -183,7 +183,7 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
 }
 ```
 
-**Problem**: This requires changing ~50+ match arms across write_inline, write_block, write_table_part, etc.
+**Problem**: This requires changing \~50+ match arms across write_inline, write_block, write_table_part, etc.
 
 **Better approach**: Create a helper macro or function to build node JSON with optional location:
 
@@ -248,7 +248,7 @@ Inline::Str(s) => add_location_if_needed(
 )
 ```
 
-**Still requires updating all ~50+ match arms.**
+**Still requires updating all \~50+ match arms.**
 
 ### 5. Alternative: Extend SourceInfoSerializer API
 Add method to serializer that handles both 's' and 'l':
@@ -306,8 +306,8 @@ This keeps the logic centralized while being explicit at each call site.
 8. Add `add_source_info()` method to `SourceInfoSerializer`
 
 ### Phase 3: Update Serialization
-9. Update `write_inline()` - all Inline variants (~25 variants)
-10. Update `write_block()` - all Block variants (~20 variants)
+9. Update `write_inline()` - all Inline variants (\~25 variants)
+10. Update `write_block()` - all Block variants (\~20 variants)
 11. Update `write_meta_value()`, `write_caption()`, `write_table_*()` as needed
 12. Update `write_attr()` if it has source info
 

@@ -233,7 +233,7 @@ fn make_source_info(&self, marker: &Marker, len: usize) -> quarto_source_map::So
 **New:** Use `quarto_source_map::SourceContext`
 - Proper FileId type
 - Content storage for offset-to-row/column conversion
-- Thread-safe with Arc<File> internally
+- Thread-safe with `Arc<File>` internally
 
 **Migration:**
 - Pass `&mut SourceContext` instead of `&ASTContext` to parsing functions
@@ -429,7 +429,7 @@ pub fn node_to_source_info_with_context(
 ### Medium Risk
 
 3. **Performance impact**: SourceMapping has more overhead than flat structure
-   - **Mitigation**: SourceInfo is cheap to clone (uses Box<SourceInfo> for parents)
+   - **Mitigation**: SourceInfo is cheap to clone (uses `Box<SourceInfo>` for parents)
    - **Mitigation**: Benchmark if needed, optimize hot paths
 
 4. **Tree-sitter row/column vs offset confusion**: Different coordinate systems
@@ -446,7 +446,7 @@ pub fn node_to_source_info_with_context(
 
 1. **✅ DECIDED: Efficient offset → row/column conversion**
    - Create `FileInformation` struct to encapsulate file analysis concerns
-   - Store array of line break offsets (Vec<usize>)
+   - Store array of line break offsets (`Vec<usize>`)
    - Binary search for log-time, cache-friendly lookups
    - Don't need to store full content string for this purpose
    - **Design**:

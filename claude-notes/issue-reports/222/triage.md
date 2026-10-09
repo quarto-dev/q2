@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/222
 - **Reporter**: @rundel (Colin Rundel), 2026-05-21
 - **Triage date**: 2026-05-20
-- **Worktree**: `.worktrees/issue-222` (branch `issue-222`, based on `main` @ `99e7f89c`)
+- **Worktree**: `.worktrees/issue-222` (branch `issue-222`, based on `main` \@ `99e7f89c`)
 - **Beads issue**: bd-hwdlq
 - **Scope**: the variable second diagnostic (Q-2-5 Underscore vs. second Q-2-11 Double Quote) on the reported input. Both variants share the same first diagnostic, which is not in scope.
 
@@ -23,8 +23,8 @@ Run repeatedly. Across 30 runs at `99e7f89c` on macOS arm64:
 
 | Variant | Second diagnostic | Count |
 |---|---|---|
-| A | `Q-2-5` Unclosed Underscore Emphasis @ col 19 | 19 / 30 (63%) |
-| B | `Q-2-11` Unclosed Double Quote with opener at col 5 @ col 19 | 11 / 30 (37%) |
+| A | `Q-2-5` Unclosed Underscore Emphasis \@ col 19 | 19 / 30 (63%) |
+| B | `Q-2-11` Unclosed Double Quote with opener at col 5 \@ col 19 | 11 / 30 (37%) |
 
 The first diagnostic — `Q-2-11` Unclosed Double Quote with opener at col 13 — is the same in both.
 

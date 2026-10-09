@@ -45,7 +45,7 @@ Found **29 panic!() statements** across 4 writers. All of these crash the progra
 1. **Line 542**: Editorial marks (Insert, Delete, Highlight, EditComment) - `panic!("Unsupported inline type: {:?}", inline)`
 2. **Line 993**: CaptionBlock - `panic!("CaptionBlock found in JSON writer - should have been processed during postprocessing")`
 3. **Line 1070**: Non-MetaMap metadata - `panic!("Expected MetaMap for Pandoc.meta")`
-4. **Line 1216, 1258**: Test assertions (acceptable - in #[test] functions)
+4. **Line 1216, 1258**: Test assertions (acceptable - in `#[test]` functions)
 
 ## Categorization by Severity
 
@@ -174,7 +174,7 @@ fn test_blockmetadata_error_not_panic() {
    - Option C: Custom JSON extension (breaks Pandoc compatibility)
 
 4. **Single issue or multiple issues?**
-   - Option A: One issue "Fix all writer panics" (~8-12 hours)
+   - Option A: One issue "Fix all writer panics" (\~8-12 hours)
    - Option B: Per-writer issues (native, json, qmd, ansi)
    - Option C: Per-type issues (10+ separate issues)
 
@@ -182,7 +182,7 @@ fn test_blockmetadata_error_not_panic() {
 
 **Start with Phase 1 (Native Writer)** as one comprehensive issue:
 - "Replace panic!() with proper error handling in native writer"
-- Fixes all 3 panics, ~10 extension types
+- Fixes all 3 panics, \~10 extension types
 - Most critical user-facing issues
 - Can be done in one focused session
 

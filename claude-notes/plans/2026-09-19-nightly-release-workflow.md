@@ -31,7 +31,7 @@ full five-platform artifact set through the *same* jobs `release.yml` uses,
 publishing them as a rolling **prerelease** tagged `nightly`. When `main` is
 already released, it exits in seconds and burns no runners.
 
-The plan reuses the release pipeline rather than copying it: `release.yml`'s
+The plan reuses the release pipeline rather than copying it: `release.yml`\'s
 build/verify/sign/publish jobs move into a **reusable workflow**
 (`workflow_call`), and both the tag-triggered release and the nightly become
 thin callers of it. That keeps every existing gate (placeholder-embed check,
@@ -66,7 +66,7 @@ Inside web-payloads, `cargo xtask build-agents-docs` alone is 31 of the 40
 minutes (bd-9nf0ucdf tracks the recompile-per-example waste). The WASM build
 is 6 min. Earlier runs (v0.11–v0.26, before the docs embed existed) took
 25–35 min total. A nightly therefore costs roughly one hour of wall time and
-~2.5 runner-hours (one Ubuntu, one Ubuntu-ARM, two macOS, one Windows), on a
+\~2.5 runner-hours (one Ubuntu, one Ubuntu-ARM, two macOS, one Windows), on a
 public repo where hosted runners are free.
 
 **What the pipeline requires** (from `release.yml` and the runbook):
@@ -201,7 +201,7 @@ commit SHA goes in the release notes and title, not the version string
   events created with `GITHUB_TOKEN` never trigger workflows, but that is a
   trap for the next reader).
 
-The tag name `nightly` does not match `v*`, so `release.yml`'s trigger is
+The tag name `nightly` does not match `v*`, so `release.yml`\'s trigger is
 untouched either way.
 
 ### Decision 4 — "Unreleased changes" means: `main` HEAD is neither the newest `v*` tag nor the current `nightly` tag
@@ -348,204 +348,204 @@ release's caches warm.
 ### Phase 0 — Tests first (TDD, per CLAUDE.md)
 
 - [x] `quarto-util/src/version.rs`: unit tests for a pure
-      `effective_version(cargo: &str, override: Option<&str>)` helper:
-      `None` returns the Cargo version unchanged; `Some("0.33.0-nightly.20260919")`
-      returns it verbatim; an override that is not a valid SemVer string is
-      rejected at build time (a `build.rs` or `const` assertion, so a typo in
-      the workflow fails the build, not the verify gate); the display form
-      keeps the version as the last whitespace token in both cases.
+  `effective_version(cargo: &str, override: Option<&str>)` helper:
+  `None` returns the Cargo version unchanged; `Some("0.33.0-nightly.20260919")`
+  returns it verbatim; an override that is not a valid SemVer string is
+  rejected at build time (a `build.rs` or `const` assertion, so a typo in
+  the workflow fails the build, not the verify gate); the display form
+  keeps the version as the last whitespace token in both cases.
 - [x] `bootstrap_sh.rs`: offline tests for `--nightly` (Decision 6) against
-      a `file://` API fixture: resolves the platform's asset from the
-      `nightly` release JSON; downloads, verifies checksum + signature,
-      installs, and the installed binary's `--version` ends in the fixture's
-      nightly version; `--nightly --version v1` is an error naming both
-      flags; `--version 0.33.0-nightly.20260919` dies pointing at
-      `--nightly`; a `nightly` release with no asset for the platform dies
-      cleanly; `--help` lists `--nightly`.
+  a `file://` API fixture: resolves the platform's asset from the
+  `nightly` release JSON; downloads, verifies checksum + signature,
+  installs, and the installed binary's `--version` ends in the fixture's
+  nightly version; `--nightly --version v1` is an error naming both
+  flags; `--version 0.33.0-nightly.20260919` dies pointing at
+  `--nightly`; a `nightly` release with no asset for the platform dies
+  cleanly; `--help` lists `--nightly`.
 - [x] `crates/quarto/tests/integration/version_cli.rs`: an assertion that a
-      binary built *without* the env var still prints exactly
-      `CARGO_PKG_VERSION` (the existing tests already cover this; extend the
-      module doc to name the env var and the nightly contract).
+  binary built *without* the env var still prints exactly
+  `CARGO_PKG_VERSION` (the existing tests already cover this; extend the
+  module doc to name the env var and the nightly contract).
 - [x] `cache_key.rs`: a test that `quarto_build_id()` reflects the suffix
-      when set (compile-time, so the test asserts the wiring, not a runtime
-      switch).
+  when set (compile-time, so the test asserts the wiring, not a runtime
+  switch).
 - [x] Gate logic: put the "should we build" decision in
-      `scripts/nightly-gate.sh` (pure bash over `git`), with a test in
-      `crates/quarto/tests/integration/` that drives it against a temporary
-      repo (released HEAD → skip; nightly-tag HEAD → skip; new commit →
-      build; no tags at all → build). Mirrors how `bootstrap_sh.rs` tests
-      `install.sh` offline.
+  `scripts/nightly-gate.sh` (pure bash over `git`), with a test in
+  `crates/quarto/tests/integration/` that drives it against a temporary
+  repo (released HEAD → skip; nightly-tag HEAD → skip; new commit →
+  build; no tags at all → build). Mirrors how `bootstrap_sh.rs` tests
+  `install.sh` offline.
 
 ### Phase 1 — Version suffix in Rust
 
 - [x] Add `QUARTO_VERSION_OVERRIDE` (`option_env!`) handling in
-      `quarto-util/src/version.rs`; route the consumers in the Decision 2
-      table through it; keep `cli_version_display()` returning `&'static
-      str` for clap. Consumers rerouted: `quarto_core::version()`,
-      `cache_key::quarto_build_id()`, the `version` template variable,
-      and `quarto-lsp`'s server info (new `quarto-util` dep). Compile-time
-      guard verified: `QUARTO_VERSION_OVERRIDE=v0.33.0 cargo check -p
-      quarto-util` fails with the E0080 message naming the variable; the
-      dated form checks clean.
+  `quarto-util/src/version.rs`; route the consumers in the Decision 2
+  table through it; keep `cli_version_display()` returning `&'static
+  str` for clap. Consumers rerouted: `quarto_core::version()`,
+  `cache_key::quarto_build_id()`, the `version` template variable,
+  and `quarto-lsp`\'s server info (new `quarto-util` dep). Compile-time
+  guard verified: `QUARTO_VERSION_OVERRIDE=v0.33.0 cargo check -p
+  quarto-util` fails with the E0080 message naming the variable; the
+  dated form checks clean.
 - [x] Local end-to-end check of the override (2026-09-19, output inspected):
-      ```
-      $ QUARTO_VERSION_OVERRIDE=0.33.0-nightly.20260919 cargo build --bin q2
-      $ ./target/debug/q2 --version
-      q2 (quarto 2) 0.33.0-nightly.20260919
-      $ ./target/debug/q2 render doc.qmd && grep -o '<meta name="generator"[^>]*>' doc.html
-      <meta name="generator" content="quarto-rust-0.33.0-nightly.20260919">
-      $ cargo build --bin q2 && ./target/debug/q2 --version
-      q2 (quarto 2) 0.32.0
-      ```
-      The override build was a 26 s incremental rebuild (quarto-util and
-      its dependents), not a cold build.
+  ```
+  $ QUARTO_VERSION_OVERRIDE=0.33.0-nightly.20260919 cargo build --bin q2
+  $ ./target/debug/q2 --version
+  q2 (quarto 2) 0.33.0-nightly.20260919
+  $ ./target/debug/q2 render doc.qmd && grep -o '<meta name="generator"[^>]*>' doc.html
+  <meta name="generator" content="quarto-rust-0.33.0-nightly.20260919">
+  $ cargo build --bin q2 && ./target/debug/q2 --version
+  q2 (quarto 2) 0.32.0
+  ```
+  The override build was a 26 s incremental rebuild (quarto-util and
+  its dependents), not a cold build.
 - [x] `version_cli.rs` module doc updated. (The runbook's "version
-      string" gotcha is folded into the Phase 4 runbook work.)
+  string" gotcha is folded into the Phase 4 runbook work.)
 - [x] Filed bd-5qepzwst for the hardcoded Lua `quarto.version` `{0,1,0}`
-      (discovered-from bd-p4ljdp2e); not fixed here.
+  (discovered-from bd-p4ljdp2e); not fixed here.
 - [x] `cargo xtask verify --skip-hub-build` green (2026-09-19, under
-      Node 24 via fnm; all Rust + ts-package suites passed).
+  Node 24 via fnm; all Rust + ts-package suites passed).
 
 ### Phase 2 — Extract `release-pipeline.yml` (behaviour-preserving)
 
 - [x] Move `web-payloads`, `hub-mcp-bundle`, `build`, `asset-manifest-check`,
-      `release` into `release-pipeline.yml` under `on: workflow_call`;
-      replace `needs.preflight.outputs.{tag,version}` with `inputs.*`;
-      keep every comment block (they are the institutional memory of four
-      dry-run iterations). Inputs as built: `ref`, `version`, `tag`,
-      `channel` (`release`|`nightly`), `publish`, `notes_range`. A single
-      `channel` switch replaced the sketch's separate `prerelease` /
-      `rolling` / title inputs — fewer inconsistent combinations, and a
-      new `check-inputs` job rejects a channel/tag/version mismatch
-      before any runner is spent.
+  `release` into `release-pipeline.yml` under `on: workflow_call`;
+  replace `needs.preflight.outputs.{tag,version}` with `inputs.*`;
+  keep every comment block (they are the institutional memory of four
+  dry-run iterations). Inputs as built: `ref`, `version`, `tag`,
+  `channel` (`release`|`nightly`), `publish`, `notes_range`. A single
+  `channel` switch replaced the sketch's separate `prerelease` /
+  `rolling` / title inputs — fewer inconsistent combinations, and a
+  new `check-inputs` job rejects a channel/tag/version mismatch
+  before any runner is spent.
 - [x] `release.yml` becomes preflight + `uses:` with `secrets: inherit`
-      (plus a `publish` dispatch input for dry runs).
+  (plus a `publish` dispatch input for dry runs).
 - [x] Add `inputs.publish` (dry-run: sign, then upload `release-set`
-      artifact, skip `gh release create`); rolling behaviour is implied by
-      `channel: nightly`.
+  artifact, skip `gh release create`); rolling behaviour is implied by
+  `channel: nightly`.
 - [x] Add `QUARTO_VERSION_OVERRIDE` to the `Build release binary` env and to
-      the docs-embed step's host `q2` build, so the embedded docs and the
-      binary agree. Verify gate compares against `inputs.version`.
-      Exported only when non-empty: an empty value trips the compile-time
-      assertion (`option_env!` yields `Some("")`).
+  the docs-embed step's host `q2` build, so the embedded docs and the
+  binary agree. Verify gate compares against `inputs.version`.
+  Exported only when non-empty: an empty value trips the compile-time
+  assertion (`option_env!` yields `Some("")`).
 - [x] Dry-run on a branch: `workflow_dispatch` `release.yml` against the
-      existing `v0.32.0` tag with `publish: false`. **Run 35456861792**
-      (2026-09-19, from `feature/bd-p4ljdp2e-nightly-release-workflow`):
-      every job green — preflight, `check-inputs`, hub-mcp-bundle,
-      web-payloads, all 5 build legs (both Alpine gates included),
-      asset-manifest check, and the release job's dry-run branch. Verified
-      from the `release-set` artifact (output inspected):
-      - file set identical to the published v0.32.0 release (18 assets);
-      - `shasum -c checksums.sha256` OK for all 6 archives;
-      - every `.minisig` verifies with local minisign against the pubkey
-        pinned in `install.sh`;
-      - `gh release list` unchanged (v0.32.0 still Latest, published
-        2026-09-18T22:42:44Z); no tag touched;
-      - the darwin_arm64 binary, run natively: `q2 (quarto 2) 0.32.0`,
-        `default … : bundled` ×3, docs embed `source: real` at
-        `192a231d…` (`(dirty)`, same as the real v0.32.0 run —
-        bd-8e96g942).
-      Not byte-identical to the published archives, and that expectation
-      was wrong: the tar member mtime is the build time, and the binary
-      itself embeds build timestamps (MCP `build-info.json`, docs embed),
-      so the two binaries differ in hash at identical size (106907824 B).
-      Release notes differ in exactly one line — the Changes heading now
-      reads `## Changes (v0.31.0 → 192a231d8da2)`.
+  existing `v0.32.0` tag with `publish: false`. **Run 35456861792**
+  (2026-09-19, from `feature/bd-p4ljdp2e-nightly-release-workflow`):
+  every job green — preflight, `check-inputs`, hub-mcp-bundle,
+  web-payloads, all 5 build legs (both Alpine gates included),
+  asset-manifest check, and the release job's dry-run branch. Verified
+  from the `release-set` artifact (output inspected):
+  - file set identical to the published v0.32.0 release (18 assets);
+  - `shasum -c checksums.sha256` OK for all 6 archives;
+  - every `.minisig` verifies with local minisign against the pubkey
+    pinned in `install.sh`;
+  - `gh release list` unchanged (v0.32.0 still Latest, published
+    2026-09-18T22:42:44Z); no tag touched;
+  - the darwin_arm64 binary, run natively: `q2 (quarto 2) 0.32.0`,
+    `default … : bundled` ×3, docs embed `source: real` at
+    `192a231d…` (`(dirty)`, same as the real v0.32.0 run —
+    bd-8e96g942).
+  Not byte-identical to the published archives, and that expectation
+  was wrong: the tar member mtime is the build time, and the binary
+  itself embeds build timestamps (MCP `build-info.json`, docs embed),
+  so the two binaries differ in hash at identical size (106907824 B).
+  Release notes differ in exactly one line — the Changes heading now
+  reads `## Changes (v0.31.0 → 192a231d8da2)`.
 
 ### Phase 3 — `nightly.yml`
 
 - [ ] `gate` job: checkout `main` with `fetch-depth: 0` + tags, run
-      `scripts/nightly-gate.sh`, emit `build`, `version`, `sha`,
-      `prev_release_tag` outputs. Compute `<next-minor>` from `Cargo.toml`.
+  `scripts/nightly-gate.sh`, emit `build`, `version`, `sha`,
+  `prev_release_tag` outputs. Compute `<next-minor>` from `Cargo.toml`.
 - [ ] `pipeline` job: `if: needs.gate.outputs.build == 'true'`, `uses:
-      ./.github/workflows/release-pipeline.yml` with `ref: main` (pinned to
-      the gate's SHA, not the branch name, so a merge during the run cannot
-      change what is built), `tag: nightly`, `prerelease: true`, `rolling:
-      true`, `notes_range: <prev_release_tag>..<sha>`.
+  ./.github/workflows/release-pipeline.yml` with `ref: main` (pinned to
+  the gate's SHA, not the branch name, so a merge during the run cannot
+  change what is built), `tag: nightly`, `prerelease: true`, `rolling:
+  true`, `notes_range: <prev_release_tag>..<sha>`.
 - [x] `install.sh --nightly` and `install.ps1 -Nightly` per Decision 6
-      (tests from Phase 0 go green here). `--help` text, the header
-      comment, and the `resolves_latest_version_from_github` ignored test
-      gain a nightly sibling (`resolves_nightly_from_github`, also ignored,
-      run by hand in Phase 4). `install.ps1` has no `Q2_RELEASES_API_BASE`
-      seam (no offline suite exists for it; the smoke job is its test) and
-      could not be parsed locally (no `pwsh` on this machine) — the
-      Windows smoke leg is its first execution.
+  (tests from Phase 0 go green here). `--help` text, the header
+  comment, and the `resolves_latest_version_from_github` ignored test
+  gain a nightly sibling (`resolves_nightly_from_github`, also ignored,
+  run by hand in Phase 4). `install.ps1` has no `Q2_RELEASES_API_BASE`
+  seam (no offline suite exists for it; the smoke job is its test) and
+  could not be parsed locally (no `pwsh` on this machine) — the
+  Windows smoke leg is its first execution.
 - [x] Release notes: the rolling-tag caveat, the exact SHA, "changes since
-      v0.32.0" from `git log`, and the same two install one-liners the
-      README carries (with the nightly flag).
+  v0.32.0" from `git log`, and the same two install one-liners the
+  README carries (with the nightly flag).
 - [x] `install-smoke` job, `needs: pipeline`, matrix `ubuntu-latest`,
-      `macos-15`, `windows-latest`: run the README one-liner for the
-      platform with the nightly flag from `raw.githubusercontent.com/.../main`
-      (the installers land on `main` before the first nightly, so this is the
-      real user path, not a checkout), then assert the installed binary's
-      `--version` last token equals the gate's version. This is the
-      end-to-end verification CLAUDE.md requires, done by the workflow every
-      night instead of by hand once. Skipped when `publish: false`.
+  `macos-15`, `windows-latest`: run the README one-liner for the
+  platform with the nightly flag from `raw.githubusercontent.com/.../main`
+  (the installers land on `main` before the first nightly, so this is the
+  real user path, not a checkout), then assert the installed binary's
+  `--version` last token equals the gate's version. This is the
+  end-to-end verification CLAUDE.md requires, done by the workflow every
+  night instead of by hand once. Skipped when `publish: false`.
 - [x] `run-name` distinguishes scheduled / manual / forced / dry-run
-      (`run-name` cannot see job outputs, so the version and SHA go to the
-      job summary and the gate job's name instead of the run title).
+  (`run-name` cannot see job outputs, so the version and SHA go to the
+  job summary and the gate job's name instead of the run title).
 - [x] Post-merge nightly **dry run**: run 35461772435 (`main` @ `6b7be8f0`,
-      `force=false publish=false` — the gate's real `unreleased` path).
-      Every job green; `install-smoke` skipped as designed. `release-set`
-      inspected: 17 nightly-named assets, darwin_arm64 binary prints
-      `q2 (quarto 2) 0.33.0-nightly.20260919`, renders
-      `generator" content="quarto-rust-0.33.0-nightly.20260919"`, docs
-      embed real at `6b7be8f0`; notes use the nightly template with
-      `## Changes (v0.32.0 → 6b7be8f07fbf)`. The web-payloads log shows
-      `building the docs-render q2 as 0.33.0-nightly.20260919`.
+  `force=false publish=false` — the gate's real `unreleased` path).
+  Every job green; `install-smoke` skipped as designed. `release-set`
+  inspected: 17 nightly-named assets, darwin_arm64 binary prints
+  `q2 (quarto 2) 0.33.0-nightly.20260919`, renders
+  `generator" content="quarto-rust-0.33.0-nightly.20260919"`, docs
+  embed real at `6b7be8f0`; notes use the nightly template with
+  `## Changes (v0.32.0 → 6b7be8f07fbf)`. The web-payloads log shows
+  `building the docs-render q2 as 0.33.0-nightly.20260919`.
 - [x] First real run (`force=false publish=true`): **run 35465215381**
-      (2026-09-19). Every job green, including all three `install-smoke`
-      legs (ubuntu, macos-15, windows-latest — the Windows leg was the
-      first ever execution of `install.ps1 -Nightly`). Published:
-      `q2 nightly 0.33.0-nightly.20260919 (6b7be8f0)`, prerelease, 18
-      assets, `nightly` tag at `6b7be8f0` == `origin/main`;
-      `releases/latest` still `v0.32.0`.
+  (2026-09-19). Every job green, including all three `install-smoke`
+  legs (ubuntu, macos-15, windows-latest — the Windows leg was the
+  first ever execution of `install.ps1 -Nightly`). Published:
+  `q2 nightly 0.33.0-nightly.20260919 (6b7be8f0)`, prerelease, 18
+  assets, `nightly` tag at `6b7be8f0` == `origin/main`;
+  `releases/latest` still `v0.32.0`.
 - [ ] Next scheduled run (2026-09-20 08:00 UTC) must **skip**. Local
-      preview on `main` with the tag fetched already reports
-      `build=false reason=nightly-current`; confirm from the Actions run.
-      **Branch-side dry run is not possible:** `gh workflow run
-      nightly.yml --ref <branch>` returns `HTTP 404: workflow nightly.yml
-      not found on the default branch` — GitHub registers a
-      `workflow_dispatch` workflow only once it exists on `main`. So the
-      nightly channel's first execution is after merge: run it first with
-      `force=true publish=false` (dry run of the override build, no tag
-      touched), then `force=true publish=true` for the first real nightly.
-      The release channel's dry run (below, Phase 2) does exercise the
-      shared pipeline from the branch.
+  preview on `main` with the tag fetched already reports
+  `build=false reason=nightly-current`; confirm from the Actions run.
+  **Branch-side dry run is not possible:** `gh workflow run
+  nightly.yml --ref <branch>` returns `HTTP 404: workflow nightly.yml
+  not found on the default branch` — GitHub registers a
+  `workflow_dispatch` workflow only once it exists on `main`. So the
+  nightly channel's first execution is after merge: run it first with
+  `force=true publish=false` (dry run of the override build, no tag
+  touched), then `force=true publish=true` for the first real nightly.
+  The release channel's dry run (below, Phase 2) does exercise the
+  shared pipeline from the branch.
 
 ### Phase 4 — Verification and docs
 
 - [x] End-to-end (CLAUDE.md rule), by hand on this machine (2026-09-19,
-      output inspected), in addition to the `install-smoke` job:
-      ```
-      $ curl -fsSL https://raw.githubusercontent.com/quarto-dev/q2/main/install.sh | bash -s -- --nightly --dest /tmp/q2-nightly-verify/bin
-      ✓ done: q2 (quarto 2) 0.33.0-nightly.20260919
-      $ /tmp/q2-nightly-verify/bin/q2 mcp --launcher-info | grep -c '^default .*: bundled'
-      3
-      $ curl -fsSL https://raw.githubusercontent.com/quarto-dev/q2/main/install.sh | bash -s -- --dest /tmp/q2-stable-verify/bin
-      ✓ done: q2 (quarto 2) 0.32.0
-      $ cargo nextest run -p quarto --test integration -E 'test(resolves_latest_version_from_github) | test(resolves_nightly_from_github)' --run-ignored ignored-only
-      2 tests run: 2 passed
-      ```
-      Render + `generator` tag + docs-embed commit were checked on the
-      dry-run artifact of the same commit (Phase 3 above).
+  output inspected), in addition to the `install-smoke` job:
+  ```
+  $ curl -fsSL https://raw.githubusercontent.com/quarto-dev/q2/main/install.sh | bash -s -- --nightly --dest /tmp/q2-nightly-verify/bin
+  ✓ done: q2 (quarto 2) 0.33.0-nightly.20260919
+  $ /tmp/q2-nightly-verify/bin/q2 mcp --launcher-info | grep -c '^default .*: bundled'
+  3
+  $ curl -fsSL https://raw.githubusercontent.com/quarto-dev/q2/main/install.sh | bash -s -- --dest /tmp/q2-stable-verify/bin
+  ✓ done: q2 (quarto 2) 0.32.0
+  $ cargo nextest run -p quarto --test integration -E 'test(resolves_latest_version_from_github) | test(resolves_nightly_from_github)' --run-ignored ignored-only
+  2 tests run: 2 passed
+  ```
+  Render + `generator` tag + docs-embed commit were checked on the
+  dry-run artifact of the same commit (Phase 3 above).
 - [x] README "Installing": the nightly one-liners under the stable ones
-      (Decision 6 wording), with a short paragraph on what a nightly is
-      and that it is signed with the same key.
+  (Decision 6 wording), with a short paragraph on what a nightly is
+  and that it is signed with the same key.
 - [x] Runbook: new section "Nightlies" (what they are, how to force one,
-      how to dry-run the pipeline on a branch, that `release.yml` now
-      delegates to `release-pipeline.yml`, that the installers have a
-      nightly mode). Fixed the stale "one approving review" note in
-      CLAUDE.md and the stale "smoke-tested by the release workflow"
-      header in `bootstrap_sh.rs`.
+  how to dry-run the pipeline on a branch, that `release.yml` now
+  delegates to `release-pipeline.yml`, that the installers have a
+  nightly mode). Fixed the stale "one approving review" note in
+  CLAUDE.md and the stale "smoke-tested by the release workflow"
+  header in `bootstrap_sh.rs`.
 - [x] `cargo xtask lint` has no rule for workflows; noted in CLAUDE.md's
-      verify/CI drift paragraph that `nightly.yml` and the release
-      pipeline are deliberately outside `verify`'s mirror (they publish,
-      they do not gate).
+  verify/CI drift paragraph that `nightly.yml` and the release
+  pipeline are deliberately outside `verify`\'s mirror (they publish,
+  they do not gate).
 - [x] Close-out: strand commented and closed with run ids and the first
-      nightly URL (https://github.com/quarto-dev/q2/releases/tag/nightly).
-      Runs: 35456861792 (release dry run, branch), 35461772435 (nightly
-      dry run, main), 35465215381 (first nightly, main).
+  nightly URL (https://github.com/quarto-dev/q2/releases/tag/nightly).
+  Runs: 35456861792 (release dry run, branch), 35461772435 (nightly
+  dry run, main), 35465215381 (first nightly, main).
 
 ## Follow-ups (file as strands, not in scope)
 
@@ -560,7 +560,7 @@ release's caches warm.
 
 - **Reusable-workflow refactor touches the release path.** Mitigated by the
   Phase 2 dry-run against `v0.32.0` before the nightly exists, and by
-  keeping `release.yml`'s trigger and preflight unchanged.
+  keeping `release.yml`\'s trigger and preflight unchanged.
 - **Rolling tag surprises `git fetch` users.** Standard for nightly channels
   (neovim, zig do the same); documented in the release notes.
 - **Nightly reveals `main` was broken for release for days.** That is the

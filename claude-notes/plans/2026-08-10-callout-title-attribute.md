@@ -5,7 +5,7 @@
 **Origin strand:** `br-de85v0a8` — in the **connect-docs porting skein**, a
 *different* braid project. It does not resolve against the q2 skein; the
 q2-side strand above is the one to work.
-**Branch:** `braid/callout-title-attribute`, off `origin/main` @ `b2b6100c`.
+**Branch:** `braid/callout-title-attribute`, off `origin/main` \@ `b2b6100c`.
 (Investigated on `docs/feature-porting-process`; cherry-picked across once main
 was current.)
 **Status:** Implemented. All phases complete; workspace suite green
@@ -43,7 +43,7 @@ Q1 emits:
 <div class="callout-title-container flex-fill"><span class="screen-reader-only">Note</span>Off-Host Execution</div>
 ```
 
-**Impact:** ~25 pages of the Posit Connect docs, which use the attribute form
+**Impact:** \~25 pages of the Posit Connect docs, which use the attribute form
 throughout. Readers see an unlabeled "Note"/"Warning"/"Important". No warning is
 emitted. Because the title is never marked user-supplied, the
 `screen-reader-only` type span is also skipped, so a titled and an untitled
@@ -97,7 +97,7 @@ end
 Two consequences worth pinning down before implementing:
 
 1. **The attribute value is parsed as markdown inlines**, so
-   `title="Use \`renv\`"` yields a code span in the header.
+   ``title="Use `renv`"`` yields a code span in the header.
 2. **The leading heading is only *removed* inside `resolveHeadingCaption`**
    (`external-sources/quarto-cli/src/resources/filters/common/pandoc.lua:130-138`
    does `div.content:remove(1)`). When `title=` is non-empty that function is
@@ -225,7 +225,7 @@ the wrong bytes.
   from an `AstTransform` at
   `crates/quarto-core/src/transforms/config_markdown.rs:164`.
 - **Mapping (unsolved, tree-wide).** The YAML path has exactly this bug:
-  `quarto-yaml`'s `compute_scalar_len` spans the quotes while the *decoded*
+  `quarto-yaml`\'s `compute_scalar_len` spans the quotes while the *decoded*
   scalar is handed to the nested parse, and nothing compensates. The design doc
   `claude-notes/plans/2026-07-20-ipynb-surface-syntax-design.md:73-92` states
   the constraint outright — `Substring`/`Concat` compose only affine maps, a
@@ -256,7 +256,7 @@ The fallback is **bounded and safe, not merely tolerable**: unescaping only ever
 shrinks the string, so every mapped offset stays inside the attribute's raw
 extent. The error is at most `1 + #escapes` bytes and can never point at a
 neighbouring attribute. The exact path covers every case in our fixture and all
-~25 affected Connect pages; only a title containing a backslash escape takes
+\~25 affected Connect pages; only a title containing a backslash escape takes
 the approximate path.
 
 Exact non-affine mapping (an offset map through the unescape, emitting
@@ -272,7 +272,7 @@ attribute is not inline content). Highest existing is Q-2-42.
 ### Phase 0 — Tests first (TDD)
 
 - [x] Real-source test helper (`parse_and_transform`) — parses qmd and returns
-      the parse's own `SourceContext`, so span assertions are meaningful
+  the parse's own `SourceContext`, so span assertions are meaningful
 - [x] Unit test: attribute-only title populates the title slot
 - [x] Unit test: heading-only title still works (regression — passes today)
 - [x] Unit test: both present → Q-2-43 warning, exactly one consumed
@@ -283,12 +283,12 @@ attribute is not inline content). Highest existing is Q-2-42.
 - [x] Span test: exact mapping for a quoted, escape-free value
 - [x] Span test: exact mapping for a bare, unquoted value
 - [x] Span test: escaped value takes the bounded fallback, stays inside the
-      attribute extent
+  attribute extent
 - [x] Confirm every new test fails for the expected reason — 8 fail (empty
-      title slot / H1 ignored / no warning), 2 pass as intended regressions.
-      No compile or setup artifacts.
+  title slot / H1 ignored / no warning), 2 pass as intended regressions.
+  No compile or setup artifacts.
 - [x] HTML fixture: attribute title renders with the `screen-reader-only` span
-      (`crates/quarto/tests/smoke-all/quarto-test/callout-title-attribute.qmd`)
+  (`crates/quarto/tests/smoke-all/quarto-test/callout-title-attribute.qmd`)
 
 ### Phase 1 — Title source selection
 
@@ -296,40 +296,40 @@ attribute is not inline content). Highest existing is Q-2-42.
 - [x] Move the header removal into the fallback branch only
 - [x] Drop the `level >= 2` check
 - [x] Emit Q-2-43 when both are present (plus diagnostics threading through
-      `transform_blocks`/`transform_block`, which had no sink before)
+  `transform_blocks`/`transform_block`, which had no sink before)
 
 ### Phase 2 — Parse + source mapping
 
 - [x] Length-derived parent `SourceInfo` (exact / exact / bounded-fallback) —
-      `attribute_value_source`
+  `attribute_value_source`
 - [x] `parse_config_string_as_markdown`; `PandocInlines` through,
-      single-paragraph `PandocBlocks` unwrapped, else Q-2-44
+  single-paragraph `PandocBlocks` unwrapped, else Q-2-44
 - [x] Guarded `theorem.rs:336-360` index lookup for the value span
 
 ### Phase 3 — Diagnostics
 
 - [x] Register Q-2-43 and Q-2-44 in `quarto-error-catalog`
 - [x] Verify wording and spans against the fixture — Q-2-43 renders with a
-      caret on the offending callout (repro.qmd:38)
+  caret on the offending callout (repro.qmd:38)
 
 ### Phase 4 — Verification
 
 - [x] `cargo nextest run --workspace` green — 11471/11471 passed (exit 0).
-      A first fail-fast run tripped `quarto-hub …collect_lifecycle_quarantine_restore_purge`;
-      that is the known flake bd-u0tldu4z (passes in isolation, green on the
-      complete rerun of the identical tree). Recurrence recorded on the strand.
+  A first fail-fast run tripped `quarto-hub …collect_lifecycle_quarantine_restore_purge`;
+  that is the known flake bd-u0tldu4z (passes in isolation, green on the
+  complete rerun of the identical tree). Recurrence recorded on the strand.
 - [ ] `cargo xtask verify` (WASM leg — quarto-core is in hub-client's closure)
 - [x] End-to-end `q2 render` of the fixture; record invocation + output
-      (see `observed-output.md`, "After" section)
+  (see `observed-output.md`, "After" section)
 - [ ] Review snapshot churn; count and summarize in the commit message
 
 ### Phase 5 — Docs
 
 - [x] Error pages `docs/errors/markdown/Q-2-43.qmd` and `Q-2-44.qmd` (the
-      catalog's `docs_url` points at them; note Q-2-42 shipped without one, so
-      the convention is manual and unenforced)
+  catalog's `docs_url` points at them; note Q-2-42 shipped without one, so
+  the convention is manual and unenforced)
 - [ ] No callouts *feature* page exists under `docs/` at all — `title=` has no
-      home to be documented in. Out of scope here; worth its own strand.
+  home to be documented in. Out of scope here; worth its own strand.
 
 ## Risks / tradeoffs
 

@@ -9,7 +9,7 @@ REPRO_VERSION=2026.08.0 cargo run --bin q2 -- render claude-notes/plans/shortcod
 Body text substitutes correctly; all four project-level contexts leak the literal shortcode.
 From `_site/index.html`:
 
-```
+```{shortcodes="false"}
 7:<title>Home – My Site <small>Version {{< env REPRO_VERSION >}}</small></title>
 17:    <a class="navbar-brand" href="./">My Site &lt;small&gt;Version {{&lt; env REPRO_VERSION &gt;}}&lt;/small&gt;</a>
 29:  You are viewing version <strong>{{< env REPRO_VERSION >}}</strong>.
@@ -39,7 +39,7 @@ repro description mentions but its fixture does not trigger).
 
 ## Scope correction: doc-metadata shortcodes don't resolve either
 
-Adding `subtitle: "Subtitle version {{< env REPRO_VERSION >}}"` to `index.qmd`
+Adding `subtitle: "Subtitle version {{{< env REPRO_VERSION >}}}"` to `index.qmd`
 frontmatter and re-rendering with q2 at HEAD:
 
 ```
@@ -76,7 +76,7 @@ rendered envelope element's `innerText` — `website-meta.ts`); the navbar keeps
 as markup.
 
 Include files are substituted but **not** markdown-parsed: appending
-`**md-test** \`code-test\`` to `_banner.html` and re-rendering leaves both literal
+``**md-test** `code-test` `` to `\_banner.html` and re-rendering leaves both literal
 while the shortcode still substitutes. Mechanism: `quarto-init/includes.lua` reads
 include files into metadata as raw blocks; the shortcode filter's jog traversal walks
 meta and applies text-level `apply_code_shortcode` to raw-block text.
@@ -85,7 +85,7 @@ meta and applies text-level `apply_code_shortcode` to raw-block text.
 
 Q1 also substitutes shortcodes at text level in code blocks, element attributes,
 image src, and link targets. q2 probe (`probe.qmd` with a code block, link target,
-and span attribute each containing `{{< env REPRO_VERSION >}}`; rendered with
+and span attribute each containing `{{{< env REPRO_VERSION >}}}`; rendered with
 `REPRO_VERSION` set):
 
 ```

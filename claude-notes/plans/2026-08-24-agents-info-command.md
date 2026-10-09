@@ -26,11 +26,11 @@ The generation side shipped in v0.26.0 (bd-llms-txt-unimplemented-oih6z6j7,
 commits `2c144619` + `b7bfeef8`; closed 2026-08-24): rendering `docs/` writes
 
 - `_site/llms.txt` — sidebar-organized markdown index (titles + descriptions),
-- one `.md` companion per page (254 pages, ~1.1 MB at time of writing),
-- `_site/llms-full.txt` — reading-order concatenation (~544 KB).
+- one `.md` companion per page (254 pages, \~1.1 MB at time of writing),
+- `_site/llms-full.txt` — reading-order concatenation (\~544 KB).
 
 This feature is therefore **staging + embedding + CLI plumbing** — no new
-document processing. ~1.7 MB of raw text is noise next to the ~40 MB embedded
+document processing. \~1.7 MB of raw text is noise next to the \~40 MB embedded
 preview-SPA WASM.
 
 **Prior art.** `braid agents-info` (naming precedent); the llms.txt convention
@@ -253,7 +253,7 @@ agents, `head`, and `grep`, that is a real defect. Regression test
 panic), then fixed by routing all output through a `write_stdout` helper that
 treats `ErrorKind::BrokenPipe` as success.
 
-**Binary-size measurement:** debug `q2` is 143 MB; the 1.7 MB embed is ~1.2%
+**Binary-size measurement:** debug `q2` is 143 MB; the 1.7 MB embed is \~1.2%
 of it — the "noise next to the WASM" premise holds.
 
 ### Phase 4 — Docs, wiring, verification

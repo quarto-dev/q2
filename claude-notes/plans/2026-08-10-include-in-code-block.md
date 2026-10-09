@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Braid:** `bd-include-in-code-block-f8mvtczn` (bug, P1, label `parity`)
-**Branch:** `braid/include-in-code-block-f8mvtczn`, off `main` @ `bcdbce6b`
+**Branch:** `braid/include-in-code-block-f8mvtczn`, off `main` \@ `bcdbce6b`
 **Status:** Implemented, fully verified, **awaiting review before commit**. All decisions (D1–D7 plus D3a/D3b/D4a found during implementation) are settled and recorded below.
 
 ## Triage verdict
@@ -11,7 +11,7 @@
 
 ## Design decisions
 
-Settled with the user on 2026-08-10. Each records what Q1 actually does, verified against `external-sources/quarto-cli` @ `abc6a78ed` and a real `quarto render` of the repro.
+Settled with the user on 2026-08-10. Each records what Q1 actually does, verified against `external-sources/quarto-cli` \@ `abc6a78ed` and a real `quarto render` of the repro.
 
 ### D1 — Fix site: `IncludeExpansionStage` ✅ settled
 
@@ -25,7 +25,7 @@ v1 recognizes an include **only** when the shortcode is the sole content of a li
 
 **This matches Q1 exactly** — a finding that emerged after the decision was made and confirms it. Q1's `processMarkdownIncludes` (`src/core/handlers/base.ts:355-380`) splits each cell into lines and tests each with `isBlockShortcode`, whose regex is anchored to the whole line:
 
-```js
+```{.js shortcodes="false"}
 content.match(/^\s*{{< (?!\/\*)(.+?)(?<!\*\/) >}}\s*$/)
 ```
 
@@ -66,7 +66,7 @@ Three ways out:
 
 1. **Recurse (Q1 parity).** Re-scan spliced content for include lines, using the `include_stack` for cycles. No include survives to stage 13, so the problem vanishes by construction, and the D3 divergence disappears (shrinking bd-cq0xhxg5's scope). Cost: a listing that embeds a `.qmd` shows the *expanded* text, not the file's literal source. Users wanting literal source have `shortcodes="false"` — which is already the documented mechanism for exactly that.
 2. **Preserve unhandled includes in code text.** In the code/raw text arms of `ShortcodeResolveTransform`, treat an `include` shortcode as `Preserve` (emit its source text verbatim) instead of dispatching it to the error branch. The invariant that makes this sound: after stage 3, every *authored* fence include has been expanded, so anything still present must have come from spliced content — and literal is the right rendering for it. Keeps D3's intent and makes it actually true. Cost: a new (small) rule in the transform, and the `?include` token stops existing for fences entirely.
-3. **Escape includes in spliced content.** Rewrite `{{< include … >}}` to the escaped `{{{< … >}}}` form while splicing. Works, but it is a text mutation the author never wrote, and it creates an asymmetry with `{{< meta … >}}` in the same fence. Not recommended.
+3. **Escape includes in spliced content.** Rewrite `{{< include … >}}` to the escaped `{{{< … >}}}`{shortcodes="false"} form while splicing. Works, but it is a text mutation the author never wrote, and it creates an asymmetry with `{{{< meta … >}}}` in the same fence. Not recommended.
 
 **Chosen: option 1 (recurse).** It is the Q1-parity answer, needs no new rule in the shortcode transform, and makes the nested `?include` impossible by construction rather than by special-casing. Pinned by `code_fence_include_recurses`, `code_fence_include_cycle_reports_and_drops_line`, `code_fence_include_of_self_reports_cycle` (unit) and `nested_code_fence_include_expands_without_token`, `self_including_code_fence_reports_a_cycle` (full pipeline).
 
@@ -113,7 +113,7 @@ Either branch ends the spliced text with `\n\n`. So Q1 *adds* a blank line.
 
   A newline immediately before `</code></pre>` is *not* stripped by the HTML spec (only one immediately after `<pre>` is), so it renders as an empty final line.
 
-**Consequence.** Nearly every source file ends with a newline (POSIX convention; most editors and linters enforce it). Splicing verbatim would therefore give *every* listing a spurious blank last line — the default case, not an edge case — and would break parity for all ~44 Connect-docs listings, which is the reason this strand exists.
+**Consequence.** Nearly every source file ends with a newline (POSIX convention; most editors and linters enforce it). Splicing verbatim would therefore give *every* listing a spurious blank last line — the default case, not an edge case — and would break parity for all \~44 Connect-docs listings, which is the reason this strand exists.
 
 **On the "users can't force an intentional trailing newline" concern.** They can, symmetrically with how the parser already treats fences: end the file with two newlines — one is consumed by the trim, one remains. That is the same affordance a hand-written fence has.
 
@@ -158,7 +158,7 @@ An `include` shortcode standing alone inside a fenced code block — the standar
 
 ````markdown
 ```{.python filename="app.py"}
-{{< include app.py >}}
+{{{< include app.py >}}}
 ```
 ````
 
@@ -166,7 +166,7 @@ renders with the entire fence body replaced by the single token `?include`. Q1 s
 
 A `Q-17-4` "Include not expanded" warning does fire, so this is not silent — but its hint ("Put the include shortcode in its own paragraph, surrounded by blank lines") is actively wrong here: the shortcode belongs inside the fence, and following the hint would change what the page means.
 
-**Real-world impact.** Filed against the Posit Connect docs port: 21 files, ~44 listings, ~1300 lines of embedded source — the single largest remaining content loss in that port. Every cookbook integration recipe embeds its `requirements.txt` / `app.py` / `app.R` / `manifest.json` this way, so the recipes lose the code they exist to show. Worst case is `cookbook/content/integrations/databricks/viewer/python/index.qmd` — ten such listings across five framework tabs, all showing `?include`.
+**Real-world impact.** Filed against the Posit Connect docs port: 21 files, \~44 listings, \~1300 lines of embedded source — the single largest remaining content loss in that port. Every cookbook integration recipe embeds its `requirements.txt` / `app.py` / `app.R` / `manifest.json` this way, so the recipes lose the code they exist to show. Worst case is `cookbook/content/integrations/databricks/viewer/python/index.qmd` — ten such listings across five framework tabs, all showing `?include`.
 
 Filed 2026-08-10 by Carlos Scheidegger; status `open`, priority 1, type `bug`, label `parity`. Not stale — filed today.
 
@@ -178,7 +178,7 @@ The strand names an origin (`br-4kslym5r`) in the **connect-docs porting skein**
 
 Consequence for the calculus: no incoming `blocks` pressure from other strands in this skein, so urgency comes entirely from the Connect-docs port, not from internal dependents. Nothing here is blocked on anything else.
 
-Adjacent (not linked, but the relevant prior work): **bd-fz6gwfq0** — the 0.16.0 text-level shortcode work that made `{{< meta … >}}` expand inside code fences. That is the machinery that currently eats the include.
+Adjacent (not linked, but the relevant prior work): **bd-fz6gwfq0** — the 0.16.0 text-level shortcode work that made `{{{< meta … >}}}` expand inside code fences. That is the machinery that currently eats the include.
 
 ## What the code looks like today
 
@@ -216,7 +216,7 @@ Note that `expand_blocks` *does* visit every `CodeBlock` — as an element `bloc
 - `dispatch_shortcode` has no `include` handler by design; the `shortcode.name == "include"` branch (`:630`) returns `ShortcodeResult::Error` with the `Q-17-4` diagnostic.
 - `expand_text_segments` (`:1489-1493`) handles `Error` by pushing `'?'` then the shortcode name — hence `?include` replacing the whole body.
 
-So the mechanism that already makes `{{< meta … >}}` work inside a fence is the same mechanism that eats the include, and it operates on exactly the right data: raw text.
+So the mechanism that already makes `{{{< meta … >}}}` work inside a fence is the same mechanism that eats the include, and it operates on exactly the right data: raw text.
 
 ### The finding that changes the fix site — the profile checkpoint
 
@@ -286,7 +286,7 @@ Branch: `braid/include-in-code-block-f8mvtczn`. D4 settled 2026-08-10: **trim ex
 ### Phase 1 — Recognizer + textual splice in `IncludeExpansionStage` (D1, D2)
 
 - [x] Share `code_shortcode_opt_out` out of `shortcode_resolve.rs` (make `pub(crate)`)
-- [x] Add the shared recognition helper (single source of truth, mirroring `child_block_lists_mut`'s role)
+- [x] Add the shared recognition helper (single source of truth, mirroring `child_block_lists_mut`\'s role)
 - [x] Splice in `expand_blocks`: read target, replace the line, no parsing, no re-indentation, D4 trim
 - [x] Diagnostics on read failure, consistent with the block-position arms
 
@@ -294,7 +294,7 @@ Branch: `braid/include-in-code-block-f8mvtczn`. D4 settled 2026-08-10: **trim ex
 
 - [x] `record_include` for each fence target
 - [x] Extend `collect_include_paths` through the *same* helper so the preview dep-graph cannot drift
-- [x] Confirm `quarto-preview`'s `extract_include_deps` picks it up
+- [x] Confirm `quarto-preview`\'s `extract_include_deps` picks it up
 
 ### Phase 3 — Opt-out + recursion
 
@@ -317,7 +317,7 @@ Branch: `braid/include-in-code-block-f8mvtczn`. D4 settled 2026-08-10: **trim ex
 - [x] `cargo xtask verify` (WASM leg: `quarto-core` is in hub-client's dependency closure) — all 14 steps green
 - [x] End-to-end through the binary on the repro, output inspected (CLAUDE.md requirement)
 - [x] Widen the Q1 comparison: multi-include fences, indented includes, `.qmd`-into-fence, mid-line
-- [x] Re-render the Connect-docs corpus and confirm the ~44 listings come back
+- [x] Re-render the Connect-docs corpus and confirm the \~44 listings come back
 
 **Result (2026-08-10).** 44 fence includes across 20 files, matching the strand's count. Full render: `352 of 352 files`. Corpus-wide `?include` count in the rendered HTML dropped to **1**, and that one is *not* a fence — it is the raw-HTML shape the strand itself calls docs-fixable (`licenses/index.md`: an include directly under an HTML comment with no blank line, swallowed into a `RawBlock`). It still reports `Q-17-4`, and there the existing hint — "put the include in its own paragraph, surrounded by blank lines" — is exactly right. The worst-case page, `cookbook/content/integrations/databricks/viewer/python/index.qmd`, now renders all its listings including a 92-line `app.py`, with zero `?include`.
 
@@ -335,5 +335,5 @@ None. D1–D7 are settled; implementation is underway.
 - **Invariant preserved, not broken.** `shortcode_resolve.rs:623-629` documents "any `include` still present here is inline among other content, the one unsupported position." D1's site keeps that sentence true (the transform-site alternative would have falsified it) — a point in D1's favor, now settled.
 - **Test churn is modest but load-bearing.** Four test sites plus a docs page assert today's behavior. None of them are snapshots, so the changes are explicit and reviewable — good. The pinning unit test `extract_include_path_from_non_paragraph` should be *rewritten*, not deleted, so the new contract stays pinned.
 - **A deliberate Q1 divergence ships with this** (D3, no recursion inside a fence). It is defensible and arguably better for listings, but it is a parity gap on a strand labeled `parity`. bd-cq0xhxg5 is where it gets explained to users; make sure that lands rather than being dropped once the code works.
-- **Q1 comparison is now done, at one data point.** `quarto render` of the repro was run against `external-sources/quarto-cli` @ `abc6a78ed`; source was read for the recursion, opt-out and newline logic. Not yet compared: multi-include fences, indented includes, `.qmd`-into-fence, and the full Connect-docs corpus. Phase 6 should widen this before the work is called done.
+- **Q1 comparison is now done, at one data point.** `quarto render` of the repro was run against `external-sources/quarto-cli` \@ `abc6a78ed`; source was read for the recursion, opt-out and newline logic. Not yet compared: multi-include fences, indented includes, `.qmd`-into-fence, and the full Connect-docs corpus. Phase 6 should widen this before the work is called done.
 - **No incoming dependencies** means nothing else in this skein breaks whichever way we go — the risk is confined to include semantics.

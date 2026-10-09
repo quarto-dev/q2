@@ -98,7 +98,7 @@ dependency (xtask knows the repo root via `create_worktree::repo_root()`).
   - [x] initial run performs `git subtree add --squash` — prefix created, merge
     commit carries the `git-subtree-dir: <prefix>` trailer (empirically: the
     trailer lands on the *squash* commit's body, not the merge commit's —
-    `find_last_split`'s `git log --grep` walks all reachable commits so this
+    `find_last_split`\'s `git log --grep` walks all reachable commits so this
     doesn't matter for correctness, but it's why the test asserts via
     `--grep` rather than `log -1 --pretty=%b` on HEAD);
   - [x] immediate second run is a **no-op** ("No new commits to merge");
@@ -152,7 +152,7 @@ dependency (xtask knows the repo root via `create_worktree::repo_root()`).
     lacked a `contributes:` key, which `read_extension` requires — every
     extension silently failed to load and both new tests failed with 0 found.
     Fixed by adding a minimal `contributes.shortcodes` block, matching the
-    existing passing fixtures' shape.)
+    existing passing fixtures\' shape.)
 - [x] `extension/mod.rs`: `builtin_extension_subtree_roots(runtime) ->
       Vec<PathBuf>` — env override (`QUARTO_EXTENSION_SUBTREES_DIR`, same
       name as D3 and the Phase 3 tests) → per-subtree embedded payloads
@@ -225,7 +225,7 @@ dependency (xtask knows the repo root via `create_worktree::repo_root()`).
       (the "second fixture root" the plan anticipated, as a small
       test-local helper rather than a `engine_fixture_build.rs` change).
 - [x] **Tests first**, registered in `tests/integration/main.rs`, both green
-      on the first run: `synth_extension_subtree_e2e.rs`'s
+      on the first run: `synth_extension_subtree_e2e.rs`\'s
       `discovers_synth_echo_via_subtree_root_env_var_with_zero_extensions_install`
       (discovery via `QUARTO_EXTENSION_SUBTREES_DIR` + `all_builtin_extension_roots`,
       confirms zero `_extensions/` install) and
@@ -248,7 +248,7 @@ dependency (xtask knows the repo root via `create_worktree::repo_root()`).
       skipped (+2 over Phase 2's 14483, exactly the two new tests; no
       stray/duplicated tests). Full `cargo xtask verify` green on the second
       attempt — the first attempt failed on an unrelated pre-existing flake
-      in `ts-packages/quarto-sync-client`'s `doc-inventory.test.ts`
+      in `ts-packages/quarto-sync-client`\'s `doc-inventory.test.ts`
       ("reports index, text, and binary docs with states and heads"), which
       passed cleanly 6/6 when re-run in isolation immediately after
       (`npx vitest run src/doc-inventory.test.ts`) — confirming a timing

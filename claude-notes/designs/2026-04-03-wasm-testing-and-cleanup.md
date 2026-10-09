@@ -386,7 +386,7 @@ reference libc symbols (`calloc`, `fprintf`, `snprintf`, `abort`, etc.). On
 Rust `#[no_mangle]` shim functions.
 
 The production build works because `wasm-quarto-hub-client/src/c_shim.rs` provides
-~980 lines of these shims. The WASM test only builds `pampa` and doesn't include
+\~980 lines of these shims. The WASM test only builds `pampa` and doesn't include
 that crate, so the linker can't resolve the symbols.
 
 ### Solution

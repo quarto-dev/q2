@@ -20,7 +20,7 @@ Original repro: `~/Desktop/daily-log/2026/08/07/test-qmd-parse-issue.qmd`
 ### Diagnosis
 
 `parse_open_angle_brace` in
-`crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c` (~line 1821)
+`crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c` (\~line 1821)
 handles every inline `<`. After consuming `<` it scans forward looking
 for a closing delimiter:
 
@@ -139,39 +139,39 @@ scanner-only; no `grammar.js` edit is expected. Rebuild with
         `inline-markdown.txt` case 3; runs with the suite)
   - [x] bd-j9cf cases still pass (`1 < 2`, `foo <`, `a <foo`)
 - [x] Run `tree-sitter test` and verify the new cases fail as expected —
-      `tree-sitter test -i lt-as-str`: 3 failed (the three bd-ly83qewg
-      cases, each showing `html_element` where `pandoc_str`s are
-      asserted), 9 passed
+  `tree-sitter test -i lt-as-str`: 3 failed (the three bd-ly83qewg
+  cases, each showing `html_element` where `pandoc_str`s are
+  asserted), 9 passed
 - [x] Add pampa-level regression tests in
-      `crates/pampa/tests/integration/test_bare_lt_str.rs` (3 new
-      behavior tests + 2 new RawInline regression guards); verified
-      failing: emphasis case dies with Q-2-12, the other two mismatch
-      (12 passed, 3 failed)
+  `crates/pampa/tests/integration/test_bare_lt_str.rs` (3 new
+  behavior tests + 2 new RawInline regression guards); verified
+  failing: emphasis case dies with Q-2-12, the other two mismatch
+  (12 passed, 3 failed)
 
 ### Phase 2 — scanner fix — DONE 2026-08-07
 
 - [x] Implement the `html_possible` guard + fast path in
-      `parse_open_angle_brace` (sketch above)
+  `parse_open_angle_brace` (sketch above)
 - [x] `tree-sitter generate && tree-sitter build && tree-sitter test`
-      — all 545 corpus tests green
+  — all 545 corpus tests green
 - [x] `cargo nextest run -p pampa` bare-lt suite — all 15 green
 
 ### Phase 3 — verification — DONE 2026-08-07
 
 - [x] Full `cargo xtask verify` (all 14 steps green, exit 0) — this
-      includes `cargo build --workspace`, `cargo nextest run
-      --workspace`, the WASM build, and hub-client build + tests
+  includes `cargo build --workspace`, `cargo nextest run
+  --workspace`, the WASM build, and hub-client build + tests
 - [x] End-to-end per CLAUDE.md: ran the `pampa` binary on the failing
-      variant (`*a < b this text is interpreted as an HTML element.* a > b`):
+  variant (`*a < b this text is interpreted as an HTML element.* a > b`):
 
-      ```
-      $ target/debug/pampa repro.qmd
-      [ Para [Emph [Str "a", Space, Str "<", Space, Str "b", …,
-        Str "element."], Space, Str "a", Space, Str ">", Space, Str "b"] ]
-      ```
+  ```
+  $ target/debug/pampa repro.qmd
+  [ Para [Emph [Str "a", Space, Str "<", Space, Str "b", …,
+    Str "element."], Space, Str "a", Space, Str ">", Space, Str "b"] ]
+  ```
 
-      Output inspected; byte-identical in structure to
-      `pandoc -f markdown -t native` on the same input.
+  Output inspected; byte-identical in structure to
+  `pandoc -f markdown -t native` on the same input.
 - [x] Snapshot churn: none — no `.snap` files changed
 
 ### Phase 4 — bookkeeping

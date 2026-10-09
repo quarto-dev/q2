@@ -76,7 +76,7 @@ engine for live preview. The WASM build targets `wasm32-unknown-unknown` with
 `wasm-bindgen` (the standard Rust-in-browser toolchain).
 
 Quarto supports **Lua filters** — user scripts that transform the document AST.
-The filter engine lives in `crates/pampa/src/lua/` (~24,600 lines) and is built
+The filter engine lives in `crates/pampa/src/lua/` (\~24,600 lines) and is built
 on **mlua** (Rust bindings to PUC-Rio Lua 5.4 via C FFI). It's gated behind a
 `lua-filter` cargo feature.
 

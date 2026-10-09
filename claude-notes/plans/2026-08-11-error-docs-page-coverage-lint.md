@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-11
 **Braid:** bd-u2qj4y29 (task, p2, filed 2026-08-10 by Carlos)
-**Checkout:** main checkout of q2, branch `main` @ `d05e021e`
+**Checkout:** main checkout of q2, branch `main` \@ `d05e021e`
 **Status:** Design settled 2026-08-11 with Carlos; implementing. See
 **Design decisions** below — they supersede the *Open design questions*
 section, which is kept as the record of what was asked.
@@ -77,7 +77,7 @@ the documentation already promises it.
 
 ## What the code looks like today
 
-Verified at `main` @ `d05e021e`.
+Verified at `main` \@ `d05e021e`.
 
 **Everything the strand describes still holds structurally.** The catalog is
 `crates/quarto-error-catalog/error_catalog.json` — a JSON *object* keyed by
@@ -203,27 +203,27 @@ Ordered so every commit leaves `cargo xtask verify` green — the gate goes on
 only after the tree it guards is clean.
 
 - [x] **Phase 0 — Test plan (TDD).** Unit tests over synthetic
-      catalog/docs-tree fixtures: a code with a page, a code without, a
-      `docs_url` that skips the subsystem, a `docs_url` that is entirely
-      wrong. The check takes catalog path + docs root as parameters so tests
-      never touch the real tree.
+  catalog/docs-tree fixtures: a code with a page, a code without, a
+  `docs_url` that skips the subsystem, a `docs_url` that is entirely
+  wrong. The check takes catalog path + docs root as parameters so tests
+  never touch the real tree.
 - [x] **Phase 1 — The check.** `crates/xtask/src/lint/error_docs.rs`, plus a
-      repo-level-check seam in `lint/mod.rs` (existing rules are all
-      per-Rust-file). Violations anchor at the offending entry's line in
-      `error_catalog.json` — that is where the declaration that promises the
-      page actually lives. Not yet wired into `run_check`.
+  repo-level-check seam in `lint/mod.rs` (existing rules are all
+  per-Rust-file). Violations anchor at the offending entry's line in
+  `error_catalog.json` — that is where the declaration that promises the
+  page actually lives. Not yet wired into `run_check`.
 - [x] **Phase 2 — Fix `Q-3-42` / `Q-3-43` `docs_url`.** Two-line catalog
-      edit; independent of everything else.
+  edit; independent of everything else.
 - [x] **Phase 3 — Backfill the 28 missing pages.** `extension` (9, new
-      directory), `project` (11), `lua` (4), `writer` (2), `theme` (1),
-      `markdown` (1). Front-matter from the catalog; body follows the
-      README's template; `status: stub`.
+  directory), `project` (11), `lua` (4), `writer` (2), `theme` (1),
+  `markdown` (1). Front-matter from the catalog; body follows the
+  README's template; `status: stub`.
 - [x] **Phase 4 — Turn the gate on.** Call the check from
-      `lint::run_check`, so it reaches `cargo xtask lint`, `cargo xtask
-      verify` step 1, and CI in one move.
+  `lint::run_check`, so it reaches `cargo xtask lint`, `cargo xtask
+  verify` step 1, and CI in one move.
 - [x] **Phase 5 — Docs.** `docs/errors/README.md` and
-      `crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`: adding a code
-      now *requires* adding a page, and the lint says so.
+  `crates/quarto-error-reporting/CONTRIBUTING-ERRORS.md`: adding a code
+  now *requires* adding a page, and the lint says so.
 
 ## Open design questions for the user
 
@@ -268,7 +268,7 @@ only after the tree it guards is clean.
 ## Risks / tradeoffs (draft)
 
 - **The gate is only as good as its timing.** A check that lands in a red
-  state gets `--fail-on none`'d and then ignored. The ordering question (2)
+  state gets `--fail-on none`\'d and then ignored. The ordering question (2)
   is the one that decides whether this strand actually prevents the next
   page-less code or just documents that we ship them.
 - **Backfilling 28 pages is a content task wearing a tooling task's
@@ -308,7 +308,7 @@ crates/quarto-error-catalog/error_catalog.json:464:3: [error-docs-page-missing]
 LINT EXIT CODE = 1
 ```
 
-Line 464 is `Q-2-99`'s own line in the catalog. Deleting an existing page
+Line 464 is `Q-2-99`\'s own line in the catalog. Deleting an existing page
 (`docs/errors/extension/Q-16-5.qmd`) produces the same shape. Catalog
 restored after both probes; `git diff` on the catalog shows only the
 intended two-line `docs_url` change.
@@ -338,16 +338,16 @@ nine new pages. Spot-checked the rendered HTML of `Q-16-5` and `Q-3-42`.
 
 1. **Bare shortcodes in prose *and* in fenced code blocks are executed.**
    The first render fired 15 genuine `Q-16-3`/`Q-16-5` diagnostics from
-   the pages documenting those very codes — `{{< meta version >}}` inside
+   the pages documenting those very codes — `{{{< meta version >}}}` inside
    a ```` ```markdown ```` fence resolved rather than displaying. The
    convention the rest of `docs/` uses is the triple-brace form
-   `{{{< … >}}}`, which renders as `{{< … >}}` in both inline code spans
+   `{{{< … >}}}`{shortcodes="false"}, which renders as `{{{< … >}}}` in both inline code spans
    and fenced blocks. Sibling pages `Q-2-27`/`Q-2-28` instead use a fence
    attribute, ```` ```{.markdown shortcodes="false"} ```` — equivalent
    output, and arguably better source readability for fenced examples.
    Worth standardizing on one; not done here.
 2. **A trailing possessive apostrophe opens a single quote.** "the
-   scripts'" failed `Q-5-12` with `Q-2-7` (unclosed single quote) and took
+   scripts\'" failed `Q-5-12` with `Q-2-7` (unclosed single quote) and took
    the whole page out of the render, which in turn produced two `Q-13-4`
    warnings on the pages linking to it. Rephrased.
 

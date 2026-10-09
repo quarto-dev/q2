@@ -12,7 +12,7 @@
 **Expected Impact:**
 - **Conservative estimate:** 10-15% speedup in parsing
 - **Optimistic estimate:** 20-25% speedup overall
-- **Memory:** Eliminates ~615 HashMap operations per run (8% of total samples)
+- **Memory:** Eliminates \~615 HashMap operations per run (8% of total samples)
 
 ## Current Implementation Analysis
 
@@ -179,19 +179,19 @@ sym String:           1 × ~32 bytes = 32 bytes (only when used)
 Total:                ~48 bytes stack + 32 bytes heap (conditional)
 ```
 
-**Memory savings:** ~560 bytes per call, almost all heap allocations eliminated!
+**Memory savings:** \~560 bytes per call, almost all heap allocations eliminated!
 
 ### Expected Speedup Calculation
 
 If HashMap operations account for 615 samples (8.2%), eliminating them gives:
 - **Direct savings:** 8.2% faster
-- **Cache effects:** Better cache locality → ~2-3% additional
-- **Reduced allocator pressure:** ~1-2% additional
+- **Cache effects:** Better cache locality → \~2-3% additional
+- **Reduced allocator pressure:** \~1-2% additional
 - **Total estimate:** **10-15% faster**
 
 For the div-whitespace benchmark (12 seconds):
 - Current: 12.0s
-- After optimization: ~10.2s - 10.8s
+- After optimization: \~10.2s - 10.8s
 - **Speedup: 1.5s - 1.8s**
 
 ## Correctness Verification
@@ -200,7 +200,7 @@ For the div-whitespace benchmark (12 seconds):
 
 | Aspect | Current | Proposed | Equivalent? |
 |--------|---------|----------|-------------|
-| Parameter parsing | HashMap with String keys/values | Direct match with Option<T> | ✅ Yes |
+| Parameter parsing | HashMap with String keys/values | Direct match with `Option<T>` | ✅ Yes |
 | Error handling | `.expect()` on `.get()` | `.expect()` on Option | ✅ Yes |
 | Unknown parameters | Stored in HashMap, never used | Ignored in match | ✅ Yes (better!) |
 | Duplicate keys | Last value wins (HashMap) | Last value wins (Option overwrite) | ✅ Yes |

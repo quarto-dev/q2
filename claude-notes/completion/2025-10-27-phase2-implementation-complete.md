@@ -94,7 +94,7 @@ All patterns tested against actual usage from quarto-cli schemas:
 - All tests passing
 - No clippy warnings
 - Zero regressions in existing tests
-- Clean module structure (13 focused modules, largest ~280 lines)
+- Clean module structure (13 focused modules, largest \~280 lines)
 - Proper error handling with source location tracking
 
 ## Next Steps

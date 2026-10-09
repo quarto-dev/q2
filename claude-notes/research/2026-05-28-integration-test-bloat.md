@@ -20,7 +20,7 @@ runs). The raw script logs live in `measurements/`.
 
 ## Headline table
 
-| Stage                                | Profile | target/<profile> | Wall-time | Executables in deps/ |
+| Stage                                | Profile | target/\<profile> | Wall-time | Executables in deps/ |
 | ------------------------------------ | ------- | ---------------: | --------: | -------------------: |
 | Baseline (first run)                 | debug   |       21 GB (1) |    114 s  |                  220 |
 | Baseline (first run)                 | release |           11 GB  |    133 s  |                  220 |
@@ -47,7 +47,7 @@ intervening work — these are the apples-to-apples comparison and the
 ones the Phase 4 decision should use.
 
 (1) `cargo clean` after the build reported "Removed 36689 files, 22.3 GiB total"
-— a slight discrepancy with `du`'s 21 GB because `du` undercounts
+— a slight discrepancy with `du`\'s 21 GB because `du` undercounts
 hardlinks and compressed metadata. We use `du -sh` as the headline
 figure to stay consistent with the script's output.
 
@@ -106,7 +106,7 @@ Top 10 by size (all are integration test binaries):
 | 131 MB | `listing_pipeline-…` | `crates/quarto-core/tests/` |
 
 The headline observation: **the dominant single-binary size class
-(~130 MB) shows up >20 times in the top 25**, which is a textbook
+(\~130 MB) shows up >20 times in the top 25**, which is a textbook
 illustration of the matklad post — each binary is statically linking
 the same massive transitive closure (quarto-core + pampa +
 tree-sitter + …).
@@ -144,8 +144,8 @@ between each, no other work in between):
 The disk wins are unambiguous and consistent across debug and
 release: pampa's 57 integration test binaries collapse into one
 `integration` binary, eliminating exactly 56 executables and
-~2.5 GiB of duplicated dependency-closure linkage. Extrapolated
-across the other 12 candidate crates' 107 integration test files,
+\~2.5 GiB of duplicated dependency-closure linkage. Extrapolated
+across the other 12 candidate crates\' 107 integration test files,
 target/debug at the end of Phase 5 should land in the 13-15 GB
 range vs. the 21 GB baseline.
 
@@ -168,7 +168,7 @@ codegen-units=16 world), release is statistically a wash. This is
 the opposite direction from matklad's 3× speedup, but matklad's
 codebase had much smaller per-file binaries relative to the
 consolidated one. For Q2, our per-file binaries were already
-~130 MB (the dep closure dominates), so collapsing them just
+\~130 MB (the dep closure dominates), so collapsing them just
 removes redundancy without much link-time amortization. **The disk
 savings, not compile speed, are the load-bearing benefit.**
 
@@ -184,7 +184,7 @@ level required changing the 3 occurrences to `../../snapshots/…` to
 keep pointing at `crates/pampa/snapshots/`.
 
 This is the same kind of edit that the Phase 5 audit flagged for
-`quarto/tests/trace_cli.rs`'s `#[path = "../src/commands/trace.rs"]`
+`quarto/tests/trace_cli.rs`\'s `#[path = "../src/commands/trace.rs"]`
 — any source-file-relative path inside an integration test needs
 one more `../` after consolidation. We should grep for these
 patterns proactively before each Phase 5 crate migration to avoid
@@ -235,23 +235,23 @@ debug delta is essentially noise (+4 s, +3 %).
 ### Cross-platform extrapolation (concrete)
 
 The ark PR reported the Linux CI runner footprint dropping from
-~15 GB to ~2 GB — a ~7.5× reduction. Our `target/release` drops
+\~15 GB to \~2 GB — a \~7.5× reduction. Our `target/release` drops
 from 11 → 4.5 GB (2.4×), which is more conservative because Q2's
 per-file binaries were already statically linking a heavy dep
-closure (pampa + tree-sitter + quarto-core makes each binary ~130
+closure (pampa + tree-sitter + quarto-core makes each binary \~130
 MB before consolidation; ark's binaries were smaller, so consolidation
 won them proportionally more).
 
 For Linux CI specifically, the conservative expectation: a Linux
-runner that used to need ~25-30 GB of disk for the full debug test
+runner that used to need \~25-30 GB of disk for the full debug test
 suite (worse than macOS because of glibc + linker overhead per
-binary) should now need ~12-15 GB. That's well inside GitHub's
+binary) should now need \~12-15 GB. That's well inside GitHub's
 20 GB default and gives us breathing room.
 
 ## Cross-platform extrapolation
 
 The measurements above are macOS-only. The ark PR reported a Linux CI
-runner footprint drop from 15 GB → ~2 GB and a fresh `cargo clean`
+runner footprint drop from 15 GB → \~2 GB and a fresh `cargo clean`
 size drop of 8.1 GiB → 3.5 GiB on macOS. Linker bloat per binary
 scales with the dependency closure, which is the same set of crates on
 all targets (modulo platform-specific deps like `dylib`s on Linux that

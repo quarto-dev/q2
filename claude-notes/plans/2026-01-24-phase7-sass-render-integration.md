@@ -571,14 +571,14 @@ When should CSS be minified?
 
 ## Estimated Scope
 
-- **Phase 7.1** (Config): ~150 lines new code
-- **Phase 7.2** (Compile API): ~100 lines new code
-- **Phase 7.3** (Native): ~200 lines modified
-- **Phase 7.4** (WASM): ~150 lines modified
-- **Phase 7.5** (Hub-Client): ~100 lines modified
-- **Phase 7.6** (Testing): ~300 lines tests
+- **Phase 7.1** (Config): \~150 lines new code
+- **Phase 7.2** (Compile API): \~100 lines new code
+- **Phase 7.3** (Native): \~200 lines modified
+- **Phase 7.4** (WASM): \~150 lines modified
+- **Phase 7.5** (Hub-Client): \~100 lines modified
+- **Phase 7.6** (Testing): \~300 lines tests
 
-**Total**: ~1000 lines of new/modified code
+**Total**: \~1000 lines of new/modified code
 
 ---
 

@@ -45,7 +45,7 @@ branch drops them, and the TS default-HTML path never sends them.
    `render_project_active_page_to_response` (`lib.rs:1519`) is the same: its
    HTML `_ =>` arm (`lib.rs:1616`) builds a `RenderToHtmlRenderer` with no
    captures. Both HTML branches funnel through `render_qmd_to_html`
-   (`crates/quarto-core/src/pipeline.rs` ~833; the Pass-2 site is
+   (`crates/quarto-core/src/pipeline.rs` \~833; the Pass-2 site is
    `crates/quarto-core/src/project/pass2_renderer.rs:825`), which has **no
    captures channel**.
 
@@ -226,7 +226,7 @@ displays executed engine output end-to-end.
   (`crates/quarto-core/src/pipeline.rs:387-436`), splice insert `:431-433`.
 - `CaptureSpliceStage`: `crates/quarto-core/src/stage/stages/capture_splice.rs`.
 - HTML pipeline: `build_html_pipeline_stages_with_options`
-  (`crates/quarto-core/src/pipeline.rs:249-339`); `render_qmd_to_html` (~`:833`).
+  (`crates/quarto-core/src/pipeline.rs:249-339`); `render_qmd_to_html` (\~`:833`).
 - Pass-2 renderer: `crates/quarto-core/src/project/pass2_renderer.rs:727,825,991`.
 - Capture recording (cell alignment): `build_capture_pipeline_stages`
   (`crates/quarto-core/src/engine/preview_record.rs:109-117`).

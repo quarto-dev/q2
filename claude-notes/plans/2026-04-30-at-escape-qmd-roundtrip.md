@@ -78,9 +78,9 @@ emits a citation token; the citation grammar then either matches an
 identifier (yielding a `Cite`) or fails. There is no "fallback"
 production in which a bare `@` inside `Str` content is legal. Therefore:
 
-- If a `Str`'s body contains `@` followed by alnum/`_`/`{`, the
+- If a `Str`\'s body contains `@` followed by alnum/`_`/`{`, the
   unescaped emit re-parses as a `Cite` (the original bug).
-- If a `Str`'s body contains `@` followed by anything else, the
+- If a `Str`\'s body contains `@` followed by anything else, the
   unescaped emit fails to parse at all.
 - Either way, the writer must escape every `@`.
 
@@ -110,12 +110,12 @@ up automatically by `test_qmd_roundtrip_consistency` in
 - [x] Add `at_escape_plain_inline.qmd` with `See \@jjallaire please.`
 - [x] Add `at_escape_in_emphasis.qmd` with `*\@user* mention.` to cover
       another container.
-- [~] ~~Add `at_escape_brace_form.qmd` with `See \@{some-key} please.`~~
+- \[\~\] ~~Add `at_escape_brace_form.qmd` with `See \@{some-key} please.`~~
       Removed: bare `{...}` in inline text is itself a parse error
       independent of the `@` escape, so the brace-citation form can't
       currently be round-tripped end-to-end. Tracked separately as
       bd-tpve (discovered-from bd-21gu).
-- [~] ~~Negative cases (`at_no_escape_at_end.qmd`,
+- \[\~\] ~~Negative cases (`at_no_escape_at_end.qmd`,
       `at_no_escape_before_space.qmd`).~~ Removed: bare `@` is
       *always* a parse error in qmd `Str` context (verified — see
       "Fix strategy" table), so over-escape of `@` is not a concern.
@@ -124,7 +124,7 @@ up automatically by `test_qmd_roundtrip_consistency` in
       positions cleanly.
 - [x] Run `cargo nextest run -p pampa test_qmd_roundtrip_consistency` and
       confirm the four positive tests fail in the expected way before
-      any code change. Verified: all four fixtures' writer output drops
+      any code change. Verified: all four fixtures\' writer output drops
       the `\@` escape; first three re-parse as `Cite` (wrong AST), the
       `at_escape_trailing` case re-parses as a hard parse error.
 
@@ -163,7 +163,7 @@ Approach:
 - [ ] For each candidate char `C`:
       1. Construct a minimal qmd input where `\C…` parses to a `Str`
          whose text contains `C…`.
-      2. Re-parse that `Str`'s text in isolation (or in the same context)
+      2. Re-parse that `Str`\'s text in isolation (or in the same context)
          and check whether it round-trips. If it parses to anything other
          than the same `Str`, the writer must escape `C` in that context.
       3. Cross-check against the `escape_markdown` arm list at

@@ -118,7 +118,7 @@ After optimization:
   }
 }
 ```
-Size: ~200+ bytes per reference × 100 siblings = **~20,000+ bytes**
+Size: \~200+ bytes per reference × 100 siblings = **\~20,000+ bytes**
 
 **After** (pooled with references):
 ```json
@@ -126,9 +126,9 @@ Size: ~200+ bytes per reference × 100 siblings = **~20,000+ bytes**
   "key_source": {"$ref": 5}
 }
 ```
-Size: ~15 bytes per reference × 100 siblings = **~1,500 bytes**
+Size: \~15 bytes per reference × 100 siblings = **\~1,500 bytes**
 
-Plus one-time pool entry (~100 bytes per unique SourceInfo).
+Plus one-time pool entry (\~100 bytes per unique SourceInfo).
 
 ### Expected Improvement
 

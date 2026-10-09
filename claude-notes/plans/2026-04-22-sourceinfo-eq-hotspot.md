@@ -82,9 +82,9 @@ Both could be partially true. Measurement decides the split.
 **Goal:** a single command that reproduces the hotspot on the native binary,
 so we can iterate without touching the browser.
 
-- [ ] Pick/craft a representative fixture qmd (~same size as the profiled
+- [ ] Pick/craft a representative fixture qmd (\~same size as the profiled
       document). Candidates: an existing large fixture in `crates/pampa/tests/`,
-      the repo's own docs/*.qmd, or a synthetic document of N paragraphs each
+      the repo's own docs/\*.qmd, or a synthetic document of N paragraphs each
       with M inlines. Record the chosen size and a rough token/node count.
 - [ ] Add a Criterion bench `crates/pampa/benches/sourceinfo_intern.rs` that:
       - parses the fixture to AST once (outside the timed section),
@@ -117,7 +117,7 @@ before writing a fix.
       - final `content_map.len()`
 - [ ] Run the harness with stats enabled on the fixture. Expected shape if H1
       is right: hit rate is moderate (maybe 20-50%), but the linear scan is
-      doing ~N/2 comparisons per call, times ~N calls.
+      doing \~N/2 comparisons per call, times \~N calls.
 - [ ] Inspect the distribution of `SourceInfo` variants reaching the scan. If
       most are `Original` (shallow compare), the per-call cost is small and
       H1 dominates. If many are deeply nested `Substring`, H2 contributes.
@@ -255,7 +255,7 @@ Goal: remove the O(n²) hot loop.
 | 8×   |  6.80 s | 1.36 s |   5.0×  |
 | 16×  | 25.61 s | 3.90 s |   6.6×  |
 
-Growth per doubling collapsed from ~4× to ~2× — the O(n²) tail is gone.
+Growth per doubling collapsed from \~4× to \~2× — the O(n²) tail is gone.
 `eq_comparisons` = 0 trivially (the loop is removed).
 
 **Snapshots affected (13):** `002.snap`, `003.snap`,
@@ -462,8 +462,8 @@ design looks the way it does. Three documents tell the full story.
 `claude-notes/plans/2025-10-19-sourceinfo-pool-serialization.md`. The
 pool was introduced to fix a **25–55× JSON blowup** from each `Substring`
 mapping embedding its full parent chain inline. For a YAML frontmatter
-with ~100 sibling nodes sharing one parent chain, the old format wrote
-the chain 100 times. Expected savings: ~93% for metadata-heavy docs.
+with \~100 sibling nodes sharing one parent chain, the old format wrote
+the chain 100 times. Expected savings: \~93% for metadata-heavy docs.
 
 The **original design was pointer-only** — just
 `id_map: HashMap<*const SourceInfo, usize>`. "Risk 1: Pointer

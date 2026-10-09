@@ -68,6 +68,13 @@ We use plans for additional context and bookkeeping. Write plans to
 `claude-notes/plans/YYYY-MM-DD-<description>.md`, and reference the plan file
 in the strands.
 
+`claude-notes/` renders as a Quarto 2 website, so every note is a qmd
+document. Write qmd, not GitHub Markdown: no indented code blocks, escape an
+apostrophe after a code span (`` `a.rs`\'s ``), and so on. The list is in
+`claude-notes/instructions/writing-notes.md`; the user-facing page it points
+at is `q2 agents-info guides/authoring/migrating-markdown.md`. Check a note
+with `q2 render <file>`.
+
 ### File Structure
 Plan files should include:
 
@@ -635,7 +642,7 @@ This repository has Claude Code hooks configured in `.claude/settings.json`.
 ## General Instructions
 
 - in Claude Code conversations, "Rust Quarto" means this project, and "TypeScript Quarto" or "TS Quarto" means the current version of Quarto in the quarto-dev/quarto-cli repository.
-- in this repository, "qmd" means "quarto markdown", the dialect of markdown we are developing. Although we aim to be largely compatible with Pandoc, discrepancies in the behavior might not be bugs.
+- in this repository, "qmd" means "quarto markdown", the dialect of markdown we are developing. Although we aim to be largely compatible with Pandoc, discrepancies in the behavior might not be bugs. The known differences are documented for users in `docs/guides/authoring/migrating-markdown.qmd` (`q2 agents-info guides/authoring/migrating-markdown.md`); keep that page current when a difference is added or removed.
 - the qmd format only supports the inline syntax for a link [link](./target.html), and not the reference-style syntax [link][1].
 - When fixing bugs, always try to isolate and fix one bug at a time.
 - If you need to fix parser bugs, you will find use in running the application with "-v", which will provide a large amount of information from the tree-sitter parsing process, including a print of the concrete syntax tree out to stderr.

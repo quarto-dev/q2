@@ -40,29 +40,29 @@ We track work in Beads instead of Markdown. Run `br quickstart` to see how. Keep
 
 ## Mapped-Text and YAML System
 
-- **[mapped-text-analysis.md](mapped-text-analysis.md)** - MappedString data structure analysis (~1000 LOC)
-- **[yaml-validator-analysis.md](yaml-validator-analysis.md)** - YAML validation system analysis (~7600 LOC)
+- **[mapped-text-analysis.md](mapped-text-analysis.md)** - MappedString data structure analysis (\~1000 LOC)
+- **[yaml-validator-analysis.md](yaml-validator-analysis.md)** - YAML validation system analysis (\~7600 LOC)
 - **[mapped-text-yaml-port-plan.md](mapped-text-yaml-port-plan.md)** - Combined 6-8 week port plan
 - **[yaml-annotated-parse-rust-plan.md](yaml-annotated-parse-rust-plan.md)** - Plan to build AnnotatedParse using yaml-rust2's MarkedEventReceiver API
 - **[config-merging-analysis.md](config-merging-analysis.md)** - Analysis of mergeConfigs function and source-location-aware merge strategy for Rust port
 - **[yaml-tags-analysis.md](yaml-tags-analysis.md)** - YAML tags (like !expr) support analysis and integration strategy with AnnotatedParse
 - **[mapped-string-cell-yaml-design.md](mapped-string-cell-yaml-design.md)** - Comprehensive design for location tracking in YAML parsing across three scenarios: standalone files, metadata blocks, and code cell options (non-contiguous extraction). Includes unified SourceInfo design with Concat strategy, yaml-rust2 integration, complete API, implementation plan, and testing strategy
-- **[yaml-with-source-info-design.md](yaml-with-source-info-design.md)** - Complete design for YamlWithSourceInfo (renamed from AnnotatedParse): uses yaml-rust2's Yaml directly with owned data and parallel children structure. Addresses lifetime management, config merging, and dual access patterns (raw Yaml + source-tracked). Includes full API, parsing, validation, ~3x memory overhead analysis, and 3-4 week implementation plan
+- **[yaml-with-source-info-design.md](yaml-with-source-info-design.md)** - Complete design for YamlWithSourceInfo (renamed from AnnotatedParse): uses yaml-rust2's Yaml directly with owned data and parallel children structure. Addresses lifetime management, config merging, and dual access patterns (raw Yaml + source-tracked). Includes full API, parsing, validation, \~3x memory overhead analysis, and 3-4 week implementation plan
 - **[yaml-with-source-info-lifetime-approach.md](yaml-with-source-info-lifetime-approach.md)** - Alternative lifetime-based design analysis: shows how to express "shorter of two lifetimes" using lifetime bounds, requires hybrid ownership (merged containers owned, leaves borrowed), compares complexity/memory trade-offs, discusses LSP caching implications, reviews rust-analyzer and rustc precedents, recommends owned data for simplicity but acknowledges lifetime approach is feasible
 - **[rust-analyzer-owned-data-patterns.md](rust-analyzer-owned-data-patterns.md)** - Concrete code examples from rust-analyzer showing their owned data approach: Config struct uses Vec/HashMap/Arc with zero lifetimes, rowan's SyntaxNode uses manual refcounting (inc_rc/dec_rc), Clone is cheap (just refcount++), all public APIs return owned types not references, demonstrates that owned data works at scale for large codebases
 - **`crates/quarto-yaml/`** - ✅ **Implemented and Benchmarked!** YAML parsing with source location tracking. Wraps yaml-rust2::Yaml with owned data approach (6.38x memory overhead, verified linear scaling). Provides parse() API, dual access (raw Yaml + source-tracked), complete test coverage (14 tests + 2 benchmarks). See crate's README and claude-notes/ for details
-- **[yaml-validation-rust-design.md](yaml-validation-rust-design.md)** - Comprehensive design for YAML validation crate: analyzed TypeScript validator (~7000 LOC), designed Rust equivalents (Schema enum with 13 variants, ValidationContext, navigate function, type-specific validators), addressed error collection/pruning/improvement, schema compilation from YAML, and 6-8 week implementation plan (6 phases)
-- **`crates/quarto-yaml-validation/`** - ✅ **Phase 1 Complete!** YAML validation with schema-based validation. Implements Schema enum (13 types), ValidationError with source tracking, ValidationContext with path tracking, critical navigate() function for error reporting, all type-specific validators (boolean, number, string, null, enum, any, anyOf, allOf, array, object, ref). Complete test coverage (12 tests passing). ~1150 LOC. Error pruning deferred to Phase 2
+- **[yaml-validation-rust-design.md](yaml-validation-rust-design.md)** - Comprehensive design for YAML validation crate: analyzed TypeScript validator (\~7000 LOC), designed Rust equivalents (Schema enum with 13 variants, ValidationContext, navigate function, type-specific validators), addressed error collection/pruning/improvement, schema compilation from YAML, and 6-8 week implementation plan (6 phases)
+- **`crates/quarto-yaml-validation/`** - ✅ **Phase 1 Complete!** YAML validation with schema-based validation. Implements Schema enum (13 types), ValidationError with source tracking, ValidationContext with path tracking, critical navigate() function for error reporting, all type-specific validators (boolean, number, string, null, enum, any, anyOf, allOf, array, object, ref). Complete test coverage (12 tests passing). \~1150 LOC. Error pruning deferred to Phase 2
 
 ## Error Reporting and Console Output
 
 - **[error-reporting-design-research.md](error-reporting-design-research.md)** - Comprehensive design for error reporting and console print subsystem: ariadne (visual errors), R cli (structured output), tidyverse style guide (message best practices), Markdown-based API with Pandoc AST, multiple output formats (ANSI/HTML/JSON)
 - **[error-id-system-design.md](error-id-system-design.md)** - TypeScript-style error code system for Quarto. Format: `Q-<subsystem>-<number>` (e.g., Q-1-1). JSON catalog, optional but encouraged, enables Googleable error codes <!-- quarto-error-code-audit-ignore-file -->
-- **`crates/quarto-error-reporting/`** - ✅ **Phase 1 Complete!** Error reporting with TypeScript-style error codes. Includes DiagnosticMessage types, builder API, error catalog (JSON), Q-<subsystem>-<number> format. Phase 2-4 planned (rendering, console helpers)
+- **`crates/quarto-error-reporting/`** - ✅ **Phase 1 Complete!** Error reporting with TypeScript-style error codes. Includes DiagnosticMessage types, builder API, error catalog (JSON), Q-\<subsystem>-\<number> format. Phase 2-4 planned (rendering, console helpers)
 
 ## YAML and Validation
 
-- **[yaml-schema-from-yaml-design.md](yaml-schema-from-yaml-design.md)** - **[REVISED FOR YAML 1.2]** Design for loading Quarto schemas from YAML files. **Critical change**: Uses YamlWithSourceInfo instead of serde to ensure YAML 1.2 compatibility and source tracking. Required for Quarto extensions support. Includes complete implementation plan for `validate-yaml` binary. See YAML-1.2-REQUIREMENT.md in both quarto-yaml and quarto-yaml-validation crates
+- **[yaml-schema-from-yaml-design.md](yaml-schema-from-yaml-design.md)** - **\[REVISED FOR YAML 1.2\]** Design for loading Quarto schemas from YAML files. **Critical change**: Uses YamlWithSourceInfo instead of serde to ensure YAML 1.2 compatibility and source tracking. Required for Quarto extensions support. Includes complete implementation plan for `validate-yaml` binary. See YAML-1.2-REQUIREMENT.md in both quarto-yaml and quarto-yaml-validation crates
 
 ## JavaScript Runtime Dependencies
 
@@ -71,7 +71,7 @@ We track work in Beads instead of Markdown. Run `br quickstart` to see how. Keep
 ## Implications and Strategy
 
 - **[rust-port-implications.md](rust-port-implications.md)** - Strategic analysis of what breaks when porting CLI to Rust
-- **[rust-ecosystem-risks-analysis.md](rust-ecosystem-risks-analysis.md)** - Comprehensive analysis of long-term risks: dependency abandonment (62% single-maintainer), supply chain security, edition migrations (track record excellent), vulnerability communication (good tools, slow disclosure ~2yrs), practical recommendations for Kyoto
+- **[rust-ecosystem-risks-analysis.md](rust-ecosystem-risks-analysis.md)** - Comprehensive analysis of long-term risks: dependency abandonment (62% single-maintainer), supply chain security, edition migrations (track record excellent), vulnerability communication (good tools, slow disclosure \~2yrs), practical recommendations for Kyoto
 - **[versioning-strategy.md](versioning-strategy.md)** - Dual versioning approach: Cargo.toml (0.x.y) vs CLI reported (99.9.9-dev) for extension compatibility
 - **[machine-readable-io-design.md](machine-readable-io-design.md)** - Comprehensive design for machine-readable I/O: global `--format` flag, `Outputable` trait, line-delimited JSON streaming, and config file integration
 
@@ -86,17 +86,17 @@ We track work in Beads instead of Markdown. Run `br quickstart` to see how. Keep
 The current TypeScript LSP has tight runtime coupling with the CLI (loads JS modules from CLI installation). When CLI → Rust, this breaks. Solution: Implement "quarto lsp" command in Rust.
 
 ### 1.5. quarto-markdown Enables AST-Based LSP
-The quarto-markdown Rust parser (~11K LOC) converts QMD to typed Pandoc AST with full source tracking. This allows the LSP to work with structured AST instead of fragile string parsing, sharing the exact same parser with the CLI.
+The quarto-markdown Rust parser (\~11K LOC) converts QMD to typed Pandoc AST with full source tracking. This allows the LSP to work with structured AST instead of fragile string parsing, sharing the exact same parser with the CLI.
 
 ### 2. Mapped-Text is Critical Infrastructure
-~450 LOC that tracks source positions through text transformations. Essential for error reporting. Used by YAML validation, LSP, error formatting, code cell processing.
+\~450 LOC that tracks source positions through text transformations. Essential for error reporting. Used by YAML validation, LSP, error formatting, code cell processing.
 
 ### 3. YAML System is Large but Well-Structured
-~8,600 LOC total:
-- YAML intelligence (IDE features): ~2,500 LOC
-- YAML validation: ~1,500 LOC
-- YAML schemas: ~4,000 LOC
-- Mapped-text: ~450 LOC + utilities
+\~8,600 LOC total:
+- YAML intelligence (IDE features): \~2,500 LOC
+- YAML validation: \~1,500 LOC
+- YAML schemas: \~4,000 LOC
+- Mapped-text: \~450 LOC + utilities
 
 ### 4. Clear Dependencies
 ```
@@ -118,7 +118,7 @@ LSP Features + CLI Validation
 - **Rust LSP**: 14 weeks (7 phases from infrastructure to production)
 - **MappedString + YAML**: 6-8 weeks (6 phases from foundation to integration)
 - **JS Runtime Dependencies**: 9-14 weeks (HTML postprocessing: 4-6w, templating: 2-3w, browser: 2-3w, OJS: 1-2w)
-- **Total for LSP + YAML**: ~4-5 months (some parallel work possible)
+- **Total for LSP + YAML**: \~4-5 months (some parallel work possible)
 
 ## Technical Decisions
 
@@ -129,7 +129,7 @@ LSP Features + CLI Validation
 ### YAML Parsing and Source Tracking
 - **Choice**: yaml-rust2 with MarkedEventReceiver for YamlWithSourceInfo (renamed from AnnotatedParse)
 - **Rationale**: Provides position tracking for all events, already in use, single parser (strict), optional tree-sitter-yaml for lenient mode if needed later
-- **Data Structure**: Owned yaml-rust2::Yaml + parallel Children with source tracking (~3x memory overhead)
+- **Data Structure**: Owned yaml-rust2::Yaml + parallel Children with source tracking (\~3x memory overhead)
 - **Rationale**: Enables config merging across different lifetimes, provides dual access (raw Yaml + source-tracked), simpler API than lifetime-based alternatives
 
 ### LSP Framework
@@ -174,7 +174,7 @@ LSP Features + CLI Validation
 
 ### YAML Tags
 - **Choice**: Full tag support via yaml-rust2's Event API, with YamlWithSourceInfo tag field
-- **Rationale**: yaml-rust2 provides complete tag support through Option<Tag> in Event::Scalar/SequenceStart/MappingStart, compatible with TypeScript's tagged value representation, enables !expr for R/Python expressions
+- **Rationale**: yaml-rust2 provides complete tag support through `Option<Tag>` in Event::Scalar/SequenceStart/MappingStart, compatible with TypeScript's tagged value representation, enables !expr for R/Python expressions
 
 ### CLI Architecture
 - **Choice**: Workspace architecture (turborepo-style) + Commands directory (cargo-style)
@@ -213,7 +213,7 @@ LSP Features + CLI Validation
 7. ✅ Machine-readable I/O design (global --format, Outputable trait, streaming)
 8. ✅ Error reporting and console output design (ariadne + Markdown + Pandoc AST)
 9. ✅ **quarto-yaml crate implemented** (YAML parsing with source tracking, owned data approach, 14 tests passing)
-10. ✅ **quarto-yaml-validation Phase 1 implemented** (Schema types, ValidationContext, navigate function, all type-specific validators, 12 tests passing, ~1150 LOC)
+10. ✅ **quarto-yaml-validation Phase 1 implemented** (Schema types, ValidationContext, navigate function, all type-specific validators, 12 tests passing, \~1150 LOC)
 
 ### Proposed Priorities
 1. **Option A: MCP Server Spike** (2 days)
@@ -240,12 +240,12 @@ Detailed notes from design sessions:
 - **[session-logs/2025-10-12-rust-ecosystem-research.md](session-logs/2025-10-12-rust-ecosystem-research.md)** - Comprehensive research on Rust ecosystem risks: dependencies (62% single-maintainer, medium-high risk), editions (low risk, excellent track record), security communication (good tools, 2yr disclosure lag)
 - **[session-logs/2025-10-13-dependency-diagram.md](session-logs/2025-10-13-dependency-diagram.md)** - Created comprehensive Graphviz dependency diagram showing all subsystem relationships; visualizes architecture from foundation layer through tools; arrows show dependency → dependent flow
 - **[session-logs/2025-10-13-mapped-string-cell-yaml-design.md](session-logs/2025-10-13-mapped-string-cell-yaml-design.md)** - Comprehensive design for MappedString/SourceInfo handling all three YAML scenarios (standalone files, metadata blocks, code cell options). Key innovation: Concat strategy with per-piece SourceInfo for non-contiguous text extraction. Includes complete API, yaml-rust2 integration, implementation plan (10 weeks), and testing strategy
-- **[session-logs/2025-10-13-yaml-with-source-info-design.md](session-logs/2025-10-13-yaml-with-source-info-design.md)** - YamlWithSourceInfo design session: resolved lifetime tension (lifetimes vs owned data for config merging), decided on owned yaml-rust2::Yaml with parallel Children structure, analyzed ~3x memory overhead trade-off, designed dual access API (raw Yaml + source-tracked), full parsing/validation/merging implementation with 3-4 week timeline
+- **[session-logs/2025-10-13-yaml-with-source-info-design.md](session-logs/2025-10-13-yaml-with-source-info-design.md)** - YamlWithSourceInfo design session: resolved lifetime tension (lifetimes vs owned data for config merging), decided on owned yaml-rust2::Yaml with parallel Children structure, analyzed \~3x memory overhead trade-off, designed dual access API (raw Yaml + source-tracked), full parsing/validation/merging implementation with 3-4 week timeline
 - **[session-logs/2025-10-13-yaml-lifetime-vs-owned-discussion.md](session-logs/2025-10-13-yaml-lifetime-vs-owned-discussion.md)** - User challenged owned-data recommendation with lifetime-based alternative; analyzed both approaches; explored rust-analyzer source code for concrete evidence; both approaches viable; user chose owned data approach
-- **[session-logs/2025-10-13-quarto-yaml-implementation.md](session-logs/2025-10-13-quarto-yaml-implementation.md)** - Implemented quarto-yaml crate: created workspace, implemented SourceInfo/YamlWithSourceInfo/YamlHashEntry, MarkedEventReceiver parser, parse() API, 14 tests (all passing), documentation (README + claude-notes), ~2-3 hours total
+- **[session-logs/2025-10-13-quarto-yaml-implementation.md](session-logs/2025-10-13-quarto-yaml-implementation.md)** - Implemented quarto-yaml crate: created workspace, implemented SourceInfo/YamlWithSourceInfo/YamlHashEntry, MarkedEventReceiver parser, parse() API, 14 tests (all passing), documentation (README + claude-notes), \~2-3 hours total
 - **[session-logs/2025-10-13-quarto-yaml-continued.md](session-logs/2025-10-13-quarto-yaml-continued.md)** - Memory overhead validation: created benchmarks, discovered 6.38x overhead (not 3x estimated), verified linear scaling (no superlinear growth), proved production-ready with stable overhead ratios across 100x size increases, explained Rust documentation format
 - **[session-logs/2025-10-13-surface-syntax-converter-design.md](session-logs/2025-10-13-surface-syntax-converter-design.md)** - Surface syntax converter architecture design: analyzed current engine coupling (file claiming, conversion, execution), researched quarto-cli implementations (.ipynb/percent/spin converters), designed independent SourceConverter trait/registry, evaluated pros/cons, created Rust API with ConvertedSource/SourceMap, addressed challenges (file claiming, metadata preservation, source mapping), strongly recommended with 8-13 week roadmap
-- **[session-logs/2025-10-13-yaml-validation-phase1-implementation.md](session-logs/2025-10-13-yaml-validation-phase1-implementation.md)** - Phase 1 implementation of quarto-yaml-validation crate: implemented Schema enum (13 types), ValidationError with source tracking, ValidationContext with path tracking, critical navigate() function, all type-specific validators (boolean, number, string, null, enum, any, anyOf, allOf, array, object, ref). Resolved YamlWithSourceInfo API challenges, fixed yaml-rust2 integration. 12 tests passing. ~1150 LOC in ~2 hours. Phase 1 complete, ready for Phase 2 (schema compilation)
+- **[session-logs/2025-10-13-yaml-validation-phase1-implementation.md](session-logs/2025-10-13-yaml-validation-phase1-implementation.md)** - Phase 1 implementation of quarto-yaml-validation crate: implemented Schema enum (13 types), ValidationError with source tracking, ValidationContext with path tracking, critical navigate() function, all type-specific validators (boolean, number, string, null, enum, any, anyOf, allOf, array, object, ref). Resolved YamlWithSourceInfo API challenges, fixed yaml-rust2 integration. 12 tests passing. \~1150 LOC in \~2 hours. Phase 1 complete, ready for Phase 2 (schema compilation)
 
 ## Notes for Future Claude Instances
 

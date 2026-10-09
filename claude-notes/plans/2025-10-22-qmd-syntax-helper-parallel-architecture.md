@@ -472,7 +472,7 @@ Time = (100 / 8) × (10ms + 50ms + max(5ms, 5ms, 5ms, 5ms))
      = 812ms
 ```
 
-**Expected Speedup:** ~14.8x (near-linear with threads + parse sharing)
+**Expected Speedup:** \~14.8x (near-linear with threads + parse sharing)
 
 ---
 
@@ -528,7 +528,7 @@ Time = (100 / 8) × (10ms + 50ms + max(5ms, 5ms, 5ms, 5ms))
    - Use `ctx.content()` instead of direct file read
 3. Deprecate old `Rule` trait (with warning)
 
-**Expected Benefit:** Eliminate redundant file reads (minor, ~10ms/file)
+**Expected Benefit:** Eliminate redundant file reads (minor, \~10ms/file)
 
 ---
 
@@ -663,7 +663,7 @@ impl Task for GridTableConversionTask {
 
 3. **Error handling**
    - **Issue:** Parallel errors harder to aggregate
-   - **Mitigation:** Rayon collects errors into Result<Vec<_>>
+   - **Mitigation:** Rayon collects errors into `Result<Vec<_>>`
    - **Future:** Better error context (which file failed?)
 
 4. **Pandoc resource extraction**
@@ -686,10 +686,10 @@ impl Task for GridTableConversionTask {
 
 | Metric | Current (Sequential) | Target (Parallel) |
 |--------|----------------------|-------------------|
-| 100 files, check mode | ~12 seconds | <1 second |
+| 100 files, check mode | \~12 seconds | <1 second |
 | Parse reuse rate | 0% (3 parses/file) | 100% (1 parse/file) |
-| CPU utilization | ~12% (1/8 cores) | >80% (7-8/8 cores) |
-| Memory usage | ~50MB | <200MB |
+| CPU utilization | \~12% (1/8 cores) | >80% (7-8/8 cores) |
+| Memory usage | \~50MB | <200MB |
 
 ### Correctness
 
@@ -769,7 +769,7 @@ For reference, existing Rust task/dataflow libraries:
 - Phase 1: 4-6 hours
 - Phase 2: 6-8 hours
 - Phase 3: 4-6 hours
-- Total: ~14-20 hours
+- Total: \~14-20 hours
 
 **Estimated Benefit:**
 - 10-15x faster check mode

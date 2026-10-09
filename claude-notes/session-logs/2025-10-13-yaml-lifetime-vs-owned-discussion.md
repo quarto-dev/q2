@@ -27,7 +27,7 @@ This session involved a deep technical discussion about whether to use lifetime-
 
 The user read my owned-data design and pushed back:
 
-> "Your concerns about lifetime make sense, but let me try to argue just a bit further for my idea. I expect Quarto to have a data structure like ProjectContext that will exist for the lifetime of a project, which could serve as the "witness" for references that only live as long as a project do."
+> "Your concerns about lifetime make sense, but let me try to argue just a bit further for my idea. I expect Quarto to have a data structure like ProjectContext that will exist for the lifetime of a project, which could serve as the \"witness\" for references that only live as long as a project do."
 
 **Key insight proposed**:
 ```rust
@@ -68,7 +68,7 @@ pub enum YamlRef<'a> {
 
 | Aspect | Lifetime Approach | Owned Approach |
 |--------|-------------------|----------------|
-| Memory | 1x single file, ~1.2x merged | 3x always |
+| Memory | 1x single file, \~1.2x merged | 3x always |
 | Complexity | High (viral lifetimes) | Low (no parameters) |
 | LSP Caching | Hard (can't serialize refs) | Easy (already owned) |
 | API Ergonomics | Every function needs `<'a>` | No lifetime parameters |
@@ -160,7 +160,7 @@ impl<L: Language> SyntaxNode<L> {
 ### 1. yaml-with-source-info-design.md (700+ lines)
 - Initial owned-data design
 - Complete API with construction, access, parsing, validation, merging
-- Memory overhead analysis (~3x)
+- Memory overhead analysis (\~3x)
 - 3-4 week implementation plan
 
 ### 2. yaml-with-source-info-lifetime-approach.md (800+ lines)
@@ -236,9 +236,9 @@ From the code patterns observed:
    - Owned approach: no lifetime parameters
 
 3. **Is memory efficiency a concern?**
-   - Lifetime: 1x single file, ~1.2x merged
+   - Lifetime: 1x single file, \~1.2x merged
    - Owned: 3x always
-   - For Quarto configs (<10KB), overhead is ~20-30KB
+   - For Quarto configs (<10KB), overhead is \~20-30KB
 
 4. **Comfort with lifetime complexity?**
    - Lifetime approach is more "Rusty" but more complex

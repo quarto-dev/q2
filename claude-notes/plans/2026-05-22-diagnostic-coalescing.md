@@ -12,7 +12,7 @@ doesn't strictly require it).
 When the same diagnostic — same `Q-X-Y` code, same source location —
 is produced by N pages, the CLI should print it **once**, with a list
 of affected pages. For `quarto render external-sources/quarto-web`
-today this would turn ~280 identical lines into one ariadne block
+today this would turn \~280 identical lines into one ariadne block
 plus a single "Affected: a, b, c (and 277 others)" line.
 
 ## Where it plugs in
@@ -139,7 +139,7 @@ for group in coalesce_by_source(entries) {
 }
 ```
 
-The legacy "error: <path>: <plain string>" fallback is still needed
+The legacy "error: \<path>: \<plain string>" fallback is still needed
 for failures whose `diagnostics` is empty (any non-structured
 remaining error path, including sass errors we haven't migrated yet
 and any future stragglers). Keep that loop, but only for failures
@@ -165,7 +165,7 @@ where `diagnostics.is_empty()`.
 
 3. **Manual verification**: run
    `cargo run --bin q2 -- render external-sources/quarto-web 2>&1 | rg -c "Invalid theme"`
-   and expect `1` (down from ~280). Record output snippet in this plan.
+   and expect `1` (down from \~280). Record output snippet in this plan.
 
 ## Work items
 

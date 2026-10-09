@@ -3,7 +3,7 @@
 ## Overview
 
 Rendering large websites quickly is a core goal for Q2. Today,
-`q2 render external-sources/quarto-web` errors out in ~4.8s before
+`q2 render external-sources/quarto-web` errors out in \~4.8s before
 producing any output. Once the resource-path issues (plans
 `2026-05-21-resource-path-leading-slash.md` and
 `2026-05-21-resource-path-diagnostic.md`) are resolved, the project
@@ -131,7 +131,7 @@ super-linear, with a concrete fix proposal.
 - [ ] Phase 2 counter instrumentation (deferred — the sample
       already identified two large hotspots; counters become useful
       once we want to verify a *fix* didn't regress something else).
-- [x] Phase 3 geometric-scale confirmation (linear: ~4 ms/doc).
+- [x] Phase 3 geometric-scale confirmation (linear: \~4 ms/doc).
 - [x] Phase 4 written synthesis at
       `claude-notes/research/2026-05-21-quarto-web-render-profile.md`.
       Follow-up issues *suggested* in the synthesis but not yet
@@ -151,7 +151,7 @@ super-linear, with a concrete fix proposal.
 ## Dependencies
 
 - Blocked by: `2026-05-21-resource-path-leading-slash.md`. Without
-  it, the render terminates at ~4.8s before we ever reach the
+  it, the render terminates at \~4.8s before we ever reach the
   interesting work.
 - The diagnostic plan (`2026-05-21-resource-path-diagnostic.md`) is
   *not* a blocker for this; it can land in parallel.
@@ -161,10 +161,10 @@ super-linear, with a concrete fix proposal.
 See `claude-notes/research/2026-05-21-quarto-web-render-profile.md`
 for the full write-up. Headlines:
 
-- Two hotspots account for ~80 % of main-thread CPU on the 3.28 s
+- Two hotspots account for \~80 % of main-thread CPU on the 3.28 s
   render:
-  - per-doc `JupyterEngine::new()` subprocess spawn (~37 %);
-  - per-doc tree-sitter `set_logger` formatting (~45 %).
+  - per-doc `JupyterEngine::new()` subprocess spawn (\~37 %);
+  - per-doc tree-sitter `set_logger` formatting (\~45 %).
 - Both can be addressed independently and the fixes are small.
 - A *separate* UX bug — batching diagnostics to end-of-render —
   explains the 3.28 s of silence the user observed; fixing it

@@ -45,7 +45,7 @@ Example test: `sort_AguStyle.txt`
 Required features:
 - `collapse="year"` - "(Smith 1900, 2000)" instead of "(Smith 1900, Smith 2000)"
 - `collapse="year-suffix"` - "(Smith 2020a, b)"
-- `collapse="citation-number"` - "[1-3]" instead of "[1, 2, 3]"
+- `collapse="citation-number"` - "\[1-3\]" instead of "\[1, 2, 3\]"
 
 Uses `Tag::Names` and `Tag::Date` from Output AST.
 
@@ -90,9 +90,9 @@ See detailed design: `claude-notes/plans/2025-11-28-multi-pass-rendering-archite
 - [ ] Further investigation: remaining tests fail due to other issues (title-case, quote handling, moving punctuation, etc.)
 
 **Expected impact**: Unlock 80-150 additional tests by fixing:
-- Delimiter bugs (~20-30 tests)
-- Substitute inheritance (~50-100 tests)
-- Year-suffix with multi-pass (~20-30 tests)
+- Delimiter bugs (\~20-30 tests)
+- Substitute inheritance (\~50-100 tests)
+- Year-suffix with multi-pass (\~20-30 tests)
 
 ### Phase 6: Locale Post-Processing Pipeline (NEW)
 
@@ -118,18 +118,18 @@ The reference implementation applies these transformations **after** rendering:
 
 **Implementation plan**:
 
-1. **Quote Localization** (~15-20 tests)
+1. **Quote Localization** (\~15-20 tests)
    - Add locale term lookup for: `open-quote`, `close-quote`, `open-inner-quote`, `close-inner-quote`
    - Track nesting depth to flip between outer/inner quotes
    - Currently: hardcoded `"` `"` `'` `'`
    - Test: `affix_CommaAfterQuote` - Expected `"quote"` got `'quote'`
 
-2. **Moving Punctuation** (~10-15 tests)
+2. **Moving Punctuation** (\~10-15 tests)
    - Parse `punctuation-in-quote` locale option
    - When true, move `,` `.` inside closing quotes
    - Test: `magic_StripPeriodsFalse` - Expected `"Article,"` got `"Article, "`
 
-3. **Display Attribute** (~30-40 tests) - See Phase 7
+3. **Display Attribute** (\~30-40 tests) - See Phase 7
    - Render `display` attribute as `<div class="csl-{value}">`
    - Values: `block`, `left-margin`, `right-inline`, `indent`
    - Many bibliography tests expect this HTML structure
@@ -155,7 +155,7 @@ The reference implementation applies these transformations **after** rendering:
 2. Add `DisplayStyle` enum: `Block`, `LeftMargin`, `RightInline`, `Indent`
 3. Render as `<div class="csl-{style}">` wrapper in CSL HTML output
 
-**Expected impact**: ~30-40 tests (bugreports, sort, other categories)
+**Expected impact**: \~30-40 tests (bugreports, sort, other categories)
 
 ## Files to Modify
 
@@ -245,17 +245,17 @@ Updated analysis of 478 remaining failing tests: `claude-notes/plans/2025-11-28-
    - ALL-CAPS words and words with internal caps preserved
 
 **Priority order for next implementations:**
-1. **Moving Punctuation** (~15-20 tests) - CSL punctuation exchange rules
-2. **Citation Position** (~15-20 tests) - ibid, near-note detection
-3. **Flip-Flop Formatting** (~15-20 tests) - Nested formatting flip
+1. **Moving Punctuation** (\~15-20 tests) - CSL punctuation exchange rules
+2. **Citation Position** (\~15-20 tests) - ibid, near-note detection
+3. **Flip-Flop Formatting** (\~15-20 tests) - Nested formatting flip
 
 | Issue | Priority | Tests Affected | Description |
 |-------|----------|----------------|-------------|
-| k-430 | P2 | collapse_*, formatting | ✅ FIXED: Prefix/suffix ordering - now inside formatting for layout |
-| k-431 | P2 | flipflop_*, textcase_* | ✅ FIXED: HTML markup in CSL-JSON now parsed (5/6 flipflop cases pass; remaining needs k-432) |
-| k-432 | P3 | 19 flipflop_* tests | ✅ FIXED: Flip-flop formatting with CslRenderContext (2 tests pass, others need title-case fixes) |
-| k-433 | P3 | textcase_* tests | ✅ FIXED: nocase span support, quote escaping, whitespace in capitalize_all (6 new tests) |
-| k-434 | P3 | date_Negative* | ✅ FIXED: Date era formatting (BC/AD for negative years, sort key adjustment for chronological order) |
+| k-430 | P2 | collapse\_\*, formatting | ✅ FIXED: Prefix/suffix ordering - now inside formatting for layout |
+| k-431 | P2 | flipflop\_*, textcase\_* | ✅ FIXED: HTML markup in CSL-JSON now parsed (5/6 flipflop cases pass; remaining needs k-432) |
+| k-432 | P3 | 19 flipflop\_* tests | ✅ FIXED: Flip-flop formatting with CslRenderContext (2 tests pass, others need title-case fixes) |
+| k-433 | P3 | textcase\_* tests | ✅ FIXED: nocase span support, quote escaping, whitespace in capitalize_all (6 new tests) |
+| k-434 | P3 | date\_Negative* | ✅ FIXED: Date era formatting (BC/AD for negative years, sort key adjustment for chronological order) |
 
 ### Recommended Implementation Order
 

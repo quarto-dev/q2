@@ -86,7 +86,7 @@ Braid epic: **bd-t4ezufyg**. Sub-strands: Phase 0 `bd-mawltv3x`, Phase 1
   - *Phase 7:* `quartoTheme.ts` — `'qmd'` language registration, markdown-derived
     Monarch base (tier 1: `nextEmbedded` routing of `{r}`/`{python}`/frontmatter
     to stock tokenizers), exported `quartoThemeRules` (all `qmd.`-prefixed,
-    code.* mirroring the `hl-*` palette), `quarto-{light,dark}` themes with
+    code.\* mirroring the `hl-*` palette), `quarto-{light,dark}` themes with
     `semanticHighlighting: true`. Tier-2 palette-alignment deferred (gate on
     observed flicker at the Phase-8 check).
   - **Tests:** Rust `code_legend_covers_render_css` green (24 roots match).
@@ -124,7 +124,7 @@ Braid epic: **bd-t4ezufyg**. Sub-strands: Phase 0 `bd-mawltv3x`, Phase 1
     uniform default foreground. (`qmd.punctuation.bracket` stays a reserved
     legend entry / theme rule for when the grammar can split `](`.) Requires a
     WASM rebuild + browser hard-refresh.
-  - **Pre-existing, unrelated failure:** `@quarto/hub-mcp`'s `hub-mcp.test.ts`
+  - **Pre-existing, unrelated failure:** `@quarto/hub-mcp`\'s `hub-mcp.test.ts`
     (19/22) fails in this sandbox — `live:` tests needing an automerge server +
     MCP child-process spawn. Untouched package; orthogonal to this work.
 
@@ -305,7 +305,7 @@ legend.**
   `markup.heading.1`, `punctuation.special`, … — and **are themselves the legend
   entries** (modulo dotted-prefix collapse, e.g. `markup.heading.1..6` →
   `markup.heading`). There is no separate structural vocabulary to rename.
-- **Code captures** (from `quarto-highlight`'s per-language `highlights.scm`,
+- **Code captures** (from `quarto-highlight`\'s per-language `highlights.scm`,
   including yaml) are the standard tree-sitter programming names: `keyword`,
   `function`, `function.builtin`, `string`, `string.escape`, `comment`,
   `number`, `constant`, `variable`, `type`, `operator`, `property`,
@@ -427,7 +427,7 @@ This makes "fix bd-98k6 for the editor" and "feed Monaco" the *same* work
 (bd-98k6 fix-path (a)) — **and the render/HTML path converges onto it too.**
 Rather than maintain two resolvers (one for the editor, the lossy
 `collect_spans` for render), Phase 0 switches the render producer
-(`Registry::highlight`, which `quarto-highlight`'s `annotate_pandoc` at
+(`Registry::highlight`, which `quarto-highlight`\'s `annotate_pandoc` at
 `crates/quarto-highlight/src/annotate.rs:222` consumes — driven by the
 `code_highlight` render stage) onto the same
 `highlight_captures` + `flatten_spans`. Consequences:
@@ -444,7 +444,7 @@ Rather than maintain two resolvers (one for the editor, the lossy
   could change are the 15 **span-encoding goldens** in
   `crates/quarto-highlight/tests/integration/snapshots/`
   (`integration__golden__*.snap`), which store the encoded
-  `(start, end, capture)` list directly. **Of those 15, only ~4 actually change**
+  `(start, end, capture)` list directly. **Of those 15, only \~4 actually change**
   — `bash`, `julia`, `python`, and `user_grammar_toml`, the only goldens whose
   current output nests; the other 11 are already fully disjoint and stay
   byte-identical under the new resolver (confirm on regen). (Verified 2026-06-16
@@ -605,7 +605,7 @@ are untouched. `tokens_never_span_a_line` (above) pins it.
   `QueryCursor`).
 - **`quarto-highlight`** — `highlight(class, source) -> Result<Option<String>, HighlightError>`
   (JSON encoding) built on an internal `collect_spans` that walks
-  `tree-sitter-highlight`'s event stream (native `user_grammar.rs:274`, wasm
+  `tree-sitter-highlight`\'s event stream (native `user_grammar.rs:274`, wasm
   `registry.rs:111`). `collect_spans` is **lossy for same-start nested
   captures** (drops the inner end boundary — bd-98k6), so Phase 0 **replaces it
   as the resolver** with a `Query.captures()`-based `highlight_captures` +
@@ -700,7 +700,7 @@ code-cell parity by construction (and fixes bd-98k6 everywhere). It replaces
   shared innermost-wins flatten (see Flatten). Lives here so both `pampa` and
   `quarto-lsp-core` can call it without an LSP-crate dependency.
 - **Switch the render producer.** Re-point `Registry::highlight` (consumed by
-  `quarto-highlight`'s `annotate_pandoc`,
+  `quarto-highlight`\'s `annotate_pandoc`,
   `crates/quarto-highlight/src/annotate.rs:222`, via the `code_highlight` render
   stage) from `collect_spans` to
   `flatten_spans(highlight_captures(...))` → `encode`. The producer now emits
@@ -712,7 +712,7 @@ code-cell parity by construction (and fixes bd-98k6 everywhere). It replaces
   flatten identically, not half-and-half. (User grammars remain render-path
   only; editor user-grammar support stays the deferred follow-up.)
 - **Regenerate the span-encoding goldens** in
-  `crates/quarto-highlight/tests/integration/snapshots/` — expect **~4 of the 15
+  `crates/quarto-highlight/tests/integration/snapshots/` — expect **\~4 of the 15
   `integration__golden__*.snap` to change** (`bash`, `julia`, `python`,
   `user_grammar_toml`; the other 11 stay byte-identical — rendered `hl-*` HTML is
   not snapshotted) and
@@ -720,7 +720,7 @@ code-cell parity by construction (and fixes bd-98k6 everywhere). It replaces
   nested→flat change, flag any surprise — a "disjoint" golden that unexpectedly
   moves means the query double-captures a node). Read each diff as a *span-shape*
   change; per-byte visible colour is preserved for the pure-nesting goldens
-  (`bash`/`julia`/`python`) by innermost-wins, while `user_grammar_toml`'s
+  (`bash`/`julia`/`python`) by innermost-wins, while `user_grammar_toml`\'s
   gap-byte recolour is the intended bd-98k6 fix (see Flatten). **Re-check by
   hand** the
   `.contains()` assertion at
@@ -777,7 +777,7 @@ emit a distinct name wherever two constructs need distinct colours):
 - `pandoc_image` (`![content](target)`) reuses the same `target` — there is no
   separate image-url node. The `![` opener is one fused token →
   `@punctuation.special.image`; `content` → `@markup.image.label`; the
-  `target`'s `url` → `@markup.image.url`. (Distinct `markup.image.*` names — not
+  `target`\'s `url` → `@markup.image.url`. (Distinct `markup.image.*` names — not
   `markup.link.*.image`, which would collapse into the link entries under
   longest-prefix — so the theme *can* mirror link colours yet keep the option to
   diverge.)
@@ -981,7 +981,7 @@ case mocking the WASM call (parse + error handling). (Distinct from the Phase-4
   and UTF-8 because Monaco holds it).
 - `QMD_TOKEN_LEGEND: readonly string[]` — a **checked-in TS compile-time
   constant** mirroring the Rust legend, with a JSDoc note pointing at
-  `quarto-lsp-core`'s `QMD_TOKEN_LEGEND` as the source of truth. `getLegend()`
+  `quarto-lsp-core`\'s `QMD_TOKEN_LEGEND` as the source of truth. `getLegend()`
   (Phase 6) reads it synchronously; the Phase-4 drift test guards it against the
   Rust const. Also export the `SemanticToken` **type** for callers. No async
   WASM call sits on the registration path.
@@ -1012,7 +1012,7 @@ case mocking the WASM call (parse + error handling). (Distinct from the Phase-4
     comment-toggle work.
   - **Monarch base (Hybrid-A paint + gap-fill layer).** `setMonarchTokensProvider('qmd', …)`
     with a **markdown-derived** ruleset — seed it from monaco's basic-languages
-    markdown grammar (or a ~40-line subset: headings, emphasis/strong markers,
+    markdown grammar (or a \~40-line subset: headings, emphasis/strong markers,
     inline code, fenced-code regions, frontmatter block, links). This is the
     synchronous layer that paints instantly on open/while typing **and** supplies
     the permanent colour for every byte semantic leaves uncaptured. It is **not
@@ -1212,8 +1212,8 @@ Visual colour correctness is still verified in Phase 8.
     - the `code.*` legend is expanded to **all 24 CSS roots** (done in the Unified
       token model legend) — every `hl-<root>` has a `code.<root>` twin;
     - add a test (`code_legend_covers_render_css`, Rust, reading
-      `resources/scss/html/templates/highlight.scss`) asserting `{`code.*` legend
-      roots`} == {`.hl-*` selectors`}` — a mismatch in **either** direction fails
+      `resources/scss/html/templates/highlight.scss`) asserting `\{`code.\*` legend
+      roots`\} == \{`.hl-*` selectors`\}` — a mismatch in **either** direction fails
       (a CSS colour with no legend twin → uncoloured in editor; a legend twin with
       no CSS colour → coloured in editor only). This keeps the two colour tables
       locked together when someone later adds an `hl-foo` rule.
@@ -1228,7 +1228,7 @@ Tests passing is necessary but not sufficient (CLAUDE.md):
    layers (Phases 0, 2, 3; Phase 1 is `tree-sitter test`).
 2. `cargo nextest run --workspace` — no regressions in downstream crates
    (esp. `pampa`, which shares the tree-sitter-qmd crate). The Phase-0 producer
-   switch regenerates **~4 of the 15 span-encoding goldens** in `quarto-highlight`
+   switch regenerates **\~4 of the 15 span-encoding goldens** in `quarto-highlight`
    (`bash`/`julia`/`python`/`toml`; the other 11 byte-identical; rendered `hl-*`
    HTML is not snapshotted); also re-check the hand-written
    `.contains()` assertions in
@@ -1280,7 +1280,7 @@ Tests passing is necessary but not sufficient (CLAUDE.md):
 | --- | --- |
 | `crates/quarto-highlight/src/lib.rs` | **new** shared resolver: `highlight_captures` (`Query.captures()`, node-exact) + `flatten_spans` (innermost-wins); `builtin_configs_have_no_injection_or_locals` guard (the captures-only switch is lossless only while injection/locals stay empty) |
 | `crates/quarto-highlight/src/registry.rs` (+ `user_grammar.rs`) | re-point `Registry::highlight` from `collect_spans` onto `flatten_spans(highlight_captures(…))`; retire `collect_spans` from the production path |
-| `crates/quarto-highlight/tests/integration/snapshots/*.snap` | regenerate the ~4 changed span-encoding goldens (`bash`/`julia`/`python`/`toml`, nested→flat); other 11 byte-identical; writer code unchanged; rendered HTML is not snapshotted |
+| `crates/quarto-highlight/tests/integration/snapshots/*.snap` | regenerate the \~4 changed span-encoding goldens (`bash`/`julia`/`python`/`toml`, nested→flat); other 11 byte-identical; writer code unchanged; rendered HTML is not snapshotted |
 | `crates/quarto-highlight/tests/fixtures/user-grammar-equal-extent/` | **new** synthetic fixture: TOML grammar binary + a `highlights.scm` that double-captures one node, producing a genuine equal-extent collision to pin the `flatten_spans` tie-break (the corpus has none) |
 | `crates/quarto-core/tests/integration/render_to_html_user_grammars.rs` | hand-recheck the `.contains()` `hl-` assertions (`:142,147`) — not a snapshot, won't auto-regenerate |
 | `resources/scss/html/templates/highlight.scss` | unchanged; its 24 `.hl-*` roots are the source of truth that `code_legend_covers_render_css` (Phase 7, Defence 3) reads to lock editor↔render colour coverage together |
@@ -1364,7 +1364,7 @@ Tests passing is necessary but not sufficient (CLAUDE.md):
     resolved, not merely sidestepped; close it when Phase 0 lands.
 - Sub-strands per phase, blocking the parent. **Phase 0 spans the shared
   resolver *and* the render-producer switch + golden regen** (bigger than the
-  editor-only draft, but the regen is small — only ~4 of the 15 goldens change,
+  editor-only draft, but the regen is small — only \~4 of the 15 goldens change,
   all nested→flat; the equal-extent tie-break is exercised by the new synthetic
   `user-grammar-equal-extent` fixture, since no corpus golden contains a genuine
   tie) — call this out in the strand so the span-encoding golden review (and the

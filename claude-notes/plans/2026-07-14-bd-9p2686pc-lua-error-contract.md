@@ -127,8 +127,8 @@ scope here.
       `invalid_value_error` (Q-11-3), `read_only_field_error`,
       `unknown_field_error` (Q-11-5); shipped element/`__newindex`
       sites deduped onto them (element unknown-field message kept
-      byte-identical; table parts gained "on <Type>").
-- [x] Sweep types.rs (~30 sites), constructors.rs (~50), list.rs (3).
+      byte-identical; table parts gained "on \<Type>").
+- [x] Sweep types.rs (\~30 sites), constructors.rs (\~50), list.rs (3).
       Conformance ratchet unchanged (Track-1 184/19) — none of the 19
       remaining xfails are message-dependent.
 - [x] Full verify + e2e through `q2 render` (Q-11-3 invalid math

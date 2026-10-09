@@ -33,7 +33,7 @@ light/dark theme.
   - `.preview-status-clear-confirm-btn` color → `--editor-error-text`
     (border keeps `--editor-error`)
   - `.replay-mode-banner` (3.02 L) → `--editor-success-text`
-  - `.preview-error-title`, `.preview-error-expand-btn` (~3.5 L / 3.6 D)
+  - `.preview-error-title`, `.preview-error-expand-btn` (\~3.5 L / 3.6 D)
     → `--editor-error-text`
   - `.preview-error-diagnostics .diagnostic-line`,
     `.diagnostic-source-file` (2.94 L) → `--editor-warning-text`

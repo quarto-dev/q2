@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-28
 **Braid:** bd-cpyq99ps (bug, P2) — `discovered-from: bd-dofxhzaj`
-**Branch:** `braid/bd-cpyq99ps-flaky-preview-renderer-integration` off `main` @ `7ff19ff8`
+**Branch:** `braid/bd-cpyq99ps-flaky-preview-renderer-integration` off `main` \@ `7ff19ff8`
 
 ## Symptom
 
@@ -56,7 +56,7 @@ Two things turned that into a *flake* rather than an honest failure:
    mounts a real editor — it hit the real ProseMirror path by accident, not by
    design.
 
-So `caretFromClick.ts`'s own comment — *"jsdom returns null from posAtCoords"* —
+So `caretFromClick.ts`\'s own comment — *"jsdom returns null from posAtCoords"* —
 was **false**, and had never been checked.
 
 ## What was already fine (checked, not assumed)
@@ -102,7 +102,7 @@ remedy — the new block sits directly beneath it and says so.
       existing `getClientRects` precedent, with a comment explaining the rAF
       escape mechanism.
 - [x] 5/5 pass after.
-- [x] Correct `caretFromClick.ts`'s comment: its jsdom claim is now true, and it
+- [x] Correct `caretFromClick.ts`\'s comment: its jsdom claim is now true, and it
       points at *what makes it true* (the setup stub) and at the test that pins
       it.
 - [x] Full preview-renderer integration suite: 4/4 clean runs, 49 files, 570

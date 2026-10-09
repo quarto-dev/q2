@@ -38,7 +38,7 @@ The Rust port of Quarto needs a distinct name to avoid confusion with Pandoc. Th
 
 **Major conflicts found:**
 1. **MATE Desktop Environment** - Major Linux desktop environment (fork of GNOME 2), used by Ubuntu MATE and many distributions. Very well-known in open source. See: https://mate-desktop.org/
-2. crates.io: **TAKEN** - "mate" is a job queue library (0.1.0-draft, ~1171 downloads)
+2. crates.io: **TAKEN** - "mate" is a job queue library (0.1.0-draft, \~1171 downloads)
 3. npm: **TAKEN** - HTTP request library (last updated 2022)
 4. PyPI: **TAKEN** - "Matchers for unittest" library
 
@@ -113,7 +113,7 @@ The Rust port of Quarto needs a distinct name to avoid confusion with Pandoc. Th
 
 ### Author's Background
 - Born in Porto Alegre, Rio Grande do Sul, Brazil
-- Resided in Minneapolis, USA for ~20 years
+- Resided in Minneapolis, USA for \~20 years
 - Comfortable with names having cultural associations to southern Brazil
 - Personal connection to authenticity matters more than personal meaning per se
 

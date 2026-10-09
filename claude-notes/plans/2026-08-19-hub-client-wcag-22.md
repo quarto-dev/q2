@@ -14,7 +14,7 @@ Audit notes (verified against source 2026-08-19):
 
 - **4.1.2 Name Role Value**: `NewFileDialog`, `NewAssetDialog`,
   `ShareDialog` render `.ph-dialog` divs with no `role="dialog"`,
-  `aria-modal`, or `aria-labelledby`. `ShareDialog`'s close button has
+  `aria-modal`, or `aria-labelledby`. `ShareDialog`\'s close button has
   no accessible name (only `&times;` text). The 8 inline dialogs in
   `ProjectsHome` have the same gap, and its action menus use
   `role="menu"` with plain `<button>` children (required-owned-elements
@@ -27,7 +27,7 @@ Audit notes (verified against source 2026-08-19):
   anchor target.
 - **2.5.8 Target Size Minimum (new in 2.2)**: `ViewToggleControl`
   buttons are fixed 20x20px; `.close-btn` is a bare 24px glyph with
-  `padding: 0` (clickable width ~13px).
+  `padding: 0` (clickable width \~13px).
 - **2.4.7 Focus Visible**: `.close-btn` and `.rename-input`
   (`outline: none`, no replacement) have no visible focus indicator.
 - **1.1.1 Non-text Content**: decorative SVGs in `ViewToggleControl`
@@ -104,7 +104,7 @@ indicator.
 
 - ModalDialog keeps each dialog's existing Enter-key behavior via an
   `onKeyDown` passthrough; it owns Escape, trap, and restore only.
-- Skip link lives in `App.tsx`'s main return so it serves both the
+- Skip link lives in `App.tsx`\'s main return so it serves both the
   projects-home and editor views; early-return screens (loading,
   login, setup) are single-purpose and don't need it.
 - Font-size findings from the audit (11.5px/10.5px in ui.css) are NOT

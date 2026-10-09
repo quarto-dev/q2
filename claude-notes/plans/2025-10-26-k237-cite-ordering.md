@@ -97,8 +97,8 @@ Cite [
 
 ## Related Work
 
-- Fixed similar issues for Image/Link (k-234) - components were [attr, content, target] but should be [content, target, attr]
-- Fixed similar issues for Table (k-236) - components were [attr, caption, ...] but should be [..., caption, attr]
+- Fixed similar issues for Image/Link (k-234) - components were `[attr, content, target]` but should be `[content, target, attr]`
+- Fixed similar issues for Table (k-236) - components were `[attr, caption, ...]` but should be `[..., caption, attr]`
 - The pattern is: components should be ordered by their source position
 
 ## Next Steps

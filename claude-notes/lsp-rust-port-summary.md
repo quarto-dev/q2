@@ -21,7 +21,7 @@
 11. ✅ **Document Highlights** - Symbol occurrences
 12. ✅ **Diagnostics** - Link validation, YAML validation
 
-### Custom Methods (~50 total)
+### Custom Methods (\~50 total)
 - **Code View** (5 methods) - Code cell operations
 - **Dictionary** (7 methods) - Spell checking
 - **Math** (1 method) - MathJax rendering
@@ -209,9 +209,9 @@ impl LanguageServer for QuartoLsp {
 |--------|-----------|---------------|
 | **Startup time** | 500-1000ms | <100ms |
 | **Memory usage** | 50-100MB | 20-40MB |
-| **Completion latency** | ~50ms | <30ms |
-| **Hover latency** | ~30ms | <20ms |
-| **Diagnostics** | ~200ms | <100ms |
+| **Completion latency** | \~50ms | <30ms |
+| **Hover latency** | \~30ms | <20ms |
+| **Diagnostics** | \~200ms | <100ms |
 
 ### Optimization Techniques
 

@@ -4,7 +4,7 @@
 - **Triage:** `claude-notes/issue-reports/152/q236-triage.md`
 - **Fixtures:** `claude-notes/issue-reports/152/q236-repro.qmd`, `q236-repro-variants.qmd`
 - **Beads:** bd-j4fe
-- **Branch:** `issue-152` (based on `bugfix/issue-184` @ `e2d224f6`; will rebase onto `main` once #184 lands)
+- **Branch:** `issue-152` (based on `bugfix/issue-184` \@ `e2d224f6`; will rebase onto `main` once #184 lands)
 - **Approach:** upgrade the existing Q-2-8 warning site to a Q-2-36 *error*; Merr-map the parse-error forms that already error today. **No `scanner.c` change, no `grammar.js` change.** See triage `Approach` section for why scanner-emit is the wrong shape here.
 
 ## Overview
@@ -71,7 +71,7 @@ The **space-kv form** (`{r echo=FALSE}`) is deliberately *not* in the corpus. It
 - [x] Surfaced 3 sibling tests in `crates/pampa/tests/test_code_block_attributes.rs` that asserted the *legal* shape of the now-rejected `{python key=value}` form. **Disposition:** deleted `test_language_with_key_value` (redundant with `test_language_with_all_attributes`); retargeted `test_language_with_multiple_key_values` and `test_quoted_attribute_value` to add a Pandoc class (`.myclass`) so they bypass Q-2-36 while preserving their unique coverage (multi-kv extraction and quoted-value-with-spaces). Added a top-of-file comment explaining the constraint.
 - [x] End-to-end smoke through `cargo run --bin pampa --`:
   - Reporter's `q236-repro.qmd` (`{r test}`) → clean `[Q-2-36]` error, highlight on the offending token. (Path B; widen pending Phase 2.)
-  - Stdin `{r echo=FALSE}` → clean `[Q-2-36]` error, **highlight now spans only the header line** (`1 │ ` ` ```{r echo=FALSE}` ` with single-line underline). (Path A, clipped inline.)
+  - Stdin `{r echo=FALSE}` → clean `[Q-2-36]` error, **highlight now spans only the header line** (`` `1 │ ` ` ```{r echo=FALSE}` ` `` with single-line underline). (Path A, clipped inline.)
   - Stdin `{.r echo=FALSE}` (negative control) → parses cleanly, no diagnostic.
 - [x] Full pampa suite: **3686/3686 pass, 2 skipped, 0 failures.**
 
@@ -106,7 +106,7 @@ After Phase 1 + Phase 0b, path A is already clipped to the header line (inline a
 
 ### Phase 4: documentation + commit
 
-- [x] `docs/syntax-notes.md` (or nearest user-facing doc): **skipped.** No existing page under `docs/` discusses fenced-language chunk-header syntax (`grep -l '\`\`\`{' docs/**/*.qmd` returns empty). Per plan, "do not invent a new page." The Q-2-36 diagnostic message itself carries the redirection to `#| key: value` / `{.r ...}`, which is the user's actual touchpoint.
+- [x] `docs/syntax-notes.md` (or nearest user-facing doc): **skipped.** No existing page under `docs/` discusses fenced-language chunk-header syntax (``grep -l '```{' docs/**/*.qmd`` returns empty). Per plan, "do not invent a new page." The Q-2-36 diagnostic message itself carries the redirection to `#| key: value` / `{.r ...}`, which is the user's actual touchpoint.
 - [x] Three commits on `issue-152` branch:
   - `9bbb1de1` Q-2-36 Phase 0: failing tests + Merr corpus
   - `bd93ffa2` Q-2-36 Phase 1: upgrade Q-2-8 warning site to Q-2-36 error

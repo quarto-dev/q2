@@ -13,7 +13,7 @@ Discovered while investigating bd-f5yi. Once the
 `nav[role="doc-toc"]` injection bug is fixed and the website
 sidebar appears in the hub-client preview, the *visual* state at
 common viewport widths is broken: at viewports between 768 and
-991 px, the sidebar collapses to an ~26 px-wide vertical bar with
+991 px, the sidebar collapses to an \~26 px-wide vertical bar with
 a scrollbar — present in the DOM, technically interactive, but
 unusable. The user verified the same defect on the **native
 renderer** (`localhost:8000/_site` of
@@ -194,8 +194,8 @@ $grid-margin-width:         250px
 $grid-column-gutter-width:  1.5em (~24px)
 ```
 
-Sum: ~1300 px is the "comfortable" full layout.
-At 992 px, sidebar (250) + body (500 min) + margin (~50–250) +
+Sum: \~1300 px is the "comfortable" full layout.
+At 992 px, sidebar (250) + body (500 min) + margin (\~50–250) +
 gutters already overflow what's available — explaining why the
 cliff happens at `lg`.
 
@@ -218,7 +218,7 @@ Add to `_bootstrap-rules.scss`:
 ```
 
 Aligns the runtime behavior with the existing
-`page-columns-float-mid`'s author-stated intent ("No sidebar,
+`page-columns-float-mid`\'s author-stated intent ("No sidebar,
 only margins"). Restores the 768–991 range to "no sidebar at
 all", matching the <768 behavior. Cost: navigation is unreachable
 at those widths until the user resizes.
@@ -227,7 +227,7 @@ Pros: minimal surface, no new HTML, no JS.
 Cons: poor UX when the user is at 900 px and wants to navigate
 to a sibling page. Would also feel inconsistent with the
 hub-client preview, which most often opens at a half-width pane
-(~850 px) — exactly the broken band.
+(\~850 px) — exactly the broken band.
 
 ### B. Port Q1's `position: static` rollup pattern (full parity)
 
@@ -251,8 +251,8 @@ Probably needs a beads ticket of its own.
 
 Don't switch to mid mode until vp < 800 (or 768). The wide grid
 mixin scales smoothly — at 992 the sidebar is already only 180 px
-wide, and the body still has ~530 px. We could keep the wide
-mixin active down to ~800.
+wide, and the body still has \~530 px. We could keep the wide
+mixin active down to \~800.
 
 Implementation: a custom Bootstrap breakpoint or shifting the
 `media-breakpoint-down(lg)` boundary just for the website
@@ -285,7 +285,7 @@ sidebar reappears as a collapsible stripe even in that view.
 { display: none }` has been *replaced* (not stacked on) by the full
 Decision-B rollup, in `bd-26bf3j1y`. Below `lg` the floating sidebar
 now leaves the grid (`position: static`) and becomes a Bootstrap
-collapse drawer opened by `nav.quarto-secondary-nav`'s toggle. See
+collapse drawer opened by `nav.quarto-secondary-nav`\'s toggle. See
 `claude-notes/plans/2026-08-17-website-secondary-nav-mobile.md`.
 
 What changed since Resolved Decision 2 said "B is not feasible yet":

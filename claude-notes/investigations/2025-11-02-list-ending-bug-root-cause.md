@@ -181,7 +181,7 @@ A: Likely an attempt to handle multi-paragraph list items. However, it's too per
 A: No! The case `* a\n\n  b` (with indentation on the 'b' line) will still work:
 - At the blank line: match fails (no indentation)
 - List doesn't close yet (lazy continuation logic)
-- At the '  b' line: match succeeds (has indentation) → continues list
+- At the `'  b'` line: match succeeds (has indentation) → continues list
 
 **Q: How do we know block quotes don't have the same issue?**
 A: Block quotes require an explicit `>` marker to continue. They don't have a "blank lines always match" rule. That's why the minimal test case for block quotes works correctly.

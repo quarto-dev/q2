@@ -49,7 +49,7 @@ remains the hermetic test fixture.
    performs `git subtree add --squash`; subsequent runs no-op or
    `git subtree pull --squash` depending on whether upstream has new
    commits — see the command's `--help` and
-   `crates/xtask/src/pull_extension_subtree.rs`'s module doc for the exact
+   `crates/xtask/src/pull_extension_subtree.rs`\'s module doc for the exact
    `git-subtree-dir`/`git-subtree-split` trailer mechanics.
 
    **Running from a linked worktree (`.worktrees/<name>/`): set
@@ -76,7 +76,7 @@ remains the hermetic test fixture.
    checkout). **Only embed that subtree's own `_extensions/` payload**, not
    the whole vendored tree (F8 / design decision D1) — embedding whole
    repos would put unrelated bytes (tests, CI config, potentially many MB)
-   into the shipped binary. In `crates/quarto-core/src/extension/mod.rs`'s
+   into the shipped binary. In `crates/quarto-core/src/extension/mod.rs`\'s
    native `builtin` module:
 
    ```rust
@@ -111,7 +111,7 @@ remains the hermetic test fixture.
 
    The WASM side embeds **per-subtree `_extensions/` dirs**, exactly like
    native — never the whole `resources/extension-subtrees/` tree (that would
-   put the vendored repos' tests/CI config into the WASM blob, and the root
+   put the vendored repos\' tests/CI config into the WASM blob, and the root
    shape would be wrong: `discover_extensions` scans each root's *children*
    as extensions, so a root must be a `_extensions/` dir, not the parent
    `extension-subtrees/` dir).

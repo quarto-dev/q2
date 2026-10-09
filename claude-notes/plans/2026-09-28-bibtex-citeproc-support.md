@@ -73,7 +73,7 @@ read `.bib` files. That's why `biblatex` is already present in this workspace's 
 tree today, transitively — this plan promotes it from transitive to direct, in a
 different, non-Typst code path.
 
-`quarto-citeproc`'s renderer already implements CSL's `nocase`-span text-case-protection
+`quarto-citeproc`\'s renderer already implements CSL's `nocase`-span text-case-protection
 machinery (confirmed in `crates/quarto-citeproc/src/output.rs`) and already parses
 embedded `<span class="nocase">` markup inside CSL-JSON string fields (the standard
 CSL-JSON embedded-richtext convention). This matters for the title case-folding fix below:
@@ -108,7 +108,7 @@ than mapping directly from `biblatex::Entry`, while pulling in hayagriva's much 
 dependency tree (citationberg, icu, etc.) for zero conversion benefit. The existing
 spike's direct `biblatex` dependency is confirmed as the right choice.
 
-`biblatex`'s own dependencies (`paste`, `roman-numerals-rs`, `strum`,
+`biblatex`\'s own dependencies (`paste`, `roman-numerals-rs`, `strum`,
 `unicode-normalization`, `unscanny`) are pure Rust with no libc/getrandom/IO — low wasm32
 risk by inspection, not yet empirically confirmed by an actual build (Phase 3 gate,
 below).
@@ -119,7 +119,7 @@ Keep the spike's existing extension match: `.bib`, `.bibtex`, `.biblatex` — no
 
 ### Correctness fixes required in the existing spike
 
-The spike (`crates/pampa/src/citeproc_filter.rs`'s current uncommitted diff) is a
+The spike (`crates/pampa/src/citeproc_filter.rs`\'s current uncommitted diff) is a
 reasonable starting shape but has real gaps beyond "needs more tests":
 
 1. **Institutional/corporate authors.** Confirmed via an isolated probe (not committed;
@@ -142,7 +142,7 @@ reasonable starting shape but has real gaps beyond "needs more tests":
    `biblatex::ChunksExt::format_sentence` for titles, which lowercases every non-first,
    non-`Chunk::Verbatim` character with no per-word shape awareness. This diverges from
    Pandoc/citeproc's actual behavior — traced to the real Haskell source
-   (`citeproc`'s `Citeproc.CaseTransform.withSentenceCase`): it only lowercases a word
+   (`citeproc`\'s `Citeproc.CaseTransform.withSentenceCase`): it only lowercases a word
    matching `isCapitalized` (exactly one leading capital, rest lowercase), leaving
    ALL-CAPS/internally-mixed-case words untouched as a side effect of that narrow
    predicate — not a deliberate acronym-detection rule. Separately, explicit
@@ -168,7 +168,7 @@ reasonable starting shape but has real gaps beyond "needs more tests":
 
 ### Regression-test scope for v1
 
-**Must-have** — each a new or extended test in `crates/pampa/src/citeproc_filter.rs`'s
+**Must-have** — each a new or extended test in `crates/pampa/src/citeproc_filter.rs`\'s
 existing test module unless noted:
 
 - `@string` macro resolution (common in real `.bib` files, e.g. journal abbreviations).
@@ -200,11 +200,11 @@ dropped:
   accent commands) — Pandoc itself handles this unreliably (directly tested:
   `\textit{Biology}` leaked through as mangled literal text `\ntextitBiology`), so
   there's no working reference behavior to match.
-- Non-Byzantine/CJK name-ordering edge cases — `biblatex`'s `Person` parser is
+- Non-Byzantine/CJK name-ordering edge cases — `biblatex`\'s `Person` parser is
   fundamentally Western-name-shaped (family/given/prefix/suffix); no realistic way to do
   meaningfully better in v1 without inventing something upstream doesn't have either.
 - BibLaTeX's newer extended name-key-value syntax (`family={...}, given={...}`) —
-  already works via `biblatex`'s existing support (confirmed via probe); not worth a
+  already works via `biblatex`\'s existing support (confirmed via probe); not worth a
   dedicated fixture since real exported `.bib` files rarely use it.
 
 ## Phases
@@ -263,7 +263,7 @@ dropped:
     --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind
   ```
   Exit code 0 — `biblatex 0.12.0` compiled cleanly for `wasm32-unknown-unknown`, and
-  `pampa`'s lib compiled successfully with it under the hub-client feature set. No
+  `pampa`\'s lib compiled successfully with it under the hub-client feature set. No
   errors; only pre-existing warnings unrelated to this change (duplicate-crate lint
   noise, an unused import in `quarto-system-runtime::wasm`). No blocking finding — the
   low-wasm32-risk inference from Phase 0 is confirmed, not just assumed.
@@ -278,7 +278,7 @@ dropped:
   `fcaefbc38` Phase 3) rather than trusted as-written before marking phases done.
 
 **Out of scope for this plan (separate decision, not bundled in):**
-`quarto-project-create`'s book template currently ships `references.json` specifically
+`quarto-project-create`\'s book template currently ships `references.json` specifically
 because there was no BibTeX parser (its own doc comment says so explicitly). Whether to
 switch the template to `.bib` once this lands is a distinct scaffolding decision, not
 citeproc correctness — flag as a possible follow-up rather than folding into this plan's
@@ -293,6 +293,6 @@ checklist.
   **confirmed** by Phase 3's smoke build (exit 0, no errors) — sequencing it before
   the final workspace gate meant a real blocker would have surfaced with enough
   runway to revisit the design, but none did.
-- `book_citations.rs`'s doc comment was effectively documentation-as-tracking for this
+- `book_citations.rs`\'s doc comment was effectively documentation-as-tracking for this
   exact gap; Phase 2 updated it alongside the new `.bib` test, so it no longer claims
   the gap is unaddressed.

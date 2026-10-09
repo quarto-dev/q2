@@ -459,7 +459,7 @@ pub fn write(
 - Generated parser (parser.c)
 - Rust bindings
 - Grammar tests
-- Template error corpus (T-*.json files)
+- Template error corpus (T-\*.json files)
 - Generated error table
 
 **Tasks**:

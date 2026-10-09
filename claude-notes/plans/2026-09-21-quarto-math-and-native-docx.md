@@ -93,7 +93,7 @@ LibreOffice preservation is unverified against a current release.
   attribute declarations, 22 literal XML templates (inline picture, table
   skeleton, numbering). This is where Word's child-order strictness is written
   down.
-- `src/docx/opc/`: self-contained package layer (~600 lines: content types from
+- `src/docx/opc/`: self-contained package layer (\~600 lines: content types from
   parts, relationships, part naming, every reltype/content-type URI in
   `constants.py`).
 - `src/docx/templates/default.docx`: Word-generated, 160 styles (Heading 1–9,
@@ -215,7 +215,7 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
       `external-sources/mitex`, so the symbol rows can be generated without
       the Typst build step. (`typst` is now installed locally too, so
       `typst query` regeneration is a fallback.)
-- [x] (done 2026-09-21: `shared-math.xsd` is not self-contained, it imports `wml.xsd` and `shared-commonSimpleTypes.xsd`, so the whole 12-file transitional closure (~500 KB) lives at `crates/quarto-math/tests/schemas/ooxml/` and Phase 2 validates `document.xml` from the same directory; helper + guard tests in `tests/integration/omml_schema.rs`) Vendor the OMML schema under `crates/quarto-math/tests/schemas/`:
+- [x] (done 2026-09-21: `shared-math.xsd` is not self-contained, it imports `wml.xsd` and `shared-commonSimpleTypes.xsd`, so the whole 12-file transitional closure (\~500 KB) lives at `crates/quarto-math/tests/schemas/ooxml/` and Phase 2 validates `document.xml` from the same directory; helper + guard tests in `tests/integration/omml_schema.rs`) Vendor the OMML schema under `crates/quarto-math/tests/schemas/`:
       `shared-math.xsd`, `shared-commonSimpleTypes.xsd` and W3C's `xml.xsd`,
       taken from `external-sources/python-docx/ref/xsd/` (MIT notice kept),
       with the one-line import patch (`schemaLocation="xml.xsd"` on the
@@ -235,7 +235,7 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
       arg shape (mitex's `ArgShape`/`ArgPattern` JSON form), semantic kind for
       OMML (`Frac`, `Rad`, `Nary{op}`, `Accent{char}`, `Func`, `Sym{codepoint}`,
       `Matrix{delims}`, `Text`, `Style{variant}`, …), Typst alias. Generate the
-      symbol rows from mitex's spec + `codex`; hand-write the ~150 structural
+      symbol rows from mitex's spec + `codex`; hand-write the \~150 structural
       rows. Test: every mitex spec entry has a row; every row's codepoint is a
       valid scalar.
 - [x] (done 2026-09-21: `quarto_math::reader::parse` → `Parsed { root, spans, leaves }`; side table recorded at the parser's `builder.token` sites, vendored patch #5; 10 tests in `tests/integration/reader.rs` incl. the corpus-wide leaf/tiling properties and the probe's two macro cases) **Reader**: `parse(text, &Spec) -> Cst` via mitex-parser with a
@@ -364,7 +364,7 @@ annotation over a stretchy arrow, and explicit `sym` overrides where codex
 
 **Production.** `cargo xtask gen-math-spec` reads
 `spec/upstream/mitex-default-spec.json` and `spec/overrides.json` (hand
-written, ~150 rows: every non-`sym` kind above, plus `sym` rows whose Typst
+written, \~150 rows: every non-`sym` kind above, plus `sym` rows whose Typst
 alias `codex` cannot resolve) and writes `spec/commands.json`:
 
 1. every upstream entry gets `args` verbatim;
@@ -487,7 +487,7 @@ oversold, each now pinned by a test in `tests/integration/reader.rs`:
 
 ## Decisions (2026-09-21)
 
-1. **Style vocabulary: keep pandoc's style names.** Decided. Q1 users'
+1. **Style vocabulary: keep pandoc's style names.** Decided. Q1 users\'
    reference docs are keyed on pandoc's names (`Source Code`, `Body Text`,
    `First Paragraph`, `Compact`, `Block Text`, `Caption`, `Image Caption`,
    `Table Caption`, `Verbatim Char`, `Hyperlink`, …); matching them keeps
@@ -505,7 +505,7 @@ oversold, each now pinned by a test in `tests/integration/reader.rs`:
    2026-09-21 velocity check in the session transcript), so a quarterly
    `git log <upstream> -- crates/mitex-lexer crates/mitex-parser` check is
    enough to track bugfixes. Vendoring lets us add the span side table at the
-   parser's `builder.token` sites and drop `mitex-spec-gen`'s Typst/submodule
+   parser's `builder.token` sites and drop `mitex-spec-gen`\'s Typst/submodule
    build step entirely. Record the upstream commit in `VENDORED.md`.
 3. **Use-site attribution inside macro expansions: definition-site for v1.**
    Decided. Revisit if users report confusing math diagnostics.
@@ -517,7 +517,7 @@ oversold, each now pinned by a test in `tests/integration/reader.rs`:
    additive and gives the pandoc-hybrid leg the same mapping.
 6. **Vendor all four mitex front-end crates as crates.** Decided 2026-09-21
    (supersedes the "lexer + parser" wording of decision 2). Measured: lexer
-   1,987 / parser 1,482 / spec 705 / glob 2,170 source lines (~6,300 total).
+   1,987 / parser 1,482 / spec 705 / glob 2,170 source lines (\~6,300 total).
    `mitex-glob` is itself a vendored `glob-match` (MIT) used at one call site
    in the parser's argument matcher; keeping it beats reimplementing it.
    New third-party deps: `rowan`, `logos`, `ena`, `ecow`; `rkyv` is dropped.

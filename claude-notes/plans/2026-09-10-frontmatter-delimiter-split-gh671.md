@@ -90,7 +90,7 @@ emitting `---` inside values.
 
 ### Why the writer needs no change
 
-- The writer's YAML is valid in every shape probed. `yaml_rust2`'s emitter
+- The writer's YAML is valid in every shape probed. `yaml_rust2`\'s emitter
   already quotes scalars that *begin* with `---` (`title: "---"`,
   `sub: "--- foo"`) and emits mid-scalar dashes plain (`tail: foo ---`,
   `list: [x --- y]`, nested maps likewise). A `---` inside a plain scalar
@@ -113,7 +113,7 @@ deliberate canonicalization.
 ## Why the reader re-scans text it already parsed
 
 `minus_metadata` is an **external token** (`grammar.js` externals list, line
-~1121), inherited from upstream tree-sitter-markdown, where `minus_metadata` /
+\~1121), inherited from upstream tree-sitter-markdown, where `minus_metadata` /
 `plus_metadata` are opaque leaves because a Markdown grammar has no business
 parsing YAML. External tokens cannot have children, so the tree hands pampa a
 single `metadata` node covering `---` … `---` with no inner structure. The
@@ -166,7 +166,7 @@ drop their `---` lines.
 
 Blast radius: 5 corpus files / 9 `(metadata)` expectations become
 `(metadata (yaml))`; `tree-sitter generate; tree-sitter build; tree-sitter test`;
-one dispatch arm in pampa; three test files' fixtures. Error recovery for an
+one dispatch arm in pampa; three test files\' fixtures. Error recovery for an
 unterminated block is unchanged in outcome (no `start` is emitted unless a
 close exists, exactly as today).
 
@@ -282,7 +282,7 @@ Phase 3 — wrap-up:
   markdown and comes back as a bullet list, so the writer emits `* foo`.
   That is the markdown-metadata contract, not a delimiter problem.
 
-## Reproduction record (2026-09-10, `main` @ 5a12a773)
+## Reproduction record (2026-09-10, `main` \@ 5a12a773)
 
 ```
 $ printf -- '---\ndescription: "Hello — world"\nauthor: Z\n---\n\nx\n' \

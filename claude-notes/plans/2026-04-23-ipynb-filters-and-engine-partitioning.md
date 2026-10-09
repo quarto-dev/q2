@@ -70,11 +70,11 @@ This work depends on Plans 0, 1a, 1b, 1c being complete, and the website project
 
 1. **Add the project-level filter list to the `markdown_for_file` plumbing.** Plan 1c-adjacent: extend the trait signature or pass a config struct. Built-in engines that don't run filters ignore it.
 
-2. **Implement filter execution in q2's Jupyter `markdown_for_file`.** Spawn the filter scripts via `SystemRuntime::execute`, pipe notebook JSON through, chain results. Cache by `(file mtime, filter script mtimes)`. Reuse the cache from execute()'s kernel-input path so filters don't run twice per file.
+2. **Implement filter execution in q2's Jupyter `markdown_for_file`.** Spawn the filter scripts via `SystemRuntime::execute`, pipe notebook JSON through, chain results. Cache by `(file mtime, filter script mtimes)`. Reuse the cache from execute()\'s kernel-input path so filters don't run twice per file.
 
 3. **Wire the filter cache into the Phase-8 profile cache invalidation logic.** Filter scripts are part of the cache key for `DocumentProfile` of files they affect.
 
-4. **Document the per-document constraint.** If `_quarto.yml`'s `execute.ipynb-filters` is project-level-only, document this and emit a warning if a frontmatter `ipynb-filters` is encountered.
+4. **Document the per-document constraint.** If `_quarto.yml`\'s `execute.ipynb-filters` is project-level-only, document this and emit a warning if a frontmatter `ipynb-filters` is encountered.
 
 5. **Test with nbdev fixtures.** The validation target.
 

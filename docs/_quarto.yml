@@ -57,6 +57,7 @@ website:
           href: guides/authoring/index.qmd
           contents:
             - guides/authoring/markdown-basics.qmd
+            - guides/authoring/migrating-markdown.qmd
             - guides/authoring/figures.qmd
             - guides/authoring/tables.qmd
             - guides/authoring/diagrams.qmd

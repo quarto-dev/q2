@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-12
 **Braid:** `bd-ellipsis-not-smart-48bv2pe6` (bug, p3, label `markdown`)
-**Branch:** `braid/ellipsis-not-smart-48bv2pe6` (off `main` @ `27f96dfb`)
+**Branch:** `braid/ellipsis-not-smart-48bv2pe6` (off `main` \@ `27f96dfb`)
 **Status:** **Implemented.** All design questions answered; fix landed, tests green,
 verified end-to-end. Pending full `cargo xtask verify` sign-off and user review.
 

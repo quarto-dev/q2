@@ -102,8 +102,8 @@ inputs shown.
 | `* a\n*\n` | list with empty item | same | `LIST_MARKER_STAR_DONT_INTERRUPT` wins |
 | `a \* b` | literal | literal | backslash escape already works |
 | `` `a * b` `` | code span | code span | scanner never reaches `parse_star` |
-| `**bold **` | Strong[bold ] | pandoc-md: Strong[bold, Space]; commonmark: literal | closer side, out of scope |
-| `*a *b* c*` | Emph[a] b Emph[c] | pandoc-md: Emph[a ] b* c*; commonmark: nested | closer side, out of scope |
+| `**bold **` | `Strong[bold ]` | pandoc-md: `Strong[bold, Space]`; commonmark: literal | closer side, out of scope |
+| `*a *b* c*` | `Emph[a]` b `Emph[c]` | pandoc-md: `Emph[a ]` b\* c\*; commonmark: nested | closer side, out of scope |
 
 ### Cases still erroring after the change (need lookahead; follow-up)
 
@@ -267,12 +267,12 @@ test; pinned as tier-3 boundary cases in `flanking-delimiters.txt`):
 - Error corpus: the cases `a *`, `foo* a ` (Q-2-12), `**` (Q-2-13),
   `__` (Q-2-15), `_` (Q-2-5) are valid documents now and were replaced
   by word-followed openers (`a *b`, `foo *a `, `**a`, `__a`, `_a`). The
-  `~` (Q-2-17) and `^` (Q-2-16) cases became `~a\`b~\`` / `^a\`b^\``:
+  `~` (Q-2-17) and `^` (Q-2-16) cases became `` ~a`b~` `` / `` ^a`b^` ``:
   since a sub/superscript only opens when its closer is in sight, the
   remaining way to leave one unclosed is a closer swallowed by a code
   span. One tiling (suffix `'a'`) was dropped from the Q-2-5/12/13/15
   cases because the new content makes it report Q-2-7 first.
-  `case-files/` and `_autogen-table.json` were regenerated with
+  `case-files/` and `\_autogen-table.json` were regenerated with
   `deno run crates/pampa/scripts/build_error_table.ts`.
 - `qmd-syntax-helper` Q-2-16/Q-2-17 tests: `x^2` and `H~2O` are no
   longer violations (they are literal text); the violation inputs use

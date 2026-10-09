@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/195
 - **Reporter**: @rundel (Colin Rundel), 2026-05-14
 - **Triage date**: 2026-05-14
-- **Worktree**: `.worktrees/issue-195` (branch `issue-195`, based on `main` @ `59e8003f`)
+- **Worktree**: `.worktrees/issue-195` (branch `issue-195`, based on `main` \@ `59e8003f`)
 - **Beads issue**: bd-u50w
 - **Scope**: both reported facets — (a) plain `BulletList` dropping a trailing empty item on round-trip, and (b) `:::{.list-table}` cells mutating empty cells from `[]` to `[Plain []]`. Both have the same root cause class (writer emits the wrong text for a *truly* empty AST item / cell, i.e. `Vec<Block>` of length 0).
 
@@ -103,7 +103,7 @@ let is_empty_item = item.len() == 1
 A truly empty item (`item.is_empty()`, i.e. `Vec<Block>` of length 0)
 falls through to the `else` branch at L490–499, where the inner
 `for (j, block) in item.iter().enumerate()` loop runs zero times and
-writes nothing. The outer `BulletListContext`'s prefix machinery is
+writes nothing. The outer `BulletListContext`\'s prefix machinery is
 all that's left, producing the `  ` (two-space) blank line we saw —
 not a `*` marker. There is no codepath in this function that ever
 emits a bare `*` (or `*\n`) marker.

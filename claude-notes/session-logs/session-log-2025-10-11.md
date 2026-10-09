@@ -135,7 +135,7 @@ pub struct AnnotatedParse {
    - Structure: `src/cli/` with command modules
 
 3. **just** - Command runner by Casey Rodarmor
-   - ~70 modules, 11,000 LOC
+   - \~70 modules, 11,000 LOC
    - Pattern: Flat module structure with centralized imports
    - Structure: All modules in `src/`, clear compilation pipeline
    - Philosophy: Flat is easier to navigate than deep hierarchies
@@ -178,7 +178,7 @@ src/
 └── [feature modules]
 ```
 - Best for: Medium complexity, single developer/small team
-- Example: just (scales to ~70 modules)
+- Example: just (scales to \~70 modules)
 
 **Pattern 3: Workspace with Thin CLI Wrapper (Turborepo-Style)**
 ```
@@ -256,7 +256,7 @@ crates/
 
 **Investigation**:
 - Traced complete execution path for `quarto render doc.qmd`
-- Analyzed ~50+ TypeScript modules involved in rendering
+- Analyzed \~50+ TypeScript modules involved in rendering
 - Documented 10 major pipeline stages
 - Studied engine selection algorithm (jupyter, knitr, markdown, julia)
 - Examined metadata merging across 5 sources
@@ -281,7 +281,7 @@ crates/
    - Lifetime-based resource management
    - Default pandoc renderer setup
 
-4. **Context Creation** (`render-contexts.ts`) **[Most Complex]**
+4. **Context Creation** (`render-contexts.ts`) **\[Most Complex\]**
    - Engine and target resolution
    - Format resolution (html, pdf, etc.)
    - Metadata merging from 5 sources
@@ -311,7 +311,7 @@ crates/
    - Diagram rendering (mermaid, graphviz)
    - Dependency injection
 
-9. **Pandoc Conversion** (`pandoc.ts`) **[Largest Stage]**
+9. **Pandoc Conversion** (`pandoc.ts`) **\[Largest Stage\]**
    - Merge engine results
    - Generate defaults file
    - Resolve format extras (filters, postprocessors, dependencies)
@@ -670,11 +670,11 @@ Markdown
 
 - Configuration merging: 6-8 weeks
 - YAML tags: 3-4 weeks
-- Combined: ~10-12 weeks (some parallel work possible)
+- Combined: \~10-12 weeks (some parallel work possible)
 
 These integrate with the previously estimated YAML work:
 - MappedString + YAML: 6-8 weeks (from earlier analysis)
-- Total YAML system: ~16-20 weeks for complete implementation
+- Total YAML system: \~16-20 weeks for complete implementation
 
 ## Next Steps (When Work Resumes)
 
@@ -1012,12 +1012,12 @@ pub async fn update_sitemap(
 
 **Critical for Rust Port**:
 - ProjectType trait with async hooks (pre_render, format_extras, post_render)
-- Global navigation state shared across all file renders (Arc<RwLock<NavigationState>>)
+- Global navigation state shared across all file renders (`Arc<RwLock<NavigationState>>`)
 - HTML parsing with scraper (for search indexing)
 - XML generation (for sitemap)
 - EJS-compatible templating (tera recommended) for navigation templates
 - Incremental rendering support (diff existing sitemap/search entries)
-- Project context detection (walk up directory tree for _quarto.yml)
+- Project context detection (walk up directory tree for \_quarto.yml)
 
 ### 7. Book Project Rendering Analysis
 

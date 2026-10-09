@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-10
 **Braid:** bd-4b7f1hr7
-**Checkout:** room-2 main checkout, branch `main` @ `e628a18f` (investigation committed here; implementation stacks on `feature/revealjs-render-preview-convergence`, PR #271 — decided [Q1])
+**Checkout:** room-2 main checkout, branch `main` \@ `e628a18f` (investigation committed here; implementation stacks on `feature/revealjs-render-preview-convergence`, PR #271 — decided \[Q1\])
 **Status:** DONE (2026-06-10) — all phases complete, full `cargo xtask verify`
 green on branch `beads/bd-4b7f1hr7-q2-preview-audit-html` (stacked on PR
 #271's `feature/revealjs-render-preview-convergence`). Not pushed. Follow-up
@@ -48,12 +48,12 @@ source/codepath + a sync/identity check, keeping the React preview path.
   `RevealDeck.tsx` imports vendored CSS, `entry.tsx` gates the
   `data-q2-theme` link off for slide docs. Plan:
   `claude-notes/plans/2026-06-10-preview-reveal-convergence.md` (on the PR
-  branch). Its open question **[Q-E1]** is literally this strand.
+  branch). Its open question **\[Q-E1\]** is literally this strand.
 - **parent-child: bd-kw93** (open epic) — `q2 preview` epic; this is parity
   polish (epic phase D territory). Epic integration branch convention says
-  sub-task work normally branches off the epic's integration line — see [Q1].
+  sub-task work normally branches off the epic's integration line — see \[Q1\].
 
-## What the code looks like today (audit findings, `main` @ e628a18f + PR #271)
+## What the code looks like today (audit findings, `main` \@ e628a18f + PR #271)
 
 ### (1) Theme CSS codepath: SHARED — but output identity is unverified
 
@@ -116,7 +116,7 @@ render on its own, preview aside.)
 **npm** `reveal.js/reveal.css` + `reveal.js/theme/white.css` + npm KaTeX CSS.
 PR #271 only converged the `ts-packages/preview-renderer` q2-preview entry.
 q2-debug ignores `UPDATE_THEME` entirely (no theme link), so it's a debug
-surface with deliberately different chrome — scope question [Q3].
+surface with deliberately different chrome — scope question \[Q3\].
 
 ### (4b) Math engine divergence (found during implementation)
 
@@ -139,23 +139,23 @@ a phase so findings land as fixtures/strands rather than ad-hoc notes.
 
 ## Design decisions (aligned with user, 2026-06-10)
 
-1. **[Q1] Base branch: stack on `feature/revealjs-render-preview-convergence`**
+1. **\[Q1\] Base branch: stack on `feature/revealjs-render-preview-convergence`**
    (PR #271's head). Branch off its tip; lands after #271 merges.
-2. **[Q2] KaTeX: pin the CDN URL** (option a — simplest). Implies pinning npm
+2. **\[Q2\] KaTeX: pin the CDN URL** (option a — simplest). Implies pinning npm
    `katex` **exact** (`0.16.28`, dropping the `^`) so "CDN matches the npm
    pin" is well-defined, changing `DEFAULT_KATEX_URL_BASE` from `@latest` to
    `@0.16.28`, and adding a version-sync test. Vendoring (option b) deferred.
-3. **[Q3] q2-debug: fix if simple.** It's internal-only and likely to
+3. **\[Q3\] q2-debug: fix if simple.** It's internal-only and likely to
    disappear soon — converge its npm reveal/KaTeX CSS imports opportunistically
    (vendored CSS, same as q2-preview), but don't sink design effort into it.
    If anything non-trivial surfaces, exempt with a comment and move on.
-4. **[Q4] Sync-check home: plain Rust `#[test]`**, following the reveal
+4. **\[Q4\] Sync-check home: plain Rust `#[test]`**, following the reveal
    precedent (`vendored_reveal_assets_match_npm_package` in `assemble.rs`) —
    parse root `package.json` for the pinned katex version, assert it matches
    the version in `DEFAULT_KATEX_URL_BASE`. Runs under `cargo nextest`, so
    `verify` picks it up with no new wiring. Same home for the Bootstrap
    SCSS↔JS pairing check if we keep it.
-5. **[Q5] Parity sweep: dropped from this strand.** A future, more thorough
+5. **\[Q5\] Parity sweep: dropped from this strand.** A future, more thorough
    pass will address reveal 6 themes + quarto's SCSS system together; the
    browser sweep waits for that. Phase 5 below shrinks to E2E verification of
    the changes made here.
@@ -205,19 +205,19 @@ a phase so findings land as fixtures/strands rather than ad-hoc notes.
 - **Phase 4 — E2E verification.** Per the end-to-end verification policy:
   - [x] Real `q2 render` through the binary, output inspected:
 
-        ```
-        $ cargo run --bin q2 -- render \
-            claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd
-        $ grep -o 'https://cdn.jsdelivr.net/npm/katex[^"]*' math-katex.html | sort -u
-        https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/contrib/auto-render.min.js
-        https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.css
-        https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.js
-        ```
+    ```
+    $ cargo run --bin q2 -- render \
+        claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd
+    $ grep -o 'https://cdn.jsdelivr.net/npm/katex[^"]*' math-katex.html | sort -u
+    https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/contrib/auto-render.min.js
+    https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.css
+    https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.js
+    ```
 
-        All three emitted KaTeX URLs carry the exact pin; no `@latest`.
-        Fixture committed at
-        `claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd`
-        (generated outputs removed).
+    All three emitted KaTeX URLs carry the exact pin; no `@latest`.
+    Fixture committed at
+    `claude-notes/plans/html-preview-css-drift-audit-investigation/math-katex.qmd`
+    (generated outputs removed).
   - [x] Full `cargo xtask verify` (hub build leg included — hub-client
         files changed): **all steps passed** (2026-06-10, branch
         `beads/bd-4b7f1hr7-q2-preview-audit-html`).
@@ -240,7 +240,7 @@ a phase so findings land as fixtures/strands rather than ad-hoc notes.
 
 ## Risks / tradeoffs
 
-- **PR #271 is in flight.** We stack on its head ([Q1]); if #271 gets
+- **PR #271 is in flight.** We stack on its head (\[Q1\]); if #271 gets
   reworked in review, this branch rebases with it. Accepted.
 - **The theme-identity test may be flaky-by-construction** if render
   legitimately post-processes CSS (e.g. URL rewriting for output dirs). If

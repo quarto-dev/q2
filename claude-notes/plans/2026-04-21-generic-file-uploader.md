@@ -67,7 +67,7 @@ Today `FileSidebar.handleDrop` (FileSidebar.tsx:142-154) does **not** pick a des
 Approach: extract a `resolveDefaultDestination(opts)` helper that returns a folder path (possibly `""` for root) given:
 
 1. **Drop target** (if a drop event): walk up from `event.target` to the nearest folder node (via a `data-folder-path` attribute on folder headers and file rows in FileSidebar). Files contribute their parent folder; folders contribute themselves.
-2. **Current selection fallback**: if there's no drop target, use the currently focused file's parent folder (`currentFile.path`'s dirname).
+2. **Current selection fallback**: if there's no drop target, use the currently focused file's parent folder (`currentFile.path`\'s dirname).
 3. **Root fallback**: if neither is available, return `""` (project root).
 
 To make #1 work we need to tag tree rows with their folder association (one-line change in `renderFileItem` and `renderTreeNode`). This is a small, contained refactor and is worth doing in Phase A before the dialog lands, because it makes the "+"-button flow and the drop-flow trivially consistent.
@@ -157,7 +157,7 @@ No progress UX for large uploads in this iteration. 10 MB cap keeps uploads fast
 - [x] `cd hub-client && npm run build:all` green. WASM bundle built; production Vite build succeeds.
 - [x] `cargo build --workspace` green (no Rust regressions from WASM-adjacent work).
 - [x] `npx tsc --noEmit` green.
-- [~] `npm run test:ci` — the unit and integration steps pass. `npm run test:wasm` has **one pre-existing failure** in `src/services/smokeAll.wasm.test.ts` (`highlighting/03-user-grammar/03-user-grammar-toml.qmd` fails the `<pre class="sourceCode toml"` regex). Verified this failure reproduces at HEAD with my changes stashed — it is **unrelated to the file-uploader work** and appears to be a carryover from the in-progress syntax-highlighting Phase 3.5 work on the same branch. Not fixing it here.
+- \[\~\] `npm run test:ci` — the unit and integration steps pass. `npm run test:wasm` has **one pre-existing failure** in `src/services/smokeAll.wasm.test.ts` (`highlighting/03-user-grammar/03-user-grammar-toml.qmd` fails the `<pre class="sourceCode toml"` regex). Verified this failure reproduces at HEAD with my changes stashed — it is **unrelated to the file-uploader work** and appears to be a carryover from the in-progress syntax-highlighting Phase 3.5 work on the same branch. Not fixing it here.
 - [ ] **Manual browser session**: **not performed in this session.** The Claude-in-Chrome extension is not connected, so I could not drive a real browser. The dev server does start cleanly (`npm run dev` listens on localhost:5173). A human-operator manual pass is still required before the feature ships: upload the TOML grammar fixture (`.wasm` + `.scm`) into `_quarto/grammars/toml/`; confirm both appear in FileSidebar under the correct folder; confirm Phase 4's syntax highlighting picks them up (once Phase 4 lands). Record the click-path here when performed.
 - [ ] **Leading-`/` rejection sanity-check**: covered by unit tests (`validateProjectPath.test.ts` and `NewAssetDialog.integration.test.tsx` both assert rejection), **not** exercised end-to-end through the real upload path. A manual pass should confirm that typing `/foo.png` into the destination input disables the Upload button with a visible error.
 

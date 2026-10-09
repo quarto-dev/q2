@@ -10,24 +10,24 @@ During the tree-sitter refactoring work, I added the following handlers directly
 ### Additions in `treesitter.rs`
 
 1. **Delimiter handlers** (trivial, can stay):
-   - `[`, `]`, `](`, `)` - Link/span/image delimiters (~1 line each)
-   - `single_quote`, `double_quote` - Quote delimiters (~1 line each)
+   - `[`, `]`, `](`, `)` - Link/span/image delimiters (\~1 line each)
+   - `single_quote`, `double_quote` - Quote delimiters (\~1 line each)
 
 2. **Simple extractors** (trivial, can stay):
-   - `url` - Extracts URL text (~3 lines)
-   - `title` - Extracts title with quote stripping (~3 lines, uses `extract_quoted_text` helper)
+   - `url` - Extracts URL text (\~3 lines)
+   - `title` - Extracts title with quote stripping (\~3 lines, uses `extract_quoted_text` helper)
 
 3. **Mid-level collectors** (should extract):
-   - `target` - Collects URL and title from children (~23 lines)
-   - Modified `content` - Context-aware content handler (~18 lines)
+   - `target` - Collects URL and title from children (\~23 lines)
+   - Modified `content` - Context-aware content handler (\~18 lines)
 
 4. **Complex constructors** (should extract):
-   - `pandoc_span` - Creates Link or Span based on target presence (~54 lines)
-   - `pandoc_image` - Creates Image inline (~42 lines)
-   - `pandoc_single_quote` - Creates Quoted with SingleQuote (~21 lines)
-   - `pandoc_double_quote` - Creates Quoted with DoubleQuote (~21 lines)
+   - `pandoc_span` - Creates Link or Span based on target presence (\~54 lines)
+   - `pandoc_image` - Creates Image inline (\~42 lines)
+   - `pandoc_single_quote` - Creates Quoted with SingleQuote (\~21 lines)
+   - `pandoc_double_quote` - Creates Quoted with DoubleQuote (\~21 lines)
 
-**Total lines added**: ~190 lines in match statement
+**Total lines added**: \~190 lines in match statement
 
 ## Existing Helper File Pattern
 
@@ -368,7 +368,7 @@ cargo test --test test_treesitter_refactoring
 
 ## Expected Outcome
 
-- **Reduced match statement size**: ~190 lines → ~10 lines (helper calls)
+- **Reduced match statement size**: \~190 lines → \~10 lines (helper calls)
 - **Better organization**: Complex logic separated into focused modules
 - **Easier maintenance**: Changes to handlers isolated in helper files
 - **Consistent pattern**: Follows established helper file pattern

@@ -57,7 +57,7 @@ coexistence six. Neither phase should assume the other's list.
   `1e7485e0b Merge commit ... as 'resources/extension-subtrees/orange-book'`). This
   epic is unblocked; it does not need to branch off or wait for anything else.
 - **`margin-layout/` and `marginalia-only-project/` need none of the book-merge
-  machinery** — `margin-layout/`'s `_quarto.yml` is `project: type: website`
+  machinery** — `margin-layout/`\'s `_quarto.yml` is `project: type: website`
   (`ProjectKind::Website`, already fully handled generically in
   `crates/quarto-core/src/project/mod.rs:311-343`, no dedicated submodule needed the
   way `project/book/` exists), and every one of its 86 `.qmd` files is rendered
@@ -163,7 +163,7 @@ This epic is implemented across three existing worktrees, following Gordon's
 preferred integration pattern: a long-lived integration branch, each phase done on
 its own topic branch, **rebased onto the integration branch's current tip and then
 fast-forward-merged in** when done (not `--no-ff` — this deliberately differs from
-`.claude/rules/worktrees.md`'s general braid-strand convention, because this epic
+`.claude/rules/worktrees.md`\'s general braid-strand convention, because this epic
 isn't braid-tracked; Gordon's instruction for this specific epic wins).
 
 ![Worktree/branch DAG](2026-09-27-typst-smoke-all-epic-worktree-dag.svg)
@@ -210,7 +210,7 @@ worktree, branch name, and preconditions filled in — this section is the share
 rationale, not something you need to cross-reference to execute a phase.
 
 1. **Sync and branch** (in the phase's assigned worktree): create/reset a topic
-   branch `typst-testing/pN-<slug>` off `feature/typst-testing`'s current tip.
+   branch `typst-testing/pN-<slug>` off `feature/typst-testing`\'s current tip.
    `feature/typst-testing` is a local ref shared across all worktrees in this repo
    (they're the same `.git`) — no `git fetch` needed to see it, even though it's
    checked out in `workspace-3`.
@@ -219,10 +219,10 @@ rationale, not something you need to cross-reference to execute a phase.
    <crate>` per the standard per-task gate.
 3. **Close out the phase doc**: flip every `- [ ]` to `- [x]` in the checklist
    (only if actually done — don't rubber-stamp), and change the `## Status` section
-   from `Not started.` to `Complete.` (this exact string — other phases' "is this
+   from `Not started.` to `Complete.` (this exact string — other phases\' "is this
    merged yet" checks grep for it). Commit this with the implementation.
 4. **Re-sync before merging**: rebase the topic branch onto
-   `feature/typst-testing`'s *current* tip again (something may have merged from the
+   `feature/typst-testing`\'s *current* tip again (something may have merged from the
    other track while you worked). Resolve conflicts and re-run the gate if anything
    moved.
 5. **Merge** (must happen in `workspace-3`, the only worktree with
@@ -275,7 +275,7 @@ git show feature/typst-testing:claude-notes/plans/2026-09-27-typst-smoke-all-epi
   (mechanism-level coverage), documented as the deliberate coexistence with the new
   smoke-all fixtures (P10).
 - `pdf-extract` fork dependency is pinned by commit SHA (not branch), and its adoption
-  is verified not to regress the six existing Rust tests' behavior.
+  is verified not to regress the six existing Rust tests\' behavior.
 
 ### P10 confirmation (2026-09-29): both surfaces green in the same workspace run
 
@@ -283,7 +283,7 @@ git show feature/typst-testing:claude-notes/plans/2026-09-27-typst-smoke-all-epi
 (workspace-2, macOS): **15295 tests run, 15294 passed, 1 failed, 201 skipped**,
 718.929s. The one failure is `quarto::integration smoke_all::smoke_all` itself
 (232 passed, 45 skipped, 1 failed *within* that test) — the pre-existing,
-separately-filed bd-gak8uiza `{{< embed >}}`-unimplemented gap in
+separately-filed bd-gak8uiza `{{{< embed >}}}`-unimplemented gap in
 `orange-book-margin/index.qmd` (missing `fig-visualization` crossref/caption),
 not a new regression. Per this doc's own escape hatch above, "done" here means
 every fixture passes except that one identified, filed gap — not literally
@@ -335,13 +335,13 @@ populates gitignored content, so a fresh worktree just needs the same symlink
 recreated: `ln -s /Users/gordon/src/quarto-cli external-sources/quarto-cli`. Already
 done for this worktree (confirmed resolving to the real fixture tree). Not written
 into any plan-file checklist since it's environment setup, not epic scope — worth
-a one-line mention in `worktrees.md`'s fresh-worktree-bootstrap section if this
+a one-line mention in `worktrees.md`\'s fresh-worktree-bootstrap section if this
 recurs for other epics, but that's a call for whoever owns that doc, not this one.
 
 ## Note on fixture directory placement
 
 Every phase's "copy into `crates/quarto/tests/smoke-all/typst/<name>/`" instruction
-is a human-organization convention only. `smoke_all.rs`'s discovery walks the whole
+is a human-organization convention only. `smoke_all.rs`\'s discovery walks the whole
 `tests/smoke-all/` tree recursively, filtering purely on `.qmd` extension — no
 directory-structure logic exists, and today's tree doesn't even have a `typst/`
 subdirectory (fixtures are organized by topic, e.g. `appendix/`, `extensions/`).
@@ -362,7 +362,7 @@ scanning the directory can find all Typst fixtures together.
   directly: a plain `/P` element's kids split across a page break in a
   `typst compile`-produced tagged PDF). More importantly, **MCIDs are only unique
   per page, not document-wide** — page 2 restarts numbering at 0 just like page 1.
-  Q1 never hits this: `pdf.js`'s `page.getStructTree()` hands back an
+  Q1 never hits this: `pdf.js`\'s `page.getStructTree()` hands back an
   already-page-scoped tree per page, and its own marked-content identifiers are
   page-qualified strings (e.g. `"p2R_mc0"`), not bare integers — so cross-page MCID
   collision and cross-page `granularity` aggregation are both structurally

@@ -16,7 +16,7 @@ This session implemented the `quarto-yaml` crate from design to working code wit
 
 ## Timeline
 
-**Total time: ~2-3 hours of implementation**
+**Total time: \~2-3 hours of implementation**
 
 - Crate setup: 15min
 - Data structures: 45min
@@ -220,7 +220,7 @@ Following rust-analyzer precedent worked well:
 - Clean, simple API
 - Enables future config merging
 
-**Memory overhead**: Acceptable (~3x for configs <10KB)
+**Memory overhead**: Acceptable (\~3x for configs <10KB)
 
 ### 2. yaml-rust2 Integration ✅
 
@@ -394,7 +394,7 @@ The quarto-yaml crate is now **functional and ready for use**!
 - 100% test coverage (14 tests passing)
 - Comprehensive documentation
 
-**Memory overhead** (~3x) is acceptable for config files.
+**Memory overhead** (\~3x) is acceptable for config files.
 
 **Architecture** (owned data) has proven simple and effective.
 

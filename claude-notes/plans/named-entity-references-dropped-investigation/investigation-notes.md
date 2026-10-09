@@ -1,6 +1,6 @@
 # Investigation notes — bd-named-entities-w6xbfftj
 
-Investigated 2026-08-10 at main @ `0cb8abce`. Pre-flight
+Investigated 2026-08-10 at main \@ `0cb8abce`. Pre-flight
 `cargo xtask verify --skip-hub-build` passed before any changes.
 
 ## Reproduction at HEAD
@@ -24,8 +24,8 @@ The grammar produces `entity_reference` (regex over
 `crates/tree-sitter-qmd/common/html_entities.json`, built in
 `common/common.js` `html_entity_regex()`); the pampa inline converter match in
 `crates/pampa/src/pandoc/treesitter.rs` has an arm for
-`numeric_character_reference` (line ~845) but none for `entity_reference`, so
-it hits the default arm (line ~1695), which only writes
+`numeric_character_reference` (line \~845) but none for `entity_reference`, so
+it hits the default arm (line \~1695), which only writes
 `[TOP-LEVEL MISSING NODE] Warning: Unhandled node kind: entity_reference`
 to the verbose buffer and returns `IntermediateUnknown` — dropped downstream.
 That's why the loss is silent in normal renders.

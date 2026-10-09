@@ -2,7 +2,7 @@
 
 ## Context
 
-The bidirectional Automerge↔Monaco sync logic in `Editor.tsx` spans ~80 lines across 3 effects + 2 handlers, interleaved with unrelated UI concerns. Following the clean separation pattern from automerge-codemirror (`codeMirrorToAm` / `amToCodemirror`), we extract this into a focused `useAutomergeSync` hook. This follows the existing pattern of `usePresence`, `useReplayMode`, etc.
+The bidirectional Automerge↔Monaco sync logic in `Editor.tsx` spans \~80 lines across 3 effects + 2 handlers, interleaved with unrelated UI concerns. Following the clean separation pattern from automerge-codemirror (`codeMirrorToAm` / `amToCodemirror`), we extract this into a focused `useAutomergeSync` hook. This follows the existing pattern of `usePresence`, `useReplayMode`, etc.
 
 ## Hook Interface
 

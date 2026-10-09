@@ -171,7 +171,7 @@ janus/                      # Regression test framework
 
 > "I centralize use statements in src/common.rs, which makes it easy to see what external crates and standard library modules are being used."
 
-**Why This Matters for Kyoto:** Demonstrates that flat structure can scale to ~70 modules while remaining maintainable. The clear compilation pipeline is similar to Quarto's render pipeline.
+**Why This Matters for Kyoto:** Demonstrates that flat structure can scale to \~70 modules while remaining maintainable. The clear compilation pipeline is similar to Quarto's render pipeline.
 
 **Source:** [Tour de Just - Casey Rodarmor's Blog](https://casey.github.io/blog/tour-de-just/)
 
@@ -355,7 +355,7 @@ src/
 ```
 
 **Best For:**
-- Medium-complexity CLI tools (up to ~70 modules)
+- Medium-complexity CLI tools (up to \~70 modules)
 - Single developer or small team
 - Projects valuing simplicity over deep hierarchies
 
@@ -372,7 +372,7 @@ src/
 
 **Examples:** just
 
-**Philosophy:** Casey Rodarmor advocates this approach, demonstrating it can scale to ~11,000 LOC across 70 modules.
+**Philosophy:** Casey Rodarmor advocates this approach, demonstrating it can scale to \~11,000 LOC across 70 modules.
 
 ### Pattern 3: Workspace with Thin CLI Wrapper (Turborepo-Style)
 
@@ -628,7 +628,7 @@ Quarto is highly complex:
 - Multiple engines (jupyter, knitr, julia)
 - Complex render pipeline (input → qmd → engines → handlers → filters → postprocessors → recipes → output)
 - Configuration merging from multiple sources
-- Large codebase (~100,000+ LOC in TypeScript)
+- Large codebase (\~100,000+ LOC in TypeScript)
 
 ### Recommended Architecture: Hybrid Workspace + Commands
 

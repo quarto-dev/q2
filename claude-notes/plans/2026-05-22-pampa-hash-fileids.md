@@ -131,7 +131,7 @@ With hash-based FileIds, including `sub.qmd`:
 
 The `remap_file_ids` call in `include_expansion.rs:206` becomes
 unnecessary. The `debug_assert_eq!` becomes a tautology and can be
-deleted. Net: ~30 lines simpler.
+deleted. Net: \~30 lines simpler.
 
 ### 4. Public-API impact
 
@@ -177,7 +177,7 @@ silently regress.
 
 2. **Cross-parser agreement.** Parse the same `_quarto.yml` via
    `quarto_yaml::parse_file` and via pampa's recursive
-   metadata parser; assert the root `SourceInfo`s' FileIds
+   metadata parser; assert the root `SourceInfo`s\' FileIds
    match. Fails today because pampa wraps everything as
    `FileId(0)`.
 
@@ -273,8 +273,8 @@ ensure no interaction. Specifically:
   break. Grep for them and decide per-site whether to update or
   delete.
 - **Hash collisions**: extremely unlikely for distinct file paths
-  (`DefaultHasher` is 64-bit; ~`2^32` distinct paths before a
-  collision becomes ~50% likely). Not worth defending against.
+  (`DefaultHasher` is 64-bit; \~`2^32` distinct paths before a
+  collision becomes \~50% likely). Not worth defending against.
 - **Anonymous ASTContexts collide on FileId**: multiple
   `ASTContext::anonymous()` instances share
   `FileId(hash("<anonymous>"))`. If any code path puts both into

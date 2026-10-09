@@ -212,7 +212,7 @@ Based on investigation, likely fixes:
 
 | Aspect | render() | to_blocks() |
 |--------|----------|-------------|
-| Output type | String | Vec<Block> |
+| Output type | String | `Vec<Block>` |
 | Delimiter handling | `join_with_smart_delim()` | Manual in `to_inlines_inner()` |
 | Used by | CSL conformance tests | Citeproc filter |
 | Current status | Works correctly | Missing delimiters |

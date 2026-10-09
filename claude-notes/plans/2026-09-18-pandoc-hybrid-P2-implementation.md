@@ -8,7 +8,7 @@
 P2 *produces* for P4 (serialization step), P5 (the frozen schema the shim reads) and P7 (`Meta`
 carriage + the sideband-map carriage fact for code-block decorations).
 **Status:** Ready for subagent-driven execution. **No blockers remain** — the three findings that
-parked a seam (3: `cite_prefix`'s shape; 4: the TS interface-diff mechanism; 5: `ExampleEmbed`'s
+parked a seam (3: `cite_prefix`\'s shape; 4: the TS interface-diff mechanism; 5: `ExampleEmbed`\'s
 `route`) were decided by Gordon on 2026-09-18 and are applied, so **T3.4, T4.3 and T1.1 are all
 bound** and no `seam deferred until … Gordon` marker remains. **Seven tasks** — Task 7 is new,
 carrying `meta.quarto_pandoc_reader_opts`, reassigned here from P4 (its Findings item 3) because
@@ -54,7 +54,7 @@ format already ships, and the schema artifact plus its three conformance tests a
 contracts. The user-visible consumer of this work is P5/P7's Pandoc leg, which does not exist
 yet. Task 6 therefore records the honest status — "in-process tests green; the real Pandoc render
 path does not exist until P4/P5/P7" — rather than claiming an end-to-end pass. The one real
-binary-level check P2 *can* make is that `q2 preview`'s serialized AST still carries the schema's
+binary-level check P2 *can* make is that `q2 preview`\'s serialized AST still carries the schema's
 `data-custom-data` for a live document (Task 6, T6.2).
 
 ---
@@ -92,9 +92,9 @@ splitting them would produce one task with no checkable deliverable.
 | `Proof` | `transforms/proof.rs:147` | `kind: "Proof"` only (`:150-152`); **deliberately no `ref_type`** (`:148-149`) | **no** — `crossref_index.rs:256-259` early-returns on the missing `ref_type` | `content` (Blocks) always; `title` (Inlines) iff non-empty — `:153-159` |
 | `Equation` | `transforms/equation_label.rs:215` | `ref_type: "eq", kind: "Equation", identifier` (`:218-222`) | **yes** — see Finding 2 | `content` (Inlines, holding the `Math`) — `:225-226` |
 | `ExampleEmbed` | `transforms/example_embed.rs:228` | **all conditional**: `file` iff the file validates (`:188-190`), `height`, `title` iff non-empty (`:191-208`), + `ref_type, kind, identifier` iff `valid_file && is_demo_id` (`:212-216`) | **yes**, under the same condition — see Finding 2 | `snippet` (Blocks) iff the body starts with a CodeBlock; `body` (Blocks) always — `:236-240` |
-| `CrossrefResolvedRef` | `transforms/crossref_resolve.rs:296` | `identifier, ref_type, kind, resolved, kind_source` — all **unconditional** (`:297-313`; note `resolved` and `kind_source` are not enumerated anywhere in P2's prose) | yes, iff an index entry exists (`:314-319`) | `suffix` (Inlines) iff the original `Cite`'s suffix is non-empty (`:327-332`) |
+| `CrossrefResolvedRef` | `transforms/crossref_resolve.rs:296` | `identifier, ref_type, kind, resolved, kind_source` — all **unconditional** (`:297-313`; note `resolved` and `kind_source` are not enumerated anywhere in P2's prose) | yes, iff an index entry exists (`:314-319`) | `suffix` (Inlines) iff the original `Cite`\'s suffix is non-empty (`:327-332`) |
 
-`order`'s shape is `{"section": [int], "order": int}`, written by
+`order`\'s shape is `{"section": [int], "order": int}`, written by
 `crates/quarto-core/src/transforms/crossref_index.rs:287-295` (P2 cites `:283-295`; `283` is the
 comment) and by `crossref_resolve.rs:315-318` (P2 cites `:316-317`).
 
@@ -129,7 +129,7 @@ mirrored in TS at `ts-packages/preview-renderer/src/framework/customNode.ts:44`)
    rather than as an oversight to be "fixed" by a later contributor.
 
 **Prerequisite.** None. The artifact's field sets are derived by reading the Rust above; nothing
-from a later task or another plan is required. (Authoring `Tabset`'s entry has **nothing to
+from a later task or another plan is required. (Authoring `Tabset`\'s entry has **nothing to
 cross-check it against on the TS side** — it does not reach q2-preview as a live CustomNode; that
 is P2's own finding, and the compensating check is Task 2's T2.4, which observes it in the Rust
 harness. `ExampleEmbed` had the same problem and is now simply out of the artifact — see
@@ -142,7 +142,7 @@ acceptance item 5.)
 | T1.1 | U | `quarto_pandoc_types::custom_node_schema::load()` + the committed artifact | call `load()` → assert `Ok`, `version == 1`, and that the `types` key set **equals** the **7**-name literal set (two-way, not `contains`) — and, as the negative half, that it does **not** contain `"ExampleEmbed"` | none — `include_str!` is compile-time; no fs, no network | the `"Tabset"` object in `custom-node-schema.json` |
 | T1.2 | U | same loader + artifact | call `load()` → assert the **per-type route map** equals the **7** `(name, route)` pairs from design §3 | none | `"route": "N"` on the artifact's `Equation` entry |
 | T1.5 | U | the artifact's deliberate-omission note | assert the top-level `"$comment"` exists and mentions `ExampleEmbed` | none | the `"$comment"` field |
-| T1.3 | U | the `Route` / `SlotKind` deserializers in `custom_node_schema.rs` | `serde_json::from_str` two malformed inline literals (`"route": "Q"`; `"slots": {"x": "Chunk"}`) → assert both are `Err` | none | `Route`'s enum `Deserialize` derive |
+| T1.3 | U | the `Route` / `SlotKind` deserializers in `custom_node_schema.rs` | `serde_json::from_str` two malformed inline literals (`"route": "Q"`; `"slots": {"x": "Chunk"}`) → assert both are `Err` | none | `Route`\'s enum `Deserialize` derive |
 | T1.4 | U | same loader + artifact | call `load()` → assert `types["Proof"].plain_data` has **no** `order` key, and that every `order` entry elsewhere has `required: false` + a `producer` | none | the absence of an `"order"` entry under `Proof` |
 
 **Revert hunks, stated exactly:**
@@ -151,7 +151,7 @@ acceptance item 5.)
   `assert_eq!(schema.types.keys().collect::<BTreeSet<_>>(), EXPECTED_EIGHT)`⟩ RED.
 - **T1.2** — Revert ⟨change `"route": "N"` to `"route": "R"` on the artifact's `Equation`
   entry⟩ → ⟨T1.2's per-type route-map `assert_eq!`⟩ RED.
-- **T1.3** — Revert ⟨replace `Route`'s `#[derive(Deserialize)]` enum with a plain `String`
+- **T1.3** — Revert ⟨replace `Route`\'s `#[derive(Deserialize)]` enum with a plain `String`
   field⟩ → ⟨T1.3's `assert!(from_str::<Schema>(BAD_ROUTE).is_err())`⟩ RED.
 - **T1.4** — Revert ⟨add an `"order": { "required": false, … }` entry under the artifact's
   `Proof` object⟩ → ⟨T1.4's `assert!(!proof.plain_data.contains_key("order"))`⟩ RED.
@@ -196,7 +196,7 @@ checklist item 5, and it is the only thing in P2 that binds the schema to real p
 - NEW `crates/quarto-core/tests/integration/custom_node_schema_conformance.rs`.
 - `crates/quarto-core/tests/integration/main.rs` — add `pub mod custom_node_schema_conformance;`
   keeping the list alphabetized (96 `pub mod` entries today).
-- Pattern to copy: `crates/quarto-core/tests/integration/crossref_fixtures.rs:29-129`'s
+- Pattern to copy: `crates/quarto-core/tests/integration/crossref_fixtures.rs:29-129`\'s
   `run_crossref(qmd)` helper, which already does parse → `RefTypeRegistry::builtin()` +
   `metadata::read` → `codeblock_shorthand::desugar_blocks` → `CalloutTransform` →
   `ExampleEmbedTransform` → `TheoremSugarTransform` → `ProofSugarTransform` →
@@ -214,7 +214,7 @@ checklist item 5, and it is the only thing in P2 that binds the schema to real p
 **Serialize through the production entry point, not the convenience one.** Call
 `pampa::writers::json::write` / `write_with_config` (`crates/pampa/src/writers/json.rs:1892` /
 `:1881`). Those route to `stream_write_pandoc` (`:1888`) → **`stream_write_custom_block`
-(`:3684`)** / **`stream_write_custom_inline` (`:3795`)`**. Do **not** bind this test to
+(`:3684`)** / **`stream_write_custom_inline` (`:3795`)\`**. Do **not** bind this test to
 `write_custom_block` (`:1466`): that function is on the `pub(crate) write_pandoc` (`:1778`) path,
 reached only by the HTML writer's source-map builder (`writers/html.rs:1909`, `:1998`,
 `writers/html_source.rs:464`), and is **not** the path any wire-format consumer uses. See
@@ -268,16 +268,16 @@ upstream-observation caveat was *materially* untrue rather than merely conservat
 Pandoc cut never sees an `ExampleEmbed` node at all, because `example-embed-render`
 (`example_embed.rs:274`) has destroyed it by then. The remaining seven are all genuinely present at
 the cut. **Cost, stated rather than absorbed:** these two fixtures were the binding for
-`example_embed.rs:175-185`'s invalid-`file` degradation (see the Missing-test pass) — that binding
+`example_embed.rs:175-185`\'s invalid-`file` degradation (see the Missing-test pass) — that binding
 is gone and the path is now `accepted-untested` **in P2**, with its natural home being **P1 Task 4**,
-which owns `ExampleEmbedRenderTransform`'s format-parameterization.
+which owns `ExampleEmbedRenderTransform`\'s format-parameterization.
 
 ### Test Seam Spec
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T2.1 | I | `CrossrefIndexTransform::index_custom_target` (`crossref_index.rs:250-311`) | run the chain on the `#fig-alpha` / `#thm-a` / `#eq-a` / `#tip-foo` fixtures → `json::write` → parse `data-custom-data` → assert each observed key set **equals** the schema's, i.e. **includes `order`** | `ProjectContext`/`DocumentInfo`/`Format::html()`/`BinaryDependencies` test fixtures (genuine env deps; no engine, no fs, no pandoc) | `crossref_index.rs:287-295` |
-| T2.2 | I | `CalloutTransform`'s crossref-eligible guard (`callout.rs:287-296`) | run the chain on both Callout fixtures → assert the plain one's set is **exactly** `{type, appearance, collapse, collapse_starts_collapsed, icon}` and the id'd one's is that + `{ref_type, kind, identifier, order}` | same | `callout.rs:288-296` |
+| T2.2 | I | `CalloutTransform`\'s crossref-eligible guard (`callout.rs:287-296`) | run the chain on both Callout fixtures → assert the plain one's set is **exactly** `{type, appearance, collapse, collapse_starts_collapsed, icon}` and the id'd one's is that + `{ref_type, kind, identifier, order}` | same | `callout.rs:288-296` |
 | T2.3 | I | `stream_write_custom_block` / `stream_write_custom_inline` (`json.rs:3684`, `:3795`) | after `json::write`, assert every `__quarto_custom_node` wrapper in the output has a `data-custom-data` kv | same | `json.rs:3710-3715` |
 | T2.4 | I | the whole harness + the artifact | assert `observed_type_names == schema.types.keys()`, both directions | same | `PanelTabsetTransform` in the harness chain |
 | T2.5 | I | the duplicate-id early return (`crossref_index.rs:262-270`) | two `#fig-alpha` fixtures → assert the **first** wrapper has `order` and the **second** does **not**, and that a duplicate-id diagnostic was collected | same | `crossref_index.rs:262-270` |
@@ -340,15 +340,15 @@ which owns `ExampleEmbedRenderTransform`'s format-parameterization.
 ## Task 3: Grouped `plain_data` extensions — `Proof.type`, `CrossrefResolvedRef.{cite_mode, label_upper}`, and the `cite_prefix` **slot**
 
 **Scope.** Land the confirmed extension requests as one grouped mechanical task: add
-`plain_data.type` to `Proof`'s producer + schema entry, add `cite_mode` + `label_upper` to
-`CrossrefResolvedRef`'s producer + schema entry, and add **`cite_prefix` as a `slots` entry, not a
+`plain_data.type` to `Proof`\'s producer + schema entry, add `cite_mode` + `label_upper` to
+`CrossrefResolvedRef`\'s producer + schema entry, and add **`cite_prefix` as a `slots` entry, not a
 `plain_data` field** (decided 2026-09-18 with Gordon — see Finding 3). Extend Task 2's fixture
 corpus so each new field is exercised on a branch that discriminates it.
 
 **Files.**
 - `crates/quarto-core/src/transforms/proof.rs:150-152` — add `"type"` to the `json!`.
 - `crates/quarto-core/src/transforms/crossref_resolve.rs:297-320` — add `cite_mode` and
-  `label_upper` to `build_resolved_ref`'s `data` map. The inputs are available: the function
+  `label_upper` to `build_resolved_ref`\'s `data` map. The inputs are available: the function
   already receives `original: &Cite` (`:292`), whose `citations[0].mode` and `.id` carry
   everything needed.
 - `crates/quarto-core/src/transforms/crossref_resolve.rs:327-332` — the `cite_prefix` **slot**,
@@ -361,14 +361,14 @@ corpus so each new field is exercised on a branch that discriminates it.
   elements**"). The code had already solved this for the sibling field; this follows it.
 - `crates/quarto-pandoc-types/resources/custom-node-schema.json` — the three entries (two
   `plain_data` fields on `CrossrefResolvedRef`, one `plain_data` field on `Proof`) plus
-  `cite_prefix` under `CrossrefResolvedRef`'s **`slots`** map, typed `Inlines`.
+  `cite_prefix` under `CrossrefResolvedRef`\'s **`slots`** map, typed `Inlines`.
 - `crates/quarto-core/tests/integration/custom_node_schema_conformance.rs` — new fixtures.
 - `ts-packages/preview-renderer/src/q2-preview/custom/CrossrefResolvedRef.tsx:39-46` — the TS
   mirror gains the two optional fields (type-only; see the vacuity note).
 
 **Grounding for the requests** (verified against the pinned Q1 tree at
 `/Users/gordon/src/quarto-cli/src/resources/filters`, tag `v1.11.3`):
-- **`Proof.type`.** `customnodes/proof.lua:54-61`'s `constructor(tbl)` returns
+- **`Proof.type`.** `customnodes/proof.lua:54-61`\'s `constructor(tbl)` returns
   `{name, div, identifier, type}` and its own comment says "proofs can be unnumbered and lack an
   identifier; we need to know the type explicitly". The renderer at `proof.lua:81` does
   `proof_types[proof_tbl.type:lower()]` **unconditionally** — a `nil` `type` raises
@@ -381,20 +381,20 @@ corpus so each new field is exercised on a branch that discriminates it.
   `#cite.prefix > 0 or cite.mode == pandoc.SuppressAuthor`. Q2's `build_resolved_ref`
   (`crossref_resolve.rs:287-334`) records neither the mode nor the label's original case.
   Confirmed gap.
-- **`Proof`'s value domain, for honesty about what the test can prove.** Q1's `proof_types`
+- **`Proof`\'s value domain, for honesty about what the test can prove.** Q1's `proof_types`
   (`proof.lua:8-21`) has three keys — `proof`, `remark`, `solution`. Q2's sugar transform handles
   **`.proof` only** (`proof.rs:21`: "Scope: `.proof` only. `.remark` and `.solution` have
-  ref-types [elsewhere]"). So `plain_data.type` is single-valued today; see the vacuity check.
+  ref-types \[elsewhere\]"). So `plain_data.type` is single-valued today; see the vacuity check.
 
 **Acceptance criterion.**
 1. Task 2's conformance test passes with the three new keys declared in the schema and produced
    by the transforms.
 2. `@Fig-alpha` yields `label_upper: true`; `@fig-alpha` yields `label_upper: false`.
-3. `[-@fig-alpha]` (SuppressAuthor) yields a `cite_mode` distinguishable from `@fig-alpha`'s.
+3. `[-@fig-alpha]` (SuppressAuthor) yields a `cite_mode` distinguishable from `@fig-alpha`\'s.
 4. A `::: {.proof}` fixture yields `type: "proof"` and its key set equals the schema's
    `{kind, type}`.
 5. `cargo nextest run --workspace` green (this touches `quarto-core` producers that
-   `crossref_fixtures.rs`, `crossref_render.rs`'s unit tests, and the preview snapshot tests all
+   `crossref_fixtures.rs`, `crossref_render.rs`\'s unit tests, and the preview snapshot tests all
    observe — expect churn there and account for it rather than blanket-accepting).
 6. **`cite_prefix` is a `slots` entry, never a `plain_data` key.** The schema's
    `CrossrefResolvedRef.plain_data` must **not** contain `cite_prefix`, and its `slots` must —
@@ -412,7 +412,7 @@ corpus so each new field is exercised on a branch that discriminates it.
 | T3.1 | I | `proof.rs::convert_div` (`proof.rs:137-161`) | `::: {.proof}` fixture through Task 2's harness → assert the observed `Proof` key set **equals** `{kind, type}` and `type == "proof"` | as Task 2 | the new `"type"` entry in `proof.rs:150-152` |
 | T3.2 | I | `build_resolved_ref` (`crossref_resolve.rs:287-334`) | `@fig-alpha` **and** `@Fig-alpha` fixtures → assert `label_upper` is `false` and `true` respectively | as Task 2 | the new `data.insert("label_upper", …)` line |
 | T3.3 | I | same | `@fig-alpha` **and** `[-@fig-alpha]` fixtures → assert `cite_mode` differs between them and equals the `SuppressAuthor` discriminant on the second | as Task 2 | the new `data.insert("cite_mode", …)` line |
-| T3.4 | I | `build_resolved_ref`'s slot construction (`crossref_resolve.rs:327-332`) + the schema | fixture `[see @fig-alpha]` (a cite with a real prefix) through Task 2's harness → assert a `cite_prefix` **slot** is present and carries the prefix inlines; assert the schema declares `cite_prefix` under `slots` and **not** under `plain_data` | as Task 2 | the new `Slot::Inlines(original.citations[0].prefix.clone())` line |
+| T3.4 | I | `build_resolved_ref`\'s slot construction (`crossref_resolve.rs:327-332`) + the schema | fixture `[see @fig-alpha]` (a cite with a real prefix) through Task 2's harness → assert a `cite_prefix` **slot** is present and carries the prefix inlines; assert the schema declares `cite_prefix` under `slots` and **not** under `plain_data` | as Task 2 | the new `Slot::Inlines(original.citations[0].prefix.clone())` line |
 
 **Revert hunks, stated exactly:**
 - **T3.1** — Revert ⟨remove the `"type": …` entry from the `json!` at `crates/quarto-core/src/transforms/proof.rs:150-152`⟩ → ⟨T3.1's `assert_eq!(observed_keys, {"kind","type"})`⟩ RED (observed set loses `type` while the schema still declares it required).
@@ -523,12 +523,12 @@ Finding 4's mechanism question was decided 2026-09-18 (option b, above), so T4.3
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T4.1 | T | `previewRegistry` (`registry.ts:39-61`) + the `Custom.*` barrel (`custom/index.ts:20-27`) | `readFileSync` the schema JSON (path resolved from `import.meta.url`) → compute `schemaTypes − EXPECTED_UNREACHABLE` → assert that set **equals** `Object.keys(Custom) ∩ schemaTypes`, and that each is a function on `previewRegistry` | the fs read of the repo-relative schema (a genuine environment dep; **test-only** — nothing at runtime may import from `crates/`) | `export { Equation } from './Equation';` in `custom/index.ts:24` |
-| T4.2 | T | `CustomBlock`'s registry lookup (`dispatchers.tsx:668`) | render a `CustomBlockNode` with `type_name: "Tabset"` (a real schema type with no registry entry) → assert the `Fallback` component renders and nothing throws | jsdom + `@testing-library/react` (the package's standard test env) | the `?? registry['__fallback__']` in `dispatchers.tsx:668` |
+| T4.2 | T | `CustomBlock`\'s registry lookup (`dispatchers.tsx:668`) | render a `CustomBlockNode` with `type_name: "Tabset"` (a real schema type with no registry entry) → assert the `Fallback` component renders and nothing throws | jsdom + `@testing-library/react` (the package's standard test env) | the `?? registry['__fallback__']` in `dispatchers.tsx:668` |
 | T4.3 | T | `CALLOUT_PLAIN_DATA_KEYS` (and its siblings) vs. the schema's `plain_data` key sets | `readFileSync` the schema → for each `plain_data`-bearing type, assert the exported key array **equals** the schema's key set for that type, both directions | the same test-only fs read as T4.1 | the `'order'` entry in `CALLOUT_PLAIN_DATA_KEYS` |
 
 **Revert hunks, stated exactly:**
 - **T4.1** — Revert ⟨delete `export { Equation } from './Equation';` at `ts-packages/preview-renderer/src/q2-preview/custom/index.ts:24`⟩ → ⟨T4.1's `expect(reachableFromSchema).toEqual(exportedAndInSchema)`⟩ RED. And, from the other direction: Revert ⟨add a 9th type to `custom-node-schema.json` without a `Custom.*` component and without an `EXPECTED_UNREACHABLE` entry⟩ → ⟨the same assertion⟩ RED. (`registry.test.ts:81-95` goes red on the first revert too but **not** on the second — that missing direction is T4.1's whole contribution.)
-- **T4.2** — Revert ⟨remove the `?? registry['__fallback__']` from `CustomBlock`'s lookup at `ts-packages/preview-renderer/src/q2-preview/dispatchers.tsx:668`⟩ → ⟨T4.2's `expect(screen.getByTestId('custom-fallback')).toBeInTheDocument()` (or the Fallback's actual marker)⟩ RED.
+- **T4.2** — Revert ⟨remove the `?? registry['__fallback__']` from `CustomBlock`\'s lookup at `ts-packages/preview-renderer/src/q2-preview/dispatchers.tsx:668`⟩ → ⟨T4.2's `expect(screen.getByTestId('custom-fallback')).toBeInTheDocument()` (or the Fallback's actual marker)⟩ RED.
 - **T4.3** — Revert ⟨delete `'order'` from `CALLOUT_PLAIN_DATA_KEYS` in
   `ts-packages/preview-renderer/src/q2-preview/custom/Callout.tsx`⟩ → ⟨T4.3's
   `expect([...CALLOUT_PLAIN_DATA_KEYS].sort()).toEqual([...schemaKeys].sort())`⟩ RED. **`order` is
@@ -597,7 +597,7 @@ would be a scope error.
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T5.1 | I | `MetadataNormalizeTransform` + `DateNormalizeTransform` + `AuthorsNormalizeTransform` and `write_config_value_as_meta` | parse a fixture with `title`/`date: 2026-01-02`/`author` front matter → run the three transforms → `json::write` → assert the serialized `meta` carries all three, with the normalized date shape | `ProjectContext`/`DocumentInfo`/`Format::html()`/`BinaryDependencies` fixtures | `date_normalize.rs`'s normalization write-back |
+| T5.1 | I | `MetadataNormalizeTransform` + `DateNormalizeTransform` + `AuthorsNormalizeTransform` and `write_config_value_as_meta` | parse a fixture with `title`/`date: 2026-01-02`/`author` front matter → run the three transforms → `json::write` → assert the serialized `meta` carries all three, with the normalized date shape | `ProjectContext`/`DocumentInfo`/`Format::html()`/`BinaryDependencies` fixtures | `date_normalize.rs`\'s normalization write-back |
 
 **Revert hunks, stated exactly:**
 - **T5.1** — Revert ⟨the `meta` write-back in `crates/quarto-core/src/transforms/date_normalize.rs` (the hunk where the normalized date replaces the raw front-matter value)⟩ → ⟨T5.1's `assert_eq!(meta_json["date"], <normalized shape>)`⟩ RED (the raw front-matter string survives instead).
@@ -622,14 +622,14 @@ verified end-to-end because the Pandoc leg does not exist yet.
 
 **Files.** No new source files. Touches, at most, existing q2-preview snapshot artifacts if
 Task 3's new `plain_data` keys move them (they will: `cite_mode`/`label_upper` land in every
-`CrossrefResolvedRef`'s `data-custom-data`).
+`CrossrefResolvedRef`\'s `data-custom-data`).
 
 **Acceptance criterion.**
 1. `cargo nextest run --workspace` green, with its pass/skip counts reported as a **delta against
    the live baseline measured on this branch at the start of P2**, not a figure copied from an
    older document. Account for every new test and every moved snapshot.
 2. `cargo xtask verify` (full, not `--skip-hub-build`) green — `quarto-pandoc-types` and
-   `quarto-core` both changed, and both are in `wasm-quarto-hub-client`'s dependency closure.
+   `quarto-core` both changed, and both are in `wasm-quarto-hub-client`\'s dependency closure.
 3. If any `.snap` files changed: report the count, summarize what changed, and list the affected
    files (CLAUDE.md's snapshot-change rule). `cite_mode`/`label_upper` appearing in
    `data-custom-data` is the expected cause; anything else is flagged for review.
@@ -755,7 +755,7 @@ bound seam or an explicit `accepted-untested: <rationale>`.
 
 ### 1. Schema-version mismatch handling, per consumer
 
-**Rust.** `accepted-untested: nothing reads the version at runtime, by decision.** P2's
+**Rust.** `accepted-untested: nothing reads the version at runtime, by decision.` P2\'s
 "Version placement/policy" bullet is explicit: "reject on mismatch is **deferred past v1**… the
 field exists so a *future* out-of-band consumer has something to check, **not because anything
 checks it yet**." A test asserting rejection behavior would be asserting behavior the plan
@@ -801,9 +801,9 @@ mirror is `seam deferred until P5's Lua contract test`.
   (`json::write`) and via the non-streaming path (`blocks_to_source_free_json`, `json.rs:1918`,
   which routes through `write_blocks` → `write_custom_block`), and asserts the two wrapper
   attribute maps are equal after source-key stripping.
-  **Revert:** ⟨delete the `if !custom.plain_data.is_null() { … "data-custom-data" … }` block at
-  `crates/pampa/src/writers/json.rs:1489-1494` (the *non-streaming* twin)⟩ → ⟨the parity
-  assertion⟩ RED. Note this is the one revert that T2.3 deliberately leaves green, which is
+  **Revert:** \⟨delete the `if !custom.plain_data.is_null() { … "data-custom-data" … }` block at
+  `crates/pampa/src/writers/json.rs:1489-1494` (the *non-streaming* twin)\⟩ → \⟨the parity
+  assertion\⟩ RED. Note this is the one revert that T2.3 deliberately leaves green, which is
   exactly why this seam is needed. **Whether to add a checklist item for it is Finding 1.**
 
 ### 3. The 8-type inventory's totality — what catches a 9th type shipping later?
@@ -819,7 +819,7 @@ mirror is `seam deferred until P5's Lua contract test`.
 - **P5's warning is confirmed accurate.** P5 asks for a bidirectional-totality assertion and
   warns the golden harness would not catch this, because an unhandled type's unwrap-and-drop path
   preserves slot content → zero-byte snapshot diff. Verified: the analogous TS behavior is
-  `dispatchers.tsx:668`'s `?? registry['__fallback__']`, which renders rather than fails; and
+  `dispatchers.tsx:668`\'s `?? registry['__fallback__']`, which renders rather than fails; and
   `registry.test.ts:81-95` is a hardcoded one-directional subset assertion, so it does not catch
   a 9th type either. **Nothing in the tree today catches a 9th wire type.**
 - **The mechanism that would**, matching this repo's three existing precedents for exactly this
@@ -833,7 +833,7 @@ mirror is `seam deferred until P5's Lua contract test`.
   (`float_ref_target.rs:346` and `:377`), so the literal grep yields **10** non-test hits for
   **8** types — not the 9 P2's caveat predicts.
   **Revert (if the rule lands):** ⟨add a `CustomNode::new("Sidenote", …)` call site in
-  `crates/quarto-core/src/transforms/` without a schema entry⟩ → ⟨`cargo xtask lint`'s
+  `crates/quarto-core/src/transforms/` without a schema entry⟩ → ⟨`cargo xtask lint`\'s
   `custom-node-schema-unlisted` check⟩ RED.
   **P2 has no checklist item for this and P5 depends on it — see Finding 7. Not decided here.**
 
@@ -859,7 +859,7 @@ mirror is `seam deferred until P5's Lua contract test`.
 - **`Callout.collapse` / `collapse_starts_collapsed`** — HTML/JS-only accordion signals
   (`callout.rs:261-263`). Q1's `callout.lua` constructor does take `collapse`, so this is not
   single-consumer; no separate entry needed. **Bound** by T2.2's five-key equality.
-- **`ExampleEmbed`'s whole entry** — every field is conditional and the node never reaches the
+- **`ExampleEmbed`\'s whole entry** — every field is conditional and the node never reaches the
   Pandoc cut (destroyed by `example-embed-render`, `example_embed.rs:274`, which is B1 and runs
   for `Pandoc(fmt)`). **Bound** in Task 2's upstream harness (T2.4 observes it) but **not** at
   the real cut: `accepted-untested at the Pandoc cut: the node provably does not exist there;
@@ -873,15 +873,15 @@ mirror is `seam deferred until P5's Lua contract test`.
 | `crossref_index.rs:252-254` empty-identifier early return | `accepted-untested: unreachable from qmd. `has_crossref_plain_data` (`:319-321`) already returns false for an empty `attr.0`, so `index_custom_target` can never be called with one. Dead-defensive.` |
 | `crossref_index.rs:256-259` missing-`ref_type` early return | `accepted-untested: unreachable from qmd for the same reason — `has_crossref_plain_data:322-326` requires a string `ref_type`. This is the branch that makes Proof order-free, and *that* consequence **is** bound (T1.4 from the schema side, T3.1's key-set equality from the producer side).` |
 | `json.rs:3710` / `:1489` `plain_data.is_null()` guard — omits `data-custom-data` entirely | **bound — T2.3** (streaming) and the new parity seam in item 2 (non-streaming) |
-| `json.rs:3708` / `:1487` `serde_json::to_string(...).unwrap_or_else(\|_\| "{}")` fallback | `accepted-untested: unreachable — `slot_meta` is a `Map<String, Value>` of string values, which cannot fail to serialize. Same for the `"null"` fallback at `:3713`/`:1492`.` |
-| `example_embed.rs:175-185` invalid-`file` degradation (drops `file`, pushes a diagnostic) | **`accepted-untested` as of 2026-09-18 — the binding was lost, deliberately.** It *was* bound by Task 2's two `ExampleEmbed` fixtures (the numbered/unnumbered key sets differ, so the degradation path changed the observed set). Gordon's Finding-5 decision drops `ExampleEmbed` from the artifact, so those fixtures had to go (a corpus producing a type the schema does not declare is RED against correct code — T2.4 is two-way). Natural home: **P1 Task 4**, which owns `ExampleEmbedRenderTransform`'s format-parameterization and is where the node's Pandoc-leg behaviour is decided. Recorded rather than dropped so the loss is visible. |
+| `json.rs:3708` / `:1487` `serde_json::to_string(...).unwrap_or_else(\|_\| "{}")` fallback | `accepted-untested: unreachable — `slot_meta` is a ``Map<String, Value>`` of string values, which cannot fail to serialize. Same for the `"null"` fallback at `:3713`/`:1492`.` |
+| `example_embed.rs:175-185` invalid-`file` degradation (drops `file`, pushes a diagnostic) | **`accepted-untested` as of 2026-09-18 — the binding was lost, deliberately.** It *was* bound by Task 2's two `ExampleEmbed` fixtures (the numbered/unnumbered key sets differ, so the degradation path changed the observed set). Gordon's Finding-5 decision drops `ExampleEmbed` from the artifact, so those fixtures had to go (a corpus producing a type the schema does not declare is RED against correct code — T2.4 is two-way). Natural home: **P1 Task 4**, which owns `ExampleEmbedRenderTransform`\'s format-parameterization and is where the node's Pandoc-leg behaviour is decided. Recorded rather than dropped so the loss is visible. |
 | `callout.rs:270-274` `appearance="minimal"` → `("simple", false)` normalization | `accepted-untested by P2: this is value-level normalization, not field-set membership, and P2's contract is the field set. It is already covered by `callout_resolve.rs`'s existing unit tests (`:650-928`).` |
 | `dispatchers.tsx:668`/`:683` `?? __fallback__` miss path | **bound — T4.2** (block form). `accepted-untested: the inline form at `:683` is the same one-line expression; a second test would assert the same hunk.` |
 | Task 1's `include_str!` on a missing artifact | `accepted-untested: a missing file is a compile error, not a runtime branch — the strongest possible gate, and no test can be written for it.` |
 
 ### 6. Structural contracts a successor plan depends on
 
-- **P4 needs the schema to exist as a loadable JSON artifact before it builds `PandocWriteStage`'s
+- **P4 needs the schema to exist as a loadable JSON artifact before it builds `PandocWriteStage`\'s
   serialization step.** **Bound — T1.1** (the artifact loads and has all **7** types; count
   corrected 2026-09-18 with Finding 5's resolution).
 - **P5 needs the per-type `route` assignment frozen.** **Bound — T1.2** (per-type route map
@@ -929,7 +929,7 @@ correction in `6ec06d95d` says to add `order` to `Callout`, `FloatRefTarget`, `T
   calls `index_custom_target` for any inline custom node passing `has_crossref_plain_data`. Three
   independent corroborations: `crossref/mod.rs:83`'s own doc comment for `EQUATION` states "the
   specific numbering is stored in `plain_data.order` (set by the indexer)"; and
-  `ts-packages/preview-renderer/src/q2-preview/custom/Equation.tsx:36-41`'s `EquationPlainData`
+  `ts-packages/preview-renderer/src/q2-preview/custom/Equation.tsx:36-41`\'s `EquationPlainData`
   **already declares `order`**.
 - **`ExampleEmbed`.** `example_embed.rs:212-216` sets the triple when
   `valid_file.is_some() && is_demo_id(&id)`, so a numbered `#demo-` embed passes
@@ -940,7 +940,7 @@ correction's own reasoning ("Proof correctly gets none") reads as an exhaustive 
 future reader will treat it as one.
 
 **3. `cite_prefix` cannot be a `plain_data` field — the plan's own mechanism doesn't support it.**
-P2's confirmed extension request asks to add `cite_prefix` to `CrossrefResolvedRef`'s schema entry
+P2's confirmed extension request asks to add `cite_prefix` to `CrossrefResolvedRef`\'s schema entry
 as a `plain_data` field. But a citation prefix is `Inlines` (`quarto-pandoc-types/src/inline.rs:285`,
 `pub prefix: Inlines`), and `plain_data` is contractually AST-free —
 `quarto-pandoc-types/src/custom.rs:72-75`: "Plain JSON data that **doesn't contain AST
@@ -1027,10 +1027,10 @@ a real loss:
    schema to be unreachable *from*), leaving `Tabset` as the sole entry. Pleasant side effect: 7
    schema types − 1 unreachable = the 6 with components, so that arithmetic is now exact rather
    than coincidental.
-4. **The cost.** Those two fixtures were the binding for `example_embed.rs:175-185`'s
+4. **The cost.** Those two fixtures were the binding for `example_embed.rs:175-185`\'s
    invalid-`file` degradation (Missing-test pass). That binding is **gone**; the path is now
    `accepted-untested` in P2, and its natural home is **P1 Task 4**, which owns
-   `ExampleEmbedRenderTransform`'s format-parameterization. Recorded in the Missing-test pass
+   `ExampleEmbedRenderTransform`\'s format-parameterization. Recorded in the Missing-test pass
    rather than quietly dropped.
 
 **6. `registry.test.ts` is not the exhaustive lock P2 describes it as.** P2's "real TS-side

@@ -65,7 +65,7 @@ So `{ title: "Hello", format: { html: { toc: true } } }` becomes
   (derives `Default` — `project_type: Default`, `output_dir: None`,
   `render_patterns: []`, `metadata: None`)
 - `ProjectContext::discover()`: `project.rs:~368` — finds `_quarto.yml`,
-  creates context. Line ~404: `is_single_file = config.is_none() && input_file.is_some()`
+  creates context. Line \~404: `is_single_file = config.is_none() && input_file.is_some()`
 - `ProjectContext::single_file()`: `project.rs:~433` — creates single-file
   context directly, hardcodes `config: None`
 - `MetadataMergeStage::run()`: `stage/stages/metadata_merge.rs:~115`

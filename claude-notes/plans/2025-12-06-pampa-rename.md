@@ -75,7 +75,7 @@ Files to update:
 - `crates/qmd-syntax-helper/src/conversions/grid_tables.rs`
 - `crates/qmd-syntax-helper/src/conversions/definition_lists.rs`
 - `crates/pampa/fuzz/fuzz_targets/hello_fuzz.rs`
-- ~20 test files in `crates/pampa/tests/` (will be automatically correct after directory rename since they use the crate name)
+- \~20 test files in `crates/pampa/tests/` (will be automatically correct after directory rename since they use the crate name)
 
 **Documentation files with code examples** (update examples):
 - `crates/quarto-error-reporting/README.md`
@@ -189,9 +189,9 @@ Keep a shim crate at old location that re-exports from pampa.
 
 ### Phase 3: Cargo Configuration
 1. Update root Cargo.toml (workspace members and dependencies)
-2. Update crates/pampa/Cargo.toml (package name, add [[bin]])
+2. Update crates/pampa/Cargo.toml (package name, add `[[bin]]`)
 3. Update crates/pampa/fuzz/Cargo.toml
-4. Update dependent crates' Cargo.toml files
+4. Update dependent crates\' Cargo.toml files
 
 ### Phase 4: Source Code
 1. Update main.rs command name

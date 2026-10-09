@@ -2,7 +2,7 @@
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Companion plans:** [plan1a-protocol](2026-04-16-plan1a-protocol.md) (data types), [plan1a-host](2026-04-16-plan1a-host.md) (subprocess + transport)
-**Depends on:** plan1a-protocol (uses Ts* types), plan1a-host (uses `TsEngineHost` API)
+**Depends on:** plan1a-protocol (uses Ts\* types), plan1a-host (uses `TsEngineHost` API)
 **Soft-depends on:** Plan 1b (Deno harness) — a **runtime-only** contract: the
 `discovery` `OnceLock` benign-race correctness relies on the harness handling
 repeat `LoadEngine` idempotently (see "Race-free init"). Plan 1a is implemented
@@ -339,7 +339,7 @@ filter-aware notebook conversion folds into `markdown_for_file`. See
   **`HtmlDependency`, `TextInclude`, *and* `IncludeLocation` must gain
   `Serialize` / `Deserialize` derives (added in `quarto_doc.rs`).** (`TextInclude`
   contains `IncludeLocation`, so the enum needs the derives too or
-  `TextInclude`'s won't compile; today all three derive only `Debug, Clone` —
+  `TextInclude`\'s won't compile; today all three derive only `Debug, Clone` —
   `IncludeLocation` also `PartialEq, Eq`.) `pampa` already has `serde` with the
   `derive` feature (`Cargo.toml:58`) and `serde_json` (`:59`), so the derives are
   trivially available. `ExecuteResult` is already `Serialize`/`Deserialize` on
@@ -488,7 +488,7 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
   - **Recurse** into container blocks (Divs, `BlockQuote`, list items, etc.) —
     cells can be nested, so the per-block primitive must be driven by a full
     block walk. **No shared block-walker exists to reuse** — the tree has only
-    ad-hoc local walkers (e.g. `engine_execution.rs:1003`'s
+    ad-hoc local walkers (e.g. `engine_execution.rs:1003`\'s
     `fn walk_block(b, out)` collecting `FileId`s, the closest structural
     precedent). Hand-roll a small private recursion in `resolution.rs`
     mirroring that idiom; do not build a general visitor.
@@ -506,7 +506,7 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
     not ownership (§4.2), and is passed straight to `claims_language`.
   - **Empty set → no engine → markdown passthrough** (§4.1).
   `resolve_engines` calls this internally; `EngineExecutionStage` passes the
-  AST it already holds. Update `detection.rs`'s "Future Enhancements" comment
+  AST it already holds. Update `detection.rs`\'s "Future Enhancements" comment
   (the future has arrived) — though the explicit `engine:`-key path in
   `detection.rs` stays metadata-only; this is the *language* axis, not the
   declared-engine axis.
@@ -681,14 +681,14 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
     ensures the shared subprocess is running (`host.ensure_started()`), then
     calls `host.load_engine(path, c)` if `discovery` is empty (plan1a-host's
     higher-level helper over the demux `request` — not a raw `send`/`recv`
-    pair). Cheap (~10–50ms total). Required before any discovery method.
+    pair). Cheap (\~10–50ms total). Required before any discovery method.
   - `ensure_launched(&self, c: &Cancellation) -> Result<LaunchEngineResult>` —
     calls `ensure_loaded` first, then locks `instance`; if `None`, calls
     `host.launch_engine(name, c)` **under the lock** and stores `Some(...)`.
     Returns the result **by value** (a `Copy`-cheap `{ can_freeze,
     generates_figures }` pair) — a `Mutex<Option<…>>` can't lend a `&` past its
     guard. Holding the lock across `launch_engine` is fine because it is
-    **~0** (`LaunchEngine` only constructs the `ExecutionEngineInstance` object
+    **\~0** (`LaunchEngine` only constructs the `ExecutionEngineInstance` object
     on the Deno side; it starts no daemon — the expensive Julia/Jupyter startup,
     5+s, happens lazily inside `execute()` on the first call). The short lock
     makes init *exclusive* (no double-launch) while keeping the slot clearable
@@ -743,7 +743,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
     `None`, `host.launch_engine` *under the lock*, store `Some`. The second
     racer blocks on the lock and finds `Some`, so `LaunchEngine` is issued
     **exactly once**. Holding the lock across `launch_engine` is acceptable
-    precisely because it is ~0 (no daemon start) — and the slot must be a
+    precisely because it is \~0 (no daemon start) — and the slot must be a
     clearable `Mutex<Option<…>>` anyway for `poison_instance`, so exclusivity is
     free. (Harness `LaunchEngine` idempotency still holds as a backstop, but the
     lock means we don't lean on it here.)
@@ -769,7 +769,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   init is exclusive under the `Mutex` — the `LaunchEngine` message count
   observed by the mock is **exactly 1**. A companion test races two
   `ensure_loaded` calls and asserts the `LoadEngine` count is **1 or 2**
-  (the `discovery` `OnceLock`'s benign double-issue window — never 0,
+  (the `discovery` `OnceLock`\'s benign double-issue window — never 0,
   never > thread count). The end-to-end "engine.launch() invoked exactly
   once across the real harness" assertion is **Plan 1b's contract**, tested
   against the real harness; Rust+harness composition lives in Plan 1c's
@@ -778,7 +778,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
 - [x] **Add `cancellation: Cancellation` AND `execute_timeout: Option<Duration>`
   to `ExecutionContext`** (the cross-plan dependency plan1a-host's "Cancellation
   wiring" and "Per-request timeouts" are blocked on). `cancellation` is the only
-  way the token reaches the engine: `request`'s timeout/cancel loop polls
+  way the token reaches the engine: `request`\'s timeout/cancel loop polls
   `is_cancelled()`, but `execute` receives only `&ExecutionContext`, which today
   carries no token. `execute_timeout` is the resolved `Execute` window —
   **`EngineExecutionStage` reads `execute.timeout` from `doc_ast.ast.meta`**
@@ -1003,11 +1003,11 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
       diagnostics: Mutex<Vec<DiagnosticMessage>>,                    // hint-validation, missing-hints, name-collision warnings
   }
   ```
-  Both mutexes are independent of `TsEngineHost`'s transport mutex.
+  Both mutexes are independent of `TsEngineHost`\'s transport mutex.
   Following the `JupyterDaemon` pattern (`crates/quarto-core/src/engine/jupyter/daemon.rs`)
   — separate locks for separate concerns; no cross-locking.
 
-  **Migration from `main`'s registry (`#[derive(Clone)]` blocker — the
+  **Migration from `main`\'s registry (`#[derive(Clone)]` blocker — the
   Clone-drop is NOT self-contained; decided 2026-06-24).** On `main`,
   `EngineRegistry` is `{ engines: HashMap<String, Arc<dyn ExecutionEngine>> }`
   and derives `Clone`. `Mutex` is **not** `Clone`, so adding the `aliases` /
@@ -1027,7 +1027,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   per-document construction in `EngineExecutionStage::new`, and
   `with_replay_many` — do **not** break *from the `Clone`-drop*: they *move* the
   registry in or *build it fresh*, so they never relied on `Clone`. Note
-  `with_registry`'s *signature* still changes as part of the `Arc`-type
+  `with_registry`\'s *signature* still changes as part of the `Arc`-type
   propagation below — "doesn't break from `Clone`" and "signature changes for
   `Arc`" are both true and not in tension.)
 
@@ -1039,7 +1039,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   deeper `ProjectContext`-owned ownership (built once, shared across Pass 1 +
   Pass 2), building on the `Arc` Plan 1a introduces.
 
-  **Scope of the type change — ~25–30 mechanical sites, zero semantic change
+  **Scope of the type change — \~25–30 mechanical sites, zero semantic change
   (verified 2026-06-24).** The 8 clone sites are where the build *first*
   breaks, but the `Option<EngineRegistry>` → `Option<Arc<EngineRegistry>>`
   type then propagates transitively through a closed, mechanical set:
@@ -1051,9 +1051,9 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   - **A third config struct the clone-site list omitted: `HtmlRenderConfig`**
     (`pipeline.rs:118`) and its `with_engine_registry` builder
     (`pipeline.rs:131`). The `render_to_file.rs:328` clone feeds
-    `config.engine_registry`, so the `Arc` reaches into `quarto-core`'s
+    `config.engine_registry`, so the `Arc` reaches into `quarto-core`\'s
     `HtmlRenderConfig` — **name it explicitly so the count isn't a surprise.**
-  - **The `quarto-preview` pass-through chain** (~9 fn signatures in
+  - **The `quarto-preview` pass-through chain** (\~9 fn signatures in
     `re_execute.rs` / `capture_driver.rs` / `cache.rs` that carry the
     registry as an opaque `Option<…>` param) — pure signature type swaps, no
     body logic.
@@ -1081,8 +1081,8 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   **Name validation at load time:** when `name_declared` is true,
   assert `LoadEngineResult.name == self.name`. Mismatch is a hard
   error pointing at the YAML: `Engine extension declares 'name: {self.name}'
-  in _extension.yml but the loaded module reports 'name: {actual}'.
-  Update _extension.yml or the engine module's name property.`
+  in \_extension.yml but the loaded module reports 'name: {actual}'.
+  Update \_extension.yml or the engine module's name property.`
   When `name_declared` is false, the registry's `aliases` map is
   updated with `LoadEngineResult.name → self.name` so subsequent
   lookups by runtime name resolve to this engine. **Insertion is
@@ -1128,7 +1128,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   [Plan 1c](2026-04-16-plan1c-extension-integration.md) — the
   extension-author-facing surface lives there alongside the
   `_extension.yml` schema, hint declarations, and engine-API docs.
-  Same rule applies to `claims_file`'s content-inspection (cache key is
+  Same rule applies to `claims_file`\'s content-inspection (cache key is
   the canonical path; if the engine reads mutable file metadata the
   cache will go stale within a single render, which is expected to be
   rare in practice).
@@ -1166,7 +1166,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
     `Option<EngineRegistry>` → `Option<Arc<EngineRegistry>>`** (mandatory-to-compile
     once the `aliases` / `diagnostics` `Mutex` fields land — see the migration
     note for the full rationale and verified site list). The build first breaks
-    at the 8 clone sites; the type then propagates through **~25–30 mechanical
+    at the 8 clone sites; the type then propagates through **\~25–30 mechanical
     sites total, all trivial type substitutions with zero semantic change**:
     the `EngineExecutionStage` field + `with_registry` + `new()`; the three
     config structs `PreviewConfig` / `RenderToFileOptions` / **`HtmlRenderConfig`**
@@ -1236,7 +1236,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
       **id-keyed, delay-capable, and BLOCKS in `recv()`** until a paired/scripted
       response is available (a passive `VecDeque` would read empty-as-EOF and
       false-trigger the crash path); `shutdown()` signals EOF. It captures sent
-      messages (`sent_messages() -> &[ToEngine]`) and echoes each `Request`'s
+      messages (`sent_messages() -> &[ToEngine]`) and echoes each `Request`\'s
       `id`. See plan1a-host's Design Note "MockTransport & the test demux" for
       the full shape and rationale.
     All Phase 4 unit tests construct a
@@ -1390,7 +1390,7 @@ absent→`Some(300s)`; revert the `get_path`/`as_bool`/`as_int` branch → RED.)
   of the sinks, avoiding a `registry`→`engine`→`registry` cycle).
   `#[derive(Clone)]` **was dropped** (Mutex isn't Clone) and
   `Option<EngineRegistry>` → `Option<Arc<EngineRegistry>>` **was rerouted across
-  ~28 sites in Plan 1a** (F1); the deeper `ProjectContext`-owned ownership stays
+  \~28 sites in Plan 1a** (F1); the deeper `ProjectContext`-owned ownership stays
   Plan 1c. `with_replay_many` is left intact (Plan 1c removes it).
 - [x] New shared types (`LanguageClaim`, `EngineResolution`, the
   `ExecutionContext` leave-alone field, `html_dependencies`) compile for

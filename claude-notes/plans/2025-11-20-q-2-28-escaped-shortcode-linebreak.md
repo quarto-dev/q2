@@ -275,7 +275,7 @@ After running `build_error_table.ts`, we'll analyze:
 - Whether escaped shortcodes have different states than regular shortcodes
 - Duplicate state detection output
 
-**Expected**: Similar to Q-2-27, we should get ~16 unique parser states representing different contexts where the error can occur.
+**Expected**: Similar to Q-2-27, we should get \~16 unique parser states representing different contexts where the error can occur.
 
 ## Verification
 
@@ -320,7 +320,7 @@ cat test-q-2-28.qmd
 2. **Nested shortcodes**: `{{{< meta {{{< inner >}}} >}}}`
    - Make sure we only fix the outer shortcode
 
-3. **Mixed regular and escaped**: `{{< regular >}} {{{< escaped\n>}}}`
+3. **Mixed regular and escaped**: `{{< regular >}} {{{< escaped\n>}}}`{shortcodes="false"}
    - Should only fix Q-2-28, not touch regular shortcode
 
 4. **In different contexts**: Inside links, emphasis, etc.

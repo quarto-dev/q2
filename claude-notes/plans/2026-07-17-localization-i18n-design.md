@@ -13,7 +13,7 @@ rendered documents localize.** Localization is driven by:
 
 1. **`lang`** — a document/project option holding a BCP 47 tag (`fr`, `pt-BR`,
    `de-CH`). Flows to Pandoc-style `<html lang="…">` and selects the term set.
-2. **Shipped term files** — `_language.yml` (English defaults, ~111 keys) plus
+2. **Shipped term files** — `_language.yml` (English defaults, \~111 keys) plus
    `_language-<tag>.yml` per language (34 files in Q1), copied into this repo
    and embedded in the binary.
 3. **`language:`** — user-facing metadata key for overrides: an inline flat map
@@ -80,7 +80,7 @@ namespaces like `$navigation.toc.title$` already work.
   external-sources policy; never referenced in-place). Add a `README.md` noting
   provenance + the upstream commit, and that updates are re-copies.
 - Embedded via `include_dir!` in `quarto-core` (same pattern as
-  `resources.rs`'s knitr bundle), parsed on demand with `quarto-yaml`.
+  `resources.rs`\'s knitr bundle), parsed on demand with `quarto-yaml`.
 - Keys we don't consume yet (e.g. `listing-page-*`, `search-*`) still ship and
   still resolve — they're inert until their features land, and user templates
   can already reference them via `$quarto.language.*$`.
@@ -288,7 +288,7 @@ Phase 1-2 notes:
 Phase 3 notes:
 - Stage inserted in three builders: `build_html_pipeline_stages_with_options`
   (covers native render + q2-preview), `build_wasm_html_pipeline`, and
-  `build_analysis_pipeline`. Deliberately **not** in `get_config`'s pipeline
+  `build_analysis_pipeline`. Deliberately **not** in `get_config`\'s pipeline
   (that surface shows user config, not derived state) nor the Pass-1 profile
   pipeline in `orchestrator.rs` (profile doesn't carry terms in v1).
 - `language: <file>.yml` resolves against the document dir, then the project
@@ -317,7 +317,7 @@ Phase 4 notes:
   at render time; captions use the localized `kind`. Proof labels use
   `environment-proof-title`.
 - Theorem sugar now takes its display name from the registry (localized),
-  keeping `THEOREM_CLASSES`' English column only as the registry-less
+  keeping `THEOREM_CLASSES`\' English column only as the registry-less
   test fallback — the duplicate display-name table is effectively gone.
 - Title block: `labels.{author,published,abstract}` computed in Rust
   (author single/plural by author count, Q1 `computeLabels` parity),

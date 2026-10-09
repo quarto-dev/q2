@@ -53,13 +53,13 @@ direct grep, not assumption:
 - 86 `.qmd` files. **76 use `ensurePdfTextPositions`**, 82 use
   `ensureTypstFileRegexMatches`, 63 use `ensurePdfRegexMatches` — by far the most
   exhaustive real-world exercise of the position predicate in Q1's entire smoke-all
-  suite (more assertions than `orange-book-margin`'s ~24).
+  suite (more assertions than `orange-book-margin`\'s ~24).
 - **Zero files use `render-project: true`, zero use `run: skip`.** Each file is fully
   self-contained: own `format:` block, own assertions, own `bibliography:` reference
   where needed (e.g. `citation-margin-basic.qmd` sets `bibliography: borges-refs.bib`
   directly in its own front matter, not inherited from a project default). This is
   exactly the "single-file-in-project" render path that already works today
-  (`render_to_file.rs:260`'s `ProjectContext::discover` call) — **no book-merge or
+  (`render_to_file.rs:260`\'s `ProjectContext::discover` call) — **no book-merge or
   `render-project` dedup machinery (P6) is a dependency for this phase.**
 
 Coverage highlights across the 86 files: captions (above/below/interleaved), figures
@@ -123,7 +123,7 @@ nested/screen-inset variants).
       **Final state (2026-09-29, after classifying and closing out all 5
       Jupyter-revealed findings — see §"Remaining 4 Jupyter-revealed findings" below):
       82/86 P5 fixtures pass, 4 skipped (3 stranded generic-engine/dependency gaps,
-      `bd-c439o0wo`/`bd-gbaykhth`/`bd-jq223o9p`, plus `index.qmd`'s pre-existing
+      `bd-c439o0wo`/`bd-gbaykhth`/`bd-jq223o9p`, plus `index.qmd`\'s pre-existing
       no-test-specs skip), 0 fail.** The sole remaining smoke-all failure
       workspace-wide is still the pre-existing, unrelated `pdf-text-position-test.qmd`.
 
@@ -192,11 +192,11 @@ nested/screen-inset variants).
     ruling out fixture translation or P3 predicate behavior.
   - **Remaining isolated errors — root cause identified:** `crossref-grand-finale.qmd`
     (the only fixture in this set using remote `https://placehold.co/...` images)
-    crashes inside `modules/mediabag.lua`'s `write_mediabag_entry`: `param("mediabag-dir",
+    crashes inside `modules/mediabag.lua`\'s `write_mediabag_entry`: `param("mediabag-dir",
     nil)` returns `nil` because `FilterParamsBuilder`/`PandocWriteStage` never emit a
     `mediabag-dir` key at all — confirmed by direct grep, zero occurrences anywhere in
     `crates/quarto-core/src`. `pandoc.path.join{nil, src}` then throws "string expected,
-    got nil" from `quarto-finalize/mediabag.lua`'s `Image` handler, which calls this
+    got nil" from `quarto-finalize/mediabag.lua`\'s `Image` handler, which calls this
     unconditionally for any non-Office Pandoc-hybrid format (not Typst-specific — docx/
     pptx/etc. would hit the same crash the first time a fixture fetches a remote image).
     Q1's equivalent (`command/render/filters.ts:571`, `render.ts:119-120`) sets this to
@@ -224,13 +224,13 @@ nested/screen-inset variants).
 - **2026-09-28: Group 5 (column-width geometry, 4 fixtures) investigated to a root
   cause — not a P3 predicate bug, not a Q2 Typst layout bug, not a fixture design
   flaw.** Confirmed with direct evidence (temporary `eprintln!` instrumentation in
-  `evaluate_assertion`'s default-resolution branch, run against
+  `evaluate_assertion`\'s default-resolution branch, run against
   `column-widths-both.qmd`, then reverted — no net diff in
   `crates/quarto-test/src/assertions/pdf_text_position.rs`):
   - The exact failing numbers reproduce the plan's earlier example exactly:
     `OUTSET-B` (mcid 9) `word_bbox`/`mcid_union_bbox` both `right=116.5`; `BODY-B`
-    (mcid 4) both `right=128.5` — i.e. `OUTSET-B`'s measured right edge is *inside*
-    `BODY-B`'s, the reverse of "outset extends into the margin."
+    (mcid 4) both `right=128.5` — i.e. `OUTSET-B`\'s measured right edge is *inside*
+    `BODY-B`\'s, the reverse of "outset extends into the margin."
   - `item.text` for the `BODY-B` match is the **entire first line** of that
     paragraph ("BODY-B: Standard body column width. Lorem ipsum dolor sit amet, "),
     confirming Typst tags one MCID per rendered line (not per word, not per
@@ -256,12 +256,12 @@ nested/screen-inset variants).
     from the `TJ` array's numeric operands, applied separately in the `"TJ" =>`
     match arm (`lib.rs:1688-1719`). Typst emits body paragraphs as CID/Type0
     subset fonts with many short string segments interleaved with kerning
-    numbers per line (confirmed in the raw content stream: `column-widths-both`'s
+    numbers per line (confirmed in the raw content stream: `column-widths-both`\'s
     first BODY-B line is one `BT`/`TJ`/`ET` block with a long array of short
     parenthesized glyph runs and interspersed kerning numbers). The measured
     total width being a tiny fraction of the true line width is consistent with
     per-glyph advances collapsing to ~0 for this embedded font's CID range (glyph
-    widths not resolving the way `PdfSimpleFont`'s do), while the destination
+    widths not resolving the way `PdfSimpleFont`\'s do), while the destination
     *position* of each subsequent line still ends up visually correct (since line
     placement comes from Typst's own layout, not from this extraction path) —
     this explains why the rendered PDF *looks* right in `pdftotext -layout` while
@@ -276,13 +276,13 @@ nested/screen-inset variants).
     the bug's impact scales with how many characters/segments a single measured
     line contains).
   - Affects exactly the 4 fixtures already named (`column-widths-{left,right,both}`,
-    `fig-column-margin`'s position half) — all of them test multi-word body-text
+    `fig-column-margin`\'s position half) — all of them test multi-word body-text
     line widths via `rightOf`/`leftOf` pairs, matching the mechanism above.
   - **Recommendation, not yet actioned:** this is a fix to a vendored fork Gordon
     maintains directly, with blast radius across every `ensurePdfTextPositions`
     consumer in the workspace (not just P5) — needs his sign-off before anyone
     spends time in `PdfCIDFont::get_width`/the `/W`-array parsing path, the same
-    as the other three groups' unimplemented-capability gaps.
+    as the other three groups\' unimplemented-capability gaps.
 
 ### 2026-09-28 — Group 2 (`#notefigure`/margin-caption support), workspace-7
 
@@ -293,7 +293,7 @@ Gordon's handoff scoping this session to Group 2 only. **The plan's claim that
 `quarto-post/typst.lua`" was stale/incomplete** — a full Typst-side implementation
 (`make_typst_margin_figure`, `make_typst_margin_caption_figure` in
 `resources/pandoc-filters/filters/layout/typst.lua`; the margin-dispatch branch in
-`customnodes/floatreftarget.lua`'s Typst `FloatRefTarget` renderer; the vendored
+`customnodes/floatreftarget.lua`\'s Typst `FloatRefTarget` renderer; the vendored
 `marginalia` Typst package) already existed, landed in `ee7d5d77b` ("Vendor Q1's Lua
 filter pipeline..."), an ancestor of the P5 branch point. The real bug was upstream of
 all that Lua, in Q2's Rust AST-sugaring pass — found by adding temporary
@@ -306,10 +306,10 @@ force re-embedding).
 
 **Root cause 1 (fixed):** real Pandoc 3.11, auto-promoting a solo captioned image
 (`![cap](src){#fig-x .column-margin key=val}`) into a native `Figure` block, puts only
-the identifier on the `Figure`'s own `Attr` (verified directly:
+the identifier on the `Figure`\'s own `Attr` (verified directly:
 `echo '![CAP](x.svg){#fig-x .column-margin width=100%}' | pandoc -f markdown -t json`
 → Figure attr `["fig-x", [], []]`, Image attr `["", ["column-margin"],
-[["width","100%"]]]`). `crates/quarto-core/src/transforms/float_ref_target.rs`'s
+[["width","100%"]]]`). `crates/quarto-core/src/transforms/float_ref_target.rs`\'s
 `convert_figure` did `let attr = fig.attr.clone()` with no merge from the inner Image,
 so every FloatRefTarget built from this authoring shape silently got empty
 classes/attributes — `hasMarginColumn`/`hasMarginCaption`/`cap_location` in the Lua
@@ -333,7 +333,7 @@ pointing to  Figure 1 ."` (double space before `Figure` and before the period). 
 by adding `normalize_pdf_text` in `crates/quarto-test/src/assertions/regex_patterns.rs`
 (replaces U+00A0 with a regular space, then collapses runs of regular spaces to one,
 preserving newlines since patterns use `(?m)` mode) and calling it in
-`pdf_regex.rs`'s `EnsurePdfRegexMatches::verify` before `verify_patterns`. This is a
+`pdf_regex.rs`\'s `EnsurePdfRegexMatches::verify` before `verify_patterns`. This is a
 general test-harness fix, not scoped to margin-layout — it very likely also affects
 "Figure N"/"Table N" assertions across the rest of the 86-file smoke-all corpus (and
 possibly beyond it), unverified beyond this fixture set. Four new unit tests in
@@ -357,14 +357,14 @@ all missing `#notefigure(`/`#notetable(` in their generated `.typ`.
 `crates/quarto-core/src/engine/knitr/resources/rmd/hooks.R` (lines 407-408) does turn
 the `column: margin` cell option into a `.column-margin` class on the `.cell` wrapper
 Div, as originally read from the R source — but that class never reaches the float.
-Verified by adding temporary debug logging both in Lua (`columns-preprocess.lua`'s
-`resolveColumnClassesForCodeCell`) and in Rust (`float_ref_target.rs`'s
+Verified by adding temporary debug logging both in Lua (`columns-preprocess.lua`\'s
+`resolveColumnClassesForCodeCell`) and in Rust (`float_ref_target.rs`\'s
 `transform_block`): Q2's engine-agnostic pre-engine sugaring
 (`crossref/codeblock_shorthand.rs`) wraps a labelled code cell in an outer `::: {#fig-x}`
 Div **before** knitr even executes (shape 1, `Wrapper::Float`), and
 `transforms/float_ref_target.rs` converts that wrapper into `Custom(FloatRefTarget)`
 during the Normalization phase, which runs *before* any Lua filter sees the AST. By the
-time `columns-preprocess.lua`'s `Div` handler runs on the inner `.cell` div (which does
+time `columns-preprocess.lua`\'s `Div` handler runs on the inner `.cell` div (which does
 carry `column-margin`, confirmed directly: `resolveColumnClassesForCodeCell: el.classes =
 cell,column-margin`), the float is that div's **ancestor**, not a descendant — Q1's
 `resolveColumnClassesForCodeCell` was written to forward classes *downward* onto a
@@ -379,7 +379,7 @@ Fixed in `crates/quarto-core/src/crossref/codeblock_shorthand.rs`: a new
 `wrapper_column_classes(parsed, ref_type)` helper reads (peeks, does not consume)
 `column`/`<reftype>-column` and `cap-location`/`<reftype>-cap-location` off the cell's
 parsed options and turns them into `column-<value>` / `margin-caption` classes applied
-directly to the wrapper `Div`'s own `Attr` — so the `FloatRefTarget` node itself already
+directly to the wrapper `Div`\'s own `Attr` — so the `FloatRefTarget` node itself already
 carries `column-margin` when Lua's `hasMarginColumn` inspects it, closing the gap at its
 source rather than patching the Lua-side downward-forwarding logic. `column`/
 `cap-location` are read, not consumed: knitr's `hooks.R` still sees them in the code
@@ -404,8 +404,8 @@ consuming `label`/`fig-cap` out of the code block body before knitr ever ran. Wi
 `label` still present in its own chunk options, knitr's `hooks.R` (`output_label`,
 `output_label_placeholder`) can't synthesize the per-panel ids it normally derives from
 that label — every panel image comes back with an empty identifier — and
-`figure_cap()`'s subcap captions land on unlabelled images. Downstream,
-`parsefiguredivs.lua`'s `Figure` handler only promotes an image to a `FloatRefTarget`
+`figure_cap()`\'s subcap captions land on unlabelled images. Downstream,
+`parsefiguredivs.lua`\'s `Figure` handler only promotes an image to a `FloatRefTarget`
 when its identifier matches a ref-type prefix, so the now-unlabelled panels never
 become subfloats and `crossref_mark_subfloats` (`crossref/preprocess.lua`) never sets
 `has_subfloats`. Confirmed against the passing `margin-subfigure.qmd` fixture
@@ -416,13 +416,13 @@ there's no code cell at all): that shape keeps its per-image ids and does produc
 mechanism rather than a missing subfloat feature.
 
 Fixed by leaving a `fig-subcap` cell entirely unwrapped: `codeblock_shorthand.rs` now
-checks (new `CellOptions::has`, since `fig-subcap`'s YAML-sequence value has no entry in
-`CellOptions::get`'s scalar-only map) for `<reftype>-subcap` before building the
+checks (new `CellOptions::has`, since `fig-subcap`\'s YAML-sequence value has no entry in
+`CellOptions::get`\'s scalar-only map) for `<reftype>-subcap` before building the
 `Wrapper::Float` case, and short-circuits to `Wrapper::None` when present — no
 consumption of `label`/`fig-cap` at all, so the cell reaches knitr byte-for-byte as
 written. This restores the classic shape: knitr's own `.cell` div comes back
 self-labelled with the panel images individually labelled/captioned, which is exactly
-what `parsefiguredivs.lua` + `crossref_mark_subfloats`'s all-Lua subfloat pipeline
+what `parsefiguredivs.lua` + `crossref_mark_subfloats`\'s all-Lua subfloat pipeline
 already recognizes and numbers — no Lua or Rust subfloat-construction logic needed, just
 not defeating the existing one. One new regression test
 (`fig_subcap_cell_is_left_unwrapped_for_the_engine`) asserting the block list is
@@ -493,7 +493,7 @@ real size — not gaps this metadata-bridge pass can absorb:
 1. Typst-native citeproc mode for margin citations (`citeproc: true` currently has no
    effect on Typst rendering at all — confirmed `cite-method` is never emitted into
    `QUARTO_FILTER_PARAMS`, and even if it were, Q2's own pre-stage citeproc pipeline
-   would need to interoperate with `quarto-post/typst.lua`'s margin-note Cite handler
+   would need to interoperate with `quarto-post/typst.lua`\'s margin-note Cite handler
    in a way that doesn't exist today).
 2. `#notefigure`/margin-caption support: `quarto-post/typst.lua` only handles
    `.column-margin` Div/Span; there is no margin-float or `cap-location: margin`
@@ -550,7 +550,7 @@ semantics.
 `citation-location`/`reference-location` pattern in
 `TypstFilterParamsContributor`/`pandoc_write.rs`), carrying the same
 `ctx.project.dir` value passed to `--root`. Added
-`modules/mediabag.lua`'s `typst_root_relative(absPath)` helper (rebases via
+`modules/mediabag.lua`\'s `typst_root_relative(absPath)` helper (rebases via
 `pandoc.path.make_relative` against `typst-root-dir`, no-op when the param is absent
 i.e. every non-typst format) and applied it at the three call sites that embed a
 `write_mediabag_entry` result into typst source:
@@ -582,7 +582,7 @@ the safe wiring fix, and found the real scope of the remaining 3 fixtures.**
 Resolved why `citation-margin-basic.qmd` passes natively while
 `citation-margin-elaborate.qmd`/`citation-margin-locator.qmd` (near-identical
 frontmatter, no `citeproc` key) don't: it is **not** a cite-method issue at all.
-`quarto-post/typst.lua:183`'s native branch always emits a bare
+`quarto-post/typst.lua:183`\'s native branch always emits a bare
 `#cite(<id>, form: "full")`, silently dropping `citation.prefix`/`.suffix` and
 suppress-author mode — so any margin citation using a locator (`[p. 51]`), suffix
 (`and throughout`), or `-@key` suppression fails, while plain `[@key]` citations
@@ -591,7 +591,7 @@ Confirmed directly against the qmd source: the two currently-passing fixtures us
 only bare `[@key]` citations; every failing fixture (elaborate, locator,
 elaborate-citeproc, locator-citeproc, prefix-suffix-citeproc) uses a locator,
 suffix, or suppression. This is a single, uniform capability gap — **locator/
-suffix/author-suppression are not implemented in `typst.lua`'s margin-citation
+suffix/author-suppression are not implemented in `typst.lua`\'s margin-citation
 `Cite` handler, in either native or citeproc mode** — not four separate issues as
 the original triage's grouping implied.
 
@@ -601,11 +601,11 @@ in `pandoc_write.rs` to read the document's own `citeproc: true` metadata boolea
 and emit `cite-method: "citeproc"` only then (deliberately **not** defaulting to
 `"citeproc"` the way the LaTeX-only `bibliography.lua`/`meta.lua` consumers of the
 same param key do — margin citations default to native, confirmed by
-`citation-margin-basic.qmd`'s own test assertions expecting native
+`citation-margin-basic.qmd`\'s own test assertions expecting native
 `#cite(..., form: "full")` output). Added a regression test
 (`render_document_to_file_typst_citeproc_true_uses_citeproc_bibliography_in_margin`)
 proving `citeproc: true` now selects the pre-rendered citeproc bibliography branch
-in `quarto-post/typst.lua`'s `Cite` handler instead of falling through to native.
+in `quarto-post/typst.lua`\'s `Cite` handler instead of falling through to native.
 
 **Result:** `citation-margin-citeproc.qmd` (plain citations only) now fully passes
 — total smoke-all failure count dropped 40 → 39. The other three explicit-
@@ -636,7 +636,7 @@ there.
 
 Compiled `citation-margin-elaborate.typ`/`citation-margin-locator.typ` directly
 with the local `typst 0.14.2` binary (confirmed same version as the one vendored
-into `quarto`'s `typst-library`/`typst-kit` deps) and extracted text with
+into `quarto`\'s `typst-library`/`typst-kit` deps) and extracted text with
 `pdftotext -layout`: **`[1, p. 51]` and `[2, ch. 1]` and `p. 42` are all present
 and correctly rendered in the compiled PDF.** The rendering pipeline is not
 dropping anything. The failure is entirely inside this repo's own test tooling:
@@ -663,14 +663,14 @@ plausibly closes all 9 at once — but that is a hypothesis, not yet confirmed f
 the `extract_text` entry point specifically.
 
 **Gordon's direction (2026-09-28):** work Group 5 as its own design session on this
-branch, not a quick fix. Start with a full census of `pdf-extract`'s bugs (not just
+branch, not a quick fix. Start with a full census of `pdf-extract`\'s bugs (not just
 the one already root-caused) and a clear explanation of what's actually wrong,
 covering both entry points (`extract_text` and the MCID/`output_doc` path) — then
 walk through possible solutions together before committing to an approach. The
 session should produce a plan, not necessarily a fix.
 
 **2026-09-28/29: Group 5 — root cause found, fixed upstream, landed in q2. Group 5
-is done.** Census: `PdfCIDFont::new`'s `/W`-array range-form parser
+is done.** Census: `PdfCIDFont::new`\'s `/W`-array range-form parser
 (`c_first c_last w`) read `c_last`/`c_width` from `w[i]` again instead of
 `w[i+1]`/`w[i+2]`, and used an exclusive Rust range (`c_first..c_last`) instead of
 the spec's inclusive `[c_first, c_last]`. Typst emits every glyph's width as a
@@ -689,7 +689,7 @@ existing synthetic-PDF test pattern. q2 bumped to this rev in
 `column-widths-{left,right,both}.qmd` now fully pass. The other 5 fixtures Group 5
 was reclassified to cover (`citation-margin-elaborate(-citeproc)`,
 `citation-margin-locator(-citeproc)`, `citation-margin-prefix-suffix-citeproc`) and
-`fig-column-margin`'s position half no longer fail on `ensurePdfTextPositions`
+`fig-column-margin`\'s position half no longer fail on `ensurePdfTextPositions`
 width/accumulation — their *remaining* failures are `ensurePdfRegexMatches` text
 mismatches, a distinct, already-diagnosed bug on workspace-7's branch
 (`pdf_extract` inserting non-breaking-space/double-space artifacts at
@@ -698,8 +698,8 @@ caption/locator number boundaries — see workspace-7's Root cause 2, fixed ther
 
 **One exception, flagged for follow-up post-merge:** `citation-margin-locator.qmd`
 still fails under `ensurePdfTextPositions` ("Text not found in PDF: \"p. 42\"").
-This goes through `pdf_text_position.rs`'s literal substring search, a different
-code path than `pdf_regex.rs`'s `EnsurePdfRegexMatches::verify` — workspace-7's
+This goes through `pdf_text_position.rs`\'s literal substring search, a different
+code path than `pdf_regex.rs`\'s `EnsurePdfRegexMatches::verify` — workspace-7's
 `normalize_pdf_text` fix was scoped only to the latter. Likely the same
 non-breaking-space artifact (`"p.\u{a0}42"`), unverified. Whoever reconciles the
 merge should check this specifically rather than assume it's covered.
@@ -714,7 +714,7 @@ confirmed fails identically against the pre-bump `Cargo.lock` via a temporary
 stash-and-compare, i.e. pre-existing and unrelated to this change). No regressions
 from the dependency bump.
 
-**`citation-margin-suppress-bib.qmd`'s `#show bibliography: none` wrinkle —
+**`citation-margin-suppress-bib.qmd`\'s `#show bibliography: none` wrinkle —
 investigated and fixed; it was a fixture bug, not a Q2 gap.** Compiled the
 generated `.typ` directly with the local `typst` binary
 (`typst compile --root .../smoke-all/typst citation-margin-suppress-bib.typ`)
@@ -841,7 +841,7 @@ Gated after the `pdf_text_position.rs` fix: `cargo clippy -p quarto-core
 -p quarto --all-targets -- -D warnings` clean. `cargo nextest run -p
 quarto-core`: 5291 passed, 32 skipped, 0 failed (unchanged skip count from
 every prior baseline in this doc; the higher pass count reflects both
-branches' regression tests now present together post-rebase — Group 1's
+branches\' regression tests now present together post-rebase — Group 1's
 citeproc-wiring test, Group 3's mediabag-path tests, Group 5's
 `cid_font_width_tests`, and workspace-7's Root-cause 1-4 regression tests,
 with no unexplained deltas). `cargo nextest run --workspace` (phase-boundary
@@ -943,7 +943,7 @@ failures**, none investigated before this session:
   without `column: margin` at all).
 - **`margin-subtable.qmd`**: Python/Great-Tables cell with `tbl-subcap` (a
   YAML list) and `column: margin` — the exact shape Root cause 4 fixed for
-  R/knitr (`fig-subcap`). `codeblock_shorthand.rs`'s `<reftype>-subcap`
+  R/knitr (`fig-subcap`). `codeblock_shorthand.rs`\'s `<reftype>-subcap`
   unwrap check is engine-agnostic (runs pre-engine, before Python or R ever
   executes), so in principle it should already cover this — but the fixture
   still produces **no** `#note(`/`quarter_super` output at all, missing
@@ -981,9 +981,9 @@ short form directly inside the margin note, ahead of the existing
 `Ficciones`/`Universalbibliothek`/`Siamese Press`-type assertions, which
 need the full reference-list entry text, not just the short parenthetical).
 
-This mostly worked (all 3 fixtures' regex assertions passed, and 2 of 3
-fixtures' position assertions passed), but
-`citation-margin-locator-citeproc.qmd`'s `"42" leftOf "Bifurcan"` assertion
+This mostly worked (all 3 fixtures\' regex assertions passed, and 2 of 3
+fixtures\' position assertions passed), but
+`citation-margin-locator-citeproc.qmd`\'s `"42" leftOf "Bifurcan"` assertion
 failed with wildly inconsistent bounding boxes. Root cause: `pdf-extract`
 (via `crates/quarto-test/src/assertions/pdf_text_position.rs`) merges
 contiguous PDF text into one searchable "item" at real line-break/marked-
@@ -1033,7 +1033,7 @@ disjoint bands with a ~228pt gap, confirmed via `pdftotext -bbox`, not a
 sub-point coincidence.
 
 **Fixture adjustments (Phase-3 "fixture errors" category, not code bugs):**
-`citation-margin-locator-citeproc.qmd`'s position-assertion subject was
+`citation-margin-locator-citeproc.qmd`\'s position-assertion subject was
 changed from bare `"42"` to `"1941, 42"` — bare `"42"` is ambiguous because
 the body's own locator-aware short form and (in earlier attempts) the
 margin's duplicate both contain "42"; `"1941, 42"` is unambiguous and still
@@ -1060,7 +1060,7 @@ Of the 5 Jupyter-revealed failures above, this closes the
 `margin-listing-cell-option-caption-below.qmd` /
 `margin-table-great-tables-caption-below.qmd` root cause: a `cap-location`
 (or `<reftype>-cap-location`) cell option value other than `"margin"` (e.g.
-`bottom`) was silently dropped pre-engine, so `floatreftarget.lua`'s
+`bottom`) was silently dropped pre-engine, so `floatreftarget.lua`\'s
 `cap_location(obj)` always fell back to the category default
 (`caption_location` in `mainstateinit.lua`: `"top"` for `tbl`/`lst`,
 `"bottom"` for `fig`) instead of honoring the author's cell option.
@@ -1185,7 +1185,7 @@ pre-existing, unrelated `typst/pdf-text-position-test.qmd`.
   rendered via the Jupyter engine with `eval: false` on a cell is affected
   identically, regardless of Typst or margin-layout. **Stranded:**
   `bd-c439o0wo` (one strand for both fixtures, as instructed, since they
-  share the identical root cause). Both fixtures' `skip:` lines cite it.
+  share the identical root cause). Both fixtures\' `skip:` lines cite it.
 
 - **`margin-subtable.qmd` — confirmed generic Jupyter-engine gap, stranded.**
   First confirmed the pre-engine Rust wrapping (Root cause 4's fix) *does*
@@ -1236,7 +1236,7 @@ at `72ad0eda8` on 5 of this group's fixtures: `margin-table-flextable-crossref.q
 **second, distinct** bug from Root cause 3/4 above — not a reopening of the
 original `wrapper_column_classes` gap, which is still merged and still correct.
 
-**Root cause:** `crates/quarto-core/src/transforms/float_ref_target.rs`'s
+**Root cause:** `crates/quarto-core/src/transforms/float_ref_target.rs`\'s
 `clear_matching_id` (added by bd-2lxj10z0, "Restore knitr label visibility
 through PreEngineSugaringStage" — see that function's own doc comment for the
 `label_reinject`/leaked-echo background). For a figure, the label a knitr chunk

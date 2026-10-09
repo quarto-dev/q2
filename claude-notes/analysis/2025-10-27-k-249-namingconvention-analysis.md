@@ -326,7 +326,7 @@ fn test_naming_convention_normalization() {
 - Test with real schemas: 15 minutes
 - Documentation: 10 minutes
 
-**Total**: ~2 hours
+**Total**: \~2 hours
 
 ## Future Work (Validation)
 
@@ -358,6 +358,6 @@ When implementing validation:
 
 ## References
 
-- quarto-cli from-yaml.ts: lines ~280-330
+- quarto-cli from-yaml.ts: lines \~280-330
 - quarto-cli common.ts: ObjectSchema type definition
 - Real example: test-fixtures/schemas/schema.yml (uses `namingConvention: ignore`)

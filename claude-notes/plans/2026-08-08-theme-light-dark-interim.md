@@ -1,7 +1,7 @@
 # Interim support for `theme: {light: [...], dark: [...]}` — use light, warn on dark
 
 **Strand:** bd-o76p01wb (P1, feature) — discovered-from bd-ad7i1pc6 (custom project types, PR #474)
-**Full-support strand (out of scope here):** bd-0pic6 — "Support theme: {light, dark} dark-mode config (object form)"
+**Full-support strand (out of scope here):** bd-0pic6 — "Support theme: \{light, dark\} dark-mode config (object form)"
 **Branch:** `braid/bd-o76p01wb-light-dark-theme-map`, based on `origin/feature/bd-ad7i1pc6-custom-project-types` (PR #474). The eventual PR waits for #474 to merge, then retargets/rebases onto `main`.
 
 ## Overview
@@ -114,7 +114,7 @@ under subsystem `theme`. Next free code: **Q-14-3** for the new warning.
 
 **D1 — parse the map form in quarto-sass, not in a quarto-core pre-pass.**
 `ThemeConfig::from_config_value` gains a branch: when the theme value is a map
-whose keys ⊆ {`light`, `dark`} (at least one present), it is a light/dark
+whose keys ⊆ \{`light`, `dark`\} (at least one present), it is a light/dark
 pair. Rationale: single source of truth repairs both consumers
 (compile_theme_css + bootstrap_js), covers project config *and* document
 frontmatter overrides, and sits next to the brand precedent. Any map with
@@ -192,83 +192,83 @@ is already filed.
         theme
   - [x] `bootstrap_js`: map-form metadata no longer suppresses Bootstrap JS
 - [x] catalog test: Q-14-3 registered under subsystem `theme`
-      (extended `theme_diagnostic_code_is_registered_in_catalog`)
+  (extended `theme_diagnostic_code_is_registered_in_catalog`)
 - [x] integration test through the real render path
-      (`crates/quarto-core/tests/integration/theme_light_dark.rs`, 3 tests:
-      project-config map, frontmatter map, light-only map): render succeeds,
-      CSS contains the light marker rule and not the dark one, exactly one
-      Q-14-3 warning (none for light-only)
+  (`crates/quarto-core/tests/integration/theme_light_dark.rs`, 3 tests:
+  project-config map, frontmatter map, light-only map): render succeeds,
+  CSS contains the light marker rule and not the dark one, exactly one
+  Q-14-3 warning (none for light-only)
 - [x] run new tests, verify they fail for the expected reason —
-      quarto-sass: 8 failed (Q-14-1 on map form) / 3 passed (error-shape
-      tests that stay valid); quarto-core: 6 failed (Q-14-1 render failures,
-      suppressed JS, Q-14-3 not in catalog). Scaffolding note: the
-      `dark_theme_ignored` field was added as an inert stub (always `None`)
-      so the red tests compile; all behavior is Phase 2.
+  quarto-sass: 8 failed (Q-14-1 on map form) / 3 passed (error-shape
+  tests that stay valid); quarto-core: 6 failed (Q-14-1 render failures,
+  suppressed JS, Q-14-3 not in catalog). Scaffolding note: the
+  `dark_theme_ignored` field was added as an inert stub (always `None`)
+  so the red tests compile; all behavior is Phase 2.
 
 ### Phase 2 — implementation ✅ (2026-08-08)
 
 - [x] `ThemeConfig`: `dark_theme_ignored: Option<SourceInfo>`; pair branch
-      (`light_dark_pair` + `LightDarkPair`) and the shared
-      `Self::from_theme_value` helper (null / `none` sentinel / string /
-      array) used by both the top level and the light half
+  (`light_dark_pair` + `LightDarkPair`) and the shared
+  `Self::from_theme_value` helper (null / `none` sentinel / string /
+  array) used by both the top level and the light half
 - [x] Q-14-1 fallback message now reads "theme must be a string or array of
-      strings, or a map with only `light:`/`dark:` keys"
+  strings, or a map with only `light:`/`dark:` keys"
 - [x] Q-14-3 added to `crates/quarto-error-catalog/error_catalog.json`
-      (no braid-strand references in the user-facing text, per review)
+  (no braid-strand references in the user-facing text, per review)
 - [x] `CompileThemeCssStage`: emits Q-14-3 warning via `ctx.add_diagnostic`,
-      located at the ignored `dark:` key, with a remove-or-keep hint;
-      emitted after parse and before the `suppress_bootstrap` early return
-      so `{light: none, dark: …}` still warns
+  located at the ignored `dark:` key, with a remove-or-keep hint;
+  emitted after parse and before the `suppress_bootstrap` early return
+  so `{light: none, dark: …}` still warns
 - [x] All Phase-1 tests green; full workspace suite: 11,125 passed
 
 ### Phase 3 — verification
 
 - [x] `cargo nextest run --workspace` — 11,125 passed, 0 failed
 - [x] End-to-end minimal fixture (2026-08-08): project in scratchpad with
-      `format.html.theme: {light: [cosmo, light-marker.scss], dark: [darkly,
-      dark-marker.scss]}`. Invocation: `cargo run --bin q2 -- render
-      <fixture-dir>`. Observed: exit 0; stderr shows
-      `Warning: [Q-14-3] Dark theme variant not yet supported` with an
-      ariadne snippet pointing at `_quarto.yml:7:7` (the `dark:` key) and
-      the remove-or-keep hint; compiled `quarto-theme-*.css` contains
-      `.q-light-marker{color:#123456}` and zero occurrences of
-      `q-dark-marker`. Output inspected directly.
+  `format.html.theme: {light: [cosmo, light-marker.scss], dark: [darkly,
+  dark-marker.scss]}`. Invocation: `cargo run --bin q2 -- render
+  <fixture-dir>`. Observed: exit 0; stderr shows
+  `Warning: [Q-14-3] Dark theme variant not yet supported` with an
+  ariadne snippet pointing at `_quarto.yml:7:7` (the `dark:` key) and
+  the remove-or-keep hint; compiled `quarto-theme-*.css` contains
+  `.q-light-marker{color:#123456}` and zero occurrences of
+  `q-dark-marker`. Output inspected directly.
 - [x] Testbed (2026-08-08): rendered
-      `~/repos/github/cscheid/q2-connect-docs/docs-quarto-2` with the
-      posit-docs extension's theme map **unflattened** via
-      `target/debug/q2 render <testbed>`. Result: **`Rendered 351 of 351
-      files`, exit 0**; Q-14-3 printed **exactly once**, coalesced with
-      "Affected files: … (and 348 others)". Compiled site theme CSS contains
-      light-half markers (`Open Sans`, posit orange `ee6331`) and **not**
-      the dark-only body background `#181c25`. The `highlight-style`
-      light/dark map passed through inert as assessed (no reader in Q2).
-      Caveat A: the run required temporarily stripping quarto-openapi's
-      contributed `pre-render` (its Deno-style `.ts` fails under Node —
-      the separate bd-wch2dotq gap; file restored via git afterwards).
-      Caveat B: the Q-14-3 warning renders span-less on the testbed — its
-      location points into the extension's `_extension.yml`, which per-page
-      SourceContexts don't register (`attach_config_source` only repairs
-      `_quarto.yml`-anchored FileIds). Message + affected-files list are
-      still clear; snippet support for extension-fragment locations noted
-      as a possible follow-up.
+  `~/repos/github/cscheid/q2-connect-docs/docs-quarto-2` with the
+  posit-docs extension's theme map **unflattened** via
+  `target/debug/q2 render <testbed>`. Result: **`Rendered 351 of 351
+  files`, exit 0**; Q-14-3 printed **exactly once**, coalesced with
+  "Affected files: … (and 348 others)". Compiled site theme CSS contains
+  light-half markers (`Open Sans`, posit orange `ee6331`) and **not**
+  the dark-only body background `#181c25`. The `highlight-style`
+  light/dark map passed through inert as assessed (no reader in Q2).
+  Caveat A: the run required temporarily stripping quarto-openapi's
+  contributed `pre-render` (its Deno-style `.ts` fails under Node —
+  the separate bd-wch2dotq gap; file restored via git afterwards).
+  Caveat B: the Q-14-3 warning renders span-less on the testbed — its
+  location points into the extension's `_extension.yml`, which per-page
+  SourceContexts don't register (`attach_config_source` only repairs
+  `_quarto.yml`-anchored FileIds). Message + affected-files list are
+  still clear; snippet support for extension-fragment locations noted
+  as a possible follow-up.
 - [x] `cargo xtask verify` (full, including hub-client/WASM leg) — all 14
-      steps passed (2026-08-08)
+  steps passed (2026-08-08)
 
 ### Phase 4 — bookkeeping
 
 - [x] `braid dep add bd-o76p01wb bd-0pic6 --type related` (interim ↔ full)
 - [x] Comment on bd-0pic6 (c-9gw5c02b): interim degradation landed; full
-      work = dual-CSS compilation + toggle + `highlight-style` map + brand
-      light/dark seam; Q-14-3 warning to be removed/replaced when it lands
+  work = dual-CSS compilation + toggle + `highlight-style` map + brand
+  light/dark seam; Q-14-3 warning to be removed/replaced when it lands
 - [x] Work committed as 29ed786d on
-      `braid/bd-o76p01wb-light-dark-theme-map`; completion note on
-      bd-o76p01wb (c-gfv7ojsc)
+  `braid/bd-o76p01wb-light-dark-theme-map`; completion note on
+  bd-o76p01wb (c-gfv7ojsc)
 - [x] #474 merged; rebased onto `main` (single commit fc422255), re-ran
-      the full gates on the rebased tree (11,135 workspace tests + full
-      `cargo xtask verify`, both green), pushed as
-      `origin/feature/bd-o76p01wb-light-dark-theme-map`, opened
-      **PR #475** (https://github.com/quarto-dev/q2/pull/475), and closed
-      bd-o76p01wb.
+  the full gates on the rebased tree (11,135 workspace tests + full
+  `cargo xtask verify`, both green), pushed as
+  `origin/feature/bd-o76p01wb-light-dark-theme-map`, opened
+  **PR #475** (https://github.com/quarto-dev/q2/pull/475), and closed
+  bd-o76p01wb.
 
 ## Resolved questions (review with Carlos, 2026-08-08)
 

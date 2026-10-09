@@ -117,7 +117,7 @@ fn wrap_yaml_with_source_info<'a>(
 
 ### User's Intuition
 
-> "It would be sufficient for the YamlWithSourceInfo object that came from merging document metadata and project metadata to have the same lifetime bounds as the DocumentContext object that holds the document Yaml object. [...] I'd like to be able to express that the merged object has the shorter of the two lifetimes."
+> "It would be sufficient for the YamlWithSourceInfo object that came from merging document metadata and project metadata to have the same lifetime bounds as the DocumentContext object that holds the document Yaml object. \[...\] I'd like to be able to express that the merged object has the shorter of the two lifetimes."
 
 ### How to Express This in Rust
 
@@ -352,7 +352,7 @@ Just re-parse on every LSP request.
 | Scenario | Lifetime Approach | Owned Approach |
 |----------|-------------------|----------------|
 | Single file parse | **1x** (references only) | 3x (duplication) |
-| After merge | **~1.2x** (merged containers owned, leaves borrowed) | 3x (all owned) |
+| After merge | **\~1.2x** (merged containers owned, leaves borrowed) | 3x (all owned) |
 | LSP cache | **3x** (must convert to owned) | 3x (already owned) |
 
 **Winner for memory**: Lifetime approach (when not caching)
@@ -455,7 +455,7 @@ The user is correct: **the lifetime-based approach is feasible**. We CAN express
 
 1. **LSP is important** - caching will be critical for responsiveness
 2. **This is a port** - simplicity reduces risk, speeds development
-3. **Memory cost is acceptable** - configs are small (<10KB), ~30KB overhead is negligible
+3. **Memory cost is acceptable** - configs are small (<10KB), \~30KB overhead is negligible
 4. **rust-analyzer precedent** - similar use case (IDE tool), chose owned data
 5. **Serialization matters** - we'll need it for caching and debugging
 

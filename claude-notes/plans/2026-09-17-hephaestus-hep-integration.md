@@ -147,7 +147,7 @@ Q2 side:
     nothing like Q1's `.light-content` / `.dark-content` image pairing exists,
     and `preview-renderer` has no color-scheme plumbing of its own.
 16. **knitr's `fig-format` is passed straight through as `dev`**
-    (`engine/knitr/resources/rmd/hooks.R` ~L801). Whether a `.hep` device
+    (`engine/knitr/resources/rmd/hooks.R` \~L801). Whether a `.hep` device
     exists is the R package's business; Q2 needs nothing there for a
     hand-written `![](plot.hep)`, and only a `dev`-name pass-through once the
     R side ships.
@@ -224,7 +224,7 @@ served from the iframe's origin, like `web-tree-sitter.wasm` is.
 
 Alternative rejected: link hephaestus into `wasm-quarto-hub-client` and run
 transform A in the browser. It couples the R package's format version to the
-main wasm bundle, adds ~2.4 MB raw to it, and throws away what the JS client
+main wasm bundle, adds \~2.4 MB raw to it, and throws away what the JS client
 gives for free (reflow on resize, `setColorScheme`, picking).
 
 ### E. Progressive enhancement of rendered sites (future, optional)
@@ -232,7 +232,7 @@ gives for free (reflow on resize, `setColorScheme`, picking).
 Hephaestus's own first-paint story: the page ships the natively-rendered SVG
 (from A) *and* the `.hep` (copied by `resource-collector`), and a small
 after-body script mounts `PlotView` over the placeholder so the published
-plot reflows on resize and follows the site's dark toggle. Costs ~800 kB
+plot reflows on resize and follows the site's dark toggle. Costs \~800 kB
 brotli of wasm per page load and requires JS; strictly opt-in
 (`hephaestus: { live: true }` or similar), vendored like mermaid rather than
 CDN-loaded. Not part of the first cut; listed so that A's ordering decision
@@ -292,7 +292,7 @@ Child strands: bd-sxiv2tio (phase 2, preview client), bd-l6e3sd45
   across the graph), so the library is loaded at run time and a machine
   without it just gets an empty system collection — harmless, because
   plot text is shaped with the bundled faces.
-- **First `.hep` render pays ~2 s once per process** for font-context
+- **First `.hep` render pays \~2 s once per process** for font-context
   initialization (system font enumeration). Documents without `.hep`
   images never pay it; the registration is lazy.
 - **A missing `.hep` warns twice** — `Q-19-1` (plot not rendered) and
@@ -318,7 +318,7 @@ Child strands: bd-sxiv2tio (phase 2, preview client), bd-l6e3sd45
    different `textLength`, different tick label widths → different layout),
    which breaks snapshot tests and makes rendered output machine-dependent.
    Recommendation: vendor the four Roboto faces hephaestus's wasm clients
-   ship (~500 kB in `resources/hephaestus/fonts/`, OFL) and register them +
+   ship (\~500 kB in `resources/hephaestus/fonts/`, OFL) and register them +
    map `sans-serif` to them in the transform, exactly as
    `examples/document_svg.rs` does. Output then matches what the preview
    client draws, byte for byte at the same size. Alternative: no bundled
@@ -463,7 +463,7 @@ this phase; the third is bd-9t5nmq81.
 - **`.hep` was not a binary extension.** Which project files sync into
   the preview VFS as *binary* documents is decided by an extension
   allowlist — `BINARY_EXTENSIONS` in `crates/quarto-hub/src/resource.rs`
-  (hub discovery, sync, and `q2 preview`'s single-file closure all use
+  (hub discovery, sync, and `q2 preview`\'s single-file closure all use
   it) with a hand-kept mirror in `ts-packages/quarto-automerge-schema`
   (`isBinaryExtension` / `inferMimeType`, used by hub-client uploads).
   Neither knew `hep`, so the first browser check showed "bad magic" for

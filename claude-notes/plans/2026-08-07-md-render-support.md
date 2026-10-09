@@ -38,7 +38,7 @@ project:
 ```
 
 Its navbar/sidebar reference `.md` files directly (`file: admin/index.md`), and its
-`.md` sources use shortcodes (`{{< env … >}}`), raw HTML blocks, and `format:`
+`.md` sources use shortcodes (`{{{< env … >}}}`), raw HTML blocks, and `format:`
 front matter — but **zero** `engine:` keys and zero executable cells. So the
 "identical to `.qmd`, engines ignored" policy covers the real corpus exactly.
 
@@ -47,7 +47,7 @@ front matter — but **zero** `engine:` keys and zero executable cells. So the
 Research pass over `external-sources/quarto-cli` (HEAD `2e66958`, v1.10). Key
 findings, with the surprises flagged:
 
-- **Q1 includes `.md` in the render list *by default*** — this is the big
+- **Q1 includes `.md` in the render list _by default_** — this is the big
   divergence from what we want. Input discovery has no extension allow-list; a
   file is an input iff some engine claims it (`src/project/project-context.ts:932`),
   and the markdown engine claims `.md`/`.markdown`
@@ -489,7 +489,7 @@ with no further change (pinned by e2e before any Phase-4 edit). The
   change needed (graph filters by index, listing binding is extension-blind)
 - [x] Full workspace suite green (11024 passed)
 
-Note: the graph edges' pass-2 *augmentation* effect (always-render pages
+Note: the graph edges\' pass-2 *augmentation* effect (always-render pages
 re-rendering when a linked `.md` changes) is exercised only at the unit
 level — an e2e needs always-render listing pages, which are out of scope
 per D8; noted for the listing follow-up strand.
@@ -514,7 +514,7 @@ Two scope decisions made with Carlos at Phase-5 session start:
   synced `.md` edits (README etc.) would be noisy. Fix: treat `.md` like
   `.qmd` there (dep-set-gated). With that, extension-based sync has no
   user-visible noise cost found.
-- **New gate found beyond the hand-off list:** `quarto-preview`'s
+- **New gate found beyond the hand-off list:** `quarto-preview`\'s
   `capture_driver.rs` walks `ProjectFiles::qmd_files` for **engine
   captures** — `.md` must be skipped there or S5 (".md never executes")
   breaks in preview.
@@ -530,7 +530,7 @@ Work items (all landed 2026-08-07, session 2):
   rejection semantics preserved. New tests:
   `test_discover_md_files_as_sources`, `test_filters_accept_md_as_source`
 - [x] Rust `quarto-preview`: **no capture-driver code change needed** — the
-  S5 guard already lives at the single chokepoint (`EngineExecutionStage`'s
+  S5 guard already lives at the single chokepoint (`EngineExecutionStage`\'s
   `SourceType::Markdown` skip from Phase 2), which the capture sub-pipeline
   (`preview_record.rs`, truncated at engine execution) runs through. Pinned
   by `md_doc_with_engine_spec_records_no_capture`, which also asserts
@@ -587,7 +587,7 @@ Work items (all landed 2026-08-07, session 2):
     correct from both root (`admin/index.html`) and the admin page itself
     (`index.html` / `../index.html`)
   - body link rewrote to `href="admin/index.html"`
-  - inline `{{< env CONNECT_VERSION >}}` expanded to `2026.08` in both `.md`
+  - inline `{{{< env CONNECT_VERSION >}}}` expanded to `2026.08` in both `.md`
     and `.qmd` (verified in a paired fixture)
   - **discovered (not `.md`-related):** shortcodes in *metadata fields*
     (`title:`/`subtitle:`) expand empty — identically for `.qmd` and `.md`.
@@ -630,10 +630,10 @@ re-render on edit.
 **Code sites** (line numbers from the 2026-08-07 survey — re-grep, they
 drift):
 
-- `crates/quarto-hub/src/discovery.rs` (~:122-131): VFS sync — only
-  `ext == Some("qmd")` lands in `qmd_files`; single-file mode at ~:177.
-- `crates/quarto-hub/src/watch.rs` (~:244-247): `is_qmd_file`, used by
-  `WatchFilter::QmdOnly` (~:56) and `is_preview_relevant` (~:256).
+- `crates/quarto-hub/src/discovery.rs` (\~:122-131): VFS sync — only
+  `ext == Some("qmd")` lands in `qmd_files`; single-file mode at \~:177.
+- `crates/quarto-hub/src/watch.rs` (\~:244-247): `is_qmd_file`, used by
+  `WatchFilter::QmdOnly` (\~:56) and `is_preview_relevant` (\~:256).
   **Existing tests pin the old behavior** — `test_watcher_ignores_non_qmd_files`
   and siblings in `watch.rs` will need their semantics revisited, not just
   made green.

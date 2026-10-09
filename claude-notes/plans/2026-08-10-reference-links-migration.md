@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)
-**Branch:** `braid/bd-reference-links-unsupported-ddc4skac`, rebased onto `main` @ `d05e021e`
+**Branch:** `braid/bd-reference-links-unsupported-ddc4skac`, rebased onto `main` \@ `d05e021e`
 **PR:** [#497](https://github.com/quarto-dev/q2/pull/497)
 **Status:** All phases complete; full `cargo xtask verify` (including the WASM leg) green.
 
@@ -37,7 +37,7 @@ Filed 2026-08-10 by Carlos. The strand is unusually complete: it front-loads
 the scope decision, names the crate and trait, sketches the rewrites, and
 flags the escaping arm as the destructive-if-wrong one.
 
-Real-world impact is ~7 Posit Connect doc pages, in two failure classes.
+Real-world impact is \~7 Posit Connect doc pages, in two failure classes.
 Broken links plus a leaked definition paragraph
 (`admin/process-management`, `admin/integrations/package-manager`); and
 silently deleted brackets, of which three **change documented meaning**
@@ -89,7 +89,7 @@ lookahead was guarding against.
 
 **Escaping is idempotent and cross-engine safe**, verified in both
 directions for both arms: `\[…\]` produces no `Span` and `!\[…\]` produces
-no `Image` in q2, and both q2 @ `05c2454e` and `quarto pandoc` render them as
+no `Image` in q2, and both q2 \@ `05c2454e` and `quarto pandoc` render them as
 literal brackets. This matters because `convert` defaults to `-r all` and
 iterates up to `--max-iterations` (default 10).
 
@@ -251,7 +251,7 @@ now matches the product.
 
 - **`literal-brackets` writes an edit indistinguishable from author intent.**
   The strand's own caveat and the real risk. Mitigated by the separate rule
-  name (never in `-r all` by accident) plus `check`'s per-violation
+  name (never in `-r all` by accident) plus `check`\'s per-violation
   locations.
 - **AST coupling.** If `[...]`-with-no-attrs ever stops producing a bare
   `Span` — e.g. a future diagnostic changes the parse — the rules go *quiet*
@@ -266,7 +266,7 @@ now matches the product.
 
 ## Where this landed
 
-Investigated on `main` @ `05c2454e` in the primary checkout, per the skill's
+Investigated on `main` \@ `05c2454e` in the primary checkout, per the skill's
 "work in the checkout you were invoked in". This checkout's
 `CLAUDE.local.md` still carries stale worktree context for an unrelated
 strand (`bd-09aja9gl`); it was not touched. **No worktree was created** — if

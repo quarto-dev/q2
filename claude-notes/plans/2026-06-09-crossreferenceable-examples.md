@@ -100,7 +100,7 @@ message and emphasizes the full runnable demo project. Constants:
 
 Two sub-questions:
 
-**(a) Prefix.** Needs to be free (not in `registry.rs:78`'s table) and read well
+**(a) Prefix.** Needs to be free (not in `registry.rs:78`\'s table) and read well
 in prose. Candidates:
 
 | Prefix | `@…` reads as | Notes |
@@ -163,7 +163,7 @@ Callout → CalloutResolve, and the float sugar → render split):
    when numbered (read from `plain_data.order`), and the source link. Without a
    number, emit today's plain container.
 
-> Why a dedicated render step rather than teaching `CrossrefRenderTransform`'s
+> Why a dedicated render step rather than teaching `CrossrefRenderTransform`\'s
 > float renderer to emit an iframe: keeps crossref-render generic (it knows
 > figures/divs, not iframes), and keeps all embed-specific HTML in one module.
 > The shared machinery only does numbering + ref-link text.
@@ -177,7 +177,7 @@ in `pre_engine_sugaring.rs`.
 
 ### Caption source (Decision 2 — minor)
 
-A numbered float needs caption text ("Example 1: <caption>"). Where from?
+A numbered float needs caption text ("Example 1: \<caption>"). Where from?
 Options: (a) a `title=`/caption attribute on the div; (b) the fallback link's
 text; (c) a dedicated caption paragraph in the div body (like figure captions).
 **Lean:** support an optional caption (attribute or a caption para); when absent,

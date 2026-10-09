@@ -13,7 +13,7 @@ inline input; Enter commits a `[>> ...]` span into the source. Clicking the
 `✓` (Resolve) button in the expanded bubble removes the span. After resolving
 the **last** comment on a block, two visual artifacts remain:
 
-1. a small empty pill (~14×6 px) where the bubble was, and
+1. a small empty pill (\~14×6 px) where the bubble was, and
 2. the block's light-blue "glow" (the bubble-hover glow on the block wrapper)
    never clears — not even after moving the mouse away or clicking elsewhere.
 
@@ -236,7 +236,7 @@ const r = bubbleRef.current?.getBoundingClientRect();
 if (bubbleHoveredRef.current && (!pt || !r || !inside(pt, r))) setBubbleHovered(false);
 ```
 
-Included: ~10 lines, keyed on deps that already exist for the same "bubble
+Included: \~10 lines, keyed on deps that already exist for the same "bubble
 changed shape" reason, and it makes the result deterministic instead of
 "fixed on the next pixel of movement".
 
@@ -371,7 +371,7 @@ grows warts.
 
 ## Review decisions (2026-09-09)
 
-1. **Geometric re-check: yes.** Ship the ~10-line refinement so the glow
+1. **Geometric re-check: yes.** Ship the \~10-line refinement so the glow
    clears with the pointer stationary (T6 is mandatory).
 2. **`+`-while-hovered after the last resolve: fine.** No extra "hide until
    the pointer moves" behaviour.

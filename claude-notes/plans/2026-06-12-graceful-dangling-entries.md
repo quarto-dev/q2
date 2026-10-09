@@ -126,14 +126,14 @@ referenced document does not exist on the hub (a "dangling entry"),
 **every client fails the entire project**:
 
 - `ts-packages/quarto-sync-client/src/client.ts`
-  - `loadFileDocuments` (~line 434): `for` loop, `await findDoc(...)`
+  - `loadFileDocuments` (\~line 434): `for` loop, `await findDoc(...)`
     per file, **no try/catch** — the first unavailable doc throws out
     of `connect()`. Cold opens of the project fail entirely.
-  - `syncWithFiles` (just below, ~line 448): same pattern in the
+  - `syncWithFiles` (just below, \~line 448): same pattern in the
     **index-change handler** — sessions with the project already open
     blow up when a dangling entry *appears* in the index (this is how
     already-open colleagues got hit on 2026-06-12).
-  - `findDoc` (~line 332): retries "unavailable" up to 3× (with an
+  - `findDoc` (\~line 332): retries "unavailable" up to 3× (with an
     early bail when `connectedPeers.size === 0` — see Gotchas), then
     throws `Document <id> is unavailable`.
 - Consumers of `connect()` that therefore hard-fail:
@@ -264,7 +264,7 @@ In `client.ts`:
   `fileHandles`), fire `callbacks.onFileUnavailable?.(path, docId)`,
   `syncLog` a diagnostic (NOT console.log — bd-sl4o01y0), continue.
   Non-unavailable errors keep throwing (don't mask real bugs).
-- `connect()`'s returned `FileEntry[]`: annotate from
+- `connect()`\'s returned `FileEntry[]`: annotate from
   `state.unavailableFiles`.
 - Clear `unavailableFiles` appropriately on disconnect and when an
   entry is removed from the index (`syncWithFiles` removal branch).
@@ -283,16 +283,16 @@ unavailable path skips any doc fetch.
   `syncLog` (`src/log.ts`); there's a source-level invariant test
   that will fail your PR otherwise (bd-sl4o01y0).
 - **The connect spy**: `quarto-hub-mcp/src/connection-manager.test.ts`
-  has a `spySyncClientFactory` modeling `connect`'s signature — if
+  has a `spySyncClientFactory` modeling `connect`\'s signature — if
   you change the connect return shape, update it (it bit us once:
   options-bag migration).
-- **`findDoc`'s `connectedPeers.size === 0` bail** (e326eb5c): noted
+- **`findDoc`\'s `connectedPeers.size === 0` bail** (e326eb5c): noted
   latent cold-boot issue, deliberately NOT in scope — don't "fix" it
   in passing; it's tracked in the parent plan's D2 with its own test
   requirements.
 - **vitest + unhandled rejections — CONFIRMED**: the index-change
   handler calls `syncWithFiles(newFiles)` fire-and-forget (no await,
-  no void; `client.ts` ~578), so today's mid-session failure is an
+  no void; `client.ts` \~578), so today's mid-session failure is an
   *unhandled promise rejection*. Your fix should make that call
   explicitly handled (`void syncWithFiles(...).catch(...)` routing
   into the same unavailable-tolerance), and test 2 should assert no

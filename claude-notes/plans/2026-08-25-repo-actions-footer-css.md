@@ -37,18 +37,18 @@ stock Bootstrap utility classes, not Quarto CSS.
 ## Work items
 
 - [x] Reproduce: confirm the markup/CSS asymmetry at current `main`, not just
-      at the 0.27.0 release build
+  at the 0.27.0 release build
 - [x] Extend the `repo_actions_pipeline` harness to expose the `_site` root so
-      a test can read the compiled theme CSS
+  a test can read the compiled theme CSS
 - [x] **Failing test first**: `footer_repo_actions_ship_their_css` asserts each
-      of the eight rules reaches the rendered CSS; a second test asserts the
-      sidebar rules are undisturbed and that no footer rule leaks into `.sidebar`
+  of the eight rules reaches the rendered CSS; a second test asserts the
+  sidebar rules are undisturbed and that no footer rule leaks into `.sidebar`
 - [x] Verify the tests fail at HEAD for the right reason
 - [x] Port `quarto-nav.scss:770-802` verbatim into the page-footer section of
-      `resources/scss/bootstrap/_bootstrap-rules.scss`
+  `resources/scss/bootstrap/_bootstrap-rules.scss`
 - [x] Verify the tests pass
 - [x] End-to-end: render the strand's repro website with `q2 render` and inspect
-      the emitted CSS and the rendered page
+  the emitted CSS and the rendered page
 - [x] Workspace verify (`cargo xtask verify --skip-hub-build --skip-hub-tests`)
 - [x] Re-capture the `phase5-single-doc-baseline` styles.css hash (see below)
 
@@ -66,27 +66,33 @@ formatting, because the emitted CSS is minified.
 Rendered a two-page website fixture with `repo-actions: [edit, source, issue]`
 through the real binary:
 
-    cargo run --bin q2 -- render <fixture>
-    Rendered 2 of 2 files to <fixture>/_site
+```
+cargo run --bin q2 -- render <fixture>
+Rendered 2 of 2 files to <fixture>/_site
+```
 
 The strand's own repro measurement, run against that output:
 
-    toc-action links             6      (was 6 — markup was never the problem)
-    toc-actions containers       2      (was 2)
-    .nav-footer …toc-action rules  8    (was 0)
+```
+toc-action links             6      (was 6 — markup was never the problem)
+toc-actions containers       2      (was 2)
+.nav-footer …toc-action rules  8    (was 0)
+```
 
 The eight emitted rules were diffed against Q1's compiled
 `bootstrap-*.min.css` from the strand's repro and are **byte-for-byte
 identical**:
 
-    .nav-footer .toc-actions a,.nav-footer .toc-actions a:hover{text-decoration:none}
-    .nav-footer .toc-actions ul :first-child{margin-left:auto}
-    .nav-footer .toc-actions ul :last-child{margin-right:auto}
-    .nav-footer .toc-actions ul li i.bi{padding-right:.4em}
-    .nav-footer .toc-actions ul li:last-of-type{padding-right:0}
-    .nav-footer .toc-actions ul li{padding-right:1.5em}
-    .nav-footer .toc-actions ul{display:flex;list-style:none}
-    .nav-footer .toc-actions{padding-bottom:.5em;padding-top:.5em}
+```
+.nav-footer .toc-actions a,.nav-footer .toc-actions a:hover{text-decoration:none}
+.nav-footer .toc-actions ul :first-child{margin-left:auto}
+.nav-footer .toc-actions ul :last-child{margin-right:auto}
+.nav-footer .toc-actions ul li i.bi{padding-right:.4em}
+.nav-footer .toc-actions ul li:last-of-type{padding-right:0}
+.nav-footer .toc-actions ul li{padding-right:1.5em}
+.nav-footer .toc-actions ul{display:flex;list-style:none}
+.nav-footer .toc-actions{padding-bottom:.5em;padding-top:.5em}
+```
 
 The rendered footer markup was inspected and every selector matches it:
 `.nav-footer > .nav-footer-center > .toc-actions.d-sm-block.d-md-none > ul >
@@ -104,7 +110,9 @@ pins a sha256 of the compiled `doc_files/styles.css` against
 to the SCSS necessarily shifts it, so the baseline was re-captured with a
 documented note, per that file's standing convention for every prior SCSS port:
 
-    doc_files/styles.css  60291dc1…  ->  a184a291…
+```
+doc_files/styles.css  60291dc1…  ->  a184a291…
+```
 
 `doc.html` is **unchanged**, and that was confirmed empirically rather than
 assumed: it is the first entry the test checks, and it passed before the

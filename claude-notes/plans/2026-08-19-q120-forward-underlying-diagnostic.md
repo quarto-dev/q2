@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-q120-masks-config-md-diagnostic-a039r80t
-**Checkout:** main checkout at `/Users/cscheid/rooms/room-3/q2`, branch `main` @ `6bee9ebe`
+**Checkout:** main checkout at `/Users/cscheid/rooms/room-3/q2`, branch `main` \@ `6bee9ebe`
 **Status:** Design settled 2026-08-20 (user answered all four questions); implementation in progress.
 
 ## Triage verdict

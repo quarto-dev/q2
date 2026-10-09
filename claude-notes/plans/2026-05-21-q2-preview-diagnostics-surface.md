@@ -22,12 +22,12 @@ next begins.
 - [x] **2. Rust infra (incl. conversion lift, Phase 4).** Land `DiagnosticSink` + `/api/preview/diagnostics` endpoint; tests 1 + 2 green. **DONE 2026-05-21** — folded Phase 4 in (the lift had to land first because the endpoint needs the shared `JsonDiagnostic` type to produce the right wire shape). 9 sink unit tests + 2 endpoint integration tests green; existing 60 preview tests still pass; `npm run build:wasm` from `hub-client/` clean (the WASM crate now imports `JsonDiagnostic`/`JsonPass1Failure`/`diagnostic_to_json`/`with_source_file` from the lifted location instead of defining them inline). `crates/quarto-error-reporting/src/json.rs` is the new home (with 4 unit tests of its own); `quarto-preview` picks up a `quarto-source-map` workspace dep so the handler can pass an (empty for now) `SourceContext` to `diagnostic_to_json`.
 - [x] **3. Rust callsite migrations.** Migrate `capture_driver`, `deps`, `re_execute`; tests 3, 4 + re_execute regression guard green. **DONE 2026-05-21** — all three callsites swap their `tracing::warn!` to `diagnostics::current_sink().emit(...)` when the sink is set; the `emit` method calls `tracing::warn!` itself so server stdout stays additive. Each callsite gets a distinct code: `Q-PREVIEW-CAP-1` (capture_driver eager-capture failure), `Q-PREVIEW-DEPS-1` (deps IO failure), `Q-PREVIEW-DEPS-2` (deps parse failure), `Q-PREVIEW-RE-1` (re_execute engine failure). The re_execute migration ALSO keeps the existing `CaptureRef.lastError` write so the existing `StaleCaptureOverlay` (Phase C.5) keeps working. The capture-failure integration test (`diagnostics_capture_failure.rs`) initially failed against `engine: nonexistent-engine` because `EngineExecutionStage` falls back to markdown for unknown engines; the test was rewritten to register a `FailingTestEngine` that's resolved successfully and then deliberately fails on `execute()`. 120/120 preview tests + 1 skipped pass. **Test 4 (deps-handler IO unit test) skipped:** writing it cleanly requires either OnceLock isolation across test threads or a function-signature change, both for a path that's already exercised end-to-end by the capture-failure integration test (same sink + tracing-replacement code path). Pinning the contract directly on the migrated `extract_include_deps` body would only test that "the empty-Vec branch reads OnceLock," which is more about the test seam than about user-visible behaviour.
 - [x] **4. Conversion lift.** *Folded into Phase 2 above — see explanation there.*
-- [x] **5. SPA overlay fork.** Land `PreviewDiagnosticsOverlay.tsx` + unit tests (test 6 green). No PreviewApp.tsx changes yet. **DONE 2026-05-21** — 6/6 overlay unit tests pass; the fork mirrors the upstream `PreviewErrorOverlay`'s class names (`preview-error-*`) for CSS continuity and adds a `preview-error-server-diagnostics` lane for the new server feed, plus a `preview-error-overlay--warning` / `--error` modifier that flips the collapsed indicator's label from "Error" to "Warning".
-- [x] **6. SPA wiring.** Swap PreviewApp.tsx call sites + new fetch effect; tests 7–13 green; D.4 tests still pass. **DONE 2026-05-21** — 41/41 SPA integration tests pass, 8/8 SPA unit tests pass, `tsc --noEmit` clean, production build (`tsc -b && vite build`) clean. Key implementation notes: (a) `renderError: Error | null` replaced with structured `RenderStatus { failure, diagnostics, warnings, pass1Failures }` so a successful-with-warnings render carries the warnings through. (b) New `serverDiagnostics: Diagnostic[]` slot fed by a new `useEffect` that GETs `/api/preview/diagnostics?page=<rel>` on activeFile/contentTick change (same trigger as the existing deps fetch). (c) New `computeOverlayInputs(render, serverDiagnostics)` helper derives the overlay's props from the structured state. (d) Non-terminal overlay uses *uncontrolled* collapsed mode (the prop is omitted) so the overlay manages its own click-to-expand state — this fixed a tests-fail-silently bug where the controlled-collapsed wiring had no parent toggle handler. (e) Two test-pollution fixes: `beforeEach` in the new describe block resets `renderPageForPreview`'s mock implementation (the outer `vi.clearAllMocks()` only clears history); and three test assertions click-to-expand the overlay before asserting on expanded-mode content.
+- [x] **5. SPA overlay fork.** Land `PreviewDiagnosticsOverlay.tsx` + unit tests (test 6 green). No PreviewApp.tsx changes yet. **DONE 2026-05-21** — 6/6 overlay unit tests pass; the fork mirrors the upstream `PreviewErrorOverlay`\'s class names (`preview-error-*`) for CSS continuity and adds a `preview-error-server-diagnostics` lane for the new server feed, plus a `preview-error-overlay--warning` / `--error` modifier that flips the collapsed indicator's label from "Error" to "Warning".
+- [x] **6. SPA wiring.** Swap PreviewApp.tsx call sites + new fetch effect; tests 7–13 green; D.4 tests still pass. **DONE 2026-05-21** — 41/41 SPA integration tests pass, 8/8 SPA unit tests pass, `tsc --noEmit` clean, production build (`tsc -b && vite build`) clean. Key implementation notes: (a) `renderError: Error | null` replaced with structured `RenderStatus { failure, diagnostics, warnings, pass1Failures }` so a successful-with-warnings render carries the warnings through. (b) New `serverDiagnostics: Diagnostic[]` slot fed by a new `useEffect` that GETs `/api/preview/diagnostics?page=<rel>` on activeFile/contentTick change (same trigger as the existing deps fetch). (c) New `computeOverlayInputs(render, serverDiagnostics)` helper derives the overlay's props from the structured state. (d) Non-terminal overlay uses *uncontrolled* collapsed mode (the prop is omitted) so the overlay manages its own click-to-expand state — this fixed a tests-fail-silently bug where the controlled-collapsed wiring had no parent toggle handler. (e) Two test-pollution fixes: `beforeEach` in the new describe block resets `renderPageForPreview`\'s mock implementation (the outer `vi.clearAllMocks()` only clears history); and three test assertions click-to-expand the overlay before asserting on expanded-mode content.
 - [x] **7. Playwright spec** (test 15). **DONE 2026-05-21** — `q2-preview-spa/e2e/diagnostics.spec.ts` passes against a real chromium session. Fixture is a one-page project with a body-link to a non-existent sibling; the overlay's "⚠ Warning" indicator surfaces within 5s of first render. The fixture deliberately includes `_quarto.yml` so the project pipeline runs `LinkResolutionStage`; without it the SPA runs in single-doc mode and the project-scoped link check doesn't fire.
 - [x] **8. End-to-end verification** (test 14) against `docs/`; screenshot + DOM excerpt for PR description. **DONE 2026-05-21** — `q2 preview docs/` against the actual repo's docs/ surfaces both of the user's example warnings end-to-end:
   - `authoring/markdown/index.qmd` shows two `[Q-13-4]` warnings on lines 89 and 94 ("Body link references missing document — 'authoring/markdown/markdown-basics.qmd' is not in the project index"). Matches the user's `q2 render` stdout exactly.
-  - `guide/index.qmd` shows the `[Q-1-20]` warning on line 9 ("Failed to parse metadata value as markdown — Could not parse 'Brand themes (_brand.yml)' as markdown"). Matches the user's `q2 render` stdout exactly.
+  - `guide/index.qmd` shows the `[Q-1-20]` warning on line 9 ("Failed to parse metadata value as markdown — Could not parse `'Brand themes (_brand.yml)'` as markdown"). Matches the user's `q2 render` stdout exactly.
   - Screenshots stored under `claude-notes/plans/bd-b9kzg-screenshot-{1,2,3}-*.png`. **Drive-by fix:** Verification surfaced that the upstream overlay CSS lives in `hub-client/src/components/Editor.css` and isn't imported by q2-preview-spa, so the collapsed indicator initially rendered unstyled at the bottom-left of the viewport. Fixed by adding `q2-preview-spa/src/components/PreviewDiagnosticsOverlay.css` (mirrors the upstream rules with CSS variables inlined, plus fork-specific `--warning` / `--error` modifier classes and the `.preview-error-server-diagnostics` lane).
 - [x] **9. Full `cargo xtask verify`** + manual q2-preview SPA rebuild per CLAUDE.md runbook. **DONE 2026-05-21** — `cargo xtask verify` (12/12 steps) green: workspace builds, full workspace nextest, WASM rebuild, q2-preview SPA bundle, hub-client + workspace tests. Manual `cargo build --bin q2` after the verify completes so the next `q2 preview` invocation picks up the freshly-rebuilt WASM image (per CLAUDE.md "Verifying Rust changes in q2 preview"). Playwright e2e was skipped by the `--e2e not set` gate — the diagnostics Playwright spec was exercised manually in Phase 7 and is part of the suite for CI to pick up.
 - [ ] **10. PR against `main`.** — *Awaiting user push permission per CLAUDE.md GIT PUSH POLICY.* PR description drafted at `/tmp/bd-b9kzg-pr-description.md`. Topic branch ready at `beads/bd-b9kzg-q2-preview-diagnostics-surface` (2 commits + the earlier beads-sync commit on main).
@@ -159,11 +159,11 @@ Recorded 2026-05-21 from user sign-off:
    q2-preview's needs. Hub-client's overlay stays unchanged.
    Whether the two re-converge later is a separate decision and
    easier to make once both are mature; coupling them now would
-   tax both UXes' evolution.
+   tax both UXes\' evolution.
 4. **Per-page only for MVP.** Project-wide diagnostic aggregation
    is a deliberate follow-up — it's a UX problem (when to clear
    project diagnostics on page switch, single overlay vs split
-   surfaces) that's better deferred until per-page is in users'
+   surfaces) that's better deferred until per-page is in users\'
    hands.
 
 ## Proposed mechanism
@@ -200,7 +200,7 @@ seeded as a copy of
 free to diverge for q2-preview's UX needs. All current uses of
 `PreviewErrorOverlay` inside `q2-preview-spa/` migrate to the new
 component (three call sites in `PreviewApp.tsx`: boot-error,
-first-render terminal, on-top overlay). `@quarto/preview-renderer`'s
+first-render terminal, on-top overlay). `@quarto/preview-renderer`\'s
 copy is untouched — hub-client keeps using it.
 
 The fork extends the shared component's prop surface with two
@@ -347,7 +347,7 @@ will emit after migration):
 |---|---|---|
 | `capture_driver.rs:114-120` (eager-capture failure for sibling) | `tracing::warn!()` | `sink.emit(rel_path, DiagnosticMessage::warning("Engine capture failed"). with_problem(err.to_string()).build())` |
 | `deps.rs:100-107, 141-147` (dep parse failure) | log + downgrade to empty deps | `sink.emit(rel_path, DiagnosticMessage::warning("Could not analyze includes").with_problem(...).build())` — keeps the "fail-open" semantic; the user just sees *why* the dep analysis was incomplete |
-| `re_execute.rs:250-264` (engine re-execute failure) | sets `CaptureRef.lastError` only | Continue setting `lastError` (so `StaleCaptureOverlay`'s existing wiring keeps working) AND emit a structured diagnostic to the sink |
+| `re_execute.rs:250-264` (engine re-execute failure) | sets `CaptureRef.lastError` only | Continue setting `lastError` (so `StaleCaptureOverlay`\'s existing wiring keeps working) AND emit a structured diagnostic to the sink |
 
 Each callsite's lifecycle is:
 
@@ -402,7 +402,7 @@ project.
      (the `parking_lot::RwLock` makes this trivial; the test
      pins the contract).
    - `tracing_warn_still_fires` — captures `tracing` output via
-     `tracing-subscriber`'s test sink and asserts the
+     `tracing-subscriber`\'s test sink and asserts the
      human-readable line is still emitted (regression guard:
      migrating callsites must not silence stdout).
 
@@ -432,7 +432,7 @@ project.
 
 5. **Existing preview integration tests must keep passing** —
    notably the engine `lastError` path (`re_execute.rs`) still
-   populates `CaptureRef.lastError` so `StaleCaptureOverlay`'s
+   populates `CaptureRef.lastError` so `StaleCaptureOverlay`\'s
    wiring (Phase C.5) is unchanged; the sink emission is
    additive.
 
@@ -517,20 +517,20 @@ project.
   the endpoint can take a wildcard or be split into a separate
   `/api/preview/diagnostics/all`), but the UX questions (single
   overlay vs split surfaces, page-switch clear semantics) are
-  better answered after per-page is in users' hands.
+  better answered after per-page is in users\' hands.
 - **Richer engine diagnostics** — today an engine failure becomes
   a string `lastError`; lifting that to a structured
   `DiagnosticMessage` with source locations is its own work
-  (and benefits from `bd-6daf`'s engine-output source-location
+  (and benefits from `bd-6daf`\'s engine-output source-location
   reconciliation).
 - **CLI parity** — `q2 preview --print-diagnostics` or similar
   to echo the merged diagnostic stream on the terminal where the
   server runs. The sink makes this trivial to bolt on; the
   question is whether anyone wants it.
-- **`bd-m9rm`'s project-level diagnostic surface** — that issue
+- **`bd-m9rm`\'s project-level diagnostic surface** — that issue
   asks for a CLI- + hub-shared project-level diagnostic
   mechanism. The sink we land here is a candidate building
-  block; whether `bd-m9rm`'s eventual design adopts it or
+  block; whether `bd-m9rm`\'s eventual design adopts it or
   evolves something more general is a separate conversation.
 - **Re-converging the forked overlay with hub-client's** — see
   Decision 3. Re-evaluate once both surfaces are mature.
@@ -595,7 +595,7 @@ mid-stream interruption never leaves the tree broken.
    `PreviewDiagnosticsOverlay.tsx` + its unit tests (test 6
    green). No `PreviewApp.tsx` changes yet — the fork sits
    beside.
-6. **SPA wiring.** Swap `PreviewApp.tsx`'s three call sites to
+6. **SPA wiring.** Swap `PreviewApp.tsx`\'s three call sites to
    the fork, plumb state, add the server-diagnostics fetch
    effect. Tests 7–13 go green; D.4's existing tests still pass.
 7. **Playwright spec** (test 15) lands once 1–6 are green.

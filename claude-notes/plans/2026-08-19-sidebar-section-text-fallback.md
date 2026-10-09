@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-sidebar-section-text-ignored-sdp5g7ns
-**Checkout:** `main` @ `e6ac236d` (investigation ran in the main checkout; no worktree created)
+**Checkout:** `main` \@ `e6ac236d` (investigation ran in the main checkout; no worktree created)
 **Status:** Complete (2026-08-19). Fix in `a93b908e`, Q-13-10 warning in `5c9ee27d`, verification evidence in `sidebar-section-text-fallback-investigation/observed-output.md`. Full `cargo xtask verify` green.
 
 ## Triage verdict
@@ -11,7 +11,7 @@
 
 ## Issue context
 
-Filed today (2026-08-19) by Carlos, priority 2, type bug, label `navigation`. A sidebar entry with `text:` + `file:` (or `href:`) + `contents:` should display the configured `text:` (Q1 behavior for section-with-landing-page items), but q2 shows the linked page's title instead. Real-world impact: the Posit Connect docs port's Cookbook sidebar shows "Posit Connect Cookbook" instead of "Cookbook" across ~109 pages. Observed on q2 0.19.0 through 0.24.0.
+Filed today (2026-08-19) by Carlos, priority 2, type bug, label `navigation`. A sidebar entry with `text:` + `file:` (or `href:`) + `contents:` should display the configured `text:` (Q1 behavior for section-with-landing-page items), but q2 shows the linked page's title instead. Real-world impact: the Posit Connect docs port's Cookbook sidebar shows "Posit Connect Cookbook" instead of "Cookbook" across \~109 pages. Observed on q2 0.19.0 through 0.24.0.
 
 The strand already contains a root-cause analysis and a suggested fix, both of which this investigation confirmed (below).
 
@@ -71,7 +71,7 @@ let text = section_text
      in quarto-core. Q-13-10 follows the same convention (picked sidebar, per page) for
      consistency; the systemic repetition issue is filed separately (see below).
    - Mechanism: a pure scanner in quarto-navigation next to the parser
-     (`section_text_conflicts`-style, returning the conflicting entries' source infos and
+     (`section_text_conflicts`-style, returning the conflicting entries\' source infos and
      label texts, grouped per sidebar to match `parse_list_from_config` indexing — sidebar
      shape knowledge stays in the crate that owns the shape), consumed by
      `sidebar_generate.rs`, which builds the `DiagnosticMessage`s (with

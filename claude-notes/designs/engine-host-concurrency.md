@@ -134,7 +134,7 @@ murders sibling documents). So:
    engine instance**; every other request engages no daemon and is just failed. Poison = invalidate the instance on both sides (harness drops
    its `instance` entry; `TsEngine` clears its cached launched-state — which is
    why that cache is a clearable `Mutex<Option<…>>`, not a `OnceLock`), so the
-   next instance request re-runs `LaunchEngine` (~0) and gets a fresh
+   next instance request re-runs `LaunchEngine` (\~0) and gets a fresh
    `ExecutionEngineInstance` re-discovering/restarting the detached daemon.
    Blast radius shrinks from "whole subprocess" to "one engine instance." *(Future
    opt-in: an engine that performs a real interrupt may carry `clean: true` on
@@ -191,7 +191,7 @@ The concurrency lives on the **Deno event loop**, surfaced to Rust through the
 **reader-thread demux**, not through async Rust. Rust workers are blocking
 rayon+`pollster` threads; each blocks on its own slot. There is no tokio on the
 Rust side, no `block_on` in the pipeline, no reactor to drive. So the
-`EngineTransport` trait and `TsEngine`'s calls remain **synchronous** — the
+`EngineTransport` trait and `TsEngine`\'s calls remain **synchronous** — the
 earlier "the Rust transport is sync" conclusion survives; only the "because the
 protocol is lockstep / async buys no concurrency" *justification* is retired.
 

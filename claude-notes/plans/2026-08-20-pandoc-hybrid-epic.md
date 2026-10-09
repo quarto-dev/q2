@@ -38,7 +38,7 @@ Pandoc bundling + min version, native build only; versioned single-sourced wire 
   independent, non-metadata-seedable Lua mechanisms; the one metadata-driven case
   (`crossref.custom`) already passes through Q2's metadata merge untouched and is already read
   unconditionally by Q1's own `custom.lua`. P6 confirms the passthrough with a test.
-- **`enable-crossref`'s gate surface is two structurally different predicates**: an
+- **`enable-crossref`\'s gate surface is two structurally different predicates**: an
   assign-numbers gate (`if enableCrossRef then`, at `main.lua:718`; opposite polarity) and four
   present-numbers gates (P3).
 - **Two wire types have no Q1 counterpart at all** (P5: `Equation`, `CrossrefResolvedRef` — Q1
@@ -90,7 +90,7 @@ Pandoc bundling + min version, native build only; versioned single-sourced wire 
 |---|---|---|---|
 | **P1** | Neutral-core + 5-variant `PipelineProfile`; split Footnotes; concrete Pandoc exclude-list; `CalloutResolve` classified B4 in design §6; `AppendixStructure` is **B3**; `ExampleEmbedRender` classified B4→format-parameterized B1 | HTML/reveal/preview byte-identity | — |
 | **P2** | Wire-format schema v1: real 8-type inventory; hand-mirror (not codegen) + cross-consumer test | round-trip + preview parity | — |
-| **P3** | Upstream Q1 `crossref-numbering: external`: two predicates (`assignCrossrefNumbers` / `crossref_present()`), 4 real render-decoration gate sites; fallback = carry the 3-file/~6-line patch indefinitely | Q1 suite + Q2 golden | — |
+| **P3** | Upstream Q1 `crossref-numbering: external`: two predicates (`assignCrossrefNumbers` / `crossref_present()`), 4 real render-decoration gate sites; fallback = carry the 3-file/\~6-line patch indefinitely | Q1 suite + Q2 golden | — |
 | **P4** | Vendored-Q1 run machinery; resolves the `QUARTO_FILTER_PARAMS` open questions from the TS research; needs a synthetic single-file "project" value (Q1 TS never treats a render as project-less); vendor pinned to release tag `v1.11.3`; owns the `crossref-<type>-title` params that make Q2's `RefTypeRegistry` authoritative over Q1's own locale defaults | "run main.lua → bytes" smoke | — |
 | **P5** | Lua shim: Route R/N (2 types have no Q1 handler at all; no Route-L type remains in the wire-format inventory); Tabset **and** Callout classified R; Proof/Theorem/FloatRefTarget field-maps audited against real constructors; `ExampleEmbed` out of scope (resolved in P1) | per-type golden | P2, P4 |
 | **P6** | Category passthrough (no export needed — four independent Q1 mechanisms, none metadata-seedable for built-ins; `crossref.custom` passthrough already works) — a passthrough test + numbering-suppression wiring; Callout classified R | figure/theorem/callout-number parity | P3, P5 |
@@ -100,7 +100,7 @@ Pandoc bundling + min version, native build only; versioned single-sourced wire 
 
 **Parallelism.** P1, P2, P3 parallelizable immediately once the frozen decisions land; P4 after
 P2 (can start against the frozen schema decision before P2's implementation fully lands); P5
-after P1 (the `Pandoc`-kind exclude-list decision — specifically keeping `panel-tabset`'s sugar
+after P1 (the `Pandoc`-kind exclude-list decision — specifically keeping `panel-tabset`\'s sugar
 half enabled), P2, and P4; P6 after P3 **and** P5 (P6 reuses P5's Route-R post-construction
 order-assignment mechanism for Callout, and the Callout reclassification lands in P5's shim
 file); **P7-foundation is startable immediately, after P1/P2/P4 only** — in parallel with P5
@@ -166,9 +166,9 @@ add no scope: where a companion and its plan disagree, the plan wins.
   knows and Q1 doesn't renders unnumbered, with a warning, and any reference to it cites a number
   that appears nowhere in the document.
 - The wire format is a versioned shared contract with an enforced neutral-core invariant,
-  including `Proof`'s `plain_data.type` field (without it Q1's constructor crashes on any Proof
+  including `Proof`\'s `plain_data.type` field (without it Q1's constructor crashes on any Proof
   node).
-- `theorem.rs`'s `THEOREM_CLASSES` gap (missing `algorithm`) is closed before docx/pptx v1 ships
+- `theorem.rs`\'s `THEOREM_CLASSES` gap (missing `algorithm`) is closed before docx/pptx v1 ships
   if any in-scope test fixture uses `.algorithm` — otherwise track as an explicit follow-on. P7
   owns evaluating the condition (it owns the fixture set) and filing the follow-on if the
   condition doesn't fire.

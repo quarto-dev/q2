@@ -168,7 +168,7 @@ Table
 ## Files to Modify
 
 - `src/pandoc/treesitter.rs` - Uncomment handlers (lines 1117-1124, skip caption)
-- `tests/test_treesitter_refactoring.rs` - Add ~8-10 new tests
+- `tests/test_treesitter_refactoring.rs` - Add \~8-10 new tests
 
 ## Complexity Assessment
 

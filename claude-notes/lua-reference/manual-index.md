@@ -304,7 +304,7 @@ unary: not  #  -  ~
 
 ---
 
-## Section 5: Auxiliary Library (luaL_*)
+## Section 5: Auxiliary Library (luaL\_\*)
 
 All functions prefixed with `luaL_`, declared in `lauxlib.h`.
 

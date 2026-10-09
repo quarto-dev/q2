@@ -683,7 +683,7 @@ Currently source_context is in ASTContext. Might want to make it more accessible
 - **Phase 6** (Update tests): 2-3 hours
 - **Phase 7** (Clean up): 1 hour
 
-**Total**: ~10-14 hours (1.5-2 days)
+**Total**: \~10-14 hours (1.5-2 days)
 
 ## Summary
 

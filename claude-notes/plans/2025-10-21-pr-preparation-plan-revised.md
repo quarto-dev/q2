@@ -13,8 +13,8 @@
 - **`main`**: At commit `28840b4` (includes new crates merge)
 - **`2025-10-21`**: At commit `28840b4` (same as main)
 - **`kyoto`**: Diverged from `20887b8`, contains:
-  - ~88 changed files in `crates/`
-  - ~44 changed files in `private-crates/` (EXCLUDE from PR)
+  - \~88 changed files in `crates/`
+  - \~44 changed files in `private-crates/` (EXCLUDE from PR)
   - Many changed files in root (claude-notes, etc.) (EXCLUDE from PR)
 
 ### What We're Transferring

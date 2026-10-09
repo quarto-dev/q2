@@ -1,3 +1,10 @@
+---
+diagnostics:
+  Q-2-50:
+    level: off
+    reason: "Documents the Quarto 1 doubled-brace fence idiom on purpose (bd-3djx9ris, by design)."
+---
+
 # Fix: Recursive Braces in Code Block Language Attributes
 
 **Date:** 2025-10-28
@@ -7,11 +14,11 @@
 
 Code blocks with recursively-nested braces in language attributes fail to parse:
 
-```markdown
+````markdown
 ```{{r}}
 cat("hi")
 ```
-```
+````
 
 Currently only `{r}` and bare `r` work, but `{{r}}`, `{{{r}}}`, etc. fail with parse errors.
 

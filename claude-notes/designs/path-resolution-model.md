@@ -21,7 +21,7 @@ Quarto 2 interprets a path written in source (`.qmd` front matter,
    Concretely:
    - a path in `_quarto.yml` resolves against the project root,
    - a path in `docs/foo/_metadata.yml` resolves against `docs/foo/`,
-   - a path in `docs/foo/bar.qmd`'s front matter resolves against `docs/foo/`.
+   - a path in `docs/foo/bar.qmd`\'s front matter resolves against `docs/foo/`.
    Getting this right requires **provenance**: the resolver must know which
    file declared the value, not which document is consuming it. Provenance is
    captured either as `SourceInfo` retained through the merge, or by
@@ -93,13 +93,13 @@ sat in the carve-out for another release cycle.
 ## Blessed mechanisms (current state; convergence target below)
 
 Three provenance-correct mechanisms coexist today. New code should prefer
-(3)'s shape; the convergence work will fold them together.
+(3)\'s shape; the convergence work will fold them together.
 
 1. **`resolve_metadata_path`**
    (`crates/quarto-core/src/transforms/navigation_href.rs:583`) —
    `SourceInfo` → declaring file's dir → project-root-relative string, at
    Generate time. Used by navigation surfaces (sidebar/navbar/footer
-   generate transforms). Caveat: `_quarto.yml`'s FileId is usually not in
+   generate transforms). Caveat: `_quarto.yml`\'s FileId is usually not in
    the per-document `SourceContext`, so the helper degrades to the raw
    string — correct only for callers that treat input as
    project-root-relative.
@@ -118,7 +118,7 @@ Three provenance-correct mechanisms coexist today. New code should prefer
    SourceInfo lookup and runs before any consumer. Covers `css`, `theme`,
    and the three `include-*` slots. Note the registry carries a per-key
    **marking policy** the original contract text did not anticipate: some
-   keys' strings are only *sometimes* paths (`theme` shares its namespace
+   keys\' strings are only *sometimes* paths (`theme` shares its namespace
    with builtin theme names → existence-driven, silent), while others are
    always paths (`include-*` → unconditional, so even a missing file's
    later diagnostic reports the declaration-resolved location).
@@ -132,7 +132,7 @@ bd-hjv5o): generalize mechanism 3 into a single path-shaped-key registry
 unifying the four scattered tables plus the annotation table
 (`crates/pampa/src/pandoc/meta_annotations.rs`, whose `Interpretation::Path`
 is currently unused), so values arrive at consumers already marked and
-declaration-dir-resolved, and consumers' existing `doc_dir.join` reads
+declaration-dir-resolved, and consumers\' existing `doc_dir.join` reads
 become correct as written. Enforcement: the `config-path-base` xtask lint
 (see strand reference in the inventory's gap list).
 
@@ -148,7 +148,7 @@ Update this table when adding keys or migrating sites.
 | `transforms/{navbar,sidebar,footer}_generate.rs` | nav hrefs, logos | (1) `resolve_metadata_path` |
 | `glob/provenance.rs` + `project/listing/glob_resolve.rs`, `project_resources.rs` | `listing.contents`, front-matter `resources:` | (4) `BaseDirContext` |
 | `project/format_paths.rs` (`FORMAT_PATH_KEYS`) + `metadata_merge.rs` call sites | `css`, `theme`, `include-in-header`/`-before-body`/`-after-body`, `reference-doc`, `template` | (3) layer_base marking; consumers (`include_resolve.rs`, `ThemeContext.resolve_path`, `FormatCssTransform`, `pandoc_filters::format_defaults::build_forwarded_args`) read the marked doc-relative values unchanged (fixed 2026-08-19, bd-oejuizi9 / GH #455; `reference-doc`/`template` added 2026-09-20, P7 Task 4 — `ExistenceSilent`, escalated to a hard `Q-5-30` error at the pandoc-invocation consumption site rather than a merge-time warning, since a missing reference doc/template cannot be handed to pandoc at all) |
-| `project/mod.rs` fragment rebase; `extension/{paths,read}.rs` | extension-contributed theme/css/include-*/template/filters | (2) force-marked `Path` |
+| `project/mod.rs` fragment rebase; `extension/{paths,read}.rs` | extension-contributed theme/css/include-\*/template/filters | (2) force-marked `Path` |
 | `website_config.rs`, `website_post_render.rs` | `favicon`, navbar logo / footer image copy | project-root by construction (`_quarto.yml`-only keys) |
 | `discovery.rs`, `project_resources.rs`, `sidebar_auto.rs`, `quarto-sass/src/config.rs` | `project.render`, `project.resources`, sidebar `auto:`, `brand:` | project-root by construction |
 | `quarto-core/src/brand_fonts.rs` (`resolve_source`) | `_brand.yml` `typography.fonts[].files[].path` (`source: file`) | brand-file dir base; leading `/` = project root; **emitted URL is artifact-relative** (`fonts/<basename>` beside the theme CSS), never a rebased source path (bd-ve916wr8) |

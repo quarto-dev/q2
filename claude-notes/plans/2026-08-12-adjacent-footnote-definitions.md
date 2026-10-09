@@ -3,7 +3,7 @@
 **Date:** 2026-08-12
 **Braid:** bd-adjacent-footnote-definitions-miif1k1z (bug, p2, label `parser`)
 **Worktree:** `.worktrees/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`
-(branch `braid/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`, based on `main` @ `7bcddf61`)
+(branch `braid/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`, based on `main` \@ `7bcddf61`)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` **green** before any change
 (11728 tests run, 11728 passed, 197 skipped; all 14 steps passed). Run in the
 main checkout at `c28cfd81`; `main` has since been reset to `7bcddf61`, which
@@ -24,7 +24,7 @@ progress.** See "Design decisions (settled)" below.
 **Ready to design**, but the fix as filed rests on one false premise and one
 unexamined behavior choice, both of which the user has to settle first (Q1 and
 Q2 below). The root cause is confirmed exactly as described; the mechanical fix
-is a ~30-line mirror of 92737cdd. What is *not* settled is whether a `[^id]:`
+is a \~30-line mirror of 92737cdd. What is *not* settled is whether a `[^id]:`
 line should interrupt an ordinary paragraph — Pandoc says no, and q2's own
 model says yes.
 
@@ -80,10 +80,10 @@ described shape (line numbers have drifted since filing):
 
 | Description says | Actually at HEAD |
 | --- | --- |
-| `inline_ref_def: seq(ref_id_specifier, _whitespace, pandoc_paragraph)` @ grammar.js:283 | grammar.js:283 — **exact match** |
-| gate 1 leader list @ scanner.c ~2939-2945 | scanner.c:2940-2947 |
-| gate 2 leader list @ scanner.c ~3120-3123 | scanner.c:3118-3125 |
-| `parse_ref_id_specifier` @ scanner.c:1795 | scanner.c:1795 — **exact match** |
+| `inline_ref_def: seq(ref_id_specifier, _whitespace, pandoc_paragraph)` \@ grammar.js:283 | grammar.js:283 — **exact match** |
+| gate 1 leader list \@ scanner.c \~2939-2945 | scanner.c:2940-2947 |
+| gate 2 leader list \@ scanner.c \~3120-3123 | scanner.c:3118-3125 |
+| `parse_ref_id_specifier` \@ scanner.c:1795 | scanner.c:1795 — **exact match** |
 | `peek_ordered_marker` / `peek_dash_plus_opens_block` | scanner.c:1359 / 1400 |
 
 Confirmed: `'['` is absent from both leader lists. A `[`-leading continuation
@@ -264,13 +264,13 @@ Skeleton only — contents wait on the design discussion.
 - **Phase 0 — Test plan (TDD, failing first).** tree-sitter corpus cases for
   the full indent × context sweep per
   `claude-notes/instructions/scanner-indentation-contexts.md`: indent 0/1/3/4+
-  × {top level, inside list item at and past the content column, inside block
-  quote}, plus the negative cells that must *not* trip the peek (`[not a
+  × \{top level, inside list item at and past the content column, inside block
+  quote\}, plus the negative cells that must *not* trip the peek (`[not a
   footnote] in prose`, `[^b] is a ref.`, `[ref]: url`). Plus a pampa
   end-to-end HTML test on the `[^wsgi]`/`[^asgi]` pair.
 - **Phase 1 — `peek_ref_id_specifier`.** Shape-only helper next to
   `peek_ordered_marker` / `peek_dash_plus_opens_block`; no `mark_end`, no
-  `EMIT_TOKEN`; mirrors `parse_ref_id_specifier`'s id-character rule
+  `EMIT_TOKEN`; mirrors `parse_ref_id_specifier`\'s id-character rule
   (scanner.c:1808-1815) and requires the closing `]` *and* the `:`.
 - **Phase 2 — wire into both gates.** `'['` branch in each, guarded by the
   92737cdd indentation rule; add `first_peeked` / `second_peeked` bookkeeping.
@@ -433,7 +433,7 @@ relative to `BASH_SOURCE`, so it always sweeps the checkout it lives in.
    already lets `#` and `-` interrupt a note body where Pandoc absorbs them.
    Concretely, after the fix, what should `hello there.` / `[^b]: two.`
    produce — one paragraph (Pandoc parity, needs scanner state that does not
-   exist) or a paragraph + a definition (consistent with q2's own model, ~30
+   exist) or a paragraph + a definition (consistent with q2's own model, \~30
    lines)? **My recommendation: the latter**, documented as a deliberate
    divergence.
 
@@ -448,7 +448,7 @@ relative to `BASH_SOURCE`, so it always sweeps the checkout it lives in.
    (If you *want* link reference definitions in qmd, that is a much larger,
    separate feature and should not ride along here.)
 
-4. **Batch bd-mt1ksg9b (the `*` peeks' missing indent guard) into the same
+4. **Batch bd-mt1ksg9b (the `*` peeks\' missing indent guard) into the same
    pass, or keep one-bug-at-a-time?** Both touch the same two gates and would
    otherwise conflict. The project rule says one at a time, and bd-mt1ksg9b was
    explicitly deferred once already for that reason — but it also notes `*` has

@@ -18,7 +18,7 @@ Across almost every content conflict, the same two-axis tension repeats:
 | **Module layout** | (nothing — main is pre-reorg) | Package-alias imports (`@quarto/preview-renderer/...`, `@quarto/preview-runtime`), the stub-and-real-entry split |
 
 So the recipe per conflict is usually:
-1. Start from **feature**'s file (correct imports, correct package boundaries).
+1. Start from **feature**\'s file (correct imports, correct package boundaries).
 2. **Graft in** the new attribution surface from main (new props, hook calls, WASM signature additions, `<AttributionWrap>` wrapping).
 3. Re-target any relative imports `main` introduces for attribution helpers to their ts-packages equivalents.
 
@@ -154,7 +154,7 @@ The framework barrel (`ts-packages/preview-renderer/src/framework/index.ts`) nee
 - `authorshipOn: boolean` — overlay toggle, owned by Editor.tsx.
 - `onAttributionGeneratingChange?: (generating: boolean) => void` — animation state callback.
 
-These props are destructured from `props` on line ~141 (main) and forwarded only to `<ReactPreview>` — `<Preview>` (the non-React iframe path) doesn't get them.
+These props are destructured from `props` on line \~141 (main) and forwarded only to `<ReactPreview>` — `<Preview>` (the non-React iframe path) doesn't get them.
 
 **Feature side** has the same router shape but with imports retargeted:
 - `import type { FileEntry } from '@quarto/preview-renderer/types/project';` (was `'../../types/project'`)
@@ -264,7 +264,7 @@ Pick the path that matches your appetite for cross-file work in this merge. The 
 import '@quarto/preview-renderer/q2-preview/entry';
 ```
 
-**Main side has the full ~320-line entry implementation** (because the move hadn't happened on main).
+**Main side has the full \~320-line entry implementation** (because the move hadn't happened on main).
 
 **Resolution:** keep feature's stub. **Do not paste main's body in.** Instead, switch your attention to `ts-packages/preview-renderer/src/q2-preview/entry.tsx` (which is the *real* entry now) and verify whether attribution wiring needs to be added there. The conflict in this `hub-client/.../entry.tsx` file is purely an artifact of git not knowing the move happened — `git checkout --ours hub-client/src/components/render/q2-preview/entry.tsx` then `git add`.
 
@@ -359,7 +359,7 @@ export function parseQmdToAst(qmdContent) {
 
 The initial scoping (off the abort output) caught the 9 TS content conflicts above plus the 5 file-location ones. When the merge re-ran, six more content conflicts surfaced that the abort summary truncated. They have the same overall shape — concurrent signature/structure additions on both branches — and most follow the "combine both sets of additions" pattern.
 
-### 10. `crates/quarto-core/src/pipeline.rs` (single conflict, ~line 1157)
+### 10. `crates/quarto-core/src/pipeline.rs` (single conflict, \~line 1157)
 
 `origin/main` inserts two new entries (`"website-favicon"`, `"attribution-viewer"`) into a list of CLI-only transforms — between `<<<<<<<` and `=======` the feature side is empty (these transforms don't exist on this branch yet from the PR-#190 angle, though the comment on main makes clear that `attribution-viewer` is the CLI-side counterpart to the hub-client's `framework/attribution.tsx`).
 
@@ -374,7 +374,7 @@ Both branches added new fields (and constructor / builder methods) to the render
 
 **Resolution:** these are independent additions. Combine both sets of fields/methods. Mirror the pattern from `wasm-quarto-hub-client/src/lib.rs` below: every function that takes `capture: Option<EngineCapture>` on feature now needs to *also* take the attribution param from main.
 
-### 12. `crates/quarto-core/src/stage/mod.rs` (single conflict, ~line 113)
+### 12. `crates/quarto-core/src/stage/mod.rs` (single conflict, \~line 113)
 
 Concurrent additions to a `pub use crate::stage::stages::{...};` re-export list:
 
@@ -437,7 +437,7 @@ import { getActorId } from '../services/automergeSync';
 | Rust + extra TS content conflicts surfaced after the merge ran (you resolve) | 6 |
 | **Total content conflicts requiring your attention** | **15** |
 
-The 6 extra conflicts (sections 10–15 above) follow the same overall pattern as the original 9: combine both sides' additions rather than picking one. The Rust ones (`pass2_renderer.rs`, `wasm-quarto-hub-client/src/lib.rs`) are mechanical concurrent-parameter-addition merges and shouldn't require re-thinking either feature.
+The 6 extra conflicts (sections 10–15 above) follow the same overall pattern as the original 9: combine both sides\' additions rather than picking one. The Rust ones (`pass2_renderer.rs`, `wasm-quarto-hub-client/src/lib.rs`) are mechanical concurrent-parameter-addition merges and shouldn't require re-thinking either feature.
 
 ---
 

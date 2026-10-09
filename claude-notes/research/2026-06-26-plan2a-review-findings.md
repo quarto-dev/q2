@@ -51,7 +51,7 @@ strength). Everything else is a one-line plan-doc edit, not code.
 ## What checks out (faithfully ported — do not touch)
 
 - **Config key lists — exact, all five.** `kExecuteDefaultsKeys` (27),
-  `kRenderDefaultsKeys` (53), `kPandocDefaultsKeys` (80, **including all ~33 inline string
+  `kRenderDefaultsKeys` (53), `kPandocDefaultsKeys` (80, **including all \~33 inline string
   literals** like `"defaults"`/`"file-scope"`/`"trace"`), `kIdentifierDefaultsKeys` (3),
   `kLanguageDefaultsKeys` (131) each match Q1's resolved values member-for-member. Q1's
   *duplicate* language keys (`title-block-author-single`, `-published`, `-modified`,

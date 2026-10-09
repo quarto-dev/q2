@@ -44,16 +44,16 @@ Screenshot: `claude-notes/scratch/image-drop-bug-repro.png`.
 
 `hub-client/src/components/Editor.tsx`:
 
-- `handleEditorDrop` (external-file branch, ~line 854): opens the asset
+- `handleEditorDrop` (external-file branch, \~line 854): opens the asset
   dialog with `setAssetDestination('')` — always project root, ignoring the
   current file's directory.
-- `handleUploadAsset` (~line 905): inserts
+- `handleUploadAsset` (\~line 905): inserts
   `` `![](${result.path})` `` where `result.path` is the final
   project-root-relative upload path returned by `createBinaryFile`
   (`CreateBinaryFileResult.path` — authoritative; it can differ from the
   requested path via hash-suffix rename on name conflict). No relativization
   against the current file's directory.
-- `handleEditorDrop` (internal sidebar-drag branch, ~line 814): same bug —
+- `handleEditorDrop` (internal sidebar-drag branch, \~line 814): same bug —
   `` `![](${path})` `` / `` `[${fileName}](${path})` `` insert the sidebar's
   project-root-relative path verbatim.
 
@@ -74,7 +74,7 @@ Two complementary changes:
    name" requirement.
 
 2. **UX default: destination = current file's directory.** For editor drops,
-   pre-fill the asset dialog destination with the current `.qmd`'s parent
+   pre-fill the asset dialog destination with the current `.qmd`\'s parent
    directory instead of `''`. The image then lands next to the document and
    the inserted path is the bare filename in the common case. (The sidebar
    drop path already does selection-based defaulting via

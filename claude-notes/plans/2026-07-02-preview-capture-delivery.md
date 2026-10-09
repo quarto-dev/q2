@@ -5,7 +5,7 @@
 **Strand:** bd-h4rhohhy (P1) carries the delivery-bug evidence; the close/busy defect is item
 **Bug A** below (tracked in this plan; noted on the strand).
 **Scope:** OUT of Plan 4c's scope (marimo continues separately). This is a focused
-debug-and-fix of `q2 preview`'s engine-capture path plus the browser-tier e2e coverage it
+debug-and-fix of `q2 preview`\'s engine-capture path plus the browser-tier e2e coverage it
 never had (Plan-4 4J's honest limitation).
 **Repos:** q2 worktree `feature/ts-engine-extensions` + upstream `~/src/quarto-julia-engine`
 (engine-side fix on a NEW local branch `q2-close-busy-fix` off main; never push; mirrors the
@@ -45,7 +45,7 @@ before any fix. Candidate suspects (check in order): sidecar write vs sync deliv
 sidecar's rel_path key, WASM replay rejecting on canonical `input_qmd` mismatch (staleness),
 `contentTick` effect not re-firing.
 
-## Bug C candidate — wire-frame corruption on the engine-host stdout (evidence 2026-07-02 ~17:11-17:14, user's live preview; RECORDED, NOT DIAGNOSED)
+## Bug C candidate — wire-frame corruption on the engine-host stdout (evidence 2026-07-02 \~17:11-17:14, user's live preview; RECORDED, NOT DIAGNOSED)
 
 Two `ERROR quarto_core::engine::ts_process: engine-host protocol error: non-JSON line on
 stdout` events from the same session:
@@ -120,7 +120,7 @@ All three reproduced deterministically:
   WORKS end to end — `onCapturesChange` fired (keys `["index.qmd"]`), activeFile key
   matches, `getBinaryDocById` returned the capture bytes (567 B), render effect re-fired
   (renderTicks=1) — yet the pane stayed inert. The break is INSIDE WASM
-  `render_page_for_preview`'s ReplayEngine splice; PRIMARY candidate: the canonical
+  `render_page_for_preview`\'s ReplayEngine splice; PRIMARY candidate: the canonical
   `input_qmd` staleness rejection (the "accepted-untested" item — P0 now implicates it;
   P2 adds its seam on confirmation). RULED OUT: sidecar-not-delivered, key mismatch,
   getBinaryDocById failure, contentTick not re-firing.
@@ -139,7 +139,7 @@ All three reproduced deterministically:
 - **PC2/PC4 decision rule ratified** (amended after P0 review): the rule applies to the
   **abandoned-worker** scenario (client vanished mid-run, worker stuck busy — the user's
   bug). P1 first confirms whether the QNR socket `close` command accepts a force flag
-  (julia-engine.ts CLI already calls `closeWorker(file, force)` ~:1002-1003). If YES →
+  (julia-engine.ts CLI already calls `closeWorker(file, force)` \~:1002-1003). If YES →
   recovery: pre-run close falls back to forced close on busy; frozen PC4 assertion = the
   fresh `record_capture` SUCCEEDS. If NO → actionable error naming the stale-server/
   transport-file remedy; frozen PC4 assertion = error contains the frozen remedy substring.
@@ -180,7 +180,7 @@ assertion — J3-correction precedent):
 - [x] PC1 + PC2 TDD upstream (deno tests, socket/command-writer mocked); rebundle the q2
       julia fixture from the branch; compat log + migration guide addenda (julia-engine.ts is
       no longer zero-changes — UPDATE THE HEADLINE claims in both docs honestly).
-      *(Upstream `q2-close-busy-fix` @ 93bce7b. Decision gate = YES: QNR exposes `forceclose`;
+      *(Upstream `q2-close-busy-fix` \@ 93bce7b. Decision gate = YES: QNR exposes `forceclose`;
       PC2 = force-close recovery. New pure `src/worker-close.ts` (preRunClose/postRunClose over
       an injectable writer); 6 deno unit tests RED→GREEN. Fixture rebundled `82bff64…`. Compat
       log §15 + migration-guide headline updated. See .superpowers/sdd/task-p1-report.md.)*
@@ -243,7 +243,7 @@ assertion — J3-correction precedent):
       task-p1-report.md §7 and compat log §15), then drop the `QUARTO_PC6_LIVE` gate
       (or record explicitly why it stays opt-in). Relates to bd-l9jhy5u0.
       *(`isolate_julia_project()` (julia_engine_e2e.rs) / `isolateJuliaProject()`
-      (engine-capture-splice-julia.spec.ts) copy the ambient `QUARTO_JULIA_PROJECT`'s
+      (engine-capture-splice-julia.spec.ts) copy the ambient `QUARTO_JULIA_PROJECT`\'s
       `Project.toml`+`Manifest.toml` into a per-test temp dir and re-point the env
       var at the copy — on top of, not instead of, the existing temp-`HOME`
       override (which governs the transport file; confirmed by a standalone
@@ -257,7 +257,7 @@ assertion — J3-correction precedent):
       confirmed via `stat`/`ls` before and after (Project.toml/Manifest.toml
       mtimes byte-identical; `julia_transport.txt` absent both times); the
       `IsolatedJuliaServerGuard` reaped every process either run spawned (no new
-      pids after either run). Found, but did NOT touch: ~28 pre-existing
+      pids after either run). Found, but did NOT touch: \~28 pre-existing
       julia/QuartoNotebookRunner processes on the shared transport from
       unrelated (non-isolated, by-design daemon-reuse) test activity spanning the
       day — this is the pre-existing bd-l9jhy5u0 leak, out of scope here, left
@@ -286,7 +286,7 @@ assertion — J3-correction precedent):
       *(Strand → in_review with full outcome (comments c-eps49gsq, c-5ep9kmp7, c-9fvojb24):
       "Bug B" refuted as a delivery defect; user symptom re-attributed to Bug A + Bug C,
       both fixed. Left OPEN pending the user's merge-back decision + acceptance run of the
-      real ~/docs/julia doc (which also needs its project _extensions/julia-engine updated
+      real \~/docs/julia doc (which also needs its project \_extensions/julia-engine updated
       from the upstream q2-close-busy-fix branch). Compat log §15 + migration guide
       reconciled at P1, forward-note re upstream tip's errorRunClose added at the final fix
       wave (b67cb48a3). Final whole-branch review: "With fixes", all fixes applied
@@ -311,7 +311,7 @@ harness + assertions FROZEN.
 | PC3 | int-rs | `record_eager_captures` error branch (capture_driver.rs:116-140) | registry with failing-engine doc A + echo doc B → Q-PREVIEW-CAP-1 emitted for A (test sink) AND B's capture recorded | failing engine only (real driver, real samod ctx) | (a) revert sink emission → diagnostic absent → RED; (b) make the loop return on first Err → B's capture absent → RED |
 | PC4 | int-rs, julia-gated | shared-server busy-worker lifecycle | P0 harness; post-fix assertion FROZEN AT FIX TIME with controller sign-off (fresh capture succeeds via recovery, or fails with the PC2 message — whichever the ratified fix specifies) | none (real QNR) | the ratified fix hunk → pre-fix failure shape returns → RED |
 | PC5 | e2e-pw, deno-gated | full delivery chain: set_capture → samod → onCapturesChange → getBinaryDocById → WASM splice | temp project w/ echo-engine doc; real `q2 preview` via previewServer.ts; page open; WAIT (no reload) for `ECHO_EXECUTED` in the pane AND assert the inert source token ABSENT from the final pane (splice replaced, not appended). *Amended at P2 (controller-ratified): the original inert→executed transition guard is unsatisfiable — the eager capture is recorded at server startup before the browser connects, so the first SPA render already splices; the stale-full-render vacuity it targeted doesn't exist (q2 preview serves the client-side SPA; ECHO_EXECUTED exists only in the capture bytes).* | none (real binary, real chromium) | capture_driver.rs:192-194 set_capture → RED-by-timeout (revert-PROVEN at P2). The contentTick-bump hunk (PreviewApp.tsx:729-738) is REBOUND to PC7 (jsdom, its explicit revert target); PC6's julia timing observes the live post-connect update path e2e. |
-| PC6 | e2e-pw, julia-gated, **opt-in `QUARTO_PC6_LIVE=1`** | same chain, real julia | julia minimal doc (`daemon: false`); assert executed `2` appears in the pane without reload. *Green run recorded 2026-07-02 (6.5s). **P3 update:** isolation is CLOSED — `isolateJuliaProject()` now copies `QUARTO_JULIA_PROJECT`'s `Project.toml`/`Manifest.toml` into a per-test temp dir on top of the pre-existing temp-`HOME` transport override, live-verified (shared `julia_transport.txt` existence/mtime unchanged across the run). Opt-in is KEPT, but the reason changed: no longer an isolation gap, now purely environmental/speed — a real julia spawn (network-installed julia, multi-second server boot) — mirroring PC4a's `#[ignore]` gate. See task-p3-report.md.* | none | same set_capture hunk as PC5 (julia leg is the real-engine evidence row; PC5 is the fast CI guard) |
+| PC6 | e2e-pw, julia-gated, **opt-in `QUARTO_PC6_LIVE=1`** | same chain, real julia | julia minimal doc (`daemon: false`); assert executed `2` appears in the pane without reload. *Green run recorded 2026-07-02 (6.5s). **P3 update:** isolation is CLOSED — `isolateJuliaProject()` now copies `QUARTO_JULIA_PROJECT`\'s `Project.toml`/`Manifest.toml` into a per-test temp dir on top of the pre-existing temp-`HOME` transport override, live-verified (shared `julia_transport.txt` existence/mtime unchanged across the run). Opt-in is KEPT, but the reason changed: no longer an isolation gap, now purely environmental/speed — a real julia spawn (network-installed julia, multi-second server boot) — mirroring PC4a's `#[ignore]` gate. See task-p3-report.md.* | none | same set_capture hunk as PC5 (julia leg is the real-engine evidence row; PC5 is the fast CI guard) |
 | PC7 | jsdom (vitest, q2-preview-spa) | PreviewApp onCapturesChange handler + render effect re-fire | integration-test mock pattern (PreviewApp.integration.test.tsx:549): fire onCapturesChange after initial render with a CaptureRef → assert renderPageForPreview called AGAIN with the binary doc's bytes | sync client + wasm renderer (existing mocks) | the `captures` state write in the onCapturesChange handler → no second render call → RED. *(P2 finding: the contentTick bump is REDUNDANT — the render effect already depends on `state.captures`; reverting contentTick alone stays GREEN. PC7 binds the load-bearing captures write; the redundancy is documented in the test and listed for final-review triage.)* |
 | PC8 | int-rs | `perform_re_execute` failure branch (re_execute.rs:253-279) | failing engine → sidecar `CaptureState::Error` + `last_error` set + Q-PREVIEW-RE-1 emitted | failing engine | revert the error-write hunk → sidecar lacks Error state → RED |
 | PC-C | int-rs deno-gated (framing) + resilience tier chosen at fix time | `StdioReadHalf::recv` framing + `reader_loop` Malformed arm (ts_process.rs) | (framing, GREEN at P0) >1MB frame → `Ok`; foreign/interleaved line → `Malformed`. (resilience, post-fix) a stray non-JSON line does NOT kill the host and does NOT fail an unrelated in-flight request; a following valid frame is still delivered; beyond the stray-line bound the kill-channel behavior is preserved | none (real pipe) for framing; mock read-half for resilience | revert the log-and-skip resilience hunk → one stray line kills all pending → RED |

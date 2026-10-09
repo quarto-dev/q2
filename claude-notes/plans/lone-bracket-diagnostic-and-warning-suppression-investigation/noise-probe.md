@@ -20,9 +20,9 @@ with inline code spans stripped and ```` ``` ````-fenced blocks skipped.
 
 | file | count | example |
 |---|---|---|
-| `docs/guides/authoring/diagrams.qmd` | 5 | `[Idea]` @ 15 |
-| `docs/errors/index.qmd` | 2 | `[code, title, subsystem, status]` @ 7 |
-| `docs/guides/authoring/figures.qmd` | 1 | `[1,23,2,4]` @ 169 |
+| `docs/guides/authoring/diagrams.qmd` | 5 | `[Idea]` \@ 15 |
+| `docs/errors/index.qmd` | 2 | `[code, title, subsystem, status]` \@ 7 |
+| `docs/guides/authoring/figures.qmd` | 1 | `[1,23,2,4]` \@ 169 |
 
 ## Every one is a false positive
 

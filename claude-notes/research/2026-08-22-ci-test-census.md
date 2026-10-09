@@ -53,7 +53,7 @@ scratchpad). "In CI" = gated by a push/PR workflow.
 | `q2-preview-spa` | `test:e2e` (Playwright) | 17 specs | — | not measured | no (verify `--e2e` only) |
 
 **Roughly 2,070 TypeScript assertions currently sit outside the merge gate**
-(~1,620 excluding `preview-renderer`'s integration tier).
+(\~1,620 excluding `preview-renderer`\'s integration tier).
 
 ### 2.1 Build-order prerequisites (not test bugs)
 
@@ -70,11 +70,11 @@ outputs exist, because they resolve siblings through the `"import":
 - `@quarto/annotated-qmd` → needs `@quarto/pandoc-types` dist; cold it crashes
   with `ERR_MODULE_NOT_FOUND` mid-run.
 
-So CI must run the equivalent of `verify`'s step 6 (ts-packages build in
+So CI must run the equivalent of `verify`\'s step 6 (ts-packages build in
 dependency order) **before** these suites. This is #250's "a couple of deps not
 installed in my local checkout" — it is a build-order requirement, not flake.
 
-`@quarto/preview-renderer`'s integration tier additionally needs the **WASM**
+`@quarto/preview-renderer`\'s integration tier additionally needs the **WASM**
 package present (`wasm-quarto-hub-client`): 26 of its 27 file-level failures
 in a WASM-less tree are `Failed to resolve import "wasm-quarto-hub-client"`.
 With WASM built the tier reports **49 of 50 files, 578 passed / 1 failed / 1
@@ -85,10 +85,10 @@ tests, so ordering this suite after that step is enough.
 
 - `@quarto/annotated-qmd` — 154/156. `div-attrs.json - Div with attributes
   conversion` and `substring invariant - links.qmd: inline code` (an off-by-one:
-  got `' \`x = 5\`'`, expected `'\`x = 5\`'`). Tracked by **bd-1d6io**
+  got ``' `x = 5`'``, expected ``'`x = 5`'``). Tracked by **bd-1d6io**
   (`in_progress`). Unchanged since #250 was filed.
 - `@quarto/preview-renderer` `test:integration` — one real assertion failure in
-  `custom-components.integration.test.tsx > Equation > appends \tag{N} to the
+  `custom-components.integration.test.tsx > Equation > appends \tag\{N\} to the
   LaTeX when plain_data.order is set` (`expect(tagEl).not.toBeNull()` at
   `custom-components.integration.test.tsx:664`). **Confirmed real**: re-run
   after a full `npm run build:wasm` still fails, with every other file green
@@ -148,14 +148,14 @@ locally: **44 crates, 20 passed, 5 failed, 68 ignored** — the tier is red toda
 Source shape: **422 fenced blocks** in doc comments across 31 crates (211
 blocks), heavily tagged so they never compile or run — `ignore` (46),
 `rust,ignore` (24), `text` (38), `yaml` (24), plus `json`, `html`,
-`javascript`, `markdown`, `bash`, `qmd`, `xml`, `sh`, `r`, `lua`. Only ~26 are
+`javascript`, `markdown`, `bash`, `qmd`, `xml`, `sh`, `r`, `lua`. Only \~26 are
 live Rust doctests, and only 20 of those pass.
 
 The 5 failures:
 
 | Crate | Doctest | Cause |
 | --- | --- | --- |
-| `quarto-core` | `crossref::codeblock_shorthand` (lines 19, 34) | prose treated as Rust — smart quotes, backticks, em-dashes; `error: prefix \`cell\` is unknown`, `expected one of ! or ::, found Div` |
+| `quarto-core` | `crossref::codeblock_shorthand` (lines 19, 34) | prose treated as Rust — smart quotes, backticks, em-dashes; ``error: prefix `cell` is unknown``, `expected one of ! or ::, found Div` |
 | `quarto-core` | `engine::jupyter::text_execute::render_cell` (lines 535, 541) | same, plus a real `E0308` mismatched types |
 | `quarto-sass` | `bundle::assemble_themes` (`bundle.rs:769`) | **stale API**: `ThemeContext::new` gained a `runtime: &dyn SystemRuntime` parameter; the doctest still calls it with one argument (`E0061`) |
 
@@ -251,7 +251,7 @@ declared in its crate's `main.rs`, and no test module is hidden behind a
   nowhere** — not in CI, not in `verify`.
 - The tree-sitter **CRLF parity** check is `verify`-only.
 - `cargo nextest run --tests` (not `--all-targets`): the comment cites
-  `quarto-yaml`'s `harness = false` benches, but that crate is now external and
+  `quarto-yaml`\'s `harness = false` benches, but that crate is now external and
   **no in-tree crate has a `benches/` dir**, so the distinction is now moot.
 - `crates/quarto-hub-provider/tests/integration/auth_bridge.rs` has 2 skip
   sites; hub auth paths are thinly covered in CI.
@@ -261,7 +261,7 @@ declared in its crate's `main.rs`, and no test module is hidden behind a
 1. **Pure wiring** — green as-is, just needs a CI step: `trace-viewer`,
    `kanban` (unit+integration), `q2-preview-spa` (unit+integration),
    `preview-renderer` unit, `preview-runtime` unit, `quarto-api`,
-   `quarto-automerge-schema`, `wasm-js-bridge`. (~1,200 assertions.)
+   `quarto-automerge-schema`, `wasm-js-bridge`. (\~1,200 assertions.)
 2. **Wiring + build ordering** — `quarto-sync-client`, `quarto-hub-mcp`
    (ts-packages dist build first), `preview-renderer` integration (WASM first).
 3. **Red, needs a fix** — `annotated-qmd` (bd-1d6io), `preview-renderer`

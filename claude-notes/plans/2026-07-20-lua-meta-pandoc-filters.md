@@ -131,7 +131,7 @@ keys with a fraction of the complexity.
 
   (`quarto.config.md` reuses `parse_yaml_string_as_markdown_to_config`
   semantics so Lua and YAML agree about what markdown means.)
-- **No `pampa.` global.** pampa is an internal crate name; users' identity
+- **No `pampa.` global.** pampa is an internal crate name; users\' identity
   for this system is Quarto, Q1 filters already use `quarto.*`, and q2
   already ships `quarto.{warn,error,log,utils,doc,...}`. If pampa is ever
   externalized as a standalone tool, alias `pampa = quarto`-subset then.
@@ -161,7 +161,7 @@ tests.
 
 The only semantic reader of `merge_op` is the merge algorithm
 (`quarto-config/src/merged.rs:302`), which runs in `MetadataMergeStage`
-(pipeline stage 2). `UserFiltersStage::pre()/post()` run at stages ~12/14 —
+(pipeline stage 2). `UserFiltersStage::pre()/post()` run at stages \~12/14 —
 **nothing downstream of the filter passes ever merges again**, so by filter
 time `merge_op` is spent. The two post-filter touchers are non-semantic:
 the JSON writer serializes it (`pampa/src/writers/json.rs:3921`) and
@@ -196,7 +196,7 @@ Extend the existing plain-table-with-`__name="Pandoc"` representation
 (`rust_pandoc_to_lua_table`, `readwrite.rs:316-342`) with a shared metatable
 providing `walk`, `clone`, `normalize`, `__concat` (meta union right-biased),
 `__eq`. Constructor `pandoc.Pandoc(blocks, meta)` applies fuzzy blocks
-coercion + D2 meta normalization. Keeps `pandoc.read`'s doc shape and the
+coercion + D2 meta normalization. Keeps `pandoc.read`\'s doc shape and the
 constructor's shape identical. (Userdata upgrade is a possible later
 refactor; not needed by the conformance suite.)
 
@@ -301,7 +301,7 @@ Phase 2 notes:
 - bd-o8pr additivity E2E (noted in bd-uy3z) is now unblocked but not
   written here; it belongs to that strand's scope.
 
-### Phase 3 — pandoc.Pandoc/Meta/Meta* constructors + doc value
+### Phase 3 — pandoc.Pandoc/Meta/Meta\* constructors + doc value
 - [x] Flip xfails (ratchet-driven TDD: removed the lines first, watched the
       12 unexpected failures, then implemented). Conformance now 196 pass /
       7 xfail: normalize ×2 (follow-up strand), walk order ×2 (Phase 4:

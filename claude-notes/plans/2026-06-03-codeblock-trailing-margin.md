@@ -20,7 +20,7 @@ tmp-codeblock-repro/repro.qmd   (any ```ts block; see bd-jby1i)
 cargo run --bin q2 -- render tmp-codeblock-repro/repro.qmd
 ```
 
-Open the output in a browser: the gray box extends ~18px below `);`.
+Open the output in a browser: the gray box extends \~18px below `);`.
 
 ### Root cause (verified, not hypothesized)
 
@@ -32,7 +32,7 @@ Verified in Chrome via DevTools MCP on 2026-06-03:
   pre.sourceCode > code.sourceCode`.
 - The gray background is on `div.sourceCode`. It has
   `overflow-y: hidden` (`resources/scss/bootstrap/_bootstrap-rules.scss`
-  ~line 1134), which creates a **block formatting context**.
+  \~line 1134), which creates a **block formatting context**.
 - Bootstrap's reboot rule `pre { margin-bottom: 1rem }` (computed 17px)
   is never reset on `pre.sourceCode` in Q2. Inside the BFC, that
   bottom margin cannot collapse out — it is **trapped inside the div**,

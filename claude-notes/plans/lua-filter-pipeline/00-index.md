@@ -10,7 +10,7 @@
 
 **Analysis Status Legend**:
 - [ ] Not started
-- [~] Partial (reading code)
+- \[\~\] Partial (reading code)
 - [x] Complete
 
 ---
@@ -39,7 +39,7 @@ The filter pipeline is defined in `main.lua` and executes via `run_as_extended_a
 15. post-finalize       (user entry point)
 ```
 
-Total: ~78 internal stages + 8 user entry points
+Total: \~78 internal stages + 8 user entry points
 
 ---
 
@@ -63,13 +63,13 @@ For each stage, we categorize side effects:
 
 | Group | Stages | Document | Status |
 |-------|--------|----------|--------|
-| Init | 4 | [01-init-filters.md](./01-init-filters.md) | [x] |
-| Normalize | 6 | [02-normalize-filters.md](./02-normalize-filters.md) | [x] |
-| Pre | ~17 | [03-pre-filters.md](./03-pre-filters.md) | [x] |
-| Crossref | 6 | [04-crossref-filters.md](./04-crossref-filters.md) | [x] |
-| Layout | 9 | [05-layout-filters.md](./05-layout-filters.md) | [x] |
-| Post | ~29 | [06-post-filters.md](./06-post-filters.md) | [x] |
-| Finalize | 7 | [07-finalize-filters.md](./07-finalize-filters.md) | [x] |
+| Init | 4 | [01-init-filters.md](./01-init-filters.md) | \[x\] |
+| Normalize | 6 | [02-normalize-filters.md](./02-normalize-filters.md) | \[x\] |
+| Pre | \~17 | [03-pre-filters.md](./03-pre-filters.md) | \[x\] |
+| Crossref | 6 | [04-crossref-filters.md](./04-crossref-filters.md) | \[x\] |
+| Layout | 9 | [05-layout-filters.md](./05-layout-filters.md) | \[x\] |
+| Post | \~29 | [06-post-filters.md](./06-post-filters.md) | \[x\] |
+| Finalize | 7 | [07-finalize-filters.md](./07-finalize-filters.md) | \[x\] |
 
 ---
 
@@ -84,11 +84,11 @@ For each stage, we categorize side effects:
 | Pre | 14 | 1 (shortcodes)* | 1 (results) | 0 | 1 (Shiny) | 1 (`pandoc.utils.references`) |
 | Crossref | 5 | 0 | 1 (index) | 0 | 0 | 1 (`pandoc.write`) |
 | Layout | 6 | 1 (manuscripts) | 0 | 0 | 0 | 1 (lightbox) |
-| Post | ~22 | 2 (email, book) | 3 (cites, email) | 0 | 1 (rsvg) | ~8 (`pandoc.write`) |
+| Post | \~22 | 2 (email, book) | 3 (cites, email) | 0 | 1 (rsvg) | \~8 (`pandoc.write`) |
 | Finalize | 4 | 0 | 3 (mediabag, cites, deps) | 0 | 0 | 0 |
-| **Total** | **~57** | **6** | **9** | **0** | **3** | **~14** |
+| **Total** | **\~57** | **6** | **9** | **0** | **3** | **\~14** |
 
-*Shortcode file loading happens at init, env shortcode reads `os.getenv()`
+\*Shortcode file loading happens at init, env shortcode reads `os.getenv()`
 
 ### WASM Compatibility Summary
 
@@ -99,11 +99,11 @@ For each stage, we categorize side effects:
 | Pre | 14 | 1 (results file) | 1 (Shiny subprocess)* |
 | Crossref | 5 | 1 (index file) | 0 |
 | Layout | 6 | 1 (manuscripts) | 0 |
-| Post | ~22 | 0 | 2 (pdf-images, email)* |
+| Post | \~22 | 0 | 2 (pdf-images, email)* |
 | Finalize | 4 | 3 (mediabag, cites, deps) | 0 |
-| **Total** | **~57** | **7** | **4*** |
+| **Total** | **\~57** | **7** | **4\*** |
 
-*These blockers only apply to non-HTML output formats. **For HTML live preview, blocked = 0**.
+\*These blockers only apply to non-HTML output formats. **For HTML live preview, blocked = 0**.
 
 ---
 
@@ -111,7 +111,7 @@ For each stage, we categorize side effects:
 
 ### WASM Feasibility
 
-1. **~73% of stages are pure** (~57 of ~78 stages). These can run directly in WASM.
+1. **\~73% of stages are pure** (\~57 of \~78 stages). These can run directly in WASM.
 
 2. **4 stages have subprocess calls, but none apply to HTML output**:
    - Typst juice.ts → Typst only (also: JS callback possible via NPM implementation)
@@ -119,10 +119,10 @@ For each stage, we categorize side effects:
    - PDF image conversion (rsvg-convert) → PDF only
    - Email rendering → Email format only, and only via `quarto render`
 
-3. **~7 stages need VFS**: File reads/writes that could be redirected to virtual filesystem:
+3. **\~7 stages need VFS**: File reads/writes that could be redirected to virtual filesystem:
    - Include files, manuscripts notebooks, results/index files, mediabag, cites
 
-4. **~14 stages use Pandoc API** (`pandoc.read`, `pandoc.write`, `pandoc.pipe`):
+4. **\~14 stages use Pandoc API** (`pandoc.read`, `pandoc.write`, `pandoc.pipe`):
    - These would need either Pandoc WASM or Rust-native replacements
    - Most are for format-specific output generation (LaTeX, Typst, etc.)
    - For HTML output, many of these can be skipped or replaced with pampa
@@ -172,7 +172,7 @@ For a WASM-based quarto preview:
 - File I/O stages need VFS or in-memory handling
 - Pandoc API calls need Rust-native replacements
 
-This makes ~95%+ of the HTML pipeline WASM-compatible.
+This makes \~95%+ of the HTML pipeline WASM-compatible.
 
 ---
 

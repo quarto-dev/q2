@@ -132,7 +132,7 @@ Essential position conversion functions:
 
 ## Implementation Details & Design Rationale
 
-### Why Box<SourceInfo>?
+### Why `Box<SourceInfo>`?
 Using `Box<SourceInfo>` in Substring and Transformed variants prevents exponential memory growth when creating deep transformation chains. Without boxing, the size of SourceInfo would double with each level of nesting.
 
 ### Why Optional Content in SourceFile?
@@ -226,8 +226,8 @@ cargo doc --open    # View generated documentation
 - **Tests written**: 34
 - **Tests passing**: 34 ✅
 - **Warnings**: 0 ✅
-- **Lines of code**: ~900 (including tests and docs)
-- **Time estimate**: Completed Phase 1 (planned: 2 weeks, ~16 hours)
+- **Lines of code**: \~900 (including tests and docs)
+- **Time estimate**: Completed Phase 1 (planned: 2 weeks, \~16 hours)
 
 ## To Resume This Work
 

@@ -30,7 +30,7 @@ rg "Q-1-90" --type rust -A3 -B3
 
 Open `crates/quarto-error-reporting/error_catalog.json` and add these entries.
 
-Insert after the existing Q-1-* entries (after Q-1-20):
+Insert after the existing Q-1-\* entries (after Q-1-20):
 
 ```json
   "Q-1-90": {
@@ -63,7 +63,7 @@ Insert after the existing Q-1-* entries (after Q-1-20):
   },
 ```
 
-Insert after existing Q-3-* entries (after Q-3-55):
+Insert after existing Q-3-\* entries (after Q-3-55):
 
 ```json
   "Q-3-38": {

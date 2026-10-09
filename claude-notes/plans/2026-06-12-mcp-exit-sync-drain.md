@@ -24,7 +24,7 @@ parallel implementation alongside bd-vm5e5u10.
 - [x] Test hubs announce a `storageId` like the real samod hub does:
       give both `test-hub.ts` copies a `MemoryStorageAdapter`; add
       `hubHasDoc` to the hub-mcp copy. (Also: their `stop()` now
-      tolerates `repo.shutdown()`'s flush throwing "DocHandle is not
+      tolerates `repo.shutdown()`\'s flush throwing "DocHandle is not
       ready" — the half-delivered state these tests leave behind.)
 - [x] Red test 1 (sync-client `exit-drain.test.ts`):
       create-then-disconnect(drainMs) loses nothing; observed RED.
@@ -172,10 +172,10 @@ satisfies the equality against at least one storage-backed peer.
 Why this is correct, from the sources (automerge-repo 2.5.6 installed;
 samod q2 fork checkout `0b50c16`):
 
-1. **No gossiping flag needed.** `Repo`'s constructor subscribes to the
+1. **No gossiping flag needed.** `Repo`\'s constructor subscribes to the
    synchronizer's `sync-state` event and calls
    `handle.setSyncInfo(storageId, {lastHeads: theirHeads, ...})`
-   unconditionally (`dist/Repo.js` ~154-175). The
+   unconditionally (`dist/Repo.js` \~154-175). The
    `enableRemoteHeadsGossiping` flag only gates *relay* of third-party
    heads (`remote-heads-changed` control messages), not this direct
    path. `theirHeads` comes from the automerge sync protocol: every
@@ -281,7 +281,7 @@ were *delivered* before exit.
 2. **Bounded, never hanging.** MCP hosts expect prompt termination
    (and `stdio-hygiene.test.ts` asserts exit within 5 s of stdin
    EOF — do not break bd-9jq2a060). Pick a drain budget that fits
-   (suggestion: up to ~3 s total, returning EARLY the moment
+   (suggestion: up to \~3 s total, returning EARLY the moment
    delivery is confirmed; adjust the hygiene test's bound only if
    justified, with a comment).
 3. **Loud on failure, never silent.** If the budget expires with

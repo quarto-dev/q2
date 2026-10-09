@@ -121,7 +121,7 @@ How it works:
 #### Rust 2024 (Released Feb 2025)
 **Changes**: RPIT capture rules, `gen` keyword, match ergonomics, `unsafe` on certain stdlib functions
 
-**Real-world Experience** (large codebase: ~400 crates, 1,500+ deps):
+**Real-world Experience** (large codebase: \~400 crates, 1,500+ deps):
 - ✅ Successfully migrated
 - **Recommended strategy**: Incremental, not "big bang"
   1. Update code generation tools first
@@ -142,13 +142,13 @@ How it works:
 - Dependencies don't need to coordinate migrations
 - Gradual transitions over months/years are fine
 
-**~ Adoption Lag**
+**\~ Adoption Lag**
 - Proc-macros and build-time codegen can lag
 - Popular libraries migrate within months
 - Unmaintained crates may stay on older editions indefinitely
 - **This is mostly fine** due to compatibility guarantees
 
-**~ Migration Automation Quality**
+**\~ Migration Automation Quality**
 - `cargo fix` handles 80-90% of typical cases
 - Corner cases require manual intervention:
   - Doctests always manual
@@ -310,7 +310,7 @@ How it works:
 | Binary scanning | ✓✓ (unique) | ✗ | ✗ | ✓ |
 | GitHub integration | ✓ | ✓ | ✓ | ✓ |
 | Dedicated CNA | ✗ | ✓ | ✓ | ✓ |
-| Disclosure speed | ⚠️ (slow) | ~ | ~ | ~ |
+| Disclosure speed | ⚠️ (slow) | \~ | \~ | \~ |
 
 ### Practical Recommendations for Kyoto
 

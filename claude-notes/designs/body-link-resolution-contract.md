@@ -76,7 +76,7 @@ guarantee that the target exists in the project.
 4. **Resolve to project root.** Apply the source-relative path
    resolution rule:
 
-   - A leading `/` in `raw`'s path part means project-root-absolute.
+   - A leading `/` in `raw`\'s path part means project-root-absolute.
      Strip the slash; the result is the project-relative path
      (no `source_relative` involvement).
 

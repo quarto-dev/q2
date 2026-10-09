@@ -45,7 +45,7 @@ Specifically the rule:
 - copies the image's alt-text inlines into the caption as
   `Caption { short: None, long: Some([Plain[alt]]) }`,
 - wraps the (re-attributed) image in a `Plain` and makes that the
-  `Figure`'s sole content block.
+  `Figure`\'s sole content block.
 
 So in the *normal* qmd-authored case, every `Figure` has a very specific
 shape — the "implicit figure" shape — and the caption text and image alt

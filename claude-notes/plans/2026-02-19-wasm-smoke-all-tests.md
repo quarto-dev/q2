@@ -112,13 +112,13 @@ interface WasmRenderResult {
 
 The `diagnostics[].title` is the message text, and `diagnostics[].kind` maps to log levels for `printsMessage` matching. The Rust runner uses `DiagnosticKind::{Error, Warning, Info, Note}` → `LogLevel::{Error, Warn, Info, Debug}` (see `runner.rs:270-275`). **Verify the exact serialized string casing** of `kind` at runtime (e.g., is it `"error"` or `"Error"`?) — the spec YAML uses uppercase (`ERROR`, `WARN`) so the mapping must be case-insensitive or normalized.
 
-- [x] **ensureFileRegexMatches(result, matches: string[], noMatches?: string[])**
+- [x] **ensureFileRegexMatches(result, matches: `string[]`, noMatches?: `string[]`)**
   - Assert `result.success === true` and `result.html` exists
   - For each pattern in `matches`: `new RegExp(pattern, 'm').test(result.html)` must be true
   - For each pattern in `noMatches`: `new RegExp(pattern, 'm').test(result.html)` must be false
   - Use multiline flag (`m`) to match TS Quarto behavior
 
-- [x] **ensureHtmlElements(result, selectors: string[], noMatchSelectors?: string[])**
+- [x] **ensureHtmlElements(result, selectors: `string[]`, noMatchSelectors?: `string[]`)**
   - Parsed from the same two-array YAML format as `ensureFileRegexMatches`: `[[selectors...], [noMatchSelectors...]]`
   - Assert `result.success === true` and `result.html` exists
   - Parse HTML with `new JSDOM(result.html)`
@@ -137,7 +137,7 @@ The `diagnostics[].title` is the message text, and `diagnostics[].kind` maps to 
 - [x] **shouldError(result)**
   - Assert `result.success === false`
 
-- [x] **printsMessage(result, { level, regex, negate? })**
+- [x] **printsMessage(result, \{ level, regex, negate? \})**
   - Collect messages from whichever is present: `result.diagnostics` (on failure) or `result.warnings` (on success) — they are mutually exclusive, never both present. Map each to `{ level, message }` where `level` is derived from `kind` (case-insensitive) and `message` is `title`.
   - Filter by `level`
   - Check if any `message` matches `new RegExp(regex)`

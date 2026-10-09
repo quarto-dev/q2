@@ -73,7 +73,7 @@ Each is written in place at the item it affects, as an indented `> CORRECTED` bl
 are not stylistic; three of them change what you should build.
 
 1. **Phase 3, "Dispose of the dead converter"** — the preferred option (delete +
-   retarget `materialize.rs`'s `mod spans` at `yaml_to_config_value`) **cannot compile**:
+   retarget `materialize.rs`\'s `mod spans` at `yaml_to_config_value`) **cannot compile**:
    pampa depends on quarto-config, so the retarget needs a dependency cycle. Take the
    plan's own "keep it in lockstep" alternative; the correction says exactly what to do.
 2. **Phase 3, "The binding regression"** — the predicted symptom ("renders with no source
@@ -115,10 +115,10 @@ without a second target over the same source (e.g. `quarto-core`) do not double.
 
 ### Out-of-plan findings filed as braid strands
 
-- **bd-78e1ahjc** — `quarto-error-reporting`'s `test_location_in_to_text_with_context`
+- **bd-78e1ahjc** — `quarto-error-reporting`\'s `test_location_in_to_text_with_context`
   fails under `cargo test --no-default-features`. Pre-existing (reproduced at `4da3385`),
   unrelated to this epic; neither that repo's CI nor this plan exercises that configuration.
-- **bd-8k41zq68** — `attach_config_source`'s read-and-register may be dead weight, since
+- **bd-8k41zq68** — `attach_config_source`\'s read-and-register may be dead weight, since
   `MetadataMergeStage` already covers every candidate it can name. A design question, from
   correction 2 above.
 
@@ -138,12 +138,12 @@ suite). `npm run build:all` green. Snapshots moved: **1** (`table-caption-attr.s
 source-ref, `"[30,70]"` -> `[30,70]`, quote exclusion one byte each end — the other 31 refs
 byte-identical, verified by hand-derivation twice).
 
-**The generality proof holds.** `callout.rs`'s length-arithmetic workaround is gone and
+**The generality proof holds.** `callout.rs`\'s length-arithmetic workaround is gone and
 `ProvenanceBuilder` now has a second consumer in a completely different decoder, which is what
 Phase 4 existed to demonstrate. Obligation 8 — the item with the worst failure mode in the epic
 — is discharged with an **injection experiment**, not the plan's reachability argument: wrapping
-diagnostic locations in a `Concat` corrupts `qmd-syntax-helper`'s output visibly (a splice at
-byte 0; a `replace_range` percent-encoding ~340 bytes), and 5 of 7 new tests catch it.
+diagnostic locations in a `Concat` corrupts `qmd-syntax-helper`\'s output visibly (a splice at
+byte 0; a `replace_range` percent-encoding \~340 bytes), and 5 of 7 new tests catch it.
 
 ### Corrections to this plan made in session 2 — READ THESE BEFORE CONTINUING
 
@@ -161,7 +161,7 @@ byte 0; a `replace_range` percent-encoding ~340 bytes), and 5 of 7 new tests cat
    the gate.
 2. **The desync warning lives in BOTH converters**, not only pampa's. `config_value_from_yaml`
    already takes a `diagnostics` collector, and this plan's own fallout list names
-   `convert.rs`'s hand-built fixtures — which reach only quarto-config's converter.
+   `convert.rs`\'s hand-built fixtures — which reach only quarto-config's converter.
 3. **"Fixing the hand-built fixtures is a fidelity gain" is WITHDRAWN as a rationale.**
    Attaching `SourceInfo::for_test()` as content provenance silences the warning at exactly the
    synthetic fidelity the argument criticized; in a real string scalar content provenance
@@ -191,7 +191,7 @@ byte 0; a `replace_range` percent-encoding ~340 bytes), and 5 of 7 new tests cat
    framing the `q_2_28` exposure below is invisible.
 7. **The TypeScript brief's central diagnosis was wrong, and its conclusion right for another
    reason.** Attribute values carry no `Substring` at all; but `Substring{parent: Concat}` does
-   reach `annotated-qmd`'s reader via **YAML block scalars**, where every inline inside the
+   reach `annotated-qmd`\'s reader via **YAML block scalars**, where every inline inside the
    scalar is a `Substring` of its `Concat`. The `Substring`-arm fix is justified on that basis.
 8. **The TS `Concat` arm was ALSO wrong** — the plan and both briefs asserted it was already
    correct. It derived the exclusive end as `map(len-1).index + 1`, and that `+1` assumes the
@@ -269,7 +269,7 @@ in one wave (see `final-fix-report.md` for the full accounting):
   `wasm-quarto-hub-client/Cargo.toml:20`) — 0.2.2 carries the char-boundary snap that turns a
   wrong byte offset into a wrong caret instead of a process abort, and the two versions differ
   only inside a private function with no public-API change, so a 0.2.1 resolution would have
-  compiled cleanly and silently reintroduced the abort. Also `wasm-quarto-hub-client/Cargo.toml:29`'s
+  compiled cleanly and silently reintroduced the abort. Also `wasm-quarto-hub-client/Cargo.toml:29`\'s
   stale `quarto-source-map = "0.1.0"` floor corrected to `0.1.3` (compile-caught, but misleading).
   Both lockfiles verified unchanged.
 - **FIX-2 (Important):** the fourth instance of the epic's own defect, at
@@ -277,8 +277,8 @@ in one wave (see `final-fix-report.md` for the full accounting):
 - **FIX-3 (Minor, one-liners):** the malformed `Concat` fixture in `config_sources.rs`
   (`(piece_a, 0)` -> `(piece_a, 8)`); the stale TS docstring invariant in `source-map.ts`; the
   `span_assert.rs` `OutOfBounds` `Display` impl now labels the arithmetic-derived `end` as
-  possibly approximate; `extract_quoted_text`'s doc comment now notes the unreachable
-  `SuspiciousDefault`-shaped degenerate case; `hash.rs`'s `Scalar` arm comment now notes the
+  possibly approximate; `extract_quoted_text`\'s doc comment now notes the unreachable
+  `SuspiciousDefault`-shaped degenerate case; `hash.rs`\'s `Scalar` arm comment now notes the
   `SourceInfo: !Hash` type-level enforcement (closing hand-off item (f)).
 - **FIX-4 (Minor):** `config_value_from_yaml` and its two helpers regated from `#[cfg(test)]`
   to `#[allow(dead_code)]`, paying off the cost recorded in session 2's correction 1 and Phase
@@ -291,7 +291,7 @@ in one wave (see `final-fix-report.md` for the full accounting):
   removed as FIX-5 supersedes it.
 
 **Out-of-plan finding filed as a braid strand:** **bd-rj2ikb0z** — `stage/context.rs:911`
-builds a fresh `DiagnosticCollector` for `_variables.yml`'s `yaml_to_config_value` call and
+builds a fresh `DiagnosticCollector` for `_variables.yml`\'s `yaml_to_config_value` call and
 drops it, discarding every diagnostic from that path, while the enclosing function already
 holds `diagnostics: &mut Vec<DiagnosticMessage>`. Pre-existing and unrelated to provenance; it
 surfaced only because this branch added a signal (the content-provenance desync warning) that
@@ -353,7 +353,7 @@ wave to destructure `ConfigValueKind::Scalar { yaml, content_source_info }`
 and use `content_source_info.as_ref().unwrap_or(&cv.source_info)`, mirroring
 `parse_scalar_string_in_place`. **Unbindable by construction**, same audit
 category as the `callout.rs` deletion above: no consumer reads those
-inlines' spans (they feed only image-URL extraction, and `parse_diags` is
+inlines\' spans (they feed only image-URL extraction, and `parse_diags` is
 discarded), so no fixture can distinguish the corrected base from the raw
 one. See Phase 6's § Evidence for the recorded-as-unbindable entry.
 
@@ -453,7 +453,7 @@ only when the pieces tile the source without gaps.
   *exists* after the floor, so its revert lives in `quarto-source-map`, not in
   the crate that holds the test. Phase 6's "revert the floor → its own tests
   red" row does **not** cover it; add a row naming this test explicitly.
-- **`accum/`'s third reported column numerically equals its second truth
+- **`accum/`\'s third reported column numerically equals its second truth
   column** — both are `9:25`. A test asserting `25` for that element reads as
   fixed while sitting on the stale value. If T8's optional per-element check is
   added, assert all four positions as a set, or assert the third element by
@@ -519,65 +519,65 @@ below exists. An earlier revision of this phase listed the lock update first;
 it was wrong.
 
 - [x] **First, in-session: bind the ariadne test while it still binds.**
-      On the current lock (0.1.0), revert the snap call at `:878` only, keeping
-      the tests, and confirm
-      `ariadne_span_starting_inside_multibyte_char_does_not_panic`
-      (`src/diagnostic.rs:1601`) goes red. Paste the failure into § Evidence.
-      **Scope note:** Plan 1's Phase 0 bullets 3-6 revert each hunk
-      individually and already bind the *annotate-snippets* test (`:1635`) and
-      the four hunks by observed panic location. This item adds the one thing
-      those do not — that the *ariadne* test goes red — so run it in the same
-      sitting as Plan 1's Phase 0 rather than as a second expedition
-      (§ In-session verification, instance 1)
+  On the current lock (0.1.0), revert the snap call at `:878` only, keeping
+  the tests, and confirm
+  `ariadne_span_starting_inside_multibyte_char_does_not_panic`
+  (`src/diagnostic.rs:1601`) goes red. Paste the failure into § Evidence.
+  **Scope note:** Plan 1's Phase 0 bullets 3-6 revert each hunk
+  individually and already bind the *annotate-snippets* test (`:1635`) and
+  the four hunks by observed panic location. This item adds the one thing
+  those do not — that the *ariadne* test goes red — so run it in the same
+  sitting as Plan 1's Phase 0 rather than as a second expedition
+  (§ In-session verification, instance 1)
 - [x] **Then take 0.1.2 in this repo.** `Cargo.toml:28` needs no edit
-      (`quarto-source-map = "0.1.0"`, and `^0.1.0` accepts 0.1.2), but
-      `Cargo.lock` pins **0.1.0**. Run `cargo update -p quarto-source-map` and
-      **commit the lockfile** — the release runs `cargo publish --locked`, so
-      without this 0.2.2 ships built against 0.1.0, and the zero-width test
-      below would measure the old behavior. Everything after this point in the
-      phase requires the floor to be present
+  (`quarto-source-map = "0.1.0"`, and `^0.1.0` accepts 0.1.2), but
+  `Cargo.lock` pins **0.1.0**. Run `cargo update -p quarto-source-map` and
+  **commit the lockfile** — the release runs `cargo publish --locked`, so
+  without this 0.2.2 ships built against 0.1.0, and the zero-width test
+  below would measure the old behavior. Everything after this point in the
+  phase requires the floor to be present
 - [x] **Re-anchor the two tests (obligation 3).** Settled: unit-level coverage
-      is the answer, because integration-level coverage is *unreachable* after
-      the floor — every path from a `SourceInfo` to a renderer offset runs
-      through `map_offset` → `offset_to_location`, including `Concat` (which
-      recurses to `Original`), and the public entry `to_text_with_renderer`
-      takes its span from `self.location`. Concretely: extend
-      `snap_span_widens_to_whole_characters` with the offset pair the two
-      integration tests used (`21..28` over
-      `"text: <span>Ask AI \u{2728}</span>"` — one pair, shared by both
-      tests), and **rewrite the two integration tests' names and doc
-      comments** to say what they now cover (a span-carrying diagnostic still
-      renders under each renderer) plus why they no longer cover the snap. Do
-      not delete them and do not leave the names claiming a guarantee they lost
+  is the answer, because integration-level coverage is *unreachable* after
+  the floor — every path from a `SourceInfo` to a renderer offset runs
+  through `map_offset` → `offset_to_location`, including `Concat` (which
+  recurses to `Original`), and the public entry `to_text_with_renderer`
+  takes its span from `self.location`. Concretely: extend
+  `snap_span_widens_to_whole_characters` with the offset pair the two
+  integration tests used (`21..28` over
+  `"text: <span>Ask AI \u{2728}</span>"` — one pair, shared by both
+  tests), and **rewrite the two integration tests\' names and doc
+  comments** to say what they now cover (a span-carrying diagnostic still
+  renders under each renderer) plus why they no longer cover the snap. Do
+  not delete them and do not leave the names claiming a guarantee they lost
 - [x] **Test the zero-width label (obligation 2).** Measured by Plan 1 on
-      content `"x = 'A✨B'"` (emoji at bytes 6..9) with
-      `SourceInfo::original(fid, 7, 8)` — both ends inside the character:
+  content `"x = 'A✨B'"` (emoji at bytes 6..9) with
+  `SourceInfo::original(fid, 7, 8)` — both ends inside the character:
 
-      | | offsets reaching the renderer | rendered highlight |
-      |---|---|---|
-      | today | raw `7..8`; snap floors 7→6 and **ceils** 8→9 | `6..9`, the whole character |
-      | after the floor | both arrive as `6`; the ceil finds 6 already on a boundary | `6..6`, **zero width** |
+  | | offsets reaching the renderer | rendered highlight |
+  |---|---|---|
+  | today | raw `7..8`; snap floors 7→6 and **ceils** 8→9 | `6..9`, the whole character |
+  | after the floor | both arrive as `6`; the ceil finds 6 already on a boundary | `6..6`, **zero width** |
 
-      Two things to pin in the assertion. At the `Location` level this is
-      *consistency*, not regression — the columns already collapse to `6..6`
-      today; the regression is purely at the rendered level, because the
-      renderer ceils the **raw** offset and flooring upstream destroys the
-      input its ceil needs. And ariadne's `Report::build` anchor is already
-      `start..start`, so a zero-width label very likely renders — which is
-      exactly the "very likely" this test exists to replace. Assert for both
-      renderers
+  Two things to pin in the assertion. At the `Location` level this is
+  *consistency*, not regression — the columns already collapse to `6..6`
+  today; the regression is purely at the rendered level, because the
+  renderer ceils the **raw** offset and flooring upstream destroys the
+  input its ceil needs. And ariadne's `Report::build` anchor is already
+  `start..start`, so a zero-width label very likely renders — which is
+  exactly the "very likely" this test exists to replace. Assert for both
+  renderers
 - [x] Bump crate version to `0.2.2`
 - [x] `cargo test` green (this crate is not a nextest workspace), **plus**
-      clippy on `--no-default-features`, ariadne-only, and
-      annotate-snippets-only. The misplaced-`cfg_attr` bug found during
-      development was visible *only* in the no-default-features configuration
+  clippy on `--no-default-features`, ariadne-only, and
+  annotate-snippets-only. The misplaced-`cfg_attr` bug found during
+  development was visible *only* in the no-default-features configuration
 - [x] PR → CI green → merge. **Merging to `main` publishes — there is no human
-      release step.** Verified 2026-08-21 for *this* repo (Plan 1 verified the
-      other two): it carries the same repo-agnostic `release.yml` using
-      crates.io Trusted Publishing over OIDC with no stored token, and its
-      `release` environment returns `protection_rules: []`, so no approval gate
-      fires. The workflow only acts when the workspace version leads the
-      registry
+  release step.** Verified 2026-08-21 for *this* repo (Plan 1 verified the
+  other two): it carries the same repo-agnostic `release.yml` using
+  crates.io Trusted Publishing over OIDC with no stored token, and its
+  `release` environment returns `protection_rules: []`, so no approval gate
+  fires. The workflow only acts when the workspace version leads the
+  registry
 - [x] Close `bd-ariadne-config-span-char-boundary-panic-rkqmhzrg`
 
 **Not a checklist item, a review note:** `annotate-snippets` is **not** the
@@ -594,48 +594,48 @@ precede the refresh, because the refresh is what would make the change
 invisible.
 
 - [x] **First: pin the `Concat` exclusive-end change before it lands
-      silently.** Plan 1's third 0.1.2 behavior change (the exclusive-end
-      branch uses the last piece's *source* length) alters a q2 production
-      path: the QMD writer's provenance concat
-      (`pampa/src/writers/qmd.rs:2876-2903`) pairs each block's
-      `source_info()` with bytes *written*, and its only production consumer is
-      `quarto-core/src/stage/stages/engine_execution.rs:733`. Measured:
-      `crates/pampa/tests/integration/qmd_writer_source_info.rs` exercises only
-      interior offsets, so **nothing currently reacts**. Add an exclusive-end
-      assertion there against today's behavior, so the refresh below turns it
-      red rather than passing unnoticed
+  silently.** Plan 1's third 0.1.2 behavior change (the exclusive-end
+  branch uses the last piece's *source* length) alters a q2 production
+  path: the QMD writer's provenance concat
+  (`pampa/src/writers/qmd.rs:2876-2903`) pairs each block's
+  `source_info()` with bytes *written*, and its only production consumer is
+  `quarto-core/src/stage/stages/engine_execution.rs:733`. Measured:
+  `crates/pampa/tests/integration/qmd_writer_source_info.rs` exercises only
+  interior offsets, so **nothing currently reacts**. Add an exclusive-end
+  assertion there against today's behavior, so the refresh below turns it
+  red rather than passing unnoticed
 - [x] Then refresh the lock to **`quarto-source-map 0.1.3`** (not 0.1.2 —
-      that release deliberately excludes `ProvenanceBuilder`, which Phases 3
-      and 4 require), `quarto-error-reporting 0.2.2`, and
-      `quarto-yaml 0.1.3`. Note q2's lock currently pins
-      `quarto-source-map 0.1.0` even though 0.1.1 is released, so it needs an
-      explicit update regardless. Confirm the resolved version by name; `^0.1.0`
-      would accept 0.1.2 and leave Phase 3 unable to compile
+  that release deliberately excludes `ProvenanceBuilder`, which Phases 3
+  and 4 require), `quarto-error-reporting 0.2.2`, and
+  `quarto-yaml 0.1.3`. Note q2's lock currently pins
+  `quarto-source-map 0.1.0` even though 0.1.1 is released, so it needs an
+  explicit update regardless. Confirm the resolved version by name; `^0.1.0`
+  would accept 0.1.2 and leave Phase 3 unable to compile
 - [x] **No `Cargo.toml` edit for `quarto-yaml`.** Plan 1 decided the change is
-      *additive* and ships as **0.1.3**, so `^0.1.2` accepts it and this is a
-      lock refresh only
+  *additive* and ships as **0.1.3**, so `^0.1.2` accepts it and this is a
+  lock refresh only
 - [x] Confirm no `[patch.crates-io]` override for `quarto-error-reporting`
-      remains. Plan 1's Phase 0 removes it as its exit condition; this is the
-      confirmation. **Only the three added lines are local** — the section's
-      four committed entries (`lua-src`, `tree-sitter-language`, `runtimelib`,
-      `jupyter-protocol`) are load-bearing and must stay
+  remains. Plan 1's Phase 0 removes it as its exit condition; this is the
+  confirmation. **Only the three added lines are local** — the section's
+  four committed entries (`lua-src`, `tree-sitter-language`, `runtimelib`,
+  `jupyter-protocol`) are load-bearing and must stay
 - [x] **Absorb the two q2-side reactions to the floor (obligation 6).** Plan 1
-      deliberately leaves both to us:
-      - `pampa/tests/integration/test_location_health.rs:448` compares the two
-        `offset_to_location` implementations' row/column; Plan 1 aligns the
-        free `utils::offset_to_location` with `FileInformation`, so this **may**
-        react. It only diverges for mid-char inputs, and whether any current
-        fixture reaches one is **unknown until Plan 1's Phase 1 smoke step
-        runs**. Do not plan for green or red — read the smoke output and
-        **record what it showed in § Evidence**, so "nothing moved" is
-        distinguishable from "nobody looked"
-      - JSON-writer snapshots: `.offset` is emitted as `"o"`
-        (`pampa/src/writers/json.rs:550`, `:555`, `:2005`, `:2014`, `:2258`,
-        `:2267`) and read as `file_offset` at
-        `quarto-core/src/engine/ts_engine.rs:689`. Neither snaps, which is the
-        affirmative case for flooring — and the reason snapshots move.
-        Per CLAUDE.md the review needs a **count, a summary of what changed,
-        any surprises called out, and the affected file list**
+  deliberately leaves both to us:
+  - `pampa/tests/integration/test_location_health.rs:448` compares the two
+    `offset_to_location` implementations\' row/column; Plan 1 aligns the
+    free `utils::offset_to_location` with `FileInformation`, so this **may**
+    react. It only diverges for mid-char inputs, and whether any current
+    fixture reaches one is **unknown until Plan 1's Phase 1 smoke step
+    runs**. Do not plan for green or red — read the smoke output and
+    **record what it showed in § Evidence**, so "nothing moved" is
+    distinguishable from "nobody looked"
+  - JSON-writer snapshots: `.offset` is emitted as `"o"`
+    (`pampa/src/writers/json.rs:550`, `:555`, `:2005`, `:2014`, `:2258`,
+    `:2267`) and read as `file_offset` at
+    `quarto-core/src/engine/ts_engine.rs:689`. Neither snaps, which is the
+    affirmative case for flooring — and the reason snapshots move.
+    Per CLAUDE.md the review needs a **count, a summary of what changed,
+    any surprises called out, and the affected file list**
 - [x] `cargo nextest run --workspace` green
 
 **Deleted item, recorded so it is not re-derived:** an earlier draft had "fix
@@ -658,45 +658,45 @@ one-line source.
 **Tests first.**
 
 - [x] Failing test, in `crates/quarto/tests/integration/json_errors.rs`: a
-      fixture with a **quoted** scalar containing raw HTML, asserting
-      **exact** `start_column` / `end_column`. Nothing in q2 asserts on
-      `start_column` today — measured — which is why this survived.
-      **The recorded baseline "36/43 → 37/44" has no fixture attached and
-      could not be reconstructed from either committed repro.** Either
-      identify the document it came from and transcribe it, or derive fresh
-      expected values from the fixture you write and record *those*. Do not
-      copy 36/43 forward unexamined
+  fixture with a **quoted** scalar containing raw HTML, asserting
+  **exact** `start_column` / `end_column`. Nothing in q2 asserts on
+  `start_column` today — measured — which is why this survived.
+  **The recorded baseline "36/43 → 37/44" has no fixture attached and
+  could not be reconstructed from either committed repro.** Either
+  identify the document it came from and transcribe it, or derive fresh
+  expected values from the fixture you write and record *those*. Do not
+  copy 36/43 forward unexamined
 - [x] Failing test: a **multi-line block scalar**, using the fixture
-      transcribed in § Evidence below. **Measured by Plan 1 on 2026-08-21
-      against the released `q2 0.24.0`** — exit 0, two `Q-2-9` warnings (the
-      `<span id="y">` open and close tags), both genuinely on **line 9** at
-      columns **7** and **26**, reported at **`8:10`** and **`9:14`**. The
-      drift is a constant **12** = 2 preceding content lines × 6 bytes of
-      stripped indent: 26 − 12 = 14, and 7 − 12 underflows past the start of
-      line 9, which is why the first warning claims **line 8**. Observe red on
-      both, then green at 9:7 and 9:26. This is the only symptom in the epic
-      that misattributes a diagnostic to the wrong *line*, and until this
-      measurement the cited pair had never been tied to a file
+  transcribed in § Evidence below. **Measured by Plan 1 on 2026-08-21
+  against the released `q2 0.24.0`** — exit 0, two `Q-2-9` warnings (the
+  `<span id="y">` open and close tags), both genuinely on **line 9** at
+  columns **7** and **26**, reported at **`8:10`** and **`9:14`**. The
+  drift is a constant **12** = 2 preceding content lines × 6 bytes of
+  stripped indent: 26 − 12 = 14, and 7 − 12 underflows past the start of
+  line 9, which is why the first warning claims **line 8**. Observe red on
+  both, then green at 9:7 and 9:26. This is the only symptom in the epic
+  that misattributes a diagnostic to the wrong *line*, and until this
+  measurement the cited pair had never been tied to a file
 - [x] **DECLINED** (decision recorded, per this item's own instruction). Optional, if a per-element check is wanted: Plan 1 also measured
-      `.scratch/ariadne-emoji-panic/accum/` (transcribed in its § Evidence), a
-      two-span variant of the same shape giving **four** warnings at
-      `8:10` / `9:13` / `9:25` / `9:42` against truth
-      `9:7` / `9:25` / `9:37` / `9:54`. It shows the constant −12 per element
-      rather than inferred from two points. `blockscalar/` stays canonical
-      here; `accum/` is the arithmetic demonstration. **Optional — record
-      "added" or "declined" at Phase 7 rather than leaving the box ambiguous**
+  `.scratch/ariadne-emoji-panic/accum/` (transcribed in its § Evidence), a
+  two-span variant of the same shape giving **four** warnings at
+  `8:10` / `9:13` / `9:25` / `9:42` against truth
+  `9:7` / `9:25` / `9:37` / `9:54`. It shows the constant −12 per element
+  rather than inferred from two points. `blockscalar/` stays canonical
+  here; `accum/` is the arithmetic demonstration. **Optional — record
+  "added" or "declined" at Phase 7 rather than leaving the box ambiguous**
 - [x] Failing test: **front matter**. A quoted `title:` in a document's own
-      front matter, asserting exact columns for an inline inside it. This is
-      the path fixed at `meta.rs:259/:303/:316` below
+  front matter, asserting exact columns for an inline inside it. This is
+  the path fixed at `meta.rs:259/:303/:316` below
 - [x] Regression tests for a **plain** (unquoted) scalar and a **single-line
-      block** scalar — both correct today and must stay correct. Guards
-      against over-correcting
+  block** scalar — both correct today and must stay correct. Guards
+  against over-correcting
 - [x] Add a **text-path** assertion pinning the caret position, not only the
-      JSON columns. The absence of any such test is why this survived: the
-      existing renderer tests assert on *style markers* (that ariadne drew its
-      `╭` box, that annotate-snippets emitted `-->`) and every fixture is pure
-      ASCII. Nothing asserted **which bytes get underlined**. See the
-      `resolve_span` decision below for the mechanism
+  JSON columns. The absence of any such test is why this survived: the
+  existing renderer tests assert on *style markers* (that ariadne drew its
+  `╭` box, that annotate-snippets emitted `-->`) and every fixture is pure
+  ASCII. Nothing asserted **which bytes get underlined**. See the
+  `resolve_span` decision below for the mechanism
 
 **The `resolve_span` decision (settle before writing the caret test).**
 
@@ -709,145 +709,145 @@ and reports **`Generated`**, sending a reader hunting for a filter-created
 node. These are one decision, not two items:
 
 - [x] **Preferred: teach `resolve_span` piecewise resolution** — resolve the
-      two ends via `map_offset(0)` and `map_offset(length())`, the same
-      mechanism Phase 4's hull needs, so one implementation serves both. Then
-      both `Concat` and `Substring{parent: Concat}` resolve,
-      `SpanProblem::Concat` becomes dead, and the caret test can use
-      `assert_diagnostic_underlines` directly. This is the direction that
-      keeps the helper useful as this epic makes `Concat` the common shape
-      across the assertion helpers built on it in `listing/config.rs`,
-      `callout.rs` and `materialize.rs` (7 direct callers; more reach it
-      transitively through `assert_diagnostic_underlines` and
-      `resolve_diagnostic_span`)
+  two ends via `map_offset(0)` and `map_offset(length())`, the same
+  mechanism Phase 4's hull needs, so one implementation serves both. Then
+  both `Concat` and `Substring{parent: Concat}` resolve,
+  `SpanProblem::Concat` becomes dead, and the caret test can use
+  `assert_diagnostic_underlines` directly. This is the direction that
+  keeps the helper useful as this epic makes `Concat` the common shape
+  across the assertion helpers built on it in `listing/config.rs`,
+  `callout.rs` and `materialize.rs` (7 direct callers; more reach it
+  transitively through `assert_diagnostic_underlines` and
+  `resolve_diagnostic_span`)
 - [x] **NOT TAKEN — the preferred piecewise path landed (commit `b7067903d`); this fallback is mutually exclusive with it and must not also be done.** Fallback, if piecewise resolution proves wrong: a discontiguous span
-      cannot be described by one `(start, end)` pair, so if asserting on the
-      hull turns out to misrepresent what the caret covers, keep the refusal,
-      **add the missing `Substring{parent: Concat}` arm** so the label says
-      `Concat` rather than `Generated`, and have the caret test assert on
-      rendered output instead. Record which path was taken and why in
-      § Evidence — the two are mutually exclusive and a later reader must not
-      try to do both
+  cannot be described by one `(start, end)` pair, so if asserting on the
+  hull turns out to misrepresent what the caret covers, keep the refusal,
+  **add the missing `Substring{parent: Concat}` arm** so the label says
+  `Concat` rather than `Generated`, and have the caret test assert on
+  rendered output instead. Record which path was taken and why in
+  § Evidence — the two are mutually exclusive and a later reader must not
+  try to do both
 
 **Threading (obligation 1).**
 
 - [x] Carry content provenance as
-      **`ConfigValueKind::Scalar { yaml, content_source_info: Option<SourceInfo> }`**
-      — inside the variant, not as a fourth field on `ConfigValue`. Rationale
-      in Plan 1's § Hand-off; the load-bearing half is that provenance must not
-      be *separable* from the value it describes, because config merging picks
-      winners per key and a sibling field can be carried forward while `value`
-      is replaced — producing a pair whose string came from one file and whose
-      provenance resolves cleanly onto a real offset in another
+  **`ConfigValueKind::Scalar { yaml, content_source_info: Option<SourceInfo> }`**
+  — inside the variant, not as a fourth field on `ConfigValue`. Rationale
+  in Plan 1's § Hand-off; the load-bearing half is that provenance must not
+  be *separable* from the value it describes, because config merging picks
+  winners per key and a sibling field can be carried forward while `value`
+  is replaced — producing a pair whose string came from one file and whose
+  provenance resolves cleanly onto a real offset in another
 - [x] **Budget the variant migration — it is the largest mechanical task in
-      this epic and was previously invisible here.** `Scalar` is a **tuple**
-      variant today, so making it a struct variant breaks every construction
-      *and* every pattern match: **206 sites across 49 files** excluding
-      `crates/*/tests/`, **240** including them (Plan 1's figures, confirmed
-      independently twice). Plan for the sweep, its snapshot fallout, and the
-      **WASM leg** — `wasm-quarto-hub-client` builds against these types on a
-      separate target, so `cargo build --workspace` will not catch it and
-      Phase 7's `cargo xtask verify` is the first thing that would.
-      **Done when** `cargo xtask verify` (full) is green *and* the snapshot
-      review below is filed — "planned the sweep" is not a done-condition
+  this epic and was previously invisible here.** `Scalar` is a **tuple**
+  variant today, so making it a struct variant breaks every construction
+  *and* every pattern match: **206 sites across 49 files** excluding
+  `crates/*/tests/`, **240** including them (Plan 1's figures, confirmed
+  independently twice). Plan for the sweep, its snapshot fallout, and the
+  **WASM leg** — `wasm-quarto-hub-client` builds against these types on a
+  separate target, so `cargo build --workspace` will not catch it and
+  Phase 7's `cargo xtask verify` is the first thing that would.
+  **Done when** `cargo xtask verify` (full) is green *and* the snapshot
+  review below is filed — "planned the sweep" is not a done-condition
 - [x] **Snapshot gate for the front-matter expansion.** Fixing
-      `meta.rs:259/:303/:316` moves the span of every quoted `title:`,
-      `description:` and caption in every fixture whose spans serialize — a
-      larger movement than the JSON-writer `.offset` churn Phase 2 gates. Give
-      it the same CLAUDE.md treatment: **count, summary of what changed,
-      surprises called out, affected file list.** An earlier revision mentioned
-      "snapshot fallout" only in passing here, while gating the smaller churn
-      one phase earlier
+  `meta.rs:259/:303/:316` moves the span of every quoted `title:`,
+  `description:` and caption in every fixture whose spans serialize — a
+  larger movement than the JSON-writer `.offset` churn Phase 2 gates. Give
+  it the same CLAUDE.md treatment: **count, summary of what changed,
+  surprises called out, affected file list.** An earlier revision mentioned
+  "snapshot fallout" only in passing here, while gating the smaller churn
+  one phase earlier
 - [x] Note for the desync report: content provenance is meaningful only for
-      `Yaml::String`. A `Scalar(Yaml::Integer | Real | Boolean | Null)` carries
-      `None` and **must not** trip the report below — the "None on a string
-      scalar is a bug" rule is scoped to strings, and this is new user-visible
-      output, so getting the scope wrong is noisy rather than silent
+  `Yaml::String`. A `Scalar(Yaml::Integer | Real | Boolean | Null)` carries
+  `None` and **must not** trip the report below — the "None on a string
+  scalar is a bug" rule is scoped to strings, and this is new user-visible
+  output, so getting the scope wrong is noisy rather than silent
 - [x] **Set it in one place: `pampa::pandoc::meta::yaml_to_config_value`,
-      `meta.rs:242`** (`let source_info = yaml.source_info.clone();`). Derive
-      the content provenance there and use it for **both** consumers of that
-      binding:
-      - store it in the `Scalar` variant, for the deferred project-config path
-      - **pass it as the re-parse base at `:259` (`!md`), `:303` (annotated
-        `Markdown`) and `:316` (`DocumentMetadata` default)** — the three
-        immediate re-parses that fix front matter. Today each pairs the decoded
-        `&s` with the node span, which is the bug
-- [x] **Not** `quarto-config`'s `config_value_from_yaml` — that function has no
-      production caller (its only call sites are its own tests, a
-      `#[cfg(test)]` use at `materialize.rs:495`, and two locally-shadowed
-      test helpers of the same name at `project_profile.rs:639` and
-      `render_scripts.rs:712` whose bodies call the pampa converter). It is
-      exported dead API
+  `meta.rs:242`** (`let source_info = yaml.source_info.clone();`). Derive
+  the content provenance there and use it for **both** consumers of that
+  binding:
+  - store it in the `Scalar` variant, for the deferred project-config path
+  - **pass it as the re-parse base at `:259` (`!md`), `:303` (annotated
+    `Markdown`) and `:316` (`DocumentMetadata` default)** — the three
+    immediate re-parses that fix front matter. Today each pairs the decoded
+    `&s` with the node span, which is the bug
+- [x] **Not** `quarto-config`\'s `config_value_from_yaml` — that function has no
+  production caller (its only call sites are its own tests, a
+  `#[cfg(test)]` use at `materialize.rs:495`, and two locally-shadowed
+  test helpers of the same name at `project_profile.rs:639` and
+  `render_scripts.rs:712` whose bodies call the pampa converter). It is
+  exported dead API
 - [x] `meta.rs:34` and `:59` are **forwarders**, not sites:
-      `parse_yaml_string_as_markdown_to_config` receives `source_info` as a
-      parameter and hands it to `readers::qmd::read`. Nothing there can call
-      `content_source_info()`
+  `parse_yaml_string_as_markdown_to_config` receives `source_info` as a
+  parameter and hands it to `readers::qmd::read`. Nothing there can call
+  `content_source_info()`
 - [x] **Read the carried value in one place:** `parse_scalar_string_in_place`
-      (`quarto-core/src/transforms/config_markdown.rs:284-290`)
+  (`quarto-core/src/transforms/config_markdown.rs:284-290`)
 - [x] **Dispose of the dead converter.** Delete
-      `quarto-config/src/convert.rs`'s `config_value_from_yaml` (and its
-      `pub use` at `lib.rs:57`), or keep it in lockstep. Deleting is
-      preferred: kept, it is a public constructor that can produce
-      YAML-rooted scalars with no content provenance — a hole in the invariant
-      that compiles. Deleting requires **retargeting `materialize.rs`'s
-      `mod spans` tests** (the bd-2mxo / bd-9yh3pzfu span-preservation tests —
-      the module opens at `:485` and runs past `:615`, so budget the whole
-      module) at `yaml_to_config_value`. Those tests currently guard a
-      converter no render uses, so this is a fidelity gain — and the
-      `resolve_span` decision above applies to them too
+  `quarto-config/src/convert.rs`\'s `config_value_from_yaml` (and its
+  `pub use` at `lib.rs:57`), or keep it in lockstep. Deleting is
+  preferred: kept, it is a public constructor that can produce
+  YAML-rooted scalars with no content provenance — a hole in the invariant
+  that compiles. Deleting requires **retargeting `materialize.rs`\'s
+  `mod spans` tests** (the bd-2mxo / bd-9yh3pzfu span-preservation tests —
+  the module opens at `:485` and runs past `:615`, so budget the whole
+  module) at `yaml_to_config_value`. Those tests currently guard a
+  converter no render uses, so this is a fidelity gain — and the
+  `resolve_span` decision above applies to them too
 
-      > **CORRECTED 2026-08-22 — the preferred option above CANNOT BE BUILT as
-      > written. Do not attempt it; take the "keep it in lockstep" alternative.**
-      >
-      > The retarget requires a quarto-config test to call
-      > `pampa::pandoc::meta::yaml_to_config_value`, but **pampa depends on
-      > quarto-config** (`crates/pampa/Cargo.toml:53`) — quarto-config sits *below*
-      > pampa in the graph (its deps are only quarto-source-map, quarto-yaml,
-      > quarto-pandoc-types, quarto-error-reporting, indexmap, thiserror,
-      > yaml-rust2). So the retarget needs a quarto-config → pampa dev-dependency
-      > cycle, dragging pampa's very large closure into quarto-config's test build.
-      >
-      > Nor can the tests move out to dodge it: all five `mod spans` tests call
-      > `MergedConfig::new(..).materialize()` — they test **quarto-config's own**
-      > materialize with real spans, so relocating them would exile a crate's tests
-      > from the crate they test. And hand-building the values instead is explicitly
-      > ruled out by `span_assert.rs`'s module docs (`:39-45`): synthetic
-      > `SourceInfo::for_test()` spans make a wrong span indistinguishable from a
-      > right one, "the bug is invisible by construction".
-      >
-      > **What to do instead** — this closes the hole this item actually names,
-      > which is that it is a ***public*** constructor:
-      >   (a) demote `config_value_from_yaml` from `pub` to `pub(crate)` and delete
-      >       the `pub use` at `lib.rs:57`, so nothing outside quarto-config can
-      >       reach it;
-      >   (b) thread content provenance through it in lockstep with `meta.rs`'s
-      >       read (the same one-line `content_source_info()` call), so it is not a
-      >       fiction and the five span tests gain the same fidelity the retarget
-      >       was for;
-      >   (c) document it as crate-internal, with no production caller, required to
-      >       stay in lockstep with `pampa::pandoc::meta::yaml_to_config_value`, and
-      >       say in one line *why* it cannot simply delegate — so the next reader
-      >       does not rediscover the layering.
-      >
-      > Verified while measuring this, so it need not be re-derived: the function has
-      > **no production caller**. Its only callers are convert.rs's own 17 tests, the
-      > `#[cfg(test)]` use in `materialize.rs`'s `layer()` helper (`:495`), and two
-      > **locally-shadowed same-name test helpers** at
-      > `quarto-core/src/project/project_profile.rs:639` and `render_scripts.rs:712`
-      > whose bodies call **pampa's** converter, not this one. The plan is right that
-      > it is dead API; only the disposal was unbuildable. Leave those two helpers
-      > alone — they are unrelated despite the identical name, and they are exactly
-      > what makes a grep-based audit here reach the wrong conclusion.
-- [x] **Preserve the serialized wire shape.** `ConfigValueKind`'s
-      `Serialize`/`Deserialize` are hand-written
-      (`quarto-pandoc-types/src/config_value.rs:222`, `:305`) and the `Scalar`
-      arm emits `{"Scalar": <value>}`. Keep that: drop provenance on
-      serialize, `None` on deserialize. No `profile_version` bump is needed
-      (`ConfigValue` is embedded in `DocumentProfile`, equality enforced at
-      `document_profile.rs:842`). The loss is silent, so confirm no
-      serialization boundary sits between producer and consumer — measured,
-      none does: `pampa/src/readers/json.rs` constructs `Scalar` only on the
-      Pandoc-JSON *input* path (`:2719-2867`), and the Lua bridge is Lua
-      tables, not JSON. **Record that confirmation in § Evidence**
+  > **CORRECTED 2026-08-22 — the preferred option above CANNOT BE BUILT as
+  > written. Do not attempt it; take the "keep it in lockstep" alternative.**
+  >
+  > The retarget requires a quarto-config test to call
+  > `pampa::pandoc::meta::yaml_to_config_value`, but **pampa depends on
+  > quarto-config** (`crates/pampa/Cargo.toml:53`) — quarto-config sits *below*
+  > pampa in the graph (its deps are only quarto-source-map, quarto-yaml,
+  > quarto-pandoc-types, quarto-error-reporting, indexmap, thiserror,
+  > yaml-rust2). So the retarget needs a quarto-config → pampa dev-dependency
+  > cycle, dragging pampa's very large closure into quarto-config's test build.
+  >
+  > Nor can the tests move out to dodge it: all five `mod spans` tests call
+  > `MergedConfig::new(..).materialize()` — they test **quarto-config's own**
+  > materialize with real spans, so relocating them would exile a crate's tests
+  > from the crate they test. And hand-building the values instead is explicitly
+  > ruled out by `span_assert.rs`\'s module docs (`:39-45`): synthetic
+  > `SourceInfo::for_test()` spans make a wrong span indistinguishable from a
+  > right one, "the bug is invisible by construction".
+  >
+  > **What to do instead** — this closes the hole this item actually names,
+  > which is that it is a **\_public\_** constructor:
+  >   (a) demote `config_value_from_yaml` from `pub` to `pub(crate)` and delete
+  >       the `pub use` at `lib.rs:57`, so nothing outside quarto-config can
+  >       reach it;
+  >   (b) thread content provenance through it in lockstep with `meta.rs`\'s
+  >       read (the same one-line `content_source_info()` call), so it is not a
+  >       fiction and the five span tests gain the same fidelity the retarget
+  >       was for;
+  >   (c) document it as crate-internal, with no production caller, required to
+  >       stay in lockstep with `pampa::pandoc::meta::yaml_to_config_value`, and
+  >       say in one line *why* it cannot simply delegate — so the next reader
+  >       does not rediscover the layering.
+  >
+  > Verified while measuring this, so it need not be re-derived: the function has
+  > **no production caller**. Its only callers are convert.rs's own 17 tests, the
+  > `#[cfg(test)]` use in `materialize.rs`\'s `layer()` helper (`:495`), and two
+  > **locally-shadowed same-name test helpers** at
+  > `quarto-core/src/project/project_profile.rs:639` and `render_scripts.rs:712`
+  > whose bodies call **pampa's** converter, not this one. The plan is right that
+  > it is dead API; only the disposal was unbuildable. Leave those two helpers
+  > alone — they are unrelated despite the identical name, and they are exactly
+  > what makes a grep-based audit here reach the wrong conclusion.
+- [x] **Preserve the serialized wire shape.** `ConfigValueKind`\'s
+  `Serialize`/`Deserialize` are hand-written
+  (`quarto-pandoc-types/src/config_value.rs:222`, `:305`) and the `Scalar`
+  arm emits `{"Scalar": <value>}`. Keep that: drop provenance on
+  serialize, `None` on deserialize. No `profile_version` bump is needed
+  (`ConfigValue` is embedded in `DocumentProfile`, equality enforced at
+  `document_profile.rs:842`). The loss is silent, so confirm no
+  serialization boundary sits between producer and consumer — measured,
+  none does: `pampa/src/readers/json.rs` constructs `Scalar` only on the
+  Pandoc-JSON *input* path (`:2719-2867`), and the Lua bridge is Lua
+  tables, not JSON. **Record that confirmation in § Evidence**
 
 **The binding regression — do not ship Phase 3 without this.**
 
@@ -877,7 +877,7 @@ this plan uses "founding" for both and they are not interchangeable.
 >
 > Why: `MetadataMergeStage`
 > (`quarto-core/src/stage/stages/metadata_merge.rs:308-352`) **unconditionally**
-> pre-registers `_quarto.yml`'s content into both `doc.ast_context.source_context`
+> pre-registers `_quarto.yml`\'s content into both `doc.ast_context.source_context`
 > and `doc.source_context`, keyed by `quarto_yaml::file_id_for_filename` — the same
 > hash-based `FileId` scheme the binder matches on — *earlier in the pipeline*, and
 > for every candidate `attach_config_source` is actually given. That registration
@@ -887,7 +887,7 @@ this plan uses "founding" for both and they are not interchangeable.
 >
 > Verified twice, mechanically, not by re-reading: reverting the fix makes a focused
 > unit test against `bind_source_candidates` fail (`left: None, right:
-> Some(.../_quarto.yml)`) while **the CLI fixture passes identically before and
+> Some(.../\_quarto.yml)`) while **the CLI fixture passes identically before and
 > after** — direct proof that a CLI-level test cannot distinguish the two
 > implementations here.
 >
@@ -912,141 +912,141 @@ this plan uses "founding" for both and they are not interchangeable.
 > other, so narrowing one silently changes the other — is filed as **bd-8k41zq68**.
 
 - [x] Change `bind_source_candidates` to obtain the file id from
-      `info.root_file_id()` rather than `info.resolve_byte_range()?`. It
-      discards the range anyway and wants only the id, and `root_file_id`
-      handles both `Concat` and `Substring{parent: Concat}`
-      (`quarto-source-map/src/source_info.rs:521-532`). This also makes the
-      binder agree with the **renderer**, which already resolves the file via
-      `root_file_id()` (`quarto-error-reporting/src/diagnostic.rs:819`,
-      `:1022`) — today they disagree about how to obtain the same value
+  `info.root_file_id()` rather than `info.resolve_byte_range()?`. It
+  discards the range anyway and wants only the id, and `root_file_id`
+  handles both `Concat` and `Substring{parent: Concat}`
+  (`quarto-source-map/src/source_info.rs:521-532`). This also makes the
+  binder agree with the **renderer**, which already resolves the file via
+  `root_file_id()` (`quarto-error-reporting/src/diagnostic.rs:819`,
+  `:1022`) — today they disagree about how to obtain the same value
 - [x] **Test on the right population.** `project_diagnostics` are
-      pre-registered unconditionally by `config_source_context`
-      (`render.rs:1172`, printed at `:1246-1248`) and need no binding, so a
-      project-level fixture comes back green and proves nothing. The
-      regression test needs a **per-page** config diagnostic from a multi-line
-      block scalar — the same seam as the block-scalar test above
+  pre-registered unconditionally by `config_source_context`
+  (`render.rs:1172`, printed at `:1246-1248`) and need no binding, so a
+  project-level fixture comes back green and proves nothing. The
+  regression test needs a **per-page** config diagnostic from a multi-line
+  block scalar — the same seam as the block-scalar test above
 - [x] Scope check, **recorded in § Evidence**: only this one call site is
-      exposed. The other binders act on `ConfigValue` spans, which stay
-      contiguous. `rebase_source_candidates` (`config_sources.rs:140`, used
-      from `website_post_render.rs`) is the exception — it genuinely needs the
-      range to rebuild an `Original{fid,start,end}`, so `root_file_id` does not
-      help it; it is on the inert path (see the ruled-out list below) and stays
-      as is
+  exposed. The other binders act on `ConfigValue` spans, which stay
+  contiguous. `rebase_source_candidates` (`config_sources.rs:140`, used
+  from `website_post_render.rs`) is the exception — it genuinely needs the
+  range to rebuild an `Original{fid,start,end}`, so `root_file_id` does not
+  help it; it is on the inert path (see the ruled-out list below) and stays
+  as is
 
 **The two `None`s (obligation 7).**
 
 - [x] `content_source_info()` returning `None` on a node q2 has already
-      established is a string scalar is a **bug** — Plan 1 merged "not a
-      scalar" and "derivation desynced" into one `None`, and both are bugs at
-      that call site. Report it, but **warning-level and non-fatal**: Plan 1
-      rejected `Err` precisely because a walker bug must not turn a working
-      render into a hard failure, and a wrong caret beats no output
+  established is a string scalar is a **bug** — Plan 1 merged "not a
+  scalar" and "derivation desynced" into one `None`, and both are bugs at
+  that call site. Report it, but **warning-level and non-fatal**: Plan 1
+  rejected `Err` precisely because a walker bug must not turn a working
+  render into a hard failure, and a wrong caret beats no output
 
-      > **CORRECTED 2026-08-22 — this counts TWO causes of `None`; the published
-      > accessor documents THREE, and the missing one is not a bug.**
-      >
-      > `quarto-yaml` 0.1.3's `content_source_info()` doc comment
-      > (`yaml_with_source_info.rs:192-216`) states `None` means, verbatim: *"this
-      > node is not a scalar (ask `is_scalar` to tell that apart); **no derivation
-      > ran (the node was built by hand, e.g. in a test, or is an unresolved
-      > alias)**; or the lockstep derivation desynced."* The middle cause is absent
-      > from the item above and is legitimate.
-      >
-      > - The **unresolved-alias** half is self-resolving and needs no special case:
-      >   an unresolved alias is `Yaml::Alias`, not `Yaml::String`, so the
-      >   `Yaml::String` scoping already excludes it (existing fixture:
-      >   `pampa/src/pandoc/meta.rs:717`).
-      > - The **hand-built-node** half is real but test-only. Measured: q2 has 17
-      >   hand-constructed `YamlWithSourceInfo` sites, of which these build a
-      >   `Yaml::String` and will trip a naive rule —
-      >   `quarto-config/src/convert.rs:116` (the `make_scalar` helper, so every test
-      >   using it), `convert.rs:197`, `pampa/src/pandoc/meta.rs:501`, `:517`, and
-      >   the four `new_scalar_with_tag` string fixtures at `meta.rs:727`, `:747`,
-      >   `:760`, `:773`.
-      >
-      > **Decided: absorb this in the FIXTURES, not in the rule.** Where a hand-built
-      > string-scalar fixture trips the warning, attach provenance with
-      > `with_content_provenance`, or assert the warning where the test is
-      > specifically *about* the `None` path. **Do not** weaken the rule to "only warn
-      > when we can prove a parse happened", and do not add a came-from-a-real-parse
-      > flag. Production never hand-builds these nodes, so the rule is right for
-      > production traffic and the noise is confined to those fixtures — which today
-      > pair a decoded value with a synthetic `SourceInfo::for_test()` span anyway,
-      > exactly the shape `span_assert.rs`'s module docs call
-      > invisible-by-construction.
-      >
-      > **CORRECTED 2026-08-22 (session 2), by review: an earlier revision of this
-      > paragraph said "fixing them is a fidelity gain and the warning is the forcing
-      > function". WITHDRAWN — the instruction stands, the rationale does not.** What
-      > landed attaches `SourceInfo::for_test()` *as* the content provenance, which
-      > silences the warning at exactly the synthetic fidelity this paragraph
-      > criticizes. In a real `Yaml::String`, content provenance **differs** from the
-      > container's `source_info` — quote delimiters and block-scalar indent stripped,
-      > which is the entire point of this epic — and a second, independently-synthetic
-      > span does not reproduce that relationship; it makes the field `Some(garbage)`
-      > rather than `None`. If anything `None` was the **more** honest signal for a
-      > hand-built node: it is the literal truth that no derivation ran.
-      > The instruction is still right, for a narrower reason: the warning exists to
-      > police **production** traffic, none of the touched fixtures asserts anything
-      > about `content_source_info`'s value or resolves its span, so the synthetic
-      > value has zero blast radius — and the real rigor lives in the four dedicated
-      > tests, which build `None` directly. **Do not reuse the "fidelity gain"
-      > framing, here or in Plan 3.**
-      >
-      > Also required, or the scoping is untested: assert the **negative** — a
-      > non-string scalar (`Integer`/`Boolean`/`Null`) with `None` provenance must
-      > **not** warn. Without that, a later widening of the rule goes unnoticed, and
-      > the scoping is the whole reason this is a plain internal diagnostic rather
-      > than a catalog code.
+  > **CORRECTED 2026-08-22 — this counts TWO causes of `None`; the published
+  > accessor documents THREE, and the missing one is not a bug.**
+  >
+  > `quarto-yaml` 0.1.3's `content_source_info()` doc comment
+  > (`yaml_with_source_info.rs:192-216`) states `None` means, verbatim: *"this
+  > node is not a scalar (ask `is_scalar` to tell that apart); **no derivation
+  > ran (the node was built by hand, e.g. in a test, or is an unresolved
+  > alias)**; or the lockstep derivation desynced."* The middle cause is absent
+  > from the item above and is legitimate.
+  >
+  > - The **unresolved-alias** half is self-resolving and needs no special case:
+  >   an unresolved alias is `Yaml::Alias`, not `Yaml::String`, so the
+  >   `Yaml::String` scoping already excludes it (existing fixture:
+  >   `pampa/src/pandoc/meta.rs:717`).
+  > - The **hand-built-node** half is real but test-only. Measured: q2 has 17
+  >   hand-constructed `YamlWithSourceInfo` sites, of which these build a
+  >   `Yaml::String` and will trip a naive rule —
+  >   `quarto-config/src/convert.rs:116` (the `make_scalar` helper, so every test
+  >   using it), `convert.rs:197`, `pampa/src/pandoc/meta.rs:501`, `:517`, and
+  >   the four `new_scalar_with_tag` string fixtures at `meta.rs:727`, `:747`,
+  >   `:760`, `:773`.
+  >
+  > **Decided: absorb this in the FIXTURES, not in the rule.** Where a hand-built
+  > string-scalar fixture trips the warning, attach provenance with
+  > `with_content_provenance`, or assert the warning where the test is
+  > specifically *about* the `None` path. **Do not** weaken the rule to "only warn
+  > when we can prove a parse happened", and do not add a came-from-a-real-parse
+  > flag. Production never hand-builds these nodes, so the rule is right for
+  > production traffic and the noise is confined to those fixtures — which today
+  > pair a decoded value with a synthetic `SourceInfo::for_test()` span anyway,
+  > exactly the shape `span_assert.rs`\'s module docs call
+  > invisible-by-construction.
+  >
+  > **CORRECTED 2026-08-22 (session 2), by review: an earlier revision of this
+  > paragraph said "fixing them is a fidelity gain and the warning is the forcing
+  > function". WITHDRAWN — the instruction stands, the rationale does not.** What
+  > landed attaches `SourceInfo::for_test()` *as* the content provenance, which
+  > silences the warning at exactly the synthetic fidelity this paragraph
+  > criticizes. In a real `Yaml::String`, content provenance **differs** from the
+  > container's `source_info` — quote delimiters and block-scalar indent stripped,
+  > which is the entire point of this epic — and a second, independently-synthetic
+  > span does not reproduce that relationship; it makes the field `Some(garbage)`
+  > rather than `None`. If anything `None` was the **more** honest signal for a
+  > hand-built node: it is the literal truth that no derivation ran.
+  > The instruction is still right, for a narrower reason: the warning exists to
+  > police **production** traffic, none of the touched fixtures asserts anything
+  > about `content_source_info`\'s value or resolves its span, so the synthetic
+  > value has zero blast radius — and the real rigor lives in the four dedicated
+  > tests, which build `None` directly. **Do not reuse the "fidelity gain"
+  > framing, here or in Plan 3.**
+  >
+  > Also required, or the scoping is untested: assert the **negative** — a
+  > non-string scalar (`Integer`/`Boolean`/`Null`) with `None` provenance must
+  > **not** warn. Without that, a later widening of the rule goes unnoticed, and
+  > the scoping is the whole reason this is a plain internal diagnostic rather
+  > than a catalog code.
 - [x] **No `Q-` code for that report.** Decided here: it is an internal
-      consistency failure a user cannot act on, so it gets a plain internal
-      diagnostic rather than a catalog code. This is not only taste —
-      `cargo xtask lint`'s `error-docs-page-missing` and
-      `error-docs-sidebar-unlisted` would then require a
-      `docs/errors/<subsystem>/<code>.qmd` page **and** an in-code-order
-      sidebar entry in the same commit, mechanically enforced
+  consistency failure a user cannot act on, so it gets a plain internal
+  diagnostic rather than a catalog code. This is not only taste —
+  `cargo xtask lint`\'s `error-docs-page-missing` and
+  `error-docs-sidebar-unlisted` would then require a
+  `docs/errors/<subsystem>/<code>.qmd` page **and** an in-code-order
+  sidebar entry in the same commit, mechanically enforced
 - [x] `ConfigValueKind::Scalar { content_source_info: None }` at the
-      `ConfigValue` layer is **not** a bug — CLI `-M`, Lua and defaults-file
-      metadata have no YAML origin. Falling back to `source_info` is inert
-      there *because* those producers carry
-      `SourceInfo::generated(By::programmatic_config())`
-      (`quarto-core/src/stage/stages/metadata_merge.rs:48`, `:71`, `:460`,
-      `:463`), where offset arithmetic already yields `None`. **Put that
-      reason in a code comment**, so the fallback is never extended to
-      YAML-rooted values
+  `ConfigValue` layer is **not** a bug — CLI `-M`, Lua and defaults-file
+  metadata have no YAML origin. Falling back to `source_info` is inert
+  there *because* those producers carry
+  `SourceInfo::generated(By::programmatic_config())`
+  (`quarto-core/src/stage/stages/metadata_merge.rs:48`, `:71`, `:460`,
+  `:463`), where offset arithmetic already yields `None`. **Put that
+  reason in a code comment**, so the fallback is never extended to
+  YAML-rooted values
 - [x] Note the degradation path in the same comment, so it is not mistaken for
-      a bug later: `UserFiltersStage::pre()`
-      (`quarto-core/src/pipeline.rs:349`) runs before `ConfigMarkdownTransform`
-      (`:1176`), and the Lua bridge discards provenance outbound
-      (`pampa/src/lua/config_value.rs:150`) and rebuilds `Scalar` without it
-      inbound (`:324-341`). A filter that touches `website.page-footer`
-      therefore drops to today's behavior — a caret one byte left, not a
-      crash. This is the safe direction, and a direct consequence of putting
-      provenance *inside* the variant
+  a bug later: `UserFiltersStage::pre()`
+  (`quarto-core/src/pipeline.rs:349`) runs before `ConfigMarkdownTransform`
+  (`:1176`), and the Lua bridge discards provenance outbound
+  (`pampa/src/lua/config_value.rs:150`) and rebuilds `Scalar` without it
+  inbound (`:324-341`). A filter that touches `website.page-footer`
+  therefore drops to today's behavior — a caret one byte left, not a
+  crash. This is the safe direction, and a direct consequence of putting
+  provenance *inside* the variant
 
 **The third consumer.**
 
 - [x] Fix `caption_inlines` (`quarto-core/src/crossref/codeblock_shorthand.rs`,
-      fn at `:644`). `OptionValue.value_source` is set at `:551` from
-      `entry.value.source_info` — a live quarto-yaml node — and used as the
-      offset base for markdown-parsing the decoded value, so
-      `fig-cap: "A *strong* claim"` drifts exactly like the config path. It
-      needs no carrier: Plan 1's `content_source_info()` serves it directly.
-      **It is also the only path that exercises a `Concat` parent**: cell
-      options hands `parse_with_parent` a `SourceInfo::concat`
-      (`quarto-core/src/cell_options/mod.rs:227-229`), so content provenance
-      there is a Concat *inside* a Concat-parented parse. That is the case
-      Plan 1's builder contract ("never call `resolve_byte_range` on the
-      parent") exists for — test it here
+  fn at `:644`). `OptionValue.value_source` is set at `:551` from
+  `entry.value.source_info` — a live quarto-yaml node — and used as the
+  offset base for markdown-parsing the decoded value, so
+  `fig-cap: "A *strong* claim"` drifts exactly like the config path. It
+  needs no carrier: Plan 1's `content_source_info()` serves it directly.
+  **It is also the only path that exercises a `Concat` parent**: cell
+  options hands `parse_with_parent` a `SourceInfo::concat`
+  (`quarto-core/src/cell_options/mod.rs:227-229`), so content provenance
+  there is a Concat *inside* a Concat-parented parse. That is the case
+  Plan 1's builder contract ("never call `resolve_byte_range` on the
+  parent") exists for — test it here
 - [x] Ruled-out sites, **listed in § Evidence** so nobody re-investigates:
-      `project_resources.rs:215/224` (whole-node span, `as_plain_text`, no
-      sub-offset arithmetic), `use_cmd/config.rs:229` (already defensive — see
-      Phase 4), `lua/config_value.rs:620` (base is `filter_source_info(lua)` =
-      `Generated` with no anchors — Plan 3), `theme_diagnostic.rs:331`
-      (synthetic test span), `project/website_post_render.rs:217` (same shape
-      as the `config_markdown` reader, on the same page-footer data, but its
-      parse diagnostics are discarded and only image URLs are collected —
-      inert today, and a latent second reader the moment anyone surfaces them)
+  `project_resources.rs:215/224` (whole-node span, `as_plain_text`, no
+  sub-offset arithmetic), `use_cmd/config.rs:229` (already defensive — see
+  Phase 4), `lua/config_value.rs:620` (base is `filter_source_info(lua)` =
+  `Generated` with no anchors — Plan 3), `theme_diagnostic.rs:331`
+  (synthetic test span), `project/website_post_render.rs:217` (same shape
+  as the `config_markdown` reader, on the same page-footer data, but its
+  parse diagnostics are discarded and only image URLs are collected —
+  inert today, and a latent second reader the moment anyone surfaces them)
 
 ### Phase 4 — q2's attribute path drives the builder
 
@@ -1071,135 +1071,135 @@ exist yet at that point — you cannot drive a decoder against an API that has
 not been written.
 
 - [x] Failing test first: a div attribute whose value contains a collapsed
-      escape, asserting an inner node's `SourceInfo` resolves to the true byte
-      position. Measured baseline from `bd-mxa44voa`: for
-      `title="Use \`renv\` today"` the code span sits at inner bytes `4..10`,
-      maps to `85..91`, and is actually at `86..92` — off by one *before* any
-      escape is involved, and one more byte per collapsed escape
+  escape, asserting an inner node's `SourceInfo` resolves to the true byte
+  position. Measured baseline from `bd-mxa44voa`: for
+  ``title="Use `renv` today"`` the code span sits at inner bytes `4..10`,
+  maps to `85..91`, and is actually at `86..92` — off by one *before* any
+  escape is involved, and one more byte per collapsed escape
 - [x] Drive `ProvenanceBuilder` so `AttrSourceInfo` carries content
-      provenance. **The plumbing is larger than "drive it from
-      `unescape_punctuation`."** That function
-      (`pampa/src/pandoc/treesitter_utils/text_helpers.rs:41`) is private,
-      takes a `&str`, and has exactly one caller — `extract_quoted_text` at
-      `:28`, which discards offsets. `extract_quoted_text` in turn has **two**
-      callers: the div-attribute value at `treesitter.rs:1208-1213` and the
-      link/image `title` at **`:1301-1305`** — both producing
-      `IntermediateBaseText(String, Range)`
-      (`treesitter_utils/pandocnativeintermediate.rs:26`), and a
-      `quarto_source_map::Range` is a start/end pair that **cannot express a
-      `Concat`** — the same argument Plan 1 uses to reject the content-span
-      design. The `SourceInfo` is not built until
-      `commonmark_attribute.rs:44-49` (`SourceInfo::from_range`). So either the
-      intermediate carries a `SourceInfo`, or the decoder returns a piece list
-      bound later; `ProvenanceBuilder::in_file` exists for this shape.
-      **Done when** the failing test above goes green — this item is the
-      plumbing analysis behind it, not a separately checkable deliverable
+  provenance. **The plumbing is larger than "drive it from
+  `unescape_punctuation`."** That function
+  (`pampa/src/pandoc/treesitter_utils/text_helpers.rs:41`) is private,
+  takes a `&str`, and has exactly one caller — `extract_quoted_text` at
+  `:28`, which discards offsets. `extract_quoted_text` in turn has **two**
+  callers: the div-attribute value at `treesitter.rs:1208-1213` and the
+  link/image `title` at **`:1301-1305`** — both producing
+  `IntermediateBaseText(String, Range)`
+  (`treesitter_utils/pandocnativeintermediate.rs:26`), and a
+  `quarto_source_map::Range` is a start/end pair that **cannot express a
+  `Concat`** — the same argument Plan 1 uses to reject the content-span
+  design. The `SourceInfo` is not built until
+  `commonmark_attribute.rs:44-49` (`SourceInfo::from_range`). So either the
+  intermediate carries a `SourceInfo`, or the decoder returns a piece list
+  bound later; `ProvenanceBuilder::in_file` exists for this shape.
+  **Done when** the failing test above goes green — this item is the
+  plumbing analysis behind it, not a separately checkable deliverable
 - [x] **A third decoder shadows the identifier — out of scope, and it is not a
-      defect.** `treesitter.rs:989` defines a **local closure also named
-      `extract_quoted_text`** which open-codes the same strip-and-unescape for
-      `shortcode_string`, feeding `IntermediateBaseText` at `:1006` to
-      `process_shortcode_string` (`treesitter_utils/shortcode.rs:31`).
-      It **cannot drift, by construction**: that function destructures the
-      closure's range away — `let ... IntermediateBaseText(id, _) = ...` at
-      `:36`, verified — and (per Plan 3, who traced the downstream half)
-      recomputes the range from the whole node, with no
-      `ShortcodeArg::String` consumer offsetting into it. So the closure's
-      range arithmetic at `:1000-1005` is dead code; Plan 3 owns deleting it.
-      Unlike the `title` caller it is also **not** reached by changing the
-      shared function's return type, so it is separable on both counts.
-      Recorded because a Phase 4 implementer greps `extract_quoted_text`, finds
-      two definitions, and needs to know which one this phase means — and that
-      the other one is not a bug they are declining to fix
+  defect.** `treesitter.rs:989` defines a **local closure also named
+  `extract_quoted_text`** which open-codes the same strip-and-unescape for
+  `shortcode_string`, feeding `IntermediateBaseText` at `:1006` to
+  `process_shortcode_string` (`treesitter_utils/shortcode.rs:31`).
+  It **cannot drift, by construction**: that function destructures the
+  closure's range away — `let ... IntermediateBaseText(id, \_) = ...` at
+  `:36`, verified — and (per Plan 3, who traced the downstream half)
+  recomputes the range from the whole node, with no
+  `ShortcodeArg::String` consumer offsetting into it. So the closure's
+  range arithmetic at `:1000-1005` is dead code; Plan 3 owns deleting it.
+  Unlike the `title` caller it is also **not** reached by changing the
+  shared function's return type, so it is separable on both counts.
+  Recorded because a Phase 4 implementer greps `extract_quoted_text`, finds
+  two definitions, and needs to know which one this phase means — and that
+  the other one is not a bug they are declining to fix
 - [x] **The `title` caller is in scope.** Decided here rather than left open:
-      changing `extract_quoted_text`'s return type reaches
-      `treesitter.rs:1301-1305` whether or not you use the provenance there, so
-      the only real choice is use-it-or-discard-it, and discarding would
-      deliberately leave a known-wrong span behind a change that already
-      touched it. It is a **span-tightening, not a drift fix** — measured, the
-      only consumer of `TargetSourceInfo.title`
-      (`quarto-pandoc-types/src/attr.rs:121`) is the JSON writer's source-ref
-      stream (`pampa/src/writers/json.rs:2079`), which does no sub-offset
-      arithmetic, so today's span is quote-inclusive rather than drifting —
-      the same shape as `theorem.rs`/`proof.rs`. Expect the same kind of
-      fallout: any assertion pinning a link or image title's span moves.
-      **It does not widen the 0.2.0 break** — measured, `annotated-qmd` reads
-      `attrSource.kvs[i]` and never reads target/title spans, so the TS
-      consumer is untouched by this half
+  changing `extract_quoted_text`\'s return type reaches
+  `treesitter.rs:1301-1305` whether or not you use the provenance there, so
+  the only real choice is use-it-or-discard-it, and discarding would
+  deliberately leave a known-wrong span behind a change that already
+  touched it. It is a **span-tightening, not a drift fix** — measured, the
+  only consumer of `TargetSourceInfo.title`
+  (`quarto-pandoc-types/src/attr.rs:121`) is the JSON writer's source-ref
+  stream (`pampa/src/writers/json.rs:2079`), which does no sub-offset
+  arithmetic, so today's span is quote-inclusive rather than drifting —
+  the same shape as `theorem.rs`/`proof.rs`. Expect the same kind of
+  fallout: any assertion pinning a link or image title's span moves.
+  **It does not widen the 0.2.0 break** — measured, `annotated-qmd` reads
+  `attrSource.kvs[i]` and never reads target/title spans, so the TS
+  consumer is untouched by this half
 - [x] **Obligation 8: re-check `qmd-syntax-helper` after the meaning change,
-      and record the result.** § Risks rules it out *by reachability* — its
-      diagnostics come from its own `pampa::readers::qmd::read` call, so it
-      never sees this provenance. That conclusion is mine, it is expected to
-      hold, and **nothing currently re-tests it**. It matters because its 23
-      `start_offset()` sites across 22 files **write to the user's files**
-      (`conversions/q_2_33.rs:74-75`, `attribute_ordering.rs:74`,
-      `div_whitespace.rs:77`, …) using the accessor that is silently `0` on a
-      `Concat`, and this phase changes what `attributes[i].1` means. Failure
-      mode is **corrupted source files, not a bad caret** — the worst in the
-      epic. Concretely: after the swap, confirm no diagnostic reaching
-      `qmd-syntax-helper`'s conversions carries an attribute-derived span, and
-      write that confirmation into § Evidence rather than re-deriving the
-      reachability argument
+  and record the result.** § Risks rules it out *by reachability* — its
+  diagnostics come from its own `pampa::readers::qmd::read` call, so it
+  never sees this provenance. That conclusion is mine, it is expected to
+  hold, and **nothing currently re-tests it**. It matters because its 23
+  `start_offset()` sites across 22 files **write to the user's files**
+  (`conversions/q_2_33.rs:74-75`, `attribute_ordering.rs:74`,
+  `div_whitespace.rs:77`, …) using the accessor that is silently `0` on a
+  `Concat`, and this phase changes what `attributes[i].1` means. Failure
+  mode is **corrupted source files, not a bad caret** — the worst in the
+  epic. Concretely: after the swap, confirm no diagnostic reaching
+  `qmd-syntax-helper`\'s conversions carries an attribute-derived span, and
+  write that confirmation into § Evidence rather than re-deriving the
+  reachability argument
 - [x] **Tag verbatim by bytes, not by length.** Plan 1's walker had this bug
-      and fixed it; our decoder must not reintroduce it. A piece is verbatim
-      **iff its source run is byte-identical to its content run** — equal
-      lengths are not sufficient, and a 1→1 piece with differing bytes tagged
-      verbatim claims a byte-identity it lacks, which `preimage_in` would let
-      the incremental writer act on by Verbatim-copying the wrong bytes. Only
-      verbatim pieces coalesce. Zero-content pieces are **stored, never
-      dropped** — reversed by Plan 1 on 2026-08-21 after measuring that
-      dropping one leaves a source gap and `preimage_in` then returns `None`
-      where storing gives `Some(4..14)`. Storing is what keeps the tiling
-      gap-free, which the hull below depends on. Our decode is simpler than
-      YAML's — `unescape_punctuation`'s cases are `\X`→`X` (2→1) and a
-      preserved `\Y` (2→2, byte-identical), so no 1→1 non-identical case
-      exists today — but emit pieces from the decode rather than inferring
-      tags from lengths, so it stays true if the escape table grows
+  and fixed it; our decoder must not reintroduce it. A piece is verbatim
+  **iff its source run is byte-identical to its content run** — equal
+  lengths are not sufficient, and a 1→1 piece with differing bytes tagged
+  verbatim claims a byte-identity it lacks, which `preimage_in` would let
+  the incremental writer act on by Verbatim-copying the wrong bytes. Only
+  verbatim pieces coalesce. Zero-content pieces are **stored, never
+  dropped** — reversed by Plan 1 on 2026-08-21 after measuring that
+  dropping one leaves a source gap and `preimage_in` then returns `None`
+  where storing gives `Some(4..14)`. Storing is what keeps the tiling
+  gap-free, which the hull below depends on. Our decode is simpler than
+  YAML's — `unescape_punctuation`\'s cases are `\X`→`X` (2→1) and a
+  preserved `\Y` (2→2, byte-identical), so no 1→1 non-identical case
+  exists today — but emit pieces from the decode rather than inferring
+  tags from lengths, so it stays true if the escape table grows
 
-      > **WARNING added 2026-08-22 — do NOT apply "zero-content pieces are stored,
-      > never dropped" to the stripped QUOTES. Doing so silently defeats this phase.**
-      >
-      > That rule comes from Plan 1's YAML walker, where dropping a zero-content piece
-      > opened an *interior* source gap and made `preimage_in` return `None`. It is
-      > correct there. Applied here it is tempting — emit `replacement(0..1, 0)` for
-      > the opening quote and the same for the closing one — and wrong: a stored
-      > **trailing** zero-content deletion puts the closing quote's source end at the
-      > end of the last piece, so the hull's exclusive end lands *after* the closing
-      > quote, re-including the quotes in the very span this phase exists to tighten.
-      >
-      > The correct rule for this case is the one this plan already states elsewhere:
-      > quote stripping **trims the content range's ends**; it does not leave an
-      > interior gap. Start the tiling after the opening quote and stop before the
-      > closing one. Checked against the published builder: `finish()`'s
-      > `debug_assert` requires only that *consecutive* pieces abut **each other**,
-      > not that the first piece starts at the node's first byte — so this tiles
-      > legally.
-      >
-      > Sanity check to actually run: for a quoted value with **no escapes at all**,
-      > the resulting span must cover the value **without** its quotes. And note the
-      > corollary — this plan predicts `theorem.rs`/`proof.rs` and link/image `title`
-      > spans will "tighten to exclude quotes"; that prediction only holds if the
-      > quotes are left out of the tiling as above. If those spans do **not** tighten,
-      > this is the first thing to check.
+  > **WARNING added 2026-08-22 — do NOT apply "zero-content pieces are stored,
+  > never dropped" to the stripped QUOTES. Doing so silently defeats this phase.**
+  >
+  > That rule comes from Plan 1's YAML walker, where dropping a zero-content piece
+  > opened an *interior* source gap and made `preimage_in` return `None`. It is
+  > correct there. Applied here it is tempting — emit `replacement(0..1, 0)` for
+  > the opening quote and the same for the closing one — and wrong: a stored
+  > **trailing** zero-content deletion puts the closing quote's source end at the
+  > end of the last piece, so the hull's exclusive end lands *after* the closing
+  > quote, re-including the quotes in the very span this phase exists to tighten.
+  >
+  > The correct rule for this case is the one this plan already states elsewhere:
+  > quote stripping **trims the content range's ends**; it does not leave an
+  > interior gap. Start the tiling after the opening quote and stop before the
+  > closing one. Checked against the published builder: `finish()`\'s
+  > `debug_assert` requires only that *consecutive* pieces abut **each other**,
+  > not that the first piece starts at the node's first byte — so this tiles
+  > legally.
+  >
+  > Sanity check to actually run: for a quoted value with **no escapes at all**,
+  > the resulting span must cover the value **without** its quotes. And note the
+  > corollary — this plan predicts `theorem.rs`/`proof.rs` and link/image `title`
+  > spans will "tighten to exclude quotes"; that prediction only holds if the
+  > quotes are left out of the tiling as above. If those spans do **not** tighten,
+  > this is the first thing to check.
 - [x] **Delete the `callout.rs:431-447` workaround** — the
-      `match value_source.resolve_byte_range()` block. Note the criterion
-      precisely: the *function* `attribute_value_source` (`:401-448`)
-      survives. It also does the key-index lookup (`:409-411`), the `Attr.2` ↔
-      `AttrSourceInfo.attributes` positional-alignment guard for the
-      duplicate-key bug bd-3aolj / bd-1e6a5 (`:413-425`), and the
-      `Option` → `generated()` fallback. Only the length-arithmetic block is
-      the provenance workaround. If *that* block cannot go, the builder is not
-      general enough — stop, and see the note above about when this is
-      testable
+  `match value_source.resolve_byte_range()` block. Note the criterion
+  precisely: the *function* `attribute_value_source` (`:401-448`)
+  survives. It also does the key-index lookup (`:409-411`), the `Attr.2` ↔
+  `AttrSourceInfo.attributes` positional-alignment guard for the
+  duplicate-key bug bd-3aolj / bd-1e6a5 (`:413-425`), and the
+  `Option` → `generated()` fallback. Only the length-arithmetic block is
+  the provenance workaround. If *that* block cannot go, the builder is not
+  general enough — stop, and see the note above about when this is
+  testable
 - [x] **Update the fallout, don't just expect it.** These are work items, not
-      predictions: `callout.rs:718`, `:734`, `:750` call `resolve_span` on
-      attribute-derived inline spans (their disposition follows the Phase 3
-      `resolve_span` decision — they resolve if piecewise lands, else they need
-      rewriting); `quarto-ast-reconcile/src/remap.rs:526`'s test-only
-      `file_id_of` panics on non-`Original` and must accept the new shape; and
-      `theorem.rs`/`proof.rs` spans tighten to exclude quotes, moving any
-      location assertion over a theorem or proof `name=`. Reconcile itself is
-      clean — `remap_file_ids` is variant-complete
-      (`quarto-source-map/src/source_info.rs:485-511`)
+  predictions: `callout.rs:718`, `:734`, `:750` call `resolve_span` on
+  attribute-derived inline spans (their disposition follows the Phase 3
+  `resolve_span` decision — they resolve if piecewise lands, else they need
+  rewriting); `quarto-ast-reconcile/src/remap.rs:526`\'s test-only
+  `file_id_of` panics on non-`Original` and must accept the new shape; and
+  `theorem.rs`/`proof.rs` spans tighten to exclude quotes, moving any
+  location assertion over a theorem or proof `name=`. Reconcile itself is
+  clean — `remap_file_ids` is variant-complete
+  (`quarto-source-map/src/source_info.rs:485-511`)
 
 **Obligation 8 — the TypeScript boundary.**
 
@@ -1219,7 +1219,7 @@ Concat` (`:317-375`) **already walks the pieces** — it builds the concat via
 well-formed `Concat` resolves correctly today, and TS is already doing the
 `map_offset`-pair thing this plan prescribes elsewhere.
 
-**The real defect is `resolveChain`'s `Substring` arm** (`:301-315`):
+**The real defect is `resolveChain`\'s `Substring` arm** (`:301-315`):
 
 ```ts
 range: [parentStart + localStart, parentStart + localEnd]
@@ -1235,49 +1235,49 @@ behavior is the bug, not the contract. `@quarto/annotated-qmd` is a published
 public package (`publishConfig.access: public`, v0.1.1), so this is a breaking
 behavior change and gets a minor bump.
 
-- [x] Fix `resolveChain`'s `Substring` arm to compose through the parent's
-      mapping rather than affinely over its hull
+- [x] Fix `resolveChain`\'s `Substring` arm to compose through the parent's
+  mapping rather than affinely over its hull
 - [x] Update `ts-packages/annotated-qmd/test/block-types.test.ts:428-437`,
-      which today asserts `source.substring(value.start, value.end)` ∈
-      `['"42"', '"test"']` with the comment "values include quotes in source".
-      It must assert the **unquoted** value. This test is the reason the
-      change is breaking rather than invisible
+  which today asserts `source.substring(value.start, value.end)` ∈
+  `['"42"', '"test"']` with the comment "values include quotes in source".
+  It must assert the **unquoted** value. This test is the reason the
+  change is breaking rather than invisible
 - [x] Regenerate the committed `ts-packages/annotated-qmd/examples/*.json` —
-      they are Rust JSON-writer output carrying the `kvs` ids and ranges
-      (`examples/README.md:33-35`), so Phase 4 makes them stale. Note the
-      README's regeneration command names `--bin quarto-markdown-pandoc`,
-      which no longer exists; the binary is `pampa`. Fix the README in passing
+  they are Rust JSON-writer output carrying the `kvs` ids and ranges
+  (`examples/README.md:33-35`), so Phase 4 makes them stale. Note the
+  README's regeneration command names `--bin quarto-markdown-pandoc`,
+  which no longer exists; the binary is `pampa`. Fix the README in passing
 - [x] Bump `@quarto/annotated-qmd` to **0.2.0** — the 0.x signal for a
-      breaking behavior change
+  breaking behavior change
 - [x] Add a permanent test pinning the range for a quoted value and for an
-      escaped value, and record the pre-fix range in § Evidence.
-      **The runner is `node --import tsx --test test/*.test.ts`**
-      (`package.json:30`) — this package has no vitest dependency and no
-      vitest config; earlier drafts of this plan said "vitest" and were wrong
+  escaped value, and record the pre-fix range in § Evidence.
+  **The runner is `node --import tsx --test test/*.test.ts`**
+  (`package.json:30`) — this package has no vitest dependency and no
+  vitest config; earlier drafts of this plan said "vitest" and were wrong
 - [x] **Gap-free tiling is a precondition, not an incidental.** Measured: a
-      gappy `Concat` has no single range at all. Our decode is gap-free —
-      `\X`→`X` consumes the 2 source bytes it replaces, and quote stripping
-      trims the content range's ends rather than leaving an interior gap — but
-      state it as a requirement on the decoder, because a dropped zero-content
-      piece would open a source gap and silently remove this remedy's
-      precondition
+  gappy `Concat` has no single range at all. Our decode is gap-free —
+  `\X`→`X` consumes the 2 source bytes it replaces, and quote stripping
+  trims the content range's ends rather than leaving an interior gap — but
+  state it as a requirement on the decoder, because a dropped zero-content
+  piece would open a source gap and silently remove this remedy's
+  precondition
 
 - [x] **DECLINED, routed to Plan 3 (decision R-8, taken in Phase 7).**
-      `use_cmd/config.rs:229` (`scalar_value_span`, verified still at that line)
-      can be simplified to repoint declarations it currently refuses: a gap-free
-      `Concat` does have a hull, obtainable from the `map_offset` pair. (Not from
-      `preimage_in` — its `Substring` arm composes affinely,
-      `source_info.rs:448-455`; Plan 1 makes it return `None` for a `Concat`
-      parent in 0.1.2, so this is compiler-visible rather than a trap.) The
-      function is correct today, merely limited — its cost is a *refusal* to
-      repoint the declaration, not wrong output.
-      **Deciding reason:** replacing the byte-comparison with a
-      content-provenance read would add a **new consumer of content provenance
-      after Phase 6's audit has run**, so it would exit Plan 2 unaudited by the
-      very matrix built to catch that class. Declining is also
-      disposition-preserving: § Workarounds that collapse says "Plan 3's Phase 7
-      asserts these three dispositions; tell that session if any of them
-      changes" — leaving it **kept** means that assertion still holds unchanged
+  `use_cmd/config.rs:229` (`scalar_value_span`, verified still at that line)
+  can be simplified to repoint declarations it currently refuses: a gap-free
+  `Concat` does have a hull, obtainable from the `map_offset` pair. (Not from
+  `preimage_in` — its `Substring` arm composes affinely,
+  `source_info.rs:448-455`; Plan 1 makes it return `None` for a `Concat`
+  parent in 0.1.2, so this is compiler-visible rather than a trap.) The
+  function is correct today, merely limited — its cost is a *refusal* to
+  repoint the declaration, not wrong output.
+  **Deciding reason:** replacing the byte-comparison with a
+  content-provenance read would add a **new consumer of content provenance
+  after Phase 6's audit has run**, so it would exit Plan 2 unaudited by the
+  very matrix built to catch that class. Declining is also
+  disposition-preserving: § Workarounds that collapse says "Plan 3's Phase 7
+  asserts these three dispositions; tell that session if any of them
+  changes" — leaving it **kept** means that assertion still holds unchanged
 
 ### Phase 5 — panic boundary (`bd-chmbr0zl`)
 
@@ -1307,60 +1307,60 @@ Verified prerequisites, so the phase does not rest on assumption:
   `print_render_diagnostics`, on main, after the render.
 
 - [x] Add an env-gated fault-injection hook to q2's diagnostic-emission loop,
-      `cfg(debug_assertions)`-gated so it **cannot** be armed in a release
-      build
+  `cfg(debug_assertions)`-gated so it **cannot** be armed in a release
+  build
 - [x] Failing test first: with the hook armed, assert **exit code 0**, that
-      the *other* queued diagnostics still print, that `_site/` is still
-      written, and that stderr carries an explicit
-      `internal error rendering diagnostic <CODE>` line — the last of which is
-      also what makes "surface loudly, do not swallow" testable rather than
-      aspirational. Observe red. Note the default panic hook prints
-      `thread '…' panicked at …` to stderr before `catch_unwind` returns — the
-      assertion must tolerate it, and in production it will be there too,
-      which is the intent
+  the *other* queued diagnostics still print, that `_site/` is still
+  written, and that stderr carries an explicit
+  `internal error rendering diagnostic <CODE>` line — the last of which is
+  also what makes "surface loudly, do not swallow" testable rather than
+  aspirational. Observe red. Note the default panic hook prints
+  `thread '…' panicked at …` to stderr before `catch_unwind` returns — the
+  assertion must tolerate it, and in production it will be there too,
+  which is the intent
 - [x] Implement `catch_unwind` around the **per-diagnostic** render at every
-      site — **EIGHT sites, not five**, named by *function* rather than by line
-      number (the line numbers this item originally carried have all drifted;
-      counting by function is stable):
-      **three in `print_render_diagnostics_text`** (coalesced pass-2 structured
-      failures; the `project_diagnostics` loop; the coalesced per-page loop, with
-      `attach_config_source`'s `&mut` mutation deliberately left *outside* the
-      guarded closure) and **five in `print_render_diagnostics_json`** (pass-1
-      failure diagnostics; the pass-2 failure with **no** structured diagnostics;
-      the pass-2 failure **with** structured diagnostics; `project_diagnostics`;
-      the per-page successful-render outputs). This item's original text —
-      "`:1356` and `:1394` plus the project-level ones below them" —
-      **undercounted the project-level JSON ones by one**. The JSON path reads
-      `.column` and cannot panic today — that is an argument, not an exemption.
-      Verified in the landed tree: `grep -c 'render_diagnostic_guarded('` = 8,
-      3 above `print_render_diagnostics_json` and 5 below it.
-      **Updated 2026-08-23 (Plan 3 Phase 6d): the count is now 9.** Plan 3 wrapped
-      the ninth site, the pre-render `to_text(None)` loop over config-sourced
-      diagnostics in `execute_project` (§ Hand-off item 5 / recommendations § 7);
-      it is `render_diagnostic_guarded` for **uniformity**, not a fix — that path
-      passes `ctx = None`, which never reaches a renderer, so it cannot panic
-      today. **Carry the pattern, not just the number:** the count is of
-      `render_diagnostic_guarded(` **with the trailing paren**. Grepping without
-      it returns **12** on the same tree: the 9 call sites, plus the definition
-      `fn render_diagnostic_guarded<T>(` (`:1290` — the tight grep misses it
-      because of the `<T>`), plus two prose mentions in the fault-injection
-      seam's doc comment (`:1228`, `:1232`). A reader who runs the looser grep
-      will get 12 and "correct" a correct record. (An earlier revision of this
-      note said 11; that was the pre-wrap figure, when there were 8 call sites.
-      Re-measured on HEAD 2026-08-23.)
+  site — **EIGHT sites, not five**, named by *function* rather than by line
+  number (the line numbers this item originally carried have all drifted;
+  counting by function is stable):
+  **three in `print_render_diagnostics_text`** (coalesced pass-2 structured
+  failures; the `project_diagnostics` loop; the coalesced per-page loop, with
+  `attach_config_source`\'s `&mut` mutation deliberately left *outside* the
+  guarded closure) and **five in `print_render_diagnostics_json`** (pass-1
+  failure diagnostics; the pass-2 failure with **no** structured diagnostics;
+  the pass-2 failure **with** structured diagnostics; `project_diagnostics`;
+  the per-page successful-render outputs). This item's original text —
+  "`:1356` and `:1394` plus the project-level ones below them" —
+  **undercounted the project-level JSON ones by one**. The JSON path reads
+  `.column` and cannot panic today — that is an argument, not an exemption.
+  Verified in the landed tree: `grep -c 'render_diagnostic_guarded('` = 8,
+  3 above `print_render_diagnostics_json` and 5 below it.
+  **Updated 2026-08-23 (Plan 3 Phase 6d): the count is now 9.** Plan 3 wrapped
+  the ninth site, the pre-render `to_text(None)` loop over config-sourced
+  diagnostics in `execute_project` (§ Hand-off item 5 / recommendations § 7);
+  it is `render_diagnostic_guarded` for **uniformity**, not a fix — that path
+  passes `ctx = None`, which never reaches a renderer, so it cannot panic
+  today. **Carry the pattern, not just the number:** the count is of
+  `render_diagnostic_guarded(` **with the trailing paren**. Grepping without
+  it returns **12** on the same tree: the 9 call sites, plus the definition
+  `fn render_diagnostic_guarded<T>(` (`:1290` — the tight grep misses it
+  because of the `<T>`), plus two prose mentions in the fault-injection
+  seam's doc comment (`:1228`, `:1232`). A reader who runs the looser grep
+  will get 12 and "correct" a correct record. (An earlier revision of this
+  note said 11; that was the pre-wrap figure, when there were 8 call sites.
+  Re-measured on HEAD 2026-08-23.)
 - [x] Verify the `UnwindSafe` obligations and **write the outcome into
-      § Evidence**, including "not needed" if that is what it turns out to be.
-      **Outcome: not needed** — see § Evidence, Phase 5
+  § Evidence**, including "not needed" if that is what it turns out to be.
+  **Outcome: not needed** — see § Evidence, Phase 5
 - [x] Assert a caught panic while printing a **warning** does not change the
-      exit code. Sequencing already favors this:
-      `print_render_diagnostics` runs after `_site/` is written and before
-      `should_exit_nonzero` (`render.rs:836`/`:1010`, `:1026-1028`).
-      **Anchors stale as of 2026-08-23** (noted, not rewritten — the claim is
-      still true, only its line numbers drifted): on HEAD the project path is
-      `execute_project` `:854`, printing at `:1024`, gating at `:1041`; the
-      single-doc path is `:770`/`:836`/`:848`, unchanged
+  exit code. Sequencing already favors this:
+  `print_render_diagnostics` runs after `_site/` is written and before
+  `should_exit_nonzero` (`render.rs:836`/`:1010`, `:1026-1028`).
+  **Anchors stale as of 2026-08-23** (noted, not rewritten — the claim is
+  still true, only its line numbers drifted): on HEAD the project path is
+  `execute_project` `:854`, printing at `:1024`, gating at `:1041`; the
+  single-doc path is `:770`/`:836`/`:848`, unchanged
 - [x] Close `bd-chmbr0zl` (closed 2026-08-22; the close reason records all three
-      of the strand's own "things to check" as discharged)
+  of the strand's own "things to check" as discharged)
 
 ### Phase 6 — shadowing audit
 
@@ -1380,7 +1380,7 @@ fixtures), Phase 5 (deliberate fault injection), and the snap's unit test
 **Decision taken, recorded so it is not relitigated:** after Plan 1 lands, q2
 has no known producer of mid-character offsets, so there is deliberately **no
 end-to-end crash test** in q2. Coverage for the char-boundary snap lives in
-`quarto-error-reporting`'s own unit test, which constructs a mid-char span
+`quarto-error-reporting`\'s own unit test, which constructs a mid-char span
 directly — a real bad input at that crate's real API boundary.
 
 **Superseded:** an earlier draft accepted that the two `..._does_not_panic`
@@ -1402,165 +1402,165 @@ Row numbers below are the audit's, and match `task-F-report.md`. See § Evidence
 Phase 6 for the full accounting.
 
 - [x] **(row 1)** Revert **only the three re-parse bases** (`meta.rs:259/:303/:316`) →
-      expect T4 (quoted column) and T6 (front matter) red, T5 still green.
-      Split from the carrier revert below on purpose: bundled, the matrix
-      cannot tell a half-done Phase 3 from a complete one.
-      **PREDICTION WRONG.** Only the front-matter test reddened; the
-      project-config quoted test stayed green. The fix is bound; the *expectation*
-      was not right
+  expect T4 (quoted column) and T6 (front matter) red, T5 still green.
+  Split from the carrier revert below on purpose: bundled, the matrix
+  cannot tell a half-done Phase 3 from a complete one.
+  **PREDICTION WRONG.** Only the front-matter test reddened; the
+  project-config quoted test stayed green. The fix is bound; the *expectation*
+  was not right
 - [x] **(row 2)** Revert **only the carrier read** (`config_markdown.rs:284-290`) →
-      expect T5 (block scalar) red, T4/T6 still green. Prefer both of these to
-      reverting Plan 1's quarto-yaml fix: they bind the code we wrote and need
-      no cross-repo override.
-      **PREDICTION WRONG.** **Both** the block-scalar test and the
-      project-config quoted test reddened — so the two halves of Phase 3's
-      provenance work are cleanly attributable, just not the way predicted
+  expect T5 (block scalar) red, T4/T6 still green. Prefer both of these to
+  reverting Plan 1's quarto-yaml fix: they bind the code we wrote and need
+  no cross-repo override.
+  **PREDICTION WRONG.** **Both** the block-scalar test and the
+  project-config quoted test reddened — so the two halves of Phase 3's
+  provenance work are cleanly attributable, just not the way predicted
 - [x] **(row 3)** **Mutate, don't revert, for T7**: apply the content-provenance base to
-      the plain-scalar path as well → expect the plain / single-line-block
-      regression assertions red. T7 cannot be bound by reverting our code,
-      because it asserts values that are already correct.
-      Outcome: both zero-drift guards **are** bound, but the mutation as
-      performed was **not selective** (row 3's own label is "NO"); the guards'
-      discrimination was supplied instead by row 2, under which both stayed
-      green. Finding: the two guards sit on **different code paths**
-      (`meta.rs`'s `markdown_base` vs `config_markdown.rs`'s `base`), so a
-      mutation at one cannot redden the other
+  the plain-scalar path as well → expect the plain / single-line-block
+  regression assertions red. T7 cannot be bound by reverting our code,
+  because it asserts values that are already correct.
+  Outcome: both zero-drift guards **are** bound, but the mutation as
+  performed was **not selective** (row 3's own label is "NO"); the guards\'
+  discrimination was supplied instead by row 2, under which both stayed
+  green. Finding: the two guards sit on **different code paths**
+  (`meta.rs`\'s `markdown_base` vs `config_markdown.rs`\'s `base`), so a
+  mutation at one cannot redden the other
 - [x] **(row 17)** Revert the `Location.offset` floor only → expect **T2 (the zero-width
-      label test, in `quarto-error-reporting`)** red, in addition to
-      `quarto-source-map`'s own tests. T2 lives in a different repo from the
-      hunk that binds it, so it needs naming here or it is audited by nobody
+  label test, in `quarto-error-reporting`)** red, in addition to
+  `quarto-source-map`\'s own tests. T2 lives in a different repo from the
+  hunk that binds it, so it needs naming here or it is audited by nobody
 - [x] **(row 4)** Revert the `bind_source_candidates` → `root_file_id()` change only,
-      **keeping** the provenance swap → expect the binding regression test
-      red. Reverting the swap instead makes it pass vacuously, since there is
-      then no `Concat` to refuse. Confirmed, on the **unit** witness
-      (`binds_a_concat_backed_source_info`); the CLI fixture
-      `block_scalar_config_diagnostic_binds_concat_backed_source` passes in both
-      states, which its own doc comment already discloses
+  **keeping** the provenance swap → expect the binding regression test
+  red. Reverting the swap instead makes it pass vacuously, since there is
+  then no `Concat` to refuse. Confirmed, on the **unit** witness
+  (`binds_a_concat_backed_source_info`); the CLI fixture
+  `block_scalar_config_diagnostic_binds_concat_backed_source` passes in both
+  states, which its own doc comment already discloses
 - [x] **(row 5)** Revert the `caption_inlines` fix only → expect its `fig-cap` assertion red
 - [x] **(row 6)** Revert the `resolve_span` change only (whichever of the two paths was
-      taken) → expect the caret test red
+  taken) → expect the caret test red
 - [x] **(row 7)** Revert the Phase 4 attribute swap only → expect Phase 4's Rust
-      assertions red
+  assertions red
 - [x] **(row 8) The `callout.rs` deletion — a separate row from the attribute
-      swap above, and ACCEPTED-UNBINDABLE BY CONSTRUCTION.** Split out because
-      bundling it with row 7 hides the distinction: the attribute provenance
-      swap **is** bound (nine reds), while the deletion of the
-      `callout.rs:431-447` length-arithmetic block **cannot** be bound by any
-      fixture. Given an escaped attribute value's provenance is a `Concat`,
-      `resolve_byte_range` returns `None`, so the deleted block's `_` arm and its
-      first branch both returned `value_source` unchanged in **all three** shapes
-      the parser can produce (bare; quoted-no-escapes; quoted-with-escapes) —
-      each measured by row 7's own reverts, not argued. That is a **different
-      audit outcome from "unbound"**, and the closing rule below does not
-      condemn it
+  swap above, and ACCEPTED-UNBINDABLE BY CONSTRUCTION.** Split out because
+  bundling it with row 7 hides the distinction: the attribute provenance
+  swap **is** bound (nine reds), while the deletion of the
+  `callout.rs:431-447` length-arithmetic block **cannot** be bound by any
+  fixture. Given an escaped attribute value's provenance is a `Concat`,
+  `resolve_byte_range` returns `None`, so the deleted block's `_` arm and its
+  first branch both returned `value_source` unchanged in **all three** shapes
+  the parser can produce (bare; quoted-no-escapes; quoted-with-escapes) —
+  each measured by row 7's own reverts, not argued. That is a **different
+  audit outcome from "unbound"**, and the closing rule below does not
+  condemn it
 - [x] **(row 13)** Revert the TS `Substring`-arm fix only → expect the annotated-qmd range
-      test red
+  test red
 - [x] **(rows 14+15) The TS `Concat` case — PREDICTION WRONG, twice, and the
-      instrument matters.** Two rows, run as two genuine commit-state reverts
-      (`3efcb2c48^` = before `mapContentRange` existed at all, binding row 14's
-      exclusive-end fix; `3efcb2c48` = the piecewise implementation without M-3,
-      binding row 15's `lastPieceFileId` split). Ruling R-2 predicted the
-      conflict-detection test would stay green under the whole-case revert — it
-      reddened, because conflict detection *is itself part of* the piecewise
-      rewrite being reverted. R-2 also held the two rows could not be separated
-      without a hand-crafted patch — they separate cleanly, and per-test
-      attribution was achieved
+  instrument matters.** Two rows, run as two genuine commit-state reverts
+  (`3efcb2c48^` = before `mapContentRange` existed at all, binding row 14's
+  exclusive-end fix; `3efcb2c48` = the piecewise implementation without M-3,
+  binding row 15's `lastPieceFileId` split). Ruling R-2 predicted the
+  conflict-detection test would stay green under the whole-case revert — it
+  reddened, because conflict detection *is itself part of* the piecewise
+  rewrite being reverted. R-2 also held the two rows could not be separated
+  without a hand-crafted patch — they separate cleanly, and per-test
+  attribution was achieved
 - [x] **(row 18)** Revert the char-boundary snap only → expect its **unit** test red
-      (including the offset pair re-anchored into it in Phase 1). Red as
-      predicted (`4..9` vs `3..9`) — **and** the same revert surfaced the audit's
-      most important finding: the two `..._originally_mid_character_span` tests
-      still render **without panicking** with the snap gone, so the snap's
-      panic-prevention role is currently unwitnessed. Routed to Plan 3
+  (including the offset pair re-anchored into it in Phase 1). Red as
+  predicted (`4..9` vs `3..9`) — **and** the same revert surfaced the audit's
+  most important finding: the two `..._originally_mid_character_span` tests
+  still render **without panicking** with the snap gone, so the snap's
+  panic-prevention role is currently unwitnessed. Routed to Plan 3
 - [x] **(row 20)** Revert the panic boundary only → expect the injection test red.
-      3 of 4 red; `fault_injection_disarmed_by_default` correctly stayed green
-      (it never arms the seam). **This row was missing from the audit's own
-      brief** — the resolution artifact's un-rowed walk ended one commit before
-      the audit's base, so nothing swept Phase 5 until the review caught it
+  3 of 4 red; `fault_injection_disarmed_by_default` correctly stayed green
+  (it never arms the seam). **This row was missing from the audit's own
+  brief** — the resolution artifact's un-rowed walk ended one commit before
+  the audit's base, so nothing swept Phase 5 until the review caught it
 - [x] **(row 9)** Revert the **desync warning report** only → expect its test red. It is
-      injectable (feed a scalar whose provenance derivation is stubbed to
-      `None`), therefore revertible, therefore it needs a row like everything
-      else
+  injectable (feed a scalar whose provenance derivation is stubbed to
+  `None`), therefore revertible, therefore it needs a row like everything
+  else
 - [x] **(row 11)** Revert the **verbatim-by-bytes tag rule** only (tag by length instead) →
-      expect a test asserting a non-identical 1→1 piece is *not* verbatim to go
-      red. If no such case exists in our escape table, say so here and mark
-      this row accepted-unbindable rather than silently dropping it.
-      **No such case exists** — re-read from `unescape_punctuation`'s current
-      escape table: every 1→1 piece is trivially byte-identical, and the only
-      non-identical case (`\X`→`X`) is 2→1. **Accepted-unbindable**; the rule
-      stays prospectively load-bearing for any future 1→1 non-identical escape
+  expect a test asserting a non-identical 1→1 piece is *not* verbatim to go
+  red. If no such case exists in our escape table, say so here and mark
+  this row accepted-unbindable rather than silently dropping it.
+  **No such case exists** — re-read from `unescape_punctuation`\'s current
+  escape table: every 1→1 piece is trivially byte-identical, and the only
+  non-identical case (`\X`→`X`) is 2→1. **Accepted-unbindable**; the rule
+  stays prospectively load-bearing for any future 1→1 non-identical escape
 - [x] **(row 16)** Revert the `Concat` exclusive-end fix only → expect the
-      `qmd_writer_source_info.rs` assertion added in Phase 2 red
+  `qmd_writer_source_info.rs` assertion added in Phase 2 red
 - [x] **(row 19) NEW ROW — the incremental-rebuild hash's provenance exclusion
-      had no test that could catch its regression.** `hash.rs`'s
-      `hash_config_value_kind` `Scalar` arm deliberately excludes
-      `content_source_info`, and every `hash.rs` fixture reaches it through
-      helpers that hard-code `content_source_info: None` — so the exclusion was
-      unobservable by any existing test, including its nearest neighbour
-      `meta_hash_excludes_source_info_and_key_source` (which stays green under
-      the mutation). Now bound by a committed test,
-      `meta_hash_excludes_scalar_content_provenance` (`992813188`).
-      **Finding that came with it:** the specified mutation
-      (`content_source_info.hash(hasher)`) **does not compile** —
-      `quarto_source_map::SourceInfo` does not implement `Hash`, an
-      undocumented **type-level guard** on the invariant. The row was bound with
-      the nearest compiling mutation (hashing the provenance's `Debug` form)
+  had no test that could catch its regression.** `hash.rs`\'s
+  `hash_config_value_kind` `Scalar` arm deliberately excludes
+  `content_source_info`, and every `hash.rs` fixture reaches it through
+  helpers that hard-code `content_source_info: None` — so the exclusion was
+  unobservable by any existing test, including its nearest neighbour
+  `meta_hash_excludes_source_info_and_key_source` (which stays green under
+  the mutation). Now bound by a committed test,
+  `meta_hash_excludes_scalar_content_provenance` (`992813188`).
+  **Finding that came with it:** the specified mutation
+  (`content_source_info.hash(hasher)`) **does not compile** —
+  `quarto_source_map::SourceInfo` does not implement `Hash`, an
+  undocumented **type-level guard** on the invariant. The row was bound with
+  the nearest compiling mutation (hashing the provenance's `Debug` form)
 - [x] **(rows 10 and 12) Two further un-rowed changes the audit added:**
-      row 10, the non-string scalar carrying `content_source_info: None`
-      (mutation row — bound); row 12, the link/image `title` leg added in D1's
-      fix round (revert row — bound). Both matched expectation
+  row 10, the non-string scalar carrying `content_source_info: None`
+  (mutation row — bound); row 12, the link/image `title` leg added in D1's
+  fix round (revert row — bound). Both matched expectation
 - [x] **Where each revert runs, and what it costs.** The matrix spans three
-      repos plus the TS package, so say it plainly rather than discovering it
-      mid-audit: the provenance, binder, caption, `resolve_span`, attribute and
-      TS reverts are in-tree; the snap revert runs in
-      `~/src/quarto-error-reporting` alone; the floor and exclusive-end
-      reverts are in `~/src/quarto-source-map` and require a temporary
-      `[patch.crates-io]` override in whichever workspace runs the tests.
-      Those overrides are scaffolding — Phase 7 confirms none survive
-      (**confirmed** — see Phase 7's Evidence)
+  repos plus the TS package, so say it plainly rather than discovering it
+  mid-audit: the provenance, binder, caption, `resolve_span`, attribute and
+  TS reverts are in-tree; the snap revert runs in
+  `~/src/quarto-error-reporting` alone; the floor and exclusive-end
+  reverts are in `~/src/quarto-source-map` and require a temporary
+  `[patch.crates-io]` override in whichever workspace runs the tests.
+  Those overrides are scaffolding — Phase 7 confirms none survive
+  (**confirmed** — see Phase 7's Evidence)
 - [x] Record every observation in § Evidence — summarized there; the per-row
-      observations live in full in `task-F-report.md` (1421 lines), which the
-      Evidence section points at rather than transcribing
+  observations live in full in `task-F-report.md` (1421 lines), which the
+  Evidence section points at rather than transcribing
 - [x] Any test that cannot be made to fail: fix it or delete it, and say which.
-      **Which:** rows 8 and 11 are accepted-unbindable **by construction** (no
-      discriminating input exists — not the same as unbound), and the two
-      `..._originally_mid_character_span` smoke tests stay as smoke tests per
-      Phase 1's explicit accepted-unbound carve-out. **No test in scope was
-      found unbound-and-unexplained.** Row 19's invariant *was* untested; that
-      is fixed and committed
+  **Which:** rows 8 and 11 are accepted-unbindable **by construction** (no
+  discriminating input exists — not the same as unbound), and the two
+  `..._originally_mid_character_span` smoke tests stay as smoke tests per
+  Phase 1's explicit accepted-unbound carve-out. **No test in scope was
+  found unbound-and-unexplained.** Row 19's invariant *was* untested; that
+  is fixed and committed
 
 ### Phase 7 — land
 
 - [x] Reconcile this checklist against reality before handoff — re-read it,
-      verify each box against what actually landed, correct any that are
-      wrong, and commit the updated plan. **Done; the corrections are listed in
-      § Evidence, Phase 7.** This is the *third* reconciliation of this file —
-      `b7c47195e` (session 1) and `fe0fb44b1` (session 2, through Phase 4) came
-      before it — which is worth knowing: most boxes were already right, so the
-      wrong ones were the easy ones to skim past
+  verify each box against what actually landed, correct any that are
+  wrong, and commit the updated plan. **Done; the corrections are listed in
+  § Evidence, Phase 7.** This is the *third* reconciliation of this file —
+  `b7c47195e` (session 1) and `fe0fb44b1` (session 2, through Phase 4) came
+  before it — which is worth knowing: most boxes were already right, so the
+  wrong ones were the easy ones to skim past
 - [x] `cargo xtask verify` (full, not `--skip-hub-build`) green — the WASM leg
-      matters here, because the `ConfigValueKind::Scalar` migration reaches
-      `wasm-quarto-hub-client` through `quarto-pandoc-types`. **14/14 green,
-      exit 0**; Rust tests **12919 / 198**. The previous full green was
-      `1b6d30c08`, twelve commits earlier
+  matters here, because the `ConfigValueKind::Scalar` migration reaches
+  `wasm-quarto-hub-client` through `quarto-pandoc-types`. **14/14 green,
+  exit 0**; Rust tests **12919 / 198**. The previous full green was
+  `1b6d30c08`, twelve commits earlier
 - [x] `cd hub-client && npm run build:all`; and run the annotated-qmd tests
-      directly with `node --import tsx --test test/*.test.ts` —
-      `cargo xtask verify` *builds* ts-packages but does not run their tests.
-      The hub-client build **is** covered, as verify's step 7 (WASM included) and
-      step 8 (`test:ci`); the node suite was run separately: **161 / 161**
+  directly with `node --import tsx --test test/*.test.ts` —
+  `cargo xtask verify` *builds* ts-packages but does not run their tests.
+  The hub-client build **is** covered, as verify's step 7 (WASM included) and
+  step 8 (`test:ci`); the node suite was run separately: **161 / 161**
 - [x] Confirm no `[patch.crates-io]` override for these crates remains, in any
-      worktree used for the Phase 6 matrix — confirmed **by name** in all four:
-      q2 root, the nested `wasm-quarto-hub-client` workspace, and both upstream
-      checkouts (which have no patch section at all). **Neither lockfile moved**,
-      checked *after* the full verify
+  worktree used for the Phase 6 matrix — confirmed **by name** in all four:
+  q2 root, the nested `wasm-quarto-hub-client` workspace, and both upstream
+  checkouts (which have no patch section at all). **Neither lockfile moved**,
+  checked *after* the full verify
 - [x] Commit the plan. **`finishing-a-development-branch` is deliberately NOT
-      run** — this item's original instruction is superseded: `feature/yaml-provenance`
-      is the **shared integration line for Plans 2 and 3**, and Plan 3 has not
-      started, so there is no branch to finish yet. Not pushed. The epic
-      `bd-mxa44voa` stays **open** — Plan 3 is outstanding
+  run** — this item's original instruction is superseded: `feature/yaml-provenance`
+  is the **shared integration line for Plans 2 and 3**, and Plan 3 has not
+  started, so there is no branch to finish yet. Not pushed. The epic
+  `bd-mxa44voa` stays **open** — Plan 3 is outstanding
 - [x] Record the three open decisions this phase owed — **R-8** (`use_cmd/config.rs:229`:
-      declined), **R-9** (`is_gapless`: handed to Plan 3 with C7's measurement),
-      **R-10** (route the remaining findings) — each with its reason, and open
-      § Hand-off to Plan 3 to carry them
+  declined), **R-9** (`is_gapless`: handed to Plan 3 with C7's measurement),
+  **R-10** (route the remaining findings) — each with its reason, and open
+  § Hand-off to Plan 3 to carry them
 
 ## Risks
 
@@ -1569,7 +1569,7 @@ Phase 6 for the full accounting.
 - **`catch_unwind` is a no-op under `panic=abort`.** Verified unwind for every
   profile that matters (Phase 5), but re-check if a profile is ever added.
 - **Phase 4 is the load-bearing test of Plan 1's API, and it runs after Plan 1
-  has shipped.** If `callout.rs`'s length-arithmetic block cannot be deleted
+  has shipped.** If `callout.rs`\'s length-arithmetic block cannot be deleted
   against correct provenance, the builder is not general enough — but by then
   fixing Plan 1 costs two more releases. That is why Phase 4 asks for the
   attribute decoder to be driven against a path override during Plan 1's
@@ -1599,15 +1599,15 @@ Phase 6 for the full accounting.
   under obligation 8, because that crate writes to user files and this epic
   changes what the accessor is reading. (An earlier revision listed
   `getSourceLocation` here; that was a consequence of the retracted byte-0
-  diagnosis — it is a TypeScript function and reads these accessors' *values*
+  diagnosis — it is a TypeScript function and reads these accessors\' *values*
   only through the serialized `r`, on error paths. See Phase 4.) Fix a third
   at its own call site if one appears.
-- **Do not make `quarto-source-map`'s `Concat` arms consistent with each
+- **Do not make `quarto-source-map`\'s `Concat` arms consistent with each
   other.** Not our repo, but our Phase 3 removes one of the call sites that
   depends on the current asymmetry, so it is worth carrying. `resolve_byte_range`
   refuses (`None`) for a `Concat` while `preimage_in`, three functions away in
-  the same file, returns a hull — and `resolve_byte_range`'s `Substring` arm is
-  `parent_start + start_offset`, arithmetic **identical** to `preimage_in`'s.
+  the same file, returns a hull — and `resolve_byte_range`\'s `Substring` arm is
+  `parent_start + start_offset`, arithmetic **identical** to `preimage_in`\'s.
   It is safe only because of that refusal, not because its arithmetic is
   better. Anyone "fixing" the apparent oversight by teaching
   `resolve_byte_range` to return a hull converts every one of its call sites
@@ -1686,7 +1686,7 @@ crates.io publish.
    gets answered wrongly.
 7. **(f) `SourceInfo: !Hash` is an undocumented type-level guard** on the incremental-rebuild
    hash's provenance exclusion — the most obvious way to regress that arm cannot be written at
-   all. Closed in the final fix wave: `hash.rs`'s `Scalar` arm comment now notes this.
+   all. Closed in the final fix wave: `hash.rs`\'s `Scalar` arm comment now notes this.
 8. **(g) The audit's row 3 covered two guards on different code paths** — `meta.rs`'s
    `markdown_base` vs `config_markdown.rs`'s `base` — so a mutation at one cannot redden the
    other guard. The row treated them as one site.
@@ -1695,7 +1695,7 @@ crates.io publish.
    The structural argument for why this can't happen is sound — `diagnostic_counts()` runs
    before printing, so an error-severity diagnostic has already been counted by the time
    `render_diagnostic_guarded` could swallow its render panic — but it is the one property here
-   worth ~20 lines of test rather than an argument. (Final whole-branch review, deferred item
+   worth \~20 lines of test rather than an argument. (Final whole-branch review, deferred item
    8.)
 
    > **Correction, 2026-08-23 (Plan 3 Phase 6d, T9).** The record above is left as written; this
@@ -1735,7 +1735,7 @@ Phase 3's block-scalar test and the binding regression test both need this.
 It is **not** the ariadne-emoji-panic repro — that one is a single-line
 single-quoted navbar `text:` and cannot produce accumulating drift at all. It
 lives untracked at `workspace-1/.scratch/blockscalar/_quarto.yml`, under a
-`.git/info/exclude`'d directory in another worktree.
+`.git/info/exclude`\'d directory in another worktree.
 
 Plan 1 has since transcribed it too, along with a second `accum/` variant, so
 it no longer depends on `.scratch/` surviving in any one worktree. The copy
@@ -1829,7 +1829,7 @@ content coordinates must never be read as file offsets.
 **Make these permanent** — tracked as items in the phases that own them, not
 here: 7a/7b wherever a hull is computed (Phase 4), 8/9 as the binding
 regression test (Phase 3), 10 as the TS-facing assertion (Phase 4). Line 6 is
-a permanent test too, of the *opposite* value: Plan 1 fixes `preimage_in`'s
+a permanent test too, of the *opposite* value: Plan 1 fixes `preimage_in`\'s
 `Substring`-over-`Concat` arm in 0.1.2, so the wrong `Some(1..5)` becomes
 `None` — assert the `None`. Plan 1 owns that assertion in its own Phase 1;
 do not duplicate it here.
@@ -1855,7 +1855,7 @@ reached via `render_ariadne_source_context` (`diagnostic.rs:968`) <- `render_sou
 abort is ariadne's own `str` slicing, which is why the snap belongs at the renderer. The
 file was then restored and the test confirmed green again.
 
-Worth recording: the panic names **"end** byte index 21", though 21 is the span's *start*.
+Worth recording: the panic names **\"end** byte index 21\", though 21 is the span's *start*.
 So 21 arrived as the END of a zero-width range — it fired on ariadne's `Report::build`
 **anchor**, independently confirming the anchor is `start..start` and that the single `:878`
 call is load-bearing for the anchor, not just the main label.
@@ -1958,7 +1958,7 @@ recorded at the end of this subsection.)_ Session 1 landed the `Scalar` struct v
 session 2 landed the dead converter, the desync report, and `caption_inlines`.
 
 **The `ConfigValueKind::Scalar` migration** (`6a5de44b6` shape + helpers + serde + hash arm
-+ wire-shape test; `c9a77d18c` the sweep). Touched **~207 non-test / 241 total sites across
++ wire-shape test; `c9a77d18c` the sweep). Touched **\~207 non-test / 241 total sites across
 58 files**, vs the plan's predicted 206/240 across 49+8. The plan's figure came from grepping
 the literal `ConfigValueKind::Scalar(`, which cannot see sites reached through an alias:
 `quarto-core/src/stage/stages/include_resolve.rs` (`use ConfigValueKind as K`) and
@@ -1983,7 +1983,7 @@ draft walked concat piece boundaries using each piece's **declared per-piece `le
 piece 1 is `Original(3,5)` declared with concat-length 1, a 2-byte source span folded to 1
 content byte. The fix measures each piece's own **source** extent
 (`piece.source_info.map_offset(0)` / `map_offset(piece.source_info.length())`). This is
-exactly upstream `0c65d52`'s defect — solved there for the *last* piece only — generalized to
+exactly upstream `0c65d52`\'s defect — solved there for the *last* piece only — generalized to
 every boundary. So "content length is not source length" has now produced **three** separate
 bugs in this epic (upstream's exclusive-end branch, this gap detection, and the drift the
 threading fixes). That recurrence is the strongest argument for the § Risks decision to leave
@@ -2010,7 +2010,7 @@ in `meta.rs`, between the `source_info` clone and the line that partially moves 
 and used for both consumers: stored in the `Scalar` variant (scoped to `Yaml::String`) and
 passed as the re-parse base at all three immediate re-parses (the `!md` tag, the annotated
 `Markdown` interpretation, the `DocumentMetadata` default), falling back to the node span when
-`None`. Carrier read in `config_markdown.rs`'s `parse_scalar_string_in_place`.
+`None`. Carrier read in `config_markdown.rs`\'s `parse_scalar_string_in_place`.
 
 **Confirmed end-to-end through the real binary**, on the block-scalar fixture:
 
@@ -2109,7 +2109,7 @@ session 2 and are consolidated here, where the plan says evidence lives.)_
 
 **The generality proof — the reason the phase exists.** q2's attribute decoder now drives
 `ProvenanceBuilder`, `AttrSourceInfo` carries content provenance, and
-`callout.rs`'s length-arithmetic workaround is **deleted**. The builder therefore has a second
+`callout.rs`\'s length-arithmetic workaround is **deleted**. The builder therefore has a second
 consumer in a completely different decoder from Plan 1's YAML path, which is what Phase 4 was
 for. The zero-content-piece trap named in the plan was not fallen into: verbatim pieces are
 tagged **by bytes**, not by length.
@@ -2135,7 +2135,7 @@ named example sites was not — see § Latent exposures). Seven new tests share 
 carrying every construct whose value slot changed. Binding was **measured**: wrapping every
 diagnostic location on both arms of `pampa::readers::qmd::read` in a
 `SourceInfo::concat(...)` — precisely the shape the decoder now produces — visibly corrupts
-`qmd-syntax-helper`'s output (a splice at byte 0; a `replace_range` percent-encoding ~340
+`qmd-syntax-helper`\'s output (a splice at byte 0; a `replace_range` percent-encoding \~340
 bytes), and **5 of the 7 tests catch it**. No production code changed in that crate.
 
 **The TypeScript boundary.** `@quarto/annotated-qmd` moved to content semantics and bumped to
@@ -2234,7 +2234,7 @@ whole-branch review found a fourth site of the epic's own defect pattern that th
 rows did not cover, because it was not discovered until after Phase 6 ran —
 `project/website_post_render.rs:217` (`copy_footer_images`), see § Workarounds that collapse.
 Fixed in the same wave. It joins rows 8 and 11 as **accepted-unbindable by construction**: no
-consumer reads those inlines' spans (they feed only image-URL extraction and the parse
+consumer reads those inlines\' spans (they feed only image-URL extraction and the parse
 diagnostics are discarded), so no fixture can distinguish the corrected `content_source_info`
 base from the raw `cv.source_info` one. Recorded honestly as unbindable rather than passed off
 as covered — the same audit outcome category as row 8, not a fifth row retroactively added to

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-28
 **Braid:** bd-dofxhzaj (task, P1, filed 2026-06-13 by Carlos while cutting v0.1.1)
-**Branch:** `braid/bd-dofxhzaj-switch-linux-release-targets`, off `main` @ `581e45c0`
+**Branch:** `braid/bd-dofxhzaj-switch-linux-release-targets`, off `main` \@ `581e45c0`
 (pushed as `feature/bd-dofxhzaj-switch-linux-release-targets`)
 **Status:** Implemented. Phases 0-4 done and verified by a green spike run on both
 arches; Phase 5 is the PR. See **Phase outcomes** for the evidence.
@@ -49,7 +49,7 @@ Thin but informative — one edge, and it is the important one.
   2026-06-13T01:10, also `discovered-from: bd-3e3sam51`. Same body: flip the two
   targets, openssl vendorable + aws-lc musl-buildable, "validate with a release
   dry-run before merging; this touches CI release workflows, so **test on a
-  branch with `workflow_dispatch`**". bd-dofxhzaj was filed ~16 hours later
+  branch with `workflow_dispatch`**". bd-dofxhzaj was filed \~16 hours later
   during the v0.1.1 cut, apparently without noticing it. There is no edge
   between them. See Q0. (Note that bd-h7s7bsbk independently reaches the same
   conclusion as Phase 1 below about how to dry-run — that is corroboration, not
@@ -227,7 +227,7 @@ a real plan rather than a menu.
 
 ## Phases
 
-Branch: `braid/bd-dofxhzaj-switch-linux-release-targets` (off `main` @ `581e45c0`;
+Branch: `braid/bd-dofxhzaj-switch-linux-release-targets` (off `main` \@ `581e45c0`;
 carries the two plan commits, so local `main` was reset back to `origin/main` —
 everything lands via PR).
 
@@ -378,7 +378,7 @@ Run [30375857883](https://github.com/quarto-dev/q2/actions/runs/30375857883),
 | `ldd` | *not a dynamic executable* | *not a dynamic executable* |
 
 **The aws-lc-sys question is answered: it is a non-issue.** `aws-lc-sys
-v0.40.0` compiled in **~17s (amd64) / ~16s (arm64)** — orders of magnitude
+v0.40.0` compiled in **\~17s (amd64) / \~16s (arm64)** — orders of magnitude
 below a from-source cmake build of AWS-LC — with **no `bindgen` step, no
 `libclang`, and no packages installed beyond `musl-tools`**. That matches the
 static prediction: the crate ships pregenerated bindings for both musl triples

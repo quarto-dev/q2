@@ -48,7 +48,7 @@ Two parallel renderers, each computing the fragment flag from a contextual
 
 **`IncrementalContext` exists *solely* for this feature** — its only consumers
 are the two list components (fragment) and the Div/RevealDeck providers. (Caveat:
-the `enabled` field also gates the list components' *deck-vs-registry* render
+the `enabled` field also gates the list components\' *deck-vs-registry* render
 branch, which carries an editing distinction — see Obstacle 2.)
 
 ### What's duplicated
@@ -212,5 +212,5 @@ any item) with its own tests, **then** **(2)** the `RevealIncrementalListsTransf
    cleaner)?
 3. Does anything beyond fragment rely on React `IncrementalContext.enabled` (the
    deck-vs-registry editing branch)? If so, Option A keeps `enabled` and removes
-   only the `incremental` half. (Audit suggests `enabled`'s editing role is
+   only the `incremental` half. (Audit suggests `enabled`\'s editing role is
    incidental, but confirm before deleting.)

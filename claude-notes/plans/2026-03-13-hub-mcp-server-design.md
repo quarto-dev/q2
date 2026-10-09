@@ -114,7 +114,7 @@ In `--read-only` mode, only `connect_project`, `list_files`, and `read_file` are
 |------|-------------|
 | `read_binary_file_metadata` | Get metadata for a binary file (mime type, hash, size) |
 | `create_binary_file` | Upload a binary file (base64 encoded) |
-| `get_project_info` | Get project metadata (from _quarto.yml if present) |
+| `get_project_info` | Get project metadata (from \_quarto.yml if present) |
 | `search_files` | Search file contents (grep-like, implemented client-side) |
 
 #### Quarto-Specific Operations (Phase 3)

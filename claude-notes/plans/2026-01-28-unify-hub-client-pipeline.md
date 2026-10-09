@@ -262,7 +262,7 @@ This means hub-client misses all AST transforms including:
 - Footnotes processing
 - Future cross-reference resolution
 
-**Goal**: Refactor the rendering architecture so hub-client can use `quarto-core`'s pipeline stages, ensuring feature parity between native and WASM rendering.
+**Goal**: Refactor the rendering architecture so hub-client can use `quarto-core`\'s pipeline stages, ensuring feature parity between native and WASM rendering.
 
 ---
 

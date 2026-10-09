@@ -59,7 +59,7 @@ Change the QMD writer so that spans with empty attributes omit the trailing `{}`
 
 ### Change Location
 
-**File:** `crates/pampa/src/writers/qmd.rs`, function `write_span` (line ~1494)
+**File:** `crates/pampa/src/writers/qmd.rs`, function `write_span` (line \~1494)
 
 ### Parser Compatibility
 

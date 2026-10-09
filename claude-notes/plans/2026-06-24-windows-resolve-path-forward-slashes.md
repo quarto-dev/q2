@@ -13,7 +13,7 @@ direction chosen by user (option a: production-side forward-slash normalization 
 
 ## Issue context
 
-Strand filed 2026-04-28 (bug, P2, labels lua/pampa/windows). Original framing: ~10
+Strand filed 2026-04-28 (bug, P2, labels lua/pampa/windows). Original framing: \~10
 tests in `crates/pampa/src/lua/quarto_api.rs` fail on Windows because expected paths
 hardcode forward slashes while the Windows impl joins with backslashes via `Path::join`.
 Strand offered a binary choice: (a) normalize output to forward slashes, or (b)
@@ -71,7 +71,7 @@ Key code:
 - Helper: `quarto-util/src/path.rs:23` `to_forward_slashes`, `:14` `is_rooted`
   (re-exported `quarto-util/src/lib.rs:8`).
 
-The ~10 failing tests run twice (lib + bin/pampa integration), so ~18-20 visible failures
+The \~10 failing tests run twice (lib + bin/pampa integration), so \~18-20 visible failures
 from one root cause.
 
 ## Proposed phases

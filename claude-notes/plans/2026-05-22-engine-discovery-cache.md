@@ -5,7 +5,7 @@
 `JupyterEngine::new()` (and to a lesser extent `KnitrEngine::new()`)
 runs at the **top of every document render**, via
 `build_html_pipeline_stages_with_options → EngineRegistry::new`. The
-2026-05-21 quarto-web profile (`bd-9eltv`) measured this at ~37 % of
+2026-05-21 quarto-web profile (`bd-9eltv`) measured this at \~37 % of
 main-thread CPU on a 573-doc render — see
 `claude-notes/research/2026-05-21-quarto-web-render-profile.md`.
 
@@ -30,8 +30,8 @@ each):
 
 - 483 samples in `EngineRegistry::new → JupyterEngine::new`
   (combined `posix_spawn` + `poll` waiting on the child).
-- Geometric scaling on tiny fixtures: ~4 ms/doc steady state, of
-  which the spawn is at least ~2–3 ms.
+- Geometric scaling on tiny fixtures: \~4 ms/doc steady state, of
+  which the spawn is at least \~2–3 ms.
 
 The fix is the cheapest thing that could possibly work and yields
 the largest expected win in the profile. It also unblocks more
@@ -143,7 +143,7 @@ In order:
    is the "test fails" step from TDD.
 2. Apply Phase A (which::which replacement). Re-run. We expect
    `jupyter_find_calls=573` still (the count is unchanged; only the
-   per-call cost dropped). Wall time should drop by ~25–40 % on
+   per-call cost dropped). Wall time should drop by \~25–40 % on
    quarto-web.
 3. Apply Phase B (memoization). Re-run. We expect
    `jupyter_find_calls=1`. Wall time drops further.
@@ -240,7 +240,7 @@ a Rust API on `EngineRegistry`.
 These are not in scope for this plan, but the profile predicts they
 become the next visible hotspots once engine-discovery is fixed:
 
-- **Tree-sitter `set_logger` formatting overhead.** ~45 % of main-
+- **Tree-sitter `set_logger` formatting overhead.** \~45 % of main-
   thread CPU pre-fix; will rise to the top once spawn cost is gone.
 - **Streaming diagnostics instead of batching to end-of-render.**
   Independent UX bug; doesn't change wall time but eliminates the

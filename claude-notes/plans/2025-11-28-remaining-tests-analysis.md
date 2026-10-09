@@ -30,7 +30,7 @@
 
 ## Root Cause Analysis
 
-### 1. CITATIONS Format Not Parsed (~40-60 tests)
+### 1. CITATIONS Format Not Parsed (\~40-60 tests)
 
 Many tests use the complex CITATIONS format instead of CITATION-ITEMS:
 
@@ -52,7 +52,7 @@ Our parser expects simpler format and falls through to default behavior (empty c
 
 **Impact**: Most `position_*`, many `integration_*`, and various `bugreports_*` tests
 
-### 2. Text-Case Not Applied to Names (~20-30 tests)
+### 2. Text-Case Not Applied to Names (\~20-30 tests)
 
 Example from `textcase_uppercase`:
 - Expected: `SMITH, John`
@@ -60,7 +60,7 @@ Example from `textcase_uppercase`:
 
 The `text-case="uppercase"` on names element isn't being applied.
 
-### 3. Year Suffix Range Collapsing (~15-20 tests)
+### 3. Year Suffix Range Collapsing (\~15-20 tests)
 
 Example from `collapse_yearsuffixcollapse`:
 - Expected: `Smith 2000a–e, 2001`
@@ -68,7 +68,7 @@ Example from `collapse_yearsuffixcollapse`:
 
 Need to detect consecutive year suffixes and collapse to ranges.
 
-### 4. Label Rendering After Names (~10-15 tests)
+### 4. Label Rendering After Names (\~10-15 tests)
 
 Example from `label_compactnamesafterfullnames`:
 - Expected: `Alan Aalto, editor`
@@ -76,7 +76,7 @@ Example from `label_compactnamesafterfullnames`:
 
 Labels after names aren't being rendered.
 
-### 5. Extra Delimiter After Author Collapse (~10 tests)
+### 5. Extra Delimiter After Author Collapse (\~10 tests)
 
 Example from `collapse_authorcollapsenodatesorted`:
 - Expected: `(Smith 325 AD, 2000)`
@@ -84,7 +84,7 @@ Example from `collapse_authorcollapsenodatesorted`:
 
 Extra comma appears after author when years are collapsed.
 
-### 6. Locale Date Part Order (~5-10 tests)
+### 6. Locale Date Part Order (\~5-10 tests)
 
 Example from `locale_emptyplusoverridedate`:
 - Expected: `2000 June 18`
@@ -92,7 +92,7 @@ Example from `locale_emptyplusoverridedate`:
 
 Locale overrides for date-parts order not being applied.
 
-### 7. Empty Term Trailing Space (~5-10 tests)
+### 7. Empty Term Trailing Space (\~5-10 tests)
 
 Example from `locale_forceemptyetalterm`:
 - Expected: `John Doe`

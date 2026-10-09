@@ -6,7 +6,7 @@
 ## Symptom
 
 `preview_static_e2e` tests flake on the ubuntu leg of CI with
-`no \`reload\` event within 30s` or `no \`render-start\` event within 30s`.
+``no `reload` event within 30s`` or ``no `render-start` event within 30s``.
 Which test fails varies from run to run. Every failing test edits a file right after connecting:
 
 | Run | Test | Missing event |
@@ -51,18 +51,18 @@ the preview starts could be silently ignored.
 ## Fix
 
 - [x] Move the seed into the before-anyone-can-connect block, right after
-      `start_watcher`. The boot render has already finished, so the baseline
-      is the same, but it is now recorded before the port exists. It still
-      comes after the watcher starts, so on Linux the seed's own reads
-      produce events that hash equal and are ignored, as before.
+  `start_watcher`. The boot render has already finished, so the baseline
+  is the same, but it is now recorded before the port exists. It still
+  comes after the watcher starts, so on Linux the seed's own reads
+  produce events that hash equal and are ignored, as before.
 - [x] Test diagnostics: `SseReader::wait_for` used to panic without the
-      server's stderr, so the CI logs gave no hint of the cause. `SseReader` now
-      holds the captured stderr and includes it in all three panic messages.
+  server's stderr, so the CI logs gave no hint of the cause. `SseReader` now
+  holds the captured stderr and includes it in all three panic messages.
 - [x] Test diagnostics: `-v` maps to `info`, but the driver logs dropped
-      events at `debug`. The harness now sets
-      `RUST_LOG=quarto=info,q2=info,q2::commands::preview_static=debug`.
-      `RUST_LOG` takes precedence over `-v`. The module target is `q2::…`
-      because `commands` is compiled into the `q2` bin.
+  events at `debug`. The harness now sets
+  `RUST_LOG=quarto=info,q2=info,q2::commands::preview_static=debug`.
+  `RUST_LOG` takes precedence over `-v`. The module target is `q2::…`
+  because `commands` is compiled into the `q2` bin.
 
 ## Verification
 

@@ -5,7 +5,7 @@ In the past, we've studied how it works inside quarto-cli, in the following plan
 - claude-notes/config-merging-analysis.md
 - claude-notes/session-logs/session-log-2025-10-11.md
 
-I've then done some additional work on a separate repository studying a model Haskell implementation of the problem, in /Users/cscheid/repos/cscheid/composable-validation. That repository has notes you wrote in /Users/cscheid/repos/cscheid/composable-validation/claude-notes/*.md
+I've then done some additional work on a separate repository studying a model Haskell implementation of the problem, in /Users/cscheid/repos/cscheid/composable-validation. That repository has notes you wrote in /Users/cscheid/repos/cscheid/composable-validation/claude-notes/\*.md
 
 The main observation in the composable-validation directory is that we can reproduce all of the (complex, but necessary) behavior of quarto-cli's mergeConfigs and related functions with a system that performs different merging operations depending on the _tags_ of the values associated with the YAML object: "!prefer" and "!concat". The composable-validation repository has a fuller explanation. (That repository was also concerned with the behavior of the validator library under this merging operation. We'll want to worry about that as well, but not in this current session)
 
@@ -66,7 +66,7 @@ title: This is **strong**, and [this is a link](https://example.com)
 ---
 ```
 
-In _quarto.yml, these values are represented as strings by default. merge_configs will choose
+In \_quarto.yml, these values are represented as strings by default. merge_configs will choose
 concat vs prefer depending on context, and also allow explicit semantics. Similarly, I think that our configuration system should have default behaviors depending on context, and also allow explicitly determining value interpretation rules.
 
 This already exists in the .qmd files: values in the front matter can have `!md` and `!str` to control their interpretation. We should allow these tags (and potentially others) to be used in regular quarto-yaml objects, so that when a "plain" quarto-yaml configuration is added to a .qmd document, we have the ability to interpret those values as either markdown or other values.

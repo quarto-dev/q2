@@ -2,12 +2,12 @@
 
 **Date:** 2026-09-08
 **Braid:** bd-lh30hlvd
-**Worktree:** `.worktrees/bd-lh30hlvd-node-version-guard` (branch `braid/bd-lh30hlvd-node-version-guard`, based on `main` @ `b7e7c96a`)
+**Worktree:** `.worktrees/bd-lh30hlvd-node-version-guard` (branch `braid/bd-lh30hlvd-node-version-guard`, based on `main` \@ `b7e7c96a`)
 **Status:** Executing — direction agreed with the user on 2026-09-08 (see § Decision).
 
 ## Overview
 
-`cargo xtask verify`'s hub-client leg went red on this machine because a routine
+`cargo xtask verify`\'s hub-client leg went red on this machine because a routine
 `brew upgrade` on 2026-09-04 relinked `/opt/homebrew/bin/node` from node@24 to node 26.8.1.
 Node ≥ 25 defines a `localStorage` accessor on `globalThis` (returning `undefined` without
 `--localstorage-file`), and vitest 4.x's jsdom environment skips window keys that already
@@ -44,7 +44,7 @@ Concretely:
 - [x] `fnm install 24` → v24.20.0 (newer than Homebrew's node@24 24.15.0)
 - [x] `fnm default system` — outside pinned projects `node` stays Homebrew's 26.8.1
 - [x] `~/.zprofile` (new file): `eval "$(fnm env --use-on-cd --version-file-strategy=recursive)"`
-      with a comment explaining why `.zprofile` and not `.zshenv` (`/etc/zprofile`'s
+      with a comment explaining why `.zprofile` and not `.zshenv` (`/etc/zprofile`\'s
       `path_helper` would reorder `/opt/homebrew/bin` ahead of fnm — `/etc/paths.d/homebrew`
       exists on this machine)
 - [x] `~/.zshrc`: pointer comment next to the PATH section
@@ -104,7 +104,7 @@ Module `crates/xtask/src/node_version.rs`. Pure functions unit-tested; process/I
       npm-driven step skipped the preflight reports itself skipped (see § End-to-end record)
 - [x] E2 `cargo xtask verify` (full: WASM + hub build + every test leg) in the worktree under
       fnm's Node 24.20.0: `✓ All verification steps passed!` — 13,757 Rust tests, hub-client
-      1084/119/133, trace-viewer, shared preview-* and hub MCP suites all green (2026-09-08)
+      1084/119/133, trace-viewer, shared preview-\* and hub MCP suites all green (2026-09-08)
 - [x] E3 `cargo xtask dev-setup` output under both Nodes inspected
 - [x] E4 pre-commit checklist: no `HashMap`/`FxHashMap` in changed Rust; no TODOs; `cargo fmt`
       clean; clippy `-D warnings` clean; `cargo xtask lint` clean; new module's decision logic

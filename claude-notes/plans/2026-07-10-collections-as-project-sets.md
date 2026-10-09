@@ -92,7 +92,7 @@ revisit when identities move to index docs (Phase 4 reduces what summary needs
 to carry).
 
 **Members display.** A shared collection's facepile can be derived from the
-union of its projects' index-doc identities, replacing mock members. A
+union of its projects\' index-doc identities, replacing mock members. A
 dedicated `members` map on the collection doc (self-reported on join) is a
 possible follow-on, not required for this plan.
 

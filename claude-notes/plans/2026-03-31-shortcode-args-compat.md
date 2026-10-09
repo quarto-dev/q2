@@ -19,7 +19,7 @@ The shortcode engine lives in `crates/pampa/src/lua/shortcode.rs`. Key types:
   `keyword: Vec<(String, String)>`, `metadata: Vec<(String, String)>`.
 - Handler signature (Lua side): `function(args, kwargs, meta, raw_args, context)`
 
-### How handlers are called (current code, ~line 242-266)
+### How handlers are called (current code, \~line 242-266)
 `build_and_call()` constructs 5 arguments and calls the Lua handler:
 1. `lua_args` — built by `build_args_table()` (THIS IS BROKEN)
 2. `lua_kwargs` — built by `build_kwargs_table()`
@@ -35,7 +35,7 @@ The shortcode engine lives in `crates/pampa/src/lua/shortcode.rs`. Key types:
 - `quarto.*` API is registered in `crates/pampa/src/lua/quarto_api.rs` —
   includes `quarto.json`, `quarto.log`, `quarto.utils`. The `quarto.shortcode`
   sub-namespace is registered in `shortcode.rs` (function
-  `register_shortcode_api`, ~line 348).
+  `register_shortcode_api`, \~line 348).
 - Metatable infrastructure exists: `set_metatable()`, `__index` patterns are
   used in `io_wasm.rs`, `shortcode.rs:150`, `readwrite.rs`, `constructors.rs`.
 - `pandoc.Inlines({})` constructor is available (registered in
@@ -58,7 +58,7 @@ The shortcode engine lives in `crates/pampa/src/lua/shortcode.rs`. Key types:
 ### Reference: TS Quarto shortcode source
 The TypeScript Quarto shortcode handler is at
 `~/src/quarto-cli/src/resources/filters/customnodes/shortcodes.lua`
-(function `callShortcodeHandler`, ~line 373).
+(function `callShortcodeHandler`, \~line 373).
 
 ---
 
@@ -69,7 +69,7 @@ existing Lua extensions (e.g., lipsum). This causes extensions that call
 `pandoc.utils.stringify(args[1])` to get empty strings instead of the argument
 value.
 
-**Root cause:** `build_args_table` (shortcode.rs ~line 268) wraps each positional
+**Root cause:** `build_args_table` (shortcode.rs \~line 268) wraps each positional
 arg in a `{value = "string"}` table, but TS Quarto passes plain strings directly.
 
 ## How TS Quarto Does It
@@ -106,7 +106,7 @@ Key points:
 - **`context`**: string `"block"`, `"inline"`, or `"text"`.
 
 TS Quarto also provides `quarto.shortcode.read_arg(args, n)` (defined in
-`quarto-cli/src/resources/pandoc/datadir/init.lua` ~line 1003):
+`quarto-cli/src/resources/pandoc/datadir/init.lua` \~line 1003):
 ```lua
 quarto.shortcode.read_arg = function(args, n)
   local arg = args[n or 1]
@@ -120,13 +120,13 @@ end
 ```
 
 Where `inlinesToString` (in `quarto-cli/src/resources/filters/common/pandoc.lua`
-~line 76) wraps inlines in a `pandoc.Span` and calls `pandoc.utils.stringify`.
+\~line 76) wraps inlines in a `pandoc.Span` and calls `pandoc.utils.stringify`.
 
 ## Current q2 Behavior vs Expected
 
 | Aspect | TS Quarto (expected) | q2 (current) |
 |---|---|---|
-| `args[1]` for `{{< sc 5 >}}` | `"5"` (plain string) | `{value = "5"}` (table) |
+| `args[1]` for `{{{< sc 5 >}}}` | `"5"` (plain string) | `{value = "5"}` (table) |
 | `args` contains kwargs? | No | Yes (appended after positional) |
 | `kwargs` missing key | Returns `pandoc.Inlines({})` | Returns `nil` |
 | `pandoc.utils.stringify(args[1])` | `"5"` | `""` (table has no sequence items) |
@@ -140,7 +140,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 1: Tests first (TDD)
 
-- [x]**1.0** Write failing tests before any implementation changes. Add these
+- [x] **1.0** Write failing tests before any implementation changes. Add these
   tests to the `#[cfg(test)]` module in `shortcode.rs`:
 
   - **`test_args_are_plain_strings`**: Call a handler with
@@ -162,7 +162,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 2: Implementation
 
-- [x]**2.1** Fix `build_args_table` (~shortcode.rs:268): pass positional args
+- [x] **2.1** Fix `build_args_table` (\~shortcode.rs:268): pass positional args
   as plain strings in a sequential table. Do NOT include keyword args.
 
   Current (broken):
@@ -193,7 +193,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
   }
   ```
 
-- [x]**2.2** Fix `build_kwargs_table` (~shortcode.rs:287): add `__index`
+- [x] **2.2** Fix `build_kwargs_table` (\~shortcode.rs:287): add `__index`
   metatable that returns empty `pandoc.Inlines({})` for missing keys.
 
   **Truthiness note:** This changes missing-key behavior from `nil` (falsy) to
@@ -212,7 +212,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
   table.set_metatable(Some(mt))?;
   ```
 
-- [x]**2.3** Replace the existing Rust `read_arg` implementation with a Lua
+- [x] **2.3** Replace the existing Rust `read_arg` implementation with a Lua
   one that matches TS Quarto. The current Rust implementation
   (shortcode.rs:355-365) unwraps `{value=...}` tables — this is dead code
   after item 2.1 changes args to plain strings.
@@ -241,19 +241,19 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 3: Update existing tests
 
-- [x]**3.1** Update `test_handler_receives_args` (shortcode.rs:691-721).
+- [x] **3.1** Update `test_handler_receives_args` (shortcode.rs:691-721).
   Currently the Lua handler does `return args[1].value` which relies on the
   old `{value=...}` wrapping. Change to `return args[1]` since args are now
   plain strings.
 
-- [x]**3.2** Verify `test_read_arg_helper` (shortcode.rs:874-905) still
+- [x] **3.2** Verify `test_read_arg_helper` (shortcode.rs:874-905) still
   passes without changes. After the fix, `args[1]` is a plain string, so
   `read_arg(args, 1)` hits the string pass-through path. This test should
   pass as-is.
 
 ### Phase 4: Integration test
 
-- [x]**4.1** Update the lipsum smoke-all test fixture at
+- [x] **4.1** Update the lipsum smoke-all test fixture at
   `crates/quarto/tests/smoke-all/extensions/lipsum-shortcode/test.qmd`.
   Currently asserts `ensureFileRegexMatches: ["Lorem ipsum dolor sit amet"]`
   which passes even with 5 paragraphs (the default when arg parsing fails).
@@ -264,10 +264,10 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 5: Verification
 
-- [x]**5.1** Run `cargo nextest run -p pampa` — all shortcode tests pass.
-- [x]**5.2** Run `cargo nextest run -p quarto --test smoke_all` — lipsum
+- [x] **5.1** Run `cargo nextest run -p pampa` — all shortcode tests pass.
+- [x] **5.2** Run `cargo nextest run -p quarto --test smoke_all` — lipsum
   integration test passes with tightened assertion.
-- [x]**5.3** Run `cargo nextest run --workspace` — no regressions across
+- [x] **5.3** Run `cargo nextest run --workspace` — no regressions across
   the monorepo.
 
 ## Design Notes
@@ -292,7 +292,7 @@ returns `""` which doesn't match their expected values.
 
 ### `build_raw_args` is already correct
 
-The existing `build_raw_args` function (~shortcode.rs:303) already produces a
+The existing `build_raw_args` function (\~shortcode.rs:303) already produces a
 flat list of plain strings, matching TS Quarto's `raw_args`.
 
 ### `build_meta_table` may need a metatable too

@@ -14,7 +14,7 @@ Automerge 3.5.0 (JS, 2026-09-16) / automerge 0.12.0 (Rust, 2026-09-16) shipped a
 hex-string "author" in its metadata, recorded in the document history and
 propagated by sync. See [the 3.5.0 release notes](https://github.com/automerge/automerge/releases/tag/js%2Fautomerge-3.5.0),
 [`Author` in the Rust API](https://docs.rs/automerge/latest/automerge/struct.Author.html),
-and the design-intent note in [This Month in Automerge: July '26](https://automerge.org/blog/2026-july/)
+and the design-intent note in [This Month in Automerge: July \'26](https://automerge.org/blog/2026-july/)
 ("author provenance").
 
 Quarto-hub currently solves attribution by giving each user a **stable actor
@@ -83,7 +83,7 @@ Stable-actor-ID sites:
 | Doc application | `ts-packages/quarto-sync-client/src/client.ts:688-691` (`applyActorId`), `:699-710` (`createDoc`), `:732` (`findDoc`, also covers the self-heal re-fetch) | `automergeClone(doc, { actor })` / `automergeFrom(init, { actor })` |
 | Client state | `client.ts:1180` (`connect`), `:2025-2188` (`createNewProject`, via the `resolveActorId` callback parameter), `:2229` (`getActorId`) | `state.actorId` — the single "my actor" the client assumes today |
 | preview-runtime wrapper | `ts-packages/preview-runtime/src/automergeSync.ts:166` (`connect`), `:312-317` (`createNewProject`, `resolveActorId`), `:323` (`getActorId`) | Pass-through API used by hub-client and the q2 preview SPA |
-| Identity map | `ts-packages/quarto-automerge-schema/src/index.ts:66` (`identities?: Record<string, ActorIdentity>`), written via `setIdentity` at `client.ts:1264, 2094` | actorId → {name, color} for attribution UI |
+| Identity map | `ts-packages/quarto-automerge-schema/src/index.ts:66` (`identities?: Record<string, ActorIdentity>`), written via `setIdentity` at `client.ts:1264, 2094` | actorId → \{name, color\} for attribution UI |
 | Local fallback | `hub-client/src/services/userSettings.ts:32-40` (`actorIdFromUserId`) | Auth-disabled only — stable actor from IndexedDB `userId` |
 | **Current-user key** | `getActorId()` → `components/render/ReactPreview.tsx:906` (`currentActor`) → `Q2SandboxedPreviewIframe.tsx` → `ts-packages/preview-renderer/src/framework/CurrentActorContext.tsx` (`useCurrentActor()`, `actor === me` checks in user TSX: comments, kanban, drag); `hub-client/src/components/ReplayDrawer.tsx:357,520` (`--me` highlight); `DevHarness.tsx:487` (comment) | How the UI knows which changes are *mine* |
 | Replay attribution producer | `hub-client/src/services/attribution-runs.ts:269-285` (`replayChange`) | Replays history, stamps each attribution run with `decodeChange(change).actor` |
@@ -263,7 +263,7 @@ flowchart LR
   correct and avoids the clone's side effects: a full-document fork per
   `findDoc`, a re-randomized actor on every call (one random actor per
   document instance is D1's model, not one per find), a spurious
-  `applyMutation` notification through the repo, and `DocHandle.update`'s
+  `applyMutation` notification through the repo, and `DocHandle.update`\'s
   fixed-heads precondition. The backend is shared by construction:
   `fork`/`clone` are the only ways to get a second backend (`view` reuses
   the same handle), and on the paths our handles flow through — find,
@@ -340,7 +340,7 @@ design — the spike did its job:
      in Compatibility is amended accordingly.
    - D1 is reinforced: `set_author` itself re-randomizes the actor when
      the value changes, and re-applying the *same* author is a no-op
-     (pinned: actor unchanged), so `findDoc`'s idempotent re-application
+     (pinned: actor unchanged), so `findDoc`\'s idempotent re-application
      is safe.
 2. **Absence surfaces as `undefined`, not `null`** in JS:
    `DecodedChange.author` and `getAuthorForActor` return `undefined` for
@@ -374,7 +374,7 @@ unrelated to this work.
 
 - [x] Tests first (`crates/quarto-hub/src/server.rs` / auth tests, following
   `claude-notes/instructions/testing.md`): `GET /auth/author?project=` returns
-  deterministic 64-hex equal to `/auth/actor`'s value for the same
+  deterministic 64-hex equal to `/auth/actor`\'s value for the same
   credential+project (D5), distinct per project, 401 unauthenticated / 403
   disallowed, 400 on missing `project`, works on both session-cookie and
   Bearer credential paths.
@@ -578,7 +578,7 @@ unrelated to this work.
 
 - [x] Hub-server-authored changes: `index.rs` (`transact` at `:118, :172,
   :191, :271, :306` — files map and capture sidecar) and `sync.rs` (`:164,
-  `:378` — filesystem import/update; the other grep hits are test-module
+  :378` — filesystem import/update; the other grep hits are test-module
   helpers). Stay authorless
   (D8): no code change; add a test asserting a server-written change decodes
   with `author: null` so a future `LoadOptions::author` is a deliberate act.
@@ -640,7 +640,7 @@ unrelated to this work.
      Observer client decodes the file doc's changes: keys resolve to
      exactly the two server-minted authors; three distinct random actors
      (creation client + two browsers); no actor equals an author;
-     identities map keyed `{authorA, authorB}`. Authors overlay in BOTH
+     identities map keyed `\{authorA, authorB\}`. Authors overlay in BOTH
      browsers keys each user's text by their author (per-word spans,
      aggregated per key in assertions). `__COMMENT_DIAG__.me` in the
      preview iframe reads authorA for alice, authorB for bob. Replay
@@ -658,7 +658,7 @@ unrelated to this work.
      `author: null` and attributes via bare-actor fallback (D8); overlay
      keyed correctly.
   4. **legacy continuity** — a pre-transition project crafted with raw
-     automerge (`A.from(..., {actor: aliceAuthorForProject})`, two changes,
+     automerge (`A.from(..., \{actor: aliceAuthorForProject\})`, two changes,
      `author: null` pinned) uploaded via `repo.import` with chosen doc
      IDs: overlay renders legacy text under the bare actor (= alice's
      author, D5), alice's NEW edit lands on the SAME key, the page shows
@@ -685,8 +685,8 @@ unrelated to this work.
   → All 14 steps passed 2026-09-30 (lints incl. CSS, Rust workspace build +
   nextest 15332 passed, ts-packages builds + MCP smoke, hub-client
   build:all + test:ci 1264 unit + 143 integration + 153 wasm, q2-preview-spa
-  build). The smoke_all typst fixtures needed the R packages `flextable`
-  and `gt` installed in the session library (environmental, installed
+  build). The smoke_all typst fixtures needed the R packages ``flextable``
+  and ``gt`` installed in the session library (environmental, installed
   0.10.1 / 1.3.0).
 - [ ] Close bd-6f21d4c6: record the outcome of the Carlos capture plan
   (forced H4 repro / IndexedDB export) or Gordon's waiver of the real
@@ -736,6 +736,6 @@ unrelated to this work.
 
 - [Automerge 3.5.0 release notes](https://github.com/automerge/automerge/releases/tag/js%2Fautomerge-3.5.0) — the feature announcement
 - [Rust `Author` docs](https://docs.rs/automerge/latest/automerge/struct.Author.html) / [`LoadOptions::author`](https://docs.rs/automerge/latest/automerge/struct.LoadOptions.html)
-- [This Month in Automerge: July '26](https://automerge.org/blog/2026-july/) — author provenance design intent (Keyhive revocation context)
+- [This Month in Automerge: July \'26](https://automerge.org/blog/2026-july/) — author provenance design intent (Keyhive revocation context)
 - `claude-notes/plans/2026-09-17-index-doc-duplicate-seq-self-heal.md` (bd-6f21d4c6) — the collision this plan removes at the source
 - Current implementation: inventory table above

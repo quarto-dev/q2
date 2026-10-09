@@ -57,7 +57,7 @@ resolved by closing bd-zlemoc6w as obsolete.
    The grand-plan table listed `bd-zlemoc6w (provenance)` as a 7c dependency, and
    bd-zlemoc6w's own text asserted "Plan 7c (.ipynb) depends on it for provenance."
    But bd-zlemoc6w is about the **wire path** (`TsMappedStringWithMap`/
-   `markdown_for_file`'s dropped `source_map`, for a TS engine converting a file
+   `markdown_for_file`\'s dropped `source_map`, for a TS engine converting a file
    over the wire), and this plan's ipynb converter is **native Rust, never touches
    the wire path at all** (plain `serde_json` + per-cell virtual `SourceFile`s
    built directly in-process). Gordon's call: the dependency claim came from an
@@ -184,7 +184,7 @@ upstream, and it lands in **Phase 1**, not Phase 4.
 away — `.map(|converted| (converted.markdown, converted.source_info))` drops
 `files` at `traits.rs:281` — and neither the engine-trait return type nor
 `LoadedSource` can carry them (`LoadedSource.conversion` holds only the engine
-name, `data.rs:223-228`). `convert`'s signature stays fixed; the transport from
+name, `data.rs:223-228`). `convert`\'s signature stays fixed; the transport from
 its caller to `ParseDocumentStage` and the error-path rebuild sites is the
 missing piece. Until it is chosen, decision 6's registration obligation is
 unimplementable.
@@ -289,7 +289,7 @@ falsified. Both **remove** work:
 1. **No `SourceInfo::NotebookCell` variant.** The stub listed one as an
    additive enum arm. Cell identity is per-**file**, not per-**span**: with one
    ephemeral `SourceFile` per cell, the existing `Original`/`Substring`/`Concat`
-   compose fine. `SourceInfo` is a closed enum with ~8 upstream match sites
+   compose fine. `SourceInfo` is a closed enum with \~8 upstream match sites
    (`map_offset`, `map_range`, `resolve_byte_range`, `preimage_in`, `length`,
    `remap_file_ids`, `root_file_id`, `collect_file_ids`) — not touching it is a
    material saving.
@@ -386,7 +386,7 @@ JSON*. Cell-aware consumers (Jupyter, Positron, VS Code notebooks) address
 positions as (cell, line, col), which is exactly what we produce. Two
 escalation paths if raw offsets are ever needed: a converter-level decode run
 table stored beside the virtual file (no `SourceInfo` change), or reintroducing
-`Transformed { parent, runs }` upstream (which would also fix `quarto-yaml`'s
+`Transformed { parent, runs }` upstream (which would also fix `quarto-yaml`\'s
 quoted/block-scalar imprecision — same problem class). Neither blocks this
 feature; both need a concrete consumer first.
 
@@ -447,7 +447,7 @@ never touch engine availability.
   `ctx.source_info.map_offset` lands in the owning cell's virtual file —
   `FileId(ORIGINAL_FILE_ID.0 + 1 + i)` by the converter's construction —
   which *is* the notebook cell index. A fence that maps into a **markdown**
-  cell (a literal ```{python} fence in prose) stays inert. The notebook
+  cell (a literal \`\`\`\{python\} fence in prose) stays inert. The notebook
   bytes come from `source_context.get_file(ORIGINAL_FILE_ID)` (registered
   by `ParseDocumentStage`; missing = broken invariant → loud error), so no
   re-reading and no path guessing.
@@ -517,7 +517,7 @@ Found in the July-2026 audit of the live code; each is a work item:
    cells extend these, extending the existing `lint:allow` markers);
    `pipeline.rs:896` (the `StageError` rebuild — registers **nothing** today,
    not even `ORIGINAL_FILE_ID`, so percent/spin provenance already drops
-   there); `pipeline.rs:934` (`parse_qmd_to_ast`'s output context);
+   there); `pipeline.rs:934` (`parse_qmd_to_ast`\'s output context);
    `pipeline.rs:1108` (q2-preview). Miss any and squiggles silently drop. The
    `pipeline.rs:896` gap is a live 7b-era latent bug — fixing it for cells
    fixes percent/spin too. How the files *reach* these sites is settled
@@ -561,66 +561,65 @@ Found in the July-2026 audit of the live code; each is a work item:
 
 ### Phase 0 — prerequisites
 - [x] 7b landed (registry, `processor:` schema, `ProcessorContext`), including
-      the `Converted` source-file channel above. (2026-09-24: landed on
-      `plan7b-content-processors`, tip `95a6dad36`; 7c branched off it.)
+  the `Converted` source-file channel above. (2026-09-24: landed on
+  `plan7b-content-processors`, tip `95a6dad36`; 7c branched off it.)
 - [x] Confirm the stored-output replay decision (option B) with Gordon.
-      (2026-09-24: confirmed — engine-layer replay reusing
-      `format_outputs`/`render_cell`; see § Execution decisions item 1.)
+  (2026-09-24: confirmed — engine-layer replay reusing
+  `format_outputs`/`render_cell`; see § Execution decisions item 1.)
 
 ### Phase 1 — converter core + source mapping (the design's proof)
 - [x] Fixture notebooks (tiny, per-feature) as converter-test fixtures under
-      `crates/quarto-core/tests/integration/` (new module registered in
-      `tests/integration/main.rs`, per the repo's integration-test rule; pure
-      converter pieces may also carry `#[cfg(test)]` unit tests beside the
-      processor, as percent/spin do). Cover: markdown cell; raw cell with mime
-      hint; raw cell without (plain-content fallback); code cell with `#|`
-      options; genuine YAML front-matter cell; title snipping with front
-      matter lacking `title`; title snipping with no front matter (synthesized
-      cell — numbering shift, § Execution decisions item 4); cross-cell fence
-      or div open/close; escaped text (`\n`, tab, non-ASCII) in a later cell;
-      malformed markdown in cell N > 1 (flagship input).
-      *(2026-09-24: 10 fixtures under `fixtures/ipynb/`; 26 unit tests in
-      `ipynb.rs` + 4 integration tests in `ipynb_content_processor.rs`.)*
+  `crates/quarto-core/tests/integration/` (new module registered in
+  `tests/integration/main.rs`, per the repo's integration-test rule; pure
+  converter pieces may also carry `#[cfg(test)]` unit tests beside the
+  processor, as percent/spin do). Cover: markdown cell; raw cell with mime
+  hint; raw cell without (plain-content fallback); code cell with `#|`
+  options; genuine YAML front-matter cell; title snipping with front
+  matter lacking `title`; title snipping with no front matter (synthesized
+  cell — numbering shift, § Execution decisions item 4); cross-cell fence
+  or div open/close; escaped text (`\n`, tab, non-ASCII) in a later cell;
+  malformed markdown in cell N > 1 (flagship input).
+  *(2026-09-24: 10 fixtures under `fixtures/ipynb/`; 26 unit tests in
+  `ipynb.rs` + 4 integration tests in `ipynb_content_processor.rs`.)*
 - [x] TDD: markdown/raw cell conversion; front-matter extraction; assembled-qmd
-      snapshot tests. *(RED first confirmed — all new tests failed on the
-      stub; then GREEN per the pinned expected strings.)*
+  snapshot tests. *(RED first confirmed — all new tests failed on the
+  stub; then GREEN per the pinned expected strings.)*
 - [x] TDD — the **mapping** half of the source-location test (the
-      **rendering** half landed 2026-09-25 as
-      `flagship_rendering_half_labels_owning_cell_with_snippet`, same file): malformed markdown in cell N > 1 flows
-      through `read()` with the converter's `Concat` as `parent_source_info`;
-      the **harness builds its own `SourceContext`** (per-cell registration is
-      seam 2 / Phase 2, so Phase 1 registers `ORIGINAL_FILE_ID` and cells
-      `2..=N+1` itself, in order per decision 6) and asserts each rerooted
-      diagnostic's location `map_offset`s into the owning cell — right file
-      id, in-cell line/col, snippet text logical (unescaped).
-      *(2026-09-24: `flagship_malformed_cell_maps_diagnostics_into_owning_cell`
-      green; all diagnostics + details map to FileId(3), row 0.)*
+  **rendering** half landed 2026-09-25 as
+  `flagship_rendering_half_labels_owning_cell_with_snippet`, same file): malformed markdown in cell N > 1 flows
+  through `read()` with the converter's `Concat` as `parent_source_info`;
+  the **harness builds its own `SourceContext`** (per-cell registration is
+  seam 2 / Phase 2, so Phase 1 registers `ORIGINAL_FILE_ID` and cells
+  `2..=N+1` itself, in order per decision 6) and asserts each rerooted
+  diagnostic's location `map_offset`s into the owning cell — right file
+  id, in-cell line/col, snippet text logical (unescaped).
+  *(2026-09-24: `flagship_malformed_cell_maps_diagnostics_into_owning_cell`
+  green; all diagnostics + details map to FileId(3), row 0.)*
 - [x] Confirm the already-landed `reroot_diagnostics_into_parent` mechanism
-      (`4e116ba50`, 2026-08-20) covers the ipynb per-cell `Concat` case
-      end-to-end; extend it if the general mechanism doesn't (seam 1 — see
-      § Implementation seams and § Review corrections; downgraded from "build"
-      to "confirm/extend" on 2026-09-24; the flagship test's mapping half is
-      the confirming harness). *(2026-09-24: confirmed — no extension needed.)*
+  (`4e116ba50`, 2026-08-20) covers the ipynb per-cell `Concat` case
+  end-to-end; extend it if the general mechanism doesn't (seam 1 — see
+  § Implementation seams and § Review corrections; downgraded from "build"
+  to "confirm/extend" on 2026-09-24; the flagship test's mapping half is
+  the confirming harness). *(2026-09-24: confirmed — no extension needed.)*
 
-      **Two test-authoring corrections made during GREEN** (the tests were
-      written pre-implementation; both corrections verified against upstream
-      authorities, not against the implementation):
-      1. `Location.row` is **0-indexed** (upstream quarto-source-map's own
-         test is the authority); five assertions in the new tests claimed
-         1-indexed rows and were fixed.
-      2. `heading_with_content_before_it_is_not_snipped`'s expected string
-         was unproducible — it claimed a blank line inserted by the
-         separator *inside* a single verbatim cell, which no 1/2/3-cell
-         reading produces. Q1 semantics (contentBeforeHeading ⇒ verbatim)
-         pin the expectation at `"lead text\n# Not Snipped\n\nbody\n"`.
+  **Two test-authoring corrections made during GREEN** (the tests were
+  written pre-implementation; both corrections verified against upstream
+  authorities, not against the implementation):
+  1. `Location.row` is **0-indexed** (upstream quarto-source-map's own
+     test is the authority); five assertions in the new tests claimed
+     1-indexed rows and were fixed.
+  2. `heading_with_content_before_it_is_not_snipped`\'s expected string
+     was unproducible — it claimed a blank line inserted by the
+     separator *inside* a single verbatim cell, which no 1/2/3-cell
+     reading produces. Q1 semantics (contentBeforeHeading ⇒ verbatim)
+     pin the expectation at `"lead text\n# Not Snipped\n\nbody\n"`.
 - [x] Cross-piece span fallback: detect spans straddling `Concat` piece
-      boundaries and render "cell N through cell M" with no snippet (seam 3,
-      amended 2026-09-24 — the hard per-cell gate was dropped, § Execution
-      decisions item 3; lands via the upstream PR — open question 6,
-      resolved — so this is in-phase).
-      *(2026-09-24: landed upstream — posit-dev/quarto-error-reporting PR
-      #7, merged `a7821b1d`, released 0.3.1.)*
-
+  boundaries and render "cell N through cell M" with no snippet (seam 3,
+  amended 2026-09-24 — the hard per-cell gate was dropped, § Execution
+  decisions item 3; lands via the upstream PR — open question 6,
+  resolved — so this is in-phase).
+  *(2026-09-24: landed upstream — posit-dev/quarto-error-reporting PR
+  \#7, merged `a7821b1d`, released 0.3.1.)*
 ### Phase 1 (upstream) — quarto-error-reporting fix
 
 The upstream half of the flagship test, per Gordon's resolution of open
@@ -630,298 +629,298 @@ conventions — its own `cargo xtask verify` mirror, braid tracking, CI across
 feature sets.
 
 - [x] Branch off `origin/main` (`287d645` — released 0.3.0, exactly q2's
-      registry pin). Caution: the local checkout `~/src/quarto-error-reporting`
-      is sitting on an **unpushed docs branch**
-      (`docs/snap-span-char-boundaries-rationale`, ahead 1 of origin) —
-      branch fresh from `origin/main`; do not disturb that working state.
-      *(2026-09-24: resolved differently — Gordon identified the docs branch
-      as his own stranded work and authorized renaming it for the fix while
-      keeping the docs commit; branch renamed to
-      `fix/concat-renderer-cross-piece`, rebased onto `287d645` conflict-free,
-      docs commit now `384982e`.)*
+  registry pin). Caution: the local checkout `~/src/quarto-error-reporting`
+  is sitting on an **unpushed docs branch**
+  (`docs/snap-span-char-boundaries-rationale`, ahead 1 of origin) —
+  branch fresh from `origin/main`; do not disturb that working state.
+  *(2026-09-24: resolved differently — Gordon identified the docs branch
+  as his own stranded work and authorized renaming it for the fix while
+  keeping the docs commit; branch renamed to
+  `fix/concat-renderer-cross-piece`, rebased onto `287d645` conflict-free,
+  docs commit now `384982e`.)*
 - [x] Fix **both** renderer copies (§ Implementation seams item 3 has the
-      full evidence): report file from `start_mapped.file_id` (which
-      `map_offset` already returns) instead of `root_file_id()`; explicit
-      straddle detection (`start_mapped.file_id != end_mapped.file_id`) →
-      "cell N through cell M" label, no snippet; per-detail mapped file with
-      the same-file filter corrected (it currently **silently skips**
-      details rooted in other files). Sites: ariadne
-      `diagnostic.rs:819`/`:925`, annotate-snippets `:1022`/`:1077`.
-      *(2026-09-24: done; foreign-piece details render as their own source
-      block in both renderers — ariadne multi-source `Cache` + order-1M
-      labels, annotate-snippets extra group element; QER plan
-      `claude-notes/plans/2026-09-24-concat-renderer-cross-piece.md`.)*
+  full evidence): report file from `start_mapped.file_id` (which
+  `map_offset` already returns) instead of `root_file_id()`; explicit
+  straddle detection (`start_mapped.file_id != end_mapped.file_id`) →
+  "cell N through cell M" label, no snippet; per-detail mapped file with
+  the same-file filter corrected (it currently **silently skips**
+  details rooted in other files). Sites: ariadne
+  `diagnostic.rs:819`/`:925`, annotate-snippets `:1022`/`:1077`.
+  *(2026-09-24: done; foreign-piece details render as their own source
+  block in both renderers — ariadne multi-source `Cache` + order-1M
+  labels, annotate-snippets extra group element; QER plan
+  `claude-notes/plans/2026-09-24-concat-renderer-cross-piece.md`.)*
 - [x] Tests in QER covering **both feature gates** (ariadne and
-      annotate-snippets are separately `#[cfg]`'d): single-file passthrough
-      (the percent/spin shape — all pieces root to one file), diagnostic
-      rooted in the first `Concat` piece, in a later piece (today:
-      wrong file label + snippet), a straddling span (today: silently
-      clamped), and a detail in another piece (today: silently dropped).
-      *(2026-09-24: 10 tests (5 per renderer), RED verified pre-fix, green
-      both gates; `cargo xtask verify` all 6 checks green.)*
+  annotate-snippets are separately `#[cfg]`\'d): single-file passthrough
+  (the percent/spin shape — all pieces root to one file), diagnostic
+  rooted in the first `Concat` piece, in a later piece (today:
+  wrong file label + snippet), a straddling span (today: silently
+  clamped), and a detail in another piece (today: silently dropped).
+  *(2026-09-24: 10 tests (5 per renderer), RED verified pre-fix, green
+  both gates; `cargo xtask verify` all 6 checks green.)*
 - [x] PR → merge → release via the repo's Trusted-Publishing workflow
-      (expect a patch — 0.3.1: behavior fix, no API change; the 0.2.1 →
-      0.2.2 → 0.3.0 cadence shows mid-phase releases are routine there).
-      *(2026-09-24: PR #7 filed with Gordon's review of the draft, CI 4/4
-      green, squash-merged `a7821b1d`; the merge itself triggered
-      release.yml, which published 0.3.1 to crates.io (verified HTTP 200)
-      and tagged `v0.3.1` — no manual tag step exists.)*
+  (expect a patch — 0.3.1: behavior fix, no API change; the 0.2.1 →
+  0.2.2 → 0.3.0 cadence shows mid-phase releases are routine there).
+  *(2026-09-24: PR #7 filed with Gordon's review of the draft, CI 4/4
+  green, squash-merged `a7821b1d`; the merge itself triggered
+  release.yml, which published 0.3.1 to crates.io (verified HTTP 200)
+  and tagged `v0.3.1` — no manual tag step exists.)*
 - [x] q2 side: `cargo update -p quarto-error-reporting` (the workspace req
-      `"0.3.0"` is caret, so a 0.3.1 satisfies it; bump the req string too
-      if the release lands a new minor). Then the flagship's rendering-half
-      assertions go green in-phase. *(2026-09-25: lock 0.3.0 → 0.3.1; new
-      test `flagship_rendering_half_labels_owning_cell_with_snippet` went
-      RED on 0.3.0 — renderer drew `notebook.ipynb[cell 1, markdown]:1:17`
-      with cell 1's "Some intro text" at cell-2 offsets — and GREEN on
-      0.3.1: `╭─[ notebook.ipynb[cell 2, markdown]:1:39 ]` with cell 2's
-      in-cell snippet `![logo](images/logo.svg){width="65px"
-      .light-content}`. Test-side gotcha: `enable_hyperlinks: false`
-      disables OSC-8 only; ariadne still emits SGR codes, so the test
-      strips ANSI before asserting (nextest strips them when displaying,
-      which masks the mismatch).)*
+  `"0.3.0"` is caret, so a 0.3.1 satisfies it; bump the req string too
+  if the release lands a new minor). Then the flagship's rendering-half
+  assertions go green in-phase. *(2026-09-25: lock 0.3.0 → 0.3.1; new
+  test `flagship_rendering_half_labels_owning_cell_with_snippet` went
+  RED on 0.3.0 — renderer drew `notebook.ipynb[cell 1, markdown]:1:17`
+  with cell 1's "Some intro text" at cell-2 offsets — and GREEN on
+  0.3.1: `╭─[ notebook.ipynb[cell 2, markdown]:1:39 ]` with cell 2's
+  in-cell snippet `![logo](images/logo.svg){width="65px"
+  .light-content}`. Test-side gotcha: `enable_hyperlinks: false`
+  disables OSC-8 only; ariadne still emits SGR codes, so the test
+  strips ANSI before asserting (nextest strips them when displaying,
+  which masks the mismatch).)*
 
 ### Phase 2 — registry wiring
 - [x] `ipynb` processor entry in `content_processors/`; jupyter declares
-      `claims-files: [{extension: .ipynb, processor: ipynb}]` as static data.
-      *(Done 2026-09-24: `ProcessorSpec::Ipynb` + `ProcessorParams::Ipynb`,
-      registry insert, bare/map parse arms with "known processors: percent,
-      spin, ipynb" errors, jupyter `.ipynb` static claim — builtin claims now
-      6. Sniff left as the Phase-1 stub: admission is the separate Pass-1
-      item below. TDD: 5 new/updated tests RED on compile, then GREEN;
-      clippy + per-crate nextest 4973 passed / 32 skipped.)*
+  `claims-files: [{extension: .ipynb, processor: ipynb}]` as static data.
+  *(Done 2026-09-24: `ProcessorSpec::Ipynb` + `ProcessorParams::Ipynb`,
+  registry insert, bare/map parse arms with "known processors: percent,
+  spin, ipynb" errors, jupyter `.ipynb` static claim — builtin claims now
+  6. Sniff left as the Phase-1 stub: admission is the separate Pass-1
+  item below. TDD: 5 new/updated tests RED on compile, then GREEN;
+  clippy + per-crate nextest 4973 passed / 32 skipped.)*
 - [x] `Converted.files` transport (open question 7, **resolved 2026-09-24 —
-      option (a)**): `SourceConversionStage`'s processor-bearing arm (the
-      `native_claims_file` → `Some(true)` branch, `source_conversion.rs:~205`)
-      calls `content_processors::convert` directly instead of
-      `engine.markdown_for_file` — today that trait hop's only job is to call
-      `convert`, and the file is already read twice on this path (sniff,
-      then convert), so nothing is added. The claimer tuple
-      (`source_conversion.rs:~155`) becomes a small struct carrying
-      `engine_name` / `qmd_text` / `source_info` / `files`; additive
-      `LoadedSource.files: Vec<(String, String)>` (default empty — the wire
-      path can never produce files; it returns `Generated(By::unknown())`
-      placeholders by construction). Optional 6-line default trait helper
-      `native_processor_for_file -> Option<ProcessorSpec>`, with
-      `native_claims_file` refactored onto it, so the claim→spec lookup
-      exists exactly once. `convert`'s signature untouched; TsEngine, the
-      wire path, knitr/jupyter (which override nothing), and the 7b trait
-      tests untouched.
-      *(Done 2026-09-24: `ClaimedConversion` struct; `Some(true)` arm calls
-      `content_processors::convert` directly, dynamic `None` arm keeps
-      `markdown_for_file` + empty files; additive `LoadedSource.files`
-      defaulting empty in both constructors; `native_processor_for_file`
-      default helper with `native_claims_file` AND `native_markdown_for_file`
-      refactored onto it. Sequencing note: the transport test forced the
-      sniff body to land first — no `.ipynb` is ever claimed while
-      `has_cells_array` was the `false` stub, so the stage test went
-      "Can't determine execution engine". Sniff body implemented as JSON
-      parse + top-level `cells` array with its own 4 RED→GREEN tests; the
-      dispatch test's deferred sniff assertions re-enabled. TDD: transport +
-      helper tests RED (E0609/E0599) before the change; clippy clean
-      (one `is_ok_and` fix); per-crate nextest 4979 passed / 32 skipped.)*
+  option (a)**): `SourceConversionStage`\'s processor-bearing arm (the
+  `native_claims_file` → `Some(true)` branch, `source_conversion.rs:~205`)
+  calls `content_processors::convert` directly instead of
+  `engine.markdown_for_file` — today that trait hop's only job is to call
+  `convert`, and the file is already read twice on this path (sniff,
+  then convert), so nothing is added. The claimer tuple
+  (`source_conversion.rs:~155`) becomes a small struct carrying
+  `engine_name` / `qmd_text` / `source_info` / `files`; additive
+  `LoadedSource.files: Vec<(String, String)>` (default empty — the wire
+  path can never produce files; it returns `Generated(By::unknown())`
+  placeholders by construction). Optional 6-line default trait helper
+  `native_processor_for_file -> Option<ProcessorSpec>`, with
+  `native_claims_file` refactored onto it, so the claim→spec lookup
+  exists exactly once. `convert`\'s signature untouched; TsEngine, the
+  wire path, knitr/jupyter (which override nothing), and the 7b trait
+  tests untouched.
+  *(Done 2026-09-24: `ClaimedConversion` struct; `Some(true)` arm calls
+  `content_processors::convert` directly, dynamic `None` arm keeps
+  `markdown_for_file` + empty files; additive `LoadedSource.files`
+  defaulting empty in both constructors; `native_processor_for_file`
+  default helper with `native_claims_file` AND `native_markdown_for_file`
+  refactored onto it. Sequencing note: the transport test forced the
+  sniff body to land first — no `.ipynb` is ever claimed while
+  `has_cells_array` was the `false` stub, so the stage test went
+  "Can't determine execution engine". Sniff body implemented as JSON
+  parse + top-level `cells` array with its own 4 RED→GREEN tests; the
+  dispatch test's deferred sniff assertions re-enabled. TDD: transport +
+  helper tests RED (E0609/E0599) before the change; clippy clean
+  (one `is_ok_and` fix); per-crate nextest 4979 passed / 32 skipped.)*
 - [x] `SourceContext` plumbing on success **and** error paths (seam 2 — site
-      inventory in § Implementation seams item 2, including the
-      `pipeline.rs:896` percent/spin latent gap). *(Done 2026-09-25: new
-      `ConversionStash` on `StageContext` (engine/converted/source_info/files),
-      set by `ParseDocumentStage` at the top of its run — before the parse, so
-      parse failures carry it too. All four sites closed: (1) parse_document
-      success block now also registers per-cell files into BOTH contexts at
-      `FileId(ORIGINAL_FILE_ID.0 + 1 + i)` via `add_file_with_id` (same
-      lint-allow rationale as the original-file registration); (2) the
-      `run_pipeline` StageError arm rebuilds from the stash — converted buffer
-      under the same synthetic name at FileId(0), then original, then cells,
-      gated on `source_info.is_some()` exactly like the success path. Sequential
-      `add_file` lands on the decision-6 ids by construction (qsm assigns
-      `FileId(files.len())`), which also fixes the live 7b-era latent bug where
-      a converted doc's parse error labeled raw notebook JSON as
-      `notebook.ipynb` at FileId(0); (3)+(4) `parse_qmd_to_ast` and
-      `render_qmd_to_preview_ast` carry `ast.source_context` instead of a fresh
-      single-file context — byte-identical for .qmd, and the preview ASTContext
-      keeps `filenames: vec![source_name]` verbatim (pampa's JSON writer interns
-      Substring parent chains from node Arcs, not from that list). TDD: 3 tests
-      RED (missing cell registration / FileId(0) name / preview context) then
-      GREEN: T1 unit `test_parse_document_a_plus_registers_per_cell_files`;
-      T2 stage-error integration asserting the rendered diagnostic carries
-      `notebook.ipynb[cell 2, markdown]:1:` and cell 2's `![logo](images/logo.svg)`
-      line; T3 preview integration through `render_qmd_to_preview_ast`. T3
-      harness note: CROSS_CELL_FENCE_NOTEBOOK declares a kernelspec, so
-      engine resolution routes to jupyter and fails on availability (jupyter
-      not installed) before any assertion — set `ExecutionPolicy::None` on the
-      test's RenderContext (the policy gate returns before the availability
-      check; this test is about plumbing, not execution). Gates: clippy clean;
-      per-crate nextest 4982 passed / 32 skipped (+3 vs 4979 baseline = the
-      three new tests).)*
+  inventory in § Implementation seams item 2, including the
+  `pipeline.rs:896` percent/spin latent gap). *(Done 2026-09-25: new
+  `ConversionStash` on `StageContext` (engine/converted/source_info/files),
+  set by `ParseDocumentStage` at the top of its run — before the parse, so
+  parse failures carry it too. All four sites closed: (1) parse_document
+  success block now also registers per-cell files into BOTH contexts at
+  `FileId(ORIGINAL_FILE_ID.0 + 1 + i)` via `add_file_with_id` (same
+  lint-allow rationale as the original-file registration); (2) the
+  `run_pipeline` StageError arm rebuilds from the stash — converted buffer
+  under the same synthetic name at FileId(0), then original, then cells,
+  gated on `source_info.is_some()` exactly like the success path. Sequential
+  `add_file` lands on the decision-6 ids by construction (qsm assigns
+  `FileId(files.len())`), which also fixes the live 7b-era latent bug where
+  a converted doc's parse error labeled raw notebook JSON as
+  `notebook.ipynb` at FileId(0); (3)+(4) `parse_qmd_to_ast` and
+  `render_qmd_to_preview_ast` carry `ast.source_context` instead of a fresh
+  single-file context — byte-identical for .qmd, and the preview ASTContext
+  keeps `filenames: vec![source_name]` verbatim (pampa's JSON writer interns
+  Substring parent chains from node Arcs, not from that list). TDD: 3 tests
+  RED (missing cell registration / FileId(0) name / preview context) then
+  GREEN: T1 unit `test_parse_document_a_plus_registers_per_cell_files`;
+  T2 stage-error integration asserting the rendered diagnostic carries
+  `notebook.ipynb[cell 2, markdown]:1:` and cell 2's `![logo](images/logo.svg)`
+  line; T3 preview integration through `render_qmd_to_preview_ast`. T3
+  harness note: CROSS_CELL_FENCE_NOTEBOOK declares a kernelspec, so
+  engine resolution routes to jupyter and fails on availability (jupyter
+  not installed) before any assertion — set `ExecutionPolicy::None` on the
+  test's RenderContext (the policy gate returns before the availability
+  check; this test is about plumbing, not execution). Gates: clippy clean;
+  per-crate nextest 4982 passed / 32 skipped (+3 vs 4979 baseline = the
+  three new tests).)*
 - [x] Per-cell file scaling gate (open question 1): measure a ~500-cell
-      notebook's `SourceContext` registration + diagnostic-render cost before
-      wiring; record the numbers here. *(2026-09-25: harness
-      `scaling_gate_per_cell_registration_and_render` (ignored; run with
-      `--run-ignored ignored-only --nocapture`), geometric 125/250/500/1000
-      cells, ~150 B/cell. register: 249/255/522/532 µs — linear, trivial.
-      map_offset × N calls: 46/156/566/1357 µs — quadratic in N (Concat
-      walks pieces linearly per call), but the per-call constant is ~1.4 µs
-      at 1000 cells, so one diagnostic's start+end mapping is ~3 µs; callers
-      map each diagnostic's endpoints once, so the quadratic shape needs
-      thousands of diagnostics to matter (≈3 ms at 1000 — still fine).
-      render rooted in the last cell (worst-case walk): 264/72/78/44 µs —
-      flat within noise. Verdict: the technique scales; no design change
-      needed. If a future consumer ever maps O(N) locations per render, a
-      piece-start binary search in qsm is the ready fix.)*
+  notebook's `SourceContext` registration + diagnostic-render cost before
+  wiring; record the numbers here. *(2026-09-25: harness
+  `scaling_gate_per_cell_registration_and_render` (ignored; run with
+  `--run-ignored ignored-only --nocapture`), geometric 125/250/500/1000
+  cells, ~150 B/cell. register: 249/255/522/532 µs — linear, trivial.
+  map_offset × N calls: 46/156/566/1357 µs — quadratic in N (Concat
+  walks pieces linearly per call), but the per-call constant is ~1.4 µs
+  at 1000 cells, so one diagnostic's start+end mapping is ~3 µs; callers
+  map each diagnostic's endpoints once, so the quadratic shape needs
+  thousands of diagnostics to matter (≈3 ms at 1000 — still fine).
+  render rooted in the last cell (worst-case walk): 264/72/78/44 µs —
+  flat within noise. Verdict: the technique scales; no design change
+  needed. If a future consumer ever maps O(N) locations per render, a
+  piece-start binary search in qsm is the ready fix.)*
 - [x] Cell-options composition test: a `#|` YAML error inside a code cell lands
-      in the right cell. *(2026-09-25: fixture `code-cell-bad-options.ipynb`
-      (markdown intro + code cell whose `#| error: [unclosed` is a scan-level
-      YAML failure); test `cell_option_yaml_error_lands_in_owning_cell` in
-      `ipynb_content_processor.rs`. The anchor is computed exactly as the
-      production execute path computes it (`text_execute.rs:305-321`):
-      `body_source = Substring(document source_info, code_start, …)` from the
-      converter's Concat; the error's own location preferred, else the body
-      source — the fallback is the live route because quarto-yaml's
-      `From<ScanError>` carries `location: None`. Both routes must map into
-      the owning cell; asserted FileId(3) + row 0, and the rendering half
-      asserts `notebook.ipynb[cell 2, code]:1:` with the `#| error: [unclosed`
-      snippet and a negative on `[cell 1`. GREEN on first run — the
-      composition held as the design predicted ("whose concat's parent is our
-      concat"), so this is a regression guard, not a bug fix; the "verify the
-      test fails" TDD step doesn't apply (no bug). Clippy clean.)*
+  in the right cell. *(2026-09-25: fixture `code-cell-bad-options.ipynb`
+  (markdown intro + code cell whose `#| error: [unclosed` is a scan-level
+  YAML failure); test `cell_option_yaml_error_lands_in_owning_cell` in
+  `ipynb_content_processor.rs`. The anchor is computed exactly as the
+  production execute path computes it (`text_execute.rs:305-321`):
+  `body_source = Substring(document source_info, code_start, …)` from the
+  converter's Concat; the error's own location preferred, else the body
+  source — the fallback is the live route because quarto-yaml's
+  `From<ScanError>` carries `location: None`. Both routes must map into
+  the owning cell; asserted FileId(3) + row 0, and the rendering half
+  asserts `notebook.ipynb[cell 2, code]:1:` with the `#| error: [unclosed`
+  snippet and a negative on `[cell 1`. GREEN on first run — the
+  composition held as the design predicted ("whose concat's parent is our
+  concat"), so this is a regression guard, not a bug fix; the "verify the
+  test fails" TDD step doesn't apply (no bug). Clippy clean.)*
 - [x] Pass-1 discovery admission via the processor's `sniff` (7b's tier), and a
-      **launch-free assertion**: a project of N notebooks issues zero engine
-      launches in Pass-1. *(The sniff BODY landed early, 2026-09-24 — see the
-      transport item's sequencing note: `has_cells_array` = JSON parse with a
-      top-level `cells` array, 4 unit tests. **Done 2026-09-25** — with a
-      correction to this item's wording: "discovery admission via the
-      processor's sniff" is superseded by 7b's landed 2026-09-24 correction
-      (discovery-time sniffing dropped entirely; one predicate, one site at
-      claim time). What admission actually rides is the **static claim**:
-      jupyter's `claims-files: [{extension: .ipynb, processor: ipynb}]` lands
-      `.ipynb` in `builtin_file_claims()`, and `ProjectContext::discover`
-      chains those into `RenderableExtensions` for the walk (gate 1). The
-      sniff still gates *conversion* at claim time, already proven. New test
-      `discovery_pass1::project_of_notebooks_admitted_and_converted_launch_free`
-      in `ipynb_content_processor.rs`: 3-notebook project + doc.qmd with the
-      explicit `project.render: ["**/*.qmd", "**/*.ipynb"]` allowlist
-      (.ipynb is deliberately never auto-discovered), admitted through
-      production `ProjectContext::discover`, each converted through
-      `render_qmd_to_preview_ast` (ExecutionPolicy::None — Pass-1 is
-      conversion+parse, and the gate returns before jupyter's availability
-      check). Launch-free assertion: `find_jupyter_call_count() == 1`
-      absolute — the OnceLock-capped counter's process max, i.e. the single
-      lookup `EngineRegistry::new()` always pays at construction; the
-      absolute form is stable under both nextest (fresh process) and plain
-      `cargo test` (pre-warmed cache), where a delta form would read 0.
-      Native-routing proof: preview context registers raw notebook bytes at
-      `ORIGINAL_FILE_ID` (wire path can only produce
-      `Generated(By::unknown())`). GREEN on first run (regression guard —
-      wiring already landed); clippy clean.)*
+  **launch-free assertion**: a project of N notebooks issues zero engine
+  launches in Pass-1. *(The sniff BODY landed early, 2026-09-24 — see the
+  transport item's sequencing note: `has_cells_array` = JSON parse with a
+  top-level `cells` array, 4 unit tests. **Done 2026-09-25** — with a
+  correction to this item's wording: "discovery admission via the
+  processor's sniff" is superseded by 7b's landed 2026-09-24 correction
+  (discovery-time sniffing dropped entirely; one predicate, one site at
+  claim time). What admission actually rides is the **static claim**:
+  jupyter's `claims-files: [{extension: .ipynb, processor: ipynb}]` lands
+  `.ipynb` in `builtin_file_claims()`, and `ProjectContext::discover`
+  chains those into `RenderableExtensions` for the walk (gate 1). The
+  sniff still gates *conversion* at claim time, already proven. New test
+  `discovery_pass1::project_of_notebooks_admitted_and_converted_launch_free`
+  in `ipynb_content_processor.rs`: 3-notebook project + doc.qmd with the
+  explicit `project.render: ["**/*.qmd", "**/*.ipynb"]` allowlist
+  (.ipynb is deliberately never auto-discovered), admitted through
+  production `ProjectContext::discover`, each converted through
+  `render_qmd_to_preview_ast` (ExecutionPolicy::None — Pass-1 is
+  conversion+parse, and the gate returns before jupyter's availability
+  check). Launch-free assertion: `find_jupyter_call_count() == 1`
+  absolute — the OnceLock-capped counter's process max, i.e. the single
+  lookup `EngineRegistry::new()` always pays at construction; the
+  absolute form is stable under both nextest (fresh process) and plain
+  `cargo test` (pre-warmed cache), where a delta form would read 0.
+  Native-routing proof: preview context registers raw notebook bytes at
+  `ORIGINAL_FILE_ID` (wire path can only produce
+  `Generated(By::unknown())`). GREEN on first run (regression guard —
+  wiring already landed); clippy clean.)*
 - [x] End-to-end per CLAUDE.md: `cargo run --bin q2 -- render fixture.ipynb`,
-      inspect the output, inspect a deliberately-broken fixture's terminal
-      diagnostic; record invocation + snippets here. *(Done 2026-09-25,
-      jupyter-less dev machine. Three findings, in the order discovered:
+  inspect the output, inspect a deliberately-broken fixture's terminal
+  diagnostic; record invocation + snippets here. \*(Done 2026-09-25,
+  jupyter-less dev machine. Three findings, in the order discovered:
 
-      **(1) `q2 render` of any `.ipynb` demands jupyter (P2-12), by design.**
-      `cargo run --bin q2 -- render e2e-good.ipynb` fails with
-      `Engine 'jupyter' is registered but its runtime is not available.` —
-      and so does a markdown-only notebook. Mechanism: the `.ipynb` file
-      claim short-circuits engine resolution to jupyter
-      (`engine_execution.rs:266`, `claimed_engine_name`), `q2 render`
-      hardcodes `ExecutionPolicy::All` (main.rs:1359, "always executes"),
-      so `get_engine_with_fallback` fails loudly when jupyter is absent
-      (`engine_execution.rs:167`, P2-12). **Parity check**: a plain `.qmd`
-      with a ```{python}` cell fails with the byte-identical error — the
-      ipynb path is consistent with existing engine semantics, not a 7c
-      defect. Q1 divergence to note: Q1 renders stored-output notebooks
-      without jupyter; q2 will too, via Phase 3's replay engine. Sub-nuance
-      for Phase 3: even a zero-code-cell notebook demands jupyter under
-      this model, because the claim (not the cells) drives resolution.
+  **(1) `q2 render` of any `.ipynb` demands jupyter (P2-12), by design.**
+  `cargo run --bin q2 -- render e2e-good.ipynb` fails with
+  `Engine 'jupyter' is registered but its runtime is not available.` —
+  and so does a markdown-only notebook. Mechanism: the `.ipynb` file
+  claim short-circuits engine resolution to jupyter
+  (`engine_execution.rs:266`, `claimed_engine_name`), `q2 render`
+  hardcodes `ExecutionPolicy::All` (main.rs:1359, "always executes"),
+  so `get_engine_with_fallback` fails loudly when jupyter is absent
+  (`engine_execution.rs:167`, P2-12). **Parity check**: a plain `.qmd`
+  with a `` ```{python}` `` cell fails with the byte-identical error — the
+  ipynb path is consistent with existing engine semantics, not a 7c
+  defect. Q1 divergence to note: Q1 renders stored-output notebooks
+  without jupyter; q2 will too, via Phase 3's replay engine. Sub-nuance
+  for Phase 3: even a zero-code-cell notebook demands jupyter under
+  this model, because the claim (not the cells) drives resolution.
 
-      **(2) Broken notebook's terminal diagnostic is correct through the
-      real CLI.** Fixture: cell 1 markdown `Some intro`, cell 2 markdown
-      `![logo](images/logo.svg){width="65px" .light-content}` (kv-before-
-      class, same construct as the flagship fixture). Invocation:
-      `cargo run --bin q2 -- render e2e-broken.ipynb`. Observed (exit
-      nonzero, ANSI colors in real terminal):
+  **(2) Broken notebook's terminal diagnostic is correct through the
+  real CLI.** Fixture: cell 1 markdown `Some intro`, cell 2 markdown
+  ``![logo](images/logo.svg){width="65px" .light-content}`` (kv-before-
+  class, same construct as the flagship fixture). Invocation:
+  `cargo run --bin q2 -- render e2e-broken.ipynb`. Observed (exit
+  nonzero, ANSI colors in real terminal):
 
-      ```
-      warning: profile-pass skipped …/e2e-broken.ipynb: Error: [Q-2-3] Key-value Pair Before Class Specifier in Attribute
-         ╭─[ e2e-broken.ipynb[cell 2, markdown]:1:39 ]
-         │
-       1 │ ![logo](images/logo.svg){width="65px" .light-content}
-         │                         ──────┬──────  ────────┬────────
-         │                               ╰── This key-value pair cannot appear before the class specifier.
-         │                                              │
-         │                                              ╰── This class specifier appears after the key-value pair.
-      ```
+  ```
+  warning: profile-pass skipped …/e2e-broken.ipynb: Error: [Q-2-3] Key-value Pair Before Class Specifier in Attribute
+     ╭─[ e2e-broken.ipynb[cell 2, markdown]:1:39 ]
+     │
+   1 │ ![logo](images/logo.svg){width="65px" .light-content}
+     │                         ──────┬──────  ────────┬────────
+     │                               ╰── This key-value pair cannot appear before the class specifier.
+     │                                              │
+     │                                              ╰── This class specifier appears after the key-value pair.
+  ```
 
-      The owning-cell label `[cell 2, markdown]:1:39` and in-cell snippet
-      are exactly the Phase-1 design, now through the user-facing binary.
-      (Surfaced from the profile pass — `DocumentProfileStage` parses in
-      Pass-1 — not the render pipeline's `ParseDocumentStage`; same
-      mapping machinery either way.)
+  The owning-cell label `[cell 2, markdown]:1:39` and in-cell snippet
+  are exactly the Phase-1 design, now through the user-facing binary.
+  (Surfaced from the profile pass — `DocumentProfileStage` parses in
+  Pass-1 — not the render pipeline's `ParseDocumentStage`; same
+  mapping machinery either way.)
 
-      **(3) Positive render artifact via `q2 preview --static` +
-      `preview: engine: off`.** That project config maps to
-      `ExecutionPolicy::None` (`quarto-preview/src/config.rs:46`,
-      `preview_static.rs:148`) — the one jupyter-free route through a real
-      binary. Project: `_quarto.yml` with `preview: {engine: off}` +
-      `project: {render: ["**/*.ipynb"]}`, notebook with 2 markdown cells
-      + 1 code cell (`#| echo: false` + `print('hello…')`, with a stored
-      stream output). Invocation:
-      `cargo run --bin q2 -- preview <proj> --static --no-watch --no-browser`.
-      `notebook.html` written next to the source; verified:
-      `<h1 class="title">End-to-end notebook</h1>` (first markdown heading
-      → title), `<h2>A computed section</h2>`, prose paragraphs; the code
-      cell passes through inert:
-      `<pre class="{python} code-with-copy"><code>#| echo: false
-      print('hello…')</code></pre>`. Correctly absent: the stored stream
-      output (`hello from the notebook` appears only inside the `print`
-      source text) — Phase 3's replay engine hasn't landed. Cosmetic
-      observation, classified pre-existing + out of scope: the inert
-      pass-through emits the raw fence tag into the class
-      (`class="{python}"`), which is the shared writer behavior for
-      brace-fenced blocks (a .qmd ```{sql} block routes to jupyter too, so
-      the same artifact exists there whenever a brace fence passes through
-      unexecuted); execution/Phase-3 cell handling makes it moot.
+  **(3) Positive render artifact via `q2 preview --static` +
+  `preview: engine: off`.** That project config maps to
+  `ExecutionPolicy::None` (`quarto-preview/src/config.rs:46`,
+  `preview_static.rs:148`) — the one jupyter-free route through a real
+  binary. Project: `_quarto.yml` with `preview: {engine: off}` +
+  `project: {render: ["**/*.ipynb"]}`, notebook with 2 markdown cells
+  + 1 code cell (`#| echo: false` + `print('hello…')`, with a stored
+  stream output). Invocation:
+  `cargo run --bin q2 -- preview <proj> --static --no-watch --no-browser`.
+  `notebook.html` written next to the source; verified:
+  `<h1 class="title">End-to-end notebook</h1>` (first markdown heading
+  → title), `<h2>A computed section</h2>`, prose paragraphs; the code
+  cell passes through inert:
+  `<pre class="{python} code-with-copy"><code>#| echo: false
+  print('hello…')</code></pre>`. Correctly absent: the stored stream
+  output (`hello from the notebook` appears only inside the `print`
+  source text) — Phase 3's replay engine hasn't landed. Cosmetic
+  observation, classified pre-existing + out of scope: the inert
+  pass-through emits the raw fence tag into the class
+  (`class="{python}"`), which is the shared writer behavior for
+  brace-fenced blocks (a .qmd \`\`\`\{sql\} block routes to jupyter too, so
+  the same artifact exists there whenever a brace fence passes through
+  unexecuted); execution/Phase-3 cell handling makes it moot.
 
-      Scratch fixtures under `target/tmp-e2e-ipynb/` (gitignored).)*
+  Scratch fixtures under `target/tmp-e2e-ipynb/` (gitignored).)*
 
-      **Phase 2 boundary (2026-09-25, logged): `cargo nextest run
-      --workspace` → 14839 passed / 201 skipped / 86 binaries, all green
-      (462.6s; log `/tmp/nextest-7c-phase2-boundary.log`).** Delta vs the
-      handoff's quoted live baseline (14824/200): **+15 passed, +1
-      skipped.** Attribution from full-phase context: only two commits
-      postdate the handoff point (eb5126ab2), each adding exactly one
-      runnable test (composition `cell_option_yaml_error_lands_in_owning_cell`,
-      discovery `project_of_notebooks_admitted_and_converted_launch_free`;
-      verified by `git diff eb5126ab2..HEAD`) — **+2**. The residual
-      **+13 passed / +1 skipped cannot arise from branch history** (linear,
-      nothing else landed), so the handoff's 14824/200 was not measured at
-      eb5126ab2's exact tree state — most plausibly a mid-session figure
-      captured before the session's last test-adding commits (the scaling
-      gate, committed 801670fd3 with `#[ignore]`, is the natural +1-skip
-      candidate). Bounding cross-check against the nearest *logged* anchor,
-      `/tmp/nextest_workspace_p8.log` (14793/200, Sep 24 12:19, this
-      worktree): all growth 14793→14839 is in quarto-core unit (+37) and
-      quarto-core::integration (+9), exactly where 7b/7c landed; the other
-      84 binaries are flat. Nothing red, nothing missing; the only
-      unreconstructable datum is the handoff's intermediate itself (its log
-      was not kept). **New live baseline: 14839 passed / 201 skipped.**
+  **Phase 2 boundary (2026-09-25, logged): `cargo nextest run
+  --workspace` → 14839 passed / 201 skipped / 86 binaries, all green
+  (462.6s; log `/tmp/nextest-7c-phase2-boundary.log`).** Delta vs the
+  handoff's quoted live baseline (14824/200): **+15 passed, +1
+  skipped.** Attribution from full-phase context: only two commits
+  postdate the handoff point (eb5126ab2), each adding exactly one
+  runnable test (composition `cell_option_yaml_error_lands_in_owning_cell`,
+  discovery `project_of_notebooks_admitted_and_converted_launch_free`;
+  verified by `git diff eb5126ab2..HEAD`) — **+2**. The residual
+  **+13 passed / +1 skipped cannot arise from branch history** (linear,
+  nothing else landed), so the handoff's 14824/200 was not measured at
+  eb5126ab2's exact tree state — most plausibly a mid-session figure
+  captured before the session's last test-adding commits (the scaling
+  gate, committed 801670fd3 with `#[ignore]`, is the natural +1-skip
+  candidate). Bounding cross-check against the nearest *logged* anchor,
+  `/tmp/nextest_workspace_p8.log` (14793/200, Sep 24 12:19, this
+  worktree): all growth 14793→14839 is in quarto-core unit (+37) and
+  quarto-core::integration (+9), exactly where 7b/7c landed; the other
+  84 binaries are flat. Nothing red, nothing missing; the only
+  unreconstructable datum is the handoff's intermediate itself (its log
+  was not kept). **New live baseline: 14839 passed / 201 skipped.**
 
 ### Phase 3 — code cells with stored outputs
 - [x] Stored-output replay engine (option B), reusing `format_outputs`.
-      (commit 630193d66: `IpynbReplayEngine` in `engine/jupyter/stored.rs`,
-      `EngineExecutionStage` routes `.ipynb` without an execute demand to
-      it before the policy gate — see "Phase 3 wiring decision" above.)
+  (commit 630193d66: `IpynbReplayEngine` in `engine/jupyter/stored.rs`,
+  `EngineExecutionStage` routes `.ipynb` without an execute demand to
+  it before the policy gate — see "Phase 3 wiring decision" above.)
 - [x] `--execute` route-through test (existing jupyter engine).
-      (same commit: `execute_enabled_routes_to_jupyter_not_replay` +
-      `no_execute_demand_replays_instead_of_running_jupyter` in
-      `tests/integration/ipynb_stored_replay.rs` — a stub engine named
-      "jupyter" re-declaring `static_file_claims()` makes the route
-      observable machine-independently.)
+  (same commit: `execute_enabled_routes_to_jupyter_not_replay` +
+  `no_execute_demand_replays_instead_of_running_jupyter` in
+  `tests/integration/ipynb_stored_replay.rs` — a stub engine named
+  "jupyter" re-declaring `static_file_claims()` makes the route
+  observable machine-independently.)
 - [x] Real-world notebook render through the real binary (the "Q1
-      comparison" item, executed as the CLAUDE.md-mandated e2e; see the
-      record below). Jupyter is not installed on this machine, which is
-      itself the point: the replay render is the proof that stored
-      outputs render with zero kernel. The output shapes are the ones
-      pinned from Q1's `format_outputs` (unit tests in `stored.rs`), so
-      the comparison is by construction.
+  comparison" item, executed as the CLAUDE.md-mandated e2e; see the
+  record below). Jupyter is not installed on this machine, which is
+  itself the point: the replay render is the proof that stored
+  outputs render with zero kernel. The output shapes are the ones
+  pinned from Q1's `format_outputs` (unit tests in `stored.rs`), so
+  the comparison is by construction.
 
 **Phase 3 e2e record (2026-09-25).** Real-world fixture:
 `quarto-cli-6147/penguins.ipynb` (8 python code cells, 1 markdown, 1 raw
@@ -957,7 +956,7 @@ options verbatim, closing fences glued onto the last code line
 newline, so every real-world code cell ends without `\n`; the Phase 2
 converter's `cell_wrap`/`format_output` emitted the closing fence's
 Generated piece as `{ticks}\n` unconditionally, gluing
-`plt.show()` + ``` onto one line — unparseable markdown, and
+`plt.show()` + \`\`\` onto one line — unparseable markdown, and
 unmatchable by the replay engine's fence alignment. All prior converter
 fixtures used `\n`-terminated sources, so no test caught it; only the
 mandated real-binary e2e did (CLAUDE.md's "tests verify the contract the
@@ -1013,64 +1012,62 @@ untouched by this diff.
 > `cargo update -p quarto-source-map -p quarto-error-reporting`.
 
 - [x] `FileOrigin` structured metadata in `quarto-source-map` +
-      `quarto-error-reporting` rendering (replaces the P1 pseudo-path).
-      (q2 half done 2026-09-25: pins moved to qer 0.3.2 / qsm 0.3.0 /
-      quarto-yaml 0.3.0 — the last required upstream PR #20, see the note
-      above; `ConvertedFile {label, text, cell_type, cell_id}` transport
-      struct replaces the `(label, text)` tuples in `Converted`,
-      `ConversionStash`, `LoadedSource`, `ClaimedConversion` (cell.id and
-      cell_type now flow from the ipynb converter — the transport finding
-      resolved); `ParseDocumentStage` stamps
-      `FileOrigin::NotebookCell {notebook_path, cell_index, cell_id,
-      cell_type}` on every registered cell in BOTH contexts, and the
-      `run_pipeline` StageError rebuild site mirrors it. TDD: the
-      per-cell-files test extended first (fixture gained nbformat 4.5 cell
-      ids), observed RED on `origin: None`, then GREEN. quarto-core clippy
-      -D warnings clean; quarto-core suite 5003 passed / 32 skipped ×2.)
+  `quarto-error-reporting` rendering (replaces the P1 pseudo-path).
+  (q2 half done 2026-09-25: pins moved to qer 0.3.2 / qsm 0.3.0 /
+  quarto-yaml 0.3.0 — the last required upstream PR #20, see the note
+  above; `ConvertedFile {label, text, cell_type, cell_id}` transport
+  struct replaces the `(label, text)` tuples in `Converted`,
+  `ConversionStash`, `LoadedSource`, `ClaimedConversion` (cell.id and
+  cell_type now flow from the ipynb converter — the transport finding
+  resolved); `ParseDocumentStage` stamps
+  `FileOrigin::NotebookCell {notebook_path, cell_index, cell_id, cell_type}` on every registered cell in BOTH contexts, and the
+  `run_pipeline` StageError rebuild site mirrors it. TDD: the
+  per-cell-files test extended first (fixture gained nbformat 4.5 cell
+  ids), observed RED on `origin: None`, then GREEN. quarto-core clippy
+  -D warnings clean; quarto-core suite 5003 passed / 32 skipped ×2.)
 - [x] `--json-errors` structured cell locations.
-      (Done 2026-09-25, commit 0fc30d913: e2e test
-      `ipynb_parse_error_json_carries_cell_origin` in
-      `crates/quarto/tests/integration/json_errors.rs` renders a broken
-      .ipynb through the real binary and asserts a diagnostic carries
-      `origin {kind: notebook_cell, notebook_path, cell_index: 1,
-      cell_id, cell_type}`. Passed first run — no q2 wire code was
-      needed: q2's consumer calls QER 0.3.2 `diagnostic_to_json`
-      directly, and the item-1 commit attaches origin at both
-      registration sites. Numbering note, deliberate: labels reserve
-      "cell 1" for the synthesized front-matter pseudo-cell
-      (`number_shift`), while `cell_index` counts real notebook cells —
-      observed label `[cell 2, markdown]` alongside `cell_index: 1`.
-      Structured origin is notebook-relative by design. E2E evidence:
-      `cargo run --bin q2 -- render tmp-e2e/broken.ipynb --json-errors`,
-      NDJSON inspected, origin exactly as asserted. quarto clippy -D
-      warnings clean; json_errors suite 14/14.)
+  (Done 2026-09-25, commit 0fc30d913: e2e test
+  `ipynb_parse_error_json_carries_cell_origin` in
+  `crates/quarto/tests/integration/json_errors.rs` renders a broken
+  .ipynb through the real binary and asserts a diagnostic carries
+  `origin {kind: notebook_cell, notebook_path, cell_index: 1, cell_id, cell_type}`. Passed first run — no q2 wire code was
+  needed: q2's consumer calls QER 0.3.2 `diagnostic_to_json`
+  directly, and the item-1 commit attaches origin at both
+  registration sites. Numbering note, deliberate: labels reserve
+  "cell 1" for the synthesized front-matter pseudo-cell
+  (`number_shift`), while `cell_index` counts real notebook cells —
+  observed label `[cell 2, markdown]` alongside `cell_index: 1`.
+  Structured origin is notebook-relative by design. E2E evidence:
+  `cargo run --bin q2 -- render tmp-e2e/broken.ipynb --json-errors`,
+  NDJSON inspected, origin exactly as asserted. quarto clippy -D
+  warnings clean; json_errors suite 14/14.)
 - [x] Hyperlink behaviour for virtual files.
-      (Done 2026-09-25, commit b2cfacb9e: e2e test
-      `ipynb_diagnostic_hyperlinks_real_notebook` asserts the ANSI
-      rendering hyperlinks the REAL notebook — OSC-8 target
-      `file://<canonical>/broken.ipynb` — with the pseudo-path
-      `broken.ipynb[cell 2, markdown]` as visible label, and (via exact
-      URL match) that no `#line:col` fragment is appended — origin-link
-      coordinates are cell-relative, deliberate in QER 0.3.2
-      (`hyperlink_target` → `origin.notebook_path`;
-      `wrap_path_with_hyperlink` fragments only self-links). Passed
-      first run; pins the P2 promise so a regression re-pointing OSC-8
-      at the non-existent pseudo-path fails. Human-path evidence: real
-      `cargo run --bin q2 -- render tmp-e2e/broken.ipynb` (exit 1),
-      raw OSC-8 bytes inspected in stderr. quarto clippy -D warnings
-      clean (one filter_map_next fix in the new test); json_errors
-      suite 15/15.)
+  (Done 2026-09-25, commit b2cfacb9e: e2e test
+  `ipynb_diagnostic_hyperlinks_real_notebook` asserts the ANSI
+  rendering hyperlinks the REAL notebook — OSC-8 target
+  `file://<canonical>/broken.ipynb` — with the pseudo-path
+  `broken.ipynb[cell 2, markdown]` as visible label, and (via exact
+  URL match) that no `#line:col` fragment is appended — origin-link
+  coordinates are cell-relative, deliberate in QER 0.3.2
+  (`hyperlink_target` → `origin.notebook_path`;
+  `wrap_path_with_hyperlink` fragments only self-links). Passed
+  first run; pins the P2 promise so a regression re-pointing OSC-8
+  at the non-existent pseudo-path fails. Human-path evidence: real
+  `cargo run --bin q2 -- render tmp-e2e/broken.ipynb` (exit 1),
+  raw OSC-8 bytes inspected in stderr. quarto clippy -D warnings
+  clean (one filter_map_next fix in the new test); json_errors
+  suite 15/15.)
 
 ### Phase 5 — coordination
 - [x] Point bd-19nc56ao and bd-xxul at this plan; record the
-      supersession of the July-20 doc's attachment point. (k-zr88 was closed
-      superseded 2026-09-24 — open question 5 — so nothing to point there.)
-      (Done 2026-09-25: comments c-w6h6bb1c on bd-19nc56ao and c-5p8owfwx on
-      bd-xxul.)
+  supersession of the July-20 doc's attachment point. (k-zr88 was closed
+  superseded 2026-09-24 — open question 5 — so nothing to point there.)
+  (Done 2026-09-25: comments c-w6h6bb1c on bd-19nc56ao and c-5p8owfwx on
+  bd-xxul.)
 - [x] User docs (usage, not internals): rendering `.ipynb` inputs.
-      (Done 2026-09-25: `docs/guides/authoring/notebooks.qmd` + sidebar entry;
-      rendered with `q2 render docs/guides/authoring/notebooks.qmd`, output
-      inspected — all five sections present, breadcrumb + sidebar wired.)
+  (Done 2026-09-25: `docs/guides/authoring/notebooks.qmd` + sidebar entry;
+  rendered with `q2 render docs/guides/authoring/notebooks.qmd`, output
+  inspected — all five sections present, breadcrumb + sidebar wired.)
 
 ---
 
@@ -1098,7 +1095,7 @@ final two commits came after the phase-boundary run above:
 Full `cargo xtask verify` (no skip flags, `e320a4087`): **all 14 steps
 green, exit 0** (2026-09-25). Workspace leg inside verify: 14861 run /
 14861 passed / 201 skipped — +4 vs the 14857 baseline, all accounted
-(+3 items-1–3 tests, +1 `bd79ca160`'s xtask lint test
+(+3 items-1–3 tests, +1 `bd79ca160`\'s xtask lint test
 `integration_test_files_are_skipped`; the "14860" phase-boundary figure
 above was the bare run taken before `bd79ca160` landed — verify2
 pre-fix and verify3 post-fix both count 14861, so `e320a4087` adds no
@@ -1146,7 +1143,7 @@ preview-renderer integration tests is pre-existing; that suite is green
    claims through `content_processors::convert` directly and stamps an
    additive `LoadedSource.files`; the engine trait and wire path are
    untouched. Concretized as the Phase 2 checklist item of the same name.
-   `convert`'s signature stayed fixed (settled), as required.
+   `convert`\'s signature stayed fixed (settled), as required.
 
 ## Deferred / explicitly out of scope
 

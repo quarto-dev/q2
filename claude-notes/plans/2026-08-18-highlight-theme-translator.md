@@ -17,9 +17,9 @@ phase B, stage 1 of highlight-style support)
 Stage 1 (phase B) shipped a working `highlight-style:` reader with a
 **three-palette catalog**: `default`, `a11y-light`, `a11y-dark`
 (hand-translated from Q1's `.theme` JSON onto q2's tree-sitter `hl-*` class
-vocabulary). Quarto 1 ships ~26 palette names, 8 of them **adaptive pairs**
+vocabulary). Quarto 1 ships \~26 palette names, 8 of them **adaptive pairs**
 (`a11y`, `arrow`, `atom-one`, `ayu`, `breeze`, `github`, `gruvbox`,
-`monochrome`). Any ported project naming one of the other ~23 gets a Q-14-5
+`monochrome`). Any ported project naming one of the other \~23 gets a Q-14-5
 warning and the default palette.
 
 This strand builds the **general translator** so the full catalog ships, plus
@@ -58,14 +58,14 @@ generic catalog machinery (no Connect-specific anything).
 ## Current state (q2, at f7cf8322)
 
 - **Config reader** — `crates/quarto-sass/src/config.rs`:
-  - `parse_highlight_style` (~line 871): scalar + `{light, dark}` map forms;
+  - `parse_highlight_style` (\~line 871): scalar + `{light, dark}` map forms;
     each slot goes through `resolve_adaptive_highlight(name, dark)`.
-  - `ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &["a11y"]` (~line 832) — the only
+  - `ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &["a11y"]` (\~line 832) — the only
     adaptive name so far. Growing this list to Q1's 8 makes the map form
     resolve `github` → `github-light` / `arrow` → `arrow-dark` per slot,
     matching Q1's `textHighlightThemePath` (try `<name>-<style>.theme`
     first, then `<name>.theme`).
-  - `builtin_darkness` (~line 850): the item-(3) approximation for
+  - `builtin_darkness` (\~line 850): the item-(3) approximation for
     single-variant configs.
 - **Catalog + layer loader** — `crates/quarto-sass/src/bundle.rs`:
   - `KNOWN_HIGHLIGHT_PALETTES = ["default", "a11y-light", "a11y-dark"]`
@@ -78,7 +78,7 @@ generic catalog machinery (no Connect-specific anything).
   the hand-derived Pandoc-token → capture-group mapping table — the seed of
   the general translator's table.
 - **Warning** — `crates/quarto-core/src/stage/stages/compile_theme_css.rs`
-  ~line 399: one Q-14-5 per distinct unknown name, "Available palettes"
+  \~line 399: one Q-14-5 per distinct unknown name, "Available palettes"
   listed from `KNOWN_HIGHLIGHT_PALETTES`.
 - **Class emission** — `crates/pampa/src/writers/html.rs`
   `capture_to_class` (line 735): tree-sitter capture name, dots → hyphens,
@@ -107,7 +107,7 @@ From `external-sources/quarto-cli/src`:
   path relative to the input** (`highlight-style: custom.theme` is a
   supported Q1 feature); map form `{light, dark}` counts as adaptive.
 - **Translation is runtime, not codegen**: `generateThemeCssVars` /
-  `generateThemeCssClasses` (`src/command/render/pandoc-html.ts` ~line 380+)
+  `generateThemeCssClasses` (`src/command/render/pandoc-html.ts` \~line 380+)
   turn the JSON into CSS at render time via the skylighting abbreviation
   table `kAbbrevs` (`Keyword` → `.kw`, etc.).
 - **Item (2) exactly** (`resolveTextHighlightingLayer`,
@@ -178,7 +178,7 @@ runtime. (Question 1 below.)
       name still warns Q-14-5 once (existing coverage).
 - [x] Smoke-all fixture `highlighting/07-adaptive-pair-github-arrow.qmd`:
       light/dark pair + `{light: github, dark: arrow}`,
-      `noErrorsOrWarnings`, both palettes' keyword colors present, default
+      `noErrorsOrWarnings`, both palettes\' keyword colors present, default
       palette's solarized green absent.
 - [x] Tests for the YAML `code-block-bg` / `code-block-color` keys: unit
       tests on `derive_doc_scss_layer` (written first, observed failing) +
@@ -276,8 +276,8 @@ runtime. (Question 1 below.)
    `text-styles.Normal` or top-level `background-color`/`text-color`),
    adaptive or not — the palette's bg was designed to match its highlights.
    Escape hatches, verified against the layer machinery:
-   - **Custom SCSS (works today):** user theme layers' defaults land above
-     built-in layers' defaults in the merged band (`assemble_with_user_layers`
+   - **Custom SCSS (works today):** user theme layers\' defaults land above
+     built-in layers\' defaults in the merged band (`assemble_with_user_layers`
      ordering in `crates/quarto-sass/src/compile.rs`), so one
      `$code-block-bg: …;` line in a user theme file wins.
    - **YAML keys (added by this strand):** support Q1's `code-block-bg` /
@@ -285,7 +285,7 @@ runtime. (Question 1 below.)
      (`derive_doc_scss_layer` in
      `crates/quarto-core/src/stage/stages/compile_theme_css.rs:72`, which
      already lands at the top of the defaults band and wins the `!default`
-     race — currently carries only `$sidebar-border`). ~15 lines + tests.
+     race — currently carries only `$sidebar-border`). \~15 lines + tests.
      This also reproduces Q1's "user metadata suppresses injection" guard
      for free via `!default` semantics.
    Accepted caveat: ported sites diverge from Q1's look (Q1 skips bg/fg
@@ -294,18 +294,18 @@ runtime. (Question 1 below.)
    parity is one YAML/SCSS line.
 4. **One canonical capture→token mapping table** for all translated
    palettes, with **dotted-name fallback** (`function.builtin` inherits
-   `function`'s bucket unless specifically mapped, so new upstream grammar
+   `function`\'s bucket unless specifically mapped, so new upstream grammar
    captures degrade gracefully). Rationale: `.theme` files carry nothing
-   finer than Pandoc's ~30 token names, so a single table hits the quality
+   finer than Pandoc's \~30 token names, so a single table hits the quality
    ceiling (Q1 parity) by construction — there is no per-palette information
-   to lose. The judgment lives in bucket assignment (which of the ~67 known
+   to lose. The judgment lives in bucket assignment (which of the \~67 known
    `hl-*` classes counts as Function-like, etc.), which is
    palette-independent; the stage-1 hand translations already applied
    exactly such a table (documented in their file headers). Better-than-Q1
    refinements exploiting q2's finer captures remain possible later via
    hand-written per-palette overlay SCSS layered after the translated output
    (the layering mechanism already exists) — opt-in, deferred.
-5. **Full Q1 catalog** in one pass (~26 names, 8 adaptive pairs).
+5. **Full Q1 catalog** in one pass (\~26 names, 8 adaptive pairs).
 6. **Copy-button colors in scope** (`$btn-code-copy-color` from Comment,
    `$btn-code-copy-color-active` from Function, per Q1's
    `resolveTextHighlightingLayer`); **item (3)** (compiled-CSS darkness

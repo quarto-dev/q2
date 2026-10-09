@@ -97,19 +97,19 @@ work before shipping.
 
 ## Candidate fixes (assessed against the two spaces)
 
-- **Absolute-if-outside at the rebase** (mirror `rebase_candidate`'s
+- **Absolute-if-outside at the rebase** (mirror `rebase_candidate`\'s
   `..`-refusal inside `adjust_paths_to_document_dir`): fixes
   filters/template/include FS reads with no consumer change. **Breaks
   `css`/URL space** if applied uniformly — an absolute path is not a
   page-relative href. Must be space-aware, or applied only to pure-filesystem
-  keys (filters, template, template-partials, include-*, format-resources,
+  keys (filters, template, template-partials, include-\*, format-resources,
   reference-doc), leaving css/theme on the mechanism-3 marking.
 - **Normalized joins at consumers**: collapses `..` before open. MAX_PATH
   applies to the path handed to the open call, not to the stored metadata
   string, so a consumer that passes the normalized path to Lua `io.open`
   does avoid the failure (this is why Q1 is unaffected). The drawback is
   coverage, not correctness: every filesystem consumer (filters, template,
-  partials, include-*, format-resources, reference-doc, shortcodes) would
+  partials, include-\*, format-resources, reference-doc, shortcodes) would
   need it, and a new consumer that forgets regresses silently. Fixing the
   value once at the merge-time rebase covers them all.
 - **Both, space-aware** (the direction consistent with the contract): FS-space
@@ -127,7 +127,7 @@ already names (unified path-shaped-key registry, bd-oejuizi9 / bd-hjv5o).
 On the bd-1klbq2zd stack tip:
 `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`
 fails with `cannot open ...\../../...orange-book.lua`. Portable probe:
-`adjust_paths_to_document_dir` with a `metadata_dir` outside `document_dir`'s
+`adjust_paths_to_document_dir` with a `metadata_dir` outside `document_dir`\'s
 tree stores a `..`-leading value.
 
 ## 3. Follow-up (2026-10-01, bd-gh3qdq7d): `theme` and `css` space at the walk

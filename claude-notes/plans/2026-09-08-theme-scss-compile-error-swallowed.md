@@ -2,14 +2,14 @@
 
 **Date:** 2026-09-08
 **Braid:** bd-jsvetdea (bug, p2, labels: css, diagnostics, theming). Folds in bd-qmpygp02; resolves bd-36vmz7nk.
-**Checkout:** main checkout, branch `main` @ `b7e7c96a`
+**Checkout:** main checkout, branch `main` \@ `b7e7c96a`
 **Status:** Design settled with user 2026-09-08 (answers recorded below). Implemented and verified 2026-09-08; strands closed.
 
 ## Overview
 
 A grass failure while compiling the theme bundle is caught in
 `variant_css` (`crates/quarto-core/src/stage/stages/compile_theme_css.rs`),
-logged as a `Warn` trace event, and replaced by the static ~7KB
+logged as a `Warn` trace event, and replaced by the static \~7KB
 `DEFAULT_CSS`. The render reports success. The trace event goes to a
 `NoopObserver`, so nothing reaches the CLI at any verbosity. The same
 `Err` arm swallows `InvalidScssFile` (bd-qmpygp02), and the per-variant
@@ -158,7 +158,7 @@ the bundle's `@import "vendor/rfs"`. That is exactly the failure the
 passed against an unstyled page. With the default-bundle compile now a
 `Q-14-6` hard error (design decision 1) they fail honestly. Fix: a shared
 `hub-client/src/test-utils/wasmSassVfs.ts` (`wireSassVfs(wasm)`) mirroring
-the production wiring in `preview-runtime`'s `wasmRenderer.ts`, called from
+the production wiring in `preview-runtime`\'s `wasmRenderer.ts`, called from
 each file's `beforeAll`. This is the "surfacing currently-masked failures"
 risk from bd-36vmz7nk, realised in the test suite rather than in a user
 project. `npm run test:wasm`: 133/133 after the fix.
@@ -218,7 +218,7 @@ $grid-body-width: 52rem;
 
 makes the Bootstrap grid arithmetic fail in grass (`Incompatible units px and
 rem`). The theme stage catches the error, emits a `Warn` trace event, and
-returns the static ~7KB `DEFAULT_CSS`. The render reports "Rendered 1 of 1
+returns the static \~7KB `DEFAULT_CSS`. The render reports "Rendered 1 of 1
 files" with zero warnings; nothing is visible at `-v`, `-vv`, or via
 `RUST_LOG`. Brand fonts, colors, and the user's rules are all gone.
 
