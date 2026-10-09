@@ -53,7 +53,8 @@ const canonical = (p: Position): Position => {
   const parent = parentOf(p);
   if (parent === null) return p;
   const i = siblingIndex(p);
-  return i === parent.children.length - 1 ? p : withNode(p, parent.children[i + 1], "before");
+  const siblings = parent.children;
+  return i === siblings.length - 1 ? p : withNode(p, siblings[i + 1], "before");
 };
 
 export const start = (root: ParseTree): Position => ({ path: [root], at: "before" });
@@ -149,35 +150,85 @@ export const resolve = (root: ParseTree, p: Position): Position => {
   const steps = p.path.slice(1).map((n, k) => p.path[k].children.indexOf(n));
   const fallback = [root];
   for (const step of steps) {
-    const cur = fallback[fallback.length - 1];
-    if (cur.children.length === 0) break;
-    fallback.push(cur.children[Math.min(step, cur.children.length - 1)]);
+    const cur = fallback[fallback.length - 1].children;
+    if (cur.length === 0) break;
+    fallback.push(cur[Math.min(step, cur.length - 1)]);
   }
   return canonical({ path: fallback, at: clampAt(fallback, p.at) });
 };
 
+// Tree order of two positions in the same tree.
+export const compare = (a: Position, b: Position): number => indexOf(a) - indexOf(b);
+
+// What lies between two positions: whole nodes (maximal ones that fit
+// entirely inside the range) and, at the ends, runs of characters of a
+// partly covered leaf. This is the "contents" of a selection in IDEA.md's
+// sense; `from`/`to` are present only for partial leaves.
+export type Selected = { node: ParseTree; from?: number; to?: number };
+
+export const between = (root: ParseTree, a: Position, b: Position): Selected[] => {
+  const lo = Math.min(indexOf(a), indexOf(b));
+  const hi = Math.max(indexOf(a), indexOf(b));
+  const out: Selected[] = [];
+  const collect = (n: ParseTree, before: number): void => {
+    const after = before + size(n);
+    if (after <= lo || before >= hi) return;
+    if (before >= lo && after <= hi) {
+      out.push({ node: n });
+      return;
+    }
+    if (n.children.length === 0) {
+      const from = Math.max(0, lo - before - 1);
+      const to = Math.min(n.text.length, hi - before - 1);
+      if (from < to) out.push({ node: n, from, to });
+      return;
+    }
+    let at = before + 1;
+    for (const c of n.children) {
+      collect(c, at);
+      at += size(c);
+    }
+  };
+  collect(root, 0);
+  return out;
+};
+
+// A caret with an anchor: the selection runs from the anchor to the
+// position and is empty while they coincide.
 export class Caret {
   position: Position;
+  anchor: Position;
 
-  constructor(root: ParseTree, private readonly onChange: (p: Position) => void) {
+  constructor(root: ParseTree, private readonly onChange: (c: Caret) => void) {
     this.position = start(root);
+    this.anchor = this.position;
   }
 
-  moveTo(p: Position): void {
+  // Move the position; the anchor follows unless `extend` is set.
+  moveTo(p: Position, extend = false): void {
     this.position = p;
-    this.onChange(p);
+    if (!extend) this.anchor = p;
+    this.onChange(this);
   }
 
-  left(): void {
-    this.moveTo(left(this.position));
+  left(extend = false): void {
+    this.moveTo(left(this.position), extend);
   }
 
-  right(): void {
-    this.moveTo(right(this.position));
+  right(extend = false): void {
+    this.moveTo(right(this.position), extend);
   }
 
-  // The tree was reparsed; find the same place in the new one.
+  // The selection in tree order, or null when it is empty.
+  selection(): [Position, Position] | null {
+    const c = compare(this.anchor, this.position);
+    if (c === 0) return null;
+    return c < 0 ? [this.anchor, this.position] : [this.position, this.anchor];
+  }
+
+  // The tree was reparsed; find the same places in the new one.
   reparsed(root: ParseTree): void {
-    this.moveTo(resolve(root, this.position));
+    this.anchor = resolve(root, this.anchor);
+    this.moveTo(resolve(root, this.position), true);
   }
 }

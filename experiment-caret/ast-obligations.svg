@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1330" viewBox="0 0 1000 1330" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="13">
+  <style>
+    .bg   { fill: #ffffff; }
+    .panel{ fill: #f7f7f9; stroke: #d0d0d8; }
+    .title{ font-size: 16px; font-weight: 700; fill: #1a1a1a; font-family: ui-sans-serif, Helvetica, Arial, sans-serif; }
+    .hdr  { font-size: 11px; font-weight: 700; fill: #6b6b78; letter-spacing: 0.08em; font-family: ui-sans-serif, Helvetica, Arial, sans-serif; }
+    .code { fill: #1a1a1a; white-space: pre; }
+    .dim  { fill: #8a8a96; }
+    .del  { fill: #c0392b; text-decoration: line-through; }
+    .bad  { fill: #d35400; font-weight: 700; }
+    .ok   { fill: #27ae60; font-weight: 700; }
+    .note { font-size: 12px; fill: #444; font-family: ui-sans-serif, Helvetica, Arial, sans-serif; }
+    .sep  { stroke: #d0d0d8; stroke-dasharray: 3 3; }
+  </style>
+  <rect class="bg" width="1000" height="1330"/>
+  <text x="30" y="36" class="title" font-size="20">Syntactic obligations in the q2 AST</text>
+  <text x="30" y="58" class="note">Every subtree can be removed and the value still typechecks. These are the places where a removal leaves an implicit invariant broken.</text>
+  <text x="30" y="76" class="note">Red strikethrough = node deleted. Orange = what is now dangling or inconsistent. Green = a deletion that is fine.</text>
+
+  <!-- ===== Panel 1: Table geometry ===== -->
+  <g transform="translate(30,100)">
+    <rect class="panel" width="940" height="220" rx="6"/>
+    <text x="16" y="26" class="title">1. Table geometry: colspec and cells must tile the grid</text>
+    <line class="sep" x1="320" y1="40" x2="320" y2="210"/>
+    <line class="sep" x1="630" y1="40" x2="630" y2="210"/>
+    <text x="16" y="56" class="hdr">QMD</text>
+    <text class="code" x="16" y="78">| a | b |</text>
+    <text class="code" x="16" y="96">|---|---|</text>
+    <text class="code" x="16" y="114">| 1 | 2 |</text>
+
+    <text x="336" y="56" class="hdr">AST</text>
+    <text class="code" x="336" y="78">Table</text>
+    <text class="code" x="336" y="96">  colspec: [Default, Default]</text>
+    <text class="code" x="336" y="114">  head: Row[Cell[Plain[Str "a"]],</text>
+    <text class="code" x="336" y="132">             Cell[Plain[Str "b"]]]</text>
+    <text class="code" x="336" y="150">  bodies: [Body</text>
+    <text class="code" x="336" y="168">    body: Row[Cell[Plain[Str "1"]],</text>
+    <text class="code" x="336" y="186">              Cell[Plain[Str "2"]]]]</text>
+
+    <text x="646" y="56" class="hdr">DELETE Cell "2"</text>
+    <text class="code" x="646" y="78">Table</text>
+    <text class="bad"  x="646" y="96">  colspec: [Default, Default]   // 2 cols</text>
+    <text class="code" x="646" y="114">  head: Row[Cell "a", Cell "b"]</text>
+    <text class="code" x="646" y="132">  bodies: [Body</text>
+    <text class="code" x="646" y="150">    body: Row[Cell "1",</text>
+    <text class="del"  x="646" y="168">              Cell[Plain[Str "2"]]</text>
+    <text class="bad"  x="646" y="186">              ]]                  // 1 cell</text>
+    <text class="note" x="646" y="206">Writers index by colspec.len(). Deleting a whole Row is fine.</text>
+  </g>
+
+  <!-- ===== Panel 2: Note reference / definition ===== -->
+  <g transform="translate(30,340)">
+    <rect class="panel" width="940" height="220" rx="6"/>
+    <text x="16" y="26" class="title">2. Referential pairs: NoteReference ↔ NoteDefinition by id</text>
+    <line class="sep" x1="320" y1="40" x2="320" y2="210"/>
+    <line class="sep" x1="630" y1="40" x2="630" y2="210"/>
+    <text x="16" y="56" class="hdr">QMD</text>
+    <text class="code" x="16" y="78">Hello[^1]</text>
+    <text class="code" x="16" y="96"> </text>
+    <text class="code" x="16" y="114">[^1]: A note.</text>
+
+    <text x="336" y="56" class="hdr">AST</text>
+    <text class="code" x="336" y="78">Para[Str "Hello",</text>
+    <text class="code" x="336" y="96">     NoteReference{id: "1"}]</text>
+    <text class="code" x="336" y="132">NoteDefinitionPara{id: "1",</text>
+    <text class="code" x="336" y="150">  content: [Str "A", Space,</text>
+    <text class="code" x="336" y="168">            Str "note."]}</text>
+
+    <text x="646" y="56" class="hdr">DELETE the definition</text>
+    <text class="code" x="646" y="78">Para[Str "Hello",</text>
+    <text class="bad"  x="646" y="96">     NoteReference{id: "1"}]  // dangling</text>
+    <text class="del"  x="646" y="132">NoteDefinitionPara{id: "1",</text>
+    <text class="del"  x="646" y="150">  content: [Str "A", Space,</text>
+    <text class="del"  x="646" y="168">            Str "note."]}</text>
+    <text class="note" x="646" y="206">Same shape: Cite ids vs bibliography, Link "#sec-x" vs Header id.</text>
+  </g>
+
+  <!-- ===== Panel 3: Cross-reference target ===== -->
+  <g transform="translate(30,580)">
+    <rect class="panel" width="940" height="220" rx="6"/>
+    <text x="16" y="26" class="title">3. Referential pairs, block form: Link target ↔ element with that id</text>
+    <line class="sep" x1="320" y1="40" x2="320" y2="210"/>
+    <line class="sep" x1="630" y1="40" x2="630" y2="210"/>
+    <text x="16" y="56" class="hdr">QMD</text>
+    <text class="code" x="16" y="78"># Intro {#sec-intro}</text>
+    <text class="code" x="16" y="96"> </text>
+    <text class="code" x="16" y="114">See [here](#sec-intro).</text>
+
+    <text x="336" y="56" class="hdr">AST</text>
+    <text class="code" x="336" y="78">Header{level: 1,</text>
+    <text class="code" x="336" y="96">  attr: {id: "sec-intro"},</text>
+    <text class="code" x="336" y="114">  content: [Str "Intro"]}</text>
+    <text class="code" x="336" y="150">Para[Str "See", Space,</text>
+    <text class="code" x="336" y="168">  Link{target: "#sec-intro",</text>
+    <text class="code" x="336" y="186">       content: [Str "here"]}, Str "."]</text>
+
+    <text x="646" y="56" class="hdr">DELETE the Header</text>
+    <text class="del"  x="646" y="78">Header{level: 1,</text>
+    <text class="del"  x="646" y="96">  attr: {id: "sec-intro"},</text>
+    <text class="del"  x="646" y="114">  content: [Str "Intro"]}</text>
+    <text class="code" x="646" y="150">Para[Str "See", Space,</text>
+    <text class="bad"  x="646" y="168">  Link{target: "#sec-intro",  // no such id</text>
+    <text class="code" x="646" y="186">       content: [Str "here"]}, Str "."]</text>
+    <text class="note" x="646" y="206">Blocks are flat, so the section body is not reparented either.</text>
+  </g>
+
+  <!-- ===== Panel 4: Custom node slots ===== -->
+  <g transform="translate(30,820)">
+    <rect class="panel" width="940" height="240" rx="6"/>
+    <text x="16" y="26" class="title">4. Custom node slots: the slot key must exist, its contents may be empty</text>
+    <line class="sep" x1="320" y1="40" x2="320" y2="230"/>
+    <line class="sep" x1="630" y1="40" x2="630" y2="230"/>
+    <text x="16" y="56" class="hdr">QMD</text>
+    <text class="code" x="16" y="78">::: {.callout-note}</text>
+    <text class="code" x="16" y="96">## Title</text>
+    <text class="code" x="16" y="114">Body</text>
+    <text class="code" x="16" y="132">:::</text>
+
+    <text x="336" y="56" class="hdr">AST</text>
+    <text class="code" x="336" y="78">Custom{type_name: "Callout",</text>
+    <text class="code" x="336" y="96">  slots: {</text>
+    <text class="code" x="336" y="114">    title:   Inlines[Str "Title"],</text>
+    <text class="code" x="336" y="132">    content: Blocks[Para[Str "Body"]]</text>
+    <text class="code" x="336" y="150">  },</text>
+    <text class="code" x="336" y="168">  plain_data: {type: "note"}}</text>
+
+    <text x="646" y="56" class="hdr">DELETE slot entry vs. its contents</text>
+    <text class="code" x="646" y="78">Custom{type_name: "Callout",</text>
+    <text class="code" x="646" y="96">  slots: {</text>
+    <text class="del"  x="646" y="114">    title:   Inlines[Str "Title"],</text>
+    <text class="bad"  x="646" y="132">    // key gone: handler expects it</text>
+    <text class="code" x="646" y="150">    content: Blocks[Para[Str "Body"]]</text>
+    <text class="code" x="646" y="168">  }}</text>
+    <text class="ok"   x="646" y="196">title: Inlines[]            // fine</text>
+    <text class="note" x="646" y="216">Slot::Block / Slot::Inline hold one node, so there is no "empty" form of those.</text>
+  </g>
+
+  <!-- ===== Panel 5: Whitespace positional semantics ===== -->
+  <g transform="translate(30,1080)">
+    <rect class="panel" width="940" height="220" rx="6"/>
+    <text x="16" y="26" class="title">5. Positional nodes: Space / SoftBreak are siblings, not separators</text>
+    <line class="sep" x1="320" y1="40" x2="320" y2="210"/>
+    <line class="sep" x1="630" y1="40" x2="630" y2="210"/>
+    <text x="16" y="56" class="hdr">QMD</text>
+    <text class="code" x="16" y="78">a b c</text>
+
+    <text x="336" y="56" class="hdr">AST</text>
+    <text class="code" x="336" y="78">Para[Str "a", Space,</text>
+    <text class="code" x="336" y="96">     Str "b", Space,</text>
+    <text class="code" x="336" y="114">     Str "c"]</text>
+
+    <text x="646" y="56" class="hdr">DELETE Str "b"  /  DELETE Str "c"</text>
+    <text class="code" x="646" y="78">Para[Str "a", Space,</text>
+    <text class="del"  x="646" y="96">     Str "b",</text>
+    <text class="bad"  x="646" y="114">     Space,              // doubled</text>
+    <text class="code" x="646" y="132">     Str "c"]</text>
+    <text class="code" x="646" y="160">Para[Str "a", Space, Str "b",</text>
+    <text class="bad"  x="646" y="178">     Space]              // trailing</text>
+    <text class="note" x="646" y="206">Representable, but the parser never produces it; round-trip to qmd changes.</text>
+  </g>
+</svg>

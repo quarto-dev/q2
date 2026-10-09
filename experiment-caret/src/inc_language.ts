@@ -11,13 +11,14 @@
 //   "..."      literal string        Name       reference to a rule
 //   ( e )      grouping              e1 e2      sequence
 //   e1 | e2    alternation           e*  e+  e? repetition
-//   !e         negative lookahead
+//   !e         negative lookahead    e@t  e@t{arg}  apply transform t to e
 // The names `any`, `letter` and `digit` are built in and match one character.
+// Transforms are listed in inc_compile.ts; `@` binds loosest of the postfix
+// forms, so `!any@hide` applies to the lookahead.
 
-import { Parser, str, any, letter, digit, seq, alt, many, many1, not, eof, transform, lazy } from "./inc_parsers";
+import { Parser, str, any, letter, digit, seq, alt, many, many1, opt, not, eof, named as namedP, lazy } from "./inc_parsers";
 
-const named = (type: string, p: Parser): Parser =>
-  transform(p, (t) => ({ ...t, type }));
+const named = (type: string, p: Parser): Parser => namedP(p, type);
 
 const oneOf = (cs: string): Parser => alt(...Array.from(cs, str));
 
@@ -52,7 +53,15 @@ const postfix: Parser = alt(
   prefix,
 );
 
-const sequence: Parser = named("seq", many1(postfix));
+// `@t` or `@t{arg}`; the argument is a name.
+const annotation: Parser = seq(str("@"), name, opt(seq(tok(str("{")), name, tok(str("}")))));
+
+const annotated: Parser = alt(
+  named("annot", seq(postfix, many1(annotation))),
+  postfix,
+);
+
+const sequence: Parser = named("seq", many1(annotated));
 
 const alternation: Parser = named(
   "alt",

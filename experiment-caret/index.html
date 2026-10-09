@@ -27,6 +27,15 @@
       }
       #tree:not(:focus) .caret { background: #e9a; animation: none; }
       @keyframes blink { to { visibility: hidden; } }
+      .selection {
+        position: absolute;
+        left: 0;
+        top: 0;
+        overflow: visible;
+        pointer-events: none;
+      }
+      .selection path { fill: #cfe3ff; stroke: #7aa7e0; stroke-width: 1px; }
+      .node { position: relative; }
       #caret-index {
         position: fixed;
         right: 0.5rem;

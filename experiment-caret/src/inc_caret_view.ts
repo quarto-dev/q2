@@ -8,7 +8,8 @@
 // only to the nearest drawn position.
 
 import { ParseTree } from "./inc_parsers";
-import { Caret, Position, left, right, start, end } from "./inc_caret";
+import { Caret, Position, between, left, right, start, end } from "./inc_caret";
+import { Box, outline, roundedPath } from "./inc_hull";
 
 // Where a position is drawn: the gap before character `offset` of a text
 // node, or the left/right edge of an element's box.
@@ -16,10 +17,11 @@ type Locator =
   | { kind: "text"; node: Text; offset: number }
   | { kind: "edge"; el: HTMLElement; side: "left" | "right" };
 
-type NodeLocators = { before: Locator; after: Locator; offsets: Locator[] };
+type NodeLocators = { el: HTMLElement; before: Locator; after: Locator; offsets: Locator[] };
 
 export type Layout = {
   root: HTMLElement;
+  tree: ParseTree;
   // Every canonical position in the tree, with where it is drawn.
   points: { pos: Position; loc: Locator }[];
   locators: Map<ParseTree, NodeLocators>;
@@ -33,7 +35,7 @@ const display = (s: string): string => s.replace(/[\n\r\t]/g, (c) => glyphs[c]);
 
 // Render `t` into a nested-box DOM.
 export const layout = (t: ParseTree): Layout => {
-  const out: Layout = { root: document.createElement("div"), points: [], locators: new Map() };
+  const out: Layout = { root: document.createElement("div"), tree: t, points: [], locators: new Map() };
   out.root = render(t, [], out);
   return out;
 };
@@ -48,6 +50,7 @@ const render = (t: ParseTree, ancestors: ParseTree[], out: Layout): HTMLDivEleme
 
   const path = [...ancestors, t];
   const locs: NodeLocators = {
+    el,
     before: { kind: "edge", el, side: "left" },
     after: { kind: "edge", el, side: "right" },
     offsets: [],
@@ -59,19 +62,20 @@ const render = (t: ParseTree, ancestors: ParseTree[], out: Layout): HTMLDivEleme
     const text = document.createElement("span");
     text.className = "text";
     el.append(text);
-    if (t.text.length === 0) {
+    const str = t.text;
+    if (str.length === 0) {
       locs.offsets.push({ kind: "edge", el: text, side: "left" });
     } else {
-      const node = document.createTextNode(display(t.text));
+      const node = document.createTextNode(display(str));
       text.append(node);
-      for (let i = 0; i <= t.text.length; i++) locs.offsets.push({ kind: "text", node, offset: i });
+      for (let i = 0; i <= str.length; i++) locs.offsets.push({ kind: "text", node, offset: i });
     }
     locs.offsets.forEach((loc, i) => out.points.push({ pos: { path, at: i }, loc }));
   } else {
-    const kids = document.createElement("div");
-    kids.className = "kids";
-    el.append(kids);
-    for (const child of t.children) kids.append(render(child, path, out));
+    const box = document.createElement("div");
+    box.className = "kids";
+    el.append(box);
+    for (const child of t.children) box.append(render(child, path, out));
   }
 
   // `after` is canonical only for a last child or the root.
@@ -95,14 +99,27 @@ const locatorOf = (lay: Layout, p: Position): Locator | undefined => {
 // A rect in the scroll container's content coordinates.
 type Rect = { x: number; top: number; bottom: number };
 
+// How far the selection hull extends beyond the boxes it covers. Boxes
+// have 1px margins, so this also closes the gaps between neighbours.
+const HULL_PAD = 2;
+const HULL_RADIUS = 3;
+
+const SVG = "http://www.w3.org/2000/svg";
+
 export class CaretView {
   private lay: Layout | null = null;
   private rects: Rect[] | null = null;
   private readonly el: HTMLDivElement;
+  private readonly svg: SVGSVGElement;
+  private readonly hull: SVGPathElement;
 
   constructor(private readonly container: HTMLElement, private readonly caret: Caret) {
     this.el = document.createElement("div");
     this.el.className = "caret";
+    this.svg = document.createElementNS(SVG, "svg");
+    this.svg.setAttribute("class", "selection");
+    this.hull = document.createElementNS(SVG, "path");
+    this.svg.append(this.hull);
     container.tabIndex = 0;
     container.addEventListener("mousedown", this.onMouseDown);
     container.addEventListener("keydown", this.onKeyDown);
@@ -116,8 +133,12 @@ export class CaretView {
   set(lay: Layout | null): void {
     this.lay = lay;
     this.rects = null;
-    if (lay === null) this.el.remove();
-    else this.draw();
+    if (lay === null) {
+      this.el.remove();
+      this.svg.remove();
+    } else {
+      this.draw();
+    }
   }
 
   draw(): void {
@@ -128,7 +149,49 @@ export class CaretView {
     this.el.style.left = `${r.x - 1}px`;
     this.el.style.top = `${r.top}px`;
     this.el.style.height = `${r.bottom - r.top}px`;
+    this.container.prepend(this.svg);
     this.container.append(this.el);
+    this.drawSelection();
+  }
+
+  // The hull: the union of the boxes of whole selected nodes and the
+  // line rects of partly selected leaf text, padded and outlined.
+  private drawSelection(): void {
+    const lay = this.lay!;
+    const sel = this.caret.selection();
+    if (sel === null) {
+      this.hull.setAttribute("d", "");
+      return;
+    }
+    const boxes: Box[] = [];
+    for (const item of between(lay.tree, sel[0], sel[1])) {
+      const locs = lay.locators.get(item.node);
+      if (locs === undefined) continue;
+      if (item.from === undefined || item.to === undefined) {
+        boxes.push(this.boxOf(locs.el.getBoundingClientRect()));
+      } else if (locs.offsets[0].kind === "text") {
+        const range = document.createRange();
+        range.setStart(locs.offsets[0].node, item.from);
+        range.setEnd(locs.offsets[0].node, item.to);
+        for (const r of range.getClientRects()) boxes.push(this.boxOf(r));
+      }
+    }
+    this.svg.setAttribute("width", `${this.container.scrollWidth}`);
+    this.svg.setAttribute("height", `${this.container.scrollHeight}`);
+    this.hull.setAttribute("d", roundedPath(outline(boxes), HULL_RADIUS));
+  }
+
+  // A viewport-space DOMRect as a padded content-space box.
+  private boxOf(rect: DOMRect): Box {
+    const c = this.container.getBoundingClientRect();
+    const dx = this.container.scrollLeft - c.left;
+    const dy = this.container.scrollTop - c.top;
+    return {
+      x0: rect.left + dx - HULL_PAD,
+      y0: rect.top + dy - HULL_PAD,
+      x1: rect.right + dx + HULL_PAD,
+      y1: rect.bottom + dy + HULL_PAD,
+    };
   }
 
   // Convert a viewport-space DOMRect edge into content coordinates.
@@ -177,31 +240,47 @@ export class CaretView {
     return this.lay!.points[best].pos;
   }
 
+  private positionAt(e: MouseEvent): Position {
+    const c = this.container.getBoundingClientRect();
+    const x = e.clientX - c.left + this.container.scrollLeft;
+    const y = e.clientY - c.top + this.container.scrollTop;
+    return this.nearest(x, y);
+  }
+
+  // Click places the caret (Shift extends); dragging extends from there.
   private onMouseDown = (e: MouseEvent): void => {
     if (this.lay === null || e.button !== 0) return;
     e.preventDefault();
     this.container.focus();
-    const c = this.container.getBoundingClientRect();
-    const x = e.clientX - c.left + this.container.scrollLeft;
-    const y = e.clientY - c.top + this.container.scrollTop;
-    this.caret.moveTo(this.nearest(x, y));
+    this.caret.moveTo(this.positionAt(e), e.shiftKey);
+    const onMove = (ev: MouseEvent): void => {
+      if (this.lay === null) return;
+      this.caret.moveTo(this.positionAt(ev), true);
+    };
+    const onUp = (): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (this.lay === null) return;
     const p = this.caret.position;
+    const extend = e.shiftKey;
     switch (e.key) {
       case "ArrowLeft":
-        this.caret.moveTo(left(p));
+        this.caret.moveTo(left(p), extend);
         break;
       case "ArrowRight":
-        this.caret.moveTo(right(p));
+        this.caret.moveTo(right(p), extend);
         break;
       case "Home":
-        this.caret.moveTo(start(p.path[0]));
+        this.caret.moveTo(start(p.path[0]), extend);
         break;
       case "End":
-        this.caret.moveTo(end(p.path[0]));
+        this.caret.moveTo(end(p.path[0]), extend);
         break;
       default:
         return;

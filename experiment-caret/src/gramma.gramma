@@ -1,11 +1,13 @@
-Grammar = WS (Rule Newline*)* !any
-Rule    = Name "=" WS Alt (Newline | !any)
-Alt     = Seq ("|" WS Seq)*
-Seq     = Postfix+
-Postfix = Prefix (("*" | "+" | "?") WS)?
-Prefix  = ("!" WS)? Atom
-Atom    = String | Name | "(" WS Alt ")" WS
-String  = "\"" ("\\" any | !"\"" !"\\" any)* "\"" WS
-Name    = (letter | "_") (letter | digit | "_")* WS
-Newline = ("\r\n" | "\n") WS
-WS      = (" " | "\t")*
+Grammar = (WS ((Rule Newline*@flatten)@flatten)*@flatten !any@hide)@name{Grammar}
+Rule    = (Name "="@hide WS Alt (Newline | !any@hide))@name{Rule}
+Alt     = (Seq (("|"@hide WS Seq)@flatten)*@flatten)@name{Alt}@unwrap
+Seq     = Annot+@name{Seq}@unwrap
+Annot   = (Postfix (("@" Name Arg?@drop_empty)@flatten)*@flatten)@name{Annot}@unwrap
+Arg     = ("{"@hide WS Name "}"@hide WS)@name{Arg}
+Postfix = (Prefix (("*" | "+" | "?") WS)?@flatten)@name{Postfix}@unwrap
+Prefix  = (("!" WS)?@flatten Atom)@name{Prefix}@unwrap
+Atom    = String | Name | ("("@hide WS Alt ")"@hide WS)@name{Group}
+String  = ("\""@hide ("\\" any | !"\""@hide !"\\"@hide any)*@text "\""@hide WS)@name{String}
+Name    = (((letter | "_") (letter | digit | "_")*)@text WS)@name{Name}
+Newline = (("\r\n" | "\n") WS)@name{Newline}
+WS      = (" " | "\t")*@drop_empty@text@name{WS}
