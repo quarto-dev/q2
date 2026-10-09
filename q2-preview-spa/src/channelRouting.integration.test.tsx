@@ -45,6 +45,7 @@ const SENTINEL_CHANGES = [{ rangeOffset: 0, rangeLength: 5, text: 'updated' }];
 vi.mock('@quarto/preview-runtime', () => ({
   initWasm: vi.fn().mockResolvedValue(undefined),
   isWasmReady: vi.fn(() => true),
+  resolvePandocFormats: vi.fn(() => ({ success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] })),
   connect: vi.fn(async (..._args: unknown[]) => {
     if (mockState.connectError) throw new Error(mockState.connectError);
     return mockState.files;

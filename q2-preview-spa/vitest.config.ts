@@ -15,6 +15,7 @@ export default mergeConfig(
   defineConfig({
     resolve: {
       alias: {
+        '@quarto/pdf-viewer': path.resolve(__dirname, '../ts-packages/pdf-viewer/src/index.ts'),
         '@quarto/preview-renderer': path.resolve(__dirname, '../ts-packages/preview-renderer/src'),
         '@quarto/preview-runtime': path.resolve(__dirname, '../ts-packages/preview-runtime/src'),
         '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),

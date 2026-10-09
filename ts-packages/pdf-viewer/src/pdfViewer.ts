@@ -32,6 +32,16 @@ const RENDERING_FINISHED = 3;
 
 type ViewerWindow = Window & { PDFViewerApplication?: ViewerApp };
 
+export interface PdfViewerOptions {
+  /**
+   * Called with each new viewer frame's window and document once its first page has drawn, just
+   * before the frame replaces the live one. The host customises the viewer chrome here (the
+   * viewer's CSP blocks inline styles and scripts: use CSSOM or `cssText`). A throw rejects that
+   * `show()`, so a missing anchor fails loudly.
+   */
+  onFrameReady?(win: Window, doc: Document): void;
+}
+
 export interface PdfViewerHandle {
   /**
    * Show `pdf`. A call with the same `key` as the previous one keeps the reader's zoom and scroll;
@@ -61,7 +71,7 @@ export function viewerUrl(base: string, file?: string, restore = false): string 
  */
 export const VIEWER_WATCHDOG_MS = 30_000;
 
-export function mountPdfViewer(container: HTMLElement, base: string): PdfViewerHandle {
+export function mountPdfViewer(container: HTMLElement, base: string, options: PdfViewerOptions = {}): PdfViewerHandle {
   interface Frame {
     iframe: HTMLIFrameElement;
     blobUrl: string;
@@ -125,7 +135,13 @@ export function mountPdfViewer(container: HTMLElement, base: string): PdfViewerH
           }
           function finish() {
             done();
-            resolve();
+            try {
+              const win = iframe.contentWindow;
+              if (win) options.onFrameReady?.(win, win.document);
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
           }
           function fail(error: Error) {
             done();

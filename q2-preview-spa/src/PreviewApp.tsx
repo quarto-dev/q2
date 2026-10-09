@@ -69,6 +69,9 @@ import { BootLoadingScreen } from './components/BootLoadingScreen';
 import { ForceRefreshButton } from './components/ForceRefreshButton';
 import { PreviewDiagnosticsOverlay } from './components/PreviewDiagnosticsOverlay';
 import { StaleCaptureOverlay } from './components/StaleCaptureOverlay';
+import { PdfPane } from './components/PdfPane';
+import { nextNavState, readNavIndex, seedNavIndex } from './navIndex';
+import { isTypstPdf } from './pdfPage';
 import { pickInitialPage } from './pickInitialPage';
 
 /**
@@ -601,6 +604,22 @@ export default function PreviewApp() {
   // evaluated at import time, before the test harness applies its overrides).
   const [state, setState] = useState<PreviewAppState>(buildInitialState);
 
+  // Position in the SPA's own navigation, mirrored from `history.state` (P11-D4) so the PDF
+  // pane's Back button knows whether Back stays inside the SPA.
+  const [navIndex, setNavIndex] = useState(readNavIndex);
+  useEffect(() => {
+    seedNavIndex();
+    setNavIndex(readNavIndex());
+  }, []);
+
+  // P11-D1: a `format: typst` page shows as a live PDF instead of going through the HTML render.
+  // Recomputed whenever the content changes, since an edit to `format:` flips the kind.
+  const pageKind: 'html' | 'pdf' = useMemo(
+    () => (state.boot === 'ready' && state.activeFile !== null && isTypstPdf(state.activeFile) ? 'pdf' : 'html'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.boot, state.activeFile, state.contentTick, state.files],
+  );
+
   // Force-refresh trigger (bd-b5hf): bumping `contentTick` re-fires
   // the render useEffect. Reuses the same channel `onFileContent`
   // uses for sync-driven re-renders so there's one path through the
@@ -703,9 +722,18 @@ export default function PreviewApp() {
     const newHash = anchor ? `#${anchor}` : '';
     if (window.location.search !== newSearch || window.location.hash !== newHash) {
       const newUrl = `${window.location.pathname}${newSearch}${newHash}`;
-      window.history.pushState(null, '', newUrl);
+      window.history.pushState(nextNavState(), '', newUrl);
+      setNavIndex(readNavIndex());
     }
   }, []);
+
+  // Back for the PDF pane: one step back while the SPA has history, else the project's first page.
+  const firstPage = pickInitialPage('', state.files);
+  const canGoBack = navIndex > 0 || (firstPage !== null && firstPage !== state.activeFile);
+  const handlePdfBack = useCallback(() => {
+    if (navIndex > 0) window.history.back();
+    else if (firstPage !== null) handleNavigate(firstPage, null);
+  }, [navIndex, firstPage, handleNavigate]);
 
   // Phase F.1 (bd-kw93.14): browser back/forward fires popstate; map
   // the restored URL back to (activeFile, pendingAnchor) using the
@@ -714,6 +742,7 @@ export default function PreviewApp() {
   // renamed mid-session) — `pickInitialPage` reverts to firstQmd.
   useEffect(() => {
     const onPopState = () => {
+      setNavIndex(readNavIndex());
       setState((s) => {
         if (s.boot !== 'ready' || s.files.length === 0) return s;
         const restored = pickInitialPage(window.location.search, s.files);
@@ -1144,6 +1173,8 @@ export default function PreviewApp() {
   // Render the active page whenever it (or its content) changes.
   useEffect(() => {
     if (!state.activeFile) return;
+    // A typst-pdf page is compiled server-side by <PdfPane>, not rendered here.
+    if (pageKind === 'pdf') return;
     let cancelled = false;
     void (async () => {
       try {
@@ -1288,7 +1319,26 @@ export default function PreviewApp() {
     return () => {
       cancelled = true;
     };
-  }, [state.activeFile, state.contentTick, state.captures]);
+  }, [state.activeFile, state.contentTick, state.captures, pageKind]);
+
+  // Entering a PDF page drops the HTML page's render state, so that going back to HTML shows the
+  // boot spinner until a fresh render rather than the previous page's stale AST.
+  useEffect(() => {
+    if (pageKind !== 'pdf') return;
+    document.title = buildPreviewTabTitle(null);
+    setState((s) =>
+      s.astJson === null && s.untransformedAstJson === null && s.themeFingerprint === undefined && s.render === EMPTY_RENDER_STATUS
+        ? s
+        : {
+            ...s,
+            astJson: null,
+            untransformedAstJson: null,
+            renderedContent: '',
+            themeFingerprint: undefined,
+            render: EMPTY_RENDER_STATUS,
+          },
+    );
+  }, [pageKind, state.activeFile]);
 
   // bd-iuzmk: set the browser-tab title from the active AST's
   // `meta.title`. Runs after every successful render so a live-edited
@@ -1354,6 +1404,29 @@ export default function PreviewApp() {
         collapsed={false}
         severity="error"
       />
+    );
+  }
+
+  const connectionBanner = state.connection !== 'connected' && (
+    <div role="status" style={CONNECTION_BANNER_STYLE}>
+      {state.connection === 'reconnecting'
+        ? 'Reconnecting to the preview server…'
+        : 'Preview server stopped. Restart `q2 preview` — this page reconnects automatically.'}
+    </div>
+  );
+
+  // P11: the live PDF pane sits above the HTML render gates below, which all assume an AST.
+  if (pageKind === 'pdf' && state.activeFile) {
+    return (
+      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <PdfPane
+          key={state.activeFile}
+          path={state.activeFile}
+          contentTick={state.contentTick}
+          onBack={canGoBack ? handlePdfBack : null}
+        />
+        {connectionBanner}
+      </div>
     );
   }
 
@@ -1463,13 +1536,7 @@ export default function PreviewApp() {
           content stays up underneath — a dropped connection is not a
           render failure. server-gone recovers automatically when
           /health answers again (same-port restart). */}
-      {state.connection !== 'connected' && (
-        <div role="status" style={CONNECTION_BANNER_STYLE}>
-          {state.connection === 'reconnecting'
-            ? 'Reconnecting to the preview server…'
-            : 'Preview server stopped. Restart `q2 preview` — this page reconnects automatically.'}
-        </div>
-      )}
+      {connectionBanner}
       <ForceRefreshButton onRefresh={handleRefresh} />
     </div>
   );

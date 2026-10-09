@@ -47,6 +47,7 @@ let runtimeMockState: RuntimeMockState;
 vi.mock('@quarto/preview-runtime', () => ({
   initWasm: vi.fn().mockResolvedValue(undefined),
   isWasmReady: vi.fn(() => true),
+  resolvePandocFormats: vi.fn(() => ({ success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] })),
   connect: vi.fn(async () => runtimeMockState.files),
   disconnect: vi.fn(async () => undefined),
   setSyncHandlers: vi.fn(),

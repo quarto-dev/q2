@@ -1,0 +1,64 @@
+/* PdfPane (Plan 11). Solid colors only: the pane overlays a PDF viewer, so nothing here is see-through. */
+.q2-pdf-pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.q2-pdf-pane__viewer {
+  position: absolute;
+  inset: 0;
+}
+.q2-pdf-pane__spinner,
+.q2-pdf-pane__chip,
+.q2-pdf-pane__notice {
+  position: absolute;
+  z-index: 10;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: #fff8e1;
+  border: 1px solid #e0d4a8;
+  color: #6b5d2e;
+  font: 13px -apple-system, Segoe UI, sans-serif;
+}
+.q2-pdf-pane__spinner {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.q2-pdf-pane__chip {
+  top: 44px;
+  right: 16px;
+}
+.q2-pdf-pane__notice {
+  bottom: 16px;
+  left: 16px;
+}
+.q2-pdf-pane__error,
+.q2-pdf-pane__warnings {
+  position: absolute;
+  z-index: 20;
+  right: 16px;
+  bottom: 16px;
+  max-width: min(640px, calc(100% - 32px));
+  max-height: 40%;
+  overflow: auto;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fff;
+  font: 13px -apple-system, Segoe UI, sans-serif;
+}
+.q2-pdf-pane__error {
+  border: 1px solid #cc3340;
+  color: #7a1d26;
+}
+.q2-pdf-pane__warnings {
+  bottom: 56px;
+  border: 1px solid #e0d4a8;
+  color: #6b5d2e;
+}
+.q2-pdf-pane__error pre,
+.q2-pdf-pane__warnings pre {
+  margin: 6px 0 0;
+  font: 12px ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}

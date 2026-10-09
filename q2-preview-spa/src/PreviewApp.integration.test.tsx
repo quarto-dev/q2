@@ -31,6 +31,15 @@ vi.mock('@quarto/preview-renderer/iframe/Q2PreviewIframe', () => ({
   },
 }));
 
+// P11: capture the props <PdfPane> gets, and stand in for it (the real one mounts pdf.js and POSTs).
+const capturedPdfProps: Array<{ path: string; contentTick: number; onBack: (() => void) | null }> = [];
+vi.mock('./components/PdfPane', () => ({
+  PdfPane: (props: { path: string; contentTick: number; onBack: (() => void) | null }) => {
+    capturedPdfProps.push(props);
+    return <div data-testid="pdf-pane-mock" data-path={props.path} />;
+  },
+}));
+
 // Mock the runtime so the test doesn't need WASM or a sync server.
 // Each test fills in fixtures via the `runtimeMockState` below.
 type RuntimeMockState = {
@@ -39,12 +48,20 @@ type RuntimeMockState = {
   renderResult: Record<string, unknown>;
   /** Whether `connect()` should throw. */
   connectError?: string;
+  /** `'typst-pdf'` makes every page resolve as a live-PDF page (P11). */
+  formatKey?: string;
+  /** Paths that resolve as typst-pdf; overrides `formatKey` when set. */
+  pdfPaths?: string[];
 };
 let runtimeMockState: RuntimeMockState;
 
 vi.mock('@quarto/preview-runtime', () => ({
   initWasm: vi.fn().mockResolvedValue(undefined),
   isWasmReady: vi.fn(() => true),
+  // P11: the format the active page resolves to; tests flip `formatKey` to make a page typst-pdf.
+  resolvePandocFormats: vi.fn((path: string) => (runtimeMockState.pdfPaths?.includes(path) ?? runtimeMockState.formatKey === 'typst-pdf')
+    ? { success: true, source: 'document', formats: [{ key: 'typst-pdf', class: 'download' }] }
+    : { success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] }),
   connect: vi.fn(async (..._args: unknown[]) => {
     if (runtimeMockState.connectError) {
       throw new Error(runtimeMockState.connectError);
@@ -78,6 +95,7 @@ import PreviewApp from './PreviewApp';
 beforeEach(() => {
   vi.clearAllMocks();
   capturedIframeProps.length = 0;
+  capturedPdfProps.length = 0;
   runtimeMockState = {
     files: [{ path: 'index.qmd', docId: 'automerge:doc-index' }],
     renderResult: { success: true, ast_json: '{"blocks":[]}' },
@@ -1491,5 +1509,168 @@ describe('PreviewApp: formats with no live preview (bd-kltzdhle, D5)', () => {
     // error log.
     expect(consoleError).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+});
+
+
+describe('PreviewApp: live PDF pane for typst pages (Plan 11)', () => {
+  const latestPdf = () => capturedPdfProps[capturedPdfProps.length - 1];
+  const handlers = async () => {
+    const runtime = await import('@quarto/preview-runtime');
+    const calls = (runtime.setSyncHandlers as ReturnType<typeof vi.fn>).mock.calls;
+    return calls[calls.length - 1][0] as { onFileContent: (path: string, content: string) => void };
+  };
+
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('typst page renders PdfPane not iframe', async () => {
+    runtimeMockState.formatKey = 'typst-pdf';
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('pdf-pane-mock')).not.toBeNull());
+    expect(screen.queryByTestId('q2-preview-iframe-mock')).toBeNull();
+    expect(latestPdf().path).toBe('index.qmd');
+    const runtime = await import('@quarto/preview-runtime');
+    expect(runtime.renderPageForPreview).not.toHaveBeenCalled();
+  });
+
+  it('typst-pdf as the first page does not hang on the boot spinner', async () => {
+    runtimeMockState.formatKey = 'typst-pdf';
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('pdf-pane-mock')).not.toBeNull());
+    expect(screen.queryByText(/initializing/i)).toBeNull();
+  });
+
+  it('html -> pdf -> html leaves no stale AST', async () => {
+    const runtime = await import('@quarto/preview-runtime');
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
+
+    runtimeMockState.formatKey = 'typst-pdf';
+    await act(async () => (await handlers()).onFileContent('index.qmd', 'format: typst'));
+    await waitFor(() => expect(screen.queryByTestId('pdf-pane-mock')).not.toBeNull());
+    expect(screen.queryByTestId('q2-preview-iframe-mock')).toBeNull();
+
+    // Back to html, with a render that never finishes: the old AST must not come back.
+    runtimeMockState.formatKey = undefined;
+    (runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise(() => {}));
+    capturedIframeProps.length = 0;
+    await act(async () => (await handlers()).onFileContent('index.qmd', 'format: html'));
+    await waitFor(() => expect(screen.queryByTestId('pdf-pane-mock')).toBeNull());
+    expect(screen.queryByTestId('q2-preview-iframe-mock')).toBeNull();
+    expect(capturedIframeProps).toHaveLength(0);
+    expect(screen.queryByText(/initializing/i)).not.toBeNull();
+  });
+
+  it('a non-active-file edit (image, _quarto.yml) recompiles a typst page; an unrelated .qmd does not', async () => {
+    runtimeMockState.formatKey = 'typst-pdf';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/health')) {
+          return new Response(JSON.stringify({ status: 'ok', index_document_id: 'automerge:x' }), { status: 200 });
+        }
+        if (url.includes('/api/preview/deps')) {
+          return new Response(JSON.stringify({ deps: ['images/fig.png', '_quarto.yml'] }), { status: 200 });
+        }
+        return new Response('not found', { status: 404 });
+      }),
+    );
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('pdf-pane-mock')).not.toBeNull());
+    // Let the dependency set arrive before editing (until then every change falls open).
+    await waitFor(() =>
+      expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([u]) => String(u).includes('/api/preview/deps'))).toBe(true),
+    );
+    await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
+    const unrelatedBefore = latestPdf().contentTick;
+    await act(async () => (await handlers()).onFileContent('unrelated.qmd', 'x'));
+    expect(latestPdf().contentTick).toBe(unrelatedBefore);
+    const base = latestPdf().contentTick;
+    await act(async () => (await handlers()).onFileContent('images/fig.png', 'x'));
+    expect(latestPdf().contentTick).toBe(base + 1);
+    await act(async () => (await handlers()).onFileContent('_quarto.yml', 'x'));
+    expect(latestPdf().contentTick).toBe(base + 2);
+  });
+
+  describe('Back button', () => {
+    it('goes one step back when the SPA has history, tracked in history.state', async () => {
+      runtimeMockState.files = [
+        { path: 'index.qmd', docId: 'automerge:i' },
+        { path: 'paper.qmd', docId: 'automerge:p' },
+      ];
+      runtimeMockState.pdfPaths = ['paper.qmd'];
+      const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+      try {
+        render(<PreviewApp />);
+        await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
+        const navigate = capturedIframeProps.at(-1)!.onNavigateToDocument as (p: string, a: string | null) => void;
+        act(() => navigate('paper.qmd', null));
+        await waitFor(() => expect(latestPdf()?.path).toBe('paper.qmd'));
+        expect(window.history.state).toEqual({ q2NavIndex: 1 });
+        act(() => latestPdf().onBack!());
+        expect(back).toHaveBeenCalledOnce();
+      } finally {
+        back.mockRestore();
+      }
+    });
+
+    it('falls back to the first page when the PDF page is the entry point', async () => {
+      runtimeMockState.files = [
+        { path: 'index.qmd', docId: 'automerge:i' },
+        { path: 'paper.qmd', docId: 'automerge:p' },
+      ];
+      runtimeMockState.pdfPaths = ['paper.qmd'];
+      window.history.replaceState(null, '', '/?page=paper.qmd');
+      const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+      try {
+        render(<PreviewApp />);
+        await waitFor(() => expect(latestPdf()?.path).toBe('paper.qmd'));
+        expect(latestPdf().onBack).not.toBeNull();
+        act(() => latestPdf().onBack!());
+        await waitFor(() => expect(capturedIframeProps.at(-1)?.currentFilePath).toBe('index.qmd'));
+        expect(back).not.toHaveBeenCalled();
+      } finally {
+        back.mockRestore();
+      }
+    });
+
+    it('is hidden when the pane is the only page', async () => {
+      runtimeMockState.files = [{ path: 'paper.qmd', docId: 'automerge:p' }];
+      runtimeMockState.pdfPaths = ['paper.qmd'];
+      render(<PreviewApp />);
+      await waitFor(() => expect(latestPdf()?.path).toBe('paper.qmd'));
+      expect(latestPdf().onBack).toBeNull();
+    });
+
+    it('stays correct after browser Back and Forward', async () => {
+      runtimeMockState.files = [
+        { path: 'index.qmd', docId: 'automerge:i' },
+        { path: 'about.qmd', docId: 'automerge:a' },
+        { path: 'paper.qmd', docId: 'automerge:p' },
+      ];
+      runtimeMockState.pdfPaths = ['paper.qmd', 'about.qmd'];
+      const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+      try {
+        render(<PreviewApp />);
+        await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
+        const navigate = capturedIframeProps.at(-1)!.onNavigateToDocument as (p: string, a: string | null) => void;
+        act(() => navigate('about.qmd', null)); // entry 1
+        await waitFor(() => expect(latestPdf()?.path).toBe('about.qmd'));
+
+        // The browser's own Back to the boot entry: it restores that entry's state and URL.
+        window.history.replaceState({ q2NavIndex: 0 }, '', '/?page=paper.qmd');
+        await act(async () => void window.dispatchEvent(new PopStateEvent('popstate')));
+        await waitFor(() => expect(latestPdf()?.path).toBe('paper.qmd'));
+        // Index 0 and not the first page: Back goes to the first page instead of leaving the SPA.
+        act(() => latestPdf().onBack!());
+        expect(back).not.toHaveBeenCalled();
+        await waitFor(() => expect(capturedIframeProps.at(-1)?.currentFilePath).toBe('index.qmd'));
+      } finally {
+        back.mockRestore();
+      }
+    });
   });
 });

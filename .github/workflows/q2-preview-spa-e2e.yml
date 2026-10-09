@@ -3,8 +3,10 @@ name: q2-preview-spa E2E (browser trial)
 # Trial workflow: runs the q2 preview Playwright suite on Chromium and
 # Firefox to find out whether Firefox is viable. These specs are not run
 # by any other workflow (locally they go through `cargo xtask verify --e2e`).
-# Triggers only on changes to this file or the SPA's Playwright config, and
-# on manual dispatch.
+# Triggers on manual dispatch and on pull requests that touch this file, the
+# SPA and its Playwright config, or the crates and packages the preview binary
+# embeds (the paths below). Installs native pandoc and typst for the typst-pdf
+# preview spec.
 
 on:
   workflow_dispatch:
@@ -12,6 +14,24 @@ on:
     paths:
       - '.github/workflows/q2-preview-spa-e2e.yml'
       - 'q2-preview-spa/playwright.config.ts'
+      - 'q2-preview-spa/src/**'
+      - 'q2-preview-spa/e2e/**'
+      - 'crates/quarto/**'
+      - 'crates/quarto-preview/**'
+      - 'crates/quarto-core/**'
+      - 'crates/quarto-hub/**'
+      - 'crates/spa-manifest/**'
+      - 'scripts/fetch-pandoc-wasm.mjs'
+      - 'resources/pdfjs-viewer.json'
+      - 'ts-packages/pdf-viewer/**'
+      - 'ts-packages/preview-runtime/**'
+      - 'ts-packages/preview-renderer/**'
+      - 'Cargo.lock'
+
+# Pins copied from test-suite.yml (keep in step with it).
+env:
+  PANDOC_VERSION: "3.11"
+  TYPST_VERSION: "0.15.1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -91,6 +111,18 @@ jobs:
       # globalSetup requires the debug binary at target/debug/q2.
       - name: Build q2
         run: cargo build --bin q2
+
+      # The typst-pdf preview spec compiles with native typst and renders through native pandoc.
+      - name: Set up Pandoc
+        run: |
+          curl -LO "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
+          sudo dpkg -i "pandoc-${PANDOC_VERSION}-1-amd64.deb"
+
+      - name: Set up Typst
+        run: |
+          curl -LO "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+          tar -xf "typst-x86_64-unknown-linux-musl.tar.xz"
+          sudo mv "typst-x86_64-unknown-linux-musl/typst" /usr/local/bin/typst
 
       - name: Install Playwright
         run: npx playwright install --with-deps ${{ matrix.browser }}
