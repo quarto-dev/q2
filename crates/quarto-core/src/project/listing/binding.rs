@@ -867,6 +867,8 @@ mod tests {
 
     fn item(title: &str) -> ListingItem {
         ListingItem {
+            description_source: crate::project::listing::FieldSource::Absent,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: crate::document_profile::text(title),
             subtitle: None,
             description: Some(crate::document_profile::text("A descr.")),

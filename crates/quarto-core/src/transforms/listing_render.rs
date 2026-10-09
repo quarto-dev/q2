@@ -703,6 +703,8 @@ mod tests {
 
     fn make_item(title: &str, date: Option<&str>) -> ListingItem {
         ListingItem {
+            description_source: crate::project::listing::FieldSource::Absent,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: crate::document_profile::text(title),
             subtitle: None,
             description: Some(crate::document_profile::text(format!(

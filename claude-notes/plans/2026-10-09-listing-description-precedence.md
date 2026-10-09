@@ -280,9 +280,17 @@ hashes) into `recorded_includes` → `profile.includes` (relevant to the
 Phase 4 cache question).
 
 ### Phase 2 — Hydration
-- [ ] `FieldSource`; `ListingItem.description_source` / `image_source`.
-- [ ] `hydrate_item` chains; `record_item` / `overlay_record` sources.
-- [ ] Unit tests for each chain step.
+- [x] `FieldSource`; `ListingItem.description_source` / `image_source`.
+- [x] `hydrate_item` chains; `record_item` / `overlay_record` sources.
+- [x] Unit tests for each chain step (`item.rs`: description chain,
+  literal derived text, image chain with rebasing, `is_authored`;
+  `record.rs`: overlay keeps an unset field's document source, bare
+  record sources).
+
+Notes: derived description becomes literal-text inlines
+(`split_string_to_inlines`), so markdown-significant characters in a body
+paragraph's plain text stay characters. Ten test-only `ListingItem`
+literals got `Absent` sources.
 
 ### Phase 3 — Binding, templates, L7
 - [ ] Per-field placeholder gating; `show-description` key.

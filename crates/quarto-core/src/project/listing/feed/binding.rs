@@ -581,6 +581,8 @@ mod tests {
 
     fn empty_listing_item() -> ListingItem {
         ListingItem {
+            description_source: crate::project::listing::FieldSource::Absent,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: Vec::new(),
             subtitle: None,
             description: None,
