@@ -102,30 +102,108 @@ and default/grid listings with and without `fields: [date, title, description]`.
 - **Phase 3 — Docs.** `docs/guides/projects/listings.qmd`: say that `fields:`
   controls which parts of a built-in card render.
 
+## Decisions (2026-10-09)
+
+1. **Scope: gating only**, with the structural parity filed as
+   bd-x7c196m3 and planned to follow directly, possibly in the same
+   session. So this strand should not paint that work into a corner (see
+   "Leaving room for bd-x7c196m3").
+2. **Sequencing: (a).** Land this first, in parallel with the
+   description-precedence branch, which rebases onto it. The conflict is in
+   the description and image blocks of both templates.
+3. **Placeholder parity: keep it.** `image` in the field set means a
+   placeholder for every image-less item, as in Q1.
+
+## Leaving room for bd-x7c196m3
+
+- **Doctemplates have no boolean `or`.** Q1's
+  `showField('title') || showField('subtitle') || ...` (omit an empty
+  `.card-body`) and the author/date justify class can't be written in the
+  template. They have to be keys computed in `binding.rs` (e.g.
+  `show-card-body`, `attribution-justify`). This strand should establish
+  that pattern rather than nest more template conditionals.
+- **`show.<field>` keeps its current meaning** ("the effective field set
+  contains it"), because custom templates read it with Q1 semantics. Q1's
+  `showField` (in the set *and* the item has a value) is a different
+  predicate; if bd-x7c196m3 needs it per field, add it as a separate key
+  rather than changing `show`.
+- **Naming next to the sibling branch.** That plan adds a top-level
+  `show-description` key (description *or* envelope). It is easy to
+  confuse with `show.description`. Mention this to that agent when it
+  rebases.
+
+## Diagnostic for missing fields (exploratory, 2026-10-09)
+
+The user asked whether the current source-mapping infrastructure could
+support a diagnostic like "37 listing items are missing an `image` field:
+foo.qmd, bar.qmd, ..." with truncation. Findings:
+
+**What exists.**
+- *Many labels on one diagnostic.* `DiagnosticMessageBuilder::add_detail_at`
+  / `add_info_at` attach a `SourceInfo` per detail, and the Ariadne
+  renderer draws detail labels in files other than the primary one
+  (`quarto-error-reporting` `diagnostic.rs` ~1256).
+- *Truncated file lists.* `quarto-error-reporting::coalesce` already
+  renders an affected-files list capped at `AFFECTED_FILES_CAP = 3` with an
+  "(and N others)" tail. It is used for the cross-page Q-14-1 grouping. A
+  listing diagnostic would build its own list in the message text but
+  should use the same wording and cap style.
+- *A listing-level anchor.* `Listing.categories_source` captures the YAML
+  span of `categories:` for Q-12-12 ("categories enabled but no item has
+  any"), which is the closest precedent: one warning per listing about a
+  property of all its items. A matching `fields_source` is a few lines in
+  `config.rs` (~479), where `entry.value` carries the span.
+- *Item identity.* Document items carry `ItemTarget::Document { source_path }`
+  (project-relative), and records carry their YAML `SourceInfo`
+  (`record.rs`). The emit site would be `transforms/listing_generate.rs`,
+  which already pushes per-item diagnostics (Q-12-26) while hydrating.
+
+**What doesn't exist.**
+- *Per-item front-matter spans for documents.* `DocumentProfile` keeps
+  `SourceInfo` for `aliases:` and `resources:` only. Q-12-26 passes `None`
+  for document items for this reason. Pointing at each item's front matter
+  would need a profile field (a version bump, which conflicts with the
+  sibling branch's 14 → 15 bump) **and** the cross-document rebasing that
+  `website_post_render.rs` `locate_alias` does: every document's span is
+  rooted at its own `FileId(0)`, and the listing host's `SourceContext`
+  holds only the host file. That is real work, and for "this field is
+  *absent*" there is no span to point at anyway.
+
+**So:** listing-anchored diagnostic with the offending files named in the
+text (truncated) is cheap and fits the existing pieces. Per-item Ariadne
+spans are not worth it for an absent field.
+
+**When should it fire?** Q1 is silent. Defaulted grid/default field sets
+always contain `image`, so "warn when any item lacks a field" would fire
+on most blogs, where a placeholder per image-less post is intended. Options:
+
+- (i) Warn only when **no** item has an image and no `image-placeholder:`
+  is set: every card is an empty grey bar. This is the plans-page case and
+  mirrors Q-12-12. Naming files is pointless here, since it's all of them.
+- (ii) Warn when `image` is **author-explicit** in `fields:` and some items
+  lack one, naming them, truncated.
+- (iii) Implement Q1's **`field-required:`**. q2 parses it
+  (`config.rs` ~494, `Listing.field_required`) but never enforces it. Q1
+  (`website-listing-read.ts` ~972) throws on the *first* item missing a
+  required field. q2 could make it one aggregated error per listing and
+  field, naming the offending items. That is the opt-in, general form of
+  the user's example.
+
 ## Open design questions for the user
 
-1. **Scope.** Gate the existing blocks only (the strand's fix direction), or
-   also port Q1's missing structure: empty `.card-body` omission,
-   `filename`/`file-modified` footer, the "other fields" table/list,
-   author/date justification? My recommendation: gating only here, and file
-   the structural parity as a separate strand.
-2. **Sequencing with the description-precedence work.** That branch edits the
-   description and image blocks of both templates. Options: (a) land this
-   small change first and let that branch rebase (the conflict is mechanical:
-   their `$if(show-description)$` ends up nested inside `$if(show.description)$`);
-   (b) wait for it to land and do this on top; (c) hand this strand to that
-   agent to fold into its Phase 3. I lean (a), because this change is small
-   and self-contained.
-3. **`image` in `fields:` with no item image.** Q1 draws a placeholder per
-   card when `image` is in the field set, even if no item has an image (and
-   q2's `effective_fields` keeps `image` in defaulted sets for that reason).
-   Keep that parity, so the plans page needs explicit `fields:` to avoid the
-   grey bars? I assume yes.
+1. **Diagnostic: which of (i)–(iii)?** My recommendation: (i) as a Q-12
+   warning in this strand, because it catches the exact mistake that
+   surfaced the bug; (iii) as its own strand, since it is a Q1 feature q2
+   silently ignores today; skip (ii) as too noisy for an intentional
+   pattern.
+2. **Diagnostic placement.** If (i) is in, should it ship with this strand
+   or separately? It touches `config.rs` (new `fields_source`) and
+   `listing_generate.rs`, which the gating change otherwise doesn't.
 
 ## Risks / tradeoffs (draft)
 
 - **Merge conflict** with the description-precedence branch on both
-  templates (Q2).
+  templates (Decision 2).
 - **Custom field sets that omit `title`** now render cards without titles.
   That is Q1 behaviour and what the author asked for, but it is a visible
   change for anyone relying on the current behaviour.
