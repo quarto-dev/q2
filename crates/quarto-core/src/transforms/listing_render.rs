@@ -46,14 +46,16 @@ use quarto_doctemplate::{
 };
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::attr::AttrSourceInfo;
-use quarto_pandoc_types::block::{Block, Div};
+use quarto_pandoc_types::block::{Block, Div, RawBlock};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
 
 use crate::Result;
+use crate::format::PipelineProfile;
 use crate::project::listing::ResolvedListing;
-use crate::project::listing::binding::build_listing_context;
+use crate::project::listing::binding::{build_listing_context, effective_fields};
 use crate::project::listing::config::{Listing, ListingType};
+use crate::project::listing::listjs;
 use crate::project::listing::templates::{builtins_resolver, top_level_template_source};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -120,12 +122,22 @@ impl AstTransform for ListingRenderTransform {
         // directory (Q1-parity).
         let host_input: PathBuf = ctx.document.input.clone();
 
+        // The List.js bootstrap is for rendered HTML pages (`q2 render`,
+        // `q2 preview --static`). The hub-client preview renders the AST
+        // itself and runs no List.js (bd-4dfdo8vi), and non-HTML writers
+        // would only drop it.
+        let emit_listjs = matches!(
+            ctx.pipeline_profile,
+            PipelineProfile::HtmlRender | PipelineProfile::RevealjsRender
+        );
+
         for r in &resolved {
-            render_one(ast, r, &host_dir, &host_input, &mut diags);
+            render_one(ast, r, &host_dir, &host_input, emit_listjs, &mut diags);
         }
 
-        // Register the vendored client-side JS artifacts so the
-        // sort/filter UI markup our templates emit is functional.
+        // Register the vendored client-side JS artifacts that the
+        // List.js bootstrap (see `listjs`) drives. Like Q1, every
+        // listing page links them, whatever its listings' types.
         // The `js:` key prefix is the convention `ApplyTemplateStage`
         // recognizes for auto-emitting `<script>` tags into the
         // rendered HTML; the resolver maps the relative path to
@@ -175,6 +187,7 @@ fn render_one(
     r: &ResolvedListing,
     host_dir: &str,
     host_input: &Path,
+    emit_listjs: bool,
     diags: &mut Vec<DiagnosticMessage>,
 ) {
     // Build the binding. The host page's meta is used to extract
@@ -244,7 +257,7 @@ fn render_one(
         true,
         None,
     );
-    let parsed_blocks: Vec<Block> = match parse_result {
+    let mut parsed_blocks: Vec<Block> = match parse_result {
         Ok((parsed, _ctx, parse_diags)) => {
             if !parse_diags.is_empty() {
                 push_diag(
@@ -277,6 +290,31 @@ fn render_one(
             return;
         }
     };
+
+    // The List.js bootstrap (bd-nbv80e33): the pagination `<nav>`
+    // (List.js looks for `.pagination` inside the container, so it has
+    // to be here) and the init script, after the no-matching
+    // placeholder as in Q1's `_pagination.ejs.md`. Q1 puts the script
+    // in the page header; inside the container it travels with the
+    // listing, and it waits for `DOMContentLoaded` either way.
+    if emit_listjs && listjs::supports_listjs(r.listing.kind) {
+        let fields = effective_fields(&r.listing, &r.items);
+        let raw_html = |text: String| {
+            Block::RawBlock(RawBlock {
+                format: "html".to_string(),
+                text,
+                source_info: SourceInfo::generated(By::programmatic_config()),
+            })
+        };
+        if let Some(nav) = listjs::pagination_nav(&r.listing, r.items.len()) {
+            parsed_blocks.push(raw_html(nav));
+        }
+        parsed_blocks.push(raw_html(listjs::init_script(
+            &r.listing,
+            &fields,
+            r.items.len(),
+        )));
+    }
 
     // Splice into the AST: into the author's slot when there is one,
     // else into a fresh container appended to the page. Either way the
@@ -2414,5 +2452,159 @@ mod tests {
                 "{ids:?}"
             );
         }
+    }
+
+    /// The raw-HTML blocks directly inside the listing's container,
+    /// in order.
+    fn container_raw_html(ast: &Pandoc, container_id: &str) -> Vec<String> {
+        let div = find_div(&ast.blocks, container_id)
+            .unwrap_or_else(|| panic!("no #{container_id} in {:?}", ast.blocks));
+        div.content
+            .iter()
+            .filter_map(|b| match b {
+                Block::RawBlock(rb) if rb.format == "html" => Some(rb.text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Like [`run_transform`], under a given pipeline profile.
+    async fn run_transform_with_profile(
+        ast: Pandoc,
+        resolved: Vec<ResolvedListing>,
+        profile: crate::format::PipelineProfile,
+    ) -> Pandoc {
+        let mut ast = ast;
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/posts/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let index = Arc::new(ProjectIndex::new(Vec::<DocumentProfile>::new()));
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_project_index(index);
+        ctx.pipeline_profile = profile;
+        ctx.resolved_listings = resolved;
+        ListingRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ast
+    }
+
+    fn paged_listing(kind: ListingType) -> Vec<ResolvedListing> {
+        let mut listing = make_listing(kind);
+        listing.page_size = Some(1);
+        vec![ResolvedListing {
+            listing,
+            items: vec![make_item("a", None), make_item("b", None)],
+        }]
+    }
+
+    /// Default and grid listings carry the List.js bootstrap inside
+    /// their container, after the no-matching placeholder: the
+    /// pagination `<nav>` (List.js looks for `.pagination` inside the
+    /// container) and the init script.
+    #[tokio::test]
+    async fn default_and_grid_listings_carry_the_listjs_bootstrap() {
+        for kind in [ListingType::Default, ListingType::Grid] {
+            let (ast, diags) = run_transform(empty_pandoc(), paged_listing(kind)).await;
+            assert!(diags.is_empty(), "{kind:?}: {diags:?}");
+            let raw = container_raw_html(&ast, "listing-main-listing");
+            let [.., nav, script] = raw.as_slice() else {
+                panic!("{kind:?}: expected nav + script, got {raw:?}")
+            };
+            assert!(
+                nav.starts_with("<nav id=\"main-listing-pagination\""),
+                "{kind:?}: {nav}"
+            );
+            assert!(
+                script.contains(r#"new List("listing-main-listing", options)"#),
+                "{kind:?}: {script}"
+            );
+            assert!(script.contains(r#""page":1"#), "{kind:?}: {script}");
+            assert_eq!(
+                script.matches("<script>").count(),
+                1,
+                "{kind:?}: one script per listing"
+            );
+
+            // Both follow the no-matching placeholder.
+            let div = find_div(&ast.blocks, "listing-main-listing").unwrap();
+            let placeholder = div
+                .content
+                .iter()
+                .position(|b| matches!(b, Block::Div(d) if d.attr.1.iter().any(|c| c == "listing-no-matching")))
+                .expect("no-matching placeholder");
+            let nav_pos = div
+                .content
+                .iter()
+                .position(|b| matches!(b, Block::RawBlock(rb) if rb.text.starts_with("<nav")))
+                .unwrap();
+            assert!(placeholder < nav_pos, "{kind:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn listing_that_fits_one_page_gets_the_script_but_no_nav() {
+        let resolved = vec![ResolvedListing {
+            listing: make_listing(ListingType::Default),
+            items: vec![make_item("a", None)],
+        }];
+        let (ast, _) = run_transform(empty_pandoc(), resolved).await;
+        let raw = container_raw_html(&ast, "listing-main-listing").join("\n");
+        assert!(raw.contains("new List("), "{raw}");
+        assert!(!raw.contains("listing-pagination"), "{raw}");
+        assert!(!raw.contains(r#""page""#), "{raw}");
+    }
+
+    /// Table listings have no `.list` yet (bd-bl1e00r6), and custom
+    /// listings are left to their template (design decision 3).
+    #[tokio::test]
+    async fn table_listing_gets_no_listjs_bootstrap() {
+        let (ast, _) = run_transform(empty_pandoc(), paged_listing(ListingType::Table)).await;
+        let raw = collect_raw_html(&ast);
+        assert!(!raw.contains("new List("), "{raw}");
+        assert!(!raw.contains("listing-pagination"), "{raw}");
+    }
+
+    #[tokio::test]
+    async fn custom_listing_gets_no_listjs_bootstrap_even_with_a_list_element() {
+        let (_tmp, root, host) = custom_template_project(
+            "list.template",
+            "::: {.list}\n$for(items)$\n::: {.item}\n$it.title$\n:::\n\n$endfor$\n:::\n",
+        );
+        let mut listing = make_custom_listing("list.template");
+        listing.page_size = Some(1);
+        let resolved = vec![ResolvedListing {
+            listing,
+            items: vec![make_item("a", None), make_item("b", None)],
+        }];
+        let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(
+            find_div_with_class(&ast.blocks, "list").is_some(),
+            "custom template rendered"
+        );
+        let raw = collect_raw_html(&ast);
+        assert!(!raw.contains("new List("), "{raw}");
+        assert!(!raw.contains("listing-pagination"), "{raw}");
+    }
+
+    /// The hub-client preview renders the AST itself and does not run
+    /// List.js (bd-4dfdo8vi); the bootstrap is for rendered HTML only.
+    #[tokio::test]
+    async fn preview_profile_gets_no_listjs_bootstrap() {
+        use crate::format::PipelineProfile;
+        let ast = run_transform_with_profile(
+            empty_pandoc(),
+            paged_listing(ListingType::Default),
+            PipelineProfile::HtmlPreview,
+        )
+        .await;
+        let raw = collect_raw_html(&ast);
+        assert!(!raw.contains("new List("), "{raw}");
+        assert!(!raw.contains("listing-pagination"), "{raw}");
+        // The listing itself still renders.
+        assert!(find_div(&ast.blocks, "listing-main-listing").is_some());
     }
 }

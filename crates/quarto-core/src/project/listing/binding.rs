@@ -75,7 +75,7 @@ pub fn build_listing_context(
     // parity, bd-listing-table-fields-peg1w3b3). Everything below
     // (the `listing.fields` binding, `show.*`, the table
     // header/rows) reads this list, not `listing.fields`.
-    let fields = effective_fields(listing, items, &date_style);
+    let fields = effective_fields(listing, items);
     ctx.insert("listing", build_listing_map(listing, &fields));
     ctx.insert(
         "items",
@@ -94,11 +94,7 @@ pub fn build_listing_context(
 /// `title` is non-optional on [`ListingItem`], so built-in default
 /// sets can never fully empty). Author-explicit `fields:` is used
 /// verbatim.
-fn effective_fields(
-    listing: &Listing,
-    items: &[ListingItem],
-    date_style: &DateStyle,
-) -> Vec<String> {
+pub(crate) fn effective_fields(listing: &Listing, items: &[ListingItem]) -> Vec<String> {
     if listing.fields_explicit {
         return listing.fields.clone();
     }
@@ -109,7 +105,8 @@ fn effective_fields(
             f.as_str() == "image"
                 || items
                     .iter()
-                    .any(|it| item_field_cell(it, f, date_style).is_some())
+                    // Presence only — the date style doesn't matter.
+                    .any(|it| item_field_cell(it, f, &DateStyle::Medium).is_some())
         })
         .cloned()
         .collect();

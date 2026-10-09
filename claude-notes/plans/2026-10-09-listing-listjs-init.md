@@ -185,16 +185,31 @@ Other facts the design depends on:
 
 ### Phase 4 — Init script + pagination nav
 
-- [ ] Tests: default/grid listing gets one `<script>` with
-      `new List('listing-<id>', …)`, `valueNames` (fields as
+- [x] Tests (`listjs.rs`): Q1 `valueNames` order (fields as
       `listing-<f>`, `{data:['index']}`, `{data:['categories']}`, sort
-      targets), `searchColumns`, and `page`/`pagination` only when
-      items > page-size; pagination `<nav>` likewise; none for custom /
-      table; none under the `HtmlPreview` profile; ids/fields are
-      JS-string-escaped (no `</script>` breakout).
-- [ ] New `project/listing/listjs.rs` generating the script + nav.
-- [ ] Emit as raw-HTML blocks inside the container after the
-      no-matching placeholder (`listing_render.rs::render_one`).
+      targets for typed-or-linked `field-sort` entries); `searchColumns`
+      from `field-filter` defaulting to the fields; `categories` joins
+      the fields when categories are on; `page`/`pagination` only when
+      items > page-size; `page-size: 0` → 50 (Q1's `|| 50`); nav markup;
+      author text JSON-encoded with `<` escaped (no `</script>`
+      breakout), nav id attribute-escaped.
+- [x] Tests (`listing_render.rs`): default/grid containers end with
+      nav + script after the no-matching placeholder; no nav when one
+      page suffices; none for table, for custom (even with a `.list`),
+      or under the `HtmlPreview` profile.
+- [x] `project/listing/listjs.rs`; `binding::effective_fields` exposed
+      (dropped its unused date-style parameter).
+- [x] Emitted as raw-HTML blocks inside the container, gated on
+      `PipelineProfile::{HtmlRender, RevealjsRender}`.
+
+Implementation notes for bd-m6wglib4 (sort/filter UI): `list_options`
+already carries the sort targets and `searchColumns`, and item
+`data-listing-<f>-sort` attrs exist, so the follow-up is the
+`_filter.ejs.md` port (controls + localized strings + Q1's
+`sortableFieldData` ordering) and `sort-ui`/`filter-ui` accepting a
+field list (forwarded to `field_sort`/`field_filter`). The sort
+`<select>` calls `window['quarto-listings'][<container id>].sort(…)`,
+so use `Listing::container_id()`.
 
 ### Phase 5 — Integration, docs, wrap-up
 

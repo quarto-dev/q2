@@ -34,6 +34,7 @@ pub mod config;
 pub mod filter;
 pub mod helpers;
 pub mod item;
+pub mod listjs;
 pub mod placeholders;
 pub mod record;
 pub mod sort;
