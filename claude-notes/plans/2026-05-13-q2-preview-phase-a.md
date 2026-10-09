@@ -3,8 +3,8 @@ title: '`q2 preview` — Phase A (engine-less CLI skeleton)'
 date: 2026-05-13
 description: 'Builds the smallest end-to-end `q2 preview` slice without engine execution: an ephemeral hub server, a standalone SPA that renders through WASM, and live re-rendering when `.qmd` files change.'
 branch: beads/bd-???-q2-preview-phase-a (TBD — sub-issue of bd-kw93)
-beads: TBD (file as sub-issue of bd-kw93 after this plan is reviewed)
-status: approved 2026-05-13 (Q-A1 through Q-A5 resolved); ready to file beads sub-issues and begin A.0
+# beads: TBD (file as sub-issue of bd-kw93 after this plan is reviewed)
+status: approved  # approved 2026-05-13 (Q-A1 through Q-A5 resolved); ready to file beads sub-issues and begin A.0
 ---
 
 ## Goal

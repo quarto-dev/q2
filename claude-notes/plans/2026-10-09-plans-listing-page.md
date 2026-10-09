@@ -2,8 +2,10 @@
 title: "claude-notes: a listing page for all plans"
 date: 2026-10-09
 description: 'Adds a table-based listing page for all top-level plans, backfilling title and date front matter from each plan''s heading and filename because the listing is only useful once that metadata exists.'
-status: phases 1–5 done 2026-10-09; strict render clean once PRs #810 and #812 are on main
-braid: bd-fvcip3t5 (child of epic bd-uk8zgkha)
+status: in-progress  # phases 1–5 done; phase 6 (status/braid/date front matter) applied, cleanup pending
+braid:
+  strand: bd-fvcip3t5  # child of epic bd-uk8zgkha
+  priority: P2
 ---
 
 ## Goal

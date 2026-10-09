@@ -2,10 +2,12 @@
 title: 'Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa'
 date: 2026-05-11
 description: 'Moves the q2-preview React rendering stack out of hub-client into two shared workspace packages, one pure React and one WASM runtime, and adds a placeholder `q2-preview-spa` app that consumes them.'
-updated: 2026-05-13
+date-modified: 2026-05-13
 branch: beads/bd-hfjj-hub-client-decomposition-shared
-beads: bd-hfjj (sub-epic of bd-kw93)
-status: COMPLETE 2026-05-13 (all 7 phases landed; Phase 5 ↔ Phase 4 order swapped — see §Phase ordering note)
+status: done  # COMPLETE 2026-05-13 (all 7 phases landed; Phase 5 ↔ Phase 4 order swapped — see §Phase ordering note)
+braid:
+  strand: bd-hfjj  # sub-epic of bd-kw93
+  priority: P1
 ---
 
 ## Goal
