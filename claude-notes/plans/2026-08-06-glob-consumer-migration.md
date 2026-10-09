@@ -2,19 +2,17 @@
 title: 'Migrate remaining glob consumers onto the shared glob API'
 date: 2026-08-06
 description: 'Migrates the remaining glob consumers (`project.render`, `resources:`, `sidebar.auto:`) onto the shared glob API so a pattern means the same thing everywhere, fixing silent failures such as ignored negation and dropped leading slashes.'
+status: in-progress  # Phases 0–6 complete. All four consumers are migrated onto the shared API, every failure mode is diagnosed, and full `cargo xtask verify` (including the hub-client WASM leg) passes. Two small items remain — a user-facing docs page and `sidebar.auto` invalid-pattern reporting; see "Remaining".
+braid:
+  strand: bd-mt7a6uc4  # discovered-from:bd-v7ixzsp5
+  priority: P3
 ---
 
-**Braid strand:** bd-mt7a6uc4 (task, P3) — `discovered-from:bd-v7ixzsp5`
 **Stacks on:** PR [#460](https://github.com/quarto-dev/q2/pull/460)
 (`bugfix/bd-v7ixzsp5-listing-contents-globs`), branch
 `braid/bd-mt7a6uc4-glob-consumer-migration`
 **Parent plan:** `claude-notes/plans/2026-08-06-listing-glob-provenance.md`
 (decision 3)
-**Status:** Phases 0–6 complete. All four consumers are migrated onto
-the shared API, every failure mode is diagnosed, and full
-`cargo xtask verify` (including the hub-client WASM leg) passes. Two
-small items remain — a user-facing docs page and `sidebar.auto`
-invalid-pattern reporting; see "Remaining".
 
 > **Base-branch caveat.** #460 has not been through CI (GitHub Actions
 > outage, 2026-08-06). This branch stacks on it anyway; if review

@@ -1,10 +1,11 @@
 ---
 title: 'P2 — Custom-node wire format: versioned shared schema'
 date: 2026-08-20
+date-modified: 2026-09-18
 description: 'Promotes the `__quarto_custom_node` wire format to a versioned JSON schema, shared by the Rust producer, the TypeScript preview renderer, and the Lua filters, so per-type fields stop drifting apart.'
+status: draft  # Shape draft
 ---
 
-**Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P2-wire-schema.md`
 for the full correction history. Latest (round 4 review, Reviewer A): the worked `Callout` schema
 entry omitted `plain_data.order` — the field the entire epic turns on — because the field-discovery
 instruction pointed at the construction site, where `order` genuinely doesn't exist yet (it's
@@ -21,7 +22,6 @@ Also corrected the schema-version bullet's motivation (the "already-deployed Aut
 skew scenario didn't survive verification — the wire format isn't actually persisted in
 `quarto-automerge-schema`) and specified the Rust construction-site test must drive the real
 transform with per-conditional-branch fixtures, not a bare `CustomNode` literal.)
-**Status:** Shape draft
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P2-implementation.md`](2026-09-18-pandoc-hybrid-P2-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 

@@ -230,6 +230,49 @@ expensive one, so it waits for the earlier design to be accepted.
   one path that Haiku mangled in its output. The listing now shows date,
   title and description.
 
+## Phase 6: status, braid strand and dates in front matter
+
+Requested on 2026-10-09. About 800 plans have a header block of bold
+`**Key:** value` lines. The common keys are Status (532), Date (484),
+Branch, Strand/Braid/Beads/Issue (about 480 in total, with varied
+spelling), and Created/Updated. This phase moves three kinds of line into
+front matter:
+
+```yaml
+date: 2026-10-08
+date-modified: 2026-10-09   # from an Updated / Last updated line
+status: in-progress  # the original Status text, kept as a comment
+braid:
+  strand: bd-windows-arm64-nightly-xms5p652  # relationships from the line
+  priority: P2
+  labels: [ci, release, windows]
+```
+
+- **`status`** records what the plan claims, not the strand status. It
+  takes one of `draft`, `approved`, `in-progress`, `blocked`, `done`,
+  `superseded` or `abandoned`, and the original free text becomes a YAML
+  comment.
+- **`braid.strand`** is the lookup key for a future Lua filter that reads
+  the skein. It is always a bare id. Old `k-NNN` and short beads ids
+  resolve in braid. `kyoto-NNN` ids do not, so those plans get no
+  `braid:` and keep their line. Epic, parent and related ids stay in the
+  body.
+- **`priority` and `labels`** come from the skein
+  (`braid list --all --json`), not from the plan text.
+- **Dates** are ISO 8601. A Date or Created line that matches `date:` is
+  removed. One that does not match is reported and kept.
+- **Unchanged for now:** Branch, Worktree, Epic, Depends on and the
+  other keys stay in the body.
+
+Haiku extracts each field as structured output, together with the exact
+body lines it came from. The `--header-meta` mode of
+`scripts/claude-notes-plan-frontmatter.py` validates everything: the
+status is in the vocabulary, the strand id exists exactly (`braid show`
+matches prefixes, so `bd-9` would be ambiguous), the dates are ISO, and
+the lines appear verbatim in the header. Only then does it rewrite the
+file. Anything that fails is reported and left as it was. The rollout
+grows in stages, as in phase 5.
+
 ## Strands
 
 - bd-fvcip3t5: this work (child of bd-uk8zgkha)

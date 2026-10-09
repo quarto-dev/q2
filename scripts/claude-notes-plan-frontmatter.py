@@ -24,10 +24,35 @@ written by a model, see the plan for bd-fvcip3t5). The key goes right after
 `date:` (or at the end of the front matter); a file that already has one
 is reported and left alone.
 
+With `--header-meta JSON --skein SKEIN.json`, it moves the plan header
+lines `**Status:**`, `**Braid:**`/`**Strand:**`/`**Beads:**`/`**Issue:**`,
+and `**Date:**`/`**Created:**`/`**Updated:**` into front matter. JSON is a
+list of objects a model extracted from each plan (see the plan for
+bd-fvcip3t5):
+
+    {"path", "status": {"value", "original", "lines"},
+     "strand": {"id", "note", "lines"},
+     "created": {"value", "lines"}, "updated": {"value", "lines"}}
+
+Every field is checked before anything is written: `status.value` must be
+in STATUSES, `strand.id` must be an exact id in SKEIN (the output of
+`braid list --all --json`), dates must be ISO `YYYY-MM-DD`, `created`
+must equal the front matter `date:`, and every line in `lines` must occur
+verbatim in the body header (before the first `## `). A field that fails
+is reported and its lines stay in the body. Priority and labels come from
+the skein, not from the plan text. The result:
+
+    status: done  # <the original Status text>
+    braid:
+      strand: bd-xxxx  # <note>
+      priority: P2
+      labels: [ci, release]
+
 Usage:
   scripts/claude-notes-plan-frontmatter.py FILE...          # edit in place
   scripts/claude-notes-plan-frontmatter.py --dry-run FILE...
   scripts/claude-notes-plan-frontmatter.py --descriptions items.json [--dry-run]
+  scripts/claude-notes-plan-frontmatter.py --header-meta items.json --skein skein.json [--dry-run]
 """
 import json
 import argparse
@@ -136,12 +161,137 @@ def add_description(path, description, dry_run):
     return "changed", "added description"
 
 
+STATUSES = ("draft", "approved", "in-progress", "blocked", "done",
+            "superseded", "abandoned")
+ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def yaml_plain_ok(s):
+    return re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", s) is not None
+
+
+def comment(text):
+    text = " ".join((text or "").split())
+    return f"  # {text}" if text else ""
+
+
+def add_header_meta(it, skein, dry_run):
+    path = it["path"]
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    fm, body = split_front_matter(text)
+    if fm is None:
+        return "report", ["no front matter"]
+    blines = body.split("\n")
+    header_end = next((i for i, l in enumerate(blines) if l.startswith("## ")), len(blines))
+    header = blines[:header_end]
+    notes, remove, add = [], [], []
+
+    def lines_ok(field, lines):
+        missing = [l for l in lines if l not in header]
+        if missing:
+            notes.append(f"{field}: line not found verbatim: {missing[0][:60]!r}")
+            return False
+        return True
+
+    fm_date = next((l.split(":", 1)[1].strip() for l in fm if l.startswith("date:")), None)
+    created = it.get("created") or {}
+    if created.get("lines"):
+        if created.get("value") != fm_date:
+            notes.append(f"created {created.get('value')!r} != date {fm_date!r}; kept in body")
+        elif lines_ok("created", created["lines"]):
+            remove += created["lines"]
+
+    updated = it.get("updated") or {}
+    if updated.get("value"):
+        if has_key(fm, "date-modified"):
+            notes.append("already has date-modified:")
+        elif not ISO_RE.match(updated["value"]):
+            notes.append(f"updated {updated['value']!r} is not ISO")
+        elif lines_ok("updated", updated.get("lines", [])):
+            add.append(f"date-modified: {updated['value']}")
+            remove += updated.get("lines", [])
+
+    status = it.get("status") or {}
+    if status.get("value"):
+        if has_key(fm, "status"):
+            notes.append("already has status:")
+        elif status["value"] not in STATUSES:
+            notes.append(f"status {status['value']!r} not in vocabulary")
+        elif lines_ok("status", status.get("lines", [])):
+            orig = status.get("original") or ""
+            same = " ".join(orig.split()).strip(" .").lower() == status["value"]
+            add.append(f"status: {status['value']}" + ("" if same else comment(orig)))
+            remove += status.get("lines", [])
+
+    strand = it.get("strand") or {}
+    if strand.get("id"):
+        sid = strand["id"]
+        if has_key(fm, "braid") or has_key(fm, "beads"):
+            notes.append("already has braid:/beads:")
+        elif sid not in skein:
+            notes.append(f"strand {sid!r} not in skein")
+        elif lines_ok("strand", strand.get("lines", [])):
+            s = skein[sid]
+            add.append("braid:")
+            add.append(f"  strand: {sid}" + comment(strand.get("note")))
+            if s.get("priority") is not None:
+                add.append(f"  priority: P{s['priority']}")
+            labels = s.get("labels") or []
+            if labels:
+                add.append("  labels: [" + ", ".join(
+                    l if yaml_plain_ok(l) else yaml_single_quote(l) for l in labels) + "]")
+            remove += strand.get("lines", [])
+
+    if not add and not remove:
+        return ("report" if notes else "unchanged"), notes
+    # Insert after description: (or date:), keep the rest of the block.
+    at = next((i + 1 for i, l in enumerate(fm) if l.startswith("description:")), None)
+    if at is None:
+        at = next((i + 1 for i, l in enumerate(fm) if l.startswith("date:")), len(fm))
+    dm = [a for a in add if a.startswith("date-modified:")]
+    rest = [a for a in add if not a.startswith("date-modified:")]
+    if dm:
+        d_at = next(i + 1 for i, l in enumerate(fm) if l.startswith("date:"))
+        fm = fm[:d_at] + dm + fm[d_at:]
+        at += 1 if d_at < at else 0
+    fm = fm[:at] + rest + fm[at:]
+    drop = set(remove)
+    header = [l for l in header if l not in drop]
+    # Collapse the blank runs the removals leave behind.
+    out = []
+    for l in header:
+        if not l.strip() and (not out or not out[-1].strip()):
+            continue
+        out.append(l)
+    new_body = "\n".join(out + blines[header_end:])
+    if not dry_run:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("---\n" + "\n".join(fm) + "\n---\n\n" + new_body.lstrip("\n"))
+    return ("report" if notes else "changed"), notes
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--descriptions", metavar="JSON")
+    ap.add_argument("--header-meta", metavar="JSON")
+    ap.add_argument("--skein", metavar="JSON")
     ap.add_argument("files", nargs="*")
     args = ap.parse_args()
+    if args.header_meta:
+        with open(args.skein, encoding="utf-8") as f:
+            skein = {s["id"]: s for s in json.load(f)}
+        with open(args.header_meta, encoding="utf-8") as f:
+            items = json.load(f)
+        counts = {"changed": 0, "report": 0, "unchanged": 0}
+        for it in items:
+            status, notes = add_header_meta(it, skein, args.dry_run)
+            counts[status] += 1
+            for n in notes:
+                print(f"{it['path']}: {n}")
+        print(", ".join(f"{k} {v}" for k, v in counts.items()), file=sys.stderr)
+        return
     if args.descriptions:
         with open(args.descriptions, encoding="utf-8") as f:
             items = json.load(f)

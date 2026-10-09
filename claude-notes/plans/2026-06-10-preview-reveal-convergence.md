@@ -2,14 +2,13 @@
 title: 'q2 preview: converge revealjs with render (kill drift, keep the React path)'
 date: 2026-06-10
 description: 'Makes `q2 preview` reveal decks use the same reveal.js version and vendored CSS as `q2 render`, and stops the app''s Bootstrap stylesheet leaking onto slides, which caused the stray rule lines and dead transitions.'
+status: done  # DONE — all prongs (A–D) implemented + browser-verified; full `cargo xtask verify` green. Not pushed (awaiting review). Sibling follow-up \[Q-E1\] (HTML-preview CSS-codepath drift) remains a candidate strand.
+braid:
+  strand: bd-ibqkf9ry
+  priority: P2
 ---
 
-**Strand:** bd-ibqkf9ry
 **Related:** bd-jij5gge2 (render-side linked assets — done), bd-kw93 (q2-preview epic)
-**Date:** 2026-06-10
-**Status:** DONE — all prongs (A–D) implemented + browser-verified; full
-`cargo xtask verify` green. Not pushed (awaiting review). Sibling follow-up
-\[Q-E1\] (HTML-preview CSS-codepath drift) remains a candidate strand.
 
 ## Why preview reveal is React (and stays React)
 

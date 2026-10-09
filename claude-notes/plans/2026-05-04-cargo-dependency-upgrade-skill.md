@@ -2,11 +2,12 @@
 title: 'Cargo dependency upgrade skill — design discussion'
 date: 2026-05-04
 description: 'Designs a repeatable skill that surveys workspace Cargo dependencies, applies safe patch and minor upgrades in a worktree, and reports major upgrades for human review, with a plan doc rather than a PR.'
+status: approved  # Design settled — ready to implement
+braid:
+  strand: bd-hb8h
+  priority: P2
 ---
 
-**Beads issue:** bd-hb8h
-**Status:** Design settled — ready to implement
-**Created:** 2026-05-04
 **Decisions logged:** 2026-05-04
 
 ## Overview

@@ -2,12 +2,13 @@
 title: 'Native Windows ARM64 binaries in the nightly (and release) pipeline'
 date: 2026-10-08
 description: 'Adds a native `windows_arm64` build to the release and nightly pipeline, built and verified on an ARM64 Windows runner like the other legs, and selected automatically by `install.ps1` on ARM64 machines.'
+status: in-progress  # Implementing. Phases 1–4 are written. The Phase 1 dry run and Phase 5 are pending.
+braid:
+  strand: bd-windows-arm64-nightly-xms5p652
+  priority: P2
+  labels: [ci, release, windows]
 ---
 
-**Date:** 2026-10-08
-**Braid:** bd-windows-arm64-nightly-xms5p652 (feature, P2, labels release/ci/windows)
-**Status:** Implementing. Phases 1–4 are written. The Phase 1 dry run and
-Phase 5 are pending.
 **Review log:** 2026-10-08 Carlos approved D1–D5 as proposed (D3: both
 channels). He asked whether D4's detection could fail on Windows versions
 too old to have planned for ARM64; the answer is under D4 ("Old Windows").
