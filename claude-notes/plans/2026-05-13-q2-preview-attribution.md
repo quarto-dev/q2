@@ -1,4 +1,7 @@
-# q2-preview attribution wiring
+---
+title: 'q2-preview attribution wiring'
+date: 2026-05-13
+---
 
 ## Overview
 

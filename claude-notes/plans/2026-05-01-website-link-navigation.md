@@ -1,4 +1,7 @@
-# Website cross-document link navigation in hub-client
+---
+title: 'Website cross-document link navigation in hub-client'
+date: 2026-05-01
+---
 
 ## Status
 

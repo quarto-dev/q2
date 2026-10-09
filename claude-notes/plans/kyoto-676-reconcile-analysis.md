@@ -1,4 +1,7 @@
-# kyoto-676: Replace quarto-core engine/reconcile.rs with quarto-ast-reconcile
+---
+title: 'kyoto-676: Replace quarto-core engine/reconcile.rs with quarto-ast-reconcile'
+date: 2026-01-15
+---
 
 **Issue**: kyoto-676
 **Status**: In Progress

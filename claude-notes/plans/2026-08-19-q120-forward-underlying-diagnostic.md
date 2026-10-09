@@ -1,4 +1,7 @@
-# Q-1-20 discards the underlying markdown diagnostic for config values (bd-q120-masks-config-md-diagnostic-a039r80t)
+---
+title: 'Q-1-20 discards the underlying markdown diagnostic for config values (bd-q120-masks-config-md-diagnostic-a039r80t)'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-q120-masks-config-md-diagnostic-a039r80t

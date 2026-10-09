@@ -1,4 +1,7 @@
-# Fix indented continuation-line parse errors (bd-indented-continuation-parse-error-j7be7kuc)
+---
+title: 'Fix indented continuation-line parse errors (bd-indented-continuation-parse-error-j7be7kuc)'
+date: 2026-08-11
+---
 
 ## Overview
 

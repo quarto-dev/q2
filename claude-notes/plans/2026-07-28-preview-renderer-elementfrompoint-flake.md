@@ -1,4 +1,7 @@
-# Flaky preview-renderer run: unhandled `elementFromPoint` error (bd-cpyq99ps)
+---
+title: 'Flaky preview-renderer run: unhandled `elementFromPoint` error (bd-cpyq99ps)'
+date: 2026-07-28
+---
 
 **Date:** 2026-07-28
 **Braid:** bd-cpyq99ps (bug, P2) — `discovered-from: bd-dofxhzaj`

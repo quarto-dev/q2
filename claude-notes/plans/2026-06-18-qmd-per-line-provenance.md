@@ -1,4 +1,7 @@
-# qmd writer — leaf-block source provenance (fixes nest-in **and** engine line numbers)
+---
+title: 'qmd writer — leaf-block source provenance (fixes nest-in **and** engine line numbers)'
+date: 2026-06-18
+---
 
 **Date:** 2026-06-18
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

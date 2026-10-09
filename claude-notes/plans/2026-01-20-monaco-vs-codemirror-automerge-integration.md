@@ -1,4 +1,7 @@
-# Monaco vs CodeMirror Automerge Integration Analysis
+---
+title: 'Monaco vs CodeMirror Automerge Integration Analysis'
+date: 2026-01-20
+---
 
 **Date**: 2026-01-20
 **Status**: Research complete

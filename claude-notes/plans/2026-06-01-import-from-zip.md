@@ -1,4 +1,7 @@
-# Import a project from a ZIP archive (hub-client)
+---
+title: 'Import a project from a ZIP archive (hub-client)'
+date: 2026-06-01
+---
 
 **Beads:** bd-apv23
 **Status:** Design — awaiting user go-ahead before implementation.

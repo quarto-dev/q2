@@ -1,4 +1,7 @@
-# Index-miss href relativization (×2) + website breadcrumbs
+---
+title: 'Index-miss href relativization (×2) + website breadcrumbs'
+date: 2026-08-14
+---
 
 **Date:** 2026-08-14
 **Braid:**

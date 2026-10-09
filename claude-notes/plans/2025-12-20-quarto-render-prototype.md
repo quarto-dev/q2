@@ -1,4 +1,7 @@
-# Minimal `quarto render` Prototype Design
+---
+title: 'Minimal `quarto render` Prototype Design'
+date: 2025-12-20
+---
 
 **Date**: 2025-12-20
 **Status**: Proposal - Awaiting Review (Revision 3)

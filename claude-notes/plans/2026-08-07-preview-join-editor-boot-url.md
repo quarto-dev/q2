@@ -1,4 +1,7 @@
-# Editor boot URL for `q2 preview --join` guests (skip project-set setup)
+---
+title: 'Editor boot URL for `q2 preview --join` guests (skip project-set setup)'
+date: 2026-08-07
+---
 
 Strand: bd-7htq16rx
 

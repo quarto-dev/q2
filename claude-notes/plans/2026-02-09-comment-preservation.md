@@ -1,4 +1,7 @@
-# HTML Comment Preservation in Incremental Writer
+---
+title: 'HTML Comment Preservation in Incremental Writer'
+date: 2026-02-09
+---
 
 **Beads issue:** `bd-1066`
 **Status:** Phases 1-4 complete

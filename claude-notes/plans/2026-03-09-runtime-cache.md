@@ -1,4 +1,7 @@
-# Plan: Add General Caching to SystemRuntime
+---
+title: 'Plan: Add General Caching to SystemRuntime'
+date: 2026-03-09
+---
 
 ## Overview
 

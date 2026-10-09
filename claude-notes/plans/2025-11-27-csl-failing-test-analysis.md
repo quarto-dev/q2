@@ -1,4 +1,7 @@
-# CSL Failing Test Analysis
+---
+title: 'CSL Failing Test Analysis'
+date: 2025-11-27
+---
 
 **Created**: 2025-11-27
 **Status**: Analysis complete, ready for implementation

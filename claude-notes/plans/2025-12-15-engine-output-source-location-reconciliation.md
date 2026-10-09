@@ -1,4 +1,7 @@
-# Source Location Reconciliation After Engine Execution
+---
+title: 'Source Location Reconciliation After Engine Execution'
+date: 2025-12-15
+---
 
 **Date**: 2025-12-15
 **Issue**: k-6daf

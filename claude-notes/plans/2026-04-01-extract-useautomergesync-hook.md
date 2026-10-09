@@ -1,4 +1,7 @@
-# Refactor: Extract `useAutomergeSync` Hook
+---
+title: 'Refactor: Extract `useAutomergeSync` Hook'
+date: 2026-04-01
+---
 
 ## Context
 

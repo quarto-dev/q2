@@ -1,4 +1,7 @@
-# HTML Postprocessor Analysis and Rust DOM API Design
+---
+title: 'HTML Postprocessor Analysis and Rust DOM API Design'
+date: 2025-12-20
+---
 
 **Date**: 2025-12-20
 **Status**: Research Complete - API Design Pending

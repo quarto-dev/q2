@@ -1,4 +1,7 @@
-# Website sidebar responsive breakpoints
+---
+title: 'Website sidebar responsive breakpoints'
+date: 2026-05-01
+---
 
 ## Status
 

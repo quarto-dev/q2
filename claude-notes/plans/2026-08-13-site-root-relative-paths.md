@@ -1,4 +1,7 @@
-# Site-root-relative paths — three cases, and what replaces Q1's deno-dom rewrite (bd-root-relative-paths-design-fc5pvkcv)
+---
+title: 'Site-root-relative paths — three cases, and what replaces Q1''s deno-dom rewrite (bd-root-relative-paths-design-fc5pvkcv)'
+date: 2026-08-13
+---
 
 **Date:** 2026-08-13
 **Braid:** bd-root-relative-paths-design-fc5pvkcv (type: question, priority 1, label: websites)

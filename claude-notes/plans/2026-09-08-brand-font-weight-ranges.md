@@ -1,4 +1,7 @@
-# brand.yml font weight ranges collapse to 400; no variable-font axis support (bd-5fseopxy)
+---
+title: 'brand.yml font weight ranges collapse to 400; no variable-font axis support (bd-5fseopxy)'
+date: 2026-09-08
+---
 
 **Date:** 2026-09-08
 **Braid:** bd-5fseopxy (bug, p2, labels: css, diagnostics, theming)

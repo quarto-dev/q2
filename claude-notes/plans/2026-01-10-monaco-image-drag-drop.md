@@ -1,4 +1,7 @@
-# Monaco Editor Image Drag-Drop Feature
+---
+title: 'Monaco Editor Image Drag-Drop Feature'
+date: 2026-01-10
+---
 
 **Beads Issue:** k-znum
 **Created:** 2026-01-10

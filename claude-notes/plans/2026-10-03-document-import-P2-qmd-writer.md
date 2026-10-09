@@ -1,4 +1,7 @@
-# Plan: qmd writer fixes for imported documents (document import P2)
+---
+title: 'Plan: qmd writer fixes for imported documents (document import P2)'
+date: 2026-10-03
+---
 
 **Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I3, I17, I18; Findings → "qmd writer bugs reachable from docx")

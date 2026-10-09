@@ -1,4 +1,7 @@
-# User theme .scss compile error is swallowed: page silently ships DEFAULT_CSS (bd-jsvetdea)
+---
+title: 'User theme .scss compile error is swallowed: page silently ships DEFAULT_CSS (bd-jsvetdea)'
+date: 2026-09-08
+---
 
 **Date:** 2026-09-08
 **Braid:** bd-jsvetdea (bug, p2, labels: css, diagnostics, theming). Folds in bd-qmpygp02; resolves bd-36vmz7nk.

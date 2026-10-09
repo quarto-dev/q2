@@ -1,4 +1,7 @@
-# Plan: Switch Hub-Client to render_qmd
+---
+title: 'Plan: Switch Hub-Client to render_qmd'
+date: 2026-03-07
+---
 
 ## Context for New Agents
 

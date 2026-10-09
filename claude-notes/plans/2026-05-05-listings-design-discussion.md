@@ -1,4 +1,7 @@
-# Listings — design discussion against the DocumentProfile architecture
+---
+title: 'Listings — design discussion against the DocumentProfile architecture'
+date: 2026-05-05
+---
 
 **Date:** 2026-05-05
 **Status:** Discussion document **promoted to an epic plan** at

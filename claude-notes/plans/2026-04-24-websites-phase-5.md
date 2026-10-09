@@ -1,4 +1,7 @@
-# Phase 5 — Scoped artifact store + `site_libs/`
+---
+title: 'Phase 5 — Scoped artifact store + `site_libs/`'
+date: 2026-04-24
+---
 
 **Date:** 2026-04-24
 **Beads:** `bd-u5pr` (closed). Follow-ups TBD at close-out.

@@ -1,4 +1,7 @@
-# Mermaid `%%|` cell options are not processed (bd-mermaid-cell-options-9wo3crl0)
+---
+title: 'Mermaid `%%|` cell options are not processed (bd-mermaid-cell-options-9wo3crl0)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-mermaid-cell-options-9wo3crl0

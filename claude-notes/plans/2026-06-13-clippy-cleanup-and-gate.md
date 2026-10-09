@@ -1,4 +1,7 @@
-# Clean up clippy debt and gate clippy in CI (bd-3zst4hwy)
+---
+title: 'Clean up clippy debt and gate clippy in CI (bd-3zst4hwy)'
+date: 2026-06-13
+---
 
 ## Overview
 

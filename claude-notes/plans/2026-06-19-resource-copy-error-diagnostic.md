@@ -1,4 +1,7 @@
-# Resource-copy failure → structured diagnostic
+---
+title: 'Resource-copy failure → structured diagnostic'
+date: 2026-06-19
+---
 
 **Strand:** bd-bxrkxblx
 **Date:** 2026-06-19

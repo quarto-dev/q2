@@ -1,4 +1,7 @@
-# Plan: Whole-book request for Typst, PDF and EPUB (pandoc-request R9)
+---
+title: 'Plan: Whole-book request for Typst, PDF and EPUB (pandoc-request R9)'
+date: 2026-10-02
+---
 
 **Date:** 2026-10-02
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)

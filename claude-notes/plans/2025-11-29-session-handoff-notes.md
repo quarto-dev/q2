@@ -1,4 +1,7 @@
-# Session Handoff Notes
+---
+title: 'Session Handoff Notes'
+date: 2025-11-29
+---
 
 **Date**: 2025-11-29
 **Status**: Ready for next session

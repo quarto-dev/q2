@@ -1,4 +1,7 @@
-# Per-Project Actor ID via Server-Secret HMAC
+---
+title: 'Per-Project Actor ID via Server-Secret HMAC'
+date: 2026-03-22
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Plan: Remove source_info_to_range Function
+---
+title: 'Plan: Remove source_info_to_range Function'
+date: 2025-10-22
+---
 
 **Date:** 2025-10-22
 **Context:** Code review feedback - `source_info_to_range` is only used for extracting row numbers in `process_list`

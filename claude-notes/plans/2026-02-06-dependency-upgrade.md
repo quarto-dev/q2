@@ -1,4 +1,7 @@
-# Dependency Upgrade — 2026-02-06
+---
+title: 'Dependency Upgrade — 2026-02-06'
+date: 2026-02-06
+---
 
 First run of the dependency upgrade workflow.
 

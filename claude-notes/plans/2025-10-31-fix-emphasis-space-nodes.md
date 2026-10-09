@@ -1,4 +1,7 @@
-# Plan: Fix Missing Space Nodes Around Emphasis
+---
+title: 'Plan: Fix Missing Space Nodes Around Emphasis'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Status**: Planning

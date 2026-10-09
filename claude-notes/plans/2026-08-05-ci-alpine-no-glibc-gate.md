@@ -1,4 +1,7 @@
-# CI gate: released linux binaries must run with no glibc (bd-3b47pxmm)
+---
+title: 'CI gate: released linux binaries must run with no glibc (bd-3b47pxmm)'
+date: 2026-08-05
+---
 
 **Date:** 2026-08-05
 **Braid:** bd-3b47pxmm (task, P2, filed 2026-08-05 by Carlos while cutting v0.11.0)

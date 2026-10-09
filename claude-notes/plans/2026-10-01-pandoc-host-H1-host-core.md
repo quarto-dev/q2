@@ -1,4 +1,7 @@
-# Plan: Host core (pandoc-host H1)
+---
+title: 'Plan: Host core (pandoc-host H1)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

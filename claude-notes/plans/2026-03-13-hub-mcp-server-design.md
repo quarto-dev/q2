@@ -1,4 +1,7 @@
-# Hub MCP Server Design: Automerge Project Access for AI Agents
+---
+title: 'Hub MCP Server Design: Automerge Project Access for AI Agents'
+date: 2026-03-13
+---
 
 ## Overview
 

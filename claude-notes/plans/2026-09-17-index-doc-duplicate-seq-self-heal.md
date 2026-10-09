@@ -1,4 +1,7 @@
-# Automatic self-heal for a duplicate-seq-stuck index document
+---
+title: 'Automatic self-heal for a duplicate-seq-stuck index document'
+date: 2026-09-17
+---
 
 **Strand:** bd-6f21d4c6. **Retroactive plan** — written after the design was
 implemented and verified, to document it for review rather than to drive the

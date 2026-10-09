@@ -1,4 +1,7 @@
-# Fix Diagnostic Popup Clipping by Navbar (bd-1wxq)
+---
+title: 'Fix Diagnostic Popup Clipping by Navbar (bd-1wxq)'
+date: 2026-02-11
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# TypeScript Monorepo Design for Hub-Client Extraction
+---
+title: 'TypeScript Monorepo Design for Hub-Client Extraction'
+date: 2026-01-14
+---
 
 **Issue**: kyoto-1ew
 **Date**: 2026-01-14

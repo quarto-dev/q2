@@ -1,4 +1,7 @@
-# Listings lose declared order of explicit `contents:` entries (bd-listing-declared-order-3ixcvc4o)
+---
+title: 'Listings lose declared order of explicit `contents:` entries (bd-listing-declared-order-3ixcvc4o)'
+date: 2026-08-09
+---
 
 **Date:** 2026-08-09
 **Braid:** bd-listing-declared-order-3ixcvc4o (origin: `br-listing-declared-order-qodof0f6` in the connect-docs porting skein)

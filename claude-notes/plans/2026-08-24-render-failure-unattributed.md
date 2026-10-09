@@ -1,4 +1,7 @@
-# Render failures with no attribution (bd-render-failure-unattributed-yxe0v7th)
+---
+title: 'Render failures with no attribution (bd-render-failure-unattributed-yxe0v7th)'
+date: 2026-08-24
+---
 
 ## Overview
 

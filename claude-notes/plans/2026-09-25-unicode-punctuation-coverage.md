@@ -1,4 +1,7 @@
-# Unicode ⟨ (U+27E8) and other non-ASCII brackets are uncoded parse errors (bd-angle-bracket-u27e8-parse-error-r6l55zmh)
+---
+title: 'Unicode ⟨ (U+27E8) and other non-ASCII brackets are uncoded parse errors (bd-angle-bracket-u27e8-parse-error-r6l55zmh)'
+date: 2026-09-25
+---
 
 **Date:** 2026-09-25
 **Braid:** bd-angle-bracket-u27e8-parse-error-r6l55zmh (child of epic bd-uk8zgkha)

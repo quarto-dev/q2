@@ -1,4 +1,7 @@
-# Port automerge-inspector into hub-client as a debugging view
+---
+title: 'Port automerge-inspector into hub-client as a debugging view'
+date: 2026-04-16
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Include failure diagnostics: surface inner errors, kill spurious "Unknown shortcode"
+---
+title: 'Include failure diagnostics: surface inner errors, kill spurious "Unknown shortcode"'
+date: 2026-08-07
+---
 
 **Strand:** bd-qpvoamvu (discovered: bd-1fz3vh99 — nested-container includes)
 **Status:** implemented 2026-08-07 — commit 9abfda21, PR

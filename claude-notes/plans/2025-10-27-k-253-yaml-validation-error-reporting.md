@@ -1,4 +1,7 @@
-# k-253: YAML Validation Error Reporting Improvements
+---
+title: 'k-253: YAML Validation Error Reporting Improvements'
+date: 2025-10-27
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

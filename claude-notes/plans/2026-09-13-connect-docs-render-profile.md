@@ -1,4 +1,7 @@
-# Time-profile `q2 render` on the Connect docs (docs-quarto-2)
+---
+title: 'Time-profile `q2 render` on the Connect docs (docs-quarto-2)'
+date: 2026-09-13
+---
 
 **Date:** 2026-09-13
 **Strand:** bd-fq44dlnm

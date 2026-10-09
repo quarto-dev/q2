@@ -1,4 +1,7 @@
-# Minimal Website Render: Static Resources and Templates
+---
+title: 'Minimal Website Render: Static Resources and Templates'
+date: 2025-12-20
+---
 
 ## Overview
 

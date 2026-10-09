@@ -1,4 +1,7 @@
-# L8 — Custom listing templates (sub-plan)
+---
+title: 'L8 — Custom listing templates (sub-plan)'
+date: 2026-05-07
+---
 
 **Date:** 2026-05-07
 **Beads:** `bd-rqgx` (this phase). Parent epic: `bd-61cd`

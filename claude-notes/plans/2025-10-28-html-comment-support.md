@@ -1,4 +1,7 @@
-# HTML Comment Support in Quarto Markdown
+---
+title: 'HTML Comment Support in Quarto Markdown'
+date: 2025-10-28
+---
 
 **Date:** 2025-10-28
 **Status:** Design Phase

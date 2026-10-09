@@ -1,4 +1,7 @@
-# hub-client: live `_brand.yml` change doesn't recompile preview CSS (AST/slides path)
+---
+title: 'hub-client: live `_brand.yml` change doesn''t recompile preview CSS (AST/slides path)'
+date: 2026-06-22
+---
 
 **Strand:** bd-4jjckvwt
 **Date:** 2026-06-22

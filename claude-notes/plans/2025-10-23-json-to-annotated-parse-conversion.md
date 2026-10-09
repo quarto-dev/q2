@@ -1,4 +1,7 @@
-# Plan: TypeScript Module to Convert quarto-markdown-pandoc JSON to AnnotatedParse
+---
+title: 'Plan: TypeScript Module to Convert quarto-markdown-pandoc JSON to AnnotatedParse'
+date: 2025-10-23
+---
 
 ## Problem Statement
 

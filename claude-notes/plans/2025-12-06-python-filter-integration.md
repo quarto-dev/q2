@@ -1,4 +1,7 @@
-# Python Filter Integration for quarto-markdown-pandoc
+---
+title: 'Python Filter Integration for quarto-markdown-pandoc'
+date: 2025-12-06
+---
 
 **Beads Issue:** k-fgyv
 **Status:** Design/Planning Phase

@@ -1,4 +1,7 @@
-# GH issue #523 — `code-fold` vs `execute: echo: false`: assessment and fix plan
+---
+title: 'GH issue #523 — `code-fold` vs `execute: echo: false`: assessment and fix plan'
+date: 2026-08-14
+---
 
 **Issue:** https://github.com/quarto-dev/q2/issues/523 (third-party report, 2026-08-13)
 **Strand:** bd-nn2fou8h (main). Adjacent: bd-fjfizas7 (engine inference).

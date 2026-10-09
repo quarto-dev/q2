@@ -1,4 +1,7 @@
-# Plan: WASM Lua `io` and `os` Support
+---
+title: 'Plan: WASM Lua `io` and `os` Support'
+date: 2026-03-26
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Plan: CSS inlining for typst raw HTML tables (pandoc-request R8)
+---
+title: 'Plan: CSS inlining for typst raw HTML tables (pandoc-request R8)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)

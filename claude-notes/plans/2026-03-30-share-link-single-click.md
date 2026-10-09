@@ -1,4 +1,7 @@
-# Share Link Single-Click Flow
+---
+title: 'Share Link Single-Click Flow'
+date: 2026-03-30
+---
 
 ## Overview
 

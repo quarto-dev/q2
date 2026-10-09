@@ -1,4 +1,7 @@
-# Unified LSP and Hub Architecture Design
+---
+title: 'Unified LSP and Hub Architecture Design'
+date: 2025-12-11
+---
 
 **Created:** 2025-12-11
 **Status:** Design Analysis

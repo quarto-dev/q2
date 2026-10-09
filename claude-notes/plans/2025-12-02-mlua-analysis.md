@@ -1,4 +1,7 @@
-# mlua Analysis for Lua Filter Implementation
+---
+title: 'mlua Analysis for Lua Filter Implementation'
+date: 2025-12-02
+---
 
 **Date:** 2025-12-02
 **Updated:** 2025-12-02 (revised based on review feedback)

@@ -1,4 +1,7 @@
-# Smoke-All Tests in Playwright E2E
+---
+title: 'Smoke-All Tests in Playwright E2E'
+date: 2026-03-10
+---
 
 **Date**: 2026-03-10
 **Status**: Phases 1-5 complete, Phase 6 (CI) pending

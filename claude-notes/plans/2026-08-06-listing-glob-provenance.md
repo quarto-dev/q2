@@ -1,4 +1,7 @@
-# Listing `contents:` globs — provenance-based base-directory resolution
+---
+title: 'Listing `contents:` globs — provenance-based base-directory resolution'
+date: 2026-08-06
+---
 
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/456
 **Braid strand:** bd-v7ixzsp5 (bug, P1)

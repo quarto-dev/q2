@@ -1,4 +1,7 @@
-# bd-oejuizi9 — declaration-site resolution for theme / include-\* config paths
+---
+title: 'bd-oejuizi9 — declaration-site resolution for theme / include-\* config paths'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-oejuizi9 (in_progress). Also partially resolves bd-rdcvjy2s

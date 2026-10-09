@@ -1,4 +1,7 @@
-# Tree-sitter Grammar Refactoring Plan
+---
+title: 'Tree-sitter Grammar Refactoring Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Status**: In Progress

@@ -1,4 +1,7 @@
-# Quarto Lua API: `quarto.*` Namespace Implementation
+---
+title: 'Quarto Lua API: `quarto.*` Namespace Implementation'
+date: 2026-03-20
+---
 
 **Created**: 2026-03-20
 **Status**: IN PROGRESS

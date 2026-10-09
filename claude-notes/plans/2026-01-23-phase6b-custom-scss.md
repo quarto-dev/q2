@@ -1,4 +1,7 @@
-# Phase 6b: Custom SCSS Theme Support
+---
+title: 'Phase 6b: Custom SCSS Theme Support'
+date: 2026-01-23
+---
 
 **Parent Plan**: `2026-01-13-sass-compilation.md`
 **Created**: 2026-01-23

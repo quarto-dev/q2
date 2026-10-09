@@ -1,4 +1,7 @@
-# Phase 7: SASS Render Integration
+---
+title: 'Phase 7: SASS Render Integration'
+date: 2026-01-24
+---
 
 **Parent Plan**: `2026-01-13-sass-compilation.md`
 **Created**: 2026-01-24

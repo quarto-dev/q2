@@ -1,4 +1,7 @@
-# Sequential multi-engine execution
+---
+title: 'Sequential multi-engine execution'
+date: 2026-05-27
+---
 
 **Issue:** bd-5yff4 — feature/design.
 

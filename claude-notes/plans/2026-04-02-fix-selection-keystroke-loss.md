@@ -1,4 +1,7 @@
-# Fix: First keystroke lost after selection in Monaco editor
+---
+title: 'Fix: First keystroke lost after selection in Monaco editor'
+date: 2026-04-02
+---
 
 ## Overview
 

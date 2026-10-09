@@ -1,4 +1,7 @@
-# Table listings ignore fields/field-display-names (bd-listing-table-fields-peg1w3b3)
+---
+title: 'Table listings ignore fields/field-display-names (bd-listing-table-fields-peg1w3b3)'
+date: 2026-08-09
+---
 
 **Date:** 2026-08-09
 **Braid:** bd-listing-table-fields-peg1w3b3 (bug, P1, label `listings`)

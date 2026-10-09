@@ -1,4 +1,7 @@
-# claude-notes as a Quarto 2 website
+---
+title: 'claude-notes as a Quarto 2 website'
+date: 2026-09-25
+---
 
 **Strand:** bd-uk8zgkha (epic)
 **Branch:** `braid/bd-uk8zgkha-claude-notes-website` (main checkout, no worktree; not pushed)

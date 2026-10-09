@@ -1,4 +1,7 @@
-# Lua Runtime Abstraction Layer Design
+---
+title: 'Lua Runtime Abstraction Layer Design'
+date: 2025-12-03
+---
 
 **Date**: 2025-12-03 (Updated: 2025-12-03)
 **Related Issues**: k-475, k-473

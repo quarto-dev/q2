@@ -1,4 +1,7 @@
-# Lua Filter Traversal Order Fix
+---
+title: 'Lua Filter Traversal Order Fix'
+date: 2025-12-02
+---
 
 **Issue**: k-477 (Investigate Lua filter traversal order)
 **Parent**: k-409 (Lua filter support for quarto-markdown-pandoc)

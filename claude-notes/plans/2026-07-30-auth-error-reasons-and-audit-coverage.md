@@ -1,4 +1,7 @@
-# Auth failure: distinguishable reasons and audit coverage
+---
+title: 'Auth failure: distinguishable reasons and audit coverage'
+date: 2026-07-30
+---
 
 **Status:** implemented 2026-07-30 on `braid/bd-htis60s7-auth-error-reasons`.
 **Date:** 2026-07-30.

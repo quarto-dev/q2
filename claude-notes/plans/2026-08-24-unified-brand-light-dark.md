@@ -1,4 +1,7 @@
-# Unified `_brand.yml` per-color light/dark values (GH #580, bd-unified-brand-split-ep49amad)
+---
+title: 'Unified `_brand.yml` per-color light/dark values (GH #580, bd-unified-brand-split-ep49amad)'
+date: 2026-08-24
+---
 
 ## Overview
 

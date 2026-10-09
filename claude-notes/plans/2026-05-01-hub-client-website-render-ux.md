@@ -1,4 +1,7 @@
-# Hub-client website rendering UX
+---
+title: 'Hub-client website rendering UX'
+date: 2026-05-01
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Plan: Jupyter detection and test environment (q2)
+---
+title: 'Plan: Jupyter detection and test environment (q2)'
+date: 2026-09-28
+---
 
 ## Overview
 

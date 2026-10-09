@@ -1,4 +1,7 @@
-# Plan: Fix JSON Serialization Ordering with Typed Structs
+---
+title: 'Plan: Fix JSON Serialization Ordering with Typed Structs'
+date: 2026-01-12
+---
 
 **STATUS: COMPLETED**
 

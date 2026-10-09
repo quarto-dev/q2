@@ -1,4 +1,7 @@
-# HTML Attribute Handling Fix Plan
+---
+title: 'HTML Attribute Handling Fix Plan'
+date: 2025-12-27
+---
 
 ## Problem Statement
 

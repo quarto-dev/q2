@@ -1,4 +1,7 @@
-# `source: file` brand fonts: never copied, `@font-face` URLs resolve against the theme CSS's directory (bd-ve916wr8)
+---
+title: '`source: file` brand fonts: never copied, `@font-face` URLs resolve against the theme CSS''s directory (bd-ve916wr8)'
+date: 2026-09-08
+---
 
 **Date:** 2026-09-08
 **Braid:** bd-ve916wr8

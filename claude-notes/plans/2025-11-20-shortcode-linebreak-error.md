@@ -1,4 +1,7 @@
-# Shortcode Line Break Error Message Design
+---
+title: 'Shortcode Line Break Error Message Design'
+date: 2025-11-20
+---
 
 Date: 2025-11-20
 File: claude-notes/plans/2025-11-20-shortcode-linebreak-error.md

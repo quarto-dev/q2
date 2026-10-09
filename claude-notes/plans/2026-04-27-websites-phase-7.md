@@ -1,4 +1,7 @@
-# Phase 7 — Post-render (sitemap, favicon, site-url / title-prefix)
+---
+title: 'Phase 7 — Post-render (sitemap, favicon, site-url / title-prefix)'
+date: 2026-04-27
+---
 
 **Date:** 2026-04-27
 **Beads:** `bd-b9mz` (parent `bd-0tr6`).

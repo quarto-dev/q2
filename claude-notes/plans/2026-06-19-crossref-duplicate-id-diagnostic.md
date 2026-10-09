@@ -1,4 +1,7 @@
-# Duplicate crossref identifier — diagnosis & structured diagnostic
+---
+title: 'Duplicate crossref identifier — diagnosis & structured diagnostic'
+date: 2026-06-19
+---
 
 **Strand:** bd-rr6qzcvu (discovered-from bd-bxrkxblx)
 **Date:** 2026-06-19

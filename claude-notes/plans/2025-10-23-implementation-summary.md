@@ -1,4 +1,7 @@
-# Implementation Summary - Standalone TypeScript Package Setup
+---
+title: 'Implementation Summary - Standalone TypeScript Package Setup'
+date: 2025-10-23
+---
 
 ## What Was Done
 

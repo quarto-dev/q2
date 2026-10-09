@@ -1,4 +1,7 @@
-# Experiment: Lua on wasm32-unknown-unknown via LUAI_TRY/LUAI_THROW Override
+---
+title: 'Experiment: Lua on wasm32-unknown-unknown via LUAI_TRY/LUAI_THROW Override'
+date: 2026-03-16
+---
 
 **Date**: 2026-03-16
 **Branch**: `experiment/lua-wasm`

@@ -1,4 +1,7 @@
-# Plan: Add WASM Compilation Tests to CI
+---
+title: 'Plan: Add WASM Compilation Tests to CI'
+date: 2026-01-12
+---
 
 **Issue**: k-685
 **Status**: Draft - awaiting review

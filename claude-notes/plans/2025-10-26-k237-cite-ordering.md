@@ -1,4 +1,7 @@
-# K-237: Citation Component Ordering Issue
+---
+title: 'K-237: Citation Component Ordering Issue'
+date: 2025-10-26
+---
 
 ## Problem
 

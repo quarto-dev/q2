@@ -1,4 +1,7 @@
-# Fix Trailing LineBreak at End of Block (k-0dqw)
+---
+title: 'Fix Trailing LineBreak at End of Block (k-0dqw)'
+date: 2025-12-17
+---
 
 **Issue**: k-0dqw
 **Created**: 2025-12-17

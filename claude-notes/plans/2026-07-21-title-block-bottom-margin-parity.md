@@ -1,4 +1,7 @@
-# Title-block bottom-margin parity (Q1 ↔ Q2)
+---
+title: 'Title-block bottom-margin parity (Q1 ↔ Q2)'
+date: 2026-07-21
+---
 
 **Strand:** bd-btjkyylx
 **Date:** 2026-07-21

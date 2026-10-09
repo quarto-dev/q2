@@ -1,4 +1,7 @@
-# Float caption prefix skipped for Plain-first captions (attr-form figures, caption-form tables)
+---
+title: 'Float caption prefix skipped for Plain-first captions (attr-form figures, caption-form tables)'
+date: 2026-09-17
+---
 
 **Strand:** bd-n3sark9b (canonical). Marked as duplicates of it: bd-uwv2eec2 (2026-06-18),
 bd-hb9a9ik8 (2026-07-21), bd-51k5yz4e (2026-07-17), bd-4vbd3b7g (2026-08-14). Same defect,

@@ -1,4 +1,7 @@
-# Shortcode Resolution Implementation Plan
+---
+title: 'Shortcode Resolution Implementation Plan'
+date: 2026-02-01
+---
 
 **Beads Issue**: kyoto-yq1r
 **Created**: 2026-02-01

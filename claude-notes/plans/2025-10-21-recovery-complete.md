@@ -1,4 +1,7 @@
-# Recovery Complete - Summary
+---
+title: 'Recovery Complete - Summary'
+date: 2025-10-21
+---
 
 ## Problem
 The repository was in a broken state after commit 274a1c5 ("claude broke things"), which contained mixed work from two separate issues (k-103 and k-104) and didn't compile.

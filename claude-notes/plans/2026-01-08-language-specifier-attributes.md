@@ -1,4 +1,7 @@
-# Plan: Support Attributes in Language Specifier for Code Blocks
+---
+title: 'Plan: Support Attributes in Language Specifier for Code Blocks'
+date: 2026-01-08
+---
 
 ## Problem Statement
 

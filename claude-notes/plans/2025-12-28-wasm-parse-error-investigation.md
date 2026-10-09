@@ -1,4 +1,7 @@
-# WASM Parse Error Detection Investigation
+---
+title: 'WASM Parse Error Detection Investigation'
+date: 2025-12-28
+---
 
 ## STATUS: FIXED ✓
 

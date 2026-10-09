@@ -1,4 +1,7 @@
-# Fix: Incremental Writer Loses Blank Line Between Front Matter and First Block
+---
+title: 'Fix: Incremental Writer Loses Blank Line Between Front Matter and First Block'
+date: 2026-02-08
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Block editing — Plan 1: markdown-faithful editing on today's surfaces
+---
+title: 'Block editing — Plan 1: markdown-faithful editing on today''s surfaces'
+date: 2026-06-06
+---
 
 **Date:** 2026-06-06
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)

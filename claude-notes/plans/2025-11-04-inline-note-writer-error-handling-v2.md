@@ -1,4 +1,7 @@
-# Inline Note Definition Error Handling Using DiagnosticMessage
+---
+title: 'Inline Note Definition Error Handling Using DiagnosticMessage'
+date: 2025-11-04
+---
 
 Date: 2025-11-04
 File: claude-notes/plans/2025-11-04-inline-note-writer-error-handling-v2.md

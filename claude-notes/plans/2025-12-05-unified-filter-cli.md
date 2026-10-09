@@ -1,4 +1,7 @@
-# Unified Filter CLI with Citeproc Support
+---
+title: 'Unified Filter CLI with Citeproc Support'
+date: 2025-12-05
+---
 
 **Beads Issue:** k-5ywq
 

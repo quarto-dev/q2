@@ -1,4 +1,7 @@
-# Make q2 self-documenting again: don't execute a cell that is being displayed
+---
+title: 'Make q2 self-documenting again: don''t execute a cell that is being displayed'
+date: 2026-09-02
+---
 
 **Strand:** bd-knitr-executes-nested-display-fence-atbtktdj (epic: bd-98m98wg8)
 **Branch:** `braid/bd-knitr-executes-nested-display-fence-atbtktdj-mask` off

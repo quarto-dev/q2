@@ -1,4 +1,7 @@
-# Pre-fill new file dialog with current file's directory path
+---
+title: 'Pre-fill new file dialog with current file''s directory path'
+date: 2026-02-04
+---
 
 **Issue:** bd-3cus
 

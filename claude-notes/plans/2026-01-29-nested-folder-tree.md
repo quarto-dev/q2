@@ -1,4 +1,7 @@
-# Nested Collapsible Folder Tree for FileSidebar
+---
+title: 'Nested Collapsible Folder Tree for FileSidebar'
+date: 2026-01-29
+---
 
 **Issue**: kyoto-cvr
 **Created**: 2026-01-29

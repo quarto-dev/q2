@@ -1,4 +1,7 @@
-# Force-reconnect the sync WebSocket on wake and network change
+---
+title: 'Force-reconnect the sync WebSocket on wake and network change'
+date: 2026-09-28
+---
 
 This plan deliberately avoids heartbeats: it is client-only, has no hub or
 protocol change, and covers the common triggers at the cost of the

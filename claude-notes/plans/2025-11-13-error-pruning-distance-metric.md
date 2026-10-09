@@ -1,4 +1,7 @@
-# Error Pruning Distance Metric Design
+---
+title: 'Error Pruning Distance Metric Design'
+date: 2025-11-13
+---
 
 ## Problem Analysis
 

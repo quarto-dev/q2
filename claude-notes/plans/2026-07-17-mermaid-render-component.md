@@ -1,4 +1,7 @@
-# Mermaid render component for q2-preview
+---
+title: 'Mermaid render component for q2-preview'
+date: 2026-07-17
+---
 
 **Braid:** bd-c3dtpe36
 **Status:** draft / awaiting go-ahead to execute

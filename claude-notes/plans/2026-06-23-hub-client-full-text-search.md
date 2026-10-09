@@ -1,4 +1,7 @@
-# Hub-client full-text search
+---
+title: 'Hub-client full-text search'
+date: 2026-06-23
+---
 
 **Status:** Phase 1 complete (open-project client-side search shipped on
 `epic/hub-client-full-text-search`); Phase B + Phase 2 not started.

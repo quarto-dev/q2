@@ -1,4 +1,7 @@
-# Attribute Ordering Fixer for qmd-syntax-helper
+---
+title: 'Attribute Ordering Fixer for qmd-syntax-helper'
+date: 2025-10-28
+---
 
 **Issue**: qmd-7
 **Date**: 2025-10-28

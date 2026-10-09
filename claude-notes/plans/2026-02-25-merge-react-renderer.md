@@ -1,4 +1,7 @@
-# Merge new-react-renderer-stuff into main
+---
+title: 'Merge new-react-renderer-stuff into main'
+date: 2026-02-25
+---
 
 ## Overview
 Merge the React renderer and slide functionality from `new-react-renderer-stuff` branch into `main`, preserving both old and new functionality where conflicts exist.

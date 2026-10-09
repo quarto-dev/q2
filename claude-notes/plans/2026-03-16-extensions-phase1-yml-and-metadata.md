@@ -1,4 +1,7 @@
-# Extensions Phase 1: \_extension.yml Parsing and Metadata Contributions
+---
+title: 'Extensions Phase 1: `_extension.yml` Parsing and Metadata Contributions'
+date: 2026-03-16
+---
 
 **Created**: 2026-03-16
 **Status**: Complete (all phases done; 1.6 format-resources deferred)

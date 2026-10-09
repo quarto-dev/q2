@@ -1,4 +1,7 @@
-# Plan 4a: Preview engine-capture delivery — julia close/busy failure + browser splice e2e
+---
+title: 'Plan 4a: Preview engine-capture delivery — julia close/busy failure + browser splice e2e'
+date: 2026-07-02
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md) — **Plan 4a**, the preview-delivery sibling of Plan 4's julia validation (fills Plan 4's 4J browser-tier gap).
 **Status:** COMPLETE (15/15) — strand bd-h4rhohhy **in_review**, final review clean. Created 2026-07-02 from a live user repro; seams prevalidated same day.

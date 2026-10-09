@@ -1,4 +1,7 @@
-# `quarto publish` scaffolding + `gh-pages` provider
+---
+title: '`quarto publish` scaffolding + `gh-pages` provider'
+date: 2026-05-03
+---
 
 **Date:** 2026-05-03
 **Beads:** `bd-t3ny` (epic; phase sub-issues to be filed after design approval)

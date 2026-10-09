@@ -1,4 +1,7 @@
-# Remote code-execution provider for hub sessions
+---
+title: 'Remote code-execution provider for hub sessions'
+date: 2026-06-29
+---
 
 **Strand:** bd-sfet3264 (feature, P1).
 **Date:** 2026-06-29.

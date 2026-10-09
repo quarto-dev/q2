@@ -1,4 +1,7 @@
-# Particle Extraction Enhancement Plan
+---
+title: 'Particle Extraction Enhancement Plan'
+date: 2025-11-30
+---
 
 **Status**: Completed
 **Related Issue**: k-464

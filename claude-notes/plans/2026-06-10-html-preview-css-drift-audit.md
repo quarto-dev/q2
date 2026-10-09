@@ -1,4 +1,7 @@
-# q2 preview: audit HTML preview CSS for the render-drift class (bd-4b7f1hr7)
+---
+title: 'q2 preview: audit HTML preview CSS for the render-drift class (bd-4b7f1hr7)'
+date: 2026-06-10
+---
 
 **Date:** 2026-06-10
 **Braid:** bd-4b7f1hr7

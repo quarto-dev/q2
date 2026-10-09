@@ -1,4 +1,7 @@
-# Jupyter kernelspec discovery: fix venv blindness, improve error messages
+---
+title: 'Jupyter kernelspec discovery: fix venv blindness, improve error messages'
+date: 2026-05-04
+---
 
 ## Overview
 

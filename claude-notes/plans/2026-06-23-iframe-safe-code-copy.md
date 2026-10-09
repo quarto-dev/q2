@@ -1,4 +1,7 @@
-# iframe-safe code-copy in q2 preview / hub-client
+---
+title: 'iframe-safe code-copy in q2 preview / hub-client'
+date: 2026-06-23
+---
 
 **Strand:** bd-wa2pgri8 (feature, p3) — follow-up to **bd-lg6t6qfy**, which made
 revealjs code-copy buttons styled + hover-hidden in all paths but functional

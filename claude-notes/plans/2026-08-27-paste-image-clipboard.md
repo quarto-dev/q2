@@ -1,4 +1,7 @@
-# Paste images from clipboard into the Monaco source editor
+---
+title: 'Paste images from clipboard into the Monaco source editor'
+date: 2026-08-27
+---
 
 **Braid strand:** bd-706b0ixu
 **Created:** 2026-08-27

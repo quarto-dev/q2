@@ -1,4 +1,7 @@
-# Generic file uploader dialog for hub-client
+---
+title: 'Generic file uploader dialog for hub-client'
+date: 2026-04-21
+---
 
 - **Beads**: bd-eity
 - **Status**: drafted 2026-04-21 — implementation deferred to a separate session

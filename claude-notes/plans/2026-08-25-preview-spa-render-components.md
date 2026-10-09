@@ -1,4 +1,7 @@
-# `q2 preview` support for `render-components:` (GH #402 / bd-ue80chl0)
+---
+title: '`q2 preview` support for `render-components:` (GH #402 / bd-ue80chl0)'
+date: 2026-08-25
+---
 
 **Status:** APPROVED (2026-08-25) — executing on branch
 `braid/bd-ue80chl0-preview-spa-render-components`.

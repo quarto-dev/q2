@@ -1,4 +1,7 @@
-# List-Table Implementation Plan
+---
+title: 'List-Table Implementation Plan'
+date: 2025-12-05
+---
 
 **Beads Issue:** k-mapj
 **Created:** 2025-12-05

@@ -1,4 +1,7 @@
-# Error-docs sidebar: backfill + lint rule (bd-wcmk1fsq)
+---
+title: 'Error-docs sidebar: backfill + lint rule (bd-wcmk1fsq)'
+date: 2026-08-18
+---
 
 ## Overview
 

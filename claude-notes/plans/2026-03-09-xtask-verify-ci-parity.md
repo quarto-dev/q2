@@ -1,4 +1,7 @@
-# Plan: Make `cargo xtask verify` match CI checks
+---
+title: 'Plan: Make `cargo xtask verify` match CI checks'
+date: 2026-03-09
+---
 
 **Beads issue**: `bd-3flm`
 

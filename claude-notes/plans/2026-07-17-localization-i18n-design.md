@@ -1,4 +1,7 @@
-# Localization / internationalization for Quarto 2
+---
+title: 'Localization / internationalization for Quarto 2'
+date: 2026-07-17
+---
 
 **Braid strand:** bd-llhlzd7p (epic)
 **Status:** design draft — iterating with Carlos before execution

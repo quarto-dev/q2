@@ -1,4 +1,7 @@
-# q2 preview: hierarchical block navigator + breadcrumb/toolbar overlap
+---
+title: 'q2 preview: hierarchical block navigator + breadcrumb/toolbar overlap'
+date: 2026-06-25
+---
 
 **Strand:** bd-9x3zbuj8
 **Date:** 2026-06-25

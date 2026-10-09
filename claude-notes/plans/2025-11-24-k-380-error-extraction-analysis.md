@@ -1,4 +1,7 @@
-# K-380: Error Infrastructure Extraction - Deep Analysis
+---
+title: 'K-380: Error Infrastructure Extraction - Deep Analysis'
+date: 2025-11-24
+---
 
 **Date**: 2025-11-24
 **Issue**: k-380

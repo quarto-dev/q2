@@ -1,4 +1,7 @@
-# Plan: pandoc.wasm as a reader (document import P1)
+---
+title: 'Plan: pandoc.wasm as a reader (document import P1)'
+date: 2026-10-03
+---
 
 **Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I1, I8, I9, I19; builds interface 1)

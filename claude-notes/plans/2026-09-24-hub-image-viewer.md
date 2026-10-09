@@ -1,4 +1,7 @@
-# Hub-client image viewer
+---
+title: 'Hub-client image viewer'
+date: 2026-09-24
+---
 
 ## Overview
 

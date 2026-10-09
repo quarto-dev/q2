@@ -1,4 +1,7 @@
-# Plan: Q-2-36 — Clean parse error for old-style knitr chunk options
+---
+title: 'Plan: Q-2-36 — Clean parse error for old-style knitr chunk options'
+date: 2026-05-14
+---
 
 - **GH issue:** [#152](https://github.com/quarto-dev/q2/issues/152) (chunk-options half; the table-captions half closed via #154)
 - **Triage:** `claude-notes/issue-reports/152/q236-triage.md`

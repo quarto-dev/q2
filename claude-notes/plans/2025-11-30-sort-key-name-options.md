@@ -1,4 +1,7 @@
-# Sort Key Name Options Implementation
+---
+title: 'Sort Key Name Options Implementation'
+date: 2025-11-30
+---
 
 ## Problem Summary
 

@@ -1,4 +1,7 @@
-# Epic: Book projects (`ProjectKind::Book`)
+---
+title: 'Epic: Book projects (`ProjectKind::Book`)'
+date: 2026-09-21
+---
 
 **Date:** 2026-09-21 (revised after a critical review pass — see "Revision history" at the end)
 **Status:** Complete (2026-09-26) — all nine phases (P0–P8) implemented, gated green, and end-to-end verified on `feature/book-projects`. See each phase's own plan file for its gate record; P7's records the final workspace-wide verification and closeout.

@@ -1,4 +1,7 @@
-# Zero-width / format characters: writer re-encodes as entities, parser accepts them raw (GH #672)
+---
+title: 'Zero-width / format characters: writer re-encodes as entities, parser accepts them raw (GH #672)'
+date: 2026-09-11
+---
 
 **Date:** 2026-09-11
 **Braid:** bd-wuiu1of7 (bug, P1, labels `pampa`, `tree-sitter-qmd`, `parity`) —

@@ -1,4 +1,7 @@
-# Process improvement: end-to-end verification before declaring "done"
+---
+title: 'Process improvement: end-to-end verification before declaring "done"'
+date: 2026-04-20
+---
 
 - **Date**: 2026-04-20
 - **Author**: Claude, at user request

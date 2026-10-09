@@ -1,4 +1,7 @@
-# Cross-referenceable Example blocks
+---
+title: 'Cross-referenceable Example blocks'
+date: 2026-06-09
+---
 
 **Strand:** bd-t3cert81 (discovered-from bd-z1smhvuo, the embed feature)
 **Date:** 2026-06-09

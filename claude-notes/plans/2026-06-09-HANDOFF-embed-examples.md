@@ -1,4 +1,7 @@
-# Handoff — embed-example iframes + cross-referenceable Demos + preview
+---
+title: 'Handoff — embed-example iframes + cross-referenceable Demos + preview'
+date: 2026-06-09
+---
 
 **Date:** 2026-06-09
 **Branch:** `beads/bd-z1smhvuo-embed-example-iframe` (9 commits ahead of `main`,

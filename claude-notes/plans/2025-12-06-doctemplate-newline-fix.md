@@ -1,4 +1,7 @@
-# quarto-doctemplate: Fix Excess Newlines in Template Evaluation
+---
+title: 'quarto-doctemplate: Fix Excess Newlines in Template Evaluation'
+date: 2025-12-06
+---
 
 ## Problem Summary
 

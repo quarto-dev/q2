@@ -1,4 +1,7 @@
-# SASS Content Hash Cache Keys
+---
+title: 'SASS Content Hash Cache Keys'
+date: 2026-01-29
+---
 
 **Issue:** kyoto-bpp
 **Status:** Complete

@@ -1,4 +1,7 @@
-# Bare email autolinks `<user@example.com>` parsed as raw HTML (bd-email-autolink-dropped-2jj38iiv)
+---
+title: 'Bare email autolinks `<user@example.com>` parsed as raw HTML (bd-email-autolink-dropped-2jj38iiv)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-email-autolink-dropped-2jj38iiv (bug, P2, labels: pampa, parity)

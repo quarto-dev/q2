@@ -1,4 +1,7 @@
-# P5 — Implementation tasks & Test Seam Spec
+---
+title: 'P5 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+---
 
 **Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P5-lua-shim.md`](2026-08-20-pandoc-hybrid-P5-lua-shim.md)

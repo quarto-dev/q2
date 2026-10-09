@@ -1,4 +1,7 @@
-# Single-file `q2 preview`: transitive sibling-dependency resolution
+---
+title: 'Single-file `q2 preview`: transitive sibling-dependency resolution'
+date: 2026-06-16
+---
 
 **Strand:** bd-9cyza5vy · **Follows:** bd-kpuweafo (direct images), bd-ggvq1j68
 (`_brand.yml`), bd-tnm3k (no-walk single-file mode)

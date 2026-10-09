@@ -1,4 +1,7 @@
-# tree-sitter-qmd Cleanup Plan
+---
+title: 'tree-sitter-qmd Cleanup Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Status**: Planning

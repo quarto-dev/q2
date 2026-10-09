@@ -1,4 +1,7 @@
-# Lint: every `error_catalog.json` code needs a `docs/errors/<subsystem>/<code>.qmd` page (bd-u2qj4y29)
+---
+title: 'Lint: every `error_catalog.json` code needs a `docs/errors/<subsystem>/<code>.qmd` page (bd-u2qj4y29)'
+date: 2026-08-11
+---
 
 **Date:** 2026-08-11
 **Braid:** bd-u2qj4y29 (task, p2, filed 2026-08-10 by Carlos)

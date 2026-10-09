@@ -1,4 +1,7 @@
-# Comprehensive Testing Plan for k-192
+---
+title: 'Comprehensive Testing Plan for k-192'
+date: 2025-10-26
+---
 
 **Date**: 2025-10-26
 **Status**: In Progress

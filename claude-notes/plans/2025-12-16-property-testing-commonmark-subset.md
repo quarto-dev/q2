@@ -1,4 +1,7 @@
-# Property Testing Framework for CommonMark Subset Validation
+---
+title: 'Property Testing Framework for CommonMark Subset Validation'
+date: 2025-12-16
+---
 
 **Issue**: k-g9uc (child of k-333)
 **Date**: 2025-12-16

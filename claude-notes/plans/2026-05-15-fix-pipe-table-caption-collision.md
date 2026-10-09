@@ -1,4 +1,7 @@
-# Fix pipe-table × caption-start collision (bd-expy, issue #206)
+---
+title: 'Fix pipe-table × caption-start collision (bd-expy, issue #206)'
+date: 2026-05-15
+---
 
 ## Overview
 

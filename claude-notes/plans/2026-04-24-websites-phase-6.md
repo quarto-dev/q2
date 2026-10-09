@@ -1,4 +1,7 @@
-# Phase 6 — Cross-document link rewriting
+---
+title: 'Phase 6 — Cross-document link rewriting'
+date: 2026-04-24
+---
 
 **Date:** 2026-04-24
 **Beads:** `bd-v30t` (parent `bd-0tr6`). Follow-ups TBD at close-out.

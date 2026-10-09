@@ -1,4 +1,7 @@
-# page-footer item text: lone image dropped; no link/image target resolved (bd-page-footer-image-items-stmpikgo)
+---
+title: 'page-footer item text: lone image dropped; no link/image target resolved (bd-page-footer-image-items-stmpikgo)'
+date: 2026-08-18
+---
 
 **Date:** 2026-08-18
 **Braid:** bd-page-footer-image-items-stmpikgo

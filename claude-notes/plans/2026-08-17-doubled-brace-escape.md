@@ -1,4 +1,7 @@
-# Quarto 1's doubled-brace escape for showing a cell (bd-escaped-executable-fence-uuvv37pk)
+---
+title: 'Quarto 1''s doubled-brace escape for showing a cell (bd-escaped-executable-fence-uuvv37pk)'
+date: 2026-08-17
+---
 
 **Date:** 2026-08-17 (investigation); design aligned with user same day
 **Braid:** bd-escaped-executable-fence-uuvv37pk

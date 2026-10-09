@@ -1,4 +1,7 @@
-# R display fences (\`\`\` r) are a fatal parse error (bd-knitr-inline-r-eats-fence-2ofk91x1)
+---
+title: 'R display fences (\`\`\` r) are a fatal parse error (bd-knitr-inline-r-eats-fence-2ofk91x1)'
+date: 2026-08-25
+---
 
 **Date:** 2026-08-25
 **Braid:** bd-knitr-inline-r-eats-fence-2ofk91x1 (P0, bug, labels `engine` `parity`)

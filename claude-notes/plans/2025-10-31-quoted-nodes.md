@@ -1,4 +1,7 @@
-# Quoted Nodes Implementation Plan
+---
+title: 'Quoted Nodes Implementation Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Context**: Implement `pandoc_single_quote` and `pandoc_double_quote` node handlers

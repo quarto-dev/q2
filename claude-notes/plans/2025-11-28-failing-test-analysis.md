@@ -1,4 +1,7 @@
-# Failing Test Analysis for quarto-citeproc
+---
+title: 'Failing Test Analysis for quarto-citeproc'
+date: 2025-11-28
+---
 
 **Date**: 2025-11-28
 **Current Status**: 380/858 tests passing (44.3%)

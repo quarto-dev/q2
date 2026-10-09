@@ -1,4 +1,7 @@
-# MergedConfig Lifetime and Navigation API Design
+---
+title: 'MergedConfig Lifetime and Navigation API Design'
+date: 2025-12-07
+---
 
 **Date**: 2025-12-07
 **Issue**: k-vpgx (child of k-zvzm)

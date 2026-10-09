@@ -1,4 +1,7 @@
-# Project profiles: port from Quarto 1 (bd-fu16z22k)
+---
+title: 'Project profiles: port from Quarto 1 (bd-fu16z22k)'
+date: 2026-08-10
+---
 
 **Strand:** bd-fu16z22k (related: bd-ev8mk1rp, bd-mlj6)
 **Status:** plan under iteration — not yet approved for execution

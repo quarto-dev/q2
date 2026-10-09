@@ -1,4 +1,7 @@
-# hub-mcp: replace device flow with Authorization Code + PKCE + loopback
+---
+title: 'hub-mcp: replace device flow with Authorization Code + PKCE + loopback'
+date: 2026-05-28
+---
 
 ## Amendment 2026-05-28
 

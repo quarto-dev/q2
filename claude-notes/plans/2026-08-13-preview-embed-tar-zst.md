@@ -1,4 +1,7 @@
-# Embed preview SPA bundles as tar.zst archives
+---
+title: 'Embed preview SPA bundles as tar.zst archives'
+date: 2026-08-13
+---
 
 ## Overview
 

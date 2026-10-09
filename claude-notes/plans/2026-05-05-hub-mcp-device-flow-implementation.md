@@ -1,4 +1,7 @@
-# 2026-05-05 — Hub MCP auth: Design C′ (Google device flow) implementation
+---
+title: '2026-05-05 — Hub MCP auth: Design C′ (Google device flow) implementation'
+date: 2026-05-05
+---
 
 ## Overview
 

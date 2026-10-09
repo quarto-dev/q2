@@ -1,4 +1,7 @@
-# Plan 1a-host bugs — q2-introduced defects in the landed engine host
+---
+title: 'Plan 1a-host bugs — q2-introduced defects in the landed engine host'
+date: 2026-06-26
+---
 
 **Status:** ready to execute. **Created:** 2026-06-26 (carved out of `plan1a-return-to-q1`).
 **Branch:** `feature/ts-engine-extensions`. **Touches:** `crates/quarto-core/src/engine/ts_process.rs`.

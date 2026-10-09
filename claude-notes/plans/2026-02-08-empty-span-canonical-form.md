@@ -1,4 +1,7 @@
-# Span Canonical Form: drop `{}` for empty attributes
+---
+title: 'Span Canonical Form: drop `{}` for empty attributes'
+date: 2026-02-08
+---
 
 **Beads issue:** `bd-1s21`
 **Branch:** `feature/incremental-writer`

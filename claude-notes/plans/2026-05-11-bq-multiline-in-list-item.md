@@ -1,4 +1,7 @@
-# Multi-line block quote inside a list item — parser bug
+---
+title: 'Multi-line block quote inside a list item — parser bug'
+date: 2026-05-11
+---
 
 ## Overview
 

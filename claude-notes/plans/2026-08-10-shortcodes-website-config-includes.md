@@ -1,4 +1,7 @@
-# Shortcodes not evaluated in website.title, page-footer, or HTML include files (bd-shortcodes-in-metadata-bp06aub8)
+---
+title: 'Shortcodes not evaluated in website.title, page-footer, or HTML include files (bd-shortcodes-in-metadata-bp06aub8)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-shortcodes-in-metadata-bp06aub8

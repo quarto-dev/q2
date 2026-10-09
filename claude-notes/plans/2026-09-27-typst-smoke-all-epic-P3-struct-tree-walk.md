@@ -1,4 +1,7 @@
-# P3 — `ensurePdfTextPositions`: `/StructTreeRoot` walk + relational-assertion evaluator
+---
+title: 'P3 — `ensurePdfTextPositions`: `/StructTreeRoot` walk + relational-assertion evaluator'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —

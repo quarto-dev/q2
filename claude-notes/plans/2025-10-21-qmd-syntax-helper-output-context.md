@@ -1,4 +1,7 @@
-# Plan: Improve qmd-syntax-helper Output - Show Filename Context
+---
+title: 'Plan: Improve qmd-syntax-helper Output - Show Filename Context'
+date: 2025-10-21
+---
 
 ## Problem Statement
 

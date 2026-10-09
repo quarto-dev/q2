@@ -1,4 +1,7 @@
-# Reactji authorship-aware add/remove for q2-preview (`comment.tsx`)
+---
+title: 'Reactji authorship-aware add/remove for q2-preview (`comment.tsx`)'
+date: 2026-05-25
+---
 
 **Worktree:** `.worktrees/provenance-reactji-demo/` on `provenance-reactji-demo`, branched off `feature/provenance`.
 **Fixture:** `crates/quarto/tests/playwright-fixtures/q2-preview/render-components-comment/{render-components-comment.qmd, comment.tsx, _quarto.yml}` (copied verbatim from `~/docs/demo-playground/gordon/render-components/`; moved out of `smoke-all/` per the playwright-fixtures distinction documented in `claude-notes/instructions/testing.md`).

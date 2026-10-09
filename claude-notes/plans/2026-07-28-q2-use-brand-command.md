@@ -1,4 +1,7 @@
-# `q2 use brand`: brand scaffolding command (bd-1vlw8)
+---
+title: '`q2 use brand`: brand scaffolding command (bd-1vlw8)'
+date: 2026-07-28
+---
 
 **Date:** 2026-07-28
 **Braid:** bd-1vlw8 — *Implement quarto use brand scaffolding command*

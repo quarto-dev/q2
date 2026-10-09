@@ -1,4 +1,7 @@
-# QMD writer: Figure node emits empty div + duplicate caption
+---
+title: 'QMD writer: Figure node emits empty div + duplicate caption'
+date: 2026-04-30
+---
 
 **Beads:** bd-f5qd
 **Source:** [issue #150](https://github.com/quarto-dev/q2/issues/150), item 2

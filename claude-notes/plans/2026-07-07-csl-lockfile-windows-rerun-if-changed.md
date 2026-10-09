@@ -1,4 +1,7 @@
-# CSL manifest lockfile false-positive on Windows incremental builds
+---
+title: 'CSL manifest lockfile false-positive on Windows incremental builds'
+date: 2026-07-07
+---
 
 Strand: bd-2w80 ("Investigate CSL manifest test failure after rebase") — **closed**.
 

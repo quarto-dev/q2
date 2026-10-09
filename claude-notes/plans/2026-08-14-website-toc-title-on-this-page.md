@@ -1,4 +1,7 @@
-# Website TOC title uses `toc-title-document` instead of `toc-title-website` (bd-website-toc-title-wn80ymab)
+---
+title: 'Website TOC title uses `toc-title-document` instead of `toc-title-website` (bd-website-toc-title-wn80ymab)'
+date: 2026-08-14
+---
 
 **Date:** 2026-08-14
 **Braid:** bd-website-toc-title-wn80ymab (bug, p3, label `toc`)

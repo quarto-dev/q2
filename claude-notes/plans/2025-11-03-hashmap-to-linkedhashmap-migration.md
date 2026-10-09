@@ -1,4 +1,7 @@
-# HashMap to LinkedHashMap Migration Plan
+---
+title: 'HashMap to LinkedHashMap Migration Plan'
+date: 2025-11-03
+---
 
 **Beads Issue:** k-318  
 **Date:** 2025-11-03  

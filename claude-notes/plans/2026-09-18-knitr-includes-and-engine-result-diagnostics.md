@@ -1,4 +1,7 @@
-# knitr HTML dependencies fail the render; engine-result errors need real diagnostics (GH #683)
+---
+title: 'knitr HTML dependencies fail the render; engine-result errors need real diagnostics (GH #683)'
+date: 2026-09-18
+---
 
 **Strand:** bd-gy2ozix3
 **Branch:** `braid/bd-gy2ozix3-knitr-includes-engine-diagnostics`

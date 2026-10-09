@@ -8,8 +8,6 @@ design-input: user design doc "Creating q2 preview with iroh" (2026-08-03 sessio
 verified: "file:line claims checked against ../iroh @ v1.0.3, ../iroh-tickets @ 1.0.0, ../samod, and this tree"
 ---
 
-# q2 preview live share over iroh
-
 Goal: "VS Code Live Share, but built into `q2`." A host runs
 `q2 preview --share` and gets a single join string; a guest runs
 `q2 preview --join <string>` on another machine and gets a browser tab showing

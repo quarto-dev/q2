@@ -1,4 +1,7 @@
-# Fix Windows test failures: lua system command tests use Unix-only programs
+---
+title: 'Fix Windows test failures: lua system command tests use Unix-only programs'
+date: 2026-06-25
+---
 
 Strand: bd-c5bdf948
 Date: 2026-06-25

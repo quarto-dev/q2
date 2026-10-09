@@ -1,4 +1,7 @@
-# HTML Comment Support - REVISED DESIGN
+---
+title: 'HTML Comment Support - REVISED DESIGN'
+date: 2025-10-28
+---
 
 **Date:** 2025-10-28
 **Status:** Design updated based on feedback

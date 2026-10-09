@@ -1,4 +1,7 @@
-# Plan 6 — Provenance audit (Generated for synthesizers, anchors for shortcodes)
+---
+title: 'Plan 6 — Provenance audit (Generated for synthesizers, anchors for shortcodes)'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04 (revised 2026-05-20, review pass 2026-05-22)
 **Branch:** feature/q2-preview

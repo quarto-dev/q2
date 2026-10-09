@@ -1,4 +1,7 @@
-# Plan 2C — q2-preview Quarto custom-node rendering + verification
+---
+title: 'Plan 2C — q2-preview Quarto custom-node rendering + verification'
+date: 2026-05-09
+---
 
 **Date:** 2026-05-09
 **Branch:** feature/q2-preview

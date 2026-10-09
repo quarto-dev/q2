@@ -1,4 +1,7 @@
-# Analysis: Memory Reuse Bug Within Precomputation Phase
+---
+title: 'Analysis: Memory Reuse Bug Within Precomputation Phase'
+date: 2026-01-13
+---
 
 **Date**: 2026-01-13
 **Related Issue**: Continuation of k-gv05 (originally marked as fixed 2026-01-03)

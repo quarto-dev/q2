@@ -1,4 +1,7 @@
-# hub-client revealjs ≠ q2 render/preview — assessment & plan
+---
+title: 'hub-client revealjs ≠ q2 render/preview — assessment & plan'
+date: 2026-06-22
+---
 
 **Strand:** bd-vwp4y5ku
 **Date:** 2026-06-22

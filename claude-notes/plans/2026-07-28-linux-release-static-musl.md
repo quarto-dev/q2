@@ -1,4 +1,7 @@
-# Switch linux release targets to static musl (bd-dofxhzaj)
+---
+title: 'Switch linux release targets to static musl (bd-dofxhzaj)'
+date: 2026-07-28
+---
 
 **Date:** 2026-07-28
 **Braid:** bd-dofxhzaj (task, P1, filed 2026-06-13 by Carlos while cutting v0.1.1)

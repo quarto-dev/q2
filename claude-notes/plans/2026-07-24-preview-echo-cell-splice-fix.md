@@ -1,4 +1,7 @@
-# Preview capture-splice: echo-cell output run (Variant B) — Implementation Plan
+---
+title: 'Preview capture-splice: echo-cell output run (Variant B) — Implementation Plan'
+date: 2026-07-24
+---
 
 > **For agentic workers:** implement task-by-task with TDD. Steps use checkbox
 > (`- [x]`) syntax. Write the failing test, watch it fail, implement, watch it

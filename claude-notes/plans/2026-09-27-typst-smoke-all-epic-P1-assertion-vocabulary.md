@@ -1,4 +1,7 @@
-# P1 — Assertion vocabulary: `ensureTypstFileRegexMatches` + `ensurePdfRegexMatches`
+---
+title: 'P1 — Assertion vocabulary: `ensureTypstFileRegexMatches` + `ensurePdfRegexMatches`'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md)

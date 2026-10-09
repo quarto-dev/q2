@@ -1,4 +1,7 @@
-# Plan 2B — q2-preview Pandoc base + framework + asset manifest (Session A)
+---
+title: 'Plan 2B — q2-preview Pandoc base + framework + asset manifest (Session A)'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04 (revised 2026-05-07, 2026-05-09; split into 2B+2C on 2026-05-09)
 **Branch:** feature/q2-preview

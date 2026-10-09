@@ -1,4 +1,7 @@
-# Pre- and post-render project scripts (bd-w348iu63)
+---
+title: 'Pre- and post-render project scripts (bd-w348iu63)'
+date: 2026-07-29
+---
 
 **Status: implemented 2026-07-31 (all phases complete, full verify
 green) — awaiting commit approval.**

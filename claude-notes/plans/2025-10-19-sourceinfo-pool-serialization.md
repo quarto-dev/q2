@@ -1,4 +1,7 @@
-# SourceInfo Pool-Based Serialization Implementation Plan
+---
+title: 'SourceInfo Pool-Based Serialization Implementation Plan'
+date: 2025-10-19
+---
 
 **Date**: 2025-10-19
 **Issue**: k-44

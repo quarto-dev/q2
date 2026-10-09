@@ -1,4 +1,7 @@
-# Plan: Runtime Cache — Rust Implementation (Phases 1-2)
+---
+title: 'Plan: Runtime Cache — Rust Implementation (Phases 1-2)'
+date: 2026-03-09
+---
 
 Parent plan: `claude-notes/plans/2026-03-09-runtime-cache.md`
 

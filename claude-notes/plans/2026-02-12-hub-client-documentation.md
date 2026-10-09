@@ -1,4 +1,7 @@
-# Hub-Client Documentation
+---
+title: 'Hub-Client Documentation'
+date: 2026-02-12
+---
 
 **Beads Issue:** bd-3n80
 **Status:** Implementation Complete

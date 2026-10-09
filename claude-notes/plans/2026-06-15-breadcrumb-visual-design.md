@@ -1,4 +1,7 @@
-# Breadcrumb chip — visual design + positioning rework
+---
+title: 'Breadcrumb chip — visual design + positioning rework'
+date: 2026-06-15
+---
 
 **Date:** 2026-06-15 (rewritten 2026-06-15 after a design review)
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

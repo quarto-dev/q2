@@ -1,4 +1,7 @@
-# Configuration Merging System Design
+---
+title: 'Configuration Merging System Design'
+date: 2025-12-07
+---
 
 **Date**: 2025-12-07
 **Issue**: k-zvzm

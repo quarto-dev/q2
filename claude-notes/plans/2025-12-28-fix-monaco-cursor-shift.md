@@ -1,4 +1,7 @@
-# Fix Monaco Cursor Shift During Remote Edits
+---
+title: 'Fix Monaco Cursor Shift During Remote Edits'
+date: 2025-12-28
+---
 
 **Beads Issue:** k-rmdm
 **Status:** Implemented

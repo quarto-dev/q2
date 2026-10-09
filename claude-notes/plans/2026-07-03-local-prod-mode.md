@@ -1,4 +1,7 @@
-# Local Production Mode
+---
+title: 'Local Production Mode'
+date: 2026-07-03
+---
 
 **Created**: 2026-07-03  
 **Updated**: 2026-07-07  

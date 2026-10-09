@@ -1,4 +1,7 @@
-# Editor image drag-drop: wrong relative path when .qmd is in a subdirectory
+---
+title: 'Editor image drag-drop: wrong relative path when .qmd is in a subdirectory'
+date: 2026-07-15
+---
 
 **Strand:** bd-jzqswvh0
 **Status:** in progress (branch `braid/bd-jzqswvh0-image-drop-relative-path`)

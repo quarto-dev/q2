@@ -1,4 +1,7 @@
-# Nesting-cursor UI enhancements — geometry snapshot, caret-aware nest-in, mode-aware highlight
+---
+title: 'Nesting-cursor UI enhancements — geometry snapshot, caret-aware nest-in, mode-aware highlight'
+date: 2026-06-14
+---
 
 **Date:** 2026-06-14
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

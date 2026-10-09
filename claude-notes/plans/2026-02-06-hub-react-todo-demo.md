@@ -1,4 +1,7 @@
-# Demo: hub-react-todo
+---
+title: 'Demo: hub-react-todo'
+date: 2026-02-06
+---
 
 **Parent plan:** `claude-notes/plans/2026-02-06-ast-sync-client-api.md` (item 1.6)
 **Beads issue:** `bd-3lsb`

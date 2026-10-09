@@ -1,4 +1,7 @@
-# Plan 7 (root) — Native content-processor architecture for non-qmd engine inputs
+---
+title: 'Plan 7 (root) — Native content-processor architecture for non-qmd engine inputs'
+date: 2026-06-27
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Date:** 2026-06-27 (reframed 2026-07-08 as the 7-series root)

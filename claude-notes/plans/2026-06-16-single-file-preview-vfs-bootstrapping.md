@@ -1,4 +1,7 @@
-# Single-file `q2 preview`: the VFS dependency-bootstrapping problem
+---
+title: 'Single-file `q2 preview`: the VFS dependency-bootstrapping problem'
+date: 2026-06-16
+---
 
 **Strand:** bd-9cyza5vy (design exploration)
 **Discovered-from:** bd-kpuweafo (which shipped a partial, direct-image-only fix)

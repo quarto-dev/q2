@@ -1,4 +1,7 @@
-# Windows: JSON writer emits backslash path separators in output (bd-dff27o04)
+---
+title: 'Windows: JSON writer emits backslash path separators in output (bd-dff27o04)'
+date: 2026-07-01
+---
 
 **Date:** 2026-07-01
 **Braid:** bd-dff27o04

@@ -1,4 +1,7 @@
-# Single-file `q2 preview`: resolve sibling assets the deck references
+---
+title: 'Single-file `q2 preview`: resolve sibling assets the deck references'
+date: 2026-06-16
+---
 
 **Strand:** bd-kpuweafo · **Found:** 2026-06-16 (follow-up to bd-y259zb57 / bd-ggvq1j68)
 

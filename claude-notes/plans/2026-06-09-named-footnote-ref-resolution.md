@@ -1,4 +1,7 @@
-# Resolve named footnote references `[^id]` (Span.quarto-note-reference)
+---
+title: 'Resolve named footnote references `[^id]` (Span.quarto-note-reference)'
+date: 2026-06-09
+---
 
 **Strand:** bd-po3gn41h — "Named footnote refs `[^id]` never resolve
 (Span.quarto-note-reference left unresolved)."

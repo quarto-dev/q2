@@ -1,4 +1,7 @@
-# Heading inside list item is dropped
+---
+title: 'Heading inside list item is dropped'
+date: 2026-05-20
+---
 
 Tracking issue: **bd-zpl4u**
 

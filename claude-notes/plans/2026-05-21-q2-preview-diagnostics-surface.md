@@ -1,4 +1,7 @@
-# q2 preview — diagnostics surface (Phase D.4 follow-up)
+---
+title: 'q2 preview — diagnostics surface (Phase D.4 follow-up)'
+date: 2026-05-21
+---
 
 **Issue:** bd-b9kzg
 **Epic:** bd-kw93 (q2 preview)

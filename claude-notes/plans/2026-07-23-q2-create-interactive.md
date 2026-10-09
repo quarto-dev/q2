@@ -1,4 +1,7 @@
-# `q2 create`: interactive prompting (bd-hh1erpfx)
+---
+title: '`q2 create`: interactive prompting (bd-hh1erpfx)'
+date: 2026-07-23
+---
 
 **Strand:** bd-hh1erpfx (discovered-from bd-oa5kd2yr)
 **Branch:** `braid/bd-oa5kd2yr-q2-create-command` (same PR #409 line)

@@ -1,4 +1,7 @@
-# Plan 7c — ipynb content processor
+---
+title: 'Plan 7c — ipynb content processor'
+date: 2026-07-08
+---
 
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md)
 **Depends on:** [2026-07-08-plan7b-native-content-processors.md](2026-07-08-plan7b-native-content-processors.md) (the registry, the `ProcessorContext`, the source-file channel)

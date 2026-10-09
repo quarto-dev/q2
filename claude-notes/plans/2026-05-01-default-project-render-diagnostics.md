@@ -1,4 +1,7 @@
-# Default-project rendering and project-level diagnostics
+---
+title: 'Default-project rendering and project-level diagnostics'
+date: 2026-05-01
+---
 
 ## Status
 

@@ -1,4 +1,7 @@
-# Math-mode (MathJax / KaTeX / …) implementation — handoff from bd-4eyf
+---
+title: 'Math-mode (MathJax / KaTeX / …) implementation — handoff from bd-4eyf'
+date: 2026-05-04
+---
 
 **Status:** Not started. Notes for the next session.
 **Predecessor work:** bd-4eyf (Bootstrap JS injection) — see

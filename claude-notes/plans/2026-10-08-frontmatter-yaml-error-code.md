@@ -1,4 +1,7 @@
-# Frontmatter YAML parse error: Q-0-99, internal path in title, whole-block span (bd-x30aq7ae)
+---
+title: 'Frontmatter YAML parse error: Q-0-99, internal path in title, whole-block span (bd-x30aq7ae)'
+date: 2026-10-08
+---
 
 **Date:** 2026-10-08
 **Braid:** bd-x30aq7ae

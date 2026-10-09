@@ -1,4 +1,7 @@
-# Migrate quarto-project-create from EJS to quarto-doctemplate
+---
+title: 'Migrate quarto-project-create from EJS to quarto-doctemplate'
+date: 2026-06-12
+---
 
 **Strand:** bd-kuxzj8su (blocks bd-3e3sam51, discovered-from bd-3e3sam51)
 **Created:** 2026-06-12

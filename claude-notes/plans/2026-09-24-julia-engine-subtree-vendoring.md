@@ -1,4 +1,7 @@
-# Vendoring the julia engine as an extension subtree (epic Step 4)
+---
+title: 'Vendoring the julia engine as an extension subtree (epic Step 4)'
+date: 2026-09-24
+---
 
 **Status:** DONE (2026-09-29), ready for PR. All four phases complete: payload
 registered (native + WASM, F1 fixed), the Q9 diagnostic added (`Q-18-3`), the

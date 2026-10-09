@@ -1,4 +1,7 @@
-# Block-level attributes via collected trailing `Inline::Attr`
+---
+title: 'Block-level attributes via collected trailing `Inline::Attr`'
+date: 2026-06-17
+---
 
 **Strand:** bd-itqcfxc3 (discovered-from bd-38ioql41)
 **Date:** 2026-06-17

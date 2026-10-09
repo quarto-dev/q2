@@ -1,4 +1,7 @@
-# Fix ProjectSetSetup Light Theme Button Visibility
+---
+title: 'Fix ProjectSetSetup Light Theme Button Visibility'
+date: 2026-04-07
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Relax q2 over-required `_extension.yml` fields (bd-8b0af414)
+---
+title: 'Relax q2 over-required `_extension.yml` fields (bd-8b0af414)'
+date: 2026-07-08
+---
 
 ## Overview
 

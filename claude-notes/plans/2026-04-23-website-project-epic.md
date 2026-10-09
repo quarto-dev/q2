@@ -1,4 +1,7 @@
-# Website Projects (Epic)
+---
+title: 'Website Projects (Epic)'
+date: 2026-04-23
+---
 
 **Date:** 2026-04-23
 **Beads:** `bd-0tr6` (epic); phases 0–9 as sub-issues; docs spun out as `bd-tr81`.

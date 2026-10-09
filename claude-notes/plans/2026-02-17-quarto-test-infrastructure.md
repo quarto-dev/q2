@@ -1,4 +1,7 @@
-# Quarto Test Infrastructure Plan
+---
+title: 'Quarto Test Infrastructure Plan'
+date: 2026-02-17
+---
 
 ## Overview
 

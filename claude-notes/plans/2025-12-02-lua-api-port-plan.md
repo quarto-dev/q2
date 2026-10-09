@@ -1,4 +1,7 @@
-# Pandoc Lua API Port Plan
+---
+title: 'Pandoc Lua API Port Plan'
+date: 2025-12-02
+---
 
 **Date**: 2025-12-02
 **Related Issue**: k-409 (Lua subsystem work)

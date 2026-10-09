@@ -1,4 +1,7 @@
-# Hub-Client Automated Testing Infrastructure
+---
+title: 'Hub-Client Automated Testing Infrastructure'
+date: 2026-01-27
+---
 
 **Date**: 2026-01-27
 **Status**: In Progress

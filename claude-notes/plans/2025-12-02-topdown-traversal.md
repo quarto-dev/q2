@@ -1,4 +1,7 @@
-# Topdown Traversal for Lua Filters
+---
+title: 'Topdown Traversal for Lua Filters'
+date: 2025-12-02
+---
 
 **Issue**: k-478 (Implement topdown traversal with stop signal for Lua filters)
 **Parent**: k-477 (discovered-from)

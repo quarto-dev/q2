@@ -1,4 +1,7 @@
-# Q-2-7 Converter Implementation Design
+---
+title: 'Q-2-7 Converter Implementation Design'
+date: 2025-11-20
+---
 
 Date: 2025-11-20
 File: claude-notes/plans/2025-11-20-q-2-7-converter-design.md

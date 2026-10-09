@@ -1,4 +1,7 @@
-# `add_html_dependency`: `version` unimplemented, and Q-11-1 fires once per call (bd-add-html-dependency-version-5tnub5ds)
+---
+title: '`add_html_dependency`: `version` unimplemented, and Q-11-1 fires once per call (bd-add-html-dependency-version-5tnub5ds)'
+date: 2026-08-14
+---
 
 **Date:** 2026-08-14
 **Braid:** `bd-add-html-dependency-version-5tnub5ds`

@@ -1,4 +1,7 @@
-# P2 — Pin the `pdf-extract` fork, verify no regression
+---
+title: 'P2 — Pin the `pdf-extract` fork, verify no regression'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —

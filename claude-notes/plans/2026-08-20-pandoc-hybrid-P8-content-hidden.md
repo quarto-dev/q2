@@ -1,4 +1,7 @@
-# P8 — content-hidden / when-format gating (verification, not a port)
+---
+title: 'P8 — content-hidden / when-format gating (verification, not a port)'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-17 (two passes) — an epic-wide Opus review found this
 plan had no actual `- [ ]` checklist (contrary to the epic's blanket claim that every plan has

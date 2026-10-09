@@ -1,4 +1,7 @@
-# Coalesce repeated per-page diagnostics in project renders
+---
+title: 'Coalesce repeated per-page diagnostics in project renders'
+date: 2026-07-31
+---
 
 **Strand:** bd-mg3ckvp7
 **Related:** bd-9hlja (closed) — built `coalesce_by_source` and wired it for

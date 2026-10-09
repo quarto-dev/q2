@@ -1,4 +1,7 @@
-# Footer/nav config markdown drops Link attributes and unwraps attributed Spans (bd-footer-link-attrs-dropped-1axx82op)
+---
+title: 'Footer/nav config markdown drops Link attributes and unwraps attributed Spans (bd-footer-link-attrs-dropped-1axx82op)'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-footer-link-attrs-dropped-1axx82op

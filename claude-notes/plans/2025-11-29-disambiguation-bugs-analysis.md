@@ -1,4 +1,7 @@
-# Disambiguation Bugs Analysis
+---
+title: 'Disambiguation Bugs Analysis'
+date: 2025-11-29
+---
 
 **Date:** 2025-11-29
 **Beads Issue:** k-427

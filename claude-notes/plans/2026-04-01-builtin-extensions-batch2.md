@@ -1,4 +1,7 @@
-# Plan: Built-in Extensions Batch 2 — version, kbd, placeholder
+---
+title: 'Plan: Built-in Extensions Batch 2 — version, kbd, placeholder'
+date: 2026-04-01
+---
 
 ## Status: Complete
 

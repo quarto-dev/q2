@@ -1,4 +1,7 @@
-# P5 — Lua shim: wire format → Q1 nodes (Route R + N)
+---
+title: 'P5 — Lua shim: wire format → Q1 nodes (Route R + N)'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P5-lua-shim.md`
 for the full correction history (moved out of this header once it grew past readability, same

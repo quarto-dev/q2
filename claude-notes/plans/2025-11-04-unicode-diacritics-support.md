@@ -1,4 +1,7 @@
-# Unicode Diacritics and Non-ASCII Character Support Investigation
+---
+title: 'Unicode Diacritics and Non-ASCII Character Support Investigation'
+date: 2025-11-04
+---
 
 Date: 2025-11-04
 File: claude-notes/plans/2025-11-04-unicode-diacritics-support.md

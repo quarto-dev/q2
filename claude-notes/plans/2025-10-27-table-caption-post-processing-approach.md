@@ -1,4 +1,7 @@
-# Table Caption Post-Processing Approach - Analysis and Plan
+---
+title: 'Table Caption Post-Processing Approach - Analysis and Plan'
+date: 2025-10-27
+---
 
 **Date**: 2025-10-27
 **Issue**: k-185 - Table caption parsing without blank line

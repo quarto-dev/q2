@@ -1,4 +1,7 @@
-# Syntax highlighting design for Quarto 2
+---
+title: 'Syntax highlighting design for Quarto 2'
+date: 2026-04-19
+---
 
 - **Beads**: bd-n7x2
 - **Status**: Design decisions locked 2026-04-19 — ready for implementation phases

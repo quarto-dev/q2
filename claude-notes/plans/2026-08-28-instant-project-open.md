@@ -1,4 +1,7 @@
-# Instant project open from the project list
+---
+title: 'Instant project open from the project list'
+date: 2026-08-28
+---
 
 ## Note from Elliot
 

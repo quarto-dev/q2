@@ -1,4 +1,7 @@
-# Rich-text editor support for `Plain` blocks (tight list items)
+---
+title: 'Rich-text editor support for `Plain` blocks (tight list items)'
+date: 2026-07-06
+---
 
 **Strand:** bd-7pxub583 (related to bd-sjb4pzx8 — the tiptap rich-text block editor)
 **Status:** IN PROGRESS — user approved 2026-07-06

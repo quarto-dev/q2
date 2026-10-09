@@ -1,4 +1,7 @@
-# Plan: `cargo xtask create-worktree` + CLAUDE.local.md worktree context
+---
+title: 'Plan: `cargo xtask create-worktree` + CLAUDE.local.md worktree context'
+date: 2026-05-07
+---
 
 ## Context
 

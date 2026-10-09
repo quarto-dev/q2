@@ -1,4 +1,7 @@
-# cargo xtask verify does not run hub-client lint:css (CI does) (bd-4bu7vwi5)
+---
+title: 'cargo xtask verify does not run hub-client lint:css (CI does) (bd-4bu7vwi5)'
+date: 2026-09-09
+---
 
 **Date:** 2026-09-09
 **Braid:** bd-4bu7vwi5

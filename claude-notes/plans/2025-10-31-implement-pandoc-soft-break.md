@@ -1,4 +1,7 @@
-# Implementation Plan: pandoc_soft_break Node Handler
+---
+title: 'Implementation Plan: pandoc_soft_break Node Handler'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Context**: Tree-sitter grammar refactoring work (k-274)

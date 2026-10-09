@@ -1,4 +1,7 @@
-# Project Selector Loading UX Improvement
+---
+title: 'Project Selector Loading UX Improvement'
+date: 2026-04-07
+---
 
 ## Overview
 

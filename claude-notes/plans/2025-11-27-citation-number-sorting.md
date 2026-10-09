@@ -1,4 +1,7 @@
-# Citation-Number Sorting Analysis
+---
+title: 'Citation-Number Sorting Analysis'
+date: 2025-11-27
+---
 
 **Date**: 2025-11-27
 **Parent Issue**: k-422 (CSL conformance)

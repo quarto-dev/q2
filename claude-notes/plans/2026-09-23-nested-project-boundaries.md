@@ -1,4 +1,7 @@
-# Nested projects: `_quarto.yml` as a render-list boundary (bd-nested-projects-xyb28wnl)
+---
+title: 'Nested projects: `_quarto.yml` as a render-list boundary (bd-nested-projects-xyb28wnl)'
+date: 2026-09-23
+---
 
 **Date:** 2026-09-23
 **Braid:** bd-nested-projects-xyb28wnl (parent epic bd-uk8zgkha)

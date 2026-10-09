@@ -1,4 +1,7 @@
-# Example Quarto 2 website projects (end-to-end feature exercise)
+---
+title: 'Example Quarto 2 website projects (end-to-end feature exercise)'
+date: 2026-04-29
+---
 
 **Date:** 2026-04-29
 **Beads:** `bd-2jwk` (this task); related `bd-0tr6` (website epic, closed),

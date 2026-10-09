@@ -1,4 +1,7 @@
-# Fix List Item Block Ending Detection
+---
+title: 'Fix List Item Block Ending Detection'
+date: 2025-11-01
+---
 
 **Issue**: k-315
 **Date**: 2025-11-01

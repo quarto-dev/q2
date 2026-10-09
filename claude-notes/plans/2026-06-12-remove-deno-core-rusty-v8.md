@@ -1,4 +1,7 @@
-# Remove deno_core / rusty_v8 from quarto-system-runtime
+---
+title: 'Remove deno_core / rusty_v8 from quarto-system-runtime'
+date: 2026-06-12
+---
 
 **Strand:** bd-3e3sam51 (discovered-from bd-c6l13j79; was blocked by
 bd-kuxzj8su, now closed)

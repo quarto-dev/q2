@@ -1,4 +1,7 @@
-# Multi-Pass Rendering Architecture for quarto-citeproc
+---
+title: 'Multi-Pass Rendering Architecture for quarto-citeproc'
+date: 2025-11-28
+---
 
 **Issue**: k-444
 **Created**: 2025-11-28

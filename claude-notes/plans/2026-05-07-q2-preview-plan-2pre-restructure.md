@@ -1,4 +1,7 @@
-# Plan 2pre — Restructure render directory for parallel formats
+---
+title: 'Plan 2pre — Restructure render directory for parallel formats'
+date: 2026-05-07
+---
 
 **Date:** 2026-05-07
 **Branch:** feature/q2-preview-work

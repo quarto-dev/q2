@@ -1,4 +1,7 @@
-# Plan — Live re-transpile render-components on TSX content change
+---
+title: 'Plan — Live re-transpile render-components on TSX content change'
+date: 2026-05-07
+---
 
 **Date:** 2026-05-07
 **Branch:** TBD (independent)

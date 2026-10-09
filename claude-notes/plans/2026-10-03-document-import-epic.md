@@ -1,4 +1,7 @@
-# Epic: import documents into quarto-hub through pandoc.wasm (docx first)
+---
+title: 'Epic: import documents into quarto-hub through pandoc.wasm (docx first)'
+date: 2026-10-03
+---
 
 **Date:** 2026-10-03
 **Status:** Planned; nothing started. Reviewed 2026-10-03 (three parallel reviewers, findings spot-checked); decisions from that review are folded into I3-I5, I10-I13, I16, I17, I19-I22 and the interfaces. Implementability review 2026-10-03 (three reviewers walked every task as its implementer): P1 lands in two stages, comment replies are grouped by equal range, P2's mechanism is pinned (AST pre-pass plus the line-start flag), and drop routing is tested through extracted functions plus Playwright. Angle review 2026-10-03 (handoffs, verification, tree and P6): P6's placement, comment ids, default comment author and Lua-quirk choices settled with Gordon; fixtures named by directory; `expected.qmd` and the TS response types pinned; an import wall-time STOP in P1 T8. Rebased 2026-10-03 onto the squashed `feature/pandoc-wasm` at `3dfa5b296` (on `main` `b19cb4464`); every citation re-checked against that tree: H10 is now H10a/H10b (I10 and the overlap paragraph rewritten), main's `b6b1817e1` already widened `format_supports_attribution` (P6 T5 changed with Gordon), the new Playwright `firefox` projects noted and line numbers fixed in P1, P4, P5 and P6. P0, P2 and P3 needed no change. Each touched plan's Handoff log has the details.

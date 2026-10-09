@@ -1,4 +1,7 @@
-# Preview rich-text editor: open with drag-selection preserved
+---
+title: 'Preview rich-text editor: open with drag-selection preserved'
+date: 2026-07-07
+---
 
 **Strand:** bd-abo9m23f
 **Builds on:** bd-q9lyghv2 (caret-at-click), whose design comments live in

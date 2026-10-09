@@ -1,4 +1,7 @@
-# Flaky test: admin_collect_lifecycle fails intermittently in full-workspace runs (bd-u0tldu4z)
+---
+title: 'Flaky test: admin_collect_lifecycle fails intermittently in full-workspace runs (bd-u0tldu4z)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-u0tldu4z (bug, p3 as filed — but see verdict)

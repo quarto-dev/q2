@@ -1,4 +1,7 @@
-# 2026-05-20 — Isolate GIS coupling behind an AuthProvider interface
+---
+title: '2026-05-20 — Isolate GIS coupling behind an AuthProvider interface'
+date: 2026-05-20
+---
 
 ## Overview
 

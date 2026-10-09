@@ -1,4 +1,7 @@
-# Plan: Add `cargo xtask dev-setup` subcommand
+---
+title: 'Plan: Add `cargo xtask dev-setup` subcommand'
+date: 2026-03-18
+---
 
 ## Overview
 

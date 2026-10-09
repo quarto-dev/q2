@@ -1,4 +1,7 @@
-# Cargo dependency upgrade survey — 2026-05-04
+---
+title: 'Cargo dependency upgrade survey — 2026-05-04'
+date: 2026-05-04
+---
 
 **Worktree:** `.worktrees/cargo-upgrade-2026-05-04` (branch `cargo-upgrade-2026-05-04`, based on `main` \@ `3e0bc4c5`)
 **Skill:** `.claude/skills/upgrade-cargo-deps/SKILL.md`

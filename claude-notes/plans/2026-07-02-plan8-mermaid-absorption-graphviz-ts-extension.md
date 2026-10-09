@@ -1,4 +1,7 @@
-# Plan 8 — HANDLED_LANGUAGES → claiming engines: absorb #241 (mermaid) + graphviz TS extension
+---
+title: 'Plan 8 — HANDLED_LANGUAGES → claiming engines: absorb #241 (mermaid) + graphviz TS extension'
+date: 2026-07-02
+---
 
 > # ⛔ TOMBSTONED — 2026-07-24
 >

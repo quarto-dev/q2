@@ -1,4 +1,7 @@
-# Plan: Use Samod's AccessPolicy for Document Access Audit Logging
+---
+title: 'Plan: Use Samod''s AccessPolicy for Document Access Audit Logging'
+date: 2026-03-12
+---
 
 ## Context
 

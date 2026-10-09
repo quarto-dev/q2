@@ -1,4 +1,7 @@
-# `q2 render` truncates source images referenced in qmd documents
+---
+title: '`q2 render` truncates source images referenced in qmd documents'
+date: 2026-05-20
+---
 
 **Issue:** bd-cfl67 — `q2 render` truncates source images referenced in qmd documents
 **Type:** bug · **Priority:** 0 (data loss)

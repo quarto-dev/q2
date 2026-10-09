@@ -1,4 +1,7 @@
-# Lua `function Meta` / `function Pandoc` filters + Meta↔ConfigValue design
+---
+title: 'Lua `function Meta` / `function Pandoc` filters + Meta↔ConfigValue design'
+date: 2026-07-20
+---
 
 **Strands:** bd-2llqjsms (constructors + design), bd-a9g50za2 (doc-level
 invocation). Parent epic: bd-grkrb9nj. Supersedes bd-uy3z (older duplicate,

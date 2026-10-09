@@ -1,4 +1,7 @@
-# Block editing — Plan 3: nested-block descent
+---
+title: 'Block editing — Plan 3: nested-block descent'
+date: 2026-06-06
+---
 
 **Date:** 2026-06-06
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)

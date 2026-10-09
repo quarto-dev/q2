@@ -1,4 +1,7 @@
-# Plan A: `quarto.doc` Lua API (pampa crate)
+---
+title: 'Plan A: `quarto.doc` Lua API (pampa crate)'
+date: 2026-04-01
+---
 
 ## Status: Complete
 

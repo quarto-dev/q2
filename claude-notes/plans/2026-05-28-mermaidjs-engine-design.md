@@ -1,4 +1,5 @@
 ---
+title: '`mermaidjs` engine — design session'
 date: 2026-05-28
 branch: TBD (no implementation work yet — design phase)
 status: >
@@ -6,8 +7,6 @@ status: >
   open. Implementation gated on PR #238 merging.
 beads: bd-je48v (epic); see § Beads issues below.
 ---
-
-# `mermaidjs` engine — design session
 
 ## Goal
 

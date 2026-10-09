@@ -1,4 +1,7 @@
-# reveal.js: linked shared assets instead of inlined output
+---
+title: 'reveal.js: linked shared assets instead of inlined output'
+date: 2026-06-10
+---
 
 **Strand:** bd-jij5gge2
 **Related:** bd-bea550b0 (reveal Phase 2), bd-kjrpya2d (embed-in-preview — blocked by this)

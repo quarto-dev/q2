@@ -1,4 +1,7 @@
-# Website mobile secondary-nav bar (bd-26bf3j1y)
+---
+title: 'Website mobile secondary-nav bar (bd-26bf3j1y)'
+date: 2026-08-17
+---
 
 **Date:** 2026-08-17
 **Braid:** bd-26bf3j1y

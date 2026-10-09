@@ -1,4 +1,7 @@
-# Home-link relativization for sidebar title + navbar brand
+---
+title: 'Home-link relativization for sidebar title + navbar brand'
+date: 2026-04-30
+---
 
 **Date:** 2026-04-30
 **Beads:** `bd-jgeu` (bug, P1) — title widened to cover the navbar

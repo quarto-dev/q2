@@ -1,4 +1,7 @@
-# Directory Metadata (\_metadata.yml) Support
+---
+title: 'Directory Metadata (`_metadata.yml`) Support'
+date: 2026-02-17
+---
 
 **Date**: 2026-02-17
 **Status**: Core Implementation Complete (Path Resolution Deferred)

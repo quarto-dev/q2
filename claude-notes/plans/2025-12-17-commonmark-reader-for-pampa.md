@@ -1,4 +1,7 @@
-# CommonMark Reader for Pampa
+---
+title: 'CommonMark Reader for Pampa'
+date: 2025-12-17
+---
 
 **Issue**: k-n74s
 **Date**: 2025-12-17

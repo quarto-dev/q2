@@ -199,10 +199,27 @@ expensive one, so it waits for the earlier design to be accepted.
    each one:** 1 agent with about 10 plans to debug the process, then about
    50 plans, then about 200, then everything left.
 
+## Progress
+
+- 2026-10-09: phase 2 is done (d07488db8). In phase 3, the script ran
+  cleanly on 1046 files, 4 files were edited by hand, and the diff was
+  checked mechanically: 1050 H1s were removed, and only `title:` and
+  `date:` lines were added. Plan pages render with one title block and a
+  date.
+- **Blocker found in phase 3: bd-8a9eum6p.** Listing item titles are
+  flattened to plain text and then re-parsed as markdown. 27 titles
+  contain code spans whose text means something in markdown (`_brand.yml`,
+  `<anonymous>`, backticks). Re-parsing them fails, and the whole listing
+  is dropped. This is an error under `--strict`, so the CI gate fails on
+  this branch until bd-8a9eum6p is fixed or worked around. Four titles
+  that used `\_` escapes now use code spans, which is the right markup
+  once the bug is fixed.
+
 ## Strands
 
 - bd-fvcip3t5: this work (child of bd-uk8zgkha)
 - bd-mlmkev01: default and grid listings vanish at about 90 items (found here)
 - bd-pnajor0b: listing title should fall back to the first H1 (found here)
 - bd-2nb6i1qv: listings guide gaps (commented)
+- bd-8a9eum6p: listing titles are flattened to plain text and re-parsed (found here; blocks phase 3)
 - bd-bl1e00r6: table `filter-ui` / `sort-ui` / `page-size` (existing)

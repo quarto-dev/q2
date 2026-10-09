@@ -1,4 +1,7 @@
-# Conditional Slide Thumbnails in Outline Pane
+---
+title: 'Conditional Slide Thumbnails in Outline Pane'
+date: 2026-02-26
+---
 
 ## Overview
 

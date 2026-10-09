@@ -1,4 +1,7 @@
-# Cache engine-discovery so we don't re-spawn per document
+---
+title: 'Cache engine-discovery so we don''t re-spawn per document'
+date: 2026-05-22
+---
 
 ## Overview
 

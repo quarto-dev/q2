@@ -1,4 +1,7 @@
-# q2 preview: deliver engine `include-in-header` to the pane (marimo hydration)
+---
+title: 'q2 preview: deliver engine `include-in-header` to the pane (marimo hydration)'
+date: 2026-07-08
+---
 
 **Strand:** bd-5oyk1xce (discovered-from bd-5jxcio5d)
 **Branch:** `braid/bd-5oyk1xce-q2-preview-drops-engine` (off the bd-5jxcio5d capture-splice branch)

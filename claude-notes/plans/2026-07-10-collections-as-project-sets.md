@@ -1,4 +1,7 @@
-# Collections as project sets
+---
+title: 'Collections as project sets'
+date: 2026-07-10
+---
 
 ## Overview
 

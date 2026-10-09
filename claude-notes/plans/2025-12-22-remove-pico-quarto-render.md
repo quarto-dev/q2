@@ -1,4 +1,7 @@
-# Plan: Remove pico-quarto-render crate
+---
+title: 'Plan: Remove pico-quarto-render crate'
+date: 2025-12-22
+---
 
 ## Summary
 

@@ -1,4 +1,7 @@
-# Plan 1a: Return to Q1 — correct the landed 1a host/engine surface
+---
+title: 'Plan 1a: Return to Q1 — correct the landed 1a host/engine surface'
+date: 2026-06-25
+---
 
 > **STATUS (2026-06-29): RTQ code items COMPLETE on `feature/ts-engine-extensions`.** All six
 > RTQ checkboxes landed + reviewed (per-task + opus whole-branch review = READY TO MERGE): ENG-2

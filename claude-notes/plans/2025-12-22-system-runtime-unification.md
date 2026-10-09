@@ -1,4 +1,7 @@
-# SystemRuntime Unification
+---
+title: 'SystemRuntime Unification'
+date: 2025-12-22
+---
 
 **Date**: 2025-12-22
 **Issue**: k-6zaq

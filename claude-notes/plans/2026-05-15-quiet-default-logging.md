@@ -1,4 +1,7 @@
-# 2026-05-15 — Quiet default logging in `q2 preview` and `q2 hub`
+---
+title: '2026-05-15 — Quiet default logging in `q2 preview` and `q2 hub`'
+date: 2026-05-15
+---
 
 **Beads:** [bd-9mgd](../../.beads/issues.jsonl)
 **Branch:** `beads/bd-9mgd-quiet-default-logging` (off `main`)

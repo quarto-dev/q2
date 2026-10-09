@@ -1,4 +1,7 @@
-# Plan: Consolidate qmd::read Error Reporting to DiagnosticMessage
+---
+title: 'Plan: Consolidate qmd::read Error Reporting to DiagnosticMessage'
+date: 2025-10-21
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

@@ -1,4 +1,7 @@
-# Project `_environment` files are not loaded (bd-environment-files-372u9qbs)
+---
+title: 'Project `_environment` files are not loaded (bd-environment-files-372u9qbs)'
+date: 2026-08-09
+---
 
 **Date:** 2026-08-09
 **Braid:** bd-environment-files-372u9qbs (feature, P1, label `parity`)

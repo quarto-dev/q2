@@ -1,4 +1,7 @@
-# marimo file-claim vs Q2 multi-engine cooperation
+---
+title: 'marimo file-claim vs Q2 multi-engine cooperation'
+date: 2026-07-08
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# HTML Rendering Parity: Rust Quarto ↔ TypeScript Quarto
+---
+title: 'HTML Rendering Parity: Rust Quarto ↔ TypeScript Quarto'
+date: 2026-01-24
+---
 
 **Beads Epic**: kyoto-6jv
 **Created**: 2026-01-24

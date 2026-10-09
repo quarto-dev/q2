@@ -1,4 +1,7 @@
-# Filesystem Synchronization Design for quarto-hub
+---
+title: 'Filesystem Synchronization Design for quarto-hub'
+date: 2025-12-09
+---
 
 **Issue:** k-ke2m
 **Parent:** k-4wex

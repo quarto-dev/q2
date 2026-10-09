@@ -1,4 +1,7 @@
-# Treat leading-`/` resource paths as project-root-relative
+---
+title: 'Treat leading-`/` resource paths as project-root-relative'
+date: 2026-05-21
+---
 
 ## Overview
 

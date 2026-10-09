@@ -1,4 +1,7 @@
-# Plan: Fix div-whitespace Performance Problem
+---
+title: 'Plan: Fix div-whitespace Performance Problem'
+date: 2025-10-21
+---
 
 ## Problem Statement
 

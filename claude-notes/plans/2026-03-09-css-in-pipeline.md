@@ -1,4 +1,7 @@
-# Plan: Move Theme CSS Compilation into the Render Pipeline
+---
+title: 'Plan: Move Theme CSS Compilation into the Render Pipeline'
+date: 2026-03-09
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Plan: Code Coverage Infrastructure
+---
+title: 'Plan: Code Coverage Infrastructure'
+date: 2025-12-31
+---
 
 ## Problem Statement
 

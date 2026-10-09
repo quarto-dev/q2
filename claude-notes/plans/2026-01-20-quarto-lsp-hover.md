@@ -1,4 +1,7 @@
-# Quarto LSP Hover Support Plan
+---
+title: 'Quarto LSP Hover Support Plan'
+date: 2026-01-20
+---
 
 **Issue:** kyoto-jqh - LSP Phase 4: Hover Information
 **Parent Epic:** kyoto-7bf - Implement Quarto LSP server (quarto lsp)

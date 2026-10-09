@@ -1,4 +1,7 @@
-# Migrate pampa to hash-based FileIds
+---
+title: 'Migrate pampa to hash-based FileIds'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending review
 **Beads:** bd-ky14a

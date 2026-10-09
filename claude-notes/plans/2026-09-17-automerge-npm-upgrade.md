@@ -1,4 +1,7 @@
-# Upgrade `@automerge/automerge` and `@automerge/automerge-repo` (npm)
+---
+title: 'Upgrade `@automerge/automerge` and `@automerge/automerge-repo` (npm)'
+date: 2026-09-17
+---
 
 **Strand:** bd-d08gpqvu
 **Branch:** `braid/bd-d08gpqvu-automerge-npm-upgrade` (worktree under `.worktrees/`)

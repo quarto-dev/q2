@@ -1,4 +1,7 @@
-# Native Windows ARM64 binaries in the nightly (and release) pipeline
+---
+title: 'Native Windows ARM64 binaries in the nightly (and release) pipeline'
+date: 2026-10-08
+---
 
 **Date:** 2026-10-08
 **Braid:** bd-windows-arm64-nightly-xms5p652 (feature, P2, labels release/ci/windows)

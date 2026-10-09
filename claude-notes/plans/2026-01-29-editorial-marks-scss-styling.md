@@ -1,4 +1,7 @@
-# Editorial Marks SCSS Styling
+---
+title: 'Editorial Marks SCSS Styling'
+date: 2026-01-29
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Monaco Editor Diagnostics Integration Plan
+---
+title: 'Monaco Editor Diagnostics Integration Plan'
+date: 2025-12-28
+---
 
 **Issue:** k-i5nw
 **Date:** 2025-12-28

@@ -1,4 +1,7 @@
-# Plan 7b — Native content-processor registry: percent + spin (zero Pass-1 launch)
+---
+title: 'Plan 7b — Native content-processor registry: percent + spin (zero Pass-1 launch)'
+date: 2026-07-08
+---
 
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md) (reframed as the 7-series *content-processor architecture* root)
 **Supersedes:** [2026-07-07-plan7a-static-content-pattern-claims.md](2026-07-07-plan7a-static-content-pattern-claims.md) (7a's arbitrary-regex claim mechanism is withdrawn; its surviving design points — discovery admission, one-predicate-two-sites coherence, built-ins-as-data, the Q6 membership-cache contract — migrate here)

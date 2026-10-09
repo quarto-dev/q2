@@ -1,4 +1,7 @@
-# Analysis: Nondeterministic sourceInfoPool IDs in JSON Writer
+---
+title: 'Analysis: Nondeterministic sourceInfoPool IDs in JSON Writer'
+date: 2026-01-02
+---
 
 **Beads Issue**: k-gv05
 **Date**: 2026-01-02

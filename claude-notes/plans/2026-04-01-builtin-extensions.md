@@ -1,4 +1,7 @@
-# Plan: Built-in Extensions Infrastructure
+---
+title: 'Plan: Built-in Extensions Infrastructure'
+date: 2026-04-01
+---
 
 ## Status: Complete (Phases 1-5)
 

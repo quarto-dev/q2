@@ -1,4 +1,7 @@
-# Issue #195 / bd-u50w — fix qmd writer for truly-empty bullet-list items
+---
+title: 'Issue #195 / bd-u50w — fix qmd writer for truly-empty bullet-list items'
+date: 2026-05-14
+---
 
 - **GitHub issue**: https://github.com/quarto-dev/q2/issues/195
 - **Beads**: bd-u50w

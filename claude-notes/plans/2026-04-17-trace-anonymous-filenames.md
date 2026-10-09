@@ -1,4 +1,7 @@
-# Fix `<anonymous>` filenames in pipeline trace `astContext`
+---
+title: 'Fix `<anonymous>` filenames in pipeline trace `astContext`'
+date: 2026-04-17
+---
 
 Beads: `bd-b0f2`
 

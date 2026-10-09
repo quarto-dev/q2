@@ -1,4 +1,7 @@
-# pampa: bare-brace parse error should hint at escaping literal braces (bd-brace-escape-hint-0tmemkyt)
+---
+title: 'pampa: bare-brace parse error should hint at escaping literal braces (bd-brace-escape-hint-0tmemkyt)'
+date: 2026-08-09
+---
 
 **Date:** 2026-08-09
 **Braid:** bd-brace-escape-hint-0tmemkyt (feature, p2, label `diagnostics`)

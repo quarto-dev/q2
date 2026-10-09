@@ -1,4 +1,7 @@
-# Get Started collection: seeded example projects for new hub users
+---
+title: 'Get Started collection: seeded example projects for new hub users'
+date: 2026-09-17
+---
 
 **Strand:** not yet filed (will link bd-d147nkqx as parent or related)
 **Branch:** `feature/bd-d147nkqx-hub-only-project-templates` (Carlos's PR #684, draft)

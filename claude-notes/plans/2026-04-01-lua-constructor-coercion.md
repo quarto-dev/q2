@@ -1,4 +1,7 @@
-# Plan: Pandoc Lua Constructor Type Coercion
+---
+title: 'Plan: Pandoc Lua Constructor Type Coercion'
+date: 2026-04-01
+---
 
 ## Status: Complete
 

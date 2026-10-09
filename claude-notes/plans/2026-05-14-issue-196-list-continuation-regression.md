@@ -1,4 +1,7 @@
-# Fix issue #196: list-item continuation regression from PR #194 (bd-3mgb)
+---
+title: 'Fix issue #196: list-item continuation regression from PR #194 (bd-3mgb)'
+date: 2026-05-14
+---
 
 - **GitHub:** https://github.com/quarto-dev/q2/issues/196
 - **Beads:** bd-3mgb (discovered-from bd-7l1u, the Q-2-35 implementation)

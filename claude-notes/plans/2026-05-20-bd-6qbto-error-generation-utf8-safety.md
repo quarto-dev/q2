@@ -1,4 +1,7 @@
-# bd-6qbto — `quarto-parse-errors` must not panic on invalid UTF-8 input
+---
+title: 'bd-6qbto — `quarto-parse-errors` must not panic on invalid UTF-8 input'
+date: 2026-05-20
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Anchor Shorthand `<#foo>` Support
+---
+title: 'Anchor Shorthand `<#foo>` Support'
+date: 2026-02-10
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Lua require + "current path" contract: GH #587, GH #588, shortcode stack leak
+---
+title: 'Lua require + "current path" contract: GH #587, GH #588, shortcode stack leak'
+date: 2026-08-24
+---
 
 **Strands:**
 - bd-sr0nipl7 — GH #588: `resolve_path` returns module dir inside a required file (primary)

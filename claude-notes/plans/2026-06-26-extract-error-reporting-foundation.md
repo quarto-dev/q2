@@ -1,4 +1,7 @@
-# Step 1: extract the diagnostics foundation into two standalone `posit-dev/` repos — `quarto-source-map` first, then `quarto-error-reporting`
+---
+title: 'Step 1: extract the diagnostics foundation into two standalone `posit-dev/` repos — `quarto-source-map` first, then `quarto-error-reporting`'
+date: 2026-06-26
+---
 
 > **Naming (decided 2026-06-27):** both externalized crates **keep their current
 > names** — `quarto-source-map` and `quarto-error-reporting` (and `quarto-yaml`

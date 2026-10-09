@@ -1,4 +1,7 @@
-# Hub-Client Navigation Refactor Plan
+---
+title: 'Hub-Client Navigation Refactor Plan'
+date: 2026-01-10
+---
 
 **Issue:** k-wc81
 **Created:** 2026-01-10

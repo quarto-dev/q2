@@ -1,4 +1,7 @@
-# Operation-Based Sync: Fix Concurrent Edit Race Condition
+---
+title: 'Operation-Based Sync: Fix Concurrent Edit Race Condition'
+date: 2026-03-26
+---
 
 **Issue:** quarto-dev/q2#74 — hub: edits can get lost
 **Related PR:** #80 (partial fix, merged 2026-03-25)

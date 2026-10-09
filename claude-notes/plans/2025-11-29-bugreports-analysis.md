@@ -1,4 +1,7 @@
-# Bugreports Category Analysis
+---
+title: 'Bugreports Category Analysis'
+date: 2025-11-29
+---
 
 **Date**: 2025-11-29
 **Status**: In Progress

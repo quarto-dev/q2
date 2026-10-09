@@ -1,4 +1,7 @@
-# bd-6: Documentation and Examples for quarto-error-reporting
+---
+title: 'bd-6: Documentation and Examples for quarto-error-reporting'
+date: 2025-11-23
+---
 
 **Date**: 2025-11-23
 **Issue**: bd-6

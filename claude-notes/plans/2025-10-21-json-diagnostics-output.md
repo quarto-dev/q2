@@ -1,4 +1,7 @@
-# Plan: JSON Diagnostics Output for Metadata Warnings/Errors
+---
+title: 'Plan: JSON Diagnostics Output for Metadata Warnings/Errors'
+date: 2025-10-21
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

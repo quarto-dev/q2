@@ -1,4 +1,7 @@
-# Bug: Math+Attr Feature Completely Broken
+---
+title: 'Bug: Math+Attr Feature Completely Broken'
+date: 2025-11-21
+---
 
 ## Problem
 

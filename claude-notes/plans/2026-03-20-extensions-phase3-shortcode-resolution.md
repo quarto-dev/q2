@@ -1,4 +1,7 @@
-# Extensions Phase 3: Shortcode Resolution
+---
+title: 'Extensions Phase 3: Shortcode Resolution'
+date: 2026-03-20
+---
 
 **Created**: 2026-03-20
 **Status**: COMPLETE

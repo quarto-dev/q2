@@ -1,4 +1,7 @@
-# Monaco syntax highlighting for `.qmd` via tree-sitter
+---
+title: 'Monaco syntax highlighting for `.qmd` via tree-sitter'
+date: 2026-06-10
+---
 
 GitHub issue: [quarto-dev/q2#10](https://github.com/quarto-dev/q2/issues/10)
 

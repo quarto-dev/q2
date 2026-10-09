@@ -1,4 +1,7 @@
-# L2 — Listing data model + schema (reference document)
+---
+title: 'L2 — Listing data model + schema (reference document)'
+date: 2026-05-06
+---
 
 **Date:** 2026-05-06
 **Beads:** `bd-j60g`. Parent epic: `bd-61cd`

@@ -1,4 +1,7 @@
-# Heading id written as {id="..."} emits two id attributes (bd-heading-id-attr-duplicated-xbpcmejr)
+---
+title: 'Heading id written as {id="..."} emits two id attributes (bd-heading-id-attr-duplicated-xbpcmejr)'
+date: 2026-08-18
+---
 
 **Date:** 2026-08-18
 **Braid:** bd-heading-id-attr-duplicated-xbpcmejr (p2, bug, label `markdown`)

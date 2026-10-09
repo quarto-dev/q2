@@ -1,4 +1,7 @@
-# FilterContext Refactoring Plan
+---
+title: 'FilterContext Refactoring Plan'
+date: 2025-12-02
+---
 
 **Date:** 2025-12-02
 **Issue:** k-409

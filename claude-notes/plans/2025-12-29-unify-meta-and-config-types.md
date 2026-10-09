@@ -1,4 +1,7 @@
-# Unify MetaValueWithSourceInfo and ConfigValue
+---
+title: 'Unify MetaValueWithSourceInfo and ConfigValue'
+date: 2025-12-29
+---
 
 **Issue:** k-2tu9
 **Date:** 2025-12-29

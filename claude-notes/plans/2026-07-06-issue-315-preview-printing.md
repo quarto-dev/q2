@@ -1,4 +1,7 @@
-# Issue #315 — Printing / PDF export from the quarto-hub preview is broken
+---
+title: 'Issue #315 — Printing / PDF export from the quarto-hub preview is broken'
+date: 2026-07-06
+---
 
 **Issue:** https://github.com/quarto-dev/q2/issues/315 — "print to pdf is
 super broken in our react preview formats. We should audit this for the

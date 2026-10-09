@@ -1,4 +1,7 @@
-# Include shortcode: project-absolute (root-relative) path resolution
+---
+title: 'Include shortcode: project-absolute (root-relative) path resolution'
+date: 2026-08-07
+---
 
 **Strand:** bd-w9koo1i2
 **Status:** implemented; PR open — https://github.com/quarto-dev/q2/pull/468

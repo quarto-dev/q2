@@ -1,4 +1,7 @@
-# L6 — Dependency-graph integration (sub-plan)
+---
+title: 'L6 — Dependency-graph integration (sub-plan)'
+date: 2026-05-07
+---
 
 **Date:** 2026-05-07
 **Beads:** `bd-xbnf` (this phase). Parent epic: `bd-61cd`

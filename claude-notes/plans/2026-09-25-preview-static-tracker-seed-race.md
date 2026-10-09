@@ -1,4 +1,7 @@
-# q2 preview --static: content tracker seeded after the port opens
+---
+title: 'q2 preview --static: content tracker seeded after the port opens'
+date: 2026-09-25
+---
 
 **Strand:** bd-tp0yym04
 **Branch:** `braid/bd-tp0yym04-preview-tracker-seed-race`

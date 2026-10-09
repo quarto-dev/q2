@@ -1,4 +1,7 @@
-# Hub Sync Server: Missing Documents on Reconnection
+---
+title: 'Hub Sync Server: Missing Documents on Reconnection'
+date: 2026-03-03
+---
 
 ## Overview
 

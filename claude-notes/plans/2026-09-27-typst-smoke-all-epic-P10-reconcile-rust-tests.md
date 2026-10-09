@@ -1,4 +1,7 @@
-# P10 — Reconcile with the six existing Rust book integration tests
+---
+title: 'P10 — Reconcile with the six existing Rust book integration tests'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —

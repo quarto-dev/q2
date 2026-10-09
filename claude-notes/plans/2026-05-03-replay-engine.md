@@ -1,4 +1,7 @@
-# Replay engine: deterministic in-Rust engine for tests (bd-45yw)
+---
+title: 'Replay engine: deterministic in-Rust engine for tests (bd-45yw)'
+date: 2026-05-03
+---
 
 **Date:** 2026-05-03
 **Beads:** bd-45yw

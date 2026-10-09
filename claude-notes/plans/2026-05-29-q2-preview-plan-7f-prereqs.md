@@ -1,4 +1,7 @@
-# Plan 7f — Source-info prerequisites
+---
+title: 'Plan 7f — Source-info prerequisites'
+date: 2026-05-29
+---
 
 **Date:** 2026-05-29
 **Branch:** feature/provenance

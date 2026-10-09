@@ -1,4 +1,7 @@
-# Lua Filter Support Design Plan
+---
+title: 'Lua Filter Support Design Plan'
+date: 2025-11-26
+---
 
 **Issue:** k-409
 **Epic:** k-407 (Extensible filters for quarto-markdown-pandoc)

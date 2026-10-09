@@ -1,4 +1,7 @@
-# Pipeline Execution Tracing
+---
+title: 'Pipeline Execution Tracing'
+date: 2026-04-13
+---
 
 ## Overview
 

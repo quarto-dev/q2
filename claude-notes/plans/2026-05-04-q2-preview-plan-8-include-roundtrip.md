@@ -1,4 +1,7 @@
-# Plan 8 — Include round-trip (TOMBSTONE — abandoned)
+---
+title: 'Plan 8 — Include round-trip (TOMBSTONE — abandoned)'
+date: 2026-05-04
+---
 
 **Status:** **Abandoned 2026-06-05.** No work to do; include round-trip is free
 under the node-edit architecture. This file is kept as a tombstone because

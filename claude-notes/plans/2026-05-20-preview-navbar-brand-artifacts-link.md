@@ -1,4 +1,7 @@
-# bd-ql55q — Preview navbar brand link points to artifacts VFS root
+---
+title: 'bd-ql55q — Preview navbar brand link points to artifacts VFS root'
+date: 2026-05-20
+---
 
 **Issue:** bd-ql55q (child of bd-lk66 — Hub-client website rendering UX issues)
 **Type:** bug · **Priority:** 1

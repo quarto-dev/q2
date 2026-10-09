@@ -1,4 +1,7 @@
-# Julia engine: upstream fixes, static declarations, and bundling in q2 (epic, DRAFT)
+---
+title: 'Julia engine: upstream fixes, static declarations, and bundling in q2 (epic, DRAFT)'
+date: 2026-09-03
+---
 
 > ## ⚠️ PROVISIONAL — NEEDS REVIEW
 >

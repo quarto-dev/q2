@@ -1,4 +1,7 @@
-# Page-navigation: match Quarto 1 behavior in websites
+---
+title: 'Page-navigation: match Quarto 1 behavior in websites'
+date: 2026-04-30
+---
 
 Beads: **bd-bsut**.
 

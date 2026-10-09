@@ -1,4 +1,7 @@
-# Restore universal hub login nonce enforcement (GH #564, reverse PR #446)
+---
+title: 'Restore universal hub login nonce enforcement (GH #564, reverse PR #446)'
+date: 2026-09-23
+---
 
 ## Overview
 

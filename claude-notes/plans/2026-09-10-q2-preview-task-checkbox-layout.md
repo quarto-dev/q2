@@ -1,4 +1,7 @@
-# q2-preview: task-list checkbox renders on its own line above the item text
+---
+title: 'q2-preview: task-list checkbox renders on its own line above the item text'
+date: 2026-09-10
+---
 
 **Strand:** bd-qif9l4cx
 **Related:** bd-q2wqj24c (CommentBlock wrapper `<div>` breaks parent > child

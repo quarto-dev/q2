@@ -1,4 +1,7 @@
-# Navigation item `text:` is HTML-escaped; bare-string page-footer item becomes an empty link (bd-page-footer-items-f4th80mj)
+---
+title: 'Navigation item `text:` is HTML-escaped; bare-string page-footer item becomes an empty link (bd-page-footer-items-f4th80mj)'
+date: 2026-08-11
+---
 
 **Date:** 2026-08-11
 **Braid:** bd-page-footer-items-f4th80mj (bug, P1, labels `parity` / `websites`)

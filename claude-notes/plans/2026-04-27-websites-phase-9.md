@@ -1,4 +1,7 @@
-# Phase 9 — Hub-client project rendering
+---
+title: 'Phase 9 — Hub-client project rendering'
+date: 2026-04-27
+---
 
 **Date:** 2026-04-27
 **Beads:** `bd-ayj6` (parent `bd-0tr6`).

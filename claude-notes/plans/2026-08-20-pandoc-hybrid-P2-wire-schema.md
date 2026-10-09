@@ -1,4 +1,7 @@
-# P2 — Custom-node wire format: versioned shared schema
+---
+title: 'P2 — Custom-node wire format: versioned shared schema'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P2-wire-schema.md`
 for the full correction history. Latest (round 4 review, Reviewer A): the worked `Callout` schema

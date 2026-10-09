@@ -1,4 +1,7 @@
-# Plan 4c.2: Marimo through `q2 preview` — capture-splice fix + full browser e2e
+---
+title: 'Plan 4c.2: Marimo through `q2 preview` — capture-splice fix + full browser e2e'
+date: 2026-07-07
+---
 
 **Status:** plan (2026-07-07). Driving strand: **bd-5jxcio5d** (P2, bug —
 "q2 preview capture-splice cannot splice engines that emit unwrapped output").

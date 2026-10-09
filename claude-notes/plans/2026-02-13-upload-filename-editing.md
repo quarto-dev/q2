@@ -1,4 +1,7 @@
-# Upload Dialog: Editable Filenames with Whitespace Sanitization
+---
+title: 'Upload Dialog: Editable Filenames with Whitespace Sanitization'
+date: 2026-02-13
+---
 
 **Beads Issue:** bd-anxz
 

@@ -1,4 +1,8 @@
-# Pipe Table Caption Implementation Plan
+---
+title: 'Pipe Table Caption Implementation Plan'
+date: 2025-10-31
+---
+
 **Date**: 2025-10-31
 **Issue**: k-304
 **Status**: Ready to implement

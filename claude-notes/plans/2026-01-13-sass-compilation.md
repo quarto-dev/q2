@@ -1,4 +1,7 @@
-# SASS Compilation Infrastructure for Rust Quarto
+---
+title: 'SASS Compilation Infrastructure for Rust Quarto'
+date: 2026-01-13
+---
 
 **Beads Issue**: k-685
 **Created**: 2026-01-13

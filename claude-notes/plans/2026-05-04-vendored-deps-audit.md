@@ -1,4 +1,7 @@
-# Vendored / non-cargo dependency audit — plan
+---
+title: 'Vendored / non-cargo dependency audit — plan'
+date: 2026-05-04
+---
 
 **Date opened:** 2026-05-04
 **Beads issue:** bd-xm7l (epic)

@@ -1,4 +1,7 @@
-# Fix table caption attribute handling
+---
+title: 'Fix table caption attribute handling'
+date: 2025-11-03
+---
 
 ## Problem
 

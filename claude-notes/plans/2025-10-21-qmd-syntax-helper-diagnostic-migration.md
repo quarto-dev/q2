@@ -1,4 +1,7 @@
-# Plan: Update qmd-syntax-helper to use DiagnosticMessage
+---
+title: 'Plan: Update qmd-syntax-helper to use DiagnosticMessage'
+date: 2025-10-21
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

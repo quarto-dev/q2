@@ -1,4 +1,7 @@
-# Item plane — research-level plan (DEFERRED)
+---
+title: 'Item plane — research-level plan (DEFERRED)'
+date: 2026-06-19
+---
 
 **Date:** 2026-06-19
 **Branch:** TBD (follow-on to `feature/block-editing-improvements`)

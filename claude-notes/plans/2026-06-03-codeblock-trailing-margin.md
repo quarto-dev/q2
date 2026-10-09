@@ -1,4 +1,7 @@
-# Fix stray empty line at the bottom of highlighted code blocks
+---
+title: 'Fix stray empty line at the bottom of highlighted code blocks'
+date: 2026-06-03
+---
 
 **Beads issue:** bd-jby1i
 **Date:** 2026-06-03

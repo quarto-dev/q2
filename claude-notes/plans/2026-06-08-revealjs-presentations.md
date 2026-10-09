@@ -1,4 +1,7 @@
-# `format: revealjs` — Presentation Support for Quarto 2
+---
+title: '`format: revealjs` — Presentation Support for Quarto 2'
+date: 2026-06-08
+---
 
 **Status:** Phase 1 (render-side Tier-1 vertical slice) **complete** — `q2 render`
 produces standalone reveal.js 6 decks. Next: Phase 1P (preview parity, GA gate).

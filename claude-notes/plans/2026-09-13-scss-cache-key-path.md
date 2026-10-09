@@ -1,4 +1,7 @@
-# SCSS cache key hashes the document-relative theme path (bd-79c4do6g)
+---
+title: 'SCSS cache key hashes the document-relative theme path (bd-79c4do6g)'
+date: 2026-09-13
+---
 
 **Date:** 2026-09-13
 **Braid:** bd-79c4do6g (P1, bug, label `perf`)

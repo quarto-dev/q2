@@ -1,4 +1,7 @@
-# Callout class-vocabulary fix — align q2 with TS Quarto / Bootstrap
+---
+title: 'Callout class-vocabulary fix — align q2 with TS Quarto / Bootstrap'
+date: 2026-05-22
+---
 
 ## Overview
 

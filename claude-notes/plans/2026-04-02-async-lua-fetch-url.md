@@ -1,4 +1,7 @@
-# Plan: Async Lua execution + `fetch_url` for WASM
+---
+title: 'Plan: Async Lua execution + `fetch_url` for WASM'
+date: 2026-04-02
+---
 
 ## Status: Complete
 

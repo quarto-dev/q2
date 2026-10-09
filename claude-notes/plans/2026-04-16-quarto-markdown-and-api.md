@@ -1,4 +1,7 @@
-# Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements
+---
+title: 'Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements'
+date: 2026-04-16
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plan 2A — both the **foundation** (`@quarto/api` shell + `./config` + vendored `@quarto/types`) and **§2aa** (the runtime surface: the `text`/`markdownRegex`/`mappedString`/`format`/`path`/`system`/`console`/`crypto` namespaces + `@quarto/api/platform`), both implemented. **Phase A also depends on Plan 1b** (#8) — its `buildQuartoAPI(global, host)` assembly (`@quarto/engine-host-deno/src/quarto-api.ts`, landed) is the integration point that threads `Init { global }` into the factories Phase A gives bodies; Phase A lands the `global`-param seam Plan 1b already stubbed (the `_global` it accepts but ignores). Phase B (types) is otherwise independent. Phase A fills stubs that §2aa shipped, so it follows §2aa.

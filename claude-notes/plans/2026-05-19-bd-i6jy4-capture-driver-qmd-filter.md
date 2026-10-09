@@ -1,4 +1,7 @@
-# bd-i6jy4 — Filter eager-capture driver to `.qmd` files only
+---
+title: 'bd-i6jy4 — Filter eager-capture driver to `.qmd` files only'
+date: 2026-05-19
+---
 
 ## Overview
 

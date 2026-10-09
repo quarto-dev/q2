@@ -1,4 +1,7 @@
-# Nightly release workflow: build `main` whenever it has unreleased changes
+---
+title: 'Nightly release workflow: build `main` whenever it has unreleased changes'
+date: 2026-09-19
+---
 
 **Date:** 2026-09-19
 **Braid:** bd-p4ljdp2e (feature, P2, labels release/ci)

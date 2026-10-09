@@ -1,4 +1,7 @@
-# Memo: quarto-source-map binding-API redesign (Option B), with Option C as the declared end-state
+---
+title: 'Memo: quarto-source-map binding-API redesign (Option B), with Option C as the declared end-state'
+date: 2026-08-09
+---
 
 **Audience:** the agent/session working in `posit-dev/quarto-source-map`
 (and, for the migration leg, `posit-dev/quarto-yaml`).

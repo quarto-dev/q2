@@ -1,4 +1,7 @@
-# Extension Type Writer Audit - k-327
+---
+title: 'Extension Type Writer Audit - k-327'
+date: 2025-11-21
+---
 
 **Date**: 2025-11-21
 **Issue**: k-327 - Audit other Quarto extension types for silent writer failures

@@ -1,4 +1,7 @@
-# Citeproc Output Architecture Refactor
+---
+title: 'Citeproc Output Architecture Refactor'
+date: 2025-11-27
+---
 
 **Issue**: k-423 (child of k-422)
 **Created**: 2025-11-27

@@ -1,4 +1,7 @@
-# Hub-Client Deep Linking Plan
+---
+title: 'Hub-Client Deep Linking Plan'
+date: 2026-01-29
+---
 
 ## Overview
 

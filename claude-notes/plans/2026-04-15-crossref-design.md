@@ -1,4 +1,7 @@
-# Crossref Design for Quarto 2
+---
+title: 'Crossref Design for Quarto 2'
+date: 2026-04-15
+---
 
 **Beads Issue**: bd-jsbg (epic)
 **Created**: 2026-04-15

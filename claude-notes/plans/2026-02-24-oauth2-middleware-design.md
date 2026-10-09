@@ -1,4 +1,7 @@
-# OAuth2 Middleware Design for quarto-hub
+---
+title: 'OAuth2 Middleware Design for quarto-hub'
+date: 2026-02-24
+---
 
 *2026-02-24*
 

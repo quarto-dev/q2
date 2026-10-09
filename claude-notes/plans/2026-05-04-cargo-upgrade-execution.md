@@ -1,4 +1,7 @@
-# Cargo upgrade execution plan — 2026-05-04 majors
+---
+title: 'Cargo upgrade execution plan — 2026-05-04 majors'
+date: 2026-05-04
+---
 
 **Survey:** `claude-notes/plans/2026-05-04-cargo-upgrade-survey.md`
 **Tracking:** bd-hb8h (parent), 16 children

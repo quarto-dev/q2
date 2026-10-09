@@ -1,4 +1,7 @@
-# Login screen carries a "use test data, not real data" disclaimer
+---
+title: 'Login screen carries a "use test data, not real data" disclaimer'
+date: 2026-09-15
+---
 
 **Strand:** bd-m6u9qu3u · **Scope:** `hub-client/` · **Related:** bd-g0uyp2v1 (landing page intro)
 

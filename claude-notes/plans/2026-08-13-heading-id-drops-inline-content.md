@@ -1,4 +1,7 @@
-# Auto-generated heading ids drop quoted spans, links, math and every other unhandled inline (bd-heading-id-drops-inline-content-fl84n3ql)
+---
+title: 'Auto-generated heading ids drop quoted spans, links, math and every other unhandled inline (bd-heading-id-drops-inline-content-fl84n3ql)'
+date: 2026-08-13
+---
 
 **Date:** 2026-08-13
 **Braid:** `bd-heading-id-drops-inline-content-fl84n3ql` (bug, p3, label `markdown`)

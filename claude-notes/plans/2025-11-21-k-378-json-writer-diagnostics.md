@@ -1,4 +1,7 @@
-# JSON Writer Diagnostic Support - k-378
+---
+title: 'JSON Writer Diagnostic Support - k-378'
+date: 2025-11-21
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

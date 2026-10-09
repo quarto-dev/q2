@@ -1,4 +1,7 @@
-# Plan: Make AstTransform trait and shortcode resolution async
+---
+title: 'Plan: Make AstTransform trait and shortcode resolution async'
+date: 2026-04-06
+---
 
 ## Status: Complete
 

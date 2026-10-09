@@ -1,4 +1,7 @@
-# Plan: Projects and books (pandoc-request R7)
+---
+title: 'Plan: Projects and books (pandoc-request R7)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)

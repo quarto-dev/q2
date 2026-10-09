@@ -1,4 +1,7 @@
-# Attribution: auto-inject viewer CSS/JS
+---
+title: 'Attribution: auto-inject viewer CSS/JS'
+date: 2026-05-14
+---
 
 ## Overview
 

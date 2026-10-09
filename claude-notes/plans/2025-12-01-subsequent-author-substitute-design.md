@@ -1,4 +1,7 @@
-# Subsequent Author Substitute Implementation Plan
+---
+title: 'Subsequent Author Substitute Implementation Plan'
+date: 2025-12-01
+---
 
 **Issue**: k-461
 **Date**: 2025-12-01

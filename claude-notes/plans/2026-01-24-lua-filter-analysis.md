@@ -1,4 +1,7 @@
-# Lua Filter Chain Analysis for Rust Quarto
+---
+title: 'Lua Filter Chain Analysis for Rust Quarto'
+date: 2026-01-24
+---
 
 **Parent Plan**: `2026-01-24-html-rendering-parity.md`
 **Parent Epic**: kyoto-6jv

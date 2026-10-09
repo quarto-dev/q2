@@ -1,4 +1,7 @@
-# Landing page explains Quarto Hub; Learn more points at the real site
+---
+title: 'Landing page explains Quarto Hub; Learn more points at the real site'
+date: 2026-09-11
+---
 
 **Strand:** bd-g0uyp2v1 · **Branch:** `braid/bd-g0uyp2v1-landing-page-intro` · **Scope:** `hub-client/`
 **Closes:** bd-rh2n4d7q (the provisional `quarto.org` Learn more URL)

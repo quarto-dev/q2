@@ -1,4 +1,7 @@
-# Plan 1c.2 — TS Engine Extensions: loose ends
+---
+title: 'Plan 1c.2 — TS Engine Extensions: loose ends'
+date: 2026-07-01
+---
 
 **Parent:** [2026-04-16-plan1c-extension-integration.md](2026-04-16-plan1c-extension-integration.md)
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

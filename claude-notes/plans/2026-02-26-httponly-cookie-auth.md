@@ -1,4 +1,7 @@
-# HttpOnly Cookie Auth Migration
+---
+title: 'HttpOnly Cookie Auth Migration'
+date: 2026-02-26
+---
 
 ## Overview
 

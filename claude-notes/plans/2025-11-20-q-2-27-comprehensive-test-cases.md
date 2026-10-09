@@ -1,4 +1,7 @@
-# Q-2-27 Comprehensive Test Cases Plan
+---
+title: 'Q-2-27 Comprehensive Test Cases Plan'
+date: 2025-11-20
+---
 
 **Date**: 2025-11-20
 **Error Code**: Q-2-27 - Line Break Before Shortcode Close

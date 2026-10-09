@@ -1,4 +1,7 @@
-# Top-Level Navbars and Page Footers for HTML Documents
+---
+title: 'Top-Level Navbars and Page Footers for HTML Documents'
+date: 2026-04-18
+---
 
 Beads: `bd-imiw`
 

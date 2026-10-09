@@ -1,4 +1,7 @@
-# Rich Markdown in document titles is stringified
+---
+title: 'Rich Markdown in document titles is stringified'
+date: 2026-06-15
+---
 
 **Strand:** bd-5706gcrq
 

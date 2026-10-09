@@ -1,4 +1,7 @@
-# Provenance Plan 10 — Dispatch anchor + Lua source registration in SourceContext
+---
+title: 'Provenance Plan 10 — Dispatch anchor + Lua source registration in SourceContext'
+date: 2026-05-22
+---
 
 **Date:** 2026-05-22
 **Branch:** feature/provenance

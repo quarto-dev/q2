@@ -1,4 +1,7 @@
-# Attribute Processing Implementation Plan
+---
+title: 'Attribute Processing Implementation Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Context**: Add support for processing attribute nodes in tree-sitter refactoring

@@ -1,4 +1,7 @@
-# Capture-doc metadata envelope + sync-server maintainer tools
+---
+title: 'Capture-doc metadata envelope + sync-server maintainer tools'
+date: 2026-07-24
+---
 
 **Braid strand:** bd-eiku4ymo
 **Status:** implemented on branch

@@ -1,4 +1,7 @@
-# Plan: CI Optimization Steps 1 & 2
+---
+title: 'Plan: CI Optimization Steps 1 & 2'
+date: 2026-03-17
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Custom project types: extension-contributed project types (website base)
+---
+title: 'Custom project types: extension-contributed project types (website base)'
+date: 2026-08-08
+---
 
 - **Strand:** bd-ad7i1pc6 (discovered-from bd-wch2dotq "Make q2 render the posit-connect docs"; related: bd-mqk49; **absorbs bd-zb2tod5f** — see Phase 5)
 - **Date:** 2026-08-08

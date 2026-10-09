@@ -1,4 +1,7 @@
-# Project Naming Investigation
+---
+title: 'Project Naming Investigation'
+date: 2025-12-06
+---
 
 **Beads issue**: k-3n95
 **Status**: In progress

@@ -1,4 +1,7 @@
-# Audit: can list-item `itemAttr` simplify the revealjs incremental-list `fragment` machinery?
+---
+title: 'Audit: can list-item `itemAttr` simplify the revealjs incremental-list `fragment` machinery?'
+date: 2026-06-18
+---
 
 **Strand:** bd-34vf6fpr (discovered-from bd-aeyss6p5)
 **Date:** 2026-06-18

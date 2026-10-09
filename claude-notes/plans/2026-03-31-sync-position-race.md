@@ -1,4 +1,7 @@
-# Fix: Synchronous Remote Change Application to Prevent Position Mismatch
+---
+title: 'Fix: Synchronous Remote Change Application to Prevent Position Mismatch'
+date: 2026-03-31
+---
 
 ## Overview
 

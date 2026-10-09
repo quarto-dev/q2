@@ -1,4 +1,7 @@
-# Plan: Machine-Readable Validation Errors
+---
+title: 'Plan: Machine-Readable Validation Errors'
+date: 2025-10-27
+---
 
 ## Problem Statement
 

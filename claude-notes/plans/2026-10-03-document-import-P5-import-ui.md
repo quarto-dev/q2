@@ -1,4 +1,7 @@
-# Plan: Import button, dialog, drop routing and storage (document import P5)
+---
+title: 'Plan: Import button, dialog, drop routing and storage (document import P5)'
+date: 2026-10-03
+---
 
 **Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I5, I11, I12, I19, I20, I21, I22; uses interfaces 3 and 4 and P4's service contract)

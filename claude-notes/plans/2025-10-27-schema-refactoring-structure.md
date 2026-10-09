@@ -1,4 +1,7 @@
-# Schema Module Refactoring Structure
+---
+title: 'Schema Module Refactoring Structure'
+date: 2025-10-27
+---
 
 **Date**: 2025-10-27
 **Issue**: k-243 - Refactor schema.rs into smaller modules

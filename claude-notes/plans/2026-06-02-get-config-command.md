@@ -1,4 +1,7 @@
-# Plan: `q2 get-config` — emit merged document config as JSON
+---
+title: 'Plan: `q2 get-config` — emit merged document config as JSON'
+date: 2026-06-02
+---
 
 - **Beads:** bd-xoaic
 - **GitHub:** quarto-dev/q2#256

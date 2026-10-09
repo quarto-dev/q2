@@ -1,4 +1,7 @@
-# Sidebar `contents: <directory>` shorthand renders a broken sidebar (bd-sidebar-contents-dir-shorthand-z7arvhx8)
+---
+title: 'Sidebar `contents: <directory>` shorthand renders a broken sidebar (bd-sidebar-contents-dir-shorthand-z7arvhx8)'
+date: 2026-08-12
+---
 
 **Date:** 2026-08-12
 **Braid:** `bd-sidebar-contents-dir-shorthand-z7arvhx8` (bug, p1, label `navigation`)

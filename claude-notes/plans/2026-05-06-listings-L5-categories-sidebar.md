@@ -1,4 +1,7 @@
-# L5 — Categories sidebar (sub-plan)
+---
+title: 'L5 — Categories sidebar (sub-plan)'
+date: 2026-05-06
+---
 
 **Date:** 2026-05-06
 **Beads:** `bd-5vsr` (this phase). Parent epic: `bd-61cd`

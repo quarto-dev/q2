@@ -1,4 +1,7 @@
-# q2 preview — Phase F plan
+---
+title: 'q2 preview — Phase F plan'
+date: 2026-05-14
+---
 
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A, B, C, D all merged on `feature/q2-preview-command`.

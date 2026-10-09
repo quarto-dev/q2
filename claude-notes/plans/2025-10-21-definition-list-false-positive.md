@@ -1,4 +1,7 @@
-# Plan: Fix Definition List Detection False Positive on Table Captions
+---
+title: 'Plan: Fix Definition List Detection False Positive on Table Captions'
+date: 2025-10-21
+---
 
 ## Problem Statement
 

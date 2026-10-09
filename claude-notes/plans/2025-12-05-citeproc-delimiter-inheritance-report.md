@@ -1,4 +1,7 @@
-# Citeproc Delimiter Inheritance Bug Report
+---
+title: 'Citeproc Delimiter Inheritance Bug Report'
+date: 2025-12-05
+---
 
 ## Summary
 

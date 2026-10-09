@@ -1,4 +1,7 @@
-# Profile `q2 render` on a large website (quarto-web)
+---
+title: 'Profile `q2 render` on a large website (quarto-web)'
+date: 2026-05-21
+---
 
 ## Overview
 

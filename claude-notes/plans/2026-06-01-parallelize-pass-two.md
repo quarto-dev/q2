@@ -1,4 +1,7 @@
-# Parallelize Pass-2 render loop (bd-3gj56)
+---
+title: 'Parallelize Pass-2 render loop (bd-3gj56)'
+date: 2026-06-01
+---
 
 ## Overview
 

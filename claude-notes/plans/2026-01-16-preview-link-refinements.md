@@ -1,4 +1,7 @@
-# Plan: Preview Link Click Refinements
+---
+title: 'Plan: Preview Link Click Refinements'
+date: 2026-01-16
+---
 
 **Issue**: kyoto-ksw
 **Status**: Draft

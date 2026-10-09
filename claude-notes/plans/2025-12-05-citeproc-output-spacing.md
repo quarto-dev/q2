@@ -1,4 +1,7 @@
-# Fix Bibliography Spacing in quarto-citeproc to_blocks() Conversion
+---
+title: 'Fix Bibliography Spacing in quarto-citeproc to_blocks() Conversion'
+date: 2025-12-05
+---
 
 **Beads Issue:** k-vku8
 **Created:** 2025-12-05

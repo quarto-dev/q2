@@ -1,4 +1,7 @@
-# Phase 9 follow-up: thread user_grammars through RenderToHtmlRenderer (bd-izfv)
+---
+title: 'Phase 9 follow-up: thread user_grammars through RenderToHtmlRenderer (bd-izfv)'
+date: 2026-05-10
+---
 
 **Date:** 2026-05-10
 **Beads:** bd-izfv (P3, open → set to in_progress on `main` once user agrees)

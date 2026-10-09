@@ -1,4 +1,7 @@
-# Hub: Optional Local Project Watching
+---
+title: 'Hub: Optional Local Project Watching'
+date: 2026-03-03
+---
 
 **Beads issue**: `bd-3aga`
 

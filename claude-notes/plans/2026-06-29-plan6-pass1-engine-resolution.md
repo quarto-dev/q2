@@ -1,4 +1,7 @@
-# Plan 6 — Pass-1 engine resolution (per-doc lift): implementation plan
+---
+title: 'Plan 6 — Pass-1 engine resolution (per-doc lift): implementation plan'
+date: 2026-06-29
+---
 
 **Status:** implementation plan (design ratified with Gordon; final revision
 2026-07-05 — claim overrides are **whole-table claim replacement**, a claim

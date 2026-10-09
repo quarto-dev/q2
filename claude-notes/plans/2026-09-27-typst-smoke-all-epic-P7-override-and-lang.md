@@ -1,4 +1,7 @@
-# P7 — Port `override-orange-book` + `orange-book-lang`
+---
+title: 'P7 — Port `override-orange-book` + `orange-book-lang`'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md)

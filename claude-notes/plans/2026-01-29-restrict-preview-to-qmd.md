@@ -1,4 +1,7 @@
-# Plan: Restrict Preview and QMD Features to .qmd Files Only
+---
+title: 'Plan: Restrict Preview and QMD Features to .qmd Files Only'
+date: 2026-01-29
+---
 
 **Issue**: kyoto-xem
 **Date**: 2026-01-29

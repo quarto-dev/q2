@@ -1,4 +1,7 @@
-# Collapsible Sections for OutlinePanel
+---
+title: 'Collapsible Sections for OutlinePanel'
+date: 2026-01-29
+---
 
 **Issue**: kyoto-ub5
 **Created**: 2026-01-29

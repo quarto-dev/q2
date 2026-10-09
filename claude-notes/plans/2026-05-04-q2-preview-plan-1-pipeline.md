@@ -1,4 +1,7 @@
-# Plan 1 — q2-preview pipeline + integration
+---
+title: 'Plan 1 — q2-preview pipeline + integration'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04
 **Branch:** feature/q2-preview

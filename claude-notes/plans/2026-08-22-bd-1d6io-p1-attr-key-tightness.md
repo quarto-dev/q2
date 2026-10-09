@@ -1,4 +1,7 @@
-# bd-1d6io — P1 tight ranges for attribute keys, and a CI guard for the annotated-qmd fixtures
+---
+title: 'bd-1d6io — P1 tight ranges for attribute keys, and a CI guard for the annotated-qmd fixtures'
+date: 2026-08-22
+---
 
 **Strand:** bd-1d6io (`in_progress`). Absorbs **bd-49cbyqbt** (closed as a
 duplicate of failure #2; see `braid show bd-1d6io` comment `c-qn11q3g6`).

@@ -1,4 +1,7 @@
-# bd-vm5e5u10: one dangling index entry must not brick a project
+---
+title: 'bd-vm5e5u10: one dangling index entry must not brick a project'
+date: 2026-06-12
+---
 
 **Strand:** bd-vm5e5u10 (p1). Related: bd-10deu8h4 (the creator bug —
 how dangling entries get minted), bd-8x482xb0 (closed — the production

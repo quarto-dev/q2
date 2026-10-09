@@ -1,4 +1,7 @@
-# QMD writer drops shortcode arguments and delimiters
+---
+title: 'QMD writer drops shortcode arguments and delimiters'
+date: 2026-04-30
+---
 
 **Beads:** bd-ylig
 

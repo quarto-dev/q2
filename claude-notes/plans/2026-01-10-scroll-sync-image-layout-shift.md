@@ -1,4 +1,7 @@
-# Scroll Sync / Image Layout Shift Bug
+---
+title: 'Scroll Sync / Image Layout Shift Bug'
+date: 2026-01-10
+---
 
 **Date**: 2026-01-10
 **Status**: Analysis complete, ready for implementation

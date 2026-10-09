@@ -1,4 +1,7 @@
-# Fix Plan: Concat/Substring End Location Bug
+---
+title: 'Fix Plan: Concat/Substring End Location Bug'
+date: 2025-10-22
+---
 
 **Date**: 2025-10-22
 **Issue**: k-135

@@ -1,4 +1,7 @@
-# Browser sync offline-fallback race family
+---
+title: 'Browser sync offline-fallback race family'
+date: 2026-06-12
+---
 
 **Strand:** bd-10bdjmjb (related: bd-8x482xb0 dangling index entry,
 bd-vm5e5u10 MCP hard-fail on dangling entries; discovered-from

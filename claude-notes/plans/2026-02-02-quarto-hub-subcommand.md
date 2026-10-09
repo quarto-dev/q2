@@ -1,4 +1,7 @@
-# Plan: Add `quarto hub` Subcommand
+---
+title: 'Plan: Add `quarto hub` Subcommand'
+date: 2026-02-02
+---
 
 **Issue**: kyoto-3erh
 **Date**: 2026-02-02

@@ -1,4 +1,7 @@
-# Warn on an unreferenced `_brand.yml` (bd-yl1bpj82)
+---
+title: 'Warn on an unreferenced `_brand.yml` (bd-yl1bpj82)'
+date: 2026-09-30
+---
 
 ## Decision
 

@@ -1,4 +1,7 @@
-# Migrate samod: `quarto-dev/samod@q2` → `quarto-dev/samod@access-policy`
+---
+title: 'Migrate samod: `quarto-dev/samod@q2` → `quarto-dev/samod@access-policy`'
+date: 2026-07-01
+---
 
 ## Overview
 

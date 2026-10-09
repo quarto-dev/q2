@@ -1,4 +1,7 @@
-# Epic: the PandocRequest seam (Rust side of pandoc.wasm in hub-client)
+---
+title: 'Epic: the PandocRequest seam (Rust side of pandoc.wasm in hub-client)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Status:** Planned; nothing started

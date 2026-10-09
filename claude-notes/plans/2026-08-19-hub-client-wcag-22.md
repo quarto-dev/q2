@@ -1,4 +1,7 @@
-# hub-client WCAG 2.2 A/AA compliance
+---
+title: 'hub-client WCAG 2.2 A/AA compliance'
+date: 2026-08-19
+---
 
 Strand: bd-trkzm9rq
 Branch: `feature/bd-trkzm9rq-hub-client-wcag-22` (stacked on `feature/editor-projects-home-visual-alignment`)

@@ -1,4 +1,7 @@
-# website.llms-txt: llms.txt + per-page markdown companions (bd-llms-txt-unimplemented-oih6z6j7)
+---
+title: 'website.llms-txt: llms.txt + per-page markdown companions (bd-llms-txt-unimplemented-oih6z6j7)'
+date: 2026-08-14
+---
 
 **Date:** 2026-08-14
 **Braid:** bd-llms-txt-unimplemented-oih6z6j7

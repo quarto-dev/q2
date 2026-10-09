@@ -1,4 +1,7 @@
-# Nesting cursor — list-item surfaces & line-anchored navigation
+---
+title: 'Nesting cursor — list-item surfaces & line-anchored navigation'
+date: 2026-06-15
+---
 
 **Date:** 2026-06-15
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

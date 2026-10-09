@@ -1,4 +1,7 @@
-# Tabsets (panel-tabset) are not implemented — tab titles leak into the TOC (bd-toc-tabset-titles-zq93gjvf)
+---
+title: 'Tabsets (panel-tabset) are not implemented — tab titles leak into the TOC (bd-toc-tabset-titles-zq93gjvf)'
+date: 2026-08-17
+---
 
 **Date:** 2026-08-17
 **Braid:** bd-toc-tabset-titles-zq93gjvf (feature, p2, label `html`)

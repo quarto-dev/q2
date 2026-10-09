@@ -1,4 +1,7 @@
-# Phase 4 — Page navigation (prev / next)
+---
+title: 'Phase 4 — Page navigation (prev / next)'
+date: 2026-04-24
+---
 
 **Date:** 2026-04-24
 **Beads:** `bd-nwun` (closed; parent `bd-0tr6`).

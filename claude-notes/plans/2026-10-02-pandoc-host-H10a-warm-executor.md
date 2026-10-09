@@ -1,4 +1,7 @@
-# Plan: Warm pandoc executor (pandoc-host H10a)
+---
+title: 'Plan: Warm pandoc executor (pandoc-host H10a)'
+date: 2026-10-02
+---
 
 **Date:** 2026-10-02
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

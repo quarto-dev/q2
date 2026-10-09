@@ -1,4 +1,7 @@
-# Clickable File Links in Error Messages
+---
+title: 'Clickable File Links in Error Messages'
+date: 2025-11-10
+---
 
 **Date**: 2025-11-10
 **Goal**: Add OSC 8 ANSI hyperlinks to file paths in error messages so they're clickable in supported terminals

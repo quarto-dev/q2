@@ -1,4 +1,7 @@
-# Fix: Parser fails to recognize horizontal rules (---) in qmd files
+---
+title: 'Fix: Parser fails to recognize horizontal rules (---) in qmd files'
+date: 2025-10-28
+---
 
 **Issue**: k-268
 **Date**: 2025-10-28

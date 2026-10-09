@@ -1,4 +1,7 @@
-# P6 — Category passthrough + numbering suppression
+---
+title: 'P6 — Category passthrough + numbering suppression'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (round 4 review) — cross-referenced P5's corrected
 Callout `fail()`-fallback warning against this plan's own Finding 4 argument (both address the

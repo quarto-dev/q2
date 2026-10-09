@@ -1,4 +1,7 @@
-# Directory resources should expand to recursive file copies (bd-47w7o)
+---
+title: 'Directory resources should expand to recursive file copies (bd-47w7o)'
+date: 2026-05-21
+---
 
 ## Overview
 

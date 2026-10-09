@@ -1,4 +1,7 @@
-# Plan: the import pipeline in Rust (document import P3)
+---
+title: 'Plan: the import pipeline in Rust (document import P3)'
+date: 2026-10-03
+---
 
 **Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I1, I3, I4, I6, I9, I12, I13, I16, I17, I19, I20; builds interfaces 2, 3 and 4)

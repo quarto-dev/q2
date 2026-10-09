@@ -1,4 +1,7 @@
-# Research Plan: ipynb-filters in q2
+---
+title: 'Research Plan: ipynb-filters in q2'
+date: 2026-04-23
+---
 
 **Status:** Research — future work, not part of the TS engine extensions project
 **Depends on:** TS engine extensions (Plans 1a/1b/1c), native Jupyter engine, and the website-project pipeline (DocumentProfile checkpoint, two-pass orchestrator) already on `main`.

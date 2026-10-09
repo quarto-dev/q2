@@ -1,4 +1,7 @@
-# Reconciliation Correctness Plan
+---
+title: 'Reconciliation Correctness Plan'
+date: 2026-01-14
+---
 
 **Issue:** kyoto-72j
 **Date:** 2026-01-14

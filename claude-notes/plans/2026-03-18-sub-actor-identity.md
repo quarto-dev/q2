@@ -1,4 +1,7 @@
-# OIDC `sub` as Automerge Actor Identity
+---
+title: 'OIDC `sub` as Automerge Actor Identity'
+date: 2026-03-18
+---
 
 ## Overview
 

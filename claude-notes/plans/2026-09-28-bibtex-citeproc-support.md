@@ -1,4 +1,7 @@
-# pampa citeproc loads CSL-JSON bibliographies only — no BibTeX (.bib) support (bd-l6eh1635)
+---
+title: 'pampa citeproc loads CSL-JSON bibliographies only — no BibTeX (.bib) support (bd-l6eh1635)'
+date: 2026-09-28
+---
 
 **Date:** 2026-09-28
 **Beads:** bd-l6eh1635

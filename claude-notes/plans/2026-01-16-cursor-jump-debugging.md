@@ -1,4 +1,7 @@
-# Hub-Client Cursor Jump Bug Fix
+---
+title: 'Hub-Client Cursor Jump Bug Fix'
+date: 2026-01-16
+---
 
 **Issue:** kyoto-hlr
 **Created:** 2026-01-16

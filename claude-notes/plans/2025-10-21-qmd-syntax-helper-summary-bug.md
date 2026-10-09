@@ -1,4 +1,7 @@
-# Plan: Fix qmd-syntax-helper Summary File Count Bug
+---
+title: 'Plan: Fix qmd-syntax-helper Summary File Count Bug'
+date: 2025-10-21
+---
 
 ## Problem Statement
 

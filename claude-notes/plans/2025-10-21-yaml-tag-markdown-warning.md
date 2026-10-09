@@ -1,4 +1,7 @@
-# Plan: YAML Tag-Based Markdown Parsing Behavior (2025-10-21)
+---
+title: 'Plan: YAML Tag-Based Markdown Parsing Behavior (2025-10-21)'
+date: 2025-10-21
+---
 
 ## Problem Statement
 

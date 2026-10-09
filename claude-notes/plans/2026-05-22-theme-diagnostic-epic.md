@@ -1,4 +1,7 @@
-# Theme-config diagnostic overhaul
+---
+title: 'Theme-config diagnostic overhaul'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending user review
 **Beads:** [bd-l26u6](../../.beads/issues.jsonl) (parent epic)

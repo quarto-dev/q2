@@ -1,4 +1,7 @@
-# CSL Disambiguation Fixes Plan
+---
+title: 'CSL Disambiguation Fixes Plan'
+date: 2025-11-28
+---
 
 ## Analysis Summary
 

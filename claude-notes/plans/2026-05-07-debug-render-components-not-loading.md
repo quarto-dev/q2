@@ -1,4 +1,7 @@
-# Debug: render-components not loading in q2-debug iframe
+---
+title: 'Debug: render-components not loading in q2-debug iframe'
+date: 2026-05-07
+---
 
 **Date:** 2026-05-07
 **Status:** Open — handoff for a fresh debugging session

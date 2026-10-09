@@ -1,4 +1,7 @@
-# q2-preview: consolidate per-block edit chrome into one pop-up toolbar
+---
+title: 'q2-preview: consolidate per-block edit chrome into one pop-up toolbar'
+date: 2026-07-13
+---
 
 **Date:** 2026-07-13
 **Area:** `ts-packages/preview-renderer/src/q2-preview` (the q2-preview iframe UI,

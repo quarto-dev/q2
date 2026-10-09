@@ -1,4 +1,7 @@
-# Implement pandoc_code_span (Inline Code)
+---
+title: 'Implement pandoc_code_span (Inline Code)'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Epic**: k-274 (Tree-sitter Grammar Refactoring)

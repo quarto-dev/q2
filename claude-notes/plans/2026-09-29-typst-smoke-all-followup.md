@@ -1,4 +1,7 @@
-# Follow-up: `format: typst` smoke-all coverage beyond the orange-book epic
+---
+title: 'Follow-up: `format: typst` smoke-all coverage beyond the orange-book epic'
+date: 2026-09-29
+---
 
 **Date:** 2026-09-29
 **Status:** Research/triage complete. Proposal below — **not started**, awaiting

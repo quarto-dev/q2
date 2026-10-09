@@ -1,4 +1,7 @@
-# Rename quarto-markdown-pandoc to pampa
+---
+title: 'Rename quarto-markdown-pandoc to pampa'
+date: 2025-12-06
+---
 
 **Beads issue**: k-z1ji (closed)
 **Status**: Completed

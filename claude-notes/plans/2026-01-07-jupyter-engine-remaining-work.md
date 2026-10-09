@@ -1,4 +1,7 @@
-# Jupyter Engine: Remaining Work
+---
+title: 'Jupyter Engine: Remaining Work'
+date: 2026-01-07
+---
 
 **Date**: 2026-01-07
 **Related**: [Jupyter Engine Implementation Plan](2026-01-07-jupyter-engine-implementation.md)

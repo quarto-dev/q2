@@ -1,4 +1,7 @@
-# Investigation: k-90 and k-95 Status
+---
+title: 'Investigation: k-90 and k-95 Status'
+date: 2025-10-21
+---
 
 ## User's Report
 The user noticed that yaml parsing warnings/errors are not being generated. They suspected k-103 broke this functionality related to k-95.

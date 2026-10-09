@@ -1,4 +1,7 @@
-# Temporarily disable hub login nonce verification
+---
+title: 'Temporarily disable hub login nonce verification'
+date: 2026-07-31
+---
 
 ## Overview
 

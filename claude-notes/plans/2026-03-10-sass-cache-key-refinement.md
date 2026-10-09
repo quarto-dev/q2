@@ -1,4 +1,7 @@
-# SASS Cache Key Refinement
+---
+title: 'SASS Cache Key Refinement'
+date: 2026-03-10
+---
 
 **Branch**: `feature/project-metadata`
 **Plan file**: `claude-notes/plans/2026-03-10-sass-cache-key-refinement.md`

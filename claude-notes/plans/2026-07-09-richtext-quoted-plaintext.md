@@ -1,4 +1,7 @@
-# Rich-text editor: render `Quoted` as editable plaintext quotes, not a chip
+---
+title: 'Rich-text editor: render `Quoted` as editable plaintext quotes, not a chip'
+date: 2026-07-09
+---
 
 **Strand:** bd-iwv3708i
 **Date:** 2026-07-09

@@ -1,4 +1,7 @@
-# Plan: epub output format (pandoc-hybrid-writer follow-on)
+---
+title: 'Plan: epub output format (pandoc-hybrid-writer follow-on)'
+date: 2026-09-18
+---
 
 **Date:** 2026-09-20
 **Status:** This plan's Phase 1 core wiring may target `feature/pandoc-writer-hybrid` (the

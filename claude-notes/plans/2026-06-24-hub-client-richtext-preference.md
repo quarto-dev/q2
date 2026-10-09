@@ -1,4 +1,7 @@
-# Enable rich-text editor in hub-client q2-preview (default ON)
+---
+title: 'Enable rich-text editor in hub-client q2-preview (default ON)'
+date: 2026-06-24
+---
 
 **Date:** 2026-06-24
 **Strand:** bd-j1nto6eq (discovered-from bd-sjb4pzx8)

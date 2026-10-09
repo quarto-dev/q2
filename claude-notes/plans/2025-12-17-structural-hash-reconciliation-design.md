@@ -1,4 +1,7 @@
-# Structural Hash-Based AST Reconciliation Design
+---
+title: 'Structural Hash-Based AST Reconciliation Design'
+date: 2025-12-17
+---
 
 **Date**: 2025-12-17
 **Issue**: k-xvte

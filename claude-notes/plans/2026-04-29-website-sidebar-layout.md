@@ -1,4 +1,7 @@
-# Website sidebar layout: body class + grid placement
+---
+title: 'Website sidebar layout: body class + grid placement'
+date: 2026-04-29
+---
 
 **Date:** 2026-04-29
 **Beads:** `bd-mgoh` (this task); discovered-from `bd-2jwk` (website examples).

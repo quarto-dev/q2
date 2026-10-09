@@ -1,4 +1,7 @@
-# Reveal render/preview theme parity
+---
+title: 'Reveal render/preview theme parity'
+date: 2026-06-16
+---
 
 **Strand:** bd-y259zb57
 **Found:** 2026-06-16, during e2e testing on `main` (post-#297).

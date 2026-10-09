@@ -1,4 +1,7 @@
-# bd-ohvl879u: cell-options facility + jupyter error policy
+---
+title: 'bd-ohvl879u: cell-options facility + jupyter error policy'
+date: 2026-07-02
+---
 
 **Strand:** bd-ohvl879u (bug, P2, discovered-from bd-gthycd33, blocked-by bd-gthycd33)
 **Branch:** `braid/bd-ohvl879u-jupyter-engine-ignores-error` (based on

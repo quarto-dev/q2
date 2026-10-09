@@ -1,4 +1,7 @@
-# P7-foundation — Implementation tasks & Test Seam Spec
+---
+title: 'P7-foundation — Implementation tasks & Test Seam Spec'
+date: 2026-09-20
+---
 
 **Plan (authoritative scope):** [`2026-09-20-pandoc-hybrid-P7-foundation.md`](2026-09-20-pandoc-hybrid-P7-foundation.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md) (§12 known limitations, §13 project-mode gate, §14 multi-format guardrail)

@@ -1,4 +1,7 @@
-# QMD Sugaring: Div/Span to CustomNode Normalization
+---
+title: 'QMD Sugaring: Div/Span to CustomNode Normalization'
+date: 2026-01-24
+---
 
 **Parent Epic**: kyoto-6jv
 **Beads Issue**: kyoto-50m

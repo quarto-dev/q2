@@ -1,4 +1,7 @@
-# Jupyter engine: emit real figures for image outputs
+---
+title: 'Jupyter engine: emit real figures for image outputs'
+date: 2026-07-23
+---
 
 **Braid strand:** bd-5t6wvu7m (pre-existing; carries the in-code TODO).
 bd-rwz8kwia (filed from the bd-qbhp2cvv session) is a duplicate — closed

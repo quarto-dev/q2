@@ -1,4 +1,7 @@
-# Plan B: Pipeline Wiring + Template (quarto-core crate)
+---
+title: 'Plan B: Pipeline Wiring + Template (quarto-core crate)'
+date: 2026-04-01
+---
 
 ## Status: Complete (+ Phase 8 pullback for WASM script safety)
 

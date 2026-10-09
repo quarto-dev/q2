@@ -1,4 +1,7 @@
-# Extract Pandoc AST Types to quarto-pandoc-types Crate
+---
+title: 'Extract Pandoc AST Types to quarto-pandoc-types Crate'
+date: 2025-11-27
+---
 
 **Issue**: k-429 (discovered from k-422)
 **Created**: 2025-11-27

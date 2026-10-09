@@ -1,4 +1,7 @@
-# Ephemeral hub secrets for `q2 preview`
+---
+title: 'Ephemeral hub secrets for `q2 preview`'
+date: 2026-08-07
+---
 
 ## Overview
 

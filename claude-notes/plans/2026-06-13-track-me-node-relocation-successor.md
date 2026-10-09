@@ -1,4 +1,7 @@
-# Hash-based tracking of edit locations ("track me") — block-editing successor
+---
+title: 'Hash-based tracking of edit locations ("track me") — block-editing successor'
+date: 2026-06-13
+---
 
 **Date:** 2026-06-13
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

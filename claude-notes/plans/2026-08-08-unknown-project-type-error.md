@@ -1,4 +1,7 @@
-# Unknown `project.type` should be a hard error (bd-sekn481x)
+---
+title: 'Unknown `project.type` should be a hard error (bd-sekn481x)'
+date: 2026-08-08
+---
 
 **Strand:** bd-sekn481x
 **Status:** done — implemented, all gates green (2026-08-08)

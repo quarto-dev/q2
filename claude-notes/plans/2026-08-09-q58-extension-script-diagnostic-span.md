@@ -1,4 +1,7 @@
-# Q-5-8 diagnostic points at wrong `_quarto.yml` span for extension-contributed pre-render scripts
+---
+title: 'Q-5-8 diagnostic points at wrong `_quarto.yml` span for extension-contributed pre-render scripts'
+date: 2026-08-09
+---
 
 **Strand:** bd-m6wmztln (p1 bug)
 **Discovered-from strands:** bd-p86nlm92 (project_resources, same pattern — folded into this PR),

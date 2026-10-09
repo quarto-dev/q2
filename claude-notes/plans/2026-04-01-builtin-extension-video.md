@@ -1,4 +1,7 @@
-# Plan: Built-in Extension — video
+---
+title: 'Plan: Built-in Extension — video'
+date: 2026-04-01
+---
 
 ## Status: Complete
 

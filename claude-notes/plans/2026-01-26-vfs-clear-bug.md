@@ -1,4 +1,7 @@
-# VFS Clear Bug - Theme Compilation Failure
+---
+title: 'VFS Clear Bug - Theme Compilation Failure'
+date: 2026-01-26
+---
 
 ## Status: FIXED
 

@@ -1,4 +1,7 @@
-# Jupyter kernel process leak (bd-hxhnnlzs)
+---
+title: 'Jupyter kernel process leak (bd-hxhnnlzs)'
+date: 2026-08-10
+---
 
 **Strand:** bd-hxhnnlzs — "Jupyter kernels leak as orphan processes from test runs (2338 accumulated)"
 **Status:** investigated 2026-08-10; root cause confirmed on both suspected paths. Fix not yet started.

@@ -1,4 +1,7 @@
-# q2-preview comments: resolving the last comment leaves an empty pill and a stuck glow
+---
+title: 'q2-preview comments: resolving the last comment leaves an empty pill and a stuck glow'
+date: 2026-09-09
+---
 
 **Strand:** bd-bpt089zw
 **Branch / worktree:** `braid/bd-bpt089zw-q2-preview-comments-resolving` at

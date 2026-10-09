@@ -1,4 +1,7 @@
-# Fix: downloaded project ZIP uses absolute paths
+---
+title: 'Fix: downloaded project ZIP uses absolute paths'
+date: 2026-07-01
+---
 
 **Strand:** bd-esnxtcoy
 **GitHub issue:** [quarto-dev/q2#147](https://github.com/quarto-dev/q2/issues/147)

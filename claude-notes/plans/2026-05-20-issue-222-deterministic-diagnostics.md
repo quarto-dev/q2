@@ -1,4 +1,7 @@
-# Plan: deterministic diagnostic output (GH issue #222)
+---
+title: 'Plan: deterministic diagnostic output (GH issue #222)'
+date: 2026-05-20
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Snyk PR remediation skill
+---
+title: 'Snyk PR remediation skill'
+date: 2026-09-01
+---
 
 **Braid strand:** bd-t8bwkr64
 **Immediate motivation:** PR #637 (\[Snyk\] Upgrade katex from 0.18.2 to 0.18.4) is red on CI with the same failure signature as every previous katex Snyk PR.

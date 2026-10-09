@@ -1,4 +1,7 @@
-# HTML Writer Source Location Tracking
+---
+title: 'HTML Writer Source Location Tracking'
+date: 2025-12-21
+---
 
 **Issue:** k-02o9
 **Created:** 2025-12-21

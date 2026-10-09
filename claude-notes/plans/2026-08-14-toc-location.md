@@ -1,4 +1,7 @@
-# toc-location option (left/right/body); unlocks banner toc-left class (bd-e2kpwy7n)
+---
+title: 'toc-location option (left/right/body); unlocks banner toc-left class (bd-e2kpwy7n)'
+date: 2026-08-14
+---
 
 **Date:** 2026-08-14
 **Braid:** bd-e2kpwy7n

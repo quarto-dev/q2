@@ -1,4 +1,7 @@
-# Plan: Source Location Resolution for quarto.warn/error (k-481)
+---
+title: 'Plan: Source Location Resolution for quarto.warn/error (k-481)'
+date: 2025-12-03
+---
 
 **Date:** 2025-12-03
 **Issue:** k-481 (quarto.warn/error element location doesn't work for original document elements)

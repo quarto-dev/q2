@@ -1,4 +1,7 @@
-# Adjacent footnote definitions merge — the second note is silently lost (bd-adjacent-footnote-definitions-miif1k1z)
+---
+title: 'Adjacent footnote definitions merge — the second note is silently lost (bd-adjacent-footnote-definitions-miif1k1z)'
+date: 2026-08-12
+---
 
 **Date:** 2026-08-12
 **Braid:** bd-adjacent-footnote-definitions-miif1k1z (bug, p2, label `parser`)

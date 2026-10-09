@@ -1,4 +1,7 @@
-# Quarto-Hub Web Frontend and WASM Rendering
+---
+title: 'Quarto-Hub Web Frontend and WASM Rendering'
+date: 2025-12-22
+---
 
 **Date**: 2025-12-22
 **Related Issues**: k-0sdx (epic), k-nkhl (fs abstraction)

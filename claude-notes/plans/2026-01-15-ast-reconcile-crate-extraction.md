@@ -1,4 +1,7 @@
-# Plan: Extract AST Reconciliation into Dedicated Crate
+---
+title: 'Plan: Extract AST Reconciliation into Dedicated Crate'
+date: 2026-01-15
+---
 
 **Status:** Proposed
 **Created:** 2026-01-15

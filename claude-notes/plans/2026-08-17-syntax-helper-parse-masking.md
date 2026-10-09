@@ -1,4 +1,7 @@
-# qmd-syntax-helper: AST-based rules report unparseable files as clean (bd-syntax-helper-parse-masking-w88mhedp)
+---
+title: 'qmd-syntax-helper: AST-based rules report unparseable files as clean (bd-syntax-helper-parse-masking-w88mhedp)'
+date: 2026-08-17
+---
 
 **Date:** 2026-08-17
 **Braid:** bd-syntax-helper-parse-masking-w88mhedp

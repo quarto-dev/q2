@@ -1,4 +1,7 @@
-# All Writer Panics - Complete Audit
+---
+title: 'All Writer Panics - Complete Audit'
+date: 2025-11-21
+---
 
 **Date**: 2025-11-21
 **Issue**: k-327

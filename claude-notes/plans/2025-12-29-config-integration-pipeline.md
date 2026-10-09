@@ -1,4 +1,7 @@
-# ConfigValue Integration into Render Pipeline
+---
+title: 'ConfigValue Integration into Render Pipeline'
+date: 2025-12-29
+---
 
 **Issue:** k-ic1o
 **Date:** 2025-12-29

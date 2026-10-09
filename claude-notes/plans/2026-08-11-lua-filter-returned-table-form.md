@@ -1,4 +1,7 @@
-# Lua filters in the returned-table form are silently ignored (bd-lua-filter-table-form-ignored-ph23becz)
+---
+title: 'Lua filters in the returned-table form are silently ignored (bd-lua-filter-table-form-ignored-ph23becz)'
+date: 2026-08-11
+---
 
 **Date:** 2026-08-11
 **Braid:** `bd-lua-filter-table-form-ignored-ph23becz` (bug, p1, labels `pampa` / `parity`)

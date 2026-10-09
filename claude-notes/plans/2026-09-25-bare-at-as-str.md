@@ -1,4 +1,7 @@
-# Bare `@` (not a citation) is literal text, where it cannot be a typo
+---
+title: 'Bare `@` (not a citation) is literal text, where it cannot be a typo'
+date: 2026-09-25
+---
 
 **Status:** implemented and verified 2026-09-25 on
 `braid/bd-bare-at-literal-w3ytmu8e-bare-not-citation-uncoded`. Committed

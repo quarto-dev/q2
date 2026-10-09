@@ -1,4 +1,7 @@
-# Preview Pane Error State Machine
+---
+title: 'Preview Pane Error State Machine'
+date: 2026-01-08
+---
 
 **Beads Issue**: k-nwcy
 **Date**: 2026-01-08

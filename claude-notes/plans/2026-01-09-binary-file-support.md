@@ -1,4 +1,7 @@
-# Binary File Support for Quarto-Hub
+---
+title: 'Binary File Support for Quarto-Hub'
+date: 2026-01-09
+---
 
 **Created:** 2026-01-09
 **Status:** Planning

@@ -1,4 +1,7 @@
-# Misleading "engine not available in this build" warning in `q2 preview` with spliced captures
+---
+title: 'Misleading "engine not available in this build" warning in `q2 preview` with spliced captures'
+date: 2026-06-10
+---
 
 **Date:** 2026-06-10
 **Status:** Draft — awaiting review before implementation

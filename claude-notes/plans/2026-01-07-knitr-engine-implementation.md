@@ -1,4 +1,7 @@
-# Plan: Knitr Engine Implementation (Phase 4)
+---
+title: 'Plan: Knitr Engine Implementation (Phase 4)'
+date: 2026-01-07
+---
 
 **Issue**: k-ydzc
 **Date**: 2026-01-07

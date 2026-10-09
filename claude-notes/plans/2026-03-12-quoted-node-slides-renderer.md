@@ -1,4 +1,7 @@
-# Add Quoted Node Support to Slides Renderer
+---
+title: 'Add Quoted Node Support to Slides Renderer'
+date: 2026-03-12
+---
 
 ## Overview
 

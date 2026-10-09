@@ -1,4 +1,7 @@
-# P1 — Implementation tasks & Test Seam Spec
+---
+title: 'P1 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+---
 
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P1-neutral-core.md`](2026-08-20-pandoc-hybrid-P1-neutral-core.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)

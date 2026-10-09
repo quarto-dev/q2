@@ -1,4 +1,7 @@
-# QMD writer: missing `@` escape causes Str → Cite re-parse
+---
+title: 'QMD writer: missing `@` escape causes Str → Cite re-parse'
+date: 2026-04-30
+---
 
 **Beads:** bd-21gu
 **Source:** [issue #150](https://github.com/quarto-dev/q2/issues/150), item 1

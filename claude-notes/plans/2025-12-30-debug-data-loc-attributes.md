@@ -1,4 +1,7 @@
-# Debugging Missing data-loc Attributes
+---
+title: 'Debugging Missing data-loc Attributes'
+date: 2025-12-30
+---
 
 **Issue:** HTML preview in hub-client is missing `data-loc` attributes needed for scroll sync
 

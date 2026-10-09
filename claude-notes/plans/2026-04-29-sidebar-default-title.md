@@ -1,4 +1,7 @@
-# Sidebar default title: inherit from `website.title`
+---
+title: 'Sidebar default title: inherit from `website.title`'
+date: 2026-04-29
+---
 
 **Date:** 2026-04-29
 **Beads:** TBD (to be created — needs `br` from another shell)

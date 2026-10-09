@@ -1,4 +1,7 @@
-# WASM C-shim merge: unify with tree-sitter-language upstream sysroot
+---
+title: 'WASM C-shim merge: unify with tree-sitter-language upstream sysroot'
+date: 2026-04-20
+---
 
 - **Parent plan**: `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.md` (this is a sub-plan of Phase 3.1)
 - **Beads**: bd-n7x2 (overall syntax-highlighting epic)

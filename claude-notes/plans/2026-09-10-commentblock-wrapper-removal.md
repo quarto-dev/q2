@@ -1,4 +1,7 @@
-# q2-preview: remove `CommentBlock`\'s per-block wrapper `<div>` (bd-q2wqj24c)
+---
+title: 'q2-preview: remove `CommentBlock`\''s per-block wrapper `<div>` (bd-q2wqj24c)'
+date: 2026-09-10
+---
 
 **Date:** 2026-09-10
 **Braid:** bd-q2wqj24c (P2 bug; labels `parity`, `preview-renderer`)

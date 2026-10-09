@@ -1,4 +1,7 @@
-# quarto-hub MVP: Automerge-Based Collaborative Infrastructure
+---
+title: 'quarto-hub MVP: Automerge-Based Collaborative Infrastructure'
+date: 2025-12-08
+---
 
 **Issue:** k-4wex
 **Status:** In Progress

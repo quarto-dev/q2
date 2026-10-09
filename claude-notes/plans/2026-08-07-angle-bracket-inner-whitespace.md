@@ -1,4 +1,7 @@
-# Angle brackets with inner whitespace should not lex as `html_element` (bd-ly83qewg)
+---
+title: 'Angle brackets with inner whitespace should not lex as `html_element` (bd-ly83qewg)'
+date: 2026-08-07
+---
 
 **Status: approved 2026-08-07 — in progress.**
 

@@ -1,4 +1,7 @@
-# Plan: Pandoc AST Support for @quarto/annotated-qmd
+---
+title: 'Plan: Pandoc AST Support for @quarto/annotated-qmd'
+date: 2025-10-24
+---
 
 **Date**: 2025-10-24
 **Status**: Planning

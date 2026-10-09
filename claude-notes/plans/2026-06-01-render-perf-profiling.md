@@ -1,4 +1,7 @@
-# End-to-end `q2 render` performance profiling (2026-06-01)
+---
+title: 'End-to-end `q2 render` performance profiling (2026-06-01)'
+date: 2026-06-01
+---
 
 ## Overview
 

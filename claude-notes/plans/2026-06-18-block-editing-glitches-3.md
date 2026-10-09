@@ -1,4 +1,7 @@
-# Block-editing UI glitches — round 3 (fixes & tests)
+---
+title: 'Block-editing UI glitches — round 3 (fixes & tests)'
+date: 2026-06-18
+---
 
 ## Overview
 

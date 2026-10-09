@@ -1,4 +1,7 @@
-# Lua marshaling error contract + divergence registry (bd-9p2686pc)
+---
+title: 'Lua marshaling error contract + divergence registry (bd-9p2686pc)'
+date: 2026-07-14
+---
 
 **Strand**: bd-9p2686pc (Lua parity H). **Epic**: bd-grkrb9nj
 (`claude-notes/plans/2026-07-13-lua-api-pandoc-parity.md`, Phase 3.3 / 4.1).

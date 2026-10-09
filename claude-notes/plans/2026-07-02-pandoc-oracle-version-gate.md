@@ -1,4 +1,7 @@
-# Pampa pandoc-oracle tests hard-fail on local pandoc newer than allowlist (bd-i9i5ad2t)
+---
+title: 'Pampa pandoc-oracle tests hard-fail on local pandoc newer than allowlist (bd-i9i5ad2t)'
+date: 2026-07-02
+---
 
 **Date:** 2026-07-02
 **Braid:** bd-i9i5ad2t

@@ -1,4 +1,7 @@
-# doctemplate CRLF line-ending preservation (bd-1d3e / #157)
+---
+title: 'doctemplate CRLF line-ending preservation (bd-1d3e / #157)'
+date: 2026-06-23
+---
 
 ## Policy decision
 

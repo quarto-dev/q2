@@ -1,4 +1,7 @@
-# bd-tnm3k — Fix `q2 preview` for single-file mode without `_quarto.yml`
+---
+title: 'bd-tnm3k — Fix `q2 preview` for single-file mode without `_quarto.yml`'
+date: 2026-05-19
+---
 
 ## Problem (verbatim from the beads issue)
 

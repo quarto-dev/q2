@@ -1,4 +1,7 @@
-# Sidebar vertical border (Q1 parity)
+---
+title: 'Sidebar vertical border (Q1 parity)'
+date: 2026-04-30
+---
 
 ## Overview
 

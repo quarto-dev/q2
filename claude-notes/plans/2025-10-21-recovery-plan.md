@@ -1,4 +1,7 @@
-# Recovery Plan: Fix Broken Repository State
+---
+title: 'Recovery Plan: Fix Broken Repository State'
+date: 2025-10-21
+---
 
 ## Situation Analysis
 

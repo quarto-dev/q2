@@ -1,4 +1,7 @@
-# Plan 2A — q2-preview iframe foundation (revised post-2pre)
+---
+title: 'Plan 2A — q2-preview iframe foundation (revised post-2pre)'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04 (revised 2026-05-07, 2026-05-08)
 **Branch:** feature/q2-preview

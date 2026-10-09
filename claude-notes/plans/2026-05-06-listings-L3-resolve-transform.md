@@ -1,4 +1,7 @@
-# L3 — Listing resolve transforms (sub-plan)
+---
+title: 'L3 — Listing resolve transforms (sub-plan)'
+date: 2026-05-06
+---
 
 **Date:** 2026-05-06
 **Beads:** `bd-ml8z` (this phase) and `bd-b5jm` (L4 — bundled

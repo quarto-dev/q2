@@ -1,4 +1,7 @@
-# Remaining Tests Analysis - 2025-11-28
+---
+title: 'Remaining Tests Analysis - 2025-11-28'
+date: 2025-11-28
+---
 
 **Current State**: 534/930 tests passing (57.4% coverage)
 **Previous**: 501 tests (added 33 quick wins from ignored tests)

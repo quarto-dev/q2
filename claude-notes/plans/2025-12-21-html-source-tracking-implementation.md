@@ -1,4 +1,7 @@
-# HTML Source Tracking Implementation
+---
+title: 'HTML Source Tracking Implementation'
+date: 2025-12-21
+---
 
 **Issue:** k-q4rm (child of k-02o9)
 **Created:** 2025-12-21

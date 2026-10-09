@@ -1,4 +1,7 @@
-# P4 — Implementation tasks & Test Seam Spec
+---
+title: 'P4 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+---
 
 **Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P4-run-machinery.md`](2026-08-20-pandoc-hybrid-P4-run-machinery.md)

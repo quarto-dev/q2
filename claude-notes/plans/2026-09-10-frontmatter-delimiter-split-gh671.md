@@ -1,4 +1,7 @@
-# Frontmatter reader splits on every `---`, truncating YAML values that contain one (bd-mjo6ao32, GH #671)
+---
+title: 'Frontmatter reader splits on every `---`, truncating YAML values that contain one (bd-mjo6ao32, GH #671)'
+date: 2026-09-10
+---
 
 **Date:** 2026-09-10
 **Braid:** bd-mjo6ao32 (related: bd-xs2u)

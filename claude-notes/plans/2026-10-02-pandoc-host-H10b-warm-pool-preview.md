@@ -1,4 +1,7 @@
-# Plan: Warm pool and preview wiring (pandoc-host H10b)
+---
+title: 'Plan: Warm pool and preview wiring (pandoc-host H10b)'
+date: 2026-10-02
+---
 
 **Date:** 2026-10-02
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

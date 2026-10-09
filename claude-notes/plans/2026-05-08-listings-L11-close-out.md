@@ -1,4 +1,7 @@
-# L11 — Listings epic close-out
+---
+title: 'L11 — Listings epic close-out'
+date: 2026-05-08
+---
 
 **Date:** 2026-05-08
 **Beads:** `bd-qb4o` (parent `bd-61cd`).

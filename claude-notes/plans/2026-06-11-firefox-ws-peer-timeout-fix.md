@@ -1,4 +1,7 @@
-# Fix: q2 preview Firefox peer-connection timeout (bd-jit6pdwq)
+---
+title: 'Fix: q2 preview Firefox peer-connection timeout (bd-jit6pdwq)'
+date: 2026-06-11
+---
 
 **Strand:** bd-jit6pdwq
 **Research:** `claude-notes/research/2026-06-11-firefox-ws-handshake-serialization.md`

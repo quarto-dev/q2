@@ -1,4 +1,7 @@
-# Table Source Tracking - Pandoc Compatibility Fix
+---
+title: 'Table Source Tracking - Pandoc Compatibility Fix'
+date: 2025-10-24
+---
 
 ## Problem
 

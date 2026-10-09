@@ -1,4 +1,7 @@
-# WASM Smoke-All Test Runner (TypeScript)
+---
+title: 'WASM Smoke-All Test Runner (TypeScript)'
+date: 2026-02-19
+---
 
 ## Overview
 

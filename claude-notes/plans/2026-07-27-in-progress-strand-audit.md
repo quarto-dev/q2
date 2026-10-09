@@ -1,4 +1,7 @@
-# In-progress braid strand audit (bd-a0eyjshu)
+---
+title: 'In-progress braid strand audit (bd-a0eyjshu)'
+date: 2026-07-27
+---
 
 **Date:** 2026-07-27
 **Strand:** bd-a0eyjshu — Audit and clean up stale in-progress braid strands

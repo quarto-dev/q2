@@ -1,4 +1,7 @@
-# Complete AST Generators Plan
+---
+title: 'Complete AST Generators Plan'
+date: 2026-01-14
+---
 
 **Date:** 2026-01-14
 **Status:** Phases 1-4 Complete, Bugs kyoto-sz3 and kyoto-fhh Fixed

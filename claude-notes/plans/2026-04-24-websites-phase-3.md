@@ -1,4 +1,7 @@
-# Phase 3 — Navbar / page-footer project integration
+---
+title: 'Phase 3 — Navbar / page-footer project integration'
+date: 2026-04-24
+---
 
 **Date:** 2026-04-24
 **Beads:** to be filed (parent `bd-0tr6`; blocked-by `bd-9svl` Phase 2 —

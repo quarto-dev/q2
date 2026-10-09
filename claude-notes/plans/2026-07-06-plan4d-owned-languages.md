@@ -1,4 +1,7 @@
-# Plan 4d: `owned_languages` — a positive engine-ownership wire field
+---
+title: 'Plan 4d: `owned_languages` — a positive engine-ownership wire field'
+date: 2026-07-06
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** the shipping resolver + TS-engine wire (Plans 1a–c, 2, 3, 4). No new

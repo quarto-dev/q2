@@ -1,4 +1,7 @@
-# Listings — implementation epic
+---
+title: 'Listings — implementation epic'
+date: 2026-05-05
+---
 
 **Date:** 2026-05-05
 **Status:** Filed. Epic `bd-61cd`. Sub-issues filed; ids inline in

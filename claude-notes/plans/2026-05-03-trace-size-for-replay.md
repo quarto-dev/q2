@@ -1,4 +1,7 @@
-# Manage trace size for use as replay/regression-test fixtures (bd-5qnj)
+---
+title: 'Manage trace size for use as replay/regression-test fixtures (bd-5qnj)'
+date: 2026-05-03
+---
 
 **Date:** 2026-05-03
 **Beads:** bd-5qnj

@@ -1,4 +1,7 @@
-# Plan: editorial marks to Word and PowerPoint, in Rust (document import P6)
+---
+title: 'Plan: editorial marks to Word and PowerPoint, in Rust (document import P6)'
+date: 2026-10-03
+---
 
 **Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I3, I4, I20, I23; Findings → "The export side")

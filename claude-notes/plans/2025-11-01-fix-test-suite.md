@@ -1,4 +1,7 @@
-# Test Suite Fixing Plan - November 1, 2025
+---
+title: 'Test Suite Fixing Plan - November 1, 2025'
+date: 2025-11-01
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Extracting `quarto-yaml-validation`: design decisions
+---
+title: 'Extracting `quarto-yaml-validation`: design decisions'
+date: 2026-06-26
+---
 
 **Strand:** bd-egcyeym9
 **Date:** 2026-06-26

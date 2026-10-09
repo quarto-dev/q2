@@ -1,4 +1,7 @@
-# GitHub release assets for q2, with bundled quarto-hub.com MCP defaults
+---
+title: 'GitHub release assets for q2, with bundled quarto-hub.com MCP defaults'
+date: 2026-06-12
+---
 
 **Strand:** bd-c6l13j79
 **Date:** 2026-06-12 (rewritten same day after PR #277 / bd-81cfshmw landed — see "Scope changes" below)

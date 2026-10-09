@@ -1,4 +1,7 @@
-# PR Preparation Plan (REVISED): Extract crates/ Changes from kyoto to 2025-10-21
+---
+title: 'PR Preparation Plan (REVISED): Extract crates/ Changes from kyoto to 2025-10-21'
+date: 2025-10-21
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

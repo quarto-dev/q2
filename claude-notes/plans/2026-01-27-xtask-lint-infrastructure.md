@@ -1,4 +1,7 @@
-# Xtask Lint Infrastructure Plan
+---
+title: 'Xtask Lint Infrastructure Plan'
+date: 2026-01-27
+---
 
 **Issue**: kyoto-e6h
 **Created**: 2026-01-27

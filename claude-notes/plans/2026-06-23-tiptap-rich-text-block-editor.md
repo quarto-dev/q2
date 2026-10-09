@@ -1,4 +1,7 @@
-# Rich-text (tiptap) block editor for q2-preview — feasibility plan
+---
+title: 'Rich-text (tiptap) block editor for q2-preview — feasibility plan'
+date: 2026-06-23
+---
 
 **Date:** 2026-06-23
 **Strand:** bd-sjb4pzx8

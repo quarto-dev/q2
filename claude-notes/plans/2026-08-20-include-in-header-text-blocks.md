@@ -1,4 +1,7 @@
-# include-in-header `text:` holding block markdown is dropped, and Q-5-5 blames the entry form (bd-include-in-header-text-blocks-ins2v6za)
+---
+title: 'include-in-header `text:` holding block markdown is dropped, and Q-5-5 blames the entry form (bd-include-in-header-text-blocks-ins2v6za)'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20
 **Braid:** bd-include-in-header-text-blocks-ins2v6za

@@ -1,4 +1,7 @@
-# Extensions Phase 2: Extension Filter Resolution
+---
+title: 'Extensions Phase 2: Extension Filter Resolution'
+date: 2026-03-17
+---
 
 **Created**: 2026-03-17
 **Status**: Complete (merged as `cffc2e6c`)

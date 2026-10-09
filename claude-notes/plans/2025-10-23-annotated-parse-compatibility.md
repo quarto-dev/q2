@@ -1,4 +1,7 @@
-# AnnotatedParse Compatibility Analysis Report
+---
+title: 'AnnotatedParse Compatibility Analysis Report'
+date: 2025-10-23
+---
 
 ## Executive Summary
 

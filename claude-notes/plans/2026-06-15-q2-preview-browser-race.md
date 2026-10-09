@@ -1,4 +1,7 @@
-# q2 preview: browser opens before the server accepts connections
+---
+title: 'q2 preview: browser opens before the server accepts connections'
+date: 2026-06-15
+---
 
 **Strand:** bd-a6dvrdg1 (bug, p2) — related to the q2 preview epic bd-kw93
 **Reported:** 2026-06-15 by Carlos (two Firefox screenshots: "Unable to connect"

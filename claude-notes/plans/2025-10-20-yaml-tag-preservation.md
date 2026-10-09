@@ -1,4 +1,7 @@
-# Plan: Preserve YAML Tag Information in New API (k-62)
+---
+title: 'Plan: Preserve YAML Tag Information in New API (k-62)'
+date: 2025-10-20
+---
 
 ## Problem Statement
 

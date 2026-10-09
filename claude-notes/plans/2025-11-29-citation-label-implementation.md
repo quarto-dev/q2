@@ -1,4 +1,7 @@
-# Citation-Label Implementation Plan
+---
+title: 'Citation-Label Implementation Plan'
+date: 2025-11-29
+---
 
 **Date**: 2025-11-29
 **Issue**: k-454

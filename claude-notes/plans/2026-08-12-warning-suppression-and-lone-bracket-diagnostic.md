@@ -1,4 +1,7 @@
-# Warning suppression, and the lone-bracket diagnostic that motivates it (bd-lone-bracket-diagnostic-mxu41qbt)
+---
+title: 'Warning suppression, and the lone-bracket diagnostic that motivates it (bd-lone-bracket-diagnostic-mxu41qbt)'
+date: 2026-08-12
+---
 
 **Date:** 2026-08-12
 **Braid:** bd-lone-bracket-diagnostic-mxu41qbt

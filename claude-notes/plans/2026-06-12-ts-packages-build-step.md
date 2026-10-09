@@ -1,4 +1,7 @@
-# ts-packages build step for xtask build-all / verify (bd-6rczoll3)
+---
+title: 'ts-packages build step for xtask build-all / verify (bd-6rczoll3)'
+date: 2026-06-12
+---
 
 ## Overview
 

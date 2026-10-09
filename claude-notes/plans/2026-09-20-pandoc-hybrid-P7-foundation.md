@@ -1,4 +1,7 @@
-# P7-foundation — format-agnostic Pandoc CLI plumbing (extracted from P7)
+---
+title: 'P7-foundation — format-agnostic Pandoc CLI plumbing (extracted from P7)'
+date: 2026-09-20
+---
 
 **Date:** 2026-09-20
 **Status:** Shape draft — extracted, not yet re-reviewed as its own plan.

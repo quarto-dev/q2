@@ -1,4 +1,7 @@
-# Harden `q2 provide-hub`: interactive consent gate + one-shot default
+---
+title: 'Harden `q2 provide-hub`: interactive consent gate + one-shot default'
+date: 2026-07-02
+---
 
 **Strand:** bd-9lgiulr4 (feature, P1). Discovered from bd-sfet3264.
 **Date:** 2026-07-02.

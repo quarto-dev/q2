@@ -1,4 +1,7 @@
-# `html_element` runaway: `<6.1` in prose swallows the document
+---
+title: '`html_element` runaway: `<6.1` in prose swallows the document'
+date: 2026-09-28
+---
 
 **Status:** implemented on `braid/bd-html-element-runaway-k1eo50h8-htmlelement-lexing-runs-away`; full `cargo xtask verify` green locally; PR open, awaiting CI + review
 **Tracking issue:** bd-html-element-runaway-k1eo50h8

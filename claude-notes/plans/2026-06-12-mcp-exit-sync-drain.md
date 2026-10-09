@@ -1,4 +1,7 @@
-# bd-10deu8h4: MCP server exit must not race outbound document sync
+---
+title: 'bd-10deu8h4: MCP server exit must not race outbound document sync'
+date: 2026-06-12
+---
 
 **Strand:** bd-10deu8h4 (p1). Related: bd-8x482xb0 (closed — the
 production casualty this caused), bd-p68lx71t (the 2026-06-12

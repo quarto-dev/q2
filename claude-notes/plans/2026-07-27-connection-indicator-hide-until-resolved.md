@@ -1,4 +1,7 @@
-# Connection indicator: no Offline flash on open (bd-53501yf7)
+---
+title: 'Connection indicator: no Offline flash on open (bd-53501yf7)'
+date: 2026-07-27
+---
 
 ## Overview
 

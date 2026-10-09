@@ -1,4 +1,7 @@
-# Switch hub-client e2e to `vite preview` instead of `vite dev`
+---
+title: 'Switch hub-client e2e to `vite preview` instead of `vite dev`'
+date: 2026-05-11
+---
 
 **Date:** 2026-05-11
 **Branch:** `chore/e2e-ci` (PR #172) — stay on this branch, validate by pushing to the open PR

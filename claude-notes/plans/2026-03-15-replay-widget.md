@@ -1,4 +1,7 @@
-# Replay Widget Implementation Plan
+---
+title: 'Replay Widget Implementation Plan'
+date: 2026-03-15
+---
 
 ## Overview
 

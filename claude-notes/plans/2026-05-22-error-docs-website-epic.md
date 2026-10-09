@@ -1,4 +1,7 @@
-# Error-code documentation pages in the website (epic)
+---
+title: 'Error-code documentation pages in the website (epic)'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending user review
 **Beads:** [bd-94x8a](../../.beads/issues.jsonl) (parent epic)

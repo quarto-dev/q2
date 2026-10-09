@@ -1,4 +1,7 @@
-# Nested include expansion: expand `{{< include >}}` inside container blocks
+---
+title: 'Nested include expansion: expand `{{< include >}}` inside container blocks'
+date: 2026-08-07
+---
 
 **Strand:** bd-1fz3vh99 (discovered-from bd-qpvoamvu)
 **Status:** approved 2026-08-07 — implementation in progress on

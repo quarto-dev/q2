@@ -1,4 +1,7 @@
-# Plan: Fix HashMap-induced Non-determinism
+---
+title: 'Plan: Fix HashMap-induced Non-determinism'
+date: 2025-12-31
+---
 
 **Issue**: k-p39g
 **Date**: 2025-12-31

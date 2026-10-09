@@ -1,4 +1,7 @@
-# Hyperlinks Configuration for quarto-error-reporting
+---
+title: 'Hyperlinks Configuration for quarto-error-reporting'
+date: 2025-11-10
+---
 
 ## Problem
 

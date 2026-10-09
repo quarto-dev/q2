@@ -1,4 +1,7 @@
-# Syntax highlighting — Phase 3 (browser built-ins)
+---
+title: 'Syntax highlighting — Phase 3 (browser built-ins)'
+date: 2026-04-20
+---
 
 - **Parent plan**: `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`
 - **Beads**: bd-n7x2 (overall epic)

@@ -1,4 +1,7 @@
-# Deep Analysis: Downsides of Option 1 (Adjust Diagnostic Locations)
+---
+title: 'Deep Analysis: Downsides of Option 1 (Adjust Diagnostic Locations)'
+date: 2025-11-19
+---
 
 ## Critical Downside #1: AST Nodes Have Wrong SourceInfo
 

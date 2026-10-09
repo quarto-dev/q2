@@ -1,4 +1,7 @@
-# bd-8d6rk — Navigation diagnostics: structured warnings with codes + locations
+---
+title: 'bd-8d6rk — Navigation diagnostics: structured warnings with codes + locations'
+date: 2026-05-20
+---
 
 **Status**: Draft, awaiting user iteration
 **Issue**: bd-8d6rk (P2, task)

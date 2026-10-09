@@ -1,4 +1,7 @@
-# Plan: Consolidated Error Corpus Format
+---
+title: 'Plan: Consolidated Error Corpus Format'
+date: 2025-11-14
+---
 
 ## Problem Analysis
 

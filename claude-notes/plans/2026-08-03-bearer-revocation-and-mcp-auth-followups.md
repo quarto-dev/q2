@@ -1,4 +1,7 @@
-# Auth review follow-ups: Bearer revocation parity, MCP reconnect auth classification, /auth/me exp semantics
+---
+title: 'Auth review follow-ups: Bearer revocation parity, MCP reconnect auth classification, /auth/me exp semantics'
+date: 2026-08-03
+---
 
 **Status:** implemented — all three findings landed 2026-08-03; strands and
 epic closed. **Date:** 2026-08-03.

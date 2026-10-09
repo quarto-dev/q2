@@ -1,4 +1,7 @@
-# Default table rendering parity with Quarto 1
+---
+title: 'Default table rendering parity with Quarto 1'
+date: 2026-05-20
+---
 
 **Issue:** [bd-hir7j](../../.beads/) — *Default table rendering parity with Quarto 1 (render + preview)*
 **Created:** 2026-05-20

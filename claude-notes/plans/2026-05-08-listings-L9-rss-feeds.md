@@ -1,4 +1,7 @@
-# L9 — RSS feeds (sub-plan)
+---
+title: 'L9 — RSS feeds (sub-plan)'
+date: 2026-05-08
+---
 
 **Date:** 2026-05-08
 **Beads:** `bd-o90m` (this phase). Parent epic: `bd-61cd`

@@ -1,4 +1,7 @@
-# Handoff: extract the YAML stack (`quarto-yaml` + `quarto-yaml-validation`)
+---
+title: 'Handoff: extract the YAML stack (`quarto-yaml` + `quarto-yaml-validation`)'
+date: 2026-06-29
+---
 
 **Strand:** bd-egcyeym9 (final phase of the diagnostics/YAML extraction epic)
 **Date:** 2026-06-29

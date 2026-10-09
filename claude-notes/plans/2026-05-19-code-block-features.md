@@ -1,4 +1,7 @@
-# Code-block features in Quarto 2
+---
+title: 'Code-block features in Quarto 2'
+date: 2026-05-19
+---
 
 **Beads:** [bd-1tl09](../../.beads/issues.jsonl) — Code-block decorations epic.
 

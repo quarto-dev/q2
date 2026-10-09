@@ -1,4 +1,7 @@
-# `q2 create`: native CLI command (project website + artifact scaffolding)
+---
+title: '`q2 create`: native CLI command (project website + artifact scaffolding)'
+date: 2026-07-23
+---
 
 **Strand:** bd-oa5kd2yr (related: bd-kuxzj8su, bd-0tr6)
 **Created:** 2026-07-23

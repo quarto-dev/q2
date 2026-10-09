@@ -1,4 +1,7 @@
-# quarto-math and the native docx writer
+---
+title: 'quarto-math and the native docx writer'
+date: 2026-09-21
+---
 
 **Epic:** bd-pq9k90z2 (native docx writer)
 **Strand (phase 1, this branch):** bd-entbg6x3 (quarto-math)

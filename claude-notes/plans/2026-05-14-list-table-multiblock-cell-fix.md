@@ -1,4 +1,7 @@
-# Fix: qmd writer emits list-table cell with multiple blocks as broken bullet item
+---
+title: 'Fix: qmd writer emits list-table cell with multiple blocks as broken bullet item'
+date: 2026-05-14
+---
 
 - **Issue**: GitHub #183
 - **Beads**: bd-oxsr

@@ -1,4 +1,7 @@
-# Continuation line starting with a digit terminates the paragraph (bd-digit-line-splits-paragraph-w6tod0gh)
+---
+title: 'Continuation line starting with a digit terminates the paragraph (bd-digit-line-splits-paragraph-w6tod0gh)'
+date: 2026-08-11
+---
 
 **Date:** 2026-08-11
 **Braid:** `bd-digit-line-splits-paragraph-w6tod0gh` (bug, P1, labels `bug` / `parity`)

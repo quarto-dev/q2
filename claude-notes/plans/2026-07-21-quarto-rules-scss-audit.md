@@ -1,4 +1,7 @@
-# Audit `_quarto-rules.scss`: categorized selector inventory (bd-eias3e39)
+---
+title: 'Audit `_quarto-rules.scss`: categorized selector inventory (bd-eias3e39)'
+date: 2026-07-21
+---
 
 **Date:** 2026-07-21
 **Braid:** bd-eias3e39 (child of epic bd-4doe9lvt)

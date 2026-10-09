@@ -1,4 +1,7 @@
-# Shareable Project URLs for hub-client
+---
+title: 'Shareable Project URLs for hub-client'
+date: 2026-02-03
+---
 
 **Issue:** bd-8exa
 **Status:** Implementation Complete - Awaiting Manual Testing

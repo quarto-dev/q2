@@ -1,4 +1,7 @@
-# `q2 create`: blog scaffold (`website:blog`)
+---
+title: '`q2 create`: blog scaffold (`website:blog`)'
+date: 2026-07-29
+---
 
 **Strand:** bd-r1by4u2a (discovered-from bd-oa5kd2yr)
 **Created:** 2026-07-29

@@ -1,4 +1,7 @@
-# Quarto LSP Server Implementation Plan
+---
+title: 'Quarto LSP Server Implementation Plan'
+date: 2026-01-20
+---
 
 **Epic:** kyoto-7bf - Implement Quarto LSP server (quarto lsp)
 **Created:** 2026-01-20

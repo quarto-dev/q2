@@ -1,4 +1,7 @@
-# hub-client: `q2-preview` becomes the default renderer; the full-DOM renderer gets its own format name
+---
+title: 'hub-client: `q2-preview` becomes the default renderer; the full-DOM renderer gets its own format name'
+date: 2026-09-09
+---
 
 **Strand:** bd-kltzdhle
 **Date:** 2026-09-09

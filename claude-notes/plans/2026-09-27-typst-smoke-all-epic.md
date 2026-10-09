@@ -1,4 +1,7 @@
-# Epic: `format: typst` smoke-all testing (orange-book port)
+---
+title: 'Epic: `format: typst` smoke-all testing (orange-book port)'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Status:** Pre-implementation. Research complete (this doc + phase docs below), all

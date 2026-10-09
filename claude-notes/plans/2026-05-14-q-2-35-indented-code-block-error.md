@@ -1,4 +1,7 @@
-# Plan: Q-2-35 — Reject 4-space indented code blocks with a high-quality error
+---
+title: 'Plan: Q-2-35 — Reject 4-space indented code blocks with a high-quality error'
+date: 2026-05-14
+---
 
 - **GH issue:** [#184](https://github.com/quarto-dev/q2/issues/184)
 - **Triage:** `claude-notes/issue-reports/184/triage.md`

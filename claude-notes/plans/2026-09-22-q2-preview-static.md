@@ -1,4 +1,7 @@
-# `q2 preview --static`: render to disk, serve statically, watch and re-render
+---
+title: '`q2 preview --static`: render to disk, serve statically, watch and re-render'
+date: 2026-09-22
+---
 
 **Strand:** bd-sl79jjiq
 **Status:** implemented 2026-09-22 on branch

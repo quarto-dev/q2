@@ -1,4 +1,7 @@
-# Listing numeric config keys silently ignore unquoted YAML integers (bd-yjsz6hdu)
+---
+title: 'Listing numeric config keys silently ignore unquoted YAML integers (bd-yjsz6hdu)'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20
 **Braid:** bd-yjsz6hdu (bug, p2, label `listings`)

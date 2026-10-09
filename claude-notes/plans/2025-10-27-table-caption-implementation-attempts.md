@@ -1,4 +1,7 @@
-# Table Caption Implementation Attempts (k-185)
+---
+title: 'Table Caption Implementation Attempts (k-185)'
+date: 2025-10-27
+---
 
 **Date**: 2025-10-27
 **Issue**: k-185 - Table caption parsing fails without blank line before caption

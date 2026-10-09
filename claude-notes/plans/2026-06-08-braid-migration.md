@@ -1,4 +1,7 @@
-# Migrate q2 issue tracking from beads_rust to braid
+---
+title: 'Migrate q2 issue tracking from beads_rust to braid'
+date: 2026-06-08
+---
 
 **Status:** Draft / awaiting go-ahead
 **Created:** 2026-06-08

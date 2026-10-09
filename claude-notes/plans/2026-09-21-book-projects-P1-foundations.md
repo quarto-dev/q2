@@ -1,4 +1,7 @@
-# Plan: Book project foundations (book-projects P1)
+---
+title: 'Plan: Book project foundations (book-projects P1)'
+date: 2026-09-21
+---
 
 **Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)

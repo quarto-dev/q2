@@ -1,4 +1,7 @@
-# Listing nits vs Q1: truncation ellipsis + hidden "No matching items" placeholder (bd-listing-ellipsis-no-matching-l963osy1)
+---
+title: 'Listing nits vs Q1: truncation ellipsis + hidden "No matching items" placeholder (bd-listing-ellipsis-no-matching-l963osy1)'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-listing-ellipsis-no-matching-l963osy1 (bug, p3, label `listings`)

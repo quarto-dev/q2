@@ -1,4 +1,7 @@
-# Epic: Port TS Quarto `_quarto-rules.scss` to Q2 for HTML DOM parity
+---
+title: 'Epic: Port TS Quarto `_quarto-rules.scss` to Q2 for HTML DOM parity'
+date: 2026-07-21
+---
 
 **Epic:** bd-4doe9lvt
 **Audit task:** bd-eias3e39

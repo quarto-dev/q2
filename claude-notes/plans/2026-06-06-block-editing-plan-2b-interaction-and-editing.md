@@ -1,4 +1,7 @@
-# Block editing — Plan 2b: interaction model + editing (built-in + render-component)
+---
+title: 'Block editing — Plan 2b: interaction model + editing (built-in + render-component)'
+date: 2026-06-06
+---
 
 **Date:** 2026-06-06 (revised 2026-06-08: built on Plan 2a's dual-node substrate;
 absorbed the former Plan 5 editability + Plan 6 render-component work;

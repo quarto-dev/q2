@@ -1,4 +1,7 @@
-# Error Code Audit: Ignore Feature
+---
+title: 'Error Code Audit: Ignore Feature'
+date: 2025-11-23
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

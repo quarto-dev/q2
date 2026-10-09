@@ -1,4 +1,7 @@
-# k-259: Validation Error Architecture Redesign
+---
+title: 'k-259: Validation Error Architecture Redesign'
+date: 2025-10-27
+---
 
 **Date**: 2025-10-27
 **Issue**: Redesign validation error architecture to separate data from presentation

@@ -1,4 +1,7 @@
-# Plan: pico-quarto-render HTML Template Integration
+---
+title: 'Plan: pico-quarto-render HTML Template Integration'
+date: 2025-11-25
+---
 
 ## Overview
 

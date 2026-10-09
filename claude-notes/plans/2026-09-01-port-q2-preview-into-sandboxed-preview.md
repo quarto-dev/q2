@@ -1,4 +1,7 @@
-# Port q2-preview functionality into q2-sandboxed-preview
+---
+title: 'Port q2-preview functionality into q2-sandboxed-preview'
+date: 2026-09-01
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Smoke-all E2E deflake
+---
+title: 'Smoke-all E2E deflake'
+date: 2026-06-19
+---
 
 ## Overview
 

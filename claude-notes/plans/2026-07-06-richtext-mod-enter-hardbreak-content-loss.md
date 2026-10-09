@@ -1,4 +1,7 @@
-# Rich-text editor: `Mod-Enter` commit drops selected content (HardBreak collision)
+---
+title: 'Rich-text editor: `Mod-Enter` commit drops selected content (HardBreak collision)'
+date: 2026-07-06
+---
 
 **Strand:** bd-hafs0qho (discovered-from bd-7pxub583; related to bd-sjb4pzx8)
 **Status:** IN PROGRESS — user approved (A)+(B) on 2026-07-06

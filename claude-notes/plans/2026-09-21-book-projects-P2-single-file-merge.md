@@ -1,4 +1,7 @@
-# Plan: Single-file chapter merge mechanism (book-projects P2)
+---
+title: 'Plan: Single-file chapter merge mechanism (book-projects P2)'
+date: 2026-09-21
+---
 
 **Date:** 2026-09-21 (revised twice after review passes; this revision folds in the already-vendored `book-*.lua` files)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)

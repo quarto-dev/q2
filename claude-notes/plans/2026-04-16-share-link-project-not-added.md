@@ -1,4 +1,7 @@
-# Share link project never joins the synced project set
+---
+title: 'Share link project never joins the synced project set'
+date: 2026-04-16
+---
 
 ## Symptom
 

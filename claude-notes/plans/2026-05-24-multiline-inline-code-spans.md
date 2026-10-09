@@ -1,4 +1,7 @@
-# Multi-line inline code spans (and inline math)
+---
+title: 'Multi-line inline code spans (and inline math)'
+date: 2026-05-24
+---
 
 **Beads:** bd-ilv8p (bug)
 **Date:** 2026-05-24

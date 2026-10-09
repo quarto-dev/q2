@@ -1,4 +1,7 @@
-# Provenance Plan 9 — ValueSource threading for metadata-derived content
+---
+title: 'Provenance Plan 9 — ValueSource threading for metadata-derived content'
+date: 2026-05-22
+---
 
 **Date:** 2026-05-22
 **Branch:** feature/provenance

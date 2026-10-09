@@ -1,4 +1,7 @@
-# q2 preview: converge revealjs with render (kill drift, keep the React path)
+---
+title: 'q2 preview: converge revealjs with render (kill drift, keep the React path)'
+date: 2026-06-10
+---
 
 **Strand:** bd-ibqkf9ry
 **Related:** bd-jij5gge2 (render-side linked assets — done), bd-kw93 (q2-preview epic)

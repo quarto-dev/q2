@@ -1,4 +1,7 @@
-# Reorder MetadataMergeStage Before EngineExecutionStage
+---
+title: 'Reorder MetadataMergeStage Before EngineExecutionStage'
+date: 2026-04-13
+---
 
 ## Overview
 

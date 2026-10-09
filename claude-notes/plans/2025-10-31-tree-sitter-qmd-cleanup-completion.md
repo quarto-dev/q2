@@ -1,4 +1,7 @@
-# tree-sitter-qmd Cleanup - Completion Summary
+---
+title: 'tree-sitter-qmd Cleanup - Completion Summary'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Status**: ✅ COMPLETE

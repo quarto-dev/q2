@@ -1,4 +1,7 @@
-# Plan: CSS in Pipeline — Part B1: Migration (Phases 3-4)
+---
+title: 'Plan: CSS in Pipeline — Part B1: Migration (Phases 3-4)'
+date: 2026-03-09
+---
 
 Parent plan: `claude-notes/plans/2026-03-09-css-in-pipeline.md`
 Prerequisite: `claude-notes/plans/2026-03-09-css-in-pipeline-b2-tests.md`

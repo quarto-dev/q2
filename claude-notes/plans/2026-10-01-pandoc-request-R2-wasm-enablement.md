@@ -1,4 +1,7 @@
-# Plan: wasm enablement and exports (pandoc-request R2)
+---
+title: 'Plan: wasm enablement and exports (pandoc-request R2)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)

@@ -1,4 +1,7 @@
-# q2-preview: clicking a block to edit does not scroll the source editor
+---
+title: 'q2-preview: clicking a block to edit does not scroll the source editor'
+date: 2026-08-21
+---
 
 ## Overview
 

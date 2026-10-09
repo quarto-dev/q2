@@ -1,4 +1,7 @@
-# Recognize bare `<` as a `Str` token
+---
+title: 'Recognize bare `<` as a `Str` token'
+date: 2026-05-18
+---
 
 **Status:** implemented (awaiting review / push)
 **Tracking issue:** bd-j9cf

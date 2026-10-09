@@ -1,4 +1,7 @@
-# Unicode Offset Bug Investigation Plan (k-328)
+---
+title: 'Unicode Offset Bug Investigation Plan (k-328)'
+date: 2025-11-04
+---
 
 **Issue**: Error diagnostics show incorrect column positions when unicode characters precede errors.
 

@@ -1,4 +1,7 @@
-# Default-project theme artifacts not flushed in hub-client
+---
+title: 'Default-project theme artifacts not flushed in hub-client'
+date: 2026-05-01
+---
 
 ## Status
 

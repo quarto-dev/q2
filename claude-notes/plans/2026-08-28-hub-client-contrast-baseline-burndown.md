@@ -1,4 +1,7 @@
-# hub-client: burn down axe color-contrast baseline
+---
+title: 'hub-client: burn down axe color-contrast baseline'
+date: 2026-08-28
+---
 
 Strand: bd-7byucvr6
 Date: 2026-08-28

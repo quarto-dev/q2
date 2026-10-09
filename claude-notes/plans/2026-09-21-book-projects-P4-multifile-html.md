@@ -1,4 +1,7 @@
-# Plan: Multi-file HTML book mode, local numbering (book-projects P4)
+---
+title: 'Plan: Multi-file HTML book mode, local numbering (book-projects P4)'
+date: 2026-09-21
+---
 
 **Date:** 2026-09-21 (revised after a critical review pass)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)

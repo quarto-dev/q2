@@ -1,4 +1,7 @@
-# Merge `main` into `feature/websites`: order IncludeExpansion before DocumentProfile
+---
+title: 'Merge `main` into `feature/websites`: order IncludeExpansion before DocumentProfile'
+date: 2026-04-24
+---
 
 **Date:** 2026-04-24
 **Beads:** `bd-xfwx`

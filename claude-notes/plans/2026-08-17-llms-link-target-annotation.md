@@ -1,4 +1,7 @@
-# llms-txt: author-facing link-target annotation (bd-llms-link-target-annotation-0zo2ppgx)
+---
+title: 'llms-txt: author-facing link-target annotation (bd-llms-link-target-annotation-0zo2ppgx)'
+date: 2026-08-17
+---
 
 **Date:** 2026-08-17
 **Braid:** bd-llms-link-target-annotation-0zo2ppgx

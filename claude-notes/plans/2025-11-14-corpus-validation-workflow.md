@@ -1,4 +1,7 @@
-# Corpus Validation Workflow
+---
+title: 'Corpus Validation Workflow'
+date: 2025-11-14
+---
 
 Date: 2025-11-14
 File: claude-notes/plans/2025-11-14-corpus-validation-workflow.md

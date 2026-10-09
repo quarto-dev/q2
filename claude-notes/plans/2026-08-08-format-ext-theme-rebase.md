@@ -1,4 +1,7 @@
-# Format-extension theme/css paths not rebased: contributes.formats.html.theme silently drops bundled SCSS (bd-of20unsb)
+---
+title: 'Format-extension theme/css paths not rebased: contributes.formats.html.theme silently drops bundled SCSS (bd-of20unsb)'
+date: 2026-08-08
+---
 
 **Date:** 2026-08-08
 **Braid:** bd-of20unsb (P2, bug)

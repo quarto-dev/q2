@@ -1,4 +1,7 @@
-# Project Metadata Merging with Format Resolution
+---
+title: 'Project Metadata Merging with Format Resolution'
+date: 2026-02-16
+---
 
 **Date**: 2026-02-16
 **Status**: Complete

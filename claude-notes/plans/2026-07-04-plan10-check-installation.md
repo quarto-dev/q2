@@ -1,4 +1,7 @@
-# Plan 10: engine `checkInstallation` → real `q2 check` (bd-4qflzhwh)
+---
+title: 'Plan 10: engine `checkInstallation` → real `q2 check` (bd-4qflzhwh)'
+date: 2026-07-04
+---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task.

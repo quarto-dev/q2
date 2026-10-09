@@ -1,4 +1,7 @@
-# Phase 4 Components Tree Validation Plan (k-228)
+---
+title: 'Phase 4 Components Tree Validation Plan (k-228)'
+date: 2025-10-26
+---
 
 **Date**: 2025-10-26
 **Status**: In Progress

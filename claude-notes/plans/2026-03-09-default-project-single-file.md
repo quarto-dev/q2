@@ -1,4 +1,7 @@
-# Plan: Default Project for Single-File Renders
+---
+title: 'Plan: Default Project for Single-File Renders'
+date: 2026-03-09
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Windows Lua Path Escaping Fix
+---
+title: 'Windows Lua Path Escaping Fix'
+date: 2026-03-31
+---
 
 **Date**: 2026-03-31
 **Branch**: fix/lua-path-escaping

@@ -1,4 +1,7 @@
-# Named HTML entity references silently dropped in prose (bd-named-entities-w6xbfftj)
+---
+title: 'Named HTML entity references silently dropped in prose (bd-named-entities-w6xbfftj)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-named-entities-w6xbfftj (bug, P1, labels `pampa`, `parity`)

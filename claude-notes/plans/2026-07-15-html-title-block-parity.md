@@ -1,4 +1,7 @@
-# HTML Title Block Parity with Quarto 1 (bd-gx9cic8z)
+---
+title: 'HTML Title Block Parity with Quarto 1 (bd-gx9cic8z)'
+date: 2026-07-15
+---
 
 **Status: COMPLETE (2026-07-17).** All phases P0–P7 executed on
 `feature/bd-gx9cic8z-title-block-parity` (PR #396, draft). Follow-up

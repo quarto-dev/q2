@@ -1,4 +1,7 @@
-# P9 — Port `orange-book-margin` (book-context margin notes)
+---
+title: 'P9 — Port `orange-book-margin` (book-context margin notes)'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —

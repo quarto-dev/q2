@@ -1,4 +1,7 @@
-# ANSI Writer Style Stack Fix
+---
+title: 'ANSI Writer Style Stack Fix'
+date: 2025-10-28
+---
 
 **Date**: 2025-10-28
 **Issue**: Nested styled elements reset to default instead of parent style

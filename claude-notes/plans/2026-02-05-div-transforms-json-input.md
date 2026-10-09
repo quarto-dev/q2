@@ -1,4 +1,7 @@
-# Plan: Apply div transforms to JSON input
+---
+title: 'Plan: Apply div transforms to JSON input'
+date: 2026-02-05
+---
 
 **Issue**: bd-31lk
 **Date**: 2026-02-05

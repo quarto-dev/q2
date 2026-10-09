@@ -1,4 +1,7 @@
-# Cargo dependency upgrade skill — design discussion
+---
+title: 'Cargo dependency upgrade skill — design discussion'
+date: 2026-05-04
+---
 
 **Beads issue:** bd-hb8h
 **Status:** Design settled — ready to implement

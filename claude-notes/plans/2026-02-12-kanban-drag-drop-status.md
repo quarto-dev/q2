@@ -1,4 +1,7 @@
-# Kanban: Drag-and-Drop Status Changes
+---
+title: 'Kanban: Drag-and-Drop Status Changes'
+date: 2026-02-12
+---
 
 **Issue:** bd-3okv
 **Date:** 2026-02-12

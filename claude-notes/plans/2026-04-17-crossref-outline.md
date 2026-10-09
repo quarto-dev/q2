@@ -1,4 +1,7 @@
-# LSP Outline: Include Cross-Referenceable Elements
+---
+title: 'LSP Outline: Include Cross-Referenceable Elements'
+date: 2026-04-17
+---
 
 Beads: `bd-ascs`
 

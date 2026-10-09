@@ -1,4 +1,7 @@
-# Plan: `--json-errors` for `q2 render`
+---
+title: 'Plan: `--json-errors` for `q2 render`'
+date: 2026-05-22
+---
 
 **Status:** Implementation complete on `feature/q2-render-json-errors`;
 awaiting review before merge to `main`. Beads issue still `in_progress`

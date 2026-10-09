@@ -1,4 +1,7 @@
-# Correct Implementation of fixPunct for quarto-citeproc
+---
+title: 'Correct Implementation of fixPunct for quarto-citeproc'
+date: 2025-11-28
+---
 
 **Date**: 2025-11-28
 **Status**: Completed

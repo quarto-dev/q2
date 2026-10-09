@@ -1,4 +1,7 @@
-# Incremental Writer Trailing Newline Bug
+---
+title: 'Incremental Writer Trailing Newline Bug'
+date: 2026-02-11
+---
 
 ## Overview
 

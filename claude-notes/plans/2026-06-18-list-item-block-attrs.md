@@ -1,4 +1,7 @@
-# Block-level attributes on list items (`<li class>`)
+---
+title: 'Block-level attributes on list items (`<li class>`)'
+date: 2026-06-18
+---
 
 **Strand:** bd-aeyss6p5 (discovered-from bd-itqcfxc3; related bd-38ioql41)
 **Date:** 2026-06-18

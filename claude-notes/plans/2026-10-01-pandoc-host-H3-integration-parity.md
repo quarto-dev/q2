@@ -1,4 +1,7 @@
-# Plan: Integration and parity net (pandoc-host H3)
+---
+title: 'Plan: Integration and parity net (pandoc-host H3)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

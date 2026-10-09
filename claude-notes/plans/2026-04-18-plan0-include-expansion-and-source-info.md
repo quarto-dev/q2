@@ -1,4 +1,7 @@
-# Plan 0: Pre-Engine Include Expansion & Engine SourceInfo
+---
+title: 'Plan 0: Pre-Engine Include Expansion & Engine SourceInfo'
+date: 2026-04-18
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Nothing

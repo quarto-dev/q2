@@ -1,4 +1,7 @@
-# `q2 render --json-errors`: pure, attributable NDJSON on stderr
+---
+title: '`q2 render --json-errors`: pure, attributable NDJSON on stderr'
+date: 2026-10-06
+---
 
 **Strand:** bd-gnw9asuo (bug, P2). Child: bd-ckbqmupi. Discovered from bd-uk8zgkha (claude-notes website).
 **Branch:** `braid/bd-gnw9asuo-q2-render-json-errors`, off `origin/main` @ `7f70632cc`.

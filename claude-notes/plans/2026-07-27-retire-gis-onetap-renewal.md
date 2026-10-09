@@ -1,4 +1,7 @@
-# Retire GIS / One-Tap silent renewal (renewal-only scope)
+---
+title: 'Retire GIS / One-Tap silent renewal (renewal-only scope)'
+date: 2026-07-27
+---
 
 **Epic:** `bd-qxgoti2b` — \"Unify hub-client and hub-mcp auth on Authorization Code
 + PKCE.\" This plan is the renewal-retirement slice, referred to as **B2** below;

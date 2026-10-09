@@ -1,4 +1,7 @@
-# Hub-Client Custom SCSS Theme Support
+---
+title: 'Hub-Client Custom SCSS Theme Support'
+date: 2026-01-29
+---
 
 ## Overview
 

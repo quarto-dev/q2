@@ -1,4 +1,7 @@
-# Grammar Issue: emphasis_delimiter Captures Adjacent Whitespace
+---
+title: 'Grammar Issue: emphasis_delimiter Captures Adjacent Whitespace'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Discovered During**: Implementation of `pandoc_emph` handler

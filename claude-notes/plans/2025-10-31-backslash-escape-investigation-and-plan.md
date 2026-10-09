@@ -1,4 +1,7 @@
-# Backslash Escape Investigation and Implementation Plan
+---
+title: 'Backslash Escape Investigation and Implementation Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Epic**: k-274 (Tree-sitter Grammar Refactoring)

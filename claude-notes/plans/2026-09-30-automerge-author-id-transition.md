@@ -1,4 +1,7 @@
-# Plan: Transition quarto-hub from stable actor IDs to automerge author IDs
+---
+title: 'Plan: Transition quarto-hub from stable actor IDs to automerge author IDs'
+date: 2026-09-30
+---
 
 Date: 2026-09-30
 Status: Approved — in execution. Gordon's go-ahead given 2026-09-30,

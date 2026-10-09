@@ -1,4 +1,7 @@
-# Route structured diagnostics through discovery errors (bd-y56u1gl7)
+---
+title: 'Route structured diagnostics through discovery errors (bd-y56u1gl7)'
+date: 2026-08-08
+---
 
 **Strand:** bd-y56u1gl7 (discovered-from bd-sekn481x)
 **Status:** done — all gates green (2026-08-08; workspace suite

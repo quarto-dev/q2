@@ -1,4 +1,7 @@
-# Emphasis-Like Constructs Implementation - Summary
+---
+title: 'Emphasis-Like Constructs Implementation - Summary'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Status**: ✅ COMPLETED

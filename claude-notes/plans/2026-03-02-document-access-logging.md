@@ -1,4 +1,7 @@
-# Plan: Add `document_served` effect to samod-core
+---
+title: 'Plan: Add `document_served` effect to samod-core'
+date: 2026-03-02
+---
 
 ## Context
 

@@ -1,4 +1,7 @@
-# Light/dark theme support epic (bd-0pic6)
+---
+title: 'Light/dark theme support epic (bd-0pic6)'
+date: 2026-08-14
+---
 
 **Created**: 2026-08-14
 **Status**: DESIGN SETTLED (2026-08-14) — all open questions resolved with

@@ -1,4 +1,7 @@
-# Lua Filter Diagnostics Implementation Plan
+---
+title: 'Lua Filter Diagnostics Implementation Plan'
+date: 2025-12-03
+---
 
 **Date:** 2025-12-03
 **Issue:** k-480 (Implement quarto.warn() and quarto.error() Lua functions)

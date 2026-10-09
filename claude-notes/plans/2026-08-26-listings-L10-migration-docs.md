@@ -1,4 +1,7 @@
-# L10 — Q1 → Q2 listing template migration docs + LLM skill (`bd-hzsi`)
+---
+title: 'L10 — Q1 → Q2 listing template migration docs + LLM skill (`bd-hzsi`)'
+date: 2026-08-26
+---
 
 **Strand:** `bd-hzsi` (P2, task, parent `bd-61cd` Listings epic, blocked-by
 `bd-rqgx` L8 — closed).

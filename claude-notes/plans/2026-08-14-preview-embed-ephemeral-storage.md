@@ -1,4 +1,7 @@
-# Preview-embed ephemeral storage mode
+---
+title: 'Preview-embed ephemeral storage mode'
+date: 2026-08-14
+---
 
 ## Overview
 

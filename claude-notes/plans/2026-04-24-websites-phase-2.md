@@ -1,4 +1,7 @@
-# Phase 2 — Sidebar (data model, generate, render, template)
+---
+title: 'Phase 2 — Sidebar (data model, generate, render, template)'
+date: 2026-04-24
+---
 
 **Date:** 2026-04-24
 **Beads:** to be filed (parent `bd-0tr6`; blocked-by `bd-w5os` Phase 1 — closed).

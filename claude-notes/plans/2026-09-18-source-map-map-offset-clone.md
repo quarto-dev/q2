@@ -1,4 +1,7 @@
-# `SourceInfo::map_offset` clones the whole file per call (bd-jn7r22g8)
+---
+title: '`SourceInfo::map_offset` clones the whole file per call (bd-jn7r22g8)'
+date: 2026-09-18
+---
 
 **Strand:** bd-jn7r22g8 (P1, perf). Discovered from bd-5yektmwt; related to
 bd-is4q72tt (peak RSS).

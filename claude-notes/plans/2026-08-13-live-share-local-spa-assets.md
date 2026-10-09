@@ -1,4 +1,7 @@
-# Live-share join: cut first-join payload (embedded-SPA serving + compression)
+---
+title: 'Live-share join: cut first-join payload (embedded-SPA serving + compression)'
+date: 2026-08-13
+---
 
 **Epic:** bd-puc7xt6e
 **Date:** 2026-08-13

@@ -1,4 +1,7 @@
-# k-259: Validation Error Architecture Redesign (v2)
+---
+title: 'k-259: Validation Error Architecture Redesign (v2)'
+date: 2025-10-27
+---
 
 **Date**: 2025-10-27 (Updated)
 **Issue**: Redesign validation error architecture with wrapper type and filename-based locations

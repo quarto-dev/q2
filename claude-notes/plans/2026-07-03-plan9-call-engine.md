@@ -1,4 +1,7 @@
-# Plan 9: `q2 call engine` — Q1-parity engine CLI surface (bd-m1jeqhhz)
+---
+title: 'Plan 9: `q2 call engine` — Q1-parity engine CLI surface (bd-m1jeqhhz)'
+date: 2026-07-03
+---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task.

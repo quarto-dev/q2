@@ -1,4 +1,7 @@
-# Hub: contain index-sourced paths to the project root (path-traversal write fix)
+---
+title: 'Hub: contain index-sourced paths to the project root (path-traversal write fix)'
+date: 2026-05-30
+---
 
 **Issue:** bd-rz6yb (bug, p1)
 

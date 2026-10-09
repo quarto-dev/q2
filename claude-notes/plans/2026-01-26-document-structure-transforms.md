@@ -1,4 +1,7 @@
-# Phase 1b: Document Structure Transforms
+---
+title: 'Phase 1b: Document Structure Transforms'
+date: 2026-01-26
+---
 
 **Parent Plan**: `claude-notes/plans/2026-01-24-html-rendering-parity.md`
 **Parent Epic**: kyoto-6jv

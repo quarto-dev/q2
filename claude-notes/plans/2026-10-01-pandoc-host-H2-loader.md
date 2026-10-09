@@ -1,4 +1,7 @@
-# Plan: Loader and worker lifecycle (pandoc-host H2)
+---
+title: 'Plan: Loader and worker lifecycle (pandoc-host H2)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

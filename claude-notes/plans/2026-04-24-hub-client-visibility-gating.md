@@ -1,4 +1,7 @@
-# Hub-client visibility gating for text sync + presence
+---
+title: 'Hub-client visibility gating for text sync + presence'
+date: 2026-04-24
+---
 
 ## Repro confirmation (2026-04-24)
 

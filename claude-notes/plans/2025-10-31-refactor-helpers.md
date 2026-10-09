@@ -1,4 +1,7 @@
-# Refactor Tree-Sitter Handlers to Helper Files
+---
+title: 'Refactor Tree-Sitter Handlers to Helper Files'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Context**: The match statement in `treesitter.rs` has grown significantly with recent additions. We need to extract complex handlers into helper files following the established pattern.

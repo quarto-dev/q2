@@ -1,4 +1,7 @@
-# Spans, Links, and Images Implementation Plan
+---
+title: 'Spans, Links, and Images Implementation Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31 (REVISED after testing)
 **Context**: Implement `pandoc_span` and `pandoc_image` handlers to support spans, links, and images

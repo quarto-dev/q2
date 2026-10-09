@@ -1,4 +1,7 @@
-# Phase 6: Hub-Client Intelligence Subsystem
+---
+title: 'Phase 6: Hub-Client Intelligence Subsystem'
+date: 2026-01-20
+---
 
 **Parent Epic:** kyoto-7bf - Implement Quarto LSP server
 **Parent Plan:** `claude-notes/plans/2026-01-20-quarto-lsp.md`

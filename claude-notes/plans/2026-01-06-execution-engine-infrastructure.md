@@ -1,4 +1,7 @@
-# Plan: ExecutionEngine Trait and Engine Detection
+---
+title: 'Plan: ExecutionEngine Trait and Engine Detection'
+date: 2026-01-06
+---
 
 **Issue**: k-oomv
 **Date**: 2026-01-06

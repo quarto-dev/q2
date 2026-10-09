@@ -1,4 +1,7 @@
-# AST-Level Sync Client API
+---
+title: 'AST-Level Sync Client API'
+date: 2026-02-06
+---
 
 ## Overview
 

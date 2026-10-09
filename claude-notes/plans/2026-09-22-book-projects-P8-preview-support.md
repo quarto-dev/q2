@@ -1,4 +1,7 @@
-# Plan: Book-aware preview for `q2 preview` / hub-client (book-projects P8)
+---
+title: 'Plan: Book-aware preview for `q2 preview` / hub-client (book-projects P8)'
+date: 2026-09-22
+---
 
 **Date:** 2026-09-22 (revised after an implementor-standpoint technical review the same day — see the epic doc's revision history for what changed and why)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)

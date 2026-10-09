@@ -1,4 +1,7 @@
-# Error Pruning Strategy for quarto-markdown-pandoc
+---
+title: 'Error Pruning Strategy for quarto-markdown-pandoc'
+date: 2025-11-13
+---
 
 **Date**: 2025-11-13
 **Context**: We're emitting too many error diagnostics due to tree-sitter error recovery branching

@@ -1,4 +1,7 @@
-# Perf: WASM render re-flushes ALL artifacts into the VFS on every render (bd-q3bxnq2e)
+---
+title: 'Perf: WASM render re-flushes ALL artifacts into the VFS on every render (bd-q3bxnq2e)'
+date: 2026-06-09
+---
 
 **Date:** 2026-06-09
 **Beads:** bd-q3bxnq2e

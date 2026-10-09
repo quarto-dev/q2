@@ -1,4 +1,7 @@
-# Table Reconciliation Plan
+---
+title: 'Table Reconciliation Plan'
+date: 2026-01-14
+---
 
 **Date:** 2026-01-14
 **Status:** ✅ COMPLETE

@@ -1,4 +1,7 @@
-# Plan 7g — Source-range tiling
+---
+title: 'Plan 7g — Source-range tiling'
+date: 2026-06-01
+---
 
 **Date:** 2026-06-01 (research) → 2026-06-02 (converted to development plan)
 **Branch:** feature/provenance

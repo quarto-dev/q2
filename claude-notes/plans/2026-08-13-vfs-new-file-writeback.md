@@ -1,4 +1,7 @@
-# Write VFS-created files to disk under `--allow-edit` (WriteBack)
+---
+title: 'Write VFS-created files to disk under `--allow-edit` (WriteBack)'
+date: 2026-08-13
+---
 
 **Date:** 2026-08-13
 **Status:** Complete — implemented and e2e-verified 2026-08-13 (bd-1kuiw7sx)

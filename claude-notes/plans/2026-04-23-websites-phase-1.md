@@ -1,4 +1,7 @@
-# Phase 1 — Project orchestration (`ProjectType` trait + two-pass driver)
+---
+title: 'Phase 1 — Project orchestration (`ProjectType` trait + two-pass driver)'
+date: 2026-04-23
+---
 
 **Date:** 2026-04-23
 **Beads:** `bd-w5os` (phase); parent `bd-0tr6` (website epic). Blocked-by

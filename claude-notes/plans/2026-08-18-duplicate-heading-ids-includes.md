@@ -1,4 +1,7 @@
-# Heading identifiers are not disambiguated across include boundaries (bd-duplicate-heading-ids-mou5z7ux)
+---
+title: 'Heading identifiers are not disambiguated across include boundaries (bd-duplicate-heading-ids-mou5z7ux)'
+date: 2026-08-18
+---
 
 **Date:** 2026-08-18
 **Braid:** bd-duplicate-heading-ids-mou5z7ux (p2, bug, label `markdown`)

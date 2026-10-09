@@ -1,4 +1,7 @@
-# Plan: Route `Position::Post` extension filters to pandoc's `main.lua` chain for Pandoc-hybrid targets (book-projects P2b)
+---
+title: 'Plan: Route `Position::Post` extension filters to pandoc''s `main.lua` chain for Pandoc-hybrid targets (book-projects P2b)'
+date: 2026-09-24
+---
 
 **Date:** 2026-09-24
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md) (new phase, inserted between P2 and P3 — see the epic's phase table)

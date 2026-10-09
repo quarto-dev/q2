@@ -1,4 +1,7 @@
-# Unicode whitespace handling in the qmd parser
+---
+title: 'Unicode whitespace handling in the qmd parser'
+date: 2026-04-30
+---
 
 **Beads:** bd-rmx3 (bug), bd-8oe4 (audit task, discovered-from bd-rmx3)
 **Date:** 2026-04-30

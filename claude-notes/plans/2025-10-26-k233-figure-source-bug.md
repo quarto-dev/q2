@@ -1,4 +1,7 @@
-# K-233: Figure Block Source Range Bug in quarto-markdown-pandoc
+---
+title: 'K-233: Figure Block Source Range Bug in quarto-markdown-pandoc'
+date: 2025-10-26
+---
 
 **Date**: 2025-10-26
 **Status**: Diagnosed - Ready for Rust fix

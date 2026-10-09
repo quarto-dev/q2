@@ -1,4 +1,7 @@
-# Automerge-Backed Project Set Storage
+---
+title: 'Automerge-Backed Project Set Storage'
+date: 2026-03-31
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Draft pages render without Q1's draft alert banner (bd-draft-banner-missing-hgx1gkqm)
+---
+title: 'Draft pages render without Q1''s draft alert banner (bd-draft-banner-missing-hgx1gkqm)'
+date: 2026-08-13
+---
 
 **Date:** 2026-08-13
 **Braid:** `bd-draft-banner-missing-hgx1gkqm` (feature, p3, labels: `navigation`, `parity`)

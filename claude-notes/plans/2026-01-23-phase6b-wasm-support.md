@@ -1,4 +1,7 @@
-# Phase 6b WASM Support: Custom SCSS Cross-Platform Compatibility
+---
+title: 'Phase 6b WASM Support: Custom SCSS Cross-Platform Compatibility'
+date: 2026-01-23
+---
 
 **Parent Plan**: `2026-01-23-phase6b-custom-scss.md`
 **Created**: 2026-01-23

@@ -1,4 +1,7 @@
-# fnm + nvm-windows Node discovery for `q2 mcp` (bd-e1ger90c)
+---
+title: 'fnm + nvm-windows Node discovery for `q2 mcp` (bd-e1ger90c)'
+date: 2026-07-02
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# q2 mcp: `--print-config` + `--help` launcher-options discovery (bd-9a8yu2gw)
+---
+title: 'q2 mcp: `--print-config` + `--help` launcher-options discovery (bd-9a8yu2gw)'
+date: 2026-06-13
+---
 
 ## Overview
 

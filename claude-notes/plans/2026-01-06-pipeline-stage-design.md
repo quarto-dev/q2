@@ -1,4 +1,7 @@
-# Plan: PipelineStage Abstraction for Full Render Pipeline
+---
+title: 'Plan: PipelineStage Abstraction for Full Render Pipeline'
+date: 2026-01-06
+---
 
 **Issue**: k-m46n
 **Date**: 2026-01-06

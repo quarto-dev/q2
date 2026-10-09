@@ -1,4 +1,7 @@
-# `{{< include >}}` inside a fenced code block is not expanded (bd-include-in-code-block-f8mvtczn)
+---
+title: '`{{< include >}}` inside a fenced code block is not expanded (bd-include-in-code-block-f8mvtczn)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** `bd-include-in-code-block-f8mvtczn` (bug, P1, label `parity`)

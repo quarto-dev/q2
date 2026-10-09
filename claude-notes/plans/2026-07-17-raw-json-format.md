@@ -1,4 +1,7 @@
-# Pampa-native "raw JSON" reader/writer (GH issue #11)
+---
+title: 'Pampa-native "raw JSON" reader/writer (GH issue #11)'
+date: 2026-07-17
+---
 
 **Status:** Draft v2 — iterating with Carlos before implementation.
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/11

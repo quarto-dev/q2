@@ -1,4 +1,7 @@
-# bd-af1e — Tree-sitter splits paragraph at line starting with backtick
+---
+title: 'bd-af1e — Tree-sitter splits paragraph at line starting with backtick'
+date: 2026-04-30
+---
 
 ## Summary
 

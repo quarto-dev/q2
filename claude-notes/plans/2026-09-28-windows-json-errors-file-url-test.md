@@ -1,4 +1,7 @@
-# Windows: json_errors ipynb hyperlink test builds expected file:// URL from verbatim path (bd-clq56rem)
+---
+title: 'Windows: json_errors ipynb hyperlink test builds expected file:// URL from verbatim path (bd-clq56rem)'
+date: 2026-09-28
+---
 
 **Date:** 2026-09-28
 **Braid:** bd-clq56rem (related: bd-1klbq2zd)

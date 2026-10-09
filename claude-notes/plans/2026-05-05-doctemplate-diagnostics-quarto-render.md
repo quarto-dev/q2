@@ -1,4 +1,7 @@
-# Plumb doctemplate diagnostics through `quarto render`
+---
+title: 'Plumb doctemplate diagnostics through `quarto render`'
+date: 2026-05-05
+---
 
 **Issue:** bd-xdnk
 **Status:** Implementation complete — awaiting user review for commit/push

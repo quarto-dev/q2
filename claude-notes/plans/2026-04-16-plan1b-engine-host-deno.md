@@ -1,4 +1,7 @@
-# Plan 1b: @quarto/engine-host-deno (Deno harness)
+---
+title: 'Plan 1b: @quarto/engine-host-deno (Deno harness)'
+date: 2026-04-16
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** plan1a-protocol (Rust core: protocol types), **RTQ

@@ -1,4 +1,7 @@
-# Format-specific equation numbering and `html-math-method: mathml`
+---
+title: 'Format-specific equation numbering and `html-math-method: mathml`'
+date: 2026-09-21
+---
 
 **Status:** approved 2026-09-21 (all five open decisions settled with the
 user, each as recommended). Phases 1–3 implemented the same day. PRs: #708 (Phase 1,

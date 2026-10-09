@@ -1,12 +1,11 @@
 ---
+title: 'Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa'
 date: 2026-05-11
 updated: 2026-05-13
 branch: beads/bd-hfjj-hub-client-decomposition-shared
 beads: bd-hfjj (sub-epic of bd-kw93)
 status: COMPLETE 2026-05-13 (all 7 phases landed; Phase 5 ↔ Phase 4 order swapped — see §Phase ordering note)
 ---
-
-# Hub-client decomposition: shared preview-pane packages for hub-client + q2-preview-spa
 
 ## Goal
 

@@ -1,4 +1,7 @@
-# Plan: Q-2-30 Multi-Paragraph Footnote Linting Diagnostic
+---
+title: 'Plan: Q-2-30 Multi-Paragraph Footnote Linting Diagnostic'
+date: 2025-11-20
+---
 
 **Date**: 2025-11-20
 **Issue**: k-367 (case 2)

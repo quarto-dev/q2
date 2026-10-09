@@ -1,4 +1,7 @@
-# Error-docs content authoring (umbrella)
+---
+title: 'Error-docs content authoring (umbrella)'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending user review
 **Beads:** [bd-an6z4](../../.beads/issues.jsonl) (child of [bd-94x8a](2026-05-22-error-docs-website-epic.md))

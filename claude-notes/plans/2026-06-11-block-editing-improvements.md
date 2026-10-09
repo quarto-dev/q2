@@ -1,4 +1,7 @@
-# Block editing — depth-aware editing, cross-surface cursor, AST buffers
+---
+title: 'Block editing — depth-aware editing, cross-surface cursor, AST buffers'
+date: 2026-06-11
+---
 
 **Date:** 2026-06-11 (substantially reworked 2026-06-12; concurrency/identity rework 2026-06-13)
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

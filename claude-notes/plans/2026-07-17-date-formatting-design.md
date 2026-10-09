@@ -1,4 +1,7 @@
-# Date Parsing & Formatting for Q2 (title-block P4, bd-13f821l5)
+---
+title: 'Date Parsing & Formatting for Q2 (title-block P4, bd-13f821l5)'
+date: 2026-07-17
+---
 
 **Status: APPROVED (2026-07-17) — executing.** Carlos approved all
 open-question recommendations; final token scope (Carlos): implement

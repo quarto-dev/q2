@@ -1,4 +1,7 @@
-# Meta Shortcode Resolution in Document Outline
+---
+title: 'Meta Shortcode Resolution in Document Outline'
+date: 2026-02-01
+---
 
 ## Overview
 

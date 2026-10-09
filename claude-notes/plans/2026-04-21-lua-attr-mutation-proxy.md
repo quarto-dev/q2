@@ -1,4 +1,7 @@
-# Lua attribute-mutation proxy (bd-195t)
+---
+title: 'Lua attribute-mutation proxy (bd-195t)'
+date: 2026-04-21
+---
 
 ## Problem
 

@@ -1,4 +1,7 @@
-# Boundary-addressed splice — generalizing `apply_node_edit` to insert / range
+---
+title: 'Boundary-addressed splice — generalizing `apply_node_edit` to insert / range'
+date: 2026-06-18
+---
 
 **Date:** 2026-06-18 (updated 2026-06-19)
 **Branch:** `feature/block-editing-improvements` (worktree `.worktrees/block-editing`)

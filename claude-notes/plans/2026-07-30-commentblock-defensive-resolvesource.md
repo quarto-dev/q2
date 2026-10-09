@@ -1,4 +1,7 @@
-# Fix bd-ddaqjb91 — s0-list-item-surfaces crash: defensive `CommentBlock` + honest test stub
+---
+title: 'Fix bd-ddaqjb91 — s0-list-item-surfaces crash: defensive `CommentBlock` + honest test stub'
+date: 2026-07-30
+---
 
 **Strand:** bd-ddaqjb91 (bug, P1)
 **Discovered:** 2026-07-30, while landing the #442 sidecar-stripping fix (`c33c40bd`).

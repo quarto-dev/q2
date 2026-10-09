@@ -1,4 +1,7 @@
-# Epic: pandoc.wasm host, "Download as" UI and PDF (browser side)
+---
+title: 'Epic: pandoc.wasm host, "Download as" UI and PDF (browser side)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Status:** Planned; nothing started

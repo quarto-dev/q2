@@ -1,4 +1,7 @@
-# NewFileDialog: Enter-submit reopens the dialog (GH #635)
+---
+title: 'NewFileDialog: Enter-submit reopens the dialog (GH #635)'
+date: 2026-08-31
+---
 
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/635
 **Braid strand:** bd-zcv0iea4

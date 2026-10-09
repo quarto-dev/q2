@@ -1,4 +1,7 @@
-# k-69 Session 4 Progress - Source Map Migration Final Switchover
+---
+title: 'k-69 Session 4 Progress - Source Map Migration Final Switchover'
+date: 2025-10-20
+---
 
 **Date:** 2025-10-20
 **Task:** k-69 - Replace source_info with source_info_qsm throughout

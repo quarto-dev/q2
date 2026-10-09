@@ -1,4 +1,7 @@
-# YAML provenance desync after a block scalar with non-ASCII content (bd-e0e9kd4a)
+---
+title: 'YAML provenance desync after a block scalar with non-ASCII content (bd-e0e9kd4a)'
+date: 2026-10-08
+---
 
 **Date:** 2026-10-08
 **Braid:** bd-e0e9kd4a

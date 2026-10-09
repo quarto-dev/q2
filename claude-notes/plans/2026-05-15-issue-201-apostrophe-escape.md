@@ -1,4 +1,7 @@
-# Plan: writer emits `\'` for apostrophes the reader would re-reject (issue #201, bd-8lcm)
+---
+title: 'Plan: writer emits `\''` for apostrophes the reader would re-reject (issue #201, bd-8lcm)'
+date: 2026-05-15
+---
 
 ## Context
 

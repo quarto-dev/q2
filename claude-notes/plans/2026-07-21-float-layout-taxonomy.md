@@ -1,4 +1,7 @@
-# Float/layout DOM class taxonomy (bd-hcp8m3ve)
+---
+title: 'Float/layout DOM class taxonomy (bd-hcp8m3ve)'
+date: 2026-07-21
+---
 
 **Date:** 2026-07-21
 **Strand:** bd-hcp8m3ve (feature; unblocks bd-9fz5fweg CSS port)

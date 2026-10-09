@@ -1,4 +1,7 @@
-# Plan: Extract MetadataMergeStage from AstTransformsStage
+---
+title: 'Plan: Extract MetadataMergeStage from AstTransformsStage'
+date: 2026-03-09
+---
 
 ## Overview
 

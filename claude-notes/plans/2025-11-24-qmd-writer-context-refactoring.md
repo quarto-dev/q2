@@ -1,4 +1,7 @@
-# QMD Writer Context Refactoring Analysis
+---
+title: 'QMD Writer Context Refactoring Analysis'
+date: 2025-11-24
+---
 
 ## Summary
 

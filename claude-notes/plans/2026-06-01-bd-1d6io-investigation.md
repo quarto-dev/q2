@@ -1,4 +1,7 @@
-# bd-1d6io — annotated-qmd source-tracking off-by-one: investigation
+---
+title: 'bd-1d6io — annotated-qmd source-tracking off-by-one: investigation'
+date: 2026-06-01
+---
 
 **Status:** investigation complete — triage verdict below. No fix committed yet.
 **Worktree:** `.worktrees/bd-1d6io-annotated-qmd-source-tracking` (branch `beads/bd-1d6io-annotated-qmd-source-tracking`, off `main`).

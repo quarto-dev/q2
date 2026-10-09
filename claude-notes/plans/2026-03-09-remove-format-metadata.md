@@ -1,4 +1,7 @@
-# Plan: Remove Format.metadata and extract_format_metadata()
+---
+title: 'Plan: Remove Format.metadata and extract_format_metadata()'
+date: 2026-03-09
+---
 
 ## Overview
 

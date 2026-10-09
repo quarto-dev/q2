@@ -1,4 +1,7 @@
-# Plan: Unified bibliography for multi-file HTML (book-projects P6)
+---
+title: 'Plan: Unified bibliography for multi-file HTML (book-projects P6)'
+date: 2026-09-21
+---
 
 **Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)

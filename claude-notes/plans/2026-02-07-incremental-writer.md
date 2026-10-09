@@ -1,4 +1,7 @@
-# Incremental QMD Writer
+---
+title: 'Incremental QMD Writer'
+date: 2026-02-07
+---
 
 **Beads issue:** `bd-2t4o`
 **Parent plan:** `claude-notes/plans/2026-02-06-ast-sync-client-api.md` (Phase 2)

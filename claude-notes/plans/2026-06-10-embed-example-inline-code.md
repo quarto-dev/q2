@@ -1,4 +1,7 @@
-# `.embed-example-iframe`: inline code snippet + Demo crossref for all examples
+---
+title: '`.embed-example-iframe`: inline code snippet + Demo crossref for all examples'
+date: 2026-06-10
+---
 
 **Strand:** bd-15uump3h (discovered-from bd-z1smhvuo, the embed feature;
 related to bd-t3cert81, crossreferenceable Demo blocks)

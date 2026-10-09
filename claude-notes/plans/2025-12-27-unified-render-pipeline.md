@@ -1,4 +1,7 @@
-# Plan: Unified Render Pipeline for quarto and wasm-quarto-hub-client
+---
+title: 'Plan: Unified Render Pipeline for quarto and wasm-quarto-hub-client'
+date: 2025-12-27
+---
 
 **Issue**: k-dnfd
 **Date**: 2025-12-27

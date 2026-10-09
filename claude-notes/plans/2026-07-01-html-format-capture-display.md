@@ -1,4 +1,7 @@
-# Display executed code output in the default `format: html` preview
+---
+title: 'Display executed code output in the default `format: html` preview'
+date: 2026-07-01
+---
 
 > **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this
 > plan refers to is no longer hub-client's default. q2-preview is the default

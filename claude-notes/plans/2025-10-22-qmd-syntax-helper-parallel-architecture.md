@@ -1,4 +1,7 @@
-# QMD-Syntax-Helper: Multi-threaded Architecture with Task Reuse
+---
+title: 'QMD-Syntax-Helper: Multi-threaded Architecture with Task Reuse'
+date: 2025-10-22
+---
 
 **Date:** 2025-10-22
 **Status:** Design Proposal

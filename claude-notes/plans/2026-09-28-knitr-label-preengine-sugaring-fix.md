@@ -1,4 +1,7 @@
-# Fix: restore knitr label visibility through PreEngineSugaringStage
+---
+title: 'Fix: restore knitr label visibility through PreEngineSugaringStage'
+date: 2026-09-28
+---
 
 **Strand:** bd-2lxj10z0 — knitr label stripped by PreEngineSugaring breaks
 label-based figure filenames (`fig-cars-1.svg` -> `unnamed-chunk-1-1.svg`)

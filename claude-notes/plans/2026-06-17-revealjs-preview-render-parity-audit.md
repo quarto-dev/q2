@@ -1,4 +1,7 @@
-# revealjs `q2 preview` ↔ `q2 render` parity audit
+---
+title: 'revealjs `q2 preview` ↔ `q2 render` parity audit'
+date: 2026-06-17
+---
 
 **Created:** 2026-06-17
 **Epic:** bd-67yja58s (format: revealjs) · GA gate: bd-v053sk3s (Phase 1P)

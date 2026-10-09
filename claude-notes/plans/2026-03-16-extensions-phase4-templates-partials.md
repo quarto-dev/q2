@@ -1,4 +1,7 @@
-# Extensions Phase 4: Template and Partial Support
+---
+title: 'Extensions Phase 4: Template and Partial Support'
+date: 2026-03-16
+---
 
 **Created**: 2026-03-16
 **Status**: Complete

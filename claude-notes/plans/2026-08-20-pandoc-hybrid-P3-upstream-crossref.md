@@ -1,4 +1,7 @@
-# P3 — Upstream Q1: crossref-numbering: external
+---
+title: 'P3 — Upstream Q1: crossref-numbering: external'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (round 4 review) — added a request to fold into this
 plan's upstream PR: expose P5's Route-N functions on `quarto.doc.crossref`/`quarto.utils`, since

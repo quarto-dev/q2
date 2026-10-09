@@ -1,4 +1,7 @@
-# FileId/span hardening — Phase A (q2-side fixes + guardrails)
+---
+title: 'FileId/span hardening — Phase A (q2-side fixes + guardrails)'
+date: 2026-08-09
+---
 
 **Parent strand:** bd-nv4p0eb1 (audit + API hardening)
 **Assessment:** `claude-notes/research/2026-08-09-fileid-span-integrity-audit.md`

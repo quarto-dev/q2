@@ -1,4 +1,7 @@
-# Hub-Client UI/UX Modernization Plan
+---
+title: 'Hub-Client UI/UX Modernization Plan'
+date: 2026-08-25
+---
 
 **Date:** 2026-08-25
 **Status:** Approved 2026-08-25 — Phases 0–4 complete (Phase 3 = PR #611); Phase 5 implemented 2026-08-27 (branch `hub-client-uiux-phase5`, deck at `.worktrees/phase5-review-deck/`) — awaiting design review

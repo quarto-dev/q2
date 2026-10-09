@@ -1,4 +1,7 @@
-# Three-Phase Reconciliation Algorithm
+---
+title: 'Three-Phase Reconciliation Algorithm'
+date: 2026-01-15
+---
 
 ## Implementation Status
 

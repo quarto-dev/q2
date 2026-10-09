@@ -1,4 +1,7 @@
-# Listing item images break the hub preview (bd-yqlbfrln)
+---
+title: 'Listing item images break the hub preview (bd-yqlbfrln)'
+date: 2026-09-24
+---
 
 Branch `braid/bd-yqlbfrln-listing-item-image-copy` off main at `ccbdc441`.
 Discovered from bd-q33ylfxf while Andrew tried the grouped New menu

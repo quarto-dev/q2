@@ -1,4 +1,7 @@
-# Add a Rust grammar to `quarto-highlight` (`rust` / `rs`)
+---
+title: 'Add a Rust grammar to `quarto-highlight` (`rust` / `rs`)'
+date: 2026-09-08
+---
 
 **Status:** approved 2026-09-08, in progress.
 **Strand:** bd-202u5bld (parent: bd-n7x2, syntax highlighting epic).

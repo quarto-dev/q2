@@ -1,4 +1,7 @@
-# In-context debugging/diagnostic affordances for the hub-client editor SPA
+---
+title: 'In-context debugging/diagnostic affordances for the hub-client editor SPA'
+date: 2026-07-29
+---
 
 **Strand:** bd-aim2gqis (parent)
 **Phase strands:** bd-q93tkglb (1: am core) → bd-6ogrov5r (2: doctor + tap) →

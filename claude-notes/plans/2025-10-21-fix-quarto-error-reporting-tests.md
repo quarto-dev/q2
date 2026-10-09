@@ -1,4 +1,7 @@
-# Plan: Fix quarto-error-reporting Test Failures
+---
+title: 'Plan: Fix quarto-error-reporting Test Failures'
+date: 2025-10-21
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

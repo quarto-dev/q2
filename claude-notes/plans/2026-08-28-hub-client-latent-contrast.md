@@ -1,4 +1,7 @@
-# hub-client: fix latent contrast pairs outside the axe scan set
+---
+title: 'hub-client: fix latent contrast pairs outside the axe scan set'
+date: 2026-08-28
+---
 
 Strand: bd-uue5voml (discovered-from bd-7byucvr6)
 Branch: `fix/bd-uue5voml-latent-contrast` (stacked on

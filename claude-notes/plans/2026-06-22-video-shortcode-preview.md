@@ -1,4 +1,7 @@
-# Video shortcode support in `q2 preview` / hub-client
+---
+title: 'Video shortcode support in `q2 preview` / hub-client'
+date: 2026-06-22
+---
 
 **Strand:** bd-5b21rbaq
 **Date:** 2026-06-22

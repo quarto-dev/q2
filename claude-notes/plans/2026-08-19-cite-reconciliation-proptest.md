@@ -1,4 +1,7 @@
-# Flaky proptest: reconciliation_preserves_structure_full_ast (bd-205v6)
+---
+title: 'Flaky proptest: reconciliation_preserves_structure_full_ast (bd-205v6)'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-205v6

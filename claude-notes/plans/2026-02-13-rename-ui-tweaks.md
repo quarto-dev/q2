@@ -1,4 +1,7 @@
-# Rename UI Tweaks
+---
+title: 'Rename UI Tweaks'
+date: 2026-02-13
+---
 
 ## Overview
 

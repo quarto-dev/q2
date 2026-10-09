@@ -1,4 +1,7 @@
-# L0 — `ListingItemInfo` profile extension (sub-plan)
+---
+title: 'L0 — `ListingItemInfo` profile extension (sub-plan)'
+date: 2026-05-05
+---
 
 **Date:** 2026-05-05
 **Beads:** `bd-n8a4`. Parent epic: `bd-61cd`

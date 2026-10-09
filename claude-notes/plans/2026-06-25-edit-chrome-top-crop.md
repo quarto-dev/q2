@@ -1,4 +1,7 @@
-# Fix: edit chrome cropped at the top of the viewport
+---
+title: 'Fix: edit chrome cropped at the top of the viewport'
+date: 2026-06-25
+---
 
 **Strand:** bd-pvcnea83
 **Date:** 2026-06-25

@@ -1,4 +1,7 @@
-# Recovery Analysis - What Went Wrong
+---
+title: 'Recovery Analysis - What Went Wrong'
+date: 2025-10-21
+---
 
 ## Investigation Results
 

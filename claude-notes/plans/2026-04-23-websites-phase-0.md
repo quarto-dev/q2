@@ -1,4 +1,7 @@
-# Phase 0 — Foundations: DocumentProfile, Pipeline Checkpoint, Naming
+---
+title: 'Phase 0 — Foundations: DocumentProfile, Pipeline Checkpoint, Naming'
+date: 2026-04-23
+---
 
 **Date:** 2026-04-23
 **Beads:** `bd-f3jc` (phase); parent `bd-0tr6` (website epic).

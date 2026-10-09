@@ -1,4 +1,7 @@
-# Source Map Migration Completion Summary
+---
+title: 'Source Map Migration Completion Summary'
+date: 2025-10-20
+---
 
 **Date:** 2025-10-20
 **Issue:** k-71 - Run full test suite after migration complete

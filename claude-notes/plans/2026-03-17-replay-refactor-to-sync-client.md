@@ -1,4 +1,7 @@
-# Refactor Replay into quarto-sync-client
+---
+title: 'Refactor Replay into quarto-sync-client'
+date: 2026-03-17
+---
 
 ## Overview
 

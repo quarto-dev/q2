@@ -1,4 +1,7 @@
-# HTML Comment Support - Design Summary
+---
+title: 'HTML Comment Support - Design Summary'
+date: 2025-10-28
+---
 
 **Date:** 2025-10-28
 **Status:** Ready for review and implementation

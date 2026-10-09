@@ -1,4 +1,7 @@
-# Attribution Lua host binding (Option B)
+---
+title: 'Attribution Lua host binding (Option B)'
+date: 2026-05-15
+---
 
 ## Overview
 

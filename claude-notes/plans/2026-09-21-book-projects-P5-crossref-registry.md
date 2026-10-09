@@ -1,4 +1,7 @@
-# Plan: Pass 3 — project-wide crossref registry (book-projects P5)
+---
+title: 'Plan: Pass 3 — project-wide crossref registry (book-projects P5)'
+date: 2026-09-21
+---
 
 **Date:** 2026-09-21 (revised after a critical review pass; renumbered from a prior draft's P6 — see the epic doc's revision history)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)

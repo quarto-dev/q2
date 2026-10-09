@@ -1,4 +1,7 @@
-# Vendor and integrate quarto-listing.scss (bd-57y4)
+---
+title: 'Vendor and integrate quarto-listing.scss (bd-57y4)'
+date: 2026-07-29
+---
 
 **Strand:** bd-57y4 (P2; discovered from L3 phase 7, bd-ml8z — see D5 in
 `claude-notes/plans/2026-05-06-listings-L3-resolve-transform.md`)

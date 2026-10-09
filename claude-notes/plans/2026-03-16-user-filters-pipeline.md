@@ -1,4 +1,7 @@
-# User Filters in the Render Pipeline
+---
+title: 'User Filters in the Render Pipeline'
+date: 2026-03-16
+---
 
 **Created**: 2026-03-16
 **Status**: In Progress (Phases 1-6 complete)

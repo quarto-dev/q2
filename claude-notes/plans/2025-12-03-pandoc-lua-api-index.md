@@ -1,4 +1,7 @@
-# Pandoc Lua API Index
+---
+title: 'Pandoc Lua API Index'
+date: 2025-12-03
+---
 
 This document provides a navigable index to `external-sources/pandoc/doc/lua-filters.md` (7412 lines). Use this to quickly locate specific API documentation when implementing the Lua runtime.
 

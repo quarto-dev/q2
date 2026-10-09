@@ -1,4 +1,7 @@
-# Block source-range tightness — blockquote gutters & list continuation
+---
+title: 'Block source-range tightness — blockquote gutters & list continuation'
+date: 2026-06-18
+---
 
 **Date:** 2026-06-18
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

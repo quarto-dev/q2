@@ -1,4 +1,7 @@
-# Suppress the Q-5-12 render-scripts warning in `q2 preview`
+---
+title: 'Suppress the Q-5-12 render-scripts warning in `q2 preview`'
+date: 2026-08-08
+---
 
 **Strand:** bd-pq72bplh (caused-by bd-w348iu63) — closed 2026-08-08
 **Status:** done — PR #472 merged to main (`958d331f`); strand closed.

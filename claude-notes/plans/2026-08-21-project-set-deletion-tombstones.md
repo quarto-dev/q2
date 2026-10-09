@@ -1,4 +1,7 @@
-# Project-set deletion tombstones (latest-wins reconcile)
+---
+title: 'Project-set deletion tombstones (latest-wins reconcile)'
+date: 2026-08-21
+---
 
 Branch: `bugfix/bd-f5a0c6rv-project-set-deletion-tombstones`
 Strand: bd-f5a0c6rv (bug, in progress)

@@ -1,4 +1,7 @@
-# PR Preparation Plan: Transfer kyoto Changes to 2025-10-21
+---
+title: 'PR Preparation Plan: Transfer kyoto Changes to 2025-10-21'
+date: 2025-10-21
+---
 
 **Date**: 2025-10-21
 **Goal**: Transfer all `crates/*` changes from `kyoto` branch to `2025-10-21` branch for PR to quarto-dev/quarto-markdown

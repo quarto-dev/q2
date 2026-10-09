@@ -1,4 +1,7 @@
-# Fix default-theme SCSS recompile regression in hub-client (WASM)
+---
+title: 'Fix default-theme SCSS recompile regression in hub-client (WASM)'
+date: 2026-04-18
+---
 
 Beads: `bd-i992` (discovered-from `bd-imiw`)
 

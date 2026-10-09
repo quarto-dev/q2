@@ -1,4 +1,7 @@
-# Inline Note Reference Whitespace Handling Plan
+---
+title: 'Inline Note Reference Whitespace Handling Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Issue**: Whitespace around `inline_note_reference` nodes is not being preserved correctly

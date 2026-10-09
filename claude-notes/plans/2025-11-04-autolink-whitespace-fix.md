@@ -1,4 +1,7 @@
-# Plan: Fix Autolink Token Including Leading Whitespace
+---
+title: 'Plan: Fix Autolink Token Including Leading Whitespace'
+date: 2025-11-04
+---
 
 Date: 2025-11-04
 Beads Issue: k-325

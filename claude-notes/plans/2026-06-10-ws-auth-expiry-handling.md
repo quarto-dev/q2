@@ -1,4 +1,7 @@
-# WS auth-expiry handling (bd-3o8zmz46)
+---
+title: 'WS auth-expiry handling (bd-3o8zmz46)'
+date: 2026-06-10
+---
 
 ## Overview
 

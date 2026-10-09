@@ -1,4 +1,7 @@
-# Auto-create the project set on first run (drop the fresh-setup screen)
+---
+title: 'Auto-create the project set on first run (drop the fresh-setup screen)'
+date: 2026-09-15
+---
 
 **Strand:** bd-4h1hv60p · **PR:** https://github.com/quarto-dev/q2/pull/681
 **Status:** decisions settled 2026-09-15 (see Resolved questions); ready to execute on approval

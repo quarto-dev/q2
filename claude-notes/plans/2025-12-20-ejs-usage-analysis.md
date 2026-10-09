@@ -1,4 +1,7 @@
-# EJS Template Usage Analysis in quarto-cli
+---
+title: 'EJS Template Usage Analysis in quarto-cli'
+date: 2025-12-20
+---
 
 ## Executive Summary
 

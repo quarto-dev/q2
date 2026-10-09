@@ -1,4 +1,7 @@
-# P7 — Implementation tasks & Test Seam Spec
+---
+title: 'P7 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+---
 
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P7-format-tail.md`](2026-08-20-pandoc-hybrid-P7-format-tail.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md) (§11 golden-capture strategy, §12 known limitations, §13 project-mode gate, §14 multi-format guardrail)

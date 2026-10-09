@@ -1,4 +1,7 @@
-# Plan: keep imported EMF/WMF as SVG, rasterize only for docx/pptx export
+---
+title: 'Plan: keep imported EMF/WMF as SVG, rasterize only for docx/pptx export'
+date: 2026-10-05
+---
 
 **Date:** 2026-10-05
 **Status:** Planned; nothing started. Decisions D1-D3 settled with Gordon 2026-10-05 (all three recommendations accepted). Adversarial feasibility review done 2026-10-05 (two Sonnet reviewers, Rust/pipeline and browser/TS/import); its findings are folded in below. None changed D1-D3.

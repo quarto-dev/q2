@@ -1,4 +1,7 @@
-# Cross-references in `format: revealjs`
+---
+title: 'Cross-references in `format: revealjs`'
+date: 2026-06-18
+---
 
 **Braid strand:** bd-w0c6d38k (related: bd-jsbg crossref epic, bd-zkstclhl reveal auto-stretch)
 **Sub-strands:** bd-4ly7ne01 (Bug B: bare-table desugar, format-agnostic),

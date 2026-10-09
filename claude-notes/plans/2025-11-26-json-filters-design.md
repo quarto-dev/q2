@@ -1,4 +1,7 @@
-# JSON Filter Support Design Plan
+---
+title: 'JSON Filter Support Design Plan'
+date: 2025-11-26
+---
 
 **Issue:** k-408
 **Epic:** k-407 (Extensible filters for quarto-markdown-pandoc)

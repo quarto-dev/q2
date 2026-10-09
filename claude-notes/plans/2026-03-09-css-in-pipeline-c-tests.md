@@ -1,4 +1,7 @@
-# Plan: CSS in Pipeline — Part C: Integration & E2E Tests (Phases 5-6)
+---
+title: 'Plan: CSS in Pipeline — Part C: Integration & E2E Tests (Phases 5-6)'
+date: 2026-03-09
+---
 
 Parent plan: `claude-notes/plans/2026-03-09-css-in-pipeline.md`
 Prerequisite: B1-B3 complete (commit `60750e13`).

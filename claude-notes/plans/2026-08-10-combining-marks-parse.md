@@ -1,4 +1,7 @@
-# Parser rejects combining characters / join controls in prose (bd-96fswwce)
+---
+title: 'Parser rejects combining characters / join controls in prose (bd-96fswwce)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-96fswwce (bug, P2 — arguably P1, see scope), discovered-from bd-named-entities-w6xbfftj

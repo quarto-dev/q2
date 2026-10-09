@@ -1,4 +1,7 @@
-# Skip project-set setup for `q2 preview --ui editor` (ephemeral hub)
+---
+title: 'Skip project-set setup for `q2 preview --ui editor` (ephemeral hub)'
+date: 2026-08-07
+---
 
 Strand: bd-zf4ryvuq
 

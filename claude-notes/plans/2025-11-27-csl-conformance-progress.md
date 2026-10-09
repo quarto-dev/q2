@@ -1,4 +1,7 @@
-# CSL Conformance Test Progress (k-422)
+---
+title: 'CSL Conformance Test Progress (k-422)'
+date: 2025-11-27
+---
 
 ## Current Status
 

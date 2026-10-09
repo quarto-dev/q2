@@ -1,4 +1,7 @@
-# Plan: "Download as" UI (pandoc-host H5)
+---
+title: 'Plan: "Download as" UI (pandoc-host H5)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

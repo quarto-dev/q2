@@ -1,4 +1,7 @@
-# Plan: Hardening (pandoc-host H6)
+---
+title: 'Plan: Hardening (pandoc-host H6)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

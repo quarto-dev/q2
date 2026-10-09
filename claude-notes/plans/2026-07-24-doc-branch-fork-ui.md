@@ -1,4 +1,7 @@
-# Per-document fork/branch UI in hub-client
+---
+title: 'Per-document fork/branch UI in hub-client'
+date: 2026-07-24
+---
 
 ## Overview
 

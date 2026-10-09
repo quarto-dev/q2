@@ -1,4 +1,7 @@
-# Fix `bd-swpy` — Sidebar/navbar/footer/page-nav hrefs not relativized to current page
+---
+title: 'Fix `bd-swpy` — Sidebar/navbar/footer/page-nav hrefs not relativized to current page'
+date: 2026-04-29
+---
 
 **Date:** 2026-04-29
 **Beads:** `bd-swpy` (bug, P1).

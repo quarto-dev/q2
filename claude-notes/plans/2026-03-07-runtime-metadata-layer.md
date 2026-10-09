@@ -1,4 +1,7 @@
-# Plan: Runtime Metadata Layer
+---
+title: 'Plan: Runtime Metadata Layer'
+date: 2026-03-07
+---
 
 ## Overview
 

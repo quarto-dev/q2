@@ -1,4 +1,7 @@
-# Plan: Migrate pico-quarto-render to New API
+---
+title: 'Plan: Migrate pico-quarto-render to New API'
+date: 2025-10-22
+---
 
 ## Context
 

@@ -1,4 +1,7 @@
-# Plan: Use reqwest::blocking for native fetch_url
+---
+title: 'Plan: Use reqwest::blocking for native fetch_url'
+date: 2026-04-06
+---
 
 ## Status: Ready to commit
 

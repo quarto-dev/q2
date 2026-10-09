@@ -1,4 +1,7 @@
-# `q2 render` walks the cwd before checking for `_quarto.yml`
+---
+title: '`q2 render` walks the cwd before checking for `_quarto.yml`'
+date: 2026-05-20
+---
 
 **Issue:** bd-nmkmi — `q2 render` with no args scans cwd for `.qmd` files before checking whether a project exists
 **Type:** bug · **Priority:** 2

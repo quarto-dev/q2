@@ -1,4 +1,7 @@
-# P7 — Per-format tail + invocation builder (docx first)
+---
+title: 'P7 — Per-format tail + invocation builder (docx first)'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P7-format-tail.md`
 for the full correction history. Latest (round 4 review): the `render.rs:680-684` relaxation is

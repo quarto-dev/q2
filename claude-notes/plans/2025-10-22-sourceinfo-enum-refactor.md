@@ -1,4 +1,7 @@
-# SourceInfo Enum Refactor Plan
+---
+title: 'SourceInfo Enum Refactor Plan'
+date: 2025-10-22
+---
 
 **Issue:** k-136
 **Date:** 2025-10-22

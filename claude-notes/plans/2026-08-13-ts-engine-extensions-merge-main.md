@@ -1,4 +1,7 @@
-# ts-engine-extensions ← main: Merge Runbook (2026-08-13)
+---
+title: 'ts-engine-extensions ← main: Merge Runbook (2026-08-13)'
+date: 2026-08-13
+---
 
 > **What this is:** a runbook for bringing `feature/ts-engine-extensions` up to
 > date with `main` via a **merge**, plus the design changes that merge forces us

@@ -1,4 +1,7 @@
-# `q2 docs llms`: embed the docs-site llms.txt artifacts in the binary
+---
+title: '`q2 docs llms`: embed the docs-site llms.txt artifacts in the binary'
+date: 2026-08-24
+---
 
 **Strand:** bd-hwop1zii
 **Date:** 2026-08-24

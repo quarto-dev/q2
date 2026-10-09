@@ -1,4 +1,7 @@
-# Suppress the sidebar title when the page has a navbar
+---
+title: 'Suppress the sidebar title when the page has a navbar'
+date: 2026-08-25
+---
 
 **Strand:** `bd-sidebar-title-with-navbar-82wxow6m` (bug, p3, labels: `navigation`, `parity`)
 **Branch:** `braid/bd-sidebar-title-with-navbar-82wxow6m-sidebar-title-with-navbar`

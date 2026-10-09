@@ -1,4 +1,7 @@
-# Phase 4: JavaScript Infrastructure for Quarto HTML
+---
+title: 'Phase 4: JavaScript Infrastructure for Quarto HTML'
+date: 2026-01-28
+---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)
 **Beads Issue**: kyoto-aqv (labeled "Phase 3: JavaScript Dependencies" in beads)

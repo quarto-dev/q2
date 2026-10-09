@@ -1,4 +1,7 @@
-# Kanban Demo App — Plan
+---
+title: 'Kanban Demo App — Plan'
+date: 2026-02-10
+---
 
 ## Overview
 

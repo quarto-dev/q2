@@ -1,4 +1,7 @@
-# Flip-Flop Formatting / NoDecor Investigation
+---
+title: 'Flip-Flop Formatting / NoDecor Investigation'
+date: 2025-11-30
+---
 
 **Date**: 2025-11-30
 **Status**: Partially Fixed

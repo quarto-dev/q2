@@ -1,4 +1,7 @@
-# Ship the standalone `quarto-hub-mcp` bundle as a GH release artifact
+---
+title: 'Ship the standalone `quarto-hub-mcp` bundle as a GH release artifact'
+date: 2026-06-19
+---
 
 **Strand:** `bd-sca6g1tu`
 **Status:** planned (awaiting go-ahead to implement)

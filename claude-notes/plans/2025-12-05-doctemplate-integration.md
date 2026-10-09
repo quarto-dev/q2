@@ -1,4 +1,7 @@
-# Doctemplate Integration Plan
+---
+title: 'Doctemplate Integration Plan'
+date: 2025-12-05
+---
 
 **Beads Issue**: k-y2f3
 **Date**: 2025-12-05

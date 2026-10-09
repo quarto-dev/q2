@@ -1,4 +1,7 @@
-# Plan: Fix Definition List False Positives on Grid Table Captions
+---
+title: 'Plan: Fix Definition List False Positives on Grid Table Captions'
+date: 2025-10-21
+---
 
 ## Problem Statement
 

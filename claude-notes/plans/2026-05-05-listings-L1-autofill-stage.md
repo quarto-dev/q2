@@ -1,4 +1,7 @@
-# L1 — `ListingItemInfoStage` (auto-fill, pre-checkpoint)
+---
+title: 'L1 — `ListingItemInfoStage` (auto-fill, pre-checkpoint)'
+date: 2026-05-05
+---
 
 **Date:** 2026-05-05
 **Beads:** `bd-izqh`. Parent epic: `bd-61cd`

@@ -1,4 +1,7 @@
-# Grand Plan: TypeScript Engine Extensions for q2 (v2 — Subprocess)
+---
+title: 'Grand Plan: TypeScript Engine Extensions for q2 (v2 — Subprocess)'
+date: 2026-04-16
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Plan 4: Julia Engine Validation
+---
+title: 'Plan 4: Julia Engine Validation'
+date: 2026-04-16
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plans 1a/1b/1c, 2, 3, and 1c.2 P1.1+P1.1b — **all landed as of 2026-07-02** (see Prerequisites)

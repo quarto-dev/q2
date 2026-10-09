@@ -1,4 +1,7 @@
-# Comprehensive Plan for bd-8: YAML Schema Deserialization from quarto-cli YAML Files
+---
+title: 'Comprehensive Plan for bd-8: YAML Schema Deserialization from quarto-cli YAML Files'
+date: 2025-10-27
+---
 
 **Date**: 2025-10-27
 **Issue**: bd-8 - YAML schema deserialization: Add Deserialize impl for Schema enum

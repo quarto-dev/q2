@@ -1,4 +1,7 @@
-# .ipynb Surface Syntax for Quarto 2 — Feasibility and Design
+---
+title: '.ipynb Surface Syntax for Quarto 2 — Feasibility and Design'
+date: 2026-07-20
+---
 
 **Date**: 2026-07-20
 **Strand**: bd-19nc56ao (related: k-zr88, bd-xxul, bd-kik3s1vt)

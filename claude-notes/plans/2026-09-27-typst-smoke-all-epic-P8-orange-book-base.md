@@ -1,4 +1,7 @@
-# P8 — Port `orange-book` (base), full predicates
+---
+title: 'P8 — Port `orange-book` (base), full predicates'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —

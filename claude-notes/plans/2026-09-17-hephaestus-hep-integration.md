@@ -1,4 +1,7 @@
-# Hephaestus (`.hep` plot document) support in Quarto 2
+---
+title: 'Hephaestus (`.hep` plot document) support in Quarto 2'
+date: 2026-09-17
+---
 
 **Strand:** bd-3qych45b
 **Status:** phases 1–2 implemented (branch `feature/bd-3qych45b-hephaestus-hep-svg`, PR #688); phases 3–5 filed as child strands. The `image` error subsystem is **`Q-19-*`** (it was `Q-18-*` until the 2026-09-19 merge of main, where `engine` had taken 18).

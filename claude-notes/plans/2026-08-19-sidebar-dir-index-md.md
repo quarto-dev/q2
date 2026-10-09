@@ -1,4 +1,7 @@
-# Sidebar `contents: <dir>` shorthand only recognizes `index.qmd` (bd-sidebar-dir-index-md-5khf3lds)
+---
+title: 'Sidebar `contents: <dir>` shorthand only recognizes `index.qmd` (bd-sidebar-dir-index-md-5khf3lds)'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-sidebar-dir-index-md-5khf3lds

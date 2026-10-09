@@ -1,4 +1,7 @@
-# CSL Disambiguation Study
+---
+title: 'CSL Disambiguation Study'
+date: 2025-11-28
+---
 
 **Date**: 2025-11-28
 

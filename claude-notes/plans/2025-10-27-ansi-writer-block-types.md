@@ -1,4 +1,7 @@
-# ANSI Writer Block Types Implementation Plan
+---
+title: 'ANSI Writer Block Types Implementation Plan'
+date: 2025-10-27
+---
 
 **Date**: 2025-10-27
 **Issue**: k-267 Phase 2

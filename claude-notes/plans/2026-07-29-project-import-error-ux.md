@@ -1,4 +1,7 @@
-# Project import error UX: "Document … is unavailable"
+---
+title: 'Project import error UX: "Document … is unavailable"'
+date: 2026-07-29
+---
 
 **Strand:** bd-tux4m6od
 **Date started:** 2026-07-29

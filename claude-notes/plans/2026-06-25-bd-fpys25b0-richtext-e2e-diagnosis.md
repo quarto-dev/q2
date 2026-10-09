@@ -1,4 +1,7 @@
-# bd-fpys25b0 — Diagnosis: "12 hub-client block-editing e2e specs red since rich-text default-on"
+---
+title: 'bd-fpys25b0 — Diagnosis: "12 hub-client block-editing e2e specs red since rich-text default-on"'
+date: 2026-06-25
+---
 
 **Strand:** bd-fpys25b0 (discovered-from bd-9x3zbuj8)
 **Date:** 2026-06-25

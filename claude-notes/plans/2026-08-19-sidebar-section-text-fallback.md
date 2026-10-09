@@ -1,4 +1,7 @@
-# Sidebar item with `text:` + `file:` + `contents:` renders the page title, ignoring `text:` (bd-sidebar-section-text-ignored-sdp5g7ns)
+---
+title: 'Sidebar item with `text:` + `file:` + `contents:` renders the page title, ignoring `text:` (bd-sidebar-section-text-ignored-sdp5g7ns)'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-sidebar-section-text-ignored-sdp5g7ns

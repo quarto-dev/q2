@@ -1,4 +1,7 @@
-# Pampa: Accept input file as a positional argument
+---
+title: 'Pampa: Accept input file as a positional argument'
+date: 2026-04-16
+---
 
 ## Overview
 

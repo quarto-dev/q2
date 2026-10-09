@@ -1,4 +1,7 @@
-# Rich-text editor: place caret at click position on first activation
+---
+title: 'Rich-text editor: place caret at click position on first activation'
+date: 2026-06-24
+---
 
 **Date:** 2026-06-24
 **Strand:** bd-q9lyghv2 (discovered-from bd-sjb4pzx8)

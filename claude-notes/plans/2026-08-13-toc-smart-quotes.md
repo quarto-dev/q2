@@ -1,4 +1,7 @@
-# TOC entry drops the quote glyphs around a quoted span (bd-toc-smart-quotes-6nro57ed)
+---
+title: 'TOC entry drops the quote glyphs around a quoted span (bd-toc-smart-quotes-6nro57ed)'
+date: 2026-08-13
+---
 
 **Date:** 2026-08-13
 **Braid:** bd-toc-smart-quotes-6nro57ed

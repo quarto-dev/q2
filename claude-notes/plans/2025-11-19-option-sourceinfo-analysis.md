@@ -1,4 +1,7 @@
-# Analysis: Is `Option<SourceInfo>` Sufficient?
+---
+title: 'Analysis: Is `Option<SourceInfo>` Sufficient?'
+date: 2025-11-19
+---
 
 ## Proposed API Change
 

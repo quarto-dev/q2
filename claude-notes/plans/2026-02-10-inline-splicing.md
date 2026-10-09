@@ -1,4 +1,7 @@
-# Phase 5: Inline Splicing for Incremental Writer
+---
+title: 'Phase 5: Inline Splicing for Incremental Writer'
+date: 2026-02-10
+---
 
 **Beads issue:** `bd-1hwd`
 **Parent issue:** `bd-2t4o` (Incremental QMD Writer)

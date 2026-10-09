@@ -1,4 +1,7 @@
-# Snapshot Change Review: Phase 5 MetaValueWithSourceInfo → ConfigValue Migration
+---
+title: 'Snapshot Change Review: Phase 5 MetaValueWithSourceInfo → ConfigValue Migration'
+date: 2025-12-29
+---
 
 **Date:** 2025-12-29
 **Branch:** `refactor/meta-value-config-value`

@@ -1,4 +1,7 @@
-# CSL Test Categorization Report
+---
+title: 'CSL Test Categorization Report'
+date: 2025-12-01
+---
 
 **Date**: 2025-12-01
 **Status**: 70 unknown tests remaining (82.2% enabled, 9.7% deferred, 8.2% unknown)

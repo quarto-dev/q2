@@ -1,4 +1,7 @@
-# RevealJS auto-stretch: image not sized because `r-stretch` img stays wrapped in `<p>`
+---
+title: 'RevealJS auto-stretch: image not sized because `r-stretch` img stays wrapped in `<p>`'
+date: 2026-06-17
+---
 
 **Strand:** bd-zkstclhl (figure follow-up: bd-38ioql41)
 **Date:** 2026-06-17

@@ -1,4 +1,7 @@
-# Headings nested inside tabset panels leak into the TOC and point at hidden content (bd-tabset-headings-in-toc-t04ie7f7)
+---
+title: 'Headings nested inside tabset panels leak into the TOC and point at hidden content (bd-tabset-headings-in-toc-t04ie7f7)'
+date: 2026-08-18
+---
 
 **Date:** 2026-08-18
 **Braid:** bd-tabset-headings-in-toc-t04ie7f7

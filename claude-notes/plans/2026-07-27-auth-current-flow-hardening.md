@@ -1,4 +1,7 @@
-# Auth hardening — current-flow easy wins (pre-pattern-(ii))
+---
+title: 'Auth hardening — current-flow easy wins (pre-pattern-(ii))'
+date: 2026-07-27
+---
 
 **Status:** proposed — intended to land **before** Epic 2's B1 (the pattern-(ii)
 redirect login), as independent hardening of the flow that exists today.

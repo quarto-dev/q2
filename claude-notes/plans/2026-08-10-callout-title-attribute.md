@@ -1,4 +1,7 @@
-# Callout `title=` attribute is ignored; header shows the type name instead of the author's title (bd-callout-custom-title-dropped-9qi1p7iw)
+---
+title: 'Callout `title=` attribute is ignored; header shows the type name instead of the author''s title (bd-callout-custom-title-dropped-9qi1p7iw)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** `bd-callout-custom-title-dropped-9qi1p7iw` (P1, bug, label `parity`)

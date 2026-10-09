@@ -1,4 +1,7 @@
-# Debugging Div + Math Parse Error
+---
+title: 'Debugging Div + Math Parse Error'
+date: 2025-10-28
+---
 
 ## Problem
 The parser fails on this document:

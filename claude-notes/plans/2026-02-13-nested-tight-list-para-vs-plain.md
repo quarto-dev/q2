@@ -1,4 +1,7 @@
-# Fix: Nested tight lists incorrectly marked as loose (Para instead of Plain)
+---
+title: 'Fix: Nested tight lists incorrectly marked as loose (Para instead of Plain)'
+date: 2026-02-13
+---
 
 **Beads issue:** bd-2gc9
 

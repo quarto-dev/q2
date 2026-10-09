@@ -1,4 +1,7 @@
-# Code Span Implementation - Completion Summary
+---
+title: 'Code Span Implementation - Completion Summary'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Issue**: k-281

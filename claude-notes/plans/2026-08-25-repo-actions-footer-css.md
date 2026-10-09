@@ -1,4 +1,7 @@
-# repo-actions footer copy ships no CSS
+---
+title: 'repo-actions footer copy ships no CSS'
+date: 2026-08-25
+---
 
 **Strand:** bd-repo-actions-footer-unstyled-80xtt35y
 **Discovered from:** bd-repo-actions-missing-99ezd2fe (closed — shipped in 0.27.0)

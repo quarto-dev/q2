@@ -1,4 +1,7 @@
-# E2E: pin classic UI in existing suite + new projects-home spec
+---
+title: 'E2E: pin classic UI in existing suite + new projects-home spec'
+date: 2026-07-22
+---
 
 **Strand:** bd-cbuc8n0e (discovered-from bd-je3w8q39)
 **Branch:** `feature/85-projects-collections-ui` (PR #394)

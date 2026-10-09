@@ -1,4 +1,7 @@
-# Plan: Template Rendering for pico-quarto-render
+---
+title: 'Plan: Template Rendering for pico-quarto-render'
+date: 2025-11-25
+---
 
 ## Overview
 

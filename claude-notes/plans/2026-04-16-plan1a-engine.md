@@ -1,4 +1,7 @@
-# Plan 1a (engine): TsEngine and ExecutionEngine trait extensions
+---
+title: 'Plan 1a (engine): TsEngine and ExecutionEngine trait extensions'
+date: 2026-04-16
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Companion plans:** [plan1a-protocol](2026-04-16-plan1a-protocol.md) (data types), [plan1a-host](2026-04-16-plan1a-host.md) (subprocess + transport)

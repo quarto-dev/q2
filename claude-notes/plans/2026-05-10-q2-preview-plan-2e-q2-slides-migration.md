@@ -1,4 +1,7 @@
-# Plan 2E — q2-slides + revealjs as sibling formats
+---
+title: 'Plan 2E — q2-slides + revealjs as sibling formats'
+date: 2026-05-10
+---
 
 **Date:** 2026-05-10
 **Branch:** feature/q2-preview (post-2D)

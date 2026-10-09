@@ -1,4 +1,7 @@
-# Cross-page diagnostic coalescing
+---
+title: 'Cross-page diagnostic coalescing'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending user review
 **Parent:** [theme-diagnostic epic](2026-05-22-theme-diagnostic-epic.md)

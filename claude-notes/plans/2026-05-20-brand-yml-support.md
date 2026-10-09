@@ -1,4 +1,7 @@
-# \_brand.yml support in Quarto 2
+---
+title: '`_brand.yml` support in Quarto 2'
+date: 2026-05-20
+---
 
 **Created**: 2026-05-20
 **Status**: DRAFT — design questions resolved 2026-05-20, awaiting

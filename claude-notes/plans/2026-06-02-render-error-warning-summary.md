@@ -1,4 +1,7 @@
-# Render error/warning summary line (bd-ooleh)
+---
+title: 'Render error/warning summary line (bd-ooleh)'
+date: 2026-06-02
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# `format: typst` / `format: pdf` / `output-ext` parity (Q1, native, wasm)
+---
+title: '`format: typst` / `format: pdf` / `output-ext` parity (Q1, native, wasm)'
+date: 2026-10-03
+---
 
 **Branch:** `fix/typst-pdf-format-parity` (from `feature/pandoc-wasm` @ 3dfa5b296; **rebase onto the tip first**: H5's post-STOP wire-ups, including the R9 book menu, landed at `0ae5119bc` and change the hub-client sites below; see "After H5's wire-ups")
 

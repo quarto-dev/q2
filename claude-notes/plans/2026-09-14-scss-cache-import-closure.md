@@ -1,4 +1,7 @@
-# SCSS cache key ignores `@import`ed partials (bd-m3hga05o)
+---
+title: 'SCSS cache key ignores `@import`ed partials (bd-m3hga05o)'
+date: 2026-09-14
+---
 
 **Date:** 2026-09-14
 **Braid:** bd-m3hga05o (P2, bug, label `perf`)

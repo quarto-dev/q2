@@ -1,4 +1,7 @@
-# Name Handling Architecture Fixes for quarto-citeproc
+---
+title: 'Name Handling Architecture Fixes for quarto-citeproc'
+date: 2025-11-28
+---
 
 **Date**: 2025-11-28
 **Parent Issue**: k-422 (CSL Conformance)

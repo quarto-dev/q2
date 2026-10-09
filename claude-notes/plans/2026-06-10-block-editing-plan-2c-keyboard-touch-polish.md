@@ -1,4 +1,7 @@
-# Block editing — Plan 2c: keyboard a11y, touch polish, Tier-2 tests
+---
+title: 'Block editing — Plan 2c: keyboard a11y, touch polish, Tier-2 tests'
+date: 2026-06-10
+---
 
 **Date:** 2026-06-10
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)

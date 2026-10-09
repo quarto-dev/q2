@@ -1,4 +1,7 @@
-# Worktree + cargo-target disk reclamation
+---
+title: 'Worktree + cargo-target disk reclamation'
+date: 2026-05-22
+---
 
 **Status:** drafting — ready for a separate agent to pick up
 **Beads:** [bd-4y8fd](../../.beads/issues.jsonl)

@@ -1,4 +1,7 @@
-# Navbar logo unstyled: theme ships no `.navbar-logo` rule and brand markup drops Q1's `navbar-brand-logo` structure (bd-navbar-logo-unstyled-gbzd8vcu)
+---
+title: 'Navbar logo unstyled: theme ships no `.navbar-logo` rule and brand markup drops Q1''s `navbar-brand-logo` structure (bd-navbar-logo-unstyled-gbzd8vcu)'
+date: 2026-08-19
+---
 
 **Date:** 2026-08-19
 **Braid:** bd-navbar-logo-unstyled-gbzd8vcu

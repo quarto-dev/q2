@@ -1,4 +1,7 @@
-# Hub-Client Project Management Refactor and Create New Project Implementation
+---
+title: 'Hub-Client Project Management Refactor and Create New Project Implementation'
+date: 2026-01-12
+---
 
 **Epic ID**: k-1omt
 **Created**: 2026-01-12

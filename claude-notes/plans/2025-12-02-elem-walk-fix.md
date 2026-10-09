@@ -1,4 +1,7 @@
-# Fix elem:walk{} Traversal Order
+---
+title: 'Fix elem:walk{} Traversal Order'
+date: 2025-12-02
+---
 
 **Issue**: k-479 (Update elem:walk{} to use correct four-pass traversal)
 **Parent**: k-477 (discovered-from)

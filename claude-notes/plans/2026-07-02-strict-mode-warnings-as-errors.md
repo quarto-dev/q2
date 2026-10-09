@@ -1,4 +1,7 @@
-# Strict mode: promote warning diagnostics to errors (GH #220)
+---
+title: 'Strict mode: promote warning diagnostics to errors (GH #220)'
+date: 2026-07-02
+---
 
 - **Braid strand:** bd-yjs54ptg
 - **GitHub issue:** https://github.com/quarto-dev/q2/issues/220

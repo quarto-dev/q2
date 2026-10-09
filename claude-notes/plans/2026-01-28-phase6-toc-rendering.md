@@ -1,4 +1,7 @@
-# Phase 6: Table of Contents Rendering
+---
+title: 'Phase 6: Table of Contents Rendering'
+date: 2026-01-28
+---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)
 **Beads Issue**: kyoto-b48

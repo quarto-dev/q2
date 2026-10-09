@@ -1,4 +1,8 @@
-# Pipe Table Implementation Plan
+---
+title: 'Pipe Table Implementation Plan'
+date: 2025-10-31
+---
+
 **Date**: 2025-10-31
 **Issue**: k-303
 **Status**: Ready to implement

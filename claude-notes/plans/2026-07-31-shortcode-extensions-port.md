@@ -1,4 +1,7 @@
-# Shortcode extensions: Quarto 1 → Quarto 2 port plan
+---
+title: 'Shortcode extensions: Quarto 1 → Quarto 2 port plan'
+date: 2026-07-31
+---
 
 **Status:** Reviewed 2026-07-31 — design decisions signed off (see § Design
 decisions; Phase 3 deferred). Awaiting go-ahead to implement.

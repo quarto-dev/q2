@@ -1,4 +1,7 @@
-# Plan: Flush resource copies before `TypstCompileStage` runs (book-projects P2c)
+---
+title: 'Plan: Flush resource copies before `TypstCompileStage` runs (book-projects P2c)'
+date: 2026-09-24
+---
 
 **Date:** 2026-09-24
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md) (new phase, inserted between P2b and P3 — see the epic's phase table)

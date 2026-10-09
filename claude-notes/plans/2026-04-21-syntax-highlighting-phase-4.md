@@ -1,4 +1,7 @@
-# Syntax highlighting — Phase 4: browser user grammars (minimal v1)
+---
+title: 'Syntax highlighting — Phase 4: browser user grammars (minimal v1)'
+date: 2026-04-21
+---
 
 - **Parent plan**: `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`
 - **Predecessor sub-plan**: `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.5.md`

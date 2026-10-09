@@ -1,4 +1,7 @@
-# Plan: Delivery pipeline and the embedded hub (pandoc-host H4)
+---
+title: 'Plan: Delivery pipeline and the embedded hub (pandoc-host H4)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)

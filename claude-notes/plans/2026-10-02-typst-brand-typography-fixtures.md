@@ -1,4 +1,7 @@
-# Port the Typst brand-yaml typography fixtures that pass today (bd-post2btu)
+---
+title: 'Port the Typst brand-yaml typography fixtures that pass today (bd-post2btu)'
+date: 2026-10-02
+---
 
 **Date:** 2026-10-03
 **Braid:** bd-post2btu

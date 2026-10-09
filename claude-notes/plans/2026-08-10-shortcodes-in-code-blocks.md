@@ -1,4 +1,7 @@
-# Shortcodes in text contexts: code blocks, attributes, image src, link targets (bd-fz6gwfq0)
+---
+title: 'Shortcodes in text contexts: code blocks, attributes, image src, link targets (bd-fz6gwfq0)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-fz6gwfq0 (absorbs duplicate bd-shortcodes-in-code-blocks-hhpus9da, closed)

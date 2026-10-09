@@ -1,4 +1,7 @@
-# Project Resources: user- and engine-declared additional files
+---
+title: 'Project Resources: user- and engine-declared additional files'
+date: 2026-05-03
+---
 
 **Date:** 2026-05-03
 **Status:** Draft v2 — design questions resolved with the user 2026-05-03.

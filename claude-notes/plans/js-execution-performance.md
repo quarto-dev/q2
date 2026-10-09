@@ -1,4 +1,7 @@
-# JavaScript Execution Performance Considerations
+---
+title: 'JavaScript Execution Performance Considerations'
+date: 2026-01-12
+---
 
 **Created**: 2026-01-12
 **Status**: OBSOLETE (2026-06-12) — the JS execution surface this document

@@ -1,4 +1,7 @@
-# Merging the math stack (PRs 705, 706, 708, 709, 710) onto main after #704
+---
+title: 'Merging the math stack (PRs 705, 706, 708, 709, 710) onto main after #704'
+date: 2026-09-23
+---
 
 ## Overview
 

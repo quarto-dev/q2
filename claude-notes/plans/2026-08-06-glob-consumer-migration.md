@@ -1,4 +1,7 @@
-# Migrate remaining glob consumers onto the shared glob API
+---
+title: 'Migrate remaining glob consumers onto the shared glob API'
+date: 2026-08-06
+---
 
 **Braid strand:** bd-mt7a6uc4 (task, P3) — `discovered-from:bd-v7ixzsp5`
 **Stacks on:** PR [#460](https://github.com/quarto-dev/q2/pull/460)

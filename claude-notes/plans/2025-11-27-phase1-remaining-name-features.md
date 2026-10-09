@@ -1,4 +1,7 @@
-# Phase 1 Remaining: Name Formatting Features
+---
+title: 'Phase 1 Remaining: Name Formatting Features'
+date: 2025-11-27
+---
 
 **Parent issue:** k-422 (quarto-citeproc: Citation processing engine)
 **Status:** Optional/Deferred

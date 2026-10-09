@@ -1,4 +1,7 @@
-# Filter Diagnostics Infrastructure Analysis
+---
+title: 'Filter Diagnostics Infrastructure Analysis'
+date: 2025-12-02
+---
 
 **Date:** 2025-12-02
 **Related:** [Lua Filters Design](./2025-11-26-lua-filters-design.md)

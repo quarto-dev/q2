@@ -1,4 +1,7 @@
-# hub-client vitest: 23 tests fail under Node 26 — `localStorage` global undefined (bd-lh30hlvd)
+---
+title: 'hub-client vitest: 23 tests fail under Node 26 — `localStorage` global undefined (bd-lh30hlvd)'
+date: 2026-09-08
+---
 
 **Date:** 2026-09-08
 **Braid:** bd-lh30hlvd

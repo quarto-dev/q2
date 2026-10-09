@@ -1,4 +1,7 @@
-# Task-list rendering fix + interactive checkboxes (bd-obkvhlam)
+---
+title: 'Task-list rendering fix + interactive checkboxes (bd-obkvhlam)'
+date: 2026-07-21
+---
 
 **Date:** 2026-07-21
 **Strands:** bd-obkvhlam (rendering bug, this plan's core), interactive-toggle

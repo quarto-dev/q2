@@ -1,4 +1,7 @@
-# format.html.css files are neither copied into the site nor rebased per page (bd-format-css-not-copied-crn3bjdz)
+---
+title: 'format.html.css files are neither copied into the site nor rebased per page (bd-format-css-not-copied-crn3bjdz)'
+date: 2026-08-14
+---
 
 **Date:** 2026-08-14
 **Braid:** bd-format-css-not-copied-crn3bjdz (bug, p1, label `websites`)

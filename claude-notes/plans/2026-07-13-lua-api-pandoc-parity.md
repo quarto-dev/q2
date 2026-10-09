@@ -1,4 +1,7 @@
-# Plan: Lua API Pandoc parity — mismatch catalog + conformance harness
+---
+title: 'Plan: Lua API Pandoc parity — mismatch catalog + conformance harness'
+date: 2026-07-13
+---
 
 **Strand**: bd-grkrb9nj (epic)
 **Status**: Draft — iterating with Carlos before execution

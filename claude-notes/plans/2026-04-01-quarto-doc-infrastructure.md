@@ -1,4 +1,7 @@
-# Plan: `quarto.doc` Lua API + HTML Dependency Infrastructure
+---
+title: 'Plan: `quarto.doc` Lua API + HTML Dependency Infrastructure'
+date: 2026-04-01
+---
 
 ## Status: Complete
 

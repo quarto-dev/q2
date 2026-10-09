@@ -1,4 +1,7 @@
-# Rich inline rendering in comment bubbles
+---
+title: 'Rich inline rendering in comment bubbles'
+date: 2026-08-26
+---
 
 **Strand:** bd-y66gbfs4 (discovered-from bd-wcz4x7y0, PR #612)
 **Date:** 2026-08-26

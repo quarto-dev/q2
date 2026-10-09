@@ -1,4 +1,7 @@
-# Consolidate the artifact-write family (bd-v8gx + bd-gdhk)
+---
+title: 'Consolidate the artifact-write family (bd-v8gx + bd-gdhk)'
+date: 2026-07-28
+---
 
 **Date:** 2026-07-28
 **Braid:** bd-v8gx (chore, p4) — rename `flush_site_libs` → `flush_project_artifacts`

@@ -1,4 +1,7 @@
-# Isolate tree-sitter's compiled-grammar cache per checkout (bd-agsgrbfn)
+---
+title: 'Isolate tree-sitter''s compiled-grammar cache per checkout (bd-agsgrbfn)'
+date: 2026-09-25
+---
 
 **Date:** 2026-09-25
 **Braid:** bd-agsgrbfn

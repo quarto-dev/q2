@@ -1,4 +1,7 @@
-# Plan 5 — JSON wire format extension for Generated
+---
+title: 'Plan 5 — JSON wire format extension for Generated'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04 (revised 2026-05-20)
 **Branch:** feature/q2-preview

@@ -1,4 +1,7 @@
-# quarto-citeproc Development Guide
+---
+title: 'quarto-citeproc Development Guide'
+date: 2025-11-29
+---
 
 This document serves as a workflow guide for LLM coding sessions working on
 quarto-citeproc, a Rust implementation of CSL (Citation Style Language) processing.

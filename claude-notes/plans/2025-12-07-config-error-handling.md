@@ -1,4 +1,7 @@
-# Error Handling Strategy for Config Merging
+---
+title: 'Error Handling Strategy for Config Merging'
+date: 2025-12-07
+---
 
 **Date**: 2025-12-07
 **Issue**: k-os6h (child of k-zvzm)

@@ -1,4 +1,7 @@
-# Shrink `SourceInfo` from 136 to 32 bytes by boxing the `Generated` payload (bd-1c085k3a)
+---
+title: 'Shrink `SourceInfo` from 136 to 32 bytes by boxing the `Generated` payload (bd-1c085k3a)'
+date: 2026-09-19
+---
 
 **Status:** crate side done on `posit-dev/quarto-source-map` branch
 `generated-box` (PR #7, 0.2.0, by the crate-side session). q2 migration

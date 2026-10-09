@@ -1,4 +1,7 @@
-# Grammar html_entity_regex() mangles legacy no-semicolon entity names (bd-v8qc9zyc)
+---
+title: 'Grammar html_entity_regex() mangles legacy no-semicolon entity names (bd-v8qc9zyc)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** bd-v8qc9zyc (bug, P3), discovered-from bd-named-entities-w6xbfftj

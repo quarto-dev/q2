@@ -1,4 +1,7 @@
-# Trace Viewer & Analysis Tooling — Design Plan
+---
+title: 'Trace Viewer & Analysis Tooling — Design Plan'
+date: 2026-04-14
+---
 
 ## Overview
 

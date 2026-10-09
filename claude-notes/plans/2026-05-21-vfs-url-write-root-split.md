@@ -1,4 +1,7 @@
-# Plan — Split `vfs_root` into write-root + url-root in `ResourceResolverContext`
+---
+title: 'Plan — Split `vfs_root` into write-root + url-root in `ResourceResolverContext`'
+date: 2026-05-21
+---
 
 **Date:** 2026-05-21
 **Branch:** `beads/bd-rz2we-plan-3-q2-preview` → integrates into `feature/provenance`

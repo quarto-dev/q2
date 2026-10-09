@@ -1,4 +1,7 @@
-# Fix Source Location Tracking in Recursive YAML Metadata Parsing
+---
+title: 'Fix Source Location Tracking in Recursive YAML Metadata Parsing'
+date: 2025-11-19
+---
 
 ## Problem Analysis
 

@@ -1,4 +1,7 @@
-# Table Caption Attribute Source Location Bug Fix
+---
+title: 'Table Caption Attribute Source Location Bug Fix'
+date: 2025-10-24
+---
 
 **Date**: 2025-10-24
 **Issue**: Compiler warnings for unused `caption_attr_source` variable in postprocess.rs

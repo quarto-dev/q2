@@ -1,4 +1,7 @@
-# Website header: headroom.js scroll-away + fixed-top parity (bd-ersobfbt)
+---
+title: 'Website header: headroom.js scroll-away + fixed-top parity (bd-ersobfbt)'
+date: 2026-08-21
+---
 
 **Date:** 2026-08-21
 **Braid:** bd-ersobfbt

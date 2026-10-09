@@ -1,4 +1,7 @@
-# Directory Metadata Path Resolution
+---
+title: 'Directory Metadata Path Resolution'
+date: 2026-02-17
+---
 
 **Date**: 2026-02-17
 **Status**: Complete

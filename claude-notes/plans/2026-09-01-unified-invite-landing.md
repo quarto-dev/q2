@@ -1,4 +1,7 @@
-# Unified InviteLanding for collection and document invites
+---
+title: 'Unified InviteLanding for collection and document invites'
+date: 2026-09-01
+---
 
 **Strand:** bd-fxdcxbpq · **Branch:** `onboarding/invite-landing` · **Scope:** `hub-client/`
 **Design handoff:** `design_handoff_invite_landing/` (README.md is the spec; `screenshots/3a-unified-invite-landings.png` is the authoritative mock)

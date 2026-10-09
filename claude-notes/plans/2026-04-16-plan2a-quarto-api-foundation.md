@@ -1,4 +1,7 @@
-# Plan 2A: TS package foundations (@quarto/api skeleton + config, @quarto/types vendor)
+---
+title: 'Plan 2A: TS package foundations (@quarto/api skeleton + config, @quarto/types vendor)'
+date: 2026-04-16
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** the npm workspace (no epic dependency — independent root, peer of plan1a-protocol)

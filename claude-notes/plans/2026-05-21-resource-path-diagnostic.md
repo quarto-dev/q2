@@ -1,4 +1,7 @@
-# Source-pointing diagnostics for resource-path errors
+---
+title: 'Source-pointing diagnostics for resource-path errors'
+date: 2026-05-21
+---
 
 ## Overview
 

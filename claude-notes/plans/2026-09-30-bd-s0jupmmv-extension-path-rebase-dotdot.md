@@ -1,4 +1,7 @@
-# Space-aware `..` refusal in `adjust_paths_to_document_dir`
+---
+title: 'Space-aware `..` refusal in `adjust_paths_to_document_dir`'
+date: 2026-09-30
+---
 
 **Strands:** bd-s0jupmmv (research, `question`) · bd-9z2258af (implementation,
 `bug`) · discovered-from bd-qi11c7fj · related bd-oejuizi9 (the path-resolution

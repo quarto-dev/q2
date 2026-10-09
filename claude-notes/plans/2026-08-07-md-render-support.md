@@ -1,4 +1,7 @@
-# `.md` render support (bd-6d2wj4zp)
+---
+title: '`.md` render support (bd-6d2wj4zp)'
+date: 2026-08-07
+---
 
 **Status:** COMPLETE (2026-08-07). All phases landed on
 `braid/bd-6d2wj4zp-md-render-support`: render path (Phases 1–4, 6) in session 1,

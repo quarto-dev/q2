@@ -1,4 +1,7 @@
-# Lua Filter Infrastructure Porting to Rust
+---
+title: 'Lua Filter Infrastructure Porting to Rust'
+date: 2025-12-20
+---
 
 **Date**: 2025-12-20
 **Status**: Research Complete - Design Phase

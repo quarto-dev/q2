@@ -1,4 +1,7 @@
-# Unify hub-client Rendering with quarto-core Pipeline
+---
+title: 'Unify hub-client Rendering with quarto-core Pipeline'
+date: 2026-01-28
+---
 
 **Beads Issue**: kyoto-5hi
 **Created**: 2026-01-28

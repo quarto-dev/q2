@@ -1,4 +1,7 @@
-# Output Format Design Proposal
+---
+title: 'Output Format Design Proposal'
+date: 2025-11-27
+---
 
 **Created**: 2025-11-27
 **Related**: k-422 (CSL conformance testing)

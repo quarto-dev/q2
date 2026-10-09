@@ -1,4 +1,7 @@
-# Matched Scrolling for Hub-Client
+---
+title: 'Matched Scrolling for Hub-Client'
+date: 2025-12-29
+---
 
 **Issue:** k-suww
 **Date:** 2025-12-29

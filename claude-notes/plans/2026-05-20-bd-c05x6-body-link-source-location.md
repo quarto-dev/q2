@@ -1,4 +1,7 @@
-# bd-c05x6 — Plumb SourceInfo into Q-13-4 body-link "missing document" warnings
+---
+title: 'bd-c05x6 — Plumb SourceInfo into Q-13-4 body-link "missing document" warnings'
+date: 2026-05-20
+---
 
 **Status**: Implementation complete. Awaiting user review before commit.
 

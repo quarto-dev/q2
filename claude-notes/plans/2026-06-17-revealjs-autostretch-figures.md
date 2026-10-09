@@ -1,4 +1,7 @@
-# RevealJS auto-stretch — captioned & cross-referenceable figures
+---
+title: 'RevealJS auto-stretch — captioned & cross-referenceable figures'
+date: 2026-06-17
+---
 
 **Strand:** bd-38ioql41 (follow-up to bd-zkstclhl)
 **Date:** 2026-06-17 (Case 1 implemented 2026-06-18)

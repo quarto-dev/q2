@@ -1,4 +1,7 @@
-# q2 preview: persist React-preview edits back to the source .qmd on disk
+---
+title: 'q2 preview: persist React-preview edits back to the source .qmd on disk'
+date: 2026-06-10
+---
 
 **Strand:** bd-ov4gqk3m
 **Parent epic:** bd-kw93 (q2 preview epic)

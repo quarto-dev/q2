@@ -1,4 +1,7 @@
-# JS Dependency Handling for Quarto 2 HTML Output — Design Outline
+---
+title: 'JS Dependency Handling for Quarto 2 HTML Output — Design Outline'
+date: 2026-04-18
+---
 
 Beads: `bd-ulgr` (parent: `bd-imiw`)
 

@@ -1,4 +1,7 @@
-# Hub-only project templates (surface-gated `ProjectChoice`)
+---
+title: 'Hub-only project templates (surface-gated `ProjectChoice`)'
+date: 2026-09-15
+---
 
 **Strand:** bd-d147nkqx
 **PR:** https://github.com/quarto-dev/q2/pull/684 (draft; remote branch `feature/bd-d147nkqx-hub-only-project-templates`)

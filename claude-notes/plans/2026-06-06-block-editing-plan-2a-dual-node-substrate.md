@@ -1,4 +1,7 @@
-# Block editing — Plan 2a: SourceInfo-value index + structural editability gate
+---
+title: 'Block editing — Plan 2a: SourceInfo-value index + structural editability gate'
+date: 2026-06-06
+---
 
 **Date:** 2026-06-08
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)

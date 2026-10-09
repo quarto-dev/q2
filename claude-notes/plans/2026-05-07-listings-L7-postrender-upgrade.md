@@ -1,4 +1,7 @@
-# L7 — Post-render placeholder upgrade (sub-plan)
+---
+title: 'L7 — Post-render placeholder upgrade (sub-plan)'
+date: 2026-05-07
+---
 
 **Date:** 2026-05-07
 **Beads:** `bd-qf7r` (this phase). Parent epic: `bd-61cd`

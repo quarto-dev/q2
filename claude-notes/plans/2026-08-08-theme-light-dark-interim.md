@@ -1,4 +1,7 @@
-# Interim support for `theme: {light: [...], dark: [...]}` — use light, warn on dark
+---
+title: 'Interim support for `theme: {light: [...], dark: [...]}` — use light, warn on dark'
+date: 2026-08-08
+---
 
 **Strand:** bd-o76p01wb (P1, feature) — discovered-from bd-ad7i1pc6 (custom project types, PR #474)
 **Full-support strand (out of scope here):** bd-0pic6 — "Support theme: \{light, dark\} dark-mode config (object form)"

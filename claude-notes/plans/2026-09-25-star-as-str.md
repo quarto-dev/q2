@@ -1,4 +1,7 @@
-# Flanking rules for `*` `_` `~` `^`: whitespace-adjacent delimiters are literal text
+---
+title: 'Flanking rules for `*` `_` `~` `^`: whitespace-adjacent delimiters are literal text'
+date: 2026-09-25
+---
 
 **Status:** tiers 1 and 2 implemented on `braid/bd-star-as-str-qigl02pz-tree-sitter-qmd-parse`, not pushed
 **Tracking issues:** bd-star-as-str-qigl02pz (this plan), bd-whitespace-flanked-delimiters-0ncy8bgq (closed by tier 2)

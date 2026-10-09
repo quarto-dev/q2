@@ -1,4 +1,7 @@
-# RevealJS themes: Quarto 1 → Quarto 2 (reveal.js 6)
+---
+title: 'RevealJS themes: Quarto 1 → Quarto 2 (reveal.js 6)'
+date: 2026-06-16
+---
 
 **Strand:** bd-yown2ts4
 **Branch:** `feature/revealjs-q1-themes` (epic integration line; stages land on sub-branches)

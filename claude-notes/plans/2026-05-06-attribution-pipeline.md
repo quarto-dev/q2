@@ -1,4 +1,7 @@
-# Attribution Pipeline (Rust port of `feat/node-attribution`)
+---
+title: 'Attribution Pipeline (Rust port of `feat/node-attribution`)'
+date: 2026-05-06
+---
 
 ## Overview
 

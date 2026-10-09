@@ -1,4 +1,7 @@
-# Template Diagnostics file_id Attribution Bug
+---
+title: 'Template Diagnostics file_id Attribution Bug'
+date: 2025-12-06
+---
 
 **Issue ID**: k-5zv5
 **Date**: 2025-12-06

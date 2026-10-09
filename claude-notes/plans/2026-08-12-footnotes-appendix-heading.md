@@ -1,4 +1,7 @@
-# Footnotes appendix section omits the visible \'Footnotes\' heading that Quarto 1 emits (bd-v9zs83zj)
+---
+title: 'Footnotes appendix section omits the visible \''Footnotes\'' heading that Quarto 1 emits (bd-v9zs83zj)'
+date: 2026-08-12
+---
 
 **Date:** 2026-08-12
 **Braid:** bd-v9zs83zj

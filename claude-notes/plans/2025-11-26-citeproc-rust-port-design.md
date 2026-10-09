@@ -1,4 +1,7 @@
-# Citeproc Rust Port Design Report
+---
+title: 'Citeproc Rust Port Design Report'
+date: 2025-11-26
+---
 
 **Issue:** k-410
 **Created:** 2025-11-26

@@ -1,4 +1,5 @@
 ---
+title: '`q2 preview` — Feasibility & Architecture Plan (Epic)'
 date: 2026-05-11
 branch: feature/q2-preview
 status: "v3 — all open items resolved (2026-05-11 review #2). Ready to
@@ -6,8 +7,6 @@ status: "v3 — all open items resolved (2026-05-11 review #2). Ready to
         Phase A planning can begin."
 beads: bd-kw93 (epic).
 ---
-
-# `q2 preview` — Feasibility & Architecture Plan (Epic)
 
 ## Goal
 

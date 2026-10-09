@@ -1,4 +1,7 @@
-# Plan: Jupyter Engine Implementation
+---
+title: 'Plan: Jupyter Engine Implementation'
+date: 2026-01-07
+---
 
 **Issue**: k-kh5i
 **Date**: 2026-01-07

@@ -1,4 +1,7 @@
-# Plan 5 — engine-host pooling (preview re-compute warmth)
+---
+title: 'Plan 5 — engine-host pooling (preview re-compute warmth)'
+date: 2026-06-26
+---
 
 **Status:** research stub — not yet designed in depth. **Created:** 2026-06-26.
 **Sequence:** post-Plan-4 capstone optimization; orthogonal to Plan 3; runs **last**.

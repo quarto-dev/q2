@@ -1,4 +1,7 @@
-# revealjs: actually support code-copy (CSS + JS in render; styled-only in preview)
+---
+title: 'revealjs: actually support code-copy (CSS + JS in render; styled-only in preview)'
+date: 2026-06-23
+---
 
 **Strand:** bd-lg6t6qfy (feature, p3) — follow-up to **bd-fu1a5g6l** (which
 *suppressed* the broken reveal copy button) and sibling of **bd-ehyyfpjj**

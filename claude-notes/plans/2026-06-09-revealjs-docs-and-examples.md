@@ -1,4 +1,7 @@
-# Reveal.js docs page + per-feature example projects
+---
+title: 'Reveal.js docs page + per-feature example projects'
+date: 2026-06-09
+---
 
 **Strand:** bd-ixdktocp (discovered-from the revealjs epic bd-bea550b0)
 **Date:** 2026-06-09

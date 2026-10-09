@@ -1,4 +1,7 @@
-# k-246: Schema Inheritance Implementation Plan
+---
+title: 'k-246: Schema Inheritance Implementation Plan'
+date: 2025-10-27
+---
 
 **Created**: 2025-10-27
 **Issue**: k-246 - Implement schema inheritance (super/baseSchema)

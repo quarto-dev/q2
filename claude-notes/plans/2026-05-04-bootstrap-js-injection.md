@@ -1,4 +1,7 @@
-# Bootstrap JS Runtime Injection (HTML output)
+---
+title: 'Bootstrap JS Runtime Injection (HTML output)'
+date: 2026-05-04
+---
 
 **Status:** Plan drafted, awaiting go-ahead.
 **Beads:** bd-4eyf

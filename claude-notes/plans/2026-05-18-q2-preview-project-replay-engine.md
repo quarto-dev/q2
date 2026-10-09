@@ -1,4 +1,7 @@
-# q2 preview: AST-splice the captured engine output into live edits
+---
+title: 'q2 preview: AST-splice the captured engine output into live edits'
+date: 2026-05-18
+---
 
 **Beads:** bd-lucp (parent-child to bd-kw93, discovered-from bd-m0mu).
 **Supersedes:** bd-m0mu (engine_registry plumbing) — see "Why this

@@ -1,4 +1,7 @@
-# quarto-ast-reconcile: proptest counterexample — reconciliation does not preserve structure (bd-9fwn1504)
+---
+title: 'quarto-ast-reconcile: proptest counterexample — reconciliation does not preserve structure (bd-9fwn1504)'
+date: 2026-07-27
+---
 
 **Date:** 2026-07-27
 **Braid:** bd-9fwn1504

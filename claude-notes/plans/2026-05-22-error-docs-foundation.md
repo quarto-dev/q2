@@ -1,4 +1,7 @@
-# Error-docs foundation
+---
+title: 'Error-docs foundation'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending user review
 **Beads:** [bd-nvlxn](../../.beads/issues.jsonl) (child of [bd-94x8a](2026-05-22-error-docs-website-epic.md))

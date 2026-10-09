@@ -1,4 +1,7 @@
-# Implementation Plan: Unnumbered Section Specifier {-}
+---
+title: 'Implementation Plan: Unnumbered Section Specifier'
+date: 2025-11-13
+---
 
 ## Date: 2025-11-13
 

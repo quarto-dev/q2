@@ -1,4 +1,7 @@
-# `include-in-header` / `include-before-body` / `include-after-body` (HTML) — design draft
+---
+title: '`include-in-header` / `include-before-body` / `include-after-body` (HTML) — design draft'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04
 **Status:** Draft for review. Beads: `bd-8kp3`.

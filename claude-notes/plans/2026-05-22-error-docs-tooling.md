@@ -1,4 +1,7 @@
-# Error-docs tooling: `cargo xtask error-docs`
+---
+title: 'Error-docs tooling: `cargo xtask error-docs`'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending user review
 **Beads:** [bd-8otua](../../.beads/issues.jsonl) (child of [bd-94x8a](2026-05-22-error-docs-website-epic.md))

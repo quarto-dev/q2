@@ -1,4 +1,7 @@
-# Preview: resolve embedded static-asset iframes from the VFS source path
+---
+title: 'Preview: resolve embedded static-asset iframes from the VFS source path'
+date: 2026-06-09
+---
 
 **Strand:** bd-kjrpya2d (discovered-from bd-z1smhvuo)
 **Date:** 2026-06-09

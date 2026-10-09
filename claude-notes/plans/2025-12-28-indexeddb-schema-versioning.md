@@ -1,4 +1,7 @@
-# IndexedDB Schema Versioning and Migration System
+---
+title: 'IndexedDB Schema Versioning and Migration System'
+date: 2025-12-28
+---
 
 **Beads Issue:** `k-ifux` - Implement IndexedDB schema versioning and migration system
 **Related:** `k-evpj` - Presence features (requires user identity storage)

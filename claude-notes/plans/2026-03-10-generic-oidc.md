@@ -1,4 +1,7 @@
-# Generic OIDC Authentication for quarto-hub
+---
+title: 'Generic OIDC Authentication for quarto-hub'
+date: 2026-03-10
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Plan 7a — Static content-pattern file claims (TOMBSTONE — superseded by Plan 7b)
+---
+title: 'Plan 7a — Static content-pattern file claims (TOMBSTONE — superseded by Plan 7b)'
+date: 2026-07-07
+---
 
 **Status:** SUPERSEDED (2026-07-08, session "spin-parse-rust"). Do not execute this plan.
 **Superseded by:** [2026-07-08-plan7b-native-content-processors.md](2026-07-08-plan7b-native-content-processors.md)

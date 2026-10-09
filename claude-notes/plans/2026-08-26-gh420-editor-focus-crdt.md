@@ -1,4 +1,7 @@
-# GH #420 — rich-text editor loses focus on incoming CRDT changes
+---
+title: 'GH #420 — rich-text editor loses focus on incoming CRDT changes'
+date: 2026-08-26
+---
 
 **Strand:** bd-84ljmbaf
 **Issue:** https://github.com/quarto-dev/q2/issues/420

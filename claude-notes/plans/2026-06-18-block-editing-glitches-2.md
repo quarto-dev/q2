@@ -1,4 +1,7 @@
-# Block-editing UI glitches — round 2 (fixes & tests)
+---
+title: 'Block-editing UI glitches — round 2 (fixes & tests)'
+date: 2026-06-18
+---
 
 **Date:** 2026-06-18
 **Branch:** `feature/block-editing-improvements` (worktree `.worktrees/block-editing`)

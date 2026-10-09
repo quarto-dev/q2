@@ -1,4 +1,7 @@
-# Plan: Error Corpus Integration for quarto-doctemplate (k-386)
+---
+title: 'Plan: Error Corpus Integration for quarto-doctemplate (k-386)'
+date: 2025-01-25
+---
 
 ## Overview
 

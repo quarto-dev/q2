@@ -1,4 +1,7 @@
-# Em-dash / en-dash parsing + canonicalization
+---
+title: 'Em-dash / en-dash parsing + canonicalization'
+date: 2026-06-15
+---
 
 **Strand:** bd-k2h1x7bu
 **Date:** 2026-06-15

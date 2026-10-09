@@ -1,4 +1,7 @@
-# Windows: q2 emits and compares plain paths where a plain form exists (bd-1klbq2zd)
+---
+title: 'Windows: q2 emits and compares plain paths where a plain form exists (bd-1klbq2zd)'
+date: 2026-09-29
+---
 
 ## Overview
 

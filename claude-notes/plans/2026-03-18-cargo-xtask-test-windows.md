@@ -1,4 +1,7 @@
-# cargo xtask test — Platform-Aware Test Runner
+---
+title: 'cargo xtask test — Platform-Aware Test Runner'
+date: 2026-03-18
+---
 
 ## Overview
 

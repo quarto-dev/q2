@@ -1,4 +1,7 @@
-# Workspace Warnings Cleanup Plan
+---
+title: 'Workspace Warnings Cleanup Plan'
+date: 2026-01-15
+---
 
 **Date**: 2026-01-15
 **Status**: Planning

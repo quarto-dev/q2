@@ -1,4 +1,8 @@
-# Block-Editing E2E Test Design Spec
+---
+title: 'Block-Editing E2E Test Design Spec'
+date: 2026-06-16
+---
+
 **Date:** 2026-06-16  
 **Branch:** block-editing worktree  
 **Status:** Design-only — writer agent implements, does not alter this file

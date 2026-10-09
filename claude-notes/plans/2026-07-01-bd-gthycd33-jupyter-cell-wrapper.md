@@ -1,4 +1,7 @@
-# bd-gthycd33: Jupyter engine output not spliced into preview (knitr works)
+---
+title: 'bd-gthycd33: Jupyter engine output not spliced into preview (knitr works)'
+date: 2026-07-01
+---
 
 **Strand:** bd-gthycd33 (bug, P2, discovered-from bd-sfet3264)
 **Branch:** `braid/bd-gthycd33-jupyter-engine-output-not` (off `main`)

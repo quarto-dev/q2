@@ -1,4 +1,7 @@
-# DocumentProfile: comment summary for downstream tooling (GH #445)
+---
+title: 'DocumentProfile: comment summary for downstream tooling (GH #445)'
+date: 2026-08-25
+---
 
 **Strand:** bd-0rsk07il
 **GH issue:** https://github.com/quarto-dev/q2/issues/445

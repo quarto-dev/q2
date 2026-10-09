@@ -1,4 +1,7 @@
-# ProjectsHome polish: dark-mode contrast, right-click menu, per-collection sort
+---
+title: 'ProjectsHome polish: dark-mode contrast, right-click menu, per-collection sort'
+date: 2026-07-22
+---
 
 **Strand:** bd-je3w8q39
 **Branch:** `feature/85-projects-collections-ui` (PR #394, after merging main on 2026-07-22)

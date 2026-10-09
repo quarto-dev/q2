@@ -1,4 +1,7 @@
-# Code span containing a backtick run longer than its delimiter is a parse error (bd-code-span-longer-backtick-run-nycn85a8)
+---
+title: 'Code span containing a backtick run longer than its delimiter is a parse error (bd-code-span-longer-backtick-run-nycn85a8)'
+date: 2026-09-25
+---
 
 **Date:** 2026-09-25
 **Braid:** bd-code-span-longer-backtick-run-nycn85a8

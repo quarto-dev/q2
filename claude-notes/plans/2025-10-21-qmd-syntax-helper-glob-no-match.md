@@ -1,4 +1,7 @@
-# Plan: Fix qmd-syntax-helper Glob Pattern No-Match Handling
+---
+title: 'Plan: Fix qmd-syntax-helper Glob Pattern No-Match Handling'
+date: 2025-10-21
+---
 
 ## Problem Statement
 

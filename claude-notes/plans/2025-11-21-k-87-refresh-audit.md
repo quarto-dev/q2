@@ -1,4 +1,7 @@
-# k-87 SourceInfo::default() Audit - 2025-11-21 Refresh
+---
+title: 'k-87 SourceInfo::default() Audit - 2025-11-21 Refresh'
+date: 2025-11-21
+---
 
 ## Current State
 Total instances: **109** (up from original 43)

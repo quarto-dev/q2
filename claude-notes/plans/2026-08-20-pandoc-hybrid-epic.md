@@ -1,4 +1,7 @@
-# Epic: All output formats via a Pandoc-writer hybrid
+---
+title: 'Epic: All output formats via a Pandoc-writer hybrid'
+date: 2026-08-20
+---
 
 **Date:** 2026-09-20
 **Status:** Shape drafts reviewed; ready for implementation ordering.

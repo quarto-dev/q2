@@ -1,4 +1,7 @@
-# `q2 render --json-errors`: escape-free `rendered` and pass-1 `error` (R1)
+---
+title: '`q2 render --json-errors`: escape-free `rendered` and pass-1 `error` (R1)'
+date: 2026-10-07
+---
 
 **Strand:** bd-ckbqmupi (item 2). Upstream: qe-hal9cc7b, released as `quarto-error-reporting` 0.4.0.
 **Branch:** `braid/bd-ckbqmupi-q2-render-json-errors`, off `main` @ `5c61810b1` (after PR #795).

@@ -1,4 +1,7 @@
-# Provenance, Plan 1 of 3: foundations (`quarto-source-map`, `quarto-yaml`)
+---
+title: 'Provenance, Plan 1 of 3: foundations (`quarto-source-map`, `quarto-yaml`)'
+date: 2026-08-20
+---
 
 **Epic:** `bd-mxa44voa` — *Nested-parse source mapping drifts when the inner
 text was unescaped.*

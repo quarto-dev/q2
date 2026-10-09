@@ -1,4 +1,7 @@
-# Phase 8 — Incremental rebuilds
+---
+title: 'Phase 8 — Incremental rebuilds'
+date: 2026-04-27
+---
 
 **Date:** 2026-04-27 (redrafted after design discussion)
 **Beads:** TBD (parent `bd-0tr6`).

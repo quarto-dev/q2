@@ -1,4 +1,7 @@
-# Plan 3 — Built-in transform and filter idempotence verification (CI-time)
+---
+title: 'Plan 3 — Built-in transform and filter idempotence verification (CI-time)'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04 (revised 2026-05-21)
 **Branch:** feature/provenance (long-lived integration branch — see

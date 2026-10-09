@@ -1,4 +1,7 @@
-# Broken `main`: PWA precache limit + changelog unclosed-subscript
+---
+title: 'Broken `main`: PWA precache limit + changelog unclosed-subscript'
+date: 2026-07-07
+---
 
 **Strand:** `bd-q5o7ekzn`
 **Date:** 2026-07-07

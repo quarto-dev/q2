@@ -1,4 +1,7 @@
-# Presence Features for Quarto Hub
+---
+title: 'Presence Features for Quarto Hub'
+date: 2025-12-28
+---
 
 **Beads Issue:** `k-evpj` - Add presence features (cursors, selections) to quarto-hub
 

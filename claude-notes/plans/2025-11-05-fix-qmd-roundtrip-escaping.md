@@ -1,4 +1,7 @@
-# Plan: Fix QMD Roundtrip Escaping Bug
+---
+title: 'Plan: Fix QMD Roundtrip Escaping Bug'
+date: 2025-11-05
+---
 
 **Date**: 2025-11-05
 **Issue**: Escaped punctuation characters lose their backslash escapes during qmd roundtripping

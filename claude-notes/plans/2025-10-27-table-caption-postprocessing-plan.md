@@ -1,4 +1,8 @@
-# Table Caption Postprocessing Plan
+---
+title: 'Table Caption Postprocessing Plan'
+date: 2025-10-27
+---
+
 **Date:** 2025-10-27
 **Approach:** Pure Rust postprocessing to fix malformed caption parsing
 

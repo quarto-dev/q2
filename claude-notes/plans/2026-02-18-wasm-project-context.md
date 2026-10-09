@@ -1,4 +1,7 @@
-# WASM Project Context Discovery
+---
+title: 'WASM Project Context Discovery'
+date: 2026-02-18
+---
 
 ## Overview
 

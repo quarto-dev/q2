@@ -1,4 +1,7 @@
-# Investigation Report: qmd-syntax-helper Test Failures
+---
+title: 'Investigation Report: qmd-syntax-helper Test Failures'
+date: 2025-11-10
+---
 
 **Date**: 2025-11-10
 **Branch**: bugfix/92

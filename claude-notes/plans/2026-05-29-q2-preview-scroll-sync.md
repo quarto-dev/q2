@@ -1,4 +1,7 @@
-# q2-preview scroll sync (bd-9kzfi)
+---
+title: 'q2-preview scroll sync (bd-9kzfi)'
+date: 2026-05-29
+---
 
 ## Overview
 

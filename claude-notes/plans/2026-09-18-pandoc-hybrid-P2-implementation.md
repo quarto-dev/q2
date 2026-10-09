@@ -1,4 +1,7 @@
-# P2 — Implementation tasks & Test Seam Spec
+---
+title: 'P2 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+---
 
 **Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P2-wire-schema.md`](2026-08-20-pandoc-hybrid-P2-wire-schema.md)

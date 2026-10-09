@@ -1,4 +1,7 @@
-# Fix Windows path-separator assumptions in pampa quarto_api path tests (bd-picv)
+---
+title: 'Fix Windows path-separator assumptions in pampa quarto_api path tests (bd-picv)'
+date: 2026-06-24
+---
 
 **Date:** 2026-06-24
 **Braid:** bd-picv

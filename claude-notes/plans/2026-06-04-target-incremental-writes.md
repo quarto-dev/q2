@@ -1,4 +1,7 @@
-# Target Incremental Writes — Development Plan
+---
+title: 'Target Incremental Writes — Development Plan'
+date: 2026-06-04
+---
 
 **Date:** 2026-06-04 (rewritten from the research-plan version)
 **Branch:** feature/provenance

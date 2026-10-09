@@ -1,4 +1,7 @@
-# Block Handlers Implementation Plan
+---
+title: 'Block Handlers Implementation Plan'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Beads Issue**: k-274 (tree-sitter grammar refactoring - block handlers phase)

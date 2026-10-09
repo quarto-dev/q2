@@ -1,4 +1,7 @@
-# Extension management commands (`remove` / `list` / `add` / `update`) — STUB plan
+---
+title: 'Extension management commands (`remove` / `list` / `add` / `update`) — STUB plan'
+date: 2026-07-03
+---
 
 **Status:** STUB (2026-07-03) — placeholder in the **extensions epic**
 (`2026-03-16-extensions-grand-plan.md` family), not yet scheduled or designed.

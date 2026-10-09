@@ -1,4 +1,7 @@
-# Attr and Target Source Location Sideloading
+---
+title: 'Attr and Target Source Location Sideloading'
+date: 2025-10-24
+---
 
 **Date**: 2025-10-24
 **Context**: Fixing quarto-markdown-pandoc to properly track source locations for tuple-based Pandoc structures

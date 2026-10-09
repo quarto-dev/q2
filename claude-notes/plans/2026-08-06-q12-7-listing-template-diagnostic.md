@@ -1,4 +1,7 @@
-# Diagnostics blame the wrong key: materialized map spans (Q-12-7 and siblings)
+---
+title: 'Diagnostics blame the wrong key: materialized map spans (Q-12-7 and siblings)'
+date: 2026-08-06
+---
 
 **Strand:** bd-9yh3pzfu (bug, p1) — child of bd-61cd (Listings epic)
 **Folded in:** bd-2mxo (metadata materialization drops source_info provenance)

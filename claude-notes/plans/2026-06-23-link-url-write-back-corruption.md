@@ -1,4 +1,7 @@
-# bd-3zp3z4jx — link URL corrupted on write-back
+---
+title: 'bd-3zp3z4jx — link URL corrupted on write-back'
+date: 2026-06-23
+---
 
 **Date:** 2026-06-23
 **Branch:** `braid/bd-3zp3z4jx-link-url-corrupted-write` (off `origin/main`)

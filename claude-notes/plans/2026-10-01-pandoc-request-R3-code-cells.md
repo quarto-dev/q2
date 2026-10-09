@@ -1,4 +1,7 @@
-# Plan: Code cells and cached results (pandoc-request R3)
+---
+title: 'Plan: Code cells and cached results (pandoc-request R3)'
+date: 2026-10-01
+---
 
 **Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)

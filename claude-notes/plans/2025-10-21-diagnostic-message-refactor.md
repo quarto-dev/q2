@@ -1,4 +1,7 @@
-# Refactor readers::qmd::read() to Return DiagnosticMessages
+---
+title: 'Refactor readers::qmd::read() to Return DiagnosticMessages'
+date: 2025-10-21
+---
 
 **Date:** 2025-10-21
 **Status:** In Progress

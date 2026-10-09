@@ -1,4 +1,7 @@
-# Parallelize Pass-1 across project files
+---
+title: 'Parallelize Pass-1 across project files'
+date: 2026-05-22
+---
 
 **Issue:** bd-m7x9s — discovered from bd-9eltv (quarto-web profile).
 

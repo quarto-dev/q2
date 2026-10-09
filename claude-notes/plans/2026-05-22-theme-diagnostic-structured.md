@@ -1,4 +1,7 @@
-# Structured diagnostic for theme-config errors
+---
+title: 'Structured diagnostic for theme-config errors'
+date: 2026-05-22
+---
 
 **Status:** drafting — pending user review
 **Parent:** [theme-diagnostic epic](2026-05-22-theme-diagnostic-epic.md)

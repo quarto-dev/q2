@@ -1,4 +1,7 @@
-# Plan: Lua Filter Integration Tests for types.rs Coverage
+---
+title: 'Plan: Lua Filter Integration Tests for types.rs Coverage'
+date: 2026-01-02
+---
 
 **Issue**: k-4csc
 **Baseline Coverage**: types.rs at 44.56% (after pure Rust unit tests)

@@ -1,4 +1,7 @@
-# P1 — Neutral core + PipelineProfile
+---
+title: 'P1 — Neutral core + PipelineProfile'
+date: 2026-08-20
+---
 
 **Date:** 2026-09-20
 **Status:** Landed.

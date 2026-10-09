@@ -1,4 +1,7 @@
-# Provenance, Plan 2 of 3: consumers (`quarto-error-reporting`, q2)
+---
+title: 'Provenance, Plan 2 of 3: consumers (`quarto-error-reporting`, q2)'
+date: 2026-08-20
+---
 
 **Epic:** `bd-mxa44voa`.
 **Depends on:** Plan 1 (`2026-08-20-provenance-1-foundations.md`). **Read Plan

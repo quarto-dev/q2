@@ -1,4 +1,7 @@
-# Design: Reader/Writer Options for quarto-markdown-pandoc
+---
+title: 'Design: Reader/Writer Options for quarto-markdown-pandoc'
+date: 2025-12-03
+---
 
 **Date**: 2025-12-03
 **Related Issue**: k-491 (Phase 6: Reader/Writer)

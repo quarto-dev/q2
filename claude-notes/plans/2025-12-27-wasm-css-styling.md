@@ -1,4 +1,7 @@
-# WASM Artifact and Styling System
+---
+title: 'WASM Artifact and Styling System'
+date: 2025-12-27
+---
 
 **Issue:** k-giyy
 **Date:** 2025-12-27

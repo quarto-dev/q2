@@ -1,4 +1,7 @@
-# Plan: Add pandoc.List metatable to all list-like tables in Lua API
+---
+title: 'Plan: Add pandoc.List metatable to all list-like tables in Lua API'
+date: 2026-04-10
+---
 
 **Beads issue**: `bd-y9zl`
 **Date**: 2026-04-10

@@ -1,4 +1,7 @@
-# k-54: Unify 'l' and 's' Source Tracking Keys - Investigation & Plan
+---
+title: 'k-54: Unify ''l'' and ''s'' Source Tracking Keys - Investigation & Plan'
+date: 2025-10-20
+---
 
 **Date**: 2025-10-20
 **Issue**: k-54 - Unify 'l' and 's' source tracking keys in JSON format

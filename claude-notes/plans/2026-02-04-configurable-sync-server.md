@@ -1,4 +1,7 @@
-# Configurable Default Sync Server
+---
+title: 'Configurable Default Sync Server'
+date: 2026-02-04
+---
 
 **Issue:** bd-1g5f
 **Priority:** Medium (2)

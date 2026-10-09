@@ -1,4 +1,7 @@
-# Extension-subtree infrastructure: `xtask pull-extension-subtree` + bundled-payload discovery
+---
+title: 'Extension-subtree infrastructure: `xtask pull-extension-subtree` + bundled-payload discovery'
+date: 2026-09-23
+---
 
 **Status:** All three phases done. **Unblocked** — deliberately independent of the two
 external PRs ([quarto-dev/quarto-cli#14936](https://github.com/quarto-dev/quarto-cli/pull/14936),

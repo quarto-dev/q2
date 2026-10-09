@@ -1,4 +1,7 @@
-# Quarto Markdown CommonMark-Compatible Subset Specification
+---
+title: 'Quarto Markdown CommonMark-Compatible Subset Specification'
+date: 2025-11-06
+---
 
 ## Motivation
 

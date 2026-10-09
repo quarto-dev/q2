@@ -1,4 +1,7 @@
-# P4 — Vendored-Q1 run machinery (transport)
+---
+title: 'P4 — Vendored-Q1 run machinery (transport)'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P4-run-machinery.md`
 for the full correction history. Latest (round 4 review, three dispatched Opus reviewers):

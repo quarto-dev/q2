@@ -1,4 +1,7 @@
-# Plan: Move private-crates to crates
+---
+title: 'Plan: Move private-crates to crates'
+date: 2025-12-04
+---
 
 **Status**: Completed
 **Created**: 2025-12-04

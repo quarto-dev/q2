@@ -1,4 +1,7 @@
-# A failed include fails the document
+---
+title: 'A failed include fails the document'
+date: 2026-09-02
+---
 
 **Strand:** `bd-include-parse-failure-dropped-u4rdjxru`
 **Repro:** `q2-positron-docs/llms-info/repros/include-parse-failure-dropped/`

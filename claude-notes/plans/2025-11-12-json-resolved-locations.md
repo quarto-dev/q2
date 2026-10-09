@@ -1,4 +1,7 @@
-# JSON Writer: Add Resolved Source Locations
+---
+title: 'JSON Writer: Add Resolved Source Locations'
+date: 2025-11-12
+---
 
 ## Goal
 Add an optional 'l' (location) field to JSON output containing fully resolved source position information for each node.

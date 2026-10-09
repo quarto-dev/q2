@@ -1,4 +1,7 @@
-# Fix: Monaco editor auto-closes backtick, inserting a doubled `` ` ``
+---
+title: 'Fix: Monaco editor auto-closes backtick, inserting a doubled `` ` ``'
+date: 2026-06-24
+---
 
 **Strand:** bd-w1s38lbe
 

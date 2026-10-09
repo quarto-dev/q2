@@ -1,4 +1,7 @@
-# Flip-Flop Tests: Remaining Blockers
+---
+title: 'Flip-Flop Tests: Remaining Blockers'
+date: 2025-11-30
+---
 
 **Date**: 2025-11-30
 **Related to**: k-432 (flip-flop formatting)

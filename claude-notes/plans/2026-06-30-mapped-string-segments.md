@@ -1,4 +1,7 @@
-# Plan 1b.1: MappedString `segments()` accessor — make piece provenance reachable
+---
+title: 'Plan 1b.1: MappedString `segments()` accessor — make piece provenance reachable'
+date: 2026-06-30
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Sequences:** landed after Plan 1b, **independently of Plan 1c.** It is a small,

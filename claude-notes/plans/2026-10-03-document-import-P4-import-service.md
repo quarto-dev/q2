@@ -1,4 +1,7 @@
-# Plan: the import service in hub-client (document import P4)
+---
+title: 'Plan: the import service in hub-client (document import P4)'
+date: 2026-10-03
+---
 
 **Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I8, I9, I10, I15, I16, I19; uses interfaces 1, 2 and 3)

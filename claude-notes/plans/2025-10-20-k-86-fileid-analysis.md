@@ -1,4 +1,7 @@
-# k-86: FileId Handling Analysis
+---
+title: 'k-86: FileId Handling Analysis'
+date: 2025-10-20
+---
 
 ## The Issue
 

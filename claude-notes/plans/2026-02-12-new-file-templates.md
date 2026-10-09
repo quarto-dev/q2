@@ -1,4 +1,7 @@
-# New File Templates Feature
+---
+title: 'New File Templates Feature'
+date: 2026-02-12
+---
 
 **Beads Issue:** bd-1uky
 **Status:** Implementation Complete - Awaiting Review

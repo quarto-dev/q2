@@ -1,4 +1,7 @@
-# Actor Identity Mapping Plan
+---
+title: 'Actor Identity Mapping Plan'
+date: 2026-03-20
+---
 
 ## Overview
 

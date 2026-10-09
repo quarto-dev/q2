@@ -1,4 +1,7 @@
-# Brand-aware favicon fallback (bd-97yc)
+---
+title: 'Brand-aware favicon fallback (bd-97yc)'
+date: 2026-07-27
+---
 
 **Date:** 2026-07-27
 **Braid:** bd-97yc (feature, filed 2026-04-27, raised to P3). Its duplicate

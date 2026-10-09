@@ -1,4 +1,7 @@
-# Plan 4 — SourceInfo provenance types (Generated + Anchor + AnchorRole)
+---
+title: 'Plan 4 — SourceInfo provenance types (Generated + Anchor + AnchorRole)'
+date: 2026-05-04
+---
 
 **Date:** 2026-05-04 (substantially revised 2026-05-20)
 **Branch:** feature/q2-preview

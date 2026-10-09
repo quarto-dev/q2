@@ -1,4 +1,7 @@
-# Comrak AST Structure Analysis
+---
+title: 'Comrak AST Structure Analysis'
+date: 2025-11-06
+---
 
 **Related to**: CommonMark-compatible subset design (k-333)
 **Purpose**: Document comrak's AST structure to inform our testing strategy

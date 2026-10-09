@@ -1,4 +1,7 @@
-# Plan: Migrate All Consumers from Format.metadata to doc.ast.meta
+---
+title: 'Plan: Migrate All Consumers from Format.metadata to doc.ast.meta'
+date: 2026-03-09
+---
 
 ## Overview
 

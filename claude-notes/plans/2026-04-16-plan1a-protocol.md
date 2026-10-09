@@ -1,4 +1,7 @@
-# Plan 1a (protocol): JSON message types and data shapes
+---
+title: 'Plan 1a (protocol): JSON message types and data shapes'
+date: 2026-04-16
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Companion plans:** [plan1a-host](2026-04-16-plan1a-host.md) (subprocess + transport), [plan1a-engine](2026-04-16-plan1a-engine.md) (TsEngine + trait extensions)

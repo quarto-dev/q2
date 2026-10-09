@@ -1,4 +1,7 @@
-# Preview: engine-generated images missing (`q2 preview` + hub-client q2-preview)
+---
+title: 'Preview: engine-generated images missing (`q2 preview` + hub-client q2-preview)'
+date: 2026-07-23
+---
 
 **Braid strand:** bd-qbhp2cvv
 **Status:** implemented on branch

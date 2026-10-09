@@ -1,4 +1,7 @@
-# Source Information Tracking for Structured Input Formats
+---
+title: 'Source Information Tracking for Structured Input Formats'
+date: 2025-12-15
+---
 
 **Date**: 2025-12-15
 **Issue**: k-zr88

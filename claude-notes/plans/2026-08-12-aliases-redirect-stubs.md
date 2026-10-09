@@ -1,4 +1,7 @@
-# `aliases:` is silently ignored — no redirect stubs written (bd-aliases-redirects-missing-sch7cd1g)
+---
+title: '`aliases:` is silently ignored — no redirect stubs written (bd-aliases-redirects-missing-sch7cd1g)'
+date: 2026-08-12
+---
 
 **Date:** 2026-08-12
 **Braid:** `bd-aliases-redirects-missing-sch7cd1g` (p2, feature, label `website`)

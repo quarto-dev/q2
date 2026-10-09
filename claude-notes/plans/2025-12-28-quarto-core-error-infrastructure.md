@@ -1,4 +1,7 @@
-# Quarto-Core Error Infrastructure Refactoring
+---
+title: 'Quarto-Core Error Infrastructure Refactoring'
+date: 2025-12-28
+---
 
 **Issue:** k-a2nw
 **Date:** 2025-12-28

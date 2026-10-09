@@ -1,4 +1,7 @@
-# Make the concrete-tree depth guard cheaper
+---
+title: 'Make the concrete-tree depth guard cheaper'
+date: 2026-09-18
+---
 
 **Strand:** bd-t7i6oanu (related finding: bd-khect2gq)
 **Branch:** `braid/bd-t7i6oanu-make-concrete-tree-depth`

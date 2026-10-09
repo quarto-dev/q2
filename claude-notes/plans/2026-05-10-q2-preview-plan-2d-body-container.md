@@ -1,4 +1,7 @@
-# Plan 2D — q2-preview body container + title block
+---
+title: 'Plan 2D — q2-preview body container + title block'
+date: 2026-05-10
+---
 
 **Date:** 2026-05-10
 **Branch:** feature/q2-preview

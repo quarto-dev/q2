@@ -1,4 +1,7 @@
-# Phase 2: Enhanced Template System
+---
+title: 'Phase 2: Enhanced Template System'
+date: 2026-01-26
+---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)
 **Beads Issue**: kyoto-nje

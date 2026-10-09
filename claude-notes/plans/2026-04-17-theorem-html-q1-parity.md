@@ -1,4 +1,7 @@
-# Theorem / block-crossref HTML output: Q1 parity
+---
+title: 'Theorem / block-crossref HTML output: Q1 parity'
+date: 2026-04-17
+---
 
 **Beads issue:** bd-gvhe (child of bd-jsbg)
 **Created:** 2026-04-17

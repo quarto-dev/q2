@@ -1,4 +1,7 @@
-# hub-client `q2-preview`: editable / read-only toggle in the bottom status bar
+---
+title: 'hub-client `q2-preview`: editable / read-only toggle in the bottom status bar'
+date: 2026-09-09
+---
 
 > **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this
 > plan refers to is no longer hub-client's default. q2-preview is the default

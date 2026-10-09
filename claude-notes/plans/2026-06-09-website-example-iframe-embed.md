@@ -1,4 +1,7 @@
-# Example-iframe embed feature (`.embed-example-iframe`)
+---
+title: 'Example-iframe embed feature (`.embed-example-iframe`)'
+date: 2026-06-09
+---
 
 **Strand:** bd-z1smhvuo (discovered-from bd-ixdktocp, the revealjs docs page)
 **Date:** 2026-06-09

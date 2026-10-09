@@ -1,4 +1,7 @@
-# q2 preview diagnostics: include ariadne source-context snippet
+---
+title: 'q2 preview diagnostics: include ariadne source-context snippet'
+date: 2026-05-21
+---
 
 **Issue:** bd-352bh
 **Discovered-from:** bd-b9kzg (q2 preview diagnostics surface)

@@ -1,4 +1,7 @@
-# Location Information Self-Health Test Plan
+---
+title: 'Location Information Self-Health Test Plan'
+date: 2025-10-22
+---
 
 **Date**: 2025-10-22
 **Issue**: k-129

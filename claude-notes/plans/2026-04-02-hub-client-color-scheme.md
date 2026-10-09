@@ -1,4 +1,7 @@
-# Hub-Client Color Scheme Refactor
+---
+title: 'Hub-Client Color Scheme Refactor'
+date: 2026-04-02
+---
 
 ## Overview
 

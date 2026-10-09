@@ -1,4 +1,7 @@
-# Fix: Slide Renderer Crashes on Empty Slides Document
+---
+title: 'Fix: Slide Renderer Crashes on Empty Slides Document'
+date: 2026-02-26
+---
 
 ## Overview
 

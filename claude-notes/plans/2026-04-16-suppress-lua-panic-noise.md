@@ -1,4 +1,7 @@
-# Suppress noisy `lua error` panic stack traces in WASM
+---
+title: 'Suppress noisy `lua error` panic stack traces in WASM'
+date: 2026-04-16
+---
 
 ## Problem
 

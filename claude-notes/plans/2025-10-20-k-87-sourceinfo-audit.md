@@ -1,4 +1,7 @@
-# k-87: SourceInfo::default() Audit
+---
+title: 'k-87: SourceInfo::default() Audit'
+date: 2025-10-20
+---
 
 ## Summary
 Total instances: 43 across 8 files

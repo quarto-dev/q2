@@ -1,4 +1,7 @@
-# Plan: Typst + EPUB book output, DOCX/PPTX scope-out (book-projects P3)
+---
+title: 'Plan: Typst + EPUB book output, DOCX/PPTX scope-out (book-projects P3)'
+date: 2026-09-21
+---
 
 **Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)

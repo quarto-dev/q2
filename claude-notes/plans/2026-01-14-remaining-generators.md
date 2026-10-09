@@ -1,4 +1,7 @@
-# Remaining AST Generators Plan
+---
+title: 'Remaining AST Generators Plan'
+date: 2026-01-14
+---
 
 **Date:** 2026-01-14
 **Status:** ✅ COMPLETE (All 4 Phases)

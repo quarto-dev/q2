@@ -1,4 +1,7 @@
-# P5 — Port `margin-layout` (86 files, website-type project)
+---
+title: 'P5 — Port `margin-layout` (86 files, website-type project)'
+date: 2026-09-27
+---
 
 **Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —

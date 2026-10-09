@@ -1,4 +1,7 @@
-# Implementation Plan: pandoc_emph
+---
+title: 'Implementation Plan: pandoc_emph'
+date: 2025-10-31
+---
 
 **Date**: 2025-10-31
 **Status**: Planning

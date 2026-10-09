@@ -1,4 +1,7 @@
-# Mermaid runtime is imported from jsDelivr at page load, not bundled into the site (bd-mermaid-runtime-not-bundled-vxejw159)
+---
+title: 'Mermaid runtime is imported from jsDelivr at page load, not bundled into the site (bd-mermaid-runtime-not-bundled-vxejw159)'
+date: 2026-08-11
+---
 
 **Date:** 2026-08-11
 **Braid:** `bd-mermaid-runtime-not-bundled-vxejw159`

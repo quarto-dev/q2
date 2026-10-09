@@ -1,4 +1,7 @@
-# Highlight styles: general `.theme` translator + full Q1 palette catalog
+---
+title: 'Highlight styles: general `.theme` translator + full Q1 palette catalog'
+date: 2026-08-18
+---
 
 **Strand:** bd-hl-theme-translator-2mdgh4k6 (open, feature, P3 — field evidence
 argues for higher; see below)

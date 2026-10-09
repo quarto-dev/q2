@@ -1,4 +1,7 @@
-# Parsing Failure Investigation Template
+---
+title: 'Parsing Failure Investigation Template'
+date: 2025-11-04
+---
 
 Date: 2025-11-04
 File: claude-notes/plans/2025-11-04-parsing-failure-investigation-template.md

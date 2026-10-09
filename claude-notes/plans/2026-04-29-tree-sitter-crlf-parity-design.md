@@ -1,4 +1,7 @@
-# Tree-sitter Corpus CRLF Parity Check — Design
+---
+title: 'Tree-sitter Corpus CRLF Parity Check — Design'
+date: 2026-04-29
+---
 
 ## Context
 

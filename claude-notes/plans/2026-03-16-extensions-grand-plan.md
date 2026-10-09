@@ -1,4 +1,7 @@
-# Quarto Extensions Grand Plan
+---
+title: 'Quarto Extensions Grand Plan'
+date: 2026-03-16
+---
 
 **Created**: 2026-03-16
 **Status**: In Progress (Phases 1, 2, 3, 4 complete)

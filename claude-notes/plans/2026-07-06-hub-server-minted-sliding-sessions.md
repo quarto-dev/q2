@@ -1,4 +1,7 @@
-# Hub server-minted sliding sessions
+---
+title: 'Hub server-minted sliding sessions'
+date: 2026-07-06
+---
 
 **Status:** implementation complete (2026-07-24) — all phases C0–C7 done on
 `feature/hub-sliding-sessions` (unpushed); remaining: human browser-visual

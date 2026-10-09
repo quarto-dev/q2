@@ -1,4 +1,7 @@
-# Experiment: consolidate integration tests into single binary per crate
+---
+title: 'Experiment: consolidate integration tests into single binary per crate'
+date: 2026-05-28
+---
 
 **Beads:** [bd-xvdop](../../.beads/issues.jsonl) — `br show bd-xvdop`
 **Branch:** `beads/bd-xvdop-integration-test-consolidation` (off `main`)

@@ -1,4 +1,7 @@
-# Diagnose and fix `SourceInfo::eq` hotspot in hub-client preview
+---
+title: 'Diagnose and fix `SourceInfo::eq` hotspot in hub-client preview'
+date: 2026-04-22
+---
 
 Status: **approach locked in (Option 1) — implementation in progress on `perf/2026-04-22-json-sourcemap`**
 

@@ -1,4 +1,7 @@
-# Default listing emits no description for items without explicit `description:` (bd-listing-default-no-derived-desc-m0wrr8ty)
+---
+title: 'Default listing emits no description for items without explicit `description:` (bd-listing-default-no-derived-desc-m0wrr8ty)'
+date: 2026-08-20
+---
 
 **Date:** 2026-08-20
 **Braid:** bd-listing-default-no-derived-desc-m0wrr8ty

@@ -1,4 +1,7 @@
-# Math+Attr Source Tracking Implementation Plan
+---
+title: 'Math+Attr Source Tracking Implementation Plan'
+date: 2025-11-21
+---
 
 ## Problem Statement
 

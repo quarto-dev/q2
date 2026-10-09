@@ -1,4 +1,7 @@
-# k-44: SourceInfo JSON Serialization Optimization - Complete
+---
+title: 'k-44: SourceInfo JSON Serialization Optimization - Complete'
+date: 2025-10-20
+---
 
 **Date**: 2025-10-20
 **Issue**: k-44 - Investigate and optimize SourceInfo JSON serialization size

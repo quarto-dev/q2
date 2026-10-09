@@ -1,4 +1,7 @@
-# behave F4 crash-relaunch e2e: async launch-marker race (bd-qlnkdw9u)
+---
+title: 'behave F4 crash-relaunch e2e: async launch-marker race (bd-qlnkdw9u)'
+date: 2026-08-19
+---
 
 ## Overview
 

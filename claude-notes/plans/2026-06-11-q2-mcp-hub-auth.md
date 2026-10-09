@@ -1,4 +1,7 @@
-# `q2 mcp` — embed & delegate to the TypeScript hub MCP server
+---
+title: '`q2 mcp` — embed & delegate to the TypeScript hub MCP server'
+date: 2026-06-11
+---
 
 **Strand:** bd-81cfshmw
 **Status:** DESIGN — iterating with Carlos; do not start implementation

@@ -1,4 +1,7 @@
-# Plan: Fix Shortcode Argument Passing for TS Quarto Compatibility
+---
+title: 'Plan: Fix Shortcode Argument Passing for TS Quarto Compatibility'
+date: 2026-03-31
+---
 
 ## Status: Complete (commit 5315af95)
 

@@ -1,4 +1,7 @@
-# Fix: NoteDefinitionPara Support in Native Writer
+---
+title: 'Fix: NoteDefinitionPara Support in Native Writer'
+date: 2025-10-28
+---
 
 **Date:** 2025-10-28
 **Status:** In Progress

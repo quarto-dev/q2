@@ -1,4 +1,7 @@
-# Plan 1a.6: Move the engine-host protocol off stdout → loopback TCP
+---
+title: 'Plan 1a.6: Move the engine-host protocol off stdout → loopback TCP'
+date: 2026-07-08
+---
 
 > **Status:** ● **COMPLETE 2026-07-23** (Phases 1–4 all landed + verified; the
 > loopback-TCP transport is the sole engine-host transport, stdio deleted). The

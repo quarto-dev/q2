@@ -1,4 +1,7 @@
-# 2026-05-12 — Fix displaymath column-strip to use enclosing paragraph column
+---
+title: '2026-05-12 — Fix displaymath column-strip to use enclosing paragraph column'
+date: 2026-05-12
+---
 
 - **Beads:** [bd-qpa2](https://example/none) — *Display math column-strip uses wrong column source, mishandles inline-wrapped and labeled math (issue #181 follow-up)*
 - **Related:** bd-q6ed (the original column-strip fix), upstream GH #181

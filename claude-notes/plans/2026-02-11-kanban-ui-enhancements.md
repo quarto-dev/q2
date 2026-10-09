@@ -1,4 +1,7 @@
-# Kanban Demo UI Enhancements
+---
+title: 'Kanban Demo UI Enhancements'
+date: 2026-02-11
+---
 
 ## Overview
 

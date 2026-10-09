@@ -1,4 +1,7 @@
-# Format Extensions (resolution & apply) — STUB
+---
+title: 'Format Extensions (resolution & apply) — STUB'
+date: 2026-06-22
+---
 
 **Status:** STUB / research — scoping, not yet an implementation plan. Needs a
 research pass before it becomes a checklist.

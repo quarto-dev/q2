@@ -1,4 +1,7 @@
-# qmd-syntax-helper rules: migrate reference-style links and escape literal brackets (bd-reference-links-unsupported-ddc4skac)
+---
+title: 'qmd-syntax-helper rules: migrate reference-style links and escape literal brackets (bd-reference-links-unsupported-ddc4skac)'
+date: 2026-08-10
+---
 
 **Date:** 2026-08-10
 **Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)

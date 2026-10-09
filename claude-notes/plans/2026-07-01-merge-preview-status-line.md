@@ -1,4 +1,7 @@
-# Merge the preview executor + capture status bars into one status line
+---
+title: 'Merge the preview executor + capture status bars into one status line'
+date: 2026-07-01
+---
 
 **Strand:** bd-yai4w8ly (task, P2). Discovered from bd-sfet3264
 (remote code-execution provider).

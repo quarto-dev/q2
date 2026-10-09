@@ -1,4 +1,7 @@
-# Smart punctuation: `...` converts to an ellipsis only when preceded by a word character (bd-ellipsis-not-smart-48bv2pe6)
+---
+title: 'Smart punctuation: `...` converts to an ellipsis only when preceded by a word character (bd-ellipsis-not-smart-48bv2pe6)'
+date: 2026-08-12
+---
 
 **Date:** 2026-08-12
 **Braid:** `bd-ellipsis-not-smart-48bv2pe6` (bug, p3, label `markdown`)

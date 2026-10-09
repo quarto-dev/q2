@@ -1,4 +1,7 @@
-# k-211: Fix Document-Level Source Mapping
+---
+title: 'k-211: Fix Document-Level Source Mapping'
+date: 2025-10-26
+---
 
 **Issue:** `parseRustQmdDocument()` returns AnnotatedParse with empty source (start=0, end=0, source.value='')
 

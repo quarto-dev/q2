@@ -1,4 +1,7 @@
-# Click-to-align: put the clicked block's source line at the same screen Y
+---
+title: 'Click-to-align: put the clicked block''s source line at the same screen Y'
+date: 2026-08-22
+---
 
 ## Overview
 

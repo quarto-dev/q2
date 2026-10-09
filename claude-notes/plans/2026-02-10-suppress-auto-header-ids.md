@@ -1,4 +1,7 @@
-# Suppress Auto-Generated Header IDs in QMD Writer
+---
+title: 'Suppress Auto-Generated Header IDs in QMD Writer'
+date: 2026-02-10
+---
 
 ## Overview
 

@@ -1,4 +1,7 @@
-# Hub-Client User Preferences Subsystem
+---
+title: 'Hub-Client User Preferences Subsystem'
+date: 2026-01-16
+---
 
 **Issue:** kyoto-3se
 **Status:** Completed
