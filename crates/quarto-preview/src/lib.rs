@@ -32,10 +32,15 @@ pub mod deps;
 pub mod diagnostics;
 pub mod import_route;
 pub mod join_frontend;
+pub mod pdf_preview;
 pub mod re_execute;
 pub mod render_download;
+pub mod render_helper;
 pub mod share;
 pub mod static_mode;
+
+#[cfg(test)]
+mod route_tests;
 
 pub use asset_manifest::{
     AssetMode, AssetsBlock, EmbeddedManifests, TunnelReason, decide_asset_mode, embedded_manifest,
@@ -767,7 +772,22 @@ pub fn extend_with_preview(
         .route("/api/preview/deps", get(deps::deps_handler))
         // pandoc-wasm H4b (D7): "Download as" for the embedded hub, which
         // carries no pandoc.wasm; renders natively and returns the file.
-        .route("/api/preview/render", post(render_download::render_handler))
+        // grown by hub-parity Plan 9 into the general download route (odt,
+        // typst source and PDF, authorship, captures, scope); the body limit
+        // rises to the shared render limit.
+        .route(
+            "/api/preview/render",
+            post(render_download::render_handler).layer(axum::extract::DefaultBodyLimit::max(
+                render_helper::BODY_LIMIT,
+            )),
+        )
+        // Plan 9: the inline, supersede-aware PDF for the preview pane.
+        .route(
+            "/api/preview/pdf",
+            post(pdf_preview::pdf_handler).layer(axum::extract::DefaultBodyLimit::max(
+                render_helper::BODY_LIMIT,
+            )),
+        )
         // Plan 7 (P7-D1): document import for the embed; native pandoc runs the
         // reader. The body limit rises to the source cap on this route only.
         .route(

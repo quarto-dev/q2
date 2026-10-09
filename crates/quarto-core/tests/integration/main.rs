@@ -148,6 +148,7 @@ pub mod pandoc_wasm_constants;
 pub mod pass1_engine_resolution_pipeline;
 pub mod pipeline_temp_dir_cleanup;
 pub mod preview_render_css_parity;
+pub mod preview_route_core;
 pub mod printable_render;
 pub mod project_pipeline;
 pub mod project_profile_overlays;

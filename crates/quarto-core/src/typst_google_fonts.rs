@@ -321,7 +321,17 @@ fn unavailable(title: &str, problem: String) -> DiagnosticMessage {
         .build()
 }
 
+/// Serializes every font staging in this process. The cache directory is the
+/// project's shared `.quarto/typst/fonts`, and the preview server can render
+/// the same project from several requests at once (a `/pdf` preview racing a
+/// PDF download, or a book render beside either): two downloads of one file
+/// would write the same `.part` temp file. Held across the whole staging, so
+/// the second renderer finds the first one's files in the cache.
+static FONT_STAGING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Download the brand's `source: google` fonts into `cache_dir`.
+///
+/// Process-wide serialized (see [`FONT_STAGING`]): one staging at a time.
 ///
 /// `fetch` returns a URL's body; a failed fetch is retried per `retry`.
 /// Never fails the render: each problem becomes a `Q-21-4` warning and that
@@ -333,6 +343,7 @@ pub fn stage_brand_fonts(
     fetch: &dyn Fn(&str) -> Result<Vec<u8>, String>,
     retry: &RetrySchedule<'_>,
 ) -> Vec<DiagnosticMessage> {
+    let _staging = FONT_STAGING.lock().unwrap_or_else(|e| e.into_inner());
     let mut diagnostics = Vec::new();
     for (font_path, font) in remote_fonts(brand) {
         match font {
@@ -582,6 +593,41 @@ mod tests {
             1,
             "second render refetches only the css, not the files"
         );
+    }
+
+    /// Two renders of one project staging at once download each file once:
+    /// the lock makes the second find the first's files in the cache.
+    #[test]
+    fn concurrent_stagings_download_each_file_once() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let dir = tempfile::tempdir().unwrap();
+        let file_fetches = Arc::new(AtomicUsize::new(0));
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let cache = dir.path().to_path_buf();
+                let file_fetches = file_fetches.clone();
+                std::thread::spawn(move || {
+                    let brand = brand_with_fonts(
+                        "typography:\n  fonts:\n    - family: Fira Code\n      source: google\n",
+                    );
+                    let fetch = |url: &str| -> Result<Vec<u8>, String> {
+                        if url.contains("fonts.googleapis.com") {
+                            return Ok(GOOGLE_TTF_CSS.as_bytes().to_vec());
+                        }
+                        file_fetches.fetch_add(1, Ordering::SeqCst);
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        Ok(b"FONTBYTES".to_vec())
+                    };
+                    stage_brand_fonts(&brand, &cache, &fetch, &RetrySchedule::NONE)
+                })
+            })
+            .collect();
+        for h in handles {
+            assert!(h.join().unwrap().is_empty());
+        }
+        assert_eq!(file_fetches.load(Ordering::SeqCst), 2, "2 files, once each");
     }
 
     #[test]

@@ -1,0 +1,566 @@
+//! The render helper and response contract shared by `POST /api/preview/pdf`
+//! ([`crate::pdf_preview`]) and `POST /api/preview/render`
+//! ([`crate::render_download`]) (epic E1, Plan 9).
+//!
+//! One blocking function, [`render_blocking`], does what both routes need:
+//! a request directory under the discovered project (Plan 6), the editor's
+//! text as the source, server-resolved captures spliced in place of running
+//! kernels, the client's attribution payload, the typst target, child
+//! cancellation and a deadline (Plan 1), scope resolution (Plan 3), and
+//! structured diagnostics and stats. The routes only decode requests and
+//! encode [`RenderOutcome`]s.
+//!
+//! Two process-wide seams, both statics (the preview router is built from a
+//! bare fn pointer, so there is no extension slot; `re_execute.rs` does the
+//! same): [`RenderSeam`] stands in for the real `quarto-core` render entry
+//! points so route tests do not race real typst, and [`BookDownload`] is the
+//! whole-book entry that Plan 10 fills in.
+//!
+//! The response contract is in [`outcome_response`]: 200 with
+//! `X-Q2-Diagnostics` (warnings, percent-encoded JSON) and `X-Q2-Stats`
+//! (percent-encoded `{"unexecuted_cells": N}`); 422 `{error?, diagnostics}`;
+//! 409 `{"superseded": true}` or `{"busy": true}`; 501 for a build without
+//! book downloads.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
+
+use axum::{
+    Json,
+    http::{HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
+};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use quarto_core::engine::ExecutionPolicy;
+use quarto_core::format::Format;
+use quarto_core::pandoc_request::formats::TYPST_PDF_KEY;
+use quarto_core::preview_out::PreviewOutDir;
+use quarto_core::project::ProjectContext;
+use quarto_core::project::book::{ResolvedBookScope, resolve_book_scope};
+use quarto_core::render_to_file::{
+    RenderToFileOptions, RenderToFileResult, TypstTarget, render_document_to_file,
+};
+use quarto_core::stage::Cancellation;
+use quarto_core::{BookScope, QuartoError};
+use quarto_error_reporting::{
+    DiagnosticKind, DiagnosticMessage, JsonDiagnostic, diagnostic_to_json,
+};
+use quarto_hub::context::SharedContext;
+use quarto_source_map::SourceContext;
+use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+use quarto_trace::EngineCapture;
+use serde::{Deserialize, Serialize};
+
+/// Header carrying the render's warnings.
+pub const DIAGNOSTICS_HEADER: &str = "x-q2-diagnostics";
+
+/// Header carrying `{"unexecuted_cells": N}`.
+pub const STATS_HEADER: &str = "x-q2-stats";
+
+/// Wall-clock limit for each child process (typst, pandoc) of a route render.
+/// The orange-book takes about 2 s; a stuck child must not hold a blocking
+/// thread (and, for `/api/preview/pdf`, the path's slot) forever.
+pub const CHILD_DEADLINE: Duration = Duration::from_secs(120);
+
+/// Request body limit of both render routes. A `content` plus an
+/// `attributionJson` (about 80 bytes per run: one run per contiguous stretch
+/// of one author's text, so 8 MB holds a history of roughly 100 000 runs) is
+/// far below it; axum's implicit 2 MB is not.
+pub const BODY_LIMIT: usize = 8 * 1024 * 1024;
+
+/// The `scope` request field (epic E11).
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ScopeParam {
+    Book,
+    Chapter,
+}
+
+impl From<ScopeParam> for BookScope {
+    fn from(s: ScopeParam) -> Self {
+        match s {
+            ScopeParam::Book => BookScope::Book,
+            ScopeParam::Chapter => BookScope::Chapter,
+        }
+    }
+}
+
+/// `{ error?, diagnostics }`: the body of a 422.
+#[derive(Debug, Serialize)]
+pub struct RenderFailed {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub diagnostics: Vec<JsonDiagnostic>,
+}
+
+impl RenderFailed {
+    pub fn message(error: impl Into<String>) -> Self {
+        Self {
+            error: Some(error.into()),
+            diagnostics: Vec::new(),
+        }
+    }
+}
+
+/// A finished render.
+#[derive(Debug)]
+pub struct RenderedFile {
+    pub file_name: String,
+    pub bytes: Vec<u8>,
+    pub warnings: Vec<JsonDiagnostic>,
+    pub unexecuted_cells: usize,
+}
+
+/// What a route sends back.
+#[derive(Debug)]
+pub enum RenderOutcome {
+    Ok(RenderedFile),
+    Failed(RenderFailed),
+    /// A newer request for the same path replaced this one (`/pdf` only).
+    Superseded,
+    /// Another whole-book render holds the project (Plan 10).
+    Busy,
+    /// 501: this build cannot do it.
+    Unavailable(String),
+}
+
+/// Everything [`render_blocking`] needs, resolved on the async side.
+pub struct RenderJob {
+    /// Absolute path of the document (hub root joined with the index path).
+    pub abs_path: PathBuf,
+    /// The format key: a `PANDOC_FORMATS` key (`docx`, `typst`, `typst-pdf`, ...).
+    pub format_key: String,
+    /// The editor's text; the disk copy is rendered when `None`.
+    pub content: Option<String>,
+    pub scope: Option<BookScope>,
+    pub attribution_json: Option<String>,
+    /// The sidecar captures of this path (never a client-named id; E10).
+    pub captures: Vec<EngineCapture>,
+    /// Every sidecar entry of the hub, keyed by hub-root-relative path;
+    /// filled only when the request may resolve to a whole book.
+    pub all_captures: HashMap<String, Vec<EngineCapture>>,
+    /// The canonical hub root the sidecar keys are relative to.
+    pub hub_root: PathBuf,
+    pub cancellation: Cancellation,
+}
+
+/// The render entry points of `quarto-core`, behind a seam.
+pub trait RenderSeam: Send + Sync {
+    /// `render_document_to_file` for the page at `input`, rendering `format`
+    /// whatever the project and the page declare (what `render_to_file` does).
+    fn render_document(
+        &self,
+        input: &Path,
+        format: &str,
+        options: &RenderToFileOptions,
+        project: &ProjectContext,
+        runtime: Arc<dyn SystemRuntime>,
+    ) -> quarto_core::Result<RenderToFileResult>;
+
+    /// `render_chapter_alone`.
+    fn render_chapter(
+        &self,
+        project: &ProjectContext,
+        abs_path: &Path,
+        format: &Format,
+        options: &RenderToFileOptions,
+        runtime: Arc<dyn SystemRuntime>,
+    ) -> quarto_core::Result<RenderToFileResult>;
+}
+
+struct RealRender;
+
+impl RenderSeam for RealRender {
+    fn render_document(
+        &self,
+        input: &Path,
+        format: &str,
+        options: &RenderToFileOptions,
+        project: &ProjectContext,
+        runtime: Arc<dyn SystemRuntime>,
+    ) -> quarto_core::Result<RenderToFileResult> {
+        render_document_to_file(
+            input,
+            format,
+            options,
+            Some(project),
+            runtime,
+            None,
+            None,
+            Some(format),
+        )
+    }
+
+    fn render_chapter(
+        &self,
+        project: &ProjectContext,
+        abs_path: &Path,
+        format: &Format,
+        options: &RenderToFileOptions,
+        runtime: Arc<dyn SystemRuntime>,
+    ) -> quarto_core::Result<RenderToFileResult> {
+        pollster::block_on(quarto_core::render_chapter_alone(
+            project, abs_path, format, options, runtime,
+        ))
+    }
+}
+
+static RENDER_SEAM: RwLock<Option<Arc<dyn RenderSeam>>> = RwLock::new(None);
+
+fn render_seam() -> Arc<dyn RenderSeam> {
+    RENDER_SEAM
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_else(|| Arc::new(RealRender))
+}
+
+/// Replace the render seam (`None` restores the real one). For tests: swap it
+/// only in a test that runs in its own process (nextest's default).
+pub fn set_render_seam(seam: Option<Arc<dyn RenderSeam>>) {
+    *RENDER_SEAM.write().unwrap_or_else(|e| e.into_inner()) = seam;
+}
+
+/// What a whole-book download needs (Plan 10 implements it).
+pub struct BookDownloadRequest {
+    pub path: PathBuf,
+    pub content: Option<String>,
+    pub format: String,
+    pub typst_target: Option<TypstTarget>,
+    pub request_dir: PathBuf,
+    pub hub_root: PathBuf,
+    /// Every sidecar entry of the hub, keyed by hub-root-relative path.
+    pub captures: HashMap<String, Vec<EngineCapture>>,
+    pub cancellation: Cancellation,
+}
+
+#[derive(Debug)]
+pub struct BookDownloadOutput {
+    pub file: PathBuf,
+    pub chapters: usize,
+    pub unexecuted_cells: usize,
+    pub diagnostics: Vec<JsonDiagnostic>,
+}
+
+#[derive(Debug)]
+pub enum BookDownloadError {
+    /// Another book render holds the project.
+    Busy,
+    Cancelled,
+    Failed(Vec<JsonDiagnostic>),
+    /// This build has no book downloads (the initial seam answers it).
+    Unavailable(String),
+}
+
+/// The whole-book entry. Called inside `spawn_blocking`.
+pub trait BookDownload: Send + Sync {
+    fn render(&self, req: BookDownloadRequest) -> Result<BookDownloadOutput, BookDownloadError>;
+}
+
+struct NoBookDownloads;
+
+impl BookDownload for NoBookDownloads {
+    fn render(&self, _req: BookDownloadRequest) -> Result<BookDownloadOutput, BookDownloadError> {
+        Err(BookDownloadError::Unavailable(
+            "book downloads are not available in this build".to_string(),
+        ))
+    }
+}
+
+static BOOK_DOWNLOAD: RwLock<Option<Arc<dyn BookDownload>>> = RwLock::new(None);
+
+fn book_download() -> Arc<dyn BookDownload> {
+    BOOK_DOWNLOAD
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_else(|| Arc::new(NoBookDownloads))
+}
+
+/// Replace the book seam (`None` restores the 501 default). Plan 10 makes its
+/// implementation the default; tests swap it in a process of their own.
+pub fn set_book_download(seam: Option<Arc<dyn BookDownload>>) {
+    *BOOK_DOWNLOAD.write().unwrap_or_else(|e| e.into_inner()) = seam;
+}
+
+/// The sidecar captures of `rel_path`, read on the async side from the
+/// capture doc the sidecar names for exactly that path (E10, P9-D4). Absent,
+/// unreadable or never-recorded entries give no captures, so the document
+/// compiles unexecuted and reports the notice.
+pub async fn resolve_captures(ctx: &SharedContext, rel_path: &str) -> Vec<EngineCapture> {
+    let Some(entry) = ctx.index().get_capture(rel_path) else {
+        return Vec::new();
+    };
+    match crate::capture_driver::read_capture_from_doc(ctx, &entry.capture_doc_id).await {
+        Ok(captures) => captures,
+        Err(e) => {
+            tracing::debug!(path = rel_path, error = %e, "capture doc unreadable; rendering unexecuted");
+            Vec::new()
+        }
+    }
+}
+
+/// Every sidecar entry of the hub, for a whole-book render.
+pub async fn resolve_all_captures(ctx: &SharedContext) -> HashMap<String, Vec<EngineCapture>> {
+    let mut all = HashMap::new();
+    for (key, entry) in ctx.index().get_all_captures() {
+        if let Ok(captures) =
+            crate::capture_driver::read_capture_from_doc(ctx, &entry.capture_doc_id).await
+        {
+            all.insert(key, captures);
+        }
+    }
+    all
+}
+
+/// Whether a request for `format_key` can resolve to a whole book (so the
+/// every-entry capture read is worth doing): the formats that consolidate one.
+pub fn may_render_book(format_key: &str, scope: Option<BookScope>) -> bool {
+    scope != Some(BookScope::Chapter) && matches!(format_key, "typst" | "typst-pdf" | "epub")
+}
+
+/// Split a table key into the render format and the typst target (E8): the
+/// `typst-pdf` key is `typst` compiled to a PDF, the `typst` key is the source.
+pub fn render_format_and_target(format_key: &str) -> (&str, Option<TypstTarget>) {
+    if format_key == TYPST_PDF_KEY {
+        ("typst", Some(TypstTarget::Pdf))
+    } else if format_key == "typst" {
+        ("typst", Some(TypstTarget::Source))
+    } else {
+        (format_key, None)
+    }
+}
+
+fn json_all(diagnostics: &[DiagnosticMessage], ctx: &SourceContext) -> Vec<JsonDiagnostic> {
+    diagnostics
+        .iter()
+        .map(|d| diagnostic_to_json(d, ctx))
+        .collect()
+}
+
+/// A render error as a 422 body: a parse error keeps its structured
+/// diagnostics, anything else is a message.
+fn failure_from(error: QuartoError) -> RenderFailed {
+    match error {
+        QuartoError::Parse(parse) => RenderFailed {
+            error: None,
+            diagnostics: json_all(&parse.diagnostics, &parse.source_context),
+        },
+        other => RenderFailed::message(other.to_string()),
+    }
+}
+
+/// The blocking half of both routes. Everything that touches the project
+/// directory happens here, and the request directory is removed (its guard
+/// drops) only after the output bytes are read.
+pub fn render_blocking(job: RenderJob) -> RenderOutcome {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let (base_key, typst_target) = render_format_and_target(&job.format_key);
+    let format = match Format::from_format_string(base_key) {
+        Ok(f) => f,
+        Err(e) => return RenderOutcome::Failed(RenderFailed::message(e)),
+    };
+    let guard = match PreviewOutDir::create(&job.abs_path, runtime.as_ref()) {
+        Ok(g) => g,
+        Err(e) => return RenderOutcome::Failed(RenderFailed::message(e.to_string())),
+    };
+    let project = guard.project();
+    let active = runtime
+        .canonicalize(&job.abs_path)
+        .unwrap_or_else(|_| job.abs_path.clone());
+
+    let resolution =
+        match resolve_book_scope(project, &active, job.scope, &format, runtime.as_ref()) {
+            Ok(r) => r,
+            Err(e) => return RenderOutcome::Failed(failure_from(e)),
+        };
+
+    let options = RenderToFileOptions {
+        output_dir: Some(guard.path().to_path_buf()),
+        quiet: true,
+        execution_policy: ExecutionPolicy::None,
+        source_override: job.content.clone().map(String::into_bytes),
+        cancellation: Some(job.cancellation.clone()),
+        child_deadline: Some(CHILD_DEADLINE),
+        capture_materialize_dir: Some(guard.path().to_path_buf()),
+        typst_target,
+        captures: job.captures.clone(),
+        attribution_json: job.attribution_json.clone(),
+        ..Default::default()
+    };
+
+    let seam = render_seam();
+    let mut notices = json_all(&resolution.diagnostics, &SourceContext::new());
+    let (file, unexecuted_cells, mut diagnostics) = match resolution.scope {
+        ResolvedBookScope::Book => {
+            let request = BookDownloadRequest {
+                path: active.clone(),
+                content: job.content,
+                format: job.format_key.clone(),
+                typst_target,
+                request_dir: guard.path().to_path_buf(),
+                hub_root: job.hub_root.clone(),
+                captures: job.all_captures,
+                cancellation: job.cancellation.clone(),
+            };
+            match book_download().render(request) {
+                Ok(out) => (out.file, out.unexecuted_cells, out.diagnostics),
+                Err(BookDownloadError::Busy) => return RenderOutcome::Busy,
+                Err(BookDownloadError::Cancelled) => return RenderOutcome::Superseded,
+                Err(BookDownloadError::Failed(diagnostics)) => {
+                    return RenderOutcome::Failed(RenderFailed {
+                        error: None,
+                        diagnostics,
+                    });
+                }
+                Err(BookDownloadError::Unavailable(m)) => return RenderOutcome::Unavailable(m),
+            }
+        }
+        scope => {
+            let result = match scope {
+                ResolvedBookScope::Chapter => {
+                    seam.render_chapter(project, &active, &format, &options, runtime)
+                }
+                _ => seam.render_document(&active, base_key, &options, project, runtime),
+            };
+            let result = match result {
+                Ok(r) => r,
+                Err(e) => return RenderOutcome::Failed(failure_from(e)),
+            };
+            let out = &result.render_output;
+            let json = json_all(&out.diagnostics, &out.source_context);
+            let has_errors = out
+                .diagnostics
+                .iter()
+                .any(|d| matches!(d.kind, DiagnosticKind::Error));
+            if has_errors {
+                return RenderOutcome::Failed(RenderFailed {
+                    error: None,
+                    diagnostics: json,
+                });
+            }
+            (result.output_path, result.unexecuted_cells, json)
+        }
+    };
+    notices.append(&mut diagnostics);
+
+    let bytes = match std::fs::read(&file) {
+        Ok(b) => b,
+        Err(e) => {
+            return RenderOutcome::Failed(RenderFailed::message(format!(
+                "could not read the rendered file {}: {e}",
+                file.display()
+            )));
+        }
+    };
+    let file_name = file.file_name().map_or_else(
+        || format!("download.{base_key}"),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    drop(guard);
+    RenderOutcome::Ok(RenderedFile {
+        file_name,
+        bytes,
+        warnings: notices,
+        unexecuted_cells,
+    })
+}
+
+fn encoded_header(value: &str) -> Option<HeaderValue> {
+    HeaderValue::from_str(&utf8_percent_encode(value, NON_ALPHANUMERIC).to_string()).ok()
+}
+
+/// `attachment` with an ASCII fallback `filename` and the exact name as RFC 5987 `filename*`.
+pub fn content_disposition(file_name: &str) -> String {
+    let ascii: String = file_name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_graphic() && c != '"' && c != '\\' && c != '%' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let encoded = utf8_percent_encode(file_name, NON_ALPHANUMERIC);
+    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
+}
+
+/// Encode an outcome. `mime` is the 200's content type; `attachment` adds
+/// `Content-Disposition` (the `/render` route; `/pdf` is inline).
+pub fn outcome_response(outcome: RenderOutcome, mime: &'static str, attachment: bool) -> Response {
+    match outcome {
+        RenderOutcome::Ok(rendered) => {
+            let mut response = (StatusCode::OK, rendered.bytes).into_response();
+            let headers = response.headers_mut();
+            headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(mime));
+            if attachment
+                && let Ok(v) = HeaderValue::from_str(&content_disposition(&rendered.file_name))
+            {
+                headers.insert(header::CONTENT_DISPOSITION, v);
+            }
+            if !rendered.warnings.is_empty()
+                && let Ok(json) = serde_json::to_string(&rendered.warnings)
+                && let Some(v) = encoded_header(&json)
+            {
+                headers.insert(DIAGNOSTICS_HEADER, v);
+            }
+            let stats = serde_json::json!({ "unexecuted_cells": rendered.unexecuted_cells });
+            if let Some(v) = encoded_header(&stats.to_string()) {
+                headers.insert(STATS_HEADER, v);
+            }
+            response
+        }
+        RenderOutcome::Failed(f) => (StatusCode::UNPROCESSABLE_ENTITY, Json(f)).into_response(),
+        RenderOutcome::Superseded => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "superseded": true })),
+        )
+            .into_response(),
+        RenderOutcome::Busy => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "busy": true })),
+        )
+            .into_response(),
+        RenderOutcome::Unavailable(message) => (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+/// Cancels the render when the handler future is dropped (the client went away).
+pub struct CancelOnDrop(pub Cancellation);
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.cancel();
+    }
+}
+
+/// The path-and-hub half every route shares: the index must know the path (a
+/// 400 otherwise) and the hub must have a project root. `Err` is the response.
+pub fn locate(ctx: &SharedContext, rel_path: &str) -> Result<(PathBuf, PathBuf), Response> {
+    if !ctx.index().has_file(rel_path) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("Path '{rel_path}' is not in the project index"),
+        )
+            .into_response());
+    }
+    let Some(project_root) = ctx.storage().project_root().map(Path::to_path_buf) else {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "no project root (standalone mode?)",
+        )
+            .into_response());
+    };
+    // The sidecar keys are relative to the hub root: a canonical project dir
+    // against a non-canonical root would silently produce a wrong key.
+    let hub_root = project_root.canonicalize().unwrap_or(project_root);
+    let abs_path = hub_root.join(rel_path);
+    Ok((abs_path, hub_root))
+}

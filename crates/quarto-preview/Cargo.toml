@@ -61,6 +61,8 @@ tar.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]
+# Plan 9 route tests build a capture with a plot file.
+base64.workspace = true
 # Reads the docx back in the `render_download` tests.
 zip.workspace = true
 tower = "0.5"

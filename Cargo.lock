@@ -7493,6 +7493,7 @@ dependencies = [
  "anyhow",
  "automerge",
  "axum",
+ "base64 0.22.1",
  "flate2",
  "futures",
  "http",

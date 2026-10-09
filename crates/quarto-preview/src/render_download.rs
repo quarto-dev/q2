@@ -1,80 +1,62 @@
-//! `POST /api/preview/render` — "Download as" for the embedded hub
-//! (pandoc-wasm H4b, design D7).
+//! `POST /api/preview/render`: "Download as" for the embedded hub (pandoc-wasm
+//! H4b, design D7), grown by Plan 9 of the hub-parity epic into the general
+//! download route.
 //!
-//! The embed carries no pandoc.wasm, so it asks the native side, which has
-//! pandoc already, to render. Body: `{ "path": "rel/doc.qmd", "format":
-//! "docx", "content": "<editor text>" }`. `content` is the editor's current
-//! text; the server renders it as the document's source (the disk copy can be
-//! stale when edits are disabled), against the project on disk, so images,
-//! `_quarto.yml` and includes resolve as they do for `q2 render`. Code cells
-//! are not executed (D11: unexecuted by default).
+//! The embed carries no pandoc.wasm, so it asks the native side to render.
+//! Body: `{ "path": "rel/doc.qmd", "format": "docx", "content": "<editor
+//! text>", "scope"?: "book" | "chapter", "attributionJson"?: "<json>" }`.
+//! `format` is a key of `PANDOC_FORMATS` (docx, odt, pptx, epub, typst,
+//! typst-pdf), looked up in that table so the client's menu and this route
+//! cannot drift; the caller's key beats the document's own `format:`. `typst`
+//! is the typst source (no compile; a bare `.typ`: images are not bundled, so
+//! one taken out of the request directory has broken image paths) and
+//! `typst-pdf` the compiled PDF. `content` is the editor's current text (the
+//! disk copy can be stale when edits are disabled); the path anchors project
+//! discovery and relative resources. Code cells are never executed: recorded
+//! captures of the path are spliced in, others compile unexecuted and are
+//! counted in `X-Q2-Stats`.
 //!
-//! Responses:
-//! - `200`: the file's bytes, `Content-Disposition: attachment`, and the
-//!   render's warnings as `X-Q2-Diagnostics` (percent-encoded JSON array of
-//!   `JsonDiagnostic`; absent when there are none). Warnings still download.
-//! - `400`: the path is not in the project index, or the format is not one the
-//!   download supports.
-//! - `422`: the render failed or produced errors; the body is
-//!   `{ "error"?: string, "diagnostics": [...] }` and nothing downloads.
-//!
-//! Auth is loopback-only, inherited from the server, as for `re_execute`.
-
-use std::path::Path;
-use std::sync::Arc;
+//! The render, response codes and headers are the shared contract of
+//! [`crate::render_helper`]; this route adds the attachment headers and never
+//! supersedes. Auth is loopback-only, inherited from the server, as for
+//! `re_execute`.
 
 use axum::{
     Json,
     extract::State,
-    http::{HeaderValue, StatusCode, header},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
-use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
-use quarto_core::engine::ExecutionPolicy;
-use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
-use quarto_error_reporting::{DiagnosticKind, JsonDiagnostic, diagnostic_to_json};
+use quarto_core::pandoc_request::formats::{PandocFormatInfo, pandoc_format};
+use quarto_core::stage::Cancellation;
 use quarto_hub::context::SharedContext;
-use quarto_system_runtime::{NativeRuntime, SystemRuntime};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-/// Header carrying the render's warnings.
-pub const DIAGNOSTICS_HEADER: &str = "x-q2-diagnostics";
-
-/// The formats the download supports: pandoc.wasm's table (D8) minus typst. Native
-/// `format: typst` compiles to PDF; the `.typ`-only download D8 wants needs a
-/// pipeline option that stops before `TypstCompileStage`, which no phase has yet.
-const FORMATS: &[(&str, &str)] = &[
-    (
-        "docx",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ),
-    (
-        "pptx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ),
-    ("epub", "application/epub+zip"),
-];
+pub use crate::render_helper::DIAGNOSTICS_HEADER;
+use crate::render_helper::{
+    CancelOnDrop, RenderJob, ScopeParam, locate, may_render_book, outcome_response,
+    render_blocking, resolve_all_captures, resolve_captures,
+};
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RenderRequest {
     pub path: String,
     pub format: String,
-    /// The editor's current text; the disk copy is rendered when absent.
+    /// The editor's current text; the disk copy is rendered when absent (an
+    /// explicit empty string is an empty document).
     #[serde(default)]
     pub content: Option<String>,
+    #[serde(default)]
+    pub scope: Option<ScopeParam>,
+    /// Client-built attribution transport JSON (Automerge history).
+    #[serde(default)]
+    pub attribution_json: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct RenderFailed {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-    diagnostics: Vec<JsonDiagnostic>,
-}
-
-struct Rendered {
-    file_name: String,
-    bytes: Vec<u8>,
-    warnings: Vec<JsonDiagnostic>,
+/// The table row for a downloadable key.
+fn download_format(key: &str) -> Option<&'static PandocFormatInfo> {
+    pandoc_format(key).filter(|f| f.available && !f.hidden)
 }
 
 /// Axum handler for `POST /api/preview/render`.
@@ -82,35 +64,40 @@ pub async fn render_handler(
     State(ctx): State<SharedContext>,
     Json(body): Json<RenderRequest>,
 ) -> Response {
-    let Some(&(_, mime)) = FORMATS.iter().find(|(f, _)| *f == body.format) else {
+    let Some(info) = download_format(&body.format) else {
         return (
             StatusCode::BAD_REQUEST,
             format!("Format '{}' is not supported for download", body.format),
         )
             .into_response();
     };
-    if !ctx.index().has_file(&body.path) {
-        return (
-            StatusCode::BAD_REQUEST,
-            format!("Path '{}' is not in the project index", body.path),
-        )
-            .into_response();
-    }
-    let Some(project_root) = ctx.storage().project_root().map(Path::to_path_buf) else {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "no project root (standalone mode?)",
-        )
-            .into_response();
+    let (abs_path, hub_root) = match locate(&ctx, &body.path) {
+        Ok(located) => located,
+        Err(response) => return response,
     };
-    let abs_path = project_root.join(&body.path);
+    let scope = body.scope.map(Into::into);
+    let captures = resolve_captures(&ctx, &body.path).await;
+    let all_captures = if may_render_book(info.key, scope) {
+        resolve_all_captures(&ctx).await
+    } else {
+        Default::default()
+    };
 
-    let outcome =
-        tokio::task::spawn_blocking(move || render_blocking(&abs_path, &body.format, body.content))
-            .await;
-    match outcome {
-        Ok(Ok(rendered)) => success_response(rendered, mime),
-        Ok(Err(f)) => (StatusCode::UNPROCESSABLE_ENTITY, Json(f)).into_response(),
+    let cancel = Cancellation::new();
+    let _client_gone = CancelOnDrop(cancel.clone());
+    let job = RenderJob {
+        abs_path,
+        format_key: info.key.to_string(),
+        content: body.content,
+        scope,
+        attribution_json: body.attribution_json,
+        captures,
+        all_captures,
+        hub_root,
+        cancellation: cancel,
+    };
+    match tokio::task::spawn_blocking(move || render_blocking(job)).await {
+        Ok(outcome) => outcome_response(outcome, info.mime, true),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("render task failed: {e}"),
@@ -119,99 +106,15 @@ pub async fn render_handler(
     }
 }
 
-fn render_blocking(
-    abs_path: &Path,
-    format: &str,
-    content: Option<String>,
-) -> Result<Rendered, RenderFailed> {
-    let failed = |error: String| RenderFailed {
-        error: Some(error),
-        diagnostics: Vec::new(),
-    };
-    let out_dir = tempfile::TempDir::with_prefix("q2-download-")
-        .map_err(|e| failed(format!("could not create a temporary directory: {e}")))?;
-    let options = RenderToFileOptions {
-        output_dir: Some(out_dir.path().to_path_buf()),
-        quiet: true,
-        execution_policy: ExecutionPolicy::None,
-        source_override: content.map(String::into_bytes),
-        ..Default::default()
-    };
-    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
-    let result =
-        render_to_file(abs_path, format, &options, runtime).map_err(|e| failed(e.to_string()))?;
-
-    let diagnostics = &result.render_output.diagnostics;
-    let ctx = &result.render_output.source_context;
-    let has_errors = diagnostics
-        .iter()
-        .any(|d| matches!(d.kind, DiagnosticKind::Error));
-    let json: Vec<JsonDiagnostic> = diagnostics
-        .iter()
-        .map(|d| diagnostic_to_json(d, ctx))
-        .collect();
-    if has_errors {
-        return Err(RenderFailed {
-            error: None,
-            diagnostics: json,
-        });
-    }
-    let bytes = std::fs::read(&result.output_path).map_err(|e| {
-        failed(format!(
-            "could not read the rendered file {}: {e}",
-            result.output_path.display()
-        ))
-    })?;
-    let file_name = result.output_path.file_name().map_or_else(
-        || format!("download.{format}"),
-        |n| n.to_string_lossy().into_owned(),
-    );
-    Ok(Rendered {
-        file_name,
-        bytes,
-        warnings: json,
-    })
-}
-
-fn success_response(rendered: Rendered, mime: &'static str) -> Response {
-    let mut response = (StatusCode::OK, rendered.bytes).into_response();
-    let headers = response.headers_mut();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(mime));
-    if let Ok(v) = HeaderValue::from_str(&content_disposition(&rendered.file_name)) {
-        headers.insert(header::CONTENT_DISPOSITION, v);
-    }
-    if !rendered.warnings.is_empty()
-        && let Ok(json) = serde_json::to_string(&rendered.warnings)
-        && let Ok(v) =
-            HeaderValue::from_str(&utf8_percent_encode(&json, NON_ALPHANUMERIC).to_string())
-    {
-        headers.insert(DIAGNOSTICS_HEADER, v);
-    }
-    response
-}
-
-/// `attachment` with an ASCII fallback `filename` and the exact name as RFC 5987 `filename*`.
-fn content_disposition(file_name: &str) -> String {
-    let ascii: String = file_name
-        .chars()
-        .map(|c| {
-            if c.is_ascii_graphic() && c != '"' && c != '\\' && c != '%' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let encoded = utf8_percent_encode(file_name, NON_ALPHANUMERIC);
-    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render_helper::content_disposition;
+    use axum::http::header;
     use quarto_hub::HubContext;
     use quarto_hub::context::HubConfig;
     use quarto_hub::storage::StorageManager;
+    use std::sync::Arc;
     use tempfile::TempDir;
 
     async fn build_ctx(files: &[(&str, &str)]) -> (TempDir, SharedContext) {
@@ -234,6 +137,8 @@ mod tests {
             path: path.to_string(),
             format: format.to_string(),
             content: content.map(str::to_string),
+            scope: None,
+            attribution_json: None,
         })
     }
 
@@ -309,7 +214,7 @@ mod tests {
     #[tokio::test]
     async fn unsupported_format_is_400() {
         let (_tmp, ctx) = build_ctx(&[("doc.qmd", "hi\n")]).await;
-        let response = render_handler(State(ctx), request("doc.qmd", "typst", None)).await;
+        let response = render_handler(State(ctx), request("doc.qmd", "html", None)).await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 

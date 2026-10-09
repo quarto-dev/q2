@@ -139,6 +139,16 @@ pub struct RenderToFileOptions {
     /// [`GitBlameProvider`]: crate::attribution::GitBlameProvider
     pub attribution: Option<crate::attribution::AttributionMode>,
 
+    /// Client-built attribution transport JSON (hub-client's
+    /// `attributionJsonFor`: Automerge history and hub identities), as the
+    /// preview routes receive it. Installs a [`PreBuiltAttributionProvider`]
+    /// and takes precedence over `attribution`. A `String` rather than the
+    /// provider so the options stay `Debug`. `None` (the default) changes
+    /// nothing.
+    ///
+    /// [`PreBuiltAttributionProvider`]: crate::attribution::PreBuiltAttributionProvider
+    pub attribution_json: Option<String>,
+
     /// This document's book chapter seed (book-projects P4): the
     /// chapter number / appendix flag the crossref index transform
     /// seeds its section counter from and the crossref render transform
@@ -423,6 +433,13 @@ pub fn render_document_to_file(
     ) {
         ctx.attribution_provider = Some(std::sync::Arc::new(
             crate::attribution::GitBlameProvider::new(),
+        ));
+    }
+    // A client-built payload wins over git blame: the hub's Automerge
+    // history is the authorship the editor shows.
+    if let Some(json) = &options.attribution_json {
+        ctx.attribution_provider = Some(std::sync::Arc::new(
+            crate::attribution::PreBuiltAttributionProvider::new(json.clone()),
         ));
     }
 

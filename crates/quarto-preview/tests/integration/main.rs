@@ -10,14 +10,17 @@ pub mod diagnostics_capture_failure;
 pub mod diagnostics_endpoint;
 pub mod eager_capture;
 pub mod editor_ui;
+pub mod embed_downloads;
 pub mod import_route;
 pub mod join_frontend;
 pub mod join_tunnel;
 pub mod pdfjs_serving;
+pub mod render_routes_support;
 pub mod render_scripts_boot;
 pub mod share;
 pub mod smoke;
 pub mod staleness;
 pub mod static_mode;
+pub mod typst_pdf;
 
 fn main() {}

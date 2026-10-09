@@ -328,7 +328,7 @@ pub async fn recompute_staleness(
 /// engine names) into the doc's uncompressed `meta` audit map
 /// (bd-eiku4ymo) so `hub admin scan` can read provenance without
 /// gunzipping.
-async fn write_capture_doc(
+pub async fn write_capture_doc(
     ctx: &Arc<HubContext>,
     rel_path: &str,
     captures: &[EngineCapture],

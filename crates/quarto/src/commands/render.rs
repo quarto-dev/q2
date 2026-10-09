@@ -1005,6 +1005,7 @@ pub fn render_once(
         // until project YAML schema work; the resolver matrix is still
         // exercised end-to-end by Phase 0 test #9b).
         attribution: args.attribution,
+        attribution_json: None,
         chapter_seed: None,
         source_override: None,
         // `q2 render` never times out or cancels a long typst or pandoc run.
