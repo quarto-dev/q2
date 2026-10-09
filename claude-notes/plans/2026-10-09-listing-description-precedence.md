@@ -168,7 +168,7 @@ unconditional.
 
 **Pass-1 (sibling's root cause).** `pass1_profile_single_file_live` gets
 `ListingItemInfoStage`, so `derived_description`, image, word count and
-reading time reach listing profiles. How to do it is still open (Q-A below).
+reading time reach listing profiles. It uses a shared head-stage list (Q-A, decided below).
 
 **Feeds.** Metadata feeds inline `item.description`. That now includes a
 derived one when nothing is authored, which matches Q1, where the
