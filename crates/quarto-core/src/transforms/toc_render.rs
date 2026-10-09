@@ -165,7 +165,11 @@ impl AstTransform for TocRenderTransform {
 /// The match is exhaustive on purpose — a new `Inline` variant should
 /// force a decision here rather than silently fall through a `_` arm,
 /// which is how the flattener this replaced accumulated its bugs.
-fn strip_links_and_notes(inlines: &[Inline]) -> Inlines {
+///
+/// Listings reuse it for the same two reasons: an item's title is
+/// wrapped in the item's link, and a footnote in an item's title or
+/// description would land on the listing page (bd-8a9eum6p).
+pub(crate) fn strip_links_and_notes(inlines: &[Inline]) -> Inlines {
     let mut out = Inlines::new();
     for inline in inlines {
         match inline {

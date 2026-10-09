@@ -384,7 +384,7 @@ fn section_for_dir(dir: &str, members: &[&DocumentProfile]) -> SidebarEntry {
 
     let (text_cv, href) = match index_profile {
         Some(p) => {
-            let title = p.title.clone().unwrap_or_else(|| capitalize(dir));
+            let title = p.title_text().unwrap_or_else(|| capitalize(dir));
             (
                 Some(ConfigValue::new_string(
                     &title,
@@ -431,7 +431,7 @@ fn flatten_as_links(candidates: &[&DocumentProfile]) -> Vec<SidebarEntry> {
 
 fn link_entry(profile: &DocumentProfile) -> SidebarEntry {
     let href = source_fwd_slash(profile);
-    let text = profile.title.clone().unwrap_or_else(|| {
+    let text = profile.title_text().unwrap_or_else(|| {
         // Fall back to the file stem.
         profile
             .source_path
@@ -468,13 +468,11 @@ fn sort_profiles(list: &mut [&DocumentProfile]) {
         }
         // Fall back to title (case-insensitive).
         let ta = a
-            .title
-            .as_deref()
-            .map_or_else(|| source_fwd_slash(a).to_lowercase(), str::to_lowercase);
+            .title_text()
+            .map_or_else(|| source_fwd_slash(a).to_lowercase(), |t| t.to_lowercase());
         let tb = b
-            .title
-            .as_deref()
-            .map_or_else(|| source_fwd_slash(b).to_lowercase(), str::to_lowercase);
+            .title_text()
+            .map_or_else(|| source_fwd_slash(b).to_lowercase(), |t| t.to_lowercase());
         ta.cmp(&tb)
     });
 }
@@ -497,7 +495,7 @@ mod tests {
             source_path: PathBuf::from(source),
             output_href: source.replace(".qmd", ".html"),
             format_id: "html".to_string(),
-            title: Some(title.to_string()),
+            title: Some(crate::document_profile::text(title)),
             ..DocumentProfile::default()
         }
     }

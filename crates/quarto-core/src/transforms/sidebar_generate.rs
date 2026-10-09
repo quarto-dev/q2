@@ -299,10 +299,10 @@ fn enrich_text_from_index(
                 if text.is_none()
                     && let Some(h) = href.as_deref()
                     && let Some(profile) = index.lookup_by_source(std::path::Path::new(h))
-                    && let Some(title) = &profile.title
+                    && let Some(title) = profile.title_text()
                 {
                     *text = Some(ConfigValue::new_string(
-                        title,
+                        &title,
                         SourceInfo::generated(By::programmatic_config()),
                     ));
                 }
@@ -356,7 +356,7 @@ mod tests {
             source_path: PathBuf::from(source),
             output_href: source.replace(".qmd", ".html"),
             format_id: "html".to_string(),
-            title: Some(title.to_string()),
+            title: Some(crate::document_profile::text(title)),
             ..DocumentProfile::default()
         }
     }

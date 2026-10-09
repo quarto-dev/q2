@@ -73,7 +73,9 @@ document. Write qmd, not GitHub Markdown: no indented code blocks, escape an
 apostrophe after a code span (`` `a.rs`\'s ``), and so on. The list is in
 `claude-notes/instructions/writing-notes.md`; the user-facing page it points
 at is `q2 agents-info guides/authoring/migrating-markdown.md`. Check a note
-with `q2 render <file>`.
+with `q2 render --strict <file>`; CI runs `q2 render --strict claude-notes`
+on every PR (a step of the test suite, `.github/workflows/test-suite.yml`),
+so a note that fails to parse or warns fails the PR.
 
 ### File Structure
 Plan files should include:

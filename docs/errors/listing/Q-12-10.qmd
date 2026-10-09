@@ -22,29 +22,36 @@ items and produces a string of markdown. Then it parses that
 markdown back into an AST so the result can be spliced into the
 host document.
 
-If the second parse surfaces diagnostics, this warning fires.
+If the second parse surfaces diagnostics, this diagnostic fires.
 The message includes how many diagnostics the re-parse produced
 and the title of the first one, so you can find the underlying
 issue.
 
+- When the re-parse **succeeds** with diagnostics (for example,
+  raw HTML written by a custom template), it is a **warning** and
+  the listing renders.
+- When the re-parse **fails**, the listing is skipped and it is an
+  **error**: a page that silently ships without its listing is
+  easy to miss.
+
 ## Why this happens
 
-Two known triggers:
+Item metadata does not cause it: a listing writes each item's
+`title`, `subtitle` and `description` back as markdown, with their
+formatting kept and any markdown-significant text escaped. A title
+such as `Fix \_scope` or ``About `<anonymous>` frames`` renders in
+the listing as it does on its own page.
 
-- **Item metadata contains markdown that does not survive
-  template interpolation.** A title with raw `[` characters, an
-  unbalanced `*`, or similar — the template emitted the
-  character literally and the re-parse complained.
-- **A custom template produced syntactically invalid output.**
-  An accidental unterminated fence or unescaped delimiter that
-  the template author did not anticipate.
+The usual trigger is a **custom template that produces
+syntactically invalid output**: an unterminated fence, an
+unclosed `_` or `*` in the template's own text, or a
+`$variable$` interpolated where markdown does not expect it.
 
 ## How to fix
 
-Inspect the first diagnostic the warning mentions — its error
+Inspect the first diagnostic the message mentions. Its error
 code (`Q-2-*`) and message point at what the re-parser found
-broken. Then trace it back to either the offending item
-metadata or the custom template.
+broken. Then trace it back to the custom template.
 
 ## Related
 

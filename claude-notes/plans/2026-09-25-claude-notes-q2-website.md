@@ -2,13 +2,14 @@
 title: 'claude-notes as a Quarto 2 website'
 date: 2026-09-25
 description: 'Makes the `claude-notes/` directory render as a Quarto 2 website by fixing notes that rely on Markdown habits q2 rejects, fixing q2 where it is wrong, and writing agent guidance for new notes.'
-status: in-progress  # every note renders (1456 / 1456, 0 errors, 2026-10-07, nightly .20261007), and the warnings are gone too: brackets (Q-2-9 152 → 0, Q-2-49 339 → 0 outside three repro fixtures) and quoted shortcodes (Q-16-3 95 → 0, Q-16-5 77 → 0), 2026-10-08. Mechanical escaping, six per-file agent batches for errors, four for brackets, three for shortcodes, and hand tails; the star queue below is historical. The render now reports 1451 / 1451 with no diagnostics at all (after merging `origin/main` once more on 2026-10-08: two new plans, three `\'` escapes and one code span). The last two warnings were one q2 bug filed with a repro, the YAML provenance desync for a folded scalar holding a non-ASCII character (bd-e0e9kd4a, in progress); worked around by spelling two cosmetic `status:` blocks in ASCII. A third, Q-2-50 on a `{{r}}` fence line inside a four-backtick block, turned out to be by design (bd-3djx9ris, closed: the nested check is what catches Quarto 1 openers hidden in display fences); the one note that documents that idiom now carries `diagnostics: {Q-2-50: {level: off, reason: …}}` in its front matter, as `docs/errors/markdown/Q-2-50.qmd` does. The repro fixtures that exist to warn are excluded in `_quarto.yml`. Note for the tally scripts: `--json-errors` emits some warnings with no `code` field ("Missing shortcode argument", "Shortcode error", the provenance self-check; bd-9vmlk2md), so count `kind: warning`, not codes. Remaining work: site polish, CI, and every merge from `main` needs the fixpoint script (and probably a small batch) for the notes it brings in.
+status: in-progress  # every note renders (1456 / 1456, 0 errors, 2026-10-07, nightly .20261007), and the warnings are gone too: brackets (Q-2-9 152 → 0, Q-2-49 339 → 0 outside three repro fixtures) and quoted shortcodes (Q-16-3 95 → 0, Q-16-5 77 → 0), 2026-10-08. Mechanical escaping, six per-file agent batches for errors, four for brackets, three for shortcodes, and hand tails; the star queue below is historical. The render now reports 1451 / 1451 with no diagnostics at all (after merging `origin/main` once more on 2026-10-08: two new plans, three `\'` escapes and one code span). The last two warnings were one q2 bug filed with a repro, the YAML provenance desync for a folded scalar holding a non-ASCII character (bd-e0e9kd4a, in progress); worked around by spelling two cosmetic `status:` blocks in ASCII. A third, Q-2-50 on a `{{r}}` fence line inside a four-backtick block, turned out to be by design (bd-3djx9ris, closed: the nested check is what catches Quarto 1 openers hidden in display fences); the one note that documents that idiom now carries `diagnostics: {Q-2-50: {level: off, reason: …}}` in its front matter, as `docs/errors/markdown/Q-2-50.qmd` does. The repro fixtures that exist to warn are excluded in `_quarto.yml`. Note for the tally scripts: `--json-errors` emits some warnings with no `code` field ("Missing shortcode argument", "Shortcode error", the provenance self-check; bd-9vmlk2md), so count `kind: warning`, not codes. Since 2026-10-09 CI runs `q2 render --strict claude-notes` on every PR (bd-7v3trpxn, below), so notes arrive checked instead of needing the fixpoint script after each merge. Remaining work: site polish (index, navigation).
 braid:
   strand: bd-uk8zgkha
   priority: P2
 ---
 
-**Branch:** `braid/bd-uk8zgkha-claude-notes-website` (main checkout, no worktree; not pushed)
+**Branch:** merged to `main` as PR #807 (2026-10-09); the CI gate is bd-7v3trpxn,
+branch `braid/bd-7v3trpxn-ci-gate-q2-render`
 
 ## Goal
 
@@ -118,6 +119,8 @@ before accepting, and keep it for the long tail, not for whole documents.
 | bd-3djx9ris | Q-2-50 (doubled braces) fires on a fence-shaped line inside an enclosing four-backtick block; closed, by design (bd-q250-nested-fence-blind-spot-t68z1lsw). A note documenting the idiom opts out with `diagnostics: {Q-2-50: {level: off}}` in its front matter |
 | bd-e0e9kd4a | a folded `>` block scalar with a non-ASCII character desyncs the next scalar's provenance ("YAML string scalar has no content provenance", twice) |
 | bd-9vmlk2md | three warnings carry no Q code and so hide from code-keyed tooling: "Missing shortcode argument", "Shortcode error", the provenance self-check |
+| bd-be8ve52f | `q2 render` diagnostics keep ANSI colour and OSC 8 links with `NO_COLOR` set or stderr redirected; only the counts clause checks |
+| bd-m7pqz8a5 | `cargo xtask switch-task --from main` branches off the stale local `main` after fetching (not a q2 bug; tooling) |
 
 Shipped in 0.33.0-nightly.20260925: the code-span fix, the nested-project boundary,
 and the flanking fix for `*`, `~` and `^` (now literal, no error). `_` is half done:
@@ -359,6 +362,55 @@ spans and no attribute; two more nested-fence repairs; one prose note beside a
 repro directory. The nested-fence detector in the batch picker caught both
 fence cases before an agent saw them.
 
+## CI gate (2026-10-09, bd-7v3trpxn)
+
+A step at the end of the Linux `test-suite` leg in
+`.github/workflows/test-suite.yml`:
+`cargo run --profile ci --bin q2 -- render --strict claude-notes`, with
+`if: runner.os == 'Linux' && !cancelled()`. The `crates/quarto` integration
+tests run the binary through `CARGO_BIN_EXE_q2`, so the preceding
+`cargo nextest run --tests --cargo-profile ci` has already built
+`target/ci/q2`; the step adds the render itself, about two seconds for the
+1452 files (the binary needs nothing on `PATH`: no pandoc, typst or deno).
+
+The first draft was a separate workflow that built `q2` itself. Carlos asked
+whether the build could be reused instead, and it should be: `rust-cache`
+evicts workspace-crate artifacts, so the separate job would have recompiled
+the ~40 workspace crates on every PR (8–15 min of runner time, counted against
+the concurrent-job cap) for a two-second render. The price of the step is
+that the signal arrives when the test suite finishes and shows as the red
+Linux leg with the step name, not as a named check; the pre-flight for a new
+note is local anyway (`q2 render --strict <file>`). A dependent job passing
+the binary as an artifact would restore the named check but waits on both
+matrix legs; not worth it.
+
+Decisions:
+
+- `--strict` rather than a tally script. It promotes warnings to errors at the
+  summary boundary and exits 1 on any diagnostic, with the ordinary
+  human-readable report in the log. Per-document `diagnostics:` opt-outs are
+  applied inside the render, before the promotion, so the Q-2-50 opt-out in
+  the doubled-brace note stays quiet. This also made the gate one line and
+  retired the "count `kind: warning`" caveat for CI purposes (it still applies
+  to `q2-render-tally.py`).
+- Built from the branch, not a nightly, and on every PR (the test suite is
+  not path-filtered). A parser change that breaks the notes fails here too, so
+  the notes double as a corpus test for the qmd reader, and a q2 fix and the
+  note changes it needs can land in one PR.
+- No `actions/upload-artifact` of `_site/`; publishing the site is the
+  site-polish item, not this one.
+
+Two things noticed while wiring it: the per-diagnostic output carries ANSI
+colour and OSC 8 hyperlinks even when stderr is not a terminal or `NO_COLOR` is
+set (only the counts clause checks; bd-6d9ew2up added the switch in
+`quarto-error-reporting` but `q2 render` does not pass it) — harmless in the
+Actions log viewer, which renders SGR; filed as bd-be8ve52f (p3). And
+`cargo xtask switch-task --from main` fetches `origin/main` but branches off
+the stale local `main` while printing "after pull"; bd-m7pqz8a5 (p3).
+
+For a new note, `q2 render --strict <file>` before committing is the whole
+pre-flight; `claude-notes/instructions/writing-notes.md` and `AGENTS.md` say so.
+
 ## Manual review queue: star emphasis (historical)
 
 Each line is `file:line:col` and the reported opener, in brackets. For each:
@@ -449,5 +501,6 @@ plans/2026-09-29-typst-smoke-all-followup.md:85:4: 6. [**]`authors.lua` (shared 
    three more Q-2-35 are knock-on positions from an earlier error in the file, and
    one is a Pandoc-style multi-paragraph footnote; q2 writes those as `::: ^1` block
    footnotes (Q-2-29 is the intended diagnostic, but Q-2-35 fires instead).
-5. Site polish: `index` page (00-INDEX.md is stale), navigation, and whether CI
-   should require a clean render.
+5. Site polish: `index` page (00-INDEX.md is stale), navigation. ~~Whether CI
+   should require a clean render~~: it does, since 2026-10-09 (bd-7v3trpxn;
+   "CI gate" above).

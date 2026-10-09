@@ -1071,7 +1071,14 @@ fn active_page_profile_comments_on_html_output() {
     let texts: Vec<&str> = profile.comments.iter().map(|c| c.text.as_str()).collect();
     assert_eq!(texts, vec!["one", "two"]);
     assert_eq!(profile.comments[1].author.as_deref(), Some("Alice"));
-    assert_eq!(profile.title.as_deref(), Some("Home"));
+    assert_eq!(
+        profile
+            .title
+            .as_deref()
+            .map(quarto_pandoc_types::inlines_to_plain_text)
+            .as_deref(),
+        Some("Home")
+    );
 }
 
 /// Same as [`active_page_profile_comments_on_html_output`] but through

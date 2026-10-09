@@ -375,7 +375,7 @@ mod tests {
                 source_path: PathBuf::from(p),
                 output_href: p.replace(".qmd", ".html"),
                 format_id: "html".to_string(),
-                title: Some(p.to_string()),
+                title: Some(crate::document_profile::text(p)),
                 ..DocumentProfile::default()
             })
             .collect();
@@ -442,7 +442,7 @@ mod tests {
             source_path: PathBuf::from("a.qmd"),
             output_href: "a.html".to_string(),
             format_id: "html".to_string(),
-            title: Some("A".to_string()),
+            title: Some(crate::document_profile::text("A")),
             body_link_targets: vec![PathBuf::from("b.qmd")],
             ..DocumentProfile::default()
         }];
@@ -450,7 +450,7 @@ mod tests {
             source_path: PathBuf::from("b.qmd"),
             output_href: "b.html".to_string(),
             format_id: "html".to_string(),
-            title: Some("B".to_string()),
+            title: Some(crate::document_profile::text("B")),
             ..DocumentProfile::default()
         });
         let index = ProjectIndex::new(profiles);
@@ -475,7 +475,7 @@ mod tests {
                 source_path: PathBuf::from("foo.qmd"),
                 output_href: "foo.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("Foo".to_string()),
+                title: Some(crate::document_profile::text("Foo")),
                 nav_dependencies: vec![PathBuf::from("a.qmd"), PathBuf::from("b.qmd")],
                 ..DocumentProfile::default()
             },
@@ -483,14 +483,14 @@ mod tests {
                 source_path: PathBuf::from("a.qmd"),
                 output_href: "a.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("A".to_string()),
+                title: Some(crate::document_profile::text("A")),
                 ..DocumentProfile::default()
             },
             DocumentProfile {
                 source_path: PathBuf::from("b.qmd"),
                 output_href: "b.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("B".to_string()),
+                title: Some(crate::document_profile::text("B")),
                 ..DocumentProfile::default()
             },
         ];
@@ -510,7 +510,7 @@ mod tests {
             source_path: PathBuf::from("foo.qmd"),
             output_href: "foo.html".to_string(),
             format_id: "html".to_string(),
-            title: Some("Foo".to_string()),
+            title: Some(crate::document_profile::text("Foo")),
             nav_dependencies: vec![PathBuf::from("missing.qmd")],
             ..DocumentProfile::default()
         }];
@@ -533,7 +533,7 @@ mod tests {
                 source_path: PathBuf::from("vol.qmd"),
                 output_href: "vol.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("Volatile".to_string()),
+                title: Some(crate::document_profile::text("Volatile")),
                 always_render: true,
                 ..DocumentProfile::default()
             },
@@ -541,7 +541,7 @@ mod tests {
                 source_path: PathBuf::from("stable.qmd"),
                 output_href: "stable.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("Stable".to_string()),
+                title: Some(crate::document_profile::text("Stable")),
                 ..DocumentProfile::default()
             },
         ];
@@ -562,7 +562,7 @@ mod tests {
                 source_path: PathBuf::from("a.qmd"),
                 output_href: "a.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("A".to_string()),
+                title: Some(crate::document_profile::text("A")),
                 body_link_targets: vec![PathBuf::from("b.qmd")],
                 ..DocumentProfile::default()
             },
@@ -570,7 +570,7 @@ mod tests {
                 source_path: PathBuf::from("b.qmd"),
                 output_href: "b.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("B".to_string()),
+                title: Some(crate::document_profile::text("B")),
                 body_link_targets: vec![PathBuf::from("c.qmd")],
                 ..DocumentProfile::default()
             },
@@ -578,7 +578,7 @@ mod tests {
                 source_path: PathBuf::from("c.qmd"),
                 output_href: "c.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("C".to_string()),
+                title: Some(crate::document_profile::text("C")),
                 body_link_targets: vec![PathBuf::from("d.qmd")],
                 ..DocumentProfile::default()
             },
@@ -586,7 +586,7 @@ mod tests {
                 source_path: PathBuf::from("d.qmd"),
                 output_href: "d.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("D".to_string()),
+                title: Some(crate::document_profile::text("D")),
                 ..DocumentProfile::default()
             },
         ];
@@ -610,7 +610,7 @@ mod tests {
                 source_path: PathBuf::from("a.qmd"),
                 output_href: "a.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("A".to_string()),
+                title: Some(crate::document_profile::text("A")),
                 body_link_targets: vec![PathBuf::from("b.qmd")],
                 ..DocumentProfile::default()
             },
@@ -618,7 +618,7 @@ mod tests {
                 source_path: PathBuf::from("b.qmd"),
                 output_href: "b.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("B".to_string()),
+                title: Some(crate::document_profile::text("B")),
                 body_link_targets: vec![PathBuf::from("a.qmd")],
                 ..DocumentProfile::default()
             },
@@ -640,7 +640,7 @@ mod tests {
                 source_path: PathBuf::from("a.qmd"),
                 output_href: "a.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("A".to_string()),
+                title: Some(crate::document_profile::text("A")),
                 body_link_targets: vec![PathBuf::from("b.qmd")],
                 ..DocumentProfile::default()
             },
@@ -648,14 +648,14 @@ mod tests {
                 source_path: PathBuf::from("b.qmd"),
                 output_href: "b.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("B".to_string()),
+                title: Some(crate::document_profile::text("B")),
                 ..DocumentProfile::default()
             },
             DocumentProfile {
                 source_path: PathBuf::from("c.qmd"),
                 output_href: "c.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("C".to_string()),
+                title: Some(crate::document_profile::text("C")),
                 body_link_targets: vec![PathBuf::from("b.qmd")],
                 ..DocumentProfile::default()
             },
@@ -681,7 +681,7 @@ mod tests {
                 source_path: PathBuf::from("q.qmd"),
                 output_href: "q.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("Q".to_string()),
+                title: Some(crate::document_profile::text("Q")),
                 always_render: true,
                 body_link_targets: vec![PathBuf::from("x.qmd")],
                 ..DocumentProfile::default()
@@ -690,7 +690,7 @@ mod tests {
                 source_path: PathBuf::from("x.qmd"),
                 output_href: "x.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("X".to_string()),
+                title: Some(crate::document_profile::text("X")),
                 ..DocumentProfile::default()
             },
         ];
@@ -714,7 +714,7 @@ mod tests {
                 source_path: PathBuf::from("q.qmd"),
                 output_href: "q.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("Q".to_string()),
+                title: Some(crate::document_profile::text("Q")),
                 always_render: true,
                 ..DocumentProfile::default()
             },
@@ -722,7 +722,7 @@ mod tests {
                 source_path: PathBuf::from("x.qmd"),
                 output_href: "x.html".to_string(),
                 format_id: "html".to_string(),
-                title: Some("X".to_string()),
+                title: Some(crate::document_profile::text("X")),
                 ..DocumentProfile::default()
             },
         ];
@@ -788,7 +788,7 @@ mod tests {
             source_path: PathBuf::from(path),
             output_href: path.replace(".qmd", ".html"),
             format_id: "html".to_string(),
-            title: Some(path.to_string()),
+            title: Some(crate::document_profile::text(path)),
             listing_content_globs: globs
                 .iter()
                 .map(|g| match g.strip_prefix('!') {
@@ -805,7 +805,7 @@ mod tests {
             source_path: PathBuf::from(path),
             output_href: path.replace(".qmd", ".html"),
             format_id: "html".to_string(),
-            title: Some(path.to_string()),
+            title: Some(crate::document_profile::text(path)),
             ..DocumentProfile::default()
         }
     }

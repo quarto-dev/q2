@@ -44,6 +44,16 @@ For images the same split costs **two** things — rewriting *and* copying:
 `<img src="$it.image$">`{=html}   ✘ neither: the src 404s in the deployed site
 ```
 
+Item prose follows the same split. `$it.title$`, `$it.subtitle$` and
+`$it.description$` are **markdown** (formatting kept, special characters
+escaped); inside a raw HTML block use their rendered twins:
+
+```
+### [$it.title$]($it.path$)                    ✔ markdown in markdown
+`<span class="t">$it.title-html$</span>`{=html}  ✔ HTML in HTML
+`<span class="t">$it.title$</span>`{=html}       ✘ shows `Fix \_scope` source
+```
+
 Raw HTML is fine *inside* the link text — the built-ins do exactly this with
 ``[`$image-html$`{=html}]($path$)``. **Anchor markdown, contents raw.**
 

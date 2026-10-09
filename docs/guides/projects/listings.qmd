@@ -46,6 +46,20 @@ empty-titled item ([`Q-12-21`](/errors/listing/Q-12-21.qmd)). Relative
 `image:` and `path:` values resolve against the file the listing is
 written in.
 
+### Titles and descriptions are markdown
+
+An item's `title`, `subtitle` and `description` are markdown, whether
+they come from a document's front matter or from a record. Their
+formatting shows in the listing as it does on the page: a title such as
+``Fix `_scope`: a *lexical* regression`` keeps its code span and its
+emphasis. Links inside them are shown as plain text, since each item is
+already a link, and footnotes are left out.
+
+A listing shows each of them as a single paragraph. Write a
+`description:` as one paragraph; one written as several (a YAML block
+scalar with a blank line in it, or a list) is joined into one, with a
+warning ([`Q-12-26`](/errors/listing/Q-12-26.qmd)).
+
 ### Records that point at a document
 
 `path: guide/install.qmd` merges the record over that document's own
@@ -160,7 +174,12 @@ rather than paste the file into the page.
   `word-count`, `order`, plus `image-html`, `category-html` and
   `table-row` pre-rendered snippets. Custom fields from an inline record
   or from a document's `listing-item.extra` are readable directly
-  (`$it.icon$`) and under `$it.extra.icon$`.
+  (`$it.icon$`) and under `$it.extra.icon$`. `title`, `subtitle` and
+  `description` are **markdown** on one line, already escaped: use them
+  where the template writes markdown (`### [$it.title$]($it.path$)`).
+  Inside a raw HTML block, where markdown would show as source, use
+  their rendered twins `title-html`, `subtitle-html` and
+  `description-html` instead.
 - **`project.*`** — `site-url` and `title` from the website
   configuration.
 
