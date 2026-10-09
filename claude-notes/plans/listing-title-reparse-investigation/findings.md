@@ -18,3 +18,23 @@ Without p/a.qmd and p/c.qmd (the `_scope` titles):
     <td><a href="p/b.html" class="no-external">Plan for q2 preview and emph</a>
 
 Each page renders its own title correctly (`<code>_scope</code>`, `<code>&lt;anonymous&gt;</code>`).
+
+# Phase 0 probes (2026-10-09)
+
+## Multi-paragraph description (D5)
+
+`description: |` with two paragraphs → `PandocBlocks`, and `ConfigValue::as_plain_text` returns
+`None` for blocks, so **the description is silently dropped**. A table listing with
+`fields: [title, description]` shows an empty description cell, with no diagnostic. A single-paragraph
+description renders, but flattened (`Single *para* desc` → `Single para desc`).
+
+## `|` inside a code span in a pipe-table cell
+
+Pandoc 3.11 and pampa agree:
+- `` | `a|b` x | `` → `Code "a|b"`: the code span protects the pipe;
+- `` | `a\|b` x | `` → `Code "a\\|b"`: the backslash is **kept** inside code;
+- `| $a|b$ x |` → `Math InlineMath "a|b"`: math protects it too.
+
+So today's `escape_table_cell` (a global `|` → `\|`) would corrupt a code span that contains a pipe.
+The qmd writer already escapes `|` in `Str` text, so a cell written from inlines needs only line
+breaks flattened (SoftBreak/LineBreak → Space before writing), not the global pipe escape.

@@ -8,14 +8,14 @@ date: 2026-10-09
 **Date:** 2026-10-09
 **Braid:** bd-8a9eum6p
 **Branch:** `braid/bd-8a9eum6p-listing-title-reparse` (topic branch in the main checkout, based on `main` @ `15bb0d54f`)
-**Status:** Design agreed with the user on 2026-10-09 (see Decisions). Two smaller points (D5, D6) are my defaults and still open to change. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design agreed (D1–D7) on 2026-10-09; implementation in progress. Progress is tracked in the Phases checklists.
 
 **Pre-flight:** `cargo xtask verify --skip-hub-build` is green at `15bb0d54f`. The first run hit a
 flaky `marimo_engine_e2e::sc14` (a uv cache-rename race). That test passed on its own, and the full rerun exited 0.
 
 ## Triage verdict
 
-**Ready to implement once the user gives the go-ahead.** The root cause is clear and confined to one place, pampa already has the
+**Ready; implementation started 2026-10-09.** The root cause is clear and confined to one place, pampa already has the
 writer this fix needs (`write_inlines_fragment`), and scope was settled with the user on 2026-10-09.
 
 ## Issue context
@@ -112,7 +112,7 @@ markdown and lets Pandoc parse it once. Code spans and emphasis therefore surviv
   listing. There is precedent for transform-level errors: crossref's Q-15-1, which
   `ProjectRenderSummary` counts as an error.
 
-My defaults, not yet confirmed:
+Confirmed by the user on 2026-10-09 (proposed by me):
 
 - **D5. Multi-block descriptions.** `description: |` with two paragraphs parses to
   `PandocBlocks`, and today `as_plain_text` returns `None` for that, so the description is
@@ -125,47 +125,62 @@ My defaults, not yet confirmed:
   item *data* can no longer trigger it. Only template text can.
 - **D7. Truncation becomes inline-aware.** `max-description-length` currently truncates a
   `String` (`helpers::truncate_text_at_space`). It needs an `Inlines` version that counts the plain-text
-  length, cuts at a word boundary inside a `Str`, drops the inlines after the cut (and closes nothing,
+  length, cuts at a word boundary inside a `Str`, drops the inlines after the cut (nothing needs closing,
   because the result is a tree, not text), and appends `…`. Derived descriptions (filled in after render from the
-  HTML) are unaffected.
+  HTML) are unaffected. The cut may not match Q1's character count exactly; the user accepted that.
 
 ## Phases
 
-- **Phase 0: failing tests first.**
-  - Unit (`binding.rs`): an item whose title is `[Str "_scope"]` or contains `Code "_scope"` /
-    `Code "<anonymous>"` / `Emph`. Assert that the bound `title` markdown, run through
-    `pampa::readers::qmd::read`, gives back the same inlines. Do the same for a table cell that contains a `|`
-    inside a code span.
-  - Unit (`document_profile.rs`): the profile keeps `title` as inlines (code span intact).
-    Probe the multi-paragraph description (D5) and record what happens today.
-  - Integration (`crates/quarto-core/tests/integration/listing_title_markup.rs`, registered in
-    `main.rs`): render the repro project
-    (`claude-notes/plans/listing-title-reparse-investigation/repro/`, copied into a fixture).
-    Assert that both listings are present, that `<code>_scope</code>` and
-    `<code>&lt;anonymous&gt;</code>` appear inside listing titles and table cells, that `<em>emph</em>`
-    survives, and that there is no Q-12-10.
-  - Integration: a custom template that cannot be re-parsed gives Q-12-10 with **error** kind (D4).
-- **Phase 1: profile.** Switch the three fields to `Option<Inlines>` on `DocumentProfile` and
-  `ListingItemInfo` (`from_map`, and inline `contents:` records via `record.rs`), add a
-  `ConfigValue → Inlines` helper (a `Str` from a plain YAML string, `PandocInlines` as-is,
-  `PandocBlocks` per D5), bump to v14, and update the version doc comment. Move the plain-text consumers
-  to `inlines_to_string`.
-- **Phase 2: listing item and binding.** `ListingItem.{title,subtitle,description}` become `Inlines`.
-  The filename-stem fallback is `vec![Str(stem)]`, so its `_` gets escaped automatically.
-  `build_item_map` and `table_row` bind `write_inlines_fragment(..)` output. Flatten `Link` to
-  its content first (risk 2), because the templates wrap the title in a link. `escape_table_cell`
-  still runs over the writer output. Check that the writer escapes `|` inside code spans,
-  or handle it.
-- **Phase 3: truncation (D7)** and the multi-block warning (D5), with a new code in
-  `error_catalog.json`.
-- **Phase 4: Q-12-10 to error (D4).** Split `push_diag` into warning and error variants, and update the
-  catalog entry (title and message) to say that a failure skips the listing *and* fails the render.
-  Coordinate with bd-mlmkev01: until it lands, a listing with 90 or more items becomes a hard error rather
-  than a vanishing listing. That is arguably the point, but land mlmkev01 first or alongside.
-- **Phase 5: unblock bd-fvcip3t5.** Render the claude-notes plans listing with `--strict`
-  on that branch, and drop any code-span workarounds that are no longer needed.
-- **Phase 6: docs.** Q-12-10 docs page or catalog text, and listing docs that say descriptions
-  should be one paragraph of markdown.
+### Phase 0: failing tests first
+- [x] Probe today's behavior: a multi-paragraph `description: |` (D5), and the qmd writer's
+      handling of `|` inside a code span. Record both in the investigation dir.
+- [ ] *(moved to Phase 1; needs the new types to compile)* Unit (`document_profile.rs`): the profile keeps `title` / `subtitle` / `description` as inlines
+      (code span intact).
+- [ ] *(moved to Phase 2; needs the new types to compile)* Unit (`binding.rs`): items whose title is `[Str "_scope"]`, or contains `Code "_scope"`,
+      `Code "<anonymous>"` or `Emph`. Re-parsing the bound `title` markdown with
+      `pampa::readers::qmd::read` gives back the same inlines. Same for a table-row cell, including a `|` inside
+      a code span.
+- [x] Integration (`tests/integration/listing_title_markup.rs`): the repro project. Both
+      listings present; `<code>_scope</code>`, `<code>&lt;anonymous&gt;</code>` and `<em>emph</em>` appear in
+      listing titles (default) and table cells; subtitle and description markup survives; no Q-12-10.
+- [x] Integration: a custom template that fails to re-parse gives Q-12-10 with **error** kind (D4).
+- [x] Confirm the new tests fail for the right reason at HEAD. All 3 fail: Q-12-10 present; the
+      multi-paragraph description cell is empty; Q-12-10 has warning kind. The multi-paragraph test pins
+      the new warning code as **Q-12-26** (the next free Q-12 code on `main`; check for collisions with
+      bd-mlmkev01 before merging).
+
+### Phase 1: profile (D1, D2, D5)
+- [ ] `ConfigValue → Option<Inlines>` helper: a plain YAML string becomes `Str`s; `PandocInlines` is
+      used as-is; `PandocBlocks` is flattened per D5 (with a flag so the caller can warn).
+- [ ] `DocumentProfile.{title,subtitle,description}` and `ListingItemInfo.{title,subtitle,description}`
+      become `Option<Inlines>`.
+- [ ] `DOCUMENT_PROFILE_VERSION` 13 → 14, plus a doc-comment entry.
+- [ ] Move every plain-text consumer to `inlines_to_string` (sidebar, navigation, llms, search,
+      index, book, sort, filter, feed, …).
+
+### Phase 2: listing item and binding (D3)
+- [ ] `ListingItem.{title,subtitle,description}` become `Inlines`; the filename-stem fallback is `Str`.
+- [ ] Inline `contents:` records (`record.rs`) produce inlines.
+- [ ] `build_item_map` / `table_row` bind `write_inlines_fragment` output, with links flattened in
+      titles; table cells stay safe for `|` and newlines.
+
+### Phase 3: truncation (D7) and multi-block warning (D5)
+- [ ] Inline-aware truncation for `max-description-length`.
+- [ ] Warning (new catalog code) for a multi-block description.
+
+### Phase 4: a failed Q-12-10 re-parse becomes an error (D4, D6)
+- [ ] The `Err` branch emits an error; the `Ok`-with-diagnostics branch stays a warning.
+- [ ] Update the catalog entry text.
+- [ ] Note the bd-mlmkev01 ordering on both strands.
+
+### Phase 5: verification and unblocking
+- [ ] `cargo xtask verify` green.
+- [ ] Repro project renders with both listings and formatting intact.
+- [ ] Re-render the bd-fvcip3t5 plans listing under `--strict`.
+
+### Phase 6: docs
+- [ ] Catalog/docs text for Q-12-10 and the new warning; listing docs say a description should be
+      one paragraph.
 
 ## Risks / tradeoffs (draft)
 
