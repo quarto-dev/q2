@@ -87,21 +87,6 @@ and default/grid listings with and without `fields: [date, title, description]`.
   and a `show.*` test for custom templates (~1250). No test covers
   `fields:` narrowing for the built-in grid/default templates.
 
-## Proposed phases (draft)
-
-- **Phase 0 — Tests first (red).** In `listing_render.rs` unit tests: for
-  grid and default, an item with every field set and a listing with
-  `fields: [date, title, description]` renders no image/placeholder,
-  subtitle, author, reading time or categories; a listing without `fields:`
-  still renders the image and the placeholder for an image-less item.
-- **Phase 1 — Gate the templates.** Wrap each block in `$if(show.<field>)$`
-  (image block including the placeholder branch under `$if(show.image)$`),
-  keeping the inner value checks.
-- **Phase 2 — Verification.** Repro vs. Quarto 1; the plans page with
-  `type: grid`; snapshot churn review; `cargo xtask verify`.
-- **Phase 3 — Docs.** `docs/guides/projects/listings.qmd`: say that `fields:`
-  controls which parts of a built-in card render.
-
 ## Decisions (2026-10-09)
 
 1. **Scope: gating only**, with the structural parity filed as
@@ -189,16 +174,103 @@ on most blogs, where a placeholder per image-less post is intended. Options:
   field, naming the offending items. That is the opt-in, general form of
   the user's example.
 
+## Decisions, round 2 (2026-10-09)
+
+- **(i) ships in this strand** as a new Q-12 warning: "every card in this
+  listing is an empty image placeholder".
+- **(iii) is filed** as bd-9q7w7xhq (enforce `field-required:`, aggregated
+  per listing and field, offending items named with a truncated list).
+- (ii) is dropped.
+
+## Design notes for the empty-placeholder warning (i)
+
+**It can't be decided when the items are built.** An item with no authored
+`image:` gets an L7 image envelope (`helpers::image_placeholder_begin`,
+carrying listing id, item index and href). After render,
+`post_render_upgrade/substitute.rs` `substitute_images` fills it with the
+rendered page's preview image, falling back to `image-placeholder:` and
+then to the empty div. A blog whose posts have body images but no `image:`
+front matter ends up with real thumbnails. A warning based only on
+item data would fire falsely there, which is the common case.
+
+What `listing_generate.rs` *can* know:
+- whether `image` is in the effective field set;
+- whether any item has an authored image (`image-html` branch, no
+  envelope);
+- whether `image-placeholder:` is set;
+- whether any placeholder can be filled at all (document items get
+  envelopes; plain records don't).
+
+What only L7 knows: whether every envelope stayed empty.
+
+**Two-stage shape (proposed).** At generate time, a listing is a
+*candidate* when `image` is shown, no item has an authored image, and no
+`image-placeholder:` is set. Then:
+- If no item can be filled (records only), warn right there, with a
+  source span (see below).
+- Otherwise mark the candidate's envelopes (e.g. a flag in the marker's
+  attrs). L7 groups envelopes by listing id within a host file and warns
+  once when every flagged envelope stayed empty.
+
+L7 doesn't run in the hub client (`orchestrator.rs` ~566 is
+`not(wasm32)`), so there the warning only appears in the records-only case.
+That's acceptable.
+
+**Location.** L7 diagnostics carry no source span today: Q-12-13 uses
+`SourceInfo::generated(By::unknown())`. The L7 warning would name the
+listing page and listing id in its text, plus the hint (set
+`fields:` without `image`, or set `image-placeholder:`). The generate-time
+(records-only) case can anchor on the listing, via a new
+`Listing.fields_source` captured like `categories_source` (`config.rs`
+~479 / ~577). When `fields:` is defaulted there is no `fields:` span, so it
+falls back to the listing's own span.
+
+**Interaction with the description-precedence branch.** That branch moves
+placeholder gating from item origin to `image_source` (Derived/Absent),
+puts an envelope inside the `image-html` branch too, and gives L1 a
+derived (first body) image. The candidate test should then read "no
+*authored* image" (`image_source.is_authored()`), and a derived image
+counts as filled. Whichever branch lands second adapts; the flag-in-marker
+approach survives that change.
+
+## Proposed phases (revised)
+
+- **Phase 0 — Tests first (red).**
+  - Template gating (unit, `listing_render.rs`): grid and default with
+    `fields: [date, title, description]` render no image or placeholder,
+    subtitle, author, reading time or categories. Without `fields:`,
+    image and placeholder still render.
+  - Warning (L7 unit, `substitute.rs`): flagged envelopes all empty →
+    one warning per listing. One envelope filled by a preview →
+    none. Unflagged envelopes → none.
+  - Warning (generate): records-only candidate → warning with a span.
+    `image-placeholder:` set → none. An item with an authored image →
+    none.
+  - Integration: the repro's `grid-*` pages, plus an all-image-less
+    grid listing.
+- **Phase 1 — Gate the templates** on `show.<field>` (image block
+  including the placeholder branch under `show.image`).
+- **Phase 2 — Candidate detection and the generate-time warning.**
+  `Listing.fields_source`; candidate check in `listing_generate.rs`;
+  register the code in `error_catalog.json` (next free: Q-12-27).
+- **Phase 3 — L7 confirmation.** Marker flag; per-listing grouping in
+  `substitute_images`; the warning.
+- **Phase 4 — Verification.** Repro vs. Quarto 1; plans page with
+  `type: grid`, with and without `image` in `fields:`; snapshot churn;
+  `cargo xtask verify`.
+- **Phase 5 — Docs.** `listings.qmd`: `fields:` controls which parts of a
+  card render; the new warning and how to silence it.
+
 ## Open design questions for the user
 
-1. **Diagnostic: which of (i)–(iii)?** My recommendation: (i) as a Q-12
-   warning in this strand, because it catches the exact mistake that
-   surfaced the bug; (iii) as its own strand, since it is a Q1 feature q2
-   silently ignores today; skip (ii) as too noisy for an intentional
-   pattern.
-2. **Diagnostic placement.** If (i) is in, should it ship with this strand
-   or separately? It touches `config.rs` (new `fields_source`) and
-   `listing_generate.rs`, which the gating change otherwise doesn't.
+1. **Location vs. correctness for the warning.** Recommended: the
+   two-stage shape above. It is correct, and the L7 case has no span
+   (like Q-12-13). The alternative is generate-time only, using "no
+   authored *or derived* image" once the description-precedence branch
+   adds derived images. That gets a span everywhere and needs no marker
+   flag, but it misfires on listings whose only images are
+   engine-produced (plot-only posts). Two-stage?
+2. **Go-ahead.** With that settled, OK to start Phase 0?
 
 ## Risks / tradeoffs (draft)
 
