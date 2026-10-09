@@ -240,6 +240,12 @@ jobs:
         if: runner.os == 'Linux' && !cancelled()
         shell: bash
         run: cargo run --profile ci --bin q2 -- render --strict claude-notes
+        env:
+          # Must match the nextest step above: RUSTFLAGS is part of
+          # cargo's fingerprint, so a different value here rebuilds the
+          # entire tree (836 crates, 12 min, in the first run of this
+          # step — PR #809) instead of reusing target/ci/q2.
+          RUSTFLAGS: "-D warnings"
 
   wasm-tests:
     name: WASM Tests

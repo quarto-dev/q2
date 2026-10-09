@@ -137,6 +137,7 @@ before accepting, and keep it for the long tail, not for whole documents.
 | bd-9vmlk2md | three warnings carry no Q code and so hide from code-keyed tooling: "Missing shortcode argument", "Shortcode error", the provenance self-check |
 | bd-be8ve52f | `q2 render` diagnostics keep ANSI colour and OSC 8 links with `NO_COLOR` set or stderr redirected; only the counts clause checks |
 | bd-m7pqz8a5 | `cargo xtask switch-task --from main` branches off the stale local `main` after fetching (not a q2 bug; tooling) |
+| bd-9ccy9ktr | the `quarto-preview` build script names the absent `hub-client/dist-preview-embed` in `rerun-if-changed`, so it and the `quarto` bin recompile on every cargo invocation without the embed |
 
 Shipped in 0.33.0-nightly.20260925: the code-span fix, the nested-project boundary,
 and the flanking fix for `*`, `~` and `^` (now literal, no error). `_` is half done:
@@ -388,6 +389,21 @@ tests run the binary through `CARGO_BIN_EXE_q2`, so the preceding
 `cargo nextest run --tests --cargo-profile ci` has already built
 `target/ci/q2`; the step adds the render itself, about two seconds for the
 1452 files (the binary needs nothing on `PATH`: no pandoc, typst or deno).
+The step must also run with the same `RUSTFLAGS: "-D warnings"` as nextest:
+RUSTFLAGS is part of cargo's fingerprint, and the first CI run of the step
+(PR #809, merged 2026-10-09) ran without it and recompiled all 836 crates, 12
+minutes, before rendering. Fixed in the follow-up PR; reproduced locally
+first from a clean `target/ci`: build with `RUSTFLAGS="-D warnings"`, 826
+crates; `cargo run` without it, 826 again; `cargo run` with it, 2. (Cargo
+keys artifacts by RUSTFLAGS, so both flavours coexist once built, which is
+why a non-clean local run shows nothing: it already had both.) The 2 are
+`quarto-preview` and, behind it, the `quarto` bin: the `quarto-preview`
+build script emits `rerun-if-changed` for `hub-client/dist-preview-embed`,
+which does not exist when the embed has not been built, and cargo treats a
+missing path as always changed. So every cargo invocation without the embed
+recompiles those two (19 s locally; a minute or so on a runner), the render
+step included. Pre-existing and independent of the gate; filed as
+bd-9ccy9ktr.
 
 The first draft was a separate workflow that built `q2` itself. Carlos asked
 whether the build could be reused instead, and it should be: `rust-cache`
