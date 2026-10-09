@@ -79,8 +79,20 @@ The title block renders the title, so do not repeat it as a `#` heading.
 title: 'Fix `_scope`: lexical regression (bd-XXXX)'
 date: 2026-10-09
 description: 'Restores `_scope: lexical` handling, which broke when metadata strings began parsing as markdown.'
+date-modified: 2026-10-12  # optional
+status: in-progress  # optional free-text detail goes in the comment
+braid:
+  strand: bd-XXXX
+  priority: P2           # optional; copy from the strand
+  labels: [parser]       # optional; copy from the strand
 ---
 ```
+
+`status:` is what the plan claims, one of `draft`, `approved`, `in-progress`,
+`blocked`, `done`, `superseded`, `abandoned`; put the detail in the YAML
+comment, not in a `**Status:**` line. `braid.strand` is a bare strand id (the
+key tools look the strand up by), never a formatted string; relationships to
+other strands go in its comment or in the body. Dates are ISO `YYYY-MM-DD`.
 
 Single-quote the title (write a `'` inside it as `''`): in single quotes a
 backslash escape such as `\@` reaches the markdown parser unchanged, while in
