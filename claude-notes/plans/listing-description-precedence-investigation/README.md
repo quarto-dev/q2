@@ -53,3 +53,15 @@ Reading the table:
 
 Net: q2 inverts Q1. It replaces authored descriptions and leaves missing ones
 empty.
+
+## After the fix (2026-10-09, branch `braid/bd-listing-description-precedence-x4bh6w3m-…`)
+
+| listing | a (explicit) | b (none) | c (listing-item) | d (abstract) |
+|---------|--------------|----------|------------------|--------------|
+| q2 default/grid/table | EXPLICIT-A ✓ | BODY-B ✓ | LISTING-ITEM-C ✓ | ABSTRACT-D ✓ |
+| Q1 (all three) | EXPLICIT-A | BODY-B | BODY-C¹ | ABSTRACT-D |
+
+Identical to Q1 except c, where q2's documented `listing-item:` override
+wins. No envelope markers remain in the output, and in the grid the
+derived description keeps its link (`<a href="posts/b.html">BODY-B
+paragraph.</a>`).

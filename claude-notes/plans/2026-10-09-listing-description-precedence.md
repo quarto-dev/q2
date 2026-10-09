@@ -25,7 +25,7 @@ follow-ups on the shared head pipeline and `image`.
 
 The strand is a P2 bug (labels `listings`, `parity`), filed 2026-08-11 from
 the Connect docs port (origin `br-zx6111f9`). Its original diagnosis was L1:
-`ListingItemInfoStage`'s `fill_string_if_absent` checks only
+`ListingItemInfoStage`\'s `fill_string_if_absent` checks only
 `listing-item.description`, so a top-level `description:` doesn't stop the
 autofill.
 
@@ -248,7 +248,7 @@ Red results at `ea211d56f` + tests:
 |---|---|
 | `listing_description_follows_precedence_in_every_listing_type` | FAIL: `default.html` lacks `EXPLICIT-A` |
 | `listing_derives_description_present_only_in_rendered_output` | FAIL: `default.html` lacks `RENDERED-ONLY paragraph.` |
-| `pass1_profiles_equal_full_pipeline_profiles` | FAIL: `index.qmd`'s Pass-1 profile lacks `listing_item.date_modified` (the L1 mtime) |
+| `pass1_profiles_equal_full_pipeline_profiles` | FAIL: `index.qmd`\'s Pass-1 profile lacks `listing_item.date_modified` (the L1 mtime) |
 | `listing_image_follows_precedence` | **passes today** — Pass-1 has no L1, so `listing-item.image` is never autofilled. It is the guard for the latent image bug once Phase 4 adds L1 to Pass-1. |
 
 Known test that encodes the old behaviour and must change in Phase 3:
@@ -352,7 +352,7 @@ Existing tests updated because they encoded the old behaviour:
 - [x] `IncludeResolveStage` already records file-slot includes with
   content hashes into `recorded_includes` → `profile.includes`, and
   `profile_cache::load` re-verifies those hashes. Covered, no change.
-  Its and `LanguageResolveStage`'s problems are diagnostics, not stage
+  Its and `LanguageResolveStage`\'s problems are diagnostics, not stage
   errors, and Pass-1 discards diagnostics, so no new Pass-1 failures.
 - [x] Pass-1 == full-pipeline profile test is green; plus a structural
   test `full_pipeline_starts_with_the_shared_head`.
@@ -372,10 +372,20 @@ without `description:`, matching the HTML listing
   the embedded pandoc input is `meta.listing-item` losing the leaked
   derived `description` / `image` (blocks identical; `job_id` follows).
   Full `test:wasm` then 414/414.
-- [ ] Repro vs Quarto 1 (README table); claude-notes plans page with
-  `type: grid`; Connect-docs repros.
-- [ ] Review snapshot churn item by item. (No insta snapshot changed;
-  the two goldens above are the only recorded-output changes.)
+- [x] Repro vs Quarto 1: identical in default, grid and table except the
+  intended `listing-item:` case (README "After the fix"). Grid keeps the
+  description link for derived descriptions.
+- [x] claude-notes plans page, temporarily switched to `type: grid` (not
+  committed): 1458/1458 files render; all 1054 cards show their plan's
+  curated `description:`; no envelope left. (This plan file itself first
+  failed to parse — `` `Foo`'s `` is an unclosed single quote to q2 —
+  fixed by escaping `\'`.)
+- [x] Connect-docs repros (copied to a scratch dir, not rendered in
+  place): `listing-description-precedence` now shows EXPLICIT-DESCRIPTION
+  and LISTING-ITEM-DESCRIPTION; `listing-ellipsis-no-matching` default
+  listing now matches its `_site-q1` (derived, truncated with `…`).
+- [x] Review recorded-output churn: no insta snapshot changed; the two
+  goldens above are the only recorded-output changes, both audited.
 
 ### Phase 6 — Docs
 - [x] Listing docs: precedence, `abstract`, derivation in tables, image
@@ -433,7 +443,7 @@ The plan1c caution points to real work, which is now part of Phase 4:
   `date-modified` after a `touch` with no content change. Decide: put mtime
   in the key, leave `date_modified` out of the cached profile and recompute
   it, or accept the staleness and document it. Likewise confirm that
-  `IncludeResolveStage`'s file-slot reads (`include-in-header` files) don't
+  `IncludeResolveStage`\'s file-slot reads (`include-in-header` files) don't
   put file *contents* into the profile in a way the key doesn't cover.
 - **Profile equality.** After the change, the Pass-1 profile and the full
   pipeline's profile should be identical for the same input. Add a test
