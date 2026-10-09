@@ -2,7 +2,7 @@
 title: 'Listing ignores an explicit description: and uses the auto-derived first paragraph (bd-listing-description-precedence-x4bh6w3m)'
 date: 2026-10-09
 description: 'Listings replace authored descriptions with a derived first paragraph and leave undescribed pages empty; give items a description source so derivation is a fallback (listing-item → description → abstract → derived), in every listing type.'
-status: draft  # Design agreed 2026-10-09 (all questions answered); awaiting the go-ahead to implement
+status: in-progress  # Implementation started 2026-10-09
 braid:
   strand: bd-listing-description-precedence-x4bh6w3m
   also: bd-listing-default-no-derived-desc-m0wrr8ty
@@ -10,7 +10,7 @@ braid:
 
 **Branch:** `braid/bd-listing-description-precedence-x4bh6w3m-listing-ignores-explicit-description` (main checkout, topic branch, based on `main` @ `ea72d68aa`)
 **Also covers** bd-listing-default-no-derived-desc-m0wrr8ty (merged in 2026-10-09; its investigation is `2026-08-20-listing-default-derived-description.md`).
-**Do not start implementation until the user gives the go-ahead.**
+**Implementation approved 2026-10-09.**
 
 ## Triage verdict
 
@@ -174,49 +174,114 @@ reading time reach listing profiles. It uses a shared head-stage list (Q-A, deci
 derived one when nothing is authored, which matches Q1, where the
 placeholder is substituted.
 
-## Phases
+## Implementation design refinements (2026-10-09, before Phase 0)
 
-- **Phase 0 — Tests first (red).**
-  - An orchestrator-level integration test over the repro shape (posts with
-    explicit description, no description, `listing-item.description`, and
-    abstract, each listed in default, grid and table). It asserts:
-    EXPLICIT, BODY, LISTING-ITEM, ABSTRACT in every type. It must drive real
-    Pass-1 profiles.
-  - Both `listing-item.description` and `description` set →
-    `listing-item` wins.
-  - A post with top-level `image:` and a different body image → the
-    listing shows the `image:` one, in every type. Without `image:` → the
-    body image.
-  - Pass-1 profile == full-pipeline profile for a fixture that exercises
-    includes, `include-in-header`, `lang`, and listing autofill.
-  - A page whose body starts with a code cell and has no prose → the
-    description comes from L7 (engine output).
-  - Unit tests: the `hydrate_item` chain and `description_source`; the
-    binding's envelope decision for each source; the table cell envelope;
-    L1 writes `derived-description` and leaves `listing-item.description`
-    alone.
-- **Phase 1 — Profile and L1.** `derived_description`, `derived_image`,
-  `abstract`, the version bump, and the L1 key changes.
-- **Phase 2 — Hydration.** `DescriptionSource` / `ImageSource` and the
-  precedence chains.
-- **Phase 3 — Binding and templates.** Conditional description and image
-  envelopes,
-  `show-description`, table cell envelope, Q-12-13 quieting.
-- **Phase 4 — Shared head.** Extract `head_stages()` (SourceConversion →
-  Parse → MetadataMerge → LanguageResolve → IncludeExpansion →
-  IncludeResolve → ListingItemInfo → DocumentProfile → LinkResolution).
-  Use it from both builders. Resolve the cache-key questions above. Add a
-  test that the Pass-1 and full-pipeline profiles are equal. Update the
-  sibling plan's list of other stage-list builders that must *not* use it.
-- **Phase 5 — Real-site check.** Re-render the repro against Quarto 1 (the
-  table in the README should match, except LISTING-ITEM-C). Re-render the
-  claude-notes plans page with `type: grid` (bd-fvcip3t5), and the
-  Connect-docs repros (`listing-description-precedence`,
-  `listing-ellipsis-no-matching`). `cargo xtask verify`.
-- **Phase 6 — Docs.** Listing docs: description precedence, `abstract`,
-  derivation in tables. Update the `ListingItemInfo` doc comments and
-  `claude-notes/designs/document-profile-contract.md` if Pass-1's head
-  changes.
+These refine the Design section above, based on reading the code.
+
+- **The L1 → profile channel is a typed side-channel, not a meta key.**
+  `DocumentAst.derived_listing: DerivedListingValues { description, image }`
+  is set by `ListingItemInfoStage` and moved into
+  `DocumentProfile.derived_listing` by `DocumentProfileStage`. This is the
+  same pattern as `recorded_includes` → `profile.includes`. A reserved
+  `listing-item.derived-*` meta key would leak into `listing-item` `extra`
+  fields, could be forged from front matter, and would be visible to Lua
+  filters as if it were authored. L1 keeps filling `word-count`,
+  `reading-time-minutes` and `date-modified` into `meta.listing-item` as
+  today. It stops writing `description` and `image` there.
+- **One provenance enum for both fields.** `FieldSource { ListingItem,
+  Document, Abstract, Record, Derived, Absent }`, with `is_authored()`.
+  `ListingItem` gets `description_source` and `image_source`.
+- **Gate placeholders by field source, not item origin.** A field gets its
+  L7 envelope when the item has a document target (`output_href()`) and its
+  source is `Derived` or `Absent`. This replaces
+  `origin == ItemOrigin::Document`. Consequence: a `RecordOverDocument`
+  whose record doesn't set `description` now derives from the document,
+  which is what Q1 does (it spreads the record over the document item,
+  whose description is the placeholder). A record that *does* set it stays
+  authored. Update the comment in `feed/binding.rs` that contrasts the two
+  gates.
+- **The envelope wraps the derived value, not an empty slot.** L7 runs
+  only in native project renders (`orchestrator.rs` ~566, gated
+  `not(wasm32)`). In the hub client, what's inside the envelope is what
+  users see. Description: the envelope wraps `$description$` (the L1 text).
+  Image: the `$if(image-html)$` branch also gets the envelope, so a derived
+  image renders directly and L7 can still upgrade it to the rendered
+  page's preview image (which honours `.preview-image`). L7 image fallback
+  order becomes: rendered preview → existing inner `<img>` (the L1 image)
+  → listing `image-placeholder` default → empty div.
+- **Q-12-13** fires only when the envelope held a non-empty L1 fallback.
+  An empty envelope with no paragraph in the rendered page is silent (Q1
+  parity).
+- **Table listings** get the description envelope as inline raw HTML in
+  the cell. Table images stay as they are: `image-html`, which now
+  includes a derived image.
+- **`head_stages()`** is SourceConversion → Parse → MetadataMerge →
+  LanguageResolve → IncludeExpansion → IncludeResolve → ListingItemInfo →
+  DocumentProfile → LinkResolution. `build_html_pipeline_stages_with_options`
+  = `head_stages()` + tail; Pass-1 = `head_stages()`. Every other builder
+  already derives from the full list, except `build_analysis_pipeline`
+  (LSP: no profile checkpoint, deliberately separate).
+
+## Implementation todo
+
+### Phase 0 — Tests first (red)
+- [ ] Integration test (orchestrator, real Pass-1): the repro shape — posts
+  with explicit description / none / `listing-item.description` / abstract
+  / both listing-item+description — in default, grid and table listings.
+  Expect EXPLICIT, BODY, LISTING-ITEM, ABSTRACT; listing-item beats
+  description.
+- [ ] Integration test: code-cell-first page with no prose → description
+  derived (envelope present even with no L1 text).
+- [ ] Integration test: top-level `image:` + different body image → `image:`
+  shown (default + grid); no `image:` → body image.
+- [ ] Integration test: Pass-1 profile == full-pipeline profile (fixture
+  with include, `include-in-header`, `lang`, listing autofill).
+- [ ] Record red results here.
+
+### Phase 1 — Profile + L1
+- [ ] `DerivedListingValues` type; `DocumentAst.derived_listing`;
+  `DocumentProfile.derived_listing`; `DocumentProfile.r#abstract`.
+- [ ] L1 writes `derived_listing` (always) and stops writing
+  `listing-item.description` / `listing-item.image`.
+- [ ] `DocumentProfileStage` drains the side-channel; `extract` reads
+  `abstract`.
+- [ ] Bump `DOCUMENT_PROFILE_VERSION` 14 → 15 with a changelog line.
+- [ ] Unit tests (L1 never touches authored keys; side-channel drained).
+
+### Phase 2 — Hydration
+- [ ] `FieldSource`; `ListingItem.description_source` / `image_source`.
+- [ ] `hydrate_item` chains; `record_item` / `overlay_record` sources.
+- [ ] Unit tests for each chain step.
+
+### Phase 3 — Binding, templates, L7
+- [ ] Per-field placeholder gating; `show-description` key.
+- [ ] `item-default` / `item-grid` templates: `show-description`; image
+  envelope inside the `image-html` branch.
+- [ ] Table description cell envelope.
+- [ ] L7: image inner-`<img>` fallback; Q-12-13 only with non-empty
+  fallback.
+- [ ] Unit tests (binding per source; table cell; L7 fallbacks).
+
+### Phase 4 — Shared head
+- [ ] Extract `head_stages()`; use it from both builders; update the
+  stage-order tests.
+- [ ] Pass-1 cache key vs. mtime-based `date_modified`: decide and
+  implement.
+- [ ] Confirm `IncludeResolveStage` doesn't put uncovered file contents
+  into the profile.
+- [ ] Pass-1 == full-pipeline profile test is green.
+
+### Phase 5 — Verification
+- [ ] All Phase 0 tests green; `cargo xtask verify`.
+- [ ] Repro vs Quarto 1 (README table); claude-notes plans page with
+  `type: grid`; Connect-docs repros.
+- [ ] Review snapshot churn item by item.
+
+### Phase 6 — Docs
+- [ ] Listing docs: precedence, `abstract`, derivation in tables, image
+  precedence.
+- [ ] `ListingItemInfo` / `DocumentProfile` doc comments;
+  `document-profile-contract.md` (head pipeline).
 
 ## Decisions, round 2 (2026-10-09)
 
