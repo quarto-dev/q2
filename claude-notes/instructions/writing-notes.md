@@ -72,11 +72,20 @@ so when in doubt, escape.
 Render the file you wrote:
 
 ```sh
-q2 render claude-notes/plans/2026-10-07-my-plan.md
+q2 render --strict claude-notes/plans/2026-10-07-my-plan.md
 ```
 
 It reports each problem with a location, and for "unclosed" errors the opening
-delimiter. For the whole tree, `scripts/q2-render-tally.py claude-notes` tallies
+delimiter. `--strict` makes warnings exit non-zero too, which is what CI does:
+the test suite (`.github/workflows/test-suite.yml`, Linux leg) runs
+`q2 render --strict claude-notes` with the `q2` it built from the branch, so a
+note that fails to parse or warns fails the PR (`cargo run --bin q2 -- render
+--strict claude-notes` is the local equivalent; it takes a few seconds). A
+warning a note triggers on purpose
+is switched off in that note's front matter, with a reason:
+`diagnostics: {Q-2-50: {level: off, reason: "..."}}`. Errors cannot be switched off.
+
+For the whole tree, `scripts/q2-render-tally.py claude-notes` tallies
 diagnostics by code (`--list Q-2-7` shows each occurrence with its source line).
 `scripts/claude-notes-escape-fixpoint.sh` applies the reviewed mechanical escapes
 for the classes above; run it after merging a branch that added notes.

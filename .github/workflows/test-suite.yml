@@ -218,6 +218,29 @@ jobs:
           # failure if the "Set up Deno" step above regresses.
           QUARTO_CI: "1"
 
+      # claude-notes/ is a Quarto 2 website (claude-notes/_quarto.yml; epic
+      # bd-uk8zgkha), brought to a clean render in PR #807. This keeps it
+      # there (bd-7v3trpxn): `--strict` promotes warnings to errors and
+      # exits 1 on any diagnostic, so a note that fails to parse or warns
+      # fails the job, with the same report `q2 render` prints locally.
+      # Per-document `diagnostics:` opt-outs in front matter are applied
+      # before the promotion and stay suppressed.
+      #
+      # It lives here, after nextest, rather than in its own workflow so
+      # the q2 binary is reused: the crates/quarto integration tests run
+      # it via CARGO_BIN_EXE_q2, so `--tests --cargo-profile ci` has
+      # already built target/ci/q2 (`cargo run` makes this a link-only
+      # step if that ever changes). The render takes seconds and needs
+      # nothing on PATH. Built from the branch, it also catches a parser
+      # change that breaks the notes — ~1,450 documents of qmd corpus.
+      # Linux-only: parsing is platform-independent. `!cancelled()` so a
+      # red test does not hide a bad note, or the other way round.
+      # Guidance for notes that pass: claude-notes/instructions/writing-notes.md.
+      - name: Render claude-notes (warnings are errors)
+        if: runner.os == 'Linux' && !cancelled()
+        shell: bash
+        run: cargo run --profile ci --bin q2 -- render --strict claude-notes
+
   wasm-tests:
     name: WASM Tests
     runs-on: ubuntu-latest
