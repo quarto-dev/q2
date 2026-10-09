@@ -1,7 +1,10 @@
-# Debug: render-components not loading in q2-debug iframe
+---
+title: 'Debug: render-components not loading in q2-debug iframe'
+date: 2026-05-07
+description: 'Investigates why user TSX render-component overrides fail to apply in the `q2-debug` preview, with a suspected race where the transpile memo runs before file contents load.'
+status: draft  # Open — handoff for a fresh debugging session
+---
 
-**Date:** 2026-05-07
-**Status:** Open — handoff for a fresh debugging session
 **Severity:** High — blocks manual smoke-testing of any q2-debug feature that depends on user-TSX overrides; surfaced while validating Plan 2pre Phase 1.
 **Branch context:** Reproducible on `main` and on `feature/q2-preview-work` HEAD `f58ed2b6` (pre-Plan-2pre). NOT introduced by Plan 2pre; Plan 2pre's Phase 1 has been verified clean independently.
 

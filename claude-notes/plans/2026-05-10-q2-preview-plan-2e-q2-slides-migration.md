@@ -1,8 +1,11 @@
-# Plan 2E — q2-slides + revealjs as sibling formats
+---
+title: 'Plan 2E — q2-slides + revealjs as sibling formats'
+date: 2026-05-10
+description: 'Moves the carousel and reveal.js slide renderers into one `q2-slides` directory, where two format registries share the same block and inline components and differ only in their document root.'
+status: draft  # Implementation plan — DRAFT (open design questions §1, §3, §4, §5, §6 unresolved)
+---
 
-**Date:** 2026-05-10
 **Branch:** feature/q2-preview (post-2D)
-**Status:** Implementation plan — DRAFT (open design questions §1, §3, §4, §5, §6 unresolved)
 **Milestone:** Completes the hub-client format-restructure that 2pre started. After 2E, every React-side render path lives under a sibling format directory (`q2-debug/`, `q2-preview/`, `q2-slides/`) and follows the framework registry contract; no "ghost format" code remains at the top of `components/render/`.
 
 ## Goal

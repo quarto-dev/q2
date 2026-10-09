@@ -1,4 +1,8 @@
-# Plan 1c3: `q2 call build-ts-extension` rename + extracted build lib + hermetic self-regenerating fixtures
+---
+title: 'Plan 1c3: `q2 call build-ts-extension` rename + extracted build lib + hermetic self-regenerating fixtures'
+date: 2026-07-08
+description: 'Renames the `q2 build-ts-extension` command to `q2 call build-ts-extension` for Quarto 1 parity and moves the bundle build logic into a `quarto-core` library so tests can call it in-process.'
+---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

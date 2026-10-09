@@ -1,12 +1,17 @@
-# Issue #315 — Printing / PDF export from the quarto-hub preview is broken
+---
+title: 'Issue #315 — Printing / PDF export from the quarto-hub preview is broken'
+date: 2026-07-06
+description: 'Makes printing and print-to-PDF from the quarto-hub preview produce paginated, styled output by opening the document in a new top-level tab instead of relying on iframe printing.'
+status: draft  # planning (do not execute until the user gives the go-ahead)
+braid:
+  strand: bd-vhdknrvl
+  priority: P1
+  labels: [bug]
+---
 
 **Issue:** https://github.com/quarto-dev/q2/issues/315 — "print to pdf is
 super broken in our react preview formats. We should audit this for the
 formats we care about."
-
-**Status:** planning (do not execute until the user gives the go-ahead)
-
-**Braid strand:** bd-vhdknrvl
 
 ---
 

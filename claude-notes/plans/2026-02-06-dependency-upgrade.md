@@ -1,4 +1,8 @@
-# Dependency Upgrade — 2026-02-06
+---
+title: 'Dependency Upgrade — 2026-02-06'
+date: 2026-02-06
+description: 'Records the first run of the dependency upgrade workflow: a lock file refresh, compatible version bumps, and twelve breaking crate upgrades, with tree-sitter reverted because its WASM build failed.'
+---
 
 First run of the dependency upgrade workflow.
 

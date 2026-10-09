@@ -1,6 +1,9 @@
-# Block editing — Plan 2c: keyboard a11y, touch polish, Tier-2 tests
+---
+title: 'Block editing — Plan 2c: keyboard a11y, touch polish, Tier-2 tests'
+date: 2026-06-10
+description: 'Adds roving-tabindex keyboard access and ARIA to inline block editing in the `useBlockEditHover` hook, suppresses touch OS gestures, adds WASM round-trip tests for more block types, and restores the box layout that editing lost.'
+---
 
-**Date:** 2026-06-10
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
 **Depends on:** Plans 2a, 2b, 3 (all done).
 **Audit source:** 2026-06-10 post-2b audit — items that were either falsely

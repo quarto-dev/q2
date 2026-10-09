@@ -1,9 +1,12 @@
-# Experiment: Lua on wasm32-unknown-unknown via LUAI_TRY/LUAI_THROW Override
+---
+title: 'Experiment: Lua on wasm32-unknown-unknown via LUAI_TRY/LUAI_THROW Override'
+date: 2026-03-16
+description: 'Experiment to compile Lua 5.4 into the hub-client WASM build by replacing its setjmp error handling with Rust panics caught by `catch_unwind`, so Lua filters can run in the browser.'
+status: done  # Phase 4 COMPLETE — End-to-end Lua filter works through full render pipeline! 10/10 tests pass.
+---
 
-**Date**: 2026-03-16
 **Branch**: `experiment/lua-wasm`
 **Worktree**: `~/src/q2-lua-wasm-spike` (git worktree of `~/src/q2`)
-**Status**: Phase 4 COMPLETE — End-to-end Lua filter works through full render pipeline! 10/10 tests pass.
 **Context**: [Investigation](../investigations/2026-03-16-lua-wasm-options.md) — Option 8
 
 ## Goal

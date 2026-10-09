@@ -1,4 +1,8 @@
-# Default-project rendering and project-level diagnostics
+---
+title: 'Default-project rendering and project-level diagnostics'
+date: 2026-05-01
+description: 'Fixes default-project discovery so `.qmd` files are found when the output directory equals the project root, and adds a project-level diagnostic surface for empty render sets.'
+---
 
 ## Status
 

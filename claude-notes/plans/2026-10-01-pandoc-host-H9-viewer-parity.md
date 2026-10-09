@@ -1,6 +1,9 @@
-# Plan: Viewer, incremental spike and PDF parity (pandoc-host H9)
+---
+title: 'Plan: Viewer, incremental spike and PDF parity (pandoc-host H9)'
+date: 2026-10-01
+description: 'Shows the PDF in a pdf.js viewer that keeps zoom and scroll across recompiles, adds a PDF preview pane, records a no verdict on incremental recompile, and checks typst output against native.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (PDF section, T2, T6, T7, D10)
 **Depends on:** H8. **Unblocks:** H10a (the warm pandoc executor).

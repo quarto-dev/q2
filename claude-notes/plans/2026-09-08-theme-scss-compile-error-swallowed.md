@@ -1,9 +1,15 @@
-# User theme .scss compile error is swallowed: page silently ships DEFAULT_CSS (bd-jsvetdea)
+---
+title: 'User theme .scss compile error is swallowed: page silently ships DEFAULT_CSS (bd-jsvetdea)'
+date: 2026-09-08
+description: 'Turns theme SCSS compile failures, which previously fell back silently to the default CSS, into structured hard errors with new `Q-14-6` and `Q-14-7` codes that point at the `theme:` value.'
+status: done  # Design settled with user 2026-09-08 (answers recorded below). Implemented and verified 2026-09-08; strands closed.
+braid:
+  strand: bd-jsvetdea  # Folds in bd-qmpygp02; resolves bd-36vmz7nk.
+  priority: P2
+  labels: [css, diagnostics, theming]
+---
 
-**Date:** 2026-09-08
-**Braid:** bd-jsvetdea (bug, p2, labels: css, diagnostics, theming). Folds in bd-qmpygp02; resolves bd-36vmz7nk.
 **Checkout:** main checkout, branch `main` \@ `b7e7c96a`
-**Status:** Design settled with user 2026-09-08 (answers recorded below). Implemented and verified 2026-09-08; strands closed.
 
 ## Overview
 

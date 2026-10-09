@@ -1,6 +1,9 @@
-# Plan: Typst + EPUB book output, DOCX/PPTX scope-out (book-projects P3)
+---
+title: 'Plan: Typst + EPUB book output, DOCX/PPTX scope-out (book-projects P3)'
+date: 2026-09-21
+description: 'Wires the single-file merge through real Typst and EPUB book output so chapters render end to end, and turns the silent DOCX and PPTX gap into an explicit diagnostic.'
+---
 
-**Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §6, §11
 **Q1 ground truth:** `tests/docs/smoke-all/typst/orange-book` (and `orange-book-lang`/`orange-book-margin`/`override-orange-book`) — the deepest numbering-correctness fixture in Q1's own test suite, with machine-checked `.typ`-source and PDF-text assertions covering every crossref-numbered construct type.

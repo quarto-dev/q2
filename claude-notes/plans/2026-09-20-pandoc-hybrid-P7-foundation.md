@@ -1,7 +1,10 @@
-# P7-foundation — format-agnostic Pandoc CLI plumbing (extracted from P7)
+---
+title: 'P7-foundation — format-agnostic Pandoc CLI plumbing (extracted from P7)'
+date: 2026-09-20
+description: 'Adds format-agnostic CLI plumbing for pandoc-hybrid output: a multi-format render warning, a project-mode containment gate, and routing of `docx` and `pptx` renders through the shared pandoc render entry point.'
+status: draft  # Shape draft — extracted, not yet re-reviewed as its own plan.
+---
 
-**Date:** 2026-09-20
-**Status:** Shape draft — extracted, not yet re-reviewed as its own plan.
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md) — migrated verbatim from P7's companion Tasks 1, 2, 3, and 7 (renumbered 1-4 here), with only cross-reference fixes, no scope change.
 **Depends on:** P1, P2, P4 — **all already landed**. Does not need P5 or P6 to compile or to be tested at the structural level this plan asserts (content correctness through the shim is a separate concern — see "What this plan does not claim" below).

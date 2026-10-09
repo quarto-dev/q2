@@ -1,10 +1,15 @@
-# Filesystem Synchronization Design for quarto-hub
+---
+title: 'Filesystem Synchronization Design for quarto-hub'
+date: 2025-12-09
+description: 'Designs how `quarto-hub` keeps each automerge text document in step with its `.qmd` file on disk, covering initial population from the filesystem and resolving cases where both sides changed.'
+status: draft  # Design Discussion
+braid:
+  strand: k-ke2m
+  priority: P1
+---
 
-**Issue:** k-ke2m
 **Parent:** k-4wex
 **Related:** k-r2t1 (filesystem serialization), k-yvfo (conflict resolution)
-**Status:** Design Discussion
-**Created:** 2025-12-09
 
 ## Problem Statement
 

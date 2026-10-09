@@ -1,9 +1,12 @@
-# bd-6: Documentation and Examples for quarto-error-reporting
+---
+title: 'bd-6: Documentation and Examples for quarto-error-reporting'
+date: 2025-11-23
+description: 'Lays out the documentation work for the `quarto-error-reporting` crate, covering a contributor guide, module docs, runnable examples for Quarto integration patterns, and catalog validation tests.'
+status: in-progress
+---
 
-**Date**: 2025-11-23
 **Issue**: bd-6
 **Priority**: 3 (Task)
-**Status**: In Progress
 
 ## Context
 

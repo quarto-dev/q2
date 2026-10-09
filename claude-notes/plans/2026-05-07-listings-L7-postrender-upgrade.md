@@ -1,6 +1,13 @@
-# L7 — Post-render placeholder upgrade (sub-plan)
+---
+title: 'L7 — Post-render placeholder upgrade (sub-plan)'
+date: 2026-05-07
+description: 'Fills listing-item descriptions and preview images during `quarto render` by reading engine-rendered sibling HTML in a native-only post-render step, with a `Q-12-13` warning when that content is missing.'
+braid:
+  strand: bd-qf7r
+  priority: P2
+status: draft  # Draft. Awaiting user approval before hand-off.
+---
 
-**Date:** 2026-05-07
 **Beads:** `bd-qf7r` (this phase). Parent epic: `bd-61cd`
 (`claude-notes/plans/2026-05-05-listings-epic.md`).
 **Predecessors:**
@@ -18,8 +25,6 @@
 - L6 (`bd-xbnf`, closed) — `force_render` already pulls listing
   hosts into Mode B; L7 doesn't touch that mechanism but inherits
   the Mode B re-render contract.
-
-**Status:** Draft. Awaiting user approval before hand-off.
 
 ## Goal of this phase
 

@@ -1,6 +1,9 @@
-# P9 — Port `orange-book-margin` (book-context margin notes)
+---
+title: 'P9 — Port `orange-book-margin` (book-context margin notes)'
+date: 2026-09-27
+description: 'Ports the orange-book margin-notes Typst fixture to q2 with book-level margin settings, and fixes `citation-location: margin` by skipping the merged citeproc pass when that setting is active.'
+---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —
 Decided item 4: in scope for this epic, not deferred to a follow-on. Sequenced after
 P5 specifically so the struct-tree implementation is already proven at scale.

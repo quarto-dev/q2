@@ -1,6 +1,9 @@
-# Plan: Projects and books (pandoc-request R7)
+---
+title: 'Plan: Projects and books (pandoc-request R7)'
+date: 2026-10-01
+description: 'Routes a multi-file project download through the pandoc request path so the active page renders with image targets matching native output; whole-book rendering is deferred.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D3, D10)
 **Depends on:** R2, R4. **Unblocks:** project downloads in host H5. The whole-book stage is R9; this phase's scope is stages 0-1.

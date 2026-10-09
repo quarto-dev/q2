@@ -1,6 +1,9 @@
-# Plan: Unified bibliography for multi-file HTML (book-projects P6)
+---
+title: 'Plan: Unified bibliography for multi-file HTML (book-projects P6)'
+date: 2026-09-21
+description: 'Builds one bibliography for all chapters of a multi-file HTML book by recording each chapter''s citations and merging the reference list through an in-process citeproc pass.'
+---
 
-**Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §9
 **Q1 reference, mechanism now confirmed, not just "problem shape":** `book-bibliography.ts`\'s `bookBibliographyPostRender` (read in full, 316 lines, alongside `book-crossrefs.ts` for comparison). It **is** a DOM postprocessor — same forbidden family as crossref resolution — but a narrower one than initially assumed (see Decisions below for exactly what it does and doesn't do).

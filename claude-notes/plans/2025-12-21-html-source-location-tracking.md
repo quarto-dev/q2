@@ -1,8 +1,12 @@
-# HTML Writer Source Location Tracking
-
-**Issue:** k-02o9
-**Created:** 2025-12-21
-**Status:** Design Phase
+---
+title: 'HTML Writer Source Location Tracking'
+date: 2025-12-21
+description: 'Designs how the HTML writer embeds source locations on elements, through inline `data-loc` attributes or an optional source info pool, so that clicking the preview can highlight the matching source in an editor.'
+status: draft  # Design Phase
+braid:
+  strand: k-02o9
+  priority: P1
+---
 
 ## Goal
 

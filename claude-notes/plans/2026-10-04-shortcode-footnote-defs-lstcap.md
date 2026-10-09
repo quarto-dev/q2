@@ -1,7 +1,12 @@
-# Shortcodes in footnote definitions and `lst-cap` (bd-xjg7vl6c)
-
-Strand: `bd-xjg7vl6c`. Blocks `claude-notes/plans/2026-10-03-disable-lua-shortcodes.md`
-(bd-2uva9urq): that plan's T2 must not land until this is fixed.
+---
+title: 'Shortcodes in footnote definitions and `lst-cap` (bd-xjg7vl6c)'
+date: 2026-10-04
+description: 'Makes shortcodes expand inside footnote definitions and the `lst-cap` attribute of listings, matching Quarto 1, while leaving other attribute and title contexts unexpanded as Quarto 1 does.'
+braid:
+  strand: bd-xjg7vl6c  # blocks the plan for bd-2uva9urq (claude-notes/plans/2026-10-03-disable-lua-shortcodes.md)
+  priority: P2
+  labels: [shortcode]
+---
 
 ## Problem
 

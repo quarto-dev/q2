@@ -1,9 +1,15 @@
-# Sidebar item with `text:` + `file:` + `contents:` renders the page title, ignoring `text:` (bd-sidebar-section-text-ignored-sdp5g7ns)
+---
+title: 'Sidebar item with `text:` + `file:` + `contents:` renders the page title, ignoring `text:` (bd-sidebar-section-text-ignored-sdp5g7ns)'
+date: 2026-08-19
+description: 'Makes a sidebar section declared with `text:`, `file:` and `contents:` show its configured text rather than the linked page''s title, and warns when both `text:` and `section:` are given.'
+status: done  # Complete (2026-08-19). Fix in `a93b908e`, Q-13-10 warning in `5c9ee27d`, verification evidence in `sidebar-section-text-fallback-investigation/observed-output.md`. Full `cargo xtask verify` green.
+braid:
+  strand: bd-sidebar-section-text-ignored-sdp5g7ns
+  priority: P2
+  labels: [navigation]
+---
 
-**Date:** 2026-08-19
-**Braid:** bd-sidebar-section-text-ignored-sdp5g7ns
 **Checkout:** `main` \@ `e6ac236d` (investigation ran in the main checkout; no worktree created)
-**Status:** Complete (2026-08-19). Fix in `a93b908e`, Q-13-10 warning in `5c9ee27d`, verification evidence in `sidebar-section-text-fallback-investigation/observed-output.md`. Full `cargo xtask verify` green.
 
 ## Triage verdict
 

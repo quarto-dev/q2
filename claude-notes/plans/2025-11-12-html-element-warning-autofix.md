@@ -1,6 +1,9 @@
-# Plan: Convert Naked HTML Elements to Warnings with Auto-fix
+---
+title: 'Plan: Convert Naked HTML Elements to Warnings with Auto-fix'
+date: 2025-11-12
+description: 'Turns naked HTML elements from a hard error into a warning, converting each element to a `RawInline` node with format html so that the document still processes and renders.'
+---
 
-**Date**: 2025-11-12
 **Goal**: Change naked HTML element handling from hard error to warning with automatic conversion to RawInline nodes
 
 ## Background

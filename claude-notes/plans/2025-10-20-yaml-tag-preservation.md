@@ -1,4 +1,11 @@
-# Plan: Preserve YAML Tag Information in New API (k-62)
+---
+title: 'Plan: Preserve YAML Tag Information in New API (k-62)'
+date: 2025-10-20
+description: 'Carries YAML tags such as `!path` and `!glob` through the new metadata API by recording each scalar''s tag and its source location in `quarto-yaml`, so tagged strings skip markdown parsing.'
+braid:
+  strand: k-62
+  priority: P1
+---
 
 ## Problem Statement
 

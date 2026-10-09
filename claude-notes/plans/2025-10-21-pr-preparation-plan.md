@@ -1,6 +1,9 @@
-# PR Preparation Plan: Transfer kyoto Changes to 2025-10-21
+---
+title: 'PR Preparation Plan: Transfer kyoto Changes to 2025-10-21'
+date: 2025-10-21
+description: 'Lays out a rebase of a long-running work branch onto the mainline, followed by a merge into a second branch, to carry the crate changes into an upstream pull request with tests checked at each step.'
+---
 
-**Date**: 2025-10-21
 **Goal**: Transfer all `crates/*` changes from `kyoto` branch to `2025-10-21` branch for PR to quarto-dev/quarto-markdown
 
 ## Current Situation

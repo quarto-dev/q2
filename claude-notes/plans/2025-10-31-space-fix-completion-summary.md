@@ -1,7 +1,10 @@
-# Space Node Fix - Completion Summary
+---
+title: 'Space Node Fix - Completion Summary'
+date: 2025-10-31
+description: 'Records the fix for missing Space nodes around emphasis, where delimiter nodes captured adjacent whitespace, by scanning delimiter text and injecting Space inlines so output matches Pandoc.'
+status: done  # ✅ COMPLETED
+---
 
-**Date**: 2025-10-31
-**Status**: ✅ COMPLETED
 **Related**: pandoc_emph implementation, k-274
 
 ## Problem Solved

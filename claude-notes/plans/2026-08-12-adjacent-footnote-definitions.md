@@ -1,15 +1,20 @@
-# Adjacent footnote definitions merge — the second note is silently lost (bd-adjacent-footnote-definitions-miif1k1z)
+---
+title: 'Adjacent footnote definitions merge — the second note is silently lost (bd-adjacent-footnote-definitions-miif1k1z)'
+date: 2026-08-12
+description: 'Stops consecutive `[^id]:` footnote definition lines from merging into one note, which silently drops the second note, by letting a definition line open a block after a paragraph line.'
+status: in-progress  # Design settled 2026-08-12 — **implementation approved and in progress.** See "Design decisions (settled)" below.
+braid:
+  strand: bd-adjacent-footnote-definitions-miif1k1z
+  priority: P2
+  labels: [parser]
+---
 
-**Date:** 2026-08-12
-**Braid:** bd-adjacent-footnote-definitions-miif1k1z (bug, p2, label `parser`)
 **Worktree:** `.worktrees/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`
 (branch `braid/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`, based on `main` \@ `7bcddf61`)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` **green** before any change
 (11728 tests run, 11728 passed, 197 skipped; all 14 steps passed). Run in the
 main checkout at `c28cfd81`; `main` has since been reset to `7bcddf61`, which
 differs only by two unrelated Q-2-10 *plan* commits (docs).
-**Status:** Design settled 2026-08-12 — **implementation approved and in
-progress.** See "Design decisions (settled)" below.
 
 > **Note on where this work lives.** The investigation was originally done in
 > the main checkout. Partway through implementation another session reset

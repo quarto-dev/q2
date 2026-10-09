@@ -1,4 +1,8 @@
-# Kanban Demo App — Plan
+---
+title: 'Kanban Demo App — Plan'
+date: 2026-02-10
+description: 'Builds a small Kanban-style project tool whose cards are level-two QMD headers, edited either as markdown or through React views, with the document kept human-readable throughout.'
+---
 
 ## Overview
 

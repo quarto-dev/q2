@@ -1,9 +1,15 @@
-# website.llms-txt: llms.txt + per-page markdown companions (bd-llms-txt-unimplemented-oih6z6j7)
+---
+title: 'website.llms-txt: llms.txt + per-page markdown companions (bd-llms-txt-unimplemented-oih6z6j7)'
+date: 2026-08-14
+description: 'Adds `llms.txt` and per-page markdown companions to website builds, generated from the qmd AST writer rather than scraped HTML, with a structured index that carries page descriptions.'
+status: approved  # Design aligned 2026-08-14 (all six questions resolved — see Resolved design decisions). Ready to implement on a dedicated branch/worktree.
+braid:
+  strand: bd-llms-txt-unimplemented-oih6z6j7
+  priority: P3
+  labels: [website]
+---
 
-**Date:** 2026-08-14
-**Braid:** bd-llms-txt-unimplemented-oih6z6j7
 **Checkout:** main \@ `3ac596e0` (investigation committed in place; implementation should get its own branch/worktree)
-**Status:** Design aligned 2026-08-14 (all six questions resolved — see Resolved design decisions). Ready to implement on a dedicated branch/worktree.
 
 ## Triage verdict
 

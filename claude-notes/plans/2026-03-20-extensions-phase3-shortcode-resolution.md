@@ -1,7 +1,10 @@
-# Extensions Phase 3: Shortcode Resolution
+---
+title: 'Extensions Phase 3: Shortcode Resolution'
+date: 2026-03-20
+description: 'Lets Lua shortcode handlers from extensions run during rendering by passing extensions and the runtime into the shortcode resolve transform without storing the non-Send Lua state.'
+status: done
+---
 
-**Created**: 2026-03-20
-**Status**: COMPLETE
 **Branch**: `feature/shortcode-extensions`
 **Parent Plan**: `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
 **Depends on**: Phase 1 (complete), Phase 2 (complete), Lua filter support (complete)

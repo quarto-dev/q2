@@ -1,4 +1,8 @@
-# Trace Viewer & Analysis Tooling — Design Plan
+---
+title: 'Trace Viewer & Analysis Tooling — Design Plan'
+date: 2026-04-14
+description: 'Plans how users and coding agents consume pipeline traces, through a JSON-only `quarto trace` CLI and an interactive trace viewer that runs locally and is also embedded in hub-client behind a shared data-source interface.'
+---
 
 ## Overview
 

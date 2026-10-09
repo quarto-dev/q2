@@ -1,6 +1,9 @@
-# P10 — Reconcile with the six existing Rust book integration tests
+---
+title: 'P10 — Reconcile with the six existing Rust book integration tests'
+date: 2026-09-27
+description: 'Cross-references the six existing Rust book integration tests against the new smoke-all fixtures and records that both suites stay, since they catch different failure modes.'
+---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —
 Decided item 6: coexist, not replace. This phase documents and confirms that decision
 once real smoke-all coverage exists to compare against — it is analysis/docs, not new

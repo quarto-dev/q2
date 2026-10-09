@@ -1,9 +1,14 @@
-# Windows: json_errors ipynb hyperlink test builds expected file:// URL from verbatim path (bd-clq56rem)
+---
+title: 'Windows: json_errors ipynb hyperlink test builds expected file:// URL from verbatim path (bd-clq56rem)'
+date: 2026-09-28
+description: 'Reworks a Windows-failing test that built its expected `file://` URL from a verbatim path, replacing the string oracle with a round-trip check and exposing that verbatim `\?\` prefixes leak into JSON output.'
+status: in-progress  # Piece 1 (test rework) implemented and opened as a draft PR, the bottom layer of a stack. Decided 2026-09-29: this branch ships Piece 1 only. The product fix (Piece 2) moves to bd-1klbq2zd, audit first, as the upper layers of the same stack. See § Decisions and § Stacked PR workflow. The S1 sequencing below was decided 2026-09-28 and is superseded for Piece 2.
+braid:
+  strand: bd-clq56rem  # related bd-1klbq2zd
+  priority: P2
+---
 
-**Date:** 2026-09-28
-**Braid:** bd-clq56rem (related: bd-1klbq2zd)
 **Worktree:** `.worktrees/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink` (branch `bugfix/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink`, local and remote; based on `main` @ `e8379cfe`)
-**Status:** Piece 1 (test rework) implemented and opened as a draft PR, the bottom layer of a stack. Decided 2026-09-29: this branch ships Piece 1 only. The product fix (Piece 2) moves to bd-1klbq2zd, audit first, as the upper layers of the same stack. See § Decisions and § Stacked PR workflow. The S1 sequencing below was decided 2026-09-28 and is superseded for Piece 2.
 
 ## Overview
 

@@ -1,9 +1,14 @@
-# Phase 9 follow-up: thread user_grammars through RenderToHtmlRenderer (bd-izfv)
+---
+title: 'Phase 9 follow-up: thread user_grammars through RenderToHtmlRenderer (bd-izfv)'
+date: 2026-05-10
+description: 'Threads user-supplied syntax grammars into `RenderToHtmlRenderer` so that project renders apply them, since the project path currently drops them and breaks TOML code highlighting inside projects.'
+status: approved  # Design questions answered (2026-05-10) — implementation not yet started. **Wait for user go-ahead before starting Phase 0.**
+braid:
+  strand: bd-izfv
+  priority: P3
+---
 
-**Date:** 2026-05-10
-**Beads:** bd-izfv (P3, open → set to in_progress on `main` once user agrees)
 **Worktree:** `.worktrees/bd-izfv-thread-user-grammars` (branch `beads/bd-izfv-thread-user-grammars`, based on `main` \@ `0fa2655d`)
-**Status:** Design questions answered (2026-05-10) — implementation not yet started. **Wait for user go-ahead before starting Phase 0.**
 
 ## Triage verdict
 

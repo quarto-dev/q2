@@ -1,10 +1,13 @@
-# Light/dark theme support epic (bd-0pic6)
+---
+title: 'Light/dark theme support epic (bd-0pic6)'
+date: 2026-08-14
+description: 'Plans full Q1-parity light and dark theme support for Q2 HTML and website output, compiling both CSS variants with a navbar toggle, `prefers-color-scheme` handling, and light- and dark-aware syntax highlighting.'
+status: approved  # DESIGN SETTLED (2026-08-14) — all open questions resolved with Carlos; epic structure created in braid; awaiting go-ahead to start execution
+braid:
+  strand: bd-0pic6  # umbrella epic for child strands
+  priority: P2
+---
 
-**Created**: 2026-08-14
-**Status**: DESIGN SETTLED (2026-08-14) — all open questions resolved with
-Carlos; epic structure created in braid; awaiting go-ahead to start execution
-**Umbrella strand**: bd-0pic6 (epic; children bd-… created 2026-08-14, see
-"Proposed epic structure")
 **Supersedes/absorbs**: the deferred "Phase 6b.6 Light/Dark Support" placeholder in
 `2026-01-23-phase6b-custom-scss.md`; the `SassBundle.dark` scaffolding sketched in
 `2026-01-13-sass-compilation.md` §7.3.

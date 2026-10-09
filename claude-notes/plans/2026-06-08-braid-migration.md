@@ -1,8 +1,14 @@
-# Migrate q2 issue tracking from beads_rust to braid
+---
+title: 'Migrate q2 issue tracking from beads_rust to braid'
+date: 2026-06-08
+description: 'Sets out how q2 moves its issue tracking from `beads_rust` to the CRDT-backed braid skein, covering the id-preserving import, the backup-only snapshot policy, and the cutover phases.'
+status: draft  # Draft / awaiting go-ahead
+braid:
+  strand: bd-a1qb3  # prerequisite braid-0.3.0 work bd-sjk4t (blocks the epic)
+  priority: P2
+  labels: [braid, migration]
+---
 
-**Status:** Draft / awaiting go-ahead
-**Created:** 2026-06-08
-**Beads issue:** `bd-a1qb3` (epic) · prerequisite braid-0.3.0 work `bd-sjk4t` (blocks the epic)
 **Companion doc (braid-side work, hand off to a braid-repo agent):**
 [`2026-06-08-braid-0.3.0-features-for-migration.md`](./2026-06-08-braid-0.3.0-features-for-migration.md)
 

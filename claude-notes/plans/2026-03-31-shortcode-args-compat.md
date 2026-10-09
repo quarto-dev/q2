@@ -1,4 +1,8 @@
-# Plan: Fix Shortcode Argument Passing for TS Quarto Compatibility
+---
+title: 'Plan: Fix Shortcode Argument Passing for TS Quarto Compatibility'
+date: 2026-03-31
+description: 'Changes shortcode handler arguments in the pampa Lua engine to plain strings and adds a kwargs table with an empty default, so existing TS Quarto extensions such as lipsum receive values they can stringify.'
+---
 
 ## Status: Complete (commit 5315af95)
 

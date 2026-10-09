@@ -1,9 +1,12 @@
-# HTML Rendering Parity: Rust Quarto ↔ TypeScript Quarto
+---
+title: 'HTML Rendering Parity: Rust Quarto ↔ TypeScript Quarto'
+date: 2026-01-24
+date-modified: 2026-01-26
+description: 'Plans to close the HTML output gap with TypeScript Quarto by making structural fixes as Pandoc AST transforms rather than DOM postprocessors, so the same logic also runs in WASM.'
+status: draft  # Planning
+---
 
 **Beads Epic**: kyoto-6jv
-**Created**: 2026-01-24
-**Updated**: 2026-01-26 (added Phase 1b detailed subplan reference)
-**Status**: Planning
 
 ---
 

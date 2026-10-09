@@ -1,4 +1,8 @@
-# Attribution Pipeline (Rust port of `feat/node-attribution`)
+---
+title: 'Attribution Pipeline (Rust port of `feat/node-attribution`)'
+date: 2026-05-06
+description: 'Ports the per-node authorship feature from a TypeScript prototype into the Rust render pipeline, so every renderer can show who wrote each node, with git blame and Automerge history as inputs.'
+---
 
 ## Overview
 

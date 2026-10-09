@@ -1,4 +1,8 @@
-# Fix Windows test failures: lua system command tests use Unix-only programs
+---
+title: 'Fix Windows test failures: lua system command tests use Unix-only programs'
+date: 2026-06-25
+description: 'Makes eight command-execution tests pass on Windows by replacing Unix-only programs such as `echo`, `false` and `cat` with platform-appropriate equivalents, and trimming line endings in the strict stdin assertions.'
+---
 
 Strand: bd-c5bdf948
 Date: 2026-06-25

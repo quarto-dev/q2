@@ -1,4 +1,8 @@
-# Bug: Math+Attr Feature Completely Broken
+---
+title: 'Bug: Math+Attr Feature Completely Broken'
+date: 2025-11-21
+description: 'Fixes the paragraph processor, which silently drops attributes that follow inline math, so that `$E = mc^2$ {#eq-einstein}` produces a span wrapping the math with the attribute.'
+---
 
 ## Problem
 

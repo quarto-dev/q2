@@ -1,8 +1,14 @@
-# Strict mode: promote warning diagnostics to errors (GH #220)
+---
+title: 'Strict mode: promote warning diagnostics to errors (GH #220)'
+date: 2026-07-02
+description: 'Proposes a `--strict` render flag that promotes warnings to errors at the project summary boundary, so every warning source fails the command without per-call-site changes.'
+status: draft  # feasibility study + implementation plan (no code yet)
+braid:
+  strand: bd-yjs54ptg
+  priority: P2
+---
 
-- **Braid strand:** bd-yjs54ptg
 - **GitHub issue:** https://github.com/quarto-dev/q2/issues/220
-- **Status:** feasibility study + implementation plan (no code yet)
 
 ## Overview
 

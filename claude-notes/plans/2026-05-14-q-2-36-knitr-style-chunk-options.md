@@ -1,9 +1,16 @@
-# Plan: Q-2-36 — Clean parse error for old-style knitr chunk options
+---
+title: 'Plan: Q-2-36 — Clean parse error for old-style knitr chunk options'
+date: 2026-05-14
+description: 'Turns old-style knitr chunk headers such as `{r echo=FALSE}` and `{r test}` into a clean `Q-2-36` parse error that points users to the `#| key: value` body syntax.'
+braid:
+  strand: bd-j4fe
+  priority: P1
+  labels: [error-messages, readers-writers]
+---
 
 - **GH issue:** [#152](https://github.com/quarto-dev/q2/issues/152) (chunk-options half; the table-captions half closed via #154)
 - **Triage:** `claude-notes/issue-reports/152/q236-triage.md`
 - **Fixtures:** `claude-notes/issue-reports/152/q236-repro.qmd`, `q236-repro-variants.qmd`
-- **Beads:** bd-j4fe
 - **Branch:** `issue-152` (based on `bugfix/issue-184` \@ `e2d224f6`; will rebase onto `main` once #184 lands)
 - **Approach:** upgrade the existing Q-2-8 warning site to a Q-2-36 *error*; Merr-map the parse-error forms that already error today. **No `scanner.c` change, no `grammar.js` change.** See triage `Approach` section for why scanner-emit is the wrong shape here.
 

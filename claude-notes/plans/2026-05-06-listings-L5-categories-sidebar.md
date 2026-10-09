@@ -1,6 +1,13 @@
-# L5 — Categories sidebar (sub-plan)
+---
+title: 'L5 — Categories sidebar (sub-plan)'
+date: 2026-05-06
+description: 'Adds per-item category badges and a right-margin categories sidebar in default, unnumbered and cloud styles to listing host pages, emitting markup that the existing listing JavaScript already handles.'
+braid:
+  strand: bd-5vsr
+  priority: P2
+status: draft  # Draft. Awaiting user approval before hand-off.
+---
 
-**Date:** 2026-05-06
 **Beads:** `bd-5vsr` (this phase). Parent epic: `bd-61cd`
 (`claude-notes/plans/2026-05-05-listings-epic.md`).
 **Predecessors:**
@@ -18,8 +25,6 @@
   built-in templates, vendored `list.min.js` +
   `quarto-listing.js`. The L5 session begins **after** L3 is
   merged onto `feature/listings`. See §"Branch / worktree" below.
-
-**Status:** Draft. Awaiting user approval before hand-off.
 
 ## Goal of this phase
 

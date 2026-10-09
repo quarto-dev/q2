@@ -1,7 +1,12 @@
-# GitHub release assets for q2, with bundled quarto-hub.com MCP defaults
+---
+title: 'GitHub release assets for q2, with bundled quarto-hub.com MCP defaults'
+date: 2026-06-12  # (rewritten same day after PR #277 / bd-81cfshmw landed — see "Scope changes" below)
+description: 'Adds tag-triggered GitHub release binaries for `q2` with signed checksums and install scripts, and embeds quarto-hub.com OAuth defaults so the bundled MCP server works without operator-supplied environment variables.'
+braid:
+  strand: bd-c6l13j79
+  priority: P2
+---
 
-**Strand:** bd-c6l13j79
-**Date:** 2026-06-12 (rewritten same day after PR #277 / bd-81cfshmw landed — see "Scope changes" below)
 **Reference implementation:** `external-sources/braid` (release.yml + install.sh + install.ps1 + minisign)
 **Related:** bd-3tak0lyy (npx publish channel, deferred), bd-81cfshmw (q2 mcp launcher, shipped)
 

@@ -1,9 +1,14 @@
-# Phase 0 — Foundations: DocumentProfile, Pipeline Checkpoint, Naming
+---
+title: 'Phase 0 — Foundations: DocumentProfile, Pipeline Checkpoint, Naming'
+date: 2026-04-23
+description: 'Lays the foundation for website projects with a serializable static `DocumentProfile` snapshot taken after metadata merge, a named pipeline checkpoint for it, and a contract document, with no user-visible change.'
+status: draft  # Draft — awaiting user review on open questions at the end.
+braid:
+  strand: bd-f3jc  # phase; parent bd-0tr6 (website epic)
+  priority: P1
+---
 
-**Date:** 2026-04-23
-**Beads:** `bd-f3jc` (phase); parent `bd-0tr6` (website epic).
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
-**Status:** Draft — awaiting user review on open questions at the end.
 
 ## Goal of this phase
 

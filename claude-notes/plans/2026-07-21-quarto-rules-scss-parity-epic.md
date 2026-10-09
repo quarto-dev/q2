@@ -1,9 +1,12 @@
-# Epic: Port TS Quarto `_quarto-rules.scss` to Q2 for HTML DOM parity
+---
+title: 'Epic: Port TS Quarto `_quarto-rules.scss` to Q2 for HTML DOM parity'
+date: 2026-07-21
+description: 'Epic for closing gaps between Q2''s HTML stylesheets and TS Quarto''s `_quarto-rules.scss`, by auditing each selector and porting only rules whose target DOM Q2 already emits.'
+---
 
 **Epic:** bd-4doe9lvt
 **Audit task:** bd-eias3e39
 **Discovered from:** bd-btjkyylx (title-block bottom-margin, PR #406)
-**Date:** 2026-07-21
 
 ## Overview
 

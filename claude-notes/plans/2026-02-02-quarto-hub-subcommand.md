@@ -1,7 +1,10 @@
-# Plan: Add `quarto hub` Subcommand
+---
+title: 'Plan: Add `quarto hub` Subcommand'
+date: 2026-02-02
+description: 'Adds a `quarto hub` subcommand to the quarto binary that starts the collaborative editing server by calling the quarto-hub library, so the separate hub binary is no longer needed.'
+---
 
 **Issue**: kyoto-3erh
-**Date**: 2026-02-02
 
 ## Overview
 

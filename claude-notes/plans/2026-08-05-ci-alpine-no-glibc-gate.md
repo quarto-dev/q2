@@ -1,7 +1,12 @@
-# CI gate: released linux binaries must run with no glibc (bd-3b47pxmm)
+---
+title: 'CI gate: released linux binaries must run with no glibc (bd-3b47pxmm)'
+date: 2026-08-05
+description: 'Adds a release CI gate that runs the musl Linux binary''s `--version` inside an Alpine container, failing the build if the binary needs glibc, and replaces the manual runbook check that tended to be skipped.'
+braid:
+  strand: bd-3b47pxmm  # filed 2026-08-05 by Carlos while cutting v0.11.0
+  priority: P2
+---
 
-**Date:** 2026-08-05
-**Braid:** bd-3b47pxmm (task, P2, filed 2026-08-05 by Carlos while cutting v0.11.0)
 **Branch:** `braid/bd-3b47pxmm-ci-assert-released-linux`, off `main` \@ `c6ab84c2`
 **Related:** bd-dofxhzaj (the musl switch this check guards), plan
 `claude-notes/plans/2026-07-28-linux-release-static-musl.md`

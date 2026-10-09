@@ -1,6 +1,9 @@
-# Quoted Nodes Implementation Plan
+---
+title: 'Quoted Nodes Implementation Plan'
+date: 2025-10-31
+description: 'Adds handlers for `pandoc_single_quote` and `pandoc_double_quote` nodes so quoted text, which is currently dropped from the output, becomes Pandoc `Quoted` inlines with nested quotes supported.'
+---
 
-**Date**: 2025-10-31
 **Context**: Implement `pandoc_single_quote` and `pandoc_double_quote` node handlers
 
 ## Current Status

@@ -1,8 +1,11 @@
-# Target Incremental Writes — Development Plan
+---
+title: 'Target Incremental Writes — Development Plan'
+date: 2026-06-04  # (rewritten from the research-plan version)
+description: 'Lets a user edit a rendered preview block by sending a pure replacement subtree for one node, which is spliced into the untransformed AST and written back through the existing reconcile and incremental-write core.'
+status: approved  # Implementation-ready development plan.
+---
 
-**Date:** 2026-06-04 (rewritten from the research-plan version)
 **Branch:** feature/provenance
-**Status:** Implementation-ready development plan.
 **Supersedes:** the original *research* version of this file (the
 `preimage_in`-text-splice model). That model is abandoned — see
 "Why this replaces the text-splice model" below.

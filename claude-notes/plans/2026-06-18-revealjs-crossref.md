@@ -1,10 +1,16 @@
-# Cross-references in `format: revealjs`
+---
+title: 'Cross-references in `format: revealjs`'
+date: 2026-06-18
+description: 'Fixes cross-reference resolution under `format: revealjs`, where auto-stretch hoists figures before the crossref phase and bare tables never become float targets.'
+status: draft  # Design — decisions taken 2026-06-18 (see "Decisions"), iterating before implementation
+braid:
+  strand: bd-w0c6d38k  # related: bd-jsbg crossref epic, bd-zkstclhl reveal auto-stretch
+  priority: P1
+  labels: [crossref, revealjs]
+---
 
-**Braid strand:** bd-w0c6d38k (related: bd-jsbg crossref epic, bd-zkstclhl reveal auto-stretch)
 **Sub-strands:** bd-4ly7ne01 (Bug B: bare-table desugar, format-agnostic),
 bd-zecehtnc (WASM/interactive-preview crossref support: `q2 preview` + hub-client)
-**Created:** 2026-06-18
-**Status:** Design — decisions taken 2026-06-18 (see "Decisions"), iterating before implementation
 
 ---
 

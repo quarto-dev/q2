@@ -1,4 +1,11 @@
-# bd-af1e — Tree-sitter splits paragraph at line starting with backtick
+---
+title: 'bd-af1e — Tree-sitter splits paragraph at line starting with backtick'
+date: 2026-04-30
+description: 'Fixes the tree-sitter Markdown scanner so a line starting with a one- or two-backtick code span continues its paragraph instead of splitting it; only fences of three or more backticks should interrupt.'
+braid:
+  strand: bd-af1e
+  priority: P1
+---
 
 ## Summary
 

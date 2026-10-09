@@ -1,4 +1,8 @@
-# Preview capture-splice: echo-cell output run (Variant B) — Implementation Plan
+---
+title: 'Preview capture-splice: echo-cell output run (Variant B) — Implementation Plan'
+date: 2026-07-24
+description: 'Fixes `q2 preview` dropping every marimo cell after the first `echo: true` cell by letting the capture-splice walk treat an echoed source block plus its output as a run of blocks.'
+---
 
 > **For agentic workers:** implement task-by-task with TDD. Steps use checkbox
 > (`- [x]`) syntax. Write the failing test, watch it fail, implement, watch it

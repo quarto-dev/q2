@@ -1,7 +1,10 @@
-# Table Reconciliation Plan
+---
+title: 'Table Reconciliation Plan'
+date: 2026-01-14
+description: 'Makes table cell content reconcilable by matching cells position by position, so unchanged cell content keeps its source info when a table is edited instead of the whole table being replaced.'
+status: done  # ✅ COMPLETE
+---
 
-**Date:** 2026-01-14
-**Status:** ✅ COMPLETE
 **Parent:** k-xvte (Design structural hash-based AST reconciliation algorithm)
 **Epic:** kyoto-tsq (complete)
 

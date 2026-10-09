@@ -1,12 +1,16 @@
-# `SourceInfo::map_offset` clones the whole file per call (bd-jn7r22g8)
+---
+title: '`SourceInfo::map_offset` clones the whole file per call (bd-jn7r22g8)'
+date: 2026-09-18
+description: 'Removes a per-call clone of the whole source file in `SourceInfo::map_offset` in the external source-map crate, which made parsing long lists quadratic, by borrowing the in-memory text with no public API change.'
+status: approved  # approved 2026-09-18 — option **A only** (user decision). q2 work on topic branch `braid/bd-jn7r22g8-map-offset-clone` in the main checkout; crate work in `~/repos/github/posit-dev/quarto-source-map` (commit + push, then watch CI). The `external-sources/` clone is used only for the throwaway timing experiment via an uncommitted `[patch.crates-io]`.
+braid:
+  strand: bd-jn7r22g8
+  priority: P1
+  labels: [perf]
+---
 
 **Strand:** bd-jn7r22g8 (P1, perf). Discovered from bd-5yektmwt; related to
 bd-is4q72tt (peak RSS).
-**Status:** approved 2026-09-18 — option **A only** (user decision). q2 work on
-topic branch `braid/bd-jn7r22g8-map-offset-clone` in the main checkout; crate
-work in `~/repos/github/posit-dev/quarto-source-map` (commit + push, then
-watch CI). The `external-sources/` clone is used only for the throwaway
-timing experiment via an uncommitted `[patch.crates-io]`.
 **External crate clone:** `external-sources/quarto-source-map` (at `e328ddd`,
 = released 0.1.3).
 

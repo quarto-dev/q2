@@ -1,7 +1,11 @@
-# P1 — Neutral core + PipelineProfile
+---
+title: 'P1 — Neutral core + PipelineProfile'
+date: 2026-08-20
+description: 'Makes the format-neutral core of the HTML and reveal.js pipelines explicit through a `PipelineProfile` enum with a new `Pandoc(fmt)` case and exclude-list, as a pure refactor with byte-identical output.'
+status: done  # Landed.
+---
 
 **Date:** 2026-09-20
-**Status:** Landed.
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P1-implementation.md`](2026-09-18-pandoc-hybrid-P1-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 

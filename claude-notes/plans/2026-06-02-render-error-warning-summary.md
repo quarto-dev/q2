@@ -1,4 +1,11 @@
-# Render error/warning summary line (bd-ooleh)
+---
+title: 'Render error/warning summary line (bd-ooleh)'
+date: 2026-06-02
+description: 'Adds a closing summary to `q2 render` that totals errors and warnings across all files, counting diagnostics by kind and treating pass-one failures as errors, so problem counts survive after per-file output scrolls away.'
+braid:
+  strand: bd-ooleh
+  priority: P2
+---
 
 ## Overview
 

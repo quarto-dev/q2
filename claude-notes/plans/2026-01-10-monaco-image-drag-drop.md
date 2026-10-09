@@ -1,8 +1,11 @@
-# Monaco Editor Image Drag-Drop Feature
+---
+title: 'Monaco Editor Image Drag-Drop Feature'
+date: 2026-01-10
+description: 'Lets users drop image files onto the hub-client Monaco editor, reusing the upload dialog and then inserting a Markdown image reference at the drop position.'
+status: done
+---
 
 **Beads Issue:** k-znum
-**Created:** 2026-01-10
-**Status:** Complete
 
 ## Overview
 

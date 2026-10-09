@@ -1,7 +1,10 @@
-# Auth review follow-ups: Bearer revocation parity, MCP reconnect auth classification, /auth/me exp semantics
+---
+title: 'Auth review follow-ups: Bearer revocation parity, MCP reconnect auth classification, /auth/me exp semantics'
+date: 2026-08-03
+description: 'Enforces the revocation ledger on the Bearer credential path so bans and logout-everywhere apply to MCP clients, and fixes MCP reconnect auth classification and the meaning of the expiry field.'
+status: done  # implemented — all three findings landed 2026-08-03; strands and epic closed. **Date:** 2026-08-03.
+---
 
-**Status:** implemented — all three findings landed 2026-08-03; strands and
-epic closed. **Date:** 2026-08-03.
 **Epic:** `bd-rk55baiz`. **Child strands:** F1 `bd-jkih1ql7` · F2 `bd-l3b1brn8` ·
 F3 `bd-aw8f3sp8` (all closed).
 **Branches:** integration `feature/auth-review-followups` (not yet pushed);

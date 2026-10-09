@@ -1,8 +1,13 @@
-# Extract Pandoc AST Types to quarto-pandoc-types Crate
+---
+title: 'Extract Pandoc AST Types to quarto-pandoc-types Crate'
+date: 2025-11-27
+description: 'Moves the Pandoc AST types out of `quarto-markdown-pandoc` into a new `quarto-pandoc-types` crate so that `quarto-citeproc` can produce Pandoc output without a circular dependency.'
+status: done  # Completed (Phase 1)
+braid:
+  strand: k-429  # discovered from k-422
+  priority: P1
+---
 
-**Issue**: k-429 (discovered from k-422)
-**Created**: 2025-11-27
-**Status**: Completed (Phase 1)
 **Completed**: 2025-11-27
 
 ## Problem Statement

@@ -1,4 +1,8 @@
-# Plan A: `quarto.doc` Lua API (pampa crate)
+---
+title: 'Plan A: `quarto.doc` Lua API (pampa crate)'
+date: 2026-04-01
+description: 'Adds the `quarto.version`, `quarto.base64.encode` and `quarto.doc` Lua APIs in the pampa crate, plus `dofile` and `loadfile` overrides for restricted WASM and test environments and a script-directory stack for nested paths.'
+---
 
 ## Status: Complete
 

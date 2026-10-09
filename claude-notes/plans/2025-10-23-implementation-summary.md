@@ -1,4 +1,8 @@
-# Implementation Summary - Standalone TypeScript Package Setup
+---
+title: 'Implementation Summary - Standalone TypeScript Package Setup'
+date: 2025-10-23
+description: 'Records the setup of the standalone `@quarto/rust-qmd-json` TypeScript package under `ts-packages/`, with build tooling, a `@quarto/mapped-string` dependency, and passing placeholder tests, ahead of the conversion logic.'
+---
 
 ## What Was Done
 

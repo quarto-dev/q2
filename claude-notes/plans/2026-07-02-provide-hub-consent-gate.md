@@ -1,11 +1,12 @@
-# Harden `q2 provide-hub`: interactive consent gate + one-shot default
-
-**Strand:** bd-9lgiulr4 (feature, P1). Discovered from bd-sfet3264.
-**Date:** 2026-07-02.
-**Status:** IMPLEMENTED on `feature/hub-execution-provider` (2026-07-02).
-All phases done; `cargo xtask verify --skip-hub-build` green; E2E-verified
-in the terminal + browser (see "End-to-end evidence"). Not pushed yet.
-All open questions (Q1–Q7) resolved below.
+---
+title: 'Harden `q2 provide-hub`: interactive consent gate + one-shot default'
+date: 2026-07-02
+description: 'Makes `q2 provide-hub` safe by default: an interactive consent prompt shows the resolved document before any execution, always-online auto-execution moves behind `--watch`, and `--allow-all` is retired.'
+status: done  # IMPLEMENTED on `feature/hub-execution-provider` (2026-07-02). All phases done; `cargo xtask verify --skip-hub-build` green; E2E-verified in the terminal + browser (see "End-to-end evidence"). Not pushed yet. All open questions (Q1–Q7) resolved below.
+braid:
+  strand: bd-9lgiulr4  # Discovered from bd-sfet3264
+  priority: P1
+---
 
 ## Decisions locked (user, 2026-07-02)
 

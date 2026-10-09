@@ -1,5 +1,9 @@
-# Table Caption Postprocessing Plan
-**Date:** 2025-10-27
+---
+title: 'Table Caption Postprocessing Plan'
+date: 2025-10-27
+description: 'Adds a postprocessing filter that moves a table caption written without a preceding blank line out of the last table row and into the caption, matching Pandoc''s output.'
+---
+
 **Approach:** Pure Rust postprocessing to fix malformed caption parsing
 
 ## Problem Statement

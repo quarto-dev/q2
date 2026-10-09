@@ -1,7 +1,13 @@
-# Plan 4c.2: Marimo through `q2 preview` — capture-splice fix + full browser e2e
+---
+title: 'Plan 4c.2: Marimo through `q2 preview` — capture-splice fix + full browser e2e'
+date: 2026-07-07
+description: 'Fixes the q2 preview capture-splice so marimo''s unwrapped RawBlock output reaches the preview pane, then adds browser end-to-end tests for marimo cells, widgets and sql interop.'
+status: draft  # plan (2026-07-07). Driving strand: **bd-5jxcio5d** (P2, bug — "q2 preview capture-splice cannot splice engines that emit unwrapped output").
+braid:
+  strand: bd-5jxcio5d
+  priority: P2
+---
 
-**Status:** plan (2026-07-07). Driving strand: **bd-5jxcio5d** (P2, bug —
-"q2 preview capture-splice cannot splice engines that emit unwrapped output").
 **Sequence:** continuation of Plan 4c (marimo validation), which completed the
 `q2 render` tier (15 tests green) and *pinned* the preview gap with the
 SC21-NEG limitation canary. This plan **fixes** the gap and adds the positive

@@ -1,14 +1,13 @@
 ---
+title: 'Fix: Recursive Braces in Code Block Language Attributes'
+date: 2025-10-28
+description: 'Makes the `language_attribute` grammar rule recursive so that code block fences with nested braces around a language name, such as `{{r}}`, parse instead of failing.'
+status: draft  # Proposed
 diagnostics:
   Q-2-50:
     level: off
     reason: "Documents the Quarto 1 doubled-brace fence idiom on purpose (bd-3djx9ris, by design)."
 ---
-
-# Fix: Recursive Braces in Code Block Language Attributes
-
-**Date:** 2025-10-28
-**Status:** Proposed
 
 ## Problem
 

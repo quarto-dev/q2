@@ -1,10 +1,15 @@
-# Lua marshaling error contract + divergence registry (bd-9p2686pc)
+---
+title: 'Lua marshaling error contract + divergence registry (bd-9p2686pc)'
+date: 2026-07-14
+description: 'Defines the error contract for Lua marshaling failures, with granular Q-11 codes, expected-versus-got messages and filter locations, plus a divergence registry and ratchet marker for intentional differences from Pandoc.'
+status: done  # investigation complete 2026-07-14; implementation not started. Catalog row 12 of `claude-notes/research/2026-07-13-lua-api-mismatch-catalog.md`.
+braid:
+  strand: bd-9p2686pc
+  priority: P2
+---
 
 **Strand**: bd-9p2686pc (Lua parity H). **Epic**: bd-grkrb9nj
 (`claude-notes/plans/2026-07-13-lua-api-pandoc-parity.md`, Phase 3.3 / 4.1).
-**Status**: investigation complete 2026-07-14; implementation not started.
-Catalog row 12 of
-`claude-notes/research/2026-07-13-lua-api-mismatch-catalog.md`.
 
 ## Overview
 

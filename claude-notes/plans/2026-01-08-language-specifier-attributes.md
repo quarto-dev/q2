@@ -1,4 +1,8 @@
-# Plan: Support Attributes in Language Specifier for Code Blocks
+---
+title: 'Plan: Support Attributes in Language Specifier for Code Blocks'
+date: 2026-01-08
+description: 'Makes fenced code blocks keep attributes written after the language, such as `{python #fig-test .myclass key=value}`, by processing the nested specifier in the tree-sitter conversion instead of discarding it.'
+---
 
 ## Problem Statement
 

@@ -1,8 +1,13 @@
-# Error Handling Strategy for Config Merging
+---
+title: 'Error Handling Strategy for Config Merging'
+date: 2025-12-07
+description: 'Proposes how config merging should handle YAML parse failures in one layer, invalid tags, circular includes, and runaway nesting, reusing the existing diagnostic collector and error code scheme.'
+status: draft  # Design proposal
+braid:
+  strand: k-os6h  # child of k-zvzm
+  priority: P2
+---
 
-**Date**: 2025-12-07
-**Issue**: k-os6h (child of k-zvzm)
-**Status**: Design proposal
 **Parent Plan**: `claude-notes/plans/2025-12-07-config-merging-design.md`
 
 ## Problem Statement

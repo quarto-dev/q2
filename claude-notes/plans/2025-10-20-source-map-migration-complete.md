@@ -1,7 +1,12 @@
-# Source Map Migration Completion Summary
+---
+title: 'Source Map Migration Completion Summary'
+date: 2025-10-20
+description: 'Summarizes the completed move of all AST types from the legacy `pandoc::location` module to `quarto-source-map`, with test results, JSON writer changes, and follow-up work left open.'
+braid:
+  strand: k-71
+  priority: P1
+---
 
-**Date:** 2025-10-20
-**Issue:** k-71 - Run full test suite after migration complete
 **Branch:** kyoto-source-map-migration
 
 ## Migration Status: ✅ COMPLETE

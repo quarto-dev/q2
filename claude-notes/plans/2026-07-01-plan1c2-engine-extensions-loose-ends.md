@@ -1,13 +1,15 @@
-# Plan 1c.2 — TS Engine Extensions: loose ends
+---
+title: 'Plan 1c.2 — TS Engine Extensions: loose ends'
+date: 2026-07-01
+description: 'Collects the remaining TS engine extension follow-ups: typed `claims-files` entries, folding statically claimed extensions such as `.echo` into project discovery, and encapsulating the engine contribution order.'
+status: done  # P1 landed (2026-07-02); **P2 + P4 landed (2026-07-07)** on `feature/ts-engine-extensions` via SDD (commits `1406074d2`→`e5a07644` + a wasm-warning fix; see `.superpowers/sdd/progress.md`). All checklist items complete; `cargo xtask verify` green. Source refs current as of 2026-07-06.
+---
 
 **Parent:** [2026-04-16-plan1c-extension-integration.md](2026-04-16-plan1c-extension-integration.md)
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Design docs:** `engine-resolution.md` §3.3/§6.1/§8/§10; `engine-api-surface.md` (DQ-1…DQ-7);
 Plan 5 stub §Invalidation.
 **Successor for content claims:** [2026-07-07-plan7a-static-content-pattern-claims.md](2026-07-07-plan7a-static-content-pattern-claims.md)
-**Status:** P1 landed (2026-07-02); **P2 + P4 landed (2026-07-07)** on `feature/ts-engine-extensions`
-via SDD (commits `1406074d2`→`e5a07644` + a wasm-warning fix; see `.superpowers/sdd/progress.md`).
-All checklist items complete; `cargo xtask verify` green. Source refs current as of 2026-07-06.
 **Reworked 2026-07-07:** the P4 "rename `claims-files → claims-extensions`" is **withdrawn**. A full
 census of Q1's engine file-claims showed `claims-files` is a genuine *file-claim* surface (extension +
 an optional content pattern), not a bare extension set — so the name was right all along. P4 now

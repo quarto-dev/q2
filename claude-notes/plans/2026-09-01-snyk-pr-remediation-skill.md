@@ -1,6 +1,12 @@
-# Snyk PR remediation skill
+---
+title: 'Snyk PR remediation skill'
+date: 2026-09-01
+description: 'Adds a `/snyk-pr` skill that walks a Snyk bot upgrade PR through every copy of a pinned version, including generated bundles, so that KaTeX and React bumps can be made mergeable without weakening CI guard tests.'
+braid:
+  strand: bd-t8bwkr64
+  priority: P1
+---
 
-**Braid strand:** bd-t8bwkr64
 **Immediate motivation:** PR #637 (\[Snyk\] Upgrade katex from 0.18.2 to 0.18.4) is red on CI with the same failure signature as every previous katex Snyk PR.
 
 ## Overview

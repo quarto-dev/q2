@@ -1,7 +1,12 @@
-# `q2 preview` support for `render-components:` (GH #402 / bd-ue80chl0)
-
-**Status:** APPROVED (2026-08-25) — executing on branch
-`braid/bd-ue80chl0-preview-spa-render-components`.
+---
+title: '`q2 preview` support for `render-components:` (GH #402 / bd-ue80chl0)'
+date: 2026-08-25
+description: 'Makes `q2 preview` honor `render-components:` by transpiling user TSX overrides in the SPA with the same babel transpiler hub-client uses, lazy-loaded so documents without the key pay nothing.'
+status: in-progress  # APPROVED (2026-08-25) — executing on branch `braid/bd-ue80chl0-preview-spa-render-components`.
+braid:
+  strand: bd-ue80chl0
+  priority: P2
+---
 
 ### Settled decisions (review round, 2026-08-25)
 

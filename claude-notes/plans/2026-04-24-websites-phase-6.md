@@ -1,10 +1,15 @@
-# Phase 6 — Cross-document link rewriting
+---
+title: 'Phase 6 — Cross-document link rewriting'
+date: 2026-04-24
+description: 'Rewrites body-content Markdown links to other project documents, such as `about.qmd`, into `.html` URLs relative to the current page''s depth, so links resolve correctly in the rendered site.'
+status: draft  # Draft — pending user review.
+braid:
+  strand: bd-v30t  # (parent `bd-0tr6`). Follow-ups TBD at close-out.
+  priority: P1
+---
 
-**Date:** 2026-04-24
-**Beads:** `bd-v30t` (parent `bd-0tr6`). Follow-ups TBD at close-out.
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-24-websites-phase-5.md`
-**Status:** Draft — pending user review.
 
 ## Goal of this phase
 

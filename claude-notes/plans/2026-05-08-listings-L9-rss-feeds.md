@@ -1,6 +1,13 @@
-# L9 — RSS feeds (sub-plan)
+---
+title: 'L9 — RSS feeds (sub-plan)'
+date: 2026-05-08
+description: 'Adds RSS 2.0 feeds for website listings, built from staged files that a post-render step completes with rendered descriptions, plus per-category sub-feeds and image metadata for media content.'
+braid:
+  strand: bd-o90m
+  priority: P2
+status: draft  # Draft. Awaiting user approval before hand-off.
+---
 
-**Date:** 2026-05-08
 **Beads:** `bd-o90m` (this phase). Parent epic: `bd-61cd`
 (`claude-notes/plans/2026-05-05-listings-epic.md`).
 **Predecessors:**
@@ -28,8 +35,6 @@
 - L8 (closed) — custom listing templates. Untouched by L9
   (L9's templates are built-ins; custom feed templates are
   out of scope).
-
-**Status:** Draft. Awaiting user approval before hand-off.
 
 ## Goal of this phase
 

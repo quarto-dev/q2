@@ -1,7 +1,13 @@
-# Worktree + cargo-target disk reclamation
-
-**Status:** drafting — ready for a separate agent to pick up
-**Beads:** [bd-4y8fd](../../.beads/issues.jsonl)
+---
+title: 'Worktree + cargo-target disk reclamation'
+date: 2026-05-22
+description: 'Adds a `cargo xtask reap-worktrees` command that surveys `.worktrees/` and removes finished worktrees while skipping unmerged or uncommitted ones, reclaiming the build directories that filled the disk.'
+status: draft  # drafting — ready for a separate agent to pick up
+braid:
+  strand: bd-4y8fd
+  priority: P2
+  labels: [disk-space, tooling, worktrees]
+---
 
 ## Motivation
 

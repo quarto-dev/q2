@@ -1,4 +1,11 @@
-# fnm + nvm-windows Node discovery for `q2 mcp` (bd-e1ger90c)
+---
+title: 'fnm + nvm-windows Node discovery for `q2 mcp` (bd-e1ger90c)'
+date: 2026-07-02
+description: 'Adds fnm and nvm-windows Node discovery to the Windows branch of the `q2 mcp` launcher, so a GUI-launched host with a stripped PATH finds Node, and widens the version-directory sub-path list to cover all layouts.'
+braid:
+  strand: bd-e1ger90c
+  priority: P1
+---
 
 ## Overview
 

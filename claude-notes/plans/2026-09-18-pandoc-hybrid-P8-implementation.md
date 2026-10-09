@@ -1,4 +1,9 @@
-# P8 — Implementation tasks & Test Seam Spec
+---
+title: 'P8 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+description: 'Breaks the content-hidden work into tasks that verify `when-format` and `unless-format` conditionals against Pandoc targets such as docx and pptx, mostly as regression tests over already-shipped code.'
+status: in-progress  # Tasks 1-3 done. Task 4 remains gated as above.
+---
 
 **Date:** 2026-09-20
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P8-content-hidden.md`](2026-08-20-pandoc-hybrid-P8-content-hidden.md)
@@ -7,7 +12,6 @@
 **Depends on:** Tasks 1–3 are done. The docx/pptx smoke fixture (Task 4) is gated on
 **P7-foundation's Task 3** (Pandoc-tail reachability) *and* **P7's Task 4** (the invocation
 builder). It is not additionally gated on P1 Task 1 (`FormatIdentifier::Pptx`), which has landed.
-**Status:** Tasks 1-3 done. Task 4 remains gated as above.
 
 This file converts P8's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P8 needs to a named

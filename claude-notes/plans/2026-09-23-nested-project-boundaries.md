@@ -1,9 +1,14 @@
-# Nested projects: `_quarto.yml` as a render-list boundary (bd-nested-projects-xyb28wnl)
+---
+title: 'Nested projects: `_quarto.yml` as a render-list boundary (bd-nested-projects-xyb28wnl)'
+date: 2026-09-23
+description: 'Makes `_quarto.yml` subdirectories a render-list boundary, so the implicit walk skips them with one warning per render and explicit references into them only warn.'
+status: in-progress  # The design is settled (see "Design decisions"). Implementation is in progress on this branch.
+braid:
+  strand: bd-nested-projects-xyb28wnl  # parent epic bd-uk8zgkha
+  priority: P2
+---
 
-**Date:** 2026-09-23
-**Braid:** bd-nested-projects-xyb28wnl (parent epic bd-uk8zgkha)
 **Branch:** `braid/bd-nested-projects-xyb28wnl-nested-project-boundaries` (topic branch in the main checkout, based on `main` at `9e5d519c`)
-**Status:** The design is settled (see "Design decisions"). Implementation is in progress on this branch.
 
 ## Triage verdict
 

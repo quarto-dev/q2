@@ -1,14 +1,15 @@
-# format.html.css files are neither copied into the site nor rebased per page (bd-format-css-not-copied-crn3bjdz)
+---
+title: 'format.html.css files are neither copied into the site nor rebased per page (bd-format-css-not-copied-crn3bjdz)'
+date: 2026-08-14
+description: 'Copies stylesheets listed under `format.html.css` into the site and rebases their links per page, so project CSS no longer returns 404 on nested pages.'
+status: done  # Implementation complete on branch `braid/bd-format-css-not-copied-crn3bjdz` (commits `37758160` + `86a6f79d` on top of the investigation commits). All phases done; full `cargo xtask verify` green; preview verified in a real browser (false Q-5-29 fixed, css-application gap filed as bd-b3oq2fsy). Awaiting push/PR approval.
+braid:
+  strand: bd-format-css-not-copied-crn3bjdz
+  priority: P1
+  labels: [websites]
+---
 
-**Date:** 2026-08-14
-**Braid:** bd-format-css-not-copied-crn3bjdz (bug, p1, label `websites`)
 **Checkout:** main checkout, branch `main` \@ `10d86829` (investigation only — no worktree/branch created)
-**Status:** Implementation complete on branch
-`braid/bd-format-css-not-copied-crn3bjdz` (commits `37758160` +
-`86a6f79d` on top of the investigation commits). All phases done; full
-`cargo xtask verify` green; preview verified in a real browser (false
-Q-5-29 fixed, css-application gap filed as bd-b3oq2fsy). Awaiting
-push/PR approval.
 
 ## Phase 4 evidence (end-to-end, real binary)
 

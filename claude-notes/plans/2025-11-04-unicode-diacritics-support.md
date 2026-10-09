@@ -1,4 +1,8 @@
-# Unicode Diacritics and Non-ASCII Character Support Investigation
+---
+title: 'Unicode Diacritics and Non-ASCII Character Support Investigation'
+date: 2025-11-04
+description: 'Investigates why the `pandoc_str` grammar regex rejects accented and non-ASCII letters such as the o in Antônio, and compares ways to extend it to Unicode letter ranges.'
+---
 
 Date: 2025-11-04
 File: claude-notes/plans/2025-11-04-unicode-diacritics-support.md

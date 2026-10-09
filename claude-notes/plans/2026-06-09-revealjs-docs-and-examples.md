@@ -1,7 +1,13 @@
-# Reveal.js docs page + per-feature example projects
+---
+title: 'Reveal.js docs page + per-feature example projects'
+date: 2026-06-09
+description: 'Documents the implemented reveal.js authoring features on the docs site, each section with a minimal source sample and a placeholder for a runnable example project from `examples/presentations/`.'
+braid:
+  strand: bd-ixdktocp  # discovered-from the revealjs epic bd-bea550b0
+  priority: P2
+  labels: [docs, revealjs]
+---
 
-**Strand:** bd-ixdktocp (discovered-from the revealjs epic bd-bea550b0)
-**Date:** 2026-06-09
 **Writing skill:** apply `reader-expectations-prose` (Gopen structure) when drafting prose.
 
 ## Overview

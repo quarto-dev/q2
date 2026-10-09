@@ -1,4 +1,8 @@
-# Memo: quarto-source-map binding-API redesign (Option B), with Option C as the declared end-state
+---
+title: 'Memo: quarto-source-map binding-API redesign (Option B), with Option C as the declared end-state'
+date: 2026-08-09
+description: 'Proposes a redesign of the quarto-source-map binding API so a source span''s file identity and content are bound together, making mismatched file ids unrepresentable, with a later end-state where spans hold file handles.'
+---
 
 **Audience:** the agent/session working in `posit-dev/quarto-source-map`
 (and, for the migration leg, `posit-dev/quarto-yaml`).

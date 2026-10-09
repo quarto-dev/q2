@@ -1,8 +1,12 @@
-# Resource-copy failure → structured diagnostic
-
-**Strand:** bd-bxrkxblx
-**Date:** 2026-06-19
-**Status:** assessment / awaiting go-ahead (DO NOT execute yet)
+---
+title: 'Resource-copy failure → structured diagnostic'
+date: 2026-06-19
+description: 'Converts resource-copy failures, which currently print as an unstructured string with no span, into span-aware diagnostics: a warning for missing referenced images and an error for environment failures like permission denial.'
+status: approved  # assessment / awaiting go-ahead (DO NOT execute yet)
+braid:
+  strand: bd-bxrkxblx
+  priority: P2
+---
 
 ## Overview
 

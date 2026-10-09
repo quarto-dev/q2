@@ -1,4 +1,11 @@
-# Automatic self-heal for a duplicate-seq-stuck index document
+---
+title: 'Automatic self-heal for a duplicate-seq-stuck index document'
+date: 2026-09-17
+description: 'Lets a hub-client browser recover automatically when its index document stops receiving peer updates after a duplicate sequence number collision, by swapping in a fresh handle instead of a manual IndexedDB wipe.'
+braid:
+  strand: bd-6f21d4c6
+  priority: P1
+---
 
 **Strand:** bd-6f21d4c6. **Retroactive plan** — written after the design was
 implemented and verified, to document it for review rather than to drive the

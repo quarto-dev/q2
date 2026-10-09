@@ -1,7 +1,14 @@
-# Error-code documentation pages in the website (epic)
+---
+title: 'Error-code documentation pages in the website (epic)'
+date: 2026-05-22
+description: 'Plans a documentation page on the website for each of the 133 structured error codes, covering the page convention, a `cargo xtask error-docs` coverage tool, and hand-written content.'
+status: draft  # drafting — pending user review
+braid:
+  strand: bd-94x8a  # parent epic
+  priority: P2
+  labels: [documentation, error-reporting, website]
+---
 
-**Status:** drafting — pending user review
-**Beads:** [bd-94x8a](../../.beads/issues.jsonl) (parent epic)
 **Children:**
 - [Foundation](2026-05-22-error-docs-foundation.md) — bd-nvlxn
 - [Tooling](2026-05-22-error-docs-tooling.md) — bd-8otua

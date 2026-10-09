@@ -1,7 +1,11 @@
-# Project import error UX: "Document … is unavailable"
-
-**Strand:** bd-tux4m6od
-**Date started:** 2026-07-29
+---
+title: 'Project import error UX: "Document … is unavailable"'
+date: 2026-07-29
+description: 'Replaces the raw unavailable-document error shown when joining a shared project collection with classified messages for expired sign-in, offline, unreachable sync server, and missing documents, plus retry handling for a cold-start race.'
+braid:
+  strand: bd-tux4m6od
+  priority: P1
+---
 
 ## Overview
 

@@ -1,4 +1,8 @@
-# Plan: Use Samod's AccessPolicy for Document Access Audit Logging
+---
+title: 'Plan: Use Samod''s AccessPolicy for Document Access Audit Logging'
+date: 2026-03-12
+description: 'Logs which authenticated user first accesses each document in a session by implementing samod''s `AccessPolicy` trait with a peer-to-email map, always allowing access so the policy serves only as an audit trail.'
+---
 
 ## Context
 

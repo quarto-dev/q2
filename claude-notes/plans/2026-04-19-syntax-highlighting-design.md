@@ -1,7 +1,13 @@
-# Syntax highlighting design for Quarto 2
+---
+title: 'Syntax highlighting design for Quarto 2'
+date: 2026-04-19
+description: 'Designs syntax highlighting for Quarto 2 by storing tree-sitter capture spans as a JSON attribute on code blocks, so user filters can author the same spans and the HTML writer renders them.'
+status: approved  # Design decisions locked 2026-04-19 — ready for implementation phases
+braid:
+  strand: bd-n7x2
+  priority: P2
+---
 
-- **Beads**: bd-n7x2
-- **Status**: Design decisions locked 2026-04-19 — ready for implementation phases
 - **Research notes**:
   - `claude-notes/research/syntax-highlighting-pandoc.md` — Pandoc + skylighting
   - `claude-notes/research/syntax-highlighting-hugo-chroma.md` — Hugo + chroma (Pygments heritage)

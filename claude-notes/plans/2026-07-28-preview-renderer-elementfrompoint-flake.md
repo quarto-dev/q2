@@ -1,7 +1,12 @@
-# Flaky preview-renderer run: unhandled `elementFromPoint` error (bd-cpyq99ps)
+---
+title: 'Flaky preview-renderer run: unhandled `elementFromPoint` error (bd-cpyq99ps)'
+date: 2026-07-28
+description: 'Fixes an intermittent unhandled `elementFromPoint` error that failed the preview renderer test run by stubbing the missing jsdom method in the test setup and adding a test that drives a real ProseMirror editor.'
+braid:
+  strand: bd-cpyq99ps  # discovered-from bd-dofxhzaj
+  priority: P2
+---
 
-**Date:** 2026-07-28
-**Braid:** bd-cpyq99ps (bug, P2) — `discovered-from: bd-dofxhzaj`
 **Branch:** `braid/bd-cpyq99ps-flaky-preview-renderer-integration` off `main` \@ `7ff19ff8`
 
 ## Symptom

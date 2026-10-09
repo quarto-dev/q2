@@ -1,13 +1,16 @@
-# Q-5-8 diagnostic points at wrong `_quarto.yml` span for extension-contributed pre-render scripts
+---
+title: 'Q-5-8 diagnostic points at wrong `_quarto.yml` span for extension-contributed pre-render scripts'
+date: 2026-08-09
+description: 'Makes the Q-5-8 diagnostic for failing pre-render and post-render scripts point at the `_extension.yml` manifest, not `_quarto.yml`, when an extension contributed the script, and applies the same fix to project resources.'
+status: done  # done — PR #478 merged as `4bb32844` (2026-08-09); bd-m6wmztln and bd-p86nlm92 closed. Remaining follow-ups live in their own strands: bd-nv4p0eb1 (systematic audit + API hardening), bd-xh1v98d9 (manifest path on `Extension`), bd-2x0tmd7v (doc-level span-less gap).
+braid:
+  strand: bd-m6wmztln
+  priority: P1
+---
 
-**Strand:** bd-m6wmztln (p1 bug)
 **Discovered-from strands:** bd-p86nlm92 (project_resources, same pattern — folded into this PR),
 bd-2x0tmd7v (doc-level span-less gap, unverified), bd-xh1v98d9 (store manifest
 path on `Extension`), bd-nv4p0eb1 (systematic span/FileId audit + API hardening)
-**Status:** done — PR #478 merged as `4bb32844` (2026-08-09); bd-m6wmztln
-and bd-p86nlm92 closed. Remaining follow-ups live in their own strands:
-bd-nv4p0eb1 (systematic audit + API hardening), bd-xh1v98d9 (manifest
-path on `Extension`), bd-2x0tmd7v (doc-level span-less gap).
 
 ## Review decisions (2026-08-09)
 

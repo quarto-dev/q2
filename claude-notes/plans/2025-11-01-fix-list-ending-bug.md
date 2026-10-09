@@ -1,7 +1,11 @@
-# Fix List Item Block Ending Detection
-
-**Issue**: k-315
-**Date**: 2025-11-01
+---
+title: 'Fix List Item Block Ending Detection'
+date: 2025-11-01
+description: 'Diagnoses why list items in `scanner.c` never end at a blank line, so that a following paragraph like `b` splits off as it already does for block quotes.'
+braid:
+  strand: k-315
+  priority: P1
+---
 
 ## Problem
 

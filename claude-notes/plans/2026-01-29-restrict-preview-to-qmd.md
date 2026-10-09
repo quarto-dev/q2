@@ -1,7 +1,10 @@
-# Plan: Restrict Preview and QMD Features to .qmd Files Only
+---
+title: 'Plan: Restrict Preview and QMD Features to .qmd Files Only'
+date: 2026-01-29
+description: 'Limits preview, diagnostics, folding and outline features to `.qmd` files, showing a placeholder in the preview pane for other text files so CSS, JSON and YAML stop producing render errors.'
+---
 
 **Issue**: kyoto-xem
-**Date**: 2026-01-29
 
 ## Overview
 

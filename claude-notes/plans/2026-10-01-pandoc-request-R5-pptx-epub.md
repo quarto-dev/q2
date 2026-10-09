@@ -1,6 +1,9 @@
-# Plan: pptx and epub requests (pandoc-request R5)
+---
+title: 'Plan: pptx and epub requests (pandoc-request R5)'
+date: 2026-10-01
+description: 'Extends the browser docx request to pptx and epub, and fixes epub output by stopping a document''s `css` metadata from being resolved against pandoc''s working directory.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D3, D1)
 **Depends on:** R2; file-serial with R4 (both change `pandoc_write.rs`). **Unblocks:** the pptx and epub menu entries in host H5.

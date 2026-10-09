@@ -1,8 +1,11 @@
-# Pandoc-Hybrid Long-Tail Formats
+---
+title: 'Pandoc-Hybrid Long-Tail Formats'
+date: 2026-09-24
+description: 'Adds 48 new Pandoc long-tail output formats to q2 by mapping each to a writer name, output extension and defaults row, reusing the shipped hybrid pipeline without custom code.'
+status: approved  # Plan (Phase 0 complete; all Gordon decisions resolved 2026-09-24 — ready for Phase 1)
+---
 
-**Status:** Plan (Phase 0 complete; all Gordon decisions resolved 2026-09-24 — ready for Phase 1)
 **Branch:** `feature/pandoc-many-formats` (workspace-7, off `origin/main` @ `790eaf89f`)
-**Date:** 2026-09-24
 
 ## Overview
 

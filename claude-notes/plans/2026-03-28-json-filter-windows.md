@@ -1,4 +1,8 @@
-# json_filter Windows Support Implementation Plan
+---
+title: 'json_filter Windows Support Implementation Plan'
+date: 2026-03-28
+description: 'Makes `apply_json_filter` work on Windows by dispatching script filters by extension to Python or bash and probing pyenv-win `.bat` shims, while bare command names still resolve through PATH.'
+---
 
 **Goal:** Make `apply_json_filter` work on Windows by dispatching script filters to the correct interpreter, using a Pandoc-style exists-then-dispatch pattern.
 

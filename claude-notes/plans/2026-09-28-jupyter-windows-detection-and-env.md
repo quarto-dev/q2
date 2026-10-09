@@ -1,4 +1,8 @@
-# Plan: Jupyter detection and test environment (q2)
+---
+title: 'Plan: Jupyter detection and test environment (q2)'
+date: 2026-09-28
+description: 'Makes Jupyter availability checks probe that the `jupyter` binary actually runs and that a `python3` kernelspec exists, so broken or Python-less installs skip tests instead of failing them, with CI provisioning deferred.'
+---
 
 ## Overview
 

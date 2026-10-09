@@ -1,8 +1,11 @@
-# Plan 1 — q2-preview pipeline + integration
+---
+title: 'Plan 1 — q2-preview pipeline + integration'
+date: 2026-05-04
+description: 'Adds a `q2-preview` pseudo-format whose pipeline runs the transforms and user filters but returns the AST instead of HTML, giving the React iframe preview its first visible rendering in read-only mode.'
+status: approved  # Implementation plan (open questions resolved; ready to build)
+---
 
-**Date:** 2026-05-04
 **Branch:** feature/q2-preview
-**Status:** Implementation plan (open questions resolved; ready to build)
 **Milestone:** M1 (visible q2-preview rendering, read-only)
 
 ## Goal

@@ -1,10 +1,13 @@
-# Phase 2: Enhanced Template System
+---
+title: 'Phase 2: Enhanced Template System'
+date: 2026-01-26
+date-modified: 2026-01-26
+description: 'Adds a second, Bootstrap-compatible HTML template, chosen by the `minimal` option and theme setting, so output matches the minimal and full output modes of TypeScript Quarto.'
+status: in-progress  # In Progress (Phases 2.0-2.3 complete, 2.4 remaining)
+---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)
 **Beads Issue**: kyoto-nje
-**Created**: 2026-01-26
-**Updated**: 2026-01-26 (integrated title-block.scss into SASS compilation)
-**Status**: In Progress (Phases 2.0-2.3 complete, 2.4 remaining)
 
 ---
 

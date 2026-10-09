@@ -1,4 +1,8 @@
-# Fix: markdown adjacent to a raw HTML block is emitted verbatim
+---
+title: 'Fix: markdown adjacent to a raw HTML block is emitted verbatim'
+date: 2026-09-04
+description: 'Splits a paragraph that opens with a block-level HTML tag so the tag runs stay raw while the text between them goes back through the inline parser, matching pandoc''s `markdown_in_html_blocks` behavior.'
+---
 
 Strand: `bd-block-html-adjacent-markdown-unparsed-0qnjuwuy`
 Exploration: `claude-notes/research/2026-09-03-block-html-adjacent-markdown-unparsed.md`

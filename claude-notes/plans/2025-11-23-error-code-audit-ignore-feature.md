@@ -1,4 +1,8 @@
-# Error Code Audit: Ignore Feature
+---
+title: 'Error Code Audit: Ignore Feature'
+date: 2025-11-23
+description: 'Specifies `quarto-error-code-audit-ignore` comments that exclude a single line or a whole file from the error code audit script, so intentionally invalid or example codes stay out of its reports.'
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

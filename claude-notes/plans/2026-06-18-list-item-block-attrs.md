@@ -1,8 +1,14 @@
-# Block-level attributes on list items (`<li class>`)
+---
+title: 'Block-level attributes on list items (`<li class>`)'
+date: 2026-06-18
+description: 'Lets a block attribute such as `{.foo}` on a list item reach its `<li>` in HTML, preview and JSON, hoisting it from the item''s last block into a parallel `itemAttr` key.'
+status: draft  # planning
+braid:
+  strand: bd-aeyss6p5  # discovered-from bd-itqcfxc3; related bd-38ioql41
+  priority: P2
+  labels: [pampa]
+---
 
-**Strand:** bd-aeyss6p5 (discovered-from bd-itqcfxc3; related bd-38ioql41)
-**Date:** 2026-06-18
-**Status:** planning
 **Parent plan:** [`2026-06-17-block-level-attrs-inline-attr.md`](./2026-06-17-block-level-attrs-inline-attr.md)
 (the `Para` capability, merged in PR #310; see its "List-item JSON
 representation — study" section, which this plan implements)

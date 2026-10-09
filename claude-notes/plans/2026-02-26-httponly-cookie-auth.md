@@ -1,4 +1,8 @@
-# HttpOnly Cookie Auth Migration
+---
+title: 'HttpOnly Cookie Auth Migration'
+date: 2026-02-26
+description: 'Moves hub authentication from localStorage and Bearer tokens to HttpOnly cookies so JavaScript can no longer read the JWT, adding CSRF checks, WebSocket Origin validation and a strict Content-Security-Policy.'
+---
 
 ## Overview
 

@@ -1,7 +1,10 @@
-# Hub-Client UI/UX Modernization Plan
+---
+title: 'Hub-Client UI/UX Modernization Plan'
+date: 2026-08-25
+description: 'Systematizes the hub-client UI into shared design tokens, one pattern per interaction problem, keyboard parity and WCAG fixes, with opinionated visual changes gathered into a single later review gate.'
+status: in-progress  # Approved 2026-08-25 — Phases 0–4 complete (Phase 3 = PR #611); Phase 5 implemented 2026-08-27 (branch `hub-client-uiux-phase5`, deck at `.worktrees/phase5-review-deck/`) — awaiting design review
+---
 
-**Date:** 2026-08-25
-**Status:** Approved 2026-08-25 — Phases 0–4 complete (Phase 3 = PR #611); Phase 5 implemented 2026-08-27 (branch `hub-client-uiux-phase5`, deck at `.worktrees/phase5-review-deck/`) — awaiting design review
 **Tracking:** braid epic `bd-2q55e6rc` (per-phase strands hang off it)
 **Scope:** `hub-client/` React/TypeScript app only — no Rust, no WASM, no sync-protocol changes.
 

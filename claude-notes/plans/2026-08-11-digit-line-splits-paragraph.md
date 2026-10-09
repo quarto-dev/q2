@@ -1,9 +1,15 @@
-# Continuation line starting with a digit terminates the paragraph (bd-digit-line-splits-paragraph-w6tod0gh)
+---
+title: 'Continuation line starting with a digit terminates the paragraph (bd-digit-line-splits-paragraph-w6tod0gh)'
+date: 2026-08-11
+description: 'Stops a continuation line that begins with a digit from ending the paragraph, following CommonMark, so a line wrap inside link text no longer fails with an unclosed span error.'
+status: done  # Implemented on `braid/bd-digit-line-splits-paragraph-w6tod0gh-continuation-line-starting-digit`. Design questions answered by the user 2026-08-11; see "Answers" and "Implementation record" below.
+braid:
+  strand: bd-digit-line-splits-paragraph-w6tod0gh
+  priority: P1
+  labels: [bug, parity]
+---
 
-**Date:** 2026-08-11
-**Braid:** `bd-digit-line-splits-paragraph-w6tod0gh` (bug, P1, labels `bug` / `parity`)
 **Branch:** investigated in place on `main` \@ `fc2895b2` — no worktree created (see "Where this should land")
-**Status:** Implemented on `braid/bd-digit-line-splits-paragraph-w6tod0gh-continuation-line-starting-digit`. Design questions answered by the user 2026-08-11; see "Answers" and "Implementation record" below.
 
 ## Triage verdict
 

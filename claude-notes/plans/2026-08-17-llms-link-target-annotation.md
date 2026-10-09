@@ -1,9 +1,15 @@
-# llms-txt: author-facing link-target annotation (bd-llms-link-target-annotation-0zo2ppgx)
+---
+title: 'llms-txt: author-facing link-target annotation (bd-llms-link-target-annotation-0zo2ppgx)'
+date: 2026-08-17
+description: 'Adds a `link-format` link attribute so an author can keep a link on the HTML page inside the llms-txt companion, or point the HTML page at the markdown companion.'
+status: approved  # Design aligned 2026-08-17 (all five questions resolved — see Resolved design decisions). Ready to implement on a dedicated branch/worktree.
+braid:
+  strand: bd-llms-link-target-annotation-0zo2ppgx
+  priority: P3
+  labels: [websites]
+---
 
-**Date:** 2026-08-17
-**Braid:** bd-llms-link-target-annotation-0zo2ppgx
 **Checkout:** main (investigation committed in place; implementation should get its own branch/worktree)
-**Status:** Design aligned 2026-08-17 (all five questions resolved — see Resolved design decisions). Ready to implement on a dedicated branch/worktree.
 
 ## Triage verdict
 

@@ -1,11 +1,15 @@
-# RevealJS themes: Quarto 1 → Quarto 2 (reveal.js 6)
+---
+title: 'RevealJS themes: Quarto 1 → Quarto 2 (reveal.js 6)'
+date: 2026-06-16
+description: 'Brings Quarto 1 reveal.js themes and theming defaults to Quarto 2 on reveal.js 6 through a Sass theme layer and AST transforms, so output feels familiar to Quarto 1 users.'
+status: in-progress  # Stages A/B/C **and** Stage D's D1 (callouts) + D2 (brand) are merged to `feature/revealjs-q1-themes`, which is **pushed to `origin`**. Stage D (bd-j8qoyc0s) continues: **D3/D4/D5 remain** — see "## Handoff for next session" at the bottom (a fresh-clone agent branches off `feature` for these).
+braid:
+  strand: bd-yown2ts4
+  priority: P1
+  labels: [revealjs, theming]
+---
 
-**Strand:** bd-yown2ts4
 **Branch:** `feature/revealjs-q1-themes` (epic integration line; stages land on sub-branches)
-**Status (2026-06-16):** Stages A/B/C **and** Stage D's D1 (callouts) + D2 (brand)
-are merged to `feature/revealjs-q1-themes`, which is **pushed to `origin`**.
-Stage D (bd-j8qoyc0s) continues: **D3/D4/D5 remain** — see "## Handoff for next
-session" at the bottom (a fresh-clone agent branches off `feature` for these).
 
 ---
 

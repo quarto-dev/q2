@@ -1,7 +1,13 @@
-# Generic file uploader dialog for hub-client
+---
+title: 'Generic file uploader dialog for hub-client'
+date: 2026-04-21
+description: 'Proposes a generic asset dialog for hub-client that replaces the image-only drop and file-picker paths, accepting any binary file, letting the user choose its destination folder, and validating paths before upload.'
+status: draft  # drafted 2026-04-21 — implementation deferred to a separate session
+braid:
+  strand: bd-eity
+  priority: P1
+---
 
-- **Beads**: bd-eity
-- **Status**: drafted 2026-04-21 — implementation deferred to a separate session
 - **Related**: blocks real-browser end-to-end verification for syntax-highlighting Phase 4 (`claude-notes/plans/2026-04-21-syntax-highlighting-phase-4.md` step 4.6).
 
 ## Why this plan exists

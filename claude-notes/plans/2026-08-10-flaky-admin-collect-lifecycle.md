@@ -1,12 +1,14 @@
-# Flaky test: admin_collect_lifecycle fails intermittently in full-workspace runs (bd-u0tldu4z)
+---
+title: 'Flaky test: admin_collect_lifecycle fails intermittently in full-workspace runs (bd-u0tldu4z)'
+date: 2026-08-10
+description: 'Traces an intermittent `admin_collect_lifecycle` test failure to doc-id case-folding on case-insensitive filesystems rather than timing, and proposes recovering ids with a checksum-validated case-variant search.'
+status: in-progress  # Part A implemented on `main` (user go-ahead 2026-08-10: "do Part A of bd-eb2wnxkp here"). bd-u0tldu4z stays open for a future dedicated stress verification; moved-store scenario confirmed out of scope; Parts B/C of the eb2wnxkp plan remain open questions on that strand.
+braid:
+  strand: bd-u0tldu4z
+  priority: P3
+---
 
-**Date:** 2026-08-10
-**Braid:** bd-u0tldu4z (bug, p3 as filed — but see verdict)
 **Branch:** `main` (main checkout; no worktree — investigation only, per `/investigate-beads`)
-**Status:** Part A implemented on `main` (user go-ahead 2026-08-10: "do Part A of
-bd-eb2wnxkp here"). bd-u0tldu4z stays open for a future dedicated stress
-verification; moved-store scenario confirmed out of scope; Parts B/C of the
-eb2wnxkp plan remain open questions on that strand.
 
 ## Triage verdict
 

@@ -1,13 +1,17 @@
-# `aliases:` is silently ignored — no redirect stubs written (bd-aliases-redirects-missing-sch7cd1g)
+---
+title: '`aliases:` is silently ignored — no redirect stubs written (bd-aliases-redirects-missing-sch7cd1g)'
+date: 2026-08-12
+description: 'Implements the `aliases:` front matter key by writing redirect stubs so old URLs keep working after pages move, with diagnostics for collisions, including case-only ones.'
+status: done  # **Implemented.** All phases complete and verified end-to-end (§ Outcome). `cargo xtask verify --skip-hub-build` green; the Connect-docs file-count gap is closed.
+braid:
+  strand: bd-aliases-redirects-missing-sch7cd1g
+  priority: P2
+  labels: [website]
+---
 
-**Date:** 2026-08-12
-**Braid:** `bd-aliases-redirects-missing-sch7cd1g` (p2, feature, label `website`)
 **Duplicate:** `bd-hzwecpyk` — **closed** in favour of this strand
 **Follow-up:** `bd-wdhhl0t9` (stale-stub cleanup, deferred)
 **Branch:** `braid/aliases-redirect-stubs`, based on `main` \@ `1ba0f2ec` (no worktree — work in place)
-**Status:** **Implemented.** All phases complete and verified end-to-end
-(§ Outcome). `cargo xtask verify --skip-hub-build` green; the Connect-docs
-file-count gap is closed.
 
 ## Outcome
 

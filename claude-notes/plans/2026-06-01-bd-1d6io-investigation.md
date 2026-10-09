@@ -1,8 +1,14 @@
-# bd-1d6io — annotated-qmd source-tracking off-by-one: investigation
+---
+title: 'bd-1d6io — annotated-qmd source-tracking off-by-one: investigation'
+date: 2026-06-01
+description: 'Investigates two failing `annotated-qmd` tests where source ranges absorb preceding whitespace, tracing inline code spans to a tree-sitter scanner regression and attribute keys to an original defect.'
+status: done  # investigation complete — triage verdict below. No fix committed yet.
+braid:
+  strand: bd-1d6io
+  priority: P2
+---
 
-**Status:** investigation complete — triage verdict below. No fix committed yet.
 **Worktree:** `.worktrees/bd-1d6io-annotated-qmd-source-tracking` (branch `beads/bd-1d6io-annotated-qmd-source-tracking`, off `main`).
-**Date:** 2026-06-01.
 
 ## TL;DR
 

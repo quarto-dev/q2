@@ -1,8 +1,11 @@
-# Unify hub-client Rendering with quarto-core Pipeline
+---
+title: 'Unify hub-client Rendering with quarto-core Pipeline'
+date: 2026-01-28
+description: 'Makes hub-client rendering share the quarto-core format metadata extraction used by the native CLI, so frontmatter options such as `toc` take effect in the browser preview.'
+status: in-progress
+---
 
 **Beads Issue**: kyoto-5hi
-**Created**: 2026-01-28
-**Status**: In Progress
 
 ---
 

@@ -1,9 +1,15 @@
-# Navigation item `text:` is HTML-escaped; bare-string page-footer item becomes an empty link (bd-page-footer-items-f4th80mj)
+---
+title: 'Navigation item `text:` is HTML-escaped; bare-string page-footer item becomes an empty link (bd-page-footer-items-f4th80mj)'
+date: 2026-08-11
+description: 'Makes navigation item `text:` values in navbars, sidebars and footers parse as markdown instead of escaped literals, so entities, emphasis and shortcodes render, and bare footer strings stop producing empty links.'
+status: done  # **Implemented and verified.** All six design questions answered by Carlos (see "Settled decisions"); all five defects fixed and verified end-to-end; full workspace suite green. Awaiting PR + review.
+braid:
+  strand: bd-page-footer-items-f4th80mj
+  priority: P1
+  labels: [parity, websites]
+---
 
-**Date:** 2026-08-11
-**Braid:** bd-page-footer-items-f4th80mj (bug, P1, labels `parity` / `websites`)
 **Branch:** `braid/bd-page-footer-items-f4th80mj-nav-item-text`, off `main` \@ `6516a330`, in the main checkout (`/Users/cscheid/rooms/room-1/q2`) — no worktree, per decision 6. Investigation was committed on `main` first (`6632884b`).
-**Status:** **Implemented and verified.** All six design questions answered by Carlos (see "Settled decisions"); all five defects fixed and verified end-to-end; full workspace suite green. Awaiting PR + review.
 
 ## Settled decisions (2026-08-11)
 

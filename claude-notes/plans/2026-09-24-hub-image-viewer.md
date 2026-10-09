@@ -1,4 +1,8 @@
-# Hub-client image viewer
+---
+title: 'Hub-client image viewer'
+date: 2026-09-24
+description: 'Lets the hub''s editor pane show image files selected in the project sidebar through a binary-content viewer, replacing the editor and preview panes while keeping text-only hooks bound to the text file.'
+---
 
 ## Overview
 

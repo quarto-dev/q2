@@ -1,4 +1,8 @@
-# HTML Attribute Handling Fix Plan
+---
+title: 'HTML Attribute Handling Fix Plan'
+date: 2025-12-27
+description: 'Fixes the pampa HTML writer so that only non-standard key-value attributes receive a `data-` prefix, leaving standard HTML5, RDFa, aria, and already-prefixed attributes unchanged as Pandoc does.'
+---
 
 ## Problem Statement
 

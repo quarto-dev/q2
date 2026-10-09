@@ -1,11 +1,14 @@
-# Lint: every `error_catalog.json` code needs a `docs/errors/<subsystem>/<code>.qmd` page (bd-u2qj4y29)
+---
+title: 'Lint: every `error_catalog.json` code needs a `docs/errors/<subsystem>/<code>.qmd` page (bd-u2qj4y29)'
+date: 2026-08-11
+description: 'Investigates why 28 error catalog codes lack documentation pages and how coverage should be enforced, weighing a new lint rule against the planned `cargo xtask error-docs audit` command.'
+status: in-progress  # Design settled 2026-08-11 with Carlos; implementing. See **Design decisions** below — they supersede the *Open design questions* section, which is kept as the record of what was asked.
+braid:
+  strand: bd-u2qj4y29
+  priority: P2
+---
 
-**Date:** 2026-08-11
-**Braid:** bd-u2qj4y29 (task, p2, filed 2026-08-10 by Carlos)
 **Checkout:** main checkout of q2, branch `main` \@ `d05e021e`
-**Status:** Design settled 2026-08-11 with Carlos; implementing. See
-**Design decisions** below — they supersede the *Open design questions*
-section, which is kept as the record of what was asked.
 
 ## Triage verdict
 

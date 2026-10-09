@@ -1,11 +1,10 @@
-# Listings — design discussion against the DocumentProfile architecture
+---
+title: 'Listings — design discussion against the DocumentProfile architecture'
+date: 2026-05-05
+description: 'Audits whether the existing document profile architecture can support Quarto 1 website listings, identifies the residual gaps such as word count and modified dates, and asks whether custom EJS templates still block the feature.'
+status: superseded  # Discussion document promoted to an epic plan at `claude-notes/plans/2026-05-05-listings-epic.md`. This file remains the rationale reference for *why* each design decision in the epic plan was made; the epic plan is *what* gets implemented. Read this first if you're new to the listings work.
+---
 
-**Date:** 2026-05-05
-**Status:** Discussion document **promoted to an epic plan** at
-`claude-notes/plans/2026-05-05-listings-epic.md`. This file remains
-the rationale reference for *why* each design decision in the epic
-plan was made; the epic plan is *what* gets implemented. Read this
-first if you're new to the listings work.
 **Parent epic (when this becomes one):** website project epic
 (`bd-0tr6`). The listings feature is explicitly out of scope for that
 epic (see §"Out of scope" in

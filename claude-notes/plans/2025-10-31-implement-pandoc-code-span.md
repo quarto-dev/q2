@@ -1,6 +1,9 @@
-# Implement pandoc_code_span (Inline Code)
+---
+title: 'Implement pandoc_code_span (Inline Code)'
+date: 2025-10-31
+description: 'Plans the tree-sitter handler for inline code spans, covering backtick delimiters, optional trailing attributes and content extraction, with tests written first and checked against Pandoc output.'
+---
 
-**Date**: 2025-10-31
 **Epic**: k-274 (Tree-sitter Grammar Refactoring)
 **Phase**: 2 (Basic Formatting)
 **Priority**: HIGH

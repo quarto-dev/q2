@@ -1,10 +1,13 @@
-# Fix: qmd writer emits list-table cell with multiple blocks as broken bullet item
+---
+title: 'Fix: qmd writer emits list-table cell with multiple blocks as broken bullet item'
+date: 2026-05-14
+description: 'Fixes the qmd writer so `list-table` cells holding several blocks, or one non-paragraph block, emit valid marker lines and indentation, so the output parses back without error.'
+---
 
 - **Issue**: GitHub #183
 - **Beads**: bd-oxsr
 - **Worktree**: `.worktrees/issue-183` (branch `issue-183`)
 - **Triage**: `claude-notes/issue-reports/183/triage.md`
-- **Started**: 2026-05-14
 
 ## Overview
 

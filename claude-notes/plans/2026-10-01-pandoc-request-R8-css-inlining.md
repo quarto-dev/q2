@@ -1,6 +1,9 @@
-# Plan: CSS inlining for typst raw HTML tables (pandoc-request R8)
+---
+title: 'Plan: CSS inlining for typst raw HTML tables (pandoc-request R8)'
+date: 2026-10-01
+description: 'Moves CSS inlining for raw HTML tables out of the Lua filter, which cannot run in the browser, into a Rust stage so typst requests from the hub match native table styling.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D9)
 **Depends on:** R2 (ungated prefix builder), R4 (typst request); R0's rebase (PR #766). **Unblocks:** hub typst output with gt/pandas tables matching native.

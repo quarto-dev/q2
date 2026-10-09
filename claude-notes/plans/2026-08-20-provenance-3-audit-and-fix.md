@@ -1,4 +1,8 @@
-# Provenance, Plan 3 of 3: fix the remaining instances
+---
+title: 'Provenance, Plan 3 of 3: fix the remaining instances'
+date: 2026-08-20
+description: 'Completes the YAML source-provenance epic by classifying the remaining copy sites that should locate source spans instead, adding regression tests, and fixing comrak text-node offset drift after escapes.'
+---
 
 **Epic:** `bd-mxa44voa`.
 **Findings:** `claude-notes/research/2026-08-21-provenance-audit-findings.md`.

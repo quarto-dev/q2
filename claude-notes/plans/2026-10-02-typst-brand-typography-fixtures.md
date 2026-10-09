@@ -1,7 +1,13 @@
-# Port the Typst brand-yaml typography fixtures that pass today (bd-post2btu)
+---
+title: 'Port the Typst brand-yaml typography fixtures that pass today (bd-post2btu)'
+date: 2026-10-02
+description: 'Ports the Typst brand.yml typography fixtures that already pass into the smoke-all regression suite, and hands the failing ones to the separate issues that own their bugs.'
+braid:
+  strand: bd-post2btu
+  priority: P2
+---
 
 **Date:** 2026-10-03
-**Braid:** bd-post2btu
 **Branch:** `braid/bd-post2btu-typst-brandyml-typography-font`
 **Goal:** deliver, as committed smoke-all regression tests, every Q1 `brand-yaml/typography/*` fixture that passes against Q2 today, and hand the rest to the strands that own the bugs that stop them.
 

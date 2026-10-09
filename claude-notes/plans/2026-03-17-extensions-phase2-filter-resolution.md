@@ -1,7 +1,10 @@
-# Extensions Phase 2: Extension Filter Resolution
+---
+title: 'Extensions Phase 2: Extension Filter Resolution'
+date: 2026-03-17
+description: 'Makes filters contributed by extensions resolve against the extension directory rather than the document directory, and expands filter extension names in document metadata into their contributed filters.'
+status: done  # Complete (merged as `cffc2e6c`)
+---
 
-**Created**: 2026-03-17
-**Status**: Complete (merged as `cffc2e6c`)
 **Parent Plan**: `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
 **Depends on**: Phase 1 (complete), Lua filter support (complete, rebased)
 

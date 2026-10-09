@@ -1,7 +1,14 @@
-# Error-docs foundation
+---
+title: 'Error-docs foundation'
+date: 2026-05-22
+description: 'Defines the layout, front-matter schema, and page template for error-code documentation, with one subdirectory per subsystem so that the `docs_url` values in the error catalog stay stable.'
+status: draft  # drafting — pending user review
+braid:
+  strand: bd-nvlxn  # child of bd-94x8a
+  priority: P2
+  labels: [documentation, error-reporting, website]
+---
 
-**Status:** drafting — pending user review
-**Beads:** [bd-nvlxn](../../.beads/issues.jsonl) (child of [bd-94x8a](2026-05-22-error-docs-website-epic.md))
 **Blocks:** bd-8otua (tooling), bd-an6z4 (content)
 
 ## Goal

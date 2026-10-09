@@ -1,7 +1,11 @@
-# All Writer Panics - Complete Audit
-
-**Date**: 2025-11-21
-**Issue**: k-327
+---
+title: 'All Writer Panics - Complete Audit'
+date: 2025-11-21
+description: 'Audits the 29 `panic!()` calls across the native, ANSI, QMD and JSON writers, grouping them by severity and proposing phased replacements that emit diagnostics instead of crashing.'
+braid:
+  strand: k-327
+  priority: P2
+---
 
 ## Summary
 

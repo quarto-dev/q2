@@ -1,7 +1,10 @@
-# Quarto Extensions Grand Plan
+---
+title: 'Quarto Extensions Grand Plan'
+date: 2026-03-16
+description: 'Roadmap for implementing the Quarto extension system in the Rust rewrite, covering the seven contribution types declared in `_extension.yml` files and the phases that deliver each one.'
+status: in-progress  # In Progress (Phases 1, 2, 3, 4 complete)
+---
 
-**Created**: 2026-03-16
-**Status**: In Progress (Phases 1, 2, 3, 4 complete)
 **Sub-plans**:
 - Phase 1: `claude-notes/plans/2026-03-16-extensions-phase1-yml-and-metadata.md`
 - Phase 2: `claude-notes/plans/2026-03-17-extensions-phase2-filter-resolution.md`

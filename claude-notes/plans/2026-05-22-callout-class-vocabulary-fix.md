@@ -1,4 +1,8 @@
-# Callout class-vocabulary fix — align q2 with TS Quarto / Bootstrap
+---
+title: 'Callout class-vocabulary fix — align q2 with TS Quarto / Bootstrap'
+date: 2026-05-22
+description: 'Rewrites the callout resolver to emit the Bootstrap-based class vocabulary used by TS Quarto, so callouts in HTML output get styled instead of rendering as unstyled divs, with a smoke fixture covering the full callout matrix.'
+---
 
 ## Overview
 

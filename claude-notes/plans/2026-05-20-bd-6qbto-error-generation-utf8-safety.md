@@ -1,4 +1,11 @@
-# bd-6qbto — `quarto-parse-errors` must not panic on invalid UTF-8 input
+---
+title: 'bd-6qbto — `quarto-parse-errors` must not panic on invalid UTF-8 input'
+date: 2026-05-20
+description: 'Makes diagnostic generation in `quarto-parse-errors` panic-free on invalid UTF-8 input by doing all offset arithmetic over the raw input bytes instead of the lossily converted string.'
+braid:
+  strand: bd-6qbto
+  priority: P1
+---
 
 ## Overview
 

@@ -1,4 +1,8 @@
-# Collections as project sets
+---
+title: 'Collections as project sets'
+date: 2026-07-10
+description: 'Rebuilds projects-home collections so each collection is a synced project set document, and the browser keeps a list of collection pointers instead of a single project set.'
+---
 
 ## Overview
 

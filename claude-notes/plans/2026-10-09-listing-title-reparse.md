@@ -1,14 +1,14 @@
 ---
-title: "Listing item titles are flattened to plain text, then re-parsed as markdown (bd-8a9eum6p)"
+title: 'Listing item titles are flattened to plain text, then re-parsed as markdown (bd-8a9eum6p)'
 date: 2026-10-09
+description: 'Keeps the markup in listing item titles, subtitles and descriptions through the listing re-parse, so code spans survive and a title such as `_brand.yml` no longer makes the whole listing disappear.'
+status: in-progress  # Design agreed (D1–D7) on 2026-10-09; implementation in progress. Progress is tracked in the Phases checklists.
+braid:
+  strand: bd-8a9eum6p
+  priority: P1
 ---
 
-# Listing item titles are flattened to plain text, then re-parsed as markdown (bd-8a9eum6p)
-
-**Date:** 2026-10-09
-**Braid:** bd-8a9eum6p
 **Branch:** `braid/bd-8a9eum6p-listing-title-reparse` (topic branch in the main checkout, based on `main` @ `15bb0d54f`)
-**Status:** Design agreed (D1–D7) on 2026-10-09; implementation in progress. Progress is tracked in the Phases checklists.
 
 **Pre-flight:** `cargo xtask verify --skip-hub-build` is green at `15bb0d54f`. The first run hit a
 flaky `marimo_engine_e2e::sc14` (a uv cache-rename race). That test passed on its own, and the full rerun exited 0.

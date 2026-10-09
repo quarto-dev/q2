@@ -1,11 +1,15 @@
-# P7-foundation — Implementation tasks & Test Seam Spec
+---
+title: 'P7-foundation — Implementation tasks & Test Seam Spec'
+date: 2026-09-20
+description: 'Lays out the first steps for letting one document target several Pandoc output formats, starting with a warning diagnostic for multi-key `format:` blocks and a project containment gate for non-HTML targets.'
+status: approved  # Ready for subagent-driven execution.
+---
 
 **Plan (authoritative scope):** [`2026-09-20-pandoc-hybrid-P7-foundation.md`](2026-09-20-pandoc-hybrid-P7-foundation.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md) (§12 known limitations, §13 project-mode gate, §14 multi-format guardrail)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
 **Sibling companion:** [`2026-09-18-pandoc-hybrid-P7-implementation.md`](2026-09-18-pandoc-hybrid-P7-implementation.md) — this file's Tasks 1-4 correspond to that document's Tasks 1, 2, 3, and 7 (Task 7 renumbered Task 4 here, with its row ids renumbered `T7.x` → `T4.x`). That document's remaining tasks keep their original numbers 4-6, 8-12.
 **Depends on:** P1, P2, P4.
-**Status:** Ready for subagent-driven execution.
 
 This file converts the plan's Coarse checklist into `## Task N` units `superpowers:subagent-driven-development` can dispatch, binding every test to a named production seam and revert hunk (the `/prevalidating-test-seams` discipline). The Spec is the plan + the design doc; where this file and the plan disagree, the plan wins.
 

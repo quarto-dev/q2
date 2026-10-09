@@ -1,9 +1,12 @@
-# q2 preview — Phase C plan
+---
+title: 'q2 preview — Phase C plan'
+date: 2026-05-13  # (sub-task issues filed 2026-05-14)
+description: 'Moves code-cell execution to the server in `q2 preview`, recording engine captures that the browser replays, with eager capture, staleness detection, re-execution and caching.'
+status: done  # All seven sub-tasks (C.3, C.1, C.4, C.2, C.5, C.6, C.7) merged 2026-05-14. Phase C complete.
+---
 
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A + B, both fully merged on `feature/q2-preview-command`.
-**Date:** 2026-05-13 (sub-task issues filed 2026-05-14)
-**Status:** All seven sub-tasks (C.3, C.1, C.4, C.2, C.5, C.6, C.7) merged 2026-05-14. Phase C complete.
 
 ## Progress
 

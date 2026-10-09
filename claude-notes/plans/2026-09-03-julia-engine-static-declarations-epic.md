@@ -1,4 +1,9 @@
-# Julia engine: upstream fixes, static declarations, and bundling in q2 (epic, DRAFT)
+---
+title: 'Julia engine: upstream fixes, static declarations, and bundling in q2 (epic, DRAFT)'
+date: 2026-09-03
+description: 'Sequences three workstreams for the Julia engine: a worker-leak fix, static engine declarations in `_extension.yml` that Quarto 1 currently rejects, and vendoring the engine into q2 as a subtree.'
+status: in-progress  # preliminary draft — research done, not scoped into tasks. **In progress as of 2026-09-22/23/24** — see "Developments" below.
+---
 
 > ## ⚠️ PROVISIONAL — NEEDS REVIEW
 >
@@ -9,8 +14,6 @@
 > release timelines. Nothing here should be treated as settled, and no part of
 > it has been started. **Review before acting on any of it.**
 
-**Status:** preliminary draft — research done, not scoped into tasks. **In progress
-as of 2026-09-22/23/24** — see "Developments" below.
 **Author context:** written 2026-09-03 off the back of the worker-leak
 investigation (`0f243f64c` on `julia-orphan-triage`).
 

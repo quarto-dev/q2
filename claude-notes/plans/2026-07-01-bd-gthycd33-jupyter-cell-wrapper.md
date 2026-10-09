@@ -1,13 +1,14 @@
-# bd-gthycd33: Jupyter engine output not spliced into preview (knitr works)
+---
+title: 'bd-gthycd33: Jupyter engine output not spliced into preview (knitr works)'
+date: 2026-07-01
+description: 'Makes the Jupyter engine emit each executed cell inside a `.cell` wrapper div, the Quarto-canonical shape that knitr already uses, so Jupyter outputs splice into the preview and get matching styling.'
+status: done  # implemented + verified end-to-end (2026-07-02): Phases 1–4 complete (unit + engine-gated integration + parity suites green; full workspace suite 10181 passed; full `cargo xtask verify` passed; CLI `q2 render` and browser `q2 preview` e2e inspected). Staged, awaiting commit approval; the feature-branch hub-harness cross-check happens post-merge.
+braid:
+  strand: bd-gthycd33  # discovered-from bd-sfet3264
+  priority: P2
+---
 
-**Strand:** bd-gthycd33 (bug, P2, discovered-from bd-sfet3264)
 **Branch:** `braid/bd-gthycd33-jupyter-engine-output-not` (off `main`)
-**Status:** implemented + verified end-to-end (2026-07-02): Phases 1–4
-complete (unit + engine-gated integration + parity suites green; full
-workspace suite 10181 passed; full `cargo xtask verify` passed; CLI
-`q2 render` and browser `q2 preview` e2e inspected). Staged, awaiting
-commit approval; the feature-branch hub-harness cross-check happens
-post-merge.
 
 ## Overview
 

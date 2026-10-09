@@ -1,9 +1,15 @@
-# R display fences (\`\`\` r) are a fatal parse error (bd-knitr-inline-r-eats-fence-2ofk91x1)
+---
+title: 'R display fences (\`\`\` r) are a fatal parse error (bd-knitr-inline-r-eats-fence-2ofk91x1)'
+date: 2026-08-25
+description: 'Fixes the knitr inline-R preprocessing pattern so that R display fences with a language but no braces stop being read as inline expressions, which currently makes the whole page fail to parse.'
+status: done  # **Implemented** on branch `braid/bd-knitr-inline-r-eats-fence-2ofk91x1-r-display-fence-parse-error` (`7e6e479ba`). All phases done; not yet pushed.
+braid:
+  strand: bd-knitr-inline-r-eats-fence-2ofk91x1
+  priority: P0
+  labels: [engine, parity]
+---
 
-**Date:** 2026-08-25
-**Braid:** bd-knitr-inline-r-eats-fence-2ofk91x1 (P0, bug, labels `engine` `parity`)
 **Worktree:** `.worktrees/workspace-1` (branch `braid/bd-knitr-inline-r-eats-fence-2ofk91x1-r-display-fence-parse-error`, based on `main` @ `d05e96ee8`)
-**Status:** **Implemented** on branch `braid/bd-knitr-inline-r-eats-fence-2ofk91x1-r-display-fence-parse-error` (`7e6e479ba`). All phases done; not yet pushed.
 
 ## Triage verdict
 

@@ -1,9 +1,16 @@
-# Flanking rules for `*` `_` `~` `^`: whitespace-adjacent delimiters are literal text
+---
+title: 'Flanking rules for `*` `_` `~` `^`: whitespace-adjacent delimiters are literal text'
+date: 2026-09-25
+date-modified: 2026-09-25
+description: 'Makes `*`, `_`, `~` and `^` delimiters flanked by whitespace literal text rather than silently pairing them into emphasis or sub- and superscript, so `a * b` stops failing or pairing.'
+status: in-progress  # tiers 1 and 2 implemented on `braid/bd-star-as-str-qigl02pz-tree-sitter-qmd-parse`, not pushed
+braid:
+  strand: bd-star-as-str-qigl02pz  # this plan; also tracks bd-whitespace-flanked-delimiters-0ncy8bgq (closed by tier 2)
+  priority: P2
+  labels: [parser]
+---
 
-**Status:** tiers 1 and 2 implemented on `braid/bd-star-as-str-qigl02pz-tree-sitter-qmd-parse`, not pushed
-**Tracking issues:** bd-star-as-str-qigl02pz (this plan), bd-whitespace-flanked-delimiters-0ncy8bgq (closed by tier 2)
 **Owner:** cscheid
-**Last updated:** 2026-09-25
 **Precedents:** bd-j9cf (bare `<` as Str, `claude-notes/plans/2026-05-18-bare-lt-as-str.md`),
 bd-6kewx (Unicode Po/Pc punctuation as Str), bd-ly83qewg (`< text` not html)
 

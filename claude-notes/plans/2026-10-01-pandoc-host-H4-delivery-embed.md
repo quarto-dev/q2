@@ -1,6 +1,9 @@
-# Plan: Delivery pipeline and the embedded hub (pandoc-host H4)
+---
+title: 'Plan: Delivery pipeline and the embedded hub (pandoc-host H4)'
+date: 2026-10-01
+description: 'Ships `pandoc.wasm.gz` from the hub''s public directory behind a missing-asset feature flag, keeps the wasm out of the embedded preview build, and adds a native render route, `POST /api/preview/render`, so the embed can download files.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D6, D7)
 **Depends on:** H1 (the download script); H4b is startable once H1 exists. **Unblocks:** H5.

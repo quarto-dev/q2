@@ -1,7 +1,9 @@
-# Refactor readers::qmd::read() to Return DiagnosticMessages
-
-**Date:** 2025-10-21
-**Status:** In Progress
+---
+title: 'Refactor readers::qmd::read() to Return DiagnosticMessages'
+date: 2025-10-21
+description: 'Refactors `readers::qmd::read()` to return `DiagnosticMessage` values for errors and warnings instead of formatted strings, threading a collector through metadata parsing in place of direct `eprintln!` calls.'
+status: in-progress
+---
 
 ## Problem
 

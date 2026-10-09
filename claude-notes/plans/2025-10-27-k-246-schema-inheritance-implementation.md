@@ -1,7 +1,12 @@
-# k-246: Schema Inheritance Implementation Plan
+---
+title: 'k-246: Schema Inheritance Implementation Plan'
+date: 2025-10-27
+description: 'Implements quarto-cli''s `super` field for object schemas, so a derived schema inherits and merges properties, required fields and additional-property rules from base schemas, with eager references resolved later.'
+braid:
+  strand: k-246
+  priority: P2
+---
 
-**Created**: 2025-10-27
-**Issue**: k-246 - Implement schema inheritance (super/baseSchema)
 **Estimated Time**: 3-4 hours
 **Priority**: P2 (Medium - needed before P2/P3 patterns are fully usable)
 

@@ -1,4 +1,8 @@
-# OIDC `sub` as Automerge Actor Identity
+---
+title: 'OIDC `sub` as Automerge Actor Identity'
+date: 2026-03-18
+description: 'Uses the OIDC `sub` claim, hashed with SHA-256, as each user''s Automerge actor ID so edit history is attributed consistently, and shows the current user''s own changes as Me in replay.'
+---
 
 ## Overview
 

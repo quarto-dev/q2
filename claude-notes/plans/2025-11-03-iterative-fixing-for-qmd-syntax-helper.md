@@ -1,6 +1,9 @@
-# Iterative Fixing for qmd-syntax-helper
+---
+title: 'Iterative Fixing for qmd-syntax-helper'
+date: 2025-11-03
+description: 'Makes `qmd-syntax-helper` rerun all of its rules until no fixes remain, because the parser reports only one error reliably at a time and later error locations are wrong until earlier ones are fixed.'
+---
 
-**Date**: 2025-11-03
 **Issue**: test_div_whitespace_conversion failing due to parser only reliably detecting one error at a time
 
 ## Problem Analysis

@@ -1,6 +1,9 @@
-# ANSI Writer Style Stack Fix
+---
+title: 'ANSI Writer Style Stack Fix'
+date: 2025-10-28
+description: 'Corrects ANSI terminal output so that a styled inline nested inside a colored span restores the parent''s color rather than resetting to the default, comparing a style stack with manual code generation.'
+---
 
-**Date**: 2025-10-28
 **Issue**: Nested styled elements reset to default instead of parent style
 **Example**: `[Colored `code` text]{color="green"}` - "text" appears in default color instead of green
 

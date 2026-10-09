@@ -1,4 +1,13 @@
-# Listing inline `contents:` records — Implementation Plan
+---
+title: 'Listing inline `contents:` records — Implementation Plan'
+date: 2026-08-24
+description: 'Makes listings render one item per inline metadata record under `contents:`, including records that overlay a project document through `path:`, and replaces silent empty listings with diagnostics.'
+status: approved  # Plan written 2026-08-24 after design alignment with the user; **awaiting go-ahead to execute.**
+braid:
+  strand: bd-listing-inline-contents-tyy446ze
+  priority: P1
+  labels: [listings, parity]
+---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -10,9 +19,7 @@
 
 **Spec:** this file — §"Design decisions" and §"Investigation record" below. Strand: `bd-listing-inline-contents-tyy446ze` (p1 bug, parent epic bd-61cd). Follow-up already filed: `bd-hj1ehfn8` (YAML-file item source).
 
-**Braid:** bd-listing-inline-contents-tyy446ze
 **Worktree:** `.worktrees/workspace-5` (branch `braid/bd-listing-inline-contents-tyy446ze-listing-inline-contents`, based on `main` \@ `596ceb572`)
-**Status:** Plan written 2026-08-24 after design alignment with the user; **awaiting go-ahead to execute.**
 
 ## Global Constraints
 

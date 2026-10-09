@@ -1,8 +1,11 @@
-# Plan 2B — q2-preview Pandoc base + framework + asset manifest (Session A)
+---
+title: 'Plan 2B — q2-preview Pandoc base + framework + asset manifest (Session A)'
+date: 2026-05-04  # (revised 2026-05-07, 2026-05-09; split into 2B+2C on 2026-05-09)
+description: 'Adds real HTML components for every Pandoc block and inline type in `q2-preview`, plus an asset manifest that delivers image bytes into the preview iframe, so base Pandoc documents match HTML output.'
+status: approved  # Implementation plan
+---
 
-**Date:** 2026-05-04 (revised 2026-05-07, 2026-05-09; split into 2B+2C on 2026-05-09)
 **Branch:** feature/q2-preview
-**Status:** Implementation plan
 **Milestone:** **M2** — q2-preview reaches visual parity with the HTML format for documents that use **Pandoc base types** (Para, Header, lists, images, links, code, tables, math, footnotes, …). Quarto-specific custom-node renderers (callouts, theorems, proofs, cross-refs, figures-as-FloatRefTarget, equations) ship in **Plan 2C (M2.5)**.
 
 ## Goal

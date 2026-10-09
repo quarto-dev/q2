@@ -1,8 +1,12 @@
-# Plan: Fix HashMap-induced Non-determinism
-
-**Issue**: k-p39g
-**Date**: 2025-12-31
-**Status**: Investigation complete, awaiting review
+---
+title: 'Plan: Fix HashMap-induced Non-determinism'
+date: 2025-12-31
+description: 'Replaces `HashMap` and `FxHashMap` with insertion-ordered maps in the citeproc and reconciliation code, so that three nondeterministic test failures stop occurring.'
+status: draft  # Investigation complete, awaiting review
+braid:
+  strand: k-p39g
+  priority: P1
+---
 
 ## Problem Summary
 

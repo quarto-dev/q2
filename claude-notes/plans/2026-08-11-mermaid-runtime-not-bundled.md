@@ -1,9 +1,15 @@
-# Mermaid runtime is imported from jsDelivr at page load, not bundled into the site (bd-mermaid-runtime-not-bundled-vxejw159)
+---
+title: 'Mermaid runtime is imported from jsDelivr at page load, not bundled into the site (bd-mermaid-runtime-not-bundled-vxejw159)'
+date: 2026-08-11
+description: 'Replaces the jsDelivr import of the mermaid runtime with a vendored copy emitted as a relative script, so diagram pages work offline and stop calling a third-party CDN.'
+status: done  # **Implemented** on `braid/bd-mermaid-runtime-not-bundled-vxejw159` (commits `095cb39c`, `eeb1eb7d`). All phases complete; full `cargo xtask verify` green. Not pushed — awaiting review.
+braid:
+  strand: bd-mermaid-runtime-not-bundled-vxejw159
+  priority: P2
+  labels: [parity]
+---
 
-**Date:** 2026-08-11
-**Braid:** `bd-mermaid-runtime-not-bundled-vxejw159`
 **Branch:** `main` \@ `001cb6a5` (investigated in place; no worktree created)
-**Status:** **Implemented** on `braid/bd-mermaid-runtime-not-bundled-vxejw159` (commits `095cb39c`, `eeb1eb7d`). All phases complete; full `cargo xtask verify` green. Not pushed — awaiting review.
 
 ## Triage verdict
 

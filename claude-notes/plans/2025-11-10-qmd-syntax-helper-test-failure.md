@@ -1,6 +1,9 @@
-# Investigation Report: qmd-syntax-helper Test Failures
+---
+title: 'Investigation Report: qmd-syntax-helper Test Failures'
+date: 2025-11-10
+description: 'Diagnoses why `qmd-syntax-helper` attribute ordering tests find no violations after a tree-sitter grammar change shifted parser state numbers, leaving the generated error table stale.'
+---
 
-**Date**: 2025-11-10
 **Branch**: bugfix/92
 **Issue**: crates/qmd-syntax-helper test suite failing after recent commits
 

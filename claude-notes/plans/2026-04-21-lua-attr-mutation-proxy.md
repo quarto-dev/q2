@@ -1,4 +1,11 @@
-# Lua attribute-mutation proxy (bd-195t)
+---
+title: 'Lua attribute-mutation proxy (bd-195t)'
+date: 2026-04-21
+description: 'Makes Lua attribute reads return shared proxies so that idiomatic writes such as assigning to `cb.attr.attributes` entries persist to the AST rather than being silently dropped.'
+braid:
+  strand: bd-195t
+  priority: P1
+---
 
 ## Problem
 

@@ -1,4 +1,11 @@
-# behave F4 crash-relaunch e2e: async launch-marker race (bd-qlnkdw9u)
+---
+title: 'behave F4 crash-relaunch e2e: async launch-marker race (bd-qlnkdw9u)'
+date: 2026-08-19
+description: 'Converts bare stderr-marker count assertions in the behave end-to-end tests to bounded polling, fixing a race where a forwarded launch marker had not yet arrived when the test counted it.'
+braid:
+  strand: bd-qlnkdw9u
+  priority: P1
+---
 
 ## Overview
 

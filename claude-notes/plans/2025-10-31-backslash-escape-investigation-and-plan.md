@@ -1,10 +1,13 @@
-# Backslash Escape Investigation and Implementation Plan
+---
+title: 'Backslash Escape Investigation and Implementation Plan'
+date: 2025-10-31
+description: 'Investigates why tree-sitter does not produce `backslash_escape` nodes for `\*`-style escapes and plans a handler so that escaped ASCII punctuation becomes plain `Str` text, matching Pandoc.'
+status: draft  # Investigation and Planning
+---
 
-**Date**: 2025-10-31
 **Epic**: k-274 (Tree-sitter Grammar Refactoring)
 **Phase**: 2 (Basic Formatting)
 **Priority**: HIGH
-**Status**: Investigation and Planning
 
 ## Current Situation
 

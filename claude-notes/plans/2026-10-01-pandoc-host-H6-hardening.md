@@ -1,6 +1,9 @@
-# Plan: Hardening (pandoc-host H6)
+---
+title: 'Plan: Hardening (pandoc-host H6)'
+date: 2026-10-01
+description: 'Hardens the download feature with a WebKit project in the pandoc harness, a memory test on image-heavy documents, a failure-taxonomy audit that adds the missing no-wasm and out-of-memory states, and a decision on the total size limit.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D2, D4, Risks)
 **Depends on:** H5. **Unblocks:** nothing (closes the download epic); H9's incremental spike reads its D2(b) result if one exists; the D2(b) result led to H10a and H10b.

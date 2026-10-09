@@ -1,4 +1,8 @@
-# Collections in project export/import
+---
+title: 'Collections in project export/import'
+date: 2026-08-04
+description: 'Adds collection pointers to the project-list export and import so that an export round trip re-subscribes to shared collections, and fixes imported projects not appearing in the home view until reload.'
+---
 
 **Branch:** `feature/collections-export` (off main at `c6ab84c2`)
 **Braid:** not filed — braid CLI unresolved on this machine (`projects.toml` missing `[projects.q2]`); file a strand when available.

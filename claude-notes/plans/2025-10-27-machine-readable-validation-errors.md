@@ -1,4 +1,8 @@
-# Plan: Machine-Readable Validation Errors
+---
+title: 'Plan: Machine-Readable Validation Errors'
+date: 2025-10-27
+description: 'Keeps `ValidationErrorKind` structured data by adding serde derives and storing the kind in `ValidationDiagnostic`, so JSON output exposes expected types, received values and constraints instead of lossy message strings.'
+---
 
 ## Problem Statement
 

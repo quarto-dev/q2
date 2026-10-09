@@ -1,10 +1,13 @@
-# Phase 8 — Incremental rebuilds
+---
+title: 'Phase 8 — Incremental rebuilds'
+date: 2026-04-27  # (redrafted after design discussion)
+description: 'Makes re-renders of a single page in a website project cheap by caching per-page profiles and tracking which pages depend on each other, without caching any filter or engine output.'
+status: draft  # Draft v2 — pending user review.
+---
 
-**Date:** 2026-04-27 (redrafted after design discussion)
 **Beads:** TBD (parent `bd-0tr6`).
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-27-websites-phase-7.md`
-**Status:** Draft v2 — pending user review.
 
 ## Goal of this phase
 

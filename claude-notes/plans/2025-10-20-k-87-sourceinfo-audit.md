@@ -1,4 +1,11 @@
-# k-87: SourceInfo::default() Audit
+---
+title: 'k-87: SourceInfo::default() Audit'
+date: 2025-10-20
+description: 'Audits the 43 `SourceInfo::default()` calls across eight files and sorts each into a legitimate default, a fixable case, or a case that should propagate source info from neighbouring elements.'
+braid:
+  strand: k-87
+  priority: P1
+---
 
 ## Summary
 Total instances: 43 across 8 files

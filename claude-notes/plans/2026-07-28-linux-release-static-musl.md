@@ -1,11 +1,15 @@
-# Switch linux release targets to static musl (bd-dofxhzaj)
+---
+title: 'Switch linux release targets to static musl (bd-dofxhzaj)'
+date: 2026-07-28
+description: 'Switches the Linux release targets from glibc to static musl so one artifact per architecture covers every distribution, including Alpine, after checking that the openssl and aws-lc dependencies build statically.'
+status: done  # Implemented. Phases 0-4 done and verified by a green spike run on both arches; Phase 5 is the PR. See **Phase outcomes** for the evidence.
+braid:
+  strand: bd-dofxhzaj
+  priority: P1
+---
 
-**Date:** 2026-07-28
-**Braid:** bd-dofxhzaj (task, P1, filed 2026-06-13 by Carlos while cutting v0.1.1)
 **Branch:** `braid/bd-dofxhzaj-switch-linux-release-targets`, off `main` \@ `581e45c0`
 (pushed as `feature/bd-dofxhzaj-switch-linux-release-targets`)
-**Status:** Implemented. Phases 0-4 done and verified by a green spike run on both
-arches; Phase 5 is the PR. See **Phase outcomes** for the evidence.
 
 ## Triage verdict
 

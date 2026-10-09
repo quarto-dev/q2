@@ -1,8 +1,14 @@
-# Extracting `quarto-yaml-validation`: design decisions
+---
+title: 'Extracting `quarto-yaml-validation`: design decisions'
+date: 2026-06-26
+description: 'Records the design decisions for extracting the YAML validation stack from q2, covering how error codes keep their identity across the package boundary and how the `validate-yaml` demo binary is removed.'
+status: approved  # Design decisions (chosen direction; not yet implemented)
+braid:
+  strand: bd-egcyeym9
+  priority: P2
+  labels: [architecture, research]
+---
 
-**Strand:** bd-egcyeym9
-**Date:** 2026-06-26
-**Status:** Design decisions (chosen direction; not yet implemented)
 **Predecessor:** `claude-notes/research/2026-06-17-extract-quarto-yaml-validation.md`
   (current-state architecture)
 

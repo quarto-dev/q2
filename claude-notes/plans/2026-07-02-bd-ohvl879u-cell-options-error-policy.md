@@ -1,12 +1,15 @@
-# bd-ohvl879u: cell-options facility + jupyter error policy
+---
+title: 'bd-ohvl879u: cell-options facility + jupyter error policy'
+date: 2026-07-02
+description: 'Adds a shared, language-aware `#|` cell-option extraction facility to `quarto-core` and makes the jupyter engine fail the render on un-annotated cell errors, matching knitr, unless a cell opts in with `error: true`.'
+status: approved  # decisions 1–7 locked with Carlos (2026-07-02) — awaiting explicit go-ahead before execution. Note decision 3 upgraded the design: cell options resolve through a ConfigValue merge against the document's already-merged metadata (scoped resolution), not a direct YAML read.
+braid:
+  strand: bd-ohvl879u  # discovered-from bd-gthycd33, blocked-by bd-gthycd33
+  priority: P2
+---
 
-**Strand:** bd-ohvl879u (bug, P2, discovered-from bd-gthycd33, blocked-by bd-gthycd33)
 **Branch:** `braid/bd-ohvl879u-jupyter-engine-ignores-error` (based on
 `braid/bd-gthycd33-jupyter-engine-output-not`, i.e. PR #360 — merge that first)
-**Status:** decisions 1–7 locked with Carlos (2026-07-02) — awaiting
-explicit go-ahead before execution. Note decision 3 upgraded the design:
-cell options resolve through a ConfigValue merge against the document's
-already-merged metadata (scoped resolution), not a direct YAML read.
 
 ## Overview
 

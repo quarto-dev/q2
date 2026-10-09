@@ -1,9 +1,14 @@
-# Plan — Split `vfs_root` into write-root + url-root in `ResourceResolverContext`
+---
+title: 'Plan — Split `vfs_root` into write-root + url-root in `ResourceResolverContext`'
+date: 2026-05-21
+description: 'Splits the single `vfs_root` in `ResourceResolverContext` into a disk-write root and a URL prefix, so native tests can write to a tempdir while links stay path-independent and the preview AST stays idempotent across runs.'
+status: draft  # Implementation plan
+braid:
+  strand: bd-rz2we
+  priority: P2
+---
 
-**Date:** 2026-05-21
 **Branch:** `beads/bd-rz2we-plan-3-q2-preview` → integrates into `feature/provenance`
-**Status:** Implementation plan
-**Beads:** bd-rz2we
 **Blocks:** closing Plan 3 (q2-preview idempotence gate)
 
 ## Goal

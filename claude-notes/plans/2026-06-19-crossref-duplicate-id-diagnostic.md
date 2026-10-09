@@ -1,8 +1,12 @@
-# Duplicate crossref identifier — diagnosis & structured diagnostic
-
-**Strand:** bd-rr6qzcvu (discovered-from bd-bxrkxblx)
-**Date:** 2026-06-19
-**Status:** decisions settled 2026-06-22; implementing **Facet B first** (Stage 1).
+---
+title: 'Duplicate crossref identifier — diagnosis & structured diagnostic'
+date: 2026-06-19
+description: 'Turns the unstructured duplicate crossref identifier error into a located, coded diagnostic first, and later relabels the two duplicate figure cells in the docs so the docs render is clean.'
+status: in-progress  # decisions settled 2026-06-22; implementing **Facet B first** (Stage 1).
+braid:
+  strand: bd-rr6qzcvu  # discovered-from bd-bxrkxblx
+  priority: P2
+---
 
 ## Decisions (settled 2026-06-22)
 - **A — relabeling:** approved (`fig-charts-jupyter` / `fig-charts-knitr`), but

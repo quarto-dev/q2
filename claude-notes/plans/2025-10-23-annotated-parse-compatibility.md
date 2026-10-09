@@ -1,4 +1,8 @@
-# AnnotatedParse Compatibility Analysis Report
+---
+title: 'AnnotatedParse Compatibility Analysis Report'
+date: 2025-10-23
+description: 'Checks whether the quarto-cli TypeScript code can safely accept JSON arrays in the `AnnotatedParse.result` field, which converted metadata inlines would need, and concludes the existing code already guards against arrays.'
+---
 
 ## Executive Summary
 

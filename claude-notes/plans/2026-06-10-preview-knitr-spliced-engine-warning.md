@@ -1,8 +1,13 @@
-# Misleading "engine not available in this build" warning in `q2 preview` with spliced captures
-
-**Date:** 2026-06-10
-**Status:** Draft — awaiting review before implementation
-**Strand:** bd-sauc9iiq
+---
+title: 'Misleading "engine not available in this build" warning in `q2 preview` with spliced captures'
+date: 2026-06-10
+description: 'Stops `q2 preview` from warning that knitr is unavailable and not executing when its output was already captured server-side and spliced in, by passing spliced engine names to the execution stage.'
+status: draft  # Draft — awaiting review before implementation
+braid:
+  strand: bd-sauc9iiq
+  priority: P2
+  labels: [bug]
+---
 
 ## Overview
 

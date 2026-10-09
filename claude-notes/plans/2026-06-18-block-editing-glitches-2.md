@@ -1,14 +1,11 @@
-# Block-editing UI glitches — round 2 (fixes & tests)
+---
+title: 'Block-editing UI glitches — round 2 (fixes & tests)'
+date: 2026-06-18
+description: 'Fixes a batch of block-editor glitches, including a stuck blur fade, an editor that grows to two lines, and down-arrow navigation caught in blockquote lists, each bound by a fail-on-revert test.'
+status: approved  # READY TO IMPLEMENT — **clean-slate**. Every fix below was diagnosed and **live-validated** on the running dev server during the 2026-06-18 session, then captured here as the **independent source of truth** so it can be rebuilt from scratch on a clean worktree under TDD. Continues the glitch namespace of `2026-06-16-block-editing-ui-glitches.md` (which ended at G13); this round is **G14–G18** (all validated in the exploratory pass). G18 also opens a deferred **Layer 2** (an audit of spurious "dirty" writes), tracked separately — see its section.
+---
 
-**Date:** 2026-06-18
 **Branch:** `feature/block-editing-improvements` (worktree `.worktrees/block-editing`)
-**Status:** READY TO IMPLEMENT — **clean-slate**. Every fix below was diagnosed and
-**live-validated** on the running dev server during the 2026-06-18 session, then
-captured here as the **independent source of truth** so it can be rebuilt from
-scratch on a clean worktree under TDD. Continues the glitch namespace of
-`2026-06-16-block-editing-ui-glitches.md` (which ended at G13); this round is
-**G14–G18** (all validated in the exploratory pass). G18 also opens a deferred **Layer 2**
-(an audit of spurious "dirty" writes), tracked separately — see its section.
 
 > **⚠️ CLEAN-SLATE — treat the working tree as empty of these changes.** Each item
 > carries its root cause, the **verbatim** fix (exact code where it is subtle), and

@@ -1,4 +1,8 @@
-# Share link project never joins the synced project set
+---
+title: 'Share link project never joins the synced project set'
+date: 2026-04-16
+description: 'Fixes share-link visits that open a project without adding it to the synced project set, using a reconciler that keeps IndexedDB projects in the set and makes the Connect form idempotent.'
+---
 
 ## Symptom
 

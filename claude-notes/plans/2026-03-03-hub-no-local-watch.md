@@ -1,6 +1,11 @@
-# Hub: Optional Local Project Watching
-
-**Beads issue**: `bd-3aga`
+---
+title: 'Hub: Optional Local Project Watching'
+date: 2026-03-03
+description: 'Makes local project watching optional in the hub server so it can run as a standalone sync server with its own data directory, and adds a `--no-project` flag to `quarto hub`.'
+braid:
+  strand: bd-3aga
+  priority: P1
+---
 
 ## Overview
 

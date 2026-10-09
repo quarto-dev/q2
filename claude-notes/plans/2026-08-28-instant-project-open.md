@@ -1,4 +1,8 @@
-# Instant project open from the project list
+---
+title: 'Instant project open from the project list'
+date: 2026-08-28
+description: 'Removes the blocking `/auth/actor` wait and the 400 ms peer wait from the open path, so a cached project opens from IndexedDB without a blocking connect banner, with a per-entry opening indicator.'
+---
 
 ## Note from Elliot
 

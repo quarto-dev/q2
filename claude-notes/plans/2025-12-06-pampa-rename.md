@@ -1,8 +1,13 @@
-# Rename quarto-markdown-pandoc to pampa
+---
+title: 'Rename quarto-markdown-pandoc to pampa'
+date: 2025-12-06
+description: 'Renames the `quarto-markdown-pandoc` crate to `pampa` by moving its directory and updating every Cargo manifest and workspace dependency that refers to the old name.'
+status: done
+braid:
+  strand: k-z1ji  # closed
+  priority: P1
+---
 
-**Beads issue**: k-z1ji (closed)
-**Status**: Completed
-**Date**: 2025-12-06
 **Related**: 2025-12-06-project-naming.md (naming decision)
 
 ## Summary

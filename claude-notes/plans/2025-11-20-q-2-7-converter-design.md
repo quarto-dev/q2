@@ -1,4 +1,8 @@
-# Q-2-7 Converter Implementation Design
+---
+title: 'Q-2-7 Converter Implementation Design'
+date: 2025-11-20
+description: 'Designs the automatic fix for the Q-2-7 unclosed single quote error, which escapes a stray apostrophe with a backslash instead of replacing it with a curly quote, using the diagnostic''s apostrophe location.'
+---
 
 Date: 2025-11-20
 File: claude-notes/plans/2025-11-20-q-2-7-converter-design.md

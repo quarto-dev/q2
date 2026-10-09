@@ -1,12 +1,17 @@
-# Shortcodes in text contexts: code blocks, attributes, image src, link targets (bd-fz6gwfq0)
+---
+title: 'Shortcodes in text contexts: code blocks, attributes, image src, link targets (bd-fz6gwfq0)'
+date: 2026-08-10
+description: 'Extends shortcode substitution to code blocks, inline code, raw blocks, math, element attributes, image sources and link targets, with a `shortcodes="false"` opt-out matching Quarto 1.'
+status: done  # Implemented; PR [#490](https://github.com/quarto-dev/q2/pull/490) (stacked on #487, retargets to `main` when it merges).
+braid:
+  strand: bd-fz6gwfq0  # absorbs duplicate bd-shortcodes-in-code-blocks-hhpus9da, closed
+  priority: P2
+  labels: [parity]
+---
 
-**Date:** 2026-08-10
-**Braid:** bd-fz6gwfq0 (absorbs duplicate bd-shortcodes-in-code-blocks-hhpus9da, closed)
 **Branch:** `braid/bd-fz6gwfq0-shortcode-text-contexts`, based on PR #487's head
 (`feature/bd-shortcodes-in-metadata-bp06aub8` \@ `c3856cb7`) so it reuses
 `expand_text_segments` / `parse_text_shortcodes`; merges after #487.
-**Status:** Implemented; PR [#490](https://github.com/quarto-dev/q2/pull/490)
-(stacked on #487, retargets to `main` when it merges).
 
 ## Design decisions (user, 2026-08-10)
 

@@ -1,4 +1,8 @@
-# ts-engine-extensions → main: Squash-then-Rebase Conflict-Resolution Plan
+---
+title: 'ts-engine-extensions → main: Squash-then-Rebase Conflict-Resolution Plan'
+date: 2026-07-22
+description: 'Runbook for rebasing the ts-engine-extensions branch onto main, resolving its fourteen merge conflicts in two stops on the engine registry and pipeline, and verifying the workspace stays green.'
+---
 
 > **For the engineer executing this:** this is a **rebase runbook**, not a
 > feature build. The tests already exist; each task is *resolve a conflict →

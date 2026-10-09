@@ -1,4 +1,8 @@
-# Anchor Shorthand `<#foo>` Support
+---
+title: 'Anchor Shorthand `<#foo>` Support'
+date: 2026-02-10
+description: 'Adds `<#foo>` as shorthand for a `.anchor` link to `#foo`, so the reader produces such links and the writer emits the shorthand when the link text matches the fragment identifier.'
+---
 
 ## Overview
 

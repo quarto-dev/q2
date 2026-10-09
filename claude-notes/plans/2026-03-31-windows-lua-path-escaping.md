@@ -1,8 +1,13 @@
-# Windows Lua Path Escaping Fix
+---
+title: 'Windows Lua Path Escaping Fix'
+date: 2026-03-31
+description: 'Replaces ad hoc backslash handling in pampa Lua tests with one forward-slash path utility in `quarto-util`, fixing Windows failures where backslashes broke Lua string literals.'
+braid:
+  strand: bd-3pe8  # follow-up: audit production Lua code
+  priority: P2
+---
 
-**Date**: 2026-03-31
 **Branch**: fix/lua-path-escaping
-**Beads**: bd-3pe8 (follow-up: audit production Lua code)
 
 ## Goal
 

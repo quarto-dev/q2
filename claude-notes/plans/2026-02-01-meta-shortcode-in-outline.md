@@ -1,4 +1,8 @@
-# Meta Shortcode Resolution in Document Outline
+---
+title: 'Meta Shortcode Resolution in Document Outline'
+date: 2026-02-01
+description: 'Resolves `meta` shortcodes in headers so the document outline shows the frontmatter value, using a new `quarto-analysis` crate whose transforms run in both the LSP and the render pipeline.'
+---
 
 ## Overview
 

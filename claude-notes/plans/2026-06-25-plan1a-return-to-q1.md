@@ -1,15 +1,10 @@
-# Plan 1a: Return to Q1 — correct the landed 1a host/engine surface
+---
+title: 'Plan 1a: Return to Q1 — correct the landed 1a host/engine surface'
+date: 2026-06-25
+description: 'Corrects landed engine-host Rust code where it drifted from the Quarto 1 engine API without a forcing reason, and adds the protocol seams needed to carry the full engine API later.'
+status: done  # RTQ code items COMPLETE on `feature/ts-engine-extensions`. All six RTQ checkboxes landed + reviewed (per-task + opus whole-branch review = READY TO MERGE): ENG-2 (`831e761b0`), Item A protocol split (`08386d678`), §2aa B3/B3b (`3a36be5bf` + `665e81d77` doc sweep), ENG-1 (`9c87b9b45`), FC-1 (`deb5bb0f1`), FC-2 (`38e5963f2`). Workspace 10446 passed; `cargo xtask verify --skip-hub-build --skip-hub-tests` clean. The ONLY unchecked box is the **deferred** q2 render-orchestrator consumer (FC-2, "lands with the book feature" — plan1c). All harness halves remain plan1b's; §2aa real bodies + global param remain Plan 2 Phase A's. Not yet pushed (awaiting user approval per GIT PUSH POLICY).
+---
 
-> **STATUS (2026-06-29): RTQ code items COMPLETE on `feature/ts-engine-extensions`.** All six
-> RTQ checkboxes landed + reviewed (per-task + opus whole-branch review = READY TO MERGE): ENG-2
-> (`831e761b0`), Item A protocol split (`08386d678`), §2aa B3/B3b (`3a36be5bf` + `665e81d77` doc
-> sweep), ENG-1 (`9c87b9b45`), FC-1 (`deb5bb0f1`), FC-2 (`38e5963f2`). Workspace 10446 passed;
-> `cargo xtask verify --skip-hub-build --skip-hub-tests` clean. The ONLY unchecked box is the
-> **deferred** q2 render-orchestrator consumer (FC-2, "lands with the book feature" — plan1c). All
-> harness halves remain plan1b's; §2aa real bodies + global param remain Plan 2 Phase A's. Not yet
-> pushed (awaiting user approval per GIT PUSH POLICY).
-
-**Created:** 2026-06-25
 **Lives on:** `feature/ts-engine-extensions` (the epic's integration line, which holds the landed
 `ts_protocol.rs`/`ts_process.rs`/`ts_engine.rs`/`dependency.rs` and the developed sub-plans). The
 plan's **code** items are implemented as `braid/<id>-<slug>` topic branches off the integration

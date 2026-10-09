@@ -1,6 +1,9 @@
-# Plan: Typst source request (pandoc-request R4)
+---
+title: 'Plan: Typst source request (pandoc-request R4)'
+date: 2026-10-01
+description: 'Adds a browser-side Pandoc WASM request that produces a single Typst `.typ` source file, carrying templates, partials, brand settings and a pinned document date, as groundwork for PDF output.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D8.6, D9, D5 typst case)
 **Depends on:** R2; R0's rebase (PR #766). **Unblocks:** R5 (serial), R6's typst case, R7, R8, the typst menu entry (host H5) and the PDF work (host H8).

@@ -1,9 +1,15 @@
-# Quarto 1's doubled-brace escape for showing a cell (bd-escaped-executable-fence-uuvv37pk)
+---
+title: 'Quarto 1''s doubled-brace escape for showing a cell (bd-escaped-executable-fence-uuvv37pk)'
+date: 2026-08-17  # (investigation); design aligned with user same day
+description: 'Adds a Q-2-50 diagnostic for Quarto 1''s doubled-brace idiom, `{{python}}`, so it fails clearly in prose and warns on fence openers instead of silently rendering invalid syntax.'
+status: approved  # Design settled — ready to implement on user go-ahead.
+braid:
+  strand: bd-escaped-executable-fence-uuvv37pk
+  priority: P2
+  labels: [parser]
+---
 
-**Date:** 2026-08-17 (investigation); design aligned with user same day
-**Braid:** bd-escaped-executable-fence-uuvv37pk
 **Checkout:** main worktree `q2` (branch `main` \@ `60cc579e`)
-**Status:** Design settled — ready to implement on user go-ahead.
 
 ## Design decisions (2026-08-17, aligned with Carlos)
 

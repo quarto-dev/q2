@@ -1,8 +1,11 @@
-# Xtask Lint Infrastructure Plan
+---
+title: 'Xtask Lint Infrastructure Plan'
+date: 2026-01-27
+description: 'Adds a `cargo xtask lint` command built on the `syn` crate that mechanically flags `include_dir!` references to `external-sources/`, which break builds for anyone without that checkout, with an extensible rule design.'
+status: draft  # Planning
+---
 
 **Issue**: kyoto-e6h
-**Created**: 2026-01-27
-**Status**: Planning
 
 ## Overview
 

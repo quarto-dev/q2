@@ -1,10 +1,15 @@
-# Phase 9 — Hub-client project rendering
+---
+title: 'Phase 9 — Hub-client project rendering'
+date: 2026-04-27
+description: 'Makes the hub-client live preview render a project page with its sidebar, navbar, prev and next strip, and rewritten cross-document links, through a new `render_page_in_project` WASM entry point that runs full two-pass orchestration over the virtual filesystem.'
+status: draft  # Draft v1 — pending user review.
+braid:
+  strand: bd-ayj6  # parent bd-0tr6
+  priority: P1
+---
 
-**Date:** 2026-04-27
-**Beads:** `bd-ayj6` (parent `bd-0tr6`).
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-27-websites-phase-8.md`
-**Status:** Draft v1 — pending user review.
 
 ## Goal of this phase
 

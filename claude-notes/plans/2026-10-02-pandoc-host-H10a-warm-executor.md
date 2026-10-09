@@ -1,6 +1,9 @@
-# Plan: Warm pandoc executor (pandoc-host H10a)
+---
+title: 'Plan: Warm pandoc executor (pandoc-host H10a)'
+date: 2026-10-02
+description: 'Builds a warm pandoc.wasm executor that reuses one instance across renders and produces output and diagnostics identical to a fresh run, without yet being reachable from the UI.'
+---
 
-**Date:** 2026-10-02
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D2, D2(b); H10a and H10b implement D2(b) for the PDF preview only)
 **Evidence:** [`../research/2026-10-02-d2b-warm-instance-spike.md`](../research/2026-10-02-d2b-warm-instance-spike.md) (numbers, failure modes and fixtures; sources in `claude-notes/research/2026-10-01-pandoc-wasm-spike/d2b/`)

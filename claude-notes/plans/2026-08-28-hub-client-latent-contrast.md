@@ -1,4 +1,8 @@
-# hub-client: fix latent contrast pairs outside the axe scan set
+---
+title: 'hub-client: fix latent contrast pairs outside the axe scan set'
+date: 2026-08-28
+description: 'Fixes WCAG AA contrast failures in hub-client text that the accessibility scan never covered, such as editor status banners, replay attribution and diagnostic notes, and extends the scan to the editor shell.'
+---
 
 Strand: bd-uue5voml (discovered-from bd-7byucvr6)
 Branch: `fix/bd-uue5voml-latent-contrast` (stacked on

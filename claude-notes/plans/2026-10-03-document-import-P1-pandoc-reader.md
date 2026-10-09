@@ -1,6 +1,9 @@
-# Plan: pandoc.wasm as a reader (document import P1)
+---
+title: 'Plan: pandoc.wasm as a reader (document import P1)'
+date: 2026-10-03
+description: 'Makes pandoc.wasm read document formats for import by adding host inputs and media collection to its request, with recorded fixtures so wasm output can be checked against native pandoc.'
+---
 
-**Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I1, I8, I9, I19; builds interface 1)
 **Depends on:** nothing. **Unblocks:** P3's fixture-driven tests, P4.
 **Branch:** `import/p1-pandoc-reader` from `feature/hub-import`.

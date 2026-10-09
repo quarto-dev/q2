@@ -1,4 +1,8 @@
-# Investigation: k-90 and k-95 Status
+---
+title: 'Investigation: k-90 and k-95 Status'
+date: 2025-10-21
+description: 'Finds that YAML parse warnings and errors were never implemented, so an earlier change did not break them, and sets out what the falsely closed issues still need.'
+---
 
 ## User's Report
 The user noticed that yaml parsing warnings/errors are not being generated. They suspected k-103 broke this functionality related to k-95.

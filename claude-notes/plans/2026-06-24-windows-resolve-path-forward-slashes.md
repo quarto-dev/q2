@@ -1,9 +1,15 @@
-# Fix Windows path-separator assumptions in pampa quarto_api path tests (bd-picv)
+---
+title: 'Fix Windows path-separator assumptions in pampa quarto_api path tests (bd-picv)'
+date: 2026-06-24
+description: 'Makes the `resolve_path` Lua API function always return forward slashes and use `is_rooted` instead of `is_absolute`, so Windows path tests pass without platform-specific expectations.'
+status: done  # Implemented 2026-06-24 (production normalize + `is_rooted`). pampa lib + targeted tests green on Windows. Full `cargo xtask verify` pending as pre-push gate.
+braid:
+  strand: bd-picv
+  priority: P2
+  labels: [lua, pampa, windows]
+---
 
-**Date:** 2026-06-24
-**Braid:** bd-picv
 **Worktree:** `.worktrees/bd-picv-fix-windows-path-separator` (branch `braid/bd-picv-fix-windows-path-separator`, based on `main`)
-**Status:** Implemented 2026-06-24 (production normalize + `is_rooted`). pampa lib + targeted tests green on Windows. Full `cargo xtask verify` pending as pre-push gate.
 
 ## Triage verdict
 

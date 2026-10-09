@@ -1,10 +1,16 @@
-# qmd-syntax-helper rules: migrate reference-style links and escape literal brackets (bd-reference-links-unsupported-ddc4skac)
+---
+title: 'qmd-syntax-helper rules: migrate reference-style links and escape literal brackets (bd-reference-links-unsupported-ddc4skac)'
+date: 2026-08-10
+description: 'Adds `qmd-syntax-helper` rules that migrate reference-style links to inline links and escape unmatched brackets, so documentation stops losing link targets and bracketed text silently.'
+status: done  # All phases complete; full `cargo xtask verify` (including the WASM leg) green.
+braid:
+  strand: bd-reference-links-unsupported-ddc4skac
+  priority: P1
+  labels: [diagnostics, parity]
+---
 
-**Date:** 2026-08-10
-**Braid:** `bd-reference-links-unsupported-ddc4skac` (feature, p1, labels: `diagnostics`, `parity`)
 **Branch:** `braid/bd-reference-links-unsupported-ddc4skac`, rebased onto `main` \@ `d05e021e`
 **PR:** [#497](https://github.com/quarto-dev/q2/pull/497)
-**Status:** All phases complete; full `cargo xtask verify` (including the WASM leg) green.
 
 ## Scope, restated
 

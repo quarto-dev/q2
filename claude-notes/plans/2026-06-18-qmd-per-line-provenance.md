@@ -1,10 +1,11 @@
-# qmd writer — leaf-block source provenance (fixes nest-in **and** engine line numbers)
+---
+title: 'qmd writer — leaf-block source provenance (fixes nest-in **and** engine line numbers)'
+date: 2026-06-18
+description: 'Makes the qmd writer record where each leaf block lands in its output, so nested blocks map exactly back to source lines, fixing off-by-one nest-in cursor positions and engine error line numbers.'
+status: approved  # PLAN — design settled with the user across the 2026-06-18 provenance investigation; both target failures reproduced empirically (see research note). TDD-first; pampa-only.
+---
 
-**Date:** 2026-06-18
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
-**Status:** PLAN — design settled with the user across the 2026-06-18 provenance
-investigation; both target failures reproduced empirically (see research note).
-TDD-first; pampa-only.
 
 > **SCOPE.** pampa qmd-writer methods and their pampa-native tests only. This now
 > covers BOTH (a) a **new** single-block method for the nesting cursor, and (b) a

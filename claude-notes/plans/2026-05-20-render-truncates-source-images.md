@@ -1,6 +1,13 @@
-# `q2 render` truncates source images referenced in qmd documents
+---
+title: '`q2 render` truncates source images referenced in qmd documents'
+date: 2026-05-20
+description: 'Fixes `q2 render` overwriting source image files with empty content by correcting the artifact path producer and adding guards in the output writer that refuse writes outside the output tree.'
+braid:
+  strand: bd-cfl67
+  priority: P0
+  labels: [bug, data-loss]
+---
 
-**Issue:** bd-cfl67 — `q2 render` truncates source images referenced in qmd documents
 **Type:** bug · **Priority:** 0 (data loss)
 
 ## Summary

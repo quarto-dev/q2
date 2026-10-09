@@ -1,10 +1,14 @@
-# Footnotes appendix section omits the visible \'Footnotes\' heading that Quarto 1 emits (bd-v9zs83zj)
+---
+title: 'Footnotes appendix section omits the visible \''Footnotes\'' heading that Quarto 1 emits (bd-v9zs83zj)'
+date: 2026-08-12
+description: 'Adds the visible Footnotes heading to the footnotes appendix, localized through the language table, and removes the horizontal rule that Quarto 1 drops when it inserts the heading.'
+status: approved  # Design settled 2026-08-12 — **ready to implement.** All four questions answered by the user; see "Design answers" below.
+braid:
+  strand: bd-v9zs83zj
+  priority: P3
+---
 
-**Date:** 2026-08-12
-**Braid:** bd-v9zs83zj
 **Checkout:** main \@ `de2375f0` (no worktree/branch created — this skill ran in the main checkout)
-**Status:** Design settled 2026-08-12 — **ready to implement.** All four questions
-answered by the user; see "Design answers" below.
 
 ## Triage verdict
 

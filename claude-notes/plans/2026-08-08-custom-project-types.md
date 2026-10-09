@@ -1,8 +1,12 @@
-# Custom project types: extension-contributed project types (website base)
-
-- **Strand:** bd-ad7i1pc6 (discovered-from bd-wch2dotq "Make q2 render the posit-connect docs"; related: bd-mqk49; **absorbs bd-zb2tod5f** — see Phase 5)
-- **Date:** 2026-08-08
-- **Status:** DESIGN APPROVED 2026-08-08 (decisions recorded below) — awaiting go-ahead to execute
+---
+title: 'Custom project types: extension-contributed project types (website base)'
+date: 2026-08-08
+description: 'Adds support for extension-contributed project types, such as a `posit-docs` type that names a base type and supplies default config, with user `_quarto.yml` settings taking precedence over the extension defaults.'
+status: approved  # DESIGN APPROVED 2026-08-08 (decisions recorded below) — awaiting go-ahead to execute
+braid:
+  strand: bd-ad7i1pc6  # discovered-from bd-wch2dotq "Make q2 render the posit-connect docs"; related: bd-mqk49; absorbs bd-zb2tod5f — see Phase 5
+  priority: P1
+---
 
 ## Overview
 

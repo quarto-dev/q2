@@ -1,15 +1,17 @@
-# Handoff: remove `CommentBlock`\'s per-block wrapper (q2-preview comment chrome as an overlay layer)
+---
+title: 'Handoff: remove `CommentBlock`\''s per-block wrapper (q2-preview comment chrome as an overlay layer)'
+date: 2026-09-10
+description: 'Proposes removing the wrapper `div` that `CommentBlock` adds around every block, moving comment bubbles into one overlay layer so theme rules using child selectors match again in q2 preview.'
+status: superseded  # superseded 2026-09-10 by the implementation plan `2026-09-10-commentblock-wrapper-removal.md` (decisions D1–D7 there; this note remains as the original recommendation). Where the two differ, the plan wins: the layer is body-level rather than inside `#quarto-content` (decks have no `#quarto-content`), the anchor contract is a per-CommentBlock context rather than a `NodeArgs` prop, and only five block components adopt it.
+braid:
+  strand: bd-q2wqj24c  # re-scoped 2026-09-10; `related` → bd-j3764r9a parity epic; discovered-from bd-kltzdhle
+  priority: P2
+  labels: [parity, preview-renderer]
+---
 
-**Strand:** bd-q2wqj24c (re-scoped 2026-09-10; `related` → bd-j3764r9a parity epic; discovered-from bd-kltzdhle)
 **Written:** 2026-09-10, for a fresh session. Everything below was verified in the
 session that made hub-client default to q2-preview (PR for bd-kltzdhle; plan
 `2026-09-09-hub-client-default-q2-preview.md`, Phase 4b).
-**Status:** superseded 2026-09-10 by the implementation plan
-`2026-09-10-commentblock-wrapper-removal.md` (decisions D1–D7 there; this note
-remains as the original recommendation). Where the two differ, the plan wins:
-the layer is body-level rather than inside `#quarto-content` (decks have no
-`#quarto-content`), the anchor contract is a per-CommentBlock context rather
-than a `NodeArgs` prop, and only five block components adopt it.
 
 ## The defect
 

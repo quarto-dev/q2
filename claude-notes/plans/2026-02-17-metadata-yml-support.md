@@ -1,7 +1,10 @@
-# Directory Metadata (\_metadata.yml) Support
+---
+title: 'Directory Metadata (`_metadata.yml`) Support'
+date: 2026-02-17
+description: 'Adds support for directory-level `_metadata.yml` files, discovered between the project root and a document and layered between project config and document frontmatter.'
+status: done  # Core Implementation Complete (Path Resolution Deferred)
+---
 
-**Date**: 2026-02-17
-**Status**: Core Implementation Complete (Path Resolution Deferred)
 **Depends on**: `2026-02-16-project-metadata-merging.md` (Complete)
 
 ## Overview

@@ -1,4 +1,8 @@
-# Recovery Plan: Fix Broken Repository State
+---
+title: 'Recovery Plan: Fix Broken Repository State'
+date: 2025-10-21
+description: 'Plans how to recover a repository that stopped compiling after a mixed commit, by checking whether an earlier commit builds and then keeping, completing, or reverting each of the two bundled pieces of work.'
+---
 
 ## Situation Analysis
 

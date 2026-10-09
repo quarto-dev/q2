@@ -1,4 +1,8 @@
-# SASS Cache Key Refinement
+---
+title: 'SASS Cache Key Refinement'
+date: 2026-03-10
+description: 'Restores SHA-256 hashing for the SASS cache key and hashes the SCSS inputs before assembly, moves the resource hash into `quarto-sass`, adds LRU eviction to the cache, and removes the dead `SassCacheManager` code.'
+---
 
 **Branch**: `feature/project-metadata`
 **Plan file**: `claude-notes/plans/2026-03-10-sass-cache-key-refinement.md`

@@ -1,12 +1,15 @@
-# Lua filters in the returned-table form are silently ignored (bd-lua-filter-table-form-ignored-ph23becz)
+---
+title: 'Lua filters in the returned-table form are silently ignored (bd-lua-filter-table-form-ignored-ph23becz)'
+date: 2026-08-11
+description: 'Makes Lua filters written in Pandoc''s returned-table form run their handlers instead of being silently ignored, and derives the handler-name list from the walker''s tags to close a gap that drops some global handlers.'
+status: done  # Complete and awaiting review — **PR #508** (`bugfix/bd-lua-filter-table-form-ignored-ph23becz`), all 8 CI checks green. All phases done. `main` was never touched: the work was developed in the main checkout but the commits were moved to a branch before pushing.
+braid:
+  strand: bd-lua-filter-table-form-ignored-ph23becz
+  priority: P1
+  labels: [pampa, parity]
+---
 
-**Date:** 2026-08-11
-**Braid:** `bd-lua-filter-table-form-ignored-ph23becz` (bug, p1, labels `pampa` / `parity`)
 **Branch:** `main` \@ `808215fc` (investigated in the main checkout; no worktree created)
-**Status:** Complete and awaiting review — **PR #508**
-(`bugfix/bd-lua-filter-table-form-ignored-ph23becz`), all 8 CI checks green.
-All phases done. `main` was never touched: the work was developed in the main
-checkout but the commits were moved to a branch before pushing.
 
 ## Triage verdict
 

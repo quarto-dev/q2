@@ -1,4 +1,11 @@
-# L10 — Q1 → Q2 listing template migration docs + LLM skill (`bd-hzsi`)
+---
+title: 'L10 — Q1 → Q2 listing template migration docs + LLM skill (`bd-hzsi`)'
+date: 2026-08-26
+description: 'Documents the migration from Quarto 1 EJS listing templates to Quarto 2 doctemplates on a new page and adds an LLM skill, with examples re-rooted in the built-in templates and locked by integration tests.'
+braid:
+  strand: bd-hzsi
+  priority: P2
+---
 
 **Strand:** `bd-hzsi` (P2, task, parent `bd-61cd` Listings epic, blocked-by
 `bd-rqgx` L8 — closed).

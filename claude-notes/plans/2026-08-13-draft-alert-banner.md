@@ -1,9 +1,15 @@
-# Draft pages render without Q1's draft alert banner (bd-draft-banner-missing-hgx1gkqm)
+---
+title: 'Draft pages render without Q1''s draft alert banner (bd-draft-banner-missing-hgx1gkqm)'
+date: 2026-08-13
+description: 'Investigates the missing Draft alert banner that Quarto 1 shows on `draft: true` pages, finding that the styles and localized term already ship, so only a small template change is needed.'
+status: draft  # Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+braid:
+  strand: bd-draft-banner-missing-hgx1gkqm
+  priority: P3
+  labels: [navigation, parity]
+---
 
-**Date:** 2026-08-13
-**Braid:** `bd-draft-banner-missing-hgx1gkqm` (feature, p3, labels: `navigation`, `parity`)
 **Branch:** `main` \@ `0dcd7e83` (investigated in place; no worktree created)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 

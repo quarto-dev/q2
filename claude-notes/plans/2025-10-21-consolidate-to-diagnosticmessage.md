@@ -1,4 +1,8 @@
-# Plan: Consolidate qmd::read Error Reporting to DiagnosticMessage
+---
+title: 'Plan: Consolidate qmd::read Error Reporting to DiagnosticMessage'
+date: 2025-10-21
+description: 'Proposes having `qmd::read()` return all errors and warnings as `DiagnosticMessage` values and dropping its formatter parameter, so each caller decides between text and JSON output.'
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

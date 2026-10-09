@@ -1,9 +1,12 @@
-# Preview: engine-generated images missing (`q2 preview` + hub-client q2-preview)
-
-**Braid strand:** bd-qbhp2cvv
-**Status:** implemented on branch
-`braid/bd-qbhp2cvv-preview-knitrjupyter-engine-generated`; E2E-verified
-(knitr, real browser). jupyter blocked upstream by bd-rwz8kwia.
+---
+title: 'Preview: engine-generated images missing (`q2 preview` + hub-client q2-preview)'
+date: 2026-07-23
+description: 'Fixes knitr figures missing from preview output, since the engine capture stores the supporting-files directory path but not the image bytes the browser needs.'
+status: done  # implemented on branch `braid/bd-qbhp2cvv-preview-knitrjupyter-engine-generated`; E2E-verified (knitr, real browser). jupyter blocked upstream by bd-rwz8kwia.
+braid:
+  strand: bd-qbhp2cvv
+  priority: P1
+---
 
 ## Overview
 

@@ -1,7 +1,14 @@
-# Theme-config diagnostic overhaul
+---
+title: 'Theme-config diagnostic overhaul'
+date: 2026-05-22
+description: 'Reports the unsupported `theme` map shape in `_quarto.yml` once with a source-located diagnostic, instead of repeating a plain error on every rendered page.'
+status: draft  # drafting — pending user review
+braid:
+  strand: bd-l26u6  # parent epic
+  priority: P2
+  labels: [diagnostics, theme, website]
+---
 
-**Status:** drafting — pending user review
-**Beads:** [bd-l26u6](../../.beads/issues.jsonl) (parent epic)
 **Children:**
 - [theme diagnostic — structured](2026-05-22-theme-diagnostic-structured.md)
 - [cross-page diagnostic coalescing](2026-05-22-diagnostic-coalescing.md)

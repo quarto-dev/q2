@@ -1,8 +1,14 @@
-# Upgrade `@automerge/automerge` and `@automerge/automerge-repo` (npm)
+---
+title: 'Upgrade `@automerge/automerge` and `@automerge/automerge-repo` (npm)'
+date: 2026-09-17
+description: 'Upgrades the npm automerge stack to the stable 3.5.0 release and ports the automerge-repo family to the 2.6.0-alpha.5 line, which moves document availability off `DocHandle.state` onto `DocumentQuery`.'
+braid:
+  strand: bd-d08gpqvu
+  priority: P2
+  labels: [dependencies]
+---
 
-**Strand:** bd-d08gpqvu
 **Branch:** `braid/bd-d08gpqvu-automerge-npm-upgrade` (worktree under `.worktrees/`)
-**Date:** 2026-09-17
 
 ## Overview
 

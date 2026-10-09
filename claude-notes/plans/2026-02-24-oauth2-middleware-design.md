@@ -1,4 +1,8 @@
-# OAuth2 Middleware Design for quarto-hub
+---
+title: 'OAuth2 Middleware Design for quarto-hub'
+date: 2026-02-24
+description: 'Designs Google OAuth2 authentication for quarto-hub as a stateless check of ID tokens at the Axum transport layer, leaving the samod sync protocol unmodified.'
+---
 
 *2026-02-24*
 

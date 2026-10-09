@@ -1,4 +1,12 @@
-# Parallelize Pass-2 render loop (bd-3gj56)
+---
+title: 'Parallelize Pass-2 render loop (bd-3gj56)'
+date: 2026-06-01
+description: 'Parallelizes the serial pass-two render loop in the project orchestrator with rayon, using per-worker artifact stores merged in input order so output stays deterministic and the WASM path remains serial.'
+braid:
+  strand: bd-3gj56
+  priority: P1
+  labels: [perf]
+---
 
 ## Overview
 

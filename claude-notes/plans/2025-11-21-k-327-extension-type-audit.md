@@ -1,7 +1,11 @@
-# Extension Type Writer Audit - k-327
-
-**Date**: 2025-11-21
-**Issue**: k-327 - Audit other Quarto extension types for silent writer failures
+---
+title: 'Extension Type Writer Audit - k-327'
+date: 2025-11-21
+description: 'Audits the Quarto extension node types in the native writer and finds that unhandled block and inline variants, plus percentage column widths, crash the program through `panic!()` rather than returning an error.'
+braid:
+  strand: k-327
+  priority: P2
+---
 
 ## Executive Summary
 

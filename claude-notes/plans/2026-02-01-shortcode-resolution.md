@@ -1,8 +1,11 @@
-# Shortcode Resolution Implementation Plan
+---
+title: 'Shortcode Resolution Implementation Plan'
+date: 2026-02-01
+description: 'Adds a built-in transform that resolves inline shortcodes, starting with `meta`, and reports failures both as visible `?meta:key` text and as source-located diagnostics.'
+status: done  # Implementation complete, all bugs fixed
+---
 
 **Beads Issue**: kyoto-yq1r
-**Created**: 2026-02-01
-**Status**: Implementation complete, all bugs fixed
 
 ---
 

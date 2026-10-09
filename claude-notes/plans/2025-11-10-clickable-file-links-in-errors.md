@@ -1,6 +1,9 @@
-# Clickable File Links in Error Messages
+---
+title: 'Clickable File Links in Error Messages'
+date: 2025-11-10
+description: 'Adds OSC 8 terminal hyperlinks to file paths in `quarto-error-reporting` messages so they can be clicked in supported terminals, leaving in-memory files and unsupported terminals unchanged.'
+---
 
-**Date**: 2025-11-10
 **Goal**: Add OSC 8 ANSI hyperlinks to file paths in error messages so they're clickable in supported terminals
 
 ## Background

@@ -1,16 +1,12 @@
-# Remote code-execution provider for hub sessions
-
-**Strand:** bd-sfet3264 (feature, P1).
-**Date:** 2026-06-29.
-**Status:** Phases 1–4 implemented + `cargo xtask verify`-green on
-`feature/hub-execution-provider`. **Phase 4 complete (2026-07-01):** the native
-provider executes on request (4a — subscribe `exec/request` → materialize VFS →
-uncached `record_capture` → write capture doc + sidecar back over automerge;
-`q2 provide-hub --allow-all` serves, default fail-closed) and the hub-client
-editor drives it (4b — a Run button gated on a live capability beacon + the
-document having executable cells, reflecting `CaptureRef.state`/staleness).
-**Next: Phase 5** (retention/dedup + real provider-only authz) and **Phase 6**
-(hardening).
+---
+title: 'Remote code-execution provider for hub sessions'
+date: 2026-06-29
+description: 'Lets a `q2` client join a shared hub session as a code executor, run document cells with the local engines, and deposit the results into automerge so every player sees the output.'
+status: in-progress  # Phases 1–4 implemented + `cargo xtask verify`-green on `feature/hub-execution-provider`. **Phase 4 complete (2026-07-01):** the native provider executes on request (4a — subscribe `exec/request` → materialize VFS → uncached `record_capture` → write capture doc + sidecar back over automerge; `q2 provide-hub --allow-all` serves, default fail-closed) and the hub-client editor drives it (4b — a Run button gated on a live capability beacon + the document having executable cells, reflecting `CaptureRef.state`/staleness). **Next: Phase 5** (retention/dedup + real provider-only authz) and **Phase 6** (hardening).
+braid:
+  strand: bd-sfet3264
+  priority: P1
+---
 
 ## Known limitations (v1) — READ THIS
 

@@ -1,9 +1,15 @@
-# Listing numeric config keys silently ignore unquoted YAML integers (bd-yjsz6hdu)
+---
+title: 'Listing numeric config keys silently ignore unquoted YAML integers (bd-yjsz6hdu)'
+date: 2026-08-20
+description: 'Makes listing and revealjs numeric options such as `page-size` and `margin` accept unquoted YAML numbers by adding lenient integer and float accessors on `ConfigValue`, since unquoted values were previously dropped without warning.'
+status: in-progress  # Design aligned 2026-08-21; executing.
+braid:
+  strand: bd-yjsz6hdu
+  priority: P2
+  labels: [listings]
+---
 
-**Date:** 2026-08-20
-**Braid:** bd-yjsz6hdu (bug, p2, label `listings`)
 **Checkout:** main checkout, branch `braid/bd-yjsz6hdu` (off `main` \@ `a72a2bb26`)
-**Status:** Design aligned 2026-08-21; executing.
 
 ## Design decisions (2026-08-21, aligned with user)
 

@@ -1,4 +1,8 @@
-# Block-editing UI glitches — round 3 (fixes & tests)
+---
+title: 'Block-editing UI glitches — round 3 (fixes & tests)'
+date: 2026-06-18
+description: 'Records three block-editing UI fixes for the nested list-item editor height, focus jumping after commit, and a new commit-status indicator with error routing, to be re-implemented test-first.'
+---
 
 ## Overview
 

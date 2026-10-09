@@ -1,7 +1,12 @@
-# Schema Module Refactoring Structure
+---
+title: 'Schema Module Refactoring Structure'
+date: 2025-10-27
+description: 'Splits the 1299-line `schema.rs` in `quarto-yaml-validation` into a `schema/` module tree of smaller files, grouped by primitive, combinator, array and object parsers, to cut editing context and prepare for new schema forms.'
+braid:
+  strand: k-243
+  priority: P1
+---
 
-**Date**: 2025-10-27
-**Issue**: k-243 - Refactor schema.rs into smaller modules
 **Current Size**: 1299 lines in single file
 **Target**: Multiple files, each <300 lines
 

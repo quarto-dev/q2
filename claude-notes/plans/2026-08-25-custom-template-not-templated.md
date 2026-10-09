@@ -1,4 +1,12 @@
-# Custom Listing Template Not Templated (Q-12-24) Implementation Plan
+---
+title: 'Custom Listing Template Not Templated (Q-12-24) Implementation Plan'
+date: 2026-08-25
+description: 'Makes an untemplated custom listing file, such as a Quarto 1 EJS template, warn and skip the listing instead of splicing raw content into the page, and documents Quarto 2 custom templates.'
+braid:
+  strand: bd-custom-template-not-templated-e5t6m0i0  # parent bd-61cd (listings epic); related bd-hzsi (L10 migration docs + LLM skill), bd-u4ow (custom-template reference page), bd-lu16jgxq (Q-12-7 wording); supersedes bd-oywyaouf.
+  priority: P1
+  labels: [listings]
+---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -9,8 +17,6 @@
 **Tech Stack:** Rust (`quarto-core`, `quarto-doctemplate`, `quarto-error-catalog`), Quarto docs site under `docs/` (rendered with `cargo run --bin q2 -- render docs/`, never Q1).
 
 **Spec:** The braid strand bd-custom-template-not-templated-e5t6m0i0 (supersedes bd-oywyaouf) plus the decisions below. No separate spec document — the "Investigation context" section at the end of this file is the argued root cause.
-
-**Braid:** bd-custom-template-not-templated-e5t6m0i0 — parent bd-61cd (listings epic); related bd-hzsi (L10 migration docs + LLM skill), bd-u4ow (custom-template reference page), bd-lu16jgxq (Q-12-7 wording); supersedes bd-oywyaouf.
 
 **Worktree:** `.worktrees/workspace-2`, branch `braid/bd-custom-template-not-templated-e5t6m0i0-custom-template-not-templated`, based on `origin/main` \@ `05b6fd75c`. Pre-flight `cargo xtask verify --skip-hub-build --skip-hub-tests` green at that base: 13380 Rust tests passed, 199 skipped.
 

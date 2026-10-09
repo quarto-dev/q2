@@ -1,7 +1,12 @@
-# Pipe Table Caption Implementation Plan
-**Date**: 2025-10-31
-**Issue**: k-304
-**Status**: Ready to implement
+---
+title: 'Pipe Table Caption Implementation Plan'
+date: 2025-10-31
+description: 'Attaches captions to pipe tables by updating the caption handler for the new grammar, which places a caption either inside the table node or as a sibling block after an empty line.'
+status: approved  # Ready to implement
+braid:
+  strand: k-304
+  priority: P2
+---
 
 ## Summary
 

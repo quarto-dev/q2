@@ -1,4 +1,8 @@
-# Top-Level Navbars and Page Footers for HTML Documents
+---
+title: 'Top-Level Navbars and Page Footers for HTML Documents'
+date: 2026-04-18
+description: 'Designs top-level navbars and page footers for single HTML documents, set through `navbar` and `page-footer` YAML keys and rendered by the same generate and render stages used for the table of contents.'
+---
 
 Beads: `bd-imiw`
 

@@ -1,6 +1,9 @@
-# P4 — Standalone validation fixtures: `pdf-text-position-test` + `marginalia-only-project`
+---
+title: 'P4 — Standalone validation fixtures: `pdf-text-position-test` + `marginalia-only-project`'
+date: 2026-09-27
+description: 'Adds two standalone Typst smoke fixtures, a single-file text-position test and a margin-only default project, to prove the new text-position predicates end to end before book-shaped fixtures.'
+---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md)
 **Depends on:** P1 (assertion vocabulary), P3 (`ensurePdfTextPositions` implementation).
 **Worktree:** `workspace-2` (Track A, sequential after P3 — see epic's "Parallel

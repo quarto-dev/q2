@@ -1,14 +1,14 @@
-# `q2 preview --static`: render to disk, serve statically, watch and re-render
+---
+title: '`q2 preview --static`: render to disk, serve statically, watch and re-render'
+date: 2026-09-22
+description: 'Adds a `q2 preview --static` mode that renders a project to disk through the same pipeline as `q2 render`, serves the output, and re-renders and reloads the browser on each save.'
+status: done  # implemented 2026-09-22 on branch `braid/bd-sl79jjiq-q2-preview-static-full` (Phases 0–5; commits 69fc263, 193f9af, 5fd99a4, 0e67a44, 74b26e0, a02df5b). Verified in a real browser on `docs/` (§ End-to-end verification log) and with Jupyter-gated e2e tests. PR #712 (https://github.com/quarto-dev/q2/pull/712), opened 2026-09-22 to see CI. Open questions Q1–Q6 were not answered explicitly and the proposed defaults were taken (see § Open questions); the seven § Deferred items are filed as strands.
+braid:
+  strand: bd-sl79jjiq
+  priority: P1
+  labels: [preview]
+---
 
-**Strand:** bd-sl79jjiq
-**Status:** implemented 2026-09-22 on branch
-`braid/bd-sl79jjiq-q2-preview-static-full` (Phases 0–5; commits 69fc263,
-193f9af, 5fd99a4, 0e67a44, 74b26e0, a02df5b). Verified in a real browser
-on `docs/` (§ End-to-end verification log) and with Jupyter-gated e2e
-tests. PR #712 (https://github.com/quarto-dev/q2/pull/712), opened
-2026-09-22 to see CI. Open questions Q1–Q6
-were not answered explicitly and the proposed defaults were taken (see
-§ Open questions); the seven § Deferred items are filed as strands.
 **Related:** bd-kw93 (the closed `q2 preview` epic; its plan is
 `2026-05-11-q2-preview-epic.md`), bd-w59hlv0s (engine-written figure files
 are not served in the hub preview; static mode sidesteps it by construction),

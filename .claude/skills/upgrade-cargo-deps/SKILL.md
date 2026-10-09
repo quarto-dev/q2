@@ -312,7 +312,10 @@ braid prints each new strand id on stdout; capture them — you'll list them in 
 Create `claude-notes/plans/YYYY-MM-DD-cargo-upgrade-survey.md` using the template below. Commit it to the worktree branch.
 
 ```markdown
-# Cargo dependency upgrade survey — YYYY-MM-DD
+---
+title: 'Cargo dependency upgrade survey — YYYY-MM-DD'
+date: YYYY-MM-DD
+---
 
 **Worktree:** `.worktrees/cargo-upgrade-YYYY-MM-DD` (branch `cargo-upgrade-YYYY-MM-DD`, based on `main` @ `<short-sha>`)
 **Skill:** `.claude/skills/upgrade-cargo-deps/SKILL.md`

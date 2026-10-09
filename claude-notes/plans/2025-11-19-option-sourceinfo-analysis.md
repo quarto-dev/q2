@@ -1,4 +1,8 @@
-# Analysis: Is `Option<SourceInfo>` Sufficient?
+---
+title: 'Analysis: Is `Option<SourceInfo>` Sufficient?'
+date: 2025-11-19
+description: 'Analyzes whether passing a parent source location into the `read` function of the `qmd` reader can give metadata parse diagnostics accurate locations, and which call sites such an API change would touch.'
+---
 
 ## Proposed API Change
 

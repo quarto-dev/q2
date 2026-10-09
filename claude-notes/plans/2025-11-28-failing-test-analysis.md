@@ -1,6 +1,9 @@
-# Failing Test Analysis for quarto-citeproc
+---
+title: 'Failing Test Analysis for quarto-citeproc'
+date: 2025-11-28
+description: 'Groups the 478 failing quarto-citeproc CSL tests by category and ranks the fixes by impact, covering title case, punctuation exchange, citation position, and flip-flop formatting.'
+---
 
-**Date**: 2025-11-28
 **Current Status**: 380/858 tests passing (44.3%)
 
 ## Summary of Failing Tests by Category

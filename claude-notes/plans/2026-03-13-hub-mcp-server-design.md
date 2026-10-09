@@ -1,4 +1,8 @@
-# Hub MCP Server Design: Automerge Project Access for AI Agents
+---
+title: 'Hub MCP Server Design: Automerge Project Access for AI Agents'
+date: 2026-03-13
+description: 'Designs a TypeScript MCP server that lets AI coding agents read and edit Quarto Hub projects through the automerge sync server instead of the filesystem, with a proposed tool list and transport choices.'
+---
 
 ## Overview
 

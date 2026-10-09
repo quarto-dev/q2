@@ -1,11 +1,15 @@
-# TOC entry drops the quote glyphs around a quoted span (bd-toc-smart-quotes-6nro57ed)
+---
+title: 'TOC entry drops the quote glyphs around a quoted span (bd-toc-smart-quotes-6nro57ed)'
+date: 2026-08-13
+description: 'Makes TOC entries carry inline markup instead of flattening headings to plain text, so quoted spans and code in headings no longer lose their delimiters or formatting.'
+status: done  # **Complete** (2026-08-13). All five phases done; `cargo xtask verify` green, 11,846/11,846 workspace tests pass, end-to-end verified through the `q2` binary. See "Outcome" at the end of the Work items.
+braid:
+  strand: bd-toc-smart-quotes-6nro57ed
+  priority: P3
+  labels: [toc]
+---
 
-**Date:** 2026-08-13
-**Braid:** bd-toc-smart-quotes-6nro57ed
 **Branch:** `main` \@ `0dcd7e83` (investigated in the main checkout — no worktree was created)
-**Status:** **Complete** (2026-08-13). All five phases done; `cargo xtask verify` green,
-11,846/11,846 workspace tests pass, end-to-end verified through the `q2` binary. See
-"Outcome" at the end of the Work items.
 
 ## Triage verdict
 

@@ -1,7 +1,11 @@
-# Citeproc Rust Port Design Report
-
-**Issue:** k-410
-**Created:** 2025-11-26
+---
+title: 'Citeproc Rust Port Design Report'
+date: 2025-11-26
+description: 'Assesses porting the Haskell citeproc library to Rust, recommending a phased approach that starts with CSL parsing and adds source location tracking so that style errors can be reported precisely.'
+braid:
+  strand: k-410
+  priority: P4
+---
 
 ## Executive Summary
 

@@ -1,7 +1,10 @@
-# Epic: Book projects (`ProjectKind::Book`)
+---
+title: 'Epic: Book projects (`ProjectKind::Book`)'
+date: 2026-09-21  # (revised after a critical review pass — see "Revision history" at the end)
+description: 'Gives `ProjectKind::Book` a real implementation with chapter-aware numbering, single-file chapter merging for Typst and EPUB, and project-wide cross-chapter reference and bibliography resolution for multi-file HTML books.'
+status: done  # Complete (2026-09-26) — all nine phases (P0–P8) implemented, gated green, and end-to-end verified on `feature/book-projects`. See each phase's own plan file for its gate record; P7's records the final workspace-wide verification and closeout.
+---
 
-**Date:** 2026-09-21 (revised after a critical review pass — see "Revision history" at the end)
-**Status:** Complete (2026-09-26) — all nine phases (P0–P8) implemented, gated green, and end-to-end verified on `feature/book-projects`. See each phase's own plan file for its gate record; P7's records the final workspace-wide verification and closeout.
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md)
 **Integration branch:** `feature/book-projects`, stacked on `feature/pandoc-writer-hybrid` (that epic is substantially complete — single-document docx/pptx/typst/epub via Pandoc + vendored Q1 Lua — but not yet merged to `main`; this epic depends on its landed shape, not on the merge).
 **Q1 references:** `src/project/types/book/*.ts`, `src/format/{typst,epub,pdf}/format-*.ts`, `resources/filters/crossref/sections.lua`, `tests/docs/smoke-all/typst/orange-book*` (the deepest numbering-correctness fixture in Q1's own test suite).

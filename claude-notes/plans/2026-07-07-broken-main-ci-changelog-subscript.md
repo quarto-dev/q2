@@ -1,7 +1,13 @@
-# Broken `main`: PWA precache limit + changelog unclosed-subscript
+---
+title: 'Broken `main`: PWA precache limit + changelog unclosed-subscript'
+date: 2026-07-07
+description: 'Repairs a red `main` build by raising the PWA precache size limit for the large WASM file and closing an unclosed subscript in the changelog, plus a process to prevent similar churn.'
+braid:
+  strand: bd-q5o7ekzn
+  priority: P0
+  labels: [ci]
+---
 
-**Strand:** `bd-q5o7ekzn`
-**Date:** 2026-07-07
 **Branch under repair:** `main`
 **Failing check:** `TS Test Suite` (both `ubuntu-latest` and `macos-latest`)
 

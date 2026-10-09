@@ -1,6 +1,9 @@
-# Plan: Runtime gates (pandoc-host H0)
+---
+title: 'Plan: Runtime gates (pandoc-host H0)'
+date: 2026-10-01
+description: 'Checks in browsers that `pandoc.wasm` runs in WASI command mode and that the vendored Lua filters give output equal to native pandoc, as a stop-or-continue gate before the host is built.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (Standing decision 5, D2, D4, D9)
 **Depends on:** request R0 (capture wrapper, constants file, extractor CLI). **Unblocks:** request R1 and host H1 (human checkpoint); H7.

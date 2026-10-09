@@ -1,10 +1,15 @@
-# L11 — Listings epic close-out
+---
+title: 'L11 — Listings epic close-out'
+date: 2026-05-08
+description: 'Rolls up the 33 open follow-ups from the listings feature phases, identifies the few quick wins worth taking before the epic is declared delivered, and lists the remaining checks.'
+status: draft
+braid:
+  strand: bd-qb4o  # parent bd-61cd
+  priority: P2
+---
 
-**Date:** 2026-05-08
-**Beads:** `bd-qb4o` (parent `bd-61cd`).
 **Parent plan:** `claude-notes/plans/2026-05-05-listings-epic.md`
 **Predecessor phases:** L0–L9 (closed); L10 (open, deferred).
-**Status:** Draft.
 
 ## Goal of this phase
 

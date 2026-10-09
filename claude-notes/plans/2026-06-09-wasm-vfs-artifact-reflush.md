@@ -1,9 +1,15 @@
-# Perf: WASM render re-flushes ALL artifacts into the VFS on every render (bd-q3bxnq2e)
+---
+title: 'Perf: WASM render re-flushes ALL artifacts into the VFS on every render (bd-q3bxnq2e)'
+date: 2026-06-09
+description: 'Investigates whether the WASM renderer re-flushing every artifact into the virtual filesystem on each render wastes time, and proposes skipping writes whose bytes are unchanged.'
+status: draft  # Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+braid:
+  strand: bd-q3bxnq2e
+  priority: P1
+  labels: [revealjs]
+---
 
-**Date:** 2026-06-09
-**Beads:** bd-q3bxnq2e
 **Worktree:** main checkout (branch `main`, based on `main` \@ `ade34bed`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 

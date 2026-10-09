@@ -1,4 +1,8 @@
-# WASM Smoke-All Test Runner (TypeScript)
+---
+title: 'WASM Smoke-All Test Runner (TypeScript)'
+date: 2026-02-19
+description: 'Adds a vitest runner that renders the shared smoke-all fixtures through the WASM module and checks their assertions, so the hub-client live preview is tested against the same cases as native.'
+---
 
 ## Overview
 

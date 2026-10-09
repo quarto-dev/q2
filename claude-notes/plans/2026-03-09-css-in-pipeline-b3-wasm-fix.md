@@ -1,4 +1,8 @@
-# Plan: CSS in Pipeline — Part B3: Fix WASM CompileThemeCssStage
+---
+title: 'Plan: CSS in Pipeline — Part B3: Fix WASM CompileThemeCssStage'
+date: 2026-03-09
+description: 'Diagnoses why the pipeline''s theme CSS stage falls back to default CSS on WASM once the JavaScript compilation is removed, so the theme-inheritance smoke tests pass in the WASM build.'
+---
 
 Parent plan: `claude-notes/plans/2026-03-09-css-in-pipeline.md`
 Prerequisite: B1 Phase 3 (native migration) complete, B1 Phase 4 (JS-side removal) complete.

@@ -1,4 +1,11 @@
-# WS auth-expiry handling (bd-3o8zmz46)
+---
+title: 'WS auth-expiry handling (bd-3o8zmz46)'
+date: 2026-06-10
+description: 'Stops the web client from staying logged in after the Google ID token expires, by reading the expiry from the server, scheduling renewal from it, and clearing auth only on definitive 401 or 403 responses.'
+braid:
+  strand: bd-3o8zmz46
+  priority: P1
+---
 
 ## Overview
 

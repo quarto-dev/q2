@@ -1,4 +1,8 @@
-# Fix: Slide Renderer Crashes on Empty Slides Document
+---
+title: 'Fix: Slide Renderer Crashes on Empty Slides Document'
+date: 2026-02-26
+description: 'Fixes a slide renderer crash on documents with `format: q2-slides` but no slide content, by showing an empty slide area and hiding navigation controls rather than indexing an empty array.'
+---
 
 ## Overview
 

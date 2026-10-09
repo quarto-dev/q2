@@ -1,4 +1,8 @@
-# Grand Plan: TypeScript Engine Extensions for q2 (v2 — Subprocess)
+---
+title: 'Grand Plan: TypeScript Engine Extensions for q2 (v2 — Subprocess)'
+date: 2026-04-16
+description: 'Grand plan for running TypeScript engine extensions in q2 through one shared Deno subprocess that speaks a multiplexed JSON protocol, validated against the Julia engine from Quarto 1.'
+---
 
 ## Overview
 

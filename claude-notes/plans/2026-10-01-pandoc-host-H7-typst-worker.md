@@ -1,6 +1,9 @@
-# Plan: Typst worker (pandoc-host H7)
+---
+title: 'Plan: Typst worker (pandoc-host H7)'
+date: 2026-10-01
+description: 'Builds a standalone typst compiler worker on typst.ts 0.7.0 that loads lazily, serves a virtual filesystem with fonts and prefetched packages, and exports PDF, with the first-use download measured against a 40 MB budget.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (PDF section, T1-T5)
 **Depends on:** H0 only (independent of the pandoc host otherwise), except the budget measurement and the prior-art reading, which can start before H0; can run in parallel with H1-H5. **Unblocks:** H8.

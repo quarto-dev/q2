@@ -1,8 +1,11 @@
-# Attr and Target Source Location Sideloading
+---
+title: 'Attr and Target Source Location Sideloading'
+date: 2025-10-24
+description: 'Designs a way to record source locations for Attr and Target tuple fields in annotated Pandoc JSON, using parallel `attrS` and `targetS` fields because plain strings cannot carry source ids.'
+status: draft  # Design phase
+---
 
-**Date**: 2025-10-24
 **Context**: Fixing quarto-markdown-pandoc to properly track source locations for tuple-based Pandoc structures
-**Status**: Design phase
 
 ## Problem Statement
 

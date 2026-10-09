@@ -1,4 +1,13 @@
-# Float caption prefix skipped for Plain-first captions (attr-form figures, caption-form tables)
+---
+title: 'Float caption prefix skipped for Plain-first captions (attr-form figures, caption-form tables)'
+date: 2026-09-17
+description: 'Fixes the missing `Figure N:` prefix on attribute-form figures and caption-form tables by making every caption consumer accept a `Plain` first block, then canonicalizing caption blocks to `Plain` at the sugar boundary.'
+braid:
+  strand: bd-n3sark9b
+  priority: P2
+  labels: [crossref]
+status: in-progress  # executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (`1a83b4776`); full `cargo xtask verify` green 2026-09-17. Pushed; PR https://github.com/quarto-dev/q2/pull/690 (CI in progress).
+---
 
 **Strand:** bd-n3sark9b (canonical). Marked as duplicates of it: bd-uwv2eec2 (2026-06-18),
 bd-hb9a9ik8 (2026-07-21), bd-51k5yz4e (2026-07-17), bd-4vbd3b7g (2026-08-14). Same defect,
@@ -6,7 +15,6 @@ filed four times over three months, correctly diagnosed twice, never fixed.
 **Reported:** 2026-09-17, `~/Desktop/daily-log/2026/09/17/fig-test/test.qmd` (knitr cell with
 `#| fig-cap` + `![This is another figure](plot.png){#fig-test-2}`).
 **Verified against:** `main` \@ `aa92c4b9e`. **Q1 reference:** `quarto` 99.9.9 (dev checkout).
-**Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (`1a83b4776`); full `cargo xtask verify` green 2026-09-17. Pushed; PR https://github.com/quarto-dev/q2/pull/690 (CI in progress).
 **Docs follow-up:** bd-t0qt409i (under the docs epic bd-tr81, blocked on this strand).
 
 ## TL;DR

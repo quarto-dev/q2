@@ -1,13 +1,17 @@
-# revealjs: actually support code-copy (CSS + JS in render; styled-only in preview)
+---
+title: 'revealjs: actually support code-copy (CSS + JS in render; styled-only in preview)'
+date: 2026-06-23
+description: 'Ports the code-copy styling and clipboard script into revealjs decks so `code-copy:` is honored in native `q2 render` output, with copy-code styles shared as a single SCSS layer across HTML and reveal.'
+status: done  # IMPLEMENTATION COMPLETE (2026-06-23) — all 5 phases done, `cargo xtask verify` green, all three render paths browser-verified. Awaiting user review + push approval.
+braid:
+  strand: bd-lg6t6qfy
+  priority: P3
+---
 
 **Strand:** bd-lg6t6qfy (feature, p3) — follow-up to **bd-fu1a5g6l** (which
 *suppressed* the broken reveal copy button) and sibling of **bd-ehyyfpjj**
 (which ported the highlight SCSS layer into reveal — the template this plan
 follows).
-
-**Status:** IMPLEMENTATION COMPLETE (2026-06-23) — all 5 phases done,
-`cargo xtask verify` green, all three render paths browser-verified. Awaiting
-user review + push approval.
 
 ---
 

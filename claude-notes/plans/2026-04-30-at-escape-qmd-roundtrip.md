@@ -1,6 +1,12 @@
-# QMD writer: missing `@` escape causes Str → Cite re-parse
+---
+title: 'QMD writer: missing `@` escape causes Str → Cite re-parse'
+date: 2026-04-30
+description: 'The qmd writer leaves `@` unescaped before an identifier, so literal text like `@name` re-parses as a citation; the plan fixes the writer''s escaping so qmd round trips are idempotent.'
+braid:
+  strand: bd-21gu
+  priority: P1
+---
 
-**Beads:** bd-21gu
 **Source:** [issue #150](https://github.com/quarto-dev/q2/issues/150), item 1
 
 ## Bug

@@ -1,4 +1,9 @@
-# Plan 7b — Native content-processor registry: percent + spin (zero Pass-1 launch)
+---
+title: 'Plan 7b — Native content-processor registry: percent + spin (zero Pass-1 launch)'
+date: 2026-07-08
+description: 'Replaces per-file conversion of percent and spin scripts with a native, engine-agnostic processor registry, so project discovery and conversion never launch an engine process.'
+status: approved  # PLAN — design ratified with Gordon 2026-07-08 (session "spin-parse-rust"). Work items unstarted. **Reviewed for staleness/consistency 2026-09-24** (see § Review corrections below) — Phase 6 and the SourceInfo/sidecar section were rewritten; everything else held up. **No longer "not on the critical path"**: this is now the blocker for bundling the Julia engine into q2 by default (Q-16-10 fires on every render once julia ships bundled, because its `.jl` claim is a content sniff that cannot be declared statically without this plan's `processor:` field — see `.worktrees/workspace-5/CLAUDE.local.md` "Why this work exists now").
+---
 
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md) (reframed as the 7-series *content-processor architecture* root)
 **Supersedes:** [2026-07-07-plan7a-static-content-pattern-claims.md](2026-07-07-plan7a-static-content-pattern-claims.md) (7a's arbitrary-regex claim mechanism is withdrawn; its surviving design points — discovery admission, one-predicate-two-sites coherence, built-ins-as-data, the Q6 membership-cache contract — migrate here)
@@ -9,14 +14,6 @@
 **Branch:** `plan7b-percent-spin-registry` off `main` (`feature/ts-engine-extensions`, which this
 plan originally targeted, merged to `main` via PR #416 in the interim — all four declared
 dependencies below are confirmed landed on `main`, code-verified 2026-09-24).
-**Date:** 2026-07-08
-**Status:** PLAN — design ratified with Gordon 2026-07-08 (session "spin-parse-rust"). Work items
-unstarted. **Reviewed for staleness/consistency 2026-09-24** (see § Review corrections below) —
-Phase 6 and the SourceInfo/sidecar section were rewritten; everything else held up. **No longer
-"not on the critical path"**: this is now the blocker for bundling the Julia engine into q2 by
-default (Q-16-10 fires on every render once julia ships bundled, because its `.jl` claim is a
-content sniff that cannot be declared statically without this plan's `processor:` field — see
-`.worktrees/workspace-5/CLAUDE.local.md` "Why this work exists now").
 
 ---
 

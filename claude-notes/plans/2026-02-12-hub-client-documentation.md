@@ -1,7 +1,12 @@
-# Hub-Client Documentation
-
-**Beads Issue:** bd-3n80
-**Status:** Implementation Complete
+---
+title: 'Hub-Client Documentation'
+date: 2026-02-12
+description: 'Plans user-facing documentation for Quarto Hub in a new `docs/quarto-hub/` section, covering files, preview, themes, templates, projects and collaboration, with a prototype disclaimer.'
+status: done  # Implementation Complete
+braid:
+  strand: bd-3n80
+  priority: P2
+---
 
 ## Overview
 

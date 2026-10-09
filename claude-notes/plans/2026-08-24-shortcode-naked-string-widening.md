@@ -1,4 +1,8 @@
-# Shortcode Naked-String Widening Implementation Plan
+---
+title: 'Shortcode Naked-String Widening Implementation Plan'
+date: 2026-08-24
+description: 'Widens the `shortcode_naked_string` token to accept non-ASCII characters and backslash escapes, so one unusual character in a positional argument no longer drops the whole document; `=` stays excluded.'
+---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

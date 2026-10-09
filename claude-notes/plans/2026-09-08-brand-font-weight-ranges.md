@@ -1,11 +1,16 @@
-# brand.yml font weight ranges collapse to 400; no variable-font axis support (bd-5fseopxy)
+---
+title: 'brand.yml font weight ranges collapse to 400; no variable-font axis support (bd-5fseopxy)'
+date: 2026-09-08
+description: 'Triages how brand.yml font weight ranges such as `400..700` silently collapse to 400 or break theme compilation, and what variable-font axis support would involve.'
+status: done  # Merged to `main` 2026-09-08 via https://github.com/quarto-dev/q2/pull/663. Nothing left to do in the repo; the strand is closed in braid once the user approves.
+braid:
+  strand: bd-5fseopxy
+  priority: P2
+  labels: [css, diagnostics, theming]
+---
 
-**Date:** 2026-09-08
-**Braid:** bd-5fseopxy (bug, p2, labels: css, diagnostics, theming)
 **Checkout:** `~/rooms/room-1/q2`, branch `main` \@ `b7e7c96a` (no worktree/branch created; the
 user picks where the fix lands)
-**Status:** Merged to `main` 2026-09-08 via https://github.com/quarto-dev/q2/pull/663. Nothing left
-to do in the repo; the strand is closed in braid once the user approves.
 
 ## Triage verdict
 

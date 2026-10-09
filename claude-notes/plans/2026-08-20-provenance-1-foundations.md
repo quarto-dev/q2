@@ -1,4 +1,8 @@
-# Provenance, Plan 1 of 3: foundations (`quarto-source-map`, `quarto-yaml`)
+---
+title: 'Provenance, Plan 1 of 3: foundations (`quarto-source-map`, `quarto-yaml`)'
+date: 2026-08-20
+description: 'Corrects `quarto-yaml` source positions for quoted, escaped, folded and block scalars, whose decoded values drift from their raw spans, by having the decoder report exact content provenance.'
+---
 
 **Epic:** `bd-mxa44voa` — *Nested-parse source mapping drifts when the inner
 text was unescaped.*

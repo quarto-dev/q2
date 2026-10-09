@@ -1,4 +1,12 @@
-# Render failures with no attribution (bd-render-failure-unattributed-yxe0v7th)
+---
+title: 'Render failures with no attribution (bd-render-failure-unattributed-yxe0v7th)'
+date: 2026-08-24
+description: 'Stops render failures from going unattributed by keeping engine-output parse errors bound to their own source context and adding the failing page''s path to render summary lines that do not name it.'
+braid:
+  strand: bd-render-failure-unattributed-yxe0v7th
+  priority: P1
+  labels: [diagnostics, parser]
+---
 
 ## Overview
 

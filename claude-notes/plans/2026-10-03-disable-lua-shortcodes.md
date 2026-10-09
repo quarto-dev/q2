@@ -1,8 +1,15 @@
-# Disable the vendored Lua shortcodes pass (escaped shortcodes expanded twice)
+---
+title: 'Disable the vendored Lua shortcodes pass (escaped shortcodes expanded twice)'
+date: 2026-10-03
+description: 'Disables the vendored Lua shortcode pass in pandoc, because Rust already resolves shortcodes and the Lua pass re-expands escaped shortcodes in code text, which made `brand.qmd` fail to render.'
+status: done  # EXECUTED 2026-10-04 (T1-T7 done; commits `7af327711` T1/T2/T4, `aecaef501` T5; not pushed).
+braid:
+  strand: bd-2uva9urq  # design question bd-qwgu94f4; related bd-xfqx2tuc, bd-qnylgu69
+  priority: P2
+  labels: [shortcode]
+---
 
 **Branch:** `issue-brand-shortcode` (from `feature/pandoc-wasm` @ `6d03c76ac`), worktree `workspace-7`.
-**Strands:** bug `bd-2uva9urq` (this plan); design question `bd-qwgu94f4` ("should pandoc Lua execute shortcodes?"). Related: `bd-xfqx2tuc`, `bd-qnylgu69`.
-**Status:** EXECUTED 2026-10-04 (T1-T7 done; commits `7af327711` T1/T2/T4, `aecaef501` T5; not pushed).
 **Was blocked by:** `bd-xjg7vl6c` (Rust never expands shortcodes in footnote definitions); fixed in `9f6c35190` before T2.
 
 ## Problem

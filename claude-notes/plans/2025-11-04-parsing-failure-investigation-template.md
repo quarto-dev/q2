@@ -1,4 +1,8 @@
-# Parsing Failure Investigation Template
+---
+title: 'Parsing Failure Investigation Template'
+date: 2025-11-04
+description: 'A step-by-step template for diagnosing qmd files that fail to parse after the grammar migration, to decide whether the cause is invalid syntax, a tree-sitter grammar bug, or a Rust processing bug.'
+---
 
 Date: 2025-11-04
 File: claude-notes/plans/2025-11-04-parsing-failure-investigation-template.md

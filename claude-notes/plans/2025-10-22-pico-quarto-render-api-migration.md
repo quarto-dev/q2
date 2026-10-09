@@ -1,4 +1,8 @@
-# Plan: Migrate pico-quarto-render to New API
+---
+title: 'Plan: Migrate pico-quarto-render to New API'
+date: 2025-10-22
+description: 'Ports the experimental `pico-quarto-render` crate to the new `read()` API of `quarto-markdown-pandoc`, which drops the error formatter, returns warnings, and reports errors as `DiagnosticMessage` values, while resolving merge conflicts.'
+---
 
 ## Context
 

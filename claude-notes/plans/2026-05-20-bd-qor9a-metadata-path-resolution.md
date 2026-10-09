@@ -1,8 +1,13 @@
-# bd-qor9a — Resolve metadata paths relative to where they were declared
+---
+title: 'bd-qor9a — Resolve metadata paths relative to where they were declared'
+date: 2026-05-20
+description: 'Resolves sidebar, navbar and footer hrefs relative to the file where they were written, instead of always treating them as project-root-relative, so missing-document warnings disappear.'
+status: in-progress  # In progress. bd-8d6rk landed; implementation under way.
+braid:
+  strand: bd-qor9a
+  priority: P2
+---
 
-**Status**: In progress. bd-8d6rk landed; implementation under way.
-
-**Issue**: bd-qor9a (P2, bug)
 **Blocked by**: bd-8d6rk (structured navigation diagnostics)
 **Related design precedent**: `claude-notes/plans/2026-02-17-dir-metadata-path-resolution.md`
 

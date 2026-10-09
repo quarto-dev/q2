@@ -1,9 +1,14 @@
-# SystemRuntime Unification
+---
+title: 'SystemRuntime Unification'
+date: 2025-12-22
+description: 'Renames pampa''s `LuaRuntime` trait to `SystemRuntime` and moves it into a shared crate, so pampa and quarto-core use one filesystem and process abstraction with a `find_binary` method added.'
+status: done  # ✅ COMPLETED (2025-12-22)
+braid:
+  strand: k-6zaq
+  priority: P1
+---
 
-**Date**: 2025-12-22
-**Issue**: k-6zaq
 **Parent Issue**: k-nkhl (QuartoRuntime abstraction)
-**Status**: ✅ COMPLETED (2025-12-22)
 
 ---
 

@@ -1,12 +1,10 @@
-# JavaScript Execution Performance Considerations
+---
+title: 'JavaScript Execution Performance Considerations'
+date: 2026-01-12
+description: 'Analyzes the cost of creating a fresh V8 runtime for each JavaScript render call and compares caching strategies, though the JavaScript surface it covers has since been removed.'
+status: superseded  # OBSOLETE (2026-06-12) — the JS execution surface this document describes was removed in bd-3e3sam51 (see `claude-notes/plans/2026-06-12-remove-deno-core-rusty-v8.md`). Project scaffolding renders with quarto-doctemplate (pure Rust) since bd-kuxzj8su; `js_native.rs` and the deno_core/rusty_v8 dependency no longer exist. Kept for historical context only.
+---
 
-**Created**: 2026-01-12
-**Status**: OBSOLETE (2026-06-12) — the JS execution surface this document
-describes was removed in bd-3e3sam51 (see
-`claude-notes/plans/2026-06-12-remove-deno-core-rusty-v8.md`). Project
-scaffolding renders with quarto-doctemplate (pure Rust) since bd-kuxzj8su;
-`js_native.rs` and the deno_core/rusty_v8 dependency no longer exist.
-Kept for historical context only.
 **Related code**: `crates/quarto-system-runtime/src/js_native.rs` (deleted)
 
 ## Overview

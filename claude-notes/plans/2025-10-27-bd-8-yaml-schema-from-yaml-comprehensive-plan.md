@@ -1,6 +1,9 @@
-# Comprehensive Plan for bd-8: YAML Schema Deserialization from quarto-cli YAML Files
+---
+title: 'Comprehensive Plan for bd-8: YAML Schema Deserialization from quarto-cli YAML Files'
+date: 2025-10-27
+description: 'Plans a Rust `Deserialize` implementation for the Schema type so it can load quarto-cli YAML schema files, auditing the existing `Schema::from_yaml()` against every syntax form quarto-cli accepts.'
+---
 
-**Date**: 2025-10-27
 **Issue**: bd-8 - YAML schema deserialization: Add Deserialize impl for Schema enum
 **Blocks**: bd-9 - SchemaField and schema file loading
 

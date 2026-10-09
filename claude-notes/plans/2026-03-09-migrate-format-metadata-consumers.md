@@ -1,4 +1,8 @@
-# Plan: Migrate All Consumers from Format.metadata to doc.ast.meta
+---
+title: 'Plan: Migrate All Consumers from Format.metadata to doc.ast.meta'
+date: 2026-03-09
+description: 'Moves pipeline transforms and template selection from the `Format.metadata` field to the merged `doc.ast.meta` tree, so they see project, directory and runtime metadata as well as the document''s own format block.'
+---
 
 ## Overview
 

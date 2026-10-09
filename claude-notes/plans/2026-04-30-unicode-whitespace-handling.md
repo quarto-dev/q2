@@ -1,8 +1,12 @@
-# Unicode whitespace handling in the qmd parser
-
-**Beads:** bd-rmx3 (bug), bd-8oe4 (audit task, discovered-from bd-rmx3)
-**Date:** 2026-04-30
-**Status:** Plan — awaiting user review before implementation
+---
+title: 'Unicode whitespace handling in the qmd parser'
+date: 2026-04-30
+description: 'Lets the qmd parser accept non-ASCII whitespace such as U+202F, which breaks pasted chat transcripts, by treating it as content as Pandoc does and auditing scanners that test only for ASCII whitespace.'
+status: draft  # Plan — awaiting user review before implementation
+braid:
+  strand: bd-rmx3  # also bd-8oe4, discovered-from bd-rmx3
+  priority: P1
+---
 
 ## Overview
 

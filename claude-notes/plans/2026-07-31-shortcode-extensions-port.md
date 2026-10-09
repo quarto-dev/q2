@@ -1,9 +1,12 @@
-# Shortcode extensions: Quarto 1 → Quarto 2 port plan
-
-**Status:** Reviewed 2026-07-31 — design decisions signed off (see § Design
-decisions; Phase 3 deferred). Awaiting go-ahead to implement.
-**Braid strand:** bd-540a976a (epic; related: bd-8b0af414, bd-nzdm1wry, bd-u145dg3y, bd-5edooc78, bd-mqk49)
-**Date:** 2026-07-31
+---
+title: 'Shortcode extensions: Quarto 1 → Quarto 2 port plan'
+date: 2026-07-31
+description: 'Plans the port of Quarto 1 shortcode extensions to Quarto 2, closing gaps in loading, dispatch, built-in shortcodes and diagnostics so `_extensions` handlers behave as documented, with source-mapped errors.'
+status: approved  # Reviewed 2026-07-31 — design decisions signed off (see § Design decisions; Phase 3 deferred). Awaiting go-ahead to implement.
+braid:
+  strand: bd-540a976a  # epic; related: bd-8b0af414, bd-nzdm1wry, bd-u145dg3y, bd-5edooc78, bd-mqk49
+  priority: P1
+---
 
 ## Overview
 

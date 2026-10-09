@@ -1,11 +1,12 @@
-# Date Parsing & Formatting for Q2 (title-block P4, bd-13f821l5)
-
-**Status: APPROVED (2026-07-17) — executing.** Carlos approved all
-open-question recommendations; final token scope (Carlos): implement
-every token that does not incur i18n/localization design cost —
-i.e. everything except locale-week `w ww wo gggg` (deferred to the
-localization design, likely tackled next) and named-timezone `z zzz`
-(deferred on tz-database dependency grounds).
+---
+title: 'Date Parsing & Formatting for Q2 (title-block P4, bd-13f821l5)'
+date: 2026-07-17
+description: 'Designs a shared date module that parses and formats `date` metadata and listing dates in a normalization transform, keeping doctemplates logic-less while offering Q1''s named styles and format tokens in English.'
+status: in-progress  # APPROVED (2026-07-17) — executing. Carlos approved all open-question recommendations; final token scope (Carlos): implement every token that does not incur i18n/localization design cost — i.e. everything except locale-week `w ww wo gggg` (deferred to the localization design, likely tackled next) and named-timezone `z zzz` (deferred on tz-database dependency grounds).
+braid:
+  strand: bd-13f821l5
+  priority: P2
+---
 
 Ancillary to the title-block parity epic plan
 (`2026-07-15-html-title-block-parity.md`, design decision Q4 and the

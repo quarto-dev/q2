@@ -1,4 +1,8 @@
-# Default-project theme artifacts not flushed in hub-client
+---
+title: 'Default-project theme artifacts not flushed in hub-client'
+date: 2026-05-01
+description: 'Fixes hub-client so default projects flush their theme and other project-scope artifacts to the virtual file system, so themes appear on first render instead of only when cached from an earlier website render.'
+---
 
 ## Status
 

@@ -1,9 +1,15 @@
-# Navbar logo unstyled: theme ships no `.navbar-logo` rule and brand markup drops Q1's `navbar-brand-logo` structure (bd-navbar-logo-unstyled-gbzd8vcu)
+---
+title: 'Navbar logo unstyled: theme ships no `.navbar-logo` rule and brand markup drops Q1''s `navbar-brand-logo` structure (bd-navbar-logo-unstyled-gbzd8vcu)'
+date: 2026-08-19
+description: 'Adds the default `.navbar-logo` sizing rules and restructures the navbar brand into Quarto 1''s container and dual-anchor markup, with separate light and dark logo variants, so oversized logos stop filling the bar.'
+status: approved  # Plan finalized after design alignment with Carlos (2026-08-19). Awaiting go-ahead to implement.
+braid:
+  strand: bd-navbar-logo-unstyled-gbzd8vcu
+  priority: P2
+  labels: [navigation]
+---
 
-**Date:** 2026-08-19
-**Braid:** bd-navbar-logo-unstyled-gbzd8vcu
 **Checkout:** main \@ `f387bd68` (investigation ran in the main checkout; no worktree created)
-**Status:** Plan finalized after design alignment with Carlos (2026-08-19). Awaiting go-ahead to implement.
 
 ## Design decisions (settled with Carlos, 2026-08-19)
 

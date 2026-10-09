@@ -1,13 +1,14 @@
-# Breadcrumb chip — visual design + positioning rework
+---
+title: 'Breadcrumb chip — visual design + positioning rework'
+date: 2026-06-15  # (rewritten 2026-06-15 after a design review)
+description: 'Restyles the nesting breadcrumb chip with lighter glyph-based crumbs, anchors it in the content plane so it scrolls with the editing surface, and reserves space for future crumbs.'
+status: approved  # Design settled across the original brainstorm (2026-06-15) **and a follow-up review** that changed the positioning model substantially (see *What changed in the rewrite*). TDD-first; checklist below is ready to execute.
+---
 
-**Date:** 2026-06-15 (rewritten 2026-06-15 after a design review)
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
 **Builds on:** `2026-06-14-nesting-cursor-ui-enhancements.md` (geometry snapshot, caret-aware
 nest-in, mode-aware highlight) — *successor* plan. The nesting cursor and its breadcrumb chip
 (`BreadcrumbChip.tsx`, shipped commit `eccd89c2`) are the substrate.
-**Status:** Design settled across the original brainstorm (2026-06-15) **and a follow-up review**
-that changed the positioning model substantially (see *What changed in the rewrite*). TDD-first;
-checklist below is ready to execute.
 
 > **All cited files live under `ts-packages/preview-renderer/src/q2-preview/`** unless a path is
 > given. The Playwright acceptance spec lives under `hub-client/e2e/` (that SPA bundles

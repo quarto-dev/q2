@@ -1,10 +1,15 @@
-# q2 preview diagnostics: include ariadne source-context snippet
+---
+title: 'q2 preview diagnostics: include ariadne source-context snippet'
+date: 2026-05-21
+description: 'Shows the Ariadne source-context snippet that `q2 render` prints for each warning in the `q2 preview` diagnostics overlay, by sending a pre-rendered text field in the diagnostic JSON.'
+status: draft  # DRAFT — awaiting user sign-off on wire-shape addition
+braid:
+  strand: bd-352bh
+  priority: P2
+---
 
-**Issue:** bd-352bh
 **Discovered-from:** bd-b9kzg (q2 preview diagnostics surface)
 **Parent epic:** bd-kw93 (q2 preview)
-**Date:** 2026-05-21
-**Status:** DRAFT — awaiting user sign-off on wire-shape addition
 
 ## Problem
 

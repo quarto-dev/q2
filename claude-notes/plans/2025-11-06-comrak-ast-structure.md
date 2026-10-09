@@ -1,8 +1,11 @@
-# Comrak AST Structure Analysis
+---
+title: 'Comrak AST Structure Analysis'
+date: 2025-11-06
+description: 'Documents the node structure of the comrak CommonMark parser and marks which node types fall inside the planned CommonMark-compatible subset, to guide differential testing.'
+---
 
 **Related to**: CommonMark-compatible subset design (k-333)
 **Purpose**: Document comrak's AST structure to inform our testing strategy
-**Date**: 2025-11-06
 
 ## Overview
 

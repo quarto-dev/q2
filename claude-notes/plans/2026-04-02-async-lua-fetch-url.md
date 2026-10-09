@@ -1,4 +1,8 @@
-# Plan: Async Lua execution + `fetch_url` for WASM
+---
+title: 'Plan: Async Lua execution + `fetch_url` for WASM'
+date: 2026-04-02
+description: 'Makes Lua filter and shortcode execution async so `pandoc.mediabag.fetch` can await a real `fetch_url` on native and WASM, replacing the stub that always returned nil.'
+---
 
 ## Status: Complete
 

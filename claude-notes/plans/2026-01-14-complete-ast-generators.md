@@ -1,7 +1,10 @@
-# Complete AST Generators Plan
+---
+title: 'Complete AST Generators Plan'
+date: 2026-01-14
+description: 'Builds property-test generators that cover every Block and Inline variant so reconciliation tests exercise all code paths, with the goal of finding and fixing reconciliation bugs they expose.'
+status: in-progress  # Phases 1-4 Complete, Bugs kyoto-sz3 and kyoto-fhh Fixed
+---
 
-**Date:** 2026-01-14
-**Status:** Phases 1-4 Complete, Bugs kyoto-sz3 and kyoto-fhh Fixed
 **Parent:** 2026-01-14-reconciliation-correctness.md
 **Epic:** kyoto-tsq
 

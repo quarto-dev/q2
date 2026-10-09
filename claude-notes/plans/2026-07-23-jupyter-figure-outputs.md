@@ -1,9 +1,16 @@
-# Jupyter engine: emit real figures for image outputs
+---
+title: 'Jupyter engine: emit real figures for image outputs'
+date: 2026-07-23
+description: 'Makes the Jupyter engine emit real figure files for image outputs, fixing MIME selection order so matplotlib plots become `<img>` tags in render and preview instead of text reprs.'
+braid:
+  strand: bd-5t6wvu7m
+  priority: P3
+status: draft  # plan draft — awaiting review
+---
 
 **Braid strand:** bd-5t6wvu7m (pre-existing; carries the in-code TODO).
 bd-rwz8kwia (filed from the bd-qbhp2cvv session) is a duplicate — closed
 in favor of this one, evidence merged here.
-**Status:** plan draft — awaiting review
 
 ## Overview
 

@@ -1,16 +1,14 @@
-# Nesting-cursor UI enhancements — geometry snapshot, caret-aware nest-in, mode-aware highlight
+---
+title: 'Nesting-cursor UI enhancements — geometry snapshot, caret-aware nest-in, mode-aware highlight'
+date: 2026-06-14
+description: 'Improves the nesting cursor in `q2-preview` by sizing nested editors from a pre-edit geometry snapshot, making nest-in follow the caret, and highlighting the outer block that activates in locked mode.'
+status: approved  # Design settled through two reflection passes, a source-grounded design review, a fourth internal-consistency pass on the landing-core refactor (2026-06-14, recorded in *Reflections* #14–15), **and a fifth consequence-chasing pass (2026-06-14) that verified every cited source line against the worktree, parse-verified the acceptance fixture with the real binary, and resolved the design questions in *Reflections* #16–22**. All cross-feature ambiguities resolved with the user. TDD-first; checklist below is ready to execute.
+---
 
-**Date:** 2026-06-14
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
 **Builds on:** `2026-06-11-block-editing-improvements.md` (the nesting-cursor / outer-block
 editor, Phases 1–3.5, all done). Same machinery; this plan is a follow-on set of UI
 enhancements + one mechanical rename, all q2-preview-only.
-**Status:** Design settled through two reflection passes, a source-grounded design review, a
-fourth internal-consistency pass on the landing-core refactor (2026-06-14, recorded in
-*Reflections* #14–15), **and a fifth consequence-chasing pass (2026-06-14) that verified every
-cited source line against the worktree, parse-verified the acceptance fixture with the real binary,
-and resolved the design questions in *Reflections* #16–22**. All cross-feature ambiguities resolved
-with the user. TDD-first; checklist below is ready to execute.
 
 > **All cited production files live under `ts-packages/preview-renderer/src/q2-preview/`** unless
 > a path is given (e.g. `../utils/byteLineMap.ts`). The Playwright acceptance specs live under

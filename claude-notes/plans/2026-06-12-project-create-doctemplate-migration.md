@@ -1,8 +1,12 @@
-# Migrate quarto-project-create from EJS to quarto-doctemplate
-
-**Strand:** bd-kuxzj8su (blocks bd-3e3sam51, discovered-from bd-3e3sam51)
-**Created:** 2026-06-12
-**Status:** planned
+---
+title: 'Migrate quarto-project-create from EJS to quarto-doctemplate'
+date: 2026-06-12
+description: 'Moves `quarto-project-create` from EJS templates rendered through the JavaScript runtime to `quarto-doctemplate` `$title$` placeholders, making scaffolding synchronous and removing the last JavaScript template consumer.'
+status: draft  # planned
+braid:
+  strand: bd-kuxzj8su  # blocks bd-3e3sam51, discovered-from bd-3e3sam51
+  priority: P2
+---
 
 ## Overview
 

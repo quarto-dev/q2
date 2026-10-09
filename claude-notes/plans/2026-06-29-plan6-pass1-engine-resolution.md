@@ -1,8 +1,10 @@
-# Plan 6 — Pass-1 engine resolution (per-doc lift): implementation plan
+---
+title: 'Plan 6 — Pass-1 engine resolution (per-doc lift): implementation plan'
+date: 2026-06-29
+description: 'Plans engine resolution in the Pass-1 indexing stage for documents that need no engine load, so the language server gets resolved execution languages, with user claim tables widening which documents qualify.'
+status: approved  # implementation plan (design ratified with Gordon; final revision 2026-07-05 — claim overrides are **whole-table claim replacement**, a claim *source*, not a resolution tier).
+---
 
-**Status:** implementation plan (design ratified with Gordon; final revision
-2026-07-05 — claim overrides are **whole-table claim replacement**, a claim
-*source*, not a resolution tier).
 **Sequence:** post-Plan-1c; **executes after Plan 4b** (ratified 2026-07-06 —
 4b lands the `engines:` ordering splice + name-validation this plan builds on,
 and exercises the resolution tiers this plan's claim tables intercept; see

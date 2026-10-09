@@ -1,11 +1,17 @@
-# knitr HTML dependencies fail the render; engine-result errors need real diagnostics (GH #683)
+---
+title: 'knitr HTML dependencies fail the render; engine-result errors need real diagnostics (GH #683)'
+date: 2026-09-18
+description: 'Makes knitr documents with HTML dependencies render by accepting the array-valued include slots that the R engine sends, and turns unreadable engine results into a coded diagnostic with the raw result preserved.'
+status: in-progress  # Phases A and B complete and committed 2026-09-18; PR #694 open. Phase C is bd-yd94iyq9.
+braid:
+  strand: bd-gy2ozix3
+  priority: P1
+  labels: [diagnostics, engine, knitr]
+---
 
-**Strand:** bd-gy2ozix3
 **Branch:** `braid/bd-gy2ozix3-knitr-includes-engine-diagnostics`
 **Phase C strand:** bd-yd94iyq9 (separate; decided 2026-09-18)
 **GitHub:** https://github.com/quarto-dev/q2/issues/683
-**Date:** 2026-09-18
-**Status:** Phases A and B complete and committed 2026-09-18; PR #694 open. Phase C is bd-yd94iyq9.
 
 ## Overview
 

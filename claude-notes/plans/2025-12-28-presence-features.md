@@ -1,6 +1,11 @@
-# Presence Features for Quarto Hub
-
-**Beads Issue:** `k-evpj` - Add presence features (cursors, selections) to quarto-hub
+---
+title: 'Presence Features for Quarto Hub'
+date: 2025-12-28
+description: 'Shows the cursors and text selections of collaborators in the quarto-hub Monaco editor by broadcasting presence over Automerge ephemeral messages and rendering them with the monaco-collab-ext library.'
+braid:
+  strand: k-evpj
+  priority: P2
+---
 
 ## Overview
 

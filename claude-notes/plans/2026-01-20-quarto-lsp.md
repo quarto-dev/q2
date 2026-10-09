@@ -1,8 +1,11 @@
-# Quarto LSP Server Implementation Plan
+---
+title: 'Quarto LSP Server Implementation Plan'
+date: 2026-01-20
+description: 'Lays out the Quarto LSP design: a transport-agnostic `quarto-lsp-core` crate shared by a tower-lsp native server and the hub-client WASM module, providing diagnostics, symbols and hover.'
+status: in-progress  # In Progress (Phases 1-3, 5 Complete, Phase 4 Deferred)
+---
 
 **Epic:** kyoto-7bf - Implement Quarto LSP server (quarto lsp)
-**Created:** 2026-01-20
-**Status:** In Progress (Phases 1-3, 5 Complete, Phase 4 Deferred)
 
 ## Overview
 

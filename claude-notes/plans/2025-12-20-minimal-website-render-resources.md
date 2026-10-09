@@ -1,4 +1,8 @@
-# Minimal Website Render: Static Resources and Templates
+---
+title: 'Minimal Website Render: Static Resources and Templates'
+date: 2025-12-20
+description: 'Catalogs the static JavaScript, CSS, and HTML template resources a minimal Quarto website render needs, drawn from a compiled example site and the quarto-cli sources.'
+---
 
 ## Overview
 

@@ -1,4 +1,8 @@
-# Skip project-set setup for `q2 preview --ui editor` (ephemeral hub)
+---
+title: 'Skip project-set setup for `q2 preview --ui editor` (ephemeral hub)'
+date: 2026-08-07
+description: 'Lets the editor preview open straight into the editor on a fresh browser profile by passing an `ephemeral=true` flag on the boot URL, which silently creates the project set and skips onboarding.'
+---
 
 Strand: bd-zf4ryvuq
 

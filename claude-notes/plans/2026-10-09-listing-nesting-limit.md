@@ -1,9 +1,14 @@
-# Default and grid listings nest every item one level deeper (bd-mlmkev01)
+---
+title: 'Default and grid listings nest every item one level deeper (bd-mlmkev01)'
+date: 2026-10-09
+description: 'Fixes default and grid listings that nested each item one level deeper than the last, so listings past about 90 items hit the parser depth limit and vanished; the item templates now end with a blank line.'
+status: done  # Implemented on the topic branch (design settled with the user 2026-10-09; see Decisions).
+braid:
+  strand: bd-mlmkev01
+  priority: P1
+---
 
-**Date:** 2026-10-09
-**Braid:** bd-mlmkev01
 **Branch:** `braid/bd-mlmkev01-listing-nesting-limit` (topic branch in the main checkout, based on `main` @ `15bb0d54f`)
-**Status:** Implemented on the topic branch (design settled with the user 2026-10-09; see Decisions).
 
 ## Triage verdict
 

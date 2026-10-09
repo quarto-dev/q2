@@ -1,8 +1,14 @@
-# Cross-referenceable Example blocks
+---
+title: 'Cross-referenceable Example blocks'
+date: 2026-06-09
+description: 'Makes embedded example iframes first-class cross-referenceable items, auto-numbered as Demo items under the new `demo` prefix, so prose can refer to them the way it refers to figures and theorems.'
+status: draft  # DESIGN — iterate before execution. No code yet.
+braid:
+  strand: bd-t3cert81  # discovered-from bd-z1smhvuo, the embed feature
+  priority: P2
+  labels: [docs, revealjs]
+---
 
-**Strand:** bd-t3cert81 (discovered-from bd-z1smhvuo, the embed feature)
-**Date:** 2026-06-09
-**Status:** DESIGN — iterate before execution. No code yet.
 **Builds on:** `claude-notes/plans/2026-06-09-website-example-iframe-embed.md`
 (Phases 1–2: the `.embed-example-iframe` transform, staging, page-relative src).
 **Crossref background:** `claude-notes/plans/2026-04-15-crossref-design.md`.

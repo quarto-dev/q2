@@ -1,4 +1,8 @@
-# Table Source Tracking - Pandoc Compatibility Fix
+---
+title: 'Table Source Tracking - Pandoc Compatibility Fix'
+date: 2025-10-24
+description: 'Restores Pandoc-compatible JSON for tables by keeping the `c` field in Pandoc''s array layout and moving source tracking into parallel fields such as `captionS`, `headS`, `bodiesS` and `footS`.'
+---
 
 ## Problem
 

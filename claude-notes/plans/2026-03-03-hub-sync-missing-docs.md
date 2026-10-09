@@ -1,4 +1,8 @@
-# Hub Sync Server: Missing Documents on Reconnection
+---
+title: 'Hub Sync Server: Missing Documents on Reconnection'
+date: 2026-03-03
+description: 'Traces the loss of newly created documents on the standalone `hub` sync server to a samod race in `handle_load` that discarded pending sync messages, and fixes it upstream with a regression harness.'
+---
 
 ## Overview
 

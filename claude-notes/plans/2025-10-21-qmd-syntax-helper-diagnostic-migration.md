@@ -1,4 +1,8 @@
-# Plan: Update qmd-syntax-helper to use DiagnosticMessage
+---
+title: 'Plan: Update qmd-syntax-helper to use DiagnosticMessage'
+date: 2025-10-21
+description: 'Migrates `qmd-syntax-helper` off the old five-argument `qmd::read` call and string-based errors, so its div whitespace and parse checks use structured `DiagnosticMessage` values and compile again.'
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

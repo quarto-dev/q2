@@ -1,8 +1,13 @@
-# Lua Filter Traversal Order Fix
+---
+title: 'Lua Filter Traversal Order Fix'
+date: 2025-12-02
+description: 'Explains why the Lua filter traversal makes one bottom-up pass while Pandoc makes four typewise passes, and plans the change needed to match Pandoc''s visiting order.'
+braid:
+  strand: k-477
+  priority: P1
+---
 
-**Issue**: k-477 (Investigate Lua filter traversal order)
 **Parent**: k-409 (Lua filter support for quarto-markdown-pandoc)
-**Date**: 2025-12-02
 
 ## Executive Summary
 

@@ -1,7 +1,11 @@
-# Kanban: Drag-and-Drop Status Changes
-
-**Issue:** bd-3okv
-**Date:** 2026-02-12
+---
+title: 'Kanban: Drag-and-Drop Status Changes'
+date: 2026-02-12
+description: 'Replaces the per-card status dropdown in the board view with drag-and-drop between status sections using `@dnd-kit`, so a card''s position alone shows its status.'
+braid:
+  strand: bd-3okv
+  priority: P2
+---
 
 ## Overview
 

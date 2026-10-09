@@ -1,9 +1,14 @@
-# reveal.js: linked shared assets instead of inlined output
+---
+title: 'reveal.js: linked shared assets instead of inlined output'
+date: 2026-06-10
+description: 'Switches reveal.js output from inlining all assets into each `slides.html` to linking shared assets via the artifact path `format: html` uses, so decks on one website stop duplicating the reveal core.'
+status: draft  # DRAFT — iterating on the plan. **Do not implement until the user gives the go-ahead.**
+braid:
+  strand: bd-jij5gge2
+  priority: P1
+---
 
-**Strand:** bd-jij5gge2
 **Related:** bd-bea550b0 (reveal Phase 2), bd-kjrpya2d (embed-in-preview — blocked by this)
-**Date:** 2026-06-10
-**Status:** DRAFT — iterating on the plan. **Do not implement until the user gives the go-ahead.**
 
 > This is a first draft meant for discussion. Open questions are called out
 > inline as **\[Q-n\]**; design decisions we still need to make are in

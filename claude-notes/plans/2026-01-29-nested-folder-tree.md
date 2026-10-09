@@ -1,8 +1,11 @@
-# Nested Collapsible Folder Tree for FileSidebar
+---
+title: 'Nested Collapsible Folder Tree for FileSidebar'
+date: 2026-01-29
+description: 'Replaces the flat directory grouping in the FileSidebar with a nested folder tree built by a pure utility module, where each folder expands and collapses independently.'
+status: done
+---
 
 **Issue**: kyoto-cvr
-**Created**: 2026-01-29
-**Status**: Complete
 
 ## Overview
 

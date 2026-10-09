@@ -1,9 +1,17 @@
-# Single-file `q2 preview`: transitive sibling-dependency resolution
+---
+title: 'Single-file `q2 preview`: transitive sibling-dependency resolution'
+date: 2026-06-16
+description: 'Makes single-file `q2 preview` populate its in-browser virtual file system with the deck''s full transitive closure of included files and images, reusing the renderer''s own include expansion so resolution cannot drift from `q2 render`.'
+status: draft  # plan for review — *not yet approved for implementation.*
+braid:
+  strand: bd-9cyza5vy
+  priority: P2
+  labels: [preview]
+---
 
 **Strand:** bd-9cyza5vy · **Follows:** bd-kpuweafo (direct images), bd-ggvq1j68
 (`_brand.yml`), bd-tnm3k (no-walk single-file mode)
 **Design doc this refines:** `2026-06-16-single-file-preview-vfs-bootstrapping.md`
-**Status:** plan for review — *not yet approved for implementation.*
 
 ## Goal
 

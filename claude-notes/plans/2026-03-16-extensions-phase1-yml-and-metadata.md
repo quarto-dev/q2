@@ -1,7 +1,10 @@
-# Extensions Phase 1: \_extension.yml Parsing and Metadata Contributions
+---
+title: 'Extensions Phase 1: `_extension.yml` Parsing and Metadata Contributions'
+date: 2026-03-16
+description: 'Parses `_extension.yml` files into an extension data model and merges their format metadata into project and document configuration as a new layer in the metadata merge order.'
+status: done  # Complete (all phases done; 1.6 format-resources deferred)
+---
 
-**Created**: 2026-03-16
-**Status**: Complete (all phases done; 1.6 format-resources deferred)
 **Parent Plan**: `claude-notes/plans/2026-03-16-extensions-grand-plan.md`
 
 ## Codebase Context for New Agents

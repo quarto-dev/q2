@@ -1,12 +1,14 @@
-# Phase 3 — Navbar / page-footer project integration
+---
+title: 'Phase 3 — Navbar / page-footer project integration'
+date: 2026-04-24
+description: 'Brings navbar and page-footer into the project model, rewriting their `.qmd` hrefs to `.html`, enriching bare-path items with titles, and marking the active navbar item.'
+status: in-progress  # Decisions 1–8 confirmed 2026-04-24 after design iteration. Implementation in progress.
+---
 
-**Date:** 2026-04-24
 **Beads:** to be filed (parent `bd-0tr6`; blocked-by `bd-9svl` Phase 2 —
 closed).
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-24-websites-phase-2.md`
-**Status:** Decisions 1–8 confirmed 2026-04-24 after design iteration.
-Implementation in progress.
 
 ## Goal of this phase
 

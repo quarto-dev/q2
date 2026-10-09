@@ -1,4 +1,11 @@
-# k-87 SourceInfo::default() Audit - 2025-11-21 Refresh
+---
+title: 'k-87 SourceInfo::default() Audit - 2025-11-21 Refresh'
+date: 2025-11-21
+description: 'Re-counts the 109 uses of `SourceInfo::default()` across the workspace, sorting them into test, legitimate-by-design and unverified groups, with a checklist of documentation and verification to-dos.'
+braid:
+  strand: k-87
+  priority: P1
+---
 
 ## Current State
 Total instances: **109** (up from original 43)

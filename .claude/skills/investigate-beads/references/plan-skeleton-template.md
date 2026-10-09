@@ -2,13 +2,24 @@
 
 Copy the body below into `claude-notes/plans/YYYY-MM-DD-<slug>.md` and fill it in. The plan **is a skeleton, not a finished plan** — phases are draft headings; the design questions section is where the real thinking still has to happen with the user.
 
-```markdown
-# <Issue title> (bd-XXXX)
+The front matter `title:`, `date:` and `description:` (one plain sentence on
+what the work is) are required: the plans listing
+(`claude-notes/plans/index.md`) reads them, and the title block renders the
+title, so the body has no `#` heading. Single-quote the title (double any `'`
+inside it) so backslash escapes reach the markdown parser unchanged.
 
-**Date:** YYYY-MM-DD
-**Beads:** bd-XXXX
+```markdown
+---
+title: '<Issue title> (bd-XXXX)'
+date: YYYY-MM-DD
+description: '<One sentence: the problem and the approach or outcome.>'
+status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+braid:
+  strand: bd-XXXX
+---
+
 **Worktree:** `.worktrees/<id>-<slug>` (branch `braid/<id>-<slug>`, based on `main` @ `<short-sha>`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 

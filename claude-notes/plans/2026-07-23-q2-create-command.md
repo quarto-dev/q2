@@ -1,8 +1,12 @@
-# `q2 create`: native CLI command (project website + artifact scaffolding)
-
-**Strand:** bd-oa5kd2yr (related: bd-kuxzj8su, bd-0tr6)
-**Created:** 2026-07-23
-**Status:** draft — iterating with Carlos before execution
+---
+title: '`q2 create`: native CLI command (project website + artifact scaffolding)'
+date: 2026-07-23
+description: 'Implements the native `q2 create` command so `q2 create project website` scaffolds a website that renders immediately, reusing the existing scaffolding crate and laying down the artifact seam for future types.'
+status: draft  # draft — iterating with Carlos before execution
+braid:
+  strand: bd-oa5kd2yr  # related: bd-kuxzj8su, bd-0tr6
+  priority: P1
+---
 
 ## Overview
 

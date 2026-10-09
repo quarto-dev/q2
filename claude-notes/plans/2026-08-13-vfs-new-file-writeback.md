@@ -1,7 +1,10 @@
-# Write VFS-created files to disk under `--allow-edit` (WriteBack)
+---
+title: 'Write VFS-created files to disk under `--allow-edit` (WriteBack)'
+date: 2026-08-13
+description: 'Creates files on disk under `--allow-edit` when a guest makes a new file in the VFS, distinguishing them from deleted files by whether the hub has ever checkpointed that document.'
+status: done  # Complete — implemented and e2e-verified 2026-08-13 (bd-1kuiw7sx)
+---
 
-**Date:** 2026-08-13
-**Status:** Complete — implemented and e2e-verified 2026-08-13 (bd-1kuiw7sx)
 **Context:** In a `q2 preview --share --ui editor --allow-edit` session, a
 guest who creates a new file (New File dialog / asset upload) gets a
 VFS-only document: `createFile` (`ts-packages/quarto-sync-client/src/client.ts:1255`)

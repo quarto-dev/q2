@@ -1,6 +1,10 @@
-# Research Plan: ipynb-filters in q2
+---
+title: 'Research Plan: ipynb-filters in q2'
+date: 2026-04-23
+description: 'Researches how q2 should implement Quarto 1''s ipynb-filters, proposing that the Jupyter engine run filter chains inside `markdown_for_file` so filter-modified metadata and headings reach project profiles, instead of a separate partition method.'
+status: draft  # Research — future work, not part of the TS engine extensions project
+---
 
-**Status:** Research — future work, not part of the TS engine extensions project
 **Depends on:** TS engine extensions (Plans 1a/1b/1c), native Jupyter engine, and the website-project pipeline (DocumentProfile checkpoint, two-pass orchestrator) already on `main`.
 **Supersedes:** an earlier draft of this plan (in git history) that assumed Plans 1a/1b would ship a `partitioned_markdown` trait method and `PartitionedMarkdown` protocol message. That assumption was reversed during plan review on 2026-04-28; see "Why we changed approach" below. The earlier specifics are preserved in the file's git history if needed.
 

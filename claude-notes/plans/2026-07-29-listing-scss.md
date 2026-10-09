@@ -1,8 +1,14 @@
-# Vendor and integrate quarto-listing.scss (bd-57y4)
+---
+title: 'Vendor and integrate quarto-listing.scss (bd-57y4)'
+date: 2026-07-29
+description: 'Vendors Quarto 1''s `quarto-listing.scss` into the theme CSS bundle so listing cards, tables and category chips in Quarto 2 websites get their intended styling instead of browser defaults.'
+braid:
+  strand: bd-57y4
+  priority: P2
+---
 
 **Strand:** bd-57y4 (P2; discovered from L3 phase 7, bd-ml8z — see D5 in
 `claude-notes/plans/2026-05-06-listings-L3-resolve-transform.md`)
-**Created:** 2026-07-29
 **Branch:** `braid/bd-57y4-listing-scss` (based on the blog-scaffold
 branch, PR #434 — independent code, but the blog scaffold is the natural
 e2e fixture)

@@ -1,8 +1,14 @@
-# Syntax highlighting — Phase 3.5: native user grammars + filter-authored spans + documentation fixtures
+---
+title: 'Syntax highlighting — Phase 3.5: native user grammars + filter-authored spans + documentation fixtures'
+date: 2026-04-20
+description: 'Adds end-to-end CLI tests for native user grammars, filter-authored highlight spans, and `theme: none` behavior, using fixtures that double as future user documentation.'
+status: draft  # planned 2026-04-20
+braid:
+  strand: bd-n7x2  # overall syntax-highlighting epic
+  priority: P2
+---
 
 - **Parent plan**: `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`
-- **Beads**: bd-n7x2 (overall syntax-highlighting epic)
-- **Status**: planned 2026-04-20
 
 ## Why this phase exists
 

@@ -1,9 +1,15 @@
-# Heading identifiers are not disambiguated across include boundaries (bd-duplicate-heading-ids-mou5z7ux)
+---
+title: 'Heading identifiers are not disambiguated across include boundaries (bd-duplicate-heading-ids-mou5z7ux)'
+date: 2026-08-18
+description: 'Disambiguates heading ids that repeat when one fragment is included several times, using a scoped pass after include expansion that matches Quarto 1''s numbering for repeated includes.'
+status: done  # **MERGED AND CLOSED.** PR #546 merged to `main` as `736d595a` (2026-08-18); strand bd-duplicate-heading-ids-mou5z7ux closed; origin strand br-duplicate-heading-ids-ye3j3gkr (connect-docs skein) commented — its verification against the full docs port waits on the next q2 release. Open follow-ups: **bd-4qjl87ax** (engine-output headings), **bd-8wf5brc8** (duplicate explicit-id diagnostic).
+braid:
+  strand: bd-duplicate-heading-ids-mou5z7ux
+  priority: P2
+  labels: [markdown]
+---
 
-**Date:** 2026-08-18
-**Braid:** bd-duplicate-heading-ids-mou5z7ux (p2, bug, label `markdown`)
 **Checkout:** main checkout, branch `main` \@ `4eaede00` at investigation time (implementation branch TBD)
-**Status:** **MERGED AND CLOSED.** PR #546 merged to `main` as `736d595a` (2026-08-18); strand bd-duplicate-heading-ids-mou5z7ux closed; origin strand br-duplicate-heading-ids-ye3j3gkr (connect-docs skein) commented — its verification against the full docs port waits on the next q2 release. Open follow-ups: **bd-4qjl87ax** (engine-output headings), **bd-8wf5brc8** (duplicate explicit-id diagnostic).
 
 ## Design decisions (user-aligned, 2026-08-18)
 

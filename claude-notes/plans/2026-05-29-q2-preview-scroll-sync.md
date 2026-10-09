@@ -1,4 +1,11 @@
-# q2-preview scroll sync (bd-9kzfi)
+---
+title: 'q2-preview scroll sync (bd-9kzfi)'
+date: 2026-05-29
+description: 'Adds editor-to-preview scroll sync for the q2-preview renderer by stamping source-line `data-loc` attributes on block elements and wiring the iframe scroll handle, matching the HTML preview''s behavior.'
+braid:
+  strand: bd-9kzfi
+  priority: P1
+---
 
 ## Overview
 

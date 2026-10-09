@@ -1,4 +1,8 @@
-# Automerge-Backed Project Set Storage
+---
+title: 'Automerge-Backed Project Set Storage'
+date: 2026-03-31
+description: 'Moves the per-browser project list into a synced Automerge project set document so the list follows the user across browsers, with IndexedDB keeping only a pointer to it.'
+---
 
 ## Overview
 

@@ -1,4 +1,11 @@
-# k-211: Fix Document-Level Source Mapping
+---
+title: 'k-211: Fix Document-Level Source Mapping'
+date: 2025-10-26
+description: 'Fixes `parseRustQmdDocument()` returning an AnnotatedParse with empty source by making original-offset MappedStrings substrings of per-file top-level strings, keeping all offsets in one coordinate system.'
+braid:
+  strand: k-211
+  priority: P0
+---
 
 **Issue:** `parseRustQmdDocument()` returns AnnotatedParse with empty source (start=0, end=0, source.value='')
 

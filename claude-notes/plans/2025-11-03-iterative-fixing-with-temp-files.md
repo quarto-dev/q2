@@ -1,6 +1,9 @@
-# Iterative Fixing with Temporary Files for qmd-syntax-helper
+---
+title: 'Iterative Fixing with Temporary Files for qmd-syntax-helper'
+date: 2025-11-03
+description: 'Has `qmd-syntax-helper` apply every fix to a temporary copy of each file on each pass, so in-place and printed-output modes share one convergence loop and the original file is written only at the end.'
+---
 
-**Date**: 2025-11-03
 **Issue**: test_div_whitespace_conversion failing due to parser only reliably detecting one error at a time
 **Approach**: Global iteration using temporary files as working copies
 

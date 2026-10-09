@@ -1,9 +1,15 @@
-# Sidebar `contents: <dir>` shorthand only recognizes `index.qmd` (bd-sidebar-dir-index-md-5khf3lds)
+---
+title: 'Sidebar `contents: <dir>` shorthand only recognizes `index.qmd` (bd-sidebar-dir-index-md-5khf3lds)'
+date: 2026-08-19
+description: 'Makes the sidebar `contents: <dir>` shorthand recognize an `index.md` landing page, not only `index.qmd`, by resolving the directory''s index by file stem, so the section header links to it and it leaves the child list.'
+status: approved  # Design questions answered by user 2026-08-19 — approved for TDD implementation. See "Design decisions" below.
+braid:
+  strand: bd-sidebar-dir-index-md-5khf3lds
+  priority: P2
+  labels: [navigation]
+---
 
-**Date:** 2026-08-19
-**Braid:** bd-sidebar-dir-index-md-5khf3lds
 **Branch:** `main` \@ `f387bd68` (investigation committed in place; no worktree created)
-**Status:** Design questions answered by user 2026-08-19 — approved for TDD implementation. See "Design decisions" below.
 
 ## Triage verdict
 

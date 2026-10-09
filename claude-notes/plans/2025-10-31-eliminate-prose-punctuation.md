@@ -1,8 +1,11 @@
-# Grammar Issue: emphasis_delimiter Captures Adjacent Whitespace
+---
+title: 'Grammar Issue: emphasis_delimiter Captures Adjacent Whitespace'
+date: 2025-10-31
+description: 'Documents a tree-sitter grammar bug where `emphasis_delimiter` nodes absorb neighboring spaces, so `x *y* z` loses its Space nodes and the output differs from Pandoc''s structure.'
+status: draft  # Documented - Needs Grammar Fix
+---
 
-**Date**: 2025-10-31
 **Discovered During**: Implementation of `pandoc_emph` handler
-**Status**: Documented - Needs Grammar Fix
 
 ## Problem
 

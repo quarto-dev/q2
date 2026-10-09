@@ -1,4 +1,8 @@
-# Editor boot URL for `q2 preview --join` guests (skip project-set setup)
+---
+title: 'Editor boot URL for `q2 preview --join` guests (skip project-set setup)'
+date: 2026-08-07
+description: 'Lets `q2 preview --join` guests land in the shared editor by fetching the host''s boot details from the config endpoint and building the same ephemeral share URL the host uses.'
+---
 
 Strand: bd-7htq16rx
 

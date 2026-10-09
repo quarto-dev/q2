@@ -1,7 +1,12 @@
-# Suppress the Q-5-12 render-scripts warning in `q2 preview`
-
-**Strand:** bd-pq72bplh (caused-by bd-w348iu63) — closed 2026-08-08
-**Status:** done — PR #472 merged to main (`958d331f`); strand closed.
+---
+title: 'Suppress the Q-5-12 render-scripts warning in `q2 preview`'
+date: 2026-08-08
+description: 'Stops the render-scripts warning from appearing in `q2 preview`, where pre-render scripts already run at boot, by passing the host kind into the shared render path so the hub browser keeps it.'
+status: done  # done — PR #472 merged to main (`958d331f`); strand closed.
+braid:
+  strand: bd-pq72bplh  # caused-by bd-w348iu63 — closed 2026-08-08
+  priority: P2
+---
 
 ## Overview
 

@@ -1,4 +1,8 @@
-# LSP Outline: Include Cross-Referenceable Elements
+---
+title: 'LSP Outline: Include Cross-Referenceable Elements'
+date: 2026-04-17
+description: 'Adds figures, theorems, tables and equations with cross-reference IDs to the LSP document outline by running the render pipeline up to crossref resolution, so their numbering matches the rendered output.'
+---
 
 Beads: `bd-ascs`
 

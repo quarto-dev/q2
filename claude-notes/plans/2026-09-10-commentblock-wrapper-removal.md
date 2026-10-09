@@ -1,12 +1,18 @@
-# q2-preview: remove `CommentBlock`\'s per-block wrapper `<div>` (bd-q2wqj24c)
+---
+title: 'q2-preview: remove `CommentBlock`\''s per-block wrapper `<div>` (bd-q2wqj24c)'
+date: 2026-09-10
+description: 'Removes the wrapper `div` that `CommentBlock` adds around each block in q2-preview, so theme rules using direct child selectors match `q2 render` again, by moving comment bubbles into a shared body-level layer.'
+status: done  # Implemented and verified 2026-09-10 (Phases 0–5; only the changelog entry and the push remain). Committed on the PR #670 branch.
+braid:
+  strand: bd-q2wqj24c
+  priority: P2
+  labels: [parity, preview-renderer]
+---
 
-**Date:** 2026-09-10
-**Braid:** bd-q2wqj24c (P2 bug; labels `parity`, `preview-renderer`)
 **Branch:** `feature/bd-kltzdhle-hub-client-default-q2-preview` — the branch under
 PR #670 (https://github.com/quarto-dev/q2/pull/670). No worktree; the work is
 designed and done in the main checkout and pushed to that branch so it merges
 through #670 (user's instruction, 2026-09-10).
-**Status:** Implemented and verified 2026-09-10 (Phases 0–5; only the changelog entry and the push remain). Committed on the PR #670 branch.
 **Precursor:** `2026-09-10-commentblock-overlay-handoff.md` (the previous
 session's recommendation). This plan re-verifies it and narrows it in three
 places (see "What the code looks like today").

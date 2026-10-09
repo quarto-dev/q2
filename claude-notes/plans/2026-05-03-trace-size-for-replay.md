@@ -1,9 +1,14 @@
-# Manage trace size for use as replay/regression-test fixtures (bd-5qnj)
+---
+title: 'Manage trace size for use as replay/regression-test fixtures (bd-5qnj)'
+date: 2026-05-03
+description: 'Shrinks trace files, which are dominated by repeated document AST snapshots, by dropping pretty-printing and compressing and deduplicating snapshots so traces stay small enough to check in as regression fixtures.'
+status: approved  # Design aligned with user 2026-05-03. Ready to implement on user go-ahead. See "Resolved design decisions" below.
+braid:
+  strand: bd-5qnj
+  priority: P2
+---
 
-**Date:** 2026-05-03
-**Beads:** bd-5qnj
 **Worktree:** `.worktrees/5qnj-trace-size` (branch `beads/5qnj-trace-size`, based on `main` \@ `2b954d75`)
-**Status:** Design aligned with user 2026-05-03. Ready to implement on user go-ahead. See "Resolved design decisions" below.
 
 ## Triage verdict
 

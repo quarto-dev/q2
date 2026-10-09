@@ -1,6 +1,9 @@
-# Name Handling Architecture Fixes for quarto-citeproc
+---
+title: 'Name Handling Architecture Fixes for quarto-citeproc'
+date: 2025-11-28
+description: 'Catalogs the architectural gaps in `quarto-citeproc` name formatting, such as missing name-part support, string-only output and absent suffix and particle handling, that block many CSL conformance tests.'
+---
 
-**Date**: 2025-11-28
 **Parent Issue**: k-422 (CSL Conformance)
 **Related Issue**: (to be created)
 

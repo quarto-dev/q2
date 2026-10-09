@@ -1,7 +1,12 @@
-# bd-fpys25b0 — Diagnosis: "12 hub-client block-editing e2e specs red since rich-text default-on"
+---
+title: 'bd-fpys25b0 — Diagnosis: "12 hub-client block-editing e2e specs red since rich-text default-on"'
+date: 2026-06-25
+description: 'Investigates why twelve hub-client block-editing end-to-end specs went red once rich-text editing became the default, finding the failure already fixed by a global preference pin plus a registration-order fragility.'
+braid:
+  strand: bd-fpys25b0  # discovered-from bd-9x3zbuj8
+  priority: P2
+---
 
-**Strand:** bd-fpys25b0 (discovered-from bd-9x3zbuj8)
-**Date:** 2026-06-25
 **Checkout:** main \@ `c64e391e`
 **Author of investigation:** session reproduction + static trace
 

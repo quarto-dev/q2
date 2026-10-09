@@ -1,4 +1,8 @@
-# Plan: TypeScript Module to Convert quarto-markdown-pandoc JSON to AnnotatedParse
+---
+title: 'Plan: TypeScript Module to Convert quarto-markdown-pandoc JSON to AnnotatedParse'
+date: 2025-10-23
+description: 'Plans a TypeScript module in `ts-packages/rust-qmd-json/` that converts `quarto-markdown-pandoc` JSON metadata into quarto-cli `AnnotatedParse` structures, mapping each Meta variant directly without reconstructing text.'
+---
 
 ## Problem Statement
 

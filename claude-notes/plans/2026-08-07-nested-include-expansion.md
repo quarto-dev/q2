@@ -1,8 +1,12 @@
-# Nested include expansion: expand `{{< include >}}` inside container blocks
-
-**Strand:** bd-1fz3vh99 (discovered-from bd-qpvoamvu)
-**Status:** approved 2026-08-07 — implementation in progress on
-branch `braid/bd-1fz3vh99-includes-nested-inside-container`
+---
+title: 'Nested include expansion: expand `{{< include >}}` inside container blocks'
+date: 2026-08-07
+description: 'Expands `{{< include >}}` shortcodes wherever a block list appears, such as fenced divs, block quotes, list items and table cells, instead of silently dropping them inside containers.'
+status: in-progress  # approved 2026-08-07 — implementation in progress on branch `braid/bd-1fz3vh99-includes-nested-inside-container`
+braid:
+  strand: bd-1fz3vh99  # discovered-from bd-qpvoamvu
+  priority: P1
+---
 
 ## Overview
 

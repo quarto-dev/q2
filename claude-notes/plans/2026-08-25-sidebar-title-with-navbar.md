@@ -1,6 +1,13 @@
-# Suppress the sidebar title when the page has a navbar
+---
+title: 'Suppress the sidebar title when the page has a navbar'
+date: 2026-08-25
+description: 'Suppresses a sidebar''s own `title:` when the page has a navbar, matching the Quarto 1 gate, while keeping `- section:` labels, and measures the blast radius across the Positron docs and this repo''s docs site.'
+braid:
+  strand: bd-sidebar-title-with-navbar-82wxow6m
+  priority: P3
+  labels: [navigation, parity]
+---
 
-**Strand:** `bd-sidebar-title-with-navbar-82wxow6m` (bug, p3, labels: `navigation`, `parity`)
 **Branch:** `braid/bd-sidebar-title-with-navbar-82wxow6m-sidebar-title-with-navbar`
 **Base:** `origin/main` \@ `c11aa0e4d` (rebased 2026-08-26; originally planned at `99e7db175`)
 **Worktree:** `.worktrees/workspace-3`

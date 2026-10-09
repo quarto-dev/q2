@@ -1,4 +1,8 @@
-# Attribution Lua host binding (Option B)
+---
+title: 'Attribution Lua host binding (Option B)'
+date: 2026-05-15
+description: 'Exposes the attribution sidecar to Lua filters as a `quarto.attribution.*` host binding, so filters can look up a node''s author without storing attribution data on the AST.'
+---
 
 ## Overview
 

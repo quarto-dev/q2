@@ -1,6 +1,9 @@
-# Plan: Whole-book request for Typst, PDF and EPUB (pandoc-request R9)
+---
+title: 'Plan: Whole-book request for Typst, PDF and EPUB (pandoc-request R9)'
+date: 2026-10-02
+description: 'Makes a browser download of a book''s typst, PDF or EPUB target render the whole book in one request, mirroring native chapter merging and per-chapter captures, with a chapter-only option kept alongside.'
+---
 
-**Date:** 2026-10-02
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D3, D10, D8.5); book machinery: [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) (§6 pause/resume, §11, which this phase reverses for the download/PDF path)
 **Depends on:** R7 stages 0-1 (landed), R3 (captures) and R8 (`inline-table-css`, in the finishing list), R6 (snapshot and prefetch, landed), R4/R5, PR #782 (`bd-7ansf9cq`, chapter-relative images in single-file books; to be merged before R9 executes), and `bd-a16sy7c1` (the merged typst/EPUB book emits no heading for a chapter's front-matter `title:`, which Quarto 1 does; assumed fixed, being worked in workspace-2, where it lives in `merge_book_chapters`, so request and native get it identically; must be in the tree before R9's parity tests, or those tests compare two outputs that both lack the headings and pass vacuously for title-only chapters). **Unblocks:** the book entries of host H5 (menu wording, progress, per-chapter captures); H8's PDF chain needs no change for a book.

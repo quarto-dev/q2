@@ -1,8 +1,11 @@
-# PR Preparation Plan (REVISED): Extract crates/ Changes from kyoto to 2025-10-21
+---
+title: 'PR Preparation Plan (REVISED): Extract crates/ Changes from kyoto to 2025-10-21'
+date: 2025-10-21
+description: 'Describes a selective checkout of only the `crates/` directory from the work branch onto a clean base, excluding `private-crates/` and root-level files, for an upstream pull request.'
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 
-**Date**: 2025-10-21
 **Goal**: Extract ONLY `crates/` changes from `kyoto` branch to `2025-10-21` branch for PR to quarto-dev/quarto-markdown
 
 **Key Constraint**: NO `private-crates/` changes should be transferred (those stay in the private repo only)

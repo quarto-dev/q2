@@ -1,12 +1,17 @@
-# Home-link relativization for sidebar title + navbar brand
+---
+title: 'Home-link relativization for sidebar title + navbar brand'
+date: 2026-04-30
+description: 'Makes the sidebar title and navbar brand links point to the site root relative to the current page, since the sidebar title hardcodes `./` and reloads the current directory from nested pages.'
+status: draft  # Diagnosis + plan draft. Pending user review before implementation.
+braid:
+  strand: bd-jgeu
+  priority: P1
+---
 
-**Date:** 2026-04-30
 **Beads:** `bd-jgeu` (bug, P1) — title widened to cover the navbar
 brand as well; see "Scope expansion" below.
 **Discovered-from:** `bd-swpy` (sibling — same root-cause family).
 **Parent:** `bd-0tr6` (website epic).
-**Status:** Diagnosis + plan draft. Pending user review before
-implementation.
 
 ## Symptom
 

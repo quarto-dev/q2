@@ -1,9 +1,14 @@
-# Frontmatter YAML parse error: Q-0-99, internal path in title, whole-block span (bd-x30aq7ae)
+---
+title: 'Frontmatter YAML parse error: Q-0-99, internal path in title, whole-block span (bd-x30aq7ae)'
+date: 2026-10-08
+description: 'Replaces the internal-path `Q-0-99` diagnostic for malformed frontmatter with a located YAML syntax error, using the precise position that `quarto-yaml` now reports.'
+status: done  # Implemented on this branch (2026-10-08). See § Decisions and § Implementation log.
+braid:
+  strand: bd-x30aq7ae
+  priority: P2
+---
 
-**Date:** 2026-10-08
-**Braid:** bd-x30aq7ae
 **Branch:** `braid/bd-x30aq7ae-frontmatter-yaml-error-code` (topic branch in the main checkout, based on `main` @ `3d3360ab6`)
-**Status:** Implemented on this branch (2026-10-08). See § Decisions and § Implementation log.
 
 ## Triage verdict
 

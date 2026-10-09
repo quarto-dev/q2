@@ -1,8 +1,11 @@
-# Q-2-27 Comprehensive Test Cases Plan
+---
+title: 'Q-2-27 Comprehensive Test Cases Plan'
+date: 2025-11-20
+description: 'Plans a fuller set of test cases for the line break before shortcode close error, covering naked, quoted and numeric parameters, key-value attributes and mixed content before the `>}}` delimiter.'
+status: draft  # Planning
+---
 
-**Date**: 2025-11-20
 **Error Code**: Q-2-27 - Line Break Before Shortcode Close
-**Status**: Planning
 
 ## Background
 

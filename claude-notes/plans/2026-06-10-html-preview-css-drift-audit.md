@@ -1,13 +1,14 @@
-# q2 preview: audit HTML preview CSS for the render-drift class (bd-4b7f1hr7)
+---
+title: 'q2 preview: audit HTML preview CSS for the render-drift class (bd-4b7f1hr7)'
+date: 2026-06-10
+description: 'Audits whether the HTML preview''s theme CSS and math rendering diverge from `q2 render`, finding that KaTeX is pinned differently on each side and proposing a version pin and a sync test.'
+status: done  # DONE (2026-06-10) — all phases complete, full `cargo xtask verify` green on branch `beads/bd-4b7f1hr7-q2-preview-audit-html` (stacked on PR #271's `feature/revealjs-render-preview-convergence`). Not pushed. Follow-up strands: bd-izs62xci (SCSS compiler split), bd-sm314r1x (math engine divergence).
+braid:
+  strand: bd-4b7f1hr7
+  priority: P2
+---
 
-**Date:** 2026-06-10
-**Braid:** bd-4b7f1hr7
 **Checkout:** room-2 main checkout, branch `main` \@ `e628a18f` (investigation committed here; implementation stacks on `feature/revealjs-render-preview-convergence`, PR #271 — decided \[Q1\])
-**Status:** DONE (2026-06-10) — all phases complete, full `cargo xtask verify`
-green on branch `beads/bd-4b7f1hr7-q2-preview-audit-html` (stacked on PR
-#271's `feature/revealjs-render-preview-convergence`). Not pushed. Follow-up
-strands: bd-izs62xci (SCSS compiler split), bd-sm314r1x (math engine
-divergence).
 
 ## Triage verdict
 

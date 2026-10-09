@@ -1,4 +1,8 @@
-# Tree-sitter Corpus CRLF Parity Check — Design
+---
+title: 'Tree-sitter Corpus CRLF Parity Check — Design'
+date: 2026-04-29
+description: 'Adds a step to `cargo xtask verify` that reruns the tree-sitter corpus tests against a CRLF-converted copy of the grammar, checking that parses and errors stay identical under Windows line endings.'
+---
 
 ## Context
 

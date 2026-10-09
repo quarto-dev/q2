@@ -1,4 +1,8 @@
-# Plan B: Pipeline Wiring + Template (quarto-core crate)
+---
+title: 'Plan B: Pipeline Wiring + Template (quarto-core crate)'
+date: 2026-04-01
+description: 'Wires the Lua `quarto.doc` API into the quarto-core render pipeline so that HTML dependencies and text includes reach the final HTML, using a `FilterOutput` struct and template placeholders.'
+---
 
 ## Status: Complete (+ Phase 8 pullback for WASM script safety)
 

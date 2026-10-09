@@ -1,7 +1,12 @@
-# `q2 create`: blog scaffold (`website:blog`)
+---
+title: '`q2 create`: blog scaffold (`website:blog`)'
+date: 2026-07-29
+description: 'Adds the `blog` project choice to `q2 create`, porting Quarto 1''s blog template with binary post images and a date-sorted listing, and fixes three listing gaps the scaffold exposed.'
+braid:
+  strand: bd-r1by4u2a  # discovered-from bd-oa5kd2yr
+  priority: P3
+---
 
-**Strand:** bd-r1by4u2a (discovered-from bd-oa5kd2yr)
-**Created:** 2026-07-29
 **Parent plan:** `claude-notes/plans/2026-07-23-q2-create-command.md` (the `q2 create` foundation — artifact seam, JSON mode, writer — all landed; this strand only adds the blog choice)
 
 ## Overview

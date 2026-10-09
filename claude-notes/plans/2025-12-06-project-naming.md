@@ -1,8 +1,12 @@
-# Project Naming Investigation
-
-**Beads issue**: k-3n95
-**Status**: In progress
-**Date**: 2025-12-06
+---
+title: 'Project Naming Investigation'
+date: 2025-12-06
+description: 'Weighs candidate names for the Rust port of Quarto against cultural fit and package registry and GitHub availability, so the port cannot be confused with Pandoc.'
+status: draft  # In progress
+braid:
+  strand: k-3n95
+  priority: P2
+---
 
 ## Problem Statement
 

@@ -1,4 +1,8 @@
-# Plan: pico-quarto-render HTML Template Integration
+---
+title: 'Plan: pico-quarto-render HTML Template Integration'
+date: 2025-11-25
+description: 'Extends `pico-quarto-render` to produce complete HTML documents by embedding templates with `include_dir`, converting document metadata into template values, and building the full template context.'
+---
 
 ## Overview
 

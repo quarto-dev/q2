@@ -1,9 +1,14 @@
-# q2-preview: consolidate per-block edit chrome into one pop-up toolbar
+---
+title: 'q2-preview: consolidate per-block edit chrome into one pop-up toolbar'
+date: 2026-07-13
+description: 'Merges the per-block edit chrome in the q2-preview into one pop-up `EditToolbar` holding the rich and plain toggle, formatting marks and a type indicator, replacing the clipped left-margin label.'
+braid:
+  strand: bd-igpm0xur
+  priority: P2
+---
 
-**Date:** 2026-07-13
 **Area:** `ts-packages/preview-renderer/src/q2-preview` (the q2-preview iframe UI,
 bundled by both hub-client's preview pane and `q2-preview-spa`).
-**Tracking:** bd-igpm0xur
 
 ## Overview
 

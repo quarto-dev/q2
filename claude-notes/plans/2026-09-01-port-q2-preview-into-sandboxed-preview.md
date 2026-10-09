@@ -1,4 +1,8 @@
-# Port q2-preview functionality into q2-sandboxed-preview
+---
+title: 'Port q2-preview functionality into q2-sandboxed-preview'
+date: 2026-09-01
+description: 'Brings the full `q2-preview` renderer to the cross-origin sandboxed preview by reusing the preview-renderer package unmodified and replacing same-origin asset, scroll-sync and clipboard access with service-worker and postMessage paths.'
+---
 
 ## Overview
 

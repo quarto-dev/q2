@@ -1,8 +1,14 @@
-# GH #420 — rich-text editor loses focus on incoming CRDT changes
+---
+title: 'GH #420 — rich-text editor loses focus on incoming CRDT changes'
+date: 2026-08-26
+description: 'Keeps the rich-text editor mounted and focused when remote CRDT changes shift text offsets above it, by re-anchoring the edit target during render instead of one render too late.'
+status: approved  # diagnosed + fix validated by prototype (2026-08-26); implementation pending (TDD)
+braid:
+  strand: bd-84ljmbaf
+  priority: P1
+---
 
-**Strand:** bd-84ljmbaf
 **Issue:** https://github.com/quarto-dev/q2/issues/420
-**Status:** diagnosed + fix validated by prototype (2026-08-26); implementation pending (TDD)
 
 ## Overview
 

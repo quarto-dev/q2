@@ -1,4 +1,8 @@
-# Merge new-react-renderer-stuff into main
+---
+title: 'Merge new-react-renderer-stuff into main'
+date: 2026-02-25
+description: 'Plans the merge of the React renderer and slides branch into `main`, resolving Rust, WASM and React conflicts and adding feature flags where old and new behavior differ.'
+---
 
 ## Overview
 Merge the React renderer and slide functionality from `new-react-renderer-stuff` branch into `main`, preserving both old and new functionality where conflicts exist.

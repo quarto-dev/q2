@@ -1,14 +1,15 @@
 ---
 title: "q2 preview live share over iroh (`--share` / `--join`)"
 date: 2026-08-03
-status: planned
+description: 'Adds `q2 preview --share` and `--join` so a remote guest can join a live preview session over an encrypted iroh peer-to-peer tunnel that proxies the host''s HTTP server.'
+status: approved  # planned
 branch: feature/preview-live-share (integration line; sub-tasks on braid/\<id>-\<slug>)
-braid: bd-yyoyvx91
+braid:
+  strand: bd-yyoyvx91
+  priority: P1
 design-input: user design doc "Creating q2 preview with iroh" (2026-08-03 session)
 verified: "file:line claims checked against ../iroh @ v1.0.3, ../iroh-tickets @ 1.0.0, ../samod, and this tree"
 ---
-
-# q2 preview live share over iroh
 
 Goal: "VS Code Live Share, but built into `q2`." A host runs
 `q2 preview --share` and gets a single join string; a guest runs

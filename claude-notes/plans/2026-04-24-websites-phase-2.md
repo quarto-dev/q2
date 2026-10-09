@@ -1,11 +1,13 @@
-# Phase 2 — Sidebar (data model, generate, render, template)
+---
+title: 'Phase 2 — Sidebar (data model, generate, render, template)'
+date: 2026-04-24
+description: 'Adds a left-column sidebar for website projects, configured under `website.sidebar` in `_quarto.yml`, with generate and render transforms, active-item highlighting, and selection of the sidebar that applies to each page.'
+status: approved  # Decisions confirmed 2026-04-24. Ready for implementation pending final go-ahead.
+---
 
-**Date:** 2026-04-24
 **Beads:** to be filed (parent `bd-0tr6`; blocked-by `bd-w5os` Phase 1 — closed).
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-23-websites-phase-1.md`
-**Status:** Decisions confirmed 2026-04-24. Ready for implementation
-pending final go-ahead.
 
 ## Goal of this phase
 

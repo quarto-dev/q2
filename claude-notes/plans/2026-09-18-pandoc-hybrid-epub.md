@@ -1,10 +1,11 @@
-# Plan: epub output format (pandoc-hybrid-writer follow-on)
+---
+title: 'Plan: epub output format (pandoc-hybrid-writer follow-on)'
+date: 2026-09-18
+description: 'Adds `epub` as an output format by reusing Pandoc''s own EPUB writer with Quarto defaults, math and chapter-splitting options, and a cover image forwarding allow-list, so no post-Pandoc compile step is needed.'
+status: approved  # This plan's Phase 1 core wiring may target `feature/pandoc-writer-hybrid` (the epic's integration branch) directly, in parallel with the epic's remaining P5/P6/P7 work — it does not need to wait for a `main` merge. The crossref/numbering verification bullet at the end of Phase 1 still needs P3/P6 landed first.
+---
 
 **Date:** 2026-09-20
-**Status:** This plan's Phase 1 core wiring may target `feature/pandoc-writer-hybrid` (the
-epic's integration branch) directly, in parallel with the epic's remaining P5/P6/P7 work — it
-does not need to wait for a `main` merge. The crossref/numbering verification bullet at the end
-of Phase 1 still needs P3/P6 landed first.
 **Design (authoritative, epic-side):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
 **Research (this follow-on):** [`../research/2026-09-18-typst-epub-pandoc-q1-inventory.md`](../research/2026-09-18-typst-epub-pandoc-q1-inventory.md) — Part 2 (pandoc's EPUB writer), Part 4 (Q1's epub format).
 **Sibling follow-on:** [`2026-09-18-pandoc-hybrid-typst.md`](2026-09-18-pandoc-hybrid-typst.md) — independent, no shared implementation work beyond the epic itself.

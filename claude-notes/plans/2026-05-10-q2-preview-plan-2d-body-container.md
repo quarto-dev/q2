@@ -1,8 +1,11 @@
-# Plan 2D — q2-preview body container + title block
+---
+title: 'Plan 2D — q2-preview body container + title block'
+date: 2026-05-10
+description: 'Adds the document body wrapper and title block to q2-preview, mirroring the HTML template''s markup so theme CSS selectors match real elements, including a React-side title for minimal mode.'
+status: approved  # Implementation plan
+---
 
-**Date:** 2026-05-10
 **Branch:** feature/q2-preview
-**Status:** Implementation plan
 **Milestone:** M2 polish. Closes the gap between q2-preview's bare-fragment output and the HTML pipeline's `#quarto-content > main.content#quarto-document-content` wrapper plus its `<header id="title-block-header">` document chrome, so theme CSS that targets `.page-layout-article`, `.content`, `body.fullcontent`, and `.quarto-title-block` selectors lands on real elements in the iframe DOM.
 
 ## Goal

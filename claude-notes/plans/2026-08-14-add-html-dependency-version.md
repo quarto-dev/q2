@@ -1,12 +1,15 @@
-# `add_html_dependency`: `version` unimplemented, and Q-11-1 fires once per call (bd-add-html-dependency-version-5tnub5ds)
+---
+title: '`add_html_dependency`: `version` unimplemented, and Q-11-1 fires once per call (bd-add-html-dependency-version-5tnub5ds)'
+date: 2026-08-14
+description: 'Implements the `version` field of `quarto.doc.add_html_dependency` so each version gets its own asset directory, and stops the Q-11-1 warning from repeating once per call.'
+status: done  # Implemented and verified 2026-08-14 (full `cargo xtask verify` green, all 14 steps). All design questions settled (§ Decisions, § Settled design). One follow-up remains: tell the connect-docs side to drop its `Q-11-1: level: off` suppression.
+braid:
+  strand: bd-add-html-dependency-version-5tnub5ds
+  priority: P3
+  labels: [lua]
+---
 
-**Date:** 2026-08-14
-**Braid:** `bd-add-html-dependency-version-5tnub5ds`
 **Branch:** `main` \@ `3ac596e0` (investigated in place; no worktree created)
-**Status:** Implemented and verified 2026-08-14 (full `cargo xtask verify`
-green, all 14 steps). All design questions settled (§ Decisions, § Settled
-design). One follow-up remains: tell the connect-docs side to drop its
-`Q-11-1: level: off` suppression.
 
 ## Triage verdict
 

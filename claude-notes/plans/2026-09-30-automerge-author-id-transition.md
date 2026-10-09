@@ -1,4 +1,8 @@
-# Plan: Transition quarto-hub from stable actor IDs to automerge author IDs
+---
+title: 'Plan: Transition quarto-hub from stable actor IDs to automerge author IDs'
+date: 2026-09-30
+description: 'Moves quarto-hub attribution from stable per-user actor IDs to automerge''s author metadata, so actor IDs go back to random per-document values, and history readers fall back to actor IDs for older changes.'
+---
 
 Date: 2026-09-30
 Status: Approved — in execution. Gordon's go-ahead given 2026-09-30,

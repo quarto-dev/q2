@@ -1,4 +1,8 @@
-# CSL Disambiguation Fixes Plan
+---
+title: 'CSL Disambiguation Fixes Plan'
+date: 2025-11-28
+description: 'Fixes the CSL disambiguation loop in `quarto-citeproc` by re-rendering after each method, expanding et-al names only as far as needed, and generating year suffixes for ambiguous citations.'
+---
 
 ## Analysis Summary
 

@@ -1,4 +1,8 @@
-# Plan: Add `document_served` effect to samod-core
+---
+title: 'Plan: Add `document_served` effect to samod-core'
+date: 2026-03-02
+description: 'Adds a one-time `document_served` event in samod-core, emitted when a document''s sync data is first sent to a remote peer, so the hub can audit which user received which document.'
+---
 
 ## Context
 

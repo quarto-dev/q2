@@ -1,4 +1,8 @@
-# Corpus Validation Workflow
+---
+title: 'Corpus Validation Workflow'
+date: 2025-11-14
+description: 'Defines a workflow for validating large `.qmd` corpora against the grammar, fixing documents whose first error carries a code, and triaging uncoded errors as possible grammar bugs or new error types.'
+---
 
 Date: 2025-11-14
 File: claude-notes/plans/2025-11-14-corpus-validation-workflow.md

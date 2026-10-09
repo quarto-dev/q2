@@ -1,4 +1,8 @@
-# Diagnose and fix `SourceInfo::eq` hotspot in hub-client preview
+---
+title: 'Diagnose and fix `SourceInfo::eq` hotspot in hub-client preview'
+date: 2026-04-22
+description: 'Investigates a hub-client preview hotspot in `SourceInfo` equality during JSON serialization, building a native profiling harness and replacing the linear-scan content dedup in the JSON writer with pointer-based dedup.'
+---
 
 Status: **approach locked in (Option 1) — implementation in progress on `perf/2026-04-22-json-sourcemap`**
 

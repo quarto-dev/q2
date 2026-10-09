@@ -1,4 +1,8 @@
-# Three-Phase Reconciliation Algorithm
+---
+title: 'Three-Phase Reconciliation Algorithm'
+date: 2026-01-15
+description: 'Replaces the single-pass greedy matching in reconciliation with three phases, exact hash matches first, then positional matches, then fallback, so inserted blocks and list items no longer steal original matches.'
+---
 
 ## Implementation Status
 

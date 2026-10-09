@@ -1,8 +1,12 @@
-# Plan: Source Location Resolution for quarto.warn/error (k-481)
-
-**Date:** 2025-12-03
-**Issue:** k-481 (quarto.warn/error element location doesn't work for original document elements)
-**Status:** IMPLEMENTED
+---
+title: 'Plan: Source Location Resolution for quarto.warn/error (k-481)'
+date: 2025-12-03
+description: 'Moves source location resolution for `quarto.warn` and `quarto.error` into Rust so diagnostics can point at original document elements, not only filter-created ones.'
+status: done  # IMPLEMENTED
+braid:
+  strand: k-481
+  priority: P1
+---
 
 ## Problem Summary
 

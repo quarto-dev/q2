@@ -1,9 +1,12 @@
-# Phase 6: Hub-Client Intelligence Subsystem
+---
+title: 'Phase 6: Hub-Client Intelligence Subsystem'
+date: 2026-01-20
+description: 'Adds an intelligence subsystem to hub-client that runs `quarto-lsp-core` through WASM to supply a document outline and diagnostics, unifying its diagnostic types with `quarto-error-reporting`.'
+status: draft  # Planning
+---
 
 **Parent Epic:** kyoto-7bf - Implement Quarto LSP server
 **Parent Plan:** `claude-notes/plans/2026-01-20-quarto-lsp.md`
-**Created:** 2026-01-20
-**Status:** Planning
 
 ## Overview
 

@@ -1,4 +1,8 @@
-# K-237: Citation Component Ordering Issue
+---
+title: 'K-237: Citation Component Ordering Issue'
+date: 2025-10-26
+description: 'Fixes the TypeScript converter so citation-id components of multi-citation `Cite` inlines are interleaved with their rendered content in source order rather than appended after all content.'
+---
 
 ## Problem
 

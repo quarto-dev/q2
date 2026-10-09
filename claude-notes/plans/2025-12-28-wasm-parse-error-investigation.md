@@ -1,4 +1,8 @@
-# WASM Parse Error Detection Investigation
+---
+title: 'WASM Parse Error Detection Investigation'
+date: 2025-12-28
+description: 'Investigates why WASM rendering misses parse errors: macros in `wasm-sysroot/stdio.h` turn `snprintf` into a constant, so the C shim never runs, and the fix is to declare the real functions.'
+---
 
 ## STATUS: FIXED ✓
 

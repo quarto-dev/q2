@@ -1,6 +1,9 @@
-# P5 — Port `margin-layout` (86 files, website-type project)
+---
+title: 'P5 — Port `margin-layout` (86 files, website-type project)'
+date: 2026-09-27
+description: 'Ports the 86-file `margin-layout` website fixture from Q1 into the smoke-all suite, triaging its failures into predicate bugs, real Typst rendering gaps, and fixture mistakes.'
+---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —
 read "Decided" items 7 and 8 first: this fixture is in scope, and it's deliberately
 sequenced *before* `orange-book-margin` (P9) so the struct-tree implementation gets

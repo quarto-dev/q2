@@ -1,4 +1,8 @@
-# Per-document fork/branch UI in hub-client
+---
+title: 'Per-document fork/branch UI in hub-client'
+date: 2026-07-24
+description: 'Experiment adding per-document fork and branch controls to hub-client, where forked branches live only in localStorage, can be edited in Monaco, and merge back into the synced document through a CRDT merge.'
+---
 
 ## Overview
 

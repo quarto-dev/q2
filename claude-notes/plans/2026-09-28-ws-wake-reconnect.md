@@ -1,4 +1,8 @@
-# Force-reconnect the sync WebSocket on wake and network change
+---
+title: 'Force-reconnect the sync WebSocket on wake and network change'
+date: 2026-09-28
+description: 'Force-reconnects the hub-client and preview sync WebSocket after laptop sleep, wake, or a network change, since a silently dropped connection otherwise leaves live updates stale until a page refresh.'
+---
 
 This plan deliberately avoids heartbeats: it is client-only, has no hub or
 protocol change, and covers the common triggers at the cost of the

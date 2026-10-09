@@ -1,4 +1,8 @@
-# Plan: Add `cargo xtask dev-setup` subcommand
+---
+title: 'Plan: Add `cargo xtask dev-setup` subcommand'
+date: 2026-03-18
+description: 'Adds a `cargo xtask dev-setup` command that installs the Cargo-based developer tools, nextest and wasm-pack, skipping any already present and printing Windows test notes.'
+---
 
 ## Overview
 

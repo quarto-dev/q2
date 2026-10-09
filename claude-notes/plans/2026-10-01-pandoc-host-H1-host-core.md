@@ -1,6 +1,9 @@
-# Plan: Host core (pandoc-host H1)
+---
+title: 'Plan: Host core (pandoc-host H1)'
+date: 2026-10-01
+description: 'Builds the DOM-free `@quarto/pandoc-host` package that runs pandoc.wasm in command mode, mounting the share tree and request files under limits and path rules, with a checksum-verified download script and wasm tests in CI.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (Contracts, D2, D4, D6, Who owns what)
 **Depends on:** H0 (command-mode result); request R1's first task (the published `pandoc-request.schema.json` and golden). **Unblocks:** H2, H4.

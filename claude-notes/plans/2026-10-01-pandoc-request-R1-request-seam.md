@@ -1,6 +1,9 @@
-# Plan: The PandocRequest seam (pandoc-request R1)
+---
+title: 'Plan: The PandocRequest seam (pandoc-request R1)'
+date: 2026-10-01
+description: 'Splits the `PandocWriteStage` run into a pure prepare step that returns a serializable `PandocRequest` and a native-only execute step, so the request can cross out of the pipeline.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (Target architecture, Contracts, D3, D11, D12)
 **Depends on:** R0 (recommendation, constants file, capture wrapper); host H0 passed (human checkpoint). **Unblocks:** R2, host H1.

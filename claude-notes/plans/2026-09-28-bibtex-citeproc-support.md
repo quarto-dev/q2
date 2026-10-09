@@ -1,10 +1,14 @@
-# pampa citeproc loads CSL-JSON bibliographies only — no BibTeX (.bib) support (bd-l6eh1635)
+---
+title: 'pampa citeproc loads CSL-JSON bibliographies only — no BibTeX (.bib) support (bd-l6eh1635)'
+date: 2026-09-28
+description: 'Adds BibTeX `.bib` reading to pampa''s citeproc bibliography loader, translating entries into the same canonical references that CSL-JSON produces, so the citeproc filter and book merges accept `.bib` files.'
+status: done  # All four phases landed 2026-09-28 (see per-phase results below). Workspace green throughout; ready for review/push.
+braid:
+  strand: bd-l6eh1635
+  priority: P2
+---
 
-**Date:** 2026-09-28
-**Beads:** bd-l6eh1635
 **Worktree:** `.worktrees/workspace-6` (branch `braid/bd-l6eh1635-bibtex-citeproc`, based on `main` @ `e8379cfe1fa68a99c29b45093b87f35d02bb5d0c`)
-**Status:** All four phases landed 2026-09-28 (see per-phase results below). Workspace
-green throughout; ready for review/push.
 
 ## Triage verdict
 

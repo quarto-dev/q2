@@ -1,4 +1,8 @@
-# Migrate samod: `quarto-dev/samod@q2` → `quarto-dev/samod@access-policy`
+---
+title: 'Migrate samod: `quarto-dev/samod@q2` → `quarto-dev/samod@access-policy`'
+date: 2026-07-01
+description: 'Ports the vendored samod fork used by the hub from the `q2` branch to the `access-policy` branch, adapting the synchronous `is_allowed` policy trait and bumping automerge from 0.8 to 0.10.'
+---
 
 ## Overview
 

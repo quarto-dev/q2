@@ -1,6 +1,9 @@
-# P7 — Port `override-orange-book` + `orange-book-lang`
+---
+title: 'P7 — Port `override-orange-book` + `orange-book-lang`'
+date: 2026-09-27
+description: 'Ports the `orange-book-lang` French localization fixture and the `override-orange-book` user-extension fixture, proving that a project-local extension overrides the vendored `orange-book` subtree end to end.'
+---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md)
 **Depends on:** P1, P6.
 **Worktree:** `workspace-5` (Track B, sequential after P6 — see epic's "Parallel

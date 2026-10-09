@@ -1,7 +1,11 @@
-# Plan: Apply div transforms to JSON input
-
-**Issue**: bd-31lk
-**Date**: 2026-02-05
+---
+title: 'Plan: Apply div transforms to JSON input'
+date: 2026-02-05
+description: 'Makes JSON input receive the definition-list and list-table div transforms that only QMD input gets, by extracting them into a `transform_divs` pass called from the binary entry point.'
+braid:
+  strand: bd-31lk
+  priority: P2
+---
 
 ## Overview
 

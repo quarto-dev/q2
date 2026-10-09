@@ -1,4 +1,8 @@
-# Fix Source Location Tracking in Recursive YAML Metadata Parsing
+---
+title: 'Fix Source Location Tracking in Recursive YAML Metadata Parsing'
+date: 2025-11-19
+description: 'Corrects source locations for warnings raised when a YAML metadata string such as an embedded `<script>` tag is re-parsed as Markdown, so diagnostics point at the real line in the source file.'
+---
 
 ## Problem Analysis
 

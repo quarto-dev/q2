@@ -27,3 +27,7 @@ project:
 
 website:
   title: "q2 claude-notes"
+  navbar:
+    left:
+      - href: plans/index.md
+        text: Plans

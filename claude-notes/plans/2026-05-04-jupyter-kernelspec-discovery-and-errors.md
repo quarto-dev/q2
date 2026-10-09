@@ -1,4 +1,8 @@
-# Jupyter kernelspec discovery: fix venv blindness, improve error messages
+---
+title: 'Jupyter kernelspec discovery: fix venv blindness, improve error messages'
+date: 2026-05-04
+description: 'Fixes Jupyter kernel discovery so kernels installed in Python virtualenvs are found, and makes the not-found error list the searched directories and available kernels, by patching runtimelib in a fork before upstreaming.'
+---
 
 ## Overview
 

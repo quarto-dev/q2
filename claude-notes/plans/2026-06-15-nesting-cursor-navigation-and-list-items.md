@@ -1,15 +1,16 @@
-# Nesting cursor — list-item surfaces & line-anchored navigation
+---
+title: 'Nesting cursor — list-item surfaces & line-anchored navigation'
+date: 2026-06-15
+description: 'Makes list items and definition bodies into editing surfaces, and changes arrow-key navigation to follow the caret''s source line, including skipping structural lines that hold no content.'
+status: approved  # Design settled across an extended review/brainstorm (2026-06-15). All cross-feature ambiguities resolved with the user (recorded in *Design decisions* below). TDD-first; checklist ready to execute.
+---
 
-**Date:** 2026-06-15
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
 **Builds on:**
 - `2026-06-14-nesting-cursor-ui-enhancements.md` (geometry snapshot §1, caret-aware nest-in §2,
   mode-aware highlight §3) — the substrate this plan refines.
 - `2026-06-15-breadcrumb-visual-design.md` — **run that first**; this plan is a successor that
   builds on the restyled chip (see *Sequencing* below).
-**Status:** Design settled across an extended review/brainstorm (2026-06-15). All cross-feature
-ambiguities resolved with the user (recorded in *Design decisions* below). TDD-first; checklist
-ready to execute.
 
 > **All cited production files live under `ts-packages/preview-renderer/src/q2-preview/`** unless a
 > path is given (e.g. `../framework/dispatch.tsx`, `crates/pampa/src/...`). Playwright acceptance

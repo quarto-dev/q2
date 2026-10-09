@@ -1,4 +1,8 @@
-# Plan: Built-in Extension — video
+---
+title: 'Plan: Built-in Extension — video'
+date: 2026-04-01
+description: 'Ports the TS Quarto `video` built-in extension, with its shortcode, companion filter and bundled VideoJS assets, to q2 on top of the Lua APIs that now exist.'
+---
 
 ## Status: Complete
 

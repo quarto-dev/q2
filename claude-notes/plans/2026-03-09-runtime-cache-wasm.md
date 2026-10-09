@@ -1,4 +1,8 @@
-# Plan: Runtime Cache — WASM/JS Implementation (Phase 3)
+---
+title: 'Plan: Runtime Cache — WASM/JS Implementation (Phase 3)'
+date: 2026-03-09
+description: 'Adds the WASM side of the runtime cache: an IndexedDB bridge in hub-client, a `WasmRuntime` implementation that calls it through wasm-bindgen, and vitest tests for the bridge.'
+---
 
 Parent plan: `claude-notes/plans/2026-03-09-runtime-cache.md`
 Prerequisite: `claude-notes/plans/2026-03-09-runtime-cache-rust.md` (must be completed first)

@@ -1,4 +1,8 @@
-# Plan: Fix JSON Serialization Ordering with Typed Structs
+---
+title: 'Plan: Fix JSON Serialization Ordering with Typed Structs'
+date: 2026-01-12
+description: 'Restores alphabetical key order in the pampa JSON writer, which became insertion order when `deno_core` enabled the `preserve_order` feature of `serde_json`, by using typed structs whose field declaration order fixes the output.'
+---
 
 **STATUS: COMPLETED**
 

@@ -1,7 +1,13 @@
-# Handoff: extract the YAML stack (`quarto-yaml` + `quarto-yaml-validation`)
+---
+title: 'Handoff: extract the YAML stack (`quarto-yaml` + `quarto-yaml-validation`)'
+date: 2026-06-29
+description: 'Hands off the extraction of `quarto-yaml` and `quarto-yaml-validation` into a standalone two-crate workspace repository published to crates.io, covering preconditions, repo layout, and the deferred error-code decision.'
+braid:
+  strand: bd-egcyeym9  # final phase of the diagnostics/YAML extraction epic
+  priority: P2
+  labels: [architecture, research]
+---
 
-**Strand:** bd-egcyeym9 (final phase of the diagnostics/YAML extraction epic)
-**Date:** 2026-06-29
 **Audience:** an agent picking this up cold. You should not need to read the
 session transcript — everything needed is here or in the linked docs.
 

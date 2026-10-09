@@ -1,6 +1,12 @@
-# k-259: Validation Error Architecture Redesign (v2)
+---
+title: 'k-259: Validation Error Architecture Redesign (v2)'
+date: 2025-10-27  # (Updated)
+description: 'Proposes a `ValidationDiagnostic` wrapper that keeps structured instance paths, schema paths and filename-based source ranges for validation errors, delegating text rendering to `DiagnosticMessage` and adding tailored JSON output.'
+braid:
+  strand: k-259
+  priority: P0
+---
 
-**Date**: 2025-10-27 (Updated)
 **Issue**: Redesign validation error architecture with wrapper type and filename-based locations
 **Priority**: 0 (Critical)
 **Parent**: k-253

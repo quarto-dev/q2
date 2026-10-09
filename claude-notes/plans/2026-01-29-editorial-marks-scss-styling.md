@@ -1,4 +1,8 @@
-# Editorial Marks SCSS Styling
+---
+title: 'Editorial Marks SCSS Styling'
+date: 2026-01-29
+description: 'Adds overridable SCSS variables and rules for editorial mark spans covering insertions, deletions, highlights and comments, so they are styled consistently and readable in both light and dark themes.'
+---
 
 ## Overview
 

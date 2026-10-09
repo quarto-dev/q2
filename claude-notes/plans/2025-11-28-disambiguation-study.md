@@ -1,6 +1,8 @@
-# CSL Disambiguation Study
-
-**Date**: 2025-11-28
+---
+title: 'CSL Disambiguation Study'
+date: 2025-11-28
+description: 'Studies the Haskell reference implementation of CSL disambiguation and proposes how `quarto-citeproc` should add names, given names, and year suffixes to ambiguous citations.'
+---
 
 ## Executive Summary
 

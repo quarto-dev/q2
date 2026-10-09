@@ -1,4 +1,8 @@
-# Block editing — Plan 2a: SourceInfo-value index + structural editability gate
+---
+title: 'Block editing — Plan 2a: SourceInfo-value index + structural editability gate'
+date: 2026-06-06
+description: 'Builds a `sourceIndex` in the preview that maps each rendered block to its untransformed AST node and reachability class, so a single structural lookup decides which blocks are editable without shared framework changes.'
+---
 
 **Date:** 2026-06-08
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)

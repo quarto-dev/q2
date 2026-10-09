@@ -1,9 +1,16 @@
-# `html_element` runaway: `<6.1` in prose swallows the document
+---
+title: '`html_element` runaway: `<6.1` in prose swallows the document'
+date: 2026-09-28
+date-modified: 2026-09-28
+description: 'Tightens the inline HTML scanner so that a `<` followed by a non-letter, as in `<6.1` in prose, no longer opens an HTML element that can run across blank lines and swallow later tables.'
+status: done  # implemented on `braid/bd-html-element-runaway-k1eo50h8-htmlelement-lexing-runs-away`; full `cargo xtask verify` green locally; PR open, awaiting CI + review
+braid:
+  strand: bd-html-element-runaway-k1eo50h8
+  priority: P2
+  labels: [diagnostics, markdown, parser]
+---
 
-**Status:** implemented on `braid/bd-html-element-runaway-k1eo50h8-htmlelement-lexing-runs-away`; full `cargo xtask verify` green locally; PR open, awaiting CI + review
-**Tracking issue:** bd-html-element-runaway-k1eo50h8
 **Owner:** cscheid
-**Last updated:** 2026-09-28
 **Precedents:** bd-j9cf (bare `<` as Str, `2026-05-18-bare-lt-as-str.md`),
 bd-ly83qewg (`< text` not html, `2026-08-07-angle-bracket-inner-whitespace.md`),
 bd-star-as-str-qigl02pz (flanking rules, `2026-09-25-star-as-str.md`)

@@ -1,7 +1,12 @@
-# HTML Comment Preservation in Incremental Writer
-
-**Beads issue:** `bd-1066`
-**Status:** Phases 1-4 complete
+---
+title: 'HTML Comment Preservation in Incremental Writer'
+date: 2026-02-09
+description: 'Investigates why HTML comments are lost when the incremental writer rewrites a block, since the parser drops them from the AST, and weighs ways to keep them in the tree.'
+status: in-progress  # Phases 1-4 complete
+braid:
+  strand: bd-1066
+  priority: P1
+---
 
 ## Problem Summary
 

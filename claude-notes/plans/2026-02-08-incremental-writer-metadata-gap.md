@@ -1,4 +1,8 @@
-# Fix: Incremental Writer Loses Blank Line Between Front Matter and First Block
+---
+title: 'Fix: Incremental Writer Loses Blank Line Between Front Matter and First Block'
+date: 2026-02-08
+description: 'Fixes the incremental writer dropping the blank line between YAML front matter and the first block, caused by comparing metadata with source positions and by a missing separator after metadata rewrites.'
+---
 
 ## Overview
 

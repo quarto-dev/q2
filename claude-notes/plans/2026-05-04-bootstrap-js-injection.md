@@ -1,7 +1,13 @@
-# Bootstrap JS Runtime Injection (HTML output)
+---
+title: 'Bootstrap JS Runtime Injection (HTML output)'
+date: 2026-05-04
+description: 'Vendors the Bootstrap 5.3.1 JavaScript bundle and injects it into HTML output whenever a Bootstrap theme is compiled, so interactive components like dropdowns work, but leaves it out of the hub-client preview.'
+status: approved  # Plan drafted, awaiting go-ahead.
+braid:
+  strand: bd-4eyf
+  priority: P1
+---
 
-**Status:** Plan drafted, awaiting go-ahead.
-**Beads:** bd-4eyf
 **Related prior work:** `claude-notes/plans/2026-05-04-includes-feature.md` (include-before-body, the closest analog for "inject content via the artifact pipeline").
 
 ## Goal

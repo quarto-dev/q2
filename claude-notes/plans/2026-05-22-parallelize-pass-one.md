@@ -1,6 +1,11 @@
-# Parallelize Pass-1 across project files
-
-**Issue:** bd-m7x9s — discovered from bd-9eltv (quarto-web profile).
+---
+title: 'Parallelize Pass-1 across project files'
+date: 2026-05-22
+description: 'Parallelizes Pass-1 profiling across the documents of a multi-file project using scoped threads and per-worker `pollster::block_on`, so the `?Send` pipeline stages stay unchanged and large sites like quarto-web render faster.'
+braid:
+  strand: bd-m7x9s  # discovered from bd-9eltv (quarto-web profile)
+  priority: P1
+---
 
 ## Overview
 

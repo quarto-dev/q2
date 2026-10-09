@@ -1,4 +1,8 @@
-# Plan 1b: @quarto/engine-host-deno (Deno harness)
+---
+title: 'Plan 1b: @quarto/engine-host-deno (Deno harness)'
+date: 2026-04-16
+description: 'Builds the Deno-side engine host, a TypeScript harness that receives framed requests, dispatches them concurrently across engines with per-engine serialization, and writes responses back to the Rust side.'
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** plan1a-protocol (Rust core: protocol types), **RTQ

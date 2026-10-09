@@ -1,15 +1,20 @@
-# Callout `title=` attribute is ignored; header shows the type name instead of the author's title (bd-callout-custom-title-dropped-9qi1p7iw)
+---
+title: 'Callout `title=` attribute is ignored; header shows the type name instead of the author''s title (bd-callout-custom-title-dropped-9qi1p7iw)'
+date: 2026-08-10
+description: 'Makes the `title=` attribute on callouts supply the header text, parsed as markdown inlines as Quarto 1 does, instead of the type name, and marks it as user-supplied for assistive technology.'
+status: done  # Implemented. All phases complete; workspace suite green (11471/11471). Verified end to end — see `observed-output.md`, "After".
+braid:
+  strand: bd-callout-custom-title-dropped-9qi1p7iw
+  priority: P1
+  labels: [parity]
+---
 
-**Date:** 2026-08-10
-**Braid:** `bd-callout-custom-title-dropped-9qi1p7iw` (P1, bug, label `parity`)
 **Origin strand:** `br-de85v0a8` — in the **connect-docs porting skein**, a
 *different* braid project. It does not resolve against the q2 skein; the
 q2-side strand above is the one to work.
 **Branch:** `braid/callout-title-attribute`, off `origin/main` \@ `b2b6100c`.
 (Investigated on `docs/feature-porting-process`; cherry-picked across once main
 was current.)
-**Status:** Implemented. All phases complete; workspace suite green
-(11471/11471). Verified end to end — see `observed-output.md`, "After".
 
 ## Triage verdict
 

@@ -1,4 +1,8 @@
-# Inline Note Definition Error Handling and Writer Refactoring
+---
+title: 'Inline Note Definition Error Handling and Writer Refactoring'
+date: 2025-11-04
+description: 'Proposes a `WriterError` type so the writers can report unsupported constructs, such as the `[^1]: text` note definitions that the native writer currently drops silently, instead of producing malformed output.'
+---
 
 Date: 2025-11-04
 File: claude-notes/plans/2025-11-04-inline-note-writer-error-handling.md

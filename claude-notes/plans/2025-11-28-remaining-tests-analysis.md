@@ -1,4 +1,8 @@
-# Remaining Tests Analysis - 2025-11-28
+---
+title: 'Remaining Tests Analysis - 2025-11-28'
+date: 2025-11-28
+description: 'Categorizes the failing CSL conformance tests in `quarto-citeproc` by root cause, such as the unparsed CITATIONS format, text-case on names, and year-suffix range collapsing, and ranks fixes by impact.'
+---
 
 **Current State**: 534/930 tests passing (57.4% coverage)
 **Previous**: 501 tests (added 33 quick wins from ignored tests)

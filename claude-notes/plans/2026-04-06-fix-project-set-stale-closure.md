@@ -1,4 +1,8 @@
-# Fix: New projects not added to Automerge project set (stale closure)
+---
+title: 'Fix: New projects not added to Automerge project set (stale closure)'
+date: 2026-04-06
+description: 'Fixes new projects missing from the synced project set by having callbacks in `App.tsx` read the latest project set state through refs instead of stale closures.'
+---
 
 ## Overview
 

@@ -1,9 +1,14 @@
-# DocumentProfile: comment summary for downstream tooling (GH #445)
+---
+title: 'DocumentProfile: comment summary for downstream tooling (GH #445)'
+date: 2026-08-25
+description: 'Adds editorial comment entries to the document profile so tooling can count and list outstanding comments per page, including unrendered pages, and surfaces the active page''s count to hub-client.'
+status: approved  # reviewed 2026-08-25 (open questions resolved — see §"Resolved decisions"); awaiting explicit go-ahead to execute.
+braid:
+  strand: bd-0rsk07il
+  priority: P2
+---
 
-**Strand:** bd-0rsk07il
 **GH issue:** https://github.com/quarto-dev/q2/issues/445
-**Status:** reviewed 2026-08-25 (open questions resolved — see
-§"Resolved decisions"); awaiting explicit go-ahead to execute.
 
 ## Overview
 

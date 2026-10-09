@@ -1,8 +1,12 @@
-# Quarto-Core Error Infrastructure Refactoring
-
-**Issue:** k-a2nw
-**Date:** 2025-12-28
-**Status:** In Progress
+---
+title: 'Quarto-Core Error Infrastructure Refactoring'
+date: 2025-12-28
+description: 'Replaces the string-based `QuartoError::Parse` in `quarto-core` with a structured `ParseError` that keeps pampa''s diagnostics and source context, so the CLI can print rich ariadne-style error snippets.'
+status: in-progress
+braid:
+  strand: k-a2nw
+  priority: P1
+---
 
 ## Problem Statement
 

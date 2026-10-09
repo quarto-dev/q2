@@ -1,10 +1,9 @@
-# Plan 8 — Include round-trip (TOMBSTONE — abandoned)
-
-**Status:** **Abandoned 2026-06-05.** No work to do; include round-trip is free
-under the node-edit architecture. This file is kept as a tombstone because
-\~30 references to "Plan 8" remain across the q2-preview plan family
-(Plans 1, 2a, 2b, 2c, 4, 6, 7g) and `research/2026-05-05-editable-custom-nodes.md`.
-Rather than sweep them all, this note explains what happened.
+---
+title: 'Plan 8 — Include round-trip (TOMBSTONE — abandoned)'
+date: 2026-05-04
+description: 'Records that the plan to wrap `{{< include >}}` expansions in a CustomNode was abandoned, because the splice-based write model already keeps include tokens verbatim and rejects edits inside included files.'
+status: abandoned  # **Abandoned 2026-06-05.** No work to do; include round-trip is free under the node-edit architecture. This file is kept as a tombstone because \~30 references to "Plan 8" remain across the q2-preview plan family (Plans 1, 2a, 2b, 2c, 4, 6, 7g) and `research/2026-05-05-editable-custom-nodes.md`. Rather than sweep them all, this note explains what happened.
+---
 
 ## What Plan 8 was
 

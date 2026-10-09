@@ -1,9 +1,14 @@
-# Pampa pandoc-oracle tests hard-fail on local pandoc newer than allowlist (bd-i9i5ad2t)
+---
+title: 'Pampa pandoc-oracle tests hard-fail on local pandoc newer than allowlist (bd-i9i5ad2t)'
+date: 2026-07-02
+description: 'Replaces the substring version check that makes pampa''s pandoc oracle tests hard-fail on newer local pandoc with a numeric range gate, an actionable failure message, and a `cargo xtask pandoc-check` command for bumping the calibrated range.'
+status: approved  # Design aligned 2026-07-02 — ready to implement (TDD). One prerequisite: bd-nj9nnkn1 (Windows clippy blocker) must be green for the final `cargo xtask verify`.
+braid:
+  strand: bd-i9i5ad2t
+  priority: P3
+---
 
-**Date:** 2026-07-02
-**Braid:** bd-i9i5ad2t
 **Worktree:** `.worktrees/bd-i9i5ad2t-pampa-pandoc-oracle-tests` (branch `braid/bd-i9i5ad2t-pampa-pandoc-oracle-tests`, based on `main` \@ `51cf3707`)
-**Status:** Design aligned 2026-07-02 — ready to implement (TDD). One prerequisite: bd-nj9nnkn1 (Windows clippy blocker) must be green for the final `cargo xtask verify`.
 
 ## Triage verdict
 

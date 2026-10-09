@@ -1,8 +1,11 @@
-# Plan 7f — Source-info prerequisites
+---
+title: 'Plan 7f — Source-info prerequisites'
+date: 2026-05-29
+description: 'Covers source-info hygiene for the provenance work, adding a strict JSON reader paired with a completing reader for outside input, deprecating `SourceInfo::default()`, and shorter wire-format key names.'
+status: done  # Landed. Source-info hygiene that shipped on the provenance branch.
+---
 
-**Date:** 2026-05-29
 **Branch:** feature/provenance
-**Status:** Landed. Source-info hygiene that shipped on the provenance branch.
 
 > **Scope note (2026-06-05).** This plan originally had four workstreams.
 > Two of them — *framework source_info preservation* (spreading `s:` through

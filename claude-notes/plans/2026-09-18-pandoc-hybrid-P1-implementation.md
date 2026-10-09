@@ -1,4 +1,9 @@
-# P1 — Implementation tasks & Test Seam Spec
+---
+title: 'P1 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+description: 'Task-by-task spec for the neutral core of the Pandoc hybrid writer, adding a `PipelineProfile` seam that replaces two ad hoc format checks and a `pptx` format identifier, each with named test seams.'
+status: approved  # Ready for subagent-driven execution. All nine tasks are dispatchable; none is blocked.
+---
 
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P1-neutral-core.md`](2026-08-20-pandoc-hybrid-P1-neutral-core.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
@@ -7,7 +12,6 @@
 P5 (needs the `Pandoc`-kind exclude-list decision — specifically that `panel-tabset`\'s sugar half
 stays enabled), P7 (needs the `PipelineProfile` seam), and P7-foundation (needs the B3
 shared-services segment).
-**Status:** Ready for subagent-driven execution. All nine tasks are dispatchable; none is blocked.
 
 This file converts P1's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P1 needs to a named

@@ -1,4 +1,8 @@
-# Plan: JSON Diagnostics Output for Metadata Warnings/Errors
+---
+title: 'Plan: JSON Diagnostics Output for Metadata Warnings/Errors'
+date: 2025-10-21
+description: 'Routes metadata parsing warnings and errors through the `--json-errors` flag as structured JSON instead of plain text on stderr, weighing a signature change to `qmd::read` against a diagnostic collector abstraction.'
+---
 
 <!-- quarto-error-code-audit-ignore-file -->
 

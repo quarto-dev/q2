@@ -1,6 +1,9 @@
-# Plan: Integration and parity net (pandoc-host H3)
+---
+title: 'Plan: Integration and parity net (pandoc-host H3)'
+date: 2026-10-01
+description: 'Connects the host to the real Rust request and proves its docx, typst, pptx and epub output equals native output, using a dev-only download harness, parity tests in Node and Chromium, and measured browser limits.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D12, Failure taxonomy)
 **Depends on:** H2; request R2 (`render_pandoc_request`, share-tree export). **Unblocks:** H5.

@@ -1,6 +1,11 @@
-# Plan: Make `cargo xtask verify` match CI checks
-
-**Beads issue**: `bd-3flm`
+---
+title: 'Plan: Make `cargo xtask verify` match CI checks'
+date: 2026-03-09
+description: 'Makes `cargo xtask verify` run the same checks as CI, including `-D warnings` for builds and tests, custom lints and tree-sitter grammar tests, so failures are caught before pushing.'
+braid:
+  strand: bd-3flm
+  priority: P1
+---
 
 ## Overview
 

@@ -1,4 +1,10 @@
-# P3 — Upstream Q1: crossref-numbering: external
+---
+title: 'P3 — Upstream Q1: crossref-numbering: external'
+date: 2026-08-20
+date-modified: 2026-09-18
+description: 'Proposes a backward-compatible quarto-cli change that separates assigning crossref numbers from presenting them, using two predicates, so Q2 can supply numbers while the vendored Q1 Lua stays verbatim.'
+status: draft  # Shape draft
+---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (round 4 review) — added a request to fold into this
 plan's upstream PR: expose P5's Route-N functions on `quarto.doc.crossref`/`quarto.utils`, since
@@ -23,7 +29,6 @@ claim with an exact per-branch breakdown, and resolved the fallback-policy aspir
 concrete recommendation.) **Also noted in round 4 review (2026-09-18): this plan's line-number
 citations should anchor to `if enableCrossRef then` instead, since P4's splice renumbers the
 site from `718` to `719` with no warning.**
-**Status:** Shape draft
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P3-implementation.md`](2026-09-18-pandoc-hybrid-P3-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 

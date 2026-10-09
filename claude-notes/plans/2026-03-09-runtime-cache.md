@@ -1,4 +1,8 @@
-# Plan: Add General Caching to SystemRuntime
+---
+title: 'Plan: Add General Caching to SystemRuntime'
+date: 2026-03-09
+description: 'Adds a general key-value cache to `SystemRuntime`, stored under `.quarto/cache` in native projects and in IndexedDB on WASM, so any subsystem can cache expensive results across renders.'
+---
 
 ## Overview
 

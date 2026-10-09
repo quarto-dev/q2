@@ -1,8 +1,12 @@
-# Editor image drag-drop: wrong relative path when .qmd is in a subdirectory
-
-**Strand:** bd-jzqswvh0
-**Status:** in progress (branch `braid/bd-jzqswvh0-image-drop-relative-path`)
-**Date:** 2026-07-15
+---
+title: 'Editor image drag-drop: wrong relative path when .qmd is in a subdirectory'
+date: 2026-07-15
+description: 'Fixes editor image and file drops so the inserted markdown path is relative to the current `.qmd` file''s directory instead of the project root, and defaults the upload destination to that directory.'
+status: in-progress  # in progress (branch `braid/bd-jzqswvh0-image-drop-relative-path`)
+braid:
+  strand: bd-jzqswvh0
+  priority: P1
+---
 
 ## Overview
 

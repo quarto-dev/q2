@@ -1,9 +1,15 @@
-# Rich-text (tiptap) block editor for q2-preview — feasibility plan
+---
+title: 'Rich-text (tiptap) block editor for q2-preview — feasibility plan'
+date: 2026-06-23
+description: 'Feasibility study for replacing the raw-markdown textarea in `q2 preview` block editing with a ProseMirror rich-text editor, where Quarto-specific constructs become atomic chips that round-trip to their exact source.'
+status: in-progress  # Phase 0 (spike) in progress — go-ahead given 2026-06-23.
+braid:
+  strand: bd-sjb4pzx8
+  priority: P2
+  labels: [block-editing, experiment]
+---
 
-**Date:** 2026-06-23
-**Strand:** bd-sjb4pzx8
 **Branch:** `braid/bd-sjb4pzx8-tiptap-rich-text-editor`
-**Status:** Phase 0 (spike) in progress — go-ahead given 2026-06-23.
 **Builds on / required reading:** `claude-notes/designs/2026-06-06-block-editing-design.md`
 (the master spec for the current editor), plus the boundary-splice
 (`2026-06-18/19`), track-me (`2026-06-13`), and glitch (`2026-06-15`→`18`) plans.

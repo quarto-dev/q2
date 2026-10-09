@@ -1,10 +1,11 @@
-# Plan 7 (root) — Native content-processor architecture for non-qmd engine inputs
+---
+title: 'Plan 7 (root) — Native content-processor architecture for non-qmd engine inputs'
+date: 2026-06-27  # (reframed 2026-07-08 as the 7-series root)
+description: 'Architecture root for the 7-series, defining a native, engine-agnostic content-processor registry that converts percent and spin scripts with precise source provenance and never launches an engine during project discovery.'
+status: approved  # ARCHITECTURE ROOT — this file no longer holds an execution checklist. The percent/spin work moved to **Plan 7b**; ipynb is **Plan 7c**; the withdrawn arbitrary-regex claim mechanism is **Plan 7a (tombstone)**.
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
-**Date:** 2026-06-27 (reframed 2026-07-08 as the 7-series root)
-**Status:** ARCHITECTURE ROOT — this file no longer holds an execution checklist. The percent/spin
-work moved to **Plan 7b**; ipynb is **Plan 7c**; the withdrawn arbitrary-regex claim mechanism is
-**Plan 7a (tombstone)**.
 
 > **History.** This plan originally scoped "native percent/spin conversion + precise SourceInfo" with
 > **two conversion paths** (native for built-ins, wire/Deno-side for TS engines via

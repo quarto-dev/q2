@@ -1,4 +1,12 @@
-# Resolve named footnote references `[^id]` (Span.quarto-note-reference)
+---
+title: 'Resolve named footnote references `[^id]` (Span.quarto-note-reference)'
+date: 2026-06-09
+description: 'Fixes named footnote references like `[^id]`, which the shared `FootnotesTransform` leaves as empty spans while dropping their definition text, so they resolve as ordinary footnotes.'
+braid:
+  strand: bd-po3gn41h
+  priority: P2
+  labels: [bug, footnotes]
+---
 
 **Strand:** bd-po3gn41h — "Named footnote refs `[^id]` never resolve
 (Span.quarto-note-reference left unresolved)."

@@ -1,4 +1,8 @@
-# Embed preview SPA bundles as tar.zst archives
+---
+title: 'Embed preview SPA bundles as tar.zst archives'
+date: 2026-08-13
+description: 'Embeds the preview viewer and editor bundles as one deterministic `tar.zst` archive each, decompressed lazily and gzip generated at runtime, to shrink the release binary by about 63 MiB.'
+---
 
 ## Overview
 

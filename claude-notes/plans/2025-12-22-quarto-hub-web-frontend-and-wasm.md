@@ -1,8 +1,11 @@
-# Quarto-Hub Web Frontend and WASM Rendering
+---
+title: 'Quarto-Hub Web Frontend and WASM Rendering'
+date: 2025-12-22
+description: 'Assesses whether a single-page quarto-hub web frontend can combine automerge collaboration with WASM builds of the pampa and quarto crates for live preview, centering on abstracting filesystem access.'
+status: draft  # Design Document / Assessment
+---
 
-**Date**: 2025-12-22
 **Related Issues**: k-0sdx (epic), k-nkhl (fs abstraction)
-**Status**: Design Document / Assessment
 
 ---
 

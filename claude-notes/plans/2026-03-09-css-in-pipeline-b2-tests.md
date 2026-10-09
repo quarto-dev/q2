@@ -1,4 +1,8 @@
-# Plan: CSS in Pipeline — Part B2: Theme Inheritance Tests (Phase 5)
+---
+title: 'Plan: CSS in Pipeline — Part B2: Theme Inheritance Tests (Phase 5)'
+date: 2026-03-09
+description: 'Adds end-to-end smoke tests and an `ensureCssRegexMatches` assertion that check theme CSS follows project, directory and document metadata inheritance across six fixture files on native and WASM.'
+---
 
 Parent plan: `claude-notes/plans/2026-03-09-css-in-pipeline.md`
 Prerequisite: `claude-notes/plans/2026-03-09-css-in-pipeline-a-core.md`

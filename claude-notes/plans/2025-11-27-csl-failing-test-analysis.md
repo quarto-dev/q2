@@ -1,7 +1,9 @@
-# CSL Failing Test Analysis
-
-**Created**: 2025-11-27
-**Status**: Analysis complete, ready for implementation
+---
+title: 'CSL Failing Test Analysis'
+date: 2025-11-27
+description: 'Groups the ignored CSL conformance tests into issue categories such as prefix and suffix ordering, HTML in CSL-JSON fields and flip-flop formatting, then ranks those categories by implementation priority.'
+status: approved  # Analysis complete, ready for implementation
+---
 
 ## Overview
 

@@ -1,8 +1,13 @@
-# Process improvement: end-to-end verification before declaring "done"
+---
+title: 'Process improvement: end-to-end verification before declaring "done"'
+date: 2026-04-20
+description: 'Proposes a `CLAUDE.md` rule that features count as done only after being exercised through the real binary and their output inspected, because passing tests missed a pipeline branch that dropped syntax highlighting.'
+braid:
+  strand: bd-469o  # discovered-from bd-n7x2
+  priority: P1
+---
 
-- **Date**: 2026-04-20
 - **Author**: Claude, at user request
-- **Beads**: bd-469o (discovered-from bd-n7x2)
 
 ## Motivation
 

@@ -1,8 +1,12 @@
-# Lua Filter Diagnostics Implementation Plan
-
-**Date:** 2025-12-03
-**Issue:** k-480 (Implement quarto.warn() and quarto.error() Lua functions)
-**Status:** ✅ COMPLETED (with one known issue tracked in k-481)
+---
+title: 'Lua Filter Diagnostics Implementation Plan'
+date: 2025-12-03
+description: 'Describes adding `quarto.warn()` and `quarto.error()` so Lua filters can emit diagnostics with source locations from the call stack, and notes that element-attached locations only work for filter-created elements.'
+status: done  # ✅ COMPLETED (with one known issue tracked in k-481)
+braid:
+  strand: k-480
+  priority: P1
+---
 
 **Related:**
 - [Filter Diagnostics Analysis](./2025-12-02-filter-diagnostics-analysis.md)

@@ -1,4 +1,8 @@
-# Per-Project Actor ID via Server-Secret HMAC
+---
+title: 'Per-Project Actor ID via Server-Secret HMAC'
+date: 2026-03-22
+description: 'Replaces the globally stable SHA-256 actor ID with a per-project HMAC keyed by a server secret, so the same user cannot be correlated across Hub projects through Automerge document history.'
+---
 
 ## Overview
 

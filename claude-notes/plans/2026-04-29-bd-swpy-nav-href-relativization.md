@@ -1,11 +1,15 @@
-# Fix `bd-swpy` — Sidebar/navbar/footer/page-nav hrefs not relativized to current page
+---
+title: 'Fix `bd-swpy` — Sidebar/navbar/footer/page-nav hrefs not relativized to current page'
+date: 2026-04-29
+description: 'Sidebar, navbar, footer and page-nav links are emitted relative to the project root rather than the current page, so they 404 from pages in subdirectories; the plan threads the page-relative resolver used for body links through the navigation helper.'
+status: draft  # Diagnosis + plan draft. Pending user review before implementation.
+braid:
+  strand: bd-swpy
+  priority: P1
+---
 
-**Date:** 2026-04-29
-**Beads:** `bd-swpy` (bug, P1).
 **Discovered-from:** `bd-2jwk` (website example projects).
 **Parent:** `bd-0tr6` (website epic, closed).
-**Status:** Diagnosis + plan draft. Pending user review before
-implementation.
 
 ## Symptom
 

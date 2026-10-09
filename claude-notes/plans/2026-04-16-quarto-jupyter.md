@@ -1,4 +1,8 @@
-# Plan 3: @quarto/api/jupyter
+---
+title: 'Plan 3: @quarto/api/jupyter'
+date: 2026-04-16
+description: 'Implements the `@quarto/api/jupyter` namespace as a TypeScript port of the Quarto 1 notebook-to-markdown conversion, covering output formatting, figure files and widget dependencies the Julia engine calls.'
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plan 2A (the `@quarto/api` package skeleton). Phases 3A-3D and 3F otherwise independent, **except** `assets()` (Phase 3D) consumes the `PlatformHost.fs.walk` seam op that **Plan 1b** owns (interface member + `denoHost` impl, in lockstep) — **already landed** on the integration line (see *Platform dependencies*). Phase 3E (wiring into engine-host) targets `buildQuartoAPI` — the assembly that **Plan 2 Phase A** landed inside the `@quarto/engine-host-deno` package (the package itself was created by Plan 1b). Both have landed.

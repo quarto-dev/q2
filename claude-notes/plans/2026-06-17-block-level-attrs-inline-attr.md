@@ -1,8 +1,13 @@
-# Block-level attributes via collected trailing `Inline::Attr`
-
-**Strand:** bd-itqcfxc3 (discovered-from bd-38ioql41)
-**Date:** 2026-06-17
-**Status:** in progress — JSON-writer keystone landed (see Progress below)
+---
+title: 'Block-level attributes via collected trailing `Inline::Attr`'
+date: 2026-06-17
+description: 'Carries block-level attributes such as `{.class}` on paragraphs from the parser through the JSON transport to HTML and React, by collecting a trailing inline attribute into the block.'
+status: in-progress  # in progress — JSON-writer keystone landed (see Progress below)
+braid:
+  strand: bd-itqcfxc3  # discovered-from bd-38ioql41
+  priority: P2
+  labels: [pampa]
+---
 
 ## Progress
 

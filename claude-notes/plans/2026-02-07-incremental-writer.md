@@ -1,8 +1,14 @@
-# Incremental QMD Writer
+---
+title: 'Incremental QMD Writer'
+date: 2026-02-07
+description: 'Designs an incremental writer for pampa that turns localized AST edits into localized edits of the QMD source, rewriting only changed blocks and keeping the rest of the text verbatim.'
+status: in-progress  # Phases 0-4 COMPLETE — all property tests passing, WASM export + sync client integration done
+braid:
+  strand: bd-2t4o
+  priority: P1
+---
 
-**Beads issue:** `bd-2t4o`
 **Parent plan:** `claude-notes/plans/2026-02-06-ast-sync-client-api.md` (Phase 2)
-**Status:** Phases 0-4 COMPLETE — all property tests passing, WASM export + sync client integration done
 **Branch:** `feature/incremental-writer`
 
 ## Resumption Notes

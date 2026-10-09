@@ -1,6 +1,12 @@
-# bd-oejuizi9 — declaration-site resolution for theme / include-\* config paths
+---
+title: 'bd-oejuizi9 — declaration-site resolution for theme / include-\* config paths'
+date: 2026-08-19
+description: 'Resolves `include-in-header`, `include-before-body`, `include-after-body` and `theme` paths against the declaring config file rather than each document''s directory, so project-wide settings reach subdirectory pages.'
+braid:
+  strand: bd-oejuizi9
+  priority: P2
+---
 
-**Date:** 2026-08-19
 **Braid:** bd-oejuizi9 (in_progress). Also partially resolves bd-rdcvjy2s
 (leading-`/` for these keys) and GH #455.
 **Branch:** `feature/path-resolution-class` (dedicated to the path-resolution

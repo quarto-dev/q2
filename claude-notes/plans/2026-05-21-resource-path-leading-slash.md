@@ -1,4 +1,8 @@
-# Treat leading-`/` resource paths as project-root-relative
+---
+title: 'Treat leading-`/` resource paths as project-root-relative'
+date: 2026-05-21
+description: 'Makes leading-slash `project.resources` patterns in `_quarto.yml` resolve project-root-relative instead of filesystem-absolute, which currently fails the containment check during `q2 render` of quarto-web.'
+---
 
 ## Overview
 

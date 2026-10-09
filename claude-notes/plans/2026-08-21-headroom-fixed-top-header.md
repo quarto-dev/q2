@@ -1,9 +1,14 @@
-# Website header: headroom.js scroll-away + fixed-top parity (bd-ersobfbt)
+---
+title: 'Website header: headroom.js scroll-away + fixed-top parity (bd-ersobfbt)'
+date: 2026-08-21
+description: 'Ports Q1''s website header that hides on scroll-down and returns on scroll-up, pairing `headroom.js` with the JavaScript offset bookkeeping that keeps page content from sitting under the fixed header.'
+status: in-progress  # Implementation in progress on topic branch `braid/bd-ersobfbt-headroom-fixed-top` (off `main` \@ `587721bb`; investigation commits included). Started 2026-08-24.
+braid:
+  strand: bd-ersobfbt
+  priority: P3
+---
 
-**Date:** 2026-08-21
-**Braid:** bd-ersobfbt
 **Branch:** `main` \@ `587721bb` (investigated in the main checkout; no worktree created)
-**Status:** Implementation in progress on topic branch `braid/bd-ersobfbt-headroom-fixed-top` (off `main` \@ `587721bb`; investigation commits included). Started 2026-08-24.
 
 Reference material collected during the investigation:
 `claude-notes/plans/headroom-fixed-top-investigation/q1-headroom-reference.md`

@@ -1,4 +1,8 @@
-# Fix: First keystroke lost after selection in Monaco editor
+---
+title: 'Fix: First keystroke lost after selection in Monaco editor'
+date: 2026-04-02
+description: 'Fixes a lost first keystroke after selection in the hub-client Monaco editor, caused by an unstable `onChange` callback and a browser bug that drops input after backward selections.'
+---
 
 ## Overview
 

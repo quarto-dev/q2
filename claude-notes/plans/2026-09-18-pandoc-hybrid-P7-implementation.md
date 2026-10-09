@@ -1,4 +1,9 @@
-# P7 — Implementation tasks & Test Seam Spec
+---
+title: 'P7 — Implementation tasks & Test Seam Spec'
+date: 2026-09-18
+description: 'Breaks the docx and pptx output work into dispatchable implementation tasks, binds each test to a named production seam, and defines what the semantic extractor must preserve when comparing Office files.'
+status: approved  # Ready for subagent-driven execution.
+---
 
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P7-format-tail.md`](2026-08-20-pandoc-hybrid-P7-format-tail.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md) (§11 golden-capture strategy, §12 known limitations, §13 project-mode gate, §14 multi-format guardrail)
@@ -6,7 +11,6 @@
 **Research companion:** [`../research/2026-07-13-q1-format-typescript.md`](../research/2026-07-13-q1-format-typescript.md)
 **Sibling companions:** [`P1`](2026-09-18-pandoc-hybrid-P1-implementation.md), [`P2`](2026-09-18-pandoc-hybrid-P2-implementation.md), [`P3`](2026-09-18-pandoc-hybrid-P3-implementation.md), [`P4`](2026-09-18-pandoc-hybrid-P4-implementation.md), [`P5`](2026-09-18-pandoc-hybrid-P5-implementation.md), [`P6`](2026-09-18-pandoc-hybrid-P6-implementation.md), [`P7-foundation`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md) — prerequisites below cite their task numbers
 **Depends on:** **P7-foundation**, P1, P2, P4, P5 — **and P6**, for correct numbers in its golden (per the epic's graph). P7 is last.
-**Status:** Ready for subagent-driven execution.
 
 This document's tasks are numbered **4, 5, 6, 8, 9, 10, 11, 12**. Tasks 1, 2, 3, and 7 live in
 [`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md)

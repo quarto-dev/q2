@@ -1,4 +1,8 @@
-# Plan 4b: Shadow-Engine Feature Validation
+---
+title: 'Plan 4b: Shadow-Engine Feature Validation'
+date: 2026-07-01
+description: 'Validates engine-subsystem features that a single Julia render never exercises, using synthetic contending TypeScript test engines to make the resolution tier model observable and recording untestable limitations as notes.'
+---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plan 4 (Julia validation) — **✓ complete (2026-07-06); this plan

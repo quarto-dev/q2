@@ -1,8 +1,10 @@
-# Extension-subtree infrastructure: `xtask pull-extension-subtree` + bundled-payload discovery
+---
+title: 'Extension-subtree infrastructure: `xtask pull-extension-subtree` + bundled-payload discovery'
+date: 2026-09-23
+description: 'Adds an `xtask pull-extension-subtree` command and lets bundled extension payloads be discovered from a second builtin root, proven end to end with a fake extension.'
+status: done  # All three phases done. **Unblocked** — deliberately independent of the two external PRs ([quarto-dev/quarto-cli#14936](https://github.com/quarto-dev/quarto-cli/pull/14936), [PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)).
+---
 
-**Status:** All three phases done. **Unblocked** — deliberately independent of the two
-external PRs ([quarto-dev/quarto-cli#14936](https://github.com/quarto-dev/quarto-cli/pull/14936),
-[PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)).
 **Parent:** [2026-09-03-julia-engine-static-declarations-epic.md](2026-09-03-julia-engine-static-declarations-epic.md)
 — this plan is **Step 4's infrastructure, pulled out of the gated sequence**
 (Gordon, 2026-09-23: "I don't think we need to wait on implementation of the

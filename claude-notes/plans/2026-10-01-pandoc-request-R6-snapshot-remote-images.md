@@ -1,6 +1,9 @@
-# Plan: VFS snapshot and remote images (pandoc-request R6)
+---
+title: 'Plan: VFS snapshot and remote images (pandoc-request R6)'
+date: 2026-10-01
+description: 'Lets browser exports fetch remote images through a hardened fetch and a click-time VFS snapshot, so docx, pptx, epub and typst requests stay consistent while the live project keeps changing.'
+---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D5, Snapshot)
 **Depends on:** R2; R3's capture splice (the prefetch runs after it); R4 for the typst case. **Unblocks:** remote images in docx/pptx/epub/typst; typst documents with remote images stop failing (and host H8 can chain them).

@@ -1,6 +1,9 @@
-# Plan: Number-sections / `@sec-` foundation (book-projects P0)
+---
+title: 'Plan: Number-sections / `@sec-` foundation (book-projects P0)'
+date: 2026-09-21
+description: 'Adds `@sec-` reference resolution and visible heading numbers to the native HTML writer, plus a chapter seed that offsets section numbers and letters appendices, so book chapters can be numbered across files.'
+---
 
-**Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §10
 **Tracks:** `bd-5aklrxgi` ("Q2 has no number-sections / @sec- header-numbering implementation for any format") — scoped narrowly here to what book mode needs, not the strand's full original scope.

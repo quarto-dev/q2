@@ -1,8 +1,13 @@
-# hub-client: live `_brand.yml` change doesn't recompile preview CSS (AST/slides path)
-
-**Strand:** bd-4jjckvwt
-**Date:** 2026-06-22
-**Status:** diagnosis — awaiting go-ahead to implement
+---
+title: 'hub-client: live `_brand.yml` change doesn''t recompile preview CSS (AST/slides path)'
+date: 2026-06-22
+description: 'Fixes the hub-client slide preview so it recompiles theme CSS when a sibling `_brand.yml` changes, by adding the missing `fileContents` dependency to the AST-path re-render effect.'
+status: approved  # diagnosis — awaiting go-ahead to implement
+braid:
+  strand: bd-4jjckvwt
+  priority: P2
+  labels: [bug]
+---
 
 ## Symptom
 

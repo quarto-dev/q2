@@ -1,4 +1,8 @@
-# Reorder MetadataMergeStage Before EngineExecutionStage
+---
+title: 'Reorder MetadataMergeStage Before EngineExecutionStage'
+date: 2026-04-13
+description: 'Moves `MetadataMergeStage` ahead of `EngineExecutionStage` in the HTML pipeline so that project-level metadata such as `engine` is available when the engine is chosen.'
+---
 
 ## Overview
 

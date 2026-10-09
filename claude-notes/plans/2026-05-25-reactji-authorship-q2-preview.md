@@ -1,4 +1,8 @@
-# Reactji authorship-aware add/remove for q2-preview (`comment.tsx`)
+---
+title: 'Reactji authorship-aware add/remove for q2-preview (`comment.tsx`)'
+date: 2026-05-25
+description: 'Investigates whether authorship data reaches user render-component TSX in `q2 preview`, then makes clicking a reactji remove the viewer''s own contribution rather than always adding one.'
+---
 
 **Worktree:** `.worktrees/provenance-reactji-demo/` on `provenance-reactji-demo`, branched off `feature/provenance`.
 **Fixture:** `crates/quarto/tests/playwright-fixtures/q2-preview/render-components-comment/{render-components-comment.qmd, comment.tsx, _quarto.yml}` (copied verbatim from `~/docs/demo-playground/gordon/render-components/`; moved out of `smoke-all/` per the playwright-fixtures distinction documented in `claude-notes/instructions/testing.md`).

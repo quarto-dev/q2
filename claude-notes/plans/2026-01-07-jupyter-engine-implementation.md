@@ -1,8 +1,12 @@
-# Plan: Jupyter Engine Implementation
-
-**Issue**: k-kh5i
-**Date**: 2026-01-07
-**Status**: MVP Complete
+---
+title: 'Plan: Jupyter Engine Implementation'
+date: 2026-01-07
+description: 'Describes the native Rust Jupyter engine, implemented as an AST transform that runs code cells through kernels over ZeroMQ without the Python subprocess layer used by TypeScript Quarto.'
+status: done  # MVP Complete
+braid:
+  strand: k-kh5i
+  priority: P1
+---
 
 ## Overview
 

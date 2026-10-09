@@ -1,11 +1,14 @@
-# Enable rich-text editor in hub-client q2-preview (default ON)
+---
+title: 'Enable rich-text editor in hub-client q2-preview (default ON)'
+date: 2026-06-24
+description: 'Adds a default-on `richText` preference to hub-client, wired through the preview renderer with a Settings checkbox to opt out, so quarto-hub previews get the rich-text editor the standalone SPA already has.'
+status: done  # ✅ Implemented + verified (2026-06-24). Commits `a6f16a1e` (feature) and `b010dafe` (changelog). End-to-end on quarto-hub left to the user (see Phase 4). Not yet pushed.
+braid:
+  strand: bd-j1nto6eq  # discovered-from bd-sjb4pzx8
+  priority: P2
+---
 
-**Date:** 2026-06-24
-**Strand:** bd-j1nto6eq (discovered-from bd-sjb4pzx8)
 **Branch:** `braid/bd-sjb4pzx8-tiptap-rich-text-editor` (the rich-text feature branch; PR #335)
-**Status:** ✅ Implemented + verified (2026-06-24). Commits `a6f16a1e` (feature)
-and `b010dafe` (changelog). End-to-end on quarto-hub left to the user (see
-Phase 4). Not yet pushed.
 **Builds on / required reading:** the rich-text editor work (bd-sjb4pzx8),
 the caret-at-click + reset.css fixes (bd-q9lyghv2, bd-dg8x84bu), and the q2
 preview SPA default-on flip (commit 512907f7).

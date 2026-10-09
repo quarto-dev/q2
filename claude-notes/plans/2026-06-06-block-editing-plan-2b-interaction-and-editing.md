@@ -1,4 +1,8 @@
-# Block editing — Plan 2b: interaction model + editing (built-in + render-component)
+---
+title: 'Block editing — Plan 2b: interaction model + editing (built-in + render-component)'
+date: 2026-06-06
+description: 'Turns each editable block in `q2 preview` into its own click, touch, or keyboard target and wires both the markdown textarea and render-component editing through the source tree.'
+---
 
 **Date:** 2026-06-06 (revised 2026-06-08: built on Plan 2a's dual-node substrate;
 absorbed the former Plan 5 editability + Plan 6 render-component work;

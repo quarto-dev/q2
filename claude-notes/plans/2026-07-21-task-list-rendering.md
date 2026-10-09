@@ -1,8 +1,13 @@
-# Task-list rendering fix + interactive checkboxes (bd-obkvhlam)
+---
+title: 'Task-list rendering fix + interactive checkboxes (bd-obkvhlam)'
+date: 2026-07-21
+description: 'Fixes task-list items, which render as empty spans, by adding grammar, reader, and HTML writer support in Pandoc''s form, then makes the preview checkboxes edit the Markdown source when toggled.'
+braid:
+  strand: bd-obkvhlam  # rendering bug, this plan's core; also interactive-toggle feature strand (filed from this plan)
+  priority: P2
+  labels: [parity]
+---
 
-**Date:** 2026-07-21
-**Strands:** bd-obkvhlam (rendering bug, this plan's core), interactive-toggle
-feature strand (filed from this plan, see below)
 **Discovered from:** bd-eias3e39 audit
 
 ## Overview

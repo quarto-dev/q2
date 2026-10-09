@@ -1,6 +1,9 @@
-# Plan: Pass 3 — project-wide crossref registry (book-projects P5)
+---
+title: 'Plan: Pass 3 — project-wide crossref registry (book-projects P5)'
+date: 2026-09-21  # (revised after a critical review pass; renumbered from a prior draft's P6 — see the epic doc's revision history)
+description: 'Resolves cross-chapter `@ref` links in multi-file book HTML by pausing each chapter after the Navigation phase, building a project-wide crossref registry, then finishing every chapter without re-running its engines.'
+---
 
-**Date:** 2026-09-21 (revised after a critical review pass; renumbered from a prior draft's P6 — see the epic doc's revision history)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §8
 **Prior art:** `crates/quarto-core/src/crossref/index.rs`\'s own module doc (*"per-file indices can be persisted... and merged into a project-wide index... see Phase 4 of the design plan"*) and `claude-notes/plans/2026-04-15-crossref-design.md`\'s "Phase 4 — Multi-file foundations" section, whose own O8 explicitly deferred appendix numbering "to the book-projects session" — this epic.

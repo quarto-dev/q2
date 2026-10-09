@@ -1,4 +1,8 @@
-# Attribution: auto-inject viewer CSS/JS
+---
+title: 'Attribution: auto-inject viewer CSS/JS'
+date: 2026-05-14
+description: 'Automatically injects a small CSS and JavaScript viewer into HTML renders whenever attribution is active, replacing the copy-pasted overlay snippet, and shares the same CSS with the hub-client.'
+---
 
 ## Overview
 
