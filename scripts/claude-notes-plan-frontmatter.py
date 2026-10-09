@@ -192,6 +192,15 @@ def add_header_meta(it, skein, dry_run):
         if missing:
             notes.append(f"{field}: line not found verbatim: {missing[0][:60]!r}")
             return False
+        # The field must be complete: the line after its last line has to
+        # start something new (blank, another bold key, a heading), or a
+        # partial removal leaves a dangling continuation behind.
+        if lines:
+            nxt = header.index(lines[-1]) + 1
+            if nxt < len(header) and header[nxt].strip() and not re.match(
+                    r"\s*(?:[-*]\s+)?\*\*|#", header[nxt]) and header[nxt] not in lines:
+                notes.append(f"{field}: next line looks like a continuation: {header[nxt][:60]!r}")
+                return False
         return True
 
     fm_date = next((l.split(":", 1)[1].strip() for l in fm if l.startswith("date:")), None)

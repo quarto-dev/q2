@@ -4,6 +4,7 @@ date: 2026-06-06
 description: 'Turns each editable block in `q2 preview` into its own click, touch, or keyboard target and wires both the markdown textarea and render-component editing through the source tree.'
 ---
 
+**Date:** 2026-06-06 (revised 2026-06-08: built on Plan 2a's dual-node substrate;
 absorbed the former Plan 5 editability + Plan 6 render-component work;
 revised 2026-06-08b: two-channel API, discriminated payload, editTarget rect, test environments, Pass-2 exact deletions;
 revised 2026-06-09: usePreviewEdit hook for render-component authors; boundary section rewrite; backend guard clarification; isEditTarget + setEditTarget type fixes; hostProps note;

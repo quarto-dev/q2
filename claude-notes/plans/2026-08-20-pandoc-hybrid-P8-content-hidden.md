@@ -2,9 +2,9 @@
 title: 'P8 — content-hidden / when-format gating (verification, not a port)'
 date: 2026-08-20
 description: 'Verifies that existing `when-format` and `unless-format` conditional content gating behaves correctly for docx and pptx targets, adding a smoke fixture rather than porting the transform.'
-status: done  # All four tasks complete (2026-09-20). Tasks 1-3: 12 new tests (14 assertions, 11 pre-existing-hunk regression guards, 2 unit-level pre-existing-hunk guards, 1 cross-plan) added across `conditional_content.rs`, `format.rs`, `llms.rs`, and `tests/integration/conditional_content_pandoc.rs`; every row's named revert hunk was applied, confirmed RED, and restored. Task 4 (the docx/pptx smoke fixture) was unblocked once P7's Pandoc tail landed (commit `92b89e517`) and completed via `crates/quarto/tests/integration/conditional_content_pandoc_e2e.rs` (2 new E-tier tests against the real `q2` binary — see the implementation companion's Task 4 for the corrected file paths and the recorded end-to-end invocation). **This branch (`braid/pandoc-hybrid-p8-content-hidden`) forks from an unmerged P7 commit and cannot merge to `feature/pandoc-writer-hybrid` until P7 (`braid/pandoc-hybrid-p7-format-tail`) merges first.**
 ---
 
+**Date:** 2026-08-20  **Updated:** 2026-09-17 (two passes) — an epic-wide Opus review found this
 plan had no actual `- [ ]` checklist (contrary to the epic's blanket claim that every plan has
 one, and this repo's plan-file convention) and a latent cycle with P7 over the docx/pptx smoke
 fixture (each plan pointed at the other). Converted "Remaining shape" to a real checklist and
@@ -13,6 +13,17 @@ direction, see design doc §9). Also: the design doc §6 table gap this plan fla
 (landed in the same review pass, design doc commit `43c3326c2`) — updated the note below to say
 so instead of "still missing." (Prior pass, 2026-09-16: see "Status update" below; folded
 verification tasks into one section.)
+**Status:** All four tasks complete (2026-09-20). Tasks 1-3: 12 new tests (14 assertions,
+11 pre-existing-hunk regression guards, 2 unit-level pre-existing-hunk guards, 1 cross-plan)
+added across `conditional_content.rs`, `format.rs`, `llms.rs`, and
+`tests/integration/conditional_content_pandoc.rs`; every row's named revert hunk was applied,
+confirmed RED, and restored. Task 4 (the docx/pptx smoke fixture) was unblocked once P7's Pandoc
+tail landed (commit `92b89e517`) and completed via
+`crates/quarto/tests/integration/conditional_content_pandoc_e2e.rs` (2 new E-tier tests against
+the real `q2` binary — see the implementation companion's Task 4 for the corrected file paths
+and the recorded end-to-end invocation). **This branch (`braid/pandoc-hybrid-p8-content-hidden`)
+forks from an unmerged P7 commit and cannot merge to `feature/pandoc-writer-hybrid` until P7
+(`braid/pandoc-hybrid-p7-format-tail`) merges first.**
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P8-implementation.md`](2026-09-18-pandoc-hybrid-P8-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 

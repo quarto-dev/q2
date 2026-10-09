@@ -2,17 +2,16 @@
 title: 'L0 — `ListingItemInfo` profile extension (sub-plan)'
 date: 2026-05-05
 description: 'Adds a `listing_item` field to `DocumentProfile` as the single per-document store for listing data, with curated typed fields plus a scoped extra bag for custom template fields.'
-status: draft  # Draft. Awaiting implementation.
-braid:
-  strand: bd-n8a4  # parent epic bd-61cd
-  priority: P1
 ---
 
+**Date:** 2026-05-05
+**Beads:** `bd-n8a4`. Parent epic: `bd-61cd`
 (`claude-notes/plans/2026-05-05-listings-epic.md`).
 **Design rationale:**
 `claude-notes/plans/2026-05-05-listings-design-discussion.md`
 (see §"C5 — Named listing-item info object on the profile" and
 §"Why isn't full metadata already on `DocumentProfile`?").
+**Status:** Draft. Awaiting implementation.
 
 ## Goal of this phase
 
