@@ -141,10 +141,11 @@ fn default_listing_renders_three_posts_in_default_order() {
 
     let host = html_for(&outputs, "index");
 
-    // Listing wrapper Div with the auto-synthesized id and the
-    // data-listing-rendered marker.
+    // Listing wrapper Div with Q1's container id for the synthesized
+    // listing id (`listing-` + `listing`) and the data-listing-rendered
+    // marker.
     assert!(
-        host.contains(r#"id="listing""#),
+        host.contains(r#"id="listing-listing""#),
         "expected listing wrapper id; got:\n{}",
         host
     );
@@ -518,10 +519,12 @@ format: html
     });
 
     let host = html_for(&outputs, "index");
-    // The id should exist exactly once on a Div, with the
-    // data-listing-rendered marker, and the listing items live
-    // *inside* that Div (between Heading and After in source order).
-    assert!(host.contains(r#"id="my-blog""#));
+    // The slot is renamed to Q1's container id `listing-<id>`
+    // (bd-nbv80e33), carries the data-listing-rendered marker, and
+    // the listing items live *inside* it (between Heading and After
+    // in source order).
+    assert!(host.contains(r#"id="listing-my-blog""#), "{host}");
+    assert!(!host.contains(r#"id="my-blog""#), "{host}");
     assert!(host.contains(r#"data-listing-rendered="1""#));
     assert!(host.contains("First"));
     let p_heading = host.find("Heading").expect("Heading missing");

@@ -164,14 +164,24 @@ Other facts the design depends on:
 
 ### Phase 3 — Container id and classes
 
-- [ ] Tests: implicit container `#listing-<id>`; explicit slot renamed
+- [x] Tests: implicit container `#listing-<id>`; explicit slot renamed
       to `#listing-<id>`; both carry `quarto-listing` +
       `quarto-listing-container-<type>`; second pass stays idempotent;
+      ids `x` / `listing-x` don't capture each other's containers;
       llms view still finds the container.
-- [ ] Shared `container_id(listing_id)` helper used by
-      `listing_render.rs` and `llms.rs`.
-- [ ] Docs: `Q-12-4.qmd` (synth ids), `listing-templates.qmd` (what
-      built-in layouts emit) if it names the container id.
+- [x] `Listing::container_id()` used by `listing_render.rs` and
+      `llms.rs`; `ListingType::name()` replaces binding's private copy.
+- [x] Slot walk: rendered container (container id + marker) ⇒
+      AlreadyRendered; author slot = listing id, not a section, not a
+      rendered container.
+- [x] **Q-12-25 retired.** Its premise (listing and section claim one
+      anchor) disappears once the container is `listing-<id>`; emission
+      and `find_colliding_section` removed, page marked `deprecated`
+      per `docs/errors/README.md` (catalog entry stays). This also
+      resolves the "duplicate-id residue" noted when
+      bd-listing-id-collides-with-heading-l57w41jl closed.
+- [x] Docs: `Q-12-4.qmd` (synth ids), `Q-12-25.qmd` (retired),
+      `listing-templates.qmd` (container id/classes).
 
 ### Phase 4 — Init script + pagination nav
 

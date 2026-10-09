@@ -26,7 +26,7 @@ use quarto_doctemplate::{TemplateContext, TemplateValue};
 use quarto_pandoc_types::inline::{Inline, Inlines, Space, split_string_to_inlines};
 use quarto_pandoc_types::{ConfigValue, inlines_to_plain_text};
 
-use super::config::{GridItemAlign, ImageAlign, Listing, ListingCategoriesMode, ListingType};
+use super::config::{GridItemAlign, ImageAlign, Listing, ListingCategoriesMode};
 use super::helpers;
 use super::item::{ItemOrigin, ItemTarget, ListingItem};
 use crate::dates::{DateStyle, format_date, parse_date};
@@ -125,7 +125,7 @@ fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
     m.insert("id".to_string(), TemplateValue::String(listing.id.clone()));
     m.insert(
         "type".to_string(),
-        TemplateValue::String(listing_type_name(listing.kind).to_string()),
+        TemplateValue::String(listing.kind.name().to_string()),
     );
     m.insert(
         "fields".to_string(),
@@ -825,15 +825,6 @@ fn config_value_to_template_value(cv: &ConfigValue) -> TemplateValue {
     use pampa::template::context::MetaWriter;
     let mut conv = ConfigConversionContext::new(MetaWriter::Html);
     config_to_template_value(cv, &mut conv)
-}
-
-fn listing_type_name(t: ListingType) -> &'static str {
-    match t {
-        ListingType::Default => "default",
-        ListingType::Grid => "grid",
-        ListingType::Table => "table",
-        ListingType::Custom => "custom",
-    }
 }
 
 fn image_align_name(a: ImageAlign) -> &'static str {

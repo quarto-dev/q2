@@ -179,8 +179,13 @@ $if(it.subtitle)$[$it.subtitle$]{.listing-subtitle}$endif$
 
 A custom template is spliced into the same listing container as a
 built-in one, so matching the built-in class names is what lets your
-template inherit the listing CSS. Each built-in layout is a wrapper
-template that applies a per-item partial:
+template inherit the listing CSS. The container is a div with id
+`listing-<id>` — `#listing-listing` for a page's only listing when it
+sets no `id:` — and classes `quarto-listing` and
+`quarto-listing-container-<type>`; when the page has a `::: {#<id>}`
+slot for the listing, that div becomes the container and is renamed.
+Inside it, each built-in layout is a wrapper template that applies a
+per-item partial:
 
 | Layout | Wrapper element | Per-item partial |
 | --- | --- | --- |

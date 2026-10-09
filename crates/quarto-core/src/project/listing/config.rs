@@ -107,6 +107,13 @@ impl Listing {
         })
     }
 
+    /// The id of the listing's element in the rendered page — Q1's
+    /// `listing-<id>` (`#listing-listing` for a lone listing). The
+    /// author's `::: {#<id>}` slot is renamed to it when filled.
+    pub fn container_id(&self) -> String {
+        format!("listing-{}", self.id)
+    }
+
     /// Whether the listing shows a filter box. Q1 defaults it on for
     /// table listings only; an author-supplied `filter-ui:` wins.
     pub fn filter_ui(&self) -> bool {
@@ -171,6 +178,18 @@ pub enum ListingType {
     Grid,
     Table,
     Custom,
+}
+
+impl ListingType {
+    /// The `type:` name, as authors write it.
+    pub fn name(self) -> &'static str {
+        match self {
+            ListingType::Default => "default",
+            ListingType::Grid => "grid",
+            ListingType::Table => "table",
+            ListingType::Custom => "custom",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
