@@ -1,0 +1,10 @@
+---
+title: Listing nesting repro
+listing:
+  - id: listing-default
+    type: default
+    contents: "p/*.qmd"
+  - id: listing-grid
+    type: grid
+    contents: "p/*.qmd"
+---

@@ -1551,3 +1551,67 @@ fn custom_template_markdown_image_is_copied_raw_image_is_not() {
          ResourceCollector), so the asset never reaches the output tree"
     );
 }
+
+/// Element depth (count of unclosed `<div>`s) at each opening
+/// `<div class="<class>…">` in `html`, in document order.
+fn div_depths_of(html: &str, class: &str) -> Vec<usize> {
+    let needle = format!(r#"<div class="{class}"#);
+    html.match_indices(&needle)
+        .map(|(at, _)| {
+            let before = &html[..at];
+            before.matches("<div").count() - before.matches("</div").count()
+        })
+        .collect()
+}
+
+/// Write a website whose `index.qmd` lists `n` trivial docs with a
+/// listing of type `kind`.
+fn many_items_fixture(p: &std::path::Path, kind: &str, n: usize) {
+    write(
+        &p.join("_quarto.yml"),
+        "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+    );
+    write(
+        &p.join("index.qmd"),
+        &format!("---\ntitle: Home\nlisting:\n  type: {kind}\n  contents: \"p/*.qmd\"\n---\n"),
+    );
+    for i in 1..=n {
+        write(
+            &p.join(format!("p/d{i:03}.qmd")),
+            &format!("---\ntitle: \"Doc {i:03}\"\n---\n\nHello world\n"),
+        );
+    }
+}
+
+/// bd-mlmkev01: the item partials end in `:::`, and doctemplate
+/// strips a partial's final newline, so `$items:item-default()$`
+/// glued each item's closing fence onto the next item's opening
+/// fence and every item nested one level deeper than the last.
+/// Items must be siblings.
+#[test]
+fn default_and_grid_items_are_siblings() {
+    for (kind, item_class) in [("default", "quarto-post"), ("grid", "g-col-1")] {
+        let (_dir, outputs) = render_project(|p| many_items_fixture(p, kind, 3));
+        let depths = div_depths_of(html_for(&outputs, "index"), item_class);
+        assert_eq!(depths.len(), 3, "{kind}: expected 3 items, got {depths:?}");
+        assert!(
+            depths.iter().all(|d| *d == depths[0]),
+            "{kind}: listing items must be siblings at one depth, got {depths:?}"
+        );
+    }
+}
+
+/// bd-mlmkev01: with per-item nesting, ~90 items exceeded the
+/// parser's 99-level limit and the whole listing was dropped.
+#[test]
+fn default_and_grid_listings_with_120_items_render_every_item() {
+    for (kind, item_class) in [("default", "quarto-post"), ("grid", "g-col-1")] {
+        let (_dir, outputs) = render_project(|p| many_items_fixture(p, kind, 120));
+        let depths = div_depths_of(html_for(&outputs, "index"), item_class);
+        assert_eq!(
+            depths.len(),
+            120,
+            "{kind}: expected all 120 items in the listing"
+        );
+    }
+}

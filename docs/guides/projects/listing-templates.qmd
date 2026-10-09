@@ -212,6 +212,22 @@ $endfor$
 :::
 ```
 
+::: {.callout-warning}
+## Apply item partials inside `$for(items)$`, on a line of their own
+
+Quarto drops the final newline of a partial, as Pandoc does. Each
+built-in item partial ends with the `:::` that closes its div, so it is
+the line break after `$it:item-default()$` inside the loop that keeps
+one item's closing fence apart from the next item's opening fence.
+
+The shorthand `$items:item-default()$` applies the partial to every item
+with nothing in between. The output then contains lines like
+`:::::: {.quarto-post}`, which the parser reads as a single opening
+fence: every item opens inside the one before it, and with enough items
+the listing exceeds the nesting limit and is left out of the page. The
+same applies to any partial of yours that ends in a closing `:::`.
+:::
+
 The full sources are the best reference for idiomatic style, and they
 are short:
 [`crates/quarto-core/src/project/listing/templates/`](https://github.com/quarto-dev/q2/tree/main/crates/quarto-core/src/project/listing/templates).
