@@ -60,6 +60,39 @@ A listing shows each of them as a single paragraph. Write a
 scalar with a blank line in it, or a list) is joined into one, with a
 warning ([`Q-12-26`](/errors/listing/Q-12-26.qmd)).
 
+### Where descriptions and images come from
+
+For an item that is a project document, the listing uses the first
+description it finds in this order:
+
+1. `description:` under `listing-item:` in the document's front matter;
+2. `description:`;
+3. `abstract:`;
+4. the first paragraph of the rendered page.
+
+The image follows the same pattern: `image:` under `listing-item:`, then
+`image:`, then the page's preview image. The preview image is an image
+with the class `.preview-image`, or else one whose file name contains
+`preview`, `feature`, `cover` or `thumbnail`, or else the first image on
+the page.
+
+A value you write is used as written; Quarto derives one from the page
+only when you didn't. `listing-item:` is there for the case where the
+listing should say something different from the page's own
+`description:` or `image:`. A description longer than the listing's
+`max-description-length` (default 175 characters; `0` turns the limit
+off) is cut at a word boundary, whichever way it was chosen. Derived
+descriptions appear in every layout, tables included.
+
+The derived description is taken from the *rendered* page, so a page
+whose text comes from running code still gets one. In the browser-based
+editor, which does not do that last step, the derived description is the
+page's first paragraph as written instead.
+
+A record's own `description:` and `image:` are always used as written.
+A record that points at a document but leaves them out gets the
+document's, chosen as above.
+
 ### Records that point at a document
 
 `path: guide/install.qmd` merges the record over that document's own

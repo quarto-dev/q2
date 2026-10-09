@@ -127,11 +127,11 @@ fn default_listing_renders_three_posts_in_default_order() {
         );
         write(
             &p.join("posts/a.qmd"),
-            "---\ntitle: First\ndate: 2026-01-15\nauthor: Alice\ndescription: First desc.\nformat: html\n---\n\nFirst body.\n",
+            "---\ntitle: First\ndate: 2026-01-15\nauthor: Alice\nformat: html\n---\n\nFirst body.\n",
         );
         write(
             &p.join("posts/b.qmd"),
-            "---\ntitle: Second\ndate: 2026-02-20\nauthor: Bob\ndescription: Second desc.\nformat: html\n---\n\nSecond body.\n",
+            "---\ntitle: Second\ndate: 2026-02-20\nauthor: Bob\nformat: html\n---\n\nSecond body.\n",
         );
         write(
             &p.join("posts/c.qmd"),
@@ -182,9 +182,10 @@ fn default_listing_renders_three_posts_in_default_order() {
 
     // L7 ran during `WebsiteProjectType::post_render`: the
     // description envelope markers are stripped from the rendered
-    // host and the description region is replaced with each post's
-    // engine-rendered first paragraph (`"First body."` etc., from
-    // the post bodies above).
+    // host. First and Second have no `description:`, so their region
+    // holds the engine-rendered first paragraph; Third's explicit
+    // `description:` is authored and stays as written
+    // (bd-listing-description-precedence-x4bh6w3m).
     assert!(
         !host.contains("desc-begin(5A0113B34292)"),
         "L7 should have stripped description begin markers; got: {host}"
@@ -193,12 +194,13 @@ fn default_listing_renders_three_posts_in_default_order() {
         !host.contains("desc-end(5A0113B34292)"),
         "L7 should have stripped description end markers"
     );
-    // Engine-rendered first paragraph from each post's body.
     assert!(
-        host.contains("First body.")
-            && host.contains("Second body.")
-            && host.contains("Third body."),
+        host.contains("First body.") && host.contains("Second body."),
         "L7 should substitute the engine first paragraphs; got: {host}"
+    );
+    assert!(
+        host.contains("Third desc.") && !host.contains("Third body."),
+        "an explicit description is final, not replaced; got: {host}"
     );
 
     // Authors and dates flow through.
@@ -1282,13 +1284,9 @@ const TRUNCATED_SENTENCE: &str = "alpha bravo charlie delta echo foxtrot…";
 /// placeholder (Q1's `_pagination.ejs.md` parity) and the derived
 /// description ends with `…`.
 ///
-/// Fixture note: the default item template guards the description
-/// envelope with `$if(description)$` (br-listing-default-no-derived-
-/// desc-ywc4zvu8), so the post carries a short explicit
-/// `description:` to make the envelope render; the post-render
-/// substitution then overwrites it with the derived first paragraph
-/// (bd-listing-description-precedence-x4bh6w3m). If either of those
-/// strands changes behavior, revisit this fixture.
+/// The post has no `description:`, so the description is derived from
+/// its first paragraph and truncated at `max-description-length`
+/// (bd-listing-default-no-derived-desc-m0wrr8ty).
 #[test]
 fn default_listing_emits_no_matching_placeholder_and_derived_ellipsis() {
     let (_dir, outputs) = render_project(|p| {
@@ -1302,9 +1300,7 @@ fn default_listing_emits_no_matching_placeholder_and_derived_ellipsis() {
         );
         write(
             &p.join("posts/a.qmd"),
-            &format!(
-                "---\ntitle: Alpha\ndate: 2026-01-01\ndescription: placeholder\nformat: html\n---\n\n{LONG_SENTENCE}\n"
-            ),
+            &format!("---\ntitle: Alpha\ndate: 2026-01-01\nformat: html\n---\n\n{LONG_SENTENCE}\n"),
         );
     });
 

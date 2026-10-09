@@ -56,7 +56,7 @@ mod include_resolve;
 mod inline_table_css;
 mod language_resolve;
 mod link_resolution;
-mod listing_item_info;
+pub(crate) mod listing_item_info;
 mod source_conversion;
 // Math-mode stage: injects a math-rendering JS engine (MathJax / KaTeX)
 // when the document contains Math elements. Included on both native

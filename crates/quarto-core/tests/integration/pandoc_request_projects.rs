@@ -344,8 +344,11 @@ fn book_project(root: &Path) {
         b"project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n",
     );
     write(&root.join("index.qmd"), b"# Preface\n\nHello\n");
-    write(&root.join("one.qmd"), b"# One\n\nFirst chapter.\n");
-    write(&root.join("two.qmd"), b"# Two\n\nSecond chapter.\n");
+    // Single-token markers: pandoc JSON splits prose into `Str` /
+    // `Space` nodes, so a multi-word phrase never appears verbatim in
+    // the body.
+    write(&root.join("one.qmd"), b"# One\n\nFirstChapterBody.\n");
+    write(&root.join("two.qmd"), b"# Two\n\nSecondChapterBody.\n");
 }
 
 #[test]
@@ -366,8 +369,8 @@ fn a_book_chapter_renders_alone_as_the_active_page() {
         .find(|f| f.path.ends_with("/pandoc-input.json"))
         .unwrap();
     let json = String::from_utf8_lossy(&input.bytes);
-    assert!(json.contains("First chapter"), "the active chapter");
-    assert!(!json.contains("Second chapter"), "no other chapter");
+    assert!(json.contains("FirstChapterBody"), "the active chapter");
+    assert!(!json.contains("SecondChapterBody"), "no other chapter");
     assert!(!json.contains("Hello"), "no other chapter");
 }
 
@@ -403,7 +406,7 @@ fn a_book_chapter_downloads_as_docx_and_pptx_without_native_rejection_or_warning
             .find(|f| f.path.ends_with("/pandoc-input.json"))
             .unwrap();
         let json = String::from_utf8_lossy(&input.bytes);
-        assert!(json.contains("First chapter"), "{format}");
-        assert!(!json.contains("Second chapter"), "{format}");
+        assert!(json.contains("FirstChapterBody"), "{format}");
+        assert!(!json.contains("SecondChapterBody"), "{format}");
     }
 }

@@ -133,6 +133,42 @@ pub enum ItemOrigin {
     RecordOverDocument,
 }
 
+/// Where a listing item's description or image came from. Recorded by
+/// hydration so the listing can treat an authored value as final and a
+/// derived (or missing) one as a fallback that the L7 post-render step
+/// may upgrade from the rendered page
+/// (bd-listing-description-precedence-x4bh6w3m).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FieldSource {
+    /// `listing-item.<key>` in the document's front matter.
+    ListingItem,
+    /// The top-level `<key>` (`description:`, `image:`).
+    Document,
+    /// Top-level `abstract:` (descriptions only; Q1's fallback).
+    Abstract,
+    /// An inline `contents:` record.
+    Record,
+    /// Derived from the document body by L1.
+    Derived,
+    /// No value.
+    #[default]
+    Absent,
+}
+
+impl FieldSource {
+    /// Whether an author wrote the value. Authored values are shown
+    /// as written; derived or absent ones are what L7 may replace.
+    pub fn is_authored(self) -> bool {
+        matches!(
+            self,
+            FieldSource::ListingItem
+                | FieldSource::Document
+                | FieldSource::Abstract
+                | FieldSource::Record
+        )
+    }
+}
+
 /// One resolved listing item. See L2 §"Per-item: ListingItem".
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListingItem {
@@ -145,7 +181,12 @@ pub struct ListingItem {
     /// feed use the plain-text projections ([`Self::title_text`], ...).
     pub title: Inlines,
     pub subtitle: Option<Inlines>,
+    /// Hydration order: `listing_item.description → profile.description
+    /// → profile.abstract → derived first paragraph`. See
+    /// [`Self::description_source`].
     pub description: Option<Inlines>,
+    /// Which step of the chain [`Self::description`] came from.
+    pub description_source: FieldSource,
     /// Author display string built by joining [`Self::authors`] with
     /// ", ". Templates that want each author separately read
     /// `authors`; templates that want a single rendered string read
@@ -155,7 +196,12 @@ pub struct ListingItem {
     pub date: Option<String>,
     pub date_modified: Option<String>,
     pub categories: Vec<String>,
+    /// Project-relative. Hydration order: `listing_item.image →
+    /// profile.image → derived first body image`. See
+    /// [`Self::image_source`].
     pub image: Option<String>,
+    /// Which step of the chain [`Self::image`] came from.
+    pub image_source: FieldSource,
     pub image_alt: Option<String>,
     pub image_lazy_loading: Option<bool>,
     pub reading_time_minutes: Option<u32>,
@@ -213,21 +259,37 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
         });
 
     let subtitle = li.subtitle.clone().or_else(|| profile.subtitle.clone());
-    let description = li
-        .description
-        .clone()
-        .or_else(|| profile.description.clone());
+    // Authored values first, in Q1's order (`description || abstract`),
+    // with the q2-only `listing-item:` override ahead of them; the
+    // body-derived paragraph last. The derived text is literal, so a
+    // stray `*` stays a character when the listing writes it back as
+    // markdown.
+    let (description, description_source) = first_source([
+        (li.description.clone(), FieldSource::ListingItem),
+        (profile.description.clone(), FieldSource::Document),
+        (profile.r#abstract.clone(), FieldSource::Abstract),
+        (
+            profile
+                .derived_listing
+                .description
+                .as_deref()
+                .map(split_string_to_inlines),
+            FieldSource::Derived,
+        ),
+    ]);
     // Front-matter `image:` values are document-relative (Q1
     // semantics). Rebase to project-relative here so every consumer
     // — the host-page template (which re-relativizes against the
     // host dir), the RSS feed builder (which joins with the project
     // dir), the copy intent — sees one convention. Remote/absolute
     // URLs and data: URIs pass through untouched. See bd-qv2lsab0.
-    let image = li
-        .image
-        .clone()
-        .or_else(|| profile.image.clone())
-        .map(|img| rebase_image(&img, &profile.source_path));
+    // The derived body image is document-relative too.
+    let (image, image_source) = first_source([
+        (li.image.clone(), FieldSource::ListingItem),
+        (profile.image.clone(), FieldSource::Document),
+        (profile.derived_listing.image.clone(), FieldSource::Derived),
+    ]);
+    let image = image.map(|img| rebase_image(&img, &profile.source_path));
     let image_alt = li.image_alt.clone();
     let date = li.date.clone().or_else(|| profile.date.clone());
     // `date_modified` only lives on `listing_item` — there is no
@@ -252,12 +314,14 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
         title,
         subtitle,
         description,
+        description_source,
         author: join_authors(&profile.authors),
         authors: profile.authors.clone(),
         date,
         date_modified,
         categories,
         image,
+        image_source,
         image_alt,
         image_lazy_loading: None,
         reading_time_minutes: li.reading_time_minutes,
@@ -267,6 +331,17 @@ pub fn hydrate_item(profile: &DocumentProfile) -> ListingItem {
         origin: ItemOrigin::Document,
         extra: li.extra.clone(),
     }
+}
+
+/// The first present value in a precedence chain, with its source;
+/// `(None, Absent)` when every step is empty.
+fn first_source<T, const N: usize>(
+    chain: [(Option<T>, FieldSource); N],
+) -> (Option<T>, FieldSource) {
+    chain
+        .into_iter()
+        .find_map(|(value, source)| value.map(|v| (Some(v), source)))
+        .unwrap_or((None, FieldSource::Absent))
 }
 
 /// The prose keys [`flattened_prose_diagnostics`] checks.
@@ -655,5 +730,114 @@ mod tests {
             "a/shared/x.png"
         );
         assert_eq!(rebase_image_from_dir("/site.png", "posts"), "/site.png");
+    }
+
+    // ─── bd-listing-description-precedence-x4bh6w3m ─────────────────
+    //
+    // description: listing-item → description → abstract → derived
+    // image:       listing-item → image       → derived
+
+    use crate::document_profile::{DerivedListingValues, plain, text};
+
+    /// A profile with every description / image source populated;
+    /// tests clear the higher-ranked ones to walk down the chain.
+    fn full_chain_profile() -> DocumentProfile {
+        DocumentProfile {
+            source_path: PathBuf::from("posts/foo.qmd"),
+            output_href: "posts/foo.html".to_string(),
+            description: Some(text("top-level")),
+            r#abstract: Some(text("abstract")),
+            image: Some("top.png".to_string()),
+            listing_item: ListingItemInfo {
+                description: Some(text("listing-item")),
+                image: Some("li.png".to_string()),
+                ..ListingItemInfo::default()
+            },
+            derived_listing: DerivedListingValues {
+                description: Some("derived *text*".to_string()),
+                image: Some("figs/body.png".to_string()),
+            },
+            ..DocumentProfile::default()
+        }
+    }
+
+    #[test]
+    fn description_chain_walks_listing_item_document_abstract_derived() {
+        let mut p = full_chain_profile();
+        let steps = [
+            ("listing-item", FieldSource::ListingItem),
+            ("top-level", FieldSource::Document),
+            ("abstract", FieldSource::Abstract),
+            ("derived *text*", FieldSource::Derived),
+        ];
+        for (i, (want, source)) in steps.iter().enumerate() {
+            let item = hydrate_item(&p);
+            assert_eq!(plain(&item.description).as_deref(), Some(*want), "step {i}");
+            assert_eq!(item.description_source, *source, "step {i}");
+            match i {
+                0 => p.listing_item.description = None,
+                1 => p.description = None,
+                2 => p.r#abstract = None,
+                _ => p.derived_listing.description = None,
+            }
+        }
+        let item = hydrate_item(&p);
+        assert_eq!(item.description, None);
+        assert_eq!(item.description_source, FieldSource::Absent);
+    }
+
+    #[test]
+    fn derived_description_is_literal_text() {
+        let mut p = full_chain_profile();
+        p.listing_item.description = None;
+        p.description = None;
+        p.r#abstract = None;
+        let item = hydrate_item(&p);
+        let inlines = item.description.expect("derived description");
+        assert!(
+            inlines.iter().all(|i| matches!(
+                i,
+                quarto_pandoc_types::inline::Inline::Str(_)
+                    | quarto_pandoc_types::inline::Inline::Space(_)
+            )),
+            "`*` must stay a character, not become emphasis: {inlines:?}"
+        );
+    }
+
+    #[test]
+    fn image_chain_walks_listing_item_document_derived_and_rebases() {
+        let mut p = full_chain_profile();
+        let steps = [
+            ("posts/li.png", FieldSource::ListingItem),
+            ("posts/top.png", FieldSource::Document),
+            ("posts/figs/body.png", FieldSource::Derived),
+        ];
+        for (i, (want, source)) in steps.iter().enumerate() {
+            let item = hydrate_item(&p);
+            assert_eq!(item.image.as_deref(), Some(*want), "step {i}");
+            assert_eq!(item.image_source, *source, "step {i}");
+            match i {
+                0 => p.listing_item.image = None,
+                1 => p.image = None,
+                _ => p.derived_listing.image = None,
+            }
+        }
+        let item = hydrate_item(&p);
+        assert_eq!(item.image, None);
+        assert_eq!(item.image_source, FieldSource::Absent);
+    }
+
+    #[test]
+    fn only_derived_and_absent_are_unauthored() {
+        for s in [
+            FieldSource::ListingItem,
+            FieldSource::Document,
+            FieldSource::Abstract,
+            FieldSource::Record,
+        ] {
+            assert!(s.is_authored(), "{s:?}");
+        }
+        assert!(!FieldSource::Derived.is_authored());
+        assert!(!FieldSource::Absent.is_authored());
     }
 }

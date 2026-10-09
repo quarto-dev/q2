@@ -821,6 +821,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -875,6 +876,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -922,6 +924,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -983,6 +986,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1032,6 +1036,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1092,6 +1097,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1294,6 +1300,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1344,6 +1351,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1384,6 +1392,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1427,6 +1436,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1485,6 +1495,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1544,6 +1555,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1595,6 +1607,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1642,6 +1655,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1690,6 +1704,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1734,6 +1749,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1780,6 +1796,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1837,6 +1854,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1921,6 +1939,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -1973,6 +1992,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let input = PipelineData::DocumentAst(doc_ast);
@@ -2021,6 +2041,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         }
     }
 
@@ -2291,6 +2312,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
         // The document sets its own subtitle — it must win.
         doc_ast.ast.meta = config_map(vec![("subtitle", config_str("doc subtitle"))]);

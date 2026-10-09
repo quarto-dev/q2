@@ -564,6 +564,8 @@ mod tests {
 
     fn make_item_with_image(image: Option<&str>) -> ListingItem {
         ListingItem {
+            description_source: crate::project::listing::FieldSource::Absent,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: crate::document_profile::text("Title"),
             subtitle: None,
             description: None,

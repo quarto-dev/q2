@@ -196,16 +196,10 @@ fn substitute_descriptions(
                         s.to_string()
                     }
                 }
-                _ => {
-                    diagnostics.push(make_q_12_13(&href));
-                    inner.to_string()
-                }
+                _ => keep_description_fallback(inner, &href, diagnostics),
             },
-            None => {
-                // Sibling missing.
-                diagnostics.push(make_q_12_13(&href));
-                inner.to_string()
-            }
+            // Sibling missing.
+            None => keep_description_fallback(inner, &href, diagnostics),
         };
 
         out.push_str(&replacement);
@@ -261,6 +255,12 @@ fn substitute_images(
             // Engine-rendered preview image found.
             let resolved = resolve_preview_url(host_path, &sibling_abs, &pi.src);
             build_thumbnail_img(&resolved, &pi, attrs)
+        } else if inner.contains("<img") {
+            // The envelope wraps the image L1 derived from the body
+            // (bd-listing-description-precedence-x4bh6w3m). It is the
+            // document's own image, so it beats the listing-wide
+            // `image-placeholder` default.
+            inner.to_string()
         } else if !b64_default.is_empty() {
             // Listing default URL configured. The b64 alphabet is
             // URL_SAFE_NO_PAD; decode and use as-is (it's a URL
@@ -397,6 +397,22 @@ fn read_or_cached(
     };
     cache.insert(key, extraction.clone());
     Ok(extraction)
+}
+
+/// L7 could not derive a description from the rendered sibling: keep
+/// the envelope's inner L1 fallback. Q-12-13 reports the fallback
+/// only when there is one — an item with no prose anywhere is routine
+/// and Q1 is silent about it, so an empty envelope stays quiet
+/// (bd-listing-default-no-derived-desc-m0wrr8ty).
+fn keep_description_fallback(
+    inner: &str,
+    href: &str,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> String {
+    if !inner.trim().is_empty() {
+        diagnostics.push(make_q_12_13(href));
+    }
+    inner.to_string()
 }
 
 fn make_q_12_13(href: &str) -> DiagnosticMessage {
@@ -754,6 +770,67 @@ mod tests {
         );
         assert!(after.contains(r#"class="thumbnail-image""#));
         assert!(!after.contains("img-begin"));
+    }
+
+    // bd-listing-description-precedence-x4bh6w3m: a derived image is
+    // the document's own, so with no rendered preview it beats the
+    // listing-wide `image-placeholder` default.
+    #[test]
+    fn substitute_image_keeps_derived_img_over_listing_default() {
+        let temp = TempDir::new().unwrap();
+        let project = make_project(temp.path());
+        let host_path = temp.path().join("index.html");
+        let sibling_path = temp.path().join("posts").join("derived.html");
+
+        let b64 = URL_SAFE_NO_PAD.encode("assets/site/default.png".as_bytes());
+        let inner = r#"<img src="posts/body.png" class="thumbnail-image" alt="" loading="lazy">"#;
+        let host = format!(
+            "<html><body>{}</body></html>",
+            img_envelope("posts/derived.html", &b64, inner)
+        );
+        write_file(&host_path, &host);
+        // No `main.content` → no rendered preview image.
+        write_file(&sibling_path, r#"<html><body></body></html>"#);
+
+        let runtime = NativeRuntime::new();
+        let mut diags = vec![];
+        substitute_listing_placeholders(&project, &[host_path.clone()], &runtime, &mut diags)
+            .unwrap();
+
+        let after = read_file(&host_path);
+        assert!(after.contains(inner), "derived img kept; got: {after}");
+        assert!(!after.contains("default.png"), "default not used: {after}");
+        assert!(!after.contains("img-begin"));
+    }
+
+    // bd-listing-default-no-derived-desc-m0wrr8ty: an empty envelope
+    // (no L1 paragraph) whose rendered sibling has no paragraph either
+    // is routine — no Q-12-13, as in Q1.
+    #[test]
+    fn substitute_description_empty_envelope_without_preview_is_silent() {
+        let temp = TempDir::new().unwrap();
+        let project = make_project(temp.path());
+        let host_path = temp.path().join("index.html");
+        let sibling_path = temp.path().join("posts").join("empty.html");
+
+        let host = format!(
+            "<html><body><div class=\"listing-description\">{}</div></body></html>",
+            desc_envelope("posts/empty.html", 0, "")
+        );
+        write_file(&host_path, &host);
+        write_file(
+            &sibling_path,
+            r#"<html><body><main class="content"></main></body></html>"#,
+        );
+
+        let runtime = NativeRuntime::new();
+        let mut diags = vec![];
+        substitute_listing_placeholders(&project, &[host_path.clone()], &runtime, &mut diags)
+            .unwrap();
+
+        let after = read_file(&host_path);
+        assert!(!after.contains("desc-begin"), "{after}");
+        assert!(diags.is_empty(), "expected silence, got {diags:?}");
     }
 
     // L7 plan §"Tests" Phase 4 #33

@@ -1435,6 +1435,7 @@ mod tests {
             source_context,
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         }
     }
 

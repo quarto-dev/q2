@@ -1255,6 +1255,8 @@ mod tests {
         target: crate::project::listing::ItemTarget,
     ) -> crate::project::listing::ListingItem {
         crate::project::listing::ListingItem {
+            description_source: crate::project::listing::FieldSource::Absent,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: crate::document_profile::text(title),
             subtitle: None,
             description: None,

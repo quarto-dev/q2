@@ -28,7 +28,7 @@ use quarto_pandoc_types::{ConfigValue, inlines_to_plain_text};
 
 use super::config::{GridItemAlign, ImageAlign, Listing, ListingCategoriesMode};
 use super::helpers;
-use super::item::{ItemOrigin, ItemTarget, ListingItem};
+use super::item::{FieldSource, ItemTarget, ListingItem};
 use crate::dates::{DateStyle, format_date, parse_date};
 
 /// Build the full [`TemplateContext`] for one [`Listing`] +
@@ -103,10 +103,15 @@ pub(crate) fn effective_fields(listing: &Listing, items: &[ListingItem]) -> Vec<
         .iter()
         .filter(|f| {
             f.as_str() == "image"
-                || items
-                    .iter()
+                || items.iter().any(|it| {
                     // Presence only — the date style doesn't matter.
-                    .any(|it| item_field_cell(it, f, &DateStyle::Medium).is_some())
+                    item_field_cell(it, f, &DateStyle::Medium).is_some()
+                        // A description L7 may still derive counts as
+                        // present (Q1: every document item carries
+                        // the placeholder).
+                        || (f.as_str() == "description"
+                            && derivable(it, it.description_source))
+                })
         })
         .cloned()
         .collect();
@@ -435,18 +440,23 @@ fn build_item_map(
         "metadata-attrs".to_string(),
         TemplateValue::String(helpers::metadata_attrs(item, index, listing)),
     );
-    // L7 placeholders only for document-origin items (plan §D6): a
-    // record's description/image are final strings, and the
-    // post-render substitution keys on the document's output href.
-    let placeholders = item.origin == ItemOrigin::Document;
+    // L7 placeholders per field, only where the value is derived or
+    // absent and a rendered document exists to upgrade it from
+    // (bd-listing-description-precedence-x4bh6w3m). An authored value
+    // — `listing-item.*`, top-level `description` / `abstract` /
+    // `image`, or a record's own — is final, as in Q1, where the
+    // placeholder is only the `description || abstract || …` fallback.
+    let desc_placeholders = derivable(item, item.description_source);
+    let img_placeholders = derivable(item, item.image_source);
     // Description envelope (L7 plan §"How the begin / end markers
-    // reach the templates"). Both keys are always populated;
-    // `$description-placeholder-begin$` and `-end$` flank the L1
-    // fallback `$description$` block in the templates so the L7
-    // post-render step has a region to substitute.
+    // reach the templates"). Both keys are always present (empty when
+    // inactive) so custom templates can reference them
+    // unconditionally; `$description-placeholder-begin$` and `-end$`
+    // flank the L1 fallback `$description$` so the L7 post-render step
+    // has a region to substitute.
     m.insert(
         "description-placeholder-begin".to_string(),
-        TemplateValue::String(if placeholders {
+        TemplateValue::String(if desc_placeholders {
             helpers::description_placeholder_begin(item, listing)
         } else {
             String::new()
@@ -454,22 +464,26 @@ fn build_item_map(
     );
     m.insert(
         "description-placeholder-end".to_string(),
-        TemplateValue::String(if placeholders {
+        TemplateValue::String(if desc_placeholders {
             helpers::description_placeholder_end()
         } else {
             String::new()
         }),
     );
-    // Image envelope. Always populated regardless of whether
-    // `item.image` is set: the templates only reference these keys
-    // inside the `$if(image-html)$ ... $else$ ... $endif$` block, so
-    // markers for image-present items never reach the rendered
-    // output. Keeping the binding unconditional keeps the template
-    // logic simple — the decision lives in `$if(image-html)$`, not
-    // in the binding.
+    // The description block shows when there is a description *or*
+    // L7 may still derive one: a page whose prose only exists in its
+    // rendered output (engine output first) has no L1 description,
+    // and the envelope is where L7 puts the rendered paragraph
+    // (bd-listing-default-no-derived-desc-m0wrr8ty).
+    if item.description.is_some() || desc_placeholders {
+        m.insert("show-description".to_string(), TemplateValue::Bool(true));
+    }
+    // Image envelope. Active when the image is derived (it then wraps
+    // the derived `<img>`, which L7 may upgrade to the rendered page's
+    // preview image) or absent (it wraps the empty placeholder div).
     m.insert(
         "image-placeholder-begin".to_string(),
-        TemplateValue::String(if placeholders {
+        TemplateValue::String(if img_placeholders {
             helpers::image_placeholder_begin(item, listing, index)
         } else {
             String::new()
@@ -477,7 +491,7 @@ fn build_item_map(
     );
     m.insert(
         "image-placeholder-end".to_string(),
-        TemplateValue::String(if placeholders {
+        TemplateValue::String(if img_placeholders {
             helpers::image_placeholder_end()
         } else {
             String::new()
@@ -654,6 +668,13 @@ fn table_header(
     )
 }
 
+/// Whether a field with this source gets an L7 envelope: the value is
+/// derived or absent, and the item links a project document whose
+/// rendered output L7 can read.
+fn derivable(item: &ListingItem, source: FieldSource) -> bool {
+    !source.is_authored() && item.target.output_href().is_some()
+}
+
 /// The pre-rendered per-item `table-row` value.
 fn table_row(
     item: &ListingItem,
@@ -670,7 +691,12 @@ fn table_row(
             if field == "image" {
                 return escape_table_cell(image_html);
             }
-            let Some(value) = item_field_cell(item, field, date_style) else {
+            let value = if field == "description" {
+                description_cell(item, listing)
+            } else {
+                item_field_cell(item, field, date_style)
+            };
+            let Some(value) = value else {
                 return String::new();
             };
             if !value.is_empty() && !path.is_empty() && linked.iter().any(|l| l == field) {
@@ -684,6 +710,23 @@ fn table_row(
         })
         .collect();
     format!("| {} |", cells.join(" | "))
+}
+
+/// The description cell: the description's markdown, wrapped in the L7
+/// envelope (as inline raw HTML) when the description is derived or
+/// absent, so tables derive descriptions like the other listing types
+/// do. `None` when there is neither.
+fn description_cell(item: &ListingItem, listing: &Listing) -> Option<String> {
+    let value = item.description.as_deref().map(prose_markdown);
+    if !derivable(item, item.description_source) {
+        return value;
+    }
+    Some(format!(
+        "`{}`{{=html}}{}`{}`{{=html}}",
+        helpers::description_placeholder_begin(item, listing),
+        value.unwrap_or_default(),
+        helpers::description_placeholder_end()
+    ))
 }
 
 /// One field of one item as the markdown of its table cell — the
@@ -858,6 +901,8 @@ mod tests {
 
     fn item(title: &str) -> ListingItem {
         ListingItem {
+            description_source: crate::project::listing::FieldSource::Derived,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: crate::document_profile::text(title),
             subtitle: None,
             description: Some(crate::document_profile::text("A descr.")),
@@ -1666,13 +1711,143 @@ mod tests {
 
     #[test]
     fn record_over_document_keeps_path_but_no_placeholders() {
+        // The record supplied the description, so it is authored.
         let mut i = item("Card");
         i.origin = ItemOrigin::RecordOverDocument;
+        i.description_source = FieldSource::Record;
         let m = first_item_map(i);
         assert!(m.contains_key("path"));
         assert_eq!(
             m.get("description-placeholder-begin"),
             Some(&TemplateValue::String(String::new()))
+        );
+    }
+
+    // ─── bd-listing-description-precedence-x4bh6w3m ─────────────────
+
+    fn placeholder(m: &HashMap<String, TemplateValue>, key: &str) -> String {
+        match m.get(key) {
+            Some(TemplateValue::String(s)) => s.clone(),
+            other => panic!("{key}: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn description_envelope_only_for_derived_or_absent_document_descriptions() {
+        for (source, want) in [
+            (FieldSource::ListingItem, false),
+            (FieldSource::Document, false),
+            (FieldSource::Abstract, false),
+            (FieldSource::Record, false),
+            (FieldSource::Derived, true),
+            (FieldSource::Absent, true),
+        ] {
+            let mut i = item("X");
+            i.description_source = source;
+            let m = first_item_map(i);
+            assert_eq!(
+                !placeholder(&m, "description-placeholder-begin").is_empty(),
+                want,
+                "{source:?}"
+            );
+            assert_eq!(
+                !placeholder(&m, "description-placeholder-end").is_empty(),
+                want,
+                "{source:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_envelope_without_a_document_to_derive_from() {
+        let mut i = item("X");
+        i.target = ItemTarget::Href("https://example.com".to_string());
+        i.description_source = FieldSource::Absent;
+        i.image_source = FieldSource::Absent;
+        let m = first_item_map(i);
+        assert!(placeholder(&m, "description-placeholder-begin").is_empty());
+        assert!(placeholder(&m, "image-placeholder-begin").is_empty());
+    }
+
+    #[test]
+    fn show_description_when_description_or_envelope() {
+        // Description present.
+        let m = first_item_map(item("X"));
+        assert_eq!(m.get("show-description"), Some(&TemplateValue::Bool(true)));
+        // No description, but L7 may derive one.
+        let mut i = item("X");
+        i.description = None;
+        i.description_source = FieldSource::Absent;
+        let m = first_item_map(i);
+        assert_eq!(m.get("show-description"), Some(&TemplateValue::Bool(true)));
+        assert!(!m.contains_key("description"));
+        // No description and nothing to derive from.
+        let mut i = item("X");
+        i.description = None;
+        i.description_source = FieldSource::Absent;
+        i.target = ItemTarget::None;
+        let m = first_item_map(i);
+        assert!(!m.contains_key("show-description"));
+    }
+
+    #[test]
+    fn image_envelope_follows_image_source() {
+        for (source, want) in [
+            (FieldSource::Document, false),
+            (FieldSource::ListingItem, false),
+            (FieldSource::Record, false),
+            (FieldSource::Derived, true),
+            (FieldSource::Absent, true),
+        ] {
+            let mut i = item("X");
+            i.image = (source != FieldSource::Absent).then(|| "posts/a.png".to_string());
+            i.image_source = source;
+            let m = first_item_map(i);
+            assert_eq!(
+                !placeholder(&m, "image-placeholder-begin").is_empty(),
+                want,
+                "{source:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn table_description_cell_wraps_derivable_descriptions() {
+        let mut l = table_listing(&["title", "description"]);
+        l.field_links = Some(Vec::new());
+        let mut derived = item("D");
+        derived.description_source = FieldSource::Derived;
+        let mut authored = item("A");
+        authored.description_source = FieldSource::Document;
+        let mut absent = item("N");
+        absent.description = None;
+        absent.description_source = FieldSource::Absent;
+        let row = |i: ListingItem| row_of(&ctx_for(&l, &[i]));
+        let d = row(derived);
+        assert!(
+            d.contains("`<!-- desc-begin(") && d.contains("A descr."),
+            "{d}"
+        );
+        let a = row(authored);
+        assert!(!a.contains("desc-begin") && a.contains("A descr."), "{a}");
+        let n = row(absent);
+        assert!(n.contains("desc-begin"), "{n}");
+    }
+
+    #[test]
+    fn derivable_description_keeps_defaulted_table_column() {
+        let mut l = table_listing(&[]);
+        l.fields = vec!["title".to_string(), "description".to_string()];
+        l.fields_explicit = false;
+        l.field_links = Some(Vec::new());
+        let mut i = item("X");
+        i.description = None;
+        i.description_source = FieldSource::Absent;
+        let ctx = ctx_for(&l, &[i]);
+        assert!(
+            header_of(&ctx).contains("Description"),
+            "{}",
+            header_of(&ctx)
         );
     }
 }

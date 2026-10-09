@@ -143,6 +143,8 @@ mod tests {
             extra_map.insert(k.to_string(), v);
         }
         ListingItem {
+            description_source: crate::project::listing::FieldSource::Absent,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: crate::document_profile::text(title),
             subtitle: None,
             description: None,

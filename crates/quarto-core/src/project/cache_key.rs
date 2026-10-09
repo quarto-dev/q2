@@ -17,6 +17,8 @@
 //!   | format_id                 (length-prefixed UTF-8)
 //!   | source_path               (project-relative, length-prefixed UTF-8)
 //!   | source_bytes              (length-prefixed)
+//!   | source_modified_date      (presence byte, then length-prefixed
+//!                                UTF-8 when present)
 //!   | for each layered _metadata.yml from project root → doc dir:
 //!         path                  (length-prefixed UTF-8)
 //!         bytes                 (length-prefixed)
@@ -109,7 +111,12 @@ use crate::document_profile::DOCUMENT_PROFILE_VERSION;
 ///
 /// v2: the key domain gained project-profile inputs (active names +
 /// overlay bytes, bd-fu16z22k).
-pub const PROFILE_KEY_VERSION: u32 = 2;
+///
+/// v3: the key domain gained `source_modified_date`, now that Pass-1
+/// runs `ListingItemInfoStage`, which records it as
+/// `listing_item.date_modified`
+/// (bd-listing-description-precedence-x4bh6w3m).
+pub const PROFILE_KEY_VERSION: u32 = 3;
 
 /// Returns the Quarto build identifier baked into every cache key.
 ///
@@ -142,6 +149,16 @@ pub struct Pass1KeyInputs<'a> {
 
     /// Raw bytes of the source file.
     pub source_bytes: &'a [u8],
+
+    /// The source file's modification date exactly as
+    /// `ListingItemInfoStage` records it in
+    /// `listing_item.date_modified` (`YYYY-MM-DD`, UTC; `None` when the
+    /// runtime has no mtime, e.g. the WASM VFS). It is an input of the
+    /// profile like the bytes are: without it, touching a file would
+    /// leave a cached profile with a stale `date-modified`. Keying on
+    /// the date rather than the raw mtime keeps same-day edits that
+    /// revert the bytes on the cache.
+    pub source_modified_date: Option<&'a str>,
 
     /// Layered `_metadata.yml` files from project root down to the
     /// document's directory, in walk order. Each entry is
@@ -196,6 +213,16 @@ pub fn pass1_key(inputs: &Pass1KeyInputs<'_>) -> [u8; 32] {
 
     // Source bytes.
     write_lp_bytes(&mut hasher, inputs.source_bytes);
+
+    // Source modification date. A presence byte keeps `None` distinct
+    // from `Some("")`.
+    match inputs.source_modified_date {
+        Some(date) => {
+            hasher.update([1u8]);
+            write_lp_str(&mut hasher, date);
+        }
+        None => hasher.update([0u8]),
+    }
 
     // Layered _metadata.yml. The walker (callers' responsibility)
     // produces a stable order; we hash whatever order it gave us.
@@ -280,6 +307,7 @@ mod tests {
             format_id: "html",
             source_path: "page.qmd",
             source_bytes: b"# Hello\n\nBody.\n",
+            source_modified_date: Some("2026-10-09"),
             metadata_files: &[],
             quarto_yml_bytes: b"",
             extension_contributions: &[],
@@ -375,6 +403,22 @@ mod tests {
         tweaked.source_bytes = b"# Hello\n\nDIFFERENT.\n";
         let b = pass1_key(&tweaked);
         assert_ne!(a, b);
+    }
+
+    // bd-listing-description-precedence-x4bh6w3m: the profile records
+    // the file's modification date, so it is part of the key.
+    #[test]
+    fn key_changes_on_source_modified_date() {
+        let a = pass1_key(&minimal_inputs());
+        let mut tweaked = minimal_inputs();
+        tweaked.source_modified_date = Some("2026-10-10");
+        assert_ne!(a, pass1_key(&tweaked));
+        tweaked.source_modified_date = None;
+        assert_ne!(a, pass1_key(&tweaked));
+        // A presence byte keeps "no mtime" distinct from an empty date.
+        let mut empty = minimal_inputs();
+        empty.source_modified_date = Some("");
+        assert_ne!(pass1_key(&tweaked), pass1_key(&empty));
     }
 
     #[test]

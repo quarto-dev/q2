@@ -1,6 +1,6 @@
 ---
 title: "Listing Item Produced No Preview Content"
-description: "A listing item produced no preview content; a static fallback description is used in its place."
+description: "A listing item's rendered page has no first paragraph to derive a description from; the paragraph found before rendering is used instead."
 code: Q-12-13
 subsystem: listing
 status: stub
@@ -11,39 +11,40 @@ categories:
 
 # `Q-12-13` — Listing Item Produced No Preview Content
 
-> A listing item produced no preview content; a static fallback
-> description is used in its place.
+> A listing item's rendered page has no first paragraph to derive a
+> description from; the paragraph found before rendering is used
+> instead.
 
 ## What this means
 
-Each item in a listing usually shows a short preview — the
-first paragraph or an explicit `description:` from the source
-document. To build that preview, Quarto looks for preview-eligible
-content in the rendered output of the source. This warning fires
-when Quarto cannot find any: the rendered output is empty, has
-only non-preview-eligible content (headings, raw HTML, ...), or
-the source render did not produce a sibling file Quarto could
-inspect.
+When a listed document has no description of its own (no `description:`
+under `listing-item:`, no `description:`, no `abstract:`), the listing
+derives one from the rendered page: its first paragraph. This warning
+fires when Quarto found a first paragraph in the document *before*
+rendering but cannot find one in the rendered output: the output has
+only non-preview content (headings, raw HTML, ...), or the render did
+not produce a file Quarto could inspect.
 
-The item still appears in the listing, with a static fallback
-description.
+The item still appears in the listing, showing the paragraph Quarto
+found before rendering.
+
+A document with no paragraph at all, before or after rendering, is
+routine and does not warn: its listing entry simply has no description.
 
 ## Why this happens
 
 Common causes:
 
-- **The item is a near-empty document** — no body paragraph
-  before the first heading, no `description:` in front matter.
-- **The item's front matter has nothing the listing template
-  knows to surface** (no `title`, no `description`).
-- **A custom render path** (filter, post-processor) stripped
-  the content the preview pass would have used.
+- **A custom render path** (filter, post-processor) removed or wrapped
+  the paragraph the preview pass would have used.
+- **The item's rendered output is missing** — for example, a partial
+  render that did not render the listed document.
 
 ## How to fix
 
-Add a `description:` field to the item's front matter, or write
-a short opening paragraph before the first heading. Both are
-preview-eligible and will replace the fallback.
+Add a `description:` to the item's front matter — an authored
+description is used as written and skips the preview pass — or check
+that the item's rendered page still has its opening paragraph.
 
 ## Related
 
