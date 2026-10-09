@@ -122,6 +122,17 @@ describe('PdfPane', () => {
     expect(show).toHaveBeenCalledTimes(1); // the first PDF was not replaced or cleared
   });
 
+  it('strips ANSI colors and OSC 8 hyperlinks from rendered diagnostics', async () => {
+    render(<PdfPane path="doc.qmd" contentTick={0} onBack={null} />);
+    await flush();
+    const rendered =
+      '\x1b[31mError:\x1b[0m [Q-2-55] bad \x1b[38;5;246m[\x1b[0m \x1b]8;;file:///d/doc.qmd#5:19\x1b\\/d/doc.qmd:5:19\x1b]8;;\x1b\\ \x1b[38;5;246m]\x1b[0m';
+    await answer(0, jsonResponse(422, { diagnostics: [{ kind: 'error', title: 'bad', code: 'Q-2-55', hints: [], details: [], rendered }] }));
+    const alert = screen.getByRole('alert').textContent ?? '';
+    expect(alert).toContain('Error: [Q-2-55] bad [ /d/doc.qmd:5:19 ]');
+    expect(alert).not.toContain('\x1b');
+  });
+
   it('shows the Q-21-1 text when typst is missing', async () => {
     render(<PdfPane path="doc.qmd" contentTick={0} onBack={null} />);
     await flush();

@@ -53,6 +53,23 @@ describe('stripAnsi', () => {
     });
   });
 
+  describe('OSC 8 hyperlinks', () => {
+    it('should keep the link text and drop the markers (ST = ESC \\)', () => {
+      const input = '[ \x1b]8;;file:///d/a.qmd#5:19\x1b\\/d/a.qmd:5:19\x1b]8;;\x1b\\ ]';
+      expect(stripAnsi(input)).toBe('[ /d/a.qmd:5:19 ]');
+    });
+
+    it('should handle BEL terminators and params', () => {
+      expect(stripAnsi('\x1b]8;id=1;http://x\x07link\x1b]8;;\x07')).toBe('link');
+    });
+
+    it('should clean ariadne-style output mixing SGR and OSC 8', () => {
+      const input =
+        '\x1b[38;5;246m[\x1b[0m \x1b]8;;file:///d/a.qmd#5:19\x1b\\/d/a.qmd:5:19\x1b]8;;\x1b\\ \x1b[38;5;246m]\x1b[0m';
+      expect(stripAnsi(input)).toBe('[ /d/a.qmd:5:19 ]');
+    });
+  });
+
   describe('edge cases', () => {
     it('should return unchanged text without ANSI codes', () => {
       expect(stripAnsi('Plain text without codes')).toBe('Plain text without codes');

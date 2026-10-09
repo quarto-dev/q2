@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { mountPdfViewer, type PdfViewerHandle } from '@quarto/pdf-viewer';
 import { vfsReadFile } from '@quarto/preview-runtime';
+import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { installBackButton } from '../pdfBackButton';
 import './PdfPane.css';
@@ -162,7 +163,7 @@ export function PdfPane({ path, contentTick, onBack }: PdfPaneProps) {
         <div className="q2-pdf-pane__error" role="alert">
           <strong>{banner.message}</strong>
           {banner.diagnostics.map((d, i) => (
-            <pre key={i}>{d.rendered ?? [d.code, d.title, d.problem, ...d.hints].filter(Boolean).join('\n')}</pre>
+            <pre key={i}>{stripAnsi(d.rendered ?? [d.code, d.title, d.problem, ...d.hints].filter(Boolean).join('\n'))}</pre>
           ))}
         </div>
       )}
@@ -172,7 +173,7 @@ export function PdfPane({ path, contentTick, onBack }: PdfPaneProps) {
             {warnings.length} warning{warnings.length === 1 ? '' : 's'}
           </summary>
           {warnings.map((d, i) => (
-            <pre key={i}>{d.rendered ?? [d.code, d.title, d.problem].filter(Boolean).join('\n')}</pre>
+            <pre key={i}>{stripAnsi(d.rendered ?? [d.code, d.title, d.problem].filter(Boolean).join('\n'))}</pre>
           ))}
         </details>
       )}
