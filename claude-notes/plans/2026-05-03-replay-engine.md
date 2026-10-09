@@ -2,12 +2,13 @@
 title: 'Replay engine: deterministic in-Rust engine for tests (bd-45yw)'
 date: 2026-05-03
 description: 'Adds a replay engine that reproduces a recorded engine run in pure Rust, so engine-channel tests need no R or Python installs; replay is activated by `--replay` or `QUARTO_REPLAY`.'
+status: draft  # Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+braid:
+  strand: bd-45yw
+  priority: P2
 ---
 
-**Date:** 2026-05-03
-**Beads:** bd-45yw
 **Worktree:** `.worktrees/45yw-replay-engine` (branch `beads/45yw-replay-engine`, based on `main` \@ `b77c5674`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 

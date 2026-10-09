@@ -2,12 +2,13 @@
 title: 'Plan: `--json-errors` for `q2 render`'
 date: 2026-05-22
 description: 'Adds a `--json-errors` flag to `q2 render` that emits diagnostics as one JSON object per line on stderr, so agents and tools can read errors without scraping text.'
+status: done  # Implementation complete on `feature/q2-render-json-errors`; awaiting review before merge to `main`. Beads issue still `in_progress` until then.
+braid:
+  strand: bd-iey8o
+  priority: P1
+  labels: [agent-ux, error-reporting]
 ---
 
-**Status:** Implementation complete on `feature/q2-render-json-errors`;
-awaiting review before merge to `main`. Beads issue still `in_progress`
-until then.
-**Beads issue:** bd-iey8o
 **Related issues:** bd-creo (strict pass-1 exit policy), k-lckc (uniform
 quarto-error-reporting in render pipeline), bd-rqba (JsonPass1Failure)
 **Related plans:**

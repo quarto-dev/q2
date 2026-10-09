@@ -2,12 +2,10 @@
 title: 'Item plane — research-level plan (DEFERRED)'
 date: 2026-06-19
 description: 'Deferred research stub on splicing list items, table rows, and definition-list entries, covering item content shape, tight and loose list preservation, ordered renumbering, and move semantics.'
+status: draft  # RESEARCH / DEFERRED — not scheduled. Sibling of the **block plane** (`2026-06-18-boundary-splice-edit-design.md` + `2026-06-19-boundary-splice-implementation.md`).
 ---
 
-**Date:** 2026-06-19
 **Branch:** TBD (follow-on to `feature/block-editing-improvements`)
-**Status:** RESEARCH / DEFERRED — not scheduled. Sibling of the **block plane**
-(`2026-06-18-boundary-splice-edit-design.md` + `2026-06-19-boundary-splice-implementation.md`).
 
 > This is a research stub, not an implementation plan. It captures the problem,
 > the open design questions, and rough estimates so the work can be picked up

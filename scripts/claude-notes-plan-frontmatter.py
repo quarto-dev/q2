@@ -220,7 +220,7 @@ def add_header_meta(it, skein, dry_run):
             notes.append(f"status {status['value']!r} not in vocabulary")
         elif lines_ok("status", status.get("lines", [])):
             orig = status.get("original") or ""
-            same = " ".join(orig.split()).strip(" .").lower() == status["value"]
+            same = re.sub(r"[\s_-]+", "-", orig.strip(" .").lower()) == status["value"]
             add.append(f"status: {status['value']}" + ("" if same else comment(orig)))
             remove += status.get("lines", [])
 

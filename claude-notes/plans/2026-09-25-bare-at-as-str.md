@@ -1,19 +1,18 @@
 ---
 title: 'Bare `@` (not a citation) is literal text, where it cannot be a typo'
 date: 2026-09-25
+date-modified: 2026-09-25
 description: 'Makes a standalone or word-final `@` that is not a citation literal text, while keeping a parse error for `@` forms that look like a mistyped citation key.'
+status: done  # implemented and verified 2026-09-25 on `braid/bd-bare-at-literal-w3ytmu8e-bare-not-citation-uncoded`. Committed locally, not pushed.
+braid:
+  strand: bd-bare-at-literal-w3ytmu8e  # child of bd-uk8zgkha
+  priority: P2
 ---
 
-**Status:** implemented and verified 2026-09-25 on
-`braid/bd-bare-at-literal-w3ytmu8e-bare-not-citation-uncoded`. Committed
-locally, not pushed.
-**Tracking issue:** bd-bare-at-literal-w3ytmu8e (filed 2026-09-23 as a child of
-bd-uk8zgkha; this plan attaches to it rather than filing a duplicate)
 **Follow-ups filed:** bd-2o8rq2xj (Q-code + `\@` hint for the kept `@`
 errors), bd-0idqzj33 (other uncoded parse-error sources, split from this
 strand's original scope), bd-5qmh5acq (Unicode citation keys)
 **Owner:** cscheid
-**Last updated:** 2026-09-25
 **Precedents:** bd-j9cf (bare `<` as Str, `2026-05-18-bare-lt-as-str.md`),
 bd-star-as-str-qigl02pz (`2026-09-25-star-as-str.md`, PR #731), which
 added the flanking rules and the renamed `LITERAL_STR` token this plan reuses.

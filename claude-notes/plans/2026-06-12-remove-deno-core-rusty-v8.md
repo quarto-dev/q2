@@ -2,12 +2,11 @@
 title: 'Remove deno_core / rusty_v8 from quarto-system-runtime'
 date: 2026-06-12
 description: 'Removes the unused JavaScript template engine and its `deno_core` and `rusty_v8` dependencies from `quarto-system-runtime`, shrinking the `q2` binary and unblocking static musl Linux release builds.'
+status: in-progress
+braid:
+  strand: bd-3e3sam51  # discovered-from bd-c6l13j79; was blocked by bd-kuxzj8su, now closed
+  priority: P2
 ---
-
-**Strand:** bd-3e3sam51 (discovered-from bd-c6l13j79; was blocked by
-bd-kuxzj8su, now closed)
-**Created:** 2026-06-12
-**Status:** in progress
 
 ## Overview
 

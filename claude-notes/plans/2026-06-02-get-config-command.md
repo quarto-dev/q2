@@ -2,15 +2,13 @@
 title: 'Plan: `q2 get-config` — emit merged document config as JSON'
 date: 2026-06-02
 description: 'Adds a `q2 get-config` command that prints a document''s fully merged metadata, or one dot-separated key path, as JSON by reusing the render pipeline''s merge stage, so external tools need not reimplement merging.'
+status: done  # IMPLEMENTED — all phases (0–4) complete; full workspace tests (9542 pass) + `cargo xtask verify --skip-rust-tests` (WASM/hub build) green. Awaiting user review. One item flagged below for confirmation (D3 default format = `html`).
+braid:
+  strand: bd-xoaic
+  priority: P2
 ---
 
-- **Beads:** bd-xoaic
 - **GitHub:** quarto-dev/q2#256
-- **Status:** IMPLEMENTED — all phases (0–4) complete; full workspace tests
-  (9542 pass) + `cargo xtask verify --skip-rust-tests` (WASM/hub build) green.
-  Awaiting user review. One item flagged below for confirmation (D3 default
-  format = `html`).
-- **Date:** 2026-06-02
 
 ## Overview
 

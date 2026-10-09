@@ -2,12 +2,14 @@
 title: '`source: file` brand fonts: never copied, `@font-face` URLs resolve against the theme CSS''s directory (bd-ve916wr8)'
 date: 2026-09-08
 description: 'Publishes `source: file` brand font files as artifacts beside the theme CSS and emits a constant `fonts/` URL, so `@font-face` rules resolve in websites and single documents instead of returning 404 errors.'
+status: approved  # Design agreed with user 2026-09-08 (decisions below). Ready to implement on a topic branch.
+braid:
+  strand: bd-ve916wr8
+  priority: P2
+  labels: [css, theming, websites]
 ---
 
-**Date:** 2026-09-08
-**Braid:** bd-ve916wr8
 **Checkout:** main \@ `b7e7c96a` (investigation ran in the main checkout)
-**Status:** Design agreed with user 2026-09-08 (decisions below). Ready to implement on a topic branch.
 
 ## Overview
 

@@ -2,11 +2,10 @@
 title: 'Hub-Client User Preferences Subsystem'
 date: 2026-01-16
 description: 'Designs a localStorage-backed preferences subsystem for hub-client, validated with Zod, so settings such as scroll sync and the error overlay state survive page refreshes behind a typed hook.'
+status: done  # Completed
 ---
 
 **Issue:** kyoto-3se
-**Status:** Completed
-**Created:** 2026-01-16
 
 ## Problem
 

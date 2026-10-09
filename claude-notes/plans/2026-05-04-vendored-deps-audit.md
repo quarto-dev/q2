@@ -2,10 +2,12 @@
 title: 'Vendored / non-cargo dependency audit — plan'
 date: 2026-05-04
 description: 'Sets up an inventory and audit procedure for vendored non-Cargo assets such as Bootstrap SCSS and CSL styles, so upstream updates are checked on the same cadence as Cargo dependencies.'
+braid:
+  strand: bd-xm7l
+  priority: P2
+  labels: [deps, vendored]
 ---
 
-**Date opened:** 2026-05-04
-**Beads issue:** bd-xm7l (epic)
 **Related skill:** `.claude/skills/upgrade-cargo-deps/SKILL.md`
 **Inventory doc:** `claude-notes/research/vendored-dependencies-inventory.md`
 

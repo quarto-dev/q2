@@ -2,10 +2,8 @@
 title: 'CSL Test Categorization Report'
 date: 2025-12-01
 description: 'Groups the remaining unknown CSL test cases by failure cause, such as citation sequences, quote positioning and disambiguation, with effort and priority estimates for each group.'
+status: in-progress  # 70 unknown tests remaining (82.2% enabled, 9.7% deferred, 8.2% unknown)
 ---
-
-**Date**: 2025-12-01
-**Status**: 70 unknown tests remaining (82.2% enabled, 9.7% deferred, 8.2% unknown)
 
 ## Summary
 

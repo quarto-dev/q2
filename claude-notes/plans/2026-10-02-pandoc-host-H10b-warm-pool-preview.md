@@ -4,7 +4,6 @@ date: 2026-10-02
 description: 'Puts the warm executor behind a two-worker pool and an overlap-aware controller so the PDF preview renders faster without killing in-flight renders or showing frames older than one already shown.'
 ---
 
-**Date:** 2026-10-02
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D2, D2(b))
 **Executor and decisions:** [`2026-10-02-pandoc-host-H10a-warm-executor.md`](2026-10-02-pandoc-host-H10a-warm-executor.md) (the executor, its terms, the scope decisions, the Task 0 measurements)

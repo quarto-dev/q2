@@ -2,12 +2,13 @@
 title: 'Flaky proptest: reconciliation_preserves_structure_full_ast (bd-205v6)'
 date: 2026-08-19
 description: 'Fixes a deterministic bug where `apply_reconciliation` pairs two `Cite` inlines with different citations and keeps stale citations, then audits sibling container types for the same identity gap.'
+status: in-progress  # Approved 2026-08-19 — in execution.
+braid:
+  strand: bd-205v6
+  priority: P2
 ---
 
-**Date:** 2026-08-19
-**Braid:** bd-205v6
 **Branch:** `braid/bd-205v6-cite-reconcile-identity` (off `main` \@ `4b4a63ce`)
-**Status:** Approved 2026-08-19 — in execution.
 
 ## Design decisions (user-aligned 2026-08-19)
 

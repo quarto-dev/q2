@@ -2,9 +2,12 @@
 title: '`q2 render` walks the cwd before checking for `_quarto.yml`'
 date: 2026-05-20
 description: 'Makes `q2 render` with no arguments check for an enclosing `_quarto.yml` before scanning the working directory, so running it outside a project fails instantly instead of walking large trees first.'
+braid:
+  strand: bd-nmkmi  # `q2 render` with no args scans cwd for `.qmd` files before checking whether a project exists
+  priority: P2
+  labels: [cli, perf, render]
 ---
 
-**Issue:** bd-nmkmi — `q2 render` with no args scans cwd for `.qmd` files before checking whether a project exists
 **Type:** bug · **Priority:** 2
 
 ## Summary

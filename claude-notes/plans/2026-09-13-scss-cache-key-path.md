@@ -2,12 +2,14 @@
 title: 'SCSS cache key hashes the document-relative theme path (bd-79c4do6g)'
 date: 2026-09-13
 description: 'Changes the sass cache key for custom theme files so identical theme files reached from different document directories share one cache entry, instead of hashing the document-relative path and recompiling per directory.'
+status: in-progress  # Design agreed 2026-09-14; implementing.
+braid:
+  strand: bd-79c4do6g
+  priority: P1
+  labels: [perf]
 ---
 
-**Date:** 2026-09-13
-**Braid:** bd-79c4do6g (P1, bug, label `perf`)
 **Branch:** `braid/bd-79c4do6g-scss-cache-key-path` in the main checkout (based on `main` \@ `35bc11415`; topic branch, no worktree, per user request)
-**Status:** Design agreed 2026-09-14; implementing.
 
 ## Triage verdict
 

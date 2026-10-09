@@ -2,12 +2,11 @@
 title: 'Phase 4: JavaScript Infrastructure for Quarto HTML'
 date: 2026-01-28
 description: 'Designs a modular, bundled ES6 JavaScript runtime for Quarto HTML output that replaces global-namespace libraries and inline EJS scripts, working identically in the native CLI and WASM hub-client.'
+status: draft  # Planning
 ---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)
 **Beads Issue**: kyoto-aqv (labeled "Phase 3: JavaScript Dependencies" in beads)
-**Created**: 2026-01-28
-**Status**: Planning
 
 ---
 

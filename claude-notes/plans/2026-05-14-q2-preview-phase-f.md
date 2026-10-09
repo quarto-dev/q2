@@ -2,15 +2,11 @@
 title: 'q2 preview — Phase F plan'
 date: 2026-05-14
 description: 'Brings cross-page navigation, Bootstrap JavaScript and website chrome such as the navbar, sidebar, footer and table of contents into the `q2 preview` iframe, so docs-site pages preview as they render.'
+status: done  # Phase F complete (2026-05-14). Both sub-tasks merged on `feature/q2-preview-command`. The chrome state-preservation trade-off (chrome rebuilds clear open dropdown state) is tracked as the longer-term **bd-d8fo** React-components rewrite.
 ---
 
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A, B, C, D all merged on `feature/q2-preview-command`.
-**Date:** 2026-05-14
-**Status:** Phase F complete (2026-05-14). Both sub-tasks merged on
-`feature/q2-preview-command`. The chrome state-preservation
-trade-off (chrome rebuilds clear open dropdown state) is tracked
-as the longer-term **bd-d8fo** React-components rewrite.
 
 ## Progress
 
