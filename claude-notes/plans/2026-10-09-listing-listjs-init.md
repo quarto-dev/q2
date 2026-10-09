@@ -2,13 +2,13 @@
 title: 'Listings: no List.js init script emitted — quarto-listing.js is inert (bd-nbv80e33)'
 date: 2026-10-09
 description: 'Q2 ships list.min.js and quarto-listing.js but never instantiates List.js, so pagination, category filtering and the no-matching reveal are dead; this scopes emitting the init script plus the item/page markup it depends on.'
-status: in-progress  # Design aligned 2026-10-09; implementing
+status: implemented  # All phases done on braid/bd-nbv80e33-listing-listjs-init; awaiting review/merge
 braid:
   strand: bd-nbv80e33
 ---
 
 **Branch:** `braid/bd-nbv80e33-listing-listjs-init` (topic branch in the main checkout, based on `main` @ `ea72d68aa`)
-**Design aligned 2026-10-09 — see § Decisions; implementation in progress.**
+**Design aligned 2026-10-09 — see § Decisions. Implemented 2026-10-09; awaiting review/merge.**
 
 ## Triage verdict
 
@@ -225,7 +225,12 @@ so use `Listing::container_id()`.
       (`listing-listjs-init-investigation/jsdom-check.cjs`, not a test):
       pagination, category filter and no-matching reveal all work, no
       script errors.
-- [ ] `cargo xtask verify`.
+- [x] `cargo xtask verify` (full, with the WASM/hub build): all steps
+      pass — 16063 Rust tests, all hub-client/ts-packages suites. (A
+      `--skip-hub-build` run fails 122 hub-client wasm tests with
+      "`wasm.<fn>` is not a function" when the local WASM bundle is older
+      than the sources; that is a stale-bundle artifact, not this
+      change.)
 
 ## Risks / tradeoffs
 
