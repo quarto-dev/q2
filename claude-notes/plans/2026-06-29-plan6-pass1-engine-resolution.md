@@ -1,6 +1,7 @@
 ---
 title: 'Plan 6 — Pass-1 engine resolution (per-doc lift): implementation plan'
 date: 2026-06-29
+description: 'Plans engine resolution in the Pass-1 indexing stage for documents that need no engine load, so the language server gets resolved execution languages, with user claim tables widening which documents qualify.'
 ---
 
 **Status:** implementation plan (design ratified with Gordon; final revision

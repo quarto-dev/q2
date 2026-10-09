@@ -1,6 +1,7 @@
 ---
 title: 'Fix: downloaded project ZIP uses absolute paths'
 date: 2026-07-01
+description: 'Fixes the hub-client project ZIP export so entries are relative and nested under one project-named folder, by stripping leading slashes in `export-zip.ts` and sharing one sanitized folder-name helper with the download filename.'
 ---
 
 **Strand:** bd-esnxtcoy

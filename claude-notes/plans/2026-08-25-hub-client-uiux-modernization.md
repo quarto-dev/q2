@@ -1,6 +1,7 @@
 ---
 title: 'Hub-Client UI/UX Modernization Plan'
 date: 2026-08-25
+description: 'Systematizes the hub-client UI into shared design tokens, one pattern per interaction problem, keyboard parity and WCAG fixes, with opinionated visual changes gathered into a single later review gate.'
 ---
 
 **Date:** 2026-08-25

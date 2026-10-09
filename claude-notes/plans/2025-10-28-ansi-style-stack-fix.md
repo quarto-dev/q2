@@ -1,6 +1,7 @@
 ---
 title: 'ANSI Writer Style Stack Fix'
 date: 2025-10-28
+description: 'Corrects ANSI terminal output so that a styled inline nested inside a colored span restores the parent''s color rather than resetting to the default, comparing a style stack with manual code generation.'
 ---
 
 **Date**: 2025-10-28

@@ -1,6 +1,7 @@
 ---
 title: 'Rich-text editor: `Mod-Enter` commit drops selected content (HardBreak collision)'
 date: 2026-07-06
+description: 'Stops the rich-text editor''s `Mod-Enter` commit from deleting selected text by moving the commit into the tiptap keymap and disabling the HardBreak binding on that key.'
 ---
 
 **Strand:** bd-hafs0qho (discovered-from bd-7pxub583; related to bd-sjb4pzx8)

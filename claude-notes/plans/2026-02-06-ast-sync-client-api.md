@@ -1,6 +1,7 @@
 ---
 title: 'AST-Level Sync Client API'
 date: 2026-02-06
+description: 'Adds an AST-level API to the sync client that parses QMD text into a Pandoc AST on each change and writes an edited AST back as QMD, with the parser and writer injected by the consumer.'
 ---
 
 ## Overview

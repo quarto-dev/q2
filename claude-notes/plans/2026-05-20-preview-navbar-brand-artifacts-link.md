@@ -1,6 +1,7 @@
 ---
 title: 'bd-ql55q — Preview navbar brand link points to artifacts VFS root'
 date: 2026-05-20
+description: 'Makes the navbar brand link in `q2 preview` resolve to the project home page instead of a bare artifacts directory URL that the preview iframe cannot route, so clicking it stays inside the app.'
 ---
 
 **Issue:** bd-ql55q (child of bd-lk66 — Hub-client website rendering UX issues)

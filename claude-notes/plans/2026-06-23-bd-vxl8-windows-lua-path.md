@@ -1,6 +1,7 @@
 ---
 title: 'bd-vxl8: Windows path handling in pampa synthetic Lua io/dofile — Implementation Plan'
 date: 2026-06-23
+description: 'Fixes Windows path handling in pampa''s synthetic Lua `io` and `dofile` by adding a shared `is_rooted` predicate and forward-slash test paths, so rooted VFS paths resolve on every target.'
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

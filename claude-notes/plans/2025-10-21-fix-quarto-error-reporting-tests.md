@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix quarto-error-reporting Test Failures'
 date: 2025-10-21
+description: 'Fixes three failing tests in `quarto-error-reporting` caused by a `to_text()` refactor that added trailing newlines, dropped error codes from simple output, and hid locations when no source context exists.'
 ---
 
 <!-- quarto-error-code-audit-ignore-file -->

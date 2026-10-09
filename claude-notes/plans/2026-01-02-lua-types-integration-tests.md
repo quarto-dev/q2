@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Lua Filter Integration Tests for types.rs Coverage'
 date: 2026-01-02
+description: 'Adds Lua filter integration tests that exercise the field access, field assignment and iteration code in `lua/types.rs`, raising its coverage from about 45 percent to over 70 percent.'
 ---
 
 **Issue**: k-4csc

@@ -1,6 +1,7 @@
 ---
 title: 'Headings nested inside tabset panels leak into the TOC and point at hidden content (bd-tabset-headings-in-toc-t04ie7f7)'
 date: 2026-08-18
+description: 'Stops headings inside tabset panes, callouts and blockquotes from leaking into the table of contents, by matching Quarto 1''s section recursion rather than skipping only tabset Divs.'
 ---
 
 **Date:** 2026-08-18

@@ -1,6 +1,7 @@
 ---
 title: 'revealjs: actually support code-copy (CSS + JS in render; styled-only in preview)'
 date: 2026-06-23
+description: 'Ports the code-copy styling and clipboard script into revealjs decks so `code-copy:` is honored in native `q2 render` output, with copy-code styles shared as a single SCSS layer across HTML and reveal.'
 ---
 
 **Strand:** bd-lg6t6qfy (feature, p3) — follow-up to **bd-fu1a5g6l** (which

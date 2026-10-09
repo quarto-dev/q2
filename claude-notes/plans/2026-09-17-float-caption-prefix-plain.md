@@ -1,6 +1,7 @@
 ---
 title: 'Float caption prefix skipped for Plain-first captions (attr-form figures, caption-form tables)'
 date: 2026-09-17
+description: 'Fixes the missing `Figure N:` prefix on attribute-form figures and caption-form tables by making every caption consumer accept a `Plain` first block, then canonicalizing caption blocks to `Plain` at the sugar boundary.'
 ---
 
 **Strand:** bd-n3sark9b (canonical). Marked as duplicates of it: bd-uwv2eec2 (2026-06-18),

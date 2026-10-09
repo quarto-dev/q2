@@ -1,6 +1,7 @@
 ---
 title: 'Fix: Nested tight lists incorrectly marked as loose (Para instead of Plain)'
 date: 2026-02-13
+description: 'Fixes the list parser so a tight list item followed by a nested sublist without a blank line stays tight, instead of wrongly emitting `Para` where `Plain` is correct.'
 ---
 
 **Beads issue:** bd-2gc9

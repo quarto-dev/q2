@@ -1,6 +1,7 @@
 ---
 title: 'ts-engine-extensions ← main: Merge Runbook (2026-08-13)'
 date: 2026-08-13
+description: 'Step-by-step runbook for merging main into the TS engine extensions work, resolving the conflicted files by hand rather than rebasing, and applying the design changes the merge forces.'
 ---
 
 > **What this is:** a runbook for bringing `feature/ts-engine-extensions` up to

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Add pandoc.List metatable to all list-like tables in Lua API'
 date: 2026-04-10
+description: 'Applies the pandoc.List metatable to every list-like table returned by the Lua AST API, such as `classes` and container `content` fields, so Quarto 1 filters can call methods like `:includes()` and `:map()`.'
 ---
 
 **Beads issue**: `bd-y9zl`

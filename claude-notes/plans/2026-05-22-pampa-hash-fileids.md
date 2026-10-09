@@ -1,6 +1,7 @@
 ---
 title: 'Migrate pampa to hash-based FileIds'
 date: 2026-05-22
+description: 'Switches pampa''s `ASTContext` to hash-based FileIds derived from the filename, as `quarto_yaml` already does, replacing hard-coded `FileId(0)` references and the remap step in include expansion.'
 ---
 
 **Status:** drafting — pending review

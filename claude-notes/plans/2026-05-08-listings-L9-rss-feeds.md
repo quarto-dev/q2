@@ -1,6 +1,7 @@
 ---
 title: 'L9 — RSS feeds (sub-plan)'
 date: 2026-05-08
+description: 'Adds RSS 2.0 feeds for website listings, built from staged files that a post-render step completes with rendered descriptions, plus per-category sub-feeds and image metadata for media content.'
 ---
 
 **Date:** 2026-05-08

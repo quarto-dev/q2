@@ -1,6 +1,7 @@
 ---
 title: 'Provenance Plan 9 — ValueSource threading for metadata-derived content'
 date: 2026-05-22
+description: 'Threads source locations of metadata values through to synthesized content, so that shortcode output, sidebar titles and appendix sections can record a `ValueSource` anchor pointing at the YAML key that produced them.'
 ---
 
 **Date:** 2026-05-22

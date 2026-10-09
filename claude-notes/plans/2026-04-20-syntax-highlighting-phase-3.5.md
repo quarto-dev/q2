@@ -1,6 +1,7 @@
 ---
 title: 'Syntax highlighting — Phase 3.5: native user grammars + filter-authored spans + documentation fixtures'
 date: 2026-04-20
+description: 'Adds end-to-end CLI tests for native user grammars, filter-authored highlight spans, and `theme: none` behavior, using fixtures that double as future user documentation.'
 ---
 
 - **Parent plan**: `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`

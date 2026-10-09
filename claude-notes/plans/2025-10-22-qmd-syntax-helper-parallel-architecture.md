@@ -1,6 +1,7 @@
 ---
 title: 'QMD-Syntax-Helper: Multi-threaded Architecture with Task Reuse'
 date: 2025-10-22
+description: 'Proposes restructuring `qmd-syntax-helper` for parallel execution with shared parsing and file reads, weighing Rayon, async Tokio, and a custom memoized task graph as design options.'
 ---
 
 **Date:** 2025-10-22

@@ -1,6 +1,7 @@
 ---
 title: 'Audit: metadata string reads using `as_str()` that should use `as_plain_text()`'
 date: 2026-06-09
+description: 'Audits metadata string reads that call `as_str()` and switches the user-facing front-matter options, such as `appendix-style` and `toc-title`, to `as_plain_text()` so bare YAML strings are no longer silently ignored.'
 ---
 
 **Strand:** bd-y89ihf0i (task, p2; labels: footnotes, tech-debt)

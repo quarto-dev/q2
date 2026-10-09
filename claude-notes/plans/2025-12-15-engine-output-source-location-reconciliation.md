@@ -1,6 +1,7 @@
 ---
 title: 'Source Location Reconciliation After Engine Execution'
 date: 2025-12-15
+description: 'Designs an algorithm that reconciles the AST parsed before engine execution with the one parsed after it, so unchanged elements keep their original source locations while computed output points to the engine''s intermediate file.'
 ---
 
 **Date**: 2025-12-15

@@ -1,6 +1,7 @@
 ---
 title: 'Plan 1a (protocol): JSON message types and data shapes'
 date: 2026-04-16
+description: 'Defines the JSON wire schema for messages and data shapes between q2 and the Deno engine host, plus a planned multiplexed envelope with cancellation.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

@@ -1,6 +1,7 @@
 ---
 title: 'Phase 7 — Post-render (sitemap, favicon, site-url / title-prefix)'
 date: 2026-04-27
+description: 'Adds site-level features for websites: page titles prefixed with the site title, a favicon copied and linked into every page, a sitemap generated from `site-url`, and a robots.txt file.'
 ---
 
 **Date:** 2026-04-27

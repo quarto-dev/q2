@@ -1,6 +1,7 @@
 ---
 title: 'bd-vm5e5u10: one dangling index entry must not brick a project'
 date: 2026-06-12
+description: 'Stops one index entry pointing at a missing document from failing an entire project, by loading the other files and reporting the dangling entry as unavailable so it can be deleted.'
 ---
 
 **Strand:** bd-vm5e5u10 (p1). Related: bd-10deu8h4 (the creator bug —

@@ -1,6 +1,7 @@
 ---
 title: 'Phase 0 — Foundations: DocumentProfile, Pipeline Checkpoint, Naming'
 date: 2026-04-23
+description: 'Lays the foundation for website projects with a serializable static `DocumentProfile` snapshot taken after metadata merge, a named pipeline checkpoint for it, and a contract document, with no user-visible change.'
 ---
 
 **Date:** 2026-04-23

@@ -1,6 +1,7 @@
 ---
 title: 'Sequential multi-engine execution'
 date: 2026-05-27
+description: 'Designs running several execution engines in sequence for one document, with `engine` accepting an ordered list, threading each engine''s output into the next and redesigning trace and replay for multiple captures.'
 ---
 
 **Issue:** bd-5yff4 — feature/design.

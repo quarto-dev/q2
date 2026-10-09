@@ -1,6 +1,7 @@
 ---
 title: 'Multi-line block quote inside a list item — parser bug'
 date: 2026-05-11
+description: 'Fixes a tree-sitter qmd parser failure on a block quote inside a list item whose quote continues over several lines with `>` markers, by changing how the external scanner handles soft line breaks.'
 ---
 
 ## Overview

@@ -1,6 +1,7 @@
 ---
 title: 'Filter Diagnostics Infrastructure Analysis'
 date: 2025-12-02
+description: 'Analyzes why the internal and JSON filter paths cannot report diagnostics, compares them with the reader pattern, and lists what diagnostics from Lua filters would require.'
 ---
 
 **Date:** 2025-12-02

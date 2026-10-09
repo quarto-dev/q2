@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Integration and parity net (pandoc-host H3)'
 date: 2026-10-01
+description: 'Connects the host to the real Rust request and proves its docx, typst, pptx and epub output equals native output, using a dev-only download harness, parity tests in Node and Chromium, and measured browser limits.'
 ---
 
 **Date:** 2026-10-01

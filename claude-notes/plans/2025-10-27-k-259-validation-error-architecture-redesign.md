@@ -1,6 +1,7 @@
 ---
 title: 'k-259: Validation Error Architecture Redesign'
 date: 2025-10-27
+description: 'Redesigns the YAML validation error flow so `ValidationError` keeps full source ranges and structured instance and schema paths, letting human-readable and JSON output come from the same data.'
 ---
 
 **Date**: 2025-10-27

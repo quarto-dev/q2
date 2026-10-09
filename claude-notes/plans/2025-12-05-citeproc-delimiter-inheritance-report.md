@@ -1,6 +1,7 @@
 ---
 title: 'Citeproc Delimiter Inheritance Bug Report'
 date: 2025-12-05
+description: 'Analyzes why `quarto-citeproc` dropped group delimiters inside `<choose>` branches, causing missing punctuation in bibliography entries, and recommends refactors to prevent similar bugs.'
 ---
 
 ## Summary

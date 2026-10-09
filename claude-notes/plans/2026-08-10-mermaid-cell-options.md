@@ -1,6 +1,7 @@
 ---
 title: 'Mermaid `%%|` cell options are not processed (bd-mermaid-cell-options-9wo3crl0)'
 date: 2026-08-10
+description: 'Makes `%%|` cell options in mermaid fences work like `#|` options by making the pre-engine cell option desugar language-aware, so diagrams gain captions, labels and alt text.'
 ---
 
 **Date:** 2026-08-10

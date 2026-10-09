@@ -1,6 +1,7 @@
 ---
 title: 'Highlight styles: general `.theme` translator + full Q1 palette catalog'
 date: 2026-08-18
+description: 'Replaces the three hand-written highlight palettes with a general translator from Quarto 1 `.theme` JSON files, so the full palette catalog and the adaptive light and dark pairs work.'
 ---
 
 **Strand:** bd-hl-theme-translator-2mdgh4k6 (open, feature, P3 — field evidence

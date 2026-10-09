@@ -1,6 +1,7 @@
 ---
 title: 'Default table rendering parity with Quarto 1'
 date: 2026-05-20
+description: 'Closes the gaps that make default HTML tables from `q2 render` and `q2 preview` look unstyled next to Quarto 1, covering header promotion, Bootstrap table classes and empty colgroups.'
 ---
 
 **Issue:** [bd-hir7j](../../.beads/) — *Default table rendering parity with Quarto 1 (render + preview)*

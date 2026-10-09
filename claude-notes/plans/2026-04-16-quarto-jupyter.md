@@ -1,6 +1,7 @@
 ---
 title: 'Plan 3: @quarto/api/jupyter'
 date: 2026-04-16
+description: 'Implements the `@quarto/api/jupyter` namespace as a TypeScript port of the Quarto 1 notebook-to-markdown conversion, covering output formatting, figure files and widget dependencies the Julia engine calls.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

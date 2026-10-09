@@ -1,6 +1,7 @@
 ---
 title: 'CommonMark Reader for Pampa'
 date: 2025-12-17
+description: 'Adds a `--from commonmark` reader to pampa built on comrak, converting its line and column positions into byte-offset source locations so CommonMark input gets the same source tracking as QMD input.'
 ---
 
 **Issue**: k-n74s

@@ -1,6 +1,7 @@
 ---
 title: '`cargo xtask create-worktree` — Implementation Plan'
 date: 2026-05-11
+description: 'Adds a `cargo xtask create-worktree` command that sets up a git worktree with a beads redirect and a managed context section in CLAUDE.local.md, driven by a beads id, a GitHub issue or an upgrade date.'
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

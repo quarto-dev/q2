@@ -1,6 +1,7 @@
 ---
 title: 'Nested projects: `_quarto.yml` as a render-list boundary (bd-nested-projects-xyb28wnl)'
 date: 2026-09-23
+description: 'Makes `_quarto.yml` subdirectories a render-list boundary, so the implicit walk skips them with one warning per render and explicit references into them only warn.'
 ---
 
 **Date:** 2026-09-23

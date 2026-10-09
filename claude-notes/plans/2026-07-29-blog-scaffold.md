@@ -1,6 +1,7 @@
 ---
 title: '`q2 create`: blog scaffold (`website:blog`)'
 date: 2026-07-29
+description: 'Adds the `blog` project choice to `q2 create`, porting Quarto 1''s blog template with binary post images and a date-sorted listing, and fixes three listing gaps the scaffold exposed.'
 ---
 
 **Strand:** bd-r1by4u2a (discovered-from bd-oa5kd2yr)

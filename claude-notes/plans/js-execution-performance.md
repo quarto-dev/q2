@@ -1,6 +1,7 @@
 ---
 title: 'JavaScript Execution Performance Considerations'
 date: 2026-01-12
+description: 'Analyzes the cost of creating a fresh V8 runtime for each JavaScript render call and compares caching strategies, though the JavaScript surface it covers has since been removed.'
 ---
 
 **Created**: 2026-01-12

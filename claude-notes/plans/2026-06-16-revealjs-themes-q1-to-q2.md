@@ -1,6 +1,7 @@
 ---
 title: 'RevealJS themes: Quarto 1 → Quarto 2 (reveal.js 6)'
 date: 2026-06-16
+description: 'Brings Quarto 1 reveal.js themes and theming defaults to Quarto 2 on reveal.js 6 through a Sass theme layer and AST transforms, so output feels familiar to Quarto 1 users.'
 ---
 
 **Strand:** bd-yown2ts4

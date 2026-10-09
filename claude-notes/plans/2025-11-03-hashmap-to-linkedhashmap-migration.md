@@ -1,6 +1,7 @@
 ---
 title: 'HashMap to LinkedHashMap Migration Plan'
 date: 2025-11-03
+description: 'Switches the `Attr` attribute map from `HashMap` to `LinkedHashMap` so that shortcode and other attributes keep their insertion order and test output stops varying from run to run.'
 ---
 
 **Beads Issue:** k-318  

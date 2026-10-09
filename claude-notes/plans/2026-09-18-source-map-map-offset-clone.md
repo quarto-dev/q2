@@ -1,6 +1,7 @@
 ---
 title: '`SourceInfo::map_offset` clones the whole file per call (bd-jn7r22g8)'
 date: 2026-09-18
+description: 'Removes a per-call clone of the whole source file in `SourceInfo::map_offset` in the external source-map crate, which made parsing long lists quadratic, by borrowing the in-memory text with no public API change.'
 ---
 
 **Strand:** bd-jn7r22g8 (P1, perf). Discovered from bd-5yektmwt; related to

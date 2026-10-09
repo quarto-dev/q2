@@ -1,6 +1,7 @@
 ---
 title: 'Minimal `quarto render` Prototype Design'
 date: 2025-12-20
+description: 'Proposes a minimal `quarto render` for the Rust port that turns QMD into HTML without calling Pandoc, organized as typed pipeline stages for parsing, transforms, and writers around a shared artifact store.'
 ---
 
 **Date**: 2025-12-20

@@ -1,6 +1,7 @@
 ---
 title: 'Vendored / non-cargo dependency audit — plan'
 date: 2026-05-04
+description: 'Sets up an inventory and audit procedure for vendored non-Cargo assets such as Bootstrap SCSS and CSL styles, so upstream updates are checked on the same cadence as Cargo dependencies.'
 ---
 
 **Date opened:** 2026-05-04

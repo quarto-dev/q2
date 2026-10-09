@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Typst + EPUB book output, DOCX/PPTX scope-out (book-projects P3)'
 date: 2026-09-21
+description: 'Wires the single-file merge through real Typst and EPUB book output so chapters render end to end, and turns the silent DOCX and PPTX gap into an explicit diagnostic.'
 ---
 
 **Date:** 2026-09-21

@@ -1,6 +1,7 @@
 ---
 title: 'Subsequent Author Substitute Implementation Plan'
 date: 2025-12-01
+description: 'Designs how the CSL `subsequent-author-substitute` option replaces repeated author names in consecutive bibliography entries, comparing names semantically and supporting the four substitute rules.'
 ---
 
 **Issue**: k-461

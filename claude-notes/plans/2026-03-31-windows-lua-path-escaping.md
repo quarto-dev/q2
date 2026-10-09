@@ -1,6 +1,7 @@
 ---
 title: 'Windows Lua Path Escaping Fix'
 date: 2026-03-31
+description: 'Replaces ad hoc backslash handling in pampa Lua tests with one forward-slash path utility in `quarto-util`, fixing Windows failures where backslashes broke Lua string literals.'
 ---
 
 **Date**: 2026-03-31

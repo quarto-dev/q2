@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Default Project for Single-File Renders'
 date: 2026-03-09
+description: 'Makes `ProjectContext.config` non-optional so single-file renders get a default config, which lets the metadata merge flatten `format.html.*` keys into top-level keys.'
 ---
 
 ## Overview

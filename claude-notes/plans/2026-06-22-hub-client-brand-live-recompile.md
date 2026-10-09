@@ -1,6 +1,7 @@
 ---
 title: 'hub-client: live `_brand.yml` change doesn''t recompile preview CSS (AST/slides path)'
 date: 2026-06-22
+description: 'Fixes the hub-client slide preview so it recompiles theme CSS when a sibling `_brand.yml` changes, by adding the missing `fileContents` dependency to the AST-path re-render effect.'
 ---
 
 **Strand:** bd-4jjckvwt

@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview: AST-splice the captured engine output into live edits'
 date: 2026-05-18
+description: 'Has `q2 preview` splice captured engine output into the live document''s AST, keyed by cell content hash and occurrence, so code-cell output survives prose edits to the source.'
 ---
 
 **Beads:** bd-lucp (parent-child to bd-kw93, discovered-from bd-m0mu).

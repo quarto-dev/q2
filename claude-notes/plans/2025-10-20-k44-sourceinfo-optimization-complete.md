@@ -1,6 +1,7 @@
 ---
 title: 'k-44: SourceInfo JSON Serialization Optimization - Complete'
 date: 2025-10-20
+description: 'Records the finished pool-based SourceInfo serialization, which replaces repeated parent chains with `$ref` IDs in the JSON output and confirms that no parent chains are duplicated in the pool.'
 ---
 
 **Date**: 2025-10-20

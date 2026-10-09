@@ -1,6 +1,7 @@
 ---
 title: 'Cache engine-discovery so we don''t re-spawn per document'
 date: 2026-05-22
+description: 'Replaces the per-document shell spawn that looks up jupyter with an in-process PATH walk memoized once per process, aiming to cut engine discovery cost in large quarto-web renders.'
 ---
 
 ## Overview

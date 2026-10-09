@@ -1,6 +1,7 @@
 ---
 title: 'Fix: Parser fails to recognize horizontal rules (---) in qmd files'
 date: 2025-10-28
+description: 'Stops a `---` line surrounded by blank lines from being read as the start of a YAML metadata block, by checking for a blank line after the opening delimiter in the scanner''s `parse_minus()` function.'
 ---
 
 **Issue**: k-268

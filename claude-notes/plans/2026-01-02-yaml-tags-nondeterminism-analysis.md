@@ -1,6 +1,7 @@
 ---
 title: 'Analysis: Nondeterministic sourceInfoPool IDs in JSON Writer'
 date: 2026-01-02
+description: 'Explains why the `yaml-tags` snapshot output varied between runs: a pointer-keyed cache in the JSON writer returned stale source-pool IDs when memory addresses were reused.'
 ---
 
 **Beads Issue**: k-gv05

@@ -1,7 +1,8 @@
 ---
 title: "claude-notes: a listing page for all plans"
 date: 2026-10-09
-status: approved 2026-10-09 (open questions resolved); phases 1–4 in progress, phase 5 ramps up with review
+description: 'Adds a table-based listing page for all top-level plans, backfilling title and date front matter from each plan''s heading and filename because the listing is only useful once that metadata exists.'
+status: phases 1–5 done 2026-10-09; strict render clean once PRs #810 and #812 are on main
 braid: bd-fvcip3t5 (child of epic bd-uk8zgkha)
 ---
 
@@ -214,6 +215,20 @@ expensive one, so it waits for the earlier design to be accepted.
   this branch until bd-8a9eum6p is fixed or worked around. Four titles
   that used `\_` escapes now use code spans, which is the right markup
   once the bug is fixed.
+
+- 2026-10-09, later: PRs #810 (bd-mlmkev01) and #812 (bd-8a9eum6p) are
+  open. A local build of main with both merged in
+  (`.worktrees/spec-listing-fixes`) renders the site with `--strict`
+  clean. CI builds q2 from the branch under test, so merging main into
+  this branch after both PRs land is enough to make CI green.
+- Phase 5 is done. Haiku wrote the descriptions as structured output, and
+  `--descriptions` mode applied them, with a rule checker run and a strict
+  render before every commit. The stages were 11, then 50, then 198, then
+  792 plans (1, 5, 20 and 80 agents, about 8M subagent tokens in total).
+  Hand fixes: two plural possessives (both are Q-2-10 traps; the prompt
+  forbids them after stage 2), two identifiers moved into code spans, and
+  one path that Haiku mangled in its output. The listing now shows date,
+  title and description.
 
 ## Strands
 

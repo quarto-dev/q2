@@ -1,6 +1,7 @@
 ---
 title: 'Epic: `format: typst` smoke-all testing (orange-book port)'
 date: 2026-09-27
+description: 'Ports seven Q1 Typst smoke-all fixtures into Q2, adding the assertion vocabulary and PDF layout predicates needed to check numbering and margin placement in rendered Typst output.'
 ---
 
 **Date:** 2026-09-27

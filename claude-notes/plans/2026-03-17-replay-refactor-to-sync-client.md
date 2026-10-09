@@ -1,6 +1,7 @@
 ---
 title: 'Refactor Replay into quarto-sync-client'
 date: 2026-03-17
+description: 'Moves the non-React replay logic for document history out of the hub-client hook into a framework-agnostic `ReplaySession` API in the sync client package, so other consumers can replay history.'
 ---
 
 ## Overview

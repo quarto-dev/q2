@@ -1,6 +1,7 @@
 ---
 title: 'Spans, Links, and Images Implementation Plan'
 date: 2025-10-31
+description: 'Adds handlers for `pandoc_span` and `pandoc_image` nodes so bracketed text becomes Pandoc Span, Link or Image inlines, with `[text]` deliberately producing a Span rather than Pandoc''s literal brackets.'
 ---
 
 **Date**: 2025-10-31 (REVISED after testing)

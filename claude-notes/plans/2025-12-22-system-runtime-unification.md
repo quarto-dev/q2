@@ -1,6 +1,7 @@
 ---
 title: 'SystemRuntime Unification'
 date: 2025-12-22
+description: 'Renames pampa''s `LuaRuntime` trait to `SystemRuntime` and moves it into a shared crate, so pampa and quarto-core use one filesystem and process abstraction with a `find_binary` method added.'
 ---
 
 **Date**: 2025-12-22

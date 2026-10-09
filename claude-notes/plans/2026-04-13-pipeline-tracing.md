@@ -1,6 +1,7 @@
 ---
 title: 'Pipeline Execution Tracing'
 date: 2026-04-13
+description: 'Explores how to capture the data at each pipeline stage boundary by extending `PipelineObserver` with data-bearing callbacks, going beyond Quarto 1''s filter-only, whole-AST-dump tracing.'
 ---
 
 ## Overview

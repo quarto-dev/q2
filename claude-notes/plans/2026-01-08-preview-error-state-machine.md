@@ -1,6 +1,7 @@
 ---
 title: 'Preview Pane Error State Machine'
 date: 2026-01-08
+description: 'Replaces the hub-client preview''s full-page error display with a four-state machine that keeps the last good render on screen and shows later errors as a collapsible overlay.'
 ---
 
 **Beads Issue**: k-nwcy

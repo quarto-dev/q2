@@ -1,6 +1,7 @@
 ---
 title: 'Index-miss href relativization (×2) + website breadcrumbs'
 date: 2026-08-14
+description: 'Routes root-absolute and static-file links that miss the project index through the resource resolvers so they become page-relative, then adds website breadcrumbs to the page title block.'
 ---
 
 **Date:** 2026-08-14

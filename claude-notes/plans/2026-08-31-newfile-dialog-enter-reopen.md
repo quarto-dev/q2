@@ -1,6 +1,7 @@
 ---
 title: 'NewFileDialog: Enter-submit reopens the dialog (GH #635)'
 date: 2026-08-31
+description: 'Fixes the hub-client New file dialog, where pressing Enter reopens the dialog and Enter on Cancel still creates a file, by suppressing the keydown''s default click.'
 ---
 
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/635

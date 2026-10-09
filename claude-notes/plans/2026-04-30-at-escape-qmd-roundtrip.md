@@ -1,6 +1,7 @@
 ---
 title: 'QMD writer: missing `@` escape causes Str → Cite re-parse'
 date: 2026-04-30
+description: 'The qmd writer leaves `@` unescaped before an identifier, so literal text like `@name` re-parses as a citation; the plan fixes the writer''s escaping so qmd round trips are idempotent.'
 ---
 
 **Beads:** bd-21gu

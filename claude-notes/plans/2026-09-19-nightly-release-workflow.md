@@ -1,6 +1,7 @@
 ---
 title: 'Nightly release workflow: build `main` whenever it has unreleased changes'
 date: 2026-09-19
+description: 'Adds a scheduled workflow that publishes a rolling nightly prerelease whenever `main` has changes no release has shipped, sharing the release build and signing jobs through a reusable workflow.'
 ---
 
 **Date:** 2026-09-19

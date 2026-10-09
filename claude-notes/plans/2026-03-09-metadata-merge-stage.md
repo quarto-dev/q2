@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Extract MetadataMergeStage from AstTransformsStage'
 date: 2026-03-09
+description: 'Extracts the metadata merge out of `AstTransformsStage` into its own `MetadataMergeStage` that runs right after parsing, so later stages such as theme CSS compilation can see merged configuration.'
 ---
 
 ## Overview

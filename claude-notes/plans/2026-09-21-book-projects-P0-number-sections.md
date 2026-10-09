@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Number-sections / `@sec-` foundation (book-projects P0)'
 date: 2026-09-21
+description: 'Adds `@sec-` reference resolution and visible heading numbers to the native HTML writer, plus a chapter seed that offsets section numbers and letters appendices, so book chapters can be numbered across files.'
 ---
 
 **Date:** 2026-09-21

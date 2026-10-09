@@ -1,6 +1,7 @@
 ---
 title: 'Phase 4 Components Tree Validation Plan (k-228)'
 date: 2025-10-26
+description: 'Adds systematic validation of the AnnotatedParse components tree, checking structural integrity, child ordering, nesting depth, source-range containment and navigation helpers across all document types.'
 ---
 
 **Date**: 2025-10-26

@@ -1,6 +1,7 @@
 ---
 title: 'hub-mcp: replace device flow with Authorization Code + PKCE + loopback'
 date: 2026-05-28
+description: 'Replaces the device-flow sign-in in `quarto-hub-mcp` with Authorization Code and PKCE over a loopback redirect, a stronger defense against remote phishing while keeping the client secret.'
 ---
 
 ## Amendment 2026-05-28

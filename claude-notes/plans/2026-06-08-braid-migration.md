@@ -1,6 +1,7 @@
 ---
 title: 'Migrate q2 issue tracking from beads_rust to braid'
 date: 2026-06-08
+description: 'Sets out how q2 moves its issue tracking from `beads_rust` to the CRDT-backed braid skein, covering the id-preserving import, the backup-only snapshot policy, and the cutover phases.'
 ---
 
 **Status:** Draft / awaiting go-ahead

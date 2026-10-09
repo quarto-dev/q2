@@ -1,6 +1,7 @@
 ---
 title: 'Browser sync offline-fallback race family'
 date: 2026-06-12
+description: 'Fixes three defects in the browser sync client''s offline fallback, where a 1 ms peer wait pushes every session into offline mode and documents created there never reach the hub.'
 ---
 
 **Strand:** bd-10bdjmjb (related: bd-8x482xb0 dangling index entry,

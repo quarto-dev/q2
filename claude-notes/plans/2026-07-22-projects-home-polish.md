@@ -1,6 +1,7 @@
 ---
 title: 'ProjectsHome polish: dark-mode contrast, right-click menu, per-collection sort'
 date: 2026-07-22
+description: 'Adds darker scoped dark-mode colors, a right-click project menu, and a per-collection sort control to the hub-client projects home, with the sort comparator extracted for unit tests.'
 ---
 
 **Strand:** bd-je3w8q39

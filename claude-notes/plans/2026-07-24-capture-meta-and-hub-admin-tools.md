@@ -1,6 +1,7 @@
 ---
 title: 'Capture-doc metadata envelope + sync-server maintainer tools'
 date: 2026-07-24
+description: 'Adds an uncompressed metadata envelope to engine-capture documents and a `hub admin` maintenance tool that scans for orphaned captures, quarantines them, and purges them only after a retention window.'
 ---
 
 **Braid strand:** bd-eiku4ymo

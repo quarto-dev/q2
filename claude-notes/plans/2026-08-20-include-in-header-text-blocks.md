@@ -1,6 +1,7 @@
 ---
 title: 'include-in-header `text:` holding block markdown is dropped, and Q-5-5 blames the entry form (bd-include-in-header-text-blocks-ins2v6za)'
 date: 2026-08-20
+description: 'Accepts block-level markdown, such as a fenced raw HTML block, in `text:` entries of `include-in-header` and related includes, so it reaches the output instead of triggering a misleading `Q-5-5` warning.'
 ---
 
 **Date:** 2026-08-20

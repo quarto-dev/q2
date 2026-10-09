@@ -1,6 +1,7 @@
 ---
 title: 'Make the concrete-tree depth guard cheaper'
 date: 2026-09-18
+description: 'Makes the QMD reader''s nesting-depth guard cheaper, since profiling shows its separate whole-tree walk costs about 1.6% of a render, by moving the check into the existing conversion walk.'
 ---
 
 **Strand:** bd-t7i6oanu (related finding: bd-khect2gq)

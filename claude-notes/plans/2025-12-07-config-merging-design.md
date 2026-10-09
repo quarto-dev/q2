@@ -1,6 +1,7 @@
 ---
 title: 'Configuration Merging System Design'
 date: 2025-12-07
+description: 'Designs a Rust configuration merging system where `!prefer` and `!concat` YAML tags control merge behavior, using lazy evaluation and source tracking so validation errors point to the right file.'
 ---
 
 **Date**: 2025-12-07

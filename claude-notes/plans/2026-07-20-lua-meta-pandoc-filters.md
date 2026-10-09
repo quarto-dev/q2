@@ -1,6 +1,7 @@
 ---
 title: 'Lua `function Meta` / `function Pandoc` filters + Meta↔ConfigValue design'
 date: 2026-07-20
+description: 'Implements document-level `function Meta` and `function Pandoc` Lua filters and maps ConfigValue metadata to Lua values and back, preserving source provenance through a reconciliation step on return.'
 ---
 
 **Strands:** bd-2llqjsms (constructors + design), bd-a9g50za2 (doc-level

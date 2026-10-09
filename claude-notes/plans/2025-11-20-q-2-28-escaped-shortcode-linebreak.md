@@ -1,6 +1,7 @@
 ---
 title: 'Q-2-28: Line Break Before Escaped Shortcode Close'
 date: 2025-11-20
+description: 'Adds a `Q-2-28` diagnostic that flags a line break before the closing `>}}}` of an escaped shortcode, mirroring the existing check for regular shortcodes, with an auto-fix in `qmd-syntax-helper`.'
 ---
 
 **Date**: 2025-11-20

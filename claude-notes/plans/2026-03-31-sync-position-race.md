@@ -1,6 +1,7 @@
 ---
 title: 'Fix: Synchronous Remote Change Application to Prevent Position Mismatch'
 date: 2026-03-31
+description: 'Applies remote Automerge changes to the Monaco editor synchronously, before the next keystroke, so local splice positions stay aligned and typed characters no longer land out of order.'
 ---
 
 ## Overview

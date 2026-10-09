@@ -1,6 +1,7 @@
 ---
 title: 'P8 — Port `orange-book` (base), full predicates'
 date: 2026-09-27
+description: 'Ports the base `orange-book` book fixture with its full set of Typst regex and PDF text-position assertions, checking chapter numbering, appendix lettering, and crossref kinds in a merged book render.'
 ---
 
 **Date:** 2026-09-27

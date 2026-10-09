@@ -1,6 +1,7 @@
 ---
 title: '2026-05-12 — Fix displaymath column-strip to use enclosing paragraph column'
 date: 2026-05-12
+description: 'Changes the display math column-strip in the tree-sitter reader to use the enclosing paragraph''s start column instead of the `$$` opening column, so multi-line and inline-wrapped math round-trip correctly.'
 ---
 
 - **Beads:** [bd-qpa2](https://example/none) — *Display math column-strip uses wrong column source, mishandles inline-wrapped and labeled math (issue #181 follow-up)*

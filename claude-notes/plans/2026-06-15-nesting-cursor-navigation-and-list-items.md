@@ -1,6 +1,7 @@
 ---
 title: 'Nesting cursor — list-item surfaces & line-anchored navigation'
 date: 2026-06-15
+description: 'Makes list items and definition bodies into editing surfaces, and changes arrow-key navigation to follow the caret''s source line, including skipping structural lines that hold no content.'
 ---
 
 **Date:** 2026-06-15

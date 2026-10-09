@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Flush resource copies before `TypstCompileStage` runs (book-projects P2c)'
 date: 2026-09-24
+description: 'Moves the resource-copy flush ahead of the Typst compile stage so that images referenced from a Typst render exist in a differing output directory before `typst compile` reads them.'
 ---
 
 **Date:** 2026-09-24

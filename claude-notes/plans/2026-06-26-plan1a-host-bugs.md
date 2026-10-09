@@ -1,6 +1,7 @@
 ---
 title: 'Plan 1a-host bugs — q2-introduced defects in the landed engine host'
 date: 2026-06-26
+description: 'Fixes two q2-introduced defects in the landed TypeScript engine host: crash stderr falsely attributed to one engine when several are in flight, and bundle-extraction failures cached permanently.'
 ---
 
 **Status:** ready to execute. **Created:** 2026-06-26 (carved out of `plan1a-return-to-q1`).

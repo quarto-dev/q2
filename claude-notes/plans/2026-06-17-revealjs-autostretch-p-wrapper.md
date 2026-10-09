@@ -1,6 +1,7 @@
 ---
 title: 'RevealJS auto-stretch: image not sized because `r-stretch` img stays wrapped in `<p>`'
 date: 2026-06-17
+description: 'Fixes reveal not sizing a lone slide image because it stays wrapped in a paragraph, by unwrapping the container in the AST instead of adding a DOM postprocessor as Quarto 1 does.'
 ---
 
 **Strand:** bd-zkstclhl (figure follow-up: bd-38ioql41)

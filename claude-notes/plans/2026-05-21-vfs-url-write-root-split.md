@@ -1,6 +1,7 @@
 ---
 title: 'Plan — Split `vfs_root` into write-root + url-root in `ResourceResolverContext`'
 date: 2026-05-21
+description: 'Splits the single `vfs_root` in `ResourceResolverContext` into a disk-write root and a URL prefix, so native tests can write to a tempdir while links stay path-independent and the preview AST stays idempotent across runs.'
 ---
 
 **Date:** 2026-05-21

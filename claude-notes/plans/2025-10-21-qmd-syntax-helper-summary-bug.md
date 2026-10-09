@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix qmd-syntax-helper Summary File Count Bug'
 date: 2025-10-21
+description: 'Traces why the `qmd-syntax-helper check` summary counts only files with issues, since clean files produce no results, and proposes tracking the checked file list separately.'
 ---
 
 ## Problem Statement

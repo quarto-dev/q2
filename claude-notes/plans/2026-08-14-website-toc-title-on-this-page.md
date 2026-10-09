@@ -1,6 +1,7 @@
 ---
 title: 'Website TOC title uses `toc-title-document` instead of `toc-title-website` (bd-website-toc-title-wn80ymab)'
 date: 2026-08-14
+description: 'Makes the page TOC heading on website projects use the localized `toc-title-website` term, so pages read On this page instead of Table of contents, matching Quarto 1.'
 ---
 
 **Date:** 2026-08-14

@@ -1,6 +1,7 @@
 ---
 title: 'CSL Test Categorization Report'
 date: 2025-12-01
+description: 'Groups the remaining unknown CSL test cases by failure cause, such as citation sequences, quote positioning and disambiguation, with effort and priority estimates for each group.'
 ---
 
 **Date**: 2025-12-01

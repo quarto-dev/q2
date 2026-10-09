@@ -1,6 +1,7 @@
 ---
 title: 'Switch linux release targets to static musl (bd-dofxhzaj)'
 date: 2026-07-28
+description: 'Switches the Linux release targets from glibc to static musl so one artifact per architecture covers every distribution, including Alpine, after checking that the openssl and aws-lc dependencies build statically.'
 ---
 
 **Date:** 2026-07-28

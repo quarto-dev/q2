@@ -1,6 +1,7 @@
 ---
 title: 'Lua require + "current path" contract: GH #587, GH #588, shortcode stack leak'
 date: 2026-08-24
+description: 'Makes Lua `require` and `resolve_path` resolve against the extension root rather than the loading module''s directory by splitting the script-directory stacks, and enables scoped require in filters.'
 ---
 
 **Strands:**

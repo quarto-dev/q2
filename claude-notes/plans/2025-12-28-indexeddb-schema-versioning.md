@@ -1,6 +1,7 @@
 ---
 title: 'IndexedDB Schema Versioning and Migration System'
 date: 2025-12-28
+description: 'Adds explicit schema version tracking and an ordered, idempotent migration system to the hub-client IndexedDB store, separating structural upgrades from async data transformations so existing project data survives future schema changes.'
 ---
 
 **Beads Issue:** `k-ifux` - Implement IndexedDB schema versioning and migration system

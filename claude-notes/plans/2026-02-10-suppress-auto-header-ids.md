@@ -1,6 +1,7 @@
 ---
 title: 'Suppress Auto-Generated Header IDs in QMD Writer'
 date: 2026-02-10
+description: 'Stops the QMD writer from adding an auto-generated `#id` to headers whose source had none, so roundtrips and incremental writes no longer produce spurious text changes.'
 ---
 
 ## Overview

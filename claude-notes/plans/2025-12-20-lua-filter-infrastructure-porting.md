@@ -1,6 +1,7 @@
 ---
 title: 'Lua Filter Infrastructure Porting to Rust'
 date: 2025-12-20
+description: 'Analyzes the roughly 2,500 lines of Lua filter infrastructure that carry custom nodes such as Callout as wrapped Div elements, and proposes a Rust design with native custom nodes and format-conditional renderers.'
 ---
 
 **Date**: 2025-12-20

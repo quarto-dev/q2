@@ -1,6 +1,7 @@
 ---
 title: 'Extensions Phase 1: `_extension.yml` Parsing and Metadata Contributions'
 date: 2026-03-16
+description: 'Parses `_extension.yml` files into an extension data model and merges their format metadata into project and document configuration as a new layer in the metadata merge order.'
 ---
 
 **Created**: 2026-03-16

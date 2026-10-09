@@ -1,6 +1,7 @@
 ---
 title: 'Attribute Ordering Fixer for qmd-syntax-helper'
 date: 2025-10-28
+description: 'Adds a `qmd-syntax-helper` rule that uses Pandoc as a normalizer to reorder attribute blocks whose key-value pairs precede class or id specifiers, since the parser rejects that order.'
 ---
 
 **Issue**: qmd-7

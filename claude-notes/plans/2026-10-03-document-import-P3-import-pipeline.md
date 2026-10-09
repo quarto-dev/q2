@@ -1,6 +1,7 @@
 ---
 title: 'Plan: the import pipeline in Rust (document import P3)'
 date: 2026-10-03
+description: 'Builds the native Rust import pipeline: the format table, the pandoc request, reading pandoc''s JSON, track-change and comment transforms, the media plan and the generated qmd, exposed through four wasm exports.'
 ---
 
 **Date:** 2026-10-03

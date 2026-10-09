@@ -1,6 +1,7 @@
 ---
 title: 'Sidebar default title: inherit from `website.title`'
 date: 2026-04-29
+description: 'Makes the sidebar header inherit `website.title` by default, with `sidebar.title: false` to hide it and a custom string to override it, wrapped in a home link as Quarto 1 does.'
 ---
 
 **Date:** 2026-04-29

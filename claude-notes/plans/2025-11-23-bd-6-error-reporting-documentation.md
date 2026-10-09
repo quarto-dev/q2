@@ -1,6 +1,7 @@
 ---
 title: 'bd-6: Documentation and Examples for quarto-error-reporting'
 date: 2025-11-23
+description: 'Lays out the documentation work for the `quarto-error-reporting` crate, covering a contributor guide, module docs, runnable examples for Quarto integration patterns, and catalog validation tests.'
 ---
 
 **Date**: 2025-11-23

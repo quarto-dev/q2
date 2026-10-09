@@ -1,6 +1,7 @@
 ---
 title: 'Native Windows ARM64 binaries in the nightly (and release) pipeline'
 date: 2026-10-08
+description: 'Adds a native `windows_arm64` build to the release and nightly pipeline, built and verified on an ARM64 Windows runner like the other legs, and selected automatically by `install.ps1` on ARM64 machines.'
 ---
 
 **Date:** 2026-10-08

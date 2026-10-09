@@ -1,6 +1,7 @@
 ---
 title: 'Citeproc Output Unification Implementation Plan'
 date: 2025-12-05
+description: 'Makes `to_inlines()` the single canonical conversion from citeproc output, replacing the duplicated `render()` logic with a String form derived from Pandoc inlines so both paths agree.'
 ---
 
 **Issue**: k-0dqu

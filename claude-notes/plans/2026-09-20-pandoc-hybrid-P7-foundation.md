@@ -1,6 +1,7 @@
 ---
 title: 'P7-foundation — format-agnostic Pandoc CLI plumbing (extracted from P7)'
 date: 2026-09-20
+description: 'Adds format-agnostic CLI plumbing for pandoc-hybrid output: a multi-format render warning, a project-mode containment gate, and routing of `docx` and `pptx` renders through the shared pandoc render entry point.'
 ---
 
 **Date:** 2026-09-20

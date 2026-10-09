@@ -1,6 +1,7 @@
 ---
 title: 'In-context debugging/diagnostic affordances for the hub-client editor SPA'
 date: 2026-07-29
+description: 'Adds in-context debugging affordances to the hub-client editor SPA, exposing Automerge state through a machine-readable `quartoDebug.am` API and a visual inspector that runs in the editor''s own JS heap.'
 ---
 
 **Strand:** bd-aim2gqis (parent)

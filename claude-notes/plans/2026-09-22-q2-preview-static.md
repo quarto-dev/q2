@@ -1,6 +1,7 @@
 ---
 title: '`q2 preview --static`: render to disk, serve statically, watch and re-render'
 date: 2026-09-22
+description: 'Adds a `q2 preview --static` mode that renders a project to disk through the same pipeline as `q2 render`, serves the output, and re-renders and reloads the browser on each save.'
 ---
 
 **Strand:** bd-sl79jjiq

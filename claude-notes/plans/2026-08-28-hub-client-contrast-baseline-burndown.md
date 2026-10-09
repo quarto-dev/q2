@@ -1,6 +1,7 @@
 ---
 title: 'hub-client: burn down axe color-contrast baseline'
 date: 2026-08-28
+description: 'Fixes the CSS color contrast violations that the hub-client accessibility baseline had accepted as debt, adjusting theme tokens so every flagged text and button pair meets WCAG AA and the baseline regenerates empty.'
 ---
 
 Strand: bd-7byucvr6

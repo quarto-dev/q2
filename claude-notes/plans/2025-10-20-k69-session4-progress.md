@@ -1,6 +1,7 @@
 ---
 title: 'k-69 Session 4 Progress - Source Map Migration Final Switchover'
 date: 2025-10-20
+description: 'Tracks the in-progress switch of AST structs from the old dual `source_info` fields to `quarto_source_map::SourceInfo`, listing the remaining compile errors and the subtasks that will clear them.'
 ---
 
 **Date:** 2025-10-20

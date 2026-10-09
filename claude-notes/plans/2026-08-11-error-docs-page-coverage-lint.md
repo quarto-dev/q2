@@ -1,6 +1,7 @@
 ---
 title: 'Lint: every `error_catalog.json` code needs a `docs/errors/<subsystem>/<code>.qmd` page (bd-u2qj4y29)'
 date: 2026-08-11
+description: 'Investigates why 28 error catalog codes lack documentation pages and how coverage should be enforced, weighing a new lint rule against the planned `cargo xtask error-docs audit` command.'
 ---
 
 **Date:** 2026-08-11

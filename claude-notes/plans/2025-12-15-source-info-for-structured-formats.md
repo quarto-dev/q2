@@ -1,6 +1,7 @@
 ---
 title: 'Source Information Tracking for Structured Input Formats'
 date: 2025-12-15
+description: 'Designs source location tracking for Jupyter notebooks and percent scripts, storing mapping data in a sidecar file and adding a notebook cell location variant so errors are reported in cell coordinates.'
 ---
 
 **Date**: 2025-12-15

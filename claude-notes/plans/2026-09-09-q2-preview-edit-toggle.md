@@ -1,6 +1,7 @@
 ---
 title: 'hub-client `q2-preview`: editable / read-only toggle in the bottom status bar'
 date: 2026-09-09
+description: 'Adds an Edit pill to hub-client''s bottom bar that toggles q2-preview between editable and read-only, so links can be followed without opening the block editor, by reusing the existing `editingDisabled` renderer flag.'
 ---
 
 > **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this

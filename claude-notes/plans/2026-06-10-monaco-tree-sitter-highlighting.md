@@ -1,6 +1,7 @@
 ---
 title: 'Monaco syntax highlighting for `.qmd` via tree-sitter'
 date: 2026-06-10
+description: 'Replaces Monaco''s generic markdown mode for `.qmd` files with tree-sitter based semantic highlighting, covering Quarto syntax, YAML frontmatter and embedded code cells in the hub editor.'
 ---
 
 GitHub issue: [quarto-dev/q2#10](https://github.com/quarto-dev/q2/issues/10)

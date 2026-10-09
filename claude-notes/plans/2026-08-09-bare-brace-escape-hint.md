@@ -1,6 +1,7 @@
 ---
 title: 'pampa: bare-brace parse error should hint at escaping literal braces (bd-brace-escape-hint-0tmemkyt)'
 date: 2026-08-09
+description: 'Replaces the generic parse error for bare brace runs such as `{guid}` in prose or link text with a diagnostic explaining that braces are reserved for attributes and suggesting escaping.'
 ---
 
 **Date:** 2026-08-09

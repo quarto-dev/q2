@@ -1,6 +1,7 @@
 ---
 title: 'Hub-Client Color Scheme Refactor'
 date: 2026-04-02
+description: 'Replaces the hub-client light and dark toggle with a persisted three-way preference that follows the browser by default, applied through a `ThemeContext` and shared CSS variables to the app and Monaco but not the rendered preview.'
 ---
 
 ## Overview

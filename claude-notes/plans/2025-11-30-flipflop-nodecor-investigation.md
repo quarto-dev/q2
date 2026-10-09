@@ -1,6 +1,7 @@
 ---
 title: 'Flip-Flop Formatting / NoDecor Investigation'
 date: 2025-11-30
+description: 'Explains how the `nodecor` wrapper was dropped during display-region extraction in the CSL output code, records the fix, and lists the flip-flop tests still blocked by other issues.'
 ---
 
 **Date**: 2025-11-30

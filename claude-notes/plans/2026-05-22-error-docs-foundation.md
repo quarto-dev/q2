@@ -1,6 +1,7 @@
 ---
 title: 'Error-docs foundation'
 date: 2026-05-22
+description: 'Defines the layout, front-matter schema, and page template for error-code documentation, with one subdirectory per subsystem so that the `docs_url` values in the error catalog stay stable.'
 ---
 
 **Status:** drafting — pending user review

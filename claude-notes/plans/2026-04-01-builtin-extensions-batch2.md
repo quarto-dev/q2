@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Built-in Extensions Batch 2 — version, kbd, placeholder'
 date: 2026-04-01
+description: 'Adds the `version`, `kbd` and `placeholder` built-in extensions ported from TS Quarto, with `placeholder` emitting only SVG because its PNG mode depends on `fetch_url`, which was not yet implemented.'
 ---
 
 ## Status: Complete

@@ -1,6 +1,7 @@
 ---
 title: 'Auth failure: distinguishable reasons and audit coverage'
 date: 2026-07-30
+description: 'Replaces the one sign-in failure message that hides eleven causes with distinct coarse reasons, and closes audit-log gaps so CSRF failures and stale-login cases can be diagnosed.'
 ---
 
 **Status:** implemented 2026-07-30 on `braid/bd-htis60s7-auth-error-reasons`.

@@ -1,6 +1,7 @@
 ---
 title: 'Epic: Book projects (`ProjectKind::Book`)'
 date: 2026-09-21
+description: 'Gives `ProjectKind::Book` a real implementation with chapter-aware numbering, single-file chapter merging for Typst and EPUB, and project-wide cross-chapter reference and bibliography resolution for multi-file HTML books.'
 ---
 
 **Date:** 2026-09-21 (revised after a critical review pass — see "Revision history" at the end)

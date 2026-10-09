@@ -1,6 +1,7 @@
 ---
 title: 'Cross-referenceable Example blocks'
 date: 2026-06-09
+description: 'Makes embedded example iframes first-class cross-referenceable items, auto-numbered as Demo items under the new `demo` prefix, so prose can refer to them the way it refers to figures and theorems.'
 ---
 
 **Strand:** bd-t3cert81 (discovered-from bd-z1smhvuo, the embed feature)

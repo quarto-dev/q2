@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview — diagnostics surface (Phase D.4 follow-up)'
 date: 2026-05-21
+description: 'Adds a diagnostic overlay to `q2 preview` that shows render warnings and failures for the current page, plus a sink that server-side warnings can report into rather than only logging them.'
 ---
 
 **Issue:** bd-b9kzg

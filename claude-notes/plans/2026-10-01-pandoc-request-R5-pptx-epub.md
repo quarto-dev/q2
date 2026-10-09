@@ -1,6 +1,7 @@
 ---
 title: 'Plan: pptx and epub requests (pandoc-request R5)'
 date: 2026-10-01
+description: 'Extends the browser docx request to pptx and epub, and fixes epub output by stopping a document''s `css` metadata from being resolved against pandoc''s working directory.'
 ---
 
 **Date:** 2026-10-01

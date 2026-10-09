@@ -1,6 +1,7 @@
 ---
 title: 'llms-txt: author-facing link-target annotation (bd-llms-link-target-annotation-0zo2ppgx)'
 date: 2026-08-17
+description: 'Adds a `link-format` link attribute so an author can keep a link on the HTML page inside the llms-txt companion, or point the HTML page at the markdown companion.'
 ---
 
 **Date:** 2026-08-17

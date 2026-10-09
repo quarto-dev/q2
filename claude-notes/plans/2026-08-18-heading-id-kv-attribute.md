@@ -1,6 +1,7 @@
 ---
 title: 'Heading id written as {id="..."} emits two id attributes (bd-heading-id-attr-duplicated-xbpcmejr)'
 date: 2026-08-18
+description: 'Promotes `id` and `class` given as key-value attributes to the real identifier and classes, so a heading written with `{id="..."}` no longer emits two id attributes.'
 ---
 
 **Date:** 2026-08-18

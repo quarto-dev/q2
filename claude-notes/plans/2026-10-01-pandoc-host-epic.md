@@ -1,6 +1,7 @@
 ---
 title: 'Epic: pandoc.wasm host, "Download as" UI and PDF (browser side)'
 date: 2026-10-01
+description: 'Runs `pandoc.wasm` in hub-client to offer Download as docx, pptx, epub and typst source, with a host package, lazy loader, UI, hardening and a PDF chain through a typst worker.'
 ---
 
 **Date:** 2026-10-01

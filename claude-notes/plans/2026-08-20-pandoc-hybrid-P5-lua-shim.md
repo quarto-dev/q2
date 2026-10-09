@@ -1,6 +1,7 @@
 ---
 title: 'P5 — Lua shim: wire format → Q1 nodes (Route R + N)'
 date: 2026-08-20
+description: 'Designs the Lua shim that decodes Q2''s custom-node wire format into Q1 nodes, deciding for each of the eight wire types whether to call a Q1 constructor or resolve the node directly.'
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P5-lua-shim.md`

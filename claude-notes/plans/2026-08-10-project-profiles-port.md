@@ -1,6 +1,7 @@
 ---
 title: 'Project profiles: port from Quarto 1 (bd-fu16z22k)'
 date: 2026-08-10
+description: 'Ports Quarto 1 project profiles to Q2, covering `--profile` activation, profile config overlays and local overrides, with strict validation and span-carrying diagnostics where Quarto 1 guesses silently.'
 ---
 
 **Strand:** bd-fu16z22k (related: bd-ev8mk1rp, bd-mlj6)

@@ -1,6 +1,7 @@
 ---
 title: 'E2E: pin classic UI in existing suite + new projects-home spec'
 date: 2026-07-22
+description: 'Pins the existing end-to-end suite to the classic project selector, since the collections home became the default, and adds a new spec that drives the collections projects home UI.'
 ---
 
 **Strand:** bd-cbuc8n0e (discovered-from bd-je3w8q39)

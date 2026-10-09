@@ -1,6 +1,7 @@
 ---
 title: 'Recovery Analysis - What Went Wrong'
 date: 2025-10-21
+description: 'Finds that a partially finished commit left the `quarto-markdown-pandoc` crate uncompilable, because `main.rs` calls a new `qmd::read` API that the implementation never adopted, and compares options for separating the two work streams.'
 ---
 
 ## Investigation Results

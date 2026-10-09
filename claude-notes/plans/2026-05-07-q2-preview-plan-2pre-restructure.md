@@ -1,6 +1,7 @@
 ---
 title: 'Plan 2pre — Restructure render directory for parallel formats'
 date: 2026-05-07
+description: 'Splits the hub-client AST debug renderer into a format-agnostic framework layer and a `q2-debug` format directory, so a second format can share the framework without inheriting debug-specific styling.'
 ---
 
 **Date:** 2026-05-07

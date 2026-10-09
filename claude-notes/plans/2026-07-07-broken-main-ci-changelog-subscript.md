@@ -1,6 +1,7 @@
 ---
 title: 'Broken `main`: PWA precache limit + changelog unclosed-subscript'
 date: 2026-07-07
+description: 'Repairs a red `main` build by raising the PWA precache size limit for the large WASM file and closing an unclosed subscript in the changelog, plus a process to prevent similar churn.'
 ---
 
 **Strand:** `bd-q5o7ekzn`

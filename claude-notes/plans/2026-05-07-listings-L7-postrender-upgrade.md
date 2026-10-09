@@ -1,6 +1,7 @@
 ---
 title: 'L7 — Post-render placeholder upgrade (sub-plan)'
 date: 2026-05-07
+description: 'Fills listing-item descriptions and preview images during `quarto render` by reading engine-rendered sibling HTML in a native-only post-render step, with a `Q-12-13` warning when that content is missing.'
 ---
 
 **Date:** 2026-05-07

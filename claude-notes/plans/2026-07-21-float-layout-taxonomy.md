@@ -1,6 +1,7 @@
 ---
 title: 'Float/layout DOM class taxonomy (bd-hcp8m3ve)'
 date: 2026-07-21
+description: 'Settles the DOM class names for figure, table and listing floats by reusing Quarto 1 names, emitting them from a transform so the pampa HTML writer and the preview renderer produce the same structure.'
 ---
 
 **Date:** 2026-07-21

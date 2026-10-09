@@ -1,6 +1,7 @@
 ---
 title: 'Pampa pandoc-oracle tests hard-fail on local pandoc newer than allowlist (bd-i9i5ad2t)'
 date: 2026-07-02
+description: 'Replaces the substring version check that makes pampa''s pandoc oracle tests hard-fail on newer local pandoc with a numeric range gate, an actionable failure message, and a `cargo xtask pandoc-check` command for bumping the calibrated range.'
 ---
 
 **Date:** 2026-07-02

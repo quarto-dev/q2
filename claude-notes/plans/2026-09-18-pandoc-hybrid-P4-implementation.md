@@ -1,6 +1,7 @@
 ---
 title: 'P4 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Vendors Quarto 1''s Lua filters and data directory at a pinned tag, and adds a harness that runs them under a real pandoc subprocess, with each task bound to a named test seam.'
 ---
 
 **Date:** 2026-09-18

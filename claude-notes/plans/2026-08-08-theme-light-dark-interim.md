@@ -1,6 +1,7 @@
 ---
 title: 'Interim support for `theme: {light: [...], dark: [...]}` — use light, warn on dark'
 date: 2026-08-08
+description: 'Accepts the `theme: {light: ..., dark: ...}` map form and renders only the light half, warning that the dark variant is ignored, as an interim until full dual-theme support lands.'
 ---
 
 **Strand:** bd-o76p01wb (P1, feature) — discovered-from bd-ad7i1pc6 (custom project types, PR #474)

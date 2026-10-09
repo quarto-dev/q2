@@ -1,6 +1,7 @@
 ---
 title: 'Plan: `--json-errors` for `q2 render`'
 date: 2026-05-22
+description: 'Adds a `--json-errors` flag to `q2 render` that emits diagnostics as one JSON object per line on stderr, so agents and tools can read errors without scraping text.'
 ---
 
 **Status:** Implementation complete on `feature/q2-render-json-errors`;

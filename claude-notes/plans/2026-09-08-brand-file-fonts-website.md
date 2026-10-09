@@ -1,6 +1,7 @@
 ---
 title: '`source: file` brand fonts: never copied, `@font-face` URLs resolve against the theme CSS''s directory (bd-ve916wr8)'
 date: 2026-09-08
+description: 'Publishes `source: file` brand font files as artifacts beside the theme CSS and emits a constant `fonts/` URL, so `@font-face` rules resolve in websites and single documents instead of returning 404 errors.'
 ---
 
 **Date:** 2026-09-08

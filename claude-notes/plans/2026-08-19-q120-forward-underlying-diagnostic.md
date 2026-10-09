@@ -1,6 +1,7 @@
 ---
 title: 'Q-1-20 discards the underlying markdown diagnostic for config values (bd-q120-masks-config-md-diagnostic-a039r80t)'
 date: 2026-08-19
+description: 'Forwards the underlying markdown parse diagnostics for config values, instead of only the generic Q-1-20 message, by rerooting child spans into the config''s source file and folding them into the warning.'
 ---
 
 **Date:** 2026-08-19

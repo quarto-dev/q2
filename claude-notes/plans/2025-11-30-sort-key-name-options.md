@@ -1,6 +1,7 @@
 ---
 title: 'Sort Key Name Options Implementation'
 date: 2025-11-30
+description: 'Makes the `names-min`, `names-use-first` and `names-use-last` attributes on CSL sort keys override name formatting during sort key evaluation, so abbreviated author lists can drive sort order.'
 ---
 
 ## Problem Summary

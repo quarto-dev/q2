@@ -1,6 +1,7 @@
 ---
 title: 'P7 — Port `override-orange-book` + `orange-book-lang`'
 date: 2026-09-27
+description: 'Ports the `orange-book-lang` French localization fixture and the `override-orange-book` user-extension fixture, proving that a project-local extension overrides the vendored `orange-book` subtree end to end.'
 ---
 
 **Date:** 2026-09-27

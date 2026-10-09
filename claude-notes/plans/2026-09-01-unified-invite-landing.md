@@ -1,6 +1,7 @@
 ---
 title: 'Unified InviteLanding for collection and document invites'
 date: 2026-09-01
+description: 'Replaces the separate join and share landing pages with one InviteLanding card that previews the shared content, asks signed-out users to sign in, and opens the intended file after joining.'
 ---
 
 **Strand:** bd-fxdcxbpq · **Branch:** `onboarding/invite-landing` · **Scope:** `hub-client/`

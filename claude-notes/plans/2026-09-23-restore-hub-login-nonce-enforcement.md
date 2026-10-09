@@ -1,6 +1,7 @@
 ---
 title: 'Restore universal hub login nonce enforcement (GH #564, reverse PR #446)'
 date: 2026-09-23
+description: 'Reverses the temporary nonce bypass on the hub''s `POST /auth/callback` so nonce-less ID tokens are rejected again, with a `stale_client` redirect when no login-state cookie is present.'
 ---
 
 ## Overview

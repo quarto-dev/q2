@@ -1,6 +1,7 @@
 ---
 title: 'Pampa-native "raw JSON" reader/writer (GH issue #11)'
 date: 2026-07-17
+description: 'Adds a pampa-specific raw JSON reader and writer that round-trips the full AST, including extension nodes such as standalone attributes and CriticMarkup, which the Pandoc-compatible JSON format cannot represent.'
 ---
 
 **Status:** Draft v2 — iterating with Carlos before implementation.

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Switch Hub-Client to render_qmd'
 date: 2026-03-07
+description: 'Switches the hub-client live preview from rendering editor content strings to `render_qmd` on the VFS path, so project `_quarto.yml` and metadata layers apply and scroll sync is set via runtime metadata.'
 ---
 
 ## Context for New Agents

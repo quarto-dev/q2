@@ -1,6 +1,7 @@
 ---
 title: 'Extension Type Writer Audit - k-327'
 date: 2025-11-21
+description: 'Audits the Quarto extension node types in the native writer and finds that unhandled block and inline variants, plus percentage column widths, crash the program through `panic!()` rather than returning an error.'
 ---
 
 **Date**: 2025-11-21

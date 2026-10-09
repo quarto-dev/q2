@@ -1,6 +1,7 @@
 ---
 title: 'Shortcode extensions: Quarto 1 → Quarto 2 port plan'
 date: 2026-07-31
+description: 'Plans the port of Quarto 1 shortcode extensions to Quarto 2, closing gaps in loading, dispatch, built-in shortcodes and diagnostics so `_extensions` handlers behave as documented, with source-mapped errors.'
 ---
 
 **Status:** Reviewed 2026-07-31 — design decisions signed off (see § Design

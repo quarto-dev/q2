@@ -1,6 +1,7 @@
 ---
 title: 'EJS Template Usage Analysis in quarto-cli'
 date: 2025-12-20
+description: 'Inventories which EJS templates a minimal Quarto website render depends on, finding that navigation templates are required, and weighs pre-generating navigation HTML against porting a minimal EJS renderer to Rust.'
 ---
 
 ## Executive Summary

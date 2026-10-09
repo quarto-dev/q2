@@ -1,6 +1,7 @@
 ---
 title: 'q2-preview: remove `CommentBlock`\''s per-block wrapper `<div>` (bd-q2wqj24c)'
 date: 2026-09-10
+description: 'Removes the wrapper `div` that `CommentBlock` adds around each block in q2-preview, so theme rules using direct child selectors match `q2 render` again, by moving comment bubbles into a shared body-level layer.'
 ---
 
 **Date:** 2026-09-10

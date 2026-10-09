@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Viewer, incremental spike and PDF parity (pandoc-host H9)'
 date: 2026-10-01
+description: 'Shows the PDF in a pdf.js viewer that keeps zoom and scroll across recompiles, adds a PDF preview pane, records a no verdict on incremental recompile, and checks typst output against native.'
 ---
 
 **Date:** 2026-10-01

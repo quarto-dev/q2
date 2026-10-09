@@ -1,6 +1,7 @@
 ---
 title: 'Shortcodes in footnote definitions and `lst-cap` (bd-xjg7vl6c)'
 date: 2026-10-04
+description: 'Makes shortcodes expand inside footnote definitions and the `lst-cap` attribute of listings, matching Quarto 1, while leaving other attribute and title contexts unexpanded as Quarto 1 does.'
 ---
 
 Strand: `bd-xjg7vl6c`. Blocks `claude-notes/plans/2026-10-03-disable-lua-shortcodes.md`

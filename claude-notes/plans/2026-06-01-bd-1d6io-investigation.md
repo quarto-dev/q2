@@ -1,6 +1,7 @@
 ---
 title: 'bd-1d6io — annotated-qmd source-tracking off-by-one: investigation'
 date: 2026-06-01
+description: 'Investigates two failing `annotated-qmd` tests where source ranges absorb preceding whitespace, tracing inline code spans to a tree-sitter scanner regression and attribute keys to an original defect.'
 ---
 
 **Status:** investigation complete — triage verdict below. No fix committed yet.

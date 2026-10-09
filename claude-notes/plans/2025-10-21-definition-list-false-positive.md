@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix Definition List Detection False Positive on Table Captions'
 date: 2025-10-21
+description: 'Fixes false positives in the `definition-lists` rule of qmd-syntax-helper, where table captions starting with a colon are misread as definition lists, by weighing a stricter colon-spacing regex against a pipe-table check.'
 ---
 
 ## Problem Statement

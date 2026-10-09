@@ -1,6 +1,7 @@
 ---
 title: 'Strict mode: promote warning diagnostics to errors (GH #220)'
 date: 2026-07-02
+description: 'Proposes a `--strict` render flag that promotes warnings to errors at the project summary boundary, so every warning source fails the command without per-call-site changes.'
 ---
 
 - **Braid strand:** bd-yjs54ptg

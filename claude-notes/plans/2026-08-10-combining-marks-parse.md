@@ -1,6 +1,7 @@
 ---
 title: 'Parser rejects combining characters / join controls in prose (bd-96fswwce)'
 date: 2026-08-10
+description: 'Lets the QMD parser accept Unicode combining marks and the ZWNJ and ZWJ join controls in prose, so decomposed text, Hindi vowel signs and similar content parse as ordinary words instead of raising errors.'
 ---
 
 **Date:** 2026-08-10

@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview — Phase B plan'
 date: 2026-05-13
+description: 'Broadens the `q2 preview` re-render trigger beyond `.qmd` files to config files, images, custom components and cross-document dependencies by widening the file watcher''s allow-list.'
 ---
 
 **Epic:** bd-kw93 (q2 preview)

@@ -1,6 +1,7 @@
 ---
 title: 'repo-actions footer copy ships no CSS'
 date: 2026-08-25
+description: 'Ports the missing `.toc-actions` stylesheet rules from Quarto 1 into the page-footer section of the Bootstrap rules, so the footer copy of the repo-actions links renders as a centred horizontal row.'
 ---
 
 **Strand:** bd-repo-actions-footer-unstyled-80xtt35y

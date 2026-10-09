@@ -1,6 +1,7 @@
 ---
 title: 'Error-docs sidebar: backfill + lint rule (bd-wcmk1fsq)'
 date: 2026-08-18
+description: 'Backfills the hand-maintained error-reference sidebar so every error page is listed, and adds a `cargo xtask lint` rule that flags unlisted, stale, or out-of-order sidebar entries.'
 ---
 
 ## Overview

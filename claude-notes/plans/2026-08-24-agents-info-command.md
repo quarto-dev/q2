@@ -1,6 +1,7 @@
 ---
 title: '`q2 docs llms`: embed the docs-site llms.txt artifacts in the binary'
 date: 2026-08-24
+description: 'Adds a `q2 docs llms` command that serves the docs-site llms.txt artifacts embedded in the binary, so LLM agents can read q2 documentation offline, with `q2 agents-info` as an alias.'
 ---
 
 **Strand:** bd-hwop1zii

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: WASM Lua `io` and `os` Support'
 date: 2026-03-26
+description: 'Registers synthetic `io` and `os` tables from Rust for WASM Lua, exposing only the functions that can be implemented safely in the browser so extensions such as lipsum run there.'
 ---
 
 ## Overview

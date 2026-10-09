@@ -1,6 +1,7 @@
 ---
 title: 'Fix default-theme SCSS recompile regression in hub-client (WASM)'
 date: 2026-04-18
+description: 'Fixes a hub-client keystroke freeze caused by recompiling the default Bootstrap SCSS on every WASM render, by adding an in-memory cache and routing the no-theme path through the runtime cache.'
 ---
 
 Beads: `bd-i992` (discovered-from `bd-imiw`)

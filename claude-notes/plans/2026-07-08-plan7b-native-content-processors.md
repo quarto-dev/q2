@@ -1,6 +1,7 @@
 ---
 title: 'Plan 7b — Native content-processor registry: percent + spin (zero Pass-1 launch)'
 date: 2026-07-08
+description: 'Replaces per-file conversion of percent and spin scripts with a native, engine-agnostic processor registry, so project discovery and conversion never launch an engine process.'
 ---
 
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md) (reframed as the 7-series *content-processor architecture* root)

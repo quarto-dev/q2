@@ -1,6 +1,7 @@
 ---
 title: 'Hash-based tracking of edit locations ("track me") — block-editing successor'
 date: 2026-06-13
+description: 'Tracks the editor''s block by a position-independent structural hash so the parent can relocate an open editor after a collaborator''s re-render, which fixes nested child edits being dropped.'
 ---
 
 **Date:** 2026-06-13

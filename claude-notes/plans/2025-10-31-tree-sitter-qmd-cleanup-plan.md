@@ -1,6 +1,7 @@
 ---
 title: 'tree-sitter-qmd Cleanup Plan'
 date: 2025-10-31
+description: 'Removes the unused legacy inline grammar from the `tree-sitter-qmd` build and its exported `INLINE_LANGUAGE` API, since only the unified block grammar is parsed.'
 ---
 
 **Date**: 2025-10-31

@@ -1,6 +1,7 @@
 ---
 title: 'Block Handlers Implementation Plan - ACCURATE Assessment'
 date: 2025-10-31
+description: 'Lists the block-level node types the tree-sitter visitor still does not handle, such as block quotes, lists, tables and fenced divs, which crash the parser on any document containing them, ordered by dependency.'
 ---
 
 **Date**: 2025-10-31

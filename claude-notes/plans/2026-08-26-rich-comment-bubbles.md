@@ -1,6 +1,7 @@
 ---
 title: 'Rich inline rendering in comment bubbles'
 date: 2026-08-26
+description: 'Renders comment bubble content through the normal inline renderers so emphasis, code, quotes and math keep their styling, and adds link routing and layout containment for images and notes.'
 ---
 
 **Strand:** bd-y66gbfs4 (discovered-from bd-wcz4x7y0, PR #612)

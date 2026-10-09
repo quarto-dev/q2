@@ -1,6 +1,7 @@
 ---
 title: 'Harden `q2 provide-hub`: interactive consent gate + one-shot default'
 date: 2026-07-02
+description: 'Makes `q2 provide-hub` safe by default: an interactive consent prompt shows the resolved document before any execution, always-online auto-execution moves behind `--watch`, and `--allow-all` is retired.'
 ---
 
 **Strand:** bd-9lgiulr4 (feature, P1). Discovered from bd-sfet3264.

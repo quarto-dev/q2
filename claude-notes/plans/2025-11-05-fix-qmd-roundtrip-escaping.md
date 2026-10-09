@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix QMD Roundtrip Escaping Bug'
 date: 2025-11-05
+description: 'Fixes qmd roundtripping by having the qmd writer escape every ASCII punctuation character the grammar accepts as an escape, so that `\$3.14` is no longer written back as `$3.14`.'
 ---
 
 **Date**: 2025-11-05

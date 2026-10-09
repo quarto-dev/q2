@@ -1,6 +1,7 @@
 ---
 title: 'Directory Metadata Path Resolution'
 date: 2026-02-17
+description: 'Rewrites relative `!path` values in `_metadata.yml` files so they resolve from the rendered document''s directory rather than the metadata file''s own directory, using path diffing.'
 ---
 
 **Date**: 2026-02-17

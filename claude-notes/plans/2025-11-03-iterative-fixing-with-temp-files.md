@@ -1,6 +1,7 @@
 ---
 title: 'Iterative Fixing with Temporary Files for qmd-syntax-helper'
 date: 2025-11-03
+description: 'Has `qmd-syntax-helper` apply every fix to a temporary copy of each file on each pass, so in-place and printed-output modes share one convergence loop and the original file is written only at the end.'
 ---
 
 **Date**: 2025-11-03

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix qmd-syntax-helper Glob Pattern No-Match Handling'
 date: 2025-10-21
+description: 'Proposes making `expand_globs` in `qmd-syntax-helper` report an error when a glob matches nothing or a literal path is missing, rather than summarizing a nonexistent file as a clean run.'
 ---
 
 ## Problem Statement

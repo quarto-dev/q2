@@ -1,6 +1,7 @@
 ---
 title: 'Source-pointing diagnostics for resource-path errors'
 date: 2026-05-21
+description: 'Gives out-of-project `resources:` errors a tidyverse-style diagnostic with an Ariadne snippet pointing at the offending YAML scalar in `_quarto.yml` or the document header, instead of plain text.'
 ---
 
 ## Overview

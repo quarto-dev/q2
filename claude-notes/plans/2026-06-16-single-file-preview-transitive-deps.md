@@ -1,6 +1,7 @@
 ---
 title: 'Single-file `q2 preview`: transitive sibling-dependency resolution'
 date: 2026-06-16
+description: 'Makes single-file `q2 preview` populate its in-browser virtual file system with the deck''s full transitive closure of included files and images, reusing the renderer''s own include expansion so resolution cannot drift from `q2 render`.'
 ---
 
 **Strand:** bd-9cyza5vy · **Follows:** bd-kpuweafo (direct images), bd-ggvq1j68

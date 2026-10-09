@@ -1,6 +1,7 @@
 ---
 title: 'Recognize bare `<` as a `Str` token'
 date: 2026-05-18
+description: 'Makes a bare `<` that does not start an HTML tag, comment, or autolink parse as a plain string instead of a hard parse error, by adding a scanner token for it.'
 ---
 
 **Status:** implemented (awaiting review / push)

@@ -1,6 +1,7 @@
 ---
 title: 'Extensions Phase 4: Template and Partial Support'
 date: 2026-03-16
+description: 'Lets extensions supply custom templates and template partials through the runtime abstraction, so they work in the WASM build and override the built-in HTML templates when declared.'
 ---
 
 **Created**: 2026-03-16

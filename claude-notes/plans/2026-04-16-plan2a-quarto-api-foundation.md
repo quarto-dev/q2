@@ -1,6 +1,7 @@
 ---
 title: 'Plan 2A: TS package foundations (@quarto/api skeleton + config, @quarto/types vendor)'
 date: 2026-04-16
+description: 'Creates the `@quarto/api` package shell with its metadata key lists and a vendored `@quarto/types` package, then adds the platform seam and utility namespaces that engine host tests depend on.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

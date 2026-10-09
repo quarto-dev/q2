@@ -1,6 +1,7 @@
 ---
 title: 'Code Span Implementation - Completion Summary'
 date: 2025-10-31
+description: 'Summarizes the tree-sitter handler for inline code spans, including how whitespace captured in the delimiters becomes Space nodes so that the output matches Pandoc.'
 ---
 
 **Date**: 2025-10-31

@@ -1,6 +1,7 @@
 ---
 title: 'Hub-client website rendering UX'
 date: 2026-05-01
+description: 'Improves hub-client error reporting for website projects, so a parse error on one page is no longer shown as a misleading unknown-document warning and the active page shows its real diagnostic.'
 ---
 
 ## Overview

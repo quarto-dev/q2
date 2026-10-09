@@ -1,6 +1,7 @@
 ---
 title: 'Plan 1c: Extension Integration & End-to-End'
 date: 2026-04-16
+description: 'Wires TypeScript engine extensions into project discovery by parsing `_extension.yml` engine contributions, building bundles, and registering engines in a shared registry, checked end to end with an echo engine.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

@@ -1,6 +1,7 @@
 ---
 title: 'Error Handling Strategy for Config Merging'
 date: 2025-12-07
+description: 'Proposes how config merging should handle YAML parse failures in one layer, invalid tags, circular includes, and runaway nesting, reusing the existing diagnostic collector and error code scheme.'
 ---
 
 **Date**: 2025-12-07

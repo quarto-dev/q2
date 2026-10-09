@@ -1,6 +1,7 @@
 ---
 title: 'Demo: hub-react-todo'
 date: 2026-02-06
+description: 'Plans a standalone React app that connects to a sync server and renders a live todo list from the Pandoc AST of a `#todo` div in a QMD document.'
 ---
 
 **Parent plan:** `claude-notes/plans/2026-02-06-ast-sync-client-api.md` (item 1.6)

@@ -1,6 +1,7 @@
 ---
 title: 'Phase 6 — Cross-document link rewriting'
 date: 2026-04-24
+description: 'Rewrites body-content Markdown links to other project documents, such as `about.qmd`, into `.html` URLs relative to the current page''s depth, so links resolve correctly in the rendered site.'
 ---
 
 **Date:** 2026-04-24

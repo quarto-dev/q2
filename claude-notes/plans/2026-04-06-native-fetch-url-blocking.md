@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Use reqwest::blocking for native fetch_url'
 date: 2026-04-06
+description: 'Switches native `fetch_url` from the async reqwest client to `reqwest::blocking`, because the pollster-driven render pipeline has no tokio reactor and would panic on network calls from Lua filters.'
 ---
 
 ## Status: Ready to commit

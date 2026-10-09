@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Import button, dialog, drop routing and storage (document import P5)'
 date: 2026-10-03
+description: 'Adds the Import button, the placement dialog, drop routing for documents on the sidebar, editor and window, and collision-safe writes that store images before the qmd and roll back on failure.'
 ---
 
 **Date:** 2026-10-03

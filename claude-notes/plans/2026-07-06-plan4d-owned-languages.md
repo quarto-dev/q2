@@ -1,6 +1,7 @@
 ---
 title: 'Plan 4d: `owned_languages` — a positive engine-ownership wire field'
 date: 2026-07-06
+description: 'Adds a positive `owned_languages` field to the engine-execute wire, so TypeScript engines can ask directly which languages q2 assigned to them instead of inferring this from the leave-alone `handled_languages` set.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

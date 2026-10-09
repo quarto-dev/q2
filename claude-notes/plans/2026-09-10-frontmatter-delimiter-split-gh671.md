@@ -1,6 +1,7 @@
 ---
 title: 'Frontmatter reader splits on every `---`, truncating YAML values that contain one (bd-mjo6ao32, GH #671)'
 date: 2026-09-10
+description: 'Fixes the metadata reader so it ends the YAML block only at delimiter lines rather than at every three-dash sequence, so values containing an em dash no longer truncate later keys or raise a quoting error.'
 ---
 
 **Date:** 2026-09-10

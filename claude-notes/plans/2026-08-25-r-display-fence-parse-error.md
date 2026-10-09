@@ -1,6 +1,7 @@
 ---
 title: 'R display fences (\`\`\` r) are a fatal parse error (bd-knitr-inline-r-eats-fence-2ofk91x1)'
 date: 2026-08-25
+description: 'Fixes the knitr inline-R preprocessing pattern so that R display fences with a language but no braces stop being read as inline expressions, which currently makes the whole page fail to parse.'
 ---
 
 **Date:** 2026-08-25

@@ -1,6 +1,7 @@
 ---
 title: 'Syntax highlighting — Phase 3 (browser built-ins)'
 date: 2026-04-20
+description: 'Makes the statically linked tree-sitter grammars compile and run in the browser build of hub-client, covering the C shim fixes, the un-gated highlight stage, and browser verification of highlighting.'
 ---
 
 - **Parent plan**: `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`

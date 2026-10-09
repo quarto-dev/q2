@@ -1,6 +1,7 @@
 ---
 title: 'Worktree + cargo-target disk reclamation'
 date: 2026-05-22
+description: 'Adds a `cargo xtask reap-worktrees` command that surveys `.worktrees/` and removes finished worktrees while skipping unmerged or uncommitted ones, reclaiming the build directories that filled the disk.'
 ---
 
 **Status:** drafting — ready for a separate agent to pick up

@@ -1,6 +1,7 @@
 ---
 title: 'Quarto Extensions Grand Plan'
 date: 2026-03-16
+description: 'Roadmap for implementing the Quarto extension system in the Rust rewrite, covering the seven contribution types declared in `_extension.yml` files and the phases that deliver each one.'
 ---
 
 **Created**: 2026-03-16

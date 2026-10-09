@@ -1,6 +1,7 @@
 ---
 title: 'Quarto-Core Error Infrastructure Refactoring'
 date: 2025-12-28
+description: 'Replaces the string-based `QuartoError::Parse` in `quarto-core` with a structured `ParseError` that keeps pampa''s diagnostics and source context, so the CLI can print rich ariadne-style error snippets.'
 ---
 
 **Issue:** k-a2nw

@@ -1,6 +1,7 @@
 ---
 title: 'cargo xtask verify does not run hub-client lint:css (CI does) (bd-4bu7vwi5)'
 date: 2026-09-09
+description: 'Makes `cargo xtask verify` run the hub-client `lint:css` check that CI already runs, so CSS rule violations fail locally in the first step, with a `--skip-css-lint` escape hatch.'
 ---
 
 **Date:** 2026-09-09

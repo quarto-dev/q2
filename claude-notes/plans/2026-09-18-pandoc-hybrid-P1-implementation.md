@@ -1,6 +1,7 @@
 ---
 title: 'P1 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Task-by-task spec for the neutral core of the Pandoc hybrid writer, adding a `PipelineProfile` seam that replaces two ad hoc format checks and a `pptx` format identifier, each with named test seams.'
 ---
 
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P1-neutral-core.md`](2026-08-20-pandoc-hybrid-P1-neutral-core.md)

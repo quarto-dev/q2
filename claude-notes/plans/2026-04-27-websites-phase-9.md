@@ -1,6 +1,7 @@
 ---
 title: 'Phase 9 — Hub-client project rendering'
 date: 2026-04-27
+description: 'Makes the hub-client live preview render a project page with its sidebar, navbar, prev and next strip, and rewritten cross-document links, through a new `render_page_in_project` WASM entry point that runs full two-pass orchestration over the virtual filesystem.'
 ---
 
 **Date:** 2026-04-27

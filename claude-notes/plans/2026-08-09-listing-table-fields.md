@@ -1,6 +1,7 @@
 ---
 title: 'Table listings ignore fields/field-display-names (bd-listing-table-fields-peg1w3b3)'
 date: 2026-08-09
+description: 'Makes table listings honor `fields`, `field-display-names` and the `field-links` option by pre-rendering the header and row markdown in the binding, so only declared columns appear and missing values no longer warn.'
 ---
 
 **Date:** 2026-08-09

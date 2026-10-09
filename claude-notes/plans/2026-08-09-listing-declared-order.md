@@ -1,6 +1,7 @@
 ---
 title: 'Listings lose declared order of explicit `contents:` entries (bd-listing-declared-order-3ixcvc4o)'
 date: 2026-08-09
+description: 'Makes listings with explicit `contents:` paths keep the order the author declared, by ordering matched items by their first matching pattern, instead of the project''s alphabetical index order.'
 ---
 
 **Date:** 2026-08-09

@@ -1,6 +1,7 @@
 ---
 title: 'Phase 5 — Scoped artifact store + `site_libs/`'
 date: 2026-04-24
+description: 'Gives rendered artifacts a page or project scope so that shared theme CSS and extension dependencies are written once to a `site_libs` directory in website projects, while single-document output keeps its current layout.'
 ---
 
 **Date:** 2026-04-24

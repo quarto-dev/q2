@@ -1,6 +1,7 @@
 ---
 title: 'Merge `main` into `feature/websites`: order IncludeExpansion before DocumentProfile'
 date: 2026-04-24
+description: 'Plans the merge of the mainline into the websites feature line so that the include shortcode expansion stage runs before the `DocumentProfile` checkpoint, letting included headings appear in the profile outline.'
 ---
 
 **Date:** 2026-04-24

@@ -1,6 +1,7 @@
 ---
 title: 'Sidebar `contents: <directory>` shorthand renders a broken sidebar (bd-sidebar-contents-dir-shorthand-z7arvhx8)'
 date: 2026-08-12
+description: 'Makes a bare directory name in `contents:` expand to a titled section of the pages in that directory, as Quarto 1 does, and applies sidebar selection after expansion.'
 ---
 
 **Date:** 2026-08-12

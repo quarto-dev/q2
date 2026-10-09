@@ -1,6 +1,7 @@
 ---
 title: 'Hub: contain index-sourced paths to the project root (path-traversal write fix)'
 date: 2026-05-30
+description: 'Blocks a connected sync client from writing files outside the project by lexically rejecting escaping index paths and canonicalizing targets before the hub''s sync writes, closing an arbitrary file overwrite.'
 ---
 
 **Issue:** bd-rz6yb (bug, p1)

@@ -1,6 +1,7 @@
 ---
 title: 'Heading identifiers are not disambiguated across include boundaries (bd-duplicate-heading-ids-mou5z7ux)'
 date: 2026-08-18
+description: 'Disambiguates heading ids that repeat when one fragment is included several times, using a scoped pass after include expansion that matches Quarto 1''s numbering for repeated includes.'
 ---
 
 **Date:** 2026-08-18

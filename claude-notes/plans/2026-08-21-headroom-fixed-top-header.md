@@ -1,6 +1,7 @@
 ---
 title: 'Website header: headroom.js scroll-away + fixed-top parity (bd-ersobfbt)'
 date: 2026-08-21
+description: 'Ports Q1''s website header that hides on scroll-down and returns on scroll-up, pairing `headroom.js` with the JavaScript offset bookkeeping that keeps page content from sitting under the fixed header.'
 ---
 
 **Date:** 2026-08-21

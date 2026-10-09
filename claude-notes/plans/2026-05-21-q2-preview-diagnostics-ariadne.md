@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview diagnostics: include ariadne source-context snippet'
 date: 2026-05-21
+description: 'Shows the Ariadne source-context snippet that `q2 render` prints for each warning in the `q2 preview` diagnostics overlay, by sending a pre-rendered text field in the diagnostic JSON.'
 ---
 
 **Issue:** bd-352bh

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: keep imported EMF/WMF as SVG, rasterize only for docx/pptx export'
 date: 2026-10-05
+description: 'Keeps imported EMF and WMF images as SVG in the project and rasterizes referenced SVGs to PNG only when rendering docx or pptx, since pandoc needs a PNG fallback in those writers.'
 ---
 
 **Date:** 2026-10-05

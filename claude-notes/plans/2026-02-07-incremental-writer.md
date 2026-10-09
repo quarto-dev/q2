@@ -1,6 +1,7 @@
 ---
 title: 'Incremental QMD Writer'
 date: 2026-02-07
+description: 'Designs an incremental writer for pampa that turns localized AST edits into localized edits of the QMD source, rewriting only changed blocks and keeping the rest of the text verbatim.'
 ---
 
 **Beads issue:** `bd-2t4o`

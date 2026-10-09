@@ -1,6 +1,7 @@
 ---
 title: 'Hub-client full-text search'
 date: 2026-06-23
+description: 'Designs client-side full-text search over the currently open project''s files in hub-client, behind a `SearchProvider` interface so a later cross-project backend can replace the implementation without UI changes.'
 ---
 
 **Status:** Phase 1 complete (open-project client-side search shipped on

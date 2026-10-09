@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix Definition List False Positives on Grid Table Captions'
 date: 2025-10-21
+description: 'Explains why the definition-lists check in `qmd-syntax-helper` flags grid table caption attribute lines as definition lists, and traces the table-row check in `definition_lists.rs` that fails to catch them.'
 ---
 
 ## Problem Statement

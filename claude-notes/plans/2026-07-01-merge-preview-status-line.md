@@ -1,6 +1,7 @@
 ---
 title: 'Merge the preview executor + capture status bars into one status line'
 date: 2026-07-01
+description: 'Collapses the separate executor and capture status strips in the hub-client preview into one `PreviewStatusBar` with a single precedence-ordered message and a combined Clear and Run button group.'
 ---
 
 **Strand:** bd-yai4w8ly (task, P2). Discovered from bd-sfet3264

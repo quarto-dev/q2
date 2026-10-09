@@ -1,6 +1,7 @@
 ---
 title: '`html_element` runaway: `<6.1` in prose swallows the document'
 date: 2026-09-28
+description: 'Tightens the inline HTML scanner so that a `<` followed by a non-letter, as in `<6.1` in prose, no longer opens an HTML element that can run across blank lines and swallow later tables.'
 ---
 
 **Status:** implemented on `braid/bd-html-element-runaway-k1eo50h8-htmlelement-lexing-runs-away`; full `cargo xtask verify` green locally; PR open, awaiting CI + review

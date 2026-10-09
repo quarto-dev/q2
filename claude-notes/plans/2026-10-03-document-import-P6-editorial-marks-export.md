@@ -1,6 +1,7 @@
 ---
 title: 'Plan: editorial marks to Word and PowerPoint, in Rust (document import P6)'
 date: 2026-10-03
+description: 'Ports the editorial-marks Lua filters to a Rust transform that turns insert, delete, highlight and comment marks into Word and PowerPoint markup, including a commented-range shape with replies.'
 ---
 
 **Date:** 2026-10-03

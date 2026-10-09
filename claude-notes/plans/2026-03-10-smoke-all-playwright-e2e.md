@@ -1,6 +1,7 @@
 ---
 title: 'Smoke-All Tests in Playwright E2E'
 date: 2026-03-10
+description: 'Runs the smoke-all `.qmd` fixtures through the real Quarto Hub pipeline in Chromium with Playwright, creating Automerge projects on a hub server, so bugs that the WASM tests miss can be caught.'
 ---
 
 **Date**: 2026-03-10

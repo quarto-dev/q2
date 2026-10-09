@@ -1,6 +1,7 @@
 ---
 title: 'P1 — Assertion vocabulary: `ensureTypstFileRegexMatches` + `ensurePdfRegexMatches`'
 date: 2026-09-27
+description: 'Adds `ensureTypstFileRegexMatches` and `ensurePdfRegexMatches` assertions to the smoke-test spec, reusing the existing two-array match shape and reading PDF text in-process through `pdf_extract` instead of a binary.'
 ---
 
 **Date:** 2026-09-27

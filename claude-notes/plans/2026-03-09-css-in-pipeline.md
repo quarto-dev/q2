@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Move Theme CSS Compilation into the Render Pipeline'
 date: 2026-03-09
+description: 'Moves theme CSS compilation out of `render_to_file.rs` and `wasmRenderer.ts` into the render pipeline after metadata merge, so a `theme` set in `_quarto.yml` takes effect, with compiled results cached.'
 ---
 
 ## Overview

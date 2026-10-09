@@ -1,6 +1,7 @@
 ---
 title: 'Binary File Support for Quarto-Hub'
 date: 2026-01-09
+description: 'Extends the automerge document schema so that binary assets such as images can be stored, synced and served to the preview alongside text files, with each document self-describing as text or binary.'
 ---
 
 **Created:** 2026-01-09

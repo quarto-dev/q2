@@ -1,6 +1,7 @@
 ---
 title: 'Handoff: extract the YAML stack (`quarto-yaml` + `quarto-yaml-validation`)'
 date: 2026-06-29
+description: 'Hands off the extraction of `quarto-yaml` and `quarto-yaml-validation` into a standalone two-crate workspace repository published to crates.io, covering preconditions, repo layout, and the deferred error-code decision.'
 ---
 
 **Strand:** bd-egcyeym9 (final phase of the diagnostics/YAML extraction epic)

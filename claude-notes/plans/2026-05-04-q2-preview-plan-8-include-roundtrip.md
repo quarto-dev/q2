@@ -1,6 +1,7 @@
 ---
 title: 'Plan 8 — Include round-trip (TOMBSTONE — abandoned)'
 date: 2026-05-04
+description: 'Records that the plan to wrap `{{< include >}}` expansions in a CustomNode was abandoned, because the splice-based write model already keeps include tokens verbatim and rejects edits inside included files.'
 ---
 
 **Status:** **Abandoned 2026-06-05.** No work to do; include round-trip is free

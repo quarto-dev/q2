@@ -1,6 +1,7 @@
 ---
 title: 'hub-client WCAG 2.2 A/AA compliance'
 date: 2026-08-19
+description: 'Fixes accessibility violations in the hub-client web app against WCAG 2.2 A and AA, adding a shared `ModalDialog` component so the modal dialogs get consistent role, focus trapping, and focus restoration.'
 ---
 
 Strand: bd-trkzm9rq

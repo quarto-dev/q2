@@ -1,6 +1,7 @@
 ---
 title: 'Error-docs tooling: `cargo xtask error-docs`'
 date: 2026-05-22
+description: 'Specifies a `cargo xtask error-docs` subcommand that audits error documentation pages against the error catalog for missing, stale, mismatched, or misplaced pages, plus a health rollup and stub generation.'
 ---
 
 **Status:** drafting — pending user review

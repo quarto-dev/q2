@@ -1,6 +1,7 @@
 ---
 title: 'pandoc_emph Implementation - Completion Summary'
 date: 2025-10-31
+description: 'Records the completed `pandoc_emph` work, where delimiter-captured whitespace is turned into Space nodes so emphasis output matches Pandoc''s placement of spaces around `Emph`.'
 ---
 
 **Date**: 2025-10-31

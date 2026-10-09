@@ -1,6 +1,7 @@
 ---
 title: 'Unify MetaValueWithSourceInfo and ConfigValue'
 date: 2025-12-29
+description: 'Replaces `MetaValueWithSourceInfo` with `ConfigValue` across the codebase so frontmatter and project configuration share one type with merge semantics and explicit variants for deferred tags such as `!path`.'
 ---
 
 **Issue:** k-2tu9

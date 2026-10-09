@@ -1,6 +1,7 @@
 ---
 title: 'bd-10deu8h4: MCP server exit must not race outbound document sync'
 date: 2026-06-12
+description: 'Makes the MCP server wait for outbound sync to drain before exiting on stdin EOF, so documents created just before shutdown reach the hub instead of being lost.'
 ---
 
 **Strand:** bd-10deu8h4 (p1). Related: bd-8x482xb0 (closed — the

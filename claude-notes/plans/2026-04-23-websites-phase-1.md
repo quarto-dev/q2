@@ -1,6 +1,7 @@
 ---
 title: 'Phase 1 — Project orchestration (`ProjectType` trait + two-pass driver)'
 date: 2026-04-23
+description: 'Adds multi-file project rendering: a `ProjectType` trait with pre-render and post-render hooks, a `ProjectIndex` of document profiles, and a two-pass driver wired into `quarto render`, leaving single-file output unchanged.'
 ---
 
 **Date:** 2026-04-23

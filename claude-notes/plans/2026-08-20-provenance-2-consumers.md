@@ -1,6 +1,7 @@
 ---
 title: 'Provenance, Plan 2 of 3: consumers (`quarto-error-reporting`, q2)'
 date: 2026-08-20
+description: 'Moves the `quarto-error-reporting` and q2 consumers onto the corrected YAML provenance, deletes the workarounds that compensated for the drift, and wraps diagnostic rendering in a panic boundary.'
 ---
 
 **Epic:** `bd-mxa44voa`.

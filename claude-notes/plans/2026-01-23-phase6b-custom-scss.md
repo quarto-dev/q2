@@ -1,6 +1,7 @@
 ---
 title: 'Phase 6b: Custom SCSS Theme Support'
 date: 2026-01-23
+description: 'Adds custom SCSS files and multiple theme layers to the `theme:` setting, following TS Quarto''s rules for where customization layers are injected and how layers are merged.'
 ---
 
 **Parent Plan**: `2026-01-13-sass-compilation.md`

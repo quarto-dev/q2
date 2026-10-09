@@ -1,6 +1,7 @@
 ---
 title: 'Replay engine: deterministic in-Rust engine for tests (bd-45yw)'
 date: 2026-05-03
+description: 'Adds a replay engine that reproduces a recorded engine run in pure Rust, so engine-channel tests need no R or Python installs; replay is activated by `--replay` or `QUARTO_REPLAY`.'
 ---
 
 **Date:** 2026-05-03

@@ -1,6 +1,7 @@
 ---
 title: 'pampa citeproc loads CSL-JSON bibliographies only — no BibTeX (.bib) support (bd-l6eh1635)'
 date: 2026-09-28
+description: 'Adds BibTeX `.bib` reading to pampa''s citeproc bibliography loader, translating entries into the same canonical references that CSL-JSON produces, so the citeproc filter and book merges accept `.bib` files.'
 ---
 
 **Date:** 2026-09-28

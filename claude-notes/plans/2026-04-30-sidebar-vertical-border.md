@@ -1,6 +1,7 @@
 ---
 title: 'Sidebar vertical border (Q1 parity)'
 date: 2026-04-30
+description: 'Adds Quarto 1''s faint vertical border between a docked sidebar and the main content, which needs a new hook for document and project metadata to set SCSS variables ahead of the Bootstrap defaults.'
 ---
 
 ## Overview

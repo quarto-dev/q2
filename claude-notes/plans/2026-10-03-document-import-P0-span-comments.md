@@ -1,6 +1,7 @@
 ---
 title: 'Plan: carry Elliot''s span comments onto the integration line (document import P0)'
 date: 2026-10-03
+description: 'Temporarily carries an unmerged branch of Elliot''s span-comment renderer onto the integration line, so comments that Word import writes as plain spans show as margin bubbles until that branch lands.'
 ---
 
 **Date:** 2026-10-03

@@ -1,6 +1,7 @@
 ---
 title: 'Kanban Demo UI Enhancements'
 date: 2026-02-11
+description: 'Lists UI improvements to the kanban demo: status dropdown beside card titles, horizontal status rows, a card detail view, a calendar view, new-card creation, and a consolidated toolbar.'
 ---
 
 ## Overview

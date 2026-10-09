@@ -1,6 +1,7 @@
 ---
 title: '2026-05-15 — Quiet default logging in `q2 preview` and `q2 hub`'
 date: 2026-05-15
+description: 'Lowers per-tick and per-event log lines in `q2 preview` and `q2 hub` from info to debug, and adds a `-v` verbosity flag so the terminal stays quiet by default.'
 ---
 
 **Beads:** [bd-9mgd](../../.beads/issues.jsonl)

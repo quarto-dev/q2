@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview — Phase D plan'
 date: 2026-05-14
+description: 'Polish pass for `q2 preview` covering browser auto-open, port conflict errors, initial page selection, static resources, error overlays, user docs, and dependency-based filtering of re-renders.'
 ---
 
 **Epic:** bd-kw93 (q2 preview)

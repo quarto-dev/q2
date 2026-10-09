@@ -1,6 +1,7 @@
 ---
 title: 'Block source-range tightness — blockquote gutters & list continuation'
 date: 2026-06-18
+description: 'Investigates why a block''s source range absorbs the blockquote gutter of the following line, forcing a heuristic in navigation code, and weighs options for making the producer ranges tight.'
 ---
 
 **Date:** 2026-06-18

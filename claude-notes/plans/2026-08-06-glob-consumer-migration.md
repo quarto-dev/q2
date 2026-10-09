@@ -1,6 +1,7 @@
 ---
 title: 'Migrate remaining glob consumers onto the shared glob API'
 date: 2026-08-06
+description: 'Migrates the remaining glob consumers (`project.render`, `resources:`, `sidebar.auto:`) onto the shared glob API so a pattern means the same thing everywhere, fixing silent failures such as ignored negation and dropped leading slashes.'
 ---
 
 **Braid strand:** bd-mt7a6uc4 (task, P3) — `discovered-from:bd-v7ixzsp5`

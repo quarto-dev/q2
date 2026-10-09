@@ -1,6 +1,7 @@
 ---
 title: 'Heading inside list item is dropped'
 date: 2026-05-20
+description: 'Fixes the tree-sitter to Pandoc converter so a heading inside a bullet or ordered list item is kept rather than silently discarded, matching Pandoc''s output.'
 ---
 
 Tracking issue: **bd-zpl4u**

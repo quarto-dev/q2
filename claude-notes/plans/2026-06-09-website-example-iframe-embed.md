@@ -1,6 +1,7 @@
 ---
 title: 'Example-iframe embed feature (`.embed-example-iframe`)'
 date: 2026-06-09
+description: 'Builds a built-in transform that turns `.embed-example-iframe` placeholders into live iframes plus source links, resolving each static `file=` target through normal project link rewriting in both render and preview.'
 ---
 
 **Strand:** bd-z1smhvuo (discovered-from bd-ixdktocp, the revealjs docs page)

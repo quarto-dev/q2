@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Warm pandoc executor (pandoc-host H10a)'
 date: 2026-10-02
+description: 'Builds a warm pandoc.wasm executor that reuses one instance across renders and produces output and diagnostics identical to a fresh run, without yet being reachable from the UI.'
 ---
 
 **Date:** 2026-10-02

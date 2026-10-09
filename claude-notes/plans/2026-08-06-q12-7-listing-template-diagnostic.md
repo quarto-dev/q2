@@ -1,6 +1,7 @@
 ---
 title: 'Diagnostics blame the wrong key: materialized map spans (Q-12-7 and siblings)'
 date: 2026-08-06
+description: 'Fixes a `Q-12-7` diagnostic that underlines an unrelated sibling key, tracing the bad span to config materialization, which discards source positions for maps and arrays. Covers only the source-mapping defect, not the wording or EJS issues.'
 ---
 
 **Strand:** bd-9yh3pzfu (bug, p1) — child of bd-61cd (Listings epic)

@@ -1,6 +1,7 @@
 ---
 title: "q2 preview live share over iroh (`--share` / `--join`)"
 date: 2026-08-03
+description: 'Adds `q2 preview --share` and `--join` so a remote guest can join a live preview session over an encrypted iroh peer-to-peer tunnel that proxies the host''s HTTP server.'
 status: planned
 branch: feature/preview-live-share (integration line; sub-tasks on braid/\<id>-\<slug>)
 braid: bd-yyoyvx91

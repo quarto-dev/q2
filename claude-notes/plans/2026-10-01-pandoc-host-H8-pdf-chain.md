@@ -1,6 +1,7 @@
 ---
 title: 'Plan: PDF chain (pandoc-host H8)'
 date: 2026-10-01
+description: 'Adds Download as PDF by chaining the pandoc worker, which writes a typst source, into the typst worker, which compiles it, with one progress and diagnostic channel across both stages.'
 ---
 
 **Date:** 2026-10-01

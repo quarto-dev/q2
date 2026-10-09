@@ -1,6 +1,7 @@
 ---
 title: 'Plan: CSS inlining for typst raw HTML tables (pandoc-request R8)'
 date: 2026-10-01
+description: 'Moves CSS inlining for raw HTML tables out of the Lua filter, which cannot run in the browser, into a Rust stage so typst requests from the hub match native table styling.'
 ---
 
 **Date:** 2026-10-01

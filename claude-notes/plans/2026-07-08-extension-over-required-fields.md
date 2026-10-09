@@ -1,6 +1,7 @@
 ---
 title: 'Relax q2 over-required `_extension.yml` fields (bd-8b0af414)'
 date: 2026-07-08
+description: 'Relaxes the q2 extension reader''s hard requirements on `title` and `author` in `_extension.yml` to match Quarto 1, so valid older extensions load instead of rendering as raw code.'
 ---
 
 ## Overview

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Host core (pandoc-host H1)'
 date: 2026-10-01
+description: 'Builds the DOM-free `@quarto/pandoc-host` package that runs pandoc.wasm in command mode, mounting the share tree and request files under limits and path rules, with a checksum-verified download script and wasm tests in CI.'
 ---
 
 **Date:** 2026-10-01

@@ -1,6 +1,7 @@
 ---
 title: 'Table Caption Implementation Attempts (k-185)'
 date: 2025-10-27
+description: 'Records attempts to let a pipe table caption follow the table without a blank line; grammar-only and scanner-only changes each fell short, and the scanner''s control flow made a combined fix hard.'
 ---
 
 **Date**: 2025-10-27

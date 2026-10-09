@@ -1,6 +1,7 @@
 ---
 title: 'Landing page explains Quarto Hub; Learn more points at the real site'
 date: 2026-09-11
+description: 'Adds a short invite-only intro and tagline to the hub-client sign-in screen, and points every Learn more link at the project''s marketing site instead of quarto.org.'
 ---
 
 **Strand:** bd-g0uyp2v1 · **Branch:** `braid/bd-g0uyp2v1-landing-page-intro` · **Scope:** `hub-client/`

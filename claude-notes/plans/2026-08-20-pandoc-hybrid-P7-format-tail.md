@@ -1,6 +1,7 @@
 ---
 title: 'P7 — Per-format tail + invocation builder (docx first)'
 date: 2026-08-20
+description: 'Builds the per-format output tail for docx and pptx, covering the pandoc invocation, format defaults, the Meta-block mapping and a golden-parity harness, with latex left as a stub.'
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P7-format-tail.md`

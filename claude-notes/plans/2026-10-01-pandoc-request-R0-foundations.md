@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Foundations (pandoc-request R0)'
 date: 2026-10-01
+description: 'Pins the wasm to the `PANDOC_PIN` version through a shared constants file, adds native input capture and a comparison CLI for recordings, and explores a versioned, hashable request before the seam is built.'
 ---
 
 **Date:** 2026-10-01

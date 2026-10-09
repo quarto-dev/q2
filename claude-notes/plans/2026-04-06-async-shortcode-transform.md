@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Make AstTransform trait and shortcode resolution async'
 date: 2026-04-06
+description: 'Makes the `AstTransform` trait async so shortcode resolution can await Lua calls directly, removing a `pollster::block_on` bridge that failed on WASM with a condvar error.'
 ---
 
 ## Status: Complete

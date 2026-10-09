@@ -1,6 +1,7 @@
 ---
 title: 'Citation-Number Sorting Analysis'
 date: 2025-11-27
+description: 'Works out how the `citation-number` variable must serve both as a sort key based on first-citation order and as a displayed number based on final bibliography position, and proposes a two-phase numbering fix.'
 ---
 
 **Date**: 2025-11-27

@@ -1,6 +1,7 @@
 ---
 title: 'Schema Module Refactoring Structure'
 date: 2025-10-27
+description: 'Splits the 1299-line `schema.rs` in `quarto-yaml-validation` into a `schema/` module tree of smaller files, grouped by primitive, combinator, array and object parsers, to cut editing context and prepare for new schema forms.'
 ---
 
 **Date**: 2025-10-27

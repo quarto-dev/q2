@@ -1,6 +1,7 @@
 ---
 title: 'CI gate: released linux binaries must run with no glibc (bd-3b47pxmm)'
 date: 2026-08-05
+description: 'Adds a release CI gate that runs the musl Linux binary''s `--version` inside an Alpine container, failing the build if the binary needs glibc, and replaces the manual runbook check that tended to be skipped.'
 ---
 
 **Date:** 2026-08-05

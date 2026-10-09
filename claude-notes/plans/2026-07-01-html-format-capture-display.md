@@ -1,6 +1,7 @@
 ---
 title: 'Display executed code output in the default `format: html` preview'
 date: 2026-07-01
+description: 'Makes the default `format: html` render show recorded engine output by threading captures through the WASM HTML branches, preview-runtime, and hub-client, which currently ignore them and render source only.'
 ---
 
 > **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this

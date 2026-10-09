@@ -1,6 +1,7 @@
 ---
 title: 'Block-level editorial marks: `::: ++` / `::: --` / `::: >>`'
 date: 2026-09-24
+description: 'Adds block-level `::: ++`, `::: --` and `::: >>` editorial divs to the grammar, reusing the fenced-div note machinery and factoring out the shared closer tail so future sigil constructs are small local changes.'
 ---
 
 **Status:** **Implemented** (2026-09-24) on `braid/bd-an9gkxnp-qmd-block-level-editorial`: all phases done, `cargo xtask verify` green. Awaiting review/merge. Commits: `5337b87ef` (Phase 1), `3f8ac499c` (bd-2281lkrx panic fix), `54824ea1b` (Phases 2/2b/3), `aad95cb70` (Phase 4).

@@ -1,6 +1,7 @@
 ---
 title: 'q2-preview attribution wiring'
 date: 2026-05-13
+description: 'Wires the attribution pipeline into the q2-preview render path by plumbing `JsonConfig` and adding an attribution-aware WASM entry point, so preview ASTs carry per-node author data.'
 ---
 
 ## Overview

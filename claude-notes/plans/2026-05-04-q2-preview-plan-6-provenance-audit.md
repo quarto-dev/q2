@@ -1,6 +1,7 @@
 ---
 title: 'Plan 6 — Provenance audit (Generated for synthesizers, anchors for shortcodes)'
 date: 2026-05-04
+description: 'Converts every transform that emits an empty `SourceInfo::default()` to a `Generated` source record and attaches invocation anchors to all shortcode resolutions, completing the AST provenance that later plans depend on.'
 ---
 
 **Date:** 2026-05-04 (revised 2026-05-20, review pass 2026-05-22)

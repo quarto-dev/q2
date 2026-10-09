@@ -1,6 +1,7 @@
 ---
 title: 'Extensions Phase 2: Extension Filter Resolution'
 date: 2026-03-17
+description: 'Makes filters contributed by extensions resolve against the extension directory rather than the document directory, and expands filter extension names in document metadata into their contributed filters.'
 ---
 
 **Created**: 2026-03-17

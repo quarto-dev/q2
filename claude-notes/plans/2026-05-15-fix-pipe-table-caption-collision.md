@@ -1,6 +1,7 @@
 ---
 title: 'Fix pipe-table × caption-start collision (bd-expy, issue #206)'
 date: 2026-05-15
+description: 'Fixes a parse error when a pipe table is followed directly by a fenced-div closing `:::`, by having the tree-sitter scanner stop reading the first colon as a table caption start.'
 ---
 
 ## Overview

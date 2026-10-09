@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Hardening (pandoc-host H6)'
 date: 2026-10-01
+description: 'Hardens the download feature with a WebKit project in the pandoc harness, a memory test on image-heavy documents, a failure-taxonomy audit that adds the missing no-wasm and out-of-memory states, and a decision on the total size limit.'
 ---
 
 **Date:** 2026-10-01

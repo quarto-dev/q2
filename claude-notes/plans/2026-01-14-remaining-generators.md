@@ -1,6 +1,7 @@
 ---
 title: 'Remaining AST Generators Plan'
 date: 2026-01-14
+description: 'Adds reconciliation test generators for AST types that have no coverage, such as `Table`, `Shortcode` and `CustomNode`, to find suspected bugs in their fallback branches and attribute handling.'
 ---
 
 **Date:** 2026-01-14

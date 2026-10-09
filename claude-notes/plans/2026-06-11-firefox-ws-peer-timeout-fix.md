@@ -1,6 +1,7 @@
 ---
 title: 'Fix: q2 preview Firefox peer-connection timeout (bd-jit6pdwq)'
 date: 2026-06-11
+description: 'Stops `q2 preview` from failing its boot when Firefox queues a slow localhost WebSocket handshake behind a hung one, by waiting on the server''s HTTP `/health` endpoint instead of a fixed five-second socket budget.'
 ---
 
 **Strand:** bd-jit6pdwq

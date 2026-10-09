@@ -1,6 +1,7 @@
 ---
 title: 'Listings — implementation epic'
 date: 2026-05-05
+description: 'Parent plan for listings on Quarto 2 websites, covering item auto-fill, doctemplate-based built-in and custom listing templates, a categories sidebar, RSS feeds and dependency-graph integration.'
 ---
 
 **Date:** 2026-05-05

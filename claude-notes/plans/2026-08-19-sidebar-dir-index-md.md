@@ -1,6 +1,7 @@
 ---
 title: 'Sidebar `contents: <dir>` shorthand only recognizes `index.qmd` (bd-sidebar-dir-index-md-5khf3lds)'
 date: 2026-08-19
+description: 'Makes the sidebar `contents: <dir>` shorthand recognize an `index.md` landing page, not only `index.qmd`, by resolving the directory''s index by file stem, so the section header links to it and it leaves the child list.'
 ---
 
 **Date:** 2026-08-19

@@ -1,6 +1,7 @@
 ---
 title: 'Windows: json_errors ipynb hyperlink test builds expected file:// URL from verbatim path (bd-clq56rem)'
 date: 2026-09-28
+description: 'Reworks a Windows-failing test that built its expected `file://` URL from a verbatim path, replacing the string oracle with a round-trip check and exposing that verbatim `\?\` prefixes leak into JSON output.'
 ---
 
 **Date:** 2026-09-28

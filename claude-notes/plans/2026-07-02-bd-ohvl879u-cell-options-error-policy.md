@@ -1,6 +1,7 @@
 ---
 title: 'bd-ohvl879u: cell-options facility + jupyter error policy'
 date: 2026-07-02
+description: 'Adds a shared, language-aware `#|` cell-option extraction facility to `quarto-core` and makes the jupyter engine fail the render on un-annotated cell errors, matching knitr, unless a cell opts in with `error: true`.'
 ---
 
 **Strand:** bd-ohvl879u (bug, P2, discovered-from bd-gthycd33, blocked-by bd-gthycd33)

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Consolidated Error Corpus Format'
 date: 2025-11-14
+description: 'Proposes one JSON file per error code, listing its test cases inside, instead of duplicated per-case file pairs, so that changing a message edits one file rather than seventeen copies.'
 ---
 
 ## Problem Analysis

@@ -1,6 +1,7 @@
 ---
 title: 'Test Suite Fixing Plan - November 1, 2025'
 date: 2025-11-01
+description: 'Groups the eleven failing quarto-markdown-pandoc integration tests by root cause, from document-level parse crashes to citations, line breaks and nested inline formatting, and sets a fix order.'
 ---
 
 ## Overview

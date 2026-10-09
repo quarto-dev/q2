@@ -1,6 +1,7 @@
 ---
 title: 'Bare email autolinks `<user@example.com>` parsed as raw HTML (bd-email-autolink-dropped-2jj38iiv)'
 date: 2026-08-10
+description: 'Makes bare email autolinks such as `<sales@example.com>` render as mailto links instead of being dropped as raw HTML, by widening the tree-sitter scanner and classifying the token in pampa.'
 ---
 
 **Date:** 2026-08-10

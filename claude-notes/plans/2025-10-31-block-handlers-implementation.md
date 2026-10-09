@@ -1,6 +1,7 @@
 ---
 title: 'Block Handlers Implementation Plan'
 date: 2025-10-31
+description: 'Wires up the remaining block-level handlers in the tree-sitter visitor, starting with fenced divs and fenced note definitions and then pipe tables, reusing helper functions that already exist.'
 ---
 
 **Date**: 2025-10-31

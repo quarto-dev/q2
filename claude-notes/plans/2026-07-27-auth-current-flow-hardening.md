@@ -1,6 +1,7 @@
 ---
 title: 'Auth hardening — current-flow easy wins (pre-pattern-(ii))'
 date: 2026-07-27
+description: 'Collects hardening fixes for the current Google sign-in flow, such as a server-verified `nonce`, a `__Host-` session cookie prefix, and limiting `/auth/session` to Generic providers, ahead of the larger login rework.'
 ---
 
 **Status:** proposed — intended to land **before** Epic 2's B1 (the pattern-(ii)

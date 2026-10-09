@@ -1,6 +1,7 @@
 ---
 title: '`q2 use brand`: brand scaffolding command (bd-1vlw8)'
 date: 2026-07-28
+description: 'Plans a `q2 use brand` command that copies a brand from a local directory, zip, GitHub repository, or extension and writes the `brand:` key into `_quarto.yml`, since Q2 has no brand auto-discovery.'
 ---
 
 **Date:** 2026-07-28

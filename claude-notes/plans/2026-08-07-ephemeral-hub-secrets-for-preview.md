@@ -1,6 +1,7 @@
 ---
 title: 'Ephemeral hub secrets for `q2 preview`'
 date: 2026-08-07
+description: 'Makes `q2 preview` hub secrets ephemeral by adding non-persisting storage constructors, so preview stops persisting secrets to `hub.json` and stops warning about multi-instance deployments on every boot.'
 ---
 
 ## Overview

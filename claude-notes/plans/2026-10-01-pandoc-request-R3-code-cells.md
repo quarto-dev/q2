@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Code cells and cached results (pandoc-request R3)'
 date: 2026-10-01
+description: 'Threads cached execution results into the browser pandoc request so downloaded documents show captured code output, and counts the code cells that stay unexecuted for the host status.'
 ---
 
 **Date:** 2026-10-01

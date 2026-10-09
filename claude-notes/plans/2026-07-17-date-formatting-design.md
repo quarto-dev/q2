@@ -1,6 +1,7 @@
 ---
 title: 'Date Parsing & Formatting for Q2 (title-block P4, bd-13f821l5)'
 date: 2026-07-17
+description: 'Designs a shared date module that parses and formats `date` metadata and listing dates in a normalization transform, keeping doctemplates logic-less while offering Q1''s named styles and format tokens in English.'
 ---
 
 **Status: APPROVED (2026-07-17) — executing.** Carlos approved all

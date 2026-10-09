@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Knitr Engine Implementation (Phase 4)'
 date: 2026-01-07
+description: 'Plans a knitr execution engine that renders `{r}` code cells by spawning Rscript with embedded copies of the quarto-cli R scripts and exchanging JSON over stdin and a temp results file.'
 ---
 
 **Issue**: k-ydzc

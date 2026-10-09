@@ -1,6 +1,7 @@
 ---
 title: 'hub-client: `q2-preview` becomes the default renderer; the full-DOM renderer gets its own format name'
 date: 2026-09-09
+description: 'Makes the q2-preview React renderer the default for `format: html` documents in hub-client, moves the old full-DOM renderer under the explicit `q2-html-render` format name, and adjusts the e2e suite to match.'
 ---
 
 **Strand:** bd-kltzdhle

@@ -1,6 +1,7 @@
 ---
 title: 'Listing nits vs Q1: truncation ellipsis + hidden "No matching items" placeholder (bd-listing-ellipsis-no-matching-l963osy1)'
 date: 2026-08-19
+description: 'Brings listing truncated descriptions and the hidden no-matching placeholder in line with Quarto 1 by appending the trailing ellipsis and emitting a `listing-no-matching` div for every listing type.'
 ---
 
 **Date:** 2026-08-19

@@ -1,6 +1,7 @@
 ---
 title: 'Theorem / block-crossref HTML output: Q1 parity'
 date: 2026-04-17
+description: 'Makes theorem-like blocks match on their id prefix as well as their class, so float sugar stops claiming them and their HTML matches Quarto 1 labels, classes and non-breaking spaces.'
 ---
 
 **Beads issue:** bd-gvhe (child of bd-jsbg)

@@ -1,6 +1,7 @@
 ---
 title: 'Multi-Pass Rendering Architecture for quarto-citeproc'
 date: 2025-11-28
+description: 'Proposes separating evaluation from rendering in `quarto-citeproc` so delimiters are kept as metadata until render time, enabling correct punctuation handling and multi-pass disambiguation like Pandoc citeproc.'
 ---
 
 **Issue**: k-444

@@ -1,6 +1,7 @@
 ---
 title: 'Shortcodes in text contexts: code blocks, attributes, image src, link targets (bd-fz6gwfq0)'
 date: 2026-08-10
+description: 'Extends shortcode substitution to code blocks, inline code, raw blocks, math, element attributes, image sources and link targets, with a `shortcodes="false"` opt-out matching Quarto 1.'
 ---
 
 **Date:** 2026-08-10

@@ -1,6 +1,7 @@
 ---
 title: 'Route structured diagnostics through discovery errors (bd-y56u1gl7)'
 date: 2026-08-08
+description: 'Carries structured parse errors from project discovery through `q2 render` to the normal diagnostic printers, so text and JSON output show the real code and location instead of a double-wrapped string.'
 ---
 
 **Strand:** bd-y56u1gl7 (discovered-from bd-sekn481x)

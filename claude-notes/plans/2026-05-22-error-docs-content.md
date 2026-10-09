@@ -1,6 +1,7 @@
 ---
 title: 'Error-docs content authoring (umbrella)'
 date: 2026-05-22
+description: 'Tracks hand-written `docs/errors/` pages for all catalogued Quarto error codes, one subsystem at a time, with each page meeting a minimum stub-quality bar before its subsystem closes.'
 ---
 
 **Status:** drafting — pending user review

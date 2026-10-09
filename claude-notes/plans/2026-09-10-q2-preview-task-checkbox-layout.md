@@ -1,6 +1,7 @@
 ---
 title: 'q2-preview: task-list checkbox renders on its own line above the item text'
 date: 2026-09-10
+description: 'Moves the task-list checkbox label inside the item''s head block renderer so block-level wrappers stay outside it, fixing q2-preview task items that put the checkbox on its own line above the text.'
 ---
 
 **Strand:** bd-qif9l4cx

@@ -1,6 +1,7 @@
 ---
 title: '2026-05-20 — Isolate GIS coupling behind an AuthProvider interface'
 date: 2026-05-20
+description: 'Isolates the Google Identity Services sign-in code in hub-client behind a thin `AuthProvider` interface and context, so a second identity provider can be added later without touching consumers, with behavior unchanged.'
 ---
 
 ## Overview

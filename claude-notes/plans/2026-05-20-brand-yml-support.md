@@ -1,6 +1,7 @@
 ---
 title: '`_brand.yml` support in Quarto 2'
 date: 2026-05-20
+description: 'Adds `_brand.yml` theming to Quarto 2 by porting Quarto 1''s brand model into a new crate and feeding its colors, typography and fonts into the SCSS layer stack.'
 ---
 
 **Created**: 2026-05-20

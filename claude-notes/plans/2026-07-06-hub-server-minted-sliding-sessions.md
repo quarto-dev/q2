@@ -1,6 +1,7 @@
 ---
 title: 'Hub server-minted sliding sessions'
 date: 2026-07-06
+description: 'Replaces the hub''s Google-token cookie with a hub-signed session token whose expiry slides on activity under an absolute lifetime cap, plus a revocation store so sessions outlive the one-hour Google token without One-Tap.'
 ---
 
 **Status:** implementation complete (2026-07-24) — all phases C0–C7 done on

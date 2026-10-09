@@ -1,6 +1,7 @@
 ---
 title: 'SCSS cache key hashes the document-relative theme path (bd-79c4do6g)'
 date: 2026-09-13
+description: 'Changes the sass cache key for custom theme files so identical theme files reached from different document directories share one cache entry, instead of hashing the document-relative path and recompiling per directory.'
 ---
 
 **Date:** 2026-09-13

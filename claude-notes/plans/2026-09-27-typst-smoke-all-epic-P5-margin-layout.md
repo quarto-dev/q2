@@ -1,6 +1,7 @@
 ---
 title: 'P5 — Port `margin-layout` (86 files, website-type project)'
 date: 2026-09-27
+description: 'Ports the 86-file `margin-layout` website fixture from Q1 into the smoke-all suite, triaging its failures into predicate bugs, real Typst rendering gaps, and fixture mistakes.'
 ---
 
 **Date:** 2026-09-27

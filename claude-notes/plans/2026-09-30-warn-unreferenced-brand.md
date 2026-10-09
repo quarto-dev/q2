@@ -1,6 +1,7 @@
 ---
 title: 'Warn on an unreferenced `_brand.yml` (bd-yl1bpj82)'
 date: 2026-09-30
+description: 'Adds a per-document warning, `Q-5-37`, when a `_brand.yml` file sits in the project directory but no `brand:` key references it, since q2 deliberately does not discover brands implicitly.'
 ---
 
 ## Decision

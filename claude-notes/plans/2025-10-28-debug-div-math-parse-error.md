@@ -1,6 +1,7 @@
 ---
 title: 'Debugging Div + Math Parse Error'
 date: 2025-10-28
+description: 'Investigates why a `$$` display math block inside a fenced div with attributes fails to parse, tracing it to the scanner handling the math marker before block continuation matching.'
 ---
 
 ## Problem

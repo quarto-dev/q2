@@ -1,6 +1,7 @@
 ---
 title: 'Pre-fill new file dialog with current file''s directory path'
 date: 2026-02-04
+description: 'Pre-fills the hub-client new file dialog with the directory of the currently open file, so the user only has to type the remaining file name.'
 ---
 
 **Issue:** bd-3cus

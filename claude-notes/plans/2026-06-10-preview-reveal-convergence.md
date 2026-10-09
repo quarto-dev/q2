@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview: converge revealjs with render (kill drift, keep the React path)'
 date: 2026-06-10
+description: 'Makes `q2 preview` reveal decks use the same reveal.js version and vendored CSS as `q2 render`, and stops the app''s Bootstrap stylesheet leaking onto slides, which caused the stray rule lines and dead transitions.'
 ---
 
 **Strand:** bd-ibqkf9ry

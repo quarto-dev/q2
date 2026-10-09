@@ -1,6 +1,7 @@
 ---
 title: 'qmd-syntax-helper rules: migrate reference-style links and escape literal brackets (bd-reference-links-unsupported-ddc4skac)'
 date: 2026-08-10
+description: 'Adds `qmd-syntax-helper` rules that migrate reference-style links to inline links and escape unmatched brackets, so documentation stops losing link targets and bracketed text silently.'
 ---
 
 **Date:** 2026-08-10

@@ -1,6 +1,7 @@
 ---
 title: 'Plan 2: @quarto/api deferred launch-context bodies + @quarto/types refinements'
 date: 2026-04-16
+description: 'Fills the `@quarto/api` stubs that need process-wide configuration, such as the pandoc path and runtime and data directories, and aligns the `execProcess` signature and types with `@quarto/types`.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

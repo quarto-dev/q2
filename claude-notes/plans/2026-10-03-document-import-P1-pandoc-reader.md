@@ -1,6 +1,7 @@
 ---
 title: 'Plan: pandoc.wasm as a reader (document import P1)'
 date: 2026-10-03
+description: 'Makes pandoc.wasm read document formats for import by adding host inputs and media collection to its request, with recorded fixtures so wasm output can be checked against native pandoc.'
 ---
 
 **Date:** 2026-10-03

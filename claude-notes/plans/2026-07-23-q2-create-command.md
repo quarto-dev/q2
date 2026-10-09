@@ -1,6 +1,7 @@
 ---
 title: '`q2 create`: native CLI command (project website + artifact scaffolding)'
 date: 2026-07-23
+description: 'Implements the native `q2 create` command so `q2 create project website` scaffolds a website that renders immediately, reusing the existing scaffolding crate and laying down the artifact seam for future types.'
 ---
 
 **Strand:** bd-oa5kd2yr (related: bd-kuxzj8su, bd-0tr6)

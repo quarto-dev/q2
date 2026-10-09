@@ -1,6 +1,7 @@
 ---
 title: 'SourceInfo Pool-Based Serialization Implementation Plan'
 date: 2025-10-19
+description: 'Changes the JSON writer to store each SourceInfo once in an interned pool and refer to it by ID, so parent chains are no longer duplicated and the serialized output shrinks sharply.'
 ---
 
 **Date**: 2025-10-19

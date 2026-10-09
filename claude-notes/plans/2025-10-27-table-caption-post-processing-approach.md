@@ -1,6 +1,7 @@
 ---
 title: 'Table Caption Post-Processing Approach - Analysis and Plan'
 date: 2025-10-27
+description: 'Recommends fixing the Rust `pipe_table` handler to accept the `caption` node that tree-sitter already produces, rather than post-processing table rows that look like captions, which would be more complex and fragile.'
 ---
 
 **Date**: 2025-10-27

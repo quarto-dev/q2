@@ -1,6 +1,7 @@
 ---
 title: 'Phase 2 — Sidebar (data model, generate, render, template)'
 date: 2026-04-24
+description: 'Adds a left-column sidebar for website projects, configured under `website.sidebar` in `_quarto.yml`, with generate and render transforms, active-item highlighting, and selection of the sidebar that applies to each page.'
 ---
 
 **Date:** 2026-04-24

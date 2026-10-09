@@ -1,6 +1,7 @@
 ---
 title: 'Python Filter Integration for quarto-markdown-pandoc'
 date: 2025-12-06
+description: 'Explores designing native in-process Python filters for pampa with a Panflute-inspired API, weighing PyO3 and maturin against subprocess JSON filters and the existing Lua filter architecture.'
 ---
 
 **Beads Issue:** k-fgyv

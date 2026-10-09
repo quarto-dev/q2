@@ -1,6 +1,7 @@
 ---
 title: 'SASS Content Hash Cache Keys'
 date: 2026-01-29
+description: 'Replaces the SASS cache key, which used theme filenames and so served stale CSS after custom SCSS edits, with a merkle-style hash over the actual content of each theme file.'
 ---
 
 **Issue:** kyoto-bpp

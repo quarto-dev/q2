@@ -1,6 +1,7 @@
 ---
 title: 'Live-share join: cut first-join payload (embedded-SPA serving + compression)'
 date: 2026-08-13
+description: 'Serves the preview single-page app from the guest''s own embedded copy when its manifest hash matches the host''s, so a first join tunnels only dynamic traffic, cutting first-render latency on slow links.'
 ---
 
 **Epic:** bd-puc7xt6e

@@ -1,6 +1,7 @@
 ---
 title: 'quarto-doctemplate: Fix Excess Newlines in Template Evaluation'
 date: 2025-12-06
+description: 'Fixes `quarto-doctemplate` emitting extra blank lines around multiline `$if$`, `$for$`, `$else$` and `$endif$` directives by stripping the newlines that Pandoc doctemplates swallows.'
 ---
 
 ## Problem Summary

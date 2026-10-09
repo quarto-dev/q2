@@ -1,6 +1,7 @@
 ---
 title: 'claude-notes as a Quarto 2 website'
 date: 2026-09-25
+description: 'Makes the `claude-notes/` directory render as a Quarto 2 website by fixing notes that rely on Markdown habits q2 rejects, fixing q2 where it is wrong, and writing agent guidance for new notes.'
 ---
 
 **Strand:** bd-uk8zgkha (epic)

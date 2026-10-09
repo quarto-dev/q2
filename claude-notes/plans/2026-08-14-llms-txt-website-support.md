@@ -1,6 +1,7 @@
 ---
 title: 'website.llms-txt: llms.txt + per-page markdown companions (bd-llms-txt-unimplemented-oih6z6j7)'
 date: 2026-08-14
+description: 'Adds `llms.txt` and per-page markdown companions to website builds, generated from the qmd AST writer rather than scraped HTML, with a structured index that carries page descriptions.'
 ---
 
 **Date:** 2026-08-14

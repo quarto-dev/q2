@@ -1,6 +1,7 @@
 ---
 title: 'Get Started collection: seeded example projects for new hub users'
 date: 2026-09-17
+description: 'Seeds each new hub user with a personal Get Started collection of three or four example projects, one per document type, built from hub-only templates so every copy can be edited freely.'
 ---
 
 **Strand:** not yet filed (will link bd-d147nkqx as parent or related)

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Code Coverage Infrastructure'
 date: 2025-12-31
+description: 'Sets up `cargo-llvm-cov` with nextest to measure line, function and branch coverage per crate and per file across the workspace, with a `scripts/coverage.sh` wrapper and git-ignored report outputs.'
 ---
 
 ## Problem Statement

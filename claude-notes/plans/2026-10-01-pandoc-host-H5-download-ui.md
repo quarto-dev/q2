@@ -1,6 +1,7 @@
 ---
 title: 'Plan: "Download as" UI (pandoc-host H5)'
 date: 2026-10-01
+description: 'Adds the Download as control beside the print button, with a click-only render through the wasm pandoc worker, a sanitized file name, progress and cancel, a three-way preview classifier, and accessibility checks for docx.'
 ---
 
 **Date:** 2026-10-01

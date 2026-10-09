@@ -1,6 +1,7 @@
 ---
 title: 'Epic: import documents into quarto-hub through pandoc.wasm (docx first)'
 date: 2026-10-03
+description: 'Plans importing docx, odt, rtf, epub and pptx files into hub projects through pandoc.wasm and pampa, producing one qmd per file with its media, with tracked changes and comments carried over as editorial marks.'
 ---
 
 **Date:** 2026-10-03

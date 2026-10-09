@@ -1,6 +1,7 @@
 ---
 title: 'Include failure diagnostics: surface inner errors, kill spurious "Unknown shortcode"'
 date: 2026-08-07
+description: 'Stops `q2 render` from hiding the inner parse error when an include fails and from adding a contradictory unknown-shortcode warning, and moving include error codes out of the project subsystem.'
 ---
 
 **Strand:** bd-qpvoamvu (discovered: bd-1fz3vh99 — nested-container includes)

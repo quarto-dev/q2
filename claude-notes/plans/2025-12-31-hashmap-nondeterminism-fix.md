@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix HashMap-induced Non-determinism'
 date: 2025-12-31
+description: 'Replaces `HashMap` and `FxHashMap` with insertion-ordered maps in the citeproc and reconciliation code, so that three nondeterministic test failures stop occurring.'
 ---
 
 **Issue**: k-p39g

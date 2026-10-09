@@ -1,6 +1,7 @@
 ---
 title: 'Share Link Single-Click Flow'
 date: 2026-03-30
+description: 'Makes a share link open its project in one click by creating the local project entry automatically when it is missing, and requires the project name in the share URL.'
 ---
 
 ## Overview

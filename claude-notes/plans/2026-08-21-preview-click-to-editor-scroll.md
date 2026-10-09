@@ -1,6 +1,7 @@
 ---
 title: 'q2-preview: clicking a block to edit does not scroll the source editor'
 date: 2026-08-21
+description: 'Makes clicking a block in q2-preview scroll the source editor to that block by reading the click from a capture-phase `pointerup`, since the browser suppresses the click event once the block is replaced by an editor.'
 ---
 
 ## Overview

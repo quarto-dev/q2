@@ -1,6 +1,7 @@
 ---
 title: 'Rich-text editor: place caret at click position on first activation'
 date: 2026-06-24
+description: 'Places the rich-text editor caret at the clicked position on first activation instead of the end of the block, by capturing the click coordinates and resolving them with `posAtCoords`.'
 ---
 
 **Date:** 2026-06-24

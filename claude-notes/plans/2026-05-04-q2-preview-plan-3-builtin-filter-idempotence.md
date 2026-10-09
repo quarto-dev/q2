@@ -1,6 +1,7 @@
 ---
 title: 'Plan 3 — Built-in transform and filter idempotence verification (CI-time)'
 date: 2026-05-04
+description: 'Adds a verification gate that runs each `q2-preview` transform and built-in Lua filter twice on fixtures and asserts identical structural hashes of blocks and metadata, so the incremental writer can rely on stable output.'
 ---
 
 **Date:** 2026-05-04 (revised 2026-05-21)

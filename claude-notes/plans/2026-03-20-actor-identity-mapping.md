@@ -1,6 +1,7 @@
 ---
 title: 'Actor Identity Mapping Plan'
 date: 2026-03-20
+description: 'Stores a mapping from Automerge actor IDs to user screen names in the project''s index document, with a schema version, so replay can show readable author names instead of hashes.'
 ---
 
 ## Overview

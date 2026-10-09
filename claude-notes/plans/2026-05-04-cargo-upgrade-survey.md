@@ -1,6 +1,7 @@
 ---
 title: 'Cargo dependency upgrade survey — 2026-05-04'
 date: 2026-05-04
+description: 'Records the first cargo dependency survey, which found the lockfile already current so nothing was applied, and listed 16 major or pre-1.0 minor upgrades for review.'
 ---
 
 **Worktree:** `.worktrees/cargo-upgrade-2026-05-04` (branch `cargo-upgrade-2026-05-04`, based on `main` \@ `3e0bc4c5`)

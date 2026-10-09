@@ -1,6 +1,7 @@
 ---
 title: 'New File Templates Feature'
 date: 2026-02-12
+description: 'Lets hub-client users create files from per-project `.qmd` templates kept in `_quarto-hub-templates`, using AST manipulation to strip the `template-name` metadata from each new file.'
 ---
 
 **Beads Issue:** bd-1uky

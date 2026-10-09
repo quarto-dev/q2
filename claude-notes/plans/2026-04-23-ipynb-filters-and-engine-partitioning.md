@@ -1,6 +1,7 @@
 ---
 title: 'Research Plan: ipynb-filters in q2'
 date: 2026-04-23
+description: 'Researches how q2 should implement Quarto 1''s ipynb-filters, proposing that the Jupyter engine run filter chains inside `markdown_for_file` so filter-modified metadata and headings reach project profiles, instead of a separate partition method.'
 ---
 
 **Status:** Research — future work, not part of the TS engine extensions project

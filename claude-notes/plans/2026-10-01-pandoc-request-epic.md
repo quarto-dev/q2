@@ -1,6 +1,7 @@
 ---
 title: 'Epic: the PandocRequest seam (Rust side of pandoc.wasm in hub-client)'
 date: 2026-10-01
+description: 'Splits the native pandoc stage into a pure prepare step shared with wasm and a native-only execute step, so the browser can replay the same `PandocRequest` and hub output matches native output, then widens it to more formats.'
 ---
 
 **Date:** 2026-10-01

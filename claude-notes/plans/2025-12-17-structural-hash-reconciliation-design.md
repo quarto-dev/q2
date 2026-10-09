@@ -1,6 +1,7 @@
 ---
 title: 'Structural Hash-Based AST Reconciliation Design'
 date: 2025-12-17
+description: 'Designs a reconciliation step that keeps unchanged AST nodes from the original document and swaps in only the changed nodes after engine execution, using structural hashes as virtual keys in the style of React reconciliation.'
 ---
 
 **Date**: 2025-12-17

@@ -1,6 +1,7 @@
 ---
 title: 'Profile `q2 render` on a large website (quarto-web)'
 date: 2026-05-21
+description: 'Profiles `q2 render` on the large quarto-web website to locate its hotspots, and confirms with scaled fixtures that render time grows linearly, at about 4 ms per document.'
 ---
 
 ## Overview

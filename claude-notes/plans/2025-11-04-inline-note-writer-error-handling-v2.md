@@ -1,6 +1,7 @@
 ---
 title: 'Inline Note Definition Error Handling Using DiagnosticMessage'
 date: 2025-11-04
+description: 'Has the native, qmd, and HTML writers accumulate `DiagnosticMessage` errors for unsupported constructs such as inline note definitions, rather than silently dropping them or returning only IO errors.'
 ---
 
 Date: 2025-11-04

@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview — Phase F plan'
 date: 2026-05-14
+description: 'Brings cross-page navigation, Bootstrap JavaScript and website chrome such as the navbar, sidebar, footer and table of contents into the `q2 preview` iframe, so docs-site pages preview as they render.'
 ---
 
 **Epic:** bd-kw93 (q2 preview)

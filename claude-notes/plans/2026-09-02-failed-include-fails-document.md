@@ -1,6 +1,7 @@
 ---
 title: 'A failed include fails the document'
 date: 2026-09-02
+description: 'Makes a failed `{{< include >}}` a fatal render error for that page instead of silently dropping the block and writing HTML that is missing content, and raises the related Q-17 codes to errors.'
 ---
 
 **Strand:** `bd-include-parse-failure-dropped-u4rdjxru`

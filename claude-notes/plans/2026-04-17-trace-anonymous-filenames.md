@@ -1,6 +1,7 @@
 ---
 title: 'Fix `<anonymous>` filenames in pipeline trace `astContext`'
 date: 2026-04-17
+description: 'Fixes the pipeline trace writing `<anonymous>` as the only source file by passing the real AST context into the trace serializer and recording both the `.qmd` and the engine intermediate file after engine execution.'
 ---
 
 Beads: `bd-b0f2`

@@ -1,6 +1,7 @@
 ---
 title: 'Fix Bibliography Spacing in quarto-citeproc to_blocks() Conversion'
 date: 2025-12-05
+description: 'Fixes missing punctuation and spacing in bibliography entries produced by the `to_blocks()` conversion in `quarto-citeproc`, where delimiters between author, year and title are lost.'
 ---
 
 **Beads Issue:** k-vku8

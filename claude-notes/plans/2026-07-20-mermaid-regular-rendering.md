@@ -1,6 +1,7 @@
 ---
 title: 'Mermaid diagrams as a "regular" rendering feature (non-engine)'
 date: 2026-07-20
+description: 'Moves Mermaid diagram support out of the engine model and into a regular rendering feature, turning fenced `mermaid` blocks into raw HTML for `q2 render` and a React component for the preview.'
 branch: TBD (plan phase — no implementation yet)
 status: >
   v1.1 - ratified by user 2026-07-20 (all five open questions

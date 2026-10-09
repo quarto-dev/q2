@@ -1,6 +1,7 @@
 ---
 title: 'Block editing — Plan 1: markdown-faithful editing on today''s surfaces'
 date: 2026-06-06
+description: 'Makes preview paragraphs and headings editable as markdown by slicing each block''s original source bytes into a textarea and replacing only that block on commit, using frontend changes and no Rust.'
 ---
 
 **Date:** 2026-06-06

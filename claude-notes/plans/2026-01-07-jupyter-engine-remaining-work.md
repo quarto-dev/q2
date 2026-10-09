@@ -1,6 +1,7 @@
 ---
 title: 'Jupyter Engine: Remaining Work'
 date: 2026-01-07
+description: 'Lists the features still missing from the working Jupyter engine MVP, such as chunk options, language setup code, execution timeouts and continue-on-error handling, each with a priority, effort estimate and list of files to change.'
 ---
 
 **Date**: 2026-01-07

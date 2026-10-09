@@ -1,6 +1,7 @@
 ---
 title: 'Remote code-execution provider for hub sessions'
 date: 2026-06-29
+description: 'Lets a `q2` client join a shared hub session as a code executor, run document cells with the local engines, and deposit the results into automerge so every player sees the output.'
 ---
 
 **Strand:** bd-sfet3264 (feature, P1).

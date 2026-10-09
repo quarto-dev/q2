@@ -1,6 +1,7 @@
 ---
 title: 'Epic: All output formats via a Pandoc-writer hybrid'
 date: 2026-08-20
+description: 'Adds non-HTML output formats by reusing Pandoc''s writers and Quarto 1 Lua filters, behind a shared format-neutral core that computes crossref numbers once for all targets.'
 ---
 
 **Date:** 2026-09-20

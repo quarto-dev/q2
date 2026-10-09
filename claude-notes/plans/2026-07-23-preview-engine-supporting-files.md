@@ -1,6 +1,7 @@
 ---
 title: 'Preview: engine-generated images missing (`q2 preview` + hub-client q2-preview)'
 date: 2026-07-23
+description: 'Fixes knitr figures missing from preview output, since the engine capture stores the supporting-files directory path but not the image bytes the browser needs.'
 ---
 
 **Braid strand:** bd-qbhp2cvv

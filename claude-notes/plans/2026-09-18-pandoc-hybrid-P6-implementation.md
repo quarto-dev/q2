@@ -1,6 +1,7 @@
 ---
 title: 'P6 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Wires numbering for figures, theorems, callouts and custom crossref categories through the external pandoc path so the numbers match Quarto 1, with each test bound to a named production seam.'
 ---
 
 **Date:** 2026-09-18

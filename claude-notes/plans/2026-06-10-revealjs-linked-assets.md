@@ -1,6 +1,7 @@
 ---
 title: 'reveal.js: linked shared assets instead of inlined output'
 date: 2026-06-10
+description: 'Switches reveal.js output from inlining all assets into each `slides.html` to linking shared assets via the artifact path `format: html` uses, so decks on one website stop duplicating the reveal core.'
 ---
 
 **Strand:** bd-jij5gge2

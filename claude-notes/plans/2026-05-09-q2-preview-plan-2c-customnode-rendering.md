@@ -1,6 +1,7 @@
 ---
 title: 'Plan 2C — q2-preview Quarto custom-node rendering + verification'
 date: 2026-05-09
+description: 'Fills q2-preview with Quarto renderers for callouts, theorems, proofs, figures, equations and cross-references, using the HTML output''s class names so the compiled theme CSS applies unchanged.'
 ---
 
 **Date:** 2026-05-09

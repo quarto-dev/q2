@@ -1,6 +1,7 @@
 ---
 title: 'Listings — design discussion against the DocumentProfile architecture'
 date: 2026-05-05
+description: 'Audits whether the existing document profile architecture can support Quarto 1 website listings, identifies the residual gaps such as word count and modified dates, and asks whether custom EJS templates still block the feature.'
 ---
 
 **Date:** 2026-05-05

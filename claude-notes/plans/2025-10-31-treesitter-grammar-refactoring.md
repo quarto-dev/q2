@@ -1,6 +1,7 @@
 ---
 title: 'Tree-sitter Grammar Refactoring Plan'
 date: 2025-10-31
+description: 'Tracks the rewrite of the `native_visitor` processor to handle the redesigned tree-sitter grammar node by node, with a dedicated test file and a priority list of node types.'
 ---
 
 **Date**: 2025-10-31

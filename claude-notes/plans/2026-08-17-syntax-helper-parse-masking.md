@@ -1,6 +1,7 @@
 ---
 title: 'qmd-syntax-helper: AST-based rules report unparseable files as clean (bd-syntax-helper-parse-masking-w88mhedp)'
 date: 2026-08-17
+description: 'Makes `qmd-syntax-helper` report files that fail to parse as unanalyzable rather than clean, so AST-based rules no longer give a false all-clear in `check` and `convert`.'
 ---
 
 **Date:** 2026-08-17

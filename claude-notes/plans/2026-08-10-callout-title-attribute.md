@@ -1,6 +1,7 @@
 ---
 title: 'Callout `title=` attribute is ignored; header shows the type name instead of the author''s title (bd-callout-custom-title-dropped-9qi1p7iw)'
 date: 2026-08-10
+description: 'Makes the `title=` attribute on callouts supply the header text, parsed as markdown inlines as Quarto 1 does, instead of the type name, and marks it as user-supplied for assistive technology.'
 ---
 
 **Date:** 2026-08-10

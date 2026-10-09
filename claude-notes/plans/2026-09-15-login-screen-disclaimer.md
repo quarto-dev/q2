@@ -1,6 +1,7 @@
 ---
 title: 'Login screen carries a "use test data, not real data" disclaimer'
 date: 2026-09-15
+description: 'Puts a visible test-data disclaimer on the hub-client login screen, built from structured strings and plain JSX because the markdown-rendering WASM pipeline is not loaded on the landing page.'
 ---
 
 **Strand:** bd-m6u9qu3u · **Scope:** `hub-client/` · **Related:** bd-g0uyp2v1 (landing page intro)

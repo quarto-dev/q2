@@ -1,6 +1,7 @@
 ---
 title: 'cargo xtask test — Platform-Aware Test Runner'
 date: 2026-03-18
+description: 'Adds a `cargo xtask test` command that automatically excludes the crates depending on v8 when running on Windows, where their tests fail to compile, so contributors need no manual exclude flags.'
 ---
 
 ## Overview

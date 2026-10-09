@@ -1,6 +1,7 @@
 ---
 title: 'Website sidebar layout: body class + grid placement'
 date: 2026-04-29
+description: 'Moves the website sidebar from the bottom of the page into a left column by setting body classes from the sidebar style and fixing the sidebar''s grid placement, matching Quarto 1''s layout.'
 ---
 
 **Date:** 2026-04-29

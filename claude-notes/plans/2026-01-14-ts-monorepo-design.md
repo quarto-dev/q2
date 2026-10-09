@@ -1,6 +1,7 @@
 ---
 title: 'TypeScript Monorepo Design for Hub-Client Extraction'
 date: 2026-01-14
+description: 'Compares layouts for extracting the Quarto automerge schema and sync logic from hub-client into publishable TypeScript packages, favoring a minimal near-term extraction with callback-based VFS hooks over a full monorepo.'
 ---
 
 **Issue**: kyoto-1ew

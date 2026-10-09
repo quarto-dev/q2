@@ -1,6 +1,7 @@
 ---
 title: 'Project Selector Loading UX Improvement'
 date: 2026-04-07
+description: 'Replaces the blank connecting screen in hub-client''s `App.tsx` with the full `ProjectSelector` UI, showing a connecting message inline where the project list would appear.'
 ---
 
 ## Overview

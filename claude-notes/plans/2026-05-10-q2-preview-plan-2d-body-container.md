@@ -1,6 +1,7 @@
 ---
 title: 'Plan 2D — q2-preview body container + title block'
 date: 2026-05-10
+description: 'Adds the document body wrapper and title block to q2-preview, mirroring the HTML template''s markup so theme CSS selectors match real elements, including a React-side title for minimal mode.'
 ---
 
 **Date:** 2026-05-10

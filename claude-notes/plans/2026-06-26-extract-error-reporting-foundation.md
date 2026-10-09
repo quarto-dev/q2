@@ -1,6 +1,7 @@
 ---
 title: 'Step 1: extract the diagnostics foundation into two standalone `posit-dev/` repos — `quarto-source-map` first, then `quarto-error-reporting`'
 date: 2026-06-26
+description: 'Extracts the `quarto-source-map` and `quarto-error-reporting` crates into standalone published repositories, moving the error catalog data into a q2-side crate so the reporting core stays catalog-agnostic.'
 ---
 
 > **Naming (decided 2026-06-27):** both externalized crates **keep their current

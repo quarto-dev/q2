@@ -1,6 +1,7 @@
 ---
 title: 'Fix bd-ddaqjb91 — s0-list-item-surfaces crash: defensive `CommentBlock` + honest test stub'
 date: 2026-07-30
+description: 'Guards `CommentBlock` against a malformed `resolveSource` result that crashed list item tests, corrects the stale test stub that produced it, and adds type-checking for test files so such drift gets caught.'
 ---
 
 **Strand:** bd-ddaqjb91 (bug, P1)

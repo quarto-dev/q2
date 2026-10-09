@@ -1,6 +1,7 @@
 ---
 title: 'Mermaid render component for q2-preview'
 date: 2026-07-17
+description: 'Prototypes mermaid diagram rendering as a user render component in the q2-preview playground, intercepting code blocks with the mermaid class, before folding the approach into the built-in preview renderer.'
 ---
 
 **Braid:** bd-c3dtpe36

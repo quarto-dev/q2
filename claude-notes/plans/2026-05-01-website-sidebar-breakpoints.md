@@ -1,6 +1,7 @@
 ---
 title: 'Website sidebar responsive breakpoints'
 date: 2026-05-01
+description: 'Investigates why the website sidebar collapses into a narrow, unusable bar between 768 and 991 pixels, tracing the gap to floating grid mixins that assume the sidebar is hidden in that range.'
 ---
 
 ## Status

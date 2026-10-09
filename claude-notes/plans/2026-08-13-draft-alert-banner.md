@@ -1,6 +1,7 @@
 ---
 title: 'Draft pages render without Q1''s draft alert banner (bd-draft-banner-missing-hgx1gkqm)'
 date: 2026-08-13
+description: 'Investigates the missing Draft alert banner that Quarto 1 shows on `draft: true` pages, finding that the styles and localized term already ship, so only a small template change is needed.'
 ---
 
 **Date:** 2026-08-13

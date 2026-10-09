@@ -1,6 +1,7 @@
 ---
 title: 'ConfigValue Integration into Render Pipeline'
 date: 2025-12-29
+description: 'Lets the WASM hub-client inject project-level format settings, such as `format.html.source-location`, into the render pipeline and merge them with document metadata through `ConfigValue`.'
 ---
 
 **Issue:** k-ic1o

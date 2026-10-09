@@ -1,6 +1,7 @@
 ---
 title: 'Website `repo-actions` Implementation Plan'
 date: 2026-08-24
+description: 'Renders the `repo-actions` edit, source and issue links on website pages in the table-of-contents and footer placements, synthesizing a footer when the site configures none, matching Quarto 1 where it is sound.'
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

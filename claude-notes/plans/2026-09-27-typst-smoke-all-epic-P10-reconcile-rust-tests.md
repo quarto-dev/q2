@@ -1,6 +1,7 @@
 ---
 title: 'P10 — Reconcile with the six existing Rust book integration tests'
 date: 2026-09-27
+description: 'Cross-references the six existing Rust book integration tests against the new smoke-all fixtures and records that both suites stay, since they catch different failure modes.'
 ---
 
 **Date:** 2026-09-27

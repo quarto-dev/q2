@@ -1,6 +1,7 @@
 ---
 title: 'Extension-subtree infrastructure: `xtask pull-extension-subtree` + bundled-payload discovery'
 date: 2026-09-23
+description: 'Adds an `xtask pull-extension-subtree` command and lets bundled extension payloads be discovered from a second builtin root, proven end to end with a fake extension.'
 ---
 
 **Status:** All three phases done. **Unblocked** — deliberately independent of the two

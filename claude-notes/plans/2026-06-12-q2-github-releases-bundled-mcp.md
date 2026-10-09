@@ -1,6 +1,7 @@
 ---
 title: 'GitHub release assets for q2, with bundled quarto-hub.com MCP defaults'
 date: 2026-06-12
+description: 'Adds tag-triggered GitHub release binaries for `q2` with signed checksums and install scripts, and embeds quarto-hub.com OAuth defaults so the bundled MCP server works without operator-supplied environment variables.'
 ---
 
 **Strand:** bd-c6l13j79

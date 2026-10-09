@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Template Rendering for pico-quarto-render'
 date: 2025-11-25
+description: 'Splits the `pico-quarto-render` template path into metadata preparation, format-specific conversion of metadata to template values, and final template evaluation over the Pandoc document.'
 ---
 
 ## Overview

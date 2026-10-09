@@ -1,6 +1,7 @@
 ---
 title: 'Deep Analysis: Downsides of Option 1 (Adjust Diagnostic Locations)'
 date: 2025-11-19
+description: 'Lists the drawbacks of rewriting diagnostic locations after a recursive metadata parse, including AST nodes left with wrong source info and the difficulty of mapping offsets across two source contexts.'
 ---
 
 ## Critical Downside #1: AST Nodes Have Wrong SourceInfo

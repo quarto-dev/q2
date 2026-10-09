@@ -1,6 +1,7 @@
 ---
 title: 'Replace OT cursor tracking with Automerge cursors in hub-client presence'
 date: 2026-04-21
+description: 'Replaces hub-client''s hand-rolled offset transformation for remote presence cursors with Automerge cursors, so positions stay valid across concurrent edits without the OT heuristics.'
 ---
 
 Beads: TBD (tracks [issue #113](https://github.com/quarto-dev/q2/issues/113))

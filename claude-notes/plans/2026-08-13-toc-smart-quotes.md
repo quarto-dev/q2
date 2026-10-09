@@ -1,6 +1,7 @@
 ---
 title: 'TOC entry drops the quote glyphs around a quoted span (bd-toc-smart-quotes-6nro57ed)'
 date: 2026-08-13
+description: 'Makes TOC entries carry inline markup instead of flattening headings to plain text, so quoted spans and code in headings no longer lose their delimiters or formatting.'
 ---
 
 **Date:** 2026-08-13

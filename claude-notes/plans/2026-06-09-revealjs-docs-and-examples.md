@@ -1,6 +1,7 @@
 ---
 title: 'Reveal.js docs page + per-feature example projects'
 date: 2026-06-09
+description: 'Documents the implemented reveal.js authoring features on the docs site, each section with a minimal source sample and a placeholder for a runnable example project from `examples/presentations/`.'
 ---
 
 **Strand:** bd-ixdktocp (discovered-from the revealjs epic bd-bea550b0)

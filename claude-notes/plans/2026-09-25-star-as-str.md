@@ -1,6 +1,7 @@
 ---
 title: 'Flanking rules for `*` `_` `~` `^`: whitespace-adjacent delimiters are literal text'
 date: 2026-09-25
+description: 'Makes `*`, `_`, `~` and `^` delimiters flanked by whitespace literal text rather than silently pairing them into emphasis or sub- and superscript, so `a * b` stops failing or pairing.'
 ---
 
 **Status:** tiers 1 and 2 implemented on `braid/bd-star-as-str-qigl02pz-tree-sitter-qmd-parse`, not pushed

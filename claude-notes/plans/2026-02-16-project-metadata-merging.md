@@ -1,6 +1,7 @@
 ---
 title: 'Project Metadata Merging with Format Resolution'
 date: 2026-02-16
+description: 'Parses `_quarto.yml` as a full config value and merges it with document frontmatter using Quarto 1''s precedence, where format-specific settings override top-level ones within each source.'
 ---
 
 **Date**: 2026-02-16

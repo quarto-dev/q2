@@ -1,6 +1,7 @@
 ---
 title: 'Plan: the import service in hub-client (document import P4)'
 date: 2026-10-03
+description: 'Adds a hub-client import service that runs pandoc on its own runner, converts EMF and WMF images to PNG with rtf.js, applies the 10 MB image rule, and returns the qmd and media without any UI.'
 ---
 
 **Date:** 2026-10-03

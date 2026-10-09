@@ -1,6 +1,7 @@
 ---
 title: '`.md` render support (bd-6d2wj4zp)'
 date: 2026-08-07
+description: 'Lets `.md` files render as project inputs when named in explicit `project.render` globs, treating them like `.qmd` files and warning when an engine specification is ignored.'
 ---
 
 **Status:** COMPLETE (2026-08-07). All phases landed on

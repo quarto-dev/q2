@@ -1,6 +1,7 @@
 ---
 title: 'Audit `_quarto-rules.scss`: categorized selector inventory (bd-eias3e39)'
 date: 2026-07-21
+description: 'Inventories every top-level selector in the Quarto 1 `_quarto-rules.scss` and classifies each as ported now, blocked on missing emitter output, already present, or intentionally dropped.'
 ---
 
 **Date:** 2026-07-21

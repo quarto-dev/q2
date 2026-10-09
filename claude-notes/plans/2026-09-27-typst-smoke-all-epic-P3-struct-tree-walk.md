@@ -1,6 +1,7 @@
 ---
 title: 'P3 — `ensurePdfTextPositions`: `/StructTreeRoot` walk + relational-assertion evaluator'
 date: 2026-09-27
+description: 'Builds a `/StructTreeRoot` walk that maps each marked-content ID, keyed by page and ID, to its structure role, plus the relational evaluator for `ensurePdfTextPositions` assertions such as left-of and aligned.'
 ---
 
 **Date:** 2026-09-27

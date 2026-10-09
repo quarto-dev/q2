@@ -1,6 +1,7 @@
 ---
 title: 'Unified `_brand.yml` per-color light/dark values (GH #580, bd-unified-brand-split-ep49amad)'
 date: 2026-08-24
+description: 'Lets `_brand.yml` color slots take `light:` and `dark:` values in a single brand file by splitting the unified brand into per-mode halves early, so each downstream consumer stays single-mode.'
 ---
 
 ## Overview

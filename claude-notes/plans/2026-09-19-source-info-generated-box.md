@@ -1,6 +1,7 @@
 ---
 title: 'Shrink `SourceInfo` from 136 to 32 bytes by boxing the `Generated` payload (bd-1c085k3a)'
 date: 2026-09-19
+description: 'Shrinks `SourceInfo` from 136 to 32 bytes by boxing the payload of the `Generated` variant in the external source-map crate, cutting AST size and traversal cost without changing the serialized wire shape.'
 ---
 
 **Status:** crate side done on `posit-dev/quarto-source-map` branch

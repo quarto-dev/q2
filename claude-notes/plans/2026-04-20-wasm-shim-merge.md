@@ -1,6 +1,7 @@
 ---
 title: 'WASM C-shim merge: unify with tree-sitter-language upstream sysroot'
 date: 2026-04-20
+description: 'Unifies the C stdlib shims in the WASM build by patching `tree-sitter-language` to empty stdio sources and extending the single `c_shim.rs` printf family so Lua and tree-sitter grammars link without duplicate symbols.'
 ---
 
 - **Parent plan**: `claude-notes/plans/2026-04-20-syntax-highlighting-phase-3.md` (this is a sub-plan of Phase 3.1)

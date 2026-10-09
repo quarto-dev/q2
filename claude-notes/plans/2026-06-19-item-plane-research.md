@@ -1,6 +1,7 @@
 ---
 title: 'Item plane — research-level plan (DEFERRED)'
 date: 2026-06-19
+description: 'Deferred research stub on splicing list items, table rows, and definition-list entries, covering item content shape, tight and loose list preservation, ordered renumbering, and move semantics.'
 ---
 
 **Date:** 2026-06-19

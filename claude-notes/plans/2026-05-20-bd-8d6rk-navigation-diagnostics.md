@@ -1,6 +1,7 @@
 ---
 title: 'bd-8d6rk — Navigation diagnostics: structured warnings with codes + locations'
 date: 2026-05-20
+description: 'Replaces the plain-text navigation warnings for missing documents and unmatched sidebar `auto:` entries with structured diagnostics that carry codes Q-13-1 through Q-13-6, problem text, and hints.'
 ---
 
 **Status**: Draft, awaiting user iteration

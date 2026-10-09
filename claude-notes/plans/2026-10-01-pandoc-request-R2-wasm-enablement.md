@@ -1,6 +1,7 @@
 ---
 title: 'Plan: wasm enablement and exports (pandoc-request R2)'
 date: 2026-10-01
+description: 'Makes the pandoc preparation code compile for wasm32 and exposes the request, share tree, classification and format table from the hub''s wasm module, so a docx request can be built in the browser.'
 ---
 
 **Date:** 2026-10-01

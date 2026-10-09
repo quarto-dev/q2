@@ -1,6 +1,7 @@
 ---
 title: 'P5 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Implements the `quarto2-shim.lua` filter that translates Q2''s custom AST nodes into the shapes Quarto 1''s vendored Lua crossref and callout code expects, with each task bound to a test seam.'
 ---
 
 **Date:** 2026-09-18

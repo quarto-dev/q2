@@ -1,6 +1,7 @@
 ---
 title: 'Topdown Traversal for Lua Filters'
 date: 2025-12-02
+description: 'Plans the topdown traversal mode for Lua filters, selected with `traverse` set to topdown, so parents are visited before children and a stop signal can skip a node''s children.'
 ---
 
 **Issue**: k-478 (Implement topdown traversal with stop signal for Lua filters)

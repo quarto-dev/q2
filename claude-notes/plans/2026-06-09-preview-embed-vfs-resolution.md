@@ -1,6 +1,7 @@
 ---
 title: 'Preview: resolve embedded static-asset iframes from the VFS source path'
 date: 2026-06-09
+description: 'Lets embedded example iframes resolve in `q2 preview` and hub-client by reading their static deck from the VFS source path, avoiding a copy of every resource into the rendered artifact tree.'
 ---
 
 **Strand:** bd-kjrpya2d (discovered-from bd-z1smhvuo)

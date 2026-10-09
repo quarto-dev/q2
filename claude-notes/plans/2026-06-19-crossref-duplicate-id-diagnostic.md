@@ -1,6 +1,7 @@
 ---
 title: 'Duplicate crossref identifier — diagnosis & structured diagnostic'
 date: 2026-06-19
+description: 'Turns the unstructured duplicate crossref identifier error into a located, coded diagnostic first, and later relabels the two duplicate figure cells in the docs so the docs render is clean.'
 ---
 
 **Strand:** bd-rr6qzcvu (discovered-from bd-bxrkxblx)

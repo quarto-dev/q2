@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Route `Position::Post` extension filters to pandoc''s `main.lua` chain for Pandoc-hybrid targets (book-projects P2b)'
 date: 2026-09-24
+description: 'Routes `post-quarto` and `pre-render` extension filters for Pandoc-hybrid targets into pandoc''s `main.lua` entry-point chain, since pampa''s native Lua engine lacks the Q1 helpers those filters rely on.'
 ---
 
 **Date:** 2026-09-24

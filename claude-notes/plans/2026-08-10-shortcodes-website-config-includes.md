@@ -1,6 +1,7 @@
 ---
 title: 'Shortcodes not evaluated in website.title, page-footer, or HTML include files (bd-shortcodes-in-metadata-bp06aub8)'
 date: 2026-08-10
+description: 'Makes shortcodes such as `env` resolve in `website.title`, page footers and include files, where q2 currently emits them literally while Quarto 1 evaluates them, by walking metadata and expanding include text.'
 ---
 
 **Date:** 2026-08-10

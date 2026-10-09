@@ -1,6 +1,7 @@
 ---
 title: 'Plan 0: Pre-Engine Include Expansion & Engine SourceInfo'
 date: 2026-04-18
+description: 'Adds a pre-engine include expansion stage so `{{< include >}}` code cells reach engines, plus SourceInfo provenance for the text passed to engines, for parity with Quarto 1.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

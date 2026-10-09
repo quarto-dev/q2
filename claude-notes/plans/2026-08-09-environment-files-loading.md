@@ -1,6 +1,7 @@
 ---
 title: 'Project `_environment` files are not loaded (bd-environment-files-372u9qbs)'
 date: 2026-08-09
+description: 'Loads Quarto 1 `_environment` files into a project-scoped value map that the `env` shortcode and subprocess spawn sites read, without mutating the process environment, with real variables still taking precedence.'
 ---
 
 **Date:** 2026-08-09

@@ -1,6 +1,7 @@
 ---
 title: 'Auth review follow-ups: Bearer revocation parity, MCP reconnect auth classification, /auth/me exp semantics'
 date: 2026-08-03
+description: 'Enforces the revocation ledger on the Bearer credential path so bans and logout-everywhere apply to MCP clients, and fixes MCP reconnect auth classification and the meaning of the expiry field.'
 ---
 
 **Status:** implemented — all three findings landed 2026-08-03; strands and

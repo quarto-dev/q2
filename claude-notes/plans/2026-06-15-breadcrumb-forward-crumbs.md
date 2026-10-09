@@ -1,6 +1,7 @@
 ---
 title: 'Breadcrumb forward-crumbs — preview the nest-in descent target'
 date: 2026-06-15
+description: 'Proposes faded forward-crumbs to the right of the breadcrumb chip that preview the block a nest-in move would enter, updating as the caret moves between lines of a nested list.'
 ---
 
 **Date:** 2026-06-15

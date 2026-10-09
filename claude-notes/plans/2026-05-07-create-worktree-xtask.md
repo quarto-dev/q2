@@ -1,6 +1,7 @@
 ---
 title: 'Plan: `cargo xtask create-worktree` + CLAUDE.local.md worktree context'
 date: 2026-05-07
+description: 'Adds a `cargo xtask create-worktree` command that replaces hand-copied git worktree steps in the skills and writes an idempotent worktree context section into `CLAUDE.local.md`.'
 ---
 
 ## Context

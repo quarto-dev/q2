@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview: deliver engine `include-in-header` to the pane (marimo hydration)'
 date: 2026-07-08
+description: 'Delivers engine `include-in-header` content, such as the marimo islands script, to the `q2 preview` pane so marimo cells hydrate, and makes the injected script tags actually execute.'
 ---
 
 **Strand:** bd-5oyk1xce (discovered-from bd-5jxcio5d)

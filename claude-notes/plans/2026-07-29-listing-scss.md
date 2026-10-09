@@ -1,6 +1,7 @@
 ---
 title: 'Vendor and integrate quarto-listing.scss (bd-57y4)'
 date: 2026-07-29
+description: 'Vendors Quarto 1''s `quarto-listing.scss` into the theme CSS bundle so listing cards, tables and category chips in Quarto 2 websites get their intended styling instead of browser defaults.'
 ---
 
 **Strand:** bd-57y4 (P2; discovered from L3 phase 7, bd-ml8z — see D5 in

@@ -1,6 +1,7 @@
 ---
 title: 'Crossref Design for Quarto 2'
 date: 2026-04-15
+description: 'Describes the crossref design for single-file Quarto 2 documents, where floats, theorems, callouts and equations share one CustomNode and index pipeline, with multi-file crossrefs left as a later extension.'
 ---
 
 **Beads Issue**: bd-jsbg (epic)

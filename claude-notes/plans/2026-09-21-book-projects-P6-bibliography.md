@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Unified bibliography for multi-file HTML (book-projects P6)'
 date: 2026-09-21
+description: 'Builds one bibliography for all chapters of a multi-file HTML book by recording each chapter''s citations and merging the reference list through an in-process citeproc pass.'
 ---
 
 **Date:** 2026-09-21

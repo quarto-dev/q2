@@ -1,6 +1,7 @@
 ---
 title: 'Hub-Client Automated Testing Infrastructure'
 date: 2026-01-27
+description: 'Lays out a three-tier test strategy for hub-client covering unit tests, jsdom integration tests with mocked services, and Playwright end-to-end tests against a sync server and WASM build, with generated fixtures.'
 ---
 
 **Date**: 2026-01-27

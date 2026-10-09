@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview: audit HTML preview CSS for the render-drift class (bd-4b7f1hr7)'
 date: 2026-06-10
+description: 'Audits whether the HTML preview''s theme CSS and math rendering diverge from `q2 render`, finding that KaTeX is pinned differently on each side and proposing a version pin and a sync test.'
 ---
 
 **Date:** 2026-06-10

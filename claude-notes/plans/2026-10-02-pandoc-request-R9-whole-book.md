@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Whole-book request for Typst, PDF and EPUB (pandoc-request R9)'
 date: 2026-10-02
+description: 'Makes a browser download of a book''s typst, PDF or EPUB target render the whole book in one request, mirroring native chapter merging and per-chapter captures, with a chapter-only option kept alongside.'
 ---
 
 **Date:** 2026-10-02

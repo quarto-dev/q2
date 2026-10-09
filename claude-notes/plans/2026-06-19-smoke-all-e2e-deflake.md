@@ -1,6 +1,7 @@
 ---
 title: 'Smoke-all E2E deflake'
 date: 2026-06-19
+description: 'Diagnoses flaky nightly end-to-end smoke tests, finding that renders stall under CPU contention because the sync client loaded project documents serially with no timeout, and fixes that root cause.'
 ---
 
 ## Overview

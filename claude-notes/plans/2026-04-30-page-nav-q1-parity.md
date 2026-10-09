@@ -1,6 +1,7 @@
 ---
 title: 'Page-navigation: match Quarto 1 behavior in websites'
 date: 2026-04-30
+description: 'Makes website prev/next page navigation match Quarto 1 by adding the missing project-level `page-navigation` config gate, which defaults to off, and fixing the strip''s layout and arrow icons.'
 ---
 
 Beads: **bd-bsut**.

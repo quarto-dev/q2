@@ -1,6 +1,7 @@
 ---
 title: 'Plan 1a: Return to Q1 — correct the landed 1a host/engine surface'
 date: 2026-06-25
+description: 'Corrects landed engine-host Rust code where it drifted from the Quarto 1 engine API without a forcing reason, and adds the protocol seams needed to carry the full engine API later.'
 ---
 
 > **STATUS (2026-06-29): RTQ code items COMPLETE on `feature/ts-engine-extensions`.** All six

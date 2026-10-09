@@ -1,6 +1,7 @@
 ---
 title: 'Plan: epub output format (pandoc-hybrid-writer follow-on)'
 date: 2026-09-18
+description: 'Adds `epub` as an output format by reusing Pandoc''s own EPUB writer with Quarto defaults, math and chapter-splitting options, and a cover image forwarding allow-list, so no post-Pandoc compile step is needed.'
 ---
 
 **Date:** 2026-09-20

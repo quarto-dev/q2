@@ -1,6 +1,7 @@
 ---
 title: 'Suppress noisy `lua error` panic stack traces in WASM'
 date: 2026-04-16
+description: 'Stops expected Lua error panics in the WASM build from printing stack traces to the browser console while keeping output for genuine Rust panics, comparing a custom hook against a sentinel payload type.'
 ---
 
 ## Problem

@@ -1,6 +1,7 @@
 ---
 title: 'Pampa: Accept input file as a positional argument'
 date: 2026-04-16
+description: 'Lets `pampa` take its input file as a positional argument, as Pandoc does, while keeping `-i` working for backward compatibility and rejecting conflicting or multiple inputs.'
 ---
 
 ## Overview

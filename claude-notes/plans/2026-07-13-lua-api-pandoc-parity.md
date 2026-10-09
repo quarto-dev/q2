@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Lua API Pandoc parity — mismatch catalog + conformance harness'
 date: 2026-07-13
+description: 'Catalogs where the Q2 Lua API diverges from Pandoc''s, starting with AST constructors and filter return values, and builds a conformance suite and differential harness against a real pandoc binary to drive fixes.'
 ---
 
 **Strand**: bd-grkrb9nj (epic)

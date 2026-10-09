@@ -1,6 +1,7 @@
 ---
 title: 'k-253: YAML Validation Error Reporting Improvements'
 date: 2025-10-27
+description: 'Plans better `quarto-yaml-validation` error messages with accurate file and line locations, ariadne source highlighting, a JSON output mode and anyOf error pruning, using the `validate-yaml` binary as a test bed.'
 ---
 
 <!-- quarto-error-code-audit-ignore-file -->

@@ -1,6 +1,7 @@
 ---
 title: 'Filesystem Synchronization Design for quarto-hub'
 date: 2025-12-09
+description: 'Designs how `quarto-hub` keeps each automerge text document in step with its `.qmd` file on disk, covering initial population from the filesystem and resolving cases where both sides changed.'
 ---
 
 **Issue:** k-ke2m

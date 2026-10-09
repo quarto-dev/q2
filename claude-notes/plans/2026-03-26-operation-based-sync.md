@@ -1,6 +1,7 @@
 ---
 title: 'Operation-Based Sync: Fix Concurrent Edit Race Condition'
 date: 2026-03-26
+description: 'Replaces full-text Automerge updates from the editor with positional splice operations taken from Monaco change events, so concurrent remote edits are no longer overwritten and lost.'
 ---
 
 **Issue:** quarto-dev/q2#74 — hub: edits can get lost

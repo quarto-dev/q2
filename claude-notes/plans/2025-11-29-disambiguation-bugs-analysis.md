@@ -1,6 +1,7 @@
 ---
 title: 'Disambiguation Bugs Analysis'
 date: 2025-11-29
+description: 'Identifies two bugs in `quarto-citeproc` ambiguity detection: grouping by author names hides identical renderings, and year-suffix assignment ignores whether earlier disambiguation methods already resolved the ambiguity.'
 ---
 
 **Date:** 2025-11-29

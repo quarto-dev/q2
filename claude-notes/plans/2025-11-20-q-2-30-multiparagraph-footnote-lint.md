@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Q-2-30 Multi-Paragraph Footnote Linting Diagnostic'
 date: 2025-11-20
+description: 'Adds a linting diagnostic that flags an indented paragraph following a footnote definition, a Pandoc-style multi-paragraph footnote that parses without error but is not part of the note.'
 ---
 
 **Date**: 2025-11-20

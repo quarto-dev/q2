@@ -1,6 +1,7 @@
 ---
 title: '`q2 preview` — Feasibility & Architecture Plan (Epic)'
 date: 2026-05-11
+description: 'Feasibility and architecture for `q2 preview`, a native CLI that serves an ephemeral local hub-client so edits re-render incrementally without rebuilding the DOM, keeping stateful JavaScript alive.'
 branch: feature/q2-preview
 status: "v3 — all open items resolved (2026-05-11 review #2). Ready to
         spin up the hub-client decomposition sub-epic, after which

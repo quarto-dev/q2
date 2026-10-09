@@ -1,6 +1,7 @@
 ---
 title: 'Merge Complete: pico-quarto-render API Migration'
 date: 2025-10-22
+description: 'Records the finished merge of main into the experimental render branch, where `pico-quarto-render` moved to the new `DiagnosticMessage` error and warning API and the workspace conflicts were resolved.'
 ---
 
 ## Summary

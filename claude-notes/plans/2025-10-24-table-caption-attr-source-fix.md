@@ -1,6 +1,7 @@
 ---
 title: 'Table Caption Attribute Source Location Bug Fix'
 date: 2025-10-24
+description: 'Fixes table captions with attributes so their source locations are merged into the table''s `attr_source`, since `caption_attr_source` is currently extracted in `postprocess.rs` and then discarded.'
 ---
 
 **Date**: 2025-10-24

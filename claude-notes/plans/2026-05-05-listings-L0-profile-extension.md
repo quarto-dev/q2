@@ -1,6 +1,7 @@
 ---
 title: 'L0 — `ListingItemInfo` profile extension (sub-plan)'
 date: 2026-05-05
+description: 'Adds a `listing_item` field to `DocumentProfile` as the single per-document store for listing data, with curated typed fields plus a scoped extra bag for custom template fields.'
 ---
 
 **Date:** 2026-05-05

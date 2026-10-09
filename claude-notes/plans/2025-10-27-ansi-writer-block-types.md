@@ -1,6 +1,7 @@
 ---
 title: 'ANSI Writer Block Types Implementation Plan'
 date: 2025-10-27
+description: 'Adds Paragraph, Plain, Div, BulletList and OrderedList support to the ANSI writer, using prefix-writing contexts so nested lists compose and blank-line spacing depends on the block types around each block.'
 ---
 
 **Date**: 2025-10-27

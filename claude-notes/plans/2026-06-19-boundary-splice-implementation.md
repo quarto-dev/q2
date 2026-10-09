@@ -1,6 +1,7 @@
 ---
 title: 'Boundary-addressed splice — Implementation Plan'
 date: 2026-06-19
+description: 'Task-by-task TDD plan for the boundary-addressed splice, generalizing `apply_node_edit` to gap ranges in pampa, adding a client-side verb library, and wiring the new commit path through the preview and hub client.'
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

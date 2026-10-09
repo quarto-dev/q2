@@ -1,6 +1,7 @@
 ---
 title: 'Plan — Live re-transpile render-components on TSX content change'
 date: 2026-05-07
+description: 'Lets edits to render-components TSX files reach the preview iframe live by re-transpiling on content change behind a 500 ms debounce, keeping the last working output when a file has a syntax error.'
 ---
 
 **Date:** 2026-05-07

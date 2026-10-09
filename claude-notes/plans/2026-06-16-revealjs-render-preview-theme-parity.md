@@ -1,6 +1,7 @@
 ---
 title: 'Reveal render/preview theme parity'
 date: 2026-06-16
+description: 'Makes `q2 preview` apply the compiled Quarto reveal theme for slides, so centering, heading case and per-document themes match `q2 render` instead of falling back to stock `white.css`.'
 ---
 
 **Strand:** bd-y259zb57

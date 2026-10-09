@@ -1,6 +1,7 @@
 ---
 title: 'Target Incremental Writes — Development Plan'
 date: 2026-06-04
+description: 'Lets a user edit a rendered preview block by sending a pure replacement subtree for one node, which is spliced into the untransformed AST and written back through the existing reconcile and incremental-write core.'
 ---
 
 **Date:** 2026-06-04 (rewritten from the research-plan version)

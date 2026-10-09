@@ -1,6 +1,7 @@
 ---
 title: 'Pipe Table Caption Implementation Plan'
 date: 2025-10-31
+description: 'Attaches captions to pipe tables by updating the caption handler for the new grammar, which places a caption either inside the table node or as a sibling block after an empty line.'
 ---
 
 **Date**: 2025-10-31

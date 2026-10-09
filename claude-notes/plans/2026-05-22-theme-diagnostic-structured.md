@@ -1,6 +1,7 @@
 ---
 title: 'Structured diagnostic for theme-config errors'
 date: 2026-05-22
+description: 'Turns a theme configuration error into a structured diagnostic with a source span pointing into `_quarto.yml`, instead of a plain error line that loses its location.'
 ---
 
 **Status:** drafting — pending user review

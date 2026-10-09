@@ -1,6 +1,7 @@
 ---
 title: 'Preview rich-text editor: open with drag-selection preserved'
 date: 2026-07-07
+description: 'Keeps a text selection made by dragging inside a block when the preview opens its rich-text editor, and suppresses activation for cross-block drags so copy gestures still work.'
 ---
 
 **Strand:** bd-abo9m23f

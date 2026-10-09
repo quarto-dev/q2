@@ -1,6 +1,7 @@
 ---
 title: 'P8 — content-hidden / when-format gating (verification, not a port)'
 date: 2026-08-20
+description: 'Verifies that existing `when-format` and `unless-format` conditional content gating behaves correctly for docx and pptx targets, adding a smoke fixture rather than porting the transform.'
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-17 (two passes) — an epic-wide Opus review found this

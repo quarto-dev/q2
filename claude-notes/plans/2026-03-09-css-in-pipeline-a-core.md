@@ -1,6 +1,7 @@
 ---
 title: 'Plan: CSS in Pipeline — Part A: Core Implementation (Phases 1-2)'
 date: 2026-03-09
+description: 'Moves theme CSS compilation into a new `CompileThemeCssStage` that reads merged project metadata and caches results, with `ThemeConfig` now reading top-level `theme`, while the old compilation paths remain for now.'
 ---
 
 Parent plan: `claude-notes/plans/2026-03-09-css-in-pipeline.md`

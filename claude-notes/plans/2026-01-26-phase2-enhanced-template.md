@@ -1,6 +1,7 @@
 ---
 title: 'Phase 2: Enhanced Template System'
 date: 2026-01-26
+description: 'Adds a second, Bootstrap-compatible HTML template, chosen by the `minimal` option and theme setting, so output matches the minimal and full output modes of TypeScript Quarto.'
 ---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)

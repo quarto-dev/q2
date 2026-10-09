@@ -1,6 +1,7 @@
 ---
 title: 'Syntax highlighting — Phase 4: browser user grammars (minimal v1)'
 date: 2026-04-21
+description: 'Adds browser support for user-defined tree-sitter grammars in hub-client by loading them with web-tree-sitter, auto-discovering grammars under `_quarto/grammars/` and passing a JavaScript highlight callback into the WASM render.'
 ---
 
 - **Parent plan**: `claude-notes/plans/2026-04-19-syntax-highlighting-design.md`

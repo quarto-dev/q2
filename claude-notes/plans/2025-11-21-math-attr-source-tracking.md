@@ -1,6 +1,7 @@
 ---
 title: 'Math+Attr Source Tracking Implementation Plan'
 date: 2025-11-21
+description: 'Plans how to preserve source location when a math span is wrapped with its trailing attribute block, comparing options that reuse the math range, change the Attr AST node, or combine attribute pieces.'
 ---
 
 ## Problem Statement

@@ -1,6 +1,7 @@
 ---
 title: 'Phase 6: Table of Contents Rendering'
 date: 2026-01-28
+description: 'Generates the table of contents as an AST transform rather than inside the HTML writer, so Lua filters can customize the TOC structure, following how Pandoc builds its TOC but at a point where filters can still act.'
 ---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)

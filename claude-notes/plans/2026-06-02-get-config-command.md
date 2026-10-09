@@ -1,6 +1,7 @@
 ---
 title: 'Plan: `q2 get-config` — emit merged document config as JSON'
 date: 2026-06-02
+description: 'Adds a `q2 get-config` command that prints a document''s fully merged metadata, or one dot-separated key path, as JSON by reusing the render pipeline''s merge stage, so external tools need not reimplement merging.'
 ---
 
 - **Beads:** bd-xoaic

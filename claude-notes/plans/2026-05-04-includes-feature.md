@@ -1,6 +1,7 @@
 ---
 title: '`include-in-header` / `include-before-body` / `include-after-body` (HTML) — design draft'
 date: 2026-05-04
+description: 'Implements the `include-in-header`, `include-before-body` and `include-after-body` keys for Quarto 2 HTML output, which are currently ignored, by routing them through the same generate-then-render pattern used for navbars and footers.'
 ---
 
 **Date:** 2026-05-04

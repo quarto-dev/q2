@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Book project foundations (book-projects P1)'
 date: 2026-09-21
+description: 'Gives `ProjectKind::Book` a real project type that builds the chapter list, translates book config, and reuses the website sidebar and navbar generation, with no numbering yet.'
 ---
 
 **Date:** 2026-09-21

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Warm pool and preview wiring (pandoc-host H10b)'
 date: 2026-10-02
+description: 'Puts the warm executor behind a two-worker pool and an overlap-aware controller so the PDF preview renders faster without killing in-flight renders or showing frames older than one already shown.'
 ---
 
 **Date:** 2026-10-02

@@ -1,6 +1,7 @@
 ---
 title: 'Manage trace size for use as replay/regression-test fixtures (bd-5qnj)'
 date: 2026-05-03
+description: 'Shrinks trace files, which are dominated by repeated document AST snapshots, by dropping pretty-printing and compressing and deduplicating snapshots so traces stay small enough to check in as regression fixtures.'
 ---
 
 **Date:** 2026-05-03

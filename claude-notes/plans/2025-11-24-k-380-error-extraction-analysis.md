@@ -1,6 +1,7 @@
 ---
 title: 'K-380: Error Infrastructure Extraction - Deep Analysis'
 date: 2025-11-24
+description: 'Analyzes which parts of the error infrastructure in `quarto-markdown-pandoc` are already generic enough to move into a separate `quarto-parse-errors` crate, and what small signature and build script changes remain.'
 ---
 
 **Date**: 2025-11-24

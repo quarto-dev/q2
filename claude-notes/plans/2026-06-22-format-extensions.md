@@ -1,6 +1,7 @@
 ---
 title: 'Format Extensions (resolution & apply) — STUB'
 date: 2026-06-22
+description: 'Plans how format extensions, which layer filters, templates and SCSS from `_extension.yml` onto a known base format such as `pdf`, are resolved from a format string and applied.'
 ---
 
 **Status:** STUB / research — scoping, not yet an implementation plan. Needs a

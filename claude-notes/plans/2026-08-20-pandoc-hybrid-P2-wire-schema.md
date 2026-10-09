@@ -1,6 +1,7 @@
 ---
 title: 'P2 — Custom-node wire format: versioned shared schema'
 date: 2026-08-20
+description: 'Promotes the `__quarto_custom_node` wire format to a versioned JSON schema, shared by the Rust producer, the TypeScript preview renderer, and the Lua filters, so per-type fields stop drifting apart.'
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P2-wire-schema.md`

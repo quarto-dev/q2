@@ -1,6 +1,7 @@
 ---
 title: 'Listing inline `contents:` records — Implementation Plan'
 date: 2026-08-24
+description: 'Makes listings render one item per inline metadata record under `contents:`, including records that overlay a project document through `path:`, and replaces silent empty listings with diagnostics.'
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

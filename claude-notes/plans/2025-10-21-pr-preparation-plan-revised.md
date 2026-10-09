@@ -1,6 +1,7 @@
 ---
 title: 'PR Preparation Plan (REVISED): Extract crates/ Changes from kyoto to 2025-10-21'
 date: 2025-10-21
+description: 'Describes a selective checkout of only the `crates/` directory from the work branch onto a clean base, excluding `private-crates/` and root-level files, for an upstream pull request.'
 ---
 
 <!-- quarto-error-code-audit-ignore-file -->

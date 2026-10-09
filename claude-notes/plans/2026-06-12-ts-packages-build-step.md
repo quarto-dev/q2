@@ -1,6 +1,7 @@
 ---
 title: 'ts-packages build step for xtask build-all / verify (bd-6rczoll3)'
 date: 2026-06-12
+description: 'Adds a `ts-packages` build step to `cargo xtask build-all` and `verify`, since the MCP server runs from `dist/` output that no step builds, and makes its build script work on Windows.'
 ---
 
 ## Overview

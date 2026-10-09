@@ -1,6 +1,7 @@
 ---
 title: 'Inline code span with `***` content — parse-error regression'
 date: 2026-05-24
+description: 'Fixes a parse error where inline code beginning with three asterisks, such as `***`, is rejected because the external scanner emits a token that the grammar does not allow at that position.'
 ---
 
 **Beads:** bd-qhb2o

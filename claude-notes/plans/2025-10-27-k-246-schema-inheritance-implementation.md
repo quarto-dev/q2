@@ -1,6 +1,7 @@
 ---
 title: 'k-246: Schema Inheritance Implementation Plan'
 date: 2025-10-27
+description: 'Implements quarto-cli''s `super` field for object schemas, so a derived schema inherits and merges properties, required fields and additional-property rules from base schemas, with eager references resolved later.'
 ---
 
 **Created**: 2025-10-27

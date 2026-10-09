@@ -1,6 +1,7 @@
 ---
 title: 'Snapshot Change Review: Phase 5 MetaValueWithSourceInfo → ConfigValue Migration'
 date: 2025-12-29
+description: 'Records and assesses each difference in the yaml-tags JSON snapshot produced by moving pampa from `MetaValueWithSourceInfo` to `ConfigValue`, flagging the `!date` tag as a semantic change.'
 ---
 
 **Date:** 2025-12-29

@@ -1,6 +1,7 @@
 ---
 title: 'qmd writer — leaf-block source provenance (fixes nest-in **and** engine line numbers)'
 date: 2026-06-18
+description: 'Makes the qmd writer record where each leaf block lands in its output, so nested blocks map exactly back to source lines, fixing off-by-one nest-in cursor positions and engine error line numbers.'
 ---
 
 **Date:** 2026-06-18

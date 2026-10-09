@@ -1,6 +1,7 @@
 ---
 title: 'Citeproc Output Architecture Refactor'
 date: 2025-11-27
+description: 'Replaces flat string building in `quarto-citeproc` evaluation with a tagged `Output` tree, so that later features such as disambiguation and year suffixes can post-process the output before rendering.'
 ---
 
 **Issue**: k-423 (child of k-422)

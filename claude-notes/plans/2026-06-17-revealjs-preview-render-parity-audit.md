@@ -1,6 +1,7 @@
 ---
 title: 'revealjs `q2 preview` ↔ `q2 render` parity audit'
 date: 2026-06-17
+description: 'Catalogs DOM divergences between the React reveal.js preview and the native `q2 render` scaffold across the example decks, including dropped section ids and classes, missing footer and logo, and a logo image that fails to load.'
 ---
 
 **Created:** 2026-06-17

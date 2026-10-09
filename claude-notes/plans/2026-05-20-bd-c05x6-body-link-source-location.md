@@ -1,6 +1,7 @@
 ---
 title: 'bd-c05x6 — Plumb SourceInfo into Q-13-4 body-link "missing document" warnings'
 date: 2026-05-20
+description: 'Passes the parser''s URL source range into the body-link missing-document warning so it reports a file, row and column, instead of only the broken target name.'
 ---
 
 **Status**: Implementation complete. Awaiting user review before commit.

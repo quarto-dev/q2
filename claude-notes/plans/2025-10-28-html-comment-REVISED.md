@@ -1,6 +1,7 @@
 ---
 title: 'HTML Comment Support - REVISED DESIGN'
 date: 2025-10-28
+description: 'Revises HTML comment support so the block parser consumes a comment that opens inside a paragraph and spans block-like lines such as list items, which the original block-level design would have misparsed.'
 ---
 
 **Date:** 2025-10-28

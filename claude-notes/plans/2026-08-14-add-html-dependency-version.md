@@ -1,6 +1,7 @@
 ---
 title: '`add_html_dependency`: `version` unimplemented, and Q-11-1 fires once per call (bd-add-html-dependency-version-5tnub5ds)'
 date: 2026-08-14
+description: 'Implements the `version` field of `quarto.doc.add_html_dependency` so each version gets its own asset directory, and stops the Q-11-1 warning from repeating once per call.'
 ---
 
 **Date:** 2026-08-14

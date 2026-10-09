@@ -1,6 +1,7 @@
 ---
 title: 'quarto-math and the native docx writer'
 date: 2026-09-21
+description: 'Adds the quarto-math groundwork for a native docx writer and checks that it merges cleanly with the parallel Pandoc-based docx route.'
 ---
 
 **Epic:** bd-pq9k90z2 (native docx writer)

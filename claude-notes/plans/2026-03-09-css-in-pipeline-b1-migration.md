@@ -1,6 +1,7 @@
 ---
 title: 'Plan: CSS in Pipeline — Part B1: Migration (Phases 3-4)'
 date: 2026-03-09
+description: 'Removes the old native pre-pipeline and WASM JavaScript theme CSS compilation paths so the pipeline''s `css:default` artifact becomes the single source of the rendered stylesheet.'
 ---
 
 Parent plan: `claude-notes/plans/2026-03-09-css-in-pipeline.md`

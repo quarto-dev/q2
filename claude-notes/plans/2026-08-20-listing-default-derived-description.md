@@ -1,6 +1,7 @@
 ---
 title: 'Default listing emits no description for items without explicit `description:` (bd-listing-default-no-derived-desc-m0wrr8ty)'
 date: 2026-08-20
+description: 'Investigates why default-type listings show no derived description for pages without `description:`, tracing it to a listing stage missing from the Pass-1 profile pipeline that feeds listings.'
 ---
 
 **Date:** 2026-08-20

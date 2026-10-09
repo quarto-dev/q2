@@ -1,6 +1,7 @@
 ---
 title: 'Experiment: consolidate integration tests into single binary per crate'
 date: 2026-05-28
+description: 'Measures whether moving each crate''s many `tests/*.rs` files into one `tests/integration` binary cuts build size and time, starting with the pampa crate as a pilot.'
 ---
 
 **Beads:** [bd-xvdop](../../.beads/issues.jsonl) — `br show bd-xvdop`

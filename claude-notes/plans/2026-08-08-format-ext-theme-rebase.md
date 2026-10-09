@@ -1,6 +1,7 @@
 ---
 title: 'Format-extension theme/css paths not rebased: contributes.formats.html.theme silently drops bundled SCSS (bd-of20unsb)'
 date: 2026-08-08
+description: 'Rebases bundled SCSS theme files declared by format extensions so they resolve, and replaces the silent fallback to default CSS with a real diagnostic when a theme fails.'
 ---
 
 **Date:** 2026-08-08

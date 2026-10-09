@@ -1,6 +1,7 @@
 ---
 title: 'Conditional Slide Thumbnails in Outline Pane'
 date: 2026-02-26
+description: 'Limits outline pane slide thumbnails to slide-format documents by passing the detected format from the preview router to the editor, so thumbnails clear when a regular document is shown.'
 ---
 
 ## Overview

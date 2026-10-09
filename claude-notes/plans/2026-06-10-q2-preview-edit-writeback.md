@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview: persist React-preview edits back to the source .qmd on disk'
 date: 2026-06-10
+description: 'Lets edits made in the preview from `q2 preview` persist to the source `.qmd` file on disk through the Automerge document, behind an opt-in `--allow-edit` flag.'
 ---
 
 **Strand:** bd-ov4gqk3m

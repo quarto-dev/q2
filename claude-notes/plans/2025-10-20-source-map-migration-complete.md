@@ -1,6 +1,7 @@
 ---
 title: 'Source Map Migration Completion Summary'
 date: 2025-10-20
+description: 'Summarizes the completed move of all AST types from the legacy `pandoc::location` module to `quarto-source-map`, with test results, JSON writer changes, and follow-up work left open.'
 ---
 
 **Date:** 2025-10-20

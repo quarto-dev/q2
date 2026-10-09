@@ -1,6 +1,7 @@
 ---
 title: 'Website cross-document link navigation in hub-client'
 date: 2026-05-01
+description: 'Makes cross-document links in the hub-client preview work for website projects, whose pipeline rewrites `.qmd` links to `.html` URLs that the click handler does not intercept.'
 ---
 
 ## Status

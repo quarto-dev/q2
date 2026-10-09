@@ -1,6 +1,7 @@
 ---
 title: 'Extracting `quarto-yaml-validation`: design decisions'
 date: 2026-06-26
+description: 'Records the design decisions for extracting the YAML validation stack from q2, covering how error codes keep their identity across the package boundary and how the `validate-yaml` demo binary is removed.'
 ---
 
 **Strand:** bd-egcyeym9

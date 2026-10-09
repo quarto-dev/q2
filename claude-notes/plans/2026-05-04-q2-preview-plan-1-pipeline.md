@@ -1,6 +1,7 @@
 ---
 title: 'Plan 1 — q2-preview pipeline + integration'
 date: 2026-05-04
+description: 'Adds a `q2-preview` pseudo-format whose pipeline runs the transforms and user filters but returns the AST instead of HTML, giving the React iframe preview its first visible rendering in read-only mode.'
 ---
 
 **Date:** 2026-05-04

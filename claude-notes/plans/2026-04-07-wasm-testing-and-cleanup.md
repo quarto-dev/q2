@@ -1,6 +1,7 @@
 ---
 title: 'WASM Testing and Cleanup Implementation Plan'
 date: 2026-04-07
+description: 'Removes `test` from the wasm32 cfg guards in `filter.rs` and `shortcode.rs` so native tests use the full Lua stdlib, adds real wasm-bindgen smoke tests to CI, and deletes the stale `wasm-qmd-parser` crate and its workflow.'
 ---
 
 **Status: COMPLETE.** Cleanup landed via PR #116 (merged 2026-04-23, squash `52968801`); WASM smoke tests + CI job landed via PR #109 (merged 2026-07-02, `e26a8b88`). Tracking strand bd-itj9 closed. Remaining checkboxes below reflect the original single-branch plan before the branch split (see design spec comments); not audited item-by-item post-split — treat as historical record, not a live tracker.

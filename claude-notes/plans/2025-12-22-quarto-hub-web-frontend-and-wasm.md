@@ -1,6 +1,7 @@
 ---
 title: 'Quarto-Hub Web Frontend and WASM Rendering'
 date: 2025-12-22
+description: 'Assesses whether a single-page quarto-hub web frontend can combine automerge collaboration with WASM builds of the pampa and quarto crates for live preview, centering on abstracting filesystem access.'
 ---
 
 **Date**: 2025-12-22

@@ -1,6 +1,7 @@
 ---
 title: 'Navigation item `text:` is HTML-escaped; bare-string page-footer item becomes an empty link (bd-page-footer-items-f4th80mj)'
 date: 2026-08-11
+description: 'Makes navigation item `text:` values in navbars, sidebars and footers parse as markdown instead of escaped literals, so entities, emphasis and shortcodes render, and bare footer strings stop producing empty links.'
 ---
 
 **Date:** 2026-08-11

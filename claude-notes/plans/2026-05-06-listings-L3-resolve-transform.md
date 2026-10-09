@@ -1,6 +1,7 @@
 ---
 title: 'L3 — Listing resolve transforms (sub-plan)'
 date: 2026-05-06
+description: 'Implements listing resolve transforms that build the item set from glob matches and render the built-in `default`, `grid` and `table` listings through doctemplate, along with the doctemplate enhancements rendering needs.'
 ---
 
 **Date:** 2026-05-06

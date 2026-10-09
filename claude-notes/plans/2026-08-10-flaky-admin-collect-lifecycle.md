@@ -1,6 +1,7 @@
 ---
 title: 'Flaky test: admin_collect_lifecycle fails intermittently in full-workspace runs (bd-u0tldu4z)'
 date: 2026-08-10
+description: 'Traces an intermittent `admin_collect_lifecycle` test failure to doc-id case-folding on case-insensitive filesystems rather than timing, and proposes recovering ids with a checksum-validated case-variant search.'
 ---
 
 **Date:** 2026-08-10

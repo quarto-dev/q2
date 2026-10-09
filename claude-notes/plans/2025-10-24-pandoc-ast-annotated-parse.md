@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Pandoc AST Support for @quarto/annotated-qmd'
 date: 2025-10-24
+description: 'Plans extending `@quarto/annotated-qmd` beyond YAML metadata to convert the full Pandoc AST, blocks and inlines with source locations, to support syntax-directed linting in quarto-cli.'
 ---
 
 **Date**: 2025-10-24

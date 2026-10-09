@@ -1,6 +1,7 @@
 ---
 title: 'Plan 7g — Source-range tiling'
 date: 2026-06-01
+description: 'Makes sibling AST source ranges disjoint and parent ranges contain their children, so every source byte maps to exactly one node, enforced by a tiling auditor, handler fixes, and a producer contract.'
 ---
 
 **Date:** 2026-06-01 (research) → 2026-06-02 (converted to development plan)

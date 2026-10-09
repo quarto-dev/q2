@@ -1,6 +1,7 @@
 ---
 title: 'InlineSplice silently drops header attribute changes'
 date: 2026-02-11
+description: 'Fixes the incremental writer''s inline splice path silently dropping changed header attributes such as classes and key-value pairs, by falling back to a full header rewrite when those attributes differ.'
 ---
 
 **Beads issue:** `bd-rcdo`

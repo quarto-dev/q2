@@ -1,6 +1,7 @@
 ---
 title: 'quarto-citeproc Development Guide'
 date: 2025-11-29
+description: 'Workflow guide for coding sessions on `quarto-citeproc`, setting feature parity with Pandoc''s citeproc as the goal and explaining how to pick, run, enable and defer conformance tests.'
 ---
 
 This document serves as a workflow guide for LLM coding sessions working on

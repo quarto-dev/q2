@@ -1,6 +1,7 @@
 ---
 title: 'Issue #195 / bd-u50w — fix qmd writer for truly-empty bullet-list items'
 date: 2026-05-14
+description: 'Fixes the qmd writer so truly empty bullet, ordered and list-table items are written as bare marker lines, so they survive a round trip instead of being dropped or mutated into placeholder text.'
 ---
 
 - **GitHub issue**: https://github.com/quarto-dev/q2/issues/195

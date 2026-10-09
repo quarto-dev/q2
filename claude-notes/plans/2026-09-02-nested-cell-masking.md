@@ -1,6 +1,7 @@
 ---
 title: 'Make q2 self-documenting again: don''t execute a cell that is being displayed'
 date: 2026-09-02
+description: 'Stops knitr from executing `{r}` fences that are displayed inside another code block by masking them before engine execution and restoring them afterwards, so documentation about cells can be written.'
 ---
 
 **Strand:** bd-knitr-executes-nested-display-fence-atbtktdj (epic: bd-98m98wg8)

@@ -1,6 +1,7 @@
 ---
 title: 'Snyk PR remediation skill'
 date: 2026-09-01
+description: 'Adds a `/snyk-pr` skill that walks a Snyk bot upgrade PR through every copy of a pinned version, including generated bundles, so that KaTeX and React bumps can be made mergeable without weakening CI guard tests.'
 ---
 
 **Braid strand:** bd-t8bwkr64

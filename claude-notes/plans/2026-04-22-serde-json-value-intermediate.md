@@ -1,6 +1,7 @@
 ---
 title: 'Eliminate `serde_json::Value` intermediate in pampa JSON writer'
 date: 2026-04-22
+description: 'Removes the `serde_json::Value` intermediate from the pampa JSON writer, whose allocation and copying dominate AST serialization time in the preview, and measures the gain with a native profiling harness.'
 ---
 
 Status: **landed on `perf/2026-04-22-json-sourcemap` (commits 4e7a43ec, b3e15a47); browser-verified 2026-04-22**

@@ -1,6 +1,7 @@
 ---
 title: 'Preview-embed ephemeral storage mode'
 date: 2026-08-14
+description: 'Stops the preview-embed hub-client build from accumulating IndexedDB data across sessions by using in-memory storage behind a build flag, with reloads recovered through the preview config.'
 ---
 
 ## Overview

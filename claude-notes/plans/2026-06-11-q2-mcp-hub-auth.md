@@ -1,6 +1,7 @@
 ---
 title: '`q2 mcp` — embed & delegate to the TypeScript hub MCP server'
 date: 2026-06-11
+description: 'Designs `q2 mcp`, a thin Rust launcher that bundles the TypeScript hub MCP server and runs it under Node, so LLM apps can read and write quarto-hub documents as multiplayer participants.'
 ---
 
 **Strand:** bd-81cfshmw

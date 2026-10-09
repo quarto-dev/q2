@@ -1,6 +1,7 @@
 ---
 title: 'Phase 1 Remaining: Name Formatting Features'
 date: 2025-11-27
+description: 'Lists the deferred name-formatting edge cases in `quarto-citeproc`, such as HTML entity escaping, `name-part` elements and initialization rules, with the effort and expected test impact of each.'
 ---
 
 **Parent issue:** k-422 (quarto-citeproc: Citation processing engine)

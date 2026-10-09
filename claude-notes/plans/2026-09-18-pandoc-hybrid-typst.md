@@ -1,6 +1,7 @@
 ---
 title: 'Plan: typst output format (pandoc-hybrid-writer follow-on)'
 date: 2026-09-18
+description: 'Adds `typst` as an output format by reusing pandoc''s Typst writer with vendored Quarto 1 filters and templates, plus a new compile step that invokes the typst binary to produce a PDF.'
 ---
 
 **Date:** 2026-09-20

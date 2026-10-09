@@ -1,6 +1,7 @@
 ---
 title: 'Syntax highlighting design for Quarto 2'
 date: 2026-04-19
+description: 'Designs syntax highlighting for Quarto 2 by storing tree-sitter capture spans as a JSON attribute on code blocks, so user filters can author the same spans and the HTML writer renders them.'
 ---
 
 - **Beads**: bd-n7x2

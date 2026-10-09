@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix Definition List Detection False Positive on Table Captions (Revised)'
 date: 2025-10-21
+description: 'Stops the `definition-lists` rule in qmd-syntax-helper from flagging table captions by checking whether the line above a colon line is a pipe-table row, and notes edge cases for that check.'
 ---
 
 ## Problem Statement

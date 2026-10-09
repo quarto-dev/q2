@@ -1,6 +1,7 @@
 ---
 title: 'Pre- and post-render project scripts (bd-w348iu63)'
 date: 2026-07-29
+description: 'Ports Quarto 1''s project `pre-render` and `post-render` script hooks to Quarto 2, working out where they fit the fixed file pipeline, how scripts are dispatched without a bundled Deno, and what preview does.'
 ---
 
 **Status: implemented 2026-07-31 (all phases complete, full verify

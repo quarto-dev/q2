@@ -1,6 +1,7 @@
 ---
 title: 'Retire GIS / One-Tap silent renewal (renewal-only scope)'
 date: 2026-07-27
+description: 'Removes the Google One-Tap silent renewal path from hub-client, since server-side sliding sessions now handle renewal, and renames the `/auth/refresh` endpoint to `/auth/session` as the generic OIDC login endpoint.'
 ---
 
 **Epic:** `bd-qxgoti2b` — \"Unify hub-client and hub-mcp auth on Authorization Code

@@ -1,6 +1,7 @@
 ---
 title: 'Plan 2E — q2-slides + revealjs as sibling formats'
 date: 2026-05-10
+description: 'Moves the carousel and reveal.js slide renderers into one `q2-slides` directory, where two format registries share the same block and inline components and differ only in their document root.'
 ---
 
 **Date:** 2026-05-10

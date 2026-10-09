@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Q-2-35 — Reject 4-space indented code blocks with a high-quality error'
 date: 2026-05-14
+description: 'Makes the qmd parser reject 4-space indented code blocks with a targeted error, mirroring the existing triple-star diagnostic, instead of silently rewriting them into paragraphs on round trip.'
 ---
 
 - **GH issue:** [#184](https://github.com/quarto-dev/q2/issues/184)

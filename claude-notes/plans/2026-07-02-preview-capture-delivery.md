@@ -1,6 +1,7 @@
 ---
 title: 'Plan 4a: Preview engine-capture delivery — julia close/busy failure + browser splice e2e'
 date: 2026-07-02
+description: 'Fixes three failures in the `q2 preview` engine-capture path: julia close-while-busy errors that discard captures, recorded captures that never splice into the browser pane, and stray output corrupting the engine-host stdout protocol.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md) — **Plan 4a**, the preview-delivery sibling of Plan 4's julia validation (fills Plan 4's 4J browser-tier gap).

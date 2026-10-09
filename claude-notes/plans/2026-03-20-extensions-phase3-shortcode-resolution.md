@@ -1,6 +1,7 @@
 ---
 title: 'Extensions Phase 3: Shortcode Resolution'
 date: 2026-03-20
+description: 'Lets Lua shortcode handlers from extensions run during rendering by passing extensions and the runtime into the shortcode resolve transform without storing the non-Send Lua state.'
 ---
 
 **Created**: 2026-03-20

@@ -1,6 +1,7 @@
 ---
 title: 'brand.yml font weight ranges collapse to 400; no variable-font axis support (bd-5fseopxy)'
 date: 2026-09-08
+description: 'Triages how brand.yml font weight ranges such as `400..700` silently collapse to 400 or break theme compilation, and what variable-font axis support would involve.'
 ---
 
 **Date:** 2026-09-08

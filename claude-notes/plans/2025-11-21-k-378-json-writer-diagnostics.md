@@ -1,6 +1,7 @@
 ---
 title: 'JSON Writer Diagnostic Support - k-378'
 date: 2025-11-21
+description: 'Adds diagnostic reporting to the JSON writer by accumulating errors in the source info serializer instead of calling `panic!()` or `eprintln!()`, so `--json-errors` can see them.'
 ---
 
 <!-- quarto-error-code-audit-ignore-file -->

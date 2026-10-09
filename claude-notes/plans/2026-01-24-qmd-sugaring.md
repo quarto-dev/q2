@@ -1,6 +1,7 @@
 ---
 title: 'QMD Sugaring: Div/Span to CustomNode Normalization'
 date: 2026-01-24
+description: 'Normalizes Div and span syntax in the Pandoc AST, such as `.panel-tabset` and `.callout-*` classes, into typed `CustomNode` blocks, extending the existing callout transform to tabsets, decorated code blocks and float reference targets.'
 ---
 
 **Parent Epic**: kyoto-6jv

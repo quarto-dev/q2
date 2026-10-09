@@ -1,6 +1,7 @@
 ---
 title: 'Hub-Client Custom SCSS Theme Support'
 date: 2026-01-29
+description: 'Fixes hub-client failing to find custom theme SCSS files by passing the document path into WASM CSS compilation, so relative theme paths resolve against the document''s directory.'
 ---
 
 ## Overview

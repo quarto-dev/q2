@@ -1,6 +1,7 @@
 ---
 title: 'Plan 7c — ipynb content processor'
 date: 2026-07-08
+description: 'Adds an `.ipynb` content processor that converts Jupyter notebooks with source locations and cell emission rules, building on the processor registry from Plan 7b.'
 ---
 
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md)

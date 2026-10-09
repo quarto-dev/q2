@@ -1,6 +1,7 @@
 ---
 title: 'hub-client revealjs ≠ q2 render/preview — assessment & plan'
 date: 2026-06-22
+description: 'Explains why hub-client''s live editor shows `format: revealjs` decks with stock reveal.js styling instead of the document''s compiled theme, and proposes routing them through the shared preview renderer.'
 ---
 
 **Strand:** bd-vwp4y5ku

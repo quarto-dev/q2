@@ -1,6 +1,7 @@
 ---
 title: 'Emphasis-Like Constructs Implementation - Summary'
 date: 2025-10-31
+description: 'Summarizes the tree-sitter handlers for emphasis, strong, strikeout, superscript and subscript, which keep whitespace captured by their delimiters as Space nodes so the output matches Pandoc.'
 ---
 
 **Date**: 2025-10-31

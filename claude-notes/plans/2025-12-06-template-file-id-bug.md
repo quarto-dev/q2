@@ -1,6 +1,7 @@
 ---
 title: 'Template Diagnostics file_id Attribution Bug'
 date: 2025-12-06
+description: 'Investigates why diagnostics from the built-in HTML template are reported against the `.qmd` file, tracing the bug to two independent `SourceContext` instances that assign conflicting file ids.'
 ---
 
 **Issue ID**: k-5zv5

@@ -1,6 +1,7 @@
 ---
 title: 'Mermaid runtime is imported from jsDelivr at page load, not bundled into the site (bd-mermaid-runtime-not-bundled-vxejw159)'
 date: 2026-08-11
+description: 'Replaces the jsDelivr import of the mermaid runtime with a vendored copy emitted as a relative script, so diagram pages work offline and stop calling a third-party CDN.'
 ---
 
 **Date:** 2026-08-11

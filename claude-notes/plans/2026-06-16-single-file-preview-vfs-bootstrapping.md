@@ -1,6 +1,7 @@
 ---
 title: 'Single-file `q2 preview`: the VFS dependency-bootstrapping problem'
 date: 2026-06-16
+description: 'Investigates how single-file `q2 preview` can learn which sibling files a deck needs before the in-browser file system is populated, weighing static pre-resolution, lazy fetching and render-driven discovery.'
 ---
 
 **Strand:** bd-9cyza5vy (design exploration)

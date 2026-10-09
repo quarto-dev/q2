@@ -1,6 +1,7 @@
 ---
 title: 'P3 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Task-by-task spec for moving crossref numbering out of the Lua filters into an external mode selected by the `crossref-numbering` key, with each task''s test seam and revert hunk named in advance.'
 ---
 
 **Date:** 2026-09-18

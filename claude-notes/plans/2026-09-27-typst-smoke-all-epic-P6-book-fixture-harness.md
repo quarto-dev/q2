@@ -1,6 +1,7 @@
 ---
 title: 'P6 — Book-project-fixture harness'
 date: 2026-09-27
+description: 'Adds a book-project harness to the smoke-all test: a file with `render-project: true` triggers one whole-book render per project, shared by its sibling files through `ProjectPipeline`.'
 ---
 
 **Date:** 2026-09-27

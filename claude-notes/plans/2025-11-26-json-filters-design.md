@@ -1,6 +1,7 @@
 ---
 title: 'JSON Filter Support Design Plan'
 date: 2025-11-26
+description: 'Designs support for Pandoc-style JSON filters, external programs that read the document AST as JSON on stdin and write a modified AST to stdout, invoked through `--filter` command-line options.'
 ---
 
 **Issue:** k-408

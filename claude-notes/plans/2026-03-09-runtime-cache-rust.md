@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Runtime Cache — Rust Implementation (Phases 1-2)'
 date: 2026-03-09
+description: 'Adds the cache methods, validation helpers and a `CacheError` variant to the `SystemRuntime` trait and the native runtime, with an optional `cache_dir`, so subsystems can store results on native builds.'
 ---
 
 Parent plan: `claude-notes/plans/2026-03-09-runtime-cache.md`

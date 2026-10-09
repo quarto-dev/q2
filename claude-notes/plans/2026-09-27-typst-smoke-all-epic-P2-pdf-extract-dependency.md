@@ -1,6 +1,7 @@
 ---
 title: 'P2 — Pin the `pdf-extract` fork, verify no regression'
 date: 2026-09-27
+description: 'Moves the dev-only `pdf-extract` dependency of quarto-core onto a pinned commit of a fork that surfaces tagged-PDF marked-content IDs, and confirms extracted text is unchanged in the book tests.'
 ---
 
 **Date:** 2026-09-27

@@ -1,6 +1,7 @@
 ---
 title: '`{{< include >}}` inside a fenced code block is not expanded (bd-include-in-code-block-f8mvtczn)'
 date: 2026-08-10
+description: 'Expands include shortcodes that sit alone on a line inside fenced code blocks during the include expansion stage, matching Quarto 1 so that listings show the included file''s text.'
 ---
 
 **Date:** 2026-08-10

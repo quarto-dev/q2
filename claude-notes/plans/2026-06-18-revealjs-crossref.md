@@ -1,6 +1,7 @@
 ---
 title: 'Cross-references in `format: revealjs`'
 date: 2026-06-18
+description: 'Fixes cross-reference resolution under `format: revealjs`, where auto-stretch hoists figures before the crossref phase and bare tables never become float targets.'
 ---
 
 **Braid strand:** bd-w0c6d38k (related: bd-jsbg crossref epic, bd-zkstclhl reveal auto-stretch)

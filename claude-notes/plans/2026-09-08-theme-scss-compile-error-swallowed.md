@@ -1,6 +1,7 @@
 ---
 title: 'User theme .scss compile error is swallowed: page silently ships DEFAULT_CSS (bd-jsvetdea)'
 date: 2026-09-08
+description: 'Turns theme SCSS compile failures, which previously fell back silently to the default CSS, into structured hard errors with new `Q-14-6` and `Q-14-7` codes that point at the `theme:` value.'
 ---
 
 **Date:** 2026-09-08

@@ -1,6 +1,7 @@
 ---
 title: 'Ship the standalone `quarto-hub-mcp` bundle as a GH release artifact'
 date: 2026-06-19
+description: 'Attaches a universal, checksummed and signed Node bundle of the Hub MCP server to each GitHub release as a temporary stopgap until an npm distribution channel exists, reusing the existing bundle build.'
 ---
 
 **Strand:** `bd-sca6g1tu`

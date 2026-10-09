@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix Autolink Token Including Leading Whitespace'
 date: 2025-11-04
+description: 'Fixes a panic on autolinks such as `<https://example.com>` that follow a space, because the tree-sitter scanner includes the leading whitespace in the token, so the Rust code must split that whitespace into its own node.'
 ---
 
 Date: 2025-11-04

@@ -1,6 +1,7 @@
 ---
 title: 'Block-editing UI glitches — round 2 (fixes & tests)'
 date: 2026-06-18
+description: 'Fixes a batch of block-editor glitches, including a stuck blur fade, an editor that grows to two lines, and down-arrow navigation caught in blockquote lists, each bound by a fail-on-revert test.'
 ---
 
 **Date:** 2026-06-18

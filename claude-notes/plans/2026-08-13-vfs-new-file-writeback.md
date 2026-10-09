@@ -1,6 +1,7 @@
 ---
 title: 'Write VFS-created files to disk under `--allow-edit` (WriteBack)'
 date: 2026-08-13
+description: 'Creates files on disk under `--allow-edit` when a guest makes a new file in the VFS, distinguishing them from deleted files by whether the hub has ever checkpointed that document.'
 ---
 
 **Date:** 2026-08-13

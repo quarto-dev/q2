@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix Table Caption Parsing Without Blank Line (k-185)'
 date: 2025-10-27
+description: 'Removes the blank-line requirement before a `: Caption` line so a pipe table followed directly by the caption line attaches it as the caption, by changing the caption grammar rule and the pipe table scanner.'
 ---
 
 **Date**: 2025-10-27

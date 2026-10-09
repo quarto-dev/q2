@@ -1,6 +1,7 @@
 ---
 title: 'Phase 5: Inline Splicing for Incremental Writer'
 date: 2026-02-10
+description: 'Lets the incremental writer splice only changed inlines inside paragraphs within lists and block quotes instead of rewriting the whole enclosing boundary, safe only when no written text contains a newline.'
 ---
 
 **Beads issue:** `bd-1hwd`

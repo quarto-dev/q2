@@ -1,6 +1,7 @@
 ---
 title: 'bd-oejuizi9 — declaration-site resolution for theme / include-\* config paths'
 date: 2026-08-19
+description: 'Resolves `include-in-header`, `include-before-body`, `include-after-body` and `theme` paths against the declaring config file rather than each document''s directory, so project-wide settings reach subdirectory pages.'
 ---
 
 **Date:** 2026-08-19

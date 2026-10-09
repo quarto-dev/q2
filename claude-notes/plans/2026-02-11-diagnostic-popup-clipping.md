@@ -1,6 +1,7 @@
 ---
 title: 'Fix Diagnostic Popup Clipping by Navbar (bd-1wxq)'
 date: 2026-02-11
+description: 'Keeps Monaco diagnostic hover popups from being clipped by the navbar near the top or bottom of the editor, using the `fixedOverflowWidgets` option and hover placement settings.'
 ---
 
 ## Overview

@@ -1,6 +1,7 @@
 ---
 title: 'Wiring the workspace test suites into CI — Implementation Plan'
 date: 2026-08-22
+description: 'Wires every green TypeScript workspace test suite into CI through a new parallel job, fixes two failing suites, and adds a lint rule so held-out suites stay deliberate.'
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

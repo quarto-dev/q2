@@ -1,6 +1,7 @@
 ---
 title: 'Port automerge-inspector into hub-client as a debugging view'
 date: 2026-04-16
+description: 'Ports the automerge-inspector tool into hub-client as a separate, read-only `debug.html` entry point that reuses the sign-in cookie to inspect documents on the authenticated sync server.'
 ---
 
 ## Overview

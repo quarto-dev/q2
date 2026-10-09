@@ -1,6 +1,7 @@
 ---
 title: 'SCSS cache key ignores `@import`ed partials (bd-m3hga05o)'
 date: 2026-09-14
+description: 'Makes the sass cache key cover the files a custom theme pulls in through `@import`, so editing a partial such as `_colors.scss` invalidates cached CSS instead of serving stale output.'
 ---
 
 **Date:** 2026-09-14

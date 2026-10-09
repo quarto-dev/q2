@@ -1,6 +1,7 @@
 ---
 title: 'marimo file-claim vs Q2 multi-engine cooperation'
 date: 2026-07-08
+description: 'Stops the marimo engine from claiming whole `.qmd` and `.md` files, so documents mixing marimo Python and R cells resolve to multiple engines instead of rendering the R cells as raw code.'
 ---
 
 ## Overview

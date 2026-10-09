@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Pandoc Lua Constructor Type Coercion'
 date: 2026-04-01
+description: 'Makes q2''s Lua constructors accept the loose inputs real Pandoc accepts, such as plain strings and mixed inline lists, by porting the fuzzy peek functions of `pandoc-lua-marshal` so that extensions like lipsum work.'
 ---
 
 ## Status: Complete

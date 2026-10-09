@@ -1,6 +1,7 @@
 ---
 title: 'Code span containing a backtick run longer than its delimiter is a parse error (bd-code-span-longer-backtick-run-nycn85a8)'
 date: 2026-09-25
+description: 'Fixes inline code spans so that a backtick run of a different length inside the span is content, as in CommonMark, instead of a parse error, by emitting it from an external scanner token.'
 ---
 
 **Date:** 2026-09-25

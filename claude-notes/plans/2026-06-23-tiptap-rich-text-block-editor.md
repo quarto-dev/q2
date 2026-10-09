@@ -1,6 +1,7 @@
 ---
 title: 'Rich-text (tiptap) block editor for q2-preview — feasibility plan'
 date: 2026-06-23
+description: 'Feasibility study for replacing the raw-markdown textarea in `q2 preview` block editing with a ProseMirror rich-text editor, where Quarto-specific constructs become atomic chips that round-trip to their exact source.'
 ---
 
 **Date:** 2026-06-23

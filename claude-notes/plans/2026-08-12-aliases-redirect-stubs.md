@@ -1,6 +1,7 @@
 ---
 title: '`aliases:` is silently ignored — no redirect stubs written (bd-aliases-redirects-missing-sch7cd1g)'
 date: 2026-08-12
+description: 'Implements the `aliases:` front matter key by writing redirect stubs so old URLs keep working after pages move, with diagnostics for collisions, including case-only ones.'
 ---
 
 **Date:** 2026-08-12

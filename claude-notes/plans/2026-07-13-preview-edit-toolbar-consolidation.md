@@ -1,6 +1,7 @@
 ---
 title: 'q2-preview: consolidate per-block edit chrome into one pop-up toolbar'
 date: 2026-07-13
+description: 'Merges the per-block edit chrome in the q2-preview into one pop-up `EditToolbar` holding the rich and plain toggle, formatting marks and a type indicator, replacing the clipped left-margin label.'
 ---
 
 **Date:** 2026-07-13

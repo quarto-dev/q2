@@ -1,6 +1,7 @@
 ---
 title: 'YAML provenance desync after a block scalar with non-ASCII content (bd-e0e9kd4a)'
 date: 2026-10-08
+description: 'Records the fix for a YAML provenance desync after a block scalar with non-ASCII text, caused by a byte-counting bug in the upstream parser, fixed by upgrading `quarto-yaml` and adding a regression test.'
 ---
 
 **Date:** 2026-10-08

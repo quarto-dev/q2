@@ -1,6 +1,7 @@
 ---
 title: 'Plan: CI Optimization Steps 1 & 2'
 date: 2026-03-17
+description: 'Frees disk space on the Linux test-suite CI runner and removes orphaned WASM and Node setup steps left behind after that work moved to another workflow, following a run that ran out of disk.'
 ---
 
 ## Overview

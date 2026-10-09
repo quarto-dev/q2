@@ -1,6 +1,7 @@
 ---
 title: 'Quarto 1''s doubled-brace escape for showing a cell (bd-escaped-executable-fence-uuvv37pk)'
 date: 2026-08-17
+description: 'Adds a Q-2-50 diagnostic for Quarto 1''s doubled-brace idiom, `{{python}}`, so it fails clearly in prose and warns on fence openers instead of silently rendering invalid syntax.'
 ---
 
 **Date:** 2026-08-17 (investigation); design aligned with user same day

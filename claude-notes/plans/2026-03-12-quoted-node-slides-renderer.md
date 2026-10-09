@@ -1,6 +1,7 @@
 ---
 title: 'Add Quoted Node Support to Slides Renderer'
 date: 2026-03-12
+description: 'Teaches the hub-client slides renderer to handle `Quoted` inline nodes from the Pandoc AST, rendering them with curly quote marks instead of rendering nothing.'
 ---
 
 ## Overview

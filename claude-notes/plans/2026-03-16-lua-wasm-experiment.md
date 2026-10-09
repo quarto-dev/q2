@@ -1,6 +1,7 @@
 ---
 title: 'Experiment: Lua on wasm32-unknown-unknown via LUAI_TRY/LUAI_THROW Override'
 date: 2026-03-16
+description: 'Experiment to compile Lua 5.4 into the hub-client WASM build by replacing its setjmp error handling with Rust panics caught by `catch_unwind`, so Lua filters can run in the browser.'
 ---
 
 **Date**: 2026-03-16

@@ -1,6 +1,7 @@
 ---
 title: '`q2 preview` support for `render-components:` (GH #402 / bd-ue80chl0)'
 date: 2026-08-25
+description: 'Makes `q2 preview` honor `render-components:` by transpiling user TSX overrides in the SPA with the same babel transpiler hub-client uses, lazy-loaded so documents without the key pay nothing.'
 ---
 
 **Status:** APPROVED (2026-08-25) — executing on branch

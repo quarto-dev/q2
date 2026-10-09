@@ -1,6 +1,7 @@
 ---
 title: 'Quarto LSP Hover Support Plan'
 date: 2026-01-20
+description: 'Defers hover support for the Quarto LSP, which would show schema descriptions for YAML frontmatter keys, code cell options and `_quarto.yml` keys, and lists the schema integration it needs first.'
 ---
 
 **Issue:** kyoto-jqh - LSP Phase 4: Hover Information

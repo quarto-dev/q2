@@ -1,6 +1,7 @@
 ---
 title: 'Plan 5 — engine-host pooling (preview re-compute warmth)'
 date: 2026-06-26
+description: 'Research stub for keeping the Deno engine host warm across preview re-computes by pooling it at the session level, gated on first measuring whether the respawn cost justifies the added complexity.'
 ---
 
 **Status:** research stub — not yet designed in depth. **Created:** 2026-06-26.

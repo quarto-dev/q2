@@ -1,6 +1,7 @@
 ---
 title: 'Phase 7: SASS Render Integration'
 date: 2026-01-24
+description: 'Connects the SASS compilation pipeline to `quarto render` and hub-client, so Bootstrap theme CSS is compiled from the `format.html.theme` setting instead of a static stylesheet.'
 ---
 
 **Parent Plan**: `2026-01-13-sass-compilation.md`

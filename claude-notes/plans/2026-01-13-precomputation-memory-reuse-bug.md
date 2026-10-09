@@ -1,6 +1,7 @@
 ---
 title: 'Analysis: Memory Reuse Bug Within Precomputation Phase'
 date: 2026-01-13
+description: 'Explains an intermittent `yaml-tags.qmd` snapshot failure caused by freed temporaries whose memory is reused during JSON precomputation, producing stale source IDs, and proposes keeping those temporaries alive until precomputation finishes.'
 ---
 
 **Date**: 2026-01-13

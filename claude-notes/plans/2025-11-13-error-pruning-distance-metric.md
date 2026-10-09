@@ -1,6 +1,7 @@
 ---
 title: 'Error Pruning Distance Metric Design'
 date: 2025-11-13
+description: 'Defines a byte-gap distance metric for assigning each parse diagnostic to its nearest `ERROR` node, so that no diagnostic is discarded when its location does not overlap one.'
 ---
 
 ## Problem Analysis

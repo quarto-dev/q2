@@ -1,6 +1,7 @@
 ---
 title: 'Preview ↔ Render DOM Parity Harness — Implementation Plan'
 date: 2026-08-24
+description: 'Adds an automated test that renders opted-in smoke-all fixtures through both the preview React renderer and the native HTML writer, failing when the article body DOM diverges.'
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

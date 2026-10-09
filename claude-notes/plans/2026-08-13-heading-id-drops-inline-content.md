@@ -1,6 +1,7 @@
 ---
 title: 'Auto-generated heading ids drop quoted spans, links, math and every other unhandled inline (bd-heading-id-drops-inline-content-fl84n3ql)'
 date: 2026-08-13
+description: 'Stops auto-generated heading ids from dropping the text of links, quoted spans, math, images and citations, matching Pandoc by recursing into inline kinds that the id collector currently discards.'
 ---
 
 **Date:** 2026-08-13

@@ -1,6 +1,7 @@
 ---
 title: 'Isolate tree-sitter''s compiled-grammar cache per checkout (bd-agsgrbfn)'
 date: 2026-09-25
+description: 'Stops every q2 checkout from sharing one tree-sitter compiled-grammar cache by pointing `TREE_SITTER_LIBDIR` at a per-checkout directory, and adds a `cargo xtask ts-test` wrapper for hand runs.'
 ---
 
 **Date:** 2026-09-25

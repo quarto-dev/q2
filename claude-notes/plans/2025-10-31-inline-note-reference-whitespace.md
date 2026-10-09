@@ -1,6 +1,7 @@
 ---
 title: 'Inline Note Reference Whitespace Handling Plan'
 date: 2025-10-31
+description: 'Preserves the leading space before an inline note reference so that `Hi [^ref]` and `Hi[^ref]` produce different Pandoc output, by injecting a Space node instead of trimming it away.'
 ---
 
 **Date**: 2025-10-31

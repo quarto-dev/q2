@@ -1,6 +1,7 @@
 ---
 title: 'Smart punctuation: `...` converts to an ellipsis only when preceded by a word character (bd-ellipsis-not-smart-48bv2pe6)'
 date: 2026-08-12
+description: 'Makes a run of dots convert to a true ellipsis wherever it appears in prose, such as after a space, by lexing the run as one token in the tree-sitter grammar.'
 ---
 
 **Date:** 2026-08-12

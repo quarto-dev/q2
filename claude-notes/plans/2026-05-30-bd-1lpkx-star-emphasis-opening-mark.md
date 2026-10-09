@@ -1,6 +1,7 @@
 ---
 title: 'bd-1lpkx — Fix Q-2-12 "opening `''*''` mark" diagnostic pointing at the preceding word'
 date: 2026-05-30
+description: 'Repoints one error-corpus capture in the Q-2-12 template so the opening star diagnostic underlines the `*` delimiter instead of the preceding word, fixing a misplaced caret after regenerating the error table.'
 ---
 
 **Issue:** bd-1lpkx

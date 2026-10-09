@@ -1,6 +1,7 @@
 ---
 title: 'Directory Metadata (`_metadata.yml`) Support'
 date: 2026-02-17
+description: 'Adds support for directory-level `_metadata.yml` files, discovered between the project root and a document and layered between project config and document frontmatter.'
 ---
 
 **Date**: 2026-02-17

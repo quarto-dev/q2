@@ -1,6 +1,7 @@
 ---
 title: 'iframe-safe code-copy in q2 preview / hub-client'
 date: 2026-06-23
+description: 'Makes code-copy buttons actually copy text in the `q2 preview` iframe and hub-client by using one capture-phase delegated listener on the preview host, which survives edit re-renders and keeps block editing from opening.'
 ---
 
 **Strand:** bd-wa2pgri8 (feature, p3) — follow-up to **bd-lg6t6qfy**, which made

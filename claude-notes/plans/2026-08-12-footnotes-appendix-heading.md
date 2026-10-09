@@ -1,6 +1,7 @@
 ---
 title: 'Footnotes appendix section omits the visible \''Footnotes\'' heading that Quarto 1 emits (bd-v9zs83zj)'
 date: 2026-08-12
+description: 'Adds the visible Footnotes heading to the footnotes appendix, localized through the language table, and removes the horizontal rule that Quarto 1 drops when it inserts the heading.'
 ---
 
 **Date:** 2026-08-12

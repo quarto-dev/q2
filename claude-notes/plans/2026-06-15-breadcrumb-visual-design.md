@@ -1,6 +1,7 @@
 ---
 title: 'Breadcrumb chip — visual design + positioning rework'
 date: 2026-06-15
+description: 'Restyles the nesting breadcrumb chip with lighter glyph-based crumbs, anchors it in the content plane so it scrolls with the editing surface, and reserves space for future crumbs.'
 ---
 
 **Date:** 2026-06-15 (rewritten 2026-06-15 after a design review)

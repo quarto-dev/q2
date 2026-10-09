@@ -1,6 +1,7 @@
 ---
 title: 'Collapsible Sections for OutlinePanel'
 date: 2026-01-29
+description: 'Adds expand and collapse chevrons to the hub-client `OutlinePanel` so that symbols with child symbols can be hidden, with everything expanded by default.'
 ---
 
 **Issue**: kyoto-ub5

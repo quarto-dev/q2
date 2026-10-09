@@ -1,6 +1,7 @@
 ---
 title: '`mermaidjs` engine — design session'
 date: 2026-05-28
+description: 'Designs a `mermaidjs` engine that turns `{mermaid}` code blocks into browser-rendered diagram markup for HTML output, and works out how it fits the engine sequence, trace, and preview pipeline.'
 branch: TBD (no implementation work yet — design phase)
 status: >
   v2 - Q-A resolved by PR #238 (engine sequence); Q-B/Q-C/Q-D still
