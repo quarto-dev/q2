@@ -1,6 +1,7 @@
 ---
 title: 'P4 — Vendored-Q1 run machinery (transport)'
 date: 2026-08-20
+date-modified: 2026-09-18
 description: 'Makes the vendored Q1 `main.lua` runnable from Q2 by building the `QUARTO_FILTER_PARAMS` blob and piping the JSON AST through pandoc and the Lua filters, proving the transport works before output correctness is checked.'
 status: done  # Complete (2026-09-19) — see the Coarse checklist below and the implementation ledger.
 ---

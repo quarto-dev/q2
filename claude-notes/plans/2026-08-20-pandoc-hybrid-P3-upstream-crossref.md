@@ -1,6 +1,7 @@
 ---
 title: 'P3 — Upstream Q1: crossref-numbering: external'
 date: 2026-08-20
+date-modified: 2026-09-18
 description: 'Proposes a backward-compatible quarto-cli change that separates assigning crossref numbers from presenting them, using two predicates, so Q2 can supply numbers while the vendored Q1 Lua stays verbatim.'
 status: draft  # Shape draft
 ---

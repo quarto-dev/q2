@@ -2,6 +2,9 @@
 title: 'Lua `function Meta` / `function Pandoc` filters + Meta↔ConfigValue design'
 date: 2026-07-20
 description: 'Implements document-level `function Meta` and `function Pandoc` Lua filters and maps ConfigValue metadata to Lua values and back, preserving source provenance through a reconciliation step on return.'
+braid:
+  strand: bd-2llqjsms
+  priority: P2
 status: done  # Phases 0–4 implemented (commits c4723a68 Phases 1–2, 75adf0b7 Phase 3, Phase 4 in the follow-on commit). Design decisions recorded below; `doc:normalize()` deferred to bd-62lppjuy.
 ---
 

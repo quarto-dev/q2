@@ -1,6 +1,6 @@
 ---
 title: 'Plan: Pass 3 — project-wide crossref registry (book-projects P5)'
-date: 2026-09-21
+date: 2026-09-21  # (revised after a critical review pass; renumbered from a prior draft's P6 — see the epic doc's revision history)
 description: 'Resolves cross-chapter `@ref` links in multi-file book HTML by pausing each chapter after the Navigation phase, building a project-wide crossref registry, then finishing every chapter without re-running its engines.'
 ---
 

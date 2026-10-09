@@ -4,10 +4,12 @@ date: 2026-04-23
 description: 'Adds multi-file project rendering: a `ProjectType` trait with pre-render and post-render hooks, a `ProjectIndex` of document profiles, and a two-pass driver wired into `quarto render`, leaving single-file output unchanged.'
 status: approved  # Design approved (2026-04-23). Implementation in a subsequent session.
 braid:
-  strand: bd-w5os  # parent bd-0tr6 (website epic); blocked-by bd-f3jc (Phase 0) — closed
+  strand: bd-w5os
   priority: P1
 ---
 
+**Beads:** `bd-w5os` (phase); parent `bd-0tr6` (website epic). Blocked-by
+`bd-f3jc` (Phase 0) — closed.
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-23-websites-phase-0.md`
 **Contract this phase consumes:**

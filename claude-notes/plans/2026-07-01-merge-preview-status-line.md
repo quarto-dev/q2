@@ -4,9 +4,12 @@ date: 2026-07-01
 description: 'Collapses the separate executor and capture status strips in the hub-client preview into one `PreviewStatusBar` with a single precedence-ordered message and a combined Clear and Run button group.'
 status: in-progress  # IN PROGRESS — open questions resolved 2026-07-01 (see "Decisions locked"); implementing per the TDD checklist.
 braid:
-  strand: bd-yai4w8ly  # Discovered from bd-sfet3264 (remote code-execution provider)
+  strand: bd-yai4w8ly
   priority: P2
 ---
+
+**Strand:** bd-yai4w8ly (task, P2). Discovered from bd-sfet3264
+(remote code-execution provider).
 
 ## Decisions locked (user, 2026-07-01)
 

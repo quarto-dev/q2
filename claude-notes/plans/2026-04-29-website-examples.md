@@ -4,10 +4,12 @@ date: 2026-04-29
 description: 'Adds eight runnable example website projects under `examples/websites/`, each exercising one feature area end to end, with READMEs that tell readers what to run and inspect.'
 status: approved  # Plan approved 2026-04-29 (user agreed location, granularity, README-plus-prose format, no CI wiring, manual recipe for hub-preview).
 braid:
-  strand: bd-2jwk  # this task; related bd-0tr6, bd-tr81
+  strand: bd-2jwk
   priority: P1
 ---
 
+**Beads:** `bd-2jwk` (this task); related `bd-0tr6` (website epic, closed),
+`bd-tr81` (Quarto 2 docs epic).
 **Parent epic:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 
 ## Overview

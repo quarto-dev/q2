@@ -1,6 +1,6 @@
 ---
 title: 'Boundary-addressed splice — generalizing `apply_node_edit` to insert / range'
-date: 2026-06-18
+date: 2026-06-18  # (updated 2026-06-19)
 description: 'Designs a boundary-addressed splice that generalizes single-block replacement to inserts, range replacements, and deletes by addressing the gaps between blocks rather than individual nodes.'
 status: approved  # DESIGN — approved. Implementation plan: `claude-notes/plans/2026-06-19-boundary-splice-implementation.md`.
 ---

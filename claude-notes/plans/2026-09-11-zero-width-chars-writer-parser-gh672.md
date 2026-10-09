@@ -4,11 +4,14 @@ date: 2026-09-11
 description: 'Makes the qmd writer re-encode invisible format characters such as zero-width spaces as entities, and widens the parser to accept raw ones, since pampa''s own output currently fails to re-parse.'
 status: done  # Implemented 2026-09-11 on branch `braid/bd-wuiu1of7-zero-width-entities` — `caa29d6c` (writer + grammar) and `b15868ed` (`&` escaping, bd-i18zoy4n). Full `cargo xtask verify` green for both commits; both strands closed. Not yet pushed.
 braid:
-  strand: bd-wuiu1of7  # discovered-from bd-named-entities-w6xbfftj (entity decode, PR #488), related bd-96fswwce (combining marks, `\p{M}`)
+  strand: bd-wuiu1of7
   priority: P1
   labels: [pampa, parity, tree-sitter-qmd]
 ---
 
+**Braid:** bd-wuiu1of7 (bug, P1, labels `pampa`, `tree-sitter-qmd`, `parity`) —
+discovered-from bd-named-entities-w6xbfftj (entity decode, PR #488), related
+bd-96fswwce (combining marks, `\p{M}`)
 **Discovered:** bd-i18zoy4n (writer does not escape `&` that forms a valid
 entity reference — folded into this PR, Phase 1b); bd-5rr4lgj1 (leading BOM
 not stripped — follow-up, out of scope)

@@ -2,6 +2,9 @@
 title: 'L2 — Listing data model + schema (reference document)'
 date: 2026-05-06
 description: 'Reference document mapping the Quarto 1 listing types and `listing:` YAML schema onto the planned Quarto 2 data model and per-item template bindings, without any runtime code.'
+braid:
+  strand: bd-j60g
+  priority: P1
 status: draft  # Draft. Awaiting user approval before hand-off.
 ---
 

@@ -2,7 +2,7 @@
 title: "claude-notes: a listing page for all plans"
 date: 2026-10-09
 description: 'Adds a table-based listing page for all top-level plans, backfilling title and date front matter from each plan''s heading and filename because the listing is only useful once that metadata exists.'
-status: in-progress  # phases 1–5 done; phase 6 (status/braid/date front matter) applied, cleanup pending
+status: done  # phases 1–6 done 2026-10-09; strict render clean once PRs #810 and #812 are on main
 braid:
   strand: bd-fvcip3t5  # child of epic bd-uk8zgkha
   priority: P2
@@ -265,6 +265,30 @@ braid:
   removed. One that does not match is reported and kept.
 - **Unchanged for now:** Branch, Worktree, Epic, Depends on and the
   other keys stay in the body.
+- **Lossless moves only.** A multi-line Strand or Date entry is prose
+  (related strands, revision history), so it stays in the body and only
+  the key is added. Extra text on a one-line Date entry becomes a comment
+  on `date:`. The full Status text always goes into the comment.
+
+### Phase 6 result (2026-10-09)
+
+- **Counts:** 549 plans carry `status:`, 520 carry `braid:` and 18 carry
+  `date-modified:`.
+- **Haiku stages:** 10 plans, then 50, 197 and 572, plus a 42-plan retry
+  (about 6M subagent tokens in total). Seven hand-written front matter
+  blocks were converted by hand, and 18 strands came from ids in titles.
+- **Two problems caught along the way:**
+  - Partial moves of multi-line entries left a dangling continuation that
+    broke one parse. I restored 12 plans, and the validator now rejects
+    a field whose next line looks like a continuation.
+  - Lossy moves dropped revision notes from Date lines and condensed
+    multi-line strand prose into short notes. A retroactive pass turned
+    the 30 Date notes into `date:` comments and restored 19 strand
+    entries to the body.
+- **Left in the body on purpose:** `kyoto-*` and other ids that braid
+  does not know, `**Issue:**` lines that state a problem rather than an
+  id, Created dates that disagree with the filename date, and multi-line
+  entries.
 
 Haiku extracts each field as structured output, together with the exact
 body lines it came from. The `--header-meta` mode of

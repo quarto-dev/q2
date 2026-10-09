@@ -2,6 +2,10 @@
 title: 'Float caption prefix skipped for Plain-first captions (attr-form figures, caption-form tables)'
 date: 2026-09-17
 description: 'Fixes the missing `Figure N:` prefix on attribute-form figures and caption-form tables by making every caption consumer accept a `Plain` first block, then canonicalizing caption blocks to `Plain` at the sugar boundary.'
+braid:
+  strand: bd-n3sark9b
+  priority: P2
+  labels: [crossref]
 status: in-progress  # executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (`1a83b4776`); full `cargo xtask verify` green 2026-09-17. Pushed; PR https://github.com/quarto-dev/q2/pull/690 (CI in progress).
 ---
 

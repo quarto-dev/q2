@@ -175,6 +175,14 @@ def comment(text):
     return f"  # {text}" if text else ""
 
 
+def leftover(line, iso):
+    """What a one-line Date/Created entry says beyond its label and date."""
+    rest = re.sub(r"^\s*(?:[-*]\s+)?\**\s*(?:date|created|last updated|updated)\s*:?\s*\**\s*:?\s*",
+                  "", line, count=1, flags=re.I)
+    rest = rest.replace(iso, "", 1)
+    return rest.strip(" .;,—-|")
+
+
 def add_header_meta(it, skein, dry_run):
     path = it["path"]
     with open(path, encoding="utf-8") as f:
@@ -203,12 +211,18 @@ def add_header_meta(it, skein, dry_run):
                 return False
         return True
 
-    fm_date = next((l.split(":", 1)[1].strip() for l in fm if l.startswith("date:")), None)
+    fm_date = next((l.split(":", 1)[1].split("#")[0].strip() for l in fm if l.startswith("date:")), None)
     created = it.get("created") or {}
+    date_comment = ""
     if created.get("lines"):
         if created.get("value") != fm_date:
             notes.append(f"created {created.get('value')!r} != date {fm_date!r}; kept in body")
+        elif len(created["lines"]) > 1:
+            pass  # a multi-line Date entry is prose (revision history): keep it
         elif lines_ok("created", created["lines"]):
+            extra = leftover(created["lines"][0], created["value"])
+            if extra:
+                date_comment = comment(extra)
             remove += created["lines"]
 
     updated = it.get("updated") or {}
@@ -242,16 +256,22 @@ def add_header_meta(it, skein, dry_run):
             notes.append(f"strand {sid!r} not in skein")
         elif lines_ok("strand", strand.get("lines", [])):
             s = skein[sid]
+            multi = len(strand.get("lines", [])) > 1
             add.append("braid:")
-            add.append(f"  strand: {sid}" + comment(strand.get("note")))
+            # A multi-line entry is prose about related strands: it stays in
+            # the body, and the key gets no (lossy, summarized) note.
+            add.append(f"  strand: {sid}" + ("" if multi else comment(strand.get("note"))))
             if s.get("priority") is not None:
                 add.append(f"  priority: P{s['priority']}")
             labels = s.get("labels") or []
             if labels:
                 add.append("  labels: [" + ", ".join(
                     l if yaml_plain_ok(l) else yaml_single_quote(l) for l in labels) + "]")
-            remove += strand.get("lines", [])
+            if not multi:
+                remove += strand.get("lines", [])
 
+    if date_comment:
+        fm = [l + date_comment if l.startswith("date:") and "#" not in l else l for l in fm]
     if not add and not remove:
         return ("report" if notes else "unchanged"), notes
     # Insert after description: (or date:), keep the rest of the block.

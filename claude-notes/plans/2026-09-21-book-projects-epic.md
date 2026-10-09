@@ -1,6 +1,6 @@
 ---
 title: 'Epic: Book projects (`ProjectKind::Book`)'
-date: 2026-09-21
+date: 2026-09-21  # (revised after a critical review pass — see "Revision history" at the end)
 description: 'Gives `ProjectKind::Book` a real implementation with chapter-aware numbering, single-file chapter merging for Typst and EPUB, and project-wide cross-chapter reference and bibliography resolution for multi-file HTML books.'
 status: done  # Complete (2026-09-26) — all nine phases (P0–P8) implemented, gated green, and end-to-end verified on `feature/book-projects`. See each phase's own plan file for its gate record; P7's records the final workspace-wide verification and closeout.
 ---

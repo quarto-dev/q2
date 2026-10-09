@@ -1,6 +1,6 @@
 ---
 title: 'Plan: Multi-file HTML book mode, local numbering (book-projects P4)'
-date: 2026-09-21
+date: 2026-09-21  # (revised after a critical review pass)
 description: 'Adds multi-file HTML book output in which each chapter renders on its own with an injected chapter number before its cross-reference pass, plus the book stylesheet and cover image.'
 ---
 

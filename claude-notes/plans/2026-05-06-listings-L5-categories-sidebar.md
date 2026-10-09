@@ -2,6 +2,9 @@
 title: 'L5 — Categories sidebar (sub-plan)'
 date: 2026-05-06
 description: 'Adds per-item category badges and a right-margin categories sidebar in default, unnumbered and cloud styles to listing host pages, emitting markup that the existing listing JavaScript already handles.'
+braid:
+  strand: bd-5vsr
+  priority: P2
 status: draft  # Draft. Awaiting user approval before hand-off.
 ---
 

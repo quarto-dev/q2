@@ -1,6 +1,7 @@
 ---
 title: 'P8 — content-hidden / when-format gating (verification, not a port)'
 date: 2026-08-20
+date-modified: 2026-09-17
 description: 'Verifies that existing `when-format` and `unless-format` conditional content gating behaves correctly for docx and pptx targets, adding a smoke fixture rather than porting the transform.'
 status: done  # All four tasks complete (2026-09-20). Tasks 1-3: 12 new tests (14 assertions, 11 pre-existing-hunk regression guards, 2 unit-level pre-existing-hunk guards, 1 cross-plan) added across `conditional_content.rs`, `format.rs`, `llms.rs`, and `tests/integration/conditional_content_pandoc.rs`; every row's named revert hunk was applied, confirmed RED, and restored. Task 4 (the docx/pptx smoke fixture) was unblocked once P7's Pandoc tail landed (commit `92b89e517`) and completed via `crates/quarto/tests/integration/conditional_content_pandoc_e2e.rs` (2 new E-tier tests against the real `q2` binary — see the implementation companion's Task 4 for the corrected file paths and the recorded end-to-end invocation). **This branch (`braid/pandoc-hybrid-p8-content-hidden`) forks from an unmerged P7 commit and cannot merge to `feature/pandoc-writer-hybrid` until P7 (`braid/pandoc-hybrid-p7-format-tail`) merges first.**
 ---

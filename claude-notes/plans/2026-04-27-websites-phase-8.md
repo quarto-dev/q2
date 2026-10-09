@@ -1,6 +1,6 @@
 ---
 title: 'Phase 8 — Incremental rebuilds'
-date: 2026-04-27
+date: 2026-04-27  # (redrafted after design discussion)
 description: 'Makes re-renders of a single page in a website project cheap by caching per-page profiles and tracking which pages depend on each other, without caching any filter or engine output.'
 status: draft  # Draft v2 — pending user review.
 ---

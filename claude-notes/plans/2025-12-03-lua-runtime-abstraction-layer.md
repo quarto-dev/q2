@@ -1,6 +1,6 @@
 ---
 title: 'Lua Runtime Abstraction Layer Design'
-date: 2025-12-03
+date: 2025-12-03  # (Updated: 2025-12-03)
 description: 'Designs a trait-based Lua runtime abstraction that injects system operations, so Lua filters can run in browser WASM builds and in sandboxed low-permission modes with captured output.'
 status: draft  # Design Document
 ---

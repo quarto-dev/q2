@@ -2,13 +2,8 @@
 title: 'Extension management commands (`remove` / `list` / `add` / `update`) — STUB plan'
 date: 2026-07-03
 description: 'Placeholder for implementing the q2 `add`, `update`, `remove` and `list` extension commands, which are not yet implemented, with a required guard so built-in engine extensions cannot be removed.'
+status: draft  # STUB (2026-07-03) — placeholder in the **extensions epic** (`2026-03-16-extensions-grand-plan.md` family), not yet scheduled or designed. Created per Gordon's direction after the Q1 engine-CLI survey established that `quarto remove` is generic extension management with **no** engine-specific behavior (engines are just extensions that contribute engines).
 ---
-
-**Status:** STUB (2026-07-03) — placeholder in the **extensions epic**
-(`2026-03-16-extensions-grand-plan.md` family), not yet scheduled or designed.
-Created per Gordon's direction after the Q1 engine-CLI survey established that
-`quarto remove` is generic extension management with **no** engine-specific
-behavior (engines are just extensions that contribute engines).
 
 **Sources:** `claude-notes/research/2026-07-03-q1-engine-cli-survey.md`
 (per-command evidence + the remove-julia bug chain); strand **bd-5edooc78**

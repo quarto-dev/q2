@@ -1,6 +1,6 @@
 ---
 title: 'Breadcrumb chip — visual design + positioning rework'
-date: 2026-06-15
+date: 2026-06-15  # (rewritten 2026-06-15 after a design review)
 description: 'Restyles the nesting breadcrumb chip with lighter glyph-based crumbs, anchors it in the content plane so it scrolls with the editing surface, and reserves space for future crumbs.'
 status: approved  # Design settled across the original brainstorm (2026-06-15) **and a follow-up review** that changed the positioning model substantially (see *What changed in the rewrite*). TDD-first; checklist below is ready to execute.
 ---

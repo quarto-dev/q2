@@ -2,6 +2,9 @@
 title: 'GH issue #523 — `code-fold` vs `execute: echo: false`: assessment and fix plan'
 date: 2026-08-14
 description: 'Assesses why `execute: echo: false` does not hide cell source in q2, finding that the jupyter and knitr engines ignore the execute-visibility options and that `code-fold` is unimplemented, and plans the fix.'
+braid:
+  strand: bd-nn2fou8h
+  priority: P1
 ---
 
 **Issue:** https://github.com/quarto-dev/q2/issues/523 (third-party report, 2026-08-13)

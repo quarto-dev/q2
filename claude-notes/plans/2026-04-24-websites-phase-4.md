@@ -2,6 +2,9 @@
 title: 'Phase 4 — Page navigation (prev / next)'
 date: 2026-04-24
 description: 'Adds bottom-of-page previous and next links computed from each page''s resolved sidebar, switched off by a top-level `page-navigation` key and using the class names Quarto 1 CSS already styles.'
+braid:
+  strand: bd-nwun
+  priority: P1
 status: done  # Closed 2026-04-24. Decisions 1–9 confirmed; implementation shipped on `feature/websites` in commit `4a59a9dd`.
 ---
 

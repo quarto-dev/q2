@@ -2,6 +2,9 @@
 title: 'L6 — Dependency-graph integration (sub-plan)'
 date: 2026-05-07
 description: 'Makes rendering a single file also re-render listing host pages whose `contents` globs match it, by storing the globs on `DocumentProfile` and adding dependency-graph edges from each host to its content.'
+braid:
+  strand: bd-xbnf
+  priority: P2
 status: draft  # Draft. Awaiting user approval before hand-off.
 ---
 

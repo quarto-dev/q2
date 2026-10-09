@@ -1,6 +1,6 @@
 ---
 title: 'Plan 2A — q2-preview iframe foundation (revised post-2pre)'
-date: 2026-05-04
+date: 2026-05-04  # (revised 2026-05-07, 2026-05-08)
 description: 'Builds the iframe surface for `q2-preview` as a sibling of `q2-debug`, with theme CSS delivered through a blob URL, shared link handlers, and a placeholder registry that shows every node as not yet implemented.'
 status: approved  # Implementation plan
 ---

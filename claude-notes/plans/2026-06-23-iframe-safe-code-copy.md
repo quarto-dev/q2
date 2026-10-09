@@ -4,9 +4,14 @@ date: 2026-06-23
 description: 'Makes code-copy buttons actually copy text in the `q2 preview` iframe and hub-client by using one capture-phase delegated listener on the preview host, which survives edit re-renders and keeps block editing from opening.'
 status: done  # IMPLEMENTATION COMPLETE (2026-06-23) — both reveal and plain-HTML preview copy verified working in a real q2-preview iframe; edit-isolation confirmed. Awaiting push approval.
 braid:
-  strand: bd-wa2pgri8  # follow-up to bd-lg6t6qfy
+  strand: bd-wa2pgri8
   priority: P3
 ---
+
+**Strand:** bd-wa2pgri8 (feature, p3) — follow-up to **bd-lg6t6qfy**, which made
+revealjs code-copy buttons styled + hover-hidden in all paths but functional
+(actually copies) only in native `q2 render`. This strand makes them copy in the
+WASM/iframe paths (q2 preview + hub-client) too.
 
 ---
 

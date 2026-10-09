@@ -1,6 +1,6 @@
 ---
 title: 'Plan 7g — Source-range tiling'
-date: 2026-06-01
+date: 2026-06-01  # (research) → 2026-06-02 (converted to development plan)
 description: 'Makes sibling AST source ranges disjoint and parent ranges contain their children, so every source byte maps to exactly one node, enforced by a tiling auditor, handler fixes, and a producer contract.'
 status: done  # Landed. The tiling auditor (CI property test), the handler fixes, and the producer contract (P1–P4) shipped on the provenance branch. Two scope-adjacent writer/postprocess bugs found while doing this work are fixed and committed (Phase 8, including the `b43fadef` incremental-writer crash fix on Concat/Generated-led inlines).
 ---

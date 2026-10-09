@@ -1,6 +1,6 @@
 ---
 title: 'Plan 2B — q2-preview Pandoc base + framework + asset manifest (Session A)'
-date: 2026-05-04
+date: 2026-05-04  # (revised 2026-05-07, 2026-05-09; split into 2B+2C on 2026-05-09)
 description: 'Adds real HTML components for every Pandoc block and inline type in `q2-preview`, plus an asset manifest that delivers image bytes into the preview iframe, so base Pandoc documents match HTML output.'
 status: approved  # Implementation plan
 ---

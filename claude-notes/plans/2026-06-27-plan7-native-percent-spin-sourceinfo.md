@@ -1,6 +1,6 @@
 ---
 title: 'Plan 7 (root) — Native content-processor architecture for non-qmd engine inputs'
-date: 2026-06-27
+date: 2026-06-27  # (reframed 2026-07-08 as the 7-series root)
 description: 'Architecture root for the 7-series, defining a native, engine-agnostic content-processor registry that converts percent and spin scripts with precise source provenance and never launches an engine during project discovery.'
 status: approved  # ARCHITECTURE ROOT — this file no longer holds an execution checklist. The percent/spin work moved to **Plan 7b**; ipynb is **Plan 7c**; the withdrawn arbitrary-regex claim mechanism is **Plan 7a (tombstone)**.
 ---

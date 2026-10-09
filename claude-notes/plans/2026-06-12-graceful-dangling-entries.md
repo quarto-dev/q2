@@ -4,9 +4,15 @@ date: 2026-06-12
 description: 'Stops one index entry pointing at a missing document from failing an entire project, by loading the other files and reporting the dangling entry as unavailable so it can be deleted.'
 status: done  # DONE (2026-06-12, commit `11931849` — originally `4d210f98`, rebased onto the bd-10deu8h4 boundary-contract commit before push; strand closed). Was: worktree `.worktrees/bd-vm5e5u10-hub-mcp-connectproject-hard`, branch `beads/bd-vm5e5u10-hub-mcp-connectproject-hard` off `origin/feature/bd-81cfshmw-q2-mcp-launcher`). Design agreed with Carlos in the 2026-06-12 session; written as a self-contained handoff.
 braid:
-  strand: bd-vm5e5u10  # (p1) is priority and excluded; Related: bd-10deu8h4 (the creator bug), bd-8x482xb0 (closed), bd-p68lx71t (the 2026-06-12 incident), bd-10bdjmjb (parent plan)
+  strand: bd-vm5e5u10
   priority: P1
 ---
+
+**Strand:** bd-vm5e5u10 (p1). Related: bd-10deu8h4 (the creator bug —
+how dangling entries get minted), bd-8x482xb0 (closed — the production
+casualty), bd-p68lx71t (the 2026-06-12 incident this amplified),
+bd-10bdjmjb (parent plan:
+`claude-notes/plans/2026-06-12-sync-client-offline-race.md`).
 
 ## Work items (progress)
 

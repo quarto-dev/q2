@@ -2,6 +2,9 @@
 title: 'L1 — `ListingItemInfoStage` (auto-fill, pre-checkpoint)'
 date: 2026-05-05
 description: 'Adds a pre-checkpoint stage that fills missing listing fields such as description, image, word count, reading time and modified date from the document, leaving author-supplied values untouched.'
+braid:
+  strand: bd-izqh
+  priority: P1
 status: in-progress  # In progress (worktree `.worktrees/bd-izqh-listing-item-info-stage/`).
 ---
 

@@ -1,7 +1,11 @@
 ---
 title: 'Plan 7c — ipynb content processor'
-date: 2026-07-08
+date: 2026-07-08  # (rewritten 2026-08-17 — promoted from placeholder)
 description: 'Adds an `.ipynb` content processor that converts Jupyter notebooks with source locations and cell emission rules, building on the processor registry from Plan 7b.'
+braid:
+  strand: bd-19nc56ao
+  priority: P1
+  labels: [surface-syntax]
 status: in-progress  # IN EXECUTION — Phase 0 complete (2026-09-24); Phase 1 in-repo work complete (2026-09-24: converter core green, flagship mapping half green, clippy + full-crate gates green). Remaining Phase 1 work is the upstream quarto-error-reporting engagement (needs Gordon coordination). Architecture settled; see § Execution decisions.
 ---
 

@@ -4,10 +4,12 @@ date: 2026-08-18
 description: 'Replaces the three hand-written highlight palettes with a general translator from Quarto 1 `.theme` JSON files, so the full palette catalog and the adaptive light and dark pairs work.'
 status: done  # MERGED and CLOSED 2026-08-18 — PR #547 (commit `8c844241`, merged as `4033a266`); strand bd-hl-theme-translator-2mdgh4k6 closed. Follow-ups live on as bd-ag5n55ca (user `.theme` paths) and bd-o20jxpfc (darkness sentinel).
 braid:
-  strand: bd-hl-theme-translator-2mdgh4k6  # open; field evidence argues for higher; see below
+  strand: bd-hl-theme-translator-2mdgh4k6
   priority: P3
 ---
 
+**Strand:** bd-hl-theme-translator-2mdgh4k6 (open, feature, P3 — field evidence
+argues for higher; see below)
 **Investigated:** 2026-08-18, on branch `main`
 **Discovered-from:** bd-ld-b-highlight-style-jnb036fz (closed — light/dark
 phase B, stage 1 of highlight-style support)

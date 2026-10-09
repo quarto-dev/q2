@@ -7,6 +7,8 @@ braid:
   priority: P2
 ---
 
+**Strand:** bd-2lxj10z0 — knitr label stripped by PreEngineSugaring breaks
+label-based figure filenames (`fig-cars-1.svg` -> `unnamed-chunk-1-1.svg`)
 **Public tracking issue:** https://github.com/quarto-dev/q2/issues/741
 **Worktree:** `.worktrees/workspace-4`, branch
 `braid/bd-2lxj10z0-knitr-label-stripped-preenginesugaring`, forked from

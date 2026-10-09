@@ -1,6 +1,6 @@
 ---
 title: 'Preview ↔ Render DOM Parity Harness — Implementation Plan'
-date: 2026-08-24
+date: 2026-08-24  # (revised the same day after a blank-slate review)
 description: 'Adds an automated test that renders opted-in smoke-all fixtures through both the preview React renderer and the native HTML writer, failing when the article body DOM diverges.'
 ---
 

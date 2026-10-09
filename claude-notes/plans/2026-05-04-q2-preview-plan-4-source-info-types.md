@@ -1,6 +1,6 @@
 ---
 title: 'Plan 4 — SourceInfo provenance types (Generated + Anchor + AnchorRole)'
-date: 2026-05-04
+date: 2026-05-04  # (substantially revised 2026-05-20)
 description: 'Extends `SourceInfo` with a single `Generated` variant that records which transform produced a node and which source bytes contributed to it, replacing the older `FilterProvenance` variant.'
 status: approved  # Implementation plan (ready to execute)
 ---
