@@ -106,11 +106,12 @@ page is worth running even when the listing looks right.
 
 ## Descriptions and the placeholder envelope
 
-When an item has no `description:` in its front matter, Quarto can fill
-one in from the item page itself — the first paragraph of the rendered
-document, truncated at a word boundary. This happens *after* both
-documents are rendered, as a substitution pass over the host page, and
-it only happens inside a marker envelope your template emits:
+When an item has no description of its own — no `description:` under
+`listing-item:`, no `description:`, no `abstract:` — Quarto fills one in
+from the item page itself: the first paragraph of the rendered document,
+truncated at a word boundary. This happens *after* both documents are
+rendered, as a substitution pass over the host page, and it only happens
+inside a marker envelope your template emits:
 
 ```` markdown
 ::: {.listing-description}
@@ -128,12 +129,21 @@ $it.description-placeholder-end$
 :::
 ````
 
-Three things about that shape are load-bearing:
+Four things about that shape are load-bearing:
 
-**The markers go outside the `$if$`, not inside.** The envelope marks
-the *region* to substitute, so it has to exist for exactly the items
-that have no description — the ones the `$if$` skips. Emit it
-unconditionally.
+**The markers go outside the `$if$`, not inside.** An item with no
+paragraph Quarto could find before rendering (a page whose text comes
+from running code, say) has no `$it.description$`, but its rendered page
+may still have a paragraph. The envelope has to exist for exactly those
+items, so emit it unconditionally.
+
+**The markers are empty unless the item needs one.** For an item whose
+description was written by its author, both markers are empty strings
+and the description is shown as written. For an item whose description
+is derived, `$it.description$` holds the page's first paragraph *as
+written*, which is what shows where the substitution pass doesn't run
+(the browser-based editor); the pass replaces it with the rendered
+page's paragraph.
 
 **The markers are HTML comments,** so they belong in a raw-HTML block
 (```` ```{=html} ````). They are stripped from the finished page whether
@@ -144,16 +154,24 @@ with no block structure of its own, so a container gives it a styling
 hook and keeps it separated from the surrounding content. The built-ins
 use `.listing-description`.
 
-The built-in layouts gate the *whole* envelope on `$if(description)$`,
-so items with no front-matter description get no preview there. A custom
-template that emits the envelope unconditionally does better — this is
-one of the few places where a hand-written template beats the built-in.
+To keep the description linked, put the envelope inside the link, using
+inline raw HTML and guarding the empty markers. This is what the
+built-in `grid` layout does:
+
+```` markdown
+[$if(it.description-placeholder-begin)$`$it.description-placeholder-begin$`{=html}$endif$$if(it.description)$$it.description$$endif$$if(it.description-placeholder-end)$`$it.description-placeholder-end$`{=html}$endif$]($it.path$)
+````
 
 The truncation limit is the listing's `max-description-length` (default
-175). Setting it to `0` disables truncation. If no usable first
-paragraph is found the markers are simply removed, leaving whatever the
-`$if$` produced, and Quarto emits
-[`Q-12-13`](/errors/listing/Q-12-13.qmd).
+175). Setting it to `0` disables truncation. If the rendered page has no
+usable first paragraph, the markers are simply removed, leaving whatever
+the `$if$` produced; when that is a description found before rendering,
+Quarto emits [`Q-12-13`](/errors/listing/Q-12-13.qmd).
+
+`image-placeholder-begin` / `-end` work the same way for images: they
+are empty when the item's image was written by its author, and otherwise
+wrap the derived image (or the empty placeholder `<div>`), which the
+substitution pass upgrades to the rendered page's preview image.
 
 ## Guard optional values with `$if$`
 

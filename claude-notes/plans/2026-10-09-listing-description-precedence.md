@@ -369,10 +369,18 @@ without `description:`, matching the HTML listing
 - [ ] Review snapshot churn item by item.
 
 ### Phase 6 — Docs
-- [ ] Listing docs: precedence, `abstract`, derivation in tables, image
-  precedence.
-- [ ] `ListingItemInfo` / `DocumentProfile` doc comments;
-  `document-profile-contract.md` (head pipeline).
+- [x] Listing docs: precedence, `abstract`, derivation in tables, image
+  precedence (`docs/guides/projects/listings.qmd` § "Where descriptions
+  and images come from").
+- [x] `listing-templates.qmd` § "Descriptions and the placeholder
+  envelope": markers are empty for authored descriptions; built-ins now
+  emit the envelope for every derivable item; in-link envelope shape;
+  Q-12-13 condition; image envelope.
+- [x] `docs/errors/listing/Q-12-13.qmd` and the catalog message: fires
+  only when a pre-render paragraph is the fallback.
+- [x] `ListingItemInfo` / `DocumentProfile` doc comments (Phase 1);
+  `document-profile-contract.md` field rows + v15 changelog entry;
+  `ejs-listing-port` skill note on the envelope.
 
 ## Decisions, round 2 (2026-10-09)
 
