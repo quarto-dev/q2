@@ -293,13 +293,46 @@ paragraph's plain text stay characters. Ten test-only `ListingItem`
 literals got `Absent` sources.
 
 ### Phase 3 — Binding, templates, L7
-- [ ] Per-field placeholder gating; `show-description` key.
-- [ ] `item-default` / `item-grid` templates: `show-description`; image
-  envelope inside the `image-html` branch.
-- [ ] Table description cell envelope.
-- [ ] L7: image inner-`<img>` fallback; Q-12-13 only with non-empty
-  fallback.
-- [ ] Unit tests (binding per source; table cell; L7 fallbacks).
+- [x] Per-field placeholder gating (`derivable(item, source)`: unauthored
+  source + document target); `show-description` key.
+- [x] `item-default` / `item-grid` templates: `show-description`; image
+  envelope inside the `image-html` branch; `$description$` references
+  guarded with `$if(description)$` (an envelope-only item has no
+  `description` key, and an unguarded reference is Q-12-10).
+- [x] Grid: with a link, the envelope now sits *inside* the link as inline
+  raw HTML, so L7's substitution keeps the link (before, the envelope
+  wrapped the link and substitution dropped it).
+- [x] Table description cell envelope (`description_cell`), and the
+  defaulted `description` column survives presence filtering when an
+  item is derivable (Q1: every document item carries the placeholder).
+- [x] L7: image inner-`<img>` fallback beats the listing default;
+  Q-12-13 only with a non-empty fallback.
+- [x] Unit tests: binding gating per source, no envelope without a
+  document, `show-description`, image gating, table cell, kept table
+  column; derived image wrapped in envelope (`listing_render.rs`); L7
+  derived-img-over-default and silent empty envelope.
+
+Existing tests updated because they encoded the old behaviour:
+- `website_post_render.rs::pipeline_website_post_render_substitutes_listing_placeholders`
+  and `…_image_from_sibling_preview`, `listing_pipeline.rs::default_listing_renders_three_posts_in_default_order`
+  and `…_derived_ellipsis`: they gave posts an explicit `description:`
+  and asserted that L7 *replaced* it. Now: derive when nothing is
+  authored; an explicit description stays as written.
+- `binding.rs` test helper `item()`: its description is the old L1
+  fallback, so its source is `Derived`;
+  `record_over_document_keeps_path_but_no_placeholders` marks the
+  description as the record's.
+- `listing_render.rs::render_omits_image_placeholder_when_l1_image_set`
+  → `…_when_image_authored` (an L1 image is now derived and *is*
+  wrapped; new test for that).
+- `pandoc_request_books.rs` golden: `meta.listing-item.description` (the
+  L1 value leaking into every document's pandoc metadata) is gone.
+  Re-recorded with `BOOK_REQUEST_GOLDEN=record`; the only diff is those 4
+  lines.
+- `pandoc_request_projects.rs` book tests passed only because the leaked
+  `listing-item.description` MetaString contained "First chapter"
+  verbatim (body prose is split into `Str`/`Space` nodes). Switched to
+  single-token markers.
 
 ### Phase 4 — Shared head
 - [ ] Extract `head_stages()`; use it from both builders; update the
@@ -379,10 +412,11 @@ The plan1c caution points to real work, which is now part of Phase 4:
   into HTML. Check that `<` and `&` in a body paragraph are escaped. A
   derived description now reaches many more items, so a latent escaping
   bug would show up widely.
-- **Truncation.** Authored descriptions aren't truncated (Q1 doesn't either).
-  Derived ones are truncated by L7 at `max-description-length`. The L1
-  fallback text inside the envelope is untruncated today; decide whether to
-  truncate it too.
+- **Truncation.** (Corrected during Phase 3.) Every description the binding
+  emits — authored or the L1 fallback — is already truncated at the
+  listing's `max-description-length` (`binding.rs`, bd-pcmdb7qg, Q1
+  parity). L7 truncates what it derives from the rendered page at the
+  same limit. Nothing to change.
 - **Rendered HTML churn.** Unconditional envelopes and table derivation
   change many snapshot outputs. Expect snapshot updates; review them as
   parity improvements rather than accepting them wholesale.

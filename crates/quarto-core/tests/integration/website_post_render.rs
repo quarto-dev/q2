@@ -672,17 +672,17 @@ fn pipeline_website_post_render_substitutes_listing_placeholders() {
             &project_dir.join("index.qmd"),
             "---\ntitle: Home\nlisting:\n  contents: \"posts/*.qmd\"\n  type: default\nformat: html\n---\n\nHome page.\n",
         );
-        // Explicit `description:` populates the L1 fallback so the
-        // listing template's `$if(description)$` block renders. The
-        // body content is what L7 will pull as the engine first
-        // paragraph from the rendered sibling.
+        // Foo has no `description:`: its description is derived, so
+        // the envelope is emitted and L7 fills it from the rendered
+        // sibling. Bar's explicit `description:` is authored and final
+        // (bd-listing-description-precedence-x4bh6w3m) — no envelope.
         write(
             &project_dir.join("posts/foo.qmd"),
-            "---\ntitle: Foo\ndate: 2026-01-15\ndescription: Foo L1 fallback.\nformat: html\n---\n\nEngine first paragraph from foo.\n",
+            "---\ntitle: Foo\ndate: 2026-01-15\nformat: html\n---\n\nEngine first paragraph from foo.\n",
         );
         write(
             &project_dir.join("posts/bar.qmd"),
-            "---\ntitle: Bar\ndate: 2026-01-10\ndescription: Bar L1 fallback.\nformat: html\n---\n\nEngine first paragraph from bar.\n",
+            "---\ntitle: Bar\ndate: 2026-01-10\ndescription: Bar explicit description.\nformat: html\n---\n\nEngine first paragraph from bar.\n",
         );
     });
 
@@ -692,18 +692,12 @@ fn pipeline_website_post_render_substitutes_listing_placeholders() {
         "expected foo's engine first paragraph in host; got: {host}"
     );
     assert!(
-        host.contains("Engine first paragraph from bar."),
-        "expected bar's engine first paragraph in host; got: {host}"
-    );
-    // L7-substituted preview replaces the L1 fallback; the static
-    // text should NOT survive.
-    assert!(
-        !host.contains("Foo L1 fallback."),
-        "L1 fallback should be replaced by engine first paragraph; got: {host}"
+        host.contains("Bar explicit description."),
+        "an explicit description is final; got: {host}"
     );
     assert!(
-        !host.contains("Bar L1 fallback."),
-        "L1 fallback should be replaced by engine first paragraph"
+        !host.contains("Engine first paragraph from bar."),
+        "an explicit description must not be replaced; got: {host}"
     );
     // Both halves of the description envelope must be gone.
     assert!(
@@ -715,7 +709,7 @@ fn pipeline_website_post_render_substitutes_listing_placeholders() {
         !host.contains("desc-end(5A0113B34292)"),
         "end marker must be stripped from rendered host"
     );
-    // No Q-12-13 — both posts produced rendered output.
+    // No Q-12-13 — foo produced rendered output.
     assert!(
         summary
             .project_diagnostics
@@ -762,7 +756,7 @@ fn pipeline_website_post_render_substitutes_image_from_sibling_preview() {
         // L7 sees no <p> to extract).
         write(
             &project_dir.join("posts/with-engine-image.qmd"),
-            "---\ntitle: Engine Post\ndate: 2026-01-20\ndescription: Static fallback.\nformat: html\n---\n\nBody paragraph.\n\n```{=html}\n<img src=\"preview-image.png\" alt=\"engine output\">\n```\n",
+            "---\ntitle: Engine Post\ndate: 2026-01-20\nformat: html\n---\n\nBody paragraph.\n\n```{=html}\n<img src=\"preview-image.png\" alt=\"engine output\">\n```\n",
         );
     });
 
@@ -796,10 +790,6 @@ fn pipeline_website_post_render_substitutes_image_from_sibling_preview() {
     assert!(
         host.contains("Body paragraph."),
         "expected engine first paragraph"
-    );
-    assert!(
-        !host.contains("Static fallback."),
-        "L1 fallback should be replaced"
     );
     assert!(
         summary
