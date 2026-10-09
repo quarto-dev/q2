@@ -363,10 +363,19 @@ without `description:`, matching the HTML listing
 (`llms_txt.rs::llms_listing_page_companion_synthesizes_item_list` updated).
 
 ### Phase 5 — Verification
-- [ ] All Phase 0 tests green; `cargo xtask verify`.
+- [x] All Phase 0 tests green; `cargo xtask verify --skip-hub-build`:
+  16054/16054 Rust tests pass. Its `test:wasm` step failed against a
+  **stale** WASM bundle (`--skip-hub-build` doesn't rebuild it). After
+  `npm run build:wasm`, one more golden needed regenerating:
+  `crates/quarto-core/schemas/pandoc-request.golden.json`
+  (`Q2_REGENERATE_GOLDEN=1 … golden_file`). Audited: the only change in
+  the embedded pandoc input is `meta.listing-item` losing the leaked
+  derived `description` / `image` (blocks identical; `job_id` follows).
+  Full `test:wasm` then 414/414.
 - [ ] Repro vs Quarto 1 (README table); claude-notes plans page with
   `type: grid`; Connect-docs repros.
-- [ ] Review snapshot churn item by item.
+- [ ] Review snapshot churn item by item. (No insta snapshot changed;
+  the two goldens above are the only recorded-output changes.)
 
 ### Phase 6 — Docs
 - [x] Listing docs: precedence, `abstract`, derivation in tables, image
