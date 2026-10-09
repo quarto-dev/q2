@@ -2,6 +2,9 @@
 title: 'Directory resources should expand to recursive file copies (bd-47w7o)'
 date: 2026-05-21
 description: 'Makes a literal directory listed as a project resource expand into a recursive copy of its files, matching TS Quarto, instead of failing with an I/O error.'
+braid:
+  strand: bd-47w7o
+  priority: P2
 ---
 
 ## Overview

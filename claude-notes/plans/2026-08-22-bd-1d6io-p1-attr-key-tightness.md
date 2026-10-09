@@ -2,6 +2,9 @@
 title: 'bd-1d6io — P1 tight ranges for attribute keys, and a CI guard for the annotated-qmd fixtures'
 date: 2026-08-22
 description: 'Narrows the recorded source range of second and later attribute key-value keys in pampa so they stop including the leading space, fixing the writer rather than the external scanner.'
+braid:
+  strand: bd-1d6io
+  priority: P2
 ---
 
 **Strand:** bd-1d6io (`in_progress`). Absorbs **bd-49cbyqbt** (closed as a

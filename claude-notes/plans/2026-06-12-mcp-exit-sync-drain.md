@@ -2,6 +2,9 @@
 title: 'bd-10deu8h4: MCP server exit must not race outbound document sync'
 date: 2026-06-12
 description: 'Makes the MCP server wait for outbound sync to drain before exiting on stdin EOF, so documents created just before shutdown reach the hub instead of being lost.'
+braid:
+  strand: bd-10deu8h4
+  priority: P1
 status: in-progress  # IN PROGRESS (2026-06-12, worktree `.worktrees/bd-10deu8h4-hub-mcp-server-exit`, branch `beads/bd-10deu8h4-hub-mcp-server-exit` off `4bd6d4bf`). Designed for parallel implementation alongside bd-vm5e5u10.
 ---
 

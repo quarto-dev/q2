@@ -2,6 +2,9 @@
 title: 'Comprehensive Testing Plan for k-192'
 date: 2025-10-26
 description: 'Plans the remaining tests for the annotated Pandoc AST TypeScript package, covering the DocumentConverter, realistic complex documents, edge cases, components tree structure and performance baselines.'
+braid:
+  strand: k-192
+  priority: P1
 status: in-progress
 ---
 

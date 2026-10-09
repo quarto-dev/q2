@@ -2,6 +2,10 @@
 title: 'Connection indicator: no Offline flash on open (bd-53501yf7)'
 date: 2026-07-27
 description: 'Stops the hub-client header connection indicator flashing Offline before Online on document open by widening the initial peer wait from 1 ms to 400 ms, a simpler fix than hiding the indicator while connecting.'
+braid:
+  strand: bd-53501yf7
+  priority: P2
+  labels: [bug]
 ---
 
 ## Overview

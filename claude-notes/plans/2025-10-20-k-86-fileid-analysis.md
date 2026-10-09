@@ -2,6 +2,9 @@
 title: 'k-86: FileId Handling Analysis'
 date: 2025-10-20
 description: 'Analyzes whether the `FileId(0)` fallback used after the source-map migration is a real bug, concluding that the branching `if` is redundant and should be simplified to a plain `FileId(0)`.'
+braid:
+  strand: k-86
+  priority: P0
 ---
 
 ## The Issue

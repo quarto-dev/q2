@@ -2,6 +2,9 @@
 title: 'CSL Conformance Test Progress (k-422)'
 date: 2025-11-27
 description: 'Tracks the pass rate of the `quarto-citeproc` CSL conformance suite by test category, with a prioritized list of remaining work on name order, sorting, disambiguation, position tracking and collapsing.'
+braid:
+  strand: k-422
+  priority: P4
 ---
 
 ## Current Status

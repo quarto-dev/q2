@@ -2,6 +2,9 @@
 title: 'Plan 9: `q2 call engine` — Q1-parity engine CLI surface (bd-m1jeqhhz)'
 date: 2026-07-03
 description: 'Adds `q2 call engine` with output, error messages and exit codes matching Quarto 1 byte for byte, dispatched through a one-shot call-engine mode in the Deno engine-host bundle that reuses vendored cliffy.'
+braid:
+  strand: bd-m1jeqhhz
+  priority: P3
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
