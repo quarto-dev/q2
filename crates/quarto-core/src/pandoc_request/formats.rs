@@ -277,7 +277,12 @@ pub fn resolve_document_formats(
         .map_err(|e| format!("Failed to discover project context: {e}"))?;
     let mut resolved = resolve_formats(&content, project.config.metadata.as_ref());
     if project.project_kind() == crate::project::ProjectKind::Book {
-        resolved.book = Some(book_resolution(&project, path, runtime));
+        // Membership compares against the project's absolute file list, and the hub client asks with the
+        // project-relative path it shows in its file tree.
+        let active = runtime
+            .canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf());
+        resolved.book = Some(book_resolution(&project, &active, runtime));
     }
     Ok(resolved)
 }

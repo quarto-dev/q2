@@ -22,7 +22,7 @@ export interface NativeRenderRequest {
 export type NativeDiagnostic = Record<string, unknown>;
 
 export type NativeRenderOutcome =
-  | { kind: 'ok'; blob: Blob; fileName: string; warnings: NativeDiagnostic[]; unexecutedCells: number }
+  | { kind: 'ok'; blob: Blob; fileName: string; warnings: NativeDiagnostic[]; unexecutedCells: number; book?: { chapters: number } }
   /** The render had errors (HTTP 422): nothing downloads, show these. */
   | { kind: 'failed'; error?: string; diagnostics: NativeDiagnostic[] }
   /** HTTP 409 `{"superseded":true}`: a newer request for the same document replaced this one; drop it silently. */
@@ -104,7 +104,7 @@ async function post(
     return { kind: 'error', message: (await response.text().catch(() => '')) || `HTTP ${response.status}` };
   }
   const warnings = jsonHeader<NativeDiagnostic[]>(response, DIAGNOSTICS_HEADER) ?? [];
-  const stats = jsonHeader<{ unexecuted_cells?: number }>(response, STATS_HEADER);
+  const stats = jsonHeader<{ unexecuted_cells?: number; book?: { scope: 'book' | 'chapter' | 'page'; chapters: number } | null }>(response, STATS_HEADER);
   return {
     kind: 'ok',
     blob: await response.blob(),
@@ -112,6 +112,8 @@ async function post(
     fileName: fileNameFromDisposition(response.headers.get('content-disposition'), route === NATIVE_PDF_ROUTE ? '' : `download.${request.format}`),
     warnings,
     unexecutedCells: stats?.unexecuted_cells ?? 0,
+    // Only a whole-book file is a book download; a chapter or page of a book is one document (as in the wasm path).
+    ...(stats?.book?.scope === 'book' ? { book: { chapters: stats.book.chapters } } : {}),
   };
 }
 

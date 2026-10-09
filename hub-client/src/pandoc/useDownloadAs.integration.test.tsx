@@ -61,12 +61,22 @@ describe('useDownloadAs: books', () => {
     expect(h.bookInfoFor).toHaveBeenCalledWith('one.qmd');
   });
 
-  it('has no book without a path, before the wasm is ready, and in the native embed (which renders one chapter)', () => {
+  it('has no book without a path or before the wasm is ready', () => {
     h.bookInfoFor.mockReturnValue({ chapter: true, chapters: ['one.qmd'] });
     expect(renderHook(() => useDownloadAs(null, '', true, captures)).result.current.book).toBeNull();
     expect(renderHook(() => useDownloadAs('one.qmd', '', false, captures)).result.current.book).toBeNull();
+  });
+
+  it('offers the book entries in the native embed too, and "Download book as" sends scope book there', () => {
     h.embed = true;
-    expect(renderHook(() => useDownloadAs('one.qmd', '', true, captures)).result.current.book).toBeNull();
+    h.bookInfoFor.mockReturnValue({ chapter: true, chapters: ['index.qmd', 'one.qmd'] });
+    const { result } = renderHook(() => useDownloadAs('one.qmd', 'text', true));
+    expect(result.current.book).toEqual({ chapter: true, chapters: ['index.qmd', 'one.qmd'] });
+    act(() => result.current.start(EPUB, 'book'));
+    // The embed has no capture table (the server resolves captures itself, E10), so the ids are empty and the native runner ignores them.
+    expect(h.start).toHaveBeenLastCalledWith({ path: 'one.qmd', format: EPUB, content: 'text', scope: 'book', captureDocIds: {} });
+    act(() => result.current.start(EPUB, 'chapter'));
+    expect(h.start).toHaveBeenLastCalledWith({ path: 'one.qmd', format: EPUB, content: 'text', scope: 'chapter' });
   });
 
   it('refreshBook re-reads the resolver (the project\'s chapter list may have changed)', () => {

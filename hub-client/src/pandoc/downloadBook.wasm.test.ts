@@ -82,6 +82,14 @@ describe('book download against the real wasm', () => {
     expect(resolveBook('notes.qmd')?.chapter).toBe(false);
   });
 
+  it('the resolver takes the project-relative path the file tree shows, as well as the absolute one', () => {
+    smallBook();
+    const relative = (rel: string) => bookInfoFrom(JSON.parse(wasm.resolve_pandoc_formats(rel)));
+    expect(relative('one.qmd')).toEqual(resolveBook('one.qmd'));
+    expect(relative('one.qmd')?.chapter).toBe(true);
+    expect(relative('notes.qmd')?.chapter).toBe(false);
+  });
+
   it('a project without a book has no book information', () => {
     wasm.vfs_add_file(`${ROOT}/solo.qmd`, '# Solo\n');
     expect(resolveBook('solo.qmd')).toBeNull();

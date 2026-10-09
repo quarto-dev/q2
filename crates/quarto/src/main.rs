@@ -334,8 +334,9 @@ enum Commands {
         ///
         /// Uses none of the live-editing machinery, so --share,
         /// --allow-edit, --ui, --join, --no-project, --data-dir and
-        /// --preview-dir don't combine with it. Only `html` and
-        /// `revealjs` output can be served this way.
+        /// --preview-dir don't combine with it. Only `html`,
+        /// `revealjs` and `typst` output can be served this way (a
+        /// typst PDF is shown in a pdf.js viewer).
         #[arg(
             long = "static",
             conflicts_with_all = ["join", "share", "no_project", "allow_edit", "data_dir", "preview_dir", "ui"]

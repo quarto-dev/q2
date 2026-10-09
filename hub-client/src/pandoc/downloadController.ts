@@ -364,7 +364,7 @@ export class DownloadController {
     if (warnings.some(isError)) return fail('native-failed', warnings);
     const fileName = outcome.fileName || sanitizeDownloadName(path, format.extension);
     const unexecutedCells = outcome.unexecutedCells;
-    const done: DownloadStatus = { phase: 'done', clickId: id, format, fileName, warnings, notices: [], unexecutedCells };
+    const done: DownloadStatus = { phase: 'done', clickId: id, format, fileName, warnings, notices: [], unexecutedCells, book: outcome.book };
     if (format.key === TYPST_PDF_KEY && this.deps.onPdf) {
       const pdf = new Uint8Array(await outcome.blob.arrayBuffer());
       if (!current()) return;

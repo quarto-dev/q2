@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-08
 **Integration branch:** `feature/q2-preview-hub-parity`, checked out in `.worktrees/workspace-7`. Cut from `feature/pandoc-wasm-2`; that branch has since merged, so the integration branch is rebased onto `main` before development starts (done by Gordon, outside the plans). Not pushed; the whole epic lands as one PR.
-**Status:** thirteen implementation plans written and reviewed six times; nothing implemented. The plans were split on 2026-10-08 for parallel development by up to three workers.
+**Status:** all thirteen plans implemented and landed (2026-10-08). The plans were split on 2026-10-08 for parallel development by up to three workers; Plan 13 closed the epic.
 
 ## Why this epic exists
 
@@ -23,6 +23,8 @@ The pandoc-wasm epic gave hub-client "Download as" and a PDF preview, all in the
 | Import (docx/odt/rtf/epub/pptx to qmd) | yes | hidden | none | Plans 1, 7, 13 |
 
 Not a gap: remote images in typst (native fetches them; the wasm path fails until its prefetch lands).
+
+**After the epic (Plan 13.8).** Every row above is closed in the embed and, where E5 says so, in the viewer SPA and `--static`; the Plan 13 end-to-end specs (`q2-preview-spa/e2e/embed-books.spec.ts`, `embed-import.spec.ts`) cover books, the `.typ` download on a chapter, import and `--join`. Remaining, documented differences: (a) hub and `q2 preview` PDFs are not byte-identical (E4); (b) a whole-book download fails when a chapter `embed`s a cell from another chapter, because the route never executes code and a recorded capture is not spliced into an embed (reported by Plan 10, not reproduced in Plan 13; chapter-alone works); (c) a book download renders other chapters from disk, runs no pre/post-render scripts and ignores the book's `output-ext`; (d) hub-client stores imported images only up to 10 MB, as in the browser. Plan 13 also fixed a bug the plans did not predict: the format resolver's `book.chapter` flag was false for the project-relative paths the hub client sends, so the book menu entries never appeared (now canonicalized in `quarto-core`).
 
 ## Decisions
 
@@ -132,10 +134,10 @@ Critical path: 2 -> 6 -> 9 -> 10 -> 13 (and 9 -> 12 -> 13). Plans 1, 2, 3 and 4 
 - [x] Plan 10 book downloads, server
 - [x] Plan 11 SPA PDF pane
 - [x] Plan 12 embed client
-- [ ] Plan 13 close-out
+- [x] Plan 13 close-out
 - [x] `--book-scope` documented for `q2 render`, the Download as menu and the wasm option, and noted in the changelogs; the default keeps today's CLI behaviour, so the pinned test `single_chapter_subset_render_keeps_one_file_render_set` is unchanged
-- [ ] User docs for `q2 preview` (Plan 13.7)
-- [ ] Reconcile every plan's checklist against what landed; update the gap table
+- [x] User docs for `q2 preview` (Plan 13.7)
+- [x] Reconcile every plan's checklist against what landed; update the gap table (Plan 13.8)
 
 ## Cross-cutting rules
 
@@ -145,6 +147,10 @@ Critical path: 2 -> 6 -> 9 -> 10 -> 13 (and 9 -> 12 -> 13). Plans 1, 2, 3 and 4 
 - Tests needing native `typst`/`pandoc` skip with a clear reason when absent. `test-suite.yml` installs typst; `q2-preview-spa-e2e.yml` installs neither and is extended in Plans 11 and 12; the embed's browser tier needs a workflow that builds `q2` with the embedded editor dist and installs pandoc and typst (Plan 12).
 - Cross-platform: gate platform-specific test helpers as the repo rules say; never glob `$TMPDIR` (about 46k leaked directories).
 - Never push without Gordon's approval.
+
+## Final workspace nextest
+
+`Ledger: ae2887867: 16134 passed, 202 skipped` (Plan 13, `--no-fail-fast`, 2 slow, 2 leaky, 562 s). Against the previous tip's entry (`ccd32719c: 16134 / 202`) the delta is 0 / 0, expected (Plan 13 adds no Rust test). Against the integration branch's first baseline (seed `135a42b69: 15990 / 202`) the epic added 144 passed, 0 skipped.
 
 ## Review record
 

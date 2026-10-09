@@ -28,21 +28,21 @@ Per task: `tsc` plus `vitest` in `hub-client`. Workspace nextest at the end of t
 
 ### Part A: client
 
-- [ ] 13.1 Baseline: take the workspace pass/skip counts recorded for the current integration tip (epic, "Workspace nextest ledger"); run `cargo nextest run --workspace` only if the tip has no recorded entry, and then say so in the Handoff log.
-- [ ] 13.2 Remove the `!isPreviewEmbed()` gate on `bookInfoFor`; `runNative` (which already forwards `scope`, Plan 12.3) sets `book` from `stats.book` and shows the busy outcome as a visible notice separate from `superseded`; the menu's paired entries then appear in the embed through the same code as hub-client.
-- [ ] 13.3 Vitest: menu entries and requests in embed mode; file names from `Content-Disposition`; busy handling; `book` status from stats; a non-member page downloads standalone with the notice from `X-Q2-Diagnostics`.
-- [ ] 13.4 hub-client changelog.
+- [x] 13.1 Baseline: take the workspace pass/skip counts recorded for the current integration tip (epic, "Workspace nextest ledger"); run `cargo nextest run --workspace` only if the tip has no recorded entry, and then say so in the Handoff log.
+- [x] 13.2 Remove the `!isPreviewEmbed()` gate on `bookInfoFor`; `runNative` (which already forwards `scope`, Plan 12.3) sets `book` from `stats.book` and shows the busy outcome as a visible notice separate from `superseded`; the menu's paired entries then appear in the embed through the same code as hub-client.
+- [x] 13.3 Vitest: menu entries and requests in embed mode; file names from `Content-Disposition`; busy handling; `book` status from stats; a non-member page downloads standalone with the notice from `X-Q2-Diagnostics`.
+- [x] 13.4 hub-client changelog.
 
 ### Part B: end to end
 
-- [ ] 13.5 Playwright (extends Plan 12's `embed` project): download book as PDF and chapter-only on a small book fixture; a non-member page downloads standalone with the notice; the `.typ` download on a book chapter is the chapter alone.
-- [ ] 13.6 Import end to end (Plan 7): import a docx with an image and a comment into a `--ui editor` session; the qmd and `<stem>_media/` appear; a `--join` guest sees them. Confirm over a real tunnel with a near-25 MB upload and a slow import (the transport's 5 s keep-alive should keep it open).
+- [x] 13.5 Playwright (extends Plan 12's `embed` project): download book as PDF and chapter-only on a small book fixture; a non-member page downloads standalone with the notice; the `.typ` download on a book chapter is the chapter alone.
+- [x] 13.6 Import end to end (Plan 7): import a docx with an image and a comment into a `--ui editor` session; the qmd and `<stem>_media/` appear; a `--join` guest sees them. Confirm over a real tunnel with a near-25 MB upload and a slow import (the transport's 5 s keep-alive should keep it open).
 
 ### Part C: documentation and close-out
 
-- [ ] 13.7 User docs for `q2 preview`: runtime requirements (typst, pandoc, network for non-vendored `@preview` packages); a writable project for PDF preview; what `--static` does for PDFs (Plan 8); the viewer SPA's PDF pane (Plan 11); the embed's downloads, import and books; the unsaved-chapter-edits note (only the active chapter's text is sent; other chapters come from disk without `--allow-edit`); pre/post-render scripts not run for book downloads; a book's own `output-ext` ignored; time expectations; the output-identity note (E4); share trust (a `--join` guest's request runs native renders and pandoc on the host); import and the `--allow-edit` interaction (check the VFS-created-file write path `72ef5c84f`).
-- [ ] 13.8 Reconcile the epic: tick its checklist against what landed, update the gap table, and record the final workspace nextest delta against 13.1 and against the integration branch's first baseline.
-- [ ] 13.9 Plan end: workspace nextest; reconcile this checklist; write the Handoff log; land per the epic.
+- [x] 13.7 User docs for `q2 preview`: runtime requirements (typst, pandoc, network for non-vendored `@preview` packages); a writable project for PDF preview; what `--static` does for PDFs (Plan 8); the viewer SPA's PDF pane (Plan 11); the embed's downloads, import and books; the unsaved-chapter-edits note (only the active chapter's text is sent; other chapters come from disk without `--allow-edit`); pre/post-render scripts not run for book downloads; a book's own `output-ext` ignored; time expectations; the output-identity note (E4); share trust (a `--join` guest's request runs native renders and pandoc on the host); import and the `--allow-edit` interaction (check the VFS-created-file write path `72ef5c84f`).
+- [x] 13.8 Reconcile the epic: tick its checklist against what landed, update the gap table, and record the final workspace nextest delta against 13.1 and against the integration branch's first baseline.
+- [x] 13.9 Plan end: workspace nextest; reconcile this checklist; write the Handoff log; land per the epic.
 
 ## Risks
 
@@ -51,4 +51,25 @@ Per task: `tsc` plus `vitest` in `hub-client`. Workspace nextest at the end of t
 
 ## Handoff log
 
-Written by the implementing agent in the plan-end task, committed with the checklist: what landed (commit range), any task that deviated from the plan and why, names and signatures of the interfaces later plans consume exactly as they ended up, the workspace nextest baseline and final counts, and anything the next agent in the lane or a plan that waits on this one must know. Empty until the plan lands.
+**Headline.** The embed offers "Download book as" and "This chapter only" (typst source, PDF, EPUB); the embed's books, import (including through `--join`) and typst downloads are covered end to end; `q2 preview` has user docs; the epic is reconciled. Branch `q2-preview/p13-embed-close-out`, six commits on `368636cb1` (the integration tip when Plan 12's agent reported Plans 1-12 landed): `08b17fdc8` (13.2-13.3), `23bbfd486` (13.4), `61938234a` (resolver fix, below), `ddf47ff33` (13.5), `2e4110385` (13.6), `ae2887867` (13.7), plus this checklist/epic commit.
+
+**What changed in the client (13.2-13.3).** `useDownloadAs` no longer gates `bookInfoFor` off in the embed. `nativeRender.ts`: the `ok` outcome carries `book?: { chapters }`, set only when `X-Q2-Stats.book.scope === 'book'` (a chapter or a page is one document, as in the wasm path). `DownloadController.runNative` puts it on the `done` status, so "Book downloaded (N chapters)" shows. The busy outcome was already a visible `native-error` (Plan 12); a test now pins its message. The non-member notice (`Q-5-41`) arrives in `X-Q2-Diagnostics` and shows among the warnings.
+
+**Deviation: a Rust fix found by the e2e (not in the plan).** `quarto_core::pandoc_request::formats::resolve_document_formats` compared the active page against the project's absolute file list, but the hub client (embed and browser alike) asks with the project-relative path it shows in its file tree, so `book.chapter` was always `false` and the book entries never appeared. It now canonicalizes the path through the runtime first, as `render_pandoc_request` already did. Pinned by a new case in `hub-client/src/pandoc/downloadBook.wasm.test.ts` (relative and absolute agree). The existing wasm tests all passed absolute paths, which is why this was never caught. This also affects the browser hub-client menu; I did not check whether it was visible there before.
+
+**Tests.** hub-client: typecheck clean, `npm test` 1635, `npm run test:integration` 223, `npm run test:wasm` 390 passed / 28 skipped (was 389). `q2-preview-spa` Playwright `--project=embed`: 14 passed (Plan 12's 4, plus `embed-books.spec.ts` 3 and `embed-import.spec.ts` 7, described below). `cargo clippy -p quarto-core -p quarto --all-targets -- -D warnings` clean; `nextest -p quarto-core` 5852 passed / 32 skipped; `-p quarto` 632 / 2.
+
+- `embed-books.spec.ts`: the menu pairs on a chapter; the book `.typ` holds every chapter and is named `Small-Book.typ`; the chapter-only `.typ` is `two.typ` with only that chapter; the book PDF and chapter PDF are real PDFs (needs network for `@preview/orange-book`, skips when `packages.typst.org` is unreachable); a non-member page downloads standalone, and a stale `scope: "book"` request for it returns that page with `Q-5-41` and a non-book stat.
+- `embed-import.spec.ts`: docx with an image (qmd opens, `<stem>_media/` holds the PNG); docx with comments and tracked changes (`[++`, `[--`, `[>>`); `--allow-edit` (without it nothing reaches disk; with it the qmd and its media are written); a guest sees what the host imported; a guest imports a 21 MB docx through the real `--join` tunnel (relay) and the host gets the qmd and all three images; a slow import (a wrapper `pandoc` sleeping 12 s) completes through the tunnel, which settles the keep-alive question empirically, not only by reading iroh.
+- The harness gained `share`, `joinTicket()` and `startJoinGuest(ticket)` in `q2-preview-spa/e2e/helpers/previewServer.ts`.
+
+**Things learned.**
+- hub-client stores an imported image only up to 10 MB (`FILE_SIZE_LIMITS.MAX_FILE_SIZE`; larger ones are skipped), in the browser too. The near-25 MB test therefore uses three 7 MB images, not one 22 MB image (the route itself returns the 22 MB media: verified with `curl`).
+- The viewer SPA's e2e and the pdf.js tree: a stale gitignored `q2-preview-spa/dist` (no `pdfjs/`) makes the embed's PDF pane fail with "The PDF viewer did not start". `npm run build` in `q2-preview-spa` (its `prebuild` fetches pdf.js), then `cargo build --bin q2`, fixes it. Same cause as the `pdfjs_serving` failures Plans 6 and 10 recorded.
+- `--static`'s `--help` text still said "Only html and revealjs"; it now names typst (docs table fixed too).
+- Not reproduced by me: Plan 10's note that a whole-book download fails when a chapter `embed`s another chapter's executed cell (typst `Q-21-3`). It is documented as a limitation in the user docs (13.7); no plan covers splicing a recorded capture into an embed.
+- The `--join` e2e cases need network to iroh's relay (they do not skip without it); CI has network.
+
+**Workspace nextest (13.1, 13.9).** Baseline: ledger entry `ccd32719c: 16134 passed, 202 skipped` (the tip `368636cb1` differs from it only by plan notes, so no baseline run). Final run on this tree (`--no-fail-fast`, Gordon approved it): 16134 tests run, 16134 passed (2 slow, 2 leaky), 202 skipped, 562 s. Delta 0 passed, 0 skipped, expected: this plan adds no Rust test (its coverage is TypeScript, wasm and Playwright). Against the integration branch's first baseline (`135a42b69: 15990 / 202`) the epic added 144 passed, 0 skipped.
+
+Ledger: ae2887867: 16134 passed, 202 skipped

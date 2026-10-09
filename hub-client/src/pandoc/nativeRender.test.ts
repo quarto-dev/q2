@@ -87,6 +87,22 @@ describe('renderNatively contract', () => {
     expect(none.kind === 'ok' && none.unexecutedCells).toBe(0);
   });
 
+  it('reads the book stat only for a whole-book file, and the file name from Content-Disposition', async () => {
+    const stats = (book: unknown) => encodeURIComponent(JSON.stringify({ unexecuted_cells: 0, book }));
+    const respond = (book: unknown) =>
+      renderNatively(req, {
+        fetchFn: fakeFetch(new Response('x', { status: 200, headers: { 'x-q2-stats': stats(book), 'content-disposition': 'attachment; filename="Small-Book.typ"' } })).fn,
+        baseUrl: BASE,
+      });
+    const whole = await respond({ scope: 'book', chapters: 3 });
+    expect(whole.kind === 'ok' && whole.book).toEqual({ chapters: 3 });
+    expect(whole.kind === 'ok' && whole.fileName).toBe('Small-Book.typ');
+    for (const book of [{ scope: 'chapter', chapters: 3 }, { scope: 'page', chapters: 3 }, null]) {
+      const out = await respond(book);
+      expect(out.kind === 'ok' && out.book).toBeUndefined();
+    }
+  });
+
   it('discriminates a 409 by its body: superseded, busy, anything else is an error', async () => {
     const outcome = (body: string) => renderNatively(req, { fetchFn: fakeFetch(new Response(body, { status: 409 })).fn, baseUrl: BASE });
     expect(await outcome('{"superseded":true}')).toEqual({ kind: 'superseded' });

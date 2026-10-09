@@ -4,7 +4,6 @@ import { isWasmReady, resolvePandocFormats, type ActorIdentity, type CaptureRef 
 import { getDownloadController, menuFormats, downloadAvailable, withOutputExt } from './downloadService';
 import { bookInfoFor, type BookInfo } from './bookInfo';
 import { captureDocIdsFor } from './captureFetch';
-import { isPreviewEmbed } from './featureFlag';
 import { setDownloadIdentities } from './downloadAttribution';
 import type { DownloadFormat, DownloadStatus, StartOptions } from './downloadController';
 
@@ -49,11 +48,11 @@ export function useDownloadAs(path: string | null, content: string, wasmReady: b
   }, [captures]);
   const available = downloadAvailable();
 
-  // The native embed renders one chapter, so it never offers the book entries.
+  // The embed offers the book entries too: the native route renders the book (scope `book`) or the chapter alone.
   const [bookVersion, setBookVersion] = useState(0);
   const book = useMemo(() => {
     void bookVersion;
-    return available && wasmReady && path && !isPreviewEmbed() ? bookInfoFor(path) : null;
+    return available && wasmReady && path ? bookInfoFor(path) : null;
   }, [available, wasmReady, path, bookVersion]);
   const refreshBook = useCallback(() => setBookVersion((v) => v + 1), []);
 

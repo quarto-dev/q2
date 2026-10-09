@@ -252,7 +252,37 @@ describe('DownloadController', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'working' });
     native.mockResolvedValueOnce({ kind: 'busy' });
     await controller.start({ path: 'a.qmd', format: DOCX, content: '' });
-    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', state: 'native-error' });
+    // Busy is a visible notice, unlike superseded (which stays silent in `working`).
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', state: 'native-error', message: expect.stringContaining('busy') });
+  });
+
+  it('a whole-book native download is named by the server and reports the book; a chapter or page is not a book', async () => {
+    const EPUB: DownloadFormat = { key: 'epub', label: 'EPUB', extension: 'epub', mime: 'application/epub+zip' };
+    const save = vi.fn();
+    const native = vi.fn(async (): Promise<NativeRenderOutcome> => ({
+      kind: 'ok', blob: new Blob(['x']), fileName: 'Small-Book.epub', warnings: [], unexecutedCells: 0, book: { chapters: 3 },
+    }));
+    const controller = new DownloadController({ native, save });
+    await controller.start({ path: 'one.qmd', format: EPUB, content: '', scope: 'book' });
+    expect(native).toHaveBeenCalledWith({ path: 'one.qmd', format: 'epub', content: '', scope: 'book' }, expect.anything());
+    expect(save).toHaveBeenCalledWith(expect.any(Blob), 'Small-Book.epub');
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'done', book: { chapters: 3 } });
+    native.mockResolvedValueOnce({ kind: 'ok', blob: new Blob(['x']), fileName: 'one.epub', warnings: [], unexecutedCells: 0 });
+    await controller.start({ path: 'one.qmd', format: EPUB, content: '', scope: 'chapter' });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'done', fileName: 'one.epub', book: undefined });
+  });
+
+  it('a page outside the book downloads standalone and its Q-5-41 notice is among the warnings', async () => {
+    const EPUB: DownloadFormat = { key: 'epub', label: 'EPUB', extension: 'epub', mime: 'application/epub+zip' };
+    const save = vi.fn();
+    const notice = { kind: 'info', code: 'Q-5-41', title: 'not a chapter of the book; downloaded on its own' };
+    const native = vi.fn(async (): Promise<NativeRenderOutcome> => ({ kind: 'ok', blob: new Blob(['x']), fileName: 'other.epub', warnings: [notice], unexecutedCells: 0 }));
+    const controller = new DownloadController({ native, save });
+    await controller.start({ path: 'other.qmd', format: EPUB, content: '', scope: 'book' });
+    expect(save).toHaveBeenCalledWith(expect.any(Blob), 'other.epub');
+    const status = controller.getSnapshot();
+    expect(status).toMatchObject({ phase: 'done', book: undefined });
+    expect(status.phase === 'done' && status.warnings.map((w) => w.code)).toContain('Q-5-41');
   });
 
   it('native pdf controller hands bytes to onPdf and does not save', async () => {

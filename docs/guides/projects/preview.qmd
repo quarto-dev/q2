@@ -26,6 +26,23 @@ second without rebuilding the page, so JavaScript state is preserved
 across edits. See the `--help` text for the flags that control the
 port, the browser, and live sharing.
 
+### Typst documents
+
+A page whose format is `typst` or `pdf` shows its PDF in the preview, in
+a pdf.js viewer, and recompiles it shortly after you stop typing. A
+compile that fails keeps the last good PDF on screen under an error
+banner. When you reached the page from another one,
+a **Back** button at the left of the viewer's toolbar returns to it. In a
+book project the preview shows the page you are on, not the whole book.
+
+A page that sets `output-ext` to something other than `pdf` (typst source,
+say) has no PDF to show, so it keeps the "no live preview" notice.
+
+The compile runs the `typst` on your `PATH`, and writes into
+`.quarto/preview-out/` under the project (git-ignored, swept at startup),
+so the project directory must be writable. This view has no **Download
+as** menu; that is part of the editor UI below.
+
 ## The editor UI
 
 ``` {.bash filename="Terminal"}
@@ -47,12 +64,26 @@ your machine:
 - **Typst documents** (`format: typst` or `format: pdf`) show the PDF
   in the preview pane and re-render it as you type. A render that
   fails keeps the last good PDF on screen under an error banner.
+- **Books.** On a chapter of a book project, the Typst source, PDF and
+  EPUB entries come in pairs: **Download book as** renders the whole
+  book into one file named for the book (`My-Book.pdf`), and **This
+  chapter only** renders just the page you are on. (Word, OpenDocument
+  and PowerPoint have no whole-book output, so they always download the
+  page.) A page that is not listed in the book's `chapters` downloads on
+  its own, with a notice (`Q-5-41`) saying why it is not the book.
 - **Import** reads docx, odt, rtf, epub and pptx files into a new
-  document.
+  document, with its images stored next to it in `<name>_media/`. The
+  result is created in the editing session; it reaches your files on
+  disk only when you started `q2 preview` with `--allow-edit`, as for
+  any other edit. Images larger than 10 MB are not stored, as in
+  quarto-hub.
 
 These need `pandoc` on your `PATH`, and `typst` for Typst and PDF
 output. When one is missing, the preview pane or the download says so
-(`Q-20-1`, `Q-20-2`, `Q-21-1`) rather than offering nothing.
+(`Q-20-1`, `Q-20-2`, `Q-21-1`) rather than offering nothing. Typst
+packages that `q2` does not carry (`@preview/...`, including the book
+template's) are fetched from the Typst package registry, so a first PDF
+of a document that uses one needs network access.
 
 The PDF you get here and the PDF quarto-hub makes in the browser are
 both correct but not byte-for-byte identical. quarto-hub compiles with
@@ -62,6 +93,35 @@ Line breaks and font fallbacks can differ between the two.
 
 The typst source download is the bare `.typ` file; images are not
 bundled with it.
+
+### What a book download does and does not include
+
+- Only the page open in the editor is rendered from its editor text.
+  Every other chapter is read from disk, so unsaved edits to those are
+  not in the download (and, without `--allow-edit`, edits made in the
+  editor are never on disk).
+- Pre-render and post-render scripts do not run, and the book's own
+  `output-ext` is ignored: **Typst source** is a `.typ` and **PDF** is a
+  `.pdf`, whatever the project says.
+- Code cells are not executed for a download. Output that was recorded
+  while you edited is included; a notice counts the cells that had none.
+  A chapter that `embed`s a cell from another chapter needs that cell's
+  executed output, so downloading *that book* whole can fail; the
+  chapter alone still downloads.
+- The project's own `_book/` directory and render manifests are not
+  touched.
+- One book download per project runs at a time. A second request while
+  one is running is answered "the preview server is busy"; try again when
+  the first finishes. A small book takes a second or two; a large one
+  can take much longer, and cancelling takes effect between chapters.
+
+### Sharing
+
+With `--share`, anyone holding the join string can ask the host to run
+renders, downloads and imports: those requests use the host's `pandoc`
+and `typst` and read the host's project, and an import uploads the file
+to the host (up to 25 MB), where it is converted by a sandboxed `pandoc`.
+Treat the join string like a password, as the `--share` help says.
 
 ## Static preview
 
@@ -88,13 +148,23 @@ local port and opens the browser. It then watches your files:
 Each re-render is a real render: pre-render and post-render scripts
 run, and the output directory is what you would publish.
 
+### Typst and PDF
+
+`--static` also serves `format: typst` output. The rendered `.pdf` opens
+in a pdf.js viewer rather than the browser's own PDF viewer, and the
+viewer reloads when a re-render finishes, keeping your page and zoom.
+For a book project, `--static` renders the whole book (the `book` scope
+of `q2 render`). The viewer needs `typst` on your `PATH`, like the render
+itself; `--static` does not serve other non-HTML formats (`docx`, `pptx`,
+`epub`).
+
 ### Flags
 
 | Flag | Meaning |
 |---|---|
 | `--no-watch` | Render once and serve; never re-render |
 | `--no-navigate` | After a re-render, reload the current page instead of opening the page that changed |
-| `--to FORMAT` | The output format, as `q2 render --to`. Only `html` and `revealjs` can be served |
+| `--to FORMAT` | The output format, as `q2 render --to`. Only `html`, `revealjs` and `typst` can be served |
 | `--port N`, `--host H` | Where to listen. Default: a free port on `127.0.0.1` |
 | `--no-browser`, `--browser APP` | Do not open a browser, or open a specific one |
 
