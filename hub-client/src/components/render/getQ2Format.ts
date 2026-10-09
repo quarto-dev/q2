@@ -70,7 +70,7 @@ export interface ClassifyDeps {
   resolve: FormatClassResolver;
   /** True when "Download as" can produce this format key in this build. */
   canDownload: (formatKey: string) => boolean;
-  /** True when this build compiles PDF in the browser, so a `pdf` document gets the viewer. */
+  /** True when this build can preview PDF (browser chain, or the embed's native route), so a `pdf` document gets the viewer. */
   canPreviewPdf?: () => boolean;
 }
 

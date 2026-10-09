@@ -5,24 +5,49 @@
 export interface NativeRenderRequest {
   /** Project-relative path of the document (must be in the project index). */
   path: string;
-  /** `docx`, `pptx` or `epub`; the menu's format table is Rust-owned (R2), not repeated here. */
+  /** A key of the route's format table (docx, odt, pptx, epub, typst, typst-pdf); Rust owns the table (R2), not repeated here. */
   format: string;
-  /** The editor's current text; the server renders it instead of the disk copy. */
+  /**
+   * The editor's current text; the server renders it instead of the disk copy. Always sent: the server takes an
+   * omitted `content` as "render the disk copy", but an empty string as the source itself.
+   */
   content: string;
+  /** `'book'` or `'chapter'`, only for formats that consolidate a book (E11); absent means the user did not choose. */
+  scope?: 'book' | 'chapter';
+  /** The authorship JSON for docx and pptx comment and track-change authors (`attributionJsonFor`). */
+  attributionJson?: string;
 }
 
 /** A diagnostic as the server serializes it (`JsonDiagnostic`); the UI treats it opaquely. */
 export type NativeDiagnostic = Record<string, unknown>;
 
 export type NativeRenderOutcome =
-  | { kind: 'ok'; blob: Blob; fileName: string; warnings: NativeDiagnostic[] }
+  | { kind: 'ok'; blob: Blob; fileName: string; warnings: NativeDiagnostic[]; unexecutedCells: number }
   /** The render had errors (HTTP 422): nothing downloads, show these. */
   | { kind: 'failed'; error?: string; diagnostics: NativeDiagnostic[] }
+  /** HTTP 409 `{"superseded":true}`: a newer request for the same document replaced this one; drop it silently. */
+  | { kind: 'superseded' }
+  /** HTTP 409 `{"busy":true}`: the server is rendering something that cannot overlap; tell the user. */
+  | { kind: 'busy' }
   /** Anything else: a bad request, or the server could not be reached. */
   | { kind: 'error'; message: string };
 
 export const NATIVE_RENDER_ROUTE = '/api/preview/render';
+/** The inline, supersede-aware PDF route the preview pane uses. */
+export const NATIVE_PDF_ROUTE = '/api/preview/pdf';
 export const DIAGNOSTICS_HEADER = 'x-q2-diagnostics';
+export const STATS_HEADER = 'x-q2-stats';
+
+/** The percent-encoded JSON header `name`, parsed; undefined when absent or malformed (it must never lose the file). */
+function jsonHeader<T>(response: Response, name: string): T | undefined {
+  const raw = response.headers.get(name);
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(decodeURIComponent(raw)) as T;
+  } catch {
+    return undefined;
+  }
+}
 
 /** `filename*=UTF-8''…` wins over `filename="…"`, as in RFC 6266. */
 export function fileNameFromDisposition(header: string | null, fallback: string): string {
@@ -39,13 +64,14 @@ export function fileNameFromDisposition(header: string | null, fallback: string)
   return plain ? plain[1] : fallback;
 }
 
-export async function renderNatively(
+async function post(
+  route: string,
   request: NativeRenderRequest,
-  opts: { signal?: AbortSignal; fetchFn?: typeof fetch; baseUrl?: string } = {},
+  opts: { signal?: AbortSignal; fetchFn?: typeof fetch; baseUrl?: string },
 ): Promise<NativeRenderOutcome> {
   const fetchFn = opts.fetchFn ?? fetch;
   // Same origin as the page by default; `new URL` keeps a subpath deployment working.
-  const url = new URL(NATIVE_RENDER_ROUTE.replace(/^\//, ''), opts.baseUrl ?? document.baseURI).toString();
+  const url = new URL(route.replace(/^\//, ''), opts.baseUrl ?? document.baseURI).toString();
   let response: Response;
   try {
     response = await fetchFn(url, {
@@ -62,22 +88,41 @@ export async function renderNatively(
     const body = (await response.json().catch(() => ({}))) as { error?: string; diagnostics?: NativeDiagnostic[] };
     return { kind: 'failed', error: body.error, diagnostics: body.diagnostics ?? [] };
   }
+  if (response.status === 409) {
+    const text = await response.text().catch(() => '');
+    let body: { superseded?: boolean; busy?: boolean } = {};
+    try {
+      body = JSON.parse(text) as typeof body;
+    } catch {
+      // not the contract's body: fall through to a plain error
+    }
+    if (body.superseded) return { kind: 'superseded' };
+    if (body.busy) return { kind: 'busy' };
+    return { kind: 'error', message: text || 'HTTP 409' };
+  }
   if (!response.ok) {
     return { kind: 'error', message: (await response.text().catch(() => '')) || `HTTP ${response.status}` };
   }
-  const warningsHeader = response.headers.get(DIAGNOSTICS_HEADER);
-  let warnings: NativeDiagnostic[] = [];
-  if (warningsHeader) {
-    try {
-      warnings = JSON.parse(decodeURIComponent(warningsHeader)) as NativeDiagnostic[];
-    } catch {
-      // A malformed header must not lose the download.
-    }
-  }
+  const warnings = jsonHeader<NativeDiagnostic[]>(response, DIAGNOSTICS_HEADER) ?? [];
+  const stats = jsonHeader<{ unexecuted_cells?: number }>(response, STATS_HEADER);
   return {
     kind: 'ok',
     blob: await response.blob(),
-    fileName: fileNameFromDisposition(response.headers.get('content-disposition'), `download.${request.format}`),
+    // The inline PDF route sends no `Content-Disposition`: an empty name makes the caller name the file.
+    fileName: fileNameFromDisposition(response.headers.get('content-disposition'), route === NATIVE_PDF_ROUTE ? '' : `download.${request.format}`),
     warnings,
+    unexecutedCells: stats?.unexecuted_cells ?? 0,
   };
+}
+
+type NativeOptions = { signal?: AbortSignal; fetchFn?: typeof fetch; baseUrl?: string };
+
+/** `POST /api/preview/render`: the file as an attachment (docx, odt, pptx, epub, typst source, typst PDF). */
+export function renderNatively(request: NativeRenderRequest, opts: NativeOptions = {}): Promise<NativeRenderOutcome> {
+  return post(NATIVE_RENDER_ROUTE, request, opts);
+}
+
+/** `POST /api/preview/pdf`: the PDF inline; a newer request for the same path answers this one `superseded`. */
+export function renderPdfNatively(request: NativeRenderRequest, opts: NativeOptions = {}): Promise<NativeRenderOutcome> {
+  return post(NATIVE_PDF_ROUTE, request, opts);
 }

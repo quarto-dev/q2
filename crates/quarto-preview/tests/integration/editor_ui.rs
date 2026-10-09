@@ -123,3 +123,64 @@ async fn editor_ui_serves_editor_index_and_keeps_hub_routes() {
 
     server.abort();
 }
+
+/// The embed holds no pdf.js files (`prune-embed-dist.mjs`); `--ui editor` serves `/pdfjs/...` from the
+/// viewer bundle through `lookup_embedded`'s fallback, and the embed's relative viewer URL
+/// (`./pdfjs/web/viewer.html`, vite `base: './'`) resolves to it from the editor's origin root
+/// (hub-parity Plan 12, task 12.5). Needs a real dist, so it skips on the placeholder embed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn editor_ui_serves_pdfjs_from_the_viewer_bundle() {
+    let project = tempfile::TempDir::with_prefix("q2-preview-editor-pdfjs-proj-").unwrap();
+    std::fs::write(project.path().join("foo.qmd"), "# Hello\n").unwrap();
+    let data = tempfile::TempDir::with_prefix("q2-preview-editor-pdfjs-data-").unwrap();
+
+    let port = pick_free_port();
+    let config = PreviewConfig {
+        host: "127.0.0.1".to_string(),
+        port,
+        project_root: Some(project.path().to_path_buf()),
+        single_file: None,
+        data_dir: data.path().to_path_buf(),
+        spa_dir_override: None,
+        engine_registry: None,
+        engine_policy: Default::default(),
+        resource_html_files: Vec::new(),
+        cache_dir: None,
+        allow_edit: false,
+        share: false,
+        ui: PreviewUi::Editor,
+    };
+    let server = tokio::spawn(async move {
+        let _ = quarto_preview::run(config).await;
+    });
+    wait_for_health(port).await;
+
+    let real_dist =
+        quarto_preview::embedded_editor_index_html().is_some_and(|html| html.contains("assets/"));
+    if !real_dist {
+        eprintln!("skipping: placeholder editor embed (no built dist, so no pdfjs tree to serve)");
+        server.abort();
+        return;
+    }
+
+    // The embed's `mountPdfViewer` base is `./` (`import.meta.env.BASE_URL` under vite `base: './'`), so the
+    // viewer URL it builds resolves against the page's own origin.
+    let page = reqwest::Url::parse(&format!("http://127.0.0.1:{port}/")).unwrap();
+    let viewer_url = page.join("./pdfjs/web/viewer.html").unwrap();
+    assert_eq!(viewer_url.path(), "/pdfjs/web/viewer.html");
+
+    let viewer = reqwest::get(viewer_url).await.expect("GET viewer.html");
+    assert_eq!(viewer.status(), 200);
+    let mjs = reqwest::get(format!("http://127.0.0.1:{port}/pdfjs/build/pdf.mjs"))
+        .await
+        .expect("GET pdf.mjs");
+    assert_eq!(mjs.status(), 200);
+    assert_eq!(
+        mjs.headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("application/javascript")
+    );
+
+    server.abort();
+}

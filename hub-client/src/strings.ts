@@ -96,6 +96,7 @@ export const download = {
     n === 1
       ? 'The executed output of 1 chapter could not be fetched, so that chapter has its code cells as source.'
       : `The executed output of ${n} chapters could not be fetched, so those chapters have their code cells as source.`,
+  serverBusy: 'The preview server is busy with another render. Try again in a moment.',
   cancelled: 'Download cancelled.',
   done: (fileName: string) => `Downloaded ${fileName}.`,
   warnings: (n: number) => (n === 1 ? '1 warning' : `${n} warnings`),

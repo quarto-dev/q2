@@ -179,6 +179,13 @@ export interface StartOptions {
    */
   allowEdit?: boolean;
   /**
+   * Which UI the server serves: `'viewer'` (the default, the preview SPA) or `'editor'` (`--ui editor`, the
+   * hub-client embed). The editor's launch URL is a hash-route share URL that `waitForUrl`'s banner regex already
+   * matches. The `embed-*.spec.ts` specs need a binary built with the real embed (`cargo xtask
+   * build-hub-client-embed` before `cargo build --bin q2`); `isEmbedBuilt` says whether this one has it.
+   */
+  ui?: 'viewer' | 'editor';
+  /**
    * GH #402 / bd-ue80chl0: launch in SINGLE-FILE mode — the spawned
    * command targets `<projectDir>/<targetFile>` (a file path) instead
    * of the project directory, exercising the CLI's single-file branch
@@ -270,6 +277,7 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
       '--no-browser',
       ...(opts.staticMode ? ['--static', '--no-watch'] : ['--data-dir', dataDir]),
       ...(opts.allowEdit ? ['--allow-edit'] : []),
+      ...(opts.ui === 'editor' ? ['--ui', 'editor'] : []),
       // Single-file mode targets one file inside the temp project;
       // project mode targets the directory (the default).
       opts.targetFile ? path.join(projectDir, opts.targetFile) : projectDir,
@@ -345,4 +353,15 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
       ]);
     },
   };
+}
+
+/**
+ * True when the running `q2` embeds the real hub-client editor build rather than `build.rs`'s placeholder: a
+ * real editor's `index.html` references content-hashed files under `assets/`, the placeholder does not. The embed
+ * specs call this (inside `test.skip`) instead of the repo-wide `globalSetup`, because `cargo xtask verify --e2e`
+ * runs every project and would otherwise fail on a build made without the embed.
+ */
+export async function isEmbedBuilt(server: Pick<PreviewServerHandle, 'port'>): Promise<boolean> {
+  const html = await (await fetch(`http://127.0.0.1:${server.port}/`)).text();
+  return html.includes('assets/');
 }

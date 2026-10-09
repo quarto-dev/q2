@@ -26,8 +26,9 @@ describe('selectMenuFormats', () => {
     expect(selectMenuFormats([row('docx', { available: false }), row('typst-pdf', { hidden: true })], false, all)).toEqual([]);
   });
 
-  it('hides typst and pdf in the embed (default list too): its native render compiles typst to PDF, and pdf is browser-only', () => {
-    expect(selectMenuFormats(TABLE, true).map((f) => f.key)).toEqual(['docx', 'pptx', 'epub']);
+  it('offers the embed every row the native route accepts (available, not hidden): odt, typst and PDF join', () => {
+    expect(selectMenuFormats(TABLE, true).map((f) => f.key)).toEqual(['docx', 'odt', 'pptx', 'epub', 'typst', 'typst-pdf']);
+    expect(selectMenuFormats([row('docx', { available: false }), row('typst-pdf', { hidden: true })], true)).toEqual([]);
   });
 
   it('carries the extension and mime the download uses', () => {

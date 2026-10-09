@@ -332,7 +332,7 @@ export class DownloadController {
 
     this.set({ phase: 'working', clickId: id, format, stage: this.deps.native ? 'native' : 'preparing' });
     try {
-      if (this.deps.native) await this.runNative(options, id, own, current, fail);
+      if (this.deps.native) await this.runNative(options, run, own, current, fail);
       else await this.runWasm(options, run, own, current, fail);
     } catch (e) {
       // The Rust request build and the worker hand-off run on this thread, so a memory
@@ -346,21 +346,44 @@ export class DownloadController {
   }
 
   private async runNative(
-    { path, format, content }: StartOptions,
-    id: number,
+    { path, format, content, scope }: StartOptions,
+    run: Run,
     own: AbortController,
     current: () => boolean,
     fail: (state: FailureState, diagnostics: Diagnostic[], notices?: string[], message?: string) => void,
   ): Promise<void> {
-    const outcome = await this.deps.native!({ path, format: format.key, content: content ?? '' }, { signal: own.signal });
+    const id = run.seq;
+    const outcome = await this.deps.native!({ path, format: format.key, content: content ?? '', ...(scope ? { scope } : {}) }, { signal: own.signal });
     if (!current()) return;
+    // A newer request for the same document replaced this one: its result is the newer run's business.
+    if (outcome.kind === 'superseded') return;
+    if (outcome.kind === 'busy') return fail('native-error', [], [], download.serverBusy);
     if (outcome.kind === 'failed') return fail('native-failed', asDiagnostics(outcome.diagnostics as unknown[]), [], outcome.error);
     if (outcome.kind === 'error') return fail('native-error', [], [], outcome.message);
     const warnings = asDiagnostics(outcome.warnings as unknown[]);
     if (warnings.some(isError)) return fail('native-failed', warnings);
     const fileName = outcome.fileName || sanitizeDownloadName(path, format.extension);
+    const unexecutedCells = outcome.unexecutedCells;
+    const done: DownloadStatus = { phase: 'done', clickId: id, format, fileName, warnings, notices: [], unexecutedCells };
+    if (format.key === TYPST_PDF_KEY && this.deps.onPdf) {
+      const pdf = new Uint8Array(await outcome.blob.arrayBuffer());
+      if (!current()) return;
+      if (this.deps.overlap === true) {
+        // The preview: the same ordering rule as the wasm chain. The viewer gets each PDF at most once, and
+        // only the newest run settles the status. Nothing is saved.
+        if (!this.mayShow(run)) return;
+        this.deps.trace?.({ type: 'shown', seq: id });
+        this.deps.onPdf(pdf, { path, fileName, seq: id });
+        if (id === this.latestStarted) this.set(done);
+        return;
+      }
+      this.deps.save(outcome.blob, fileName);
+      this.deps.onPdf(pdf, { path, fileName, seq: id });
+      this.set(done);
+      return;
+    }
     this.deps.save(outcome.blob, fileName);
-    this.set({ phase: 'done', clickId: id, format, fileName, warnings, notices: [], unexecutedCells: 0 });
+    this.set(done);
   }
 
   private async runWasm(

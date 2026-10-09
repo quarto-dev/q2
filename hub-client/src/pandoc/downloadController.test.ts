@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PandocRequest, ShareTree } from '@quarto/pandoc-host';
 import { DownloadController, PROGRESS_THROTTLE_MS, type DownloadDeps, type DownloadFormat, type RequestEnvelope } from './downloadController';
 import type { RunOptions, RunOutcome } from './pandocRunner';
+import type { NativeRenderOutcome } from './nativeRender';
 import type { TypstJob, TypstRunOutcome } from '../typst/typstRunner';
 
 const DOCX: DownloadFormat = { key: 'docx', label: 'Word', extension: 'docx', mime: 'application/docx' };
@@ -232,13 +233,70 @@ describe('DownloadController', () => {
   });
 
   it('uses the native executor when one is given, with the editor text', async () => {
-    const native = vi.fn(async () => ({ kind: 'ok' as const, blob: new Blob(['x']), fileName: 'server.docx', warnings: [{ kind: 'warning', title: 'w' }] }));
+    const native = vi.fn(async () => ({ kind: 'ok' as const, blob: new Blob(['x']), fileName: 'server.docx', warnings: [{ kind: 'warning', title: 'w' }], unexecutedCells: 2 }));
     const save = vi.fn();
     const controller = new DownloadController({ native, save });
     await controller.start({ path: 'a.qmd', format: DOCX, content: '# hi' });
     expect(native).toHaveBeenCalledWith({ path: 'a.qmd', format: 'docx', content: '# hi' }, expect.anything());
     expect(save).toHaveBeenCalledWith(expect.any(Blob), 'server.docx');
-    expect(controller.getSnapshot()).toMatchObject({ phase: 'done' });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'done', unexecutedCells: 2 });
+  });
+
+  it('native forwards the click scope, and a superseded or busy outcome is dropped or shown respectively', async () => {
+    const save = vi.fn();
+    const native = vi.fn(async (): Promise<NativeRenderOutcome> => ({ kind: 'superseded' }));
+    const controller = new DownloadController({ native, save });
+    await controller.start({ path: 'a.qmd', format: DOCX, content: '', scope: 'chapter' });
+    expect(native).toHaveBeenCalledWith({ path: 'a.qmd', format: 'docx', content: '', scope: 'chapter' }, expect.anything());
+    expect(save).not.toHaveBeenCalled();
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'working' });
+    native.mockResolvedValueOnce({ kind: 'busy' });
+    await controller.start({ path: 'a.qmd', format: DOCX, content: '' });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', state: 'native-error' });
+  });
+
+  it('native pdf controller hands bytes to onPdf and does not save', async () => {
+    const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+    const save = vi.fn();
+    const onPdf = vi.fn();
+    const native = vi.fn(async (): Promise<NativeRenderOutcome> => ({ kind: 'ok', blob: new Blob([new Uint8Array([37, 80])]), fileName: '', warnings: [], unexecutedCells: 1 }));
+    const controller = new DownloadController({ native, save, onPdf, overlap: true });
+    await controller.start({ path: 'a.qmd', format: PDF, content: 'x', scope: 'chapter' });
+    expect(save).not.toHaveBeenCalled();
+    expect(onPdf).toHaveBeenCalledTimes(1);
+    expect(Array.from(onPdf.mock.calls[0][0] as Uint8Array)).toEqual([37, 80]);
+    expect(onPdf.mock.calls[0][1]).toMatchObject({ path: 'a.qmd', fileName: 'a.pdf', seq: 1 });
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'done', unexecutedCells: 1 });
+  });
+
+  it('native pdf overlap: an older run that finishes after a newer one was shown is dropped', async () => {
+    const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+    const first = deferred<NativeRenderOutcome>();
+    const ok = (b: number): NativeRenderOutcome => ({ kind: 'ok', blob: new Blob([new Uint8Array([b])]), fileName: '', warnings: [], unexecutedCells: 0 });
+    const native = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce(ok(2));
+    const onPdf = vi.fn();
+    const controller = new DownloadController({ native, save: vi.fn(), onPdf, overlap: true });
+    const older = controller.start({ path: 'a.qmd', format: PDF, content: 'v1' });
+    await controller.start({ path: 'a.qmd', format: PDF, content: 'v2' });
+    first.resolve(ok(1));
+    await older;
+    expect(onPdf).toHaveBeenCalledTimes(1);
+    expect(Array.from(onPdf.mock.calls[0][0] as Uint8Array)).toEqual([2]);
+  });
+
+  it('an aborted native run rejects through renderNatively and ends silently', async () => {
+    const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+    const native = vi.fn(async (_r: unknown, opts: { signal: AbortSignal }): Promise<NativeRenderOutcome> => {
+      await new Promise((_, reject) => opts.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+      return { kind: 'superseded' };
+    });
+    const onPdf = vi.fn();
+    const controller = new DownloadController({ native, save: vi.fn(), onPdf, overlap: true });
+    const run = controller.start({ path: 'a.qmd', format: PDF, content: 'v1' });
+    controller.cancel();
+    await run;
+    expect(onPdf).not.toHaveBeenCalled();
+    expect(controller.getSnapshot()).not.toMatchObject({ phase: 'failed' });
   });
 
   it('native 422 shows the diagnostics and downloads nothing', async () => {

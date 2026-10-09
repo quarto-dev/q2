@@ -20,7 +20,7 @@ import {
 import type { ShareTree } from '@quarto/pandoc-host';
 import { DownloadController, type DownloadDeps, type DownloadFormat, type PdfInfo, type TraceEvent } from './downloadController';
 import { pandocWasmEnabled, isPreviewEmbed } from './featureFlag';
-import { renderNatively } from './nativeRender';
+import { renderNatively, renderPdfNatively, type NativeRenderRequest, type NativeRenderOutcome } from './nativeRender';
 import { attributionJsonFor } from './downloadAttribution';
 import { fetchChapterCaptures } from './captureFetch';
 import { getPandoc, getPreviewPandocRunner } from './pandocService';
@@ -38,8 +38,12 @@ import { TYPST_PDF_KEY } from './formatKeys';
  */
 export const MENU_FORMATS: readonly string[] = ['docx', 'odt', 'pptx', 'epub', 'typst', TYPST_PDF_KEY];
 
-/** What the preview server's `POST /api/preview/render` accepts (H4b); `pdf` is browser-only (H8). */
-const NATIVE_FORMATS: readonly string[] = ['docx', 'pptx', 'epub'];
+/**
+ * What the preview server's `POST /api/preview/render` accepts: the rows of the Rust table that are available and
+ * not hidden (docx, odt, pptx, epub, typst, typst-pdf; `render_download.rs`). The rule is the route's own, so the
+ * menu follows the table and nothing is repeated here (E7).
+ */
+const nativeSupported = (f: PandocFormatInfo): boolean => f.available && !f.hidden;
 
 /** "Download as" is offered at all: pandoc.wasm is shipped, or the embed has the native route. */
 export function downloadAvailable(): boolean {
@@ -50,12 +54,11 @@ const toFormat = (f: PandocFormatInfo): DownloadFormat => ({ key: f.key, label: 
 
 /**
  * The menu entries from the Rust table's rows, in its order: available, not hidden, in
- * `allowed`; and in the embed only what the native route accepts (typst's native render
- * compiles to PDF, so its `.typ`-only download is not offered there).
+ * `allowed`; and in the embed only what the native route accepts.
  */
 export function selectMenuFormats(rows: PandocFormatInfo[], embed: boolean, allowed: readonly string[] = MENU_FORMATS): DownloadFormat[] {
   return rows
-    .filter((f) => f.available && !f.hidden && allowed.includes(f.key) && (!embed || NATIVE_FORMATS.includes(f.key)))
+    .filter((f) => f.available && !f.hidden && allowed.includes(f.key) && (!embed || nativeSupported(f)))
     .map(toFormat);
 }
 
@@ -161,9 +164,9 @@ function wasmDeps(scope: 'book' | 'chapter' | undefined, runners: ChainRunners =
   };
 }
 
-/** A `pdf` document gets the viewer when the browser chain is shipped (never in the native embed). */
+/** A `pdf` document gets the viewer when the browser chain is shipped, or in the embed through the native PDF route. */
 export function pdfPreviewAvailable(): boolean {
-  return pandocWasmEnabled() && !isPreviewEmbed();
+  return pandocWasmEnabled() || isPreviewEmbed();
 }
 
 let previewTrace: ((event: TraceEvent) => void) | undefined;
@@ -189,12 +192,38 @@ export function createPdfPreviewController(
   return new DownloadController({ ...wasmDeps('chapter', runners), save: () => {}, onPdf, overlap: options.warm === true, pool: warmRunner, trace: (e) => previewTrace?.(e) });
 }
 
+/** The embed's executor: the authorship of a Word document's comments and tracked changes goes with the request (E7). */
+const nativeWithAttribution =
+  (render: typeof renderNatively) =>
+  async (request: NativeRenderRequest, opts: { signal: AbortSignal }): Promise<NativeRenderOutcome> => {
+    const attributionJson = await attributionJsonFor(request.path, request.format, opts.signal);
+    return render(attributionJson ? { ...request, attributionJson } : request, opts);
+  };
+
+/**
+ * The embed's PDF preview controller: the same controller and ordering rules as `createPdfPreviewController`, with
+ * the supersede-aware native route instead of the browser chain. It saves nothing and hands each PDF to `onPdf`.
+ */
+export function createNativePdfPreviewController(onPdf: (pdf: Uint8Array, info: PdfInfo) => void): DownloadController {
+  return new DownloadController({
+    native: nativeWithAttribution(renderPdfNatively),
+    save: () => {},
+    onPdf,
+    overlap: true,
+    trace: (e) => previewTrace?.(e),
+  });
+}
+
 let controller: DownloadController | undefined;
 
 export function getDownloadController(): DownloadController {
   if (!controller) {
     controller = isPreviewEmbed()
-      ? new DownloadController({ native: (request, opts) => renderNatively(request, opts), save: saveBlob })
+      ? new DownloadController({
+          native: nativeWithAttribution(renderNatively),
+          save: saveBlob,
+          onPdf: (pdf, info) => pdfListeners.forEach((l) => l(pdf, info)),
+        })
       : new DownloadController({
           // No default scope: the menu sends one explicitly for the formats that consolidate a book
           // ('book' for "Download book as", 'chapter' for the rest), and none for docx, odt, pptx, html.

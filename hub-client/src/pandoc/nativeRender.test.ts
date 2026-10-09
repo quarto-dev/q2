@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileNameFromDisposition, renderNatively } from './nativeRender';
+import { fileNameFromDisposition, renderNatively, renderPdfNatively } from './nativeRender';
 
 const BASE = 'http://127.0.0.1:8080/app/';
 const req = { path: 'doc.qmd', format: 'docx', content: 'hi' };
@@ -65,6 +65,49 @@ describe('renderNatively', () => {
     const { fn } = fakeFetch(new Response('x', { status: 200, headers: { 'x-q2-diagnostics': '%E0%A4%A' } }));
     const out = await renderNatively(req, { fetchFn: fn, baseUrl: BASE });
     expect(out.kind === 'ok' && out.warnings).toEqual([]);
+  });
+});
+
+describe('renderNatively contract', () => {
+  it('sends scope and attributionJson and reads the unexecuted-cells stat', async () => {
+    const { fn, calls } = fakeFetch(
+      new Response('x', { status: 200, headers: { 'x-q2-stats': encodeURIComponent(JSON.stringify({ unexecuted_cells: 3 })) } }),
+    );
+    const request = { ...req, scope: 'chapter' as const, attributionJson: '{"a":1}' };
+    const out = await renderNatively(request, { fetchFn: fn, baseUrl: BASE });
+    expect(JSON.parse(calls[0].init.body as string)).toEqual(request);
+    expect(out.kind === 'ok' && out.unexecutedCells).toBe(3);
+  });
+
+  it('a malformed or missing stats header counts no unexecuted cells', async () => {
+    const bad = fakeFetch(new Response('x', { status: 200, headers: { 'x-q2-stats': '%E0%A4%A' } }));
+    const out = await renderNatively(req, { fetchFn: bad.fn, baseUrl: BASE });
+    expect(out.kind === 'ok' && out.unexecutedCells).toBe(0);
+    const none = await renderNatively(req, { fetchFn: fakeFetch(new Response('x')).fn, baseUrl: BASE });
+    expect(none.kind === 'ok' && none.unexecutedCells).toBe(0);
+  });
+
+  it('discriminates a 409 by its body: superseded, busy, anything else is an error', async () => {
+    const outcome = (body: string) => renderNatively(req, { fetchFn: fakeFetch(new Response(body, { status: 409 })).fn, baseUrl: BASE });
+    expect(await outcome('{"superseded":true}')).toEqual({ kind: 'superseded' });
+    expect(await outcome('{"busy":true}')).toEqual({ kind: 'busy' });
+    expect(await outcome('conflict')).toEqual({ kind: 'error', message: 'conflict' });
+  });
+});
+
+describe('renderPdfNatively', () => {
+  it('posts to the inline pdf route and leaves the file name empty when the server names none', async () => {
+    const { fn, calls } = fakeFetch(new Response(new Uint8Array([37, 80]), { status: 200 }));
+    const out = await renderPdfNatively({ ...req, format: 'typst-pdf', scope: 'chapter' }, { fetchFn: fn, baseUrl: BASE });
+    expect(calls[0].url).toBe('http://127.0.0.1:8080/app/api/preview/pdf');
+    expect(out.kind === 'ok' && out.fileName).toBe('');
+  });
+
+  it('rethrows when the caller aborted', async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const { fn } = fakeFetch(new DOMException('aborted', 'AbortError'));
+    await expect(renderPdfNatively(req, { fetchFn: fn, baseUrl: BASE, signal: ac.signal })).rejects.toThrow();
   });
 });
 

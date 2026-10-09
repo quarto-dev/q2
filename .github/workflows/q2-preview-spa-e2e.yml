@@ -27,6 +27,8 @@ on:
       - 'ts-packages/preview-runtime/**'
       - 'ts-packages/preview-renderer/**'
       - 'Cargo.lock'
+      - 'hub-client/src/pandoc/**'
+      - 'hub-client/src/components/render/**'
 
 # Pins copied from test-suite.yml (keep in step with it).
 env:
@@ -46,7 +48,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox]
+        # `project` is the Playwright project; `embed` is Chromium driving `q2 preview --ui editor`.
+        include:
+          - project: chromium
+            browser: chromium
+          - project: firefox
+            browser: firefox
+          - project: embed
+            browser: chromium
     continue-on-error: true
 
     steps:
@@ -108,6 +117,13 @@ jobs:
         run: npm run build
         working-directory: q2-preview-spa
 
+      # The `embed` project needs the hub-client editor embedded in the binary: build it after the SPA
+      # (the embed build dedupes its files against the viewer dist) and before `cargo build`, or build.rs
+      # embeds a placeholder and the embed specs skip. About 4 GB of heap; it re-runs `build:wasm`.
+      - name: Build the hub-client preview embed
+        if: matrix.project == 'embed'
+        run: cargo xtask build-hub-client-embed
+
       # globalSetup requires the debug binary at target/debug/q2.
       - name: Build q2
         run: cargo build --bin q2
@@ -129,14 +145,14 @@ jobs:
         working-directory: q2-preview-spa
 
       - name: Run E2E tests
-        run: npx playwright test --project=${{ matrix.browser }}
+        run: npx playwright test --project=${{ matrix.project }}
         working-directory: q2-preview-spa
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
-          name: q2-preview-spa-results-${{ matrix.browser }}
+          name: q2-preview-spa-results-${{ matrix.project }}
           path: |
             q2-preview-spa/test-results/
             q2-preview-spa/playwright-report/

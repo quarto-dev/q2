@@ -29,15 +29,25 @@ export default defineConfig({
   },
   projects: [
     {
+      // The `--ui editor` embed specs have their own project below (they need a binary built with the
+      // hub-client embed, which the viewer-only build does not have).
       name: 'chromium',
+      testIgnore: /embed-.*\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       // Whole suite on Firefox. The ws-queue spec is excluded: it has its
       // own project below, with the open-timeout pref it needs.
       name: 'firefox',
-      testIgnore: /firefox-ws-queue\.spec\.ts/,
+      testIgnore: [/firefox-ws-queue\.spec\.ts/, /embed-.*\.spec\.ts/],
       use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      // hub-parity Plan 12: `q2 preview --ui editor` (the hub-client embed) driven in Chromium. The specs skip
+      // themselves when the binary holds the build.rs placeholder instead of the real embed.
+      name: 'embed',
+      testMatch: /embed-.*\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       // bd-jit6pdwq Phase 4: Firefox-only WS handshake-queue

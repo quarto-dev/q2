@@ -26,6 +26,43 @@ second without rebuilding the page, so JavaScript state is preserved
 across edits. See the `--help` text for the flags that control the
 port, the browser, and live sharing.
 
+## The editor UI
+
+``` {.bash filename="Terminal"}
+q2 preview --ui editor    # the quarto-hub editor, served by q2
+```
+
+`--ui editor` serves the same editor as quarto-hub: a source editor
+next to the preview, with a **Download as** menu and an **Import**
+button. Everything the browser version of quarto-hub does in the
+browser, the editor UI asks `q2` to do with the pandoc and typst on
+your machine:
+
+- **Download as** produces Word (`.docx`), OpenDocument (`.odt`),
+  PowerPoint (`.pptx`), EPUB, Typst source (`.typ`) and PDF. The file
+  is rendered from what is in the editor, saved or not. Code-cell
+  output is included, Word comments and tracked changes carry the
+  author's name, and a notice says how many code cells were not
+  executed.
+- **Typst documents** (`format: typst` or `format: pdf`) show the PDF
+  in the preview pane and re-render it as you type. A render that
+  fails keeps the last good PDF on screen under an error banner.
+- **Import** reads docx, odt, rtf, epub and pptx files into a new
+  document.
+
+These need `pandoc` on your `PATH`, and `typst` for Typst and PDF
+output. When one is missing, the preview pane or the download says so
+(`Q-20-1`, `Q-20-2`, `Q-21-1`) rather than offering nothing.
+
+The PDF you get here and the PDF quarto-hub makes in the browser are
+both correct but not byte-for-byte identical. quarto-hub compiles with
+a pinned Typst and a bundled font set; `q2 preview` uses the `typst`
+installed on your machine, your system fonts and real Typst packages.
+Line breaks and font fallbacks can differ between the two.
+
+The typst source download is the bare `.typ` file; images are not
+bundled with it.
+
 ## Static preview
 
 ``` {.bash filename="Terminal"}

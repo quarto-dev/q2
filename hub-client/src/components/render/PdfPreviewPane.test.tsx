@@ -2,12 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 
-const starts: { path: string; projectKey?: string }[] = [];
+const starts: { path: string; projectKey?: string; content?: string; scope?: string }[] = [];
 let onPdf: (pdf: Uint8Array, info: { path: string; fileName: string; seq: number }) => void = () => {};
 const shown: { key: string }[] = [];
 /** When set, the viewer rejects the next show with this message (it keeps the previous document). */
 let showError: string | null = null;
 let warmFlag = true;
+let embedFlag = false;
+let nativeCreated = 0;
 const controllerOptions: { warm?: boolean }[] = [];
 const lifecycle = { cancel: vi.fn(), acquire: vi.fn(), release: vi.fn() };
 let snapshot: unknown = { phase: 'idle' };
@@ -16,20 +18,30 @@ const FORMAT = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'applic
 
 vi.mock('../../pandoc/downloadService', () => ({
   formatByKey: () => FORMAT,
+  createNativePdfPreviewController: (cb: typeof onPdf) => {
+    nativeCreated++;
+    return fakeController(cb);
+  },
   createPdfPreviewController: (cb: typeof onPdf, options: { warm?: boolean } = {}) => {
-    onPdf = cb;
     controllerOptions.push(options);
+    return fakeController(cb);
+  },
+}));
+function fakeController(cb: typeof onPdf) {
+  onPdf = cb;
+  {
     return {
-      start: async (o: { path: string; projectKey?: string }) => void starts.push({ path: o.path, projectKey: o.projectKey }),
+      start: async (o: { path: string; projectKey?: string; content?: string; scope?: string }) =>
+        void starts.push({ path: o.path, projectKey: o.projectKey, content: o.content, scope: o.scope }),
       cancel: lifecycle.cancel,
       acquire: lifecycle.acquire,
       release: lifecycle.release,
       getSnapshot: () => snapshot,
       subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)),
     };
-  },
-}));
-vi.mock('../../pandoc/featureFlag', () => ({ pandocWarmEnabled: () => warmFlag }));
+  }
+}
+vi.mock('../../pandoc/featureFlag', () => ({ pandocWarmEnabled: () => warmFlag, isPreviewEmbed: () => embedFlag }));
 vi.mock('../../pandoc/pdfViewer', () => ({
   mountPdfViewer: () => ({
     show: async (_b: Uint8Array, o: { key: string }) => {
@@ -52,6 +64,8 @@ beforeEach(() => {
   shown.length = 0;
   showError = null;
   warmFlag = true;
+  embedFlag = false;
+  nativeCreated = 0;
   controllerOptions.length = 0;
   lifecycle.cancel.mockClear();
   lifecycle.acquire.mockClear();
@@ -62,6 +76,19 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+describe('PdfPreviewPane in the preview embed', () => {
+  it('uses the native controller and passes the editor text and chapter scope', async () => {
+    embedFlag = true;
+    render(<PdfPreviewPane path="/p/doc.qmd" content="# typed" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(nativeCreated).toBe(1);
+    expect(controllerOptions).toEqual([]);
+    expect(starts).toEqual([{ path: '/p/doc.qmd', projectKey: undefined, content: '# typed', scope: 'chapter' }]);
+  });
 });
 
 describe('PdfPreviewPane', () => {
