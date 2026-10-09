@@ -1150,15 +1150,23 @@ pub(crate) fn prose_inlines(value: &ConfigValue) -> Option<ProseInlines> {
                 inlines: p.content.clone(),
                 flattened: false,
             }),
-            _ => Some(ProseInlines {
-                inlines: crate::editorial_marks::blocks_to_inlines_with_sep(
-                    blocks,
-                    &[Inline::Space(Space {
-                        source_info: SourceInfo::generated(By::unknown()),
-                    })],
-                ),
-                flattened: true,
-            }),
+            _ => {
+                let mut runs = Vec::new();
+                prose_runs(blocks, &mut runs);
+                let mut inlines = Inlines::new();
+                for (i, run) in runs.into_iter().enumerate() {
+                    if i > 0 {
+                        inlines.push(Inline::Space(Space {
+                            source_info: SourceInfo::generated(By::unknown()),
+                        }));
+                    }
+                    inlines.extend(run);
+                }
+                Some(ProseInlines {
+                    inlines,
+                    flattened: true,
+                })
+            }
         },
         _ => value.as_plain_text().map(|s| ProseInlines {
             inlines: quarto_pandoc_types::inline::split_string_to_inlines(&s),
@@ -1177,6 +1185,41 @@ pub(crate) fn text(s: impl AsRef<str>) -> Inlines {
 #[cfg(test)]
 pub(crate) fn plain(inlines: &Option<Inlines>) -> Option<String> {
     inlines.as_deref().map(inlines_to_plain_text)
+}
+
+/// The paragraph-like runs of `blocks`, in order: one per paragraph,
+/// heading or line block, descending into lists, quotes and divs so
+/// that each list item reads as its own run. Anything else contributes
+/// its `pandoc.utils.blocks_to_inlines` text as one run. Joined with
+/// spaces by [`prose_inlines`]; `blocks_to_inlines` itself would glue
+/// list items together with no separator.
+fn prose_runs(blocks: &[Block], runs: &mut Vec<Inlines>) {
+    for block in blocks {
+        match block {
+            Block::Paragraph(p) => runs.push(p.content.clone()),
+            Block::Plain(p) => runs.push(p.content.clone()),
+            Block::Header(h) => runs.push(h.content.clone()),
+            Block::BulletList(l) => l.content.iter().for_each(|item| prose_runs(item, runs)),
+            Block::OrderedList(l) => l.content.iter().for_each(|item| prose_runs(item, runs)),
+            Block::BlockQuote(q) => prose_runs(&q.content, runs),
+            Block::Div(d) => prose_runs(&d.content, runs),
+            Block::DefinitionList(dl) => {
+                for (term, defs) in &dl.content {
+                    runs.push(term.clone());
+                    defs.iter().for_each(|def| prose_runs(def, runs));
+                }
+            }
+            other => {
+                let run = crate::editorial_marks::blocks_to_inlines_with_sep(
+                    std::slice::from_ref(other),
+                    &[],
+                );
+                if !run.is_empty() {
+                    runs.push(run);
+                }
+            }
+        }
+    }
 }
 
 /// Result of [`prose_inlines`].
@@ -2473,6 +2516,80 @@ Body.
         let ast = parse_qmd(qmd);
         let p = DocumentProfile::extract(&ast, Path::new("tm.qmd"), "tm.html", "html");
         assert_eq!(p.listing_item.reading_time_minutes, None);
+    }
+
+    // bd-8a9eum6p: prose keeps its markup.
+    #[test]
+    fn profile_keeps_prose_markup_as_inlines() {
+        use quarto_pandoc_types::inline::Inline;
+        let ast = parse_qmd(
+            "---\ntitle: 'Fix `_scope` and *emph*'\nsubtitle: 'Sub \\_x'\ndescription: '**Strong** desc'\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("a.qmd"), "a.html", "html");
+        let title = profile.title.as_deref().expect("title");
+        assert!(
+            title
+                .iter()
+                .any(|i| matches!(i, Inline::Code(c) if c.text == "_scope")),
+            "code span kept: {title:?}"
+        );
+        assert!(
+            title.iter().any(|i| matches!(i, Inline::Emph(_))),
+            "emphasis kept: {title:?}"
+        );
+        assert_eq!(profile.title_text().as_deref(), Some("Fix _scope and emph"));
+        assert_eq!(profile.subtitle_text().as_deref(), Some("Sub _x"));
+        let description = profile.description.as_deref().expect("description");
+        assert!(matches!(description[0], Inline::Strong(_)), "{description:?}");
+        assert!(profile.flattened_prose.is_empty());
+    }
+
+    // D5: a multi-block value used to project to `None` and vanish.
+    #[test]
+    fn profile_flattens_multi_block_description_and_records_it() {
+        let ast = parse_qmd(
+            "---\ntitle: T\ndescription: |\n  First *para*.\n\n  Second para.\nlisting-item:\n  description: |\n    - one\n    - two\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("a.qmd"), "a.html", "html");
+        assert_eq!(
+            profile.description_text().as_deref(),
+            Some("First para. Second para.")
+        );
+        assert_eq!(profile.flattened_prose, vec!["description".to_string()]);
+        let li = &profile.listing_item;
+        assert_eq!(plain(&li.description).as_deref(), Some("one two"));
+        assert_eq!(li.flattened_prose, vec!["description".to_string()]);
+    }
+
+    #[test]
+    fn single_paragraph_block_scalar_is_not_flattened() {
+        let ast = parse_qmd("---\ntitle: T\ndescription: |\n  Just *one* paragraph.\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("a.qmd"), "a.html", "html");
+        assert_eq!(
+            profile.description_text().as_deref(),
+            Some("Just one paragraph.")
+        );
+        assert!(profile.flattened_prose.is_empty());
+    }
+
+    // A plain string (not parsed as markdown) is literal text: its
+    // markdown-looking characters must stay text, not become markup.
+    #[test]
+    fn prose_inlines_reads_a_plain_string_as_literal_text() {
+        use quarto_pandoc_types::inline::Inline;
+        use quarto_source_map::SourceInfo;
+        let value = ConfigValue::new_string("a *b* _c_", SourceInfo::for_test());
+        let prose = prose_inlines(&value).expect("prose");
+        assert!(!prose.flattened);
+        assert!(
+            prose
+                .inlines
+                .iter()
+                .all(|i| matches!(i, Inline::Str(_) | Inline::Space(_))),
+            "{:?}",
+            prose.inlines
+        );
+        assert_eq!(inlines_to_plain_text(&prose.inlines), "a *b* _c_");
     }
 
     #[test]

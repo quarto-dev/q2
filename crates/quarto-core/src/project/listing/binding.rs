@@ -274,14 +274,26 @@ fn build_item_map(
     // bound as markdown (`prose_markdown`), never as their plain
     // text, because the templates interpolate them into markdown
     // that is parsed again (bd-8a9eum6p).
+    //
+    // Each also has an `-html` twin (`prose_html`) for custom templates
+    // that place it inside a raw HTML block, where markdown would show
+    // as source — the same convention as `image-html`/`category-html`.
     m.insert(
         "title".to_string(),
         TemplateValue::String(prose_markdown(&item.title)),
+    );
+    m.insert(
+        "title-html".to_string(),
+        TemplateValue::String(prose_html(&item.title)),
     );
     if let Some(s) = item.subtitle.as_deref() {
         m.insert(
             "subtitle".to_string(),
             TemplateValue::String(prose_markdown(s)),
+        );
+        m.insert(
+            "subtitle-html".to_string(),
+            TemplateValue::String(prose_html(s)),
         );
     }
     if let Some(s) = item.description.as_deref() {
@@ -302,6 +314,10 @@ fn build_item_map(
         m.insert(
             "description".to_string(),
             TemplateValue::String(prose_markdown(&description)),
+        );
+        m.insert(
+            "description-html".to_string(),
+            TemplateValue::String(prose_html(&description)),
         );
     }
     if let Some(s) = item.author.as_deref() {
@@ -583,6 +599,21 @@ fn prose_markdown(inlines: &[Inline]) -> String {
                 Err(_) => String::new(),
             }
         }
+    }
+}
+
+/// Item prose rendered to HTML, for a custom template that writes it
+/// inside a raw HTML block (`` `<span>$it.title-html$</span>`{=html} ``).
+/// Same preparation as [`prose_markdown`] — links and notes dropped, one
+/// line, so it also fits an inline raw-HTML span — then the HTML inline
+/// writer, as TOC labels are rendered.
+fn prose_html(inlines: &[Inline]) -> String {
+    let inlines = single_line(crate::transforms::strip_links_and_notes(inlines));
+    let mut out = Vec::new();
+    match pampa::writers::html::write_inlines_to(&inlines, &mut out) {
+        // Writing to a Vec cannot fail.
+        Ok(()) => String::from_utf8_lossy(&out).into_owned(),
+        Err(_) => String::new(),
     }
 }
 
@@ -1296,6 +1327,84 @@ mod tests {
         i.date = None;
         let ctx = ctx_for(&l, &[i]);
         assert_eq!(row_of(&ctx), "| [X](foo.qmd){.no-external} |  |");
+    }
+
+    /// Parse `md` as one paragraph and return its inlines.
+    fn parse_inlines(md: &str) -> Inlines {
+        let mut sink = std::io::sink();
+        let (doc, _, diags) =
+            pampa::readers::qmd::read(md.as_bytes(), false, "t.qmd", &mut sink, true, None)
+                .unwrap_or_else(|d| panic!("`{md}` does not parse: {d:?}"));
+        assert!(diags.is_empty(), "`{md}` parses with diagnostics: {diags:?}");
+        match doc.blocks.as_slice() {
+            [quarto_pandoc_types::block::Block::Paragraph(p)] => p.content.clone(),
+            other => panic!("`{md}` is not one paragraph: {other:?}"),
+        }
+    }
+
+    // bd-8a9eum6p: the markdown a listing interpolates must read back
+    // as the same inlines — one line, cleanly parsed, a fixpoint.
+    #[test]
+    fn prose_markdown_round_trips() {
+        for (source, expected) in [
+            ("Fix \\_scope: regression", "Fix \\_scope: regression"),
+            ("Plan `_scope` and *emph*", "Plan `_scope` and *emph*"),
+            ("About `<anonymous>` frames", "About `<anonymous>` frames"),
+            ("A \\<p\\> tag and a \\@ and \\*", "A \\<p> tag and a \\@ and \\*"),
+            ("Pipes `a|b` and c\\|d", "Pipes `a|b` and c\\|d"),
+            ("Math $x_1$ here", "Math $x_1$ here"),
+            // Links unwrap (the title is itself a link); notes go.
+            ("See [the docs](u.html) now", "See the docs now"),
+            ("Noted^[a note] title", "Noted title"),
+            // Line breaks become spaces: one line for headings and cells.
+            ("one\ntwo", "one two"),
+        ] {
+            let md = prose_markdown(&parse_inlines(source));
+            assert_eq!(md, expected, "prose_markdown of `{source}`");
+            assert_eq!(
+                prose_markdown(&parse_inlines(&md)),
+                md,
+                "`{md}` is not a fixpoint"
+            );
+        }
+    }
+
+    #[test]
+    fn prose_has_html_twins_for_raw_html_templates() {
+        let mut it = item("unused");
+        it.title = parse_inlines("Fix `<x>` and *emph* [link](u.html)");
+        it.subtitle = Some(parse_inlines("Sub \\_y"));
+        it.description = Some(parse_inlines("A **b** & c"));
+        let ctx = build_listing_context(&listing(), &[it], "posts", &ConfigValue::default());
+        let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
+            panic!("items not a list");
+        };
+        let TemplateValue::Map(m) = &arr[0] else {
+            panic!("item not a map");
+        };
+        let get = |k: &str| match m.get(k) {
+            Some(TemplateValue::String(s)) => s.clone(),
+            other => panic!("{k}: {other:?}"),
+        };
+        assert_eq!(
+            get("title-html"),
+            "Fix <code>&lt;x&gt;</code> and <em>emph</em> link"
+        );
+        assert_eq!(get("subtitle-html"), "Sub _y");
+        assert_eq!(get("description-html"), "A <strong>b</strong> &amp; c");
+    }
+
+    #[test]
+    fn table_row_keeps_pipe_inside_code_span_unescaped() {
+        let l = table_listing(&["title"]);
+        let mut i = item("unused");
+        i.title = parse_inlines("Pipes `a|b` and c\\|d");
+        i.date = None;
+        let ctx = ctx_for(&l, &[i]);
+        assert_eq!(
+            row_of(&ctx),
+            "| [Pipes `a|b` and c\\|d](foo.qmd){.no-external} |"
+        );
     }
 
     #[test]

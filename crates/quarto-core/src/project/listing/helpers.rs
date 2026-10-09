@@ -444,6 +444,70 @@ fn take_plain_prefix(inlines: &[Inline], budget: &mut usize) -> Inlines {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse_inlines(md: &str) -> Inlines {
+        let mut sink = std::io::sink();
+        let (doc, _, _) =
+            pampa::readers::qmd::read(md.as_bytes(), false, "t.qmd", &mut sink, true, None)
+                .expect("parse");
+        match doc.blocks.as_slice() {
+            [quarto_pandoc_types::block::Block::Paragraph(p)] => p.content.clone(),
+            other => panic!("not one paragraph: {other:?}"),
+        }
+    }
+
+    // D7: on text without markup the inline cut is the string cut.
+    #[test]
+    fn truncate_inlines_matches_string_cut_on_plain_text() {
+        let samples = [
+            "The quick brown fox jumps over the lazy dog.",
+            "Short.",
+            "Alpha, beta: gamma/delta epsilon zeta eta theta",
+            "Supercalifragilisticexpialidocious and more",
+        ];
+        for text in samples {
+            let inlines = quarto_pandoc_types::inline::split_string_to_inlines(text);
+            for max in [0, 1, 5, 10, 17, 20, 30, 200] {
+                assert_eq!(
+                    inlines_to_plain_text(&truncate_inlines_at_space(&inlines, max)),
+                    truncate_text_at_space(text, max),
+                    "`{text}` at {max}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn truncate_inlines_keeps_markup_before_the_cut() {
+        let inlines = parse_inlines("The *quick brown* fox `jumps_over` the lazy dog.");
+        let cut = truncate_inlines_at_space(&inlines, 20);
+        assert_eq!(inlines_to_plain_text(&cut), "The quick brown…");
+        assert!(
+            cut.iter().any(|i| matches!(i, Inline::Emph(e)
+                if inlines_to_plain_text(&e.content) == "quick brown")),
+            "{cut:?}"
+        );
+        // A cut inside a code span (at a space in its text) keeps the
+        // code span, shortened.
+        let inlines = parse_inlines("Run `cargo xtask verify now` today");
+        let cut = truncate_inlines_at_space(&inlines, 20);
+        assert_eq!(inlines_to_plain_text(&cut), "Run cargo xtask…");
+        assert!(
+            cut.iter().any(|i| matches!(i, Inline::Code(c) if c.text == "cargo xtask")),
+            "{cut:?}"
+        );
+    }
+
+    #[test]
+    fn truncate_inlines_never_splits_math() {
+        let inlines = parse_inlines("See $a+b+c+d+e$ here");
+        let cut = truncate_inlines_at_space(&inlines, 10);
+        assert!(
+            !cut.iter().any(|i| matches!(i, Inline::Math(_))),
+            "math that does not fit is dropped whole: {cut:?}"
+        );
+        assert!(inlines_to_plain_text(&cut).ends_with('…'));
+    }
     use crate::project::listing::config::{Listing, ListingType};
     use crate::project::listing::item::{ItemOrigin, ItemTarget, ListingItem};
     use std::collections::BTreeMap;

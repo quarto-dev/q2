@@ -28,7 +28,7 @@ const PROJECT: &str = "project:\n  type: website\n";
 /// One table listing and one default listing over the same items, so
 /// both the pre-rendered table-row path and the `$title$` template path
 /// are exercised.
-const INDEX: &str = "---\ntitle: Home\nlisting:\n  - id: tbl\n    type: table\n    contents: \"p/*.qmd\"\n    fields: [title, subtitle, description]\n  - id: dflt\n    type: default\n    contents: \"p/*.qmd\"\n---\n";
+const INDEX: &str = "---\ntitle: Home\nlisting:\n  - id: tbl\n    type: table\n    contents: \"p/*.qmd\"\n    fields: [title, subtitle, description]\n  - id: dflt\n    type: default\n    contents: \"p/*.qmd\"\n  - id: grd\n    type: grid\n    contents: \"p/*.qmd\"\n---\n";
 
 fn write(path: &std::path::Path, contents: &str) {
     if let Some(parent) = path.parent() {
@@ -97,13 +97,13 @@ fn codes(diags: &[DiagnosticMessage]) -> Vec<String> {
     diags.iter().filter_map(|d| d.code.clone()).collect()
 }
 
-/// Split the host page into the table listing's HTML and the default
-/// listing's HTML.
-fn listing_sections(html: &str) -> (&str, &str) {
+/// Split the host page into the table, default and grid listings' HTML.
+fn listing_sections(html: &str) -> (&str, &str, &str) {
     let tbl = html.find("id=\"tbl\"").expect("table listing present");
     let dflt = html.find("id=\"dflt\"").expect("default listing present");
-    assert!(tbl < dflt, "listings out of order");
-    (&html[tbl..dflt], &html[dflt..])
+    let grd = html.find("id=\"grd\"").expect("grid listing present");
+    assert!(tbl < dflt && dflt < grd, "listings out of order");
+    (&html[tbl..dflt], &html[dflt..grd], &html[grd..])
 }
 
 fn write_markup_items(p: &std::path::Path) {
@@ -142,9 +142,9 @@ fn listing_keeps_title_subtitle_and_description_markup() {
         "listing re-parse must be clean; got {diags:#?}"
     );
     let html = html_for(&summary, "index.html");
-    let (tbl, dflt) = listing_sections(&html);
+    let (tbl, dflt, grd) = listing_sections(&html);
 
-    for (name, section) in [("table", tbl), ("default", dflt)] {
+    for (name, section) in [("table", tbl), ("default", dflt), ("grid", grd)] {
         for needle in [
             "Fix _scope: lexical regression",
             "Plan for <code>_scope</code> and <em>emph</em>",
@@ -163,6 +163,7 @@ fn listing_keeps_title_subtitle_and_description_markup() {
     // Subtitles appear in the table (explicit field) and the default layout.
     assert!(tbl.contains("Sub with <code>code</code>"), "{tbl}");
     assert!(dflt.contains("Sub with <code>code</code>"), "{dflt}");
+    assert!(grd.contains("Sub with <code>code</code>"), "{grd}");
     // Descriptions: checked in the table only. The default layout
     // currently replaces a document's explicit description with the
     // derived first paragraph (bd-listing-description-precedence-x4bh6w3m);
@@ -218,7 +219,7 @@ fn multi_paragraph_description_is_flattened_with_a_warning() {
     });
     let diags = all_diags(&summary);
     let html = html_for(&summary, "index.html");
-    let (tbl, _) = listing_sections(&html);
+    let (tbl, _, _) = listing_sections(&html);
     assert!(
         tbl.contains("First <em>para</em>. Second para."),
         "description flattened into one cell:\n{tbl}"
@@ -228,6 +229,28 @@ fn multi_paragraph_description_is_flattened_with_a_warning() {
         .find(|d| d.code.as_deref() == Some("Q-12-26"))
         .unwrap_or_else(|| panic!("expected Q-12-26; got {diags:#?}"));
     assert_eq!(warning.kind, DiagnosticKind::Warning);
+}
+
+/// D5 for inline records: the record is in the host page's own front
+/// matter, so the warning can point at the value.
+#[test]
+fn multi_paragraph_record_description_warns_with_a_location() {
+    let summary = render(|p| {
+        write(&p.join("_quarto.yml"), PROJECT);
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Home\nlisting:\n  id: recs\n  type: default\n  contents:\n    - title: Card\n      description: |\n        First.\n\n        Second.\n---\n",
+        );
+    });
+    let diags = all_diags(&summary);
+    let warning = diags
+        .iter()
+        .find(|d| d.code.as_deref() == Some("Q-12-26"))
+        .unwrap_or_else(|| panic!("expected Q-12-26; got {diags:#?}"));
+    assert_eq!(warning.kind, DiagnosticKind::Warning);
+    assert!(warning.location.is_some(), "{warning:#?}");
+    let html = html_for(&summary, "index.html");
+    assert!(html.contains("First. Second."), "{html}");
 }
 
 /// D4: a listing whose generated markdown fails to re-parse is an

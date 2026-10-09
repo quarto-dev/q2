@@ -413,6 +413,58 @@ mod tests {
         }
     }
 
+    // bd-8a9eum6p / D5: Q-12-26 follows hydration precedence.
+    #[test]
+    fn flattened_prose_diagnostics_follow_hydration_precedence() {
+        use crate::document_profile::text;
+        let codes = |d: Vec<DiagnosticMessage>| -> Vec<String> {
+            d.into_iter().map(|m| m.title).collect()
+        };
+
+        // Top-level description flattened, nothing shadows it: warn.
+        let mut p = profile_with(ListingItemInfo::default());
+        p.description = Some(text("a b"));
+        p.flattened_prose = vec!["description".to_string()];
+        let d = flattened_prose_diagnostics(&p, None);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].code.as_deref(), Some("Q-12-26"));
+        assert!(d[0].title.contains("`description`"), "{:?}", codes(d));
+
+        // A `listing-item:` description shadows it: no warning.
+        let mut p2 = p.clone();
+        p2.listing_item.description = Some(text("override"));
+        assert!(flattened_prose_diagnostics(&p2, None).is_empty());
+
+        // The `listing-item:` value itself flattened: warn, naming it.
+        p2.listing_item.flattened_prose = vec!["description".to_string()];
+        let d = flattened_prose_diagnostics(&p2, None);
+        assert_eq!(d.len(), 1);
+        assert!(d[0].title.contains("`listing-item.description`"), "{:?}", codes(d));
+
+        // An inline record laid over the document shadows both.
+        let record = ListingItemInfo {
+            description: Some(text("from the record")),
+            ..ListingItemInfo::default()
+        };
+        assert!(flattened_prose_diagnostics(&p2, Some(&record)).is_empty());
+    }
+
+    #[test]
+    fn hydration_stem_fallback_is_literal_text() {
+        let mut p = profile_with(ListingItemInfo::default());
+        p.title = None;
+        p.source_path = PathBuf::from("posts/_draft notes.qmd");
+        let item = hydrate_item(&p);
+        assert_eq!(item.title_text(), "_draft notes");
+        assert!(
+            item.title
+                .iter()
+                .all(|i| matches!(i, quarto_pandoc_types::Inline::Str(_) | quarto_pandoc_types::Inline::Space(_))),
+            "{:?}",
+            item.title
+        );
+    }
+
     // 15. hydration_falls_back_to_top_level_title
     #[test]
     fn hydration_falls_back_to_top_level_title() {
