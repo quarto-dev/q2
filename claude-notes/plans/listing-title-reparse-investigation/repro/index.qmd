@@ -1,0 +1,10 @@
+---
+title: Listing title round-trip repro
+listing:
+  - id: tbl
+    type: table
+    contents: "p/*.qmd"
+  - id: dflt
+    type: default
+    contents: "p/*.qmd"
+---
