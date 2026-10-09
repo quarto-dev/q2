@@ -6,13 +6,20 @@
  * listings feature surface (`bd-izqh`).
  */
 
-//! Pre-checkpoint stage that enriches `meta.listing-item` with
-//! values derived from the post-include AST when the author has
-//! not supplied them. Runs between [`IncludeExpansionStage`] and
-//! [`DocumentProfileStage`]; the latter then reads the enriched
-//! map via `extract_listing_item` (L0).
+//! Pre-checkpoint stage that derives listing values from the
+//! post-include AST. Runs between [`IncludeExpansionStage`] and
+//! [`DocumentProfileStage`]. Two outputs:
 //!
-//! Author values always win — the stage strictly fills holes.
+//! - **Description and image** go to the typed
+//!   [`DocumentAst::derived_listing`] side-channel, always — even when
+//!   the author supplied them. `DocumentProfileStage` moves them into
+//!   `DocumentProfile::derived_listing`. A listing ranks authored
+//!   values (`listing-item.*`, top-level `description` / `abstract` /
+//!   `image`) above them, which it can only do if derived values never
+//!   land in an authored slot (bd-listing-description-precedence-x4bh6w3m).
+//! - **Word count, reading time and date-modified** fill holes in
+//!   `meta.listing-item` (author values always win), which
+//!   `DocumentProfileStage` reads via `extract_listing_item` (L0).
 //!
 //! See `claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md`
 //! for the full design, the §"Decisions log" (D1–D14), and the
@@ -37,6 +44,7 @@ use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::SystemRuntime;
 use yaml_rust2::Yaml;
 
+use crate::document_profile::DerivedListingValues;
 use crate::stage::data::DocumentAst;
 use crate::stage::{PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext};
 use crate::transforms::inlines_to_plain_text;
@@ -45,7 +53,7 @@ use crate::transforms::inlines_to_plain_text;
 /// `estimateReadingTimeMinutes`. Per D3 in the L1 sub-plan.
 const WORDS_PER_MINUTE: u32 = 200;
 
-/// Pipeline stage that auto-fills `meta.listing-item.*`.
+/// Pipeline stage that derives listing values from the body.
 ///
 /// Input kind: [`PipelineDataKind::DocumentAst`].
 /// Output kind: [`PipelineDataKind::DocumentAst`].
@@ -94,17 +102,19 @@ impl PipelineStage for ListingItemInfoStage {
     }
 }
 
-/// Walk the AST and fill any unset standard fields on
+/// Walk the AST: record the derived description and image on the
+/// side-channel, and fill any unset numeric / date fields on
 /// `meta.listing-item`. Author values are never overwritten.
 fn autofill_listing_item(doc: &mut DocumentAst, ctx: &StageContext) {
-    let cand_description = compute_description(&doc.ast.blocks);
-    let cand_image = first_image_src(&doc.ast.blocks);
+    doc.derived_listing = DerivedListingValues {
+        description: compute_description(&doc.ast.blocks),
+        image: first_image_src(&doc.ast.blocks),
+    };
+
     let cand_word_count = word_count(&doc.ast.blocks);
     let cand_reading = cand_word_count.map(|w| div_ceil_u32(w, WORDS_PER_MINUTE));
     let cand_date_modified = mtime_iso(ctx.runtime.as_ref(), &doc.path);
 
-    fill_string_if_absent(&mut doc.ast.meta, "description", cand_description);
-    fill_string_if_absent(&mut doc.ast.meta, "image", cand_image);
     fill_u32_if_absent(&mut doc.ast.meta, "word-count", cand_word_count);
     fill_u32_if_absent(&mut doc.ast.meta, "reading-time-minutes", cand_reading);
     fill_string_if_absent(&mut doc.ast.meta, "date-modified", cand_date_modified);
@@ -340,11 +350,15 @@ fn div_ceil_u32(num: u32, denom: u32) -> u32 {
 }
 
 /// File-modification date as `YYYY-MM-DD` (UTC), via the runtime
-/// trait. Returns `None` if the runtime can't or won't supply an
-/// mtime — currently the WASM Automerge VFS path (see `bd-a3we`).
-/// The stage swallows runtime errors gracefully; nothing here can
-/// panic.
-fn mtime_iso(runtime: &dyn SystemRuntime, path: &Path) -> Option<String> {
+/// trait — the value the stage records as `listing-item.date-modified`.
+/// Returns `None` if the runtime can't or won't supply an mtime —
+/// currently the WASM Automerge VFS path (see `bd-a3we`). The stage
+/// swallows runtime errors gracefully; nothing here can panic.
+///
+/// Also an input of the Pass-1 profile cache key
+/// (`cache_key::Pass1KeyInputs::source_modified_date`), so the two
+/// must stay one function.
+pub(crate) fn mtime_iso(runtime: &dyn SystemRuntime, path: &Path) -> Option<String> {
     let metadata = runtime.path_metadata(path).ok()?;
     let modified = metadata.modified?;
     let dt = time::OffsetDateTime::from(modified);
@@ -545,6 +559,15 @@ mod tests {
         doc.ast.meta
     }
 
+    /// Run the stage's free function and return the side-channel
+    /// values it derived (description, image).
+    fn run_derive(blocks: Vec<Block>, meta: ConfigValue) -> DerivedListingValues {
+        let mut doc = make_doc(blocks, meta);
+        let ctx = make_ctx(default_runtime());
+        autofill_listing_item(&mut doc, &ctx);
+        doc.derived_listing
+    }
+
     /// Default mock with mtime = None (mirrors WASM today).
     fn default_runtime() -> Arc<dyn SystemRuntime> {
         MockRuntime::arc(None)
@@ -646,7 +669,7 @@ mod tests {
         );
 
         let blocks = vec![para(vec![s("Different paragraph text")])];
-        let after = run_autofill(blocks, m, default_runtime());
+        let after = run_autofill(blocks.clone(), m.clone(), default_runtime());
 
         assert_eq!(str_at(&after, "title"), Some("T"));
         assert_eq!(str_at(&after, "subtitle"), Some("S"));
@@ -657,6 +680,15 @@ mod tests {
         assert_eq!(str_at(&after, "date-modified"), Some("2025-02-02"));
         assert_eq!(int_at(&after, "word-count"), Some(99));
         assert_eq!(int_at(&after, "reading-time-minutes"), Some(7));
+
+        // Derivation still runs: the derived values are recorded for
+        // consumers (search) even though the listing will use the
+        // author's.
+        let derived = run_derive(blocks, m);
+        assert_eq!(
+            derived.description.as_deref(),
+            Some("Different paragraph text")
+        );
     }
 
     #[test]
@@ -665,17 +697,15 @@ mod tests {
         // paragraph to confirm no implicit cap.
         let long: String = "a".repeat(300);
         let blocks = vec![para(vec![s(&long)])];
-        let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
-        assert_eq!(str_at(&after, "description").map(|s| s.len()), Some(300));
-        assert_eq!(str_at(&after, "description"), Some(long.as_str()));
+        let derived = run_derive(blocks, ConfigValue::default());
+        assert_eq!(derived.description.as_deref(), Some(long.as_str()));
     }
 
     #[test]
     fn t03_skip_description_when_no_paragraph() {
         // Heading-only document: no paragraph, no description.
         let blocks = vec![heading(1, vec![s("Title")])];
-        let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
-        assert!(!has_li_key(&after, "description"));
+        assert_eq!(run_derive(blocks, ConfigValue::default()).description, None);
     }
 
     #[test]
@@ -683,40 +713,50 @@ mod tests {
         // First paragraph is whitespace-only after plain-text
         // extraction; second is the real one.
         let blocks = vec![para(vec![space(), space()]), para(vec![s("Real content")])];
-        let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
-        assert_eq!(str_at(&after, "description"), Some("Real content"));
+        let derived = run_derive(blocks, ConfigValue::default());
+        assert_eq!(derived.description.as_deref(), Some("Real content"));
     }
 
     #[test]
     fn t05_populate_image_from_first_inline_image() {
         // Paragraph carrying an inline image; first image's target.0
-        // becomes listing-item.image.
+        // becomes the derived image.
         let blocks = vec![para(vec![s("see "), img("figs/cover.png")])];
-        let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
-        assert_eq!(str_at(&after, "image"), Some("figs/cover.png"));
+        let derived = run_derive(blocks, ConfigValue::default());
+        assert_eq!(derived.image.as_deref(), Some("figs/cover.png"));
     }
 
     #[test]
     fn t06_image_walks_into_link() {
         // Image wrapped in a Link still surfaces.
         let blocks = vec![para(vec![link(vec![img("plot.png")], "/post")])];
-        let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
-        assert_eq!(str_at(&after, "image"), Some("plot.png"));
+        let derived = run_derive(blocks, ConfigValue::default());
+        assert_eq!(derived.image.as_deref(), Some("plot.png"));
     }
 
     #[test]
     fn t07_image_skips_empty_targets() {
         // First image has empty target; second has "fig.png".
         let blocks = vec![para(vec![img(""), img("fig.png")])];
-        let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
-        assert_eq!(str_at(&after, "image"), Some("fig.png"));
+        let derived = run_derive(blocks, ConfigValue::default());
+        assert_eq!(derived.image.as_deref(), Some("fig.png"));
     }
 
     #[test]
     fn t08_no_image_leaves_field_unset() {
         // Image-free document.
         let blocks = vec![para(vec![s("just text")])];
+        assert_eq!(run_derive(blocks, ConfigValue::default()).image, None);
+    }
+
+    /// bd-listing-description-precedence-x4bh6w3m: derived values never
+    /// land in the authored `listing-item` slots, so a listing can rank
+    /// a top-level `description:` / `image:` above them.
+    #[test]
+    fn t08b_derived_values_never_written_to_listing_item_meta() {
+        let blocks = vec![para(vec![s("body text "), img("body.png")])];
         let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
+        assert!(!has_li_key(&after, "description"));
         assert!(!has_li_key(&after, "image"));
     }
 
@@ -791,8 +831,11 @@ mod tests {
         // Running the stage twice in a row produces a fixed point.
         let blocks = vec![para(vec![s("hello world")])];
         let m1 = run_autofill(blocks.clone(), ConfigValue::default(), default_runtime());
-        let m2 = run_autofill(blocks, m1.clone(), default_runtime());
-        assert_eq!(str_at(&m1, "description"), str_at(&m2, "description"));
+        let m2 = run_autofill(blocks.clone(), m1.clone(), default_runtime());
+        assert_eq!(
+            run_derive(blocks.clone(), ConfigValue::default()),
+            run_derive(blocks, m1.clone())
+        );
         assert_eq!(int_at(&m1, "word-count"), int_at(&m2, "word-count"));
         assert_eq!(
             int_at(&m1, "reading-time-minutes"),
@@ -823,7 +866,6 @@ mod tests {
         // it exists with auto-fills.
         let blocks = vec![para(vec![s("first paragraph")])];
         let after = run_autofill(blocks, ConfigValue::default(), default_runtime());
-        assert_eq!(str_at(&after, "description"), Some("first paragraph"));
         assert!(has_li_key(&after, "word-count"));
     }
 

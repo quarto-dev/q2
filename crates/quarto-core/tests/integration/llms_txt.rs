@@ -745,7 +745,10 @@ fn llms_listing_page_companion_synthesizes_item_list() {
     assert_contains(&md, "# Blog", "listing page title");
     assert_contains(&md, "Recent posts.", "page prose kept");
     // Synthesized entries: title link (companion href, page-relative),
-    // date + author parenthetical, description when present.
+    // date + author parenthetical, then the listing's description —
+    // authored when there is one, otherwise derived from the first
+    // paragraph, as on the HTML listing
+    // (bd-listing-description-precedence-x4bh6w3m).
     assert_contains(
         &md,
         "* [First](a.md) (2026-01-15, Alice): First desc.\n",
@@ -753,8 +756,8 @@ fn llms_listing_page_companion_synthesizes_item_list() {
     );
     assert_contains(
         &md,
-        "* [Second](b.md) (2026-02-20, Bob)\n",
-        "second item entry, no description",
+        "* [Second](b.md) (2026-02-20, Bob): Second body.\n",
+        "second item entry, derived description",
     );
     let p_first = pos(&md, "[First]", "order");
     let p_second = pos(&md, "[Second]", "order");

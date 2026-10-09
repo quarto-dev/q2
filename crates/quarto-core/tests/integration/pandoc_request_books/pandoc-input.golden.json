@@ -2088,10 +2088,6 @@
     },
     "listing-item": {
       "c": {
-        "description": {
-          "c": "Welcome. See @sec-one and chapter two.",
-          "t": "MetaString"
-        },
         "reading-time-minutes": {
           "c": "1",
           "t": "MetaString"

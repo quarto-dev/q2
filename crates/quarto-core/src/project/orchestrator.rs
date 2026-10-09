@@ -2516,6 +2516,12 @@ async fn pass1_profile_with_cache(
     let source_path = pass1_project_relative_source_path(&project.dir, &doc_info.input);
     let format_id = format.target_format.clone();
 
+    // The modification date `ListingItemInfoStage` records as
+    // `listing_item.date_modified` — computed by the same function, so
+    // a touched file misses the cache instead of serving a stale date.
+    let source_modified_date =
+        crate::stage::stages::listing_item_info::mtime_iso(runtime.as_ref(), &doc_info.input);
+
     // Layered _metadata.yml raw bytes for the cache-key domain.
     // We re-read the raw bytes (not the parsed ConfigValue) because
     // byte-for-byte changes invalidate the key — a comment-only
@@ -2565,6 +2571,7 @@ async fn pass1_profile_with_cache(
         format_id: &format_id,
         source_path: &source_path,
         source_bytes: &source_bytes,
+        source_modified_date: source_modified_date.as_deref(),
         metadata_files: &metadata_files,
         quarto_yml_bytes: &quarto_yml_bytes,
         extension_contributions: &extension_contributions,
@@ -2615,37 +2622,21 @@ async fn pass1_profile_single_file_live(
     doc_info: &DocumentInfo,
     source_bytes: &[u8],
 ) -> Result<crate::document_profile::DocumentProfile> {
-    use crate::pipeline::run_pipeline;
+    use crate::pipeline::{build_head_stages, run_pipeline};
     use crate::render::{BinaryDependencies, RenderContext};
-    use crate::stage::{
-        DocumentProfileStage, IncludeExpansionStage, LinkResolutionStage, MetadataMergeStage,
-        ParseDocumentStage, PipelineStage, SourceConversionStage,
-    };
 
     let source_name = doc_info.input.to_string_lossy().to_string();
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, doc_info, format, &binaries);
 
-    let stages: Vec<Box<dyn PipelineStage>> = vec![
-        // Convert non-QMD files to QMD before parse.  A non-QMD input
-        // without conversion would yield a garbage DocumentProfile /
-        // ProjectIndex entry in Pass 1 (plan1c §1067-1086).
-        Box::new(SourceConversionStage::new()),
-        Box::new(ParseDocumentStage::new()),
-        Box::new(MetadataMergeStage::new()),
-        // Include-expansion threads child content through the
-        // profile so transitive `{{< include … >}}` is visible
-        // (bd-xfwx). Phase 8 sub-phase 8.0d's LinkResolutionStage
-        // also depends on it: the AST walk must see post-include
-        // content so a body link inside an included child counts as
-        // a dependency edge of the parent.
-        Box::new(IncludeExpansionStage::new()),
-        Box::new(DocumentProfileStage::new()),
-        // Pass-1 cross-doc body-link resolution. Reads the
-        // post-include AST, writes `profile.body_link_targets` for
-        // the dependency graph.
-        Box::new(LinkResolutionStage::new()),
-    ];
+    // Exactly the full pipeline's head, so the Pass-1 profile equals
+    // the one the full render computes (see `build_head_stages`).
+    // Source conversion runs first: a non-QMD input without it would
+    // yield a garbage DocumentProfile / ProjectIndex entry
+    // (plan1c §1067-1086); include expansion precedes the checkpoint so
+    // transitive `{{< include … >}}` content and body links are visible
+    // (bd-xfwx, Phase 8.0d).
+    let stages = build_head_stages();
 
     let (output, _diagnostics) =
         run_pipeline(source_bytes, &source_name, &mut ctx, runtime, stages).await?;

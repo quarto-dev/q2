@@ -91,6 +91,7 @@ pub mod language_pipeline;
 pub mod language_resolve;
 pub mod link_rewriting_pipeline;
 pub mod listing_custom_template_diagnostics;
+pub mod listing_description_precedence;
 pub mod listing_glob_resolution;
 pub mod listing_inline_records;
 pub mod listing_pipeline;

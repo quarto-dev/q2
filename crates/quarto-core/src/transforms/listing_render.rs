@@ -703,6 +703,8 @@ mod tests {
 
     fn make_item(title: &str, date: Option<&str>) -> ListingItem {
         ListingItem {
+            description_source: crate::project::listing::FieldSource::Absent,
+            image_source: crate::project::listing::FieldSource::Absent,
             title: crate::document_profile::text(title),
             subtitle: None,
             description: Some(crate::document_profile::text(format!(
@@ -1694,14 +1696,15 @@ mod tests {
         );
     }
 
-    // L7 plan §"Tests" Phase 2 #12. With a static image, the image
-    // envelope must NOT appear in the rendered output (the template's
-    // $if(image-html)$ branch fires, not $else$).
+    // L7 plan §"Tests" Phase 2 #12. With an authored image, the image
+    // envelope must NOT appear in the rendered output: the image is
+    // final (bd-listing-description-precedence-x4bh6w3m).
     #[tokio::test]
-    async fn render_omits_image_placeholder_when_l1_image_set() {
+    async fn render_omits_image_placeholder_when_image_authored() {
         let listing = make_listing(ListingType::Default);
         let mut item = make_item("foo", Some("2026-01-01"));
         item.image = Some("/img/foo.png".to_string());
+        item.image_source = crate::project::listing::FieldSource::Document;
         let items = vec![item];
         let resolved = vec![ResolvedListing { listing, items }];
         let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
@@ -1723,6 +1726,33 @@ mod tests {
         assert!(
             diags.iter().all(|d| d.code.as_deref() != Some("Q-12-10")),
             "expected no Q-12-10 from static-image branch; got: {diags:?}"
+        );
+    }
+
+    // A derived (L1 body) image renders directly *inside* the envelope,
+    // so it shows where L7 does not run (hub client) and L7 can still
+    // upgrade it to the rendered page's preview image.
+    #[tokio::test]
+    async fn render_wraps_derived_image_in_placeholder_envelope() {
+        let listing = make_listing(ListingType::Default);
+        let mut item = make_item("foo", Some("2026-01-01"));
+        item.image = Some("/img/foo.png".to_string());
+        item.image_source = crate::project::listing::FieldSource::Derived;
+        let items = vec![item];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+        let serialized = format!("{:?}", ast);
+        let begin = serialized
+            .find("img-begin(9CEB782EFEE6)")
+            .expect("envelope");
+        let img = serialized.find("/img/foo.png").expect("derived image");
+        let end = serialized
+            .find("img-end(9CEB782EFEE6)")
+            .expect("envelope end");
+        assert!(begin < img && img < end, "{serialized}");
+        assert!(
+            diags.iter().all(|d| d.code.as_deref() != Some("Q-12-10")),
+            "{diags:?}"
         );
     }
 

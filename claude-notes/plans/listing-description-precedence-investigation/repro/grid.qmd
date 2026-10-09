@@ -1,0 +1,6 @@
+---
+title: grid listing
+listing:
+  type: grid
+  contents: posts
+---
