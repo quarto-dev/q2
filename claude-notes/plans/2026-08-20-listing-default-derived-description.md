@@ -9,6 +9,8 @@ braid:
   labels: [listings]
 ---
 
+**Merged 2026-10-09** into `2026-10-09-listing-description-precedence.md`, which now owns this strand's fix; this file is kept as the investigation record.
+
 **Branch:** `main` (investigated in the main checkout; no worktree created)
 
 ## Triage verdict

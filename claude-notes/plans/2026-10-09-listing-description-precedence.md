@@ -1,24 +1,25 @@
 ---
 title: 'Listing ignores an explicit description: and uses the auto-derived first paragraph (bd-listing-description-precedence-x4bh6w3m)'
 date: 2026-10-09
-description: 'Default and grid listings replace authored descriptions with the derived first paragraph because the L7 envelope is unconditional; make derivation a fallback, as in Quarto 1, and design it together with the missing-description sibling.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+description: 'Listings replace authored descriptions with a derived first paragraph and leave undescribed pages empty; give items a description source so derivation is a fallback (listing-item → description → abstract → derived), in every listing type.'
+status: draft  # Design agreed 2026-10-09; awaiting answers to the remaining questions and the go-ahead to implement
 braid:
   strand: bd-listing-description-precedence-x4bh6w3m
+  also: bd-listing-default-no-derived-desc-m0wrr8ty
 ---
 
 **Branch:** `braid/bd-listing-description-precedence-x4bh6w3m-listing-ignores-explicit-description` (main checkout, topic branch, based on `main` @ `ea72d68aa`)
+**Also covers** bd-listing-default-no-derived-desc-m0wrr8ty (merged in 2026-10-09; its investigation is `2026-08-20-listing-default-derived-description.md`).
 **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
 **Ready to design.** The bug reproduces at HEAD, and the cause is the one
 named in the strand's 2026-10-09 comment: the L7 envelope is unconditional.
-One design decision blocks implementation. This strand and
-bd-listing-default-no-derived-desc-m0wrr8ty are two halves of a single
-precedence rule, and fixing either alone either breaks the other or leaves a
-latent regression. The fix needs a way to tell an authored description from
-a derived one.
+This strand and bd-listing-default-no-derived-desc-m0wrr8ty are two halves of
+one precedence rule, so they are now planned together. The provenance
+question that blocked the design is settled (see Decisions). Three smaller
+questions remain (Q-A to Q-C).
 
 ## Issue context
 
@@ -97,61 +98,148 @@ The relevant code, layer by layer:
   missing or empty.
 - **`abstract`** isn't on `DocumentProfile` and isn't in the hydrate chain.
 
-## Proposed phases (draft)
+## Decisions (2026-10-09)
 
-- **Phase 0 — Tests first.** Add an end-to-end orchestrator test over the
-  repro shape that asserts the Q1 column, with LISTING-ITEM-C for the
-  `listing-item` case, across default, grid, and table. It must go through
-  real Pass-1 profiles, not hand-built ones. Add unit tests for the binding's
-  envelope decision.
-- **Phase 1 — Provenance.** Give `ListingItem` (or the profile) a way to
-  tell "author supplied a description" from "derived / absent". Q2 covers
-  the options.
-- **Phase 2 — Fallback-only envelope.** Emit the envelope only when there is
-  no authored description. In the templates, move the envelope out of
-  `$if(description)$` so items with no description still get one (this
-  overlaps the sibling).
-- **Phase 3 — L1 precedence.** Make `fill_string_if_absent` for
-  `description` also respect top-level `description` (and `abstract`, per
-  Q3), so adding L1 to Pass-1 can't reintroduce the bug.
-- **Phase 4 (optional, per Q3/Q4)** — `abstract` fallback; table
-  derivation.
-- **Phase 5 — Verify on the real site.** Re-render the claude-notes plans
-  page with `type: grid` (bd-fvcip3t5) and the Connect-docs repro, and
-  update listing docs if behavior changes.
+1. **One plan for both strands.** This plan also owns
+   bd-listing-default-no-derived-desc-m0wrr8ty (no description for pages
+   without one).
+2. **Provenance is explicit: option (a).** Items carry where their
+   description came from. The derived text is kept even when an authored
+   one wins, because a prospective user wants search, and search should
+   be able to use it. Schema and API changes are fine at this stage.
+3. **`abstract` fallback is in scope.**
+4. **Table listings derive too.** This is in scope.
+5. **`listing-item.description` keeps winning** over top-level
+   `description:`. It exists so Lua filters can set listing metadata
+   programmatically; nobody uses it yet, but it stays.
 
-## Open design questions for the user
+The resulting precedence, for document-origin items:
 
-1. **Merge with the sibling?** Should this strand absorb
-   bd-listing-default-no-derived-desc-m0wrr8ty, so one plan owns "derive
-   only when nothing is authored"? Or should we keep both and land this one
-   first, with the sibling's Pass-1 change gated on Phase 3 here?
-2. **How to mark provenance.** Choose one:
-   (a) a `description_is_derived: bool` (or enum) on `ListingItem`, set in
-   `hydrate_item`;
-   (b) decide from `SourceInfo` (`By::programmatic_config()` marks L1 autofill);
-   (c) stop L1 from autofilling `description` into `listing-item` at all,
-   and let L7 be the only derivation path. This matches Q1, which never
-   precomputes a description.
-   I lean toward (c) if the L1 value has no other consumer (feeds? search?
-   to check). Otherwise (a).
-3. **`abstract` fallback.** Should we add `description → abstract → derived`
-   for Q1 parity now, or file a separate strand?
-4. **Table listings.** Q1 tables show derived descriptions; q2 tables never
-   do. Is that in scope here, or a separate parity strand?
-5. **`listing-item.description` vs top-level `description`.** Keep the
-   current rule that `listing-item` wins when both are set? (It's a q2-only
-   key; the integration test at `document_profile_pipeline.rs` ~602 assumes
-   it wins.)
+```
+listing-item.description → description → abstract → derived
+```
 
-## Risks / tradeoffs (draft)
+"Derived" means the first paragraph of the rendered page (L7), with the
+pre-engine first paragraph (L1) as the fallback inside the envelope.
 
-- **Ordering hazard with the sibling.** Landing the sibling's Pass-1 change
-  alone makes authored descriptions lose in tables too. Either land them
-  together or land Phase 3 first.
-- **Truncation semantics.** Authored descriptions aren't truncated today in
-  L7, because L7 replaces them. Under Q1, authored descriptions aren't
-  truncated by `max-description-length` either. Check that this holds once
-  they bypass L7.
-- **Feeds and search.** Option (c) in Q2 changes what non-HTML consumers of
-  `listing_item.description` see. Audit `listing/feed` before choosing it.
+## Design
+
+**Profile (`document_profile.rs`).**
+- `ListingItemInfo.description` holds only what the author wrote under
+  `listing-item:`.
+- Add `ListingItemInfo.derived_description: Option<String>`. L1 fills it
+  from the first paragraph *always*, not only when nothing is authored, so
+  search has it.
+- Add a top-level `abstract` to `DocumentProfile`, read with `prose_field`
+  like `description`.
+- Bump `DOCUMENT_PROFILE_VERSION` (currently 14), so cached profiles are
+  discarded. This also answers the sibling's question 4.
+
+**L1 (`listing_item_info.rs`).** Write the derived description to a
+reserved key, such as `listing-item.derived-description`, instead of
+`listing-item.description`. An authored key is then never touched or
+shadowed, and nothing has to decide provenance from `SourceInfo`. (The key
+name is an implementation detail; I'll pick one and document it.)
+
+**Hydration (`item.rs`).** Add
+`ListingItem.description_source: DescriptionSource`, an enum with the
+variants `ListingItem | Description | Abstract | Derived | None`.
+`description` follows the chain above. `derived_description` is copied
+onto the item as well, for search and future consumers.
+
+**Binding (`binding.rs`).** Emit the description envelope only when
+`origin == Document` and `description_source` is `Derived` or `None`.
+Expose a `show-description` key that is true when there is a description
+*or* an envelope. The default and grid templates switch from
+`$if(description)$` to `$if(show-description)$`, so a page with no L1
+paragraph still gets an envelope that L7 can fill. Pages whose body starts
+with engine output need this; it was the sibling's question 2.
+
+**Table (`table_row`).** The description cell gets the same envelope as
+inline raw HTML (`` `<!-- desc-begin… -->`{=html} ``). L7's extraction
+returns plain text with no `<p>`, so it is safe inside a cell.
+
+**L7 (`substitute.rs`).** Logic is unchanged: it only ever sees envelopes
+for items with no authored description. Q-12-13 ("no preview content;
+using static fallback") should stay quiet when there is nothing to fall
+back to, either. Q1 silently leaves the text empty in that case.
+Otherwise every title-only page would warn now that envelopes are
+unconditional.
+
+**Pass-1 (sibling's root cause).** `pass1_profile_single_file_live` gets
+`ListingItemInfoStage`, so `derived_description`, image, word count and
+reading time reach listing profiles. How to do it is still open (Q-A below).
+
+**Feeds.** Metadata feeds inline `item.description`. That now includes a
+derived one when nothing is authored, which matches Q1, where the
+placeholder is substituted.
+
+## Phases
+
+- **Phase 0 — Tests first (red).**
+  - An orchestrator-level integration test over the repro shape (posts with
+    explicit description, no description, `listing-item.description`, and
+    abstract, each listed in default, grid and table). It asserts:
+    EXPLICIT, BODY, LISTING-ITEM, ABSTRACT in every type. It must drive real
+    Pass-1 profiles.
+  - Both `listing-item.description` and `description` set →
+    `listing-item` wins.
+  - A page whose body starts with a code cell and has no prose → the
+    description comes from L7 (engine output).
+  - Unit tests: the `hydrate_item` chain and `description_source`; the
+    binding's envelope decision for each source; the table cell envelope;
+    L1 writes `derived-description` and leaves `listing-item.description`
+    alone.
+- **Phase 1 — Profile and L1.** `derived_description`, `abstract`, the
+  version bump, and the L1 key change.
+- **Phase 2 — Hydration.** `DescriptionSource` and the precedence chain.
+- **Phase 3 — Binding and templates.** Conditional envelope,
+  `show-description`, table cell envelope, Q-12-13 quieting.
+- **Phase 4 — Pass-1 gets L1** (per Q-A).
+- **Phase 5 — Real-site check.** Re-render the repro against Quarto 1 (the
+  table in the README should match, except LISTING-ITEM-C). Re-render the
+  claude-notes plans page with `type: grid` (bd-fvcip3t5), and the
+  Connect-docs repros (`listing-description-precedence`,
+  `listing-ellipsis-no-matching`). `cargo xtask verify`.
+- **Phase 6 — Docs.** Listing docs: description precedence, `abstract`,
+  derivation in tables. Update the `ListingItemInfo` doc comments and
+  `claude-notes/designs/document-profile-contract.md` if Pass-1's head
+  changes.
+
+## Remaining questions for the user
+
+These are carried over from the sibling plan, which never got answers,
+plus one new one.
+
+- **Q-A. Shared head-pipeline builder?** Pass-1 and the full pipeline each
+  hand-list their pre-checkpoint stages, and they have drifted (L1 and
+  `IncludeResolveStage` are both missing from Pass-1). Should we extract one
+  `head_stages()` used by both, or add the one stage plus a test that checks
+  the two lists stay in step? The sibling's survey found no WASM obstacle to
+  sharing. I recommend the shared builder.
+- **Q-B. `IncludeResolveStage` in Pass-1.** If Q-A is the shared builder,
+  it comes along for free. Is that wanted, or should it be left out and
+  filed separately?
+- **Q-C. `image:` has the same latent bug.** `hydrate_item` does
+  `li.image.or(profile.image)`. Once L1 runs in Pass-1, the autofilled
+  `listing-item.image` (the first body image) will shadow an explicit
+  top-level `image:`, in every listing type. Should `image` get the same
+  `derived_image` treatment here? The mechanism is identical and Q1's rule is
+  the same (`image` → placeholder). I recommend yes.
+
+## Risks / tradeoffs
+
+- **Pass-1 cost and determinism.** L1 reads mtime per document. That makes
+  `date_modified` vary across checkouts; check that it doesn't poison the
+  profile cache key or snapshots (from the sibling plan).
+- **Escaping.** `extract_first_para` returns plain text, and L7 splices it
+  into HTML. Check that `<` and `&` in a body paragraph are escaped. A
+  derived description now reaches many more items, so a latent escaping
+  bug would show up widely.
+- **Truncation.** Authored descriptions aren't truncated (Q1 doesn't either).
+  Derived ones are truncated by L7 at `max-description-length`. The L1
+  fallback text inside the envelope is untruncated today; decide whether to
+  truncate it too.
+- **Rendered HTML churn.** Unconditional envelopes and table derivation
+  change many snapshot outputs. Expect snapshot updates; review them as
+  parity improvements rather than accepting them wholesale.
