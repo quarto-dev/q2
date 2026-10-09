@@ -1,6 +1,7 @@
 ---
 title: '`.embed-example-iframe`: inline code snippet + Demo crossref for all examples'
 date: 2026-06-10
+description: 'Lets an `.embed-example-iframe` div carry a leading code snippet that renders above its iframe, gives every reveal.js example a numbered Demo crossref, and adds matching styling and docs migration.'
 ---
 
 **Strand:** bd-15uump3h (discovered-from bd-z1smhvuo, the embed feature;

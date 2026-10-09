@@ -1,6 +1,7 @@
 ---
 title: 'Enable rich-text editor in hub-client q2-preview (default ON)'
 date: 2026-06-24
+description: 'Adds a default-on `richText` preference to hub-client, wired through the preview renderer with a Settings checkbox to opt out, so quarto-hub previews get the rich-text editor the standalone SPA already has.'
 ---
 
 **Date:** 2026-06-24

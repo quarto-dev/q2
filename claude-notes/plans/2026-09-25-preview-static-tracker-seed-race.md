@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview --static: content tracker seeded after the port opens'
 date: 2026-09-25
+description: 'Fixes a race in `q2 preview --static` where a file edited right after the port opens was recorded as the content baseline and its change ignored, by seeding the content tracker before clients can connect.'
 ---
 
 **Strand:** bd-tp0yym04

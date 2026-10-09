@@ -1,6 +1,7 @@
 ---
 title: 'End-to-end `q2 render` performance profiling (2026-06-01)'
 date: 2026-06-01
+description: 'Profiles a full `q2 render` of a 565-file website, finds that Pass 2 runs serially and that parsing and AST allocation dominate, and ranks the follow-up optimizations.'
 ---
 
 ## Overview

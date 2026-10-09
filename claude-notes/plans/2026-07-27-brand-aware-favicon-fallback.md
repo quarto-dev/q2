@@ -1,6 +1,7 @@
 ---
 title: 'Brand-aware favicon fallback (bd-97yc)'
 date: 2026-07-27
+description: 'Makes a website project''s brand small logo the favicon when `website.favicon` is unset, rebasing brand-relative paths and fixing explicit URL favicons that were being mangled, with an explicit setting always winning.'
 ---
 
 **Date:** 2026-07-27

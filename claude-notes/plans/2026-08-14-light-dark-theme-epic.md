@@ -1,6 +1,7 @@
 ---
 title: 'Light/dark theme support epic (bd-0pic6)'
 date: 2026-08-14
+description: 'Plans full Q1-parity light and dark theme support for Q2 HTML and website output, compiling both CSS variants with a navbar toggle, `prefers-color-scheme` handling, and light- and dark-aware syntax highlighting.'
 ---
 
 **Created**: 2026-08-14

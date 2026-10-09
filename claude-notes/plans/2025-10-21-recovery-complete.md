@@ -1,6 +1,7 @@
 ---
 title: 'Recovery Complete - Summary'
 date: 2025-10-21
+description: 'Records how a broken commit mixing work from two issues was split, keeping the source-map error-reporting changes and reverting the incomplete `ParseResult` API work to restore a clean build.'
 ---
 
 ## Problem

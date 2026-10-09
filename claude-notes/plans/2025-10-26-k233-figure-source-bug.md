@@ -1,6 +1,7 @@
 ---
 title: 'K-233: Figure Block Source Range Bug in quarto-markdown-pandoc'
 date: 2025-10-26
+description: 'Diagnoses why Figure blocks and their nested Plain blocks get `[0, 0]` source ranges in JSON output, and proposes deriving valid ranges from the image syntax.'
 ---
 
 **Date**: 2025-10-26

@@ -1,6 +1,7 @@
 ---
 title: 'GH #420 — rich-text editor loses focus on incoming CRDT changes'
 date: 2026-08-26
+description: 'Keeps the rich-text editor mounted and focused when remote CRDT changes shift text offsets above it, by re-anchoring the edit target during render instead of one render too late.'
 ---
 
 **Strand:** bd-84ljmbaf

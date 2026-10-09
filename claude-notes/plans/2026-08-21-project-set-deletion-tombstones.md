@@ -1,6 +1,7 @@
 ---
 title: 'Project-set deletion tombstones (latest-wins reconcile)'
 date: 2026-08-21
+description: 'Stops deleted projects from resurrecting on reload by recording per-key deletion tombstones in the synced project set, with latest-wins reconciliation against stale legacy IndexedDB rows.'
 ---
 
 Branch: `bugfix/bd-f5a0c6rv-project-set-deletion-tombstones`

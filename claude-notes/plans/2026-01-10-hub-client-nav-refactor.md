@@ -1,6 +1,7 @@
 ---
 title: 'Hub-Client Navigation Refactor Plan'
 date: 2026-01-10
+description: 'Replaces hub-client''s top navigation bar with a tabbed left sidebar holding Files, Project, Status, Settings and About, leaving only a minimal top bar that shows the open file path.'
 ---
 
 **Issue:** k-wc81

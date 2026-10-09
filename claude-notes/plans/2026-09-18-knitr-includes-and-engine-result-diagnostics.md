@@ -1,6 +1,7 @@
 ---
 title: 'knitr HTML dependencies fail the render; engine-result errors need real diagnostics (GH #683)'
 date: 2026-09-18
+description: 'Makes knitr documents with HTML dependencies render by accepting the array-valued include slots that the R engine sends, and turns unreadable engine results into a coded diagnostic with the raw result preserved.'
 ---
 
 **Strand:** bd-gy2ozix3

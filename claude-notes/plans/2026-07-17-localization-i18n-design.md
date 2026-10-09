@@ -1,6 +1,7 @@
 ---
 title: 'Localization / internationalization for Quarto 2'
 date: 2026-07-17
+description: 'Designs Quarto 2 localization modeled on Quarto 1: shipped and project term files resolved by a `lang` tag into one term table that Rust transforms and templates read as `$quarto.language.<key>$`.'
 ---
 
 **Braid strand:** bd-llhlzd7p (epic)

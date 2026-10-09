@@ -1,6 +1,7 @@
 ---
 title: 'Hub-client visibility gating for text sync + presence'
 date: 2026-04-24
+description: 'Stops remote text and presence updates from replaying as a fast animation when a backgrounded `hub-client` tab is refocused, by stashing them while hidden and flushing once on return to visibility.'
 ---
 
 ## Repro confirmation (2026-04-24)

@@ -1,6 +1,7 @@
 ---
 title: 'Block-level attributes on list items (`<li class>`)'
 date: 2026-06-18
+description: 'Lets a block attribute such as `{.foo}` on a list item reach its `<li>` in HTML, preview and JSON, hoisting it from the item''s last block into a parallel `itemAttr` key.'
 ---
 
 **Strand:** bd-aeyss6p5 (discovered-from bd-itqcfxc3; related bd-38ioql41)

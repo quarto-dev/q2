@@ -1,6 +1,7 @@
 ---
 title: 'JSON Writer: Add Resolved Source Locations'
 date: 2025-11-12
+description: 'Adds an opt-in `l` field to the JSON writer that resolves each node''s offsets to 1-based line and column positions, leaving open how it attaches to pooled `s` references.'
 ---
 
 ## Goal

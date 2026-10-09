@@ -1,6 +1,7 @@
 ---
 title: 'FileId/span hardening — Phase A (q2-side fixes + guardrails)'
 date: 2026-08-09
+description: 'Fixes the audited FileId and source-span bugs, including engine slot desync, foreign-offset fallbacks and misbound config diagnostics, and adds a lint restricting `add_file_with_id` to blessed modules.'
 ---
 
 **Parent strand:** bd-nv4p0eb1 (audit + API hardening)

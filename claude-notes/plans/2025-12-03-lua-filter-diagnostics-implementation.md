@@ -1,6 +1,7 @@
 ---
 title: 'Lua Filter Diagnostics Implementation Plan'
 date: 2025-12-03
+description: 'Describes adding `quarto.warn()` and `quarto.error()` so Lua filters can emit diagnostics with source locations from the call stack, and notes that element-attached locations only work for filter-created elements.'
 ---
 
 **Date:** 2025-12-03

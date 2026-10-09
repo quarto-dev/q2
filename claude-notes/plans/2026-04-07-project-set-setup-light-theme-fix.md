@@ -1,6 +1,7 @@
 ---
 title: 'Fix ProjectSetSetup Light Theme Button Visibility'
 date: 2026-04-07
+description: 'Fixes unreadable error text, an invisible backup section and a heavy shadow on the `ProjectSetSetup` migration page in light theme by moving hardcoded colors to theme variables, and adds visual regression tests.'
 ---
 
 ## Overview

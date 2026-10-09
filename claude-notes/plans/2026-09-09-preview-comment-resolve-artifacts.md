@@ -1,6 +1,7 @@
 ---
 title: 'q2-preview comments: resolving the last comment leaves an empty pill and a stuck glow'
 date: 2026-09-09
+description: 'Explains and fixes two state bugs in the q2-preview comment bubble that leave an empty pill and a stuck blue glow on a block after its last comment is resolved.'
 ---
 
 **Strand:** bd-bpt089zw

@@ -1,6 +1,7 @@
 ---
 title: 'Nesting-cursor UI enhancements — geometry snapshot, caret-aware nest-in, mode-aware highlight'
 date: 2026-06-14
+description: 'Improves the nesting cursor in `q2-preview` by sizing nested editors from a pre-edit geometry snapshot, making nest-in follow the caret, and highlighting the outer block that activates in locked mode.'
 ---
 
 **Date:** 2026-06-14

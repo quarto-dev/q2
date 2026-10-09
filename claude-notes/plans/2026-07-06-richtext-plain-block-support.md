@@ -1,6 +1,7 @@
 ---
 title: 'Rich-text editor support for `Plain` blocks (tight list items)'
 date: 2026-07-06
+description: 'Adds `Plain` to the rich-text editor''s supported block types so that tight list items and table cells become rich-text editable, with the backend already keeping tight lists tight on commit.'
 ---
 
 **Strand:** bd-7pxub583 (related to bd-sjb4pzx8 — the tiptap rich-text block editor)

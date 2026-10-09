@@ -1,6 +1,7 @@
 ---
 title: 'Unified LSP and Hub Architecture Design'
 date: 2025-12-11
+description: 'Analyzes merging the language server and collaboration hub into one process, making automerge documents the single source of content that editor changes flow into and remote edits flow out of.'
 ---
 
 **Created:** 2025-12-11

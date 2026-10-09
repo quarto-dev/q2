@@ -1,6 +1,7 @@
 ---
 title: 'L8 — Custom listing templates (sub-plan)'
 date: 2026-05-07
+description: 'Lets listings use a user-supplied `.template` file named in `listing.template`, with the same data binding as built-in templates, and falls back to the default layout with a warning when the file is missing or fails to compile.'
 ---
 
 **Date:** 2026-05-07

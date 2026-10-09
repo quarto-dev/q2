@@ -1,6 +1,7 @@
 ---
 title: 'k-54: Unify ''l'' and ''s'' Source Tracking Keys - Investigation & Plan'
 date: 2025-10-20
+description: 'Compares the two JSON encodings of source locations, `.l` flattened and `.s` pooled, and recommends serializing every AST node through the pool so consumers see one format.'
 ---
 
 **Date**: 2025-10-20

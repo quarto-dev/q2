@@ -1,6 +1,7 @@
 ---
 title: 'Follow-up: `format: typst` smoke-all coverage beyond the orange-book epic'
 date: 2026-09-29
+description: 'Triages the remaining Typst smoke-all fixtures into themed porting groups and lists the Q2 Typst and shared-filter bugs, such as font-path handling, that block some of them.'
 ---
 
 **Date:** 2026-09-29

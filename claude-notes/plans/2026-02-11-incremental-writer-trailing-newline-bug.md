@@ -1,6 +1,7 @@
 ---
 title: 'Incremental Writer Trailing Newline Bug'
 date: 2026-02-11
+description: 'Fixes a panic in the incremental QMD writer when source text lacks a trailing newline, since the reader pads its input and the source spans then point one byte past the end.'
 ---
 
 ## Overview

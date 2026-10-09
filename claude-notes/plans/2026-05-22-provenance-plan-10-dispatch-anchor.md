@@ -1,6 +1,7 @@
 ---
 title: 'Provenance Plan 10 — Dispatch anchor + Lua source registration in SourceContext'
 date: 2026-05-22
+description: 'Records the Lua filter or shortcode handler line that produced a generated node as a diagnostic-only `Dispatch` anchor, registering Lua files in `SourceContext` so attribution can point to exact byte ranges.'
 ---
 
 **Date:** 2026-05-22

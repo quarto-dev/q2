@@ -1,6 +1,7 @@
 ---
 title: 'Plan: deterministic diagnostic output (GH issue #222)'
 date: 2026-05-20
+description: 'Makes `pampa` diagnostic output deterministic when a parse yields several tree-sitter interpretations, by swapping a randomly ordered `HashMap` for an insertion-ordered map and adding a repeated-parse regression test.'
 ---
 
 ## Overview

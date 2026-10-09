@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Typst source request (pandoc-request R4)'
 date: 2026-10-01
+description: 'Adds a browser-side Pandoc WASM request that produces a single Typst `.typ` source file, carrying templates, partials, brand settings and a pinned document date, as groundwork for PDF output.'
 ---
 
 **Date:** 2026-10-01

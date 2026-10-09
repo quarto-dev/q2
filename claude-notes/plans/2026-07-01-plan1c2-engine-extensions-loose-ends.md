@@ -1,6 +1,7 @@
 ---
 title: 'Plan 1c.2 — TS Engine Extensions: loose ends'
 date: 2026-07-01
+description: 'Collects the remaining TS engine extension follow-ups: typed `claims-files` entries, folding statically claimed extensions such as `.echo` into project discovery, and encapsulating the engine contribution order.'
 ---
 
 **Parent:** [2026-04-16-plan1c-extension-integration.md](2026-04-16-plan1c-extension-integration.md)

@@ -1,6 +1,7 @@
 ---
 title: 'Navbar logo unstyled: theme ships no `.navbar-logo` rule and brand markup drops Q1''s `navbar-brand-logo` structure (bd-navbar-logo-unstyled-gbzd8vcu)'
 date: 2026-08-19
+description: 'Adds the default `.navbar-logo` sizing rules and restructures the navbar brand into Quarto 1''s container and dual-anchor markup, with separate light and dark logo variants, so oversized logos stop filling the bar.'
 ---
 
 **Date:** 2026-08-19

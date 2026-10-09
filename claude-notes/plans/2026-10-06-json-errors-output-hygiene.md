@@ -1,6 +1,7 @@
 ---
 title: '`q2 render --json-errors`: pure, attributable NDJSON on stderr'
 date: 2026-10-06
+description: 'Makes `q2 render --json-errors` keep non-JSON status and diagnostic text off stderr, and attributes each located diagnostic to the absolute path of the file its line and column refer to.'
 ---
 
 **Strand:** bd-gnw9asuo (bug, P2). Child: bd-ckbqmupi. Discovered from bd-uk8zgkha (claude-notes website).
