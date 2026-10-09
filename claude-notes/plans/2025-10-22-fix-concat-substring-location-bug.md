@@ -1,6 +1,7 @@
 ---
 title: 'Fix Plan: Concat/Substring End Location Bug'
 date: 2025-10-22
+description: 'Fixes the zero row and column reported at the end of concatenated and substring `SourceInfo` ranges, by checking whether combined pieces can map back to the original source and otherwise computing positions as a single line.'
 ---
 
 **Date**: 2025-10-22

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Improve qmd-syntax-helper Output - Show Filename Context'
 date: 2025-10-21
+description: 'Changes `qmd-syntax-helper check` so non-verbose output groups issues under the file they come from, printing a file name only for files that have problems.'
 ---
 
 ## Problem Statement

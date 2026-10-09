@@ -1,6 +1,7 @@
 ---
 title: 'Implementation Plan: Unnumbered Section Specifier'
 date: 2025-11-13
+description: 'Teaches the tree-sitter attribute handling to turn the Pandoc `{-}` shorthand into an `unnumbered` class on headers, matching Pandoc''s native output for `## foo {-}`.'
 ---
 
 ## Date: 2025-11-13

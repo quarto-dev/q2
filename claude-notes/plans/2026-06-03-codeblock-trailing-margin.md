@@ -1,6 +1,7 @@
 ---
 title: 'Fix stray empty line at the bottom of highlighted code blocks'
 date: 2026-06-03
+description: 'Removes a stray empty line at the bottom of highlighted code blocks by adding the margin rules that Quarto 1 gets from Pandoc''s baseline highlighting CSS.'
 ---
 
 **Beads issue:** bd-jby1i

@@ -1,6 +1,7 @@
 ---
 title: 'Hub-Client Project Management Refactor and Create New Project Implementation'
 date: 2026-01-12
+description: 'Refactors the hub-client project selector so existing projects are connected rather than created, and adds genuine project creation by porting `quarto create project` templates from TypeScript Quarto to Rust, usable natively and in WASM.'
 ---
 
 **Epic ID**: k-1omt

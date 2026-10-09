@@ -1,6 +1,7 @@
 ---
 title: 'Plan 4: Julia Engine Validation'
 date: 2026-04-16
+description: 'Validates the TypeScript engine extension system end to end by running the real Julia engine extension from Quarto 1 against q2 documents with Julia code cells, fixing the integration gaps that surface.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)

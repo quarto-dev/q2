@@ -1,6 +1,7 @@
 ---
 title: 'Audit: can list-item `itemAttr` simplify the revealjs incremental-list `fragment` machinery?'
 date: 2026-06-18
+description: 'Audits whether the new list-item attribute channel can replace the separate `fragment` machinery for revealjs incremental lists, and concludes that only partial unification is feasible.'
 ---
 
 **Strand:** bd-34vf6fpr (discovered-from bd-aeyss6p5)

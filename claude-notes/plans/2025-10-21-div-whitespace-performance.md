@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Fix div-whitespace Performance Problem'
 date: 2025-10-21
+description: 'Removes the quadratic line-offset recomputation in the `div-whitespace` rule of `qmd-syntax-helper` by precomputing line start offsets once, so large files with many errors check quickly.'
 ---
 
 ## Problem Statement

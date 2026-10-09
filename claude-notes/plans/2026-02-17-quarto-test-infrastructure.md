@@ -1,6 +1,7 @@
 ---
 title: 'Quarto Test Infrastructure Plan'
 date: 2026-02-17
+description: 'Adds a `quarto-test` crate and `quarto call test` command that run smoke-style tests embedded in QMD `_quarto.tests` metadata, checking rendered output with regex assertions and exposing them to cargo nextest.'
 ---
 
 ## Overview

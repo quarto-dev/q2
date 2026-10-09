@@ -1,6 +1,7 @@
 ---
 title: 'Project Naming Investigation'
 date: 2025-12-06
+description: 'Weighs candidate names for the Rust port of Quarto against cultural fit and package registry and GitHub availability, so the port cannot be confused with Pandoc.'
 ---
 
 **Beads issue**: k-3n95

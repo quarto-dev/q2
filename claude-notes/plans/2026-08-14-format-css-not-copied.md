@@ -1,6 +1,7 @@
 ---
 title: 'format.html.css files are neither copied into the site nor rebased per page (bd-format-css-not-copied-crn3bjdz)'
 date: 2026-08-14
+description: 'Copies stylesheets listed under `format.html.css` into the site and rebases their links per page, so project CSS no longer returns 404 on nested pages.'
 ---
 
 **Date:** 2026-08-14

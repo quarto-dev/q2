@@ -1,6 +1,7 @@
 ---
 title: 'Non-http URI schemes are path-normalized (bd-scheme-href-path-normalized-w5zya82r)'
 date: 2026-08-25
+description: 'Stops non-http URI schemes such as `positron://` and `javascript:` from being path-normalized in navigation, body, sidebar, listing and llms links, replacing seven hand-written scheme allowlists with one shared classifier.'
 ---
 
 **Strand:** `bd-scheme-href-path-normalized-w5zya82r` (P1 bug, labels `navigation`, `parity`)

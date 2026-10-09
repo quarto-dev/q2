@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Remove source_info_to_range Function'
 date: 2025-10-22
+description: 'Removes the `source_info_to_range` helper from the list parser by computing only the row numbers that loose-list detection actually uses, avoiding unneeded start-location work.'
 ---
 
 **Date:** 2025-10-22

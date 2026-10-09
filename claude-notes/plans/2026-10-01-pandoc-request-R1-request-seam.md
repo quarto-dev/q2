@@ -1,6 +1,7 @@
 ---
 title: 'Plan: The PandocRequest seam (pandoc-request R1)'
 date: 2026-10-01
+description: 'Splits the `PandocWriteStage` run into a pure prepare step that returns a serializable `PandocRequest` and a native-only execute step, so the request can cross out of the pipeline.'
 ---
 
 **Date:** 2026-10-01

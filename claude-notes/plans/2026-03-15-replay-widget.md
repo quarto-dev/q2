@@ -1,6 +1,7 @@
 ---
 title: 'Replay Widget Implementation Plan'
 date: 2026-03-15
+description: 'Adds a bottom-drawer history replay to hub-client that scrubs read-only through an Automerge document''s change history, with an Apply button that writes the viewed text back as a new change.'
 ---
 
 ## Overview

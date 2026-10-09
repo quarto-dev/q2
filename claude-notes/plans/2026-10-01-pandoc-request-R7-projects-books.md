@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Projects and books (pandoc-request R7)'
 date: 2026-10-01
+description: 'Routes a multi-file project download through the pandoc request path so the active page renders with image targets matching native output; whole-book rendering is deferred.'
 ---
 
 **Date:** 2026-10-01

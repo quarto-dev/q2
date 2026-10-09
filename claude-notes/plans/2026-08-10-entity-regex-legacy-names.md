@@ -1,6 +1,7 @@
 ---
 title: 'Grammar html_entity_regex() mangles legacy no-semicolon entity names (bd-v8qc9zyc)'
 date: 2026-08-10
+description: 'Stops the grammar''s `html_entity_regex()` from generating bogus alternatives for legacy no-semicolon entity names such as `&AMP`, by keeping only semicolon-terminated keys.'
 ---
 
 **Date:** 2026-08-10

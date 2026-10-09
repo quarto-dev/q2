@@ -1,6 +1,7 @@
 ---
 title: 'Span Canonical Form: drop `{}` for empty attributes'
 date: 2026-02-08
+description: 'Changes the QMD writer to drop the trailing empty attribute braces from spans, writing `[x]` instead of `[x]{}` and `[ ]` for empty spans, so checkbox markup round-trips cleanly.'
 ---
 
 **Beads issue:** `bd-1s21`

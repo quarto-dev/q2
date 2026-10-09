@@ -1,6 +1,7 @@
 ---
 title: 'Plan 5 — JSON wire format extension for Generated'
 date: 2026-05-04
+description: 'Extends the source-info pool''s JSON wire format with a code for `Generated` provenance, and repairs a reader bug where filter provenance was misread as a legacy variant and failed to parse.'
 ---
 
 **Date:** 2026-05-04 (revised 2026-05-20)

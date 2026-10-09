@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Remove Format.metadata and extract_format_metadata()'
 date: 2026-03-09
+description: 'Removes the unread `Format.metadata` field and the `extract_format_metadata()` function that filled it, since every pipeline consumer now reads document metadata from `doc.ast.meta`. No behavior change.'
 ---
 
 ## Overview

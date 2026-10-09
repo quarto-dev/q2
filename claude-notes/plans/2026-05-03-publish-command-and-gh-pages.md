@@ -1,6 +1,7 @@
 ---
 title: '`quarto publish` scaffolding + `gh-pages` provider'
 date: 2026-05-03
+description: 'Adds the scaffolding for a `quarto publish` command in a new crate, shipping GitHub Pages as the first provider so that other hosts can be added one at a time.'
 ---
 
 **Date:** 2026-05-03

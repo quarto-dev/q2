@@ -1,6 +1,7 @@
 ---
 title: 'Process improvement: end-to-end verification before declaring "done"'
 date: 2026-04-20
+description: 'Proposes a `CLAUDE.md` rule that features count as done only after being exercised through the real binary and their output inspected, because passing tests missed a pipeline branch that dropped syntax highlighting.'
 ---
 
 - **Date**: 2026-04-20

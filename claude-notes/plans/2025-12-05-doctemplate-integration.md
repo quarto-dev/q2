@@ -1,6 +1,7 @@
 ---
 title: 'Doctemplate Integration Plan'
 date: 2025-12-05
+description: 'Plans template support for `quarto-markdown-pandoc`, covering bundle-based template resolution that works in WASM, optional filesystem resolution behind a feature flag, and conversion of Pandoc metadata into template context.'
 ---
 
 **Beads Issue**: k-y2f3

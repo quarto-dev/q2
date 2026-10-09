@@ -1,6 +1,7 @@
 ---
 title: 'Hub-only project templates (surface-gated `ProjectChoice`)'
 date: 2026-09-15
+description: 'Adds a surface gate to project templates so some appear only in the hub-client New project menu and not in `q2 create project`, using a placeholder template until a real one replaces it.'
 ---
 
 **Strand:** bd-d147nkqx

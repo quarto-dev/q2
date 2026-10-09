@@ -1,6 +1,7 @@
 ---
 title: 'Implementation Plan: pandoc_soft_break Node Handler'
 date: 2025-10-31
+description: 'Adds a handler for the `pandoc_soft_break` tree-sitter node so that a newline inside a paragraph becomes a `SoftBreak` inline rather than concatenating adjacent words.'
 ---
 
 **Date**: 2025-10-31

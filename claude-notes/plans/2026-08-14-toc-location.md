@@ -1,6 +1,7 @@
 ---
 title: 'toc-location option (left/right/body); unlocks banner toc-left class (bd-e2kpwy7n)'
 date: 2026-08-14
+description: 'Adds a `toc-location` option that places the table of contents on the left or in the body, porting the Quarto 1 left-sidebar layouts for both standalone pages and websites.'
 ---
 
 **Date:** 2026-08-14

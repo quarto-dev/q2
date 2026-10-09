@@ -1,6 +1,7 @@
 ---
 title: 'Fix Windows path-separator assumptions in pampa quarto_api path tests (bd-picv)'
 date: 2026-06-24
+description: 'Makes the `resolve_path` Lua API function always return forward slashes and use `is_rooted` instead of `is_absolute`, so Windows path tests pass without platform-specific expectations.'
 ---
 
 **Date:** 2026-06-24

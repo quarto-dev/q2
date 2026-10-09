@@ -1,6 +1,7 @@
 ---
 title: 'Switch hub-client e2e to `vite preview` instead of `vite dev`'
 date: 2026-05-11
+description: 'Serves the hub-client end-to-end tests from a prebuilt bundle with `vite preview` instead of `vite dev`, to cut per-test page-load time and reduce flaky timeouts in CI.'
 ---
 
 **Date:** 2026-05-11

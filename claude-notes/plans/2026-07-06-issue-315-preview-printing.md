@@ -1,6 +1,7 @@
 ---
 title: 'Issue #315 — Printing / PDF export from the quarto-hub preview is broken'
 date: 2026-07-06
+description: 'Makes printing and print-to-PDF from the quarto-hub preview produce paginated, styled output by opening the document in a new top-level tab instead of relying on iframe printing.'
 ---
 
 **Issue:** https://github.com/quarto-dev/q2/issues/315 — "print to pdf is

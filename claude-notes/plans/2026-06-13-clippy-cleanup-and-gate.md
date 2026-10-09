@@ -1,6 +1,7 @@
 ---
 title: 'Clean up clippy debt and gate clippy in CI (bd-3zst4hwy)'
 date: 2026-06-13
+description: 'Clears the accumulated clippy violations across the workspace and adds a `-D warnings` clippy gate to CI and `cargo xtask verify` so the workspace stays clean.'
 ---
 
 ## Overview

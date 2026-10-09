@@ -1,6 +1,7 @@
 ---
 title: 'Plan: CSS in Pipeline — Part C: Integration & E2E Tests (Phases 5-6)'
 date: 2026-03-09
+description: 'Adds integration tests for theme CSS compilation through the full pipeline, covering runtime metadata theme overrides and the default stylesheet used when no theme is set, which unit and smoke-all tests do not check.'
 ---
 
 Parent plan: `claude-notes/plans/2026-03-09-css-in-pipeline.md`

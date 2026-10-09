@@ -1,6 +1,7 @@
 ---
 title: 'quarto-ast-reconcile: proptest counterexample — reconciliation does not preserve structure (bd-9fwn1504)'
 date: 2026-07-27
+description: 'Investigates a failing property test in `quarto-ast-reconcile` where skipped nested plans let reconciliation resurrect deleted or reordered content, and settles on always storing the plan.'
 ---
 
 **Date:** 2026-07-27

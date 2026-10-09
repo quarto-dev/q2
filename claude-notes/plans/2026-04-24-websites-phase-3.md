@@ -1,6 +1,7 @@
 ---
 title: 'Phase 3 — Navbar / page-footer project integration'
 date: 2026-04-24
+description: 'Brings navbar and page-footer into the project model, rewriting their `.qmd` hrefs to `.html`, enriching bare-path items with titles, and marking the active navbar item.'
 ---
 
 **Date:** 2026-04-24

@@ -1,6 +1,7 @@
 ---
 title: 'Migrate quarto-project-create from EJS to quarto-doctemplate'
 date: 2026-06-12
+description: 'Moves `quarto-project-create` from EJS templates rendered through the JavaScript runtime to `quarto-doctemplate` `$title$` placeholders, making scaffolding synchronous and removing the last JavaScript template consumer.'
 ---
 
 **Strand:** bd-kuxzj8su (blocks bd-3e3sam51, discovered-from bd-3e3sam51)

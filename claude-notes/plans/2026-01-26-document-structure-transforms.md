@@ -1,6 +1,7 @@
 ---
 title: 'Phase 1b: Document Structure Transforms'
 date: 2026-01-26
+description: 'Adds AST transforms for footnote placement, bibliography location, and appendix consolidation so the HTML writer stays stateless, reading options such as `reference-location` from format metadata.'
 ---
 
 **Parent Plan**: `claude-notes/plans/2026-01-24-html-rendering-parity.md`

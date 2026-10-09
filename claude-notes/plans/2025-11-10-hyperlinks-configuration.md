@@ -1,6 +1,7 @@
 ---
 title: 'Hyperlinks Configuration for quarto-error-reporting'
 date: 2025-11-10
+description: 'Adds a `TextRenderOptions` struct so `to_text` can disable OSC 8 terminal hyperlinks in `quarto-error-reporting`, keeping absolute file paths out of snapshot tests.'
 ---
 
 ## Problem

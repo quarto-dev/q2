@@ -1,6 +1,7 @@
 ---
 title: 'Extension management commands (`remove` / `list` / `add` / `update`) — STUB plan'
 date: 2026-07-03
+description: 'Placeholder for implementing the q2 `add`, `update`, `remove` and `list` extension commands, which are not yet implemented, with a required guard so built-in engine extensions cannot be removed.'
 ---
 
 **Status:** STUB (2026-07-03) — placeholder in the **extensions epic**

@@ -1,6 +1,7 @@
 ---
 title: 'Julia engine: upstream fixes, static declarations, and bundling in q2 (epic, DRAFT)'
 date: 2026-09-03
+description: 'Sequences three workstreams for the Julia engine: a worker-leak fix, static engine declarations in `_extension.yml` that Quarto 1 currently rejects, and vendoring the engine into q2 as a subtree.'
 ---
 
 > ## ⚠️ PROVISIONAL — NEEDS REVIEW

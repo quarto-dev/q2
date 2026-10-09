@@ -1,6 +1,7 @@
 ---
 title: 'Plan 1a.6: Move the engine-host protocol off stdout → loopback TCP'
 date: 2026-07-08
+description: 'Moves the engine-host protocol off the Deno child''s stdout onto a loopback TCP socket, passing the one-time token on stdin so no other local process can inject or read frames.'
 ---
 
 > **Status:** ● **COMPLETE 2026-07-23** (Phases 1–4 all landed + verified; the

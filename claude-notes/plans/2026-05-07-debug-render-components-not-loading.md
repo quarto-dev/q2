@@ -1,6 +1,7 @@
 ---
 title: 'Debug: render-components not loading in q2-debug iframe'
 date: 2026-05-07
+description: 'Investigates why user TSX render-component overrides fail to apply in the `q2-debug` preview, with a suspected race where the transpile memo runs before file contents load.'
 ---
 
 **Date:** 2026-05-07

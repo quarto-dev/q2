@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Loader and worker lifecycle (pandoc-host H2)'
 date: 2026-10-01
+description: 'Builds the main-thread loader for `pandoc.wasm`, covering fetch, Cache API caching, decompression, SHA verification, compilation, abort and timeout handling, idle drop of the compiled module, and Playwright smoke tests.'
 ---
 
 **Date:** 2026-10-01

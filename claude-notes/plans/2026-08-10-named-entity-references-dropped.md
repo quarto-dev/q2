@@ -1,6 +1,7 @@
 ---
 title: 'Named HTML entity references silently dropped in prose (bd-named-entities-w6xbfftj)'
 date: 2026-08-10
+description: 'Makes named HTML entities such as `&gt;` and `&nbsp;` decode to their characters in prose, where they currently vanish silently, by sharing the grammar''s entity table with the converter.'
 ---
 
 **Date:** 2026-08-10

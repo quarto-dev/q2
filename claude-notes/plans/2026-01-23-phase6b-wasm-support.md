@@ -1,6 +1,7 @@
 ---
 title: 'Phase 6b WASM Support: Custom SCSS Cross-Platform Compatibility'
 date: 2026-01-23
+description: 'Replaces direct `std::fs` access in custom SCSS theme loading with the `SystemRuntime` trait so custom themes load in WASM, where files live in the virtual file system.'
 ---
 
 **Parent Plan**: `2026-01-23-phase6b-custom-scss.md`

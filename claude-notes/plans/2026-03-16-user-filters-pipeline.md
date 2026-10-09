@@ -1,6 +1,7 @@
 ---
 title: 'User Filters in the Render Pipeline'
 date: 2026-03-16
+description: 'Wires the `filters` metadata key into the `quarto-core` render pipeline so Lua, JSON and citeproc filters run during `q2 render`, mapping TS Quarto''s eight entry points onto stages before and after AST transforms.'
 ---
 
 **Created**: 2026-03-16

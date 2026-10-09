@@ -1,6 +1,7 @@
 ---
 title: 'Merging the math stack (PRs 705, 706, 708, 709, 710) onto main after #704'
 date: 2026-09-23
+description: 'Records the conflict assessment and step-by-step merge of the stacked math pull requests onto main after the Pandoc-hybrid landing, including a fix that ignores the MathML option on non-HTML formats.'
 ---
 
 ## Overview

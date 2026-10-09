@@ -1,6 +1,7 @@
 ---
 title: 'Adjacent footnote definitions merge — the second note is silently lost (bd-adjacent-footnote-definitions-miif1k1z)'
 date: 2026-08-12
+description: 'Stops consecutive `[^id]:` footnote definition lines from merging into one note, which silently drops the second note, by letting a definition line open a block after a paragraph line.'
 ---
 
 **Date:** 2026-08-12

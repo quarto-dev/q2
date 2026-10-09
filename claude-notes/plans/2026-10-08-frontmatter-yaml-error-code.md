@@ -1,6 +1,7 @@
 ---
 title: 'Frontmatter YAML parse error: Q-0-99, internal path in title, whole-block span (bd-x30aq7ae)'
 date: 2026-10-08
+description: 'Replaces the internal-path `Q-0-99` diagnostic for malformed frontmatter with a located YAML syntax error, using the precise position that `quarto-yaml` now reports.'
 ---
 
 **Date:** 2026-10-08

@@ -1,6 +1,7 @@
 ---
 title: 'Error-code documentation pages in the website (epic)'
 date: 2026-05-22
+description: 'Plans a documentation page on the website for each of the 133 structured error codes, covering the page convention, a `cargo xtask error-docs` coverage tool, and hand-written content.'
 ---
 
 **Status:** drafting — pending user review

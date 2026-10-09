@@ -1,6 +1,7 @@
 ---
 title: 'Generic OIDC Authentication for quarto-hub'
 date: 2026-03-10
+description: 'Makes quarto-hub authentication work with any OIDC-compliant identity provider by replacing Google-specific claims, issuer, JWKS lookup and CSP domains with configurable values discovered at startup.'
 ---
 
 ## Overview

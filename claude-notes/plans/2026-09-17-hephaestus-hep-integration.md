@@ -1,6 +1,7 @@
 ---
 title: 'Hephaestus (`.hep` plot document) support in Quarto 2'
 date: 2026-09-17
+description: 'Surveys how Quarto 2 should consume hephaestus `.hep` plot documents, recommending conversion to SVG for HTML-family output with PNG rasterization as an optional extra, across render, preview and hub-client.'
 ---
 
 **Strand:** bd-3qych45b

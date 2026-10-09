@@ -1,6 +1,7 @@
 ---
 title: 'Reactji authorship-aware add/remove for q2-preview (`comment.tsx`)'
 date: 2026-05-25
+description: 'Investigates whether authorship data reaches user render-component TSX in `q2 preview`, then makes clicking a reactji remove the viewer''s own contribution rather than always adding one.'
 ---
 
 **Worktree:** `.worktrees/provenance-reactji-demo/` on `provenance-reactji-demo`, branched off `feature/provenance`.

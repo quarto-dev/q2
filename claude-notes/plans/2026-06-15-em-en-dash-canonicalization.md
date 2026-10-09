@@ -1,6 +1,7 @@
 ---
 title: 'Em-dash / en-dash parsing + canonicalization'
 date: 2026-06-15
+description: 'Makes unspaced `---` and `--` runs in `.qmd` text parse as em and en dashes, and writes Unicode dashes back as ASCII so the source stays ASCII-clean and round-trips.'
 ---
 
 **Strand:** bd-k2h1x7bu

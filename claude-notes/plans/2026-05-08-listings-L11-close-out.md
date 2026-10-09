@@ -1,6 +1,7 @@
 ---
 title: 'L11 — Listings epic close-out'
 date: 2026-05-08
+description: 'Rolls up the 33 open follow-ups from the listings feature phases, identifies the few quick wins worth taking before the epic is declared delivered, and lists the remaining checks.'
 ---
 
 **Date:** 2026-05-08

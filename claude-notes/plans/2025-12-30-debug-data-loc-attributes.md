@@ -1,6 +1,7 @@
 ---
 title: 'Debugging Missing data-loc Attributes'
 date: 2025-12-30
+description: 'Investigates why the hub-client HTML preview lacks `data-loc` attributes needed for scroll sync, tracing the render path and listing likely causes such as the scroll sync toggle being off and stale caches.'
 ---
 
 **Issue:** HTML preview in hub-client is missing `data-loc` attributes needed for scroll sync

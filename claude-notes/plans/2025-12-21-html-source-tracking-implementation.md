@@ -1,6 +1,7 @@
 ---
 title: 'HTML Source Tracking Implementation'
 date: 2025-12-21
+description: 'Plans how the HTML writer records source locations by mapping AST node pointers to source info within a single entry-point call, emitting `data-loc` and `data-sid` attributes.'
 ---
 
 **Issue:** k-q4rm (child of k-02o9)

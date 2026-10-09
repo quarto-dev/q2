@@ -1,6 +1,7 @@
 ---
 title: 'Project ZIP Export'
 date: 2026-02-11
+description: 'Adds an Export ZIP action that packages all project files into a ZIP archive using `fflate`, exposed as a library function in `quarto-sync-client` and triggered as a browser download from hub-client.'
 ---
 
 ## Overview

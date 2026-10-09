@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Preview Link Click Refinements'
 date: 2026-01-16
+description: 'Extends hub-client preview link handling so links to missing `.qmd` files offer to create the file, same-document and cross-document anchors scroll to their target, and external links open in a new tab.'
 ---
 
 **Issue**: kyoto-ksw

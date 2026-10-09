@@ -1,6 +1,7 @@
 ---
 title: 'Block-editing UI glitches — fixes & tests'
 date: 2026-06-16
+description: 'Collects visual and interaction glitches in the breadcrumb chip and nesting cursor, such as a collapsing breadcrumb, stale text after an editor re-lands, and editors that hijack the scroll wheel.'
 ---
 
 **Date:** 2026-06-16

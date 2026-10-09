@@ -1,6 +1,7 @@
 ---
 title: 'Rename UI Tweaks'
 date: 2026-02-13
+description: 'Fixes two rename problems in the hub-client file sidebar: renaming a file to its own name should cancel instead of reporting that the file exists, and the rename input should select all its text.'
 ---
 
 ## Overview

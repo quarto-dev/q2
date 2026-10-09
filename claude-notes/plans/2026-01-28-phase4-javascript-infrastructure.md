@@ -1,6 +1,7 @@
 ---
 title: 'Phase 4: JavaScript Infrastructure for Quarto HTML'
 date: 2026-01-28
+description: 'Designs a modular, bundled ES6 JavaScript runtime for Quarto HTML output that replaces global-namespace libraries and inline EJS scripts, working identically in the native CLI and WASM hub-client.'
 ---
 
 **Parent Plan**: [`2026-01-24-html-rendering-parity.md`](./2026-01-24-html-rendering-parity.md)

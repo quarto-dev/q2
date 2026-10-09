@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview — Phase C plan'
 date: 2026-05-13
+description: 'Moves code-cell execution to the server in `q2 preview`, recording engine captures that the browser replays, with eager capture, staleness detection, re-execution and caching.'
 ---
 
 **Epic:** bd-kw93 (q2 preview)

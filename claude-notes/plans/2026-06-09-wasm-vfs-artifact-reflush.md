@@ -1,6 +1,7 @@
 ---
 title: 'Perf: WASM render re-flushes ALL artifacts into the VFS on every render (bd-q3bxnq2e)'
 date: 2026-06-09
+description: 'Investigates whether the WASM renderer re-flushing every artifact into the virtual filesystem on each render wastes time, and proposes skipping writes whose bytes are unchanged.'
 ---
 
 **Date:** 2026-06-09

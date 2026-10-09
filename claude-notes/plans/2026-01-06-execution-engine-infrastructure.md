@@ -1,6 +1,7 @@
 ---
 title: 'Plan: ExecutionEngine Trait and Engine Detection'
 date: 2026-01-06
+description: 'Defines an `ExecutionEngine` trait and engine detection from document metadata, plus a pipeline stage that runs code cells and reconciles the output AST so source locations survive.'
 ---
 
 **Issue**: k-oomv

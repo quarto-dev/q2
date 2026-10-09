@@ -1,6 +1,7 @@
 ---
 title: 'Misleading "engine not available in this build" warning in `q2 preview` with spliced captures'
 date: 2026-06-10
+description: 'Stops `q2 preview` from warning that knitr is unavailable and not executing when its output was already captured server-side and spliced in, by passing spliced engine names to the execution stage.'
 ---
 
 **Date:** 2026-06-10

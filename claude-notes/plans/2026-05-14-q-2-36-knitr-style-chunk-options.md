@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Q-2-36 — Clean parse error for old-style knitr chunk options'
 date: 2026-05-14
+description: 'Turns old-style knitr chunk headers such as `{r echo=FALSE}` and `{r test}` into a clean `Q-2-36` parse error that points users to the `#| key: value` body syntax.'
 ---
 
 - **GH issue:** [#152](https://github.com/quarto-dev/q2/issues/152) (chunk-options half; the table-captions half closed via #154)

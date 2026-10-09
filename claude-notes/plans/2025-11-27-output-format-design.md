@@ -1,6 +1,7 @@
 ---
 title: 'Output Format Design Proposal'
 date: 2025-11-27
+description: 'Proposes an abstraction for citeproc output so that the `Output` AST can render to HTML, Markdown, plain text, or Pandoc inlines, since the CSL test suite expects HTML.'
 ---
 
 **Created**: 2025-11-27

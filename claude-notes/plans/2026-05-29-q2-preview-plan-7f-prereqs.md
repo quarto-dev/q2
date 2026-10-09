@@ -1,6 +1,7 @@
 ---
 title: 'Plan 7f — Source-info prerequisites'
 date: 2026-05-29
+description: 'Covers source-info hygiene for the provenance work, adding a strict JSON reader paired with a completing reader for outside input, deprecating `SourceInfo::default()`, and shorter wire-format key names.'
 ---
 
 **Date:** 2026-05-29

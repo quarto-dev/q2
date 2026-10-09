@@ -1,6 +1,7 @@
 ---
 title: 'P7-foundation — Implementation tasks & Test Seam Spec'
 date: 2026-09-20
+description: 'Lays out the first steps for letting one document target several Pandoc output formats, starting with a warning diagnostic for multi-key `format:` blocks and a project containment gate for non-HTML targets.'
 ---
 
 **Plan (authoritative scope):** [`2026-09-20-pandoc-hybrid-P7-foundation.md`](2026-09-20-pandoc-hybrid-P7-foundation.md)

@@ -1,6 +1,7 @@
 ---
 title: 'Space-aware `..` refusal in `adjust_paths_to_document_dir`'
 date: 2026-09-30
+description: 'Stops `adjust_paths_to_document_dir` from producing long `..` chains for extensions extracted outside the project, keeping absolute paths for filesystem-space keys to avoid Windows `MAX_PATH` failures.'
 ---
 
 **Strands:** bd-s0jupmmv (research, `question`) · bd-9z2258af (implementation,

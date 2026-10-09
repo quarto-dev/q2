@@ -1,6 +1,7 @@
 ---
 title: 'P9 — Port `orange-book-margin` (book-context margin notes)'
 date: 2026-09-27
+description: 'Ports the orange-book margin-notes Typst fixture to q2 with book-level margin settings, and fixes `citation-location: margin` by skipping the merged citeproc pass when that setting is active.'
 ---
 
 **Date:** 2026-09-27

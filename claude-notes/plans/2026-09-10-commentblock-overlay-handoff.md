@@ -1,6 +1,7 @@
 ---
 title: 'Handoff: remove `CommentBlock`\''s per-block wrapper (q2-preview comment chrome as an overlay layer)'
 date: 2026-09-10
+description: 'Proposes removing the wrapper `div` that `CommentBlock` adds around every block, moving comment bubbles into one overlay layer so theme rules using child selectors match again in q2 preview.'
 ---
 
 **Strand:** bd-q2wqj24c (re-scoped 2026-09-10; `related` → bd-j3764r9a parity epic; discovered-from bd-kltzdhle)

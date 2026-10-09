@@ -1,6 +1,7 @@
 ---
 title: 'Refactor Tree-Sitter Handlers to Helper Files'
 date: 2025-10-31
+description: 'Moves the large span, link, image and quote handlers out of the `treesitter.rs` match statement into new helper files, leaving trivial delimiter and extractor cases inline.'
 ---
 
 **Date**: 2025-10-31

@@ -1,6 +1,7 @@
 ---
 title: 'Consolidate the artifact-write family (bd-v8gx + bd-gdhk)'
 date: 2026-07-28
+description: 'Consolidates three near-duplicate artifact flush loops into one `artifact_flush` module, renaming `flush_site_libs` to `flush_project_artifacts` and filtering entries by Project scope.'
 ---
 
 **Date:** 2026-07-28

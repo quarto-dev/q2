@@ -1,6 +1,7 @@
 ---
 title: 'Cross-page diagnostic coalescing'
 date: 2026-05-22
+description: 'Groups identical diagnostics that share a source location across many pages so the CLI prints each once with a list of affected files, instead of hundreds of duplicate blocks.'
 ---
 
 **Status:** drafting — pending user review

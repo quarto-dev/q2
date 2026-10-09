@@ -1,6 +1,7 @@
 ---
 title: 'Q-5-8 diagnostic points at wrong `_quarto.yml` span for extension-contributed pre-render scripts'
 date: 2026-08-09
+description: 'Makes the Q-5-8 diagnostic for failing pre-render and post-render scripts point at the `_extension.yml` manifest, not `_quarto.yml`, when an extension contributed the script, and applies the same fix to project resources.'
 ---
 
 **Strand:** bd-m6wmztln (p1 bug)

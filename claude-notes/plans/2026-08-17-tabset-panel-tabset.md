@@ -1,6 +1,7 @@
 ---
 title: 'Tabsets (panel-tabset) are not implemented — tab titles leak into the TOC (bd-toc-tabset-titles-zq93gjvf)'
 date: 2026-08-17
+description: 'Implements `.panel-tabset` Divs as real Bootstrap tabsets so tab titles stop leaking into the table of contents, and grouped tabsets switch together and remember the chosen tab.'
 ---
 
 **Date:** 2026-08-17

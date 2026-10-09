@@ -1,6 +1,7 @@
 ---
 title: 'Plan: qmd writer fixes for imported documents (document import P2)'
 date: 2026-10-03
+description: 'Fixes four qmd writer bugs that corrupt pandoc-shaped documents from import, covering line-start text that re-reads as markup, multi-block footnotes, merged adjacent lists and attributed editorial marks.'
 ---
 
 **Date:** 2026-10-03

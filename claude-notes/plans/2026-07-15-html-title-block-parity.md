@@ -1,6 +1,7 @@
 ---
 title: 'HTML Title Block Parity with Quarto 1 (bd-gx9cic8z)'
 date: 2026-07-15
+description: 'Brings the HTML title block up to Quarto 1 parity, matching its DOM and class names for structured authors, a metadata grid, category chips and banner mode.'
 ---
 
 **Status: COMPLETE (2026-07-17).** All phases P0–P7 executed on

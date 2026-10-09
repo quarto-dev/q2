@@ -1,6 +1,7 @@
 ---
 title: 'Phase 9 follow-up: thread user_grammars through RenderToHtmlRenderer (bd-izfv)'
 date: 2026-05-10
+description: 'Threads user-supplied syntax grammars into `RenderToHtmlRenderer` so that project renders apply them, since the project path currently drops them and breaks TOML code highlighting inside projects.'
 ---
 
 **Date:** 2026-05-10

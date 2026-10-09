@@ -1,6 +1,7 @@
 ---
 title: 'HTML Comment Support - Design Summary'
 date: 2025-10-28
+description: 'Adds HTML comment recognition as an atomic external scanner token in both tree-sitter markdown parsers, so markdown-special characters inside a comment no longer trigger parse errors.'
 ---
 
 **Date:** 2025-10-28

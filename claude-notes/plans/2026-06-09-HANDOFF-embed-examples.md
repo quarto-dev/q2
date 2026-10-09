@@ -1,6 +1,7 @@
 ---
 title: 'Handoff — embed-example iframes + cross-referenceable Demos + preview'
 date: 2026-06-09
+description: 'Makes `.embed-example-iframe` demo decks render in `q2 preview` by syncing resources-matched `.html` files into the preview virtual filesystem so the iframe fallback can inline them.'
 ---
 
 **Date:** 2026-06-09

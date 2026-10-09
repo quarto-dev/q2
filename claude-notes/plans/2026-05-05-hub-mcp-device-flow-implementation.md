@@ -1,6 +1,7 @@
 ---
 title: '2026-05-05 — Hub MCP auth: Design C′ (Google device flow) implementation'
 date: 2026-05-05
+description: 'Lets `ts-packages/quarto-hub-mcp` authenticate to the hub over WebSocket by running Google''s device flow, storing tokens in the OS keyring and accepting Google ID tokens on the hub.'
 ---
 
 ## Overview

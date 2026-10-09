@@ -1,6 +1,7 @@
 ---
 title: 'Zero-width / format characters: writer re-encodes as entities, parser accepts them raw (GH #672)'
 date: 2026-09-11
+description: 'Makes the qmd writer re-encode invisible format characters such as zero-width spaces as entities, and widens the parser to accept raw ones, since pampa''s own output currently fails to re-parse.'
 ---
 
 **Date:** 2026-09-11

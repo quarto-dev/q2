@@ -1,6 +1,7 @@
 ---
 title: '.ipynb Surface Syntax for Quarto 2 — Feasibility and Design'
 date: 2026-07-20
+description: 'Design reference for rendering `.ipynb` notebooks directly, converting each cell''s logical text into an in-memory source file so diagnostics point at cell coordinates, not raw JSON bytes.'
 ---
 
 **Date**: 2026-07-20

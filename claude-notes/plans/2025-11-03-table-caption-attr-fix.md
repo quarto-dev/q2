@@ -1,6 +1,7 @@
 ---
 title: 'Fix table caption attribute handling'
 date: 2025-11-03
+description: 'Applies the attribute written at the end of a table caption to the Table element and removes the stray space before it, by extending `CaptionBlock` and updating its readers and writers.'
 ---
 
 ## Problem

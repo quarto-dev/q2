@@ -1,6 +1,7 @@
 ---
 title: 'Fix: restore knitr label visibility through PreEngineSugaringStage'
 date: 2026-09-28
+description: 'Restores label-derived knitr figure filenames, such as `fig-cars-1.svg`, by re-injecting the `label` option into the engine input that pre-engine sugaring had removed.'
 ---
 
 **Strand:** bd-2lxj10z0 — knitr label stripped by PreEngineSugaring breaks

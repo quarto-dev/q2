@@ -1,6 +1,7 @@
 ---
 title: 'Flip-Flop Tests: Remaining Blockers'
 date: 2025-11-30
+description: 'Catalogs the three architectural blockers keeping the remaining flip-flop citation tests failing, namely affix placement inside formatting, unparsed markup in literal text values, and apostrophe handling in tags.'
 ---
 
 **Date**: 2025-11-30

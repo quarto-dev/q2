@@ -1,6 +1,7 @@
 ---
 title: 'Shortcode Line Break Error Message Design'
 date: 2025-11-20
+description: 'Adds a dedicated error, Q-2-27, for a line break before the closing `>}}` of a shortcode, which the parser currently rejects without a useful message.'
 ---
 
 Date: 2025-11-20

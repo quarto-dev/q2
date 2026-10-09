@@ -1,6 +1,7 @@
 ---
 title: 'P8 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Breaks the content-hidden work into tasks that verify `when-format` and `unless-format` conditionals against Pandoc targets such as docx and pptx, mostly as regression tests over already-shipped code.'
 ---
 
 **Date:** 2026-09-20

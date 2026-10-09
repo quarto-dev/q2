@@ -1,6 +1,7 @@
 ---
 title: 'QMD Writer Context Refactoring Analysis'
 date: 2025-11-24
+description: 'Evaluates a refactoring that replaces the incompletely threaded `errors` parameter in the QMD writer with a `QmdWriterContext` struct, which also tracks emphasis delimiters to avoid ambiguous markers.'
 ---
 
 ## Summary

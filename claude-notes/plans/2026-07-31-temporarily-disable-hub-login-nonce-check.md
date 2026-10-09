@@ -1,6 +1,7 @@
 ---
 title: 'Temporarily disable hub login nonce verification'
 date: 2026-07-31
+description: 'Temporarily lets an already deployed single-page app that omits the login nonce authenticate with the hub server, while still enforcing an exact nonce match for callers that send one.'
 ---
 
 ## Overview

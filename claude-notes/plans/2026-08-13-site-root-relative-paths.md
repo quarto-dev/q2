@@ -1,6 +1,7 @@
 ---
 title: 'Site-root-relative paths — three cases, and what replaces Q1''s deno-dom rewrite (bd-root-relative-paths-design-fc5pvkcv)'
 date: 2026-08-13
+description: 'Decides that a leading `/` in a Quarto path always means site-root-relative, so navbar logos, footer images and copied assets resolve correctly on sites served from a subdirectory.'
 ---
 
 **Date:** 2026-08-13

@@ -1,6 +1,7 @@
 ---
 title: 'Unicode ⟨ (U+27E8) and other non-ASCII brackets are uncoded parse errors (bd-angle-bracket-u27e8-parse-error-r6l55zmh)'
 date: 2026-09-25
+description: 'Fixes uncoded parse errors on non-ASCII opening and closing brackets such as ⟨ and 「 by treating every non-ASCII punctuation or symbol character as plain text in the grammar.'
 ---
 
 **Date:** 2026-09-25

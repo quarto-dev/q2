@@ -1,6 +1,7 @@
 ---
 title: 'Click-to-align: put the clicked block''s source line at the same screen Y'
 date: 2026-08-22
+description: 'Changes click-to-source in the preview so the clicked block''s first source line lands at the same screen height in the editor, aligning the two panes instead of centring the line.'
 ---
 
 ## Overview

@@ -1,6 +1,7 @@
 ---
 title: 'Hub-Client Deep Linking Plan'
 date: 2026-01-29
+description: 'Adds fragment-only URL routing to hub-client so files open in new tabs and support back and forward navigation, keyed by local project IDs so the secret document ID stays out of URLs.'
 ---
 
 ## Overview

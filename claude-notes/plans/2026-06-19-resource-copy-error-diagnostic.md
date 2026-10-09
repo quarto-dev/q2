@@ -1,6 +1,7 @@
 ---
 title: 'Resource-copy failure → structured diagnostic'
 date: 2026-06-19
+description: 'Converts resource-copy failures, which currently print as an unstructured string with no span, into span-aware diagnostics: a warning for missing referenced images and an error for environment failures like permission denial.'
 ---
 
 **Strand:** bd-bxrkxblx

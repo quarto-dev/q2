@@ -1,6 +1,7 @@
 ---
 title: 'mlua Analysis for Lua Filter Implementation'
 date: 2025-12-02
+description: 'Evaluates whether the `mlua` userdata system can model Pandoc-compatible AST elements for Lua filters, after experiments showed that Pandoc represents elements as userdata rather than tables.'
 ---
 
 **Date:** 2025-12-02

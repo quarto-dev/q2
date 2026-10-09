@@ -1,6 +1,7 @@
 ---
 title: 'P6 — Category passthrough + numbering suppression'
 date: 2026-08-20
+description: 'Makes Quarto 1''s crossref category mechanisms recognize Quarto 2''s reference types and activates external numbering, so Quarto 1 renders Quarto 2''s cross-reference numbers without renumbering them.'
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (round 4 review) — cross-referenced P5's corrected

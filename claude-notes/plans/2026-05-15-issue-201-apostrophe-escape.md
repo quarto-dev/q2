@@ -1,6 +1,7 @@
 ---
 title: 'Plan: writer emits `\''` for apostrophes the reader would re-reject (issue #201, bd-8lcm)'
 date: 2026-05-15
+description: 'Fixes the qmd writer so that an apostrophe the reader would reject as a bare quote is escaped as `\''`, letting round-trips through pampa succeed.'
 ---
 
 ## Context

@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Single-file chapter merge mechanism (book-projects P2)'
 date: 2026-09-21
+description: 'Adds the mechanism that merges a book''s chapters into one Pandoc document before the Crossref phase, driving the vendored book Lua filters and resolving cross-chapter links in Rust.'
 ---
 
 **Date:** 2026-09-21 (revised twice after review passes; this revision folds in the already-vendored `book-*.lua` files)

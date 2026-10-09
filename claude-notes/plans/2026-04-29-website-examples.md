@@ -1,6 +1,7 @@
 ---
 title: 'Example Quarto 2 website projects (end-to-end feature exercise)'
 date: 2026-04-29
+description: 'Adds eight runnable example website projects under `examples/websites/`, each exercising one feature area end to end, with READMEs that tell readers what to run and inspect.'
 ---
 
 **Date:** 2026-04-29

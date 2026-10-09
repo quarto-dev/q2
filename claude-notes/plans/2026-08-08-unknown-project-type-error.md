@@ -1,6 +1,7 @@
 ---
 title: 'Unknown `project.type` should be a hard error (bd-sekn481x)'
 date: 2026-08-08
+description: 'Turns an unrecognized `project.type` from a silent fallback to the default type into a hard error with a source-located diagnostic, so that unsupported extension types cannot scatter output into the source tree.'
 ---
 
 **Strand:** bd-sekn481x

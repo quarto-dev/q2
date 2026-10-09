@@ -1,6 +1,7 @@
 ---
 title: 'Footer/nav config markdown drops Link attributes and unwraps attributed Spans (bd-footer-link-attrs-dropped-1axx82op)'
 date: 2026-08-19
+description: 'Fixes the navigation renderer so links, attributed spans and inline code in footer and nav markdown keep their id, class and key-value attributes instead of losing them, which breaks cookie-consent hooks.'
 ---
 
 **Date:** 2026-08-19

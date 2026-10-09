@@ -1,6 +1,7 @@
 ---
 title: 'Continuation line starting with a digit terminates the paragraph (bd-digit-line-splits-paragraph-w6tod0gh)'
 date: 2026-08-11
+description: 'Stops a continuation line that begins with a digit from ending the paragraph, following CommonMark, so a line wrap inside link text no longer fails with an unclosed span error.'
 ---
 
 **Date:** 2026-08-11

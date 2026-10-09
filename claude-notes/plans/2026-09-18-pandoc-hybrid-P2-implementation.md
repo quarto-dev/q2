@@ -1,6 +1,7 @@
 ---
 title: 'P2 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Breaks the pandoc hybrid wire-schema work into dispatchable tasks, starting with a canonical JSON schema artifact for custom AST node types and a Rust loader that gates its shape.'
 ---
 
 **Date:** 2026-09-18

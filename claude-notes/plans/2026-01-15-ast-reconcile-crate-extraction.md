@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Extract AST Reconciliation into Dedicated Crate'
 date: 2026-01-15
+description: 'Moves the roughly 9,000-line AST reconciliation module out of `quarto-pandoc-types` into its own `quarto-ast-reconcile` crate so it can evolve and be tested independently of the Pandoc types.'
 ---
 
 **Status:** Proposed

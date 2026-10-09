@@ -1,6 +1,7 @@
 ---
 title: 'page-footer item text: lone image dropped; no link/image target resolved (bd-page-footer-image-items-stmpikgo)'
 date: 2026-08-18
+description: 'Makes page-footer item text render lone images and resolve link and image targets the same way region text does, so footer images work on sites served from a subdirectory.'
 ---
 
 **Date:** 2026-08-18

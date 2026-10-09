@@ -1,6 +1,7 @@
 ---
 title: 'Format-specific equation numbering and `html-math-method: mathml`'
 date: 2026-09-21
+description: 'Moves equation numbering out of crossref rendering into a format-specific stage, and renders `html-math-method: mathml` as MathML at render time so common documents ship no MathJax.'
 ---
 
 **Status:** approved 2026-09-21 (all five open decisions settled with the

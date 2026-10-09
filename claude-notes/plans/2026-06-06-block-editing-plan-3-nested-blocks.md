@@ -1,6 +1,7 @@
 ---
 title: 'Block editing — Plan 3: nested-block descent'
 date: 2026-06-06
+description: 'Lets block edits reach blocks nested inside `:::` divs, list items, block quotes and definition bodies by making `lookup_block` recurse and `apply_node_edit` splice at a path.'
 ---
 
 **Date:** 2026-06-06

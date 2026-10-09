@@ -1,6 +1,7 @@
 ---
 title: 'Grammar Issue: emphasis_delimiter Captures Adjacent Whitespace'
 date: 2025-10-31
+description: 'Documents a tree-sitter grammar bug where `emphasis_delimiter` nodes absorb neighboring spaces, so `x *y* z` loses its Space nodes and the output differs from Pandoc''s structure.'
 ---
 
 **Date**: 2025-10-31

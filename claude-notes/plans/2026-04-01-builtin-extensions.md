@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Built-in Extensions Infrastructure'
 date: 2026-04-01
+description: 'Adds a built-in extensions directory that ships the `quarto/lipsum` extension inside the q2 binary, so user extensions with the same name override it.'
 ---
 
 ## Status: Complete (Phases 1-5)

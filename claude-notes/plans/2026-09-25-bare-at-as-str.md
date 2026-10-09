@@ -1,6 +1,7 @@
 ---
 title: 'Bare `@` (not a citation) is literal text, where it cannot be a typo'
 date: 2026-09-25
+description: 'Makes a standalone or word-final `@` that is not a citation literal text, while keeping a parse error for `@` forms that look like a mistyped citation key.'
 ---
 
 **Status:** implemented and verified 2026-09-25 on

@@ -1,6 +1,7 @@
 ---
 title: 'Listing `contents:` globs — provenance-based base-directory resolution'
 date: 2026-08-06
+description: 'Resolves listing `contents:` globs against the directory where each entry was written, using config provenance, and replaces the dual-view matching that leaked project-root documents into subdirectory listings.'
 ---
 
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/456

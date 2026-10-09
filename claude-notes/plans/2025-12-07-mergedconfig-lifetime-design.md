@@ -1,6 +1,7 @@
 ---
 title: 'MergedConfig Lifetime and Navigation API Design'
 date: 2025-12-07
+description: 'Works out lifetime and return-type choices for a lazily merged configuration type and its chained navigation API, comparing borrowed layers against owned Rc layers and path-based lookup.'
 ---
 
 **Date**: 2025-12-07

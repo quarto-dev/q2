@@ -1,6 +1,7 @@
 ---
 title: 'Warning suppression, and the lone-bracket diagnostic that motivates it (bd-lone-bracket-diagnostic-mxu41qbt)'
 date: 2026-08-12
+description: 'Proposes a way to suppress diagnostics by code from configuration, paired with a warning for lone bracket groups such as `[Version TBD]` that currently disappear silently as bare spans.'
 ---
 
 **Date:** 2026-08-12

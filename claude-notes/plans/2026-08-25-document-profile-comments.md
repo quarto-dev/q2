@@ -1,6 +1,7 @@
 ---
 title: 'DocumentProfile: comment summary for downstream tooling (GH #445)'
 date: 2026-08-25
+description: 'Adds editorial comment entries to the document profile so tooling can count and list outstanding comments per page, including unrendered pages, and surfaces the active page''s count to hub-client.'
 ---
 
 **Strand:** bd-0rsk07il

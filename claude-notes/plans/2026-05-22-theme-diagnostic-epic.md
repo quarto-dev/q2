@@ -1,6 +1,7 @@
 ---
 title: 'Theme-config diagnostic overhaul'
 date: 2026-05-22
+description: 'Reports the unsupported `theme` map shape in `_quarto.yml` once with a source-located diagnostic, instead of repeating a plain error on every rendered page.'
 ---
 
 **Status:** drafting — pending user review

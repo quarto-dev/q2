@@ -1,6 +1,7 @@
 ---
 title: 'Plan: `quarto.doc` Lua API + HTML Dependency Infrastructure'
 date: 2026-04-01
+description: 'Adds the `quarto.doc` Lua namespace, plus `quarto.version` and `quarto.base64.encode`, so shortcode extensions can register HTML dependencies, detect the output format and inject text into the document.'
 ---
 
 ## Status: Complete

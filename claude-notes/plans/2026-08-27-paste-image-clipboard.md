@@ -1,6 +1,7 @@
 ---
 title: 'Paste images from clipboard into the Monaco source editor'
 date: 2026-08-27
+description: 'Lets users paste raster images from the clipboard into the hub-client Monaco editor, saving them as hashed files beside the current document and inserting an image reference at the cursor, without a dialog.'
 ---
 
 **Braid strand:** bd-706b0ixu

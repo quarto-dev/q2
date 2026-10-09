@@ -1,6 +1,7 @@
 ---
 title: 'Include shortcode: project-absolute (root-relative) path resolution'
 date: 2026-08-07
+description: 'Makes a leading slash in an `include` shortcode path mean project-root-relative, as in Quarto 1, instead of an OS-absolute path, and applies the same rule to the preview dependency graph.'
 ---
 
 **Strand:** bd-w9koo1i2

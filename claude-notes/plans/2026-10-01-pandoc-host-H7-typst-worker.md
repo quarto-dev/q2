@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Typst worker (pandoc-host H7)'
 date: 2026-10-01
+description: 'Builds a standalone typst compiler worker on typst.ts 0.7.0 that loads lazily, serves a virtual filesystem with fonts and prefetched packages, and exports PDF, with the first-use download measured against a 40 MB budget.'
 ---
 
 **Date:** 2026-10-01

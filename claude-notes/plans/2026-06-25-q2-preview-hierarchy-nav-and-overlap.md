@@ -1,6 +1,7 @@
 ---
 title: 'q2 preview: hierarchical block navigator + breadcrumb/toolbar overlap'
 date: 2026-06-25
+description: 'Turns the hierarchical block breadcrumb navigator on by default for `q2 preview --allow-edit`, and moves it beside the rich-text toolbar for rich-text blocks so the two no longer overlap.'
 ---
 
 **Strand:** bd-9x3zbuj8

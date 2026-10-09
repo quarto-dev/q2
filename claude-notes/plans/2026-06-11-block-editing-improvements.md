@@ -1,6 +1,7 @@
 ---
 title: 'Block editing — depth-aware editing, cross-surface cursor, AST buffers'
 date: 2026-06-11
+description: 'Plans depth-aware block editing in `q2 preview`, where a click selects the right nested surface, arrow keys move the cursor between surfaces, and an opt-in nesting cursor adds depth navigation.'
 ---
 
 **Date:** 2026-06-11 (substantially reworked 2026-06-12; concurrency/identity rework 2026-06-13)

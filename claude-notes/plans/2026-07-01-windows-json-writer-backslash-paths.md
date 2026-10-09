@@ -1,6 +1,7 @@
 ---
 title: 'Windows: JSON writer emits backslash path separators in output (bd-dff27o04)'
 date: 2026-07-01
+description: 'Normalizes filenames to forward slashes when the AST context stores them, so JSON and diagnostic output match across Windows and Unix instead of embedding backslash path separators.'
 ---
 
 **Date:** 2026-07-01

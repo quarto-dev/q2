@@ -1,6 +1,7 @@
 ---
 title: 'Vendoring the julia engine as an extension subtree (epic Step 4)'
 date: 2026-09-24
+description: 'Vendors the whole julia engine repository as a git subtree, embedding only its `_extensions/` payload in binaries, and adds a diagnostic for `{julia}` cells when Julia is not installed.'
 ---
 
 **Status:** DONE (2026-09-29), ready for PR. All four phases complete: payload

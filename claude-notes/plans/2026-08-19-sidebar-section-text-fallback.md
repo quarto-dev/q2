@@ -1,6 +1,7 @@
 ---
 title: 'Sidebar item with `text:` + `file:` + `contents:` renders the page title, ignoring `text:` (bd-sidebar-section-text-ignored-sdp5g7ns)'
 date: 2026-08-19
+description: 'Makes a sidebar section declared with `text:`, `file:` and `contents:` show its configured text rather than the linked page''s title, and warns when both `text:` and `section:` are given.'
 ---
 
 **Date:** 2026-08-19

@@ -1,6 +1,7 @@
 ---
 title: 'P1 — Neutral core + PipelineProfile'
 date: 2026-08-20
+description: 'Makes the format-neutral core of the HTML and reveal.js pipelines explicit through a `PipelineProfile` enum with a new `Pandoc(fmt)` case and exclude-list, as a pure refactor with byte-identical output.'
 ---
 
 **Date:** 2026-09-20

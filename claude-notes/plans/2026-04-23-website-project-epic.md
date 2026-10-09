@@ -1,6 +1,7 @@
 ---
 title: 'Website Projects (Epic)'
 date: 2026-04-23
+description: 'Designs multi-page website projects for Quarto 2, built on a typed DocumentProfile snapshot, sidebars, shared `site_libs` resources, and hub-client project rendering, with search and listings deferred.'
 ---
 
 **Date:** 2026-04-23

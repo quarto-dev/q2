@@ -1,6 +1,7 @@
 ---
 title: 'Block-level attributes via collected trailing `Inline::Attr`'
 date: 2026-06-17
+description: 'Carries block-level attributes such as `{.class}` on paragraphs from the parser through the JSON transport to HTML and React, by collecting a trailing inline attribute into the block.'
 ---
 
 **Strand:** bd-itqcfxc3 (discovered-from bd-38ioql41)

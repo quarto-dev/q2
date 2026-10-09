@@ -1,6 +1,7 @@
 ---
 title: 'Port the Typst brand-yaml typography fixtures that pass today (bd-post2btu)'
 date: 2026-10-02
+description: 'Ports the Typst brand.yml typography fixtures that already pass into the smoke-all regression suite, and hands the failing ones to the separate issues that own their bugs.'
 ---
 
 **Date:** 2026-10-03

@@ -1,6 +1,7 @@
 ---
 title: 'Cargo upgrade execution plan — 2026-05-04 majors'
 date: 2026-05-04
+description: 'Tracks the sixteen major and pre-1.0 Cargo dependency upgrades from a 2026 survey, one branch each, noting the API migrations each needed and which were deferred or paused.'
 ---
 
 **Survey:** `claude-notes/plans/2026-05-04-cargo-upgrade-survey.md`

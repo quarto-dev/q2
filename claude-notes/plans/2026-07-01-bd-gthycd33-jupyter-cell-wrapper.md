@@ -1,6 +1,7 @@
 ---
 title: 'bd-gthycd33: Jupyter engine output not spliced into preview (knitr works)'
 date: 2026-07-01
+description: 'Makes the Jupyter engine emit each executed cell inside a `.cell` wrapper div, the Quarto-canonical shape that knitr already uses, so Jupyter outputs splice into the preview and get matching styling.'
 ---
 
 **Strand:** bd-gthycd33 (bug, P2, discovered-from bd-sfet3264)

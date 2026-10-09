@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Runtime Metadata Layer'
 date: 2026-03-07
+description: 'Adds a runtime metadata layer to the `SystemRuntime` trait so any execution environment can inject highest-precedence configuration, replacing the special-cased WASM entry point previously used for scroll sync.'
 ---
 
 ## Overview
