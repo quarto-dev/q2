@@ -62,7 +62,9 @@
 use std::path::Path;
 
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_pandoc_types::{Attr, AttrSourceInfo, Block, ConfigValue, Inline, inlines_to_plain_text};
+use quarto_pandoc_types::{
+    Attr, AttrSourceInfo, Block, ConfigValue, Inline, inlines_to_plain_text,
+};
 
 use crate::artifact::{Artifact, ArtifactScope};
 use crate::project::ProjectKind;

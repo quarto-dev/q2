@@ -648,7 +648,10 @@ mod tests {
         ListingItem {
             title: crate::document_profile::text(title),
             subtitle: None,
-            description: Some(crate::document_profile::text(format!("Description of {}.", title))),
+            description: Some(crate::document_profile::text(format!(
+                "Description of {}.",
+                title
+            ))),
             author: Some("Jane".to_string()),
             authors: vec!["Jane".to_string()],
             date: date.map(String::from),

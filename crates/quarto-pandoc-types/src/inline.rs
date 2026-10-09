@@ -683,11 +683,15 @@ pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
             }
             if has_newline {
                 result.push(Inline::SoftBreak(SoftBreak {
-                    source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+                    source_info: quarto_source_map::SourceInfo::generated(
+                        quarto_source_map::By::unknown(),
+                    ),
                 }));
             } else {
                 result.push(Inline::Space(Space {
-                    source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+                    source_info: quarto_source_map::SourceInfo::generated(
+                        quarto_source_map::By::unknown(),
+                    ),
                 }));
             }
         } else {
@@ -702,7 +706,9 @@ pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
             }
             result.push(Inline::Str(Str {
                 text: word,
-                source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::unknown(),
+                ),
             }));
         }
     }

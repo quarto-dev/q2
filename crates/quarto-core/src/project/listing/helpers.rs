@@ -18,8 +18,8 @@
 use base64::Engine;
 
 use quarto_pandoc_types::inline::{
-    Cite, Code, Emph, Highlight, Inline, Inlines, Insert, Link, Quoted, SmallCaps, Span,
-    Str, Strikeout, Strong, Subscript, Superscript, Underline,
+    Cite, Code, Emph, Highlight, Inline, Inlines, Insert, Link, Quoted, SmallCaps, Span, Str,
+    Strikeout, Strong, Subscript, Superscript, Underline,
 };
 use quarto_pandoc_types::inlines_to_plain_text;
 use quarto_source_map::{By, SourceInfo};
@@ -493,7 +493,8 @@ mod tests {
         let cut = truncate_inlines_at_space(&inlines, 20);
         assert_eq!(inlines_to_plain_text(&cut), "Run cargo xtask…");
         assert!(
-            cut.iter().any(|i| matches!(i, Inline::Code(c) if c.text == "cargo xtask")),
+            cut.iter()
+                .any(|i| matches!(i, Inline::Code(c) if c.text == "cargo xtask")),
             "{cut:?}"
         );
     }

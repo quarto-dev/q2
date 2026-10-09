@@ -417,9 +417,8 @@ mod tests {
     #[test]
     fn flattened_prose_diagnostics_follow_hydration_precedence() {
         use crate::document_profile::text;
-        let codes = |d: Vec<DiagnosticMessage>| -> Vec<String> {
-            d.into_iter().map(|m| m.title).collect()
-        };
+        let codes =
+            |d: Vec<DiagnosticMessage>| -> Vec<String> { d.into_iter().map(|m| m.title).collect() };
 
         // Top-level description flattened, nothing shadows it: warn.
         let mut p = profile_with(ListingItemInfo::default());
@@ -439,7 +438,11 @@ mod tests {
         p2.listing_item.flattened_prose = vec!["description".to_string()];
         let d = flattened_prose_diagnostics(&p2, None);
         assert_eq!(d.len(), 1);
-        assert!(d[0].title.contains("`listing-item.description`"), "{:?}", codes(d));
+        assert!(
+            d[0].title.contains("`listing-item.description`"),
+            "{:?}",
+            codes(d)
+        );
 
         // An inline record laid over the document shadows both.
         let record = ListingItemInfo {
@@ -457,9 +460,10 @@ mod tests {
         let item = hydrate_item(&p);
         assert_eq!(item.title_text(), "_draft notes");
         assert!(
-            item.title
-                .iter()
-                .all(|i| matches!(i, quarto_pandoc_types::Inline::Str(_) | quarto_pandoc_types::Inline::Space(_))),
+            item.title.iter().all(|i| matches!(
+                i,
+                quarto_pandoc_types::Inline::Str(_) | quarto_pandoc_types::Inline::Space(_)
+            )),
             "{:?}",
             item.title
         );

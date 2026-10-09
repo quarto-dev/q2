@@ -1245,7 +1245,10 @@ mod tests {
         assert!(diags.is_empty(), "{diags:?}");
         let item = &resolved[0].items[0];
         assert_eq!(item.title_text(), "Get started");
-        assert_eq!(crate::document_profile::plain(&item.description).as_deref(), Some("from the document"));
+        assert_eq!(
+            crate::document_profile::plain(&item.description).as_deref(),
+            Some("from the document")
+        );
         assert_eq!(
             item.target,
             ItemTarget::document("download.qmd", "download.html")

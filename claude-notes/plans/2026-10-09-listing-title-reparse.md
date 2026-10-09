@@ -101,7 +101,10 @@ markdown and lets Pandoc parse it once. Code spans and emphasis therefore surviv
   `ListingItemInfo.{title,subtitle,description}` become `Option<Inlines>`, following the v11
   `TocEntry::title` precedent. `DOCUMENT_PROFILE_VERSION` goes from 13 to 14, and cached profiles regenerate.
   Consumers that need plain text (sort, filter, feed/RSS, the feed's empty-title check, sidebar,
-  navigation, llms, search) compute it with `pampa::writers::plaintext::inlines_to_string`.
+  navigation, llms, search) compute it with `quarto_pandoc_types::inlines_to_plain_text`. *As built:*
+  this is the projection `ConfigValue::as_plain_text` applied before, not the plaintext writer the
+  draft named, so their output is byte-for-byte unchanged. Accessors: `DocumentProfile::title_text()` and so on,
+  and `ListingItem::title_text()` and so on.
 - **D2. Scope: title, subtitle *and* description.** A description is a single `Inlines`. Authors
   should write "about a paragraph". (A separate thread already wants description carried in
   metadata so listings work better.)
@@ -129,14 +132,32 @@ Confirmed by the user on 2026-10-09 (proposed by me):
   because the result is a tree, not text), and appends `…`. Derived descriptions (filled in after render from the
   HTML) are unaffected. The cut may not match Q1's character count exactly; the user accepted that.
 
+Added during implementation (2026-10-09):
+
+- **D8. `-html` twins for raw-HTML templates.** `$it.title$` / `$it.subtitle$` / `$it.description$` are now
+  markdown. A custom template that writes them inside a raw HTML block, as our own
+  `ejs-listing-port` worked example does, would show the markdown source (`Fix \_scope`). The binding therefore
+  also provides `title-html` / `subtitle-html` / `description-html`, rendered by the HTML inline
+  writer. This follows the existing `image-html` / `category-html` convention. The docs and skill say which
+  to use where.
+- **D5 delivery.** The profile is cached, and its spans belong to the listed file's source context,
+  not the host's. So the profile records only *which* keys were flattened (`flattened_prose`), and the
+  listing reports Q-12-26 on every host render, naming the document (no span). The report follows
+  `hydrate_item` precedence: a `listing-item:` or inline-record value that shadows a flattened one
+  draws no warning. Inline records warn directly in `parse_record`, *with* a span. Lists flatten item by
+  item (`prose_runs`), because pandoc.utils' `blocks_to_inlines` glues list items together with no separator.
+- **Prose is written on one line.** Soft and hard breaks become spaces, because titles sit in ATX headings
+  and table cells. Links are unwrapped and notes dropped (`strip_links_and_notes`, shared with
+  the TOC), because every built-in template wraps the title in the item's link.
+
 ## Phases
 
 ### Phase 0: failing tests first
 - [x] Probe today's behavior: a multi-paragraph `description: |` (D5), and the qmd writer's
       handling of `|` inside a code span. Record both in the investigation dir.
-- [ ] *(moved to Phase 1; needs the new types to compile)* Unit (`document_profile.rs`): the profile keeps `title` / `subtitle` / `description` as inlines
+- [x] *(moved to Phase 1; needs the new types to compile)* Unit (`document_profile.rs`): the profile keeps `title` / `subtitle` / `description` as inlines
       (code span intact).
-- [ ] *(moved to Phase 2; needs the new types to compile)* Unit (`binding.rs`): items whose title is `[Str "_scope"]`, or contains `Code "_scope"`,
+- [x] *(moved to Phase 2; needs the new types to compile)* Unit (`binding.rs`): items whose title is `[Str "_scope"]`, or contains `Code "_scope"`,
       `Code "<anonymous>"` or `Emph`. Re-parsing the bound `title` markdown with
       `pampa::readers::qmd::read` gives back the same inlines. Same for a table-row cell, including a `|` inside
       a code span.
@@ -150,45 +171,62 @@ Confirmed by the user on 2026-10-09 (proposed by me):
       bd-mlmkev01 before merging).
 
 ### Phase 1: profile (D1, D2, D5)
-- [ ] `ConfigValue → Option<Inlines>` helper: a plain YAML string becomes `Str`s; `PandocInlines` is
+- [x] `ConfigValue → Option<Inlines>` helper: a plain YAML string becomes `Str`s; `PandocInlines` is
       used as-is; `PandocBlocks` is flattened per D5 (with a flag so the caller can warn).
-- [ ] `DocumentProfile.{title,subtitle,description}` and `ListingItemInfo.{title,subtitle,description}`
+- [x] `DocumentProfile.{title,subtitle,description}` and `ListingItemInfo.{title,subtitle,description}`
       become `Option<Inlines>`.
-- [ ] `DOCUMENT_PROFILE_VERSION` 13 → 14, plus a doc-comment entry.
-- [ ] Move every plain-text consumer to `inlines_to_string` (sidebar, navigation, llms, search,
+- [x] `DOCUMENT_PROFILE_VERSION` 13 → 14, plus a doc-comment entry.
+- [x] Move every plain-text consumer to `inlines_to_string` (sidebar, navigation, llms, search,
       index, book, sort, filter, feed, …).
 
 ### Phase 2: listing item and binding (D3)
-- [ ] `ListingItem.{title,subtitle,description}` become `Inlines`; the filename-stem fallback is `Str`.
-- [ ] Inline `contents:` records (`record.rs`) produce inlines.
-- [ ] `build_item_map` / `table_row` bind `write_inlines_fragment` output, with links flattened in
+- [x] `ListingItem.{title,subtitle,description}` become `Inlines`; the filename-stem fallback is `Str`.
+- [x] Inline `contents:` records (`record.rs`) produce inlines.
+- [x] `build_item_map` / `table_row` bind `write_inlines_fragment` output, with links flattened in
       titles; table cells stay safe for `|` and newlines.
 
 ### Phase 3: truncation (D7) and multi-block warning (D5)
-- [ ] Inline-aware truncation for `max-description-length`.
-- [ ] Warning (new catalog code) for a multi-block description.
+- [x] Inline-aware truncation for `max-description-length`.
+- [x] Warning (new catalog code) for a multi-block description.
 
 ### Phase 4: a failed Q-12-10 re-parse becomes an error (D4, D6)
-- [ ] The `Err` branch emits an error; the `Ok`-with-diagnostics branch stays a warning.
-- [ ] Update the catalog entry text.
-- [ ] Note the bd-mlmkev01 ordering on both strands.
+- [x] The `Err` branch emits an error; the `Ok`-with-diagnostics branch stays a warning.
+- [x] Update the catalog entry text.
+- [x] Note the bd-mlmkev01 ordering on both strands (braid comments, 2026-10-09).
 
 ### Phase 5: verification and unblocking
-- [ ] `cargo xtask verify` green.
-- [ ] Repro project renders with both listings and formatting intact.
+- [x] `cargo xtask verify` green (full, including the hub build), 2026-10-09, after `cargo fmt`.
+- [x] Repro project renders with both listings and formatting intact (`q2 render`, no
+      diagnostics). A broken custom template now prints `Error [Q-12-10]` and exits 1.
 - [ ] Re-render the bd-fvcip3t5 plans listing under `--strict`.
 
 ### Phase 6: docs
-- [ ] Catalog/docs text for Q-12-10 and the new warning; listing docs say a description should be
+- [x] Catalog/docs text for Q-12-10 and the new warning; listing docs say a description should be
       one paragraph.
+- [x] `docs/errors/listing/Q-12-10.qmd` rewritten (warning vs error; item data no longer a
+      trigger); new `Q-12-26.qmd`, registered in `docs/_quarto.yml`; `listings.qmd` gains
+      "Titles and descriptions are markdown" and the `-html` twins; `listing-templates.qmd` mapping
+      row; `ejs-listing-port` skill updated for D8.
+
+## Follow-ups found (not in scope)
+
+- **bd-listing-description-precedence-x4bh6w3m** (already filed, open): the default and grid layouts
+  replace a document's *explicit* description with the derived first paragraph, because placeholders
+  are emitted for every document item. Q1 emits them only when there is no description or abstract.
+  The integration test checks document descriptions in the table and uses an inline record for
+  the template path because of this.
+- Other string fields interpolated into listing markdown (`author`, `date`, `categories` in
+  templates, custom `extra` fields, non-prose table cells) are still unescaped plain text: the same
+  class of bug, much rarer in practice (an author named `_x`).
+- Sidebar, breadcrumbs, navbar and `llms.txt` still show plain-text titles (formatting lost, nothing
+  breaks). Unchanged by this work.
+- A document listed twice on one host page warns Q-12-26 once per listing.
 
 ## Risks / tradeoffs (draft)
 
 - Bumping the profile version invalidates every cached profile. That is cheap, but it is a cold-start cost for
   large projects.
-- `write_inlines_fragment` output that contains a `Link` would nest a link inside the
-  `[$title$]($path$)` link. Q1 has the same issue (Pandoc then emits nested `<a>`). It needs a decision:
-  probably flatten `Link` to its content in the title projection.
+- ~~Nested links~~: resolved, since links are unwrapped before writing (see "Prose is written on one line").
 - Sidebar, breadcrumbs and navigation also use the plain-text `profile.title`
   (`sidebar_auto.rs`, `navigation_enrich.rs`). They do not appear to re-parse, so they lose
   formatting but do not break. That is out of scope here and could be filed as a related strand if wanted.

@@ -304,7 +304,10 @@ mod tests {
             ("link", s("download.qmd")),
         ]));
         assert!(diags.is_empty(), "{diags:?}");
-        assert_eq!(crate::document_profile::plain(&rec.info.title).as_deref(), Some("Get started"));
+        assert_eq!(
+            crate::document_profile::plain(&rec.info.title).as_deref(),
+            Some("Get started")
+        );
         assert_eq!(
             crate::document_profile::plain(&rec.info.description).as_deref(),
             Some("Download and install Positron")

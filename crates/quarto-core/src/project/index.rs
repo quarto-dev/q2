@@ -144,7 +144,11 @@ mod tests {
 
         // lookup_by_href
         assert_eq!(
-            index.lookup_by_href("index.html").unwrap().title_text().as_deref(),
+            index
+                .lookup_by_href("index.html")
+                .unwrap()
+                .title_text()
+                .as_deref(),
             Some("Home"),
         );
     }

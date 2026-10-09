@@ -20,9 +20,9 @@
 
 use std::collections::HashMap;
 
-use quarto_doctemplate::{TemplateContext, TemplateValue};
 use pampa::filter_context::FilterContext;
 use pampa::filters::{Filter, FilterReturn, topdown_traverse_inlines};
+use quarto_doctemplate::{TemplateContext, TemplateValue};
 use quarto_pandoc_types::inline::{Inline, Inlines, Space, split_string_to_inlines};
 use quarto_pandoc_types::{ConfigValue, inlines_to_plain_text};
 
@@ -620,9 +620,7 @@ fn prose_html(inlines: &[Inline]) -> String {
 /// `inlines` with every `SoftBreak` / `LineBreak` (at any depth)
 /// replaced by a `Space`.
 fn single_line(inlines: Inlines) -> Inlines {
-    let space = |source_info| {
-        vec![Inline::Space(Space { source_info })]
-    };
+    let space = |source_info| vec![Inline::Space(Space { source_info })];
     let mut filter = Filter::new()
         .with_soft_break(move |b, _| FilterReturn::FilterResult(space(b.source_info), false))
         .with_line_break(move |b, _| FilterReturn::FilterResult(space(b.source_info), false));
@@ -976,7 +974,9 @@ mod tests {
         let mut l = listing();
         l.max_description_length = 20;
         let mut it = item("Hello");
-        it.description = Some(crate::document_profile::text("The quick brown fox jumps over."));
+        it.description = Some(crate::document_profile::text(
+            "The quick brown fox jumps over.",
+        ));
         let ctx = build_listing_context(&l, &[it], "posts", &ConfigValue::default());
         let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
             panic!("items not a list");
@@ -1335,7 +1335,10 @@ mod tests {
         let (doc, _, diags) =
             pampa::readers::qmd::read(md.as_bytes(), false, "t.qmd", &mut sink, true, None)
                 .unwrap_or_else(|d| panic!("`{md}` does not parse: {d:?}"));
-        assert!(diags.is_empty(), "`{md}` parses with diagnostics: {diags:?}");
+        assert!(
+            diags.is_empty(),
+            "`{md}` parses with diagnostics: {diags:?}"
+        );
         match doc.blocks.as_slice() {
             [quarto_pandoc_types::block::Block::Paragraph(p)] => p.content.clone(),
             other => panic!("`{md}` is not one paragraph: {other:?}"),
@@ -1350,7 +1353,10 @@ mod tests {
             ("Fix \\_scope: regression", "Fix \\_scope: regression"),
             ("Plan `_scope` and *emph*", "Plan `_scope` and *emph*"),
             ("About `<anonymous>` frames", "About `<anonymous>` frames"),
-            ("A \\<p\\> tag and a \\@ and \\*", "A \\<p> tag and a \\@ and \\*"),
+            (
+                "A \\<p\\> tag and a \\@ and \\*",
+                "A \\<p> tag and a \\@ and \\*",
+            ),
             ("Pipes `a|b` and c\\|d", "Pipes `a|b` and c\\|d"),
             ("Math $x_1$ here", "Math $x_1$ here"),
             // Links unwrap (the title is itself a link); notes go.

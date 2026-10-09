@@ -373,7 +373,10 @@ mod tests {
             .await
             .unwrap()
             .expect("hit");
-        assert_eq!(crate::document_profile::plain(&loaded.title).as_deref(), Some("Second"));
+        assert_eq!(
+            crate::document_profile::plain(&loaded.title).as_deref(),
+            Some("Second")
+        );
     }
 
     #[tokio::test]

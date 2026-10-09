@@ -1729,7 +1729,10 @@ mod tests {
         assert_eq!(profile.source_path, PathBuf::from("doc.qmd"));
         assert_eq!(profile.output_href, "doc.html");
         assert_eq!(profile.format_id, "html");
-        assert_eq!(crate::document_profile::plain(&profile.title).as_deref(), Some("Hello"));
+        assert_eq!(
+            crate::document_profile::plain(&profile.title).as_deref(),
+            Some("Hello")
+        );
         assert!(!profile.draft);
         assert!(profile.outline.is_empty(), "no headings → empty outline");
     }
@@ -1838,9 +1841,18 @@ Body.
         let ast = parse_qmd(qmd);
         let profile = DocumentProfile::extract(&ast, Path::new("big.qmd"), "big.html", "html");
 
-        assert_eq!(crate::document_profile::plain(&profile.title).as_deref(), Some("Big doc"));
-        assert_eq!(crate::document_profile::plain(&profile.subtitle).as_deref(), Some("With everything"));
-        assert_eq!(crate::document_profile::plain(&profile.description).as_deref(), Some("A thorough example."));
+        assert_eq!(
+            crate::document_profile::plain(&profile.title).as_deref(),
+            Some("Big doc")
+        );
+        assert_eq!(
+            crate::document_profile::plain(&profile.subtitle).as_deref(),
+            Some("With everything")
+        );
+        assert_eq!(
+            crate::document_profile::plain(&profile.description).as_deref(),
+            Some("A thorough example.")
+        );
         assert_eq!(
             profile.authors,
             vec!["Alice Example".to_string(), "Bob Example".to_string()]
@@ -2327,7 +2339,10 @@ Body.
         // Only `title` should appear; every other field is empty/None
         // and tagged `skip_serializing_if`.
         // Prose serializes as inline nodes (v14).
-        assert!(json.contains("\"title\":[{\"Str\""), "title present: {json}");
+        assert!(
+            json.contains("\"title\":[{\"Str\""),
+            "title present: {json}"
+        );
         assert!(!json.contains("subtitle"));
         assert!(!json.contains("description"));
         assert!(!json.contains("image"));
@@ -2416,9 +2431,18 @@ Body.
         let ast = parse_qmd(qmd);
         let p = DocumentProfile::extract(&ast, Path::new("li.qmd"), "li.html", "html");
         let li = &p.listing_item;
-        assert_eq!(crate::document_profile::plain(&li.title).as_deref(), Some("Listing title"));
-        assert_eq!(crate::document_profile::plain(&li.subtitle).as_deref(), Some("Listing subtitle"));
-        assert_eq!(crate::document_profile::plain(&li.description).as_deref(), Some("Listing desc"));
+        assert_eq!(
+            crate::document_profile::plain(&li.title).as_deref(),
+            Some("Listing title")
+        );
+        assert_eq!(
+            crate::document_profile::plain(&li.subtitle).as_deref(),
+            Some("Listing subtitle")
+        );
+        assert_eq!(
+            crate::document_profile::plain(&li.description).as_deref(),
+            Some("Listing desc")
+        );
         assert_eq!(li.image.as_deref(), Some("cover.png"));
         assert_eq!(li.image_alt.as_deref(), Some("A cover"));
         assert_eq!(li.date.as_deref(), Some("2026-04-01"));
@@ -2472,7 +2496,10 @@ Body.
 ";
         let ast = parse_qmd(qmd);
         let p = DocumentProfile::extract(&ast, Path::new("c.qmd"), "c.html", "html");
-        assert_eq!(crate::document_profile::plain(&p.listing_item.title).as_deref(), Some("Curated"));
+        assert_eq!(
+            crate::document_profile::plain(&p.listing_item.title).as_deref(),
+            Some("Curated")
+        );
         let extra_title = p
             .listing_item
             .extra
@@ -2540,7 +2567,10 @@ Body.
         assert_eq!(profile.title_text().as_deref(), Some("Fix _scope and emph"));
         assert_eq!(profile.subtitle_text().as_deref(), Some("Sub _x"));
         let description = profile.description.as_deref().expect("description");
-        assert!(matches!(description[0], Inline::Strong(_)), "{description:?}");
+        assert!(
+            matches!(description[0], Inline::Strong(_)),
+            "{description:?}"
+        );
         assert!(profile.flattened_prose.is_empty());
     }
 
@@ -2563,7 +2593,8 @@ Body.
 
     #[test]
     fn single_paragraph_block_scalar_is_not_flattened() {
-        let ast = parse_qmd("---\ntitle: T\ndescription: |\n  Just *one* paragraph.\n---\n\nBody.\n");
+        let ast =
+            parse_qmd("---\ntitle: T\ndescription: |\n  Just *one* paragraph.\n---\n\nBody.\n");
         let profile = DocumentProfile::extract(&ast, Path::new("a.qmd"), "a.html", "html");
         assert_eq!(
             profile.description_text().as_deref(),
@@ -2915,7 +2946,10 @@ Body.
     fn from_map_drop_policy_ignores_unknown_keys() {
         let li = cv_map(vec![("title", cv_s("T")), ("icon", cv_s("bi-star"))]);
         let info = ListingItemInfo::from_map(&li, UnknownKeyPolicy::Drop);
-        assert_eq!(crate::document_profile::plain(&info.title).as_deref(), Some("T"));
+        assert_eq!(
+            crate::document_profile::plain(&info.title).as_deref(),
+            Some("T")
+        );
         assert!(info.extra.is_empty(), "Drop must not forward `icon`");
     }
 
@@ -2929,7 +2963,10 @@ Body.
         ]);
         let info =
             ListingItemInfo::from_map(&li, UnknownKeyPolicy::IntoExtra { except: &["path"] });
-        assert_eq!(crate::document_profile::plain(&info.title).as_deref(), Some("T"));
+        assert_eq!(
+            crate::document_profile::plain(&info.title).as_deref(),
+            Some("T")
+        );
         assert_eq!(
             info.extra
                 .get("icon")
