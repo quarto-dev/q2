@@ -2,6 +2,9 @@
 title: 'Listing item images break the hub preview (bd-yqlbfrln)'
 date: 2026-09-24
 description: 'Stops listing item thumbnails from scheduling resource copies into the output tree when the hub renders in VFS-root mode, where the `/.quarto/project-artifacts` write root rejects them and fails the whole page render.'
+braid:
+  strand: bd-yqlbfrln
+  priority: P1
 ---
 
 Branch `braid/bd-yqlbfrln-listing-item-image-copy` off main at `ccbdc441`.

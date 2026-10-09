@@ -2,10 +2,11 @@
 title: 'Shareable Project URLs for hub-client'
 date: 2026-02-03
 description: 'Adds shareable hub-client links carrying the project id, sync server, and current file so collaborators on other devices can open a project, then rewrites the URL to avoid leaving the id in history.'
+status: done  # Implementation Complete - Awaiting Manual Testing
+braid:
+  strand: bd-8exa
+  priority: P1
 ---
-
-**Issue:** bd-8exa
-**Status:** Implementation Complete - Awaiting Manual Testing
 
 ## Overview
 

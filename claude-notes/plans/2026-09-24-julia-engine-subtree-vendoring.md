@@ -2,14 +2,9 @@
 title: 'Vendoring the julia engine as an extension subtree (epic Step 4)'
 date: 2026-09-24
 description: 'Vendors the whole julia engine repository as a git subtree, embedding only its `_extensions/` payload in binaries, and adds a diagnostic for `{julia}` cells when Julia is not installed.'
+status: done  # DONE (2026-09-29), ready for PR. All four phases complete: payload registered (native + WASM, F1 fixed), the Q9 diagnostic added (`Q-18-3`), the hand-maintained fixture deleted, gates green (`cargo clippy -p quarto-core --all-targets -- -D warnings`, `cargo xtask lint`, targeted `cargo nextest -p quarto-core` including live julia+deno J1–J7 and the xtask subtree-table tests, full `cargo nextest run --workspace`).
 ---
 
-**Status:** DONE (2026-09-29), ready for PR. All four phases complete: payload
-registered (native + WASM, F1 fixed), the Q9 diagnostic added (`Q-18-3`), the
-hand-maintained fixture deleted, gates green (`cargo clippy -p quarto-core
---all-targets -- -D warnings`, `cargo xtask lint`, targeted
-`cargo nextest -p quarto-core` including live julia+deno J1–J7 and the xtask
-subtree-table tests, full `cargo nextest run --workspace`).
 **Parent:** [2026-09-03-julia-engine-static-declarations-epic.md](2026-09-03-julia-engine-static-declarations-epic.md)
 — this plan scopes Step 4's julia-specific remainder. The infrastructure
 landed on `main` as PR #717 (`extension-subtree-infra`, merged 2026-09-24).

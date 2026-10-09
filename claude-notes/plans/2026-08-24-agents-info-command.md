@@ -2,14 +2,11 @@
 title: '`q2 docs llms`: embed the docs-site llms.txt artifacts in the binary'
 date: 2026-08-24
 description: 'Adds a `q2 docs llms` command that serves the docs-site llms.txt artifacts embedded in the binary, so LLM agents can read q2 documentation offline, with `q2 agents-info` as an alias.'
+status: done  # All four phases complete and committed (`1fbc2b93` on `braid/bd-hwop1zii-docs-llms-embed`). Full workspace suite and `cargo xtask verify --skip-hub-build` green; end-to-end transcript recorded below. Awaiting user review — not pushed, strand still open.
+braid:
+  strand: bd-hwop1zii
+  priority: P1
 ---
-
-**Strand:** bd-hwop1zii
-**Date:** 2026-08-24
-**Status:** All four phases complete and committed (`1fbc2b93` on
-`braid/bd-hwop1zii-docs-llms-embed`). Full workspace suite and
-`cargo xtask verify --skip-hub-build` green; end-to-end transcript
-recorded below. Awaiting user review — not pushed, strand still open.
 
 ## Overview
 

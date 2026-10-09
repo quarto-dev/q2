@@ -2,10 +2,9 @@
 title: 'Epic: pandoc.wasm host, "Download as" UI and PDF (browser side)'
 date: 2026-10-01
 description: 'Runs `pandoc.wasm` in hub-client to offer Download as docx, pptx, epub and typst source, with a host package, lazy loader, UI, hardening and a PDF chain through a typst worker.'
+status: approved  # Planned; nothing started
 ---
 
-**Date:** 2026-10-01
-**Status:** Planned; nothing started
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md)
 **Companion epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md) (the Rust request seam)
 **Integration branch:** `feature/pandoc-wasm` (from `origin/main`)

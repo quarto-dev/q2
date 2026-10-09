@@ -4,7 +4,6 @@ date: 2026-10-01
 description: 'Pins the wasm to the `PANDOC_PIN` version through a shared constants file, adds native input capture and a comparison CLI for recordings, and explores a versioned, hashable request before the seam is built.'
 ---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D12, Contracts)
 **Depends on:** nothing. **Unblocks:** host H0 (needs the capture wrapper, constants file and extractor CLI), R1.

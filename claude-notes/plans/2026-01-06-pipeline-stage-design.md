@@ -2,11 +2,11 @@
 title: 'Plan: PipelineStage Abstraction for Full Render Pipeline'
 date: 2026-01-06
 description: 'Designs a `PipelineStage` abstraction and a runtime-checked data enum so that render stages can be composed into pipelines that work in both native and WASM builds.'
+status: done  # Implementation Complete (Phase 3)
+braid:
+  strand: k-m46n
+  priority: P1
 ---
-
-**Issue**: k-m46n
-**Date**: 2026-01-06
-**Status**: Implementation Complete (Phase 3)
 
 ## Implementation Progress
 

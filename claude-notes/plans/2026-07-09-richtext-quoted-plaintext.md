@@ -2,11 +2,11 @@
 title: 'Rich-text editor: render `Quoted` as editable plaintext quotes, not a chip'
 date: 2026-07-09
 description: 'Renders Pandoc `Quoted` spans in the q2 preview rich-text editor as literal straight quote characters around editable content, instead of an opaque chip that blocks editing inside the quotes.'
+status: draft  # planning (awaiting go-ahead)
+braid:
+  strand: bd-iwv3708i
+  priority: P2
 ---
-
-**Strand:** bd-iwv3708i
-**Date:** 2026-07-09
-**Status:** planning (awaiting go-ahead)
 
 ## Problem (reproduced in the binary)
 

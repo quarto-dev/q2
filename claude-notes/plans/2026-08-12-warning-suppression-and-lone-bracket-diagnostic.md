@@ -2,12 +2,14 @@
 title: 'Warning suppression, and the lone-bracket diagnostic that motivates it (bd-lone-bracket-diagnostic-mxu41qbt)'
 date: 2026-08-12
 description: 'Proposes a way to suppress diagnostics by code from configuration, paired with a warning for lone bracket groups such as `[Version TBD]` that currently disappear silently as bare spans.'
+status: draft  # Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+braid:
+  strand: bd-lone-bracket-diagnostic-mxu41qbt
+  priority: P2
+  labels: [markdown]
 ---
 
-**Date:** 2026-08-12
-**Braid:** bd-lone-bracket-diagnostic-mxu41qbt
 **Branch:** `braid/bd-lone-bracket-diagnostic-warning-suppression`, based on `main` \@ `593f2785` (no worktree — investigation ran in the room-3 checkout)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 

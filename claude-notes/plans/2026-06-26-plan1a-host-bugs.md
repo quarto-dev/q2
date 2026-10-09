@@ -2,9 +2,9 @@
 title: 'Plan 1a-host bugs — q2-introduced defects in the landed engine host'
 date: 2026-06-26
 description: 'Fixes two q2-introduced defects in the landed TypeScript engine host: crash stderr falsely attributed to one engine when several are in flight, and bundle-extraction failures cached permanently.'
+status: approved  # ready to execute.
 ---
 
-**Status:** ready to execute. **Created:** 2026-06-26 (carved out of `plan1a-return-to-q1`).
 **Branch:** `feature/ts-engine-extensions`. **Touches:** `crates/quarto-core/src/engine/ts_process.rs`.
 **Sequence:** **independent — no dependencies** (not on Item A, 1b, 1c). 1a-host-layer maintenance on
 already-landed code; can land **first / in parallel with everything**. Low conflict risk with Item A

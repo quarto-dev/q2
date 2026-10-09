@@ -2,9 +2,11 @@
 title: '`q2 render --json-errors`: escape-free `rendered` and pass-1 `error` (R1)'
 date: 2026-10-07
 description: 'Removes terminal escapes from `q2 render --json-errors` output by rendering the `rendered` and pass-1 `error` fields as plain text, and has no-color text output use real render options instead of a post-hoc strip.'
+braid:
+  strand: bd-ckbqmupi  # item 2. Upstream: qe-hal9cc7b, released as `quarto-error-reporting` 0.4.0.
+  priority: P2
 ---
 
-**Strand:** bd-ckbqmupi (item 2). Upstream: qe-hal9cc7b, released as `quarto-error-reporting` 0.4.0.
 **Branch:** `braid/bd-ckbqmupi-q2-render-json-errors`, off `main` @ `5c61810b1` (after PR #795).
 Predecessor plan: `2026-10-06-json-errors-output-hygiene.md` (R1 in its broader review).
 

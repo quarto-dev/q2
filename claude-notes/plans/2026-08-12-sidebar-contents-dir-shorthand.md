@@ -2,14 +2,16 @@
 title: 'Sidebar `contents: <directory>` shorthand renders a broken sidebar (bd-sidebar-contents-dir-shorthand-z7arvhx8)'
 date: 2026-08-12
 description: 'Makes a bare directory name in `contents:` expand to a titled section of the pages in that directory, as Quarto 1 does, and applies sidebar selection after expansion.'
+status: in-progress  # Design settled 2026-08-13 — implementing.
+braid:
+  strand: bd-sidebar-contents-dir-shorthand-z7arvhx8
+  priority: P1
+  labels: [navigation]
 ---
 
-**Date:** 2026-08-12
-**Braid:** `bd-sidebar-contents-dir-shorthand-z7arvhx8` (bug, p1, label `navigation`)
 **Branch:** `braid/bd-sidebar-contents-dir-shorthand-z7arvhx8`, off `main` \@
 `152ed8fb`, in the **main checkout** (no worktree — user's call, Q5).
 **Also fixes:** `bd-4feoon8u` (multi-sidebar `auto:` selection).
-**Status:** Design settled 2026-08-13 — implementing.
 
 ## Triage verdict
 

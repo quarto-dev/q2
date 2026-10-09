@@ -2,12 +2,15 @@
 title: 'q2 preview: browser opens before the server accepts connections'
 date: 2026-06-15
 description: 'Fixes `q2 preview` opening the browser before the server accepts connections, by waiting until the port accepts before launching the browser, so the first request no longer fails on large projects.'
+status: approved  # diagnosed; awaiting go-ahead to implement.
+braid:
+  strand: bd-a6dvrdg1  # related to the q2 preview epic bd-kw93
+  priority: P2
+  labels: [bug]
 ---
 
-**Strand:** bd-a6dvrdg1 (bug, p2) — related to the q2 preview epic bd-kw93
 **Reported:** 2026-06-15 by Carlos (two Firefox screenshots: "Unable to connect"
 on first open, correct render after a manual reload)
-**Status:** diagnosed; awaiting go-ahead to implement.
 
 ## Overview
 

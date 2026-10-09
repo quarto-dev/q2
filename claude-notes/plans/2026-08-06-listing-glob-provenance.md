@@ -2,11 +2,14 @@
 title: 'Listing `contents:` globs — provenance-based base-directory resolution'
 date: 2026-08-06
 description: 'Resolves listing `contents:` globs against the directory where each entry was written, using config provenance, and replaces the dual-view matching that leaked project-root documents into subdirectory listings.'
+status: in-progress  # in execution on branch `braid/bd-v7ixzsp5-listing-contents-globs-resolve`.
+braid:
+  strand: bd-v7ixzsp5
+  priority: P1
+  labels: [listing]
 ---
 
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/456
-**Braid strand:** bd-v7ixzsp5 (bug, P1)
-**Status:** in execution on branch `braid/bd-v7ixzsp5-listing-contents-globs-resolve`.
 
 ## Overview
 

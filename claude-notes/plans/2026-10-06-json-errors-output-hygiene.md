@@ -2,11 +2,13 @@
 title: '`q2 render --json-errors`: pure, attributable NDJSON on stderr'
 date: 2026-10-06
 description: 'Makes `q2 render --json-errors` keep non-JSON status and diagnostic text off stderr, and attributes each located diagnostic to the absolute path of the file its line and column refer to.'
+status: done  # IMPLEMENTED 2026-10-06 (`70707f1ba`). D1=a, D2=yes, D3=absolute, D4=dropped; R1–R6 deferred. Not pushed.
+braid:
+  strand: bd-gnw9asuo  # Child: bd-ckbqmupi. Discovered from bd-uk8zgkha (claude-notes website).
+  priority: P2
 ---
 
-**Strand:** bd-gnw9asuo (bug, P2). Child: bd-ckbqmupi. Discovered from bd-uk8zgkha (claude-notes website).
 **Branch:** `braid/bd-gnw9asuo-q2-render-json-errors`, off `origin/main` @ `7f70632cc`.
-**Status:** IMPLEMENTED 2026-10-06 (`70707f1ba`). D1=a, D2=yes, D3=absolute, D4=dropped; R1–R6 deferred. Not pushed.
 
 ## Overview
 

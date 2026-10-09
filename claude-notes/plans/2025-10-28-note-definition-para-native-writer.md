@@ -2,10 +2,8 @@
 title: 'Fix: NoteDefinitionPara Support in Native Writer'
 date: 2025-10-28
 description: 'The native writer panics on note definition blocks, which have no Pandoc native equivalent, so the plan proposes skipping them since their content already appears in inline Note elements.'
+status: in-progress
 ---
-
-**Date:** 2025-10-28
-**Status:** In Progress
 
 ## Problem
 

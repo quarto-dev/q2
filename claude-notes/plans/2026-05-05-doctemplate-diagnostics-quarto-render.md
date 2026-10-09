@@ -2,10 +2,11 @@
 title: 'Plumb doctemplate diagnostics through `quarto render`'
 date: 2026-05-05
 description: 'Carries undefined-variable and other `quarto-doctemplate` warnings out of the template stage so `quarto render` prints them, and fixes the `template:` key being silently ignored when parsed as inline content.'
+status: done  # Implementation complete — awaiting user review for commit/push
+braid:
+  strand: bd-xdnk
+  priority: P1
 ---
-
-**Issue:** bd-xdnk
-**Status:** Implementation complete — awaiting user review for commit/push
 
 ## Discovered: pre-existing `template:` YAML bug
 

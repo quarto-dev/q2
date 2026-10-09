@@ -2,16 +2,15 @@
 title: 'Auto-generated heading ids drop quoted spans, links, math and every other unhandled inline (bd-heading-id-drops-inline-content-fl84n3ql)'
 date: 2026-08-13
 description: 'Stops auto-generated heading ids from dropping the text of links, quoted spans, math, images and citations, matching Pandoc by recursing into inline kinds that the id collector currently discards.'
+status: done  # **Implemented.** Scope settled with the user on 2026-08-13; see **Settled scope** and the **Phase log** at the bottom. The "Open design questions" section below is kept as the record of what was asked and is answered in-line.
+braid:
+  strand: bd-heading-id-drops-inline-content-fl84n3ql
+  priority: P3
+  labels: [markdown]
 ---
 
-**Date:** 2026-08-13
-**Braid:** `bd-heading-id-drops-inline-content-fl84n3ql` (bug, p3, label `markdown`)
 **Checkout:** main checkout `~/rooms/room-2/q2`, branch `main` \@ `b677afd4`.
 No worktree or branch was created — `/investigate-beads` works in place.
-**Status:** **Implemented.** Scope settled with the user on 2026-08-13; see
-**Settled scope** and the **Phase log** at the bottom. The "Open design
-questions" section below is kept as the record of what was asked and is
-answered in-line.
 
 Investigative artifacts: `claude-notes/plans/heading-id-drops-inline-content-investigation/`
 (repro copied from upstream, Pandoc/q2 probes, and

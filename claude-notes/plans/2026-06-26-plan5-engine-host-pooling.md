@@ -2,9 +2,9 @@
 title: 'Plan 5 — engine-host pooling (preview re-compute warmth)'
 date: 2026-06-26
 description: 'Research stub for keeping the Deno engine host warm across preview re-computes by pooling it at the session level, gated on first measuring whether the respawn cost justifies the added complexity.'
+status: draft  # research stub — not yet designed in depth.
 ---
 
-**Status:** research stub — not yet designed in depth. **Created:** 2026-06-26.
 **Sequence:** post-Plan-4 capstone optimization; orthogonal to Plan 3; runs **last**.
 **Depends on:** the full TS-engine stack (1a–c, Plan 2, validated by Plan 4), the
 **preview↔TS-engine wiring** (the plan1c gap, R5 in RTQ), and **DQ-7** (RTQ Item A).

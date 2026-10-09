@@ -2,11 +2,11 @@
 title: 'Include shortcode: project-absolute (root-relative) path resolution'
 date: 2026-08-07
 description: 'Makes a leading slash in an `include` shortcode path mean project-root-relative, as in Quarto 1, instead of an OS-absolute path, and applies the same rule to the preview dependency graph.'
+status: done  # implemented; PR open — https://github.com/quarto-dev/q2/pull/468
+braid:
+  strand: bd-w9koo1i2
+  priority: P1
 ---
-
-**Strand:** bd-w9koo1i2
-**Status:** implemented; PR open — https://github.com/quarto-dev/q2/pull/468
-**Date:** 2026-08-07
 
 ## Overview
 

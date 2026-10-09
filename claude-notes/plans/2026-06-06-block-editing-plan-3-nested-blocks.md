@@ -4,7 +4,6 @@ date: 2026-06-06
 description: 'Lets block edits reach blocks nested inside `:::` divs, list items, block quotes and definition bodies by making `lookup_block` recurse and `apply_node_edit` splice at a path.'
 ---
 
-**Date:** 2026-06-06
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Spec:** `claude-notes/designs/2026-06-06-block-editing-design.md`
 **Phase:** 3. Rust (`pampa`) + frontend: `Block`/`CustomBlock` dispatchers own textarea substitution; affordance extended to all source-backed block components.

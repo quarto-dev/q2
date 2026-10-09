@@ -2,12 +2,9 @@
 title: 'Format-specific equation numbering and `html-math-method: mathml`'
 date: 2026-09-21
 description: 'Moves equation numbering out of crossref rendering into a format-specific stage, and renders `html-math-method: mathml` as MathML at render time so common documents ship no MathJax.'
+status: approved  # approved 2026-09-21 (all five open decisions settled with the user, each as recommended). Phases 1–3 implemented the same day. PRs: #708 (Phase 1, against `main`), #709 (Phase 2, stacked on #706) and #710 (Phase 3, stacked on #709), the last two linked into the GitHub stack #705 → #706 → #709 → #710.
 ---
 
-**Status:** approved 2026-09-21 (all five open decisions settled with the
-user, each as recommended). Phases 1–3 implemented the same day. PRs: #708 (Phase 1,
-against `main`), #709 (Phase 2, stacked on #706) and #710 (Phase 3, stacked
-on #709), the last two linked into the GitHub stack #705 → #706 → #709 → #710.
 **Strands:** bd-vlhi2zkj (Phase 1, equation numbering; branch
 `braid/bd-vlhi2zkj-equation-numbering` off `main`), bd-9z83tcv0 (Phase 2,
 MathML writer, p2), bd-3evfzwal (Phase 3, `MathMlStage`; blocked on the

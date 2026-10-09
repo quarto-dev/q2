@@ -4,7 +4,6 @@ date: 2026-10-01
 description: 'Adds Download as PDF by chaining the pandoc worker, which writes a typst source, into the typst worker, which compiles it, with one progress and diagnostic channel across both stages.'
 ---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (PDF section, D8.6)
 **Depends on:** H5 (the control and status channel), H7 (typst worker), request R4 (typst-source request); typst documents with remote images also need R6. **Unblocks:** H9.

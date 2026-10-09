@@ -5,7 +5,6 @@ description: 'Adds a `quarto hub` subcommand to the quarto binary that starts th
 ---
 
 **Issue**: kyoto-3erh
-**Date**: 2026-02-02
 
 ## Overview
 

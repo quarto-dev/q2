@@ -2,6 +2,9 @@
 title: 'bd-tnm3k — Fix `q2 preview` for single-file mode without `_quarto.yml`'
 date: 2026-05-19
 description: 'Fixes `q2 preview` on a single `.qmd` file with no `_quarto.yml` by treating the file''s parent directory as the project root and limiting discovery and file watching to that one file.'
+braid:
+  strand: bd-tnm3k
+  priority: P2
 ---
 
 ## Problem (verbatim from the beads issue)

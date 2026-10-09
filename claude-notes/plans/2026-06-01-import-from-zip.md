@@ -2,11 +2,12 @@
 title: 'Import a project from a ZIP archive (hub-client)'
 date: 2026-06-01
 description: 'Adds importing a ZIP archive as a new hub-client project, parsing its entries into project files and reusing the existing create-project path so that exports round-trip.'
+status: approved  # Design — awaiting user go-ahead before implementation.
+braid:
+  strand: bd-apv23
+  priority: P2
+  labels: [hub-client]
 ---
-
-**Beads:** bd-apv23
-**Status:** Design — awaiting user go-ahead before implementation.
-**Date:** 2026-06-01
 
 ## Overview
 

@@ -2,11 +2,11 @@
 title: 'Code-block features in Quarto 2'
 date: 2026-05-19
 description: 'Brings the Quarto 1 code-block decorations such as filename headers, copy buttons, folding, line numbers, annotations and preview iframes to Quarto 2 through a format-agnostic generate transform and per-format render transforms.'
+status: draft  # Draft, awaiting iteration with user.
+braid:
+  strand: bd-1tl09  # Code-block decorations epic.
+  priority: P2
 ---
-
-**Beads:** [bd-1tl09](../../.beads/issues.jsonl) — Code-block decorations epic.
-
-**Status:** Draft, awaiting iteration with user.
 
 ## Overview
 

@@ -2,13 +2,16 @@
 title: 'q2-preview: task-list checkbox renders on its own line above the item text'
 date: 2026-09-10
 description: 'Moves the task-list checkbox label inside the item''s head block renderer so block-level wrappers stay outside it, fixing q2-preview task items that put the checkbox on its own line above the text.'
+status: done  # done 2026-09-10 (all phases; see evidence under Phase 3). PR: https://github.com/quarto-dev/q2/pull/673
+braid:
+  strand: bd-qif9l4cx
+  priority: P1
+  labels: [parity, preview-renderer]
 ---
 
-**Strand:** bd-qif9l4cx
 **Related:** bd-q2wqj24c (CommentBlock wrapper `<div>` breaks parent > child
 parity in general), bd-tvtknbhx (interactive checkboxes; its open polish item
 (2) — loose/Para-leading task items — is fixed by this plan as a by-product).
-**Status:** done 2026-09-10 (all phases; see evidence under Phase 3). PR: https://github.com/quarto-dev/q2/pull/673
 
 ## Overview
 

@@ -5,7 +5,6 @@ description: 'Limits preview, diagnostics, folding and outline features to `.qmd
 ---
 
 **Issue**: kyoto-xem
-**Date**: 2026-01-29
 
 ## Overview
 

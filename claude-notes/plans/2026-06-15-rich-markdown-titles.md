@@ -2,9 +2,11 @@
 title: 'Rich Markdown in document titles is stringified'
 date: 2026-06-15
 description: 'Stops inline Markdown such as code spans and emphasis from being flattened to plain text in document titles, by rendering title, subtitle and abstract through the HTML inline writer.'
+braid:
+  strand: bd-5706gcrq
+  priority: P1
+  labels: [bug]
 ---
-
-**Strand:** bd-5706gcrq
 
 ## Overview
 

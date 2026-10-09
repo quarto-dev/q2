@@ -2,12 +2,14 @@
 title: 'SCSS cache key ignores `@import`ed partials (bd-m3hga05o)'
 date: 2026-09-14
 description: 'Makes the sass cache key cover the files a custom theme pulls in through `@import`, so editing a partial such as `_colors.scss` invalidates cached CSS instead of serving stale output.'
+status: in-progress  # Implemented on the branch (2026-09-15); Phase 2 measurement partly done. Rebased onto `main` after PR #679 merged (`f0bcb9538`).
+braid:
+  strand: bd-m3hga05o
+  priority: P2
+  labels: [perf]
 ---
 
-**Date:** 2026-09-14
-**Braid:** bd-m3hga05o (P2, bug, label `perf`)
 **Branch:** `braid/bd-m3hga05o-scss-cache-import-closure` in the room-2 main checkout (based on `main` \@ `35bc11415`; topic branch, no worktree, per user request)
-**Status:** Implemented on the branch (2026-09-15); Phase 2 measurement partly done. Rebased onto `main` after PR #679 merged (`f0bcb9538`).
 
 ## Triage verdict
 

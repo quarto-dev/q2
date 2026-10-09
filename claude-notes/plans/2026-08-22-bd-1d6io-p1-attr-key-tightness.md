@@ -11,7 +11,6 @@ duplicate of failure #2; see `braid show bd-1d6io` comment `c-qn11q3g6`).
 **Predecessor:** `claude-notes/plans/2026-06-01-bd-1d6io-investigation.md`
 (the bisect + root-cause record). **Read that first**, then read the
 "Corrections" section below — two of its conclusions are superseded.
-**Date:** 2026-08-22.
 
 ## Corrections to the June investigation
 

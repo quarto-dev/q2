@@ -2,11 +2,12 @@
 title: '.ipynb Surface Syntax for Quarto 2 — Feasibility and Design'
 date: 2026-07-20
 description: 'Design reference for rendering `.ipynb` notebooks directly, converting each cell''s logical text into an in-memory source file so diagnostics point at cell coordinates, not raw JSON bytes.'
+status: superseded  # **DESIGN REFERENCE — execution moved to Plan 7c** (2026-08-17)
+braid:
+  strand: bd-19nc56ao  # related: k-zr88, bd-xxul, bd-kik3s1vt
+  priority: P1
+  labels: [surface-syntax]
 ---
-
-**Date**: 2026-07-20
-**Strand**: bd-19nc56ao (related: k-zr88, bd-xxul, bd-kik3s1vt)
-**Status**: **DESIGN REFERENCE — execution moved to Plan 7c** (2026-08-17)
 
 > **Where this work lives now.** The design below is sound and is absorbed
 > wholesale into

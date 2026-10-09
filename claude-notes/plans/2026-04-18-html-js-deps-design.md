@@ -2,13 +2,11 @@
 title: 'JS Dependency Handling for Quarto 2 HTML Output — Design Outline'
 date: 2026-04-18
 description: 'Outlines how Quarto 2 HTML output should ship and load JavaScript, such as the Bootstrap bundle that navbar dropdowns and collapsing need, since q2 currently emits none.'
+status: draft  # outline only; not yet scheduled for implementation. This file exists to capture open questions and known requirements so a future session can land with full context.
+braid:
+  strand: bd-ulgr  # parent: bd-imiw
+  priority: P1
 ---
-
-Beads: `bd-ulgr` (parent: `bd-imiw`)
-
-**Status:** outline only; not yet scheduled for implementation. This file
-exists to capture open questions and known requirements so a future session
-can land with full context.
 
 ## Motivation
 

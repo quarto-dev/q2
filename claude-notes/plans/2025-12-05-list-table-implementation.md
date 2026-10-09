@@ -2,11 +2,11 @@
 title: 'List-Table Implementation Plan'
 date: 2025-12-05
 description: 'Adds bidirectional conversion between list-table div syntax and Pandoc Table AST, so tables with spans and multi-line cells can round-trip through the reader and the qmd writer.'
+status: draft  # Pending Review
+braid:
+  strand: k-mapj
+  priority: P1
 ---
-
-**Beads Issue:** k-mapj
-**Created:** 2025-12-05
-**Status:** Pending Review
 
 ## Overview
 

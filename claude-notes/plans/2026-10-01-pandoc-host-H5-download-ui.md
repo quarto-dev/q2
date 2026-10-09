@@ -4,7 +4,6 @@ date: 2026-10-01
 description: 'Adds the Download as control beside the print button, with a click-only render through the wasm pandoc worker, a sanitized file name, progress and cancel, a three-way preview classifier, and accessibility checks for docx.'
 ---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D8, D11, Failure taxonomy)
 **Depends on:** H3, H4; request R2 (resolver and format table), R3 (cell count; the control works without it), R4/R5 for the typst/pptx/epub entries, R7 for project downloads, R9 for the book entries; the embedded-hub item also needs H4b. **Unblocks:** H6, H8.

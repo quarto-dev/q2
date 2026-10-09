@@ -2,10 +2,12 @@
 title: 'Auto-create the project set on first run (drop the fresh-setup screen)'
 date: 2026-09-15
 description: 'Removes the fresh-setup screen so new hub-client users get a personal root collection created silently on the default sync server, with a retry card replacing the setup form on connection errors.'
+status: approved  # decisions settled 2026-09-15 (see Resolved questions); ready to execute on approval
+braid:
+  strand: bd-4h1hv60p
+  priority: P1
+  labels: [hub-client]
 ---
-
-**Strand:** bd-4h1hv60p · **PR:** https://github.com/quarto-dev/q2/pull/681
-**Status:** decisions settled 2026-09-15 (see Resolved questions); ready to execute on approval
 
 ## Overview
 

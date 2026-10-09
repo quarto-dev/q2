@@ -2,10 +2,8 @@
 title: 'Plan: Move private-crates to crates'
 date: 2025-12-04
 description: 'Unifies the workspace layout by moving five crates from `private-crates/` into `crates/` with git mv and updating the root `Cargo.toml` members list to match.'
+status: done
 ---
-
-**Status**: Completed
-**Created**: 2025-12-04
 
 ## Overview
 

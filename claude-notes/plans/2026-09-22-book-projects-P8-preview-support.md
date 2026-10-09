@@ -4,7 +4,6 @@ date: 2026-09-22
 description: 'Makes `q2 preview` and hub-client book-aware by applying chapter numbers and titles to the previewed page and adding a static analyzer that resolves cross-chapter references approximately.'
 ---
 
-**Date:** 2026-09-22 (revised after an implementor-standpoint technical review the same day — see the epic doc's revision history for what changed and why)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §12
 **Q1 reference:** none — Q1 has no live, cross-file-aware preview at all (its editor preview is the same single-document-at-a-time model Q2's currently has); this phase has no port target, only Q2's own crossref-design plan's unbuilt `StaticProjectAnalyzer` sketch (`claude-notes/plans/2026-04-15-crossref-design.md`, Phase 4).

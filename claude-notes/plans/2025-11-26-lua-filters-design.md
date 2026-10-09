@@ -2,11 +2,12 @@
 title: 'Lua Filter Support Design Plan'
 date: 2025-11-26
 description: 'Designs embedded Lua filter support for quarto-markdown-pandoc using the mlua crate, aiming for Pandoc''s filter API and traversal semantics while keeping the implementation scope pragmatic.'
+braid:
+  strand: k-409
+  priority: P2
 ---
 
-**Issue:** k-409
 **Epic:** k-407 (Extensible filters for quarto-markdown-pandoc)
-**Created:** 2025-11-26
 
 ## Related Documents
 

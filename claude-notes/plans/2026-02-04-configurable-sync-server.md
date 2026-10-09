@@ -2,9 +2,11 @@
 title: 'Configurable Default Sync Server'
 date: 2026-02-04
 description: 'Makes the default Automerge sync server configurable at build time through the `VITE_DEFAULT_SYNC_SERVER` environment variable, so internal deployments no longer need to type a custom server URL each time.'
+braid:
+  strand: bd-1g5f
+  priority: P2
 ---
 
-**Issue:** bd-1g5f
 **Priority:** Medium (2)
 **Type:** Feature
 

@@ -2,9 +2,11 @@
 title: 'Angle brackets with inner whitespace should not lex as `html_element` (bd-ly83qewg)'
 date: 2026-08-07
 description: 'Stops a `<` followed by whitespace from lexing as an HTML element in the tree-sitter QMD scanner, so emphasis that spans such a bracket closes correctly as the CommonMark rule requires.'
+status: in-progress  # approved 2026-08-07 — in progress.
+braid:
+  strand: bd-ly83qewg
+  priority: P2
 ---
-
-**Status: approved 2026-08-07 — in progress.**
 
 ## Overview
 

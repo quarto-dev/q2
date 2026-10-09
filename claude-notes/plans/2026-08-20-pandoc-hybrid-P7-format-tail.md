@@ -1,10 +1,11 @@
 ---
 title: 'P7 — Per-format tail + invocation builder (docx first)'
 date: 2026-08-20
+date-modified: 2026-09-18
 description: 'Builds the per-format output tail for docx and pptx, covering the pandoc invocation, format defaults, the Meta-block mapping and a golden-parity harness, with latex left as a stub.'
+status: done  # Implementation complete (2026-09-21) — every Coarse checklist item is `[x]`. All 12 tasks in the implementation companion (`2026-09-18-pandoc-hybrid-P7-implementation.md`) are done, including Task 11 (the golden assertion harness) closing out last. Pending: Gordon's review before merging `braid/pandoc-hybrid-p7-format-tail` into the `feature/pandoc-writer-hybrid` integration line.
 ---
 
-**Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P7-format-tail.md`
 for the full correction history. Latest (round 4 review): the `render.rs:680-684` relaxation is
 sufficient for docx and insufficient for pptx (confirmed independently by three reviewers —
 `Format::from_format_string("pptx")` fails one line above the gate this item relaxes; fixed in
@@ -21,11 +22,6 @@ feasibility reviews found four gaps in this plan's own scope — format-specific
 missing pptx's `echo: false`/`warning: false`, an unstated pandoc-defaults forwarding policy, the
 multi-format render guardrail this plan's own `render.rs` relaxation removes, and three concrete
 build gaps in this plan's own golden-artifact proposal — closed, see the "Finding" section below.)
-**Status:** Implementation complete (2026-09-21) — every Coarse checklist item is `[x]`. All 12
-tasks in the implementation companion (`2026-09-18-pandoc-hybrid-P7-implementation.md`) are done,
-including Task 11 (the golden assertion harness) closing out last. Pending: Gordon's review before
-merging `braid/pandoc-hybrid-p7-format-tail` into the `feature/pandoc-writer-hybrid` integration
-line.
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`  |  Depends on: **P7-foundation** (new, 2026-09-20 — see below), P1, P2, P4, P5
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P7-implementation.md`](2026-09-18-pandoc-hybrid-P7-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk. **As of 2026-09-20, that companion's Tasks 1, 2, 3, and 7 have moved to [`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md)** — see the note immediately below.
 

@@ -2,14 +2,16 @@
 title: 'Diagnostics blame the wrong key: materialized map spans (Q-12-7 and siblings)'
 date: 2026-08-06
 description: 'Fixes a `Q-12-7` diagnostic that underlines an unrelated sibling key, tracing the bad span to config materialization, which discards source positions for maps and arrays. Covers only the source-mapping defect, not the wording or EJS issues.'
+status: draft  # plan drafted, awaiting user review. **Do not implement yet.**
+braid:
+  strand: bd-9yh3pzfu  # child of bd-61cd (Listings epic)
+  priority: P1
 ---
 
-**Strand:** bd-9yh3pzfu (bug, p1) — child of bd-61cd (Listings epic)
 **Folded in:** bd-2mxo (metadata materialization drops source_info provenance)
 **Split out of this work:** bd-oywyaouf (EJS diagnostic), bd-lu16jgxq (Q-12-7 wording)
 **Handoff memo (external, separate session):**
 `claude-notes/scratch/2026-08-06-memo-quarto-source-map-default-sourceinfo.md`
-**Status:** plan drafted, awaiting user review. **Do not implement yet.**
 
 ## Overview
 

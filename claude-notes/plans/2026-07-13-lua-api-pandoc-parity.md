@@ -2,10 +2,12 @@
 title: 'Plan: Lua API Pandoc parity — mismatch catalog + conformance harness'
 date: 2026-07-13
 description: 'Catalogs where the Q2 Lua API diverges from Pandoc''s, starting with AST constructors and filter return values, and builds a conformance suite and differential harness against a real pandoc binary to drive fixes.'
+status: draft  # Draft — iterating with Carlos before execution
+braid:
+  strand: bd-grkrb9nj
+  priority: P1
 ---
 
-**Strand**: bd-grkrb9nj (epic)
-**Status**: Draft — iterating with Carlos before execution
 **Related**: bd-195t (attr-mutation proxy), claude-notes/plans/2026-04-01-lua-constructor-coercion.md (completed predecessor)
 
 ## Overview

@@ -2,9 +2,11 @@
 title: 'Single-file `q2 preview`: resolve sibling assets the deck references'
 date: 2026-06-16
 description: 'Makes `q2 preview` on a standalone `.qmd` sync the sibling images it references into the preview''s virtual filesystem, without walking the whole directory, so images render as they do in project mode.'
+braid:
+  strand: bd-kpuweafo  # follow-up to bd-y259zb57 / bd-ggvq1j68; found 2026-06-16
+  priority: P2
+  labels: [preview, revealjs]
 ---
-
-**Strand:** bd-kpuweafo · **Found:** 2026-06-16 (follow-up to bd-y259zb57 / bd-ggvq1j68)
 
 ## Problem
 

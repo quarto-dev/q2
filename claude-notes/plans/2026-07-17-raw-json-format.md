@@ -2,11 +2,13 @@
 title: 'Pampa-native "raw JSON" reader/writer (GH issue #11)'
 date: 2026-07-17
 description: 'Adds a pampa-specific raw JSON reader and writer that round-trips the full AST, including extension nodes such as standalone attributes and CriticMarkup, which the Pandoc-compatible JSON format cannot represent.'
+status: draft  # Draft v2 — iterating with Carlos before implementation.
+braid:
+  strand: bd-en2hvrwn
+  priority: P1
 ---
 
-**Status:** Draft v2 — iterating with Carlos before implementation.
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/11
-**Braid strand:** bd-en2hvrwn
 **Related strands:** k-42 (ASTContext serialization — see "k-42 status" below),
 k-gv05 (nondeterministic sourceInfoPool IDs).
 **Related docs:** `claude-notes/designs/wire-format-source-info-codes.md`

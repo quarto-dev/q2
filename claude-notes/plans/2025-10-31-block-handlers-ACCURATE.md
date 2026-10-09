@@ -2,11 +2,11 @@
 title: 'Block Handlers Implementation Plan - ACCURATE Assessment'
 date: 2025-10-31
 description: 'Lists the block-level node types the tree-sitter visitor still does not handle, such as block quotes, lists, tables and fenced divs, which crash the parser on any document containing them, ordered by dependency.'
+status: in-progress  # Most block handlers are NOT implemented
+braid:
+  strand: k-274  # tree-sitter grammar refactoring - block handlers phase
+  priority: P0
 ---
-
-**Date**: 2025-10-31
-**Beads Issue**: k-274 (tree-sitter grammar refactoring - block handlers phase)
-**Status**: Most block handlers are NOT implemented
 
 ## Critical Reality Check
 

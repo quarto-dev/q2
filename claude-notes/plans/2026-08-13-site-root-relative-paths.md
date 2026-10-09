@@ -2,15 +2,14 @@
 title: 'Site-root-relative paths — three cases, and what replaces Q1''s deno-dom rewrite (bd-root-relative-paths-design-fc5pvkcv)'
 date: 2026-08-13
 description: 'Decides that a leading `/` in a Quarto path always means site-root-relative, so navbar logos, footer images and copied assets resolve correctly on sites served from a subdirectory.'
+status: done  # MERGED & CLOSED 2026-08-18. All four phases on `main` (`1d17a9ce`, `0b4683fc`, `5da1e5f4`, `8bdb97c6`). Remaining field breakage (page-footer item images dropped/unrebased) tracked in bd-page-footer-image-items-stmpikgo.
+braid:
+  strand: bd-root-relative-paths-design-fc5pvkcv
+  priority: P1
+  labels: [websites]
 ---
 
-**Date:** 2026-08-13
-**Braid:** bd-root-relative-paths-design-fc5pvkcv (type: question, priority 1, label: websites)
 **Checkout:** main \@ `81d31cbc` (investigation committed to `main`; implementation branch TBD by user)
-**Status:** MERGED & CLOSED 2026-08-18. All four phases on `main`
-(`1d17a9ce`, `0b4683fc`, `5da1e5f4`, `8bdb97c6`). Remaining field
-breakage (page-footer item images dropped/unrebased) tracked in
-bd-page-footer-image-items-stmpikgo.
 
 **Session constraint (from the user, at investigation kickoff):** we must
 not end up parsing HTML to rewrite root-relative paths. Instead, watch

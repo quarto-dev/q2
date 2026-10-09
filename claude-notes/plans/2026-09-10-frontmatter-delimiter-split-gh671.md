@@ -2,13 +2,15 @@
 title: 'Frontmatter reader splits on every `---`, truncating YAML values that contain one (bd-mjo6ao32, GH #671)'
 date: 2026-09-10
 description: 'Fixes the metadata reader so it ends the YAML block only at delimiter lines rather than at every three-dash sequence, so values containing an em dash no longer truncate later keys or raise a quoting error.'
+status: done  # Option A approved 2026-09-10; implemented, full `cargo xtask verify` green, committed on the topic branch (`79d352ba`, amended with this plan update). Phase 3 (close strand, GH comment, push) awaits the user.
+braid:
+  strand: bd-mjo6ao32  # related: bd-xs2u
+  priority: P1
+  labels: [parity]
 ---
 
-**Date:** 2026-09-10
-**Braid:** bd-mjo6ao32 (related: bd-xs2u)
 **GitHub issue:** https://github.com/quarto-dev/q2/issues/671 (filed by rundel)
 **Branch:** `braid/bd-mjo6ao32-frontmatter-reader-splits-every` off `main` at `5a12a773`.
-**Status:** Option A approved 2026-09-10; implemented, full `cargo xtask verify` green, committed on the topic branch (`79d352ba`, amended with this plan update). Phase 3 (close strand, GH comment, push) awaits the user.
 
 ## Triage verdict
 

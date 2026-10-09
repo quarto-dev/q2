@@ -2,9 +2,10 @@
 title: 'Unified Filter CLI with Citeproc Support'
 date: 2025-12-05
 description: 'Replaces the separate `--json-filter` and `--lua-filter` options with one `-F` option that keeps filters in command-line order and auto-detects Lua, JSON and built-in citeproc filters.'
+braid:
+  strand: k-5ywq
+  priority: P1
 ---
-
-**Beads Issue:** k-5ywq
 
 ## Summary
 

@@ -2,10 +2,10 @@
 title: 'kyoto-676: Replace quarto-core engine/reconcile.rs with quarto-ast-reconcile'
 date: 2026-01-15
 description: 'Replaces the linear-alignment source-location reconciliation in `quarto-core` with the hash-based three-phase algorithm from `quarto-ast-reconcile`, which handles moved content, list length changes, tables and custom node slots.'
+status: in-progress
 ---
 
 **Issue**: kyoto-676
-**Status**: In Progress
 **Blocked by**: kyoto-lko (completed)
 
 ## Executive Summary

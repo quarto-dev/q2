@@ -2,12 +2,13 @@
 title: 'YAML provenance desync after a block scalar with non-ASCII content (bd-e0e9kd4a)'
 date: 2026-10-08
 description: 'Records the fix for a YAML provenance desync after a block scalar with non-ASCII text, caused by a byte-counting bug in the upstream parser, fixed by upgrading `quarto-yaml` and adding a regression test.'
+status: done  # Resolved (2026-10-08). The fix shipped upstream; q2 adds a regression test. See § Resolution.
+braid:
+  strand: bd-e0e9kd4a
+  priority: P2
 ---
 
-**Date:** 2026-10-08
-**Braid:** bd-e0e9kd4a
 **Branch:** `braid/bd-e0e9kd4a-folded-scalar-provenance-desync` (topic branch in the main checkout, based on `main` @ `8ae461f1b`)
-**Status:** Resolved (2026-10-08). The fix shipped upstream; q2 adds a regression test. See § Resolution.
 
 ## Resolution
 

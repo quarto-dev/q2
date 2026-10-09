@@ -2,10 +2,12 @@
 title: 'Time-profile `q2 render` on the Connect docs (docs-quarto-2)'
 date: 2026-09-13
 description: 'Time-profiles `q2 render` on a large non-Quarto Connect documentation project, finding that most serial render time goes to recompiling Bootstrap SCSS and that peak memory far exceeds source size.'
+braid:
+  strand: bd-fq44dlnm
+  priority: P2
+  labels: [perf]
 ---
 
-**Date:** 2026-09-13
-**Strand:** bd-fq44dlnm
 **Playbook:** `claude-notes/instructions/performance-profiling.md`
 **Previous whole-project runs:**
 `claude-notes/research/2026-05-21-quarto-web-render-profile.md` (bd-9eltv),

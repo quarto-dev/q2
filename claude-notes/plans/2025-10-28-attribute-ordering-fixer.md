@@ -5,7 +5,6 @@ description: 'Adds a `qmd-syntax-helper` rule that uses Pandoc as a normalizer t
 ---
 
 **Issue**: qmd-7
-**Date**: 2025-10-28
 
 ## Problem Statement
 

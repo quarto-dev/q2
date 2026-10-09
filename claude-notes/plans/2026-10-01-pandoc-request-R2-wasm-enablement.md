@@ -4,7 +4,6 @@ date: 2026-10-01
 description: 'Makes the pandoc preparation code compile for wasm32 and exposes the request, share tree, classification and format table from the hub''s wasm module, so a docx request can be built in the browser.'
 ---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D1, D3, D8.7)
 **Depends on:** R1. **Unblocks:** host H3 and H5, R3, R4, R5, R6, R7, R8.

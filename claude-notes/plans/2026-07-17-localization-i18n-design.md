@@ -2,10 +2,12 @@
 title: 'Localization / internationalization for Quarto 2'
 date: 2026-07-17
 description: 'Designs Quarto 2 localization modeled on Quarto 1: shipped and project term files resolved by a `lang` tag into one term table that Rust transforms and templates read as `$quarto.language.<key>$`.'
+status: draft  # design draft — iterating with Carlos before execution
+braid:
+  strand: bd-llhlzd7p
+  priority: P1
 ---
 
-**Braid strand:** bd-llhlzd7p (epic)
-**Status:** design draft — iterating with Carlos before execution
 **Related strands:** bd-99ru (listing category sidebar labels), bd-fod3 (sidebar language selector), bd-apudk (citeproc locale silent-degrade)
 **Follow-up strand:** bd-xzaiqpjq (Lua exposure of `quarto.language`; blocked by bd-2llqjsms + bd-a9g50za2 — no `pandoc.Meta` support in Lua filters yet)
 

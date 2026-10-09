@@ -5,7 +5,6 @@ description: 'Serves the preview single-page app from the guest''s own embedded 
 ---
 
 **Epic:** bd-puc7xt6e
-**Date:** 2026-08-13
 **Status:** Complete (2026-08-13). Phase 4's real-browser e2e caught
 and fixed a design gap (keep-alive reuse defeated per-connection
 routing — see "Phase 4 results"); with the fix, a hash-matching guest

@@ -4,7 +4,6 @@ date: 2026-06-06
 description: 'Makes preview paragraphs and headings editable as markdown by slicing each block''s original source bytes into a textarea and replacing only that block on commit, using frontend changes and no Rust.'
 ---
 
-**Date:** 2026-06-06
 **Branch:** feature/block-editing (worktree `.worktrees/block-editing`)
 **Spec:** `claude-notes/designs/2026-06-06-block-editing-design.md`
 **Builds on:** `claude-notes/plans/2026-06-04-target-incremental-writes.md`

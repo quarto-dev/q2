@@ -2,6 +2,9 @@
 title: 'bd-i6jy4 — Filter eager-capture driver to `.qmd` files only'
 date: 2026-05-19
 description: 'Makes the preview''s eager capture pass iterate only the project''s `.qmd` files, so binary assets and config files such as `_quarto.yml` no longer reach the parser and trigger a panic in `q2 preview` at startup.'
+braid:
+  strand: bd-i6jy4
+  priority: P1
 ---
 
 ## Overview

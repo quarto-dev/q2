@@ -2,10 +2,11 @@
 title: 'Block Handlers Implementation Plan'
 date: 2025-10-31
 description: 'Wires up the remaining block-level handlers in the tree-sitter visitor, starting with fenced divs and fenced note definitions and then pipe tables, reusing helper functions that already exist.'
+braid:
+  strand: k-274  # tree-sitter grammar refactoring - block handlers phase
+  priority: P0
 ---
 
-**Date**: 2025-10-31
-**Beads Issue**: k-274 (tree-sitter grammar refactoring - block handlers phase)
 **Context**: Inline handlers are complete. Need to implement remaining block-level handlers.
 
 ## Current Status

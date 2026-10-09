@@ -2,12 +2,11 @@
 title: 'Include failure diagnostics: surface inner errors, kill spurious "Unknown shortcode"'
 date: 2026-08-07
 description: 'Stops `q2 render` from hiding the inner parse error when an include fails and from adding a contradictory unknown-shortcode warning, and moving include error codes out of the project subsystem.'
+status: done  # implemented 2026-08-07 — commit 9abfda21, PR [#465](https://github.com/quarto-dev/q2/pull/465) (`feature/bd-qpvoamvu-include-failure-diagnostics`)
+braid:
+  strand: bd-qpvoamvu  # discovered: bd-1fz3vh99 — nested-container includes
+  priority: P1
 ---
-
-**Strand:** bd-qpvoamvu (discovered: bd-1fz3vh99 — nested-container includes)
-**Status:** implemented 2026-08-07 — commit 9abfda21, PR
-[#465](https://github.com/quarto-dev/q2/pull/465)
-(`feature/bd-qpvoamvu-include-failure-diagnostics`)
 
 ## Overview
 

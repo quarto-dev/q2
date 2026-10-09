@@ -2,11 +2,10 @@
 title: 'Block-Editing E2E Test Design Spec'
 date: 2026-06-16
 description: 'Specifies four Playwright end-to-end tests for block editing in `q2 preview`, using real selectors and the WASM render pipeline, so a writer agent can implement them without inventing a harness.'
+status: approved  # Design-only — writer agent implements, does not alter this file
 ---
 
-**Date:** 2026-06-16  
 **Branch:** block-editing worktree  
-**Status:** Design-only — writer agent implements, does not alter this file
 
 ---
 

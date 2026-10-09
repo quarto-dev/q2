@@ -2,10 +2,9 @@
 title: 'HTML Comment Support in Quarto Markdown'
 date: 2025-10-28
 description: 'Adds HTML comment support to the quarto-markdown tree-sitter parsers so that `<!-- ... -->` is consumed as one token, instead of letting markdown characters inside the comment trigger parse errors.'
+status: draft  # Design Phase
 ---
 
-**Date:** 2025-10-28
-**Status:** Design Phase
 **Goal:** Add robust HTML comment support to quarto-markdown parsers
 
 ## Problem Statement

@@ -2,10 +2,9 @@
 title: 'Plan: keep imported EMF/WMF as SVG, rasterize only for docx/pptx export'
 date: 2026-10-05
 description: 'Keeps imported EMF and WMF images as SVG in the project and rasterizes referenced SVGs to PNG only when rendering docx or pptx, since pandoc needs a PNG fallback in those writers.'
+status: approved  # Planned; nothing started. Decisions D1-D3 settled with Gordon 2026-10-05 (all three recommendations accepted). Adversarial feasibility review done 2026-10-05 (two Sonnet reviewers, Rust/pipeline and browser/TS/import); its findings are folded in below. None changed D1-D3.
 ---
 
-**Date:** 2026-10-05
-**Status:** Planned; nothing started. Decisions D1-D3 settled with Gordon 2026-10-05 (all three recommendations accepted). Adversarial feasibility review done 2026-10-05 (two Sonnet reviewers, Rust/pipeline and browser/TS/import); its findings are folded in below. None changed D1-D3.
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md). **Revisits I8** ("must be PNG, not SVG") and touches I9, I12, I15, I16, I20, I21 (see Epic edits in T5).
 **Depends on:** P4 (import service) and P5 (import UI, `5f92e1275`), both landed. P6 is not required.
 **Branch:** `import/metafile-svg-media` from `feature/hub-import` (workspace-5).

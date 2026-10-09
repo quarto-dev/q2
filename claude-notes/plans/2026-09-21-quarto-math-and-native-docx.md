@@ -2,12 +2,14 @@
 title: 'quarto-math and the native docx writer'
 date: 2026-09-21
 description: 'Adds the quarto-math groundwork for a native docx writer and checks that it merges cleanly with the parallel Pandoc-based docx route.'
+status: in-progress  # executing Phase 0 (started 2026-09-21 afternoon; decisions 5–9 below settled with the user).
+braid:
+  strand: bd-entbg6x3  # phase 1, this branch
+  priority: P2
 ---
 
 **Epic:** bd-pq9k90z2 (native docx writer)
-**Strand (phase 1, this branch):** bd-entbg6x3 (quarto-math)
 **Branch:** `braid/bd-entbg6x3-quarto-math`
-**Status:** executing Phase 0 (started 2026-09-21 afternoon; decisions 5–9 below settled with the user).
 **Related, parallel leg:** the pandoc-hybrid leg
 (PR #704, `feature/pandoc-writer-hybrid`; bd-fzqykm0n, bd-ymkkrn64) reaches
 docx/pptx/epub/typst through Lua filters plus Pandoc and is landing on `main`

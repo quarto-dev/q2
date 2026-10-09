@@ -2,11 +2,10 @@
 title: 'Block-editing UI glitches — fixes & tests'
 date: 2026-06-16
 description: 'Collects visual and interaction glitches in the breadcrumb chip and nesting cursor, such as a collapsing breadcrumb, stale text after an editor re-lands, and editors that hijack the scroll wheel.'
+status: approved  # READY TO IMPLEMENT — clean working tree; build every glitch from this plan under TDD.
 ---
 
-**Date:** 2026-06-16
 **Branch:** `feature/block-editing-improvements` (worktree `.worktrees/block-editing`)
-**Status:** READY TO IMPLEMENT — clean working tree; build every glitch from this plan under TDD.
 
 > **⚠️ CLEAN-SLATE STARTING STATE.** Every fix below was diagnosed and
 > **live-validated** in a prior session (temporary edits → confirmed in the dev

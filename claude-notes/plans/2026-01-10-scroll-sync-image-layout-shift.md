@@ -2,10 +2,8 @@
 title: 'Scroll Sync / Image Layout Shift Bug'
 date: 2026-01-10
 description: 'Explains why the hub-client preview rescrolls when images load: `src` rewriting to data URIs happens after the iframe is visible and shifts layout, and the plan recommends processing images before the swap.'
+status: approved  # Analysis complete, ready for implementation
 ---
-
-**Date**: 2026-01-10
-**Status**: Analysis complete, ready for implementation
 
 ## Problem Statement
 

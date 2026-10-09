@@ -2,6 +2,11 @@
 title: 'Step 1: extract the diagnostics foundation into two standalone `posit-dev/` repos — `quarto-source-map` first, then `quarto-error-reporting`'
 date: 2026-06-26
 description: 'Extracts the `quarto-source-map` and `quarto-error-reporting` crates into standalone published repositories, moving the error catalog data into a q2-side crate so the reporting core stays catalog-agnostic.'
+status: draft  # Plan (not started)
+braid:
+  strand: bd-egcyeym9
+  priority: P2
+  labels: [architecture, research]
 ---
 
 > **Naming (decided 2026-06-27):** both externalized crates **keep their current
@@ -13,9 +18,6 @@ description: 'Extracts the `quarto-source-map` and `quarto-error-reporting` crat
 > `coalesce.rs` stay in the external crate behind a default-off `json` feature
 > (see "The split").
 
-**Strand:** bd-egcyeym9
-**Date:** 2026-06-26
-**Status:** Plan (not started)
 **Design contract:** `claude-notes/designs/cross-package-error-codes.md`
 **Sibling plan (gated behind this):**
   `claude-notes/plans/2026-06-26-extract-quarto-yaml-validation-design.md`
