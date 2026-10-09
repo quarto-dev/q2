@@ -21,7 +21,10 @@
 use std::collections::HashMap;
 
 use quarto_doctemplate::{TemplateContext, TemplateValue};
-use quarto_pandoc_types::ConfigValue;
+use pampa::filter_context::FilterContext;
+use pampa::filters::{Filter, FilterReturn, topdown_traverse_inlines};
+use quarto_pandoc_types::inline::{Inline, Inlines, Space, split_string_to_inlines};
+use quarto_pandoc_types::{ConfigValue, inlines_to_plain_text};
 
 use super::config::{GridItemAlign, ImageAlign, Listing, ListingCategoriesMode, ListingType};
 use super::helpers;
@@ -106,7 +109,7 @@ fn effective_fields(
             f.as_str() == "image"
                 || items
                     .iter()
-                    .any(|it| item_field_display_value(it, f, date_style).is_some())
+                    .any(|it| item_field_cell(it, f, date_style).is_some())
         })
         .cloned()
         .collect();
@@ -266,12 +269,20 @@ fn build_item_map(
     // Curated fields. Optional fields are only inserted when
     // present so $if(<field>)$ correctly skips undefined values
     // (rather than seeing an empty-string truthy false).
+    //
+    // Title, subtitle and description are markdown prose: they are
+    // bound as markdown (`prose_markdown`), never as their plain
+    // text, because the templates interpolate them into markdown
+    // that is parsed again (bd-8a9eum6p).
     m.insert(
         "title".to_string(),
-        TemplateValue::String(item.title.clone()),
+        TemplateValue::String(prose_markdown(&item.title)),
     );
     if let Some(s) = item.subtitle.as_deref() {
-        m.insert("subtitle".to_string(), TemplateValue::String(s.to_string()));
+        m.insert(
+            "subtitle".to_string(),
+            TemplateValue::String(prose_markdown(s)),
+        );
     }
     if let Some(s) = item.description.as_deref() {
         // bd-pcmdb7qg: explicit descriptions are truncated at the
@@ -281,14 +292,16 @@ fn build_item_map(
         // is per-listing — the same item may appear in two listings
         // with different limits. Derived descriptions are truncated
         // separately by the post-render envelope substitution.
+        // The cut works on the inlines, so the markup that survives
+        // it stays intact (plan D7).
         let description = if listing.max_description_length > 0 {
-            helpers::truncate_text_at_space(s, listing.max_description_length as usize)
+            helpers::truncate_inlines_at_space(s, listing.max_description_length as usize)
         } else {
-            s.to_string()
+            s.to_vec()
         };
         m.insert(
             "description".to_string(),
-            TemplateValue::String(description),
+            TemplateValue::String(prose_markdown(&description)),
         );
     }
     if let Some(s) = item.author.as_deref() {
@@ -534,6 +547,57 @@ fn display_name(field: &str, overrides: &std::collections::BTreeMap<String, Stri
         .to_string()
 }
 
+/// Item prose — a title, subtitle or description — as the markdown a
+/// listing template interpolates (bd-8a9eum6p).
+///
+/// Written back with the qmd writer, so markup survives and literal
+/// text is escaped (`_scope` stays a word, `<anonymous>` stays text):
+/// the template output is parsed again, and the result must read back
+/// as these inlines. Before writing:
+///
+/// - links and notes are dropped (`strip_links_and_notes`): every
+///   built-in template wraps the title — and the grid its subtitle and
+///   description — in the item's link, and anchors may not nest; a
+///   footnote would land on the listing page;
+/// - soft and hard line breaks become spaces, so the result is one
+///   line: titles sit in ATX headings and table cells, where a newline
+///   ends the construct.
+///
+/// One line with every literal `|` escaped by the writer (code spans
+/// and math protect their own), so the result is also a safe pipe-table
+/// cell as-is.
+fn prose_markdown(inlines: &[Inline]) -> String {
+    let inlines = single_line(crate::transforms::strip_links_and_notes(inlines));
+    let mut buf = Vec::new();
+    match pampa::writers::qmd::write_inlines_fragment(&inlines, &mut buf) {
+        Ok(()) => String::from_utf8_lossy(&buf).into_owned(),
+        // Writing into a `Vec` cannot fail for I/O reasons; a writer
+        // diagnostic would mean an inline kind it cannot spell. Fall
+        // back to the plain text, still written as literal text so it
+        // cannot be misread as markdown.
+        Err(_) => {
+            let literal = split_string_to_inlines(&inlines_to_plain_text(&inlines));
+            let mut buf = Vec::new();
+            match pampa::writers::qmd::write_inlines_fragment(&literal, &mut buf) {
+                Ok(()) => String::from_utf8_lossy(&buf).into_owned(),
+                Err(_) => String::new(),
+            }
+        }
+    }
+}
+
+/// `inlines` with every `SoftBreak` / `LineBreak` (at any depth)
+/// replaced by a `Space`.
+fn single_line(inlines: Inlines) -> Inlines {
+    let space = |source_info| {
+        vec![Inline::Space(Space { source_info })]
+    };
+    let mut filter = Filter::new()
+        .with_soft_break(move |b, _| FilterReturn::FilterResult(space(b.source_info), false))
+        .with_line_break(move |b, _| FilterReturn::FilterResult(space(b.source_info), false));
+    topdown_traverse_inlines(inlines, &mut filter, &mut FilterContext::new())
+}
+
 /// Make a string safe inside one markdown pipe-table cell:
 /// newlines flatten to spaces (a cell is one line by definition)
 /// and `|` is escaped so it can't terminate the cell.
@@ -577,10 +641,9 @@ fn table_row(
             if field == "image" {
                 return escape_table_cell(image_html);
             }
-            let Some(value) = item_field_display_value(item, field, date_style) else {
+            let Some(value) = item_field_cell(item, field, date_style) else {
                 return String::new();
             };
-            let value = escape_table_cell(&value);
             if !value.is_empty() && !path.is_empty() && linked.iter().any(|l| l == field) {
                 // Same link shape the templates use for titles;
                 // LinkRewriteTransform rewrites the `.qmd` target
@@ -594,20 +657,31 @@ fn table_row(
     format!("| {} |", cells.join(" | "))
 }
 
-/// Display value for one field of one item — the table-cell
+/// One field of one item as the markdown of its table cell — the
 /// equivalent of Q1's `readField` + item-record pre-formatting.
 /// `None` means "the item doesn't carry this field" (renders as an
 /// empty cell; also drives presence filtering of defaulted field
 /// sets).
+///
+/// Prose fields keep their markup ([`prose_markdown`], already
+/// cell-safe); every other value is plain text made cell-safe by
+/// [`escape_table_cell`].
+fn item_field_cell(item: &ListingItem, field: &str, date_style: &DateStyle) -> Option<String> {
+    match field {
+        "title" => Some(prose_markdown(&item.title)),
+        "subtitle" => item.subtitle.as_deref().map(prose_markdown),
+        "description" => item.description.as_deref().map(prose_markdown),
+        _ => item_field_display_value(item, field, date_style).map(|v| escape_table_cell(&v)),
+    }
+}
+
+/// Plain-text display value for one non-prose field of one item.
 fn item_field_display_value(
     item: &ListingItem,
     field: &str,
     date_style: &DateStyle,
 ) -> Option<String> {
     match field {
-        "title" => Some(item.title.clone()),
-        "subtitle" => item.subtitle.clone(),
-        "description" => item.description.clone(),
         "author" => item.author.clone(),
         "authors" => (!item.authors.is_empty()).then(|| item.authors.join(", ")),
         "date" => item.date.as_deref().map(|s| display_date(s, date_style)),
@@ -764,9 +838,9 @@ mod tests {
 
     fn item(title: &str) -> ListingItem {
         ListingItem {
-            title: title.to_string(),
+            title: crate::document_profile::text(title),
             subtitle: None,
-            description: Some("A descr.".to_string()),
+            description: Some(crate::document_profile::text("A descr.")),
             author: Some("Jane".to_string()),
             authors: vec!["Jane".to_string()],
             date: Some("2026-01-01".to_string()),
@@ -871,7 +945,7 @@ mod tests {
         let mut l = listing();
         l.max_description_length = 20;
         let mut it = item("Hello");
-        it.description = Some("The quick brown fox jumps over.".to_string());
+        it.description = Some(crate::document_profile::text("The quick brown fox jumps over."));
         let ctx = build_listing_context(&l, &[it], "posts", &ConfigValue::default());
         let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
             panic!("items not a list");
@@ -880,10 +954,11 @@ mod tests {
             panic!("item not a map");
         };
         // Q1-exact cut: first 20 chars, drop one, cut at last
-        // space, append `…`.
+        // space, append `…` — bound as markdown, where the writer
+        // spells `…` as `...` (the re-parse reads it back as `…`).
         assert_eq!(
             m.get("description"),
-            Some(&TemplateValue::String("The quick brown…".to_string()))
+            Some(&TemplateValue::String("The quick brown...".to_string()))
         );
     }
 
@@ -895,7 +970,7 @@ mod tests {
         l.max_description_length = 0;
         let long = "This explicit description is much longer than any default limit would allow.";
         let mut it = item("Hello");
-        it.description = Some(long.to_string());
+        it.description = Some(crate::document_profile::text(long));
         let ctx = build_listing_context(&l, &[it], "posts", &ConfigValue::default());
         let TemplateValue::List(arr) = ctx.get("items").unwrap() else {
             panic!("items not a list");

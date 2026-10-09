@@ -649,6 +649,67 @@ pub fn make_cite_inline(
     })
 }
 
+/// Split a string into Inlines, matching Pandoc's `B.text` from pandoc-types Builder.hs.
+///
+/// Groups consecutive characters by space vs non-space:
+/// - Non-space runs → `Str(text)`
+/// - Space-only runs → `SoftBreak` if the run contains `\n` or `\r`, else `Space`
+/// - Empty string → empty vec
+pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
+    if s.is_empty() {
+        return Vec::new();
+    }
+
+    let is_space = |c: char| matches!(c, ' ' | '\r' | '\n' | '\t');
+    let is_newline = |c: char| matches!(c, '\r' | '\n');
+
+    let mut result = Vec::new();
+    let mut chars = s.chars().peekable();
+
+    while chars.peek().is_some() {
+        let first = *chars.peek().unwrap();
+        if is_space(first) {
+            // Consume all consecutive space chars
+            let mut has_newline = false;
+            while let Some(&c) = chars.peek() {
+                if is_space(c) {
+                    if is_newline(c) {
+                        has_newline = true;
+                    }
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            if has_newline {
+                result.push(Inline::SoftBreak(SoftBreak {
+                    source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+                }));
+            } else {
+                result.push(Inline::Space(Space {
+                    source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+                }));
+            }
+        } else {
+            // Consume all consecutive non-space chars
+            let mut word = String::new();
+            while let Some(&c) = chars.peek() {
+                if is_space(c) {
+                    break;
+                }
+                word.push(c);
+                chars.next();
+            }
+            result.push(Inline::Str(Str {
+                text: word,
+                source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+            }));
+        }
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

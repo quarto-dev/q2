@@ -17,6 +17,13 @@
 
 use base64::Engine;
 
+use quarto_pandoc_types::inline::{
+    Cite, Code, Emph, Highlight, Inline, Inlines, Insert, Link, Quoted, SmallCaps, Span,
+    Str, Strikeout, Strong, Subscript, Superscript, Underline,
+};
+use quarto_pandoc_types::inlines_to_plain_text;
+use quarto_source_map::{By, SourceInfo};
+
 use super::config::Listing;
 use super::item::ListingItem;
 use super::placeholders;
@@ -320,6 +327,120 @@ pub(crate) fn truncate_text_at_space(s: &str, max: usize) -> String {
     format!("{trimmed}…")
 }
 
+/// [`truncate_text_at_space`] for markdown prose kept as inlines
+/// (bd-8a9eum6p, plan D7).
+///
+/// The cut point comes from the string algorithm applied to the
+/// plain-text projection, so a description with no markup truncates
+/// exactly as before. The inlines are then cut after that many
+/// plain-text characters, keeping every wrapper (emphasis, code, ...)
+/// that starts before the cut, and `…` is appended. Text inside `Str`
+/// and `Code` may be cut mid-run; `Math` and `Image` are kept whole or
+/// not at all, since half a formula or half an alt text is not
+/// meaningful — so a cut that lands in one ends slightly early.
+pub(crate) fn truncate_inlines_at_space(inlines: &[Inline], max: usize) -> Inlines {
+    let plain = inlines_to_plain_text(inlines);
+    if max == 0 || plain.chars().count() < max {
+        return inlines.to_vec();
+    }
+    // `truncate_text_at_space` always appends exactly one `…`.
+    let keep = truncate_text_at_space(&plain, max).chars().count() - 1;
+    let mut budget = keep;
+    let mut out = take_plain_prefix(inlines, &mut budget);
+    out.push(Inline::Str(Str {
+        text: "…".to_string(),
+        source_info: SourceInfo::generated(By::unknown()),
+    }));
+    out
+}
+
+/// The longest prefix of `inlines` whose plain-text projection (as
+/// [`inlines_to_plain_text`] computes it) is at most `budget` chars;
+/// decrements `budget` by what it kept.
+///
+/// Exhaustive on purpose, like `strip_links_and_notes`: each variant's
+/// contribution here must agree with `inlines_to_plain_text`.
+fn take_plain_prefix(inlines: &[Inline], budget: &mut usize) -> Inlines {
+    /// Keep at most `budget` chars of `text`.
+    fn cut(text: &str, budget: &mut usize) -> String {
+        let n = text.chars().count();
+        if n <= *budget {
+            *budget -= n;
+            text.to_string()
+        } else {
+            let kept = text.chars().take(*budget).collect();
+            *budget = 0;
+            kept
+        }
+    }
+    /// Keep `inline` whole if its `n` chars fit, else stop here.
+    fn whole(inline: &Inline, n: usize, budget: &mut usize, out: &mut Inlines) {
+        if n <= *budget {
+            *budget -= n;
+            out.push(inline.clone());
+        } else {
+            *budget = 0;
+        }
+    }
+    macro_rules! container {
+        ($out:ident, $variant:ident, $node:ident, $budget:ident) => {
+            $out.push(Inline::$variant($variant {
+                content: take_plain_prefix(&$node.content, $budget),
+                ..$node.clone()
+            }))
+        };
+    }
+    let mut out = Inlines::new();
+    for inline in inlines {
+        if *budget == 0 {
+            break;
+        }
+        match inline {
+            Inline::Str(s) => out.push(Inline::Str(Str {
+                text: cut(&s.text, budget),
+                ..s.clone()
+            })),
+            Inline::Code(c) => out.push(Inline::Code(Code {
+                text: cut(&c.text, budget),
+                ..c.clone()
+            })),
+            Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => {
+                whole(inline, 1, budget, &mut out)
+            }
+            Inline::Math(m) => whole(inline, m.text.chars().count(), budget, &mut out),
+            Inline::Image(i) => whole(
+                inline,
+                inlines_to_plain_text(&i.content).chars().count(),
+                budget,
+                &mut out,
+            ),
+            Inline::Emph(e) => container!(out, Emph, e, budget),
+            Inline::Underline(u) => container!(out, Underline, u, budget),
+            Inline::Strong(s) => container!(out, Strong, s, budget),
+            Inline::Strikeout(s) => container!(out, Strikeout, s, budget),
+            Inline::Superscript(s) => container!(out, Superscript, s, budget),
+            Inline::Subscript(s) => container!(out, Subscript, s, budget),
+            Inline::SmallCaps(s) => container!(out, SmallCaps, s, budget),
+            Inline::Quoted(q) => container!(out, Quoted, q, budget),
+            Inline::Cite(c) => container!(out, Cite, c, budget),
+            Inline::Link(l) => container!(out, Link, l, budget),
+            Inline::Span(s) => container!(out, Span, s, budget),
+            Inline::Insert(i) => container!(out, Insert, i, budget),
+            Inline::Highlight(h) => container!(out, Highlight, h, budget),
+            // No plain text: kept when they come before the cut.
+            Inline::Note(_)
+            | Inline::NoteReference(_)
+            | Inline::RawInline(_)
+            | Inline::Shortcode(_)
+            | Inline::Attr(_)
+            | Inline::Delete(_)
+            | Inline::EditComment(_)
+            | Inline::Custom(_) => out.push(inline.clone()),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,7 +450,7 @@ mod tests {
 
     fn make_item_with_image(image: Option<&str>) -> ListingItem {
         ListingItem {
-            title: "Title".to_string(),
+            title: crate::document_profile::text("Title"),
             subtitle: None,
             description: None,
             author: None,

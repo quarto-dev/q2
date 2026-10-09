@@ -101,9 +101,9 @@ fn natural_compare(a: &str, b: &str) -> Ordering {
 
 fn field_value(item: &ListingItem, field: &str) -> Option<String> {
     match field {
-        "title" => Some(item.title.clone()),
-        "subtitle" => item.subtitle.clone(),
-        "description" => item.description.clone(),
+        "title" => Some(item.title_text()),
+        "subtitle" => item.subtitle_text(),
+        "description" => item.description_text(),
         "author" => item.author.clone(),
         "date" => item.date.clone(),
         "date-modified" => item.date_modified.clone(),
@@ -148,7 +148,7 @@ mod tests {
 
     fn make_item(title: &str, date: Option<&str>) -> ListingItem {
         ListingItem {
-            title: title.to_string(),
+            title: crate::document_profile::text(title),
             subtitle: None,
             description: None,
             author: None,
@@ -184,9 +184,9 @@ mod tests {
         }];
         let mut diags = Vec::new();
         apply_sort(&mut items, &sort, &mut diags);
-        assert_eq!(items[0].title, "a");
-        assert_eq!(items[1].title, "b");
-        assert_eq!(items[2].title, "c");
+        assert_eq!(items[0].title_text(), "a");
+        assert_eq!(items[1].title_text(), "b");
+        assert_eq!(items[2].title_text(), "c");
         assert!(diags.is_empty());
     }
 
@@ -203,9 +203,9 @@ mod tests {
         }];
         let mut diags = Vec::new();
         apply_sort(&mut items, &sort, &mut diags);
-        assert_eq!(items[0].title, "c");
-        assert_eq!(items[1].title, "b");
-        assert_eq!(items[2].title, "a");
+        assert_eq!(items[0].title_text(), "c");
+        assert_eq!(items[1].title_text(), "b");
+        assert_eq!(items[2].title_text(), "a");
     }
 
     // Multi-key: primary by date desc, tiebreaker title asc.
@@ -228,9 +228,9 @@ mod tests {
         ];
         let mut diags = Vec::new();
         apply_sort(&mut items, &sort, &mut diags);
-        assert_eq!(items[0].title, "b"); // newer date first
-        assert_eq!(items[1].title, "a"); // tied dates → title asc
-        assert_eq!(items[2].title, "c");
+        assert_eq!(items[0].title_text(), "b"); // newer date first
+        assert_eq!(items[1].title_text(), "a"); // tied dates → title asc
+        assert_eq!(items[2].title_text(), "c");
     }
 
     #[test]
@@ -248,8 +248,8 @@ mod tests {
         apply_sort(&mut items, &sort, &mut diags);
         // Present-value items first; missing items last; relative
         // order among missing items preserved (stable).
-        assert_eq!(items[0].title, "b");
-        assert!(items[1].title == "a" || items[1].title == "c");
+        assert_eq!(items[0].title_text(), "b");
+        assert!(items[1].title_text() == "a" || items[1].title_text() == "c");
     }
 
     // `order` is a known sort field (Q1's front-matter curation
@@ -275,10 +275,10 @@ mod tests {
         let mut diags = Vec::new();
         apply_sort(&mut items, &sort, &mut diags);
         assert!(diags.is_empty(), "order is a known field; got {:?}", diags);
-        assert_eq!(items[0].title, "a");
-        assert_eq!(items[1].title, "b");
-        assert_eq!(items[2].title, "c");
-        assert_eq!(items[3].title, "plain");
+        assert_eq!(items[0].title_text(), "a");
+        assert_eq!(items[1].title_text(), "b");
+        assert_eq!(items[2].title_text(), "c");
+        assert_eq!(items[3].title_text(), "plain");
     }
 
     // The documented rule is "missing values sort after present
@@ -300,10 +300,10 @@ mod tests {
         }];
         let mut diags = Vec::new();
         apply_sort(&mut items, &sort, &mut diags);
-        assert_eq!(items[0].title, "b");
+        assert_eq!(items[0].title_text(), "b");
         // Stable among the missing-value items.
-        assert_eq!(items[1].title, "a");
-        assert_eq!(items[2].title, "c");
+        assert_eq!(items[1].title_text(), "a");
+        assert_eq!(items[2].title_text(), "c");
     }
 
     #[test]
@@ -353,9 +353,9 @@ mod tests {
             diags
         );
         // Numeric comparison via natural_compare: 1, 2, 10.
-        assert_eq!(items[0].title, "a");
-        assert_eq!(items[1].title, "b");
-        assert_eq!(items[2].title, "c");
+        assert_eq!(items[0].title_text(), "a");
+        assert_eq!(items[1].title_text(), "b");
+        assert_eq!(items[2].title_text(), "c");
     }
 
     // The suppression is any-item: a field present on only SOME items
@@ -377,7 +377,7 @@ mod tests {
             "sparse field must not warn; got {:?}",
             diags
         );
-        assert_eq!(items[0].title, "tagged");
-        assert_eq!(items[1].title, "plain");
+        assert_eq!(items[0].title_text(), "tagged");
+        assert_eq!(items[1].title_text(), "plain");
     }
 }

@@ -319,7 +319,7 @@ pub fn build_feed_item(
         // No rendered sibling to read: inline what the record itself
         // says, whatever the feed type (plan §D6a).
         (FeedType::Metadata, _) | (_, None) => {
-            let desc = item.description.as_deref().unwrap_or("");
+            let desc = item.description_text().unwrap_or_default();
             format!("<description><![CDATA[{}]]></description>", desc)
         }
         (FeedType::Partial | FeedType::Full, Some(output_href)) => format!(
@@ -337,7 +337,7 @@ pub fn build_feed_item(
         .map(|src| build_item_image(src, site_url, project_dir));
 
     FeedItem {
-        title: xml_escape_text(&item.title),
+        title: xml_escape_text(&item.title_text()),
         link: link.clone(),
         guid: link,
         description_element,
@@ -581,7 +581,7 @@ mod tests {
 
     fn empty_listing_item() -> ListingItem {
         ListingItem {
-            title: String::new(),
+            title: Vec::new(),
             subtitle: None,
             description: None,
             author: None,
@@ -892,7 +892,7 @@ mod tests {
     #[test]
     fn build_item_pub_date_rfc822_from_date_only() {
         let mut item = empty_listing_item();
-        item.title = "Foo".to_string();
+        item.title = crate::document_profile::text("Foo");
         item.date = Some("2026-05-08".to_string());
         item.target = ItemTarget::document("posts/foo.qmd", "posts/foo.html");
         let feed_options = default_feed_options();
@@ -908,8 +908,8 @@ mod tests {
     #[test]
     fn build_item_xml_escapes_title_and_categories() {
         let mut item = empty_listing_item();
-        item.title = "<script>alert(1)</script>".to_string();
-        item.description = Some("a < b & c".to_string());
+        item.title = crate::document_profile::text("<script>alert(1)</script>");
+        item.description = Some(crate::document_profile::text("a < b & c"));
         item.categories = vec!["A & B".to_string(), "<C>".to_string()];
         item.target = ItemTarget::document("p.qmd", "p.html");
         let feed_options = ListingFeedOptions {
@@ -936,8 +936,8 @@ mod tests {
     #[test]
     fn build_item_metadata_inlines_description_as_cdata() {
         let mut item = empty_listing_item();
-        item.title = "T".to_string();
-        item.description = Some("Hello world".to_string());
+        item.title = crate::document_profile::text("T");
+        item.description = Some(crate::document_profile::text("Hello world"));
         item.target = ItemTarget::document("posts/foo.qmd", "posts/foo.html");
         let feed_options = ListingFeedOptions {
             kind: FeedType::Metadata,
@@ -953,7 +953,7 @@ mod tests {
     #[test]
     fn build_item_metadata_with_no_description_produces_empty_cdata() {
         let mut item = empty_listing_item();
-        item.title = "T".to_string();
+        item.title = crate::document_profile::text("T");
         item.target = ItemTarget::document("p.qmd", "p.html");
         let feed_options = ListingFeedOptions {
             kind: FeedType::Metadata,
@@ -971,7 +971,7 @@ mod tests {
     #[test]
     fn build_item_partial_emits_placeholder_envelope() {
         let mut item = empty_listing_item();
-        item.title = "T".to_string();
+        item.title = crate::document_profile::text("T");
         item.target = ItemTarget::document("posts/foo.qmd", "posts/foo.html");
         let feed_options = ListingFeedOptions {
             kind: FeedType::Partial,
@@ -987,7 +987,7 @@ mod tests {
     #[test]
     fn build_item_full_emits_placeholder_envelope() {
         let mut item = empty_listing_item();
-        item.title = "T".to_string();
+        item.title = crate::document_profile::text("T");
         item.target = ItemTarget::document("posts/bar.qmd", "posts/bar.html");
         let feed_options = ListingFeedOptions {
             kind: FeedType::Full,
@@ -1005,8 +1005,8 @@ mod tests {
     #[test]
     fn record_item_gets_an_inline_description_even_in_a_full_feed() {
         let mut item = empty_listing_item();
-        item.title = "Card".to_string();
-        item.description = Some("hand-written".to_string());
+        item.title = crate::document_profile::text("Card");
+        item.description = Some(crate::document_profile::text("hand-written"));
         item.target = ItemTarget::Href("https://example.com/card".to_string());
         item.origin = ItemOrigin::Record;
         let feed_options = ListingFeedOptions {
@@ -1028,7 +1028,7 @@ mod tests {
     #[test]
     fn document_item_keeps_the_full_feed_placeholder() {
         let mut item = empty_listing_item();
-        item.title = "Doc".to_string();
+        item.title = crate::document_profile::text("Doc");
         item.target = ItemTarget::document("posts/foo.qmd", "posts/foo.html");
         let feed_options = ListingFeedOptions {
             kind: FeedType::Full,

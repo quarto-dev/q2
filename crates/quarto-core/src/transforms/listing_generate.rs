@@ -53,7 +53,8 @@ use crate::project::listing::helpers::is_remote_src;
 use crate::project::listing::record::{overlay_record, parse_record, record_item};
 use crate::project::listing::sort::apply_sort;
 use crate::project::listing::{
-    ItemTarget, ListingContents, ListingItem, ResolvedListing, hydrate_item, parse_listings,
+    ItemTarget, ListingContents, ListingItem, ResolvedListing, flattened_prose_diagnostics,
+    hydrate_item, parse_listings,
 };
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -247,6 +248,7 @@ impl AstTransform for ListingGenerateTransform {
                     }
                     if let Some(pattern_idx) = first_match {
                         sources.insert(ListingItemSource::Document);
+                        diags.extend(flattened_prose_diagnostics(profile, None));
                         ordered.push(((pattern_idx, 1), hydrate_item(profile)));
                     }
                 }
@@ -331,6 +333,7 @@ impl AstTransform for ListingGenerateTransform {
                                 continue;
                             }
                             sources.insert(ListingItemSource::MetadataDocument);
+                            diags.extend(flattened_prose_diagnostics(profile, Some(&rec.info)));
                             overlay_record(hydrate_item(profile), rec, &base_dir)
                         }
                         RecordPath::Href(href) => {
@@ -646,7 +649,7 @@ mod tests {
             source_path: PathBuf::from(source),
             output_href: output_href.to_string(),
             format_id: "html".to_string(),
-            title: Some(title.to_string()),
+            title: Some(crate::document_profile::text(title)),
             ..DocumentProfile::default()
         }
     }
@@ -673,8 +676,8 @@ mod tests {
         p
     }
 
-    fn titles(resolved: &[ResolvedListing]) -> Vec<&str> {
-        resolved[0].items.iter().map(|i| i.title.as_str()).collect()
+    fn titles(resolved: &[ResolvedListing]) -> Vec<String> {
+        resolved[0].items.iter().map(|i| i.title_text()).collect()
     }
 
     fn make_project(
@@ -863,7 +866,7 @@ mod tests {
         .await;
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].items.len(), 1);
-        assert_eq!(resolved[0].items[0].title, "Keep");
+        assert_eq!(resolved[0].items[0].title_text(), "Keep");
     }
 
     // 31. generate_sorts_via_sort_field — date desc explicit.
@@ -887,9 +890,9 @@ mod tests {
         .await;
         assert_eq!(resolved[0].items.len(), 3);
         // Newest first.
-        assert_eq!(resolved[0].items[0].title, "C");
-        assert_eq!(resolved[0].items[1].title, "B");
-        assert_eq!(resolved[0].items[2].title, "A");
+        assert_eq!(resolved[0].items[0].title_text(), "C");
+        assert_eq!(resolved[0].items[1].title_text(), "B");
+        assert_eq!(resolved[0].items[2].title_text(), "A");
     }
 
     // 32. generate_excludes_host_page_itself — covered in #29 above
@@ -915,10 +918,10 @@ mod tests {
         )
         .await;
         assert_eq!(resolved[0].items.len(), 2);
-        let titles: Vec<&str> = resolved[0].items.iter().map(|i| i.title.as_str()).collect();
-        assert!(titles.contains(&"A"));
-        assert!(titles.contains(&"B"));
-        assert!(!titles.contains(&"C"));
+        let titles: Vec<String> = resolved[0].items.iter().map(|i| i.title_text()).collect();
+        assert!(titles.contains(&"A".to_string()));
+        assert!(titles.contains(&"B".to_string()));
+        assert!(!titles.contains(&"C".to_string()));
     }
 
     // Project-relative explicit glob from a host that's at root.
@@ -941,9 +944,9 @@ mod tests {
         )
         .await;
         assert_eq!(resolved[0].items.len(), 2);
-        let titles: Vec<&str> = resolved[0].items.iter().map(|i| i.title.as_str()).collect();
-        assert!(titles.contains(&"A"));
-        assert!(titles.contains(&"B"));
+        let titles: Vec<String> = resolved[0].items.iter().map(|i| i.title_text()).collect();
+        assert!(titles.contains(&"A".to_string()));
+        assert!(titles.contains(&"B".to_string()));
     }
 
     #[tokio::test]
@@ -967,8 +970,8 @@ mod tests {
         .await;
         assert_eq!(resolved[0].items.len(), 2);
         // Sort by date desc + truncate → C, B (A drops off).
-        assert_eq!(resolved[0].items[0].title, "C");
-        assert_eq!(resolved[0].items[1].title, "B");
+        assert_eq!(resolved[0].items[0].title_text(), "C");
+        assert_eq!(resolved[0].items[1].title_text(), "B");
     }
 
     // Q1 parity (bd-listing-declared-order-3ixcvc4o): absent `sort:`
@@ -1214,7 +1217,7 @@ mod tests {
         .await;
         assert!(diags.is_empty(), "{diags:?}");
         let item = &resolved[0].items[0];
-        assert_eq!(item.title, "Get started");
+        assert_eq!(item.title_text(), "Get started");
         assert_eq!(item.target, ItemTarget::None);
         assert_eq!(item.origin, ItemOrigin::Record);
         assert_eq!(
@@ -1229,7 +1232,7 @@ mod tests {
     #[tokio::test]
     async fn record_path_overlays_the_named_document() {
         let mut doc = make_profile("download.qmd", "download.html", "Download stub");
-        doc.description = Some("from the document".to_string());
+        doc.description = Some(crate::document_profile::text("from the document"));
         let (resolved, diags) = run_transform(
             contents_listing(vec![map(vec![
                 ("title", s("Get started")),
@@ -1241,8 +1244,8 @@ mod tests {
         .await;
         assert!(diags.is_empty(), "{diags:?}");
         let item = &resolved[0].items[0];
-        assert_eq!(item.title, "Get started");
-        assert_eq!(item.description.as_deref(), Some("from the document"));
+        assert_eq!(item.title_text(), "Get started");
+        assert_eq!(crate::document_profile::plain(&item.description).as_deref(), Some("from the document"));
         assert_eq!(
             item.target,
             ItemTarget::document("download.qmd", "download.html")
@@ -1262,7 +1265,7 @@ mod tests {
         )
         .await;
         assert!(diags.is_empty(), "{diags:?}");
-        assert_eq!(resolved[0].items[0].title, "Root Post");
+        assert_eq!(resolved[0].items[0].title_text(), "Root Post");
         assert_eq!(
             resolved[0].items[0].target,
             ItemTarget::document("rootpost.qmd", "rootpost.html")
@@ -1293,7 +1296,7 @@ mod tests {
             resolved[0].items[0].target,
             ItemTarget::Href("downlaod.qmd".to_string())
         );
-        assert_eq!(resolved[0].items[0].title, "Typo");
+        assert_eq!(resolved[0].items[0].title_text(), "Typo");
     }
 
     #[tokio::test]

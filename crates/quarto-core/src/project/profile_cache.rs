@@ -193,8 +193,8 @@ mod tests {
             source_path: PathBuf::from("docs/api.qmd"),
             output_href: "docs/api.html".to_string(),
             format_id: "html".to_string(),
-            title: Some("API".to_string()),
-            description: Some("Reference docs".to_string()),
+            title: Some(crate::document_profile::text("API")),
+            description: Some(crate::document_profile::text("Reference docs")),
             authors: vec!["Alice".to_string()],
             categories: vec!["docs".to_string()],
             includes: vec![IncludeEntry::new(
@@ -362,18 +362,18 @@ mod tests {
         let key = "overwrite_me";
 
         let mut p1 = rich_profile();
-        p1.title = Some("First".to_string());
+        p1.title = Some(crate::document_profile::text("First"));
         save(runtime.as_ref(), key, &p1).await.unwrap();
 
         let mut p2 = rich_profile();
-        p2.title = Some("Second".to_string());
+        p2.title = Some(crate::document_profile::text("Second"));
         save(runtime.as_ref(), key, &p2).await.unwrap();
 
         let loaded = load(runtime.as_ref(), key, matching_resolver)
             .await
             .unwrap()
             .expect("hit");
-        assert_eq!(loaded.title.as_deref(), Some("Second"));
+        assert_eq!(crate::document_profile::plain(&loaded.title).as_deref(), Some("Second"));
     }
 
     #[tokio::test]

@@ -18,8 +18,10 @@ use yaml_rust2::Yaml;
 /// Convert Pandoc inlines to plain text.
 ///
 /// Extracts and concatenates text from Str and Space nodes, recursively
-/// handling formatting nodes (Emph, Strong, etc.).
-fn inlines_to_plain_text(inlines: &[Inline]) -> String {
+/// handling formatting nodes (Emph, Strong, etc.). This is the projection
+/// [`ConfigValue::as_plain_text`] applies to `PandocInlines`; consumers that
+/// keep metadata prose as inlines use it to get the same plain text.
+pub fn inlines_to_plain_text(inlines: &[Inline]) -> String {
     let mut text = String::new();
     for inline in inlines {
         match inline {

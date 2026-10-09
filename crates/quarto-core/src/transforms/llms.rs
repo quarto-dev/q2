@@ -62,7 +62,7 @@
 use std::path::Path;
 
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_pandoc_types::{Attr, AttrSourceInfo, Block, ConfigValue, Inline};
+use quarto_pandoc_types::{Attr, AttrSourceInfo, Block, ConfigValue, Inline, inlines_to_plain_text};
 
 use crate::artifact::{Artifact, ArtifactScope};
 use crate::project::ProjectKind;
@@ -535,14 +535,16 @@ fn synthesize_listing_list(
             // root for config-authored paths), so it would miss a
             // root-relative literal like `path: /files/report.pdf`
             // (bd-listing-inline-contents).
-            let title_inline = str_inline(item.title.clone());
+            // The title keeps its markup; links and notes go, because
+            // the title is itself the item's link (bd-8a9eum6p).
+            let title = crate::transforms::strip_links_and_notes(&item.title);
             let mut inlines: Vec<Inline> = match &item.target {
-                ItemTarget::None => vec![title_inline],
+                ItemTarget::None => title,
                 ItemTarget::Href(raw_href) => {
                     let href = retarget_href(raw_href, cx);
                     vec![Inline::Link(quarto_pandoc_types::inline::Link {
                         attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-                        content: vec![title_inline],
+                        content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
                         attr_source: AttrSourceInfo::empty(),
@@ -554,7 +556,7 @@ fn synthesize_listing_list(
                     let href = retarget_href(&based, cx);
                     vec![Inline::Link(quarto_pandoc_types::inline::Link {
                         attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-                        content: vec![title_inline],
+                        content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
                         attr_source: AttrSourceInfo::empty(),
@@ -570,10 +572,14 @@ fn synthesize_listing_list(
             if !meta_bits.is_empty() {
                 inlines.push(str_inline(format!(" ({})", meta_bits.join(", "))));
             }
-            if let Some(desc) = item.description.as_deref().map(str::trim)
-                && !desc.is_empty()
+            if let Some(desc) = &item.description
+                && !inlines_to_plain_text(desc).trim().is_empty()
             {
-                inlines.push(str_inline(format!(": {desc}")));
+                inlines.push(str_inline(":".to_string()));
+                inlines.push(Inline::Space(quarto_pandoc_types::inline::Space {
+                    source_info: gen_si(),
+                }));
+                inlines.extend(crate::transforms::strip_links_and_notes(desc));
             }
             vec![Block::Plain(quarto_pandoc_types::block::Plain {
                 content: inlines,
@@ -1244,7 +1250,7 @@ mod tests {
         target: crate::project::listing::ItemTarget,
     ) -> crate::project::listing::ListingItem {
         crate::project::listing::ListingItem {
-            title: title.to_string(),
+            title: crate::document_profile::text(title),
             subtitle: None,
             description: None,
             author: None,
@@ -1343,18 +1349,13 @@ mod tests {
         assert_eq!(page_relative_links.len(), 1);
         assert_eq!(page_relative_links[0].target.0, "report.pdf");
 
-        // No-link item: title appears as plain text, no Link inline at all.
+        // No-link item: title appears as text, no Link inline at all.
         let none_links = collect_links(&list.content[4]);
         assert_eq!(none_links.len(), 0, "no-link item must not emit a Link");
         let none_text: String = list.content[4]
             .iter()
             .filter_map(|b| match b {
-                Block::Plain(p) => Some(&p.content),
-                _ => None,
-            })
-            .flatten()
-            .filter_map(|i| match i {
-                Inline::Str(s) => Some(s.text.as_str()),
+                Block::Plain(p) => Some(inlines_to_plain_text(&p.content)),
                 _ => None,
             })
             .collect();

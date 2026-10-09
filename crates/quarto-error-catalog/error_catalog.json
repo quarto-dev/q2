@@ -1003,7 +1003,7 @@
   "Q-12-10": {
     "subsystem": "listing",
     "title": "Listing Markdown Re-parse Diagnostics",
-    "message_template": "Re-parsing the doctemplate output of a listing produced one or more diagnostics. The first diagnostic is included; full source-info threading is a follow-up (bd-0jyl).",
+    "message_template": "Re-parsing the doctemplate output of a listing produced one or more diagnostics. The first diagnostic is included; full source-info threading is a follow-up (bd-0jyl). When the re-parse fails outright the listing is skipped, and this is an error rather than a warning.",
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-10",
     "since_version": "99.9.9"
   },
@@ -1110,6 +1110,13 @@
     "title": "Listing Id Collides With Section Id",
     "message_template": "A listing's `id` is also the id of a section on the page. Both elements claim the same HTML anchor.",
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-25",
+    "since_version": "99.9.9"
+  },
+  "Q-12-26": {
+    "subsystem": "listing",
+    "title": "Listing Item Prose Has More Than One Paragraph",
+    "message_template": "A listing item's `title`, `subtitle` or `description` is written as more than one block (paragraphs, a list, ...). A listing shows it as a single paragraph, so its blocks are joined into one.",
+    "docs_url": "https://quarto.org/docs/errors/listing/Q-12-26",
     "since_version": "99.9.9"
   },
   "Q-13-1": {

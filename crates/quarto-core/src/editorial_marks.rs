@@ -169,12 +169,22 @@ pub fn commented_range_span(mut range: Inlines, comments: Vec<Inline>) -> Inline
 /// definitions of a definition list are flattened and concatenated with no separator; a
 /// table gives its caption and its cells. A rule, a custom node or metadata gives nothing.
 pub fn blocks_to_inlines(blocks: &[Block]) -> Inlines {
+    blocks_to_inlines_with_sep(
+        blocks,
+        &[Inline::LineBreak(LineBreak {
+            source_info: generated(),
+        })],
+    )
+}
+
+/// `pandoc.utils.blocks_to_inlines(blocks, sep)`: [`blocks_to_inlines`] with an explicit
+/// separator between top-level blocks. Nested structure (list items, definitions, table
+/// cells) flattens exactly as in [`blocks_to_inlines`]; only the top-level joints change.
+pub fn blocks_to_inlines_with_sep(blocks: &[Block], sep: &[Inline]) -> Inlines {
     let mut out: Inlines = Vec::new();
     for (i, block) in blocks.iter().enumerate() {
         if i > 0 {
-            out.push(Inline::LineBreak(LineBreak {
-                source_info: generated(),
-            }));
+            out.extend(sep.iter().cloned());
         }
         out.extend(block_to_inlines(block));
     }

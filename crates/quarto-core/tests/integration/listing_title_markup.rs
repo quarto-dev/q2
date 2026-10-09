@@ -149,7 +149,6 @@ fn listing_keeps_title_subtitle_and_description_markup() {
             "Fix _scope: lexical regression",
             "Plan for <code>_scope</code> and <em>emph</em>",
             "About <code>&lt;anonymous&gt;</code> frames",
-            "Desc with <strong>strong</strong> and <code>&lt;anonymous&gt;</code>",
         ] {
             assert!(
                 section.contains(needle),
@@ -164,11 +163,45 @@ fn listing_keeps_title_subtitle_and_description_markup() {
     // Subtitles appear in the table (explicit field) and the default layout.
     assert!(tbl.contains("Sub with <code>code</code>"), "{tbl}");
     assert!(dflt.contains("Sub with <code>code</code>"), "{dflt}");
+    // Descriptions: checked in the table only. The default layout
+    // currently replaces a document's explicit description with the
+    // derived first paragraph (bd-listing-description-precedence-x4bh6w3m);
+    // `inline_record_prose_keeps_markup` covers the template path.
+    assert!(
+        tbl.contains("Desc with <strong>strong</strong> and <code>&lt;anonymous&gt;</code>"),
+        "{tbl}"
+    );
     // The pipe inside the code span stays inside one cell.
     assert!(
         tbl.contains("Pipes <code>a|b</code> and c|d"),
         "pipe handling in table cell:\n{tbl}"
     );
+}
+
+/// Inline `contents:` records carry prose too, and are written through
+/// the default template's `$title$` / `$subtitle$` / `$description$`.
+#[test]
+fn inline_record_prose_keeps_markup() {
+    let summary = render(|p| {
+        write(&p.join("_quarto.yml"), PROJECT);
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Home\nlisting:\n  id: recs\n  type: default\n  contents:\n    - title: 'Record `_r` and *emph*'\n      subtitle: 'Sub `<x>`'\n      description: 'Rec **desc** with \\_x'\n---\n",
+        );
+    });
+    let diags = all_diags(&summary);
+    assert!(
+        !codes(&diags).iter().any(|c| c == "Q-12-10"),
+        "listing re-parse must be clean; got {diags:#?}"
+    );
+    let html = html_for(&summary, "index.html");
+    for needle in [
+        "Record <code>_r</code> and <em>emph</em>",
+        "Sub <code>&lt;x&gt;</code>",
+        "Rec <strong>desc</strong> with _x",
+    ] {
+        assert!(html.contains(needle), "missing `{needle}`:\n{html}");
+    }
 }
 
 /// D5: a multi-paragraph description is flattened into one run of

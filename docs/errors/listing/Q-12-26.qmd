@@ -1,0 +1,51 @@
+---
+title: "Listing Item Prose Has More Than One Paragraph"
+description: "A listing item's title, subtitle or description is written as more than one block, so the listing joins it into one paragraph."
+code: Q-12-26
+subsystem: listing
+status: stub
+since: "99.9.9"
+categories:
+  - listing
+---
+
+# `Q-12-26` — Listing Item Prose Has More Than One Paragraph
+
+> A listing item's `title`, `subtitle` or `description` is written as
+> more than one block, so the listing joins it into one paragraph.
+
+## What this means
+
+A listing shows each item's `title`, `subtitle` and `description` as a
+single paragraph of markdown. This warning fires when one of them is
+written as more than one block, most often a `description:` using a
+YAML block scalar with a blank line in it:
+
+``` markdown
+---
+title: My post
+description: |
+  The first paragraph.
+
+  The second paragraph.
+---
+```
+
+The listing joins the blocks into one paragraph ("The first paragraph.
+The second paragraph."). Lists, block quotes and code blocks are
+flattened to their text in the same way.
+
+## How to fix
+
+Write the value as one paragraph. Inline formatting (emphasis, code,
+links) is kept:
+
+``` markdown
+---
+title: My post
+description: "The first paragraph, and *the second* folded into it."
+---
+```
+
+If the item comes from a `listing-item:` block or an inline listing
+record, fix the value there; the warning names the key it found.

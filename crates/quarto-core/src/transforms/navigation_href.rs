@@ -891,7 +891,7 @@ mod tests {
             source_path: PathBuf::from(source),
             output_href: output_href.to_string(),
             format_id: "html".to_string(),
-            title: Some("T".to_string()),
+            title: Some(crate::document_profile::text("T")),
             ..DocumentProfile::default()
         }
     }

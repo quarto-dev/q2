@@ -17,8 +17,11 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use pampa::toc::{TocConfig, TocEntry, generate_toc};
-use quarto_pandoc_types::ConfigValue;
+use quarto_pandoc_types::block::Block;
+use quarto_pandoc_types::inline::{Inline, Inlines, Space};
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_pandoc_types::{ConfigValue, ConfigValueKind, inlines_to_plain_text};
+use quarto_source_map::{By, SourceInfo};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -121,7 +124,22 @@ use thiserror::Error;
 ///   would deserialize cleanly and silently report "no comments" for
 ///   a document that has them — the semantic misread the version
 ///   check exists to prevent.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 13;
+/// - `14`: `bd-8a9eum6p`. Changes `title`, `subtitle` and `description`
+///   — on the profile and on `listing_item` — from `Option<String>` to
+///   `Option<Inlines>`, and adds `flattened_prose: Vec<String>` to both.
+///   Listings used to interpolate the plain-text projection into
+///   generated markdown and re-parse it, which lost all markup and broke
+///   on markdown-significant text (`_scope`, `<anonymous>`); they now
+///   write the inlines back as markdown. A multi-block value (e.g. a
+///   two-paragraph `description: |`) used to project to `None` and
+///   vanish; it now flattens to one inline run, recorded in
+///   `flattened_prose` so the listing can warn (Q-12-26). **Serialized
+///   shape changes**; v13 profiles fail to deserialize at the field
+///   level. Plain-text consumers project with
+///   [`quarto_pandoc_types::inlines_to_plain_text`] (the projection
+///   `ConfigValue::as_plain_text` applied before), so their output is
+///   unchanged.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 14;
 
 /// Reduced, serializable form of [`crate::engine::EngineResolution`] for the
 /// profile (names only — configs stay in merged metadata; Plan 6 decision 6).
@@ -254,20 +272,29 @@ impl IncludeEntry {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ListingItemInfo {
     /// Override for the title displayed in listings. Defaults to
-    /// `profile.title` when unset.
+    /// `profile.title` when unset. Markdown prose, kept as inlines
+    /// (see [`prose_inlines`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
+    pub title: Option<Inlines>,
 
     /// Override for the subtitle displayed in listings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subtitle: Option<String>,
+    pub subtitle: Option<Inlines>,
 
     /// Listing description (text shown under the title). L0 honors
     /// an author-supplied value; L1's `ListingItemInfoStage` will
     /// fill from the first plain-text paragraph of the post-include
     /// AST when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
+    pub description: Option<Inlines>,
+
+    /// Keys among `title` / `subtitle` / `description` whose value
+    /// was written as more than one block and flattened into one
+    /// inline run (see [`prose_inlines`]). The listing that uses the
+    /// value reports it (Q-12-26); the profile only records it, so
+    /// the report survives profile caching.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flattened_prose: Vec<String>,
 
     /// Listing image src. L0 honors an author-supplied value; L1
     /// will fill from the first body `Image` node when unset.
@@ -397,10 +424,15 @@ impl ListingItemInfo {
                     .or_insert_with(|| entry.value.clone());
             }
         }
+        let mut flattened_prose = Vec::new();
+        let title = prose_field(li, "title", &mut flattened_prose);
+        let subtitle = prose_field(li, "subtitle", &mut flattened_prose);
+        let description = prose_field(li, "description", &mut flattened_prose);
         ListingItemInfo {
-            title: plain_text_field(li, "title"),
-            subtitle: plain_text_field(li, "subtitle"),
-            description: plain_text_field(li, "description"),
+            title,
+            subtitle,
+            description,
+            flattened_prose,
             image: plain_text_field(li, "image"),
             image_alt: plain_text_field(li, "image-alt"),
             date: plain_text_field(li, "date"),
@@ -612,12 +644,20 @@ pub struct DocumentProfile {
     /// `ctx.format.target_format` at the checkpoint.
     pub format_id: String,
 
-    /// Document title, plain text. `None` when the frontmatter has no
-    /// title and no first-heading fallback was applied.
-    pub title: Option<String>,
+    /// Document title, as the inlines the front matter parsed to.
+    /// `None` when the frontmatter has no title and no first-heading
+    /// fallback was applied. Consumers wanting plain text project it
+    /// with [`quarto_pandoc_types::inlines_to_plain_text`].
+    pub title: Option<Inlines>,
 
-    pub subtitle: Option<String>,
-    pub description: Option<String>,
+    pub subtitle: Option<Inlines>,
+    pub description: Option<Inlines>,
+
+    /// Keys among `title` / `subtitle` / `description` whose value was
+    /// flattened from more than one block (see
+    /// [`ListingItemInfo::flattened_prose`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flattened_prose: Vec<String>,
 
     /// Authors, flat list of plain-text names (the `literal` of each
     /// [`ProfileAuthor`] in `authors_structured`; kept for consumers
@@ -927,6 +967,7 @@ impl Default for DocumentProfile {
             title: None,
             subtitle: None,
             description: None,
+            flattened_prose: Vec::new(),
             authors: Vec::new(),
             authors_structured: Vec::new(),
             date: None,
@@ -961,6 +1002,23 @@ impl DocumentProfile {
     /// The version tag emitted by this build.
     pub const VERSION: u32 = DOCUMENT_PROFILE_VERSION;
 
+    /// [`Self::title`] projected to plain text — the projection
+    /// `ConfigValue::as_plain_text` gives, for consumers that show the
+    /// title outside markdown (sidebar, breadcrumbs, `llms.txt`, ...).
+    pub fn title_text(&self) -> Option<String> {
+        self.title.as_deref().map(inlines_to_plain_text)
+    }
+
+    /// [`Self::subtitle`] projected to plain text.
+    pub fn subtitle_text(&self) -> Option<String> {
+        self.subtitle.as_deref().map(inlines_to_plain_text)
+    }
+
+    /// [`Self::description`] projected to plain text.
+    pub fn description_text(&self) -> Option<String> {
+        self.description.as_deref().map(inlines_to_plain_text)
+    }
+
     /// Extract a profile from a `Pandoc` AST at the pipeline
     /// checkpoint.
     ///
@@ -981,15 +1039,20 @@ impl DocumentProfile {
         let outline = extract_outline(&ast.blocks);
         let authors_structured = extract_structured_authors(meta);
         let aliases = extract_string_list_with_sources(meta, "aliases");
+        let mut flattened_prose = Vec::new();
+        let title = prose_field(meta, "title", &mut flattened_prose);
+        let subtitle = prose_field(meta, "subtitle", &mut flattened_prose);
+        let description = prose_field(meta, "description", &mut flattened_prose);
 
         Self {
             profile_version: DOCUMENT_PROFILE_VERSION,
             source_path: source_path.to_path_buf(),
             output_href: output_href.to_string(),
             format_id: format_id.to_string(),
-            title: plain_text_field(meta, "title"),
-            subtitle: plain_text_field(meta, "subtitle"),
-            description: plain_text_field(meta, "description"),
+            title,
+            subtitle,
+            description,
+            flattened_prose,
             authors: authors_structured.iter().map(|a| a.name.clone()).collect(),
             authors_structured,
             date: plain_text_field(meta, "date"),
@@ -1054,6 +1117,84 @@ impl DocumentProfile {
         }
         Ok(profile)
     }
+}
+
+/// Metadata prose — `title`, `subtitle`, `description` — as inlines.
+///
+/// Listings write these back into generated markdown, so they must keep
+/// their markup rather than a plain-text projection (bd-8a9eum6p):
+///
+/// - `PandocInlines` (a parsed front-matter string) is used as-is;
+/// - a plain string (e.g. from a `!str` value or a project config file)
+///   becomes literal `Str`/`Space` runs, so its text is never re-read as
+///   markdown;
+/// - `PandocBlocks` with a single paragraph gives that paragraph's
+///   inlines; anything else (two paragraphs, a list, ...) flattens into
+///   one run with a `Space` between blocks, and `flattened` is set so the
+///   consumer can warn (D5 in the plan) — listings show a description as
+///   one paragraph;
+/// - any other value (a number, a map, ...) is `None`, as before.
+pub(crate) fn prose_inlines(value: &ConfigValue) -> Option<ProseInlines> {
+    match &value.value {
+        ConfigValueKind::PandocInlines(inlines) => Some(ProseInlines {
+            inlines: inlines.clone(),
+            flattened: false,
+        }),
+        ConfigValueKind::PandocBlocks(blocks) => match blocks.as_slice() {
+            [] => None,
+            [Block::Paragraph(p)] => Some(ProseInlines {
+                inlines: p.content.clone(),
+                flattened: false,
+            }),
+            [Block::Plain(p)] => Some(ProseInlines {
+                inlines: p.content.clone(),
+                flattened: false,
+            }),
+            _ => Some(ProseInlines {
+                inlines: crate::editorial_marks::blocks_to_inlines_with_sep(
+                    blocks,
+                    &[Inline::Space(Space {
+                        source_info: SourceInfo::generated(By::unknown()),
+                    })],
+                ),
+                flattened: true,
+            }),
+        },
+        _ => value.as_plain_text().map(|s| ProseInlines {
+            inlines: quarto_pandoc_types::inline::split_string_to_inlines(&s),
+            flattened: false,
+        }),
+    }
+}
+
+/// Test shorthand: literal text as prose inlines.
+#[cfg(test)]
+pub(crate) fn text(s: impl AsRef<str>) -> Inlines {
+    quarto_pandoc_types::inline::split_string_to_inlines(s.as_ref())
+}
+
+/// Test shorthand: an optional prose value as plain text.
+#[cfg(test)]
+pub(crate) fn plain(inlines: &Option<Inlines>) -> Option<String> {
+    inlines.as_deref().map(inlines_to_plain_text)
+}
+
+/// Result of [`prose_inlines`].
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ProseInlines {
+    pub inlines: Inlines,
+    /// The value was more than one block and got joined into one run.
+    pub flattened: bool,
+}
+
+/// [`prose_inlines`] for `meta[key]`, recording `key` in `flattened`
+/// when the value had to be flattened.
+fn prose_field(meta: &ConfigValue, key: &str, flattened: &mut Vec<String>) -> Option<Inlines> {
+    let prose = prose_inlines(meta.get(key)?)?;
+    if prose.flattened {
+        flattened.push(key.to_string());
+    }
+    Some(prose.inlines)
 }
 
 /// Pull a plain-text field out of the document metadata, flattening
@@ -1545,7 +1686,7 @@ mod tests {
         assert_eq!(profile.source_path, PathBuf::from("doc.qmd"));
         assert_eq!(profile.output_href, "doc.html");
         assert_eq!(profile.format_id, "html");
-        assert_eq!(profile.title.as_deref(), Some("Hello"));
+        assert_eq!(crate::document_profile::plain(&profile.title).as_deref(), Some("Hello"));
         assert!(!profile.draft);
         assert!(profile.outline.is_empty(), "no headings → empty outline");
     }
@@ -1654,9 +1795,9 @@ Body.
         let ast = parse_qmd(qmd);
         let profile = DocumentProfile::extract(&ast, Path::new("big.qmd"), "big.html", "html");
 
-        assert_eq!(profile.title.as_deref(), Some("Big doc"));
-        assert_eq!(profile.subtitle.as_deref(), Some("With everything"));
-        assert_eq!(profile.description.as_deref(), Some("A thorough example."));
+        assert_eq!(crate::document_profile::plain(&profile.title).as_deref(), Some("Big doc"));
+        assert_eq!(crate::document_profile::plain(&profile.subtitle).as_deref(), Some("With everything"));
+        assert_eq!(crate::document_profile::plain(&profile.description).as_deref(), Some("A thorough example."));
         assert_eq!(
             profile.authors,
             vec!["Alice Example".to_string(), "Bob Example".to_string()]
@@ -1829,7 +1970,7 @@ Body.
         let profile =
             DocumentProfile::extract(&ast, Path::new("untitled.qmd"), "untitled.html", "html");
 
-        assert_eq!(profile.title, None);
+        assert_eq!(profile.title_text(), None);
         assert!(profile.outline.is_empty());
         assert!(profile.authors.is_empty());
         assert!(profile.categories.is_empty());
@@ -2076,15 +2217,15 @@ Body.
     #[allow(clippy::field_reassign_with_default)]
     fn listing_item_info_partial_not_empty_per_field() {
         let mut li = ListingItemInfo::default();
-        li.title = Some("X".into());
+        li.title = Some(crate::document_profile::text("X"));
         assert!(!li.is_empty(), "title set");
 
         let mut li = ListingItemInfo::default();
-        li.subtitle = Some("X".into());
+        li.subtitle = Some(crate::document_profile::text("X"));
         assert!(!li.is_empty(), "subtitle set");
 
         let mut li = ListingItemInfo::default();
-        li.description = Some("X".into());
+        li.description = Some(crate::document_profile::text("X"));
         assert!(!li.is_empty(), "description set");
 
         let mut li = ListingItemInfo::default();
@@ -2136,13 +2277,14 @@ Body.
     #[test]
     fn listing_item_info_serde_omits_empty_fields() {
         let li = ListingItemInfo {
-            title: Some("Hello".into()),
+            title: Some(crate::document_profile::text("Hello")),
             ..Default::default()
         };
         let json = serde_json::to_string(&li).expect("serialize");
         // Only `title` should appear; every other field is empty/None
         // and tagged `skip_serializing_if`.
-        assert!(json.contains("\"title\":\"Hello\""), "title present");
+        // Prose serializes as inline nodes (v14).
+        assert!(json.contains("\"title\":[{\"Str\""), "title present: {json}");
         assert!(!json.contains("subtitle"));
         assert!(!json.contains("description"));
         assert!(!json.contains("image"));
@@ -2153,6 +2295,7 @@ Body.
         assert!(!json.contains("reading_time_minutes"));
         assert!(!json.contains("word_count"));
         assert!(!json.contains("extra"));
+        assert!(!json.contains("flattened_prose"));
     }
 
     #[test]
@@ -2230,9 +2373,9 @@ Body.
         let ast = parse_qmd(qmd);
         let p = DocumentProfile::extract(&ast, Path::new("li.qmd"), "li.html", "html");
         let li = &p.listing_item;
-        assert_eq!(li.title.as_deref(), Some("Listing title"));
-        assert_eq!(li.subtitle.as_deref(), Some("Listing subtitle"));
-        assert_eq!(li.description.as_deref(), Some("Listing desc"));
+        assert_eq!(crate::document_profile::plain(&li.title).as_deref(), Some("Listing title"));
+        assert_eq!(crate::document_profile::plain(&li.subtitle).as_deref(), Some("Listing subtitle"));
+        assert_eq!(crate::document_profile::plain(&li.description).as_deref(), Some("Listing desc"));
         assert_eq!(li.image.as_deref(), Some("cover.png"));
         assert_eq!(li.image_alt.as_deref(), Some("A cover"));
         assert_eq!(li.date.as_deref(), Some("2026-04-01"));
@@ -2286,7 +2429,7 @@ Body.
 ";
         let ast = parse_qmd(qmd);
         let p = DocumentProfile::extract(&ast, Path::new("c.qmd"), "c.html", "html");
-        assert_eq!(p.listing_item.title.as_deref(), Some("Curated"));
+        assert_eq!(crate::document_profile::plain(&p.listing_item.title).as_deref(), Some("Curated"));
         let extra_title = p
             .listing_item
             .extra
@@ -2333,8 +2476,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_13() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 13);
+    fn document_profile_version_is_14() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 14);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by
@@ -2655,7 +2798,7 @@ Body.
     fn from_map_drop_policy_ignores_unknown_keys() {
         let li = cv_map(vec![("title", cv_s("T")), ("icon", cv_s("bi-star"))]);
         let info = ListingItemInfo::from_map(&li, UnknownKeyPolicy::Drop);
-        assert_eq!(info.title.as_deref(), Some("T"));
+        assert_eq!(crate::document_profile::plain(&info.title).as_deref(), Some("T"));
         assert!(info.extra.is_empty(), "Drop must not forward `icon`");
     }
 
@@ -2669,7 +2812,7 @@ Body.
         ]);
         let info =
             ListingItemInfo::from_map(&li, UnknownKeyPolicy::IntoExtra { except: &["path"] });
-        assert_eq!(info.title.as_deref(), Some("T"));
+        assert_eq!(crate::document_profile::plain(&info.title).as_deref(), Some("T"));
         assert_eq!(
             info.extra
                 .get("icon")
