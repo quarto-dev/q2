@@ -2,7 +2,7 @@
 title: 'Listing ignores an explicit description: and uses the auto-derived first paragraph (bd-listing-description-precedence-x4bh6w3m)'
 date: 2026-10-09
 description: 'Listings replace authored descriptions with a derived first paragraph and leave undescribed pages empty; give items a description source so derivation is a fallback (listing-item → description → abstract → derived), in every listing type.'
-status: draft  # Design agreed 2026-10-09; awaiting answers to the remaining questions and the go-ahead to implement
+status: draft  # Design agreed 2026-10-09 (all questions answered); awaiting the go-ahead to implement
 braid:
   strand: bd-listing-description-precedence-x4bh6w3m
   also: bd-listing-default-no-derived-desc-m0wrr8ty
@@ -18,8 +18,8 @@ braid:
 named in the strand's 2026-10-09 comment: the L7 envelope is unconditional.
 This strand and bd-listing-default-no-derived-desc-m0wrr8ty are two halves of
 one precedence rule, so they are now planned together. The provenance
-question that blocked the design is settled (see Decisions). Three smaller
-questions remain (Q-A to Q-C).
+question that blocked the design is settled (see Decisions), and so are the
+follow-ups on the shared head pipeline and `image`.
 
 ## Issue context
 
@@ -184,18 +184,30 @@ placeholder is substituted.
     Pass-1 profiles.
   - Both `listing-item.description` and `description` set →
     `listing-item` wins.
+  - A post with top-level `image:` and a different body image → the
+    listing shows the `image:` one, in every type. Without `image:` → the
+    body image.
+  - Pass-1 profile == full-pipeline profile for a fixture that exercises
+    includes, `include-in-header`, `lang`, and listing autofill.
   - A page whose body starts with a code cell and has no prose → the
     description comes from L7 (engine output).
   - Unit tests: the `hydrate_item` chain and `description_source`; the
     binding's envelope decision for each source; the table cell envelope;
     L1 writes `derived-description` and leaves `listing-item.description`
     alone.
-- **Phase 1 — Profile and L1.** `derived_description`, `abstract`, the
-  version bump, and the L1 key change.
-- **Phase 2 — Hydration.** `DescriptionSource` and the precedence chain.
-- **Phase 3 — Binding and templates.** Conditional envelope,
+- **Phase 1 — Profile and L1.** `derived_description`, `derived_image`,
+  `abstract`, the version bump, and the L1 key changes.
+- **Phase 2 — Hydration.** `DescriptionSource` / `ImageSource` and the
+  precedence chains.
+- **Phase 3 — Binding and templates.** Conditional description and image
+  envelopes,
   `show-description`, table cell envelope, Q-12-13 quieting.
-- **Phase 4 — Pass-1 gets L1** (per Q-A).
+- **Phase 4 — Shared head.** Extract `head_stages()` (SourceConversion →
+  Parse → MetadataMerge → LanguageResolve → IncludeExpansion →
+  IncludeResolve → ListingItemInfo → DocumentProfile → LinkResolution).
+  Use it from both builders. Resolve the cache-key questions above. Add a
+  test that the Pass-1 and full-pipeline profiles are equal. Update the
+  sibling plan's list of other stage-list builders that must *not* use it.
 - **Phase 5 — Real-site check.** Re-render the repro against Quarto 1 (the
   table in the README should match, except LISTING-ITEM-C). Re-render the
   claude-notes plans page with `type: grid` (bd-fvcip3t5), and the
@@ -206,26 +218,53 @@ placeholder is substituted.
   `claude-notes/designs/document-profile-contract.md` if Pass-1's head
   changes.
 
-## Remaining questions for the user
+## Decisions, round 2 (2026-10-09)
 
-These are carried over from the sibling plan, which never got answers,
-plus one new one.
+- **Q-A → one shared `head_stages()`** used by both Pass-1
+  (`pass1_profile_single_file_live`) and the full pipeline
+  (`build_html_pipeline_stages_with_options`).
+- **Q-B → `IncludeResolveStage` joins Pass-1** as part of this work.
+- **Q-C → `image` gets the same treatment as `description`.** Add
+  `derived_image` on the profile (L1 writes a reserved key, such as
+  `listing-item.derived-image`) and an `ImageSource` on the item. The chain
+  is `listing-item.image → image → derived`, and the L7 image envelope is
+  emitted only when the image is derived or missing. Q1's rule is
+  `image → placeholder`.
 
-- **Q-A. Shared head-pipeline builder?** Pass-1 and the full pipeline each
-  hand-list their pre-checkpoint stages, and they have drifted (L1 and
-  `IncludeResolveStage` are both missing from Pass-1). Should we extract one
-  `head_stages()` used by both, or add the one stage plus a test that checks
-  the two lists stay in step? The sibling's survey found no WASM obstacle to
-  sharing. I recommend the shared builder.
-- **Q-B. `IncludeResolveStage` in Pass-1.** If Q-A is the shared builder,
-  it comes along for free. Is that wanted, or should it be left out and
-  filed separately?
-- **Q-C. `image:` has the same latent bug.** `hydrate_item` does
-  `li.image.or(profile.image)`. Once L1 runs in Pass-1, the autofilled
-  `listing-item.image` (the first body image) will shadow an explicit
-  top-level `image:`, in every listing type. Should `image` get the same
-  `derived_image` treatment here? The mechanism is identical and Q1's rule is
-  the same (`image` → placeholder). I recommend yes.
+### Why the head lists drifted (history check)
+
+Pass-1's head list dates from the websites feature (`dbaa5bbf7`,
+2026-05-01). Three stages were later added to the full pipeline only:
+
+| stage | added | Pass-1? | recorded reason |
+|---|---|---|---|
+| `IncludeResolveStage` | `6421c3333` (2026-05-04, bd-8kp3) | no | none |
+| `ListingItemInfoStage` | `ccb220023` (2026-05-08, listings #169) | no | none; the L1 plan never mentions Pass-1 |
+| `LanguageResolveStage` | `3bffb3c45` (2026-07-17, i18n) | no, **deliberately** | "profile doesn't carry terms in v1" (`2026-07-17-localization-i18n-design.md:298`) |
+
+`2026-04-16-plan1c-extension-integration.md:1145` (the engine-claims
+work) noticed the IncludeResolve/ListingItemInfo gap and **deferred** it.
+It called the gap orthogonal and said it "touches Pass-1 profile +
+cache-key semantics". That is a caution, not a reason to keep the gap.
+Nothing in the history argues against sharing. The i18n omission was a
+cost/scope call: terms don't reach the profile, so running the stage in
+Pass-1 only costs a language-file read per document. A shared list
+includes it. If that cost shows up in timings, we can make an explicit,
+commented exception.
+
+The plan1c caution points to real work, which is now part of Phase 4:
+
+- **Pass-1 cache key vs. new inputs.** `cache_key::pass1_key` hashes
+  source bytes, metadata files and so on, not filesystem mtimes. L1 fills
+  `date_modified` from mtime, so a cached profile would carry a stale
+  `date-modified` after a `touch` with no content change. Decide: put mtime
+  in the key, leave `date_modified` out of the cached profile and recompute
+  it, or accept the staleness and document it. Likewise confirm that
+  `IncludeResolveStage`'s file-slot reads (`include-in-header` files) don't
+  put file *contents* into the profile in a way the key doesn't cover.
+- **Profile equality.** After the change, the Pass-1 profile and the full
+  pipeline's profile should be identical for the same input. Add a test
+  for that, because it is the invariant that stops future drift.
 
 ## Risks / tradeoffs
 
