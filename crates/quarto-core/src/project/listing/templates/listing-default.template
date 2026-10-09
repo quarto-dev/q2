@@ -1,5 +1,8 @@
 ::: {.list .quarto-listing-default}
 
-$items:item-default()$
+$for(items)$
+$it:item-default()$
+
+$endfor$
 
 :::

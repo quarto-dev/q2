@@ -3,7 +3,7 @@
 **Date:** 2026-10-09
 **Braid:** bd-mlmkev01
 **Branch:** `braid/bd-mlmkev01-listing-nesting-limit` (topic branch in the main checkout, based on `main` @ `15bb0d54f`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Implemented on the topic branch (design settled with the user 2026-10-09; see Decisions).
 
 ## Triage verdict
 
@@ -70,7 +70,33 @@ $endfor$
 
 There is a regression test for it in `crates/quarto-core/tests/integration/listing_pipeline.rs` (around line 412). The default and grid templates did not get the same fix. The user docs (`docs/guides/projects/listing-templates.qmd`) already show the `$for(items)$ … $it:item-default()$ … $endfor$` form for custom templates, so custom templates written from the docs are not affected.
 
-## Proposed phases (draft)
+## Decisions (2026-10-09)
+
+1. Fix (a): the default and grid wrappers iterate with `$for(items)$`, like the table wrapper.
+2. A failed re-parse of a built-in template should be an error. Filed separately as bd-p7eqsmmw.
+3. No parser-level detection for custom templates for now; it may not be robustly detectable. Filed as backlog follow-up bd-sgd9desh. The docs show the `$for$` loop and warn about consecutive div fences.
+
+## Checklist
+
+- [x] Phase 0: `default_and_grid_items_are_siblings` and `default_and_grid_listings_with_120_items_render_every_item` in `crates/quarto-core/tests/integration/listing_pipeline.rs`. Both failed before the fix (depths `[3, 4, 5]`; 120-item listing dropped).
+- [x] Phase 1: `listing-default.template` and `listing-grid.template` use `$for(items)$ $it:item-x()$ $endfor$`, with a comment in `templates.rs`. Both tests pass; full workspace suite green (16012 passed).
+- [x] Docs: callout in `docs/guides/projects/listing-templates.qmd`; fixed the same shorthand in the ejs-listing-port skill's worked example.
+- [x] Phase 3: end-to-end check (below).
+- [ ] Phase 2: moved to bd-p7eqsmmw.
+- [ ] Re-try the 1051-item claude-notes plans listing (bd-fvcip3t5).
+
+## End-to-end verification
+
+Invocation: a copy of `repro/` rendered with `target/debug/q2 render` (built from this branch), then again with 120 docs in `p/`. Inspected `_site/index.html` by counting the unclosed `<div>`s before each item div:
+
+```
+3 items:   quarto-post [3, 3, 3]   g-col-1 [3, 3, 3]
+120 items: quarto-post 120 items, depths [3]   g-col-1 120 items, depths [3]
+```
+
+No Q-12-10 warning at either size. The installed nightly gave `[3, 4, 5]` on the same 3-item fixture.
+
+## Proposed phases (draft, superseded by the checklist)
 
 - **Phase 0: tests first.**
   - Integration test in `listing_pipeline.rs`, run through `render_project` like the existing tests. Render default and grid listings with 3 items and assert that every item div is a direct child of the `.list` container (constant depth). This fails today.

@@ -12,6 +12,12 @@
 //! `templates/` are tracked in git) and so L8 custom templates
 //! reuse the same names via partial-include.
 //!
+//! The `listing-*` wrappers apply their item partial inside
+//! `$for(items)$`, never as `$items:item-x()$`: doctemplate strips a
+//! partial's final newline, so the shorthand glues one item's closing
+//! `:::` onto the next item's opening fence and nests every item one
+//! level deeper than the last (bd-mlmkev01).
+//!
 //! TODO(bd-0wyo): the `item-default.template` currently renders
 //! only the curated field set; Q1's `otherFields` loop emits a
 //! `<div class="metadata-value listing-<field>">…</div>` per

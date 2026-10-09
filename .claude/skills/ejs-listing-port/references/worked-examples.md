@@ -117,9 +117,16 @@ partial:
 
 ```
 ::: {.list .grid .quarto-listing-grid .quarto-listing-cols-3}
-$items:item-grid()$
+$for(items)$
+$it:item-grid()$
+$endfor$
 :::
 ```
+
+Apply the partial inside `$for(items)$`, never as `$items:item-grid()$`:
+doctemplate strips a partial's final newline, so the shorthand glues one
+item's closing `:::` onto the next item's opening fence and nests every
+item inside the previous one (bd-mlmkev01).
 
 Port it faithfully only when the template genuinely differs. Then:
 
