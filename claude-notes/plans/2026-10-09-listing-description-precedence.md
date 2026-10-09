@@ -2,7 +2,7 @@
 title: 'Listing ignores an explicit description: and uses the auto-derived first paragraph (bd-listing-description-precedence-x4bh6w3m)'
 date: 2026-10-09
 description: 'Listings replace authored descriptions with a derived first paragraph and leave undescribed pages empty; give items a description source so derivation is a fallback (listing-item → description → abstract → derived), in every listing type.'
-status: in-progress  # Implementation started 2026-10-09
+status: complete  # Implemented 2026-10-09; full cargo xtask verify green
 braid:
   strand: bd-listing-description-precedence-x4bh6w3m
   also: bd-listing-default-no-derived-desc-m0wrr8ty
