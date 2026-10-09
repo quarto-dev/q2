@@ -107,6 +107,7 @@ pub mod marimo_fixture_fresh;
 pub mod marimo_resolution;
 pub mod math_mode_pipeline;
 pub mod mermaid_bundling_pipeline;
+pub mod metadata_layers;
 pub mod metadata_path_resolution;
 pub mod navbar_footer_pipeline;
 pub mod navigation_e2e;

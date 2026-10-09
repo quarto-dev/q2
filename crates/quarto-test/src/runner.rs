@@ -634,11 +634,22 @@ fn render_document(input_path: &Path, format: &str) -> RenderOutput {
                 .then(|| std::fs::read_to_string(input_path).ok())
                 .flatten()
                 .and_then(|content| {
-                    quarto_core::output_ext::resolve_output_ext(
-                        &content,
-                        None,
-                        &parsed.target_format,
-                    )
+                    let runtime = quarto_system_runtime::NativeRuntime::new();
+                    match quarto_core::project::ProjectContext::discover(input_path, &runtime) {
+                        Ok(project) => quarto_core::output_ext::resolve_output_ext(
+                            quarto_core::output_ext::DocumentLocation {
+                                project: &project,
+                                runtime: &runtime,
+                                path: input_path,
+                            },
+                            &content,
+                            &parsed.target_format,
+                        ),
+                        Err(_) => quarto_core::output_ext::resolve_document_output_ext(
+                            &content,
+                            &parsed.target_format,
+                        ),
+                    }
                 });
             ext.unwrap_or(parsed.output_extension)
         },

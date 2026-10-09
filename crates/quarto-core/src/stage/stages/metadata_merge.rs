@@ -7,29 +7,28 @@
 
 //! Merge metadata layers into a single flattened config.
 //!
-//! This stage resolves the full metadata hierarchy for the target format:
-//!
-//! 1. Project top-level settings (`_quarto.yml`)
-//! 2. Project format-specific settings (`format.{target}.*`)
-//! 3. Directory `_metadata.yml` layers (root → leaf, deeper wins)
-//! 4. Document top-level settings (YAML front matter)
-//! 5. Document format-specific settings (`format.{target}.*`)
-//! 6. Runtime metadata (e.g., `--metadata` flags, WASM preview settings)
+//! The layers (project, extension, `_metadata.yml` chain, document, runtime)
+//! and their order are computed by [`crate::metadata_layers`], which the
+//! format resolver shares; this stage flattens each layer for the target
+//! format (`format.{target}.*`), adjusts its paths and merges them, lowest
+//! to highest precedence.
 //!
 //! After this stage, `doc.ast.meta` contains the fully merged and
 //! format-flattened config. Downstream stages (AST transforms, rendering)
 //! can read metadata without knowing about the layering.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use async_trait::async_trait;
 use quarto_config::{MergedConfig, resolve_format_config};
-use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use quarto_source_map::{By, SourceInfo};
+use quarto_system_runtime::SystemRuntime;
 
-use crate::extension::Extension;
-use crate::extension::discover::{find_extension, parse_format_descriptor};
-use crate::project::{adjust_paths_to_document_dir, directory_metadata_for_document};
+use crate::metadata_layers::{
+    DocumentLayer, LayerInputs, LayerKind, MetadataLayer, collect_metadata_layers,
+};
+use crate::project::adjust_paths_to_document_dir;
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -37,134 +36,76 @@ use crate::stage::{
 use crate::stage::{JsonTraceObserver, SummaryTraceObserver};
 use crate::trace_event;
 
-/// Convert a `serde_json::Value` to a `ConfigValue`.
+/// Flatten one collected layer for `base_format`, adjust its paths to the
+/// document directory and mark path-shaped format values.
 ///
-/// Used for converting runtime metadata (which uses `serde_json::Value` to avoid
-/// coupling `quarto-system-runtime` to `quarto-pandoc-types`) into the `ConfigValue`
-/// type needed by the merge pipeline.
-fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
-    use yaml_rust2::Yaml;
-
-    let source_info = SourceInfo::generated(By::programmatic_config());
-    let kind = match value {
-        serde_json::Value::Null => ConfigValueKind::scalar(Yaml::Null),
-        serde_json::Value::Bool(b) => ConfigValueKind::scalar(Yaml::Boolean(*b)),
-        serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                ConfigValueKind::scalar(Yaml::Integer(i))
-            } else if let Some(f) = n.as_f64() {
-                ConfigValueKind::scalar(Yaml::Real(f.to_string()))
-            } else {
-                ConfigValueKind::scalar(Yaml::String(n.to_string()))
-            }
-        }
-        serde_json::Value::String(s) => ConfigValueKind::scalar(Yaml::String(s.clone())),
-        serde_json::Value::Array(arr) => {
-            let items: Vec<ConfigValue> = arr.iter().map(json_to_config_value).collect();
-            ConfigValueKind::Array(items)
-        }
-        serde_json::Value::Object(obj) => {
-            let entries: Vec<ConfigMapEntry> = obj
-                .iter()
-                .map(|(k, v)| ConfigMapEntry {
-                    key: k.clone(),
-                    key_source: SourceInfo::generated(By::programmatic_config()),
-                    value: json_to_config_value(v),
-                })
-                .collect();
-            ConfigValueKind::Map(entries)
-        }
-    };
-    ConfigValue {
-        value: kind,
-        source_info,
-        merge_op: MergeOp::default(),
-    }
-}
-
-/// Build the extension metadata layer for the target format.
-///
-/// Parses the target format name to extract an extension reference (e.g.,
-/// "acm-html" → extension "acm", base format "html"), finds the matching
-/// extension, and returns its format-specific metadata as a ConfigValue.
-///
-/// `is_book` feeds the Typst-book default (book-projects P2): a book
-/// project targeting bare `typst` resolves to the bundled `orange-book`
-/// extension with no explicit extension named (Q1 parity; see
-/// [`crate::extension::discover::with_typst_book_default`]).
-fn build_extension_metadata_layer(
-    extensions: &[Extension],
-    target_format: &str,
-    is_book: bool,
-) -> Option<(ConfigValue, PathBuf)> {
-    let desc = crate::extension::discover::with_typst_book_default(
-        parse_format_descriptor(target_format),
-        is_book,
-    );
-
-    let ext_name = desc.extension_name.as_deref()?;
-    let ext = find_extension(ext_name, extensions)?;
-
-    // Look up format metadata: try base format first, then exact match
-    let base_meta = ext.contributes.formats.get(&desc.base_format);
-
-    // Also check for exact format name match (e.g., "acm-html" as a key)
-    let exact_meta = ext.contributes.formats.get(target_format);
-
-    let config = match (base_meta, exact_meta) {
-        (Some(base), Some(exact)) => {
-            // Merge: base is lower priority, exact match is higher
-            let layers: Vec<&ConfigValue> = vec![base, exact];
-            let merged = MergedConfig::new(layers);
-            Some(merged.materialize().unwrap_or_else(|_| exact.clone()))
-        }
-        (Some(base), None) => Some(base.clone()),
-        (None, Some(exact)) => Some(exact.clone()),
-        (None, None) => None,
-    };
-
-    config.map(|cv| (cv, ext.path.clone()))
-}
-
-/// Build the per-document layers from extension `contributes.metadata`
-/// (bd-ad7i1pc6 Phase 5, absorbing bd-zb2tod5f).
-///
-/// One layer per extension declaring `contributes.metadata`, in
-/// discovery order. The `project` key is stripped — it is a
-/// project-config concern, merged into the project config by
-/// `ProjectContext::parse_config` — and the rest is format-flattened
-/// like every metadata layer, with `Path`-kind values rebased from the
-/// extension dir to the document dir.
-///
-/// These layers sit at the **bottom** of the merge stack (below the
-/// project config): extension metadata fills gaps, and everything the
-/// user writes — `_quarto.yml`, directory metadata, the document —
-/// wins over it.
-fn build_metadata_contribution_layers(
-    extensions: &[Extension],
+/// Returns the prepared layer and the missing-css diagnostics marking
+/// produced. The project layer's diagnostics are dropped here (the
+/// orchestrator reports them once per project render,
+/// `missing_project_css_diagnostics`, not once per page).
+fn prepare_layer(
+    layer: &MetadataLayer,
     base_format: &str,
     document_dir: &Path,
-    project_root: &Path,
-) -> Vec<ConfigValue> {
-    extensions
-        .iter()
-        .filter_map(|ext| {
-            let meta = ext.contributes.metadata.as_ref()?;
-            let entries: Vec<quarto_pandoc_types::config_value::ConfigMapEntry> = meta
-                .as_map_entries()?
-                .iter()
-                .filter(|e| e.key != "project")
-                .cloned()
-                .collect();
-            if entries.is_empty() {
-                return None;
-            }
-            let wrapped = ConfigValue::new_map(entries, meta.source_info.clone());
-            let mut flattened = resolve_format_config(&wrapped, base_format);
-            adjust_paths_to_document_dir(&mut flattened, &ext.path, document_dir, project_root);
-            Some(flattened)
-        })
-        .collect()
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> (ConfigValue, Vec<quarto_error_reporting::DiagnosticMessage>) {
+    use crate::project::format_paths::mark_format_path_values;
+
+    match layer.kind {
+        // Extension metadata fills gaps below the project; its `!path`
+        // values are relative to the extension dir.
+        LayerKind::ExtensionContribution => {
+            let mut flattened = resolve_format_config(&layer.config, base_format);
+            adjust_paths_to_document_dir(
+                &mut flattened,
+                &layer.base_dir,
+                document_dir,
+                project_dir,
+            );
+            (flattened, Vec::new())
+        }
+        // Project config paths are relative to the project root. Marking
+        // runs after the `!path` adjustment so explicit Path values are
+        // rebased exactly once (bd-format-css-not-copied-crn3bjdz;
+        // generalized for bd-oejuizi9 / GH #455, see project/format_paths.rs).
+        LayerKind::Project => {
+            let mut flattened = resolve_format_config(&layer.config, base_format);
+            adjust_paths_to_document_dir(&mut flattened, project_dir, document_dir, project_dir);
+            let _ = mark_format_path_values(
+                &mut flattened,
+                project_dir,
+                project_dir,
+                document_dir,
+                runtime,
+            );
+            (flattened, Vec::new())
+        }
+        // Already specific to the target format (looked up by full format
+        // name), so not flattened again.
+        LayerKind::ExtensionFormat => {
+            let mut config = layer.config.clone();
+            adjust_paths_to_document_dir(&mut config, &layer.base_dir, document_dir, project_dir);
+            (config, Vec::new())
+        }
+        // Directory and document entries resolve against their declaring
+        // file's directory.
+        LayerKind::Directory | LayerKind::Document => {
+            let mut flattened = resolve_format_config(&layer.config, base_format);
+            let diagnostics = mark_format_path_values(
+                &mut flattened,
+                &layer.base_dir,
+                project_dir,
+                document_dir,
+                runtime,
+            );
+            (flattened, diagnostics)
+        }
+        LayerKind::Runtime => (
+            resolve_format_config(&layer.config, base_format),
+            Vec::new(),
+        ),
+    }
 }
 
 /// Merge project, directory, document, and runtime metadata.
@@ -221,17 +162,12 @@ impl PipelineStage for MetadataMergeStage {
             ));
         };
 
-        // Merge project config, extension metadata, directory metadata,
-        // document metadata, and runtime metadata. All metadata layers are
-        // flattened for the target format before merging.
+        // Merge the metadata layers, lowest to highest precedence, as
+        // computed by `collect_metadata_layers` (the single place that
+        // knows the order and membership; see `metadata_layers.rs`). Each
+        // layer is flattened for the target format and its paths adjusted
+        // before merging.
         //
-        // Precedence (lowest to highest):
-        // 1. Project settings (flattened for format)
-        // 2. Extension metadata (flattened for format)
-        // 3. Directory _metadata.yml layers (root → leaf, deeper wins)
-        // 4. Document settings (flattened for format)
-        // 5. Runtime metadata (e.g., --metadata flags, WASM preview settings)
-        let runtime_meta_json = ctx.runtime.runtime_metadata();
         // base_format is the Pandoc format name (e.g., "html") used to flatten
         // format-specific settings from project/directory/document YAML.
         //
@@ -256,70 +192,23 @@ impl PipelineStage for MetadataMergeStage {
         let target_format = ctx.format.target_format.clone();
         let target_format = target_format.as_str();
 
-        // Layer 1: Project metadata (flattened for format)
-        // Adjust !path values to be relative to document directory
-        // (project config paths are relative to project root)
+        // Project-relative paths and the like resolve against the document
+        // directory.
         let document_dir = doc
             .path
             .parent()
             .map_or_else(|| ctx.project.dir.clone(), |p| p.to_path_buf());
-        let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
-            let mut flattened = resolve_format_config(m, base_format);
-            adjust_paths_to_document_dir(
-                &mut flattened,
-                &ctx.project.dir,
-                &document_dir,
-                &ctx.project.dir,
-            );
-            // Mark path-shaped format values (css / theme / include-*) as
-            // document-relative Path values against this layer's base
-            // (bd-format-css-not-copied-crn3bjdz; generalized for
-            // bd-oejuizi9 / GH #455 — see project/format_paths.rs).
-            // Runs after the `!path` adjustment so explicit Path values are
-            // rebased exactly once. Missing-css diagnostics for the project
-            // layer are dropped here — the orchestrator reports them once per
-            // project render (`missing_project_css_diagnostics`), not once
-            // per page.
-            let _ = crate::project::format_paths::mark_format_path_values(
-                &mut flattened,
-                &ctx.project.dir,
-                &ctx.project.dir,
-                &document_dir,
-                ctx.runtime.as_ref(),
-            );
-            flattened
-        });
-
-        // Layer 0 (lowest priority): extension `contributes.metadata`
-        // (non-`project` keys; bd-ad7i1pc6 Phase 5). Sits below the
-        // project config so everything user-written wins over it.
-        let metadata_contribution_layers = build_metadata_contribution_layers(
-            &ctx.extensions,
-            base_format,
-            &document_dir,
-            &ctx.project.dir,
-        );
-
-        // Layer 2: Extension metadata (uses full target_format for lookup)
-        // Adjust !path values from extension dir to document dir
         let is_book = ctx.project.config.project_kind == crate::project::ProjectKind::Book;
-        let extension_layer = build_extension_metadata_layer(
-            &ctx.extensions,
-            target_format,
+        let collected = collect_metadata_layers(&LayerInputs {
+            project: &ctx.project,
+            document_path: &ctx.document.input,
+            document_dir: document_dir.clone(),
+            document: DocumentLayer::Parsed(&doc.ast.meta),
+            extensions: Some(&ctx.extensions),
+            target_format: Some(target_format),
             is_book,
-        )
-        .map(|(mut config, ext_dir)| {
-            adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir, &ctx.project.dir);
-            config
+            runtime: ctx.runtime.as_ref(),
         });
-
-        // Layer 3: Directory metadata layers (each flattened for base format)
-        let dir_layer_entries: Vec<(PathBuf, ConfigValue)> = if !ctx.project.is_single_file {
-            directory_metadata_for_document(&ctx.project, &ctx.document.input, ctx.runtime.as_ref())
-                .unwrap_or_default()
-        } else {
-            vec![]
-        };
 
         // Register the YAML metadata layer files (`_quarto.yml` +
         // each `_metadata.yml`) in the document's SourceContexts
@@ -363,8 +252,10 @@ impl PipelineStage for MetadataMergeStage {
             for path in &ctx.project.config.profile_config_paths {
                 register(path);
             }
-            for (path, _) in &dir_layer_entries {
-                register(path);
+            for layer in collected.iter().filter(|l| l.kind == LayerKind::Directory) {
+                if let Some(path) = layer.source.as_deref() {
+                    register(path);
+                }
             }
             // Extension manifests too (bd-r64mj1aa): values merged from
             // `contributes.metadata` / `contributes.format` keep their
@@ -383,33 +274,20 @@ impl PipelineStage for MetadataMergeStage {
         // surfaced through this document's own diagnostics
         // (bd-format-css-not-copied-crn3bjdz; bd-oejuizi9).
         let mut css_diagnostics: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
-        let dir_layers: Vec<_> = dir_layer_entries
-            .into_iter()
-            .map(|(path, m)| {
-                let mut flattened = resolve_format_config(&m, base_format);
-                let layer_base = path
-                    .parent()
-                    .map_or_else(|| ctx.project.dir.clone(), |p| p.to_path_buf());
-                css_diagnostics.extend(crate::project::format_paths::mark_format_path_values(
-                    &mut flattened,
-                    &layer_base,
-                    &ctx.project.dir,
+        let prepared: Vec<(LayerKind, ConfigValue)> = collected
+            .iter()
+            .map(|layer| {
+                let (config, diagnostics) = prepare_layer(
+                    layer,
+                    base_format,
                     &document_dir,
+                    &ctx.project.dir,
                     ctx.runtime.as_ref(),
-                ));
-                flattened
+                );
+                css_diagnostics.extend(diagnostics);
+                (layer.kind, config)
             })
             .collect();
-
-        // Layer 4: Document metadata (flattened for base format)
-        let mut doc_layer = resolve_format_config(&doc.ast.meta, base_format);
-        css_diagnostics.extend(crate::project::format_paths::mark_format_path_values(
-            &mut doc_layer,
-            &document_dir,
-            &ctx.project.dir,
-            &document_dir,
-            ctx.runtime.as_ref(),
-        ));
         // Native only: the WASM VFS is not authoritative for non-qmd
         // project files (an on-disk stylesheet may simply not be
         // synced), so surfacing these there yields false warnings.
@@ -420,41 +298,23 @@ impl PipelineStage for MetadataMergeStage {
         #[cfg(target_arch = "wasm32")]
         drop(css_diagnostics);
 
-        // Layer 5: Runtime metadata (flattened for base format)
-        let runtime_layer = runtime_meta_json
-            .as_ref()
-            .map(|json| resolve_format_config(&json_to_config_value(json), base_format));
-
-        // Build merge layers: metadata-contributions → project →
-        // extension-format → dir[0..] → document → runtime
-        let mut layers: Vec<&ConfigValue> = Vec::new();
-        for contrib in &metadata_contribution_layers {
-            layers.push(contrib);
-        }
-        if let Some(ref proj) = project_layer {
-            layers.push(proj);
-        }
-        if let Some(ref ext) = extension_layer {
-            layers.push(ext);
-        }
-        for dir_meta in &dir_layers {
-            layers.push(dir_meta);
-        }
-        layers.push(&doc_layer);
-        if let Some(ref rt) = runtime_layer {
-            layers.push(rt);
-        }
+        let has_kind = |kind: LayerKind| prepared.iter().any(|(k, _)| *k == kind);
+        let layers: Vec<&ConfigValue> = prepared.iter().map(|(_, c)| c).collect();
+        let dir_layer_count = prepared
+            .iter()
+            .filter(|(k, _)| *k == LayerKind::Directory)
+            .count();
 
         // Merge all layers
         let layer_count = layers.len();
         let merged = MergedConfig::new(layers);
         if let Ok(materialized) = merged.materialize() {
-            let has_ext = if extension_layer.is_some() {
+            let has_ext = if has_kind(LayerKind::ExtensionFormat) {
                 " + ext"
             } else {
                 ""
             };
-            let has_runtime = if runtime_layer.is_some() {
+            let has_runtime = if has_kind(LayerKind::Runtime) {
                 " + runtime"
             } else {
                 ""
@@ -466,7 +326,7 @@ impl PipelineStage for MetadataMergeStage {
                 layer_count,
                 target_format,
                 has_ext,
-                dir_layers.len(),
+                dir_layer_count,
                 has_runtime
             );
             doc.ast.meta = materialized;
@@ -609,6 +469,7 @@ fn activate_trace_from_metadata(
 mod tests {
     use super::*;
     use crate::format::Format;
+    use crate::metadata_layers::{extension_contribution_layers, extension_format_layer};
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::stage::DocumentAst;
     use quarto_pandoc_types::pandoc::Pandoc;
@@ -2147,7 +2008,7 @@ mod tests {
         );
         let ext = make_extension("acm", formats);
 
-        let layer = build_extension_metadata_layer(&[ext], "acm-html", false);
+        let layer = extension_format_layer(&[ext], "acm-html", false);
         assert!(layer.is_some());
         let (cv, ext_path) = layer.unwrap();
         assert_eq!(cv.get("toc").unwrap().as_bool(), Some(true));
@@ -2165,32 +2026,48 @@ mod tests {
         let ext = make_extension("acm", formats);
 
         // Wrong extension name
-        let layer = build_extension_metadata_layer(&[ext.clone()], "other-html", false);
+        let layer = extension_format_layer(&[ext.clone()], "other-html", false);
         assert!(layer.is_none());
 
         // Plain format (no extension prefix)
-        let layer = build_extension_metadata_layer(&[ext.clone()], "html", false);
+        let layer = extension_format_layer(&[ext.clone()], "html", false);
         assert!(layer.is_none());
 
         // Right extension but wrong base format
-        let layer = build_extension_metadata_layer(&[ext], "acm-pdf", false);
+        let layer = extension_format_layer(&[ext], "acm-pdf", false);
         assert!(layer.is_none());
     }
 
     #[test]
     fn test_build_extension_metadata_layer_no_extensions() {
-        let layer = build_extension_metadata_layer(&[], "acm-html", false);
+        let layer = extension_format_layer(&[], "acm-html", false);
         assert!(layer.is_none());
     }
 
     #[test]
     fn test_no_extensions_existing_behavior_unchanged() {
         // Regression test: with no extensions, behavior is identical to before
-        let layer = build_extension_metadata_layer(&[], "html", false);
+        let layer = extension_format_layer(&[], "html", false);
         assert!(layer.is_none());
     }
 
-    // === build_metadata_contribution_layers (bd-ad7i1pc6 Phase 5) ===
+    // === extension `contributes.metadata` layers (bd-ad7i1pc6 Phase 5) ===
+
+    /// The contribution layers as the stage merges them: flattened for
+    /// `base_format`, paths rebased to the document directory.
+    fn build_metadata_contribution_layers(
+        extensions: &[Extension],
+        base_format: &str,
+        document_dir: &Path,
+        project_root: &Path,
+    ) -> Vec<ConfigValue> {
+        extension_contribution_layers(extensions)
+            .iter()
+            .map(|layer| {
+                prepare_layer(layer, base_format, document_dir, project_root, &MockRuntime).0
+            })
+            .collect()
+    }
 
     fn make_metadata_extension(name: &str, metadata: ConfigValue) -> Extension {
         Extension {
@@ -2363,7 +2240,7 @@ mod tests {
         );
         let ext = make_extension("myext", formats);
 
-        let layer = build_extension_metadata_layer(&[ext], "myext-html", false);
+        let layer = extension_format_layer(&[ext], "myext-html", false);
         assert!(layer.is_some());
         let (cv, ext_path) = layer.unwrap();
         assert_eq!(ext_path, PathBuf::from("/extensions/myext"));

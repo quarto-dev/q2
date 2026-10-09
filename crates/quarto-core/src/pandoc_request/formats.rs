@@ -198,15 +198,20 @@ pub fn frontmatter_format_keys(content: &str) -> Option<Vec<String>> {
 /// Pure resolution: the document's own `format:` wins; otherwise the
 /// project's; otherwise `html`.
 ///
-/// `project_metadata` is the whole project metadata map (its `format:` is
-/// the project's formats; `output-ext` is read from it too).
+/// `location` is the document's project and runtime, when it has them: the
+/// project's `format:` is the project's formats, and `output-ext` is read
+/// from every metadata layer (`_metadata.yml` and runtime included).
 ///
 /// The `typst-pdf` key is the internal "typst compiled to PDF" artifact, never
 /// something a document may name: a `typst` document resolves to it (the
 /// default `output-ext`) or to the `typst`-source key with its literal
 /// extension (any other `output-ext`, as in Q1). A declared `pdf` is LaTeX,
 /// which is not in the table ([`FormatClass::Neither`]).
-pub fn resolve_formats(content: &str, project_metadata: Option<&ConfigValue>) -> ResolvedFormats {
+pub fn resolve_formats(
+    content: &str,
+    location: Option<crate::output_ext::DocumentLocation<'_>>,
+) -> ResolvedFormats {
+    let project_metadata = location.and_then(|l| l.project.config.metadata.as_ref());
     let project_format = project_metadata.and_then(|m| m.get("format"));
     let (source, keys) = if let Some(keys) = frontmatter_format_keys(content) {
         (FormatSource::Document, keys)
@@ -222,7 +227,7 @@ pub fn resolve_formats(content: &str, project_metadata: Option<&ConfigValue>) ->
         source,
         formats: keys
             .into_iter()
-            .map(|declared| resolve_declared(&declared, content, project_metadata))
+            .map(|declared| resolve_declared(&declared, content, location))
             .collect(),
         book: None,
     }
@@ -231,7 +236,7 @@ pub fn resolve_formats(content: &str, project_metadata: Option<&ConfigValue>) ->
 fn resolve_declared(
     declared: &str,
     content: &str,
-    project_metadata: Option<&ConfigValue>,
+    location: Option<crate::output_ext::DocumentLocation<'_>>,
 ) -> ResolvedFormat {
     // The artifact key is never a document's own format, and a declared `pdf` (LaTeX) is not in the table.
     if declared == TYPST_PDF_KEY {
@@ -242,7 +247,10 @@ fn resolve_declared(
         };
     }
     if declared == "typst" {
-        let ext = crate::output_ext::resolve_output_ext(content, project_metadata, "typst");
+        let ext = match location {
+            Some(location) => crate::output_ext::resolve_output_ext(location, content, "typst"),
+            None => crate::output_ext::resolve_document_output_ext(content, "typst"),
+        };
         return if crate::output_ext::is_typst_compile_ext(ext.as_deref()) {
             ResolvedFormat {
                 key: TYPST_PDF_KEY.to_string(),
@@ -275,7 +283,14 @@ pub fn resolve_document_formats(
         .map_err(|e| format!("Failed to read file: {e}"))?;
     let project = ProjectContext::discover(path, runtime)
         .map_err(|e| format!("Failed to discover project context: {e}"))?;
-    let mut resolved = resolve_formats(&content, project.config.metadata.as_ref());
+    let mut resolved = resolve_formats(
+        &content,
+        Some(crate::output_ext::DocumentLocation {
+            project: &project,
+            runtime,
+            path,
+        }),
+    );
     if project.project_kind() == crate::project::ProjectKind::Book {
         // Membership compares against the project's absolute file list, and the hub client asks with the
         // project-relative path it shows in its file tree.

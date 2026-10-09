@@ -372,7 +372,14 @@ pub fn render_document_to_file(
     // `output-ext` (Q1 semantics): for typst, `pdf` (the default) means
     // compile; any other value is literal and means "pandoc output only".
     // Resolved once, here, so path computation and the stages agree.
-    let output_ext = typst_output_ext(&input_bytes, project, format, options.typst_target);
+    let output_ext = typst_output_ext(
+        &input_bytes,
+        project,
+        runtime.as_ref(),
+        input_path,
+        format,
+        options.typst_target,
+    );
     let (output_path, output_dir, output_stem) = determine_output_paths_with_ext(
         input_path,
         format,
@@ -871,6 +878,8 @@ pub(crate) fn determine_output_paths_with_ext(
 fn typst_output_ext(
     input_bytes: &[u8],
     project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    input_path: &Path,
     format: &str,
     target: Option<TypstTarget>,
 ) -> Option<String> {
@@ -883,8 +892,12 @@ fn typst_output_ext(
     }
     let content = std::str::from_utf8(input_bytes).ok()?;
     let ext = crate::output_ext::resolve_output_ext(
+        crate::output_ext::DocumentLocation {
+            project,
+            runtime,
+            path: input_path,
+        },
         content,
-        project.config.metadata.as_ref(),
         &render_format.target_format,
     );
     if target == Some(TypstTarget::Source) {

@@ -67,6 +67,7 @@ pub mod language;
 pub mod lmd;
 pub mod math_method;
 pub mod metadata;
+pub mod metadata_layers;
 pub mod output_ext;
 pub mod output_sink;
 #[cfg(not(target_arch = "wasm32"))]
