@@ -162,7 +162,7 @@ have them, and reading an absent value directly is a warning, not a
 silent blank:
 
 ```
-Warning [Q-12-10]: Listing `listing-1` doctemplate produced
+Warning [Q-12-10]: Listing `listing` doctemplate produced
 1 diagnostic(s); first: Undefined variable: it.description
 ```
 

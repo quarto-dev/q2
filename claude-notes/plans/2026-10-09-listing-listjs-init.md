@@ -2,13 +2,13 @@
 title: 'Listings: no List.js init script emitted — quarto-listing.js is inert (bd-nbv80e33)'
 date: 2026-10-09
 description: 'Q2 ships list.min.js and quarto-listing.js but never instantiates List.js, so pagination, category filtering and the no-matching reveal are dead; this scopes emitting the init script plus the item/page markup it depends on.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: in-progress  # Design aligned 2026-10-09; implementing
 braid:
   strand: bd-nbv80e33
 ---
 
 **Branch:** `braid/bd-nbv80e33-listing-listjs-init` (topic branch in the main checkout, based on `main` @ `ea72d68aa`)
-**Do not start implementation until the user gives the go-ahead.**
+**Design aligned 2026-10-09 — see § Decisions; implementation in progress.**
 
 ## Triage verdict
 
@@ -85,8 +85,9 @@ Other facts the design depends on:
   `listing-date`, `listing-author`, `listing-reading-time` and
   `listing-description`. A missing class returns `""` to List.js and is
   harmless.
-- Page-size defaults differ. Q1 uses table 30, grid 18 and default 50
-  (`website-listing-read.ts:597`, with `|| 50` again in `templateJsScript`).
+- Page-size defaults differ. Q1 uses table 30, grid 18 and default 25
+  (`website-listing-read.ts:597`; the `|| 50` in `templateJsScript` is a
+  dead fallback — *corrected 2026-10-09; the first draft said 50*).
   Q2 uses `config.rs:105` `page_size: 25` and a type preset at
   `config.rs:988` (30). These need reconciling once pagination actually
   takes effect, or Q2 sites will start paginating at a different count
@@ -98,69 +99,100 @@ Other facts the design depends on:
   spliced into the listing's AST (next to the no-matching div) or a
   `header-includes` push. Q1 uses `include-in-header`.
 
-## Proposed phases (draft)
+## Decisions (design session 2026-10-09)
 
-- **Phase 0: tests first.** Add unit tests in `listing_render.rs` that
-  assert the init script is present, along with its container id and
-  `valueNames`, `page` and `searchColumns` values. Add a binding/template
-  test for item `data-index`/`data-categories` (b64). Add a smoke-all
-  website fixture with `page-size` < items and categories, checking the
-  `<nav class="listing-pagination">` and the `new List(` text. Optionally
-  add a headless-browser check that clicking a category hides items. See
-  Q6.
-- **Phase 1: item metadata attrs.** Fix `metadata_attrs` to b64-encode
-  categories the way Q1 does, add `listing-<field>-sort` attrs for
-  date/number fields, and splice the attrs into the default and grid item
-  wrappers (`::: {.quarto-post .image-right $metadata-attrs$}`, which
-  needs to be a qmd attr form). Fix the stale doc comment.
-- **Phase 2: init script emission.** Generate the per-listing script in
-  `render_one` from `ResolvedListing`: id, fields, sort, filter,
-  page-size and item count. Choose the emission site (Q2).
-- **Phase 3: pagination markup.** Emit the `<nav … listing-pagination>`
-  next to the no-matching div when `page_size < items.len()`. Reconcile
-  the default page sizes (Q4).
-- **Phase 4: sort/filter UI.** Port `_filter.ejs.md` to the default and
-  grid listings, with localized strings. This could be split out (Q1).
-- **Phase 5: custom listings.** Decide what custom templates get (Q3).
-- **Phase 6: docs.** Update the L10 migration docs where they say
-  interactivity is missing.
+1. **Scope:** bootstrap + pagination here (init script, item `data-*`
+   attrs, pagination nav). Sort/filter *controls* are
+   **bd-m6wglib4**, to be picked up immediately afterwards — so build
+   the bootstrap complete enough that the follow-up only adds the
+   controls: full Q1 `valueNames` (including the
+   `listing-<field>-sort` data targets) and `searchColumns` land here.
+2. **Targets:** `q2 render` and `q2 preview --static` only. The
+   hub-client React renderer gets a native listing component later
+   (**bd-4dfdo8vi**). Survey of hub-client: neither preview mode
+   executes a `<script>` inside a body raw-HTML block (React inserts it
+   via `innerHTML`; the full-HTML iframe has no `allow-scripts`), and
+   the llms view drops raw HTML. Emission is still gated on the
+   pipeline profile (`HtmlRender`/`RevealjsRender`) so the preview AST
+   never carries it.
+3. **Custom listings:** no List.js (no init script, no pagination nav)
+   — keeps the door open for React-driven custom listings. Table
+   listings also get none until bd-bl1e00r6 gives them a `.list`.
+4. **Page sizes:** Q1's defaults. *Correction to the investigation
+   notes:* Q1's real defaults are **25 / 18 / 30** (default / grid /
+   table, `defaultPageSize` in `website-listing-read.ts`); the `|| 50`
+   in `templateJsScript` is a dead fallback. So only grid changes
+   (25 → 18). Also fixed: Q2's table preset overwrote author-set
+   `page-size` / `sort-ui` / `filter-ui`.
+5. **Container id:** Q1's `listing-<id>`, with Q1's synthesized id
+   `listing` for a lone listing (`#listing-listing`); arrays keep
+   `listing-N` (`#listing-listing-1`). An author's explicit slot
+   `::: {#posts}` is renamed to `#listing-posts`, as Q1 does.
+6. **Verification:** HTML-string tests here; browser-level tests are
+   **bd-rlxlrja3** (after the sort/filter strand).
 
-## Open design questions for the user
+## Work items
 
-1. **Scope cut.** Should this strand cover only the bootstrap (init script,
-   item `data-*` attrs and pagination nav, which together make categories,
-   pagination and the no-matching reveal work), or also the sort/filter
-   controls (`_filter.ejs.md`) for default and grid? I recommend bootstrap
-   plus pagination here, and a sibling strand for the sort/filter UI.
-   Table interactivity stays in bd-bl1e00r6 either way.
-2. **Emission site.** Should the init script be a raw-HTML `<script>`
-   block appended inside the listing container (next to the no-matching
-   div, visible to Lua filters, travels with the AST), or a
-   `header-includes` entry like Q1's `include-in-header`? I lean toward
-   the in-container block for locality, since it still waits for
-   `DOMContentLoaded`. Does hub-client preview execute inline scripts in
-   rendered pages? If not, the header route has no advantage there
-   either.
-3. **Custom listings.** Q1 emits the init script for custom listings too.
-   That works only if the author's template has a `.list` element and
-   `data-*` attrs, and the script's `querySelector('#… .list')` guard
-   bails out otherwise. Should Q2 do the same, always emitting the script
-   and relying on the guard? Or should it emit only for built-in types,
-   or gate it on a config key?
-4. **Page-size defaults.** Should Q2 adopt Q1's defaults (default 50,
-   grid 18, table 30) before pagination goes live? Otherwise every Q2 site
-   with 26–50 items in a default listing starts paginating where Q1
-   didn't.
-5. **Container id parity.** Q1's DOM id is `listing-<id>` (default
-   `#listing-listing`). Q2's is the bare listing id (`#listing-1`). The JS
-   works with either as long as it is self-consistent. Should this strand
-   match Q1's ids, since authors' CSS and anchor links may target
-   `#listing-listing`, or should that be a separate strand?
-6. **Verification depth.** Is a string-level smoke-all assertion
-   (`new List(` present, ids consistent) enough, or do you want a
-   browser-level check (Playwright in hub-client e2e, or a node+jsdom
-   harness over the vendored JS) proving that clicking a category or a
-   page link changes the visible items?
+### Phase 1 — Config defaults (Q1 parity)
+
+- [x] Tests: per-type page-size defaults, author values surviving the
+      table preset, Q1 `kDefaultFieldTypes` merge, Q1 field-sort
+      defaults, single-listing synthesized id `listing`.
+- [x] `page_size` / `sort_ui` / `filter_ui` become `Option`s resolved
+      by `Listing::{page_size, sort_ui, filter_ui}()`; table preset no
+      longer clobbers author values.
+- [x] `apply_type_defaults` merges Q1's default field types and fills
+      `field_sort`.
+- [x] `SINGLE_LISTING_ID = "listing"` for map / string / boolean forms.
+- [x] Fix up downstream tests that assumed `listing-1` for a lone
+      listing.
+
+### Phase 2 — Item metadata attrs
+
+- [ ] Tests: `metadata_attrs` emits `data-index`, b64
+      (`btoa(encodeURIComponent)`) `data-categories`, and
+      `data-listing-<field>-sort` for date / number / minutes typed
+      fields; values survive the qmd re-parse on the item wrapper.
+- [ ] Rewrite `helpers::metadata_attrs` (takes the listing for field
+      types); fix the stale "gated on these attrs" doc comment
+      (Gordon's comment on the strand).
+- [ ] Splice `$metadata-attrs$` into the `item-default` wrapper and the
+      `item-grid` outer `.g-col-1` div (the direct children of
+      `.list`).
+- [ ] Update `listings.qmd` § metadata-attrs.
+
+### Phase 3 — Container id and classes
+
+- [ ] Tests: implicit container `#listing-<id>`; explicit slot renamed
+      to `#listing-<id>`; both carry `quarto-listing` +
+      `quarto-listing-container-<type>`; second pass stays idempotent;
+      llms view still finds the container.
+- [ ] Shared `container_id(listing_id)` helper used by
+      `listing_render.rs` and `llms.rs`.
+- [ ] Docs: `Q-12-4.qmd` (synth ids), `listing-templates.qmd` (what
+      built-in layouts emit) if it names the container id.
+
+### Phase 4 — Init script + pagination nav
+
+- [ ] Tests: default/grid listing gets one `<script>` with
+      `new List('listing-<id>', …)`, `valueNames` (fields as
+      `listing-<f>`, `{data:['index']}`, `{data:['categories']}`, sort
+      targets), `searchColumns`, and `page`/`pagination` only when
+      items > page-size; pagination `<nav>` likewise; none for custom /
+      table; none under the `HtmlPreview` profile; ids/fields are
+      JS-string-escaped (no `</script>` breakout).
+- [ ] New `project/listing/listjs.rs` generating the script + nav.
+- [ ] Emit as raw-HTML blocks inside the container after the
+      no-matching placeholder (`listing_render.rs::render_one`).
+
+### Phase 5 — Integration, docs, wrap-up
+
+- [ ] `listing_pipeline.rs` e2e: repro-shaped project (3 posts,
+      page-size 2, categories) asserts script, nav, item attrs,
+      container id; snapshots updated and reviewed.
+- [ ] `listings.qmd`: interactivity section (pagination, category
+      filtering, page-size defaults; not in hub-client preview yet).
+- [ ] Re-render the investigation repro; `cargo xtask verify`.
 
 ## Risks / tradeoffs (draft)
 

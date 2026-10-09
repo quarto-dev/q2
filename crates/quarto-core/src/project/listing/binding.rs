@@ -157,7 +157,7 @@ fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
     );
     m.insert(
         "page-size".to_string(),
-        TemplateValue::String(listing.page_size.to_string()),
+        TemplateValue::String(listing.page_size().to_string()),
     );
     if let Some(max) = listing.max_items {
         m.insert(
@@ -167,9 +167,12 @@ fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
     }
     m.insert(
         "filter-ui".to_string(),
-        TemplateValue::Bool(listing.filter_ui),
+        TemplateValue::Bool(listing.filter_ui()),
     );
-    m.insert("sort-ui".to_string(), TemplateValue::Bool(listing.sort_ui));
+    m.insert(
+        "sort-ui".to_string(),
+        TemplateValue::Bool(listing.sort_ui()),
+    );
     m.insert(
         "max-description-length".to_string(),
         TemplateValue::String(listing.max_description_length.to_string()),

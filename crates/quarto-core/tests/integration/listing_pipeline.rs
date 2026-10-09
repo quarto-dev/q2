@@ -144,7 +144,7 @@ fn default_listing_renders_three_posts_in_default_order() {
     // Listing wrapper Div with the auto-synthesized id and the
     // data-listing-rendered marker.
     assert!(
-        host.contains(r#"id="listing-1""#),
+        host.contains(r#"id="listing""#),
         "expected listing wrapper id; got:\n{}",
         host
     );
