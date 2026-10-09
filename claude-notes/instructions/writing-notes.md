@@ -70,13 +70,15 @@ so when in doubt, escape.
 ## Front matter on plans
 
 Every plan in `claude-notes/plans/` starts with front matter giving at least
-`title:` and `date:`; the plans listing (`plans/index.md`) is built from them.
+`title:`, `date:` and `description:` (one sentence on what the work is, shown
+in the plans table); the plans listing (`plans/index.md`) is built from them.
 The title block renders the title, so do not repeat it as a `#` heading.
 
 ```yaml
 ---
 title: 'Fix `_scope`: lexical regression (bd-XXXX)'
 date: 2026-10-09
+description: 'Restores `_scope: lexical` handling, which broke when metadata strings began parsing as markdown.'
 ---
 ```
 

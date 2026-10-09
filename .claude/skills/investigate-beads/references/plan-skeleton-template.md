@@ -2,7 +2,8 @@
 
 Copy the body below into `claude-notes/plans/YYYY-MM-DD-<slug>.md` and fill it in. The plan **is a skeleton, not a finished plan** — phases are draft headings; the design questions section is where the real thinking still has to happen with the user.
 
-The front matter `title:` and `date:` are required: the plans listing
+The front matter `title:`, `date:` and `description:` (one plain sentence on
+what the work is) are required: the plans listing
 (`claude-notes/plans/index.md`) reads them, and the title block renders the
 title, so the body has no `#` heading. Single-quote the title (double any `'`
 inside it) so backslash escapes reach the markdown parser unchanged.
@@ -11,6 +12,7 @@ inside it) so backslash escapes reach the markdown parser unchanged.
 ---
 title: '<Issue title> (bd-XXXX)'
 date: YYYY-MM-DD
+description: '<One sentence: the problem and the approach or outcome.>'
 ---
 
 **Beads:** bd-XXXX
