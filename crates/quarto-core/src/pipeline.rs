@@ -290,11 +290,26 @@ pub fn build_html_pipeline_stages_with_apply_config(
 /// registry set `ctx.engine_registry_override` (or equivalently
 /// `HtmlRenderConfig.engine_registry`) before calling `run_pipeline`,
 /// which applies it after constructing the `StageContext`.
-pub fn build_html_pipeline_stages_with_options(
-    apply_config: Option<ApplyTemplateConfig>,
-) -> Vec<Box<dyn PipelineStage>> {
-    let engine_stage = EngineExecutionStage::new();
-    let mut stages: Vec<Box<dyn PipelineStage>> = vec![
+/// The head pipeline: every stage from the raw source through the
+/// [`DocumentProfileStage`] checkpoint and the Pass-1 analyses that
+/// write to the profile ([`LinkResolutionStage`]). Its output is
+/// [`PipelineData::AtProfile`](crate::stage::PipelineData).
+///
+/// **Single source of truth for what a profile sees.** The full HTML
+/// pipeline ([`build_html_pipeline_stages_with_options`]) starts with
+/// exactly these stages, and Pass-1 profiling
+/// (`orchestrator::pass1_profile_single_file_live`) runs exactly
+/// these, so a document's Pass-1 profile — the one listings, sidebars
+/// and the dependency graph read — equals the profile its full render
+/// computes. The two lists used to be maintained by hand and drifted:
+/// `IncludeResolveStage`, `ListingItemInfoStage` and
+/// `LanguageResolveStage` were added to the full pipeline only, so
+/// listing autofill never reached listings
+/// (bd-listing-default-no-derived-desc-m0wrr8ty,
+/// bd-listing-description-precedence-x4bh6w3m). Add pre-checkpoint
+/// stages here, never to one caller.
+pub fn build_head_stages() -> Vec<Box<dyn PipelineStage>> {
+    vec![
         // Convert non-QMD files (e.g. .echo, .jl, .ipynb) to QMD before parse.
         // First engine in deterministic order that claims the file wins.
         // .qmd / .md files pass through unchanged; unclaimed non-QMD files error.
@@ -339,11 +354,23 @@ pub fn build_html_pipeline_stages_with_options(
         // graph can use them. See
         // `claude-notes/designs/body-link-resolution-contract.md`.
         Box::new(LinkResolutionStage::new()),
+    ]
+}
+
+pub fn build_html_pipeline_stages_with_options(
+    apply_config: Option<ApplyTemplateConfig>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let engine_stage = EngineExecutionStage::new();
+    // Head (through the profile checkpoint) is shared with Pass-1;
+    // see `build_head_stages`.
+    let mut stages = build_head_stages();
+    let tail: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
         Box::new(engine_stage),
         Box::new(CompileThemeCssStage::new()),
     ];
+    stages.extend(tail);
     // Inject Bootstrap JS as a Project-scoped artifact when a
     // Bootstrap-backed theme is active. Predicate matches
     // CompileThemeCssStage so JS and CSS travel together.
@@ -3446,6 +3473,35 @@ mod tests {
     }
 
     // === Pipeline builder tests ===
+
+    // bd-listing-description-precedence-x4bh6w3m: Pass-1 runs
+    // `build_head_stages`, so the full pipeline must start with exactly
+    // that list — otherwise listing profiles silently miss whatever a
+    // pre-checkpoint stage contributes.
+    #[test]
+    fn full_pipeline_starts_with_the_shared_head() {
+        let names = |stages: Vec<Box<dyn PipelineStage>>| -> Vec<String> {
+            stages.iter().map(|s| s.name().to_string()).collect()
+        };
+        let head = names(build_head_stages());
+        let full = names(build_html_pipeline_stages());
+        assert_eq!(&full[..head.len()], &head[..]);
+        assert_eq!(
+            head,
+            [
+                "source-conversion",
+                "parse-document",
+                "metadata-merge",
+                "language-resolve",
+                "include-expansion",
+                "include-resolve",
+                "listing-item-info",
+                "document-profile",
+                "link-resolution",
+            ]
+        );
+        assert_eq!(full[head.len()], "unwrap-profile");
+    }
 
     #[test]
     fn test_build_html_pipeline_stages() {

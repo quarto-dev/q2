@@ -335,13 +335,32 @@ Existing tests updated because they encoded the old behaviour:
   single-token markers.
 
 ### Phase 4 — Shared head
-- [ ] Extract `head_stages()`; use it from both builders; update the
-  stage-order tests.
-- [ ] Pass-1 cache key vs. mtime-based `date_modified`: decide and
-  implement.
-- [ ] Confirm `IncludeResolveStage` doesn't put uncovered file contents
-  into the profile.
-- [ ] Pass-1 == full-pipeline profile test is green.
+- [x] Extract `build_head_stages()` (`pipeline.rs`); the full HTML builder
+  is `build_head_stages()` + tail, and Pass-1
+  (`pass1_profile_single_file_live`) runs `build_head_stages()`. It is
+  the only hand-maintained head list left in the tree; the WASM, preview,
+  pandoc and pause/finishing builders all derive from the full list.
+  `build_analysis_pipeline` (LSP) stays separate on purpose: it has no
+  profile checkpoint.
+- [x] Pass-1 cache key vs. mtime-based `date_modified`: **decided — key
+  on the date**. `Pass1KeyInputs::source_modified_date` holds the exact
+  `YYYY-MM-DD` that L1 records (same function, `mtime_iso`, now
+  `pub(crate)`). A touch on a new day misses the cache; same-day touches
+  don't, which matches what the profile records. Presence byte in the
+  hash; `PROFILE_KEY_VERSION` 2 → 3; unit test
+  `key_changes_on_source_modified_date`.
+- [x] `IncludeResolveStage` already records file-slot includes with
+  content hashes into `recorded_includes` → `profile.includes`, and
+  `profile_cache::load` re-verifies those hashes. Covered, no change.
+  Its and `LanguageResolveStage`'s problems are diagnostics, not stage
+  errors, and Pass-1 discards diagnostics, so no new Pass-1 failures.
+- [x] Pass-1 == full-pipeline profile test is green; plus a structural
+  test `full_pipeline_starts_with_the_shared_head`.
+
+Behaviour change surfaced by the suite: the llms.txt companion of a
+listing page (`llms.rs`) now shows the derived description for items
+without `description:`, matching the HTML listing
+(`llms_txt.rs::llms_listing_page_companion_synthesizes_item_list` updated).
 
 ### Phase 5 — Verification
 - [ ] All Phase 0 tests green; `cargo xtask verify`.

@@ -350,11 +350,15 @@ fn div_ceil_u32(num: u32, denom: u32) -> u32 {
 }
 
 /// File-modification date as `YYYY-MM-DD` (UTC), via the runtime
-/// trait. Returns `None` if the runtime can't or won't supply an
-/// mtime — currently the WASM Automerge VFS path (see `bd-a3we`).
-/// The stage swallows runtime errors gracefully; nothing here can
-/// panic.
-fn mtime_iso(runtime: &dyn SystemRuntime, path: &Path) -> Option<String> {
+/// trait — the value the stage records as `listing-item.date-modified`.
+/// Returns `None` if the runtime can't or won't supply an mtime —
+/// currently the WASM Automerge VFS path (see `bd-a3we`). The stage
+/// swallows runtime errors gracefully; nothing here can panic.
+///
+/// Also an input of the Pass-1 profile cache key
+/// (`cache_key::Pass1KeyInputs::source_modified_date`), so the two
+/// must stay one function.
+pub(crate) fn mtime_iso(runtime: &dyn SystemRuntime, path: &Path) -> Option<String> {
     let metadata = runtime.path_metadata(path).ok()?;
     let modified = metadata.modified?;
     let dt = time::OffsetDateTime::from(modified);
