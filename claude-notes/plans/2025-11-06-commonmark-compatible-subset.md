@@ -1,6 +1,7 @@
 ---
 title: 'Quarto Markdown CommonMark-Compatible Subset Specification'
 date: 2025-11-06
+description: 'Defines a whitelisted subset of qmd markdown syntax that is guaranteed to parse identically to CommonMark 0.31.2, verified against the comrak reference implementation with structural and HTML comparisons.'
 ---
 
 ## Motivation

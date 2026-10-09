@@ -18,10 +18,18 @@ first block is not a plain `# H1` (no H1, something before it, attributes
 on the heading) or that already has `title:` keeps its body unchanged
 and is reported, so a human can decide.
 
+With `--descriptions JSON`, it instead adds `description:` to each file
+named in JSON (a list of {"path", "description"} objects; descriptions are
+written by a model, see the plan for bd-fvcip3t5). The key goes right after
+`date:` (or at the end of the front matter); a file that already has one
+is reported and left alone.
+
 Usage:
   scripts/claude-notes-plan-frontmatter.py FILE...          # edit in place
   scripts/claude-notes-plan-frontmatter.py --dry-run FILE...
+  scripts/claude-notes-plan-frontmatter.py --descriptions items.json [--dry-run]
 """
+import json
 import argparse
 import os
 import re
@@ -110,11 +118,41 @@ def process(path, dry_run):
     return "changed", f"added {msg}"
 
 
+def add_description(path, description, dry_run):
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    fm, body = split_front_matter(text)
+    if fm is None:
+        return "report", "no front matter"
+    if has_key(fm, "description"):
+        return "report", "already has description:"
+    desc = " ".join(description.split())
+    line = f"description: {yaml_single_quote(desc)}"
+    at = next((i + 1 for i, l in enumerate(fm) if re.match(r"^date\s*:", l)), len(fm))
+    fm = fm[:at] + [line] + fm[at:]
+    if not dry_run:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("---\n" + "\n".join(fm) + "\n---\n" + body)
+    return "changed", "added description"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("files", nargs="+")
+    ap.add_argument("--descriptions", metavar="JSON")
+    ap.add_argument("files", nargs="*")
     args = ap.parse_args()
+    if args.descriptions:
+        with open(args.descriptions, encoding="utf-8") as f:
+            items = json.load(f)
+        counts = {"changed": 0, "report": 0}
+        for it in items:
+            status, msg = add_description(it["path"], it["description"], args.dry_run)
+            counts[status] += 1
+            if status == "report":
+                print(f"{it['path']}: {msg}")
+        print(f"changed {counts['changed']}, reported {counts['report']}", file=sys.stderr)
+        return
     counts = {"changed": 0, "unchanged": 0, "report": 0}
     for path in args.files:
         if os.path.islink(path):

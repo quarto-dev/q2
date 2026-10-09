@@ -1,6 +1,7 @@
 ---
 title: 'Single-file `q2 preview`: resolve sibling assets the deck references'
 date: 2026-06-16
+description: 'Makes `q2 preview` on a standalone `.qmd` sync the sibling images it references into the preview''s virtual filesystem, without walking the whole directory, so images render as they do in project mode.'
 ---
 
 **Strand:** bd-kpuweafo · **Found:** 2026-06-16 (follow-up to bd-y259zb57 / bd-ggvq1j68)

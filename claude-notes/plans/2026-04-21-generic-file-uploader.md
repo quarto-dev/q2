@@ -1,6 +1,7 @@
 ---
 title: 'Generic file uploader dialog for hub-client'
 date: 2026-04-21
+description: 'Proposes a generic asset dialog for hub-client that replaces the image-only drop and file-picker paths, accepting any binary file, letting the user choose its destination folder, and validating paths before upload.'
 ---
 
 - **Beads**: bd-eity

@@ -1,6 +1,7 @@
 ---
 title: 'Website mobile secondary-nav bar (bd-26bf3j1y)'
 date: 2026-08-17
+description: 'Adds a mobile secondary navigation bar to website pages, with a toggle, breadcrumbs and a search button, and records which sidebar collapse and Bootstrap JavaScript dependencies it relies on.'
 ---
 
 **Date:** 2026-08-17

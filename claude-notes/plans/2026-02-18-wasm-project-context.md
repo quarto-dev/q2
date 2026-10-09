@@ -1,6 +1,7 @@
 ---
 title: 'WASM Project Context Discovery'
 date: 2026-02-18
+description: 'Lets the WASM `render_qmd` path discover `_quarto.yml` and `_metadata.yml` from the virtual filesystem by sharing one runtime between the render pipeline and the JavaScript-populated global, instead of a hardcoded single-file context.'
 ---
 
 ## Overview

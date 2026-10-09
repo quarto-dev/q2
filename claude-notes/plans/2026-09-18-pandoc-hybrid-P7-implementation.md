@@ -1,6 +1,7 @@
 ---
 title: 'P7 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+description: 'Breaks the docx and pptx output work into dispatchable implementation tasks, binds each test to a named production seam, and defines what the semantic extractor must preserve when comparing Office files.'
 ---
 
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P7-format-tail.md`](2026-08-20-pandoc-hybrid-P7-format-tail.md)

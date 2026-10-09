@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Error Corpus Integration for quarto-doctemplate (k-386)'
 date: 2025-01-25
+description: 'Adds structured Q-10 error codes and code-aware diagnostic helpers to `quarto-doctemplate`, so template parse, variable, and partial failures report stable, documented error codes with source locations.'
 ---
 
 ## Overview

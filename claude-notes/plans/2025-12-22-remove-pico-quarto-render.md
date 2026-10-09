@@ -1,6 +1,7 @@
 ---
 title: 'Plan: Remove pico-quarto-render crate'
 date: 2025-12-22
+description: 'Deletes a stale prototype rendering crate that nothing else depends on, and removes it from the binary list in `CLAUDE.md`, with the workspace glob needing no manifest edit.'
 ---
 
 ## Summary
