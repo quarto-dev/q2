@@ -241,9 +241,9 @@ fn preview_static_only_flags_require_static() {
     }
 }
 
-/// Only formats a static server can show are accepted. `typst`
-/// renders (to a PDF via pandoc) but there is nothing to serve, so the
-/// command refuses before starting anything — exit 1 with a message
+/// Only formats a static server can show are accepted (html, revealjs,
+/// and typst's PDF in the pdf.js viewer). `docx` renders but there is
+/// nothing to serve, so the command refuses before starting anything — exit 1 with a message
 /// naming the flag.
 #[test]
 fn preview_static_rejects_unservable_format() {
@@ -253,19 +253,19 @@ fn preview_static_rejects_unservable_format() {
         "---\ntitle: T\n---\n\nHello.\n",
     )
     .expect("write fixture");
-    let output = preview_output(&["--static", "--to", "typst", "doc.qmd"], temp.path());
+    let output = preview_output(&["--static", "--to", "docx", "doc.qmd"], temp.path());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
         output.status.code(),
         Some(1),
-        "--static --to typst should exit 1; stderr:\n{stderr}"
+        "--static --to docx should exit 1; stderr:\n{stderr}"
     );
     assert!(
         stderr.contains("not supported with --static"),
         "stderr should say the format is not supported with --static; got:\n{stderr}"
     );
     assert!(
-        !temp.path().join("doc.pdf").exists() && !temp.path().join("doc.typ").exists(),
+        !temp.path().join("doc.docx").exists(),
         "no render must happen before the format check"
     );
 }

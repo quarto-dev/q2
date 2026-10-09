@@ -1,5 +1,8 @@
 // q2 preview --static: the browser side of the reload channel.
-// Injected inline into every served HTML page (see server.rs). Plain
+// Injected inline into every served HTML page, and loaded as an external script by the pdf.js
+// viewer page, whose CSP (script-src and style-src 'self') blocks inline scripts and
+// style attributes set from script; styles are therefore applied through the CSSOM (cssText on
+// the element's style object), which the CSP allows (see server.rs). Plain
 // script, no framework: it opens an EventSource on the server's SSE
 // endpoint, shows a small status badge while a render runs, shows the
 // diagnostics when one fails, and reloads or navigates when outputs
@@ -15,6 +18,11 @@
   var BADGE_ID = "q2-preview-static-badge";
   var PANEL_ID = "q2-preview-static-panel";
 
+  function setCss(el, css) {
+    var st = el.style;
+    st.cssText = css;
+  }
+
   function byId(id) {
     return document.getElementById(id);
   }
@@ -26,8 +34,7 @@
     }
     el = document.createElement("div");
     el.id = BADGE_ID;
-    el.setAttribute(
-      "style",
+    setCss(el,
       "position:fixed;right:12px;bottom:12px;z-index:2147483646;" +
         "padding:6px 10px;border-radius:6px;font:13px/1.4 system-ui,sans-serif;" +
         "background:#1f2937;color:#f9fafb;box-shadow:0 2px 8px #00000055;display:none;"
@@ -60,16 +67,14 @@
     hidePanel();
     var panel = document.createElement("div");
     panel.id = PANEL_ID;
-    panel.setAttribute(
-      "style",
+    setCss(panel,
       "position:fixed;left:12px;right:12px;bottom:12px;max-height:60vh;z-index:2147483647;" +
         "overflow:auto;border-radius:8px;background:#111827;color:#f9fafb;" +
         "font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;" +
         "box-shadow:0 4px 16px #00000088;"
     );
     var head = document.createElement("div");
-    head.setAttribute(
-      "style",
+    setCss(head,
       "display:flex;align-items:center;justify-content:space-between;" +
         "padding:8px 12px;background:#7f1d1d;font-family:system-ui,sans-serif;font-weight:600;"
     );
@@ -77,15 +82,14 @@
     label.textContent = title;
     var close = document.createElement("button");
     close.textContent = "Dismiss";
-    close.setAttribute(
-      "style",
+    setCss(close,
       "border:0;border-radius:4px;padding:4px 8px;background:#f9fafb;color:#111827;cursor:pointer;font:inherit;"
     );
     close.addEventListener("click", hidePanel);
     head.appendChild(label);
     head.appendChild(close);
     var pre = document.createElement("pre");
-    pre.setAttribute("style", "margin:0;padding:12px;white-space:pre-wrap;word-break:break-word;");
+    setCss(pre, "margin:0;padding:12px;white-space:pre-wrap;word-break:break-word;");
     pre.textContent = text;
     panel.appendChild(head);
     panel.appendChild(pre);
@@ -94,6 +98,23 @@
 
   function normalizePath(p) {
     return p.replace(/index\.html$/, "");
+  }
+
+  // On the pdf.js viewer the page being shown is the PDF in ?file=, not the viewer's own URL.
+  // Kept as one literal (server.rs pins it against VIEWER_PATH).
+  var VIEWER_PATH = "/__q2-preview/pdfjs/web/viewer.html";
+  function shownPath() {
+    if (window.location.pathname === VIEWER_PATH) {
+      var m = /[?&]file=([^&#]*)/.exec(window.location.search);
+      if (m) {
+        try {
+          return decodeURIComponent(m[1]);
+        } catch (err) {
+          return window.location.pathname;
+        }
+      }
+    }
+    return window.location.pathname;
   }
 
   function parse(e) {
@@ -138,7 +159,7 @@
   source.addEventListener("reload", function (e) {
     var d = parse(e);
     var target = d.target;
-    if (target && normalizePath(target) !== normalizePath(window.location.pathname)) {
+    if (target && normalizePath(target) !== normalizePath(shownPath())) {
       window.location.replace(target);
     } else {
       window.location.reload();

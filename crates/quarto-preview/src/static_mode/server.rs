@@ -25,7 +25,11 @@
 //!   (`sec-fetch-mode: cors`), whose caller wants the raw bytes.
 //! - HEAD gets the GET headers, including the injected length, and no
 //!   body. Other methods are 405.
-//! - Every HTML page actually *viewed* (a 200 GET that is not a CORS
+//! - A browser navigation to a `.pdf` is redirected to the bundled
+//!   pdf.js viewer under [`PDFJS_PREFIX`] (when the server has a
+//!   pdf.js tree); the PDF's bytes stay at their own path, which is
+//!   what the viewer fetches.
+//! - Every HTML or PDF page actually *viewed* (a 200 GET that is not a CORS
 //!   fetch) is reported on `StaticServerConfig::page_requests`, which
 //!   is how lazy code execution learns what the user is looking at
 //!   (plan Phase 3b).
@@ -46,15 +50,30 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::{BroadcastStream, WatchStream};
 
 use super::reload::ReloadHub;
+use crate::PdfjsTree;
 
 /// Path of the server-sent-events endpoint. The `/__q2-preview/`
 /// prefix is reserved: a file at that path in the output directory is
 /// shadowed.
 pub const EVENTS_PATH: &str = "/__q2-preview/events";
 
+/// Where the bundled pdf.js tree is served (`/__q2-preview/pdfjs/web/viewer.html`, ...). Under
+/// the reserved prefix so it cannot collide with user output.
+pub const PDFJS_PREFIX: &str = "/__q2-preview/pdfjs/";
+
+/// The viewer page, as a URL path.
+pub const VIEWER_PATH: &str = "/__q2-preview/pdfjs/web/viewer.html";
+
+/// The reload client as an external script: the viewer page's CSP (`script-src 'self'`) blocks
+/// the inline copy every other page gets.
+pub const CLIENT_PATH: &str = "/__q2-preview/client.js";
+
 /// The injected browser script. Embedded inline in a `<script>` tag,
 /// so it must never contain the closing tag (pinned by a test).
 const CLIENT_JS: &str = include_str!("client.js");
+
+/// The pdf.js tree only changes with the binary, so it may be cached (unlike the output files).
+const PDFJS_CACHE: HeaderValue = HeaderValue::from_static("public, max-age=3600");
 
 const NO_STORE: HeaderValue = HeaderValue::from_static("no-store, max-age=0");
 const HTML_UTF8: HeaderValue = HeaderValue::from_static("text/html; charset=utf-8");
@@ -77,8 +96,22 @@ const PATH_SEGMENT: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
+/// Characters to percent-encode in a query-string value (a whole path, so `/` stays).
+const QUERY_VALUE: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'&')
+    .add(b'+')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'`')
+    .add(b'{')
+    .add(b'}');
+
 /// What to serve.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StaticServerConfig {
     /// The rendered output directory (`RenderReport::output_dir`).
     pub root: PathBuf,
@@ -90,6 +123,8 @@ pub struct StaticServerConfig {
     /// view. `None` when nobody needs to know. Sends never block: a
     /// full channel drops the report (the next view sends again).
     pub page_requests: Option<tokio::sync::mpsc::Sender<PathBuf>>,
+    /// The pdf.js tree to serve under [`PDFJS_PREFIX`]; `None` serves raw PDFs as before.
+    pub pdfjs: Option<PdfjsTree>,
 }
 
 #[derive(Clone)]
@@ -98,6 +133,7 @@ struct StaticState {
     default_file: Option<Arc<str>>,
     hub: ReloadHub,
     page_requests: Option<tokio::sync::mpsc::Sender<PathBuf>>,
+    pdfjs: Option<PdfjsTree>,
 }
 
 impl StaticState {
@@ -107,7 +143,7 @@ impl StaticState {
         if is_head || is_cors_fetch {
             return;
         }
-        if !path.extension().is_some_and(|e| e == "html") {
+        if !is_page_extension(path) {
             return;
         }
         if let Some(tx) = &self.page_requests {
@@ -116,17 +152,30 @@ impl StaticState {
     }
 }
 
-/// Build the router: the SSE endpoint plus a fallback that serves
-/// `config.root`.
+/// Extensions whose views count as page views: HTML, and PDF (shown through the viewer).
+fn is_page_extension(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("html") || e.eq_ignore_ascii_case("pdf"))
+}
+
+fn is_pdf(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+}
+
+/// Build the router: the SSE endpoint, the client script, and a fallback that serves
+/// `config.root` (and the pdf.js tree under [`PDFJS_PREFIX`]).
 pub fn build_router(config: StaticServerConfig, hub: ReloadHub) -> Router {
     let state = StaticState {
         root: Arc::from(config.root),
         default_file: config.default_file.map(Into::into),
         hub,
         page_requests: config.page_requests,
+        pdfjs: config.pdfjs,
     };
     Router::new()
         .route(EVENTS_PATH, get(events))
+        .route(CLIENT_PATH, get(client_script))
         .fallback(serve_path)
         .with_state(state)
 }
@@ -154,6 +203,17 @@ async fn events(State(state): State<StaticState>) -> impl IntoResponse {
             Item::Event(Err(_)) | Item::Closing(_) => None,
         });
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+/// `GET /__q2-preview/client.js`: the reload client as a file, for pages whose CSP forbids the
+/// inline copy (the pdf.js viewer).
+async fn client_script() -> Response {
+    bytes_response(
+        CLIENT_JS.as_bytes().to_vec(),
+        StatusCode::OK,
+        HeaderValue::from_static("application/javascript"),
+        false,
+    )
 }
 
 /// Serve `router` on `listener` until `shutdown` resolves, then finish
@@ -184,9 +244,15 @@ async fn serve_path(State(state): State<StaticState>, req: Request) -> Response 
     let Some(segments) = decode_segments(&raw_path) else {
         return not_found(&state, is_head).await;
     };
+    if raw_path.starts_with(PDFJS_PREFIX)
+        && let Some(tree) = &state.pdfjs
+    {
+        return serve_pdfjs(tree, &segments, is_head);
+    }
     if segments.is_empty() {
         return serve_root(&state, is_head).await;
     }
+    let is_navigation = is_document_navigation(req.headers());
     let full = segments
         .iter()
         .fold(state.root.to_path_buf(), |p, s| p.join(s));
@@ -208,12 +274,51 @@ async fn serve_path(State(state): State<StaticState>, req: Request) -> Response 
         Ok(meta) if meta.is_file() => match tokio::fs::read(&full).await {
             Ok(bytes) => {
                 state.note_page_view(&full, is_head, is_cors_fetch);
+                if is_navigation && is_pdf(&full) && state.pdfjs.is_some() {
+                    return redirect(StatusCode::FOUND, &viewer_url(&raw_path));
+                }
                 file_response(&full, bytes, StatusCode::OK, is_cors_fetch, is_head)
             }
             Err(_) => not_found(&state, is_head).await,
         },
         _ => not_found(&state, is_head).await,
     }
+}
+
+/// A browser navigating to the URL (address bar, link, redirect), not the viewer's own `fetch()`
+/// of the PDF (`mode=cors`) or an `<iframe>`.
+fn is_document_navigation(headers: &axum::http::HeaderMap) -> bool {
+    let is = |name: &str, want: &[u8]| headers.get(name).is_some_and(|v| v.as_bytes() == want);
+    is("sec-fetch-mode", b"navigate") && is("sec-fetch-dest", b"document")
+}
+
+/// The viewer URL for a PDF at the percent-encoded request path `pdf_path`. No hash parameter:
+/// any `#view=`/`#pagemode=` makes pdf.js forget the page and zoom on reload.
+fn viewer_url(pdf_path: &str) -> String {
+    let file = utf8_percent_encode(pdf_path, QUERY_VALUE);
+    format!("{VIEWER_PATH}?file={file}")
+}
+
+/// `/__q2-preview/pdfjs/...`: a file of the bundled pdf.js tree, with the reload client added
+/// to the viewer page. Misses are 404 (or the en-US locale alias), never the site's 404 page.
+fn serve_pdfjs(tree: &PdfjsTree, segments: &[String], is_head: bool) -> Response {
+    // `segments` begins with `__q2-preview`, `pdfjs`.
+    let rel = segments[1..].join("/");
+    let Some(served) = crate::resolve_pdfjs_rel(&rel, |r| tree(r).is_some()) else {
+        return plain_not_found(is_head);
+    };
+    let Some(mut bytes) = tree(&served) else {
+        return plain_not_found(is_head);
+    };
+    let content_type = HeaderValue::from_static(spa_manifest::content_type_for(&served));
+    if served == "pdfjs/web/viewer.html" {
+        bytes = inject_client_script_tag(bytes);
+    }
+    let mut response = bytes_response(bytes, StatusCode::OK, content_type, is_head);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, PDFJS_CACHE);
+    response
 }
 
 /// Percent-decode a request path into its non-empty segments, or
@@ -249,6 +354,11 @@ async fn serve_root(state: &StaticState, is_head: bool) -> Response {
             .is_ok_and(|m| m.is_file())
     {
         let location = format!("/{}", encode_path(default_file));
+        if state.pdfjs.is_some() && is_pdf(Path::new(default_file.as_ref())) {
+            // A PDF-only output: straight to the viewer, counting the view (lazy execution).
+            state.note_page_view(&state.root.join(default_file.as_ref()), is_head, false);
+            return redirect(StatusCode::FOUND, &viewer_url(&location));
+        }
         return redirect(StatusCode::FOUND, &location);
     }
     let pages = list_html_pages(&state.root);
@@ -345,6 +455,10 @@ async fn not_found(state: &StaticState, is_head: bool) -> Response {
     if let Ok(bytes) = tokio::fs::read(&page).await {
         return file_response(&page, bytes, StatusCode::NOT_FOUND, false, is_head);
     }
+    plain_not_found(is_head)
+}
+
+fn plain_not_found(is_head: bool) -> Response {
     let body = b"Not Found".to_vec();
     let mut response = Response::builder()
         .status(StatusCode::NOT_FOUND)
@@ -434,10 +548,18 @@ fn bytes_response(
     response
 }
 
+/// Splice a `<script src>` for the external client in before the last `</body>`.
+fn inject_client_script_tag(html: Vec<u8>) -> Vec<u8> {
+    splice_before_body_end(html, &format!("<script src=\"{CLIENT_PATH}\"></script>\n"))
+}
+
 /// Splice the client script in before the last `</body>` (any case),
 /// or append it when the page has none.
-fn inject_client(mut html: Vec<u8>) -> Vec<u8> {
-    let tag = format!("<script>\n{CLIENT_JS}</script>\n");
+fn inject_client(html: Vec<u8>) -> Vec<u8> {
+    splice_before_body_end(html, &format!("<script>\n{CLIENT_JS}</script>\n"))
+}
+
+fn splice_before_body_end(mut html: Vec<u8>, tag: &str) -> Vec<u8> {
     let lower = html.to_ascii_lowercase();
     let needle = b"</body>";
     match lower
@@ -445,7 +567,7 @@ fn inject_client(mut html: Vec<u8>) -> Vec<u8> {
         .rposition(|window| window == needle)
     {
         Some(at) => {
-            html.splice(at..at, tag.into_bytes());
+            html.splice(at..at, tag.bytes());
         }
         None => html.extend_from_slice(tag.as_bytes()),
     }

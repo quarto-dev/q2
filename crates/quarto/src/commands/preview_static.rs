@@ -76,9 +76,10 @@ pub struct StaticArgs {
     pub to: Option<String>,
 }
 
-/// Formats a static server can usefully show. `docx`/`pptx`/`epub`/
-/// `typst` render fine but produce nothing to browse, so they are
-/// refused up front rather than after a render (plan § CLI). `None`
+/// Formats a static server can usefully show: html and revealjs pages,
+/// and typst's PDF (in the bundled pdf.js viewer, hub-parity Plan 8).
+/// `docx`/`pptx`/`epub` render fine but produce nothing to browse, so
+/// they are refused up front, before any render (plan § CLI). `None`
 /// means nothing decided the format yet (no `--to`, no front matter),
 /// which resolves to `html`.
 fn check_servable_format(to: Option<&str>) -> Result<()> {
@@ -88,12 +89,12 @@ fn check_servable_format(to: Option<&str>) -> Result<()> {
     let format = resolve_format(to)?;
     if matches!(
         format.identifier,
-        FormatIdentifier::Html | FormatIdentifier::Revealjs
+        FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Typst
     ) {
         return Ok(());
     }
     anyhow::bail!(
-        "Format '{}' is not supported with --static (only html and revealjs can be served)",
+        "Format '{}' is not supported with --static (only html, revealjs and typst can be served)",
         format.identifier
     );
 }
@@ -448,6 +449,7 @@ async fn run(args: StaticArgs) -> Result<()> {
             root: report.output_dir.clone(),
             default_file,
             page_requests: Some(page_tx),
+            pdfjs: quarto_preview::embedded_pdfjs_tree(),
         },
         hub.clone(),
     );
@@ -751,11 +753,15 @@ mod tests {
         assert!(check_servable_format(None).is_ok());
         assert!(check_servable_format(Some("html")).is_ok());
         assert!(check_servable_format(Some("revealjs")).is_ok());
+        assert!(
+            check_servable_format(Some("typst")).is_ok(),
+            "typst's PDF is shown in the pdf.js viewer"
+        );
     }
 
     #[test]
     fn unservable_formats_are_refused_by_name() {
-        for to in ["typst", "docx", "pptx", "epub"] {
+        for to in ["docx", "pptx", "epub"] {
             let err = check_servable_format(Some(to))
                 .expect_err("format should be refused")
                 .to_string();

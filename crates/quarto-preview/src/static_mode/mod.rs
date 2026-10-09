@@ -15,7 +15,9 @@ pub mod server;
 pub mod watch_policy;
 
 pub use reload::{ReloadEvent, ReloadHub};
-pub use server::{EVENTS_PATH, StaticServerConfig, build_router, serve};
+pub use server::{
+    CLIENT_PATH, EVENTS_PATH, PDFJS_PREFIX, StaticServerConfig, VIEWER_PATH, build_router, serve,
+};
 pub use watch_policy::{
     Action, ContentTracker, WatchContext, classify, is_config_like, is_input_extension,
 };

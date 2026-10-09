@@ -1063,6 +1063,17 @@ pub fn resolve_pdfjs_rel(rel: &str, has: impl Fn(&str) -> bool) -> Option<String
     has(PDFJS_FALLBACK_LOCALE_FILE).then(|| PDFJS_FALLBACK_LOCALE_FILE.to_string())
 }
 
+/// A lookup into a pdf.js tree for the static server: a dist-relative path (`pdfjs/web/viewer.html`)
+/// to its bytes. A closure so tests can serve a small in-memory tree on a placeholder build.
+pub type PdfjsTree = Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
+
+/// The pdf.js tree embedded in this binary (the preview SPA's pruned copy), or `None` on a
+/// placeholder build that carries none.
+pub fn embedded_pdfjs_tree() -> Option<PdfjsTree> {
+    EMBEDDED_SPA.get("pdfjs/web/viewer.html")?;
+    Some(Arc::new(|rel| EMBEDDED_SPA.get(rel).map(<[u8]>::to_vec)))
+}
+
 fn pdfjs_not_found() -> Response {
     (StatusCode::NOT_FOUND, "not found").into_response()
 }
