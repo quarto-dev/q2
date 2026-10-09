@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Grammar compiler</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto 1fr;
+        font-family: monospace;
+        font-size: 14px;
+      }
+      body > * { margin: 0; padding: 1rem; font: inherit; overflow: auto; border: 0 solid #ccc; }
+      textarea { resize: none; outline: none; }
+      #grammar { grid-row: 1 / 3; border-right-width: 1px; }
+      #input { border-bottom-width: 1px; }
+      #tree.error { box-shadow: inset 0 0 0 2px #b00; }
+      #tree { line-height: 1.1; position: relative; outline: none; }
+      .caret {
+        position: absolute;
+        width: 2px;
+        background: #e33;
+        pointer-events: none;
+        animation: blink 1s steps(2, start) infinite;
+      }
+      #tree:not(:focus) .caret { background: #e9a; animation: none; }
+      @keyframes blink { to { visibility: hidden; } }
+      #caret-index {
+        position: fixed;
+        right: 0.5rem;
+        bottom: 0.5rem;
+        padding: 2px 6px;
+        color: #666;
+        background: #f4f4f4;
+        border: 1px solid #ccc;
+        border-radius: 2px;
+        font-size: 11px;
+      }
+      .node {
+        display: inline-flex;
+        flex-direction: column;
+        vertical-align: top;
+        border: 1px solid #bbb;
+        border-radius: 2px;
+        padding: 1px 3px;
+        margin: 1px;
+        font-size: 11px;
+      }
+      .node > .label { color: #888; font-size: 9px; }
+      .node > .text { color: #06c; white-space: pre; min-width: 4px; }
+      /* An empty leaf still needs a line box so the caret has a height. */
+      .node > .text:empty::before { content: "\200B"; }
+      .node > .kids { display: flex; flex-wrap: wrap; align-items: flex-start; }
+    </style>
+  </head>
+  <body>
+    <textarea id="grammar" spellcheck="false"></textarea>
+    <textarea id="input" rows="4" spellcheck="false" placeholder="string to parse"></textarea>
+    <div id="tree"></div>
+    <div id="caret-index">caret 0</div>
+    <script type="module" src="/src/inc_main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+Grammar = WS (Rule Newline*)* !any
+Rule    = Name "=" WS Alt (Newline | !any)
+Alt     = Seq ("|" WS Seq)*
+Seq     = Postfix+
+Postfix = Prefix (("*" | "+" | "?") WS)?
+Prefix  = ("!" WS)? Atom
+Atom    = String | Name | "(" WS Alt ")" WS
+String  = "\"" ("\\" any | !"\"" !"\\" any)* "\"" WS
+Name    = (letter | "_") (letter | digit | "_")* WS
+Newline = ("\r\n" | "\n") WS
+WS      = (" " | "\t")*
