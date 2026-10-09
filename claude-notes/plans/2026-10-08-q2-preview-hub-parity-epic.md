@@ -120,20 +120,20 @@ Critical path: 2 -> 6 -> 9 -> 10 -> 13 (and 9 -> 12 -> 13). Plans 1, 2, 3 and 4 
 
 (Ticked by Gordon or the orchestrating session in workspace-7 after each plan lands.)
 
-- [ ] Plan 1 child runner
-- [ ] Plan 2 core hygiene
-- [ ] Plan 3 book scope: core and CLI
-- [ ] Plan 4 pdf.js packaging
-- [ ] Plan 5 book scope: clients
-- [ ] Plan 6 typst render foundations
-- [ ] Plan 7 embed import
-- [ ] Plan 8 static PDF viewer
-- [ ] Plan 9 preview routes
-- [ ] Plan 10 book downloads, server
-- [ ] Plan 11 SPA PDF pane
-- [ ] Plan 12 embed client
+- [x] Plan 1 child runner
+- [x] Plan 2 core hygiene
+- [x] Plan 3 book scope: core and CLI
+- [x] Plan 4 pdf.js packaging
+- [x] Plan 5 book scope: clients
+- [x] Plan 6 typst render foundations
+- [x] Plan 7 embed import
+- [x] Plan 8 static PDF viewer
+- [x] Plan 9 preview routes
+- [x] Plan 10 book downloads, server
+- [x] Plan 11 SPA PDF pane
+- [x] Plan 12 embed client
 - [ ] Plan 13 close-out
-- [ ] `--book-scope` documented for `q2 render`, the Download as menu and the wasm option, and noted in the changelogs; the default keeps today's CLI behaviour, so the pinned test `single_chapter_subset_render_keeps_one_file_render_set` is unchanged
+- [x] `--book-scope` documented for `q2 render`, the Download as menu and the wasm option, and noted in the changelogs; the default keeps today's CLI behaviour, so the pinned test `single_chapter_subset_render_keeps_one_file_render_set` is unchanged
 - [ ] User docs for `q2 preview` (Plan 13.7)
 - [ ] Reconcile every plan's checklist against what landed; update the gap table
 

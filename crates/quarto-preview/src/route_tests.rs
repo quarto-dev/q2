@@ -645,9 +645,21 @@ async fn chapter_scope_renders_the_chapter_alone_and_a_non_member_renders_as_a_p
 }
 
 #[tokio::test]
-async fn the_book_seam_defaults_to_501() {
+async fn a_book_seam_without_downloads_answers_501() {
+    struct Nothing;
+    impl BookDownload for Nothing {
+        fn render(
+            &self,
+            _req: BookDownloadRequest,
+        ) -> Result<BookDownloadOutput, BookDownloadError> {
+            Err(BookDownloadError::Unavailable(
+                "book downloads are not available in this build".to_string(),
+            ))
+        }
+    }
     let (_project, ctx) = build_ctx(BOOK).await;
     install(FakeSeam::default());
+    set_book_download(Some(Arc::new(Nothing)));
     // A member with no scope chosen consolidates the book.
     let response = pdf_handler(State(ctx), pdf_req("one.qmd", None, None)).await;
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
@@ -712,7 +724,7 @@ async fn a_book_request_reaches_the_book_seam_with_every_capture() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         decoded_header(&response, "x-q2-stats").as_deref(),
-        Some(r#"{"unexecuted_cells":4}"#)
+        Some(r#"{"book":{"chapters":2,"scope":"book"},"unexecuted_cells":4}"#)
     );
     assert_eq!(body_bytes(response).await, b"%PDF-book");
 

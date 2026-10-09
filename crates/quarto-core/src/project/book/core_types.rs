@@ -18,6 +18,11 @@ use quarto_source_map::SourceContext;
 pub struct BookRenderOptions {
     pub engine_registry_override: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     pub execution_policy: crate::engine::ExecutionPolicy,
+    /// Copied onto the merged document's context, so its pandoc and typst
+    /// children can be cancelled and bounded (`RenderToFileOptions` has the
+    /// same two fields). `None` means unbounded, as `q2 render`.
+    pub cancellation: Option<crate::stage::Cancellation>,
+    pub child_deadline: Option<std::time::Duration>,
 }
 
 /// One chapter's diagnostics with the `SourceContext` they were located

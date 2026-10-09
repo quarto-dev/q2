@@ -51,6 +51,7 @@ pub(crate) async fn render_book_request(
     let options = BookRenderOptions {
         engine_registry_override: None,
         execution_policy: crate::engine::ExecutionPolicy::None,
+        ..Default::default()
     };
     let binaries = BinaryDependencies::new();
     let project_type = project_type_for(project);

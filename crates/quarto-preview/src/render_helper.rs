@@ -19,8 +19,9 @@
 //! The response contract is in [`outcome_response`]: 200 with
 //! `X-Q2-Diagnostics` (warnings, percent-encoded JSON) and `X-Q2-Stats`
 //! (percent-encoded `{"unexecuted_cells": N}`); 422 `{error?, diagnostics}`;
-//! 409 `{"superseded": true}` or `{"busy": true}`; 501 for a build without
-//! book downloads.
+//! 409 `{"superseded": true}` or `{"busy": true}`; 501 for a seam that has no
+//! book downloads. `X-Q2-Stats` also carries `book {scope, chapters}` when the
+//! path belongs to a book.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -33,6 +34,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use quarto_core::book_download::{BookDownloadFailure, BookDownloadParams, render_book_download};
 use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::Format;
 use quarto_core::pandoc_request::formats::TYPST_PDF_KEY;
@@ -111,6 +113,24 @@ pub struct RenderedFile {
     pub bytes: Vec<u8>,
     pub warnings: Vec<JsonDiagnostic>,
     pub unexecuted_cells: usize,
+    /// Set when the path belongs to a book (`X-Q2-Stats` `book`).
+    pub book: Option<BookStats>,
+}
+
+/// What `X-Q2-Stats` says about a book render: the scope it resolved to
+/// (`book`, `chapter` or `page`) and the book's file-bearing chapters.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct BookStats {
+    pub scope: &'static str,
+    pub chapters: usize,
+}
+
+fn scope_name(scope: ResolvedBookScope) -> &'static str {
+    match scope {
+        ResolvedBookScope::Book => "book",
+        ResolvedBookScope::Chapter => "chapter",
+        ResolvedBookScope::Page => "page",
+    }
 }
 
 /// What a route sends back.
@@ -223,7 +243,7 @@ pub fn set_render_seam(seam: Option<Arc<dyn RenderSeam>>) {
     *RENDER_SEAM.write().unwrap_or_else(|e| e.into_inner()) = seam;
 }
 
-/// What a whole-book download needs (Plan 10 implements it).
+/// What a whole-book download needs.
 pub struct BookDownloadRequest {
     pub path: PathBuf,
     pub content: Option<String>,
@@ -249,8 +269,8 @@ pub enum BookDownloadError {
     /// Another book render holds the project.
     Busy,
     Cancelled,
-    Failed(Vec<JsonDiagnostic>),
-    /// This build has no book downloads (the initial seam answers it).
+    Failed(RenderFailed),
+    /// This build has no book downloads (a test seam can answer it).
     Unavailable(String),
 }
 
@@ -259,13 +279,47 @@ pub trait BookDownload: Send + Sync {
     fn render(&self, req: BookDownloadRequest) -> Result<BookDownloadOutput, BookDownloadError>;
 }
 
-struct NoBookDownloads;
+/// The real whole-book entry: `quarto-core`'s native book pipeline into the
+/// request directory (Plan 10).
+struct NativeBookDownload;
 
-impl BookDownload for NoBookDownloads {
-    fn render(&self, _req: BookDownloadRequest) -> Result<BookDownloadOutput, BookDownloadError> {
-        Err(BookDownloadError::Unavailable(
-            "book downloads are not available in this build".to_string(),
-        ))
+impl BookDownload for NativeBookDownload {
+    fn render(&self, req: BookDownloadRequest) -> Result<BookDownloadOutput, BookDownloadError> {
+        let format = Format::from_format_string(render_format_and_target(&req.format).0)
+            .map_err(|e| BookDownloadError::Failed(RenderFailed::message(e)))?;
+        let result = render_book_download(BookDownloadParams {
+            path: &req.path,
+            content: req.content,
+            format: &format,
+            typst_target: req.typst_target,
+            request_dir: &req.request_dir,
+            hub_root: &req.hub_root,
+            captures: &req.captures,
+            cancellation: req.cancellation,
+            child_deadline: Some(CHILD_DEADLINE),
+        })
+        .map_err(|e| match e {
+            BookDownloadFailure::Busy => BookDownloadError::Busy,
+            BookDownloadFailure::Cancelled => BookDownloadError::Cancelled,
+            BookDownloadFailure::Failed(e) => BookDownloadError::Failed(failure_from(e)),
+        })?;
+        let diagnostics = json_all(&result.diagnostics, &result.source_context);
+        if result
+            .diagnostics
+            .iter()
+            .any(|d| matches!(d.kind, DiagnosticKind::Error))
+        {
+            return Err(BookDownloadError::Failed(RenderFailed {
+                error: None,
+                diagnostics,
+            }));
+        }
+        Ok(BookDownloadOutput {
+            file: result.file,
+            chapters: result.chapters,
+            unexecuted_cells: result.unexecuted_cells,
+            diagnostics,
+        })
     }
 }
 
@@ -276,11 +330,11 @@ fn book_download() -> Arc<dyn BookDownload> {
         .read()
         .unwrap_or_else(|e| e.into_inner())
         .clone()
-        .unwrap_or_else(|| Arc::new(NoBookDownloads))
+        .unwrap_or_else(|| Arc::new(NativeBookDownload))
 }
 
-/// Replace the book seam (`None` restores the 501 default). Plan 10 makes its
-/// implementation the default; tests swap it in a process of their own.
+/// Replace the book seam (`None` restores the native default); tests swap it
+/// in a process of their own.
 pub fn set_book_download(seam: Option<Arc<dyn BookDownload>>) {
     *BOOK_DOWNLOAD.write().unwrap_or_else(|e| e.into_inner()) = seam;
 }
@@ -393,6 +447,7 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
 
     let seam = render_seam();
     let mut notices = json_all(&resolution.diagnostics, &SourceContext::new());
+    let mut book_chapters = resolution.membership.map(|m| m.chapters);
     let (file, unexecuted_cells, mut diagnostics) = match resolution.scope {
         ResolvedBookScope::Book => {
             let request = BookDownloadRequest {
@@ -406,15 +461,13 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
                 cancellation: job.cancellation.clone(),
             };
             match book_download().render(request) {
-                Ok(out) => (out.file, out.unexecuted_cells, out.diagnostics),
+                Ok(out) => {
+                    book_chapters = Some(out.chapters);
+                    (out.file, out.unexecuted_cells, out.diagnostics)
+                }
                 Err(BookDownloadError::Busy) => return RenderOutcome::Busy,
                 Err(BookDownloadError::Cancelled) => return RenderOutcome::Superseded,
-                Err(BookDownloadError::Failed(diagnostics)) => {
-                    return RenderOutcome::Failed(RenderFailed {
-                        error: None,
-                        diagnostics,
-                    });
-                }
+                Err(BookDownloadError::Failed(failed)) => return RenderOutcome::Failed(failed),
                 Err(BookDownloadError::Unavailable(m)) => return RenderOutcome::Unavailable(m),
             }
         }
@@ -465,6 +518,10 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
         bytes,
         warnings: notices,
         unexecuted_cells,
+        book: book_chapters.map(|chapters| BookStats {
+            scope: scope_name(resolution.scope),
+            chapters,
+        }),
     })
 }
 
@@ -507,7 +564,10 @@ pub fn outcome_response(outcome: RenderOutcome, mime: &'static str, attachment: 
             {
                 headers.insert(DIAGNOSTICS_HEADER, v);
             }
-            let stats = serde_json::json!({ "unexecuted_cells": rendered.unexecuted_cells });
+            let mut stats = serde_json::json!({ "unexecuted_cells": rendered.unexecuted_cells });
+            if let Some(book) = rendered.book {
+                stats["book"] = serde_json::json!(book);
+            }
             if let Some(v) = encoded_header(&stats.to_string()) {
                 headers.insert(STATS_HEADER, v);
             }

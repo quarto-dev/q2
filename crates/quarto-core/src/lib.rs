@@ -40,6 +40,8 @@ pub mod artifact;
 pub mod artifact_flush;
 pub mod ast_walk;
 pub mod attribution;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod book_download;
 pub mod brand_fonts;
 pub mod cell_options;
 #[cfg(not(target_arch = "wasm32"))]
@@ -67,6 +69,8 @@ pub mod math_method;
 pub mod metadata;
 pub mod output_ext;
 pub mod output_sink;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod overlay_runtime;
 pub mod pandoc_filters;
 pub mod pandoc_formats;
 pub mod pandoc_request;

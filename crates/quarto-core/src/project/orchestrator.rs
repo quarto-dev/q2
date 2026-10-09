@@ -1139,6 +1139,44 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
         Ok(summary)
     }
 
+    /// The preview server's whole-book download (epic E3, P10-D4): Pass 1,
+    /// `pre_render` and the single-file merge, as
+    /// [`Self::run_book_single_file_merge`] runs them, but with no tail. The
+    /// caller hands in a `ProjectContext` whose `output_dir` is the request
+    /// directory (so the resolver, the resource flush and the output all land
+    /// there) and gets the one output file back. No resource copy, no render
+    /// manifest, no `post_resources`: the user's `_book/`,
+    /// `render-manifest.json` and `llms-manifest.json` are never touched.
+    /// (`.quarto/` is not untouched: Pass 1 writes `cache/profiles/*` and the
+    /// crossref filter writes `crossref-index.json`.) Pre- and post-render
+    /// scripts are CLI-only and do not run. `pass1_failures` are ignored, as
+    /// native does without `--fail-fast`.
+    pub(crate) async fn run_book_download(
+        &mut self,
+        extras: crate::project::book::single_file_render::BookFileExtras<'_>,
+    ) -> Result<crate::project::book::single_file_render::BookFileOutcome> {
+        let (profiles, _pass1_failures) = self.pass_one().await;
+        let index = Arc::new(ProjectIndex::new(profiles));
+        self.project_type
+            .pre_render(self.project, &index, self.runtime.as_ref())
+            .await
+            .map_err(|e| match e {
+                QuartoError::Parse(_) => e,
+                other => QuartoError::other(format!("pre_render failed: {other}")),
+            })?;
+        let book_items = self.project.book_render_items.clone().unwrap_or_default();
+        crate::project::book::single_file_render::render_book_single_file_with(
+            self.project,
+            &book_items,
+            &self.format,
+            self.runtime.clone(),
+            None,
+            self.renderer.options,
+            extras,
+        )
+        .await
+    }
+
     /// book-projects P2: the single-file-merge dispatch
     /// (`run_with_book_support`'s Typst/EPUB branch).
     ///

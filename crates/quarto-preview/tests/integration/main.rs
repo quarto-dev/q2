@@ -3,6 +3,7 @@
 
 pub mod asset_manifest;
 pub mod asset_serving;
+pub mod book_downloads;
 pub mod boot;
 pub mod cache_hit;
 pub mod config_endpoint;

@@ -31,7 +31,7 @@ use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render_to_file::{
-    RenderToFileResult, apply_project_output_dir_to_options, determine_output_paths,
+    RenderToFileResult, apply_project_output_dir_to_options, determine_output_paths_with_ext,
     finalize_rendered_output,
 };
 use crate::resource_resolver::ResourceResolverContext;
@@ -529,6 +529,8 @@ pub(crate) async fn render_book_core<S, T>(
     ctx.user_grammar_provider = book_level.user_grammar_provider;
     ctx.resource_report = book_level.resource_report;
     ctx.prepare_options = prepare_options;
+    ctx.cancellation = options.cancellation.clone();
+    ctx.child_deadline = options.child_deadline;
 
     let merged_doc = crate::stage::DocumentAst {
         path: synthetic_input,
@@ -688,10 +690,72 @@ pub(crate) async fn render_book_single_file(
     project_artifacts: Option<&mut ArtifactStore>,
     render_options: &crate::render_to_file::RenderToFileOptions,
 ) -> Result<RenderToFileResult> {
+    match render_book_single_file_with(
+        project,
+        book_items,
+        format,
+        runtime,
+        project_artifacts,
+        render_options,
+        BookFileExtras::default(),
+    )
+    .await?
+    {
+        BookFileOutcome::Done(result) => Ok(result),
+        BookFileOutcome::Cancelled => Err(QuartoError::other("book render cancelled".to_string())),
+    }
+}
+
+/// What the book download adds to [`render_book_single_file`] (epic E10,
+/// P10-D4): the per-chapter [`PartialKind`] (default: native) and the cancel
+/// hooks. The output extension is `format.output_extension`, so the caller
+/// that wants typst source sets it on the `Format` it passes (P10-D2).
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Default)]
+pub(crate) struct BookFileExtras<'a> {
+    pub chapter_kind:
+        Option<&'a mut dyn FnMut(&BookRenderItem) -> (PartialKind, Vec<DiagnosticMessage>)>,
+    pub hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
+}
+
+/// [`render_book_single_file_with`]'s result: a [`BookRenderHooks`] call
+/// that cancelled is not a failure, so the route can tell the two apart.
+///
+/// [`BookRenderHooks`]: crate::project::book::BookRenderHooks
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) enum BookFileOutcome {
+    Done(RenderToFileResult),
+    Cancelled,
+}
+
+/// [`render_book_single_file`] with the book download's extras. The
+/// returned result's `unexecuted_cells` is the sum over every chapter.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) async fn render_book_single_file_with(
+    project: &ProjectContext,
+    book_items: &[BookRenderItem],
+    format: &Format,
+    runtime: Arc<dyn SystemRuntime>,
+    project_artifacts: Option<&mut ArtifactStore>,
+    render_options: &crate::render_to_file::RenderToFileOptions,
+    extras: BookFileExtras<'_>,
+) -> Result<BookFileOutcome> {
+    let BookFileExtras {
+        chapter_kind,
+        hooks,
+    } = extras;
+    let mut native_kind = |_: &BookRenderItem| (PartialKind::Native, Vec::new());
+    let chapter_kind: &mut dyn FnMut(&BookRenderItem) -> (PartialKind, Vec<DiagnosticMessage>) =
+        match chapter_kind {
+            Some(f) => f,
+            None => &mut native_kind,
+        };
     let binaries = BinaryDependencies::discover(runtime.as_ref());
     let options = BookRenderOptions {
         engine_registry_override: render_options.engine_registry_override.clone(),
         execution_policy: render_options.execution_policy.clone(),
+        cancellation: render_options.cancellation.clone(),
+        child_deadline: render_options.child_deadline,
     };
     let project_type = crate::project::orchestrator::project_type_for(project);
     let runtime_for_tail = runtime.clone();
@@ -708,22 +772,24 @@ pub(crate) async fn render_book_single_file(
                 format.identifier,
             ),
             prepare_options: None,
-            hooks: None,
+            hooks,
         },
-        &mut |_| (PartialKind::Native, Vec::new()),
+        chapter_kind,
         |stem| {
             // `book_output_stem` + the same output-dir-resolution policy
             // every document uses, fed a synthetic input path so
             // `determine_output_paths` derives the same stem back out
             // without duplicating its fallback logic. Native ignores the
-            // caller's options here (`default()`), exactly as before.
+            // caller's options here (`default()`), exactly as before; the
+            // extension is the format's (P10-D2: the book download sets it).
             let synthetic_input = project.dir.join(format!("{stem}.qmd"));
             let options = crate::render_to_file::RenderToFileOptions::default();
             let effective_options =
                 apply_project_output_dir_to_options(&options, project, &synthetic_input);
-            let (output_path, output_dir, output_stem) = determine_output_paths(
+            let (output_path, output_dir, output_stem) = determine_output_paths_with_ext(
                 &synthetic_input,
                 &format.target_format,
+                Some(&format.output_extension),
                 &effective_options,
                 runtime.as_ref(),
             )?;
@@ -764,7 +830,7 @@ pub(crate) async fn render_book_single_file(
                 // `ExecutionPolicy`.
                 execution_skipped: tail.execution_skipped,
             };
-            finalize_rendered_output(
+            let mut result = finalize_rendered_output(
                 &setup.synthetic_input,
                 setup.output_path.clone(),
                 resource_dir,
@@ -775,14 +841,16 @@ pub(crate) async fn render_book_single_file(
                 project_artifacts,
                 &runtime_for_tail,
                 false, // is_native: Pandoc-hybrid leg wrote output_path directly
-            )
+            )?;
+            result.unexecuted_cells = tail.unexecuted_cells;
+            Ok(result)
         },
     )
     .await?;
     match outcome {
-        BookCoreOutcome::Done { value, .. } => Ok(value),
+        BookCoreOutcome::Done { value, .. } => Ok(BookFileOutcome::Done(value)),
         BookCoreOutcome::ChapterFailed { error, .. } => Err(error),
-        BookCoreOutcome::Cancelled => Err(QuartoError::other("book render cancelled".to_string())),
+        BookCoreOutcome::Cancelled => Ok(BookFileOutcome::Cancelled),
     }
 }
 
@@ -1102,6 +1170,7 @@ Some chapter text.\n";
         let options = BookRenderOptions {
             engine_registry_override: None,
             execution_policy: crate::engine::ExecutionPolicy::None,
+            ..Default::default()
         };
         let prepare = crate::pandoc_request::PrepareOptions {
             temp_root: std::path::PathBuf::from(&crate::pandoc_request::constants().share_root),
