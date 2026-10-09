@@ -67,6 +67,25 @@ literal text and need nothing. `snake_case` is fine.
 A backslash before any syntax character is always safe (`\A` is a literal `A`),
 so when in doubt, escape.
 
+## Front matter on plans
+
+Every plan in `claude-notes/plans/` starts with front matter giving at least
+`title:` and `date:`; the plans listing (`plans/index.md`) is built from them.
+The title block renders the title, so do not repeat it as a `#` heading.
+
+```yaml
+---
+title: 'Fix `_scope`: lexical regression (bd-XXXX)'
+date: 2026-10-09
+---
+```
+
+Single-quote the title (write a `'` inside it as `''`): in single quotes a
+backslash escape such as `\@` reaches the markdown parser unchanged, while in
+double quotes YAML rejects it. The title is markdown, so code spans work.
+`scripts/claude-notes-plan-frontmatter.py` adds both keys to a plan that has
+only a `#` heading and a dated filename.
+
 ## Checking
 
 Render the file you wrote:
