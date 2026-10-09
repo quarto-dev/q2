@@ -225,18 +225,35 @@ These refine the Design section above, based on reading the code.
 ## Implementation todo
 
 ### Phase 0 — Tests first (red)
-- [ ] Integration test (orchestrator, real Pass-1): the repro shape — posts
+- [x] Integration test (orchestrator, real Pass-1): the repro shape — posts
   with explicit description / none / `listing-item.description` / abstract
   / both listing-item+description — in default, grid and table listings.
   Expect EXPLICIT, BODY, LISTING-ITEM, ABSTRACT; listing-item beats
   description.
-- [ ] Integration test: code-cell-first page with no prose → description
-  derived (envelope present even with no L1 text).
-- [ ] Integration test: top-level `image:` + different body image → `image:`
+- [x] Integration test: code-cell-first page with no prose → description
+  derived (envelope present even with no L1 text). Simulated with a raw
+  HTML `<p>` block: not a Para to L1, but a `<p>` to L7, as engine output is.
+- [x] Integration test: top-level `image:` + different body image → `image:`
   shown (default + grid); no `image:` → body image.
-- [ ] Integration test: Pass-1 profile == full-pipeline profile (fixture
-  with include, `include-in-header`, `lang`, listing autofill).
-- [ ] Record red results here.
+- [x] Integration test: Pass-1 profile == full-pipeline profile (fixture
+  with include, `include-in-header`, `lang`, listing autofill). It runs the
+  full list's head (through `link-resolution`, before `unwrap-profile`)
+  through the same `run_pipeline` entry point Pass-1 uses.
+- [x] Record red results here.
+
+All in `crates/quarto-core/tests/integration/listing_description_precedence.rs`.
+Red results at `ea211d56f` + tests:
+
+| test | result |
+|---|---|
+| `listing_description_follows_precedence_in_every_listing_type` | FAIL: `default.html` lacks `EXPLICIT-A` |
+| `listing_derives_description_present_only_in_rendered_output` | FAIL: `default.html` lacks `RENDERED-ONLY paragraph.` |
+| `pass1_profiles_equal_full_pipeline_profiles` | FAIL: `index.qmd`'s Pass-1 profile lacks `listing_item.date_modified` (the L1 mtime) |
+| `listing_image_follows_precedence` | **passes today** — Pass-1 has no L1, so `listing-item.image` is never autofilled. It is the guard for the latent image bug once Phase 4 adds L1 to Pass-1. |
+
+Known test that encodes the old behaviour and must change in Phase 3:
+`website_post_render.rs::pipeline_website_post_render_substitutes_listing_placeholders`
+asserts an explicit `description:` is *replaced* by the body paragraph.
 
 ### Phase 1 — Profile + L1
 - [ ] `DerivedListingValues` type; `DocumentAst.derived_listing`;
