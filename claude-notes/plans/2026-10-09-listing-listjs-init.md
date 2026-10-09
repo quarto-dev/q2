@@ -213,24 +213,45 @@ so use `Listing::container_id()`.
 
 ### Phase 5 — Integration, docs, wrap-up
 
-- [ ] `listing_pipeline.rs` e2e: repro-shaped project (3 posts,
-      page-size 2, categories) asserts script, nav, item attrs,
-      container id; snapshots updated and reviewed.
-- [ ] `listings.qmd`: interactivity section (pagination, category
-      filtering, page-size defaults; not in hub-client preview yet).
-- [ ] Re-render the investigation repro; `cargo xtask verify`.
+- [x] `listing_pipeline.rs` e2e
+      (`paginated_listing_with_categories_carries_the_listjs_bootstrap`):
+      repro-shaped project asserts container id/classes, item attrs,
+      nav + script inside the container in order, script not
+      HTML-escaped, List.js linked before the listing.
+- [x] `listings.qmd`: "Pages and categories in the browser" (pagination,
+      category filtering, page-size defaults, container id, what is not
+      yet supported).
+- [x] Re-rendered the investigation repro; jsdom sanity check
+      (`listing-listjs-init-investigation/jsdom-check.cjs`, not a test):
+      pagination, category filter and no-matching reveal all work, no
+      script errors.
+- [ ] `cargo xtask verify`.
 
-## Risks / tradeoffs (draft)
+## Risks / tradeoffs
 
-- Turning pagination on changes how every existing Q2 listing with more
-  than `page-size` items looks. That is intended for Q1 parity, but it is
-  the most user-visible part of the change (see Q4).
-- List.js `update()` detaches and re-appends item nodes on init. Anything
-  that binds to listing items before `DOMContentLoaded` (none found
-  in-tree) would lose its handlers.
-- The item-wrapper attr splice goes through the qmd re-parse in
-  `render_one`. `data-categories` b64 values are safe in qmd attribute
-  syntax, but the sort attrs carry escaped date/number strings, so
-  confirm they survive the re-parse.
-- Grid's `.list` children are `.g-col-1` wrappers, so `data-*` attrs must
-  go on that outer div, not on `.quarto-grid-item`.
+- **Visible changes for existing sites:** default/grid listings with
+  more items than `page-size` now paginate (grid's default dropped from
+  25 to 18); a lone listing's element id changes from `#listing-1` to
+  `#listing-listing`, and an author's `::: {#id}` slot is renamed to
+  `#listing-<id>` (Q1 behaviour). Authors who targeted the old ids in
+  CSS or links need to update — called out in `listings.qmd`,
+  `listing-templates.qmd`, `Q-12-4.qmd` and the retired `Q-12-25.qmd`.
+- List.js `update()` detaches and re-appends item nodes on init.
+  Anything that binds to listing items before `DOMContentLoaded` (none
+  found in-tree) would lose its handlers.
+- *Resolved:* the sort attrs survive the qmd re-parse (they are digits
+  only by construction — unparseable values are skipped), checked by
+  `item_metadata_attrs_land_on_the_list_children` and the e2e test.
+- *Resolved:* grid attrs go on the outer `.g-col-1` (the `.list` child).
+- **Known leftover (pre-existing, not a regression):** on a page whose
+  only listings are custom (or table), `window['quarto-listings']` is
+  never defined, so clicking a category in the sidebar makes
+  `quarto-listing.js`'s `filterListingCategory` throw a `TypeError` in
+  the console (`Object.keys(undefined)`). It threw before this change
+  too, and there is nothing to filter. Left alone rather than patching
+  the vendored JS; revisit with bd-bl1e00r6 (tables) or bd-4dfdo8vi.
+- **Multiple listings per page** each register their own
+  `DOMContentLoaded`/`hashchange` handlers that call
+  `quarto-listing-loaded()`, which re-binds `updated` handlers for every
+  listing — a Q1 quirk reproduced faithfully (harmless duplicate
+  handler work).

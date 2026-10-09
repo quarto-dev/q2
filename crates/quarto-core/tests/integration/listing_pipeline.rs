@@ -599,6 +599,91 @@ fn vendored_js_artifacts_emit_script_tags_and_land_under_site_libs() {
     );
 }
 
+/// bd-nbv80e33: end to end, a paginated default listing with
+/// categories carries everything List.js and `quarto-listing.js` read
+/// back, under ids that agree with each other: the container
+/// `#listing-listing` (Q1's id for a lone listing), the items'
+/// `data-*` attrs, the pagination `<nav>` inside the container, and an
+/// init script naming that container. The script must reach the page
+/// verbatim (a raw-HTML block, not escaped text).
+#[test]
+fn paginated_listing_with_categories_carries_the_listjs_bootstrap() {
+    let (_dir, outputs) = render_project(|p| {
+        write(
+            &p.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\nwebsite:\n  title: \"My Site\"\n",
+        );
+        write(
+            &p.join("index.qmd"),
+            "---\ntitle: Listing\nlisting:\n  contents: posts\n  page-size: 2\n  categories: true\nformat: html\n---\n",
+        );
+        for i in 1..=3 {
+            write(
+                &p.join(format!("posts/p{i}.qmd")),
+                &format!(
+                    "---\ntitle: Post {i}\ndate: 2026-01-0{i}\ncategories: [cat{i}, shared]\nformat: html\n---\n\nBody {i}.\n"
+                ),
+            );
+        }
+    });
+    let host = html_for(&outputs, "index");
+
+    // The container, with Q1's id and classes.
+    let container = host
+        .find(r#"id="listing-listing""#)
+        .unwrap_or_else(|| panic!("no #listing-listing container:\n{host}"));
+    let container_tag = &host[host[..container].rfind('<').unwrap()..];
+    let container_tag = &container_tag[..container_tag.find('>').unwrap()];
+    for class in ["quarto-listing", "quarto-listing-container-default"] {
+        assert!(container_tag.contains(class), "{class}: {container_tag}");
+    }
+
+    // Item attrs: one data-index per item, base64 categories
+    // (btoa(encodeURIComponent("cat1,shared"))), date sort values.
+    for i in 0..3 {
+        assert!(
+            host.contains(&format!(r#"data-index="{i}""#)),
+            "item {i}:\n{host}"
+        );
+    }
+    assert!(
+        host.contains(r#"data-categories="Y2F0MSUyQ3NoYXJlZA==""#),
+        "{host}"
+    );
+    assert!(
+        host.contains(r#"data-listing-date-sort="1767225600000""#),
+        "{host}"
+    );
+
+    // Pagination nav and script, inside the container (after it opens).
+    let nav = host
+        .find(r#"<nav id="listing-pagination" class="listing-pagination""#)
+        .unwrap_or_else(|| panic!("no pagination nav:\n{host}"));
+    let script = host
+        .find(r#"new List("listing-listing", options)"#)
+        .unwrap_or_else(|| panic!("no List.js init script:\n{host}"));
+    assert!(
+        container < nav && nav < script,
+        "order: container, nav, script"
+    );
+    assert!(host.contains(r#""page":2"#), "{host}");
+    assert_eq!(
+        host.matches("new List(").count(),
+        1,
+        "one script per listing"
+    );
+    assert!(
+        !host.contains("new List(&quot;"),
+        "script must not be HTML-escaped:\n{host}"
+    );
+
+    // The libraries it calls are linked from the page head.
+    let list_js = host
+        .find("site_libs/listing/list.min.js")
+        .expect("list.min.js linked");
+    assert!(list_js < container, "List.js is loaded before the listing");
+}
+
 #[test]
 fn include_filter_drops_non_matching_items() {
     let (_dir, outputs) = render_project(|p| {
