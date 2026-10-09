@@ -21,7 +21,7 @@ for f in default-narrow default-all grid-narrow grid-all; do
 done
 ```
 
-## Results (2026-10-09, main @ ea72d68aa)
+## Results before the fix (2026-10-09, main @ ea72d68aa)
 
 | page | placeholder | image | subtitle | author | categories | title |
 |------|-------------|-------|----------|--------|------------|-------|
@@ -37,3 +37,18 @@ everything except title (and date and description).
 Descriptions aren't counted. Both cards show "Body of …" instead of `DESC-*`,
 because of bd-listing-description-precedence-x4bh6w3m, which is being fixed
 separately.
+
+## Results after the fix (2026-10-09, branch `braid/bd-p80b9jy9-listing-fields-gating`)
+
+| page | placeholder | image | subtitle | author | categories | title |
+|------|-------------|-------|----------|--------|------------|-------|
+| default-narrow | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ | 2 ✓ |
+| default-all    | 1 | 1 | 2 | 2 | 1 | 2 |
+| grid-narrow    | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ | 0 ✓ | 2 ✓ |
+| grid-all       | 1 | 1 | 2 | 2 | 1 | 2 |
+
+Quarto 1 (`quarto render --output-dir _site-q1`, 99.9.9 dev build) gives
+the same narrow rows. Its `*-all` rows differ: it shows no categories
+(Q1 adds `categories` to the field set only when the listing sets
+`categories:`) and, in the grid, no subtitle. That is a difference in the
+default field sets, not in gating. It is tracked as bd-n7g28c3o.

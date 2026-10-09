@@ -2,6 +2,7 @@
 
 ::: {.quarto-grid-item .card .h-100}
 
+$if(show.image)$
 $if(image-html)$
 ::: card-img-top
 $if(path)$
@@ -19,9 +20,11 @@ $else$
 $endif$
 :::
 $endif$
+$endif$
 
 ::: {.card-body .post-contents}
 
+$if(show.title)$
 $if(title)$
 $if(path)$
 ##### [$title$]($path$){.no-anchor .no-external .card-title .listing-title}
@@ -29,12 +32,15 @@ $else$
 ##### $title$ {.no-anchor .card-title .listing-title}
 $endif$
 $endif$
+$endif$
 
+$if(show.subtitle)$
 $if(subtitle)$
 $if(path)$
 [$subtitle$]($path$){.no-external .card-subtitle .listing-subtitle}
 $else$
 [$subtitle$]{.card-subtitle .listing-subtitle}
+$endif$
 $endif$
 $endif$
 
@@ -46,10 +52,13 @@ $category-html$
 $endif$
 $endif$
 
+$if(show.reading-time)$
 $if(reading-time)$
 [$reading-time$]{.listing-reading-time .card-text .text-muted}
 $endif$
+$endif$
 
+$if(show.description)$
 $if(description)$
 ::: {.card-text .listing-description .delink}
 ```{=html}
@@ -63,15 +72,20 @@ $description-placeholder-end$
 ```
 :::
 $endif$
+$endif$
 
 ::: {.card-attribution .card-text-small}
 
+$if(show.author)$
 $if(author)$
 [$author$]{.listing-author}
 $endif$
+$endif$
 
+$if(show.date)$
 $if(date)$
 [$date$]{.listing-date}
+$endif$
 $endif$
 
 :::

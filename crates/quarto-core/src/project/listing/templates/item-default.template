@@ -1,5 +1,6 @@
 ::: {.quarto-post .image-right}
 
+$if(show.image)$
 $if(image-html)$
 ::: thumbnail
 $if(path)$
@@ -17,9 +18,11 @@ $else$
 $endif$
 :::
 $endif$
+$endif$
 
 ::: body
 
+$if(show.title)$
 $if(title)$
 $if(path)$
 ### [$title$]($path$){.no-anchor .no-external .listing-title}
@@ -27,12 +30,15 @@ $else$
 ### $title$ {.no-anchor .listing-title}
 $endif$
 $endif$
+$endif$
 
+$if(show.subtitle)$
 $if(subtitle)$
 $if(path)$
 [$subtitle$]($path$){.no-external .listing-subtitle}
 $else$
 [$subtitle$]{.listing-subtitle}
+$endif$
 $endif$
 $endif$
 
@@ -44,6 +50,7 @@ $category-html$
 $endif$
 $endif$
 
+$if(show.description)$
 $if(description)$
 ::: {.delink .listing-description}
 ```{=html}
@@ -57,21 +64,28 @@ $description-placeholder-end$
 ```
 :::
 $endif$
+$endif$
 
 :::
 
 ::: metadata
 
+$if(show.date)$
 $if(date)$
 [$date$]{.listing-date}
 $endif$
+$endif$
 
+$if(show.author)$
 $if(author)$
 [$author$]{.listing-author}
 $endif$
+$endif$
 
+$if(show.reading-time)$
 $if(reading-time)$
 [$reading-time$]{.listing-reading-time}
+$endif$
 $endif$
 
 :::

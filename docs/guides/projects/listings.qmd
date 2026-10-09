@@ -105,6 +105,29 @@ negated patterns (e.g. `["!draft.qmd", {title: Featured}]`), the implicit
 record sorts after those items no matter where it's written. (Quarto 1
 placed all records after all glob matches.)
 
+### Fields
+
+`fields:` lists which parts of each item a listing shows. In the `default`
+and `grid` layouts it decides what each card draws:
+
+```yaml
+listing:
+  type: grid
+  fields: [date, title, description]
+```
+
+These cards show only a date, a title and a description. There is no
+image area, and no author, subtitle, reading time or categories, even
+for items that have them. Without `fields:`, a listing uses its type's
+default set and keeps only the fields at least one item has, plus
+`image`.
+
+`image` is the exception: when it's in the set, every card gets an image
+area, and an item without an image gets a placeholder (filled from the
+page's first image after render, or from the listing's
+`image-placeholder:`). If none of your items have images, leave `image`
+out of `fields:` to avoid a row of empty boxes.
+
 ### Not yet supported
 
 YAML files in `contents:` (Quarto 1's `contents: items.yml`) are skipped
@@ -200,10 +223,10 @@ Four more per-item values exist for specific jobs:
   Quarto fill in a missing description or image after both documents
   render. See
   [Listing templates](listing-templates.qmd#descriptions-and-the-placeholder-envelope).
-- **`show.<field>`** — true for each field named in the listing's
-  `fields:`. Note that `type: custom` has **no** default field set, so
-  every `show.*` is false unless the listing declares `fields:`
-  explicitly.
+- **`show.<field>`** — true for each field in the listing's field set:
+  its `fields:`, or the type's defaults (see [Fields](#fields)). A
+  `type: custom` listing without `fields:` uses every field that at
+  least one item has, as in Quarto 1.
 - **`metadata-attrs`** — `data-index` and `data-categories` attributes,
   the equivalent of Quarto 1's `metadataAttrs()`. It must be emitted
   inside a ```` ```{=html} ```` block; interpolated as markdown its

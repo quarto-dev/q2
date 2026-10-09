@@ -2,13 +2,13 @@
 title: 'Grid and default listings ignore fields: for everything but categories (bd-p80b9jy9)'
 date: 2026-10-09
 description: 'The built-in grid and default item templates gate only categories on the effective field set; gate every field block on its `show.*` flag as Quarto 1 does, so fields: [date, title, description] stops drawing image placeholders.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: in-progress  # Implementation approved 2026-10-09
 braid:
   strand: bd-p80b9jy9
 ---
 
 **Branch:** `braid/bd-p80b9jy9-listing-fields-gating` (main checkout, topic branch, based on `main` @ `ea72d68aa`)
-**Do not start implementation until the user gives the go-ahead.**
+**Implementation approved 2026-10-09.**
 
 **Pre-flight (2026-10-09):** `cargo xtask verify --skip-hub-build` passed all Rust tests (16029/16029). The ts-packages step failed because `@bjorn3/browser_wasi_shim` and `@myriaddreamin/typst.ts` are missing, which is a stale `node_modules` in this checkout (run `npm install`), not a problem at HEAD.
 
@@ -176,13 +176,16 @@ on most blogs, where a placeholder per image-less post is intended. Options:
 
 ## Decisions, round 2 (2026-10-09)
 
-- **(i) ships in this strand** as a new Q-12 warning: "every card in this
-  listing is an empty image placeholder".
+- **No warning in this strand.** The empty-placeholder warning (option (i)
+  below) turned out to need a two-stage design and was deferred to
+  bd-f9unh898 (P4, for a diagnostics-focused pass). Its design notes stay
+  below for that strand.
 - **(iii) is filed** as bd-9q7w7xhq (enforce `field-required:`, aggregated
   per listing and field, offending items named with a truncated list).
 - (ii) is dropped.
+- **Go-ahead given** for the gating work.
 
-## Design notes for the empty-placeholder warning (i)
+## Deferred: empty-placeholder warning (bd-f9unh898)
 
 **It can't be decided when the items are built.** An item with no authored
 `image:` gets an L7 image envelope (`helpers::image_placeholder_begin`,
@@ -233,44 +236,57 @@ derived (first body) image. The candidate test should then read "no
 counts as filled. Whichever branch lands second adapts; the flag-in-marker
 approach survives that change.
 
-## Proposed phases (revised)
+## Decisions, round 3 (2026-10-09, during implementation)
 
-- **Phase 0 — Tests first (red).**
-  - Template gating (unit, `listing_render.rs`): grid and default with
-    `fields: [date, title, description]` render no image or placeholder,
-    subtitle, author, reading time or categories. Without `fields:`,
-    image and placeholder still render.
-  - Warning (L7 unit, `substitute.rs`): flagged envelopes all empty →
-    one warning per listing. One envelope filled by a preview →
-    none. Unflagged envelopes → none.
-  - Warning (generate): records-only candidate → warning with a span.
-    `image-placeholder:` set → none. An item with an authored image →
-    none.
-  - Integration: the repro's `grid-*` pages, plus an all-image-less
-    grid listing.
-- **Phase 1 — Gate the templates** on `show.<field>` (image block
-  including the placeholder branch under `show.image`).
-- **Phase 2 — Candidate detection and the generate-time warning.**
-  `Listing.fields_source`; candidate check in `listing_generate.rs`;
-  register the code in `error_catalog.json` (next free: Q-12-27).
-- **Phase 3 — L7 confirmation.** Marker flag; per-listing grouping in
-  `substitute_images`; the warning.
-- **Phase 4 — Verification.** Repro vs. Quarto 1; plans page with
-  `type: grid`, with and without `image` in `fields:`; snapshot churn;
-  `cargo xtask verify`.
-- **Phase 5 — Docs.** `listings.qmd`: `fields:` controls which parts of a
-  card render; the new warning and how to silence it.
+- **`type: custom` without `fields:` gets Quarto 1's default:** every field
+  at least one item carries (`binding.rs` `fields_items_carry`, mirroring
+  Q1's `defaultFields(Custom, itemFields)`). Before, custom listings had an
+  empty field set, so every `show.*` was false. Once the item templates
+  gate on `show.<field>`, a custom template wrapping `$items:item-default()$`
+  without `fields:` rendered empty cards (caught by
+  `custom_template_using_item_default_partial_emits_l7_envelopes`).
+- **The other default-set differences are left alone here** and filed as
+  bd-n7g28c3o. q2's grid/default sets include `subtitle` (grid),
+  `categories`, `reading-time`, `filename` and `file-modified`, which Q1's
+  don't, and Q1 gives records-only listings every item field. That has to
+  be settled before bd-x7c196m3 adds the filename/file-modified footer.
 
-## Open design questions for the user
+## Implementation todo
 
-1. **Location vs. correctness for the warning.** Recommended: the
-   two-stage shape above. It is correct, and the L7 case has no span
-   (like Q-12-13). The alternative is generate-time only, using "no
-   authored *or derived* image" once the description-precedence branch
-   adds derived images. That gets a span everywhere and needs no marker
-   flag, but it misfires on listings whose only images are
-   engine-produced (plot-only posts). Two-stage?
-2. **Go-ahead.** With that settled, OK to start Phase 0?
+### Phase 0 — Tests first (red)
+- [x] `listing_render.rs` `grid_and_default_render_only_explicit_fields`:
+  grid and default with `fields: [date, title, description]` render no
+  image or placeholder, subtitle, author, reading time or categories.
+- [x] `grid_and_default_render_every_field_by_default`: without `fields:`,
+  everything renders, including the placeholder for an image-less item.
+- [x] Red: the explicit-fields test failed on the image (`IMG-a` rendered).
+  The defaults test passed, as expected.
+
+### Phase 1 — Gate the templates
+- [x] `item-grid.template` and `item-default.template`: every block wrapped
+  in `$if(show.<field>)$` (image and placeholder under `show.image`).
+- [x] Custom default field set (round 3), with
+  `binding.rs` `custom_listing_without_fields_uses_fields_items_carry`.
+  `custom_template_sees_listing_fields_and_per_item_show` now sets
+  `fields_explicit`, as config parsing does.
+
+### Phase 2 — Verification
+- [x] `cargo xtask verify --skip-hub-build`: all 16032 Rust tests pass.
+  Hub-client WASM tests failed against a stale `wasm_quarto_hub_client`
+  build (2026-09-22; `wasm.get_typst_assets is not a function`), so a full
+  `cargo xtask verify` with the hub build is the real check.
+- [x] Repro: narrow rows match Q1 (README).
+- [x] Full `cargo xtask verify` (hub build, fresh WASM): all green.
+- [x] Plans page with `type: grid` and `fields: [date, title, description]`
+  (temporary edit, reverted): 1054 cards, 0 placeholders, 0 `card-img-top`.
+  A single-file `q2 render --strict plans/index.md` in grid mode reports one
+  Q-12-13, because one plan's sibling HTML was missing from `_site`. That
+  comes from the description envelope (grid cards have one, table cells
+  don't), not from gating; it is the description-precedence branch's area.
+
+### Phase 3 — Docs
+- [x] `listings.qmd`: new "Fields" section; `show.<field>` entry updated
+  for the custom default.
 
 ## Risks / tradeoffs (draft)
 

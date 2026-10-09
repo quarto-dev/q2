@@ -93,7 +93,9 @@ pub fn build_listing_context(
 /// empties the list, keep the unfiltered defaults (defensive;
 /// `title` is non-optional on [`ListingItem`], so built-in default
 /// sets can never fully empty). Author-explicit `fields:` is used
-/// verbatim.
+/// verbatim. A `custom` listing has no type default; like Q1's
+/// `defaultFields(Custom, itemFields)` it gets every field some
+/// item carries ([`fields_items_carry`]).
 fn effective_fields(
     listing: &Listing,
     items: &[ListingItem],
@@ -101,6 +103,9 @@ fn effective_fields(
 ) -> Vec<String> {
     if listing.fields_explicit {
         return listing.fields.clone();
+    }
+    if listing.kind == ListingType::Custom {
+        return fields_items_carry(items, date_style);
     }
     let filtered: Vec<String> = listing
         .fields
@@ -118,6 +123,43 @@ fn effective_fields(
     } else {
         filtered
     }
+}
+
+/// Every field at least one item carries: the curated fields in a
+/// fixed order, then custom (`extra`) keys in first-seen order.
+fn fields_items_carry(items: &[ListingItem], date_style: &DateStyle) -> Vec<String> {
+    const CURATED: &[&str] = &[
+        "date",
+        "title",
+        "author",
+        "subtitle",
+        "image",
+        "image-alt",
+        "description",
+        "categories",
+        "reading-time",
+        "word-count",
+        "filename",
+        "file-modified",
+    ];
+    let mut fields: Vec<String> = CURATED
+        .iter()
+        .filter(|f| {
+            items.iter().any(|it| match **f {
+                "image" => it.image.is_some(),
+                f => item_field_cell(it, f, date_style).is_some(),
+            })
+        })
+        .map(|f| f.to_string())
+        .collect();
+    for it in items {
+        for k in it.extra.keys() {
+            if !fields.contains(k) {
+                fields.push(k.clone());
+            }
+        }
+    }
+    fields
 }
 
 fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
@@ -1552,6 +1594,49 @@ mod tests {
         let ctx = ctx_for(&l, &[i]);
         assert_eq!(header_of(&ctx), "| Title | Author |\n|---|---|");
         assert_eq!(row_of(&ctx), "| X |  |");
+    }
+
+    // Q1 `defaultFields(Custom, itemFields)`: a custom listing
+    // without `fields:` shows every field some item carries, so a
+    // custom template wrapping `$items:item-default()$` still draws
+    // its cards (bd-p80b9jy9).
+    #[test]
+    fn custom_listing_without_fields_uses_fields_items_carry() {
+        let mut l = Listing {
+            kind: ListingType::Custom,
+            ..Listing::default()
+        };
+        super::super::config::apply_type_defaults(&mut l);
+        assert!(l.fields.is_empty() && !l.fields_explicit);
+        let mut a = item("A");
+        a.author = None;
+        a.authors = Vec::new();
+        a.extra.insert(
+            "venue".to_string(),
+            ConfigValue::new_string("ICML", quarto_source_map::SourceInfo::for_test()),
+        );
+        let mut b = item("B");
+        b.image = Some("b.png".to_string());
+        let ctx = ctx_for(&l, &[a, b]);
+        let TemplateValue::List(fields) =
+            ctx.get("listing").unwrap().get_path(&["fields"]).unwrap()
+        else {
+            panic!("fields not a list");
+        };
+        let names: Vec<&str> = fields
+            .iter()
+            .map(|f| match f {
+                TemplateValue::String(s) => s.as_str(),
+                _ => panic!("non-string field"),
+            })
+            .collect();
+        for f in ["title", "author", "date", "image", "venue"] {
+            assert!(names.contains(&f), "missing `{f}` in {names:?}");
+        }
+        assert!(
+            !names.contains(&"subtitle"),
+            "no item has a subtitle: {names:?}"
+        );
     }
 
     // `image` is exempt from presence filtering (Q1: placeholders
