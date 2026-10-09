@@ -25,7 +25,7 @@ Here is what happens. A listed page's front-matter `title:` is parsed as markdow
 flattens it to plain text and drops it into the generated listing markdown, then parses that
 markdown again. This causes two failures:
 
-1. **Formatting is lost.** `Plan for `q2 preview` and *emph*` renders on its own page with
+1. **Formatting is lost.** ``Plan for `q2 preview` and *emph*`` renders on its own page with
    `<code>` and `<em>`, but the listing shows plain text.
 2. **The whole listing disappears.** If the *plain text* means something in markdown, the
    re-parse fails: a leading `_` opens emphasis that never closes, `<anonymous>` reads as raw
@@ -89,8 +89,8 @@ markdown and lets Pandoc parse it once. Code spans and emphasis therefore surviv
 (5 pages, a table listing and a default listing; see `findings.md` alongside it for the output).
 - With all 5 pages, **both** listings are dropped: `Q-12-10 … Unclosed Underscore Emphasis. Listing skipped.`
 - Without the two `_scope` pages, both listings render, but:
-  - `Plan for `q2 preview` and *emph*` becomes `Plan for q2 preview and emph` (formatting lost);
-  - `About `<anonymous>` frames` becomes `<a …>About <anonymous> frames</a>`. **The plain text is
+  - ``Plan for `q2 preview` and *emph*`` becomes `Plan for q2 preview and emph` (formatting lost);
+  - ``About `<anonymous>` frames`` becomes `<a …>About <anonymous> frames</a>`. **The plain text is
     re-read as a raw HTML element.** The browser hides it, so the title shows as "About  frames", and
     Q-12-10 still warns ("HTML element converted to raw HTML"). This is a third symptom the strand
     does not mention: page-title text can inject HTML into the listing page.
@@ -145,7 +145,7 @@ Added during implementation (2026-10-09):
   listing reports Q-12-26 on every host render, naming the document (no span). The report follows
   `hydrate_item` precedence: a `listing-item:` or inline-record value that shadows a flattened one
   draws no warning. Inline records warn directly in `parse_record`, *with* a span. Lists flatten item by
-  item (`prose_runs`), because pandoc.utils' `blocks_to_inlines` glues list items together with no separator.
+  item (`prose_runs`), because `blocks_to_inlines` (the pandoc.utils function) glues list items together with no separator.
 - **Prose is written on one line.** Soft and hard breaks become spaces, because titles sit in ATX headings
   and table cells. Links are unwrapped and notes dropped (`strip_links_and_notes`, shared with
   the TOC), because every built-in template wraps the title in the item's link.
