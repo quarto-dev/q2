@@ -2239,4 +2239,82 @@ mod tests {
             ctx.diagnostics
         );
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // bd-nbv80e33: List.js bootstrap.
+    // ─────────────────────────────────────────────────────────────
+
+    /// First Div (depth-first) carrying `class`.
+    fn find_div_with_class<'a>(blocks: &'a [Block], class: &str) -> Option<&'a Div> {
+        for b in blocks {
+            if let Block::Div(d) = b {
+                if d.attr.1.iter().any(|c| c == class) {
+                    return Some(d);
+                }
+                if let Some(found) = find_div_with_class(&d.content, class) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    /// List.js treats the element children of `.list` as the items, so
+    /// that is where Q1's `metadataAttrs` go — the `.quarto-post` for
+    /// the default layout, the outer `.g-col-1` for grid. The attrs
+    /// must survive the doctemplate → qmd re-parse as real attributes.
+    #[tokio::test]
+    async fn item_metadata_attrs_land_on_the_list_children() {
+        for kind in [ListingType::Default, ListingType::Grid] {
+            let items = vec![
+                item_with_categories("a", &["rust"]),
+                item_with_categories("b", &[]),
+            ];
+            let resolved = vec![ResolvedListing {
+                listing: make_listing(kind),
+                items,
+            }];
+            let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+            assert!(diags.is_empty(), "{kind:?}: {diags:?}");
+            let list = find_div_with_class(&ast.blocks, "list")
+                .unwrap_or_else(|| panic!("{kind:?}: no .list div"));
+            let children: Vec<&Div> = list
+                .content
+                .iter()
+                .filter_map(|b| match b {
+                    Block::Div(d) => Some(d),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(children.len(), 2, "{kind:?}: {:?}", list.content);
+            assert_eq!(list.content.len(), 2, "{kind:?}: only item divs in .list");
+            for (i, child) in children.iter().enumerate() {
+                let attrs = &child.attr.2;
+                assert_eq!(
+                    attrs.get("data-index").map(String::as_str),
+                    Some(i.to_string().as_str()),
+                    "{kind:?} item {i}: {attrs:?}"
+                );
+                assert_eq!(
+                    attrs.get("data-listing-date-sort").map(String::as_str),
+                    Some("1767225600000"),
+                    "{kind:?} item {i}: {attrs:?}"
+                );
+            }
+            // btoa(encodeURIComponent("rust"))
+            assert_eq!(
+                children[0]
+                    .attr
+                    .2
+                    .get("data-categories")
+                    .map(String::as_str),
+                Some("cnVzdA=="),
+                "{kind:?}"
+            );
+            assert!(
+                !children[1].attr.2.contains_key("data-categories"),
+                "{kind:?}"
+            );
+        }
+    }
 }

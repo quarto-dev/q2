@@ -1,4 +1,4 @@
-::: {.quarto-post .image-right}
+::: {.quarto-post .image-right $metadata-attrs$}
 
 $if(image-html)$
 ::: thumbnail

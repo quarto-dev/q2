@@ -204,10 +204,12 @@ Four more per-item values exist for specific jobs:
   `fields:`. Note that `type: custom` has **no** default field set, so
   every `show.*` is false unless the listing declares `fields:`
   explicitly.
-- **`metadata-attrs`** — `data-index` and `data-categories` attributes,
-  the equivalent of Quarto 1's `metadataAttrs()`. It must be emitted
-  inside a ```` ```{=html} ```` block; interpolated as markdown its
-  quotes are curled into invalid HTML.
+- **`metadata-attrs`** — `data-index`, `data-categories` and
+  `data-listing-<field>-sort` attributes, the equivalent of Quarto 1's
+  `metadataAttrs()`. Emit it in attribute position — inside a div's
+  braces (`::: {.item $it.metadata-attrs$}`) or on a tag in a
+  ```` ```{=html} ```` block; interpolated as markdown text its quotes
+  are curled into invalid HTML.
 
 These are the most useful values; the built-in templates show the rest.
 

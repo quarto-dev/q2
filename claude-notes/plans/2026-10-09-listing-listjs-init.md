@@ -149,17 +149,18 @@ Other facts the design depends on:
 
 ### Phase 2 — Item metadata attrs
 
-- [ ] Tests: `metadata_attrs` emits `data-index`, b64
+- [x] Tests: `metadata_attrs` emits `data-index`, b64
       (`btoa(encodeURIComponent)`) `data-categories`, and
       `data-listing-<field>-sort` for date / number / minutes typed
       fields; values survive the qmd re-parse on the item wrapper.
-- [ ] Rewrite `helpers::metadata_attrs` (takes the listing for field
+- [x] Rewrite `helpers::metadata_attrs` (takes the listing for field
       types); fix the stale "gated on these attrs" doc comment
       (Gordon's comment on the strand).
-- [ ] Splice `$metadata-attrs$` into the `item-default` wrapper and the
+- [x] Splice `$metadata-attrs$` into the `item-default` wrapper and the
       `item-grid` outer `.g-col-1` div (the direct children of
       `.list`).
-- [ ] Update `listings.qmd` § metadata-attrs.
+- [x] Update `listings.qmd` § metadata-attrs and `listing-templates.qmd`
+      (porting table row, "none of the built-ins emit it" notes).
 
 ### Phase 3 — Container id and classes
 

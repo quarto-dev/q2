@@ -436,7 +436,7 @@ fn build_item_map(
     );
     m.insert(
         "metadata-attrs".to_string(),
-        TemplateValue::String(helpers::metadata_attrs(item, index)),
+        TemplateValue::String(helpers::metadata_attrs(item, index, listing)),
     );
     // L7 placeholders only for document-origin items (plan §D6): a
     // record's description/image are final strings, and the
