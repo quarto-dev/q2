@@ -227,6 +227,7 @@ mod tests {
             source_context: Default::default(),
             warnings: Vec::new(),
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let stage = ResourceReportStage::new();
@@ -265,6 +266,7 @@ mod tests {
             source_context: Default::default(),
             warnings: Vec::new(),
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let stage = ResourceReportStage::new();

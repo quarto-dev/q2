@@ -139,7 +139,47 @@ use thiserror::Error;
 ///   [`quarto_pandoc_types::inlines_to_plain_text`] (the projection
 ///   `ConfigValue::as_plain_text` applied before), so their output is
 ///   unchanged.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 14;
+/// - `15`: `bd-listing-description-precedence-x4bh6w3m`. Adds `abstract`
+///   (top-level `abstract:`, the Q1 description fallback) and
+///   `derived_listing` (the description / image L1 derives from the
+///   body). L1 no longer writes its derived description and image into
+///   `listing_item.description` / `listing_item.image`, so those now hold
+///   only author-supplied values. Listings tell authored from derived by
+///   field, not by key. A cached v14 profile would deserialize with
+///   derived values sitting in the authored slots, which is exactly the
+///   misread this bump prevents.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 15;
+
+/// Listing values L1 (`ListingItemInfoStage`) derives from a document's
+/// body, kept apart from anything the author wrote.
+///
+/// Computed for every document, whether or not the author supplied the
+/// corresponding value: a listing uses them only as the last fallback
+/// (see `project::listing::hydrate_item`), but other consumers — search,
+/// for one — want the body-derived text regardless.
+///
+/// Travels from the stage to the profile on
+/// [`crate::stage::DocumentAst::derived_listing`], a typed side-channel
+/// like `recorded_includes`, rather than through metadata: a reserved
+/// meta key could be written in front matter, would surface among a
+/// listing's custom `extra` fields, and would look authored to Lua
+/// filters.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DerivedListingValues {
+    /// Plain text of the first non-empty paragraph of the post-include
+    /// AST, untruncated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Source of the first body image, document-relative as written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+}
+
+impl DerivedListingValues {
+    pub fn is_empty(&self) -> bool {
+        self.description.is_none() && self.image.is_none()
+    }
+}
 
 /// Reduced, serializable form of [`crate::engine::EngineResolution`] for the
 /// profile (names only — configs stay in merged metadata; Plan 6 decision 6).
@@ -247,12 +287,14 @@ impl IncludeEntry {
 ///
 /// # Generate / render decomposition
 ///
-/// L0 (this version): the field exists; `DocumentProfile::extract`
-/// reads it from frontmatter. Author-supplied values land here.
-/// L1 (planned, `bd-izqh`) introduces `ListingItemInfoStage` to
-/// auto-fill holes (description, image, word count, reading time,
-/// date-modified) from the AST. Author values always win; the stage
-/// only fills holes.
+/// `DocumentProfile::extract` reads it from frontmatter, so
+/// author-supplied values land here. L1's `ListingItemInfoStage`
+/// auto-fills word count, reading time and date-modified into
+/// `meta.listing-item` when the author left them unset. It does **not**
+/// fill `description` or `image`: those are derived into
+/// [`DocumentProfile::derived_listing`] instead, so that `description`
+/// and `image` here are always the author's and a listing can rank them
+/// above the top-level keys and the derived values.
 ///
 /// All fields are optional / collection-defaulted; an empty
 /// `ListingItemInfo` is the legitimate default for documents that
@@ -281,10 +323,9 @@ pub struct ListingItemInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<Inlines>,
 
-    /// Listing description (text shown under the title). L0 honors
-    /// an author-supplied value; L1's `ListingItemInfoStage` will
-    /// fill from the first plain-text paragraph of the post-include
-    /// AST when unset.
+    /// Listing description (text shown under the title). Author-supplied
+    /// only; the derived first paragraph lives in
+    /// [`DocumentProfile::derived_listing`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Inlines>,
 
@@ -296,8 +337,8 @@ pub struct ListingItemInfo {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flattened_prose: Vec<String>,
 
-    /// Listing image src. L0 honors an author-supplied value; L1
-    /// will fill from the first body `Image` node when unset.
+    /// Listing image src. Author-supplied only; the first body image
+    /// lives in [`DocumentProfile::derived_listing`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
 
@@ -653,6 +694,14 @@ pub struct DocumentProfile {
     pub subtitle: Option<Inlines>,
     pub description: Option<Inlines>,
 
+    /// Top-level `abstract:`, flattened to one inline run if written as
+    /// several paragraphs. Listings fall back to it when there is no
+    /// description (Q1 parity: `description || abstract || derived`).
+    ///
+    /// Default `None`; serializer omits it. Added v15.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#abstract: Option<Inlines>,
+
     /// Keys among `title` / `subtitle` / `description` whose value was
     /// flattened from more than one block (see
     /// [`ListingItemInfo::flattened_prose`]).
@@ -875,6 +924,16 @@ pub struct DocumentProfile {
     #[serde(default, skip_serializing_if = "ListingItemInfo::is_empty")]
     pub listing_item: ListingItemInfo,
 
+    /// Description and image L1 derived from the body. Listings use them
+    /// only when nothing is authored; see [`DerivedListingValues`].
+    /// Populated by `DocumentProfileStage` from the
+    /// [`crate::stage::DocumentAst::derived_listing`] side-channel;
+    /// [`DocumentProfile::extract`] leaves it empty.
+    ///
+    /// Default empty; serializer omits empty. Added v15.
+    #[serde(default, skip_serializing_if = "DerivedListingValues::is_empty")]
+    pub derived_listing: DerivedListingValues,
+
     /// Glob patterns from the host's `listing.*.contents:` config,
     /// flattened across all listings declared on the page. Each
     /// entry is a **project-relative, base-resolved** pattern (e.g.
@@ -967,6 +1026,7 @@ impl Default for DocumentProfile {
             title: None,
             subtitle: None,
             description: None,
+            r#abstract: None,
             flattened_prose: Vec::new(),
             authors: Vec::new(),
             authors_structured: Vec::new(),
@@ -991,6 +1051,7 @@ impl Default for DocumentProfile {
             rejected_resources: Vec::new(),
             categories_raw: None,
             listing_item: ListingItemInfo::default(),
+            derived_listing: DerivedListingValues::default(),
             listing_content_globs: Vec::new(),
             engine_resolution: None,
             comments: Vec::new(),
@@ -1043,6 +1104,10 @@ impl DocumentProfile {
         let title = prose_field(meta, "title", &mut flattened_prose);
         let subtitle = prose_field(meta, "subtitle", &mut flattened_prose);
         let description = prose_field(meta, "description", &mut flattened_prose);
+        // An abstract is routinely several paragraphs and is not written
+        // for the listing, so flattening it is expected rather than
+        // something to warn about (Q-12-26): its flag is discarded.
+        let r#abstract = prose_field(meta, "abstract", &mut Vec::new());
 
         Self {
             profile_version: DOCUMENT_PROFILE_VERSION,
@@ -1052,6 +1117,7 @@ impl DocumentProfile {
             title,
             subtitle,
             description,
+            r#abstract,
             flattened_prose,
             authors: authors_structured.iter().map(|a| a.name.clone()).collect(),
             authors_structured,
@@ -1086,6 +1152,8 @@ impl DocumentProfile {
             // the wiring, not the field declarations.
             categories_raw: extract_categories_raw(meta),
             listing_item: extract_listing_item(meta),
+            // Filled by `DocumentProfileStage` from the L1 side-channel.
+            derived_listing: DerivedListingValues::default(),
             // L6 (`bd-xbnf`) / v8 (`bd-v7ixzsp5`): populated by
             // `DocumentProfileStage`, which resolves each glob's
             // base directory from its `SourceInfo` provenance — a
@@ -2624,8 +2692,52 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_14() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 14);
+    fn document_profile_version_is_15() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 15);
+    }
+
+    // bd-listing-description-precedence-x4bh6w3m: `abstract:` is the
+    // listing's description fallback. Several paragraphs flatten to one
+    // run without being recorded for Q-12-26 — an abstract is not
+    // written for the listing, so the warning would only be noise.
+    #[test]
+    fn profile_extracts_abstract_flattened_without_warning_record() {
+        let ast = parse_qmd(
+            "---\ntitle: T\nabstract: |\n  First *para*.\n\n  Second para.\n---\n\nBody.\n",
+        );
+        let profile = DocumentProfile::extract(&ast, Path::new("a.qmd"), "a.html", "html");
+        assert_eq!(
+            plain(&profile.r#abstract).as_deref(),
+            Some("First para. Second para.")
+        );
+        assert!(profile.flattened_prose.is_empty());
+    }
+
+    #[test]
+    fn profile_without_abstract_has_none() {
+        let ast = parse_qmd("---\ntitle: T\n---\n\nBody.\n");
+        let profile = DocumentProfile::extract(&ast, Path::new("a.qmd"), "a.html", "html");
+        assert_eq!(profile.r#abstract, None);
+        // `extract` is pure: the derived values come from the stage.
+        assert!(profile.derived_listing.is_empty());
+    }
+
+    #[test]
+    fn derived_listing_round_trips_and_is_omitted_when_empty() {
+        let mut profile = DocumentProfile::default();
+        let empty = serde_json::to_string(&profile).expect("serialize");
+        assert!(!empty.contains("derived_listing"), "{empty}");
+        assert!(!empty.contains("abstract"), "{empty}");
+
+        profile.derived_listing = DerivedListingValues {
+            description: Some("First paragraph.".to_string()),
+            image: Some("figs/a.png".to_string()),
+        };
+        profile.r#abstract = Some(crate::document_profile::text("An abstract"));
+        let json = serde_json::to_string(&profile).expect("serialize");
+        assert!(json.contains("\"abstract\""), "{json}");
+        let back = DocumentProfile::from_json(&json).expect("deserialize");
+        assert_eq!(back, profile);
     }
 
     /// A v3 profile (the pre-listings shape) must be rejected by

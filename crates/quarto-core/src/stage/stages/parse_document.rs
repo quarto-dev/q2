@@ -232,6 +232,7 @@ impl PipelineStage for ParseDocumentStage {
                     source_context,
                     warnings,
                     recorded_includes: Vec::new(),
+                    derived_listing: Default::default(),
                 }))
             }
             Err(diagnostics) => {

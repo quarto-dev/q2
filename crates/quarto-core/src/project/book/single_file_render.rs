@@ -546,6 +546,7 @@ pub(crate) async fn render_book_core<S, T>(
         source_context: quarto_source_map::SourceContext::new(),
         warnings: Vec::new(),
         recorded_includes: Vec::new(),
+        derived_listing: Default::default(),
     };
 
     // Run the merged document's Crossref phase (`crossref-index` +
@@ -646,6 +647,7 @@ pub(crate) async fn render_book_core<S, T>(
             source_context: crossref_doc.source_context,
             warnings: crossref_doc.warnings,
             recorded_includes: crossref_doc.recorded_includes,
+            derived_listing: crossref_doc.derived_listing,
         }
     };
 

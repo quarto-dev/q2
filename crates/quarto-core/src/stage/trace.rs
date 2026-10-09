@@ -569,6 +569,7 @@ mod tests {
             source_context: quarto_source_map::SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let data = PipelineData::DocumentAst(doc);
@@ -591,6 +592,7 @@ mod tests {
             source_context: quarto_source_map::SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         };
 
         let data = PipelineData::DocumentAst(doc);

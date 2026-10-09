@@ -664,20 +664,23 @@ This is the first paragraph that L1 will harvest as the description.\n\
 
 #[tokio::test]
 async fn pipeline_listing_item_autofill_end_to_end() {
-    // No `listing-item:` key in frontmatter; L1 derives every field
-    // from the AST and mtime, then DocumentProfileStage extracts a
-    // populated ListingItemInfo into the profile.
+    // No `listing-item:` key in frontmatter. L1 derives the
+    // description and image into the `derived_listing` side-channel
+    // (never into the authored `listing_item` slots —
+    // bd-listing-description-precedence-x4bh6w3m) and fills the
+    // numeric fields into `meta.listing-item`; DocumentProfileStage
+    // carries both into the profile.
     let bundle = run_head_pipeline(L1_FIXTURE_QMD).await;
-    let li = &bundle.profile.listing_item;
-
+    let derived = &bundle.profile.derived_listing;
     assert_eq!(
-        li.description
-            .as_deref()
-            .map(quarto_pandoc_types::inlines_to_plain_text)
-            .as_deref(),
+        derived.description.as_deref(),
         Some("This is the first paragraph that L1 will harvest as the description.")
     );
-    assert_eq!(li.image.as_deref(), Some("figs/cover.png"));
+    assert_eq!(derived.image.as_deref(), Some("figs/cover.png"));
+
+    let li = &bundle.profile.listing_item;
+    assert_eq!(li.description, None);
+    assert_eq!(li.image, None);
     // 12 words in the paragraph (image alt-text excluded; image is
     // its own block-level paragraph in the AST but contributes no
     // word-bearing prose).
@@ -708,6 +711,11 @@ async fn pipeline_listing_item_author_overrides_winner() {
             .as_deref(),
         Some("Author wrote this")
     );
+    // The derived value is still recorded, separately.
+    assert_eq!(
+        bundle.profile.derived_listing.description.as_deref(),
+        Some("Auto-fill would have used this paragraph instead.")
+    );
 }
 
 #[tokio::test]
@@ -724,10 +732,7 @@ async fn pipeline_clone_and_resume_listing_item_visible_in_profile() {
     // FIXTURE_QMD has paragraphs ("Hello.", "More hello.", "Goodbye.")
     // separated by headings. L1's first non-empty paragraph wins.
     assert_eq!(
-        li.description
-            .as_deref()
-            .map(quarto_pandoc_types::inlines_to_plain_text)
-            .as_deref(),
+        bundle.profile.derived_listing.description.as_deref(),
         Some("Hello.")
     );
     // Word count: "Hello.", "More hello.", "Goodbye." plus heading

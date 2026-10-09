@@ -256,14 +256,28 @@ Known test that encodes the old behaviour and must change in Phase 3:
 asserts an explicit `description:` is *replaced* by the body paragraph.
 
 ### Phase 1 — Profile + L1
-- [ ] `DerivedListingValues` type; `DocumentAst.derived_listing`;
+- [x] `DerivedListingValues` type; `DocumentAst.derived_listing`;
   `DocumentProfile.derived_listing`; `DocumentProfile.r#abstract`.
-- [ ] L1 writes `derived_listing` (always) and stops writing
+- [x] L1 writes `derived_listing` (always) and stops writing
   `listing-item.description` / `listing-item.image`.
-- [ ] `DocumentProfileStage` drains the side-channel; `extract` reads
-  `abstract`.
-- [ ] Bump `DOCUMENT_PROFILE_VERSION` 14 → 15 with a changelog line.
-- [ ] Unit tests (L1 never touches authored keys; side-channel drained).
+- [x] `DocumentProfileStage` drains the side-channel; `extract` reads
+  `abstract`. An abstract written as several paragraphs is flattened
+  *without* a Q-12-26 record: it isn't written for the listing.
+- [x] Bump `DOCUMENT_PROFILE_VERSION` 14 → 15 with a changelog line.
+- [x] Unit tests (L1 never touches authored keys; side-channel drained).
+  Updated L1 t01–t08, t14, t16; new t08b; new profile tests for
+  `abstract` and `derived_listing` serde; `document_profile_pipeline.rs`
+  autofill tests now read `derived_listing`.
+
+Notes: the 45 `DocumentAst { … recorded_includes: Vec::new(), … }`
+literals got `derived_listing: Default::default()` mechanically; engine
+execution's full destructure threads it through; the book single-file
+merge carries it from `crossref_doc`. Between Phase 1 and Phase 2,
+derived descriptions reach no listing (hydration doesn't read
+`derived_listing` yet). That is expected and is fixed in Phase 2.
+`IncludeResolveStage` already records file-slot includes (with content
+hashes) into `recorded_includes` → `profile.includes` (relevant to the
+Phase 4 cache question).
 
 ### Phase 2 — Hydration
 - [ ] `FieldSource`; `ListingItem.description_source` / `image_source`.

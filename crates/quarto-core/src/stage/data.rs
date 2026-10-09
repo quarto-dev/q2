@@ -441,6 +441,16 @@ pub struct DocumentAst {
     /// expansion order; cycles already truncated by
     /// `IncludeExpansionStage`.
     pub recorded_includes: Vec<IncludeEntry>,
+    /// Side-channel populated by `ListingItemInfoStage` (L1) with the
+    /// description and image it derives from the body. Drained by
+    /// `DocumentProfileStage` into [`DocumentProfile::derived_listing`].
+    /// Kept out of metadata so derived values can never be mistaken
+    /// for authored ones — see [`DerivedListingValues`].
+    ///
+    /// Default: empty (L1 has not run).
+    ///
+    /// [`DerivedListingValues`]: crate::document_profile::DerivedListingValues
+    pub derived_listing: crate::document_profile::DerivedListingValues,
 }
 
 /// Pipeline state at the profile checkpoint.

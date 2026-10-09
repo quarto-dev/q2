@@ -482,6 +482,7 @@ impl PipelineStage for EngineExecutionStage {
             source_context,
             warnings,
             recorded_includes,
+            derived_listing,
         } = doc_ast;
         let mut ast = ast;
         let mut merged_context = ast_context;
@@ -856,6 +857,7 @@ impl PipelineStage for EngineExecutionStage {
             source_context,
             warnings,
             recorded_includes,
+            derived_listing,
         }))
     }
 }
@@ -1251,6 +1253,7 @@ mod tests {
             source_context,
             warnings,
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         }
     }
 

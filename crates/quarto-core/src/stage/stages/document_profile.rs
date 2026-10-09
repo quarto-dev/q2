@@ -90,6 +90,12 @@ impl PipelineStage for DocumentProfileStage {
         // (transitive) child file the parent depends on.
         profile.includes = std::mem::take(&mut doc.recorded_includes);
 
+        // Drain the L1 side-channel: the description / image
+        // `ListingItemInfoStage` derived from the body. Kept off the
+        // authored `listing_item` fields so listings can rank authored
+        // values first (bd-listing-description-precedence-x4bh6w3m).
+        profile.derived_listing = std::mem::take(&mut doc.derived_listing);
+
         // Resolve the host's `listing.*.contents:` globs to
         // project-relative form (bd-v7ixzsp5, GH #456). Needs the
         // document's `SourceContext` (registered YAML metadata
@@ -388,6 +394,7 @@ mod tests {
             source_context: SourceContext::new(),
             warnings: vec![],
             recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
         }
     }
 
