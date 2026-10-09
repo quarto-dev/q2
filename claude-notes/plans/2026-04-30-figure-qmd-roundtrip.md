@@ -2,9 +2,11 @@
 title: 'QMD writer: Figure node emits empty div + duplicate caption'
 date: 2026-04-30
 description: 'The qmd writer wraps each Figure in a fenced div and repeats the caption as a paragraph, so re-parsing yields a Div holding a Figure and a Para; the plan fixes the figure output so the round trip is stable.'
+braid:
+  strand: bd-f5qd
+  priority: P1
 ---
 
-**Beads:** bd-f5qd
 **Source:** [issue #150](https://github.com/quarto-dev/q2/issues/150), item 2
 
 ## Bug

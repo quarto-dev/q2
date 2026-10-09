@@ -2,11 +2,11 @@
 title: 'Comment bubbles drop Quoted (and all non-Str) inlines'
 date: 2026-08-26
 description: 'Fixes comment bubbles in the preview that silently dropped inline content such as quoted text, emphasis and code, by replacing a local stringifier with the shared plain-text helper, which now keeps quote marks.'
+status: done  # implemented on `braid/bd-wcz4x7y0-comment-bubbles-drop-quoted`; e2e verified
+braid:
+  strand: bd-wcz4x7y0  # follow-up for rich bubble rendering: bd-y66gbfs4
+  priority: P1
 ---
-
-**Strand:** bd-wcz4x7y0 (follow-up for rich bubble rendering: bd-y66gbfs4)
-**Date:** 2026-08-26
-**Status:** implemented on `braid/bd-wcz4x7y0-comment-bubbles-drop-quoted`; e2e verified
 
 ## Symptom
 

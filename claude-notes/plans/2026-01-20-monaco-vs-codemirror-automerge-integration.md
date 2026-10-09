@@ -2,10 +2,9 @@
 title: 'Monaco vs CodeMirror Automerge Integration Analysis'
 date: 2026-01-20
 description: 'Explains why Automerge''s patch-based CodeMirror integration cannot be cheaply matched in Monaco, given line and column positions and head tracking, and concludes that the existing full-diff sync is good enough.'
+status: done  # Research complete
 ---
 
-**Date**: 2026-01-20
-**Status**: Research complete
 **Context**: Comparison of automerge-codemirror approach vs hub-client's Monaco integration
 
 ## Executive Summary

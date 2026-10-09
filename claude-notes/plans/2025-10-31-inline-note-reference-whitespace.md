@@ -4,7 +4,6 @@ date: 2025-10-31
 description: 'Preserves the leading space before an inline note reference so that `Hi [^ref]` and `Hi[^ref]` produce different Pandoc output, by injecting a Space node instead of trimming it away.'
 ---
 
-**Date**: 2025-10-31
 **Issue**: Whitespace around `inline_note_reference` nodes is not being preserved correctly
 **Context**: User request to distinguish between 'Hi [^ref]' and 'Hi[^ref]'
 

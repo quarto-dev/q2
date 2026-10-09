@@ -2,15 +2,13 @@
 title: 'Format-extension theme/css paths not rebased: contributes.formats.html.theme silently drops bundled SCSS (bd-of20unsb)'
 date: 2026-08-08
 description: 'Rebases bundled SCSS theme files declared by format extensions so they resolve, and replaces the silent fallback to default CSS with a real diagnostic when a theme fails.'
+status: done  # Implemented 2026-08-08, all phases complete on local `main` (commits `e2cda047` → docs). Full `cargo xtask verify` green (incl. WASM leg). **Not pushed — awaiting user review + push approval.** Follow-up filed: bd-qmpygp02 (`InvalidScssFile` silent fallback).
+braid:
+  strand: bd-of20unsb
+  priority: P2
 ---
 
-**Date:** 2026-08-08
-**Braid:** bd-of20unsb (P2, bug)
 **Checkout:** main worktree at `main` \@ `e5fc4ffb` (post-merge of PR #474)
-**Status:** Implemented 2026-08-08, all phases complete on local `main`
-(commits `e2cda047` → docs). Full `cargo xtask verify` green (incl. WASM
-leg). **Not pushed — awaiting user review + push approval.** Follow-up
-filed: bd-qmpygp02 (`InvalidScssFile` silent fallback).
 
 ## Triage verdict
 

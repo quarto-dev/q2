@@ -2,6 +2,9 @@
 title: 'Windows: q2 emits and compares plain paths where a plain form exists (bd-1klbq2zd)'
 date: 2026-09-29
 description: 'Routes every Windows path that q2 emits or compares through one shared canonicalize function that returns plain paths via `dunce`, so JSON output, status lines and env vars stop carrying `\?\` prefixes.'
+braid:
+  strand: bd-1klbq2zd
+  priority: P3
 ---
 
 ## Overview

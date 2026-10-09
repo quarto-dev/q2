@@ -4,7 +4,6 @@ date: 2026-10-01
 description: 'Threads cached execution results into the browser pandoc request so downloaded documents show captured code output, and counts the code cells that stay unexecuted for the host status.'
 ---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-request-epic.md`](2026-10-01-pandoc-request-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D11)
 **Depends on:** R2. **Unblocks:** the "N code cells not executed" status in host H5; R6 (the prefetch runs after the splice).

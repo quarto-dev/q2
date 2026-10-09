@@ -2,13 +2,13 @@
 title: 'Nightly release workflow: build `main` whenever it has unreleased changes'
 date: 2026-09-19
 description: 'Adds a scheduled workflow that publishes a rolling nightly prerelease whenever `main` has changes no release has shipped, sharing the release build and signing jobs through a reusable workflow.'
+status: done  # Done. PR #697 merged 2026-09-19; first nightly published the same day (run 35465215381, all gates + install smoke green). One observation outstanding: the 2026-09-20 scheduled run should skip.
+braid:
+  strand: bd-p4ljdp2e
+  priority: P2
+  labels: [ci, release]
 ---
 
-**Date:** 2026-09-19
-**Braid:** bd-p4ljdp2e (feature, P2, labels release/ci)
-**Status:** Done. PR #697 merged 2026-09-19; first nightly published the
-same day (run 35465215381, all gates + install smoke green). One
-observation outstanding: the 2026-09-20 scheduled run should skip.
 **Review log:** 2026-09-19 Carlos accepted Decision 1 (prerelease channel)
 and added two requirements: (i) installing a nightly must be as easy as
 installing a release, so the README gets a nightly one-liner and the

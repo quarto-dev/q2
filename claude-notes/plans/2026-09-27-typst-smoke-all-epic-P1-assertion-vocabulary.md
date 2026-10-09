@@ -4,7 +4,6 @@ date: 2026-09-27
 description: 'Adds `ensureTypstFileRegexMatches` and `ensurePdfRegexMatches` assertions to the smoke-test spec, reusing the existing two-array match shape and reading PDF text in-process through `pdf_extract` instead of a binary.'
 ---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md)
 **Depends on:** nothing. Can start immediately, in parallel with P2.
 **Worktree:** `workspace-3` (bootstrap phase — see epic's "Parallel development

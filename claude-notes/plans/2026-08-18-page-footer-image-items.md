@@ -2,13 +2,14 @@
 title: 'page-footer item text: lone image dropped; no link/image target resolved (bd-page-footer-image-items-stmpikgo)'
 date: 2026-08-18
 description: 'Makes page-footer item text render lone images and resolve link and image targets the same way region text does, so footer images work on sites served from a subdirectory.'
+status: approved  # Design aligned 2026-08-18 (user answered all five questions; see § Design decisions). Ready to turn into implementation phases.
+braid:
+  strand: bd-page-footer-image-items-stmpikgo
+  priority: P2
+  labels: [parity, websites]
 ---
 
-**Date:** 2026-08-18
-**Braid:** bd-page-footer-image-items-stmpikgo
 **Branch:** `main` (investigation committed in place; implementation branch TBD by user)
-**Status:** Design aligned 2026-08-18 (user answered all five questions; see
-§ Design decisions). Ready to turn into implementation phases.
 
 ## Triage verdict
 

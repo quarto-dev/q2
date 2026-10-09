@@ -2,11 +2,11 @@
 title: 'Plan: Unified Render Pipeline for quarto and wasm-quarto-hub-client'
 date: 2025-12-27
 description: 'Routes the WASM hub-client renderer through the same `quarto-core` transform pipeline the CLI uses, so callouts, metadata normalization and resource collection behave identically in both.'
+status: draft
+braid:
+  strand: k-dnfd
+  priority: P1
 ---
-
-**Issue**: k-dnfd
-**Date**: 2025-12-27
-**Status**: Draft
 
 ## Problem Statement
 

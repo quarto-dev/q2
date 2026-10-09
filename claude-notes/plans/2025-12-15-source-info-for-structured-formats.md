@@ -2,11 +2,11 @@
 title: 'Source Information Tracking for Structured Input Formats'
 date: 2025-12-15
 description: 'Designs source location tracking for Jupyter notebooks and percent scripts, storing mapping data in a sidecar file and adding a notebook cell location variant so errors are reported in cell coordinates.'
+status: approved  # Design finalized
+braid:
+  strand: k-zr88
+  priority: P2
 ---
-
-**Date**: 2025-12-15
-**Issue**: k-zr88
-**Status**: Design finalized
 
 ## Problem Statement
 

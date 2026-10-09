@@ -2,9 +2,9 @@
 title: 'L8 — Custom listing templates (sub-plan)'
 date: 2026-05-07
 description: 'Lets listings use a user-supplied `.template` file named in `listing.template`, with the same data binding as built-in templates, and falls back to the default layout with a warning when the file is missing or fails to compile.'
+status: draft  # Draft. Awaiting user approval before hand-off.
 ---
 
-**Date:** 2026-05-07
 **Beads:** `bd-rqgx` (this phase). Parent epic: `bd-61cd`
 (`claude-notes/plans/2026-05-05-listings-epic.md`).
 **Predecessors:**
@@ -20,8 +20,6 @@ description: 'Lets listings use a user-supplied `.template` file named in `listi
   `image-placeholder-{begin,end}` bindings get the same L7
   upgrade behavior as the built-in templates without any
   L8-specific work.
-
-**Status:** Draft. Awaiting user approval before hand-off.
 
 ## Goal of this phase
 

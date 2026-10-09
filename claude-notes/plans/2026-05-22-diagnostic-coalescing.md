@@ -2,11 +2,14 @@
 title: 'Cross-page diagnostic coalescing'
 date: 2026-05-22
 description: 'Groups identical diagnostics that share a source location across many pages so the CLI prints each once with a list of affected files, instead of hundreds of duplicate blocks.'
+status: draft  # drafting — pending user review
+braid:
+  strand: bd-9hlja
+  priority: P2
+  labels: [diagnostics, website]
 ---
 
-**Status:** drafting — pending user review
 **Parent:** [theme-diagnostic epic](2026-05-22-theme-diagnostic-epic.md)
-**Beads:** bd-9hlja
 **Depends on:** [structured theme diagnostic](2026-05-22-theme-diagnostic-structured.md) (bd-pgczr)
 (for a concrete and high-value test case; the coalescing API itself
 doesn't strictly require it).

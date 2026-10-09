@@ -2,12 +2,14 @@
 title: 'hub-client vitest: 23 tests fail under Node 26 — `localStorage` global undefined (bd-lh30hlvd)'
 date: 2026-09-08
 description: 'Makes the Node 24 pin enforced in the repo, with an `xtask` version check and `engine-strict` in `.npmrc`, after Node 26 broke hub-client vitest tests through an undefined `localStorage` global.'
+status: in-progress  # Executing — direction agreed with the user on 2026-09-08 (see § Decision).
+braid:
+  strand: bd-lh30hlvd
+  priority: P2
+  labels: [hub-client, testing]
 ---
 
-**Date:** 2026-09-08
-**Braid:** bd-lh30hlvd
 **Worktree:** `.worktrees/bd-lh30hlvd-node-version-guard` (branch `braid/bd-lh30hlvd-node-version-guard`, based on `main` \@ `b7e7c96a`)
-**Status:** Executing — direction agreed with the user on 2026-09-08 (see § Decision).
 
 ## Overview
 

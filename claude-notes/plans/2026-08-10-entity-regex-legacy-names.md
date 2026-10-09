@@ -2,12 +2,14 @@
 title: 'Grammar html_entity_regex() mangles legacy no-semicolon entity names (bd-v8qc9zyc)'
 date: 2026-08-10
 description: 'Stops the grammar''s `html_entity_regex()` from generating bogus alternatives for legacy no-semicolon entity names such as `&AMP`, by keeping only semicolon-terminated keys.'
+status: done  # Implemented 2026-08-10; full verify green.
+braid:
+  strand: bd-v8qc9zyc  # discovered-from bd-named-entities-w6xbfftj
+  priority: P3
+  labels: [tree-sitter-qmd]
 ---
 
-**Date:** 2026-08-10
-**Braid:** bd-v8qc9zyc (bug, P3), discovered-from bd-named-entities-w6xbfftj
 **Checkout:** main (stacked on the combining-marks work, PR #489)
-**Status:** Implemented 2026-08-10; full verify green.
 
 ## Problem
 

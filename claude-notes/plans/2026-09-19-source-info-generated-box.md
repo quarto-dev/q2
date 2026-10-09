@@ -2,14 +2,12 @@
 title: 'Shrink `SourceInfo` from 136 to 32 bytes by boxing the `Generated` payload (bd-1c085k3a)'
 date: 2026-09-19
 description: 'Shrinks `SourceInfo` from 136 to 32 bytes by boxing the payload of the `Generated` variant in the external source-map crate, cutting AST size and traversal cost without changing the serialized wire shape.'
+status: in-progress  # crate side done on `posit-dev/quarto-source-map` branch `generated-box` (PR #7, 0.2.0, by the crate-side session). q2 migration done and measured 2026-09-19 on q2 branch `braid/bd-1c085k3a-source-info-generated-box` (off PR #698) against that branch via the uncommitted path patch; awaiting the three releases to land the dep bump.
+braid:
+  strand: bd-1c085k3a
+  priority: P2
+  labels: [perf]
 ---
-
-**Status:** crate side done on `posit-dev/quarto-source-map` branch
-`generated-box` (PR #7, 0.2.0, by the crate-side session). q2 migration
-done and measured 2026-09-19 on q2 branch
-`braid/bd-1c085k3a-source-info-generated-box` (off PR #698) against that
-branch via the uncommitted path patch; awaiting the three releases to
-land the dep bump.
 
 **Measured (release-perf, this machine, back to back; `#698` = PR #698's
 binary, i.e. the immediate baseline):**

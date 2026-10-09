@@ -2,16 +2,13 @@
 title: 'hub-client: `q2-preview` becomes the default renderer; the full-DOM renderer gets its own format name'
 date: 2026-09-09
 description: 'Makes the q2-preview React renderer the default for `format: html` documents in hub-client, moves the old full-DOM renderer under the explicit `q2-html-render` format name, and adjusts the e2e suite to match.'
+status: in-progress  # Phases 1–7 done; Phase 4b partially worked (draft alert fixed, title-banner fixtures made renderer-neutral). PR #670 (https://github.com/quarto-dev/q2/pull/670) opened 2026-09-10 from `braid/bd-kltzdhle-hub-client-make-q2` with 6 fixtures still on the e2e DOM-assertion skip-list (see the Phase 4b table). The `CommentBlock` wrapper removal landed 2026-09-10 on this PR (plan `2026-09-10-commentblock-wrapper-removal.md`), leaving 5 fixtures skip-listed.
+braid:
+  strand: bd-kltzdhle
+  priority: P1
+  labels: [hub-client, preview-renderer]
 ---
 
-**Strand:** bd-kltzdhle
-**Date:** 2026-09-09
-**Status:** Phases 1–7 done; Phase 4b partially worked (draft alert fixed, title-banner
-fixtures made renderer-neutral). PR #670 (https://github.com/quarto-dev/q2/pull/670) opened 2026-09-10 from
-`braid/bd-kltzdhle-hub-client-make-q2` with 6 fixtures still on the e2e DOM-assertion
-skip-list (see the Phase 4b table). The `CommentBlock` wrapper removal landed 2026-09-10 on this PR
-(plan `2026-09-10-commentblock-wrapper-removal.md`), leaving 5 fixtures
-skip-listed.
 **Related:** PR #667 / bd-ew0vak6b (Edit pill; plan
 `2026-09-09-q2-preview-edit-toggle.md`), bd-zvh2p (attribution through
 `render_page_for_preview` — superseded by D3 below), bd-j3764r9a (React ↔

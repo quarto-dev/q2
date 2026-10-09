@@ -2,10 +2,9 @@
 title: 'tree-sitter-qmd Cleanup - Completion Summary'
 date: 2025-10-31
 description: 'Describes removing the unused inline tree-sitter grammar from `tree-sitter-qmd`, leaving a single unified grammar in the build, exports, documentation and tests.'
+status: done  # ✅ COMPLETE
 ---
 
-**Date**: 2025-10-31
-**Status**: ✅ COMPLETE
 **Time Taken**: \~1.5 hours
 
 ## What Was Done

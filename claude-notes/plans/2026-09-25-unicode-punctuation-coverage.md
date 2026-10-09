@@ -2,12 +2,13 @@
 title: 'Unicode ⟨ (U+27E8) and other non-ASCII brackets are uncoded parse errors (bd-angle-bracket-u27e8-parse-error-r6l55zmh)'
 date: 2026-09-25
 description: 'Fixes uncoded parse errors on non-ASCII opening and closing brackets such as ⟨ and 「 by treating every non-ASCII punctuation or symbol character as plain text in the grammar.'
+status: in-progress  # Design settled 2026-09-25; implementing option (b).
+braid:
+  strand: bd-angle-bracket-u27e8-parse-error-r6l55zmh  # child of epic bd-uk8zgkha
+  priority: P2
 ---
 
-**Date:** 2026-09-25
-**Braid:** bd-angle-bracket-u27e8-parse-error-r6l55zmh (child of epic bd-uk8zgkha)
 **Branch:** `braid/r6l55zmh-angle-bracket-parse-error` (topic branch in the main checkout, based on `main` at `ce01489c4`)
-**Status:** Design settled 2026-09-25; implementing option (b).
 
 ## Decisions (2026-09-25, with user)
 

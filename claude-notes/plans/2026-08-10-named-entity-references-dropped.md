@@ -2,12 +2,14 @@
 title: 'Named HTML entity references silently dropped in prose (bd-named-entities-w6xbfftj)'
 date: 2026-08-10
 description: 'Makes named HTML entities such as `&gt;` and `&nbsp;` decode to their characters in prose, where they currently vanish silently, by sharing the grammar''s entity table with the converter.'
+status: done  # Implemented 2026-08-10; all phases complete, full verify green. Discovered follow-ups: bd-v8qc9zyc (grammar regex), bd-96fswwce (combining-mark parse failure).
+braid:
+  strand: bd-named-entities-w6xbfftj
+  priority: P1
+  labels: [pampa, parity]
 ---
 
-**Date:** 2026-08-10
-**Braid:** bd-named-entities-w6xbfftj (bug, P1, labels `pampa`, `parity`)
 **Checkout:** main \@ `0cb8abce` (investigated in place; no worktree created)
-**Status:** Implemented 2026-08-10; all phases complete, full verify green. Discovered follow-ups: bd-v8qc9zyc (grammar regex), bd-96fswwce (combining-mark parse failure).
 
 ## Triage verdict
 

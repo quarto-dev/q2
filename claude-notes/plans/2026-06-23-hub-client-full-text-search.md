@@ -2,11 +2,9 @@
 title: 'Hub-client full-text search'
 date: 2026-06-23
 description: 'Designs client-side full-text search over the currently open project''s files in hub-client, behind a `SearchProvider` interface so a later cross-project backend can replace the implementation without UI changes.'
+status: in-progress  # Phase 1 complete (open-project client-side search shipped on `epic/hub-client-full-text-search`); Phase B + Phase 2 not started.
 ---
 
-**Status:** Phase 1 complete (open-project client-side search shipped on
-`epic/hub-client-full-text-search`); Phase B + Phase 2 not started.
-**Date:** 2026-06-23
 **Scope decision (from user):** open-project search first; then cross-project
 ("all my projects"), which should ride on the upcoming server-side
 "project sets" work (logged-in-user → automerge-document-of-project-sets).

@@ -4,7 +4,6 @@ date: 2026-10-03
 description: 'Fixes four qmd writer bugs that corrupt pandoc-shaped documents from import, covering line-start text that re-reads as markup, multi-block footnotes, merged adjacent lists and attributed editorial marks.'
 ---
 
-**Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I3, I17, I18; Findings → "qmd writer bugs reachable from docx")
 **Depends on:** nothing. **Unblocks:** P3.
 **Branch:** `import/p2-qmd-writer` from `feature/hub-import`.

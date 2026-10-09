@@ -2,6 +2,9 @@
 title: 'Plan 4c.2: Marimo through `q2 preview` — capture-splice fix + full browser e2e'
 date: 2026-07-07
 description: 'Fixes the q2 preview capture-splice so marimo''s unwrapped RawBlock output reaches the preview pane, then adds browser end-to-end tests for marimo cells, widgets and sql interop.'
+braid:
+  strand: bd-5jxcio5d
+  priority: P2
 ---
 
 **Status:** plan (2026-07-07). Driving strand: **bd-5jxcio5d** (P2, bug —

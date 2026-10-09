@@ -4,7 +4,6 @@ date: 2026-10-03
 description: 'Ports the editorial-marks Lua filters to a Rust transform that turns insert, delete, highlight and comment marks into Word and PowerPoint markup, including a commented-range shape with replies.'
 ---
 
-**Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I3, I4, I20, I23; Findings → "The export side")
 **Depends on:** P3 landed (T1 shares P3 T4's vocabulary; T7 runs P3's `finish_import`), and P1's fixtures. Independent of P4 and P5; it can run alongside them. **Unblocks:** the epic Close-out's round-trip check.
 **Branch:** `import/p6-editorial-marks-export` from `feature/hub-import`.

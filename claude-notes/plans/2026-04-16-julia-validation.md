@@ -2,25 +2,13 @@
 title: 'Plan 4: Julia Engine Validation'
 date: 2026-04-16
 description: 'Validates the TypeScript engine extension system end to end by running the real Julia engine extension from Quarto 1 against q2 documents with Julia code cells, fixing the integration gaps that surface.'
+status: done  # COMPLETE (2026-07-02). All 13 success criteria met; frozen seams J1–J6/J8/J9 green; V-1…V-7 evidence recorded (V-2 folded into J3); full `cargo xtask verify` green at `1a44b4e2e`. Headline: `julia-engine.ts` ran with ZERO source changes (rebundle byte-identical). Discovered-work strands: bd-uf4epv4w (smart typography vs frontmatter strings), bd-l9jhy5u0 (QNR worker leak on error path, P1 — reproduces under Q1 too), bd-cymkcyaf (presentation-format per-writer execute defaults), bd-677297ca (supporting-dir resource copy — FIXED+closed this session). Migration guide: `claude-notes/research/2026-07-02-julia-engine-migration-guide.md`; evidence trail: `…/2026-07-02-julia-engine-q2-compat.md` §1–§14. Julia-in-PATH stays a per-session check by design (this session: julia 1.11.7). The unticked observation sub-items in 4C/4H are honest divergence records (inline-MIME figures; GR emits no htmlDependency), not gaps.
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plans 1a/1b/1c, 2, 3, and 1c.2 P1.1+P1.1b — **all landed as of 2026-07-02** (see Prerequisites)
 **Blocks:** Plan 4b (shadow-engine feature validation)
 **Estimated sessions:** 2-3 (the net-new instrumentation in 4H/4I and the daemon test push this past the original 1-2 "pure debugging" estimate)
-**Status: COMPLETE (2026-07-02).** All 13 success criteria met; frozen seams
-J1–J6/J8/J9 green; V-1…V-7 evidence recorded (V-2 folded into J3); full
-`cargo xtask verify` green at `1a44b4e2e`. Headline: `julia-engine.ts` ran
-with ZERO source changes (rebundle byte-identical). Discovered-work strands:
-bd-uf4epv4w (smart typography vs frontmatter strings), bd-l9jhy5u0 (QNR
-worker leak on error path, P1 — reproduces under Q1 too), bd-cymkcyaf
-(presentation-format per-writer execute defaults), bd-677297ca
-(supporting-dir resource copy — FIXED+closed this session). Migration guide:
-`claude-notes/research/2026-07-02-julia-engine-migration-guide.md`; evidence
-trail: `…/2026-07-02-julia-engine-q2-compat.md` §1–§14. Julia-in-PATH stays a
-per-session check by design (this session: julia 1.11.7). The unticked
-observation sub-items in 4C/4H are honest divergence records (inline-MIME
-figures; GR emits no htmlDependency), not gaps.
 
 ## Overview
 

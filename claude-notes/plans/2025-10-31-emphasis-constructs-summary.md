@@ -2,11 +2,12 @@
 title: 'Emphasis-Like Constructs Implementation - Summary'
 date: 2025-10-31
 description: 'Summarizes the tree-sitter handlers for emphasis, strong, strikeout, superscript and subscript, which keep whitespace captured by their delimiters as Space nodes so the output matches Pandoc.'
+status: done  # ✅ COMPLETED
+braid:
+  strand: k-276  # also k-277, k-278, k-279, k-280
+  priority: P0
 ---
 
-**Date**: 2025-10-31
-**Status**: ✅ COMPLETED
-**Beads Issues**: k-276, k-277, k-278, k-279, k-280
 **Parent**: k-274 (Tree-sitter Grammar Refactoring)
 
 ## Completed Implementations

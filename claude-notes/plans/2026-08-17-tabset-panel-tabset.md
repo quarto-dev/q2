@@ -2,12 +2,14 @@
 title: 'Tabsets (panel-tabset) are not implemented — tab titles leak into the TOC (bd-toc-tabset-titles-zq93gjvf)'
 date: 2026-08-17
 description: 'Implements `.panel-tabset` Divs as real Bootstrap tabsets so tab titles stop leaking into the table of contents, and grouped tabsets switch together and remember the chosen tab.'
+status: done  # Implemented 2026-08-17 — all phases complete, verified end-to-end (see § E2E evidence). Pending review/merge.
+braid:
+  strand: bd-toc-tabset-titles-zq93gjvf
+  priority: P2
+  labels: [html]
 ---
 
-**Date:** 2026-08-17
-**Braid:** bd-toc-tabset-titles-zq93gjvf (feature, p2, label `html`)
 **Branch:** `braid/bd-toc-tabset-titles-zq93gjvf-panel-tabset-support` (in the main checkout, off `main` \@ `a29b22ca`, per user)
-**Status:** Implemented 2026-08-17 — all phases complete, verified end-to-end (see § E2E evidence). Pending review/merge.
 
 ## Triage verdict
 

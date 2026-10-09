@@ -2,15 +2,14 @@
 title: 'Listing nits vs Q1: truncation ellipsis + hidden "No matching items" placeholder (bd-listing-ellipsis-no-matching-l963osy1)'
 date: 2026-08-19
 description: 'Brings listing truncated descriptions and the hidden no-matching placeholder in line with Quarto 1 by appending the trailing ellipsis and emitting a `listing-no-matching` div for every listing type.'
+status: approved  # Design aligned 2026-08-20 (all four questions answered by user; see "Design decisions" below). Scope now **includes bd-pcmdb7qg** (explicit `description:` truncation) as its own phase. Ready to implement — pending choice of branch/worktree.
+braid:
+  strand: bd-listing-ellipsis-no-matching-l963osy1
+  priority: P3
+  labels: [listings]
 ---
 
-**Date:** 2026-08-19
-**Braid:** bd-listing-ellipsis-no-matching-l963osy1 (bug, p3, label `listings`)
 **Checkout:** main checkout, branch `main` \@ `87c0e21a8` (no worktree created — investigation only)
-**Status:** Design aligned 2026-08-20 (all four questions answered by user; see
-"Design decisions" below). Scope now **includes bd-pcmdb7qg** (explicit
-`description:` truncation) as its own phase. Ready to implement — pending
-choice of branch/worktree.
 
 ## Triage verdict
 

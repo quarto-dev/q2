@@ -2,15 +2,12 @@
 title: 'Block editing — depth-aware editing, cross-surface cursor, AST buffers'
 date: 2026-06-11
 description: 'Plans depth-aware block editing in `q2 preview`, where a click selects the right nested surface, arrow keys move the cursor between surfaces, and an opt-in nesting cursor adds depth navigation.'
+status: approved  # Design settled through six review passes. All four pre-implementation assertions verified (A–D below). **Ready for handoff.** TDD-first; tests precede implementation in every phase. Execute phases in order (1 → 2 → 3); each phase's TDD checklist is its unit of work.
 ---
 
-**Date:** 2026-06-11 (substantially reworked 2026-06-12; concurrency/identity rework 2026-06-13)
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
 **Builds on:** Plans 2a/2b/2c/3 (all done). Design master:
 `claude-notes/designs/2026-06-06-block-editing-design.md`.
-**Status:** Design settled through six review passes. All four pre-implementation assertions
-verified (A–D below). **Ready for handoff.** TDD-first; tests precede implementation in every
-phase. Execute phases in order (1 → 2 → 3); each phase's TDD checklist is its unit of work.
 
 ## Overview
 

@@ -2,10 +2,11 @@
 title: 'HashMap to LinkedHashMap Migration Plan'
 date: 2025-11-03
 description: 'Switches the `Attr` attribute map from `HashMap` to `LinkedHashMap` so that shortcode and other attributes keep their insertion order and test output stops varying from run to run.'
+braid:
+  strand: k-318
+  priority: P1
 ---
 
-**Beads Issue:** k-318  
-**Date:** 2025-11-03  
 **Goal:** Replace HashMap with LinkedHashMap in Attr type for deterministic attribute ordering
 
 ## Problem Statement

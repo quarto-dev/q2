@@ -2,14 +2,10 @@
 title: 'Breadcrumb forward-crumbs — preview the nest-in descent target'
 date: 2026-06-15
 description: 'Proposes faded forward-crumbs to the right of the breadcrumb chip that preview the block a nest-in move would enter, updating as the caret moves between lines of a nested list.'
+status: draft  # **SKETCH / not scheduled.** Concept captured during the breadcrumb visual-design review (2026-06-15). The *display scaffolding* lands in `2026-06-15-breadcrumb-visual-design.md` (pivot-at-surface-left layout, empty right-group container, `.q2-crumb-future` faded style); the *functionality* below is deferred to this plan.
 ---
 
-**Date:** 2026-06-15
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
-**Status:** **SKETCH / not scheduled.** Concept captured during the breadcrumb visual-design
-review (2026-06-15). The *display scaffolding* lands in
-`2026-06-15-breadcrumb-visual-design.md` (pivot-at-surface-left layout, empty right-group
-container, `.q2-crumb-future` faded style); the *functionality* below is deferred to this plan.
 **Depends on:**
 - `2026-06-15-breadcrumb-visual-design.md` — provides the right-side scaffolding this plan fills.
 - `2026-06-15-nesting-cursor-navigation-and-list-items.md` — provides `childSurfaceTowardLine`

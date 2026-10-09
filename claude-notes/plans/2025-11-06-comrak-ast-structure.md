@@ -6,7 +6,6 @@ description: 'Documents the node structure of the comrak CommonMark parser and m
 
 **Related to**: CommonMark-compatible subset design (k-333)
 **Purpose**: Document comrak's AST structure to inform our testing strategy
-**Date**: 2025-11-06
 
 ## Overview
 

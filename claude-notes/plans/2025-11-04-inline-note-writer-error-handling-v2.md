@@ -2,12 +2,14 @@
 title: 'Inline Note Definition Error Handling Using DiagnosticMessage'
 date: 2025-11-04
 description: 'Has the native, qmd, and HTML writers accumulate `DiagnosticMessage` errors for unsupported constructs such as inline note definitions, rather than silently dropping them or returning only IO errors.'
+braid:
+  strand: k-326
+  priority: P1
 ---
 
 Date: 2025-11-04
 File: claude-notes/plans/2025-11-04-inline-note-writer-error-handling-v2.md
 
-**Beads Issue:** k-326
 **Related Issues:** k-327 (audit other extension types)
 
 **Previous Version:** 2025-11-04-inline-note-writer-error-handling.md (superseded)

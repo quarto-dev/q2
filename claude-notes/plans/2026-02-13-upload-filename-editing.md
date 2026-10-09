@@ -2,9 +2,10 @@
 title: 'Upload Dialog: Editable Filenames with Whitespace Sanitization'
 date: 2026-02-13
 description: 'Makes filenames editable in the upload dialog, with whitespace and interior dots sanitized to hyphens by default and the edited name passed through to the upload.'
+braid:
+  strand: bd-anxz
+  priority: P2
 ---
-
-**Beads Issue:** bd-anxz
 
 ## Overview
 

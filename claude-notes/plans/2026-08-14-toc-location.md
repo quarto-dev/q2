@@ -2,12 +2,13 @@
 title: 'toc-location option (left/right/body); unlocks banner toc-left class (bd-e2kpwy7n)'
 date: 2026-08-14
 description: 'Adds a `toc-location` option that places the table of contents on the left or in the body, porting the Quarto 1 left-sidebar layouts for both standalone pages and websites.'
+status: done  # Implemented 2026-08-14 on branch `braid/bd-e2kpwy7n-toc-location` (phases 0-4 complete; full `cargo xtask verify` passed 2026-08-14, all 14 steps including hub/WASM legs). Awaiting push approval.
+braid:
+  strand: bd-e2kpwy7n
+  priority: P2
 ---
 
-**Date:** 2026-08-14
-**Braid:** bd-e2kpwy7n
 **Branch:** investigated on `main` (worktree `.worktrees/bd-nn2fou8h-execute-visibility`, reused after its strand merged)
-**Status:** Implemented 2026-08-14 on branch `braid/bd-e2kpwy7n-toc-location` (phases 0-4 complete; full `cargo xtask verify` passed 2026-08-14, all 14 steps including hub/WASM legs). Awaiting push approval.
 
 User-stated scope note: `external-sources/quarto-cli` is context, not a
 contract — what matters is a mechanism that renders TOCs in alternative

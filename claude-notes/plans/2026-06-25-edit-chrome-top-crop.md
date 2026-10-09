@@ -2,11 +2,11 @@
 title: 'Fix: edit chrome cropped at the top of the viewport'
 date: 2026-06-25
 description: 'Stops the floating edit toolbar and breadcrumb chip from being clipped at the top of the viewport by flipping them below the block when there is no room above it.'
+status: in-progress
+braid:
+  strand: bd-pvcnea83
+  priority: P2
 ---
-
-**Strand:** bd-pvcnea83
-**Date:** 2026-06-25
-**Status:** in progress
 
 ## Problem (confirmed in the binary)
 

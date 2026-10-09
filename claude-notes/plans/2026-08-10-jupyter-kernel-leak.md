@@ -2,10 +2,12 @@
 title: 'Jupyter kernel process leak (bd-hxhnnlzs)'
 date: 2026-08-10
 description: 'Fixes Jupyter kernel processes leaking as orphans after every render and test run by replacing the never-dropped static daemon with refcounted scopes and graceful shutdown.'
+status: done  # investigated 2026-08-10; root cause confirmed on both suspected paths. Fix not yet started.
+braid:
+  strand: bd-hxhnnlzs  # "Jupyter kernels leak as orphan processes from test runs (2338 accumulated)"
+  priority: P1
 ---
 
-**Strand:** bd-hxhnnlzs — "Jupyter kernels leak as orphan processes from test runs (2338 accumulated)"
-**Status:** investigated 2026-08-10; root cause confirmed on both suspected paths. Fix not yet started.
 **Investigation record:** braid comment `c-1jzpdrgf` on the strand (this document is the durable copy).
 
 ## Overview

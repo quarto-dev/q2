@@ -2,12 +2,12 @@
 title: '`.embed-example-iframe`: inline code snippet + Demo crossref for all examples'
 date: 2026-06-10
 description: 'Lets an `.embed-example-iframe` div carry a leading code snippet that renders above its iframe, gives every reveal.js example a numbered Demo crossref, and adds matching styling and docs migration.'
+status: draft  # DESIGN — awaiting user review before implementation. No code yet.
+braid:
+  strand: bd-15uump3h  # discovered-from bd-z1smhvuo, the embed feature; related to bd-t3cert81, crossreferenceable Demo blocks
+  priority: P2
 ---
 
-**Strand:** bd-15uump3h (discovered-from bd-z1smhvuo, the embed feature;
-related to bd-t3cert81, crossreferenceable Demo blocks)
-**Date:** 2026-06-10
-**Status:** DESIGN — awaiting user review before implementation. No code yet.
 **Page in focus:** `docs/presentations/revealjs/index.qmd`
 **Feature code:** `crates/quarto-core/src/transforms/example_embed.rs`
 **Writing skill:** apply `reader-expectations-prose` when (re)drafting doc prose.

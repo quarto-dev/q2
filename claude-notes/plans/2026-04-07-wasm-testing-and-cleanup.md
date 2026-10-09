@@ -2,9 +2,11 @@
 title: 'WASM Testing and Cleanup Implementation Plan'
 date: 2026-04-07
 description: 'Removes `test` from the wasm32 cfg guards in `filter.rs` and `shortcode.rs` so native tests use the full Lua stdlib, adds real wasm-bindgen smoke tests to CI, and deletes the stale `wasm-qmd-parser` crate and its workflow.'
+status: done  # COMPLETE. Cleanup landed via PR #116 (merged 2026-04-23, squash `52968801`); WASM smoke tests + CI job landed via PR #109 (merged 2026-07-02, `e26a8b88`). Tracking strand bd-itj9 closed. Remaining checkboxes below reflect the original single-branch plan before the branch split (see design spec comments); not audited item-by-item post-split — treat as historical record, not a live tracker.
+braid:
+  strand: bd-itj9
+  priority: P3
 ---
-
-**Status: COMPLETE.** Cleanup landed via PR #116 (merged 2026-04-23, squash `52968801`); WASM smoke tests + CI job landed via PR #109 (merged 2026-07-02, `e26a8b88`). Tracking strand bd-itj9 closed. Remaining checkboxes below reflect the original single-branch plan before the branch split (see design spec comments); not audited item-by-item post-split — treat as historical record, not a live tracker.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -13,8 +15,6 @@ description: 'Removes `test` from the wasm32 cfg guards in `filter.rs` and `shor
 **Architecture:** The `#[cfg(any(target_arch = "wasm32", test))]` guards in `filter.rs` and `shortcode.rs` force native tests through WASM-restricted Lua stdlib, causing Windows failures. We remove the `test` from these guards so native tests use `Lua::new()` with real C stdlib, and add real `wasm-bindgen-test` smoke tests that run on the actual wasm32 target in CI. Stale `wasm-qmd-parser` crate and its `build-wasm.yml` workflow are removed.
 
 **Tech Stack:** Rust, wasm-bindgen-test, cargo test --target wasm32-unknown-unknown, GitHub Actions
-
-**Beads:** bd-itj9
 
 **Design spec:** `claude-notes/designs/2026-04-03-wasm-testing-and-cleanup.md`
 

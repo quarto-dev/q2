@@ -2,9 +2,9 @@
 title: 'Particle Extraction Enhancement Plan'
 date: 2025-11-30
 description: 'Extends name particle extraction to handle particles joined to the family name by punctuation such as apostrophes and hyphens, so those particles split off correctly and sort by family name.'
+status: done
 ---
 
-**Status**: Completed
 **Related Issue**: k-464
 **Completed**: 2025-11-30
 

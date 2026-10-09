@@ -2,9 +2,9 @@
 title: 'P4 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
 description: 'Vendors Quarto 1''s Lua filters and data directory at a pinned tag, and adds a harness that runs them under a real pandoc subprocess, with each task bound to a named test seam.'
+status: approved  # Ready for subagent-driven execution. No blockers remain on P4's own deliverable.
 ---
 
-**Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P4-run-machinery.md`](2026-08-20-pandoc-hybrid-P4-run-machinery.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
@@ -13,7 +13,6 @@ description: 'Vendors Quarto 1''s Lua filters and data directory at a pinned tag
 serialization step, though Tasks 1-8 can proceed against the *frozen schema decision* before P2's
 implementation lands. P4 is scheduled **before P5**, so the `main.lua` splice patch (Task 8) ships
 before the shim it splices in; Task 8's seams are bound to *position and shape*, never conversion.
-**Status:** Ready for subagent-driven execution. No blockers remain on P4's own deliverable.
 **P4's transport smoke depends on P2 Task 7** (`quarto_pandoc_reader_opts`).
 
 This file adds nothing to P4's scope — it converts P4's Coarse checklist into `## Task N` units

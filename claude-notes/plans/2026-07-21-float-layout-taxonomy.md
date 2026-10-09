@@ -2,13 +2,14 @@
 title: 'Float/layout DOM class taxonomy (bd-hcp8m3ve)'
 date: 2026-07-21
 description: 'Settles the DOM class names for figure, table and listing floats by reusing Quarto 1 names, emitting them from a transform so the pampa HTML writer and the preview renderer produce the same structure.'
+status: draft  # Design drafted — pending alignment on the doc's four open questions. **Do not start implementation until Carlos signs off.**
+braid:
+  strand: bd-hcp8m3ve  # unblocks bd-9fz5fweg CSS port
+  priority: P2
+  labels: [css, parity]
 ---
 
-**Date:** 2026-07-21
-**Strand:** bd-hcp8m3ve (feature; unblocks bd-9fz5fweg CSS port)
 **Design:** `claude-notes/designs/float-layout-class-taxonomy.md` (the contract)
-**Status:** Design drafted — pending alignment on the doc's four open
-questions. **Do not start implementation until Carlos signs off.**
 
 ## Overview
 

@@ -2,11 +2,9 @@
 title: 'Epic: `format: typst` smoke-all testing (orange-book port)'
 date: 2026-09-27
 description: 'Ports seven Q1 Typst smoke-all fixtures into Q2, adding the assertion vocabulary and PDF layout predicates needed to check numbering and margin placement in rendered Typst output.'
+status: approved  # Pre-implementation. Research complete (this doc + phase docs below), all open design questions settled with Gordon. Not yet started.
 ---
 
-**Date:** 2026-09-27
-**Status:** Pre-implementation. Research complete (this doc + phase docs below), all
-open design questions settled with Gordon. Not yet started.
 **Integration branch:** `explore/typst-smoke-all-epic` (worktree `.worktrees/workspace-3`),
 branched off `main` at `e8379cfe1` — post book-projects-epic merge. Positional-predicate
 research happened in parallel on `explore/typst-pdf-text-positions` (worktree

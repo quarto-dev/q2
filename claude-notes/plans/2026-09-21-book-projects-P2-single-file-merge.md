@@ -4,7 +4,6 @@ date: 2026-09-21
 description: 'Adds the mechanism that merges a book''s chapters into one Pandoc document before the Crossref phase, driving the vendored book Lua filters and resolving cross-chapter links in Rust.'
 ---
 
-**Date:** 2026-09-21 (revised twice after review passes; this revision folds in the already-vendored `book-*.lua` files)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §5, §6, §8
 **Q1 reference:** `book-render.ts`\'s `mergeExecutedFiles`/`renderSingleFileBook` (concept only — Q1 concatenates markdown text with base64-encoded HTML-comment metadata; Q2 merges Pandoc AST directly). **Also**: the already-vendored `resources/pandoc-filters/filters/quarto-pre/book-numbering.lua`, `quarto-pre/book-links.lua`, `quarto-finalize/book-cleanup.lua`, `quarto-post/book.lua` — read these before writing any code in this plan, they do real work this plan depends on.

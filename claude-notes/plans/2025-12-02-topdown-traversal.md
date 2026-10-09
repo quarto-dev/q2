@@ -2,11 +2,12 @@
 title: 'Topdown Traversal for Lua Filters'
 date: 2025-12-02
 description: 'Plans the topdown traversal mode for Lua filters, selected with `traverse` set to topdown, so parents are visited before children and a stop signal can skip a node''s children.'
+braid:
+  strand: k-478
+  priority: P1
 ---
 
-**Issue**: k-478 (Implement topdown traversal with stop signal for Lua filters)
 **Parent**: k-477 (discovered-from)
-**Date**: 2025-12-02
 
 ## Executive Summary
 

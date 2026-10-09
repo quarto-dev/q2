@@ -2,12 +2,14 @@
 title: 'q2-preview comments: resolving the last comment leaves an empty pill and a stuck glow'
 date: 2026-09-09
 description: 'Explains and fixes two state bugs in the q2-preview comment bubble that leave an empty pill and a stuck blue glow on a block after its last comment is resolved.'
+status: done  # fixed, verified, committed on the branch (2026-09-09); awaiting push approval
+braid:
+  strand: bd-bpt089zw
+  priority: P2
 ---
 
-**Strand:** bd-bpt089zw
 **Branch / worktree:** `braid/bd-bpt089zw-q2-preview-comments-resolving` at
 `.worktrees/bd-bpt089zw-q2-preview-comments-resolving/`
-**Status:** fixed, verified, committed on the branch (2026-09-09); awaiting push approval
 
 ## Overview
 

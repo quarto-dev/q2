@@ -2,13 +2,10 @@
 title: 'Plan: typst output format (pandoc-hybrid-writer follow-on)'
 date: 2026-09-18
 description: 'Adds `typst` as an output format by reusing pandoc''s Typst writer with vendored Quarto 1 filters and templates, plus a new compile step that invokes the typst binary to produce a PDF.'
+status: approved  # This plan's Phase 1 core wiring may target `feature/pandoc-writer-hybrid` (the epic's integration branch) directly, in parallel with the epic's remaining P5/P6/P7 work — it does not need to wait for a `main` merge. The crossref/numbering verification bullet at the end of Phase 1 still needs P3/P6 landed first.
 ---
 
 **Date:** 2026-09-20
-**Status:** This plan's Phase 1 core wiring may target `feature/pandoc-writer-hybrid` (the
-epic's integration branch) directly, in parallel with the epic's remaining P5/P6/P7 work — it
-does not need to wait for a `main` merge. The crossref/numbering verification bullet at the end
-of Phase 1 still needs P3/P6 landed first.
 **Design (authoritative, epic-side):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
 **Research (this follow-on):** [`../research/2026-09-18-typst-epub-pandoc-q1-inventory.md`](../research/2026-09-18-typst-epub-pandoc-q1-inventory.md) — Part 1 (pandoc's Typst writer), Part 3 (Q1's typst format), Part 5 (Q2's binary-discovery infra + the compile step's real shape). Read Part 5 in full before starting Phase 2 — the compile step is substantially more than "shell out to `typst compile`".
 **Sibling follow-on:** [`2026-09-18-pandoc-hybrid-epub.md`](2026-09-18-pandoc-hybrid-epub.md) — independent, no shared implementation work beyond the epic itself.

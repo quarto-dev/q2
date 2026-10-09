@@ -2,10 +2,8 @@
 title: 'Session Handoff Notes'
 date: 2025-11-29
 description: 'Records the page range and punctuation-in-quote fixes made in `quarto-citeproc` and sets out the year-suffix disambiguation work and other open patterns for the next session.'
+status: approved  # Ready for next session
 ---
-
-**Date**: 2025-11-29
-**Status**: Ready for next session
 
 ## Session Summary
 

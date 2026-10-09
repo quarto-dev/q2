@@ -2,11 +2,11 @@
 title: 'Table Caption Implementation Attempts (k-185)'
 date: 2025-10-27
 description: 'Records attempts to let a pipe table caption follow the table without a blank line; grammar-only and scanner-only changes each fell short, and the scanner''s control flow made a combined fix hard.'
+status: in-progress  # In progress - multiple approaches attempted
+braid:
+  strand: k-185
+  priority: P2
 ---
-
-**Date**: 2025-10-27
-**Issue**: k-185 - Table caption parsing fails without blank line before caption
-**Status**: In progress - multiple approaches attempted
 
 ## Problem Statement
 

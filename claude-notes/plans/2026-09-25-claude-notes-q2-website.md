@@ -2,32 +2,13 @@
 title: 'claude-notes as a Quarto 2 website'
 date: 2026-09-25
 description: 'Makes the `claude-notes/` directory render as a Quarto 2 website by fixing notes that rely on Markdown habits q2 rejects, fixing q2 where it is wrong, and writing agent guidance for new notes.'
+status: in-progress  # every note renders (1456 / 1456, 0 errors, 2026-10-07, nightly .20261007), and the warnings are gone too: brackets (Q-2-9 152 → 0, Q-2-49 339 → 0 outside three repro fixtures) and quoted shortcodes (Q-16-3 95 → 0, Q-16-5 77 → 0), 2026-10-08. Mechanical escaping, six per-file agent batches for errors, four for brackets, three for shortcodes, and hand tails; the star queue below is historical. The render now reports 1451 / 1451 with no diagnostics at all (after merging `origin/main` once more on 2026-10-08: two new plans, three `\'` escapes and one code span). The last two warnings were one q2 bug filed with a repro, the YAML provenance desync for a folded scalar holding a non-ASCII character (bd-e0e9kd4a, in progress); worked around by spelling two cosmetic `status:` blocks in ASCII. A third, Q-2-50 on a `{{r}}` fence line inside a four-backtick block, turned out to be by design (bd-3djx9ris, closed: the nested check is what catches Quarto 1 openers hidden in display fences); the one note that documents that idiom now carries `diagnostics: {Q-2-50: {level: off, reason: …}}` in its front matter, as `docs/errors/markdown/Q-2-50.qmd` does. The repro fixtures that exist to warn are excluded in `_quarto.yml`. Note for the tally scripts: `--json-errors` emits some warnings with no `code` field ("Missing shortcode argument", "Shortcode error", the provenance self-check; bd-9vmlk2md), so count `kind: warning`, not codes. Remaining work: site polish, CI, and every merge from `main` needs the fixpoint script (and probably a small batch) for the notes it brings in.
+braid:
+  strand: bd-uk8zgkha
+  priority: P2
 ---
 
-**Strand:** bd-uk8zgkha (epic)
 **Branch:** `braid/bd-uk8zgkha-claude-notes-website` (main checkout, no worktree; not pushed)
-**Status:** every note renders (1456 / 1456, 0 errors, 2026-10-07, nightly
-.20261007), and the warnings are gone too: brackets (Q-2-9 152 → 0, Q-2-49
-339 → 0 outside three repro fixtures) and quoted shortcodes (Q-16-3 95 → 0,
-Q-16-5 77 → 0), 2026-10-08. Mechanical escaping, six per-file agent batches
-for errors, four for brackets, three for shortcodes, and hand tails; the star
-queue below is historical. The render now reports 1451 / 1451 with no
-diagnostics at all (after merging `origin/main` once more on 2026-10-08: two
-new plans, three `\'` escapes and one code span). The last two warnings were
-one q2 bug filed with a repro, the YAML provenance desync for a folded scalar
-holding a non-ASCII character (bd-e0e9kd4a, in progress); worked around by
-spelling two cosmetic `status:` blocks in ASCII. A third,
-Q-2-50 on a `{{r}}` fence line inside a four-backtick block, turned out to be
-by design (bd-3djx9ris, closed: the nested check is what catches Quarto 1
-openers hidden in display fences); the one note that documents that idiom
-now carries `diagnostics: {Q-2-50: {level: off, reason: …}}` in its front
-matter, as `docs/errors/markdown/Q-2-50.qmd` does. The repro fixtures that
-exist to warn are excluded in `_quarto.yml`. Note for the tally scripts: `--json-errors`
-emits some warnings with no `code` field ("Missing shortcode argument",
-"Shortcode error", the provenance self-check; bd-9vmlk2md), so count
-`kind: warning`, not codes. Remaining work: site polish, CI, and every merge
-from `main` needs the fixpoint script (and probably a small batch) for the
-notes it brings in.
 
 ## Goal
 

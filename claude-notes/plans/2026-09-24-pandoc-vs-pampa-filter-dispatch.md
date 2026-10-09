@@ -4,7 +4,6 @@ date: 2026-09-24
 description: 'Routes `post-quarto` and `pre-render` extension filters for Pandoc-hybrid targets into pandoc''s `main.lua` entry-point chain, since pampa''s native Lua engine lacks the Q1 helpers those filters rely on.'
 ---
 
-**Date:** 2026-09-24
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md) (new phase, inserted between P2 and P3 — see the epic's phase table)
 **Depends on:** P2's item 80 (`orange-book` vendored as a real extension subtree) — this is what first exercised the gap.
 **Blocks:** P2's items 55–61 (the `orange-book`-grounded integration tests, currently unblocked-but-red), and P3 (wiring the merge output through real Typst/EPUB compilation) for any book that uses an extension filter with an `at:` entry point.

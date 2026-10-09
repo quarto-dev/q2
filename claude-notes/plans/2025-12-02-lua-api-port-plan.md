@@ -4,7 +4,6 @@ date: 2025-12-02
 description: 'Plans a port of the full Pandoc Lua filter API onto the mlua-based Rust runtime, cataloguing which element constructors, list types and utility functions exist and which are still missing.'
 ---
 
-**Date**: 2025-12-02
 **Related Issue**: k-409 (Lua subsystem work)
 **Epic Issue**: k-473
 

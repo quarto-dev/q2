@@ -2,6 +2,9 @@
 title: 'Unicode Offset Bug Investigation Plan (k-328)'
 date: 2025-11-04
 description: 'Investigates why error columns are wrong when a multi-byte character such as a checkmark comes before the error, tracing the mismatch between the byte offsets passed to ariadne and the character offsets it expects by default.'
+braid:
+  strand: k-328
+  priority: P0
 ---
 
 **Issue**: Error diagnostics show incorrect column positions when unicode characters precede errors.

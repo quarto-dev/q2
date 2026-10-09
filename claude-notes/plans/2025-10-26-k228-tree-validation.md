@@ -2,13 +2,14 @@
 title: 'Phase 4 Components Tree Validation Plan (k-228)'
 date: 2025-10-26
 description: 'Adds systematic validation of the AnnotatedParse components tree, checking structural integrity, child ordering, nesting depth, source-range containment and navigation helpers across all document types.'
+status: in-progress
+braid:
+  strand: k-228
+  priority: P2
 ---
 
-**Date**: 2025-10-26
-**Status**: In Progress
 **Owner**: Claude Code
 **Parent Task**: k-192 (Phase 5: Write comprehensive tests for annotated Pandoc AST)
-**Beads Issue**: k-228
 
 ## Objective
 

@@ -2,13 +2,10 @@
 title: 'Block source-range tightness — blockquote gutters & list continuation'
 date: 2026-06-18
 description: 'Investigates why a block''s source range absorbs the blockquote gutter of the following line, forcing a heuristic in navigation code, and weighs options for making the producer ranges tight.'
+status: draft  # **RESEARCH** — problem framed, options sketched, open questions listed. NOT yet a development plan; do not implement from this. Convert to a dev plan (TDD checklist) only after the open questions below are answered.
 ---
 
-**Date:** 2026-06-18
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
-**Status:** **RESEARCH** — problem framed, options sketched, open questions listed.
-NOT yet a development plan; do not implement from this. Convert to a dev plan
-(TDD checklist) only after the open questions below are answered.
 **Parent / prior art:** `2026-06-01-q2-preview-plan-7g-source-range-tiling.md`
 (the provenance epic's source-range tiling work — **landed** on `feature/provenance`,
 merged) and `claude-notes/designs/provenance-contract.md` (the P1–P4 contract).

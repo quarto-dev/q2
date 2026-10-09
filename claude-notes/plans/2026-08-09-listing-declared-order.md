@@ -2,12 +2,14 @@
 title: 'Listings lose declared order of explicit `contents:` entries (bd-listing-declared-order-3ixcvc4o)'
 date: 2026-08-09
 description: 'Makes listings with explicit `contents:` paths keep the order the author declared, by ordering matched items by their first matching pattern, instead of the project''s alphabetical index order.'
+status: draft  # Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+braid:
+  strand: bd-listing-declared-order-3ixcvc4o  # origin: `br-listing-declared-order-qodof0f6` in the connect-docs porting skein
+  priority: P1
+  labels: [listings]
 ---
 
-**Date:** 2026-08-09
-**Braid:** bd-listing-declared-order-3ixcvc4o (origin: `br-listing-declared-order-qodof0f6` in the connect-docs porting skein)
 **Checkout:** main worktree (`/Users/cscheid/rooms/room-1/q2`, branch `main`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 

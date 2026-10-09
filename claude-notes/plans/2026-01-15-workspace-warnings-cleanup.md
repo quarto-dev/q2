@@ -2,10 +2,8 @@
 title: 'Workspace Warnings Cleanup Plan'
 date: 2026-01-15
 description: 'Plans how to resolve the 16 compiler warnings in the `quarto-core` and `pampa` crates, deciding item by item whether to fix, keep as allowed public API, or delete the unused code.'
+status: draft  # Planning
 ---
-
-**Date**: 2026-01-15
-**Status**: Planning
 
 ## Overview
 

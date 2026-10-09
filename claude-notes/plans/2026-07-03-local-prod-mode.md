@@ -1,12 +1,10 @@
 ---
 title: 'Local Production Mode'
 date: 2026-07-03
+date-modified: 2026-07-07
 description: 'Adds `npm run local-prod` and an nginx Docker Compose variant that run the hub and the built hub-client behind local proxy routes, mirroring the production deployment architecture for dev/prod parity.'
+status: done  # ✅ Complete (All Phases)
 ---
-
-**Created**: 2026-07-03  
-**Updated**: 2026-07-07  
-**Status**: ✅ Complete (All Phases)
 
 ## Overview
 

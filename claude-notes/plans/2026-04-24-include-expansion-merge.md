@@ -2,13 +2,15 @@
 title: 'Merge `main` into `feature/websites`: order IncludeExpansion before DocumentProfile'
 date: 2026-04-24
 description: 'Plans the merge of the mainline into the websites feature line so that the include shortcode expansion stage runs before the `DocumentProfile` checkpoint, letting included headings appear in the profile outline.'
+status: draft  # Draft — awaiting user approval before any git operations.
+braid:
+  strand: bd-xfwx
+  priority: P1
+  labels: [websites]
 ---
 
-**Date:** 2026-04-24
-**Beads:** `bd-xfwx`
 **Parent plan / epic:** `claude-notes/plans/2026-04-23-website-project-epic.md`
   (epic `bd-0tr6`). Gates the start of Phase 4 on `feature/websites`.
-**Status:** Draft — awaiting user approval before any git operations.
 
 ## Goal
 

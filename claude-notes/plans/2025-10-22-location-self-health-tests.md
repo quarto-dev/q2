@@ -2,10 +2,11 @@
 title: 'Location Information Self-Health Test Plan'
 date: 2025-10-22
 description: 'Adds property-based tests asserting that source locations stay consistent, with ordered ranges, offset and row-column round trips, and proper nesting, across all smoke-test `.qmd` files, catching bugs like an EOF row mismatch.'
+braid:
+  strand: k-129
+  priority: P1
 ---
 
-**Date**: 2025-10-22
-**Issue**: k-129
 **Goal**: Add comprehensive self-health tests for location information that can run on any well-parsed .qmd file in the test suite
 
 ## Background

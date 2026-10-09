@@ -1,7 +1,9 @@
 ---
 title: 'P5 — Lua shim: wire format → Q1 nodes (Route R + N)'
 date: 2026-08-20
+date-modified: 2026-09-18
 description: 'Designs the Lua shim that decodes Q2''s custom-node wire format into Q1 nodes, deciding for each of the eight wire types whether to call a Q1 constructor or resolve the node directly.'
+status: draft  # Shape draft
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P5-lua-shim.md`
@@ -25,7 +27,6 @@ normative-source decision (resolved: call Q1's own functions directly), no error
 (three concrete cases resolved), and the order-assignment snippet mis-described
 `quarto.<AstName>()`\'s actual two-return-value API. All four of this plan's originally-flagged
 open design questions were already closed as of that pass.)
-**Status:** Shape draft
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`  |  Depends on: P2, P4
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P5-implementation.md`](2026-09-18-pandoc-hybrid-P5-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 

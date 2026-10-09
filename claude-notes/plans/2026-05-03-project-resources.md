@@ -2,10 +2,9 @@
 title: 'Project Resources: user- and engine-declared additional files'
 date: 2026-05-03
 description: 'Adds a way for authors, Lua filters and engines to declare extra files that should be copied into the output directory and included in `quarto publish` deployments, beyond what the render pipeline produces.'
+status: draft  # Draft v2 — design questions resolved with the user 2026-05-03.
 ---
 
-**Date:** 2026-05-03
-**Status:** Draft v2 — design questions resolved with the user 2026-05-03.
 **Do not start implementation until the user gives the go-ahead.**
 
 ## Goal

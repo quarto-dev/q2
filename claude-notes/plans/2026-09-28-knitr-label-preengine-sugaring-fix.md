@@ -2,10 +2,11 @@
 title: 'Fix: restore knitr label visibility through PreEngineSugaringStage'
 date: 2026-09-28
 description: 'Restores label-derived knitr figure filenames, such as `fig-cars-1.svg`, by re-injecting the `label` option into the engine input that pre-engine sugaring had removed.'
+braid:
+  strand: bd-2lxj10z0
+  priority: P2
 ---
 
-**Strand:** bd-2lxj10z0 — knitr label stripped by PreEngineSugaring breaks
-label-based figure filenames (`fig-cars-1.svg` -> `unnamed-chunk-1-1.svg`)
 **Public tracking issue:** https://github.com/quarto-dev/q2/issues/741
 **Worktree:** `.worktrees/workspace-4`, branch
 `braid/bd-2lxj10z0-knitr-label-stripped-preenginesugaring`, forked from

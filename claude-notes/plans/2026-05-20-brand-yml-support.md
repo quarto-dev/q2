@@ -2,11 +2,9 @@
 title: '`_brand.yml` support in Quarto 2'
 date: 2026-05-20
 description: 'Adds `_brand.yml` theming to Quarto 2 by porting Quarto 1''s brand model into a new crate and feeding its colors, typography and fonts into the SCSS layer stack.'
+status: approved  # DRAFT — design questions resolved 2026-05-20, awaiting implementation approval
 ---
 
-**Created**: 2026-05-20
-**Status**: DRAFT — design questions resolved 2026-05-20, awaiting
-implementation approval
 **Related**: `2026-01-13-sass-compilation.md` (Phase 8 stub supersedes itself with this plan)
 
 ## Goal

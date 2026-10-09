@@ -2,10 +2,10 @@
 title: 'In-progress braid strand audit (bd-a0eyjshu)'
 date: 2026-07-27
 description: 'Audits the 55 braid strands marked in progress, sorting each into close, reopen, or keep-in-progress based on git and PR evidence of whether its work landed or is still live.'
+braid:
+  strand: bd-a0eyjshu
+  priority: P2
 ---
-
-**Date:** 2026-07-27
-**Strand:** bd-a0eyjshu — Audit and clean up stale in-progress braid strands
 
 ## Overview
 

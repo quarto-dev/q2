@@ -2,6 +2,10 @@
 title: 'Fix indented continuation-line parse errors (bd-indented-continuation-parse-error-j7be7kuc)'
 date: 2026-08-11
 description: 'Fixes hard parse errors that drop whole files when indented continuation lines begin with a digit, dash or plus, by absorbing residual indentation in the grammar and judging list markers by relative indent.'
+braid:
+  strand: bd-indented-continuation-parse-error-j7be7kuc
+  priority: P0
+  labels: [parser]
 ---
 
 ## Overview

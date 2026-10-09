@@ -1,21 +1,15 @@
 ---
 title: 'P6 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
+date-modified: 2026-09-18
 description: 'Wires numbering for figures, theorems, callouts and custom crossref categories through the external pandoc path so the numbers match Quarto 1, with each test bound to a named production seam.'
+status: approved  # Ready for subagent-driven execution. Six tasks; one of them (Task 3) has **no production file changes at all**, and its honest binding is cross-plan — see `## What a revert hunk means for a "confirm the passthrough" test`.
 ---
 
-**Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P6-numbering-wiring.md`](2026-08-20-pandoc-hybrid-P6-numbering-wiring.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md) (§4 C, §7, §11, §12)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
 **Depends on:** P3, P5 (per the epic's graph) — and therefore transitively on P1/P2/P4.
-**Status:** Ready for subagent-driven execution. Six tasks; one of them (Task 3) has **no
-production file changes at all**, and its honest binding is cross-plan — see
-`## What a revert hunk means for a "confirm the passthrough" test`.
-**Updated 2026-09-18:** all three of Gordon's decisions on this plan are applied — **Task 4 is now the formal owner** of
-the positive external-mode "Figure N:" golden (moved here from P3's checklist item 3), and **T2.1's
-RED shape is a warn-and-skip rather than a render crash**, because the missing callout
-`order == nil` guard is now anchor **A7** in P3 Task 3's upstream patch.
 
 This file adds nothing to P6's scope — it converts P6's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P6 needs to a named

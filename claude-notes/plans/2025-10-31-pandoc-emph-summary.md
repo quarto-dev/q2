@@ -2,10 +2,9 @@
 title: 'pandoc_emph Implementation - Completion Summary'
 date: 2025-10-31
 description: 'Records the completed `pandoc_emph` work, where delimiter-captured whitespace is turned into Space nodes so emphasis output matches Pandoc''s placement of spaces around `Emph`.'
+status: done  # ✅ COMPLETED
 ---
 
-**Date**: 2025-10-31
-**Status**: ✅ COMPLETED
 **Parent Issue**: k-274 (Tree-sitter Grammar Refactoring)
 
 ## What Was Implemented

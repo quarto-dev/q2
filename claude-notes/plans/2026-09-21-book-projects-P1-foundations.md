@@ -4,7 +4,6 @@ date: 2026-09-21
 description: 'Gives `ProjectKind::Book` a real project type that builds the chapter list, translates book config, and reuses the website sidebar and navbar generation, with no numbering yet.'
 ---
 
-**Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §3, §4
 **Q1 reference:** `src/project/types/book/{book,book-config,book-shared,book-types,book-constants}.ts`

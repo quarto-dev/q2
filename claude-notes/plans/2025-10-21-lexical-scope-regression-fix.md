@@ -4,7 +4,6 @@ date: 2025-10-21
 description: 'Restores handling of `_scope: lexical` block metadata, which broke when YAML strings began parsing as markdown inlines, by matching both the old string form and the new inline form.'
 ---
 
-**Date**: 2025-10-21
 **Issue**: Regression in handling `_scope: lexical` block metadata
 
 ## Problem

@@ -2,11 +2,11 @@
 title: 'Multi-line inline code spans (and inline math)'
 date: 2026-05-24
 description: 'Lets inline code spans and inline math cross line breaks as Pandoc does, by lifting the same-line restriction in the tree-sitter external scanner and folding newlines into spaces.'
+status: approved  # Plan reviewed 2026-05-24 — open questions resolved (see "Decisions" below). Awaiting go-ahead to implement.
+braid:
+  strand: bd-ilv8p
+  priority: P2
 ---
-
-**Beads:** bd-ilv8p (bug)
-**Date:** 2026-05-24
-**Status:** Plan reviewed 2026-05-24 — open questions resolved (see "Decisions" below). Awaiting go-ahead to implement.
 
 ## Decisions (post-review)
 

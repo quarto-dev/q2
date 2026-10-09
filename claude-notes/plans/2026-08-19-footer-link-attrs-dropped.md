@@ -2,12 +2,14 @@
 title: 'Footer/nav config markdown drops Link attributes and unwraps attributed Spans (bd-footer-link-attrs-dropped-1axx82op)'
 date: 2026-08-19
 description: 'Fixes the navigation renderer so links, attributed spans and inline code in footer and nav markdown keep their id, class and key-value attributes instead of losing them, which breaks cookie-consent hooks.'
+status: in-progress  # Design aligned 2026-08-20; implementation approved and in progress on branch `braid/bd-footer-link-attrs-dropped-1axx82op`.
+braid:
+  strand: bd-footer-link-attrs-dropped-1axx82op
+  priority: P2
+  labels: [navigation, parity]
 ---
 
-**Date:** 2026-08-19
-**Braid:** bd-footer-link-attrs-dropped-1axx82op
 **Checkout:** invoked in the bd-nn2fou8h worktree, on `main` \@ `87c0e21a` (v0.25.0) — no dedicated branch created; user decides where implementation lands.
-**Status:** Design aligned 2026-08-20; implementation approved and in progress on branch `braid/bd-footer-link-attrs-dropped-1axx82op`.
 
 ## Triage verdict
 

@@ -2,11 +2,9 @@
 title: 'Follow-up: `format: typst` smoke-all coverage beyond the orange-book epic'
 date: 2026-09-29
 description: 'Triages the remaining Typst smoke-all fixtures into themed porting groups and lists the Q2 Typst and shared-filter bugs, such as font-path handling, that block some of them.'
+status: draft  # Research/triage complete. Proposal below — **not started**, awaiting Gordon's review before any fixture is copied or any Rust test is written.
 ---
 
-**Date:** 2026-09-29
-**Status:** Research/triage complete. Proposal below — **not started**, awaiting
-Gordon's review before any fixture is copied or any Rust test is written.
 **Base:** `origin/feature/typst-testing` tip (PR #745, still open at time of writing —
 re-check `gh pr view 745 --json state` before branching implementation work off this;
 if merged, re-base onto `main` first, per this file's own worktree note).

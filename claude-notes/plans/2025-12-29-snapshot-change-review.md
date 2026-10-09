@@ -4,7 +4,6 @@ date: 2025-12-29
 description: 'Records and assesses each difference in the yaml-tags JSON snapshot produced by moving pampa from `MetaValueWithSourceInfo` to `ConfigValue`, flagging the `!date` tag as a semantic change.'
 ---
 
-**Date:** 2025-12-29
 **Branch:** `refactor/meta-value-config-value`
 **Base:** `kyoto` (commit 22d9fd7)
 

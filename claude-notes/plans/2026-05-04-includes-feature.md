@@ -2,10 +2,12 @@
 title: '`include-in-header` / `include-before-body` / `include-after-body` (HTML) — design draft'
 date: 2026-05-04
 description: 'Implements the `include-in-header`, `include-before-body` and `include-after-body` keys for Quarto 2 HTML output, which are currently ignored, by routing them through the same generate-then-render pattern used for navbars and footers.'
+status: draft  # Draft for review. Beads: `bd-8kp3`.
+braid:
+  strand: bd-8kp3
+  priority: P2
 ---
 
-**Date:** 2026-05-04
-**Status:** Draft for review. Beads: `bd-8kp3`.
 **Scope:** HTML format only (matches current Q2 reach). Architecture chosen
 to extend cleanly to PDF/DOCX/etc. when those land.
 

@@ -2,9 +2,9 @@
 title: 'P3 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
 description: 'Task-by-task spec for moving crossref numbering out of the Lua filters into an external mode selected by the `crossref-numbering` key, with each task''s test seam and revert hunk named in advance.'
+status: done  # All eight tasks (1–8) executed and reviewed clean. Tasks 1–5, 8 as of 2026-09-18 (subagent-driven execution) — see "Execution status" below. Tasks 6 and 7 completed 2026-09-20, in q2 worktree `.worktrees/workspace-1`, once P4 landed the vendored filters tree — see "Tasks 6 and 7 execution status" below. Eight dispatchable tasks, Tasks 1–8 — note Task 8 is ordered before Task 5 (which opens the PR carrying it); numbers here are identifiers, the `Prerequisite` fields are the ordering. Updated 2026-09-18: Gordon's two decisions are applied — the missing callout `order == nil` guard is folded into the upstream patch as anchor A7 (Task 3), which also unblocks Task 7's labeled-callout fixture; and P3's checklist item 3 (the positive external-mode golden) has moved to P6 Task 4 (its old section is now a non-dispatchable pointer, and the number 8 has been reused). Also updated the same day: Gordon's third decision adds Task 8, the TypeScript half of the upstream patch (`crossref: numbering:` key, schema entry, params read, two smoke tests), carried by Task 5's PR — resolving Findings #1.
 ---
 
-**Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P3-upstream-crossref.md`](2026-08-20-pandoc-hybrid-P3-upstream-crossref.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md) (§7)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
@@ -12,19 +12,6 @@ description: 'Task-by-task spec for moving crossref numbering out of the Lua fil
 **unchanged** by the 2026-09-18 additions (Task 8 is upstream-only, `Q` tier). **One caveat:**
 Task 7, the q2-side `L`-tier matrix, is blocked on capabilities P4 owns — see
 `## Findings for Gordon` #1.
-**Status:** **All eight tasks (1–8) executed and reviewed clean.** Tasks 1–5, 8 as of
-2026-09-18 (subagent-driven execution) — see "Execution status" below. **Tasks 6 and 7
-completed 2026-09-20**, in q2 worktree `.worktrees/workspace-1`, once P4 landed the vendored
-filters tree — see "Tasks 6 and 7 execution status" below. **Eight dispatchable tasks, Tasks 1–8** — note Task 8 is ordered
-*before* Task 5 (which opens the PR carrying it); numbers here are identifiers, the
-`Prerequisite` fields are the ordering. **Updated 2026-09-18:** Gordon's two decisions are
-applied — the missing callout `order == nil` guard is folded into the upstream patch as anchor
-**A7** (Task 3), which also unblocks Task 7's labeled-callout fixture; and P3's checklist item 3
-(the positive external-mode golden) has **moved to P6 Task 4** (its old section is now a
-non-dispatchable pointer, and the number 8 has been reused). **Also updated the same day:**
-Gordon's third decision adds **Task 8**, the TypeScript half of the upstream patch
-(`crossref: numbering:` key, schema entry, params read, two smoke tests), carried by Task 5's
-PR — resolving Findings #1.
 
 ## Execution status (2026-09-18, subagent-driven execution — session `pandoc-hybrid-writer-impl-3`)
 

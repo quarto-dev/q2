@@ -1,7 +1,9 @@
 ---
 title: 'P6 — Category passthrough + numbering suppression'
 date: 2026-08-20
+date-modified: 2026-09-18
 description: 'Makes Quarto 1''s crossref category mechanisms recognize Quarto 2''s reference types and activates external numbering, so Quarto 1 renders Quarto 2''s cross-reference numbers without renumbering them.'
+status: draft  # Shape draft
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (round 4 review) — cross-referenced P5's corrected
@@ -23,7 +25,6 @@ bootstrap" to seed), closed the default-category-set drift check with a concrete
 and — with Gordon — resolved a real numbering gap in the frozen Route-L/R table (Callout), and
 found the "combined subfloat/panel" checklist item is currently dormant (the Q2 feature it
 depends on doesn't exist yet), not blocked.)
-**Status:** Shape draft
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`  |  Depends on: P3, P5
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P6-implementation.md`](2026-09-18-pandoc-hybrid-P6-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 

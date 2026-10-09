@@ -2,10 +2,9 @@
 title: 'Implementation Plan: pandoc_emph'
 date: 2025-10-31
 description: 'Adds the `pandoc_emph` node handler to the refactored tree-sitter grammar processor so that `*text*` and `_text_` become Pandoc `Emph` inlines, and removes the missing-node warnings for emphasis delimiters.'
+status: draft  # Planning
 ---
 
-**Date**: 2025-10-31
-**Status**: Planning
 **Parent Issue**: k-274 (Tree-sitter Grammar Refactoring)
 **Context**: Implementing `pandoc_emph` node handler in the refactored tree-sitter grammar
 

@@ -2,12 +2,11 @@
 title: 'Capture-doc metadata envelope + sync-server maintainer tools'
 date: 2026-07-24
 description: 'Adds an uncompressed metadata envelope to engine-capture documents and a `hub admin` maintenance tool that scans for orphaned captures, quarantines them, and purges them only after a retention window.'
+status: done  # implemented on branch `braid/bd-eiku4ymo-capture-docs-uncompressed-auditgc`; binary E2E verified (record below)
+braid:
+  strand: bd-eiku4ymo
+  priority: P2
 ---
-
-**Braid strand:** bd-eiku4ymo
-**Status:** implemented on branch
-`braid/bd-eiku4ymo-capture-docs-uncompressed-auditgc`; binary E2E
-verified (record below)
 
 ## Overview
 

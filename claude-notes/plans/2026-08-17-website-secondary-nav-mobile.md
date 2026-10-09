@@ -2,10 +2,12 @@
 title: 'Website mobile secondary-nav bar (bd-26bf3j1y)'
 date: 2026-08-17
 description: 'Adds a mobile secondary navigation bar to website pages, with a toggle, breadcrumbs and a search button, and records which sidebar collapse and Bootstrap JavaScript dependencies it relies on.'
+braid:
+  strand: bd-26bf3j1y
+  priority: P2
+  labels: [websites]
 ---
 
-**Date:** 2026-08-17
-**Braid:** bd-26bf3j1y
 **Branch:** `feature/bd-26bf3j1y-website-mobile-secondary-nav`, merged to `main`
 in [PR #543](https://github.com/quarto-dev/q2/pull/543) (merge commit `5b6774d1`)
 **Status:** **DONE — merged 2026-08-18; strand `bd-26bf3j1y` closed.** Design

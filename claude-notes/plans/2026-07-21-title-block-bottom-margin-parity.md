@@ -2,10 +2,11 @@
 title: 'Title-block bottom-margin parity (Q1 ↔ Q2)'
 date: 2026-07-21
 description: 'Adds the missing unconditional `#title-block-header` base rule to the Sass bundle so the title block gets the same bottom margin as Quarto 1 in both render and preview output.'
+braid:
+  strand: bd-btjkyylx
+  priority: P2
+  labels: [bug, css]
 ---
-
-**Strand:** bd-btjkyylx
-**Date:** 2026-07-21
 
 ## Overview
 

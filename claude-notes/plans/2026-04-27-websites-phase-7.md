@@ -2,13 +2,14 @@
 title: 'Phase 7 — Post-render (sitemap, favicon, site-url / title-prefix)'
 date: 2026-04-27
 description: 'Adds site-level features for websites: page titles prefixed with the site title, a favicon copied and linked into every page, a sitemap generated from `site-url`, and a robots.txt file.'
+status: draft  # Draft — pending user review.
+braid:
+  strand: bd-b9mz  # parent bd-0tr6
+  priority: P1
 ---
 
-**Date:** 2026-04-27
-**Beads:** `bd-b9mz` (parent `bd-0tr6`).
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-24-websites-phase-6.md`
-**Status:** Draft — pending user review.
 
 ## Goal of this phase
 

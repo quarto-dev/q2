@@ -2,10 +2,12 @@
 title: 'Resolve named footnote references `[^id]` (Span.quarto-note-reference)'
 date: 2026-06-09
 description: 'Fixes named footnote references like `[^id]`, which the shared `FootnotesTransform` leaves as empty spans while dropping their definition text, so they resolve as ordinary footnotes.'
+braid:
+  strand: bd-po3gn41h  # title: Named footnote refs [^id] never resolve (Span.quarto-note-reference left unresolved)
+  priority: P2
+  labels: [bug, footnotes]
 ---
 
-**Strand:** bd-po3gn41h — "Named footnote refs `[^id]` never resolve
-(Span.quarto-note-reference left unresolved)."
 **Discovered from:** bd-9aknlx1j (Phase 2e part 2: per-slide footnote coalescing for revealjs)
 **Related but distinct:** bd-1kly (reference-location: block/section numbering)
 

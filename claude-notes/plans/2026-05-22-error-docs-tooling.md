@@ -2,10 +2,13 @@
 title: 'Error-docs tooling: `cargo xtask error-docs`'
 date: 2026-05-22
 description: 'Specifies a `cargo xtask error-docs` subcommand that audits error documentation pages against the error catalog for missing, stale, mismatched, or misplaced pages, plus a health rollup and stub generation.'
+status: draft  # drafting — pending user review
+braid:
+  strand: bd-8otua  # child of bd-94x8a
+  priority: P2
+  labels: [documentation, error-reporting, tooling]
 ---
 
-**Status:** drafting — pending user review
-**Beads:** [bd-8otua](../../.beads/issues.jsonl) (child of [bd-94x8a](2026-05-22-error-docs-website-epic.md))
 **Blocked by:** bd-nvlxn (foundation — schema + directory layout must exist)
 
 ## Goal

@@ -2,6 +2,9 @@
 title: 'doctemplate CRLF line-ending preservation (bd-1d3e / #157)'
 date: 2026-06-23
 description: 'Makes the `quarto-doctemplate` parser treat CRLF line endings as single leading line breaks, so `$if$` and `$for$` blocks stop doubling blank lines and CRLF input keeps CRLF output.'
+braid:
+  strand: bd-1d3e
+  priority: P2
 ---
 
 ## Policy decision

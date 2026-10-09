@@ -2,14 +2,13 @@
 title: 'Brand-aware favicon fallback (bd-97yc)'
 date: 2026-07-27
 description: 'Makes a website project''s brand small logo the favicon when `website.favicon` is unset, rebasing brand-relative paths and fixing explicit URL favicons that were being mangled, with an explicit setting always winning.'
+status: done  # **Implemented**, Phases 0–5 complete. Unpushed.
+braid:
+  strand: bd-97yc  # bd-1elkd (duplicate) closed 2026-07-27 with duplicates → bd-97yc edge; its description folded into bd-97yc
+  priority: P3
 ---
 
-**Date:** 2026-07-27
-**Braid:** bd-97yc (feature, filed 2026-04-27, raised to P3). Its duplicate
-**bd-1elkd** was closed 2026-07-27 with a `duplicates → bd-97yc` edge and its
-description folded into bd-97yc.
 **Branch:** `main`, based at `dd87a8b5` (no worktree created)
-**Status:** **Implemented**, Phases 0–5 complete. Unpushed.
 
 ## What shipped
 

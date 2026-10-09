@@ -2,11 +2,10 @@
 title: 'Plan 2C — q2-preview Quarto custom-node rendering + verification'
 date: 2026-05-09
 description: 'Fills q2-preview with Quarto renderers for callouts, theorems, proofs, figures, equations and cross-references, using the HTML output''s class names so the compiled theme CSS applies unchanged.'
+status: approved  # Implementation plan
 ---
 
-**Date:** 2026-05-09
 **Branch:** feature/q2-preview
-**Status:** Implementation plan
 **Milestone:** M2 completion. After Plan 2B (Session A) ships the framework + Pandoc-base layer, Plan 2C (Session B) lands the Quarto-specific custom-node renderers and end-to-end verification so q2-preview reaches visual parity with the HTML format for documents using callouts, theorems, proofs, figures, equations, and cross-references.
 
 ## Goal

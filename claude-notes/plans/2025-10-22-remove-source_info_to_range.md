@@ -4,7 +4,6 @@ date: 2025-10-22
 description: 'Removes the `source_info_to_range` helper from the list parser by computing only the row numbers that loose-list detection actually uses, avoiding unneeded start-location work.'
 ---
 
-**Date:** 2025-10-22
 **Context:** Code review feedback - `source_info_to_range` is only used for extracting row numbers in `process_list`
 
 ## Current Situation

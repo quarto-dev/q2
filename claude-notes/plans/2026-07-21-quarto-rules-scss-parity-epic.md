@@ -7,7 +7,6 @@ description: 'Epic for closing gaps between Q2''s HTML stylesheets and TS Quarto
 **Epic:** bd-4doe9lvt
 **Audit task:** bd-eias3e39
 **Discovered from:** bd-btjkyylx (title-block bottom-margin, PR #406)
-**Date:** 2026-07-21
 
 ## Overview
 

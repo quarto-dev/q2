@@ -2,6 +2,9 @@
 title: 'q2 mcp: `--print-config` + `--help` launcher-options discovery (bd-9a8yu2gw)'
 date: 2026-06-13
 description: 'Adds a `--print-config` flag and launcher options to `q2 mcp --help`, so users can generate a `.mcp.json` entry and discover the launcher''s flags and environment variables.'
+braid:
+  strand: bd-9a8yu2gw
+  priority: P2
 ---
 
 ## Overview

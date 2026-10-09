@@ -4,7 +4,6 @@ date: 2026-08-14
 description: 'Routes root-absolute and static-file links that miss the project index through the resource resolvers so they become page-relative, then adds website breadcrumbs to the page title block.'
 ---
 
-**Date:** 2026-08-14
 **Braid:**
 - bd-tef2lm9j — nav hrefs to static (non-document) files not page-relativized
 - bd-root-absolute-dir-link-58eh8834 — body links to directories not page-relativized

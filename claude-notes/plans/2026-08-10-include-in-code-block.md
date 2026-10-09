@@ -2,12 +2,14 @@
 title: '`{{< include >}}` inside a fenced code block is not expanded (bd-include-in-code-block-f8mvtczn)'
 date: 2026-08-10
 description: 'Expands include shortcodes that sit alone on a line inside fenced code blocks during the include expansion stage, matching Quarto 1 so that listings show the included file''s text.'
+status: done  # Implemented, fully verified, awaiting review before commit. All decisions (D1–D7 plus D3a/D3b/D4a found during implementation) are settled and recorded below.
+braid:
+  strand: bd-include-in-code-block-f8mvtczn
+  priority: P1
+  labels: [parity]
 ---
 
-**Date:** 2026-08-10
-**Braid:** `bd-include-in-code-block-f8mvtczn` (bug, P1, label `parity`)
 **Branch:** `braid/include-in-code-block-f8mvtczn`, off `main` \@ `bcdbce6b`
-**Status:** Implemented, fully verified, **awaiting review before commit**. All decisions (D1–D7 plus D3a/D3b/D4a found during implementation) are settled and recorded below.
 
 ## Triage verdict
 

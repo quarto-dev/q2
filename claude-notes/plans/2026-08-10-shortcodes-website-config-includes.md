@@ -2,12 +2,14 @@
 title: 'Shortcodes not evaluated in website.title, page-footer, or HTML include files (bd-shortcodes-in-metadata-bp06aub8)'
 date: 2026-08-10
 description: 'Makes shortcodes such as `env` resolve in `website.title`, page footers and include files, where q2 currently emits them literally while Quarto 1 evaluates them, by walking metadata and expanding include text.'
+status: done  # Complete. Implemented on `braid/bd-shortcodes-in-metadata-bp06aub8`, merged to `main` via PR #487 (2026-08-10); strand closed. Follow-ups: bd-1fue1ly5, bd-fz6gwfq0.
+braid:
+  strand: bd-shortcodes-in-metadata-bp06aub8
+  priority: P1
+  labels: [parity, websites]
 ---
 
-**Date:** 2026-08-10
-**Braid:** bd-shortcodes-in-metadata-bp06aub8
 **Checkout:** `main` \@ `0c5d0abe` (investigation committed in place; no worktree created)
-**Status:** Complete. Implemented on `braid/bd-shortcodes-in-metadata-bp06aub8`, merged to `main` via PR #487 (2026-08-10); strand closed. Follow-ups: bd-1fue1ly5, bd-fz6gwfq0.
 
 ## Triage verdict
 

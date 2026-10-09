@@ -2,10 +2,12 @@
 title: 'Fix issue #196: list-item continuation regression from PR #194 (bd-3mgb)'
 date: 2026-05-14
 description: 'Restores list-item continuation after a blank line containing four or more columns of trailing whitespace, by tightening the tree-sitter scanner''s indented-code gate without weakening its detection of real code blocks.'
+braid:
+  strand: bd-3mgb  # discovered-from bd-7l1u, the Q-2-35 implementation
+  priority: P1
 ---
 
 - **GitHub:** https://github.com/quarto-dev/q2/issues/196
-- **Beads:** bd-3mgb (discovered-from bd-7l1u, the Q-2-35 implementation)
 - **Worktree branch:** `issue-196`
 - **Triage:** `claude-notes/issue-reports/196/triage.md`
 

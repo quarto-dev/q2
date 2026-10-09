@@ -2,13 +2,14 @@
 title: '`q2 use brand`: brand scaffolding command (bd-1vlw8)'
 date: 2026-07-28
 description: 'Plans a `q2 use brand` command that copies a brand from a local directory, zip, GitHub repository, or extension and writes the `brand:` key into `_quarto.yml`, since Q2 has no brand auto-discovery.'
+status: approved  # Design settled (rounds 1 + 2, 2026-07-28) — no open questions. **Do not start implementation until the user gives the go-ahead.**
+braid:
+  strand: bd-1vlw8
+  priority: P4
 ---
 
-**Date:** 2026-07-28
-**Braid:** bd-1vlw8 — *Implement quarto use brand scaffolding command*
 **Branch:** `main` \@ `581e45c0` (investigated in the primary checkout — no worktree)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` — ✓ all steps passed at this HEAD (10593 tests)
-**Status:** Design settled (rounds 1 + 2, 2026-07-28) — no open questions. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 

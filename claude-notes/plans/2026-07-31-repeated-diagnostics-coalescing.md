@@ -2,9 +2,11 @@
 title: 'Coalesce repeated per-page diagnostics in project renders'
 date: 2026-07-31
 description: 'Coalesces identical per-page warnings from shared inputs, such as a broken navbar href in `_quarto.yml`, into one printed diagnostic, by making the coalescing key path-aware so different files are never merged.'
+braid:
+  strand: bd-mg3ckvp7
+  priority: P1
 ---
 
-**Strand:** bd-mg3ckvp7
 **Related:** bd-9hlja (closed) — built `coalesce_by_source` and wired it for
 `pass2_failures` only, explicitly deferring the successful-render case.
 

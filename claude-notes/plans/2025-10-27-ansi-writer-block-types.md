@@ -2,10 +2,11 @@
 title: 'ANSI Writer Block Types Implementation Plan'
 date: 2025-10-27
 description: 'Adds Paragraph, Plain, Div, BulletList and OrderedList support to the ANSI writer, using prefix-writing contexts so nested lists compose and blank-line spacing depends on the block types around each block.'
+braid:
+  strand: k-267  # Phase 2
+  priority: P1
 ---
 
-**Date**: 2025-10-27
-**Issue**: k-267 Phase 2
 **Goal**: Implement Paragraph, Plain (consecutive), Div, BulletList, and OrderedList blocks
 
 ## 1. Understanding qmd.rs Context Pattern

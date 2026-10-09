@@ -2,12 +2,14 @@
 title: 'Project `_environment` files are not loaded (bd-environment-files-372u9qbs)'
 date: 2026-08-09
 description: 'Loads Quarto 1 `_environment` files into a project-scoped value map that the `env` shortcode and subprocess spawn sites read, without mutating the process environment, with real variables still taking precedence.'
+status: approved  # Design questions answered by user (2026-08-10, recorded below); dotenv-parser research done. Awaiting follow-up on the parser recommendation before implementation.
+braid:
+  strand: bd-environment-files-372u9qbs
+  priority: P1
+  labels: [parity]
 ---
 
-**Date:** 2026-08-09
-**Braid:** bd-environment-files-372u9qbs (feature, P1, label `parity`)
 **Checkout:** committed on `main` in the bd-eb2wnxkp worktree (the checkout `/investigate-beads` was invoked in; no new branch created — user decides where implementation lands)
-**Status:** Design questions answered by user (2026-08-10, recorded below); dotenv-parser research done. Awaiting follow-up on the parser recommendation before implementation.
 **Follow-up strand:** bd-ev8mk1rp (render profiles) — filed 2026-08-10, `discovered-from` this strand.
 
 ## Design policy: Quarto 2 does not mutate the process environment

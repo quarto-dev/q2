@@ -2,9 +2,9 @@
 title: 'L3 — Listing resolve transforms (sub-plan)'
 date: 2026-05-06
 description: 'Implements listing resolve transforms that build the item set from glob matches and render the built-in `default`, `grid` and `table` listings through doctemplate, along with the doctemplate enhancements rendering needs.'
+status: draft  # Draft. Awaiting user approval before hand-off.
 ---
 
-**Date:** 2026-05-06
 **Beads:** `bd-ml8z` (this phase) and `bd-b5jm` (L4 — bundled
 into the same hand-off; see §"Bundled L4 scope" below). Parent
 epic: `bd-61cd`
@@ -16,7 +16,6 @@ epic: `bd-61cd`
 - L2 (`bd-j60g`, draft) — listing data-model + schema
   reference doc:
   `claude-notes/plans/2026-05-06-listings-L2-data-model.md`.
-**Status:** Draft. Awaiting user approval before hand-off.
 
 ## Goal of this phase
 

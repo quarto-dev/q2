@@ -2,23 +2,15 @@
 title: 'P2 — Implementation tasks & Test Seam Spec'
 date: 2026-09-18
 description: 'Breaks the pandoc hybrid wire-schema work into dispatchable tasks, starting with a canonical JSON schema artifact for custom AST node types and a Rust loader that gates its shape.'
+status: approved  # Ready for subagent-driven execution. No blockers remain — the three findings that parked a seam (3: `cite_prefix`\'s shape; 4: the TS interface-diff mechanism; 5: `ExampleEmbed`\'s `route`) were decided by Gordon on 2026-09-18 and are applied, so **T3.4, T4.3 and T1.1 are all bound** and no `seam deferred until … Gordon` marker remains. **Seven tasks** — Task 7 is new, carrying `meta.quarto_pandoc_reader_opts`, reassigned here from P4 (its Findings item 3) because design §8 makes `Meta` carriage P2's. **P4's transport smoke depends on Task 7**, so it is the one task in this file with a downstream plan waiting on it. Findings 1 and 7 remain open but park nothing (both are "add a checklist item, or accept the risk explicitly" scope questions).
 ---
 
-**Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P2-wire-schema.md`](2026-08-20-pandoc-hybrid-P2-wire-schema.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
 **Depends on:** (per the epic's graph) **nothing** — P1, P2, P3 are parallelizable immediately.
 P2 *produces* for P4 (serialization step), P5 (the frozen schema the shim reads) and P7 (`Meta`
 carriage + the sideband-map carriage fact for code-block decorations).
-**Status:** Ready for subagent-driven execution. **No blockers remain** — the three findings that
-parked a seam (3: `cite_prefix`\'s shape; 4: the TS interface-diff mechanism; 5: `ExampleEmbed`\'s
-`route`) were decided by Gordon on 2026-09-18 and are applied, so **T3.4, T4.3 and T1.1 are all
-bound** and no `seam deferred until … Gordon` marker remains. **Seven tasks** — Task 7 is new,
-carrying `meta.quarto_pandoc_reader_opts`, reassigned here from P4 (its Findings item 3) because
-design §8 makes `Meta` carriage P2's. **P4's transport smoke depends on Task 7**, so it is the one
-task in this file with a downstream plan waiting on it. Findings 1 and 7 remain open but park
-nothing (both are "add a checklist item, or accept the risk explicitly" scope questions).
 
 This file adds nothing to P2's scope — it converts P2's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P2 needs to a named

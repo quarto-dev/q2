@@ -2,10 +2,9 @@
 title: 'Plan: Fix Missing Space Nodes Around Emphasis'
 date: 2025-10-31
 description: 'Fixes missing spaces around emphasis by having the emphasis handler return the whitespace captured by its delimiters as Space inlines beside the Emph node, instead of dropping it.'
+status: draft  # Planning
 ---
 
-**Date**: 2025-10-31
-**Status**: Planning
 **Related**: pandoc_emph implementation, k-274
 
 ## Problem

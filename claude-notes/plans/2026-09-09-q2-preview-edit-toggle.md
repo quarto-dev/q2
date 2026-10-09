@@ -2,6 +2,11 @@
 title: 'hub-client `q2-preview`: editable / read-only toggle in the bottom status bar'
 date: 2026-09-09
 description: 'Adds an Edit pill to hub-client''s bottom bar that toggles q2-preview between editable and read-only, so links can be followed without opening the block editor, by reusing the existing `editingDisabled` renderer flag.'
+status: done  # implemented 2026-09-09 (commit `93b146c`); PR #667 open, pending CI and review.
+braid:
+  strand: bd-ew0vak6b
+  priority: P2
+  labels: [hub-client, q2-preview]
 ---
 
 > **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this
@@ -10,9 +15,6 @@ description: 'Adds an Edit pill to hub-client''s bottom bar that toggles q2-prev
 > with `format: q2-html-render` (or for non-html formats). See
 > `2026-09-09-hub-client-default-q2-preview.md`.
 
-**Strand:** bd-ew0vak6b
-**Status:** implemented 2026-09-09 (commit `93b146c`); PR #667 open,
-pending CI and review.
 **Related:** bd-ov4gqk3m (`q2 preview --allow-edit`, the plan at
 `2026-06-10-q2-preview-edit-writeback.md`, which built the `editingDisabled`
 plumbing this work reuses); bd-0rsk07il (the Comments toggle in the same bar).

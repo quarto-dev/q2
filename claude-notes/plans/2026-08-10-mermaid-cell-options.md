@@ -2,15 +2,16 @@
 title: 'Mermaid `%%|` cell options are not processed (bd-mermaid-cell-options-9wo3crl0)'
 date: 2026-08-10
 description: 'Makes `%%|` cell options in mermaid fences work like `#|` options by making the pre-engine cell option desugar language-aware, so diagrams gain captions, labels and alt text.'
+status: done  # Implemented 2026-08-10, pending review. `cargo xtask verify` (full) passes. See "Resolved decisions" and the verification record.
+braid:
+  strand: bd-mermaid-cell-options-9wo3crl0
+  priority: P1
+  labels: [parity]
 ---
 
-**Date:** 2026-08-10
-**Braid:** bd-mermaid-cell-options-9wo3crl0
 **Branch:** `feature/bd-mermaid-cell-options-9wo3crl0` (no worktree; the
 investigation commit `f44b3a81` moved onto this branch and `main` was rewound to
 `a217ab5a`, so the whole strand lands as one PR)
-**Status:** Implemented 2026-08-10, pending review. `cargo xtask verify` (full)
-passes. See "Resolved decisions" and the verification record.
 
 ## Triage verdict
 

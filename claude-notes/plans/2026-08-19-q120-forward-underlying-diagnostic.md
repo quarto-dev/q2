@@ -2,12 +2,14 @@
 title: 'Q-1-20 discards the underlying markdown diagnostic for config values (bd-q120-masks-config-md-diagnostic-a039r80t)'
 date: 2026-08-19
 description: 'Forwards the underlying markdown parse diagnostics for config values, instead of only the generic Q-1-20 message, by rerooting child spans into the config''s source file and folding them into the warning.'
+status: in-progress  # Design settled 2026-08-20 (user answered all four questions); implementation in progress.
+braid:
+  strand: bd-q120-masks-config-md-diagnostic-a039r80t
+  priority: P3
+  labels: [diagnostics]
 ---
 
-**Date:** 2026-08-19
-**Braid:** bd-q120-masks-config-md-diagnostic-a039r80t
 **Checkout:** main checkout at `/Users/cscheid/rooms/room-3/q2`, branch `main` \@ `6bee9ebe`
-**Status:** Design settled 2026-08-20 (user answered all four questions); implementation in progress.
 
 ## Triage verdict
 

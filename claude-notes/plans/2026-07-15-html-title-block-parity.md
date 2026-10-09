@@ -2,15 +2,8 @@
 title: 'HTML Title Block Parity with Quarto 1 (bd-gx9cic8z)'
 date: 2026-07-15
 description: 'Brings the HTML title block up to Quarto 1 parity, matching its DOM and class names for structured authors, a metadata grid, category chips and banner mode.'
+status: done  # COMPLETE (2026-07-17). All phases P0–P7 executed on `feature/bd-gx9cic8z-title-block-parity` (PR #396, draft). Follow-up strands for every deferred item are filed and linked from P7 below. Original design-settlement note (2026-07-15) preserved: all open questions resolved with Carlos; see "Design decisions" below. Q5 (banner `<style>` vs SCSS) got a written clarification, recorded inline.
 ---
-
-**Status: COMPLETE (2026-07-17).** All phases P0–P7 executed on
-`feature/bd-gx9cic8z-title-block-parity` (PR #396, draft). Follow-up
-strands for every deferred item are filed and linked from P7 below.
-Original design-settlement note (2026-07-15) preserved: all open
-questions resolved with Carlos; see "Design decisions" below. Q5
-(banner `<style>` vs SCSS) got a written clarification, recorded
-inline.
 
 Braid epic: `bd-gx9cic8z`. Related bug filed during study: `bd-8v34zny5`
 (structured authors render as `truetrue`).

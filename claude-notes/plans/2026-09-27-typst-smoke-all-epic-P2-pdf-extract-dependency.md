@@ -4,7 +4,6 @@ date: 2026-09-27
 description: 'Moves the dev-only `pdf-extract` dependency of quarto-core onto a pinned commit of a fork that surfaces tagged-PDF marked-content IDs, and confirms extracted text is unchanged in the book tests.'
 ---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —
 read "Decided" items 1 and 3 first: the fork is a permanent, accepted dependency, and
 the research session that produced it (`typst-text-positions`) no longer exists — this

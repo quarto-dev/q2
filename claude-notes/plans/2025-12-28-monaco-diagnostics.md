@@ -2,11 +2,11 @@
 title: 'Monaco Editor Diagnostics Integration Plan'
 date: 2025-12-28
 description: 'Shows QMD parse errors and warnings as inline Monaco editor markers at their source locations by carrying structured diagnostics with positions from the WASM renderer to the editor, instead of plain text.'
+status: approved  # Approved - ready for implementation
+braid:
+  strand: k-i5nw
+  priority: P1
 ---
-
-**Issue:** k-i5nw
-**Date:** 2025-12-28
-**Status:** Approved - ready for implementation
 
 ## Design Decisions
 

@@ -2,10 +2,8 @@
 title: 'Correct Implementation of fixPunct for quarto-citeproc'
 date: 2025-11-28
 description: 'Replaces the global punctuation-collapsing post-process in `quarto-citeproc` with per-sibling collision fixing that follows Pandoc citeproc, so unrelated punctuation is no longer merged.'
+status: done
 ---
-
-**Date**: 2025-11-28
-**Status**: Completed
 
 ## Problem Statement
 

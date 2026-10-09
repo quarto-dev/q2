@@ -2,12 +2,13 @@
 title: 'Code span containing a backtick run longer than its delimiter is a parse error (bd-code-span-longer-backtick-run-nycn85a8)'
 date: 2026-09-25
 description: 'Fixes inline code spans so that a backtick run of a different length inside the span is content, as in CommonMark, instead of a parse error, by emitting it from an external scanner token.'
+status: in-progress  # Design agreed 2026-09-25; implementation in progress on this branch.
+braid:
+  strand: bd-code-span-longer-backtick-run-nycn85a8
+  priority: P2
 ---
 
-**Date:** 2026-09-25
-**Braid:** bd-code-span-longer-backtick-run-nycn85a8
 **Branch:** `braid/nycn85a8-code-span-backtick-run` (topic branch in the main checkout, based on `main` \@ `5b811915`; no worktree, per user request)
-**Status:** Design agreed 2026-09-25; implementation in progress on this branch.
 
 ## Decisions (Carlos, 2026-09-25)
 

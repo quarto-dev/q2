@@ -2,12 +2,11 @@
 title: '`quarto publish` scaffolding + `gh-pages` provider'
 date: 2026-05-03
 description: 'Adds the scaffolding for a `quarto publish` command in a new crate, shipping GitHub Pages as the first provider so that other hosts can be added one at a time.'
+status: draft  # Draft — pending user review. **Do not start implementation until the user gives the go-ahead.**
+braid:
+  strand: bd-t3ny  # phase sub-issues to be filed after design approval
+  priority: P1
 ---
-
-**Date:** 2026-05-03
-**Beads:** `bd-t3ny` (epic; phase sub-issues to be filed after design approval)
-**Status:** Draft — pending user review. **Do not start implementation until
-the user gives the go-ahead.**
 
 ## Overview
 

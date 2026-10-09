@@ -4,7 +4,6 @@ date: 2025-10-31
 description: 'Adds a handler for the `pandoc_soft_break` tree-sitter node so that a newline inside a paragraph becomes a `SoftBreak` inline rather than concatenating adjacent words.'
 ---
 
-**Date**: 2025-10-31
 **Context**: Tree-sitter grammar refactoring work (k-274)
 **Goal**: Implement handler for `pandoc_soft_break` to correctly process soft line breaks in paragraphs
 

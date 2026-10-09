@@ -2,10 +2,12 @@
 title: 'Add a Rust grammar to `quarto-highlight` (`rust` / `rs`)'
 date: 2026-09-08
 description: 'Adds a tree-sitter Rust grammar to `quarto-highlight` under the `rust` and `rs` classes, so Rust code fences get syntax-highlight spans in both `q2 render` and the browser preview.'
+status: in-progress  # approved 2026-09-08, in progress.
+braid:
+  strand: bd-202u5bld  # parent: bd-n7x2, syntax highlighting epic
+  priority: P2
+  labels: [writer]
 ---
-
-**Status:** approved 2026-09-08, in progress.
-**Strand:** bd-202u5bld (parent: bd-n7x2, syntax highlighting epic).
 
 ## Overview
 

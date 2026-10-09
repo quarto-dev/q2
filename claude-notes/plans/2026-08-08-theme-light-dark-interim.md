@@ -2,9 +2,11 @@
 title: 'Interim support for `theme: {light: [...], dark: [...]}` — use light, warn on dark'
 date: 2026-08-08
 description: 'Accepts the `theme: {light: ..., dark: ...}` map form and renders only the light half, warning that the dark variant is ignored, as an interim until full dual-theme support lands.'
+braid:
+  strand: bd-o76p01wb  # discovered-from bd-ad7i1pc6 (custom project types, PR #474)
+  priority: P1
 ---
 
-**Strand:** bd-o76p01wb (P1, feature) — discovered-from bd-ad7i1pc6 (custom project types, PR #474)
 **Full-support strand (out of scope here):** bd-0pic6 — "Support theme: \{light, dark\} dark-mode config (object form)"
 **Branch:** `braid/bd-o76p01wb-light-dark-theme-map`, based on `origin/feature/bd-ad7i1pc6-custom-project-types` (PR #474). The eventual PR waits for #474 to merge, then retargets/rebases onto `main`.
 

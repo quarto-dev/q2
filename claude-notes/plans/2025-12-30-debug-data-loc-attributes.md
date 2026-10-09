@@ -6,8 +6,6 @@ description: 'Investigates why the hub-client HTML preview lacks `data-loc` attr
 
 **Issue:** HTML preview in hub-client is missing `data-loc` attributes needed for scroll sync
 
-**Date:** 2025-12-30
-
 ## Status: Investigation Complete
 
 The WASM module works correctly. The test script (`hub-client/test-wasm.mjs`) passes:

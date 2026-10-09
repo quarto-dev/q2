@@ -2,11 +2,13 @@
 title: 'Plan: Q-2-35 — Reject 4-space indented code blocks with a high-quality error'
 date: 2026-05-14
 description: 'Makes the qmd parser reject 4-space indented code blocks with a targeted error, mirroring the existing triple-star diagnostic, instead of silently rewriting them into paragraphs on round trip.'
+braid:
+  strand: bd-7l1u
+  priority: P1
 ---
 
 - **GH issue:** [#184](https://github.com/quarto-dev/q2/issues/184)
 - **Triage:** `claude-notes/issue-reports/184/triage.md`
-- **Beads:** bd-7l1u
 - **Branch:** `issue-184`
 - **Approach:** mirror the existing Q-2-32 (`TRIPLE_STAR`) pattern — scanner emits an external token that no grammar rule consumes, the resulting `(state, sym)` pair is mapped to a user-facing message through the Merr-style error table.
 

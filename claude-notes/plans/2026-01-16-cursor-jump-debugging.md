@@ -2,11 +2,10 @@
 title: 'Hub-Client Cursor Jump Bug Fix'
 date: 2026-01-16
 description: 'Records how rapid typing in the hub-client Monaco editor made the cursor jump to the end of the document, and how switching the editor to uncontrolled mode with `defaultValue` fixed it.'
+status: done  # Fixed
 ---
 
 **Issue:** kyoto-hlr
-**Created:** 2026-01-16
-**Status:** Fixed
 
 ## Problem
 

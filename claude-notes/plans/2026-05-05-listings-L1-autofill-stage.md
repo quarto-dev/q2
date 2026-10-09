@@ -2,16 +2,15 @@
 title: 'L1 — `ListingItemInfoStage` (auto-fill, pre-checkpoint)'
 date: 2026-05-05
 description: 'Adds a pre-checkpoint stage that fills missing listing fields such as description, image, word count, reading time and modified date from the document, leaving author-supplied values untouched.'
+status: in-progress  # In progress (worktree `.worktrees/bd-izqh-listing-item-info-stage/`).
 ---
 
-**Date:** 2026-05-05
 **Beads:** `bd-izqh`. Parent epic: `bd-61cd`
 (`claude-notes/plans/2026-05-05-listings-epic.md`).
 **Predecessor:** L0 (`bd-n8a4`, closed) — adds the
 `DocumentProfile.listing_item: ListingItemInfo` field and the
 `profile.categories_raw: Option<ConfigValue>` field. L1 *populates*
 that field at the metadata layer; L0 *reads* it at extraction time.
-**Status:** In progress (worktree `.worktrees/bd-izqh-listing-item-info-stage/`).
 
 **Implementation-session decisions (2026-05-06).** The user reviewed
 this plan ahead of implementation and made or confirmed five calls.

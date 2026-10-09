@@ -2,11 +2,11 @@
 title: 'Get Started collection: seeded example projects for new hub users'
 date: 2026-09-17
 description: 'Seeds each new hub user with a personal Get Started collection of three or four example projects, one per document type, built from hub-only templates so every copy can be edited freely.'
+status: draft  # draft, shaping the example set with Andrew (2026-09-17)
 ---
 
 **Strand:** not yet filed (will link bd-d147nkqx as parent or related)
 **Branch:** `feature/bd-d147nkqx-hub-only-project-templates` (Carlos's PR #684, draft)
-**Status:** draft, shaping the example set with Andrew (2026-09-17)
 **Related:** `2026-09-15-hub-only-project-templates.md` (mechanism),
 `2026-09-15-auto-create-project-set-on-first-run.md` (first-run hook),
 `2026-09-01-unified-invite-landing.md` (deferred "seeded first-run samples"),

@@ -2,11 +2,11 @@
 title: 'Website Projects (Epic)'
 date: 2026-04-23
 description: 'Designs multi-page website projects for Quarto 2, built on a typed DocumentProfile snapshot, sidebars, shared `site_libs` resources, and hub-client project rendering, with search and listings deferred.'
+status: approved  # Design approved; phase sub-plans to be written in separate sessions.
+braid:
+  strand: bd-0tr6  # phases 0–9 as sub-issues; docs spun out as bd-tr81
+  priority: P1
 ---
-
-**Date:** 2026-04-23
-**Beads:** `bd-0tr6` (epic); phases 0–9 as sub-issues; docs spun out as `bd-tr81`.
-**Status:** Design approved; phase sub-plans to be written in separate sessions.
 
 ## Overview
 

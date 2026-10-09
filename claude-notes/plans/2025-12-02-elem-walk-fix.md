@@ -2,11 +2,12 @@
 title: 'Fix elem:walk{} Traversal Order'
 date: 2025-12-02
 description: 'Changes the `elem:walk{}` method in `types.rs` to use the same four-pass and topdown traversal semantics as document-level Lua filtering, via a shared traversal module.'
+braid:
+  strand: k-479
+  priority: P1
 ---
 
-**Issue**: k-479 (Update elem:walk{} to use correct four-pass traversal)
 **Parent**: k-477 (discovered-from)
-**Date**: 2025-12-02
 
 ## Executive Summary
 

@@ -2,11 +2,11 @@
 title: 'Matched Scrolling for Hub-Client'
 date: 2025-12-29
 description: 'Adds bidirectional scroll synchronization between the Monaco editor and the hub-client HTML preview, driven by `data-loc` source locations and controlled by a toolbar toggle that is off by default.'
+status: done
+braid:
+  strand: k-suww
+  priority: P2
 ---
-
-**Issue:** k-suww
-**Date:** 2025-12-29
-**Status:** Completed
 
 ## Overview
 

@@ -4,7 +4,6 @@ date: 2026-10-03
 description: 'Adds the Import button, the placement dialog, drop routing for documents on the sidebar, editor and window, and collision-safe writes that store images before the qmd and roll back on failure.'
 ---
 
-**Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I5, I11, I12, I19, I20, I21, I22; uses interfaces 3 and 4 and P4's service contract)
 **Depends on:** P4 landed. Tasks T1-T4 can start against P4's T0 stub. **Unblocks:** the epic Close-out.
 **Branch:** `import/p5-import-ui` from `feature/hub-import`.

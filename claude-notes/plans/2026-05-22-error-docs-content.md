@@ -2,10 +2,13 @@
 title: 'Error-docs content authoring (umbrella)'
 date: 2026-05-22
 description: 'Tracks hand-written `docs/errors/` pages for all catalogued Quarto error codes, one subsystem at a time, with each page meeting a minimum stub-quality bar before its subsystem closes.'
+status: draft  # drafting — pending user review
+braid:
+  strand: bd-an6z4  # child of bd-94x8a
+  priority: P3
+  labels: [content, documentation, error-reporting]
 ---
 
-**Status:** drafting — pending user review
-**Beads:** [bd-an6z4](../../.beads/issues.jsonl) (child of [bd-94x8a](2026-05-22-error-docs-website-epic.md))
 **Blocked by:** bd-nvlxn (foundation — template + schema must exist)
 
 ## Goal

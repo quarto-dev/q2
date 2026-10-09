@@ -2,6 +2,9 @@
 title: 'Plan 10: engine `checkInstallation` → real `q2 check` (bd-4qflzhwh)'
 date: 2026-07-04
 description: 'Wires an engine `checkInstallation` capability through the TypeScript engine protocol so `q2 check` reports real installation status, streaming progress lines in Quarto 1''s format, including native knitr and jupyter checks.'
+braid:
+  strand: bd-4qflzhwh
+  priority: P3
 ---
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

@@ -2,11 +2,12 @@
 title: 'Paste images from clipboard into the Monaco source editor'
 date: 2026-08-27
 description: 'Lets users paste raster images from the clipboard into the hub-client Monaco editor, saving them as hashed files beside the current document and inserting an image reference at the cursor, without a dialog.'
+status: done  # Complete (implemented, verified E2E, strand closed 2026-08-27)
+braid:
+  strand: bd-706b0ixu
+  priority: P2
 ---
 
-**Braid strand:** bd-706b0ixu
-**Created:** 2026-08-27
-**Status:** Complete (implemented, verified E2E, strand closed 2026-08-27)
 **Follow-up strands:** bd-yspyic32 (mixed text+image payloads), bd-myoj9kp5
 (pipeline-wide SVG posture)
 

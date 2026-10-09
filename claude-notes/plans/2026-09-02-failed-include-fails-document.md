@@ -2,9 +2,12 @@
 title: 'A failed include fails the document'
 date: 2026-09-02
 description: 'Makes a failed `{{< include >}}` a fatal render error for that page instead of silently dropping the block and writing HTML that is missing content, and raises the related Q-17 codes to errors.'
+braid:
+  strand: bd-include-parse-failure-dropped-u4rdjxru
+  priority: P2
+  labels: [includes, parity]
 ---
 
-**Strand:** `bd-include-parse-failure-dropped-u4rdjxru`
 **Repro:** `q2-positron-docs/llms-info/repros/include-parse-failure-dropped/`
 
 ## Overview

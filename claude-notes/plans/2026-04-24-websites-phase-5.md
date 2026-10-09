@@ -2,14 +2,14 @@
 title: 'Phase 5 — Scoped artifact store + `site_libs/`'
 date: 2026-04-24
 description: 'Gives rendered artifacts a page or project scope so that shared theme CSS and extension dependencies are written once to a `site_libs` directory in website projects, while single-document output keeps its current layout.'
+status: done  # Implementation complete 2026-04-24. All 7827 workspace tests pass; `cargo xtask verify` (full, incl. WASM) green.
+braid:
+  strand: bd-u5pr  # closed; follow-ups TBD at close-out
+  priority: P1
 ---
 
-**Date:** 2026-04-24
-**Beads:** `bd-u5pr` (closed). Follow-ups TBD at close-out.
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-24-websites-phase-4.md`
-**Status:** Implementation complete 2026-04-24. All 7827 workspace
-tests pass; `cargo xtask verify` (full, incl. WASM) green.
 
 ## Goal of this phase
 

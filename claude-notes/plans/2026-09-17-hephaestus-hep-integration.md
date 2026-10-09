@@ -2,11 +2,12 @@
 title: 'Hephaestus (`.hep` plot document) support in Quarto 2'
 date: 2026-09-17
 description: 'Surveys how Quarto 2 should consume hephaestus `.hep` plot documents, recommending conversion to SVG for HTML-family output with PNG rasterization as an optional extra, across render, preview and hub-client.'
+status: in-progress  # phases 1–2 implemented (branch `feature/bd-3qych45b-hephaestus-hep-svg`, PR #688); phases 3–5 filed as child strands. The `image` error subsystem is **`Q-19-*`** (it was `Q-18-*` until the 2026-09-19 merge of main, where `engine` had taken 18).
+braid:
+  strand: bd-3qych45b
+  priority: P2
+  labels: [design, hephaestus]
 ---
-
-**Strand:** bd-3qych45b
-**Status:** phases 1–2 implemented (branch `feature/bd-3qych45b-hephaestus-hep-svg`, PR #688); phases 3–5 filed as child strands. The `image` error subsystem is **`Q-19-*`** (it was `Q-18-*` until the 2026-09-19 merge of main, where `engine` had taken 18).
-**Date:** 2026-09-17
 
 ## Overview
 

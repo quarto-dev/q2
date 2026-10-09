@@ -2,6 +2,7 @@
 title: 'P4 — Vendored-Q1 run machinery (transport)'
 date: 2026-08-20
 description: 'Makes the vendored Q1 `main.lua` runnable from Q2 by building the `QUARTO_FILTER_PARAMS` blob and piping the JSON AST through pandoc and the Lua filters, proving the transport works before output correctness is checked.'
+status: done  # Complete (2026-09-19) — see the Coarse checklist below and the implementation ledger.
 ---
 
 **Date:** 2026-08-20  **Updated:** 2026-09-18 (two passes) — see `git log --oneline -- claude-notes/plans/2026-08-20-pandoc-hybrid-P4-run-machinery.md`
@@ -20,7 +21,6 @@ relabeled the env-block size-bound item as still-open, not closed. (Prior pass, 
 implementation-feasibility review found five wiring gaps — two vendoring roots not one; the
 shim's loading mechanism; the binary-output data contract; no error-catalog subsystem; unpinned
 base64/no size bound — closed with concrete decisions, see the "Finding" section below.)
-**Status:** Complete (2026-09-19) — see the Coarse checklist below and the implementation ledger.
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P4-implementation.md`](2026-09-18-pandoc-hybrid-P4-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 

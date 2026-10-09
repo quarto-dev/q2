@@ -2,10 +2,9 @@
 title: 'Format Extensions (resolution & apply) — STUB'
 date: 2026-06-22
 description: 'Plans how format extensions, which layer filters, templates and SCSS from `_extension.yml` onto a known base format such as `pdf`, are resolved from a format string and applied.'
+status: draft  # STUB / research — scoping, not yet an implementation plan. Needs a research pass before it becomes a checklist.
 ---
 
-**Status:** STUB / research — scoping, not yet an implementation plan. Needs a
-research pass before it becomes a checklist.
 **Part of:** the extensions epic (`claude-notes/plans/2026-03-16-extensions-grand-plan.md`,
 Phase 5a).
 **Distinct from:** Phase 5 (Custom Writers) — see "Not custom writers" below.

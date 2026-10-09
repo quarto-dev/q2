@@ -2,11 +2,12 @@
 title: 'MergedConfig Lifetime and Navigation API Design'
 date: 2025-12-07
 description: 'Works out lifetime and return-type choices for a lazily merged configuration type and its chained navigation API, comparing borrowed layers against owned Rc layers and path-based lookup.'
+status: draft  # Design proposal
+braid:
+  strand: k-vpgx  # child of k-zvzm
+  priority: P2
 ---
 
-**Date**: 2025-12-07
-**Issue**: k-vpgx (child of k-zvzm)
-**Status**: Design proposal
 **Parent Plan**: `claude-notes/plans/2025-12-07-config-merging-design.md`
 
 ## Problem Statement

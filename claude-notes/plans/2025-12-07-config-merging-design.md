@@ -2,11 +2,11 @@
 title: 'Configuration Merging System Design'
 date: 2025-12-07
 description: 'Designs a Rust configuration merging system where `!prefer` and `!concat` YAML tags control merge behavior, using lazy evaluation and source tracking so validation errors point to the right file.'
+status: draft  # Design proposal
+braid:
+  strand: k-zvzm
+  priority: P1
 ---
-
-**Date**: 2025-12-07
-**Issue**: k-zvzm
-**Status**: Design proposal
 
 **Incorporated subissue designs**:
 - `k-vpgx`: MergedConfig lifetime design → cursor-based navigation (see RQ1)

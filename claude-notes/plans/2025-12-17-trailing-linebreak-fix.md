@@ -2,11 +2,11 @@
 title: 'Fix Trailing LineBreak at End of Block (k-0dqw)'
 date: 2025-12-17
 description: 'Makes a backslash at the end of a paragraph or header parse as a literal backslash rather than a `LineBreak`, as CommonMark requires, by converting trailing line breaks in the postprocess handlers.'
+status: done  # COMPLETED (2025-12-17)
+braid:
+  strand: k-0dqw
+  priority: P2
 ---
-
-**Issue**: k-0dqw
-**Created**: 2025-12-17
-**Status**: COMPLETED (2025-12-17)
 
 ## Problem Statement
 

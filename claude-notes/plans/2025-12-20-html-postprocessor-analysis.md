@@ -2,11 +2,12 @@
 title: 'HTML Postprocessor Analysis and Rust DOM API Design'
 date: 2025-12-20
 description: 'Surveys the DOM operations used by quarto-cli''s HTML postprocessors to define the Rust DOM API the Quarto Rust port needs for equivalent HTML manipulation.'
+status: draft  # Research Complete - API Design Pending
+braid:
+  strand: k-xol0
+  priority: P2
 ---
 
-**Date**: 2025-12-20
-**Status**: Research Complete - API Design Pending
-**Issue**: k-xol0
 **Parent Epic**: k-xlko
 
 ## Executive Summary

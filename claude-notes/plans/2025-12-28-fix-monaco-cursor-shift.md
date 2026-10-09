@@ -2,11 +2,12 @@
 title: 'Fix Monaco Cursor Shift During Remote Edits'
 date: 2025-12-28
 description: 'Stops the editor cursor from jumping during remote collaborator edits by converting Automerge patches into incremental Monaco `executeEdits` calls instead of replacing the whole document.'
+status: done  # Implemented
+braid:
+  strand: k-rmdm
+  priority: P2
 ---
 
-**Beads Issue:** k-rmdm
-**Status:** Implemented
-**Created:** 2025-12-28
 **Implemented:** 2025-12-28
 
 ## Problem Summary

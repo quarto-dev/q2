@@ -2,10 +2,9 @@
 title: 'Unified LSP and Hub Architecture Design'
 date: 2025-12-11
 description: 'Analyzes merging the language server and collaboration hub into one process, making automerge documents the single source of content that editor changes flow into and remote edits flow out of.'
+status: draft  # Design Analysis
 ---
 
-**Created:** 2025-12-11
-**Status:** Design Analysis
 **Related Documents:**
 - 2025-12-09-filesystem-sync-design.md (filesystem sync algorithm)
 - 2025-12-08-quarto-hub-mvp.md (hub architecture)

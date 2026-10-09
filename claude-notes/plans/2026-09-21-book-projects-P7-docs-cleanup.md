@@ -4,7 +4,6 @@ date: 2026-09-21
 description: 'Closes out the book project work with user docs, project templates, and removal of the not-yet-supported diagnostics, documenting the known limitations users would otherwise hit silently.'
 ---
 
-**Date:** 2026-09-21
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §11
 

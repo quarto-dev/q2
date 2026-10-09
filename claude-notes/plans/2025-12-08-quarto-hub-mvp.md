@@ -2,11 +2,11 @@
 title: 'quarto-hub MVP: Automerge-Based Collaborative Infrastructure'
 date: 2025-12-08
 description: 'Plans a new `quarto-hub` crate that builds a `hub` binary for automerge-based collaborative editing, with WebSocket and REST endpoints and persistence under a `.quarto/hub/` directory.'
+status: in-progress
+braid:
+  strand: k-4wex
+  priority: P1
 ---
-
-**Issue:** k-4wex
-**Status:** In Progress
-**Created:** 2025-12-08
 
 ## Overview
 

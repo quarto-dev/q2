@@ -2,10 +2,9 @@
 title: 'Quarto Lua API: `quarto.*` Namespace Implementation'
 date: 2026-03-20
 description: 'Adds the missing `quarto.utils`, `quarto.json` and `quarto.log` tables to the pampa Lua engine so real extensions such as lipsum stop failing on a nil field.'
+status: in-progress
 ---
 
-**Created**: 2026-03-20
-**Status**: IN PROGRESS
 **Branch**: `feature/shortcode-extensions`
 **Triggered by**: lipsum extension fails because `quarto.utils` is nil
 

@@ -2,12 +2,13 @@
 title: 'q2 preview: persist React-preview edits back to the source .qmd on disk'
 date: 2026-06-10
 description: 'Lets edits made in the preview from `q2 preview` persist to the source `.qmd` file on disk through the Automerge document, behind an opt-in `--allow-edit` flag.'
+status: approved  # design agreed (2026-06-10) — flag is `--allow-edit`; absent ⇒ fully read-only preview; ≤5 s latency accepted given SIGINT flush (verified to exist)
+braid:
+  strand: bd-ov4gqk3m
+  priority: P1
 ---
 
-**Strand:** bd-ov4gqk3m
 **Parent epic:** bd-kw93 (q2 preview epic)
-**Status:** design agreed (2026-06-10) — flag is `--allow-edit`; absent ⇒ fully
-read-only preview; ≤5 s latency accepted given SIGINT flush (verified to exist)
 
 ## Overview
 

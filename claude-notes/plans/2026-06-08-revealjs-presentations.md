@@ -2,11 +2,9 @@
 title: '`format: revealjs` — Presentation Support for Quarto 2'
 date: 2026-06-08
 description: 'Adds Quarto-1-style reveal.js presentation output to Quarto 2 by emitting a static reveal.js scaffold from a shared slide-splitting step, so `q2 render` and `q2 preview` produce matching decks.'
+status: in-progress  # Phase 1 (render-side Tier-1 vertical slice) **complete** — `q2 render` produces standalone reveal.js 6 decks. Next: Phase 1P (preview parity, GA gate).
 ---
 
-**Status:** Phase 1 (render-side Tier-1 vertical slice) **complete** — `q2 render`
-produces standalone reveal.js 6 decks. Next: Phase 1P (preview parity, GA gate).
-**Created:** 2026-06-08
 **Branch:** `feature/revealjs` (integration line; not yet pushed)
 **Epic strand:** bd-67yja58s
 **Phase 1 strand:** bd-2m4wanyd — sub-tasks:

@@ -4,7 +4,6 @@ date: 2026-06-10
 description: 'Adds roving-tabindex keyboard access and ARIA to inline block editing in the `useBlockEditHover` hook, suppresses touch OS gestures, adds WASM round-trip tests for more block types, and restores the box layout that editing lost.'
 ---
 
-**Date:** 2026-06-10
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
 **Depends on:** Plans 2a, 2b, 3 (all done).
 **Audit source:** 2026-06-10 post-2b audit — items that were either falsely

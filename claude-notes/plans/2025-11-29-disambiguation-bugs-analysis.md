@@ -2,11 +2,11 @@
 title: 'Disambiguation Bugs Analysis'
 date: 2025-11-29
 description: 'Identifies two bugs in `quarto-citeproc` ambiguity detection: grouping by author names hides identical renderings, and year-suffix assignment ignores whether earlier disambiguation methods already resolved the ambiguity.'
+status: done  # IMPLEMENTED - Both bugs fixed, 14 new tests passing
+braid:
+  strand: k-427
+  priority: P4
 ---
-
-**Date:** 2025-11-29
-**Beads Issue:** k-427
-**Status:** IMPLEMENTED - Both bugs fixed, 14 new tests passing
 
 ## Executive Summary
 

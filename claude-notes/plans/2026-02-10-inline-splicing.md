@@ -2,12 +2,14 @@
 title: 'Phase 5: Inline Splicing for Incremental Writer'
 date: 2026-02-10
 description: 'Lets the incremental writer splice only changed inlines inside paragraphs within lists and block quotes instead of rewriting the whole enclosing boundary, safe only when no written text contains a newline.'
+status: done  # COMPLETE. All phases (5a-5g) done. 22 + 50 + 14 + 38 = 124 tests total for inline splicing.
+braid:
+  strand: bd-1hwd
+  priority: P1
 ---
 
-**Beads issue:** `bd-1hwd`
 **Parent issue:** `bd-2t4o` (Incremental QMD Writer)
 **Parent plan:** `claude-notes/plans/2026-02-07-incremental-writer.md`
-**Status:** COMPLETE. All phases (5a-5g) done. 22 + 50 + 14 + 38 = 124 tests total for inline splicing.
 **Branch:** `feature/inline-incremental-writer`
 
 ## Overview

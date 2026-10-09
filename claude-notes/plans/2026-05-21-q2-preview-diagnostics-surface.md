@@ -2,13 +2,14 @@
 title: 'q2 preview — diagnostics surface (Phase D.4 follow-up)'
 date: 2026-05-21
 description: 'Adds a diagnostic overlay to `q2 preview` that shows render warnings and failures for the current page, plus a sink that server-side warnings can report into rather than only logging them.'
+status: in-progress  # IMPLEMENTING (2026-05-21). See §Progress.
+braid:
+  strand: bd-b9kzg
+  priority: P2
 ---
 
-**Issue:** bd-b9kzg
 **Epic:** bd-kw93 (q2 preview)
 **Discovered-from:** bd-kw93.10 (Phase D.4 — render-failure overlay)
-**Date:** 2026-05-21
-**Status:** IMPLEMENTING (2026-05-21). See §Progress.
 **Branch:** `beads/bd-b9kzg-q2-preview-diagnostics-surface`
 
 ## Progress

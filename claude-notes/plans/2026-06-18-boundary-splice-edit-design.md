@@ -2,12 +2,10 @@
 title: 'Boundary-addressed splice — generalizing `apply_node_edit` to insert / range'
 date: 2026-06-18
 description: 'Designs a boundary-addressed splice that generalizes single-block replacement to inserts, range replacements, and deletes by addressing the gaps between blocks rather than individual nodes.'
+status: approved  # DESIGN — approved. Implementation plan: `claude-notes/plans/2026-06-19-boundary-splice-implementation.md`.
 ---
 
-**Date:** 2026-06-18 (updated 2026-06-19)
 **Branch:** `feature/block-editing-improvements` (worktree `.worktrees/block-editing`)
-**Status:** DESIGN — approved. Implementation plan:
-`claude-notes/plans/2026-06-19-boundary-splice-implementation.md`.
 
 **2026-06-19 corrections (after backend + frontend research):**
 - `ContainerRef = DocRoot | Node(si)` only — dropped `listItem`/`defBody` and all

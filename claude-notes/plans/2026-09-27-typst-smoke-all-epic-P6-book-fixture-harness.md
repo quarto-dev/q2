@@ -4,7 +4,6 @@ date: 2026-09-27
 description: 'Adds a book-project harness to the smoke-all test: a file with `render-project: true` triggers one whole-book render per project, shared by its sibling files through `ProjectPipeline`.'
 ---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md)
 **Depends on:** P1.
 **Worktree:** `workspace-5` (Track B — see epic's "Parallel development plan").

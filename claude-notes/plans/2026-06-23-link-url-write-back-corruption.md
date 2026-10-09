@@ -2,9 +2,12 @@
 title: 'bd-3zp3z4jx — link URL corrupted on write-back'
 date: 2026-06-23
 description: 'Fixes edits that add or change a link''s URL persisting the wrong target, by making the reconciler treat containers as matching only when their URL, title and attributes are unchanged.'
+braid:
+  strand: bd-3zp3z4jx
+  priority: P1
+  labels: [write-back]
 ---
 
-**Date:** 2026-06-23
 **Branch:** `braid/bd-3zp3z4jx-link-url-corrupted-write` (off `origin/main`)
 
 ## Symptom

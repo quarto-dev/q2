@@ -4,7 +4,6 @@ date: 2026-10-03
 description: 'Builds the native Rust import pipeline: the format table, the pandoc request, reading pandoc''s JSON, track-change and comment transforms, the media plan and the generated qmd, exposed through four wasm exports.'
 ---
 
-**Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I1, I3, I4, I6, I9, I12, I13, I16, I17, I19, I20; builds interfaces 2, 3 and 4)
 **Depends on:** P2 landed (the writer fixes; T4's oracle and T7's qmd output depend on them). P1 **stage 1** landed (T1-T4: the fixtures with `argv.json` and `corrupt-docx`, the T3 answers, the Rust request fields and `job_id`) before T2. P1 **T7 passed** (its Handoff log says so) before T6, because a T7 STOP would replace collection with data URIs and change T6's input. T1 can start before either. **Unblocks:** P4.
 **Branch:** `import/p3-import-pipeline` from `feature/hub-import`.

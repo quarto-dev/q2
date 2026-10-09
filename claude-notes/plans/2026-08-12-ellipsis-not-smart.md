@@ -2,13 +2,14 @@
 title: 'Smart punctuation: `...` converts to an ellipsis only when preceded by a word character (bd-ellipsis-not-smart-48bv2pe6)'
 date: 2026-08-12
 description: 'Makes a run of dots convert to a true ellipsis wherever it appears in prose, such as after a space, by lexing the run as one token in the tree-sitter grammar.'
+status: done  # **Implemented.** All design questions answered; fix landed, tests green, verified end-to-end. Pending full `cargo xtask verify` sign-off and user review.
+braid:
+  strand: bd-ellipsis-not-smart-48bv2pe6
+  priority: P3
+  labels: [markdown]
 ---
 
-**Date:** 2026-08-12
-**Braid:** `bd-ellipsis-not-smart-48bv2pe6` (bug, p3, label `markdown`)
 **Branch:** `braid/ellipsis-not-smart-48bv2pe6` (off `main` \@ `27f96dfb`)
-**Status:** **Implemented.** All design questions answered; fix landed, tests green,
-verified end-to-end. Pending full `cargo xtask verify` sign-off and user review.
 
 ## Triage verdict
 

@@ -2,11 +2,12 @@
 title: 'Audit: can list-item `itemAttr` simplify the revealjs incremental-list `fragment` machinery?'
 date: 2026-06-18
 description: 'Audits whether the new list-item attribute channel can replace the separate `fragment` machinery for revealjs incremental lists, and concludes that only partial unification is feasible.'
+status: done  # audit + recommendation (no code yet)
+braid:
+  strand: bd-34vf6fpr  # discovered-from bd-aeyss6p5
+  priority: P3
 ---
 
-**Strand:** bd-34vf6fpr (discovered-from bd-aeyss6p5)
-**Date:** 2026-06-18
-**Status:** audit + recommendation (no code yet)
 **Related:** bd-aeyss6p5 (list-item block attrs, merged PR #314),
 `claude-notes/plans/2026-06-08-revealjs-presentations.md` (Phase 2d, the
 incremental-lists feature, bd-fy793w6i)

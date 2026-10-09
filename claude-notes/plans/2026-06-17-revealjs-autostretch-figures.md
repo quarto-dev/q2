@@ -2,13 +2,12 @@
 title: 'RevealJS auto-stretch — captioned & cross-referenceable figures'
 date: 2026-06-17
 description: 'Extends reveal auto-stretch to captioned figures so a lone captioned image becomes a direct child of the slide section and stretches, leaving cross-referenceable figure divs as a separate case.'
+status: in-progress  # **Case 1 implemented** (markdown captioned figure hoist, with `<p class="caption">` via bd-itqcfxc3). Case 2 (crossref figures) deferred — Option 2A. Centering deferred (flush-left, consistent with the bare-image case).
+braid:
+  strand: bd-38ioql41  # follow-up to bd-zkstclhl
+  priority: P2
+  labels: [revealjs]
 ---
-
-**Strand:** bd-38ioql41 (follow-up to bd-zkstclhl)
-**Date:** 2026-06-17 (Case 1 implemented 2026-06-18)
-**Status:** **Case 1 implemented** (markdown captioned figure hoist, with
-`<p class="caption">` via bd-itqcfxc3). Case 2 (crossref figures) deferred —
-Option 2A. Centering deferred (flush-left, consistent with the bare-image case).
 
 ## Overview
 

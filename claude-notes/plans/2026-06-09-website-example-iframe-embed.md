@@ -2,12 +2,13 @@
 title: 'Example-iframe embed feature (`.embed-example-iframe`)'
 date: 2026-06-09
 description: 'Builds a built-in transform that turns `.embed-example-iframe` placeholders into live iframes plus source links, resolving each static `file=` target through normal project link rewriting in both render and preview.'
+status: approved  # DESIGN — core decisions settled with user 2026-06-09; ready to turn into an execution plan on go-ahead. No code yet.
+braid:
+  strand: bd-z1smhvuo  # discovered-from bd-ixdktocp, the revealjs docs page
+  priority: P2
+  labels: [docs, revealjs]
 ---
 
-**Strand:** bd-z1smhvuo (discovered-from bd-ixdktocp, the revealjs docs page)
-**Date:** 2026-06-09
-**Status:** DESIGN — core decisions settled with user 2026-06-09; ready to turn
-into an execution plan on go-ahead. No code yet.
 **Parent context:** Quarto 2 website infrastructure
 (`claude-notes/plans/2026-04-23-website-project-epic.md`); the placeholder
 convention this consumes was set in

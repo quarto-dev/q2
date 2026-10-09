@@ -2,11 +2,10 @@
 title: 'SASS Compilation Infrastructure for Rust Quarto'
 date: 2026-01-13
 description: 'Describes the SASS compilation infrastructure for Rust Quarto, which compiles Bootstrap and the Bootswatch themes natively with `grass` and in hub-client with dart-sass behind a cache, leaving browser testing as the remaining work.'
+status: in-progress  # In Progress (Phases 1-6 complete, Phase 7 in planning)
 ---
 
 **Beads Issue**: k-685
-**Created**: 2026-01-13
-**Status**: In Progress (Phases 1-6 complete, Phase 7 in planning)
 
 ---
 

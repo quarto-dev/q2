@@ -2,12 +2,13 @@
 title: 'Code Span Implementation - Completion Summary'
 date: 2025-10-31
 description: 'Summarizes the tree-sitter handler for inline code spans, including how whitespace captured in the delimiters becomes Space nodes so that the output matches Pandoc.'
+status: done  # ✅ COMPLETE
+braid:
+  strand: k-281
+  priority: P0
 ---
 
-**Date**: 2025-10-31
-**Issue**: k-281
 **Epic**: k-274 (Tree-sitter Grammar Refactoring)
-**Status**: ✅ COMPLETE
 
 ## What Was Implemented
 

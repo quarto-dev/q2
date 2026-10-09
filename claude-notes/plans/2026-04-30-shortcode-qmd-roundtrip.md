@@ -2,9 +2,10 @@
 title: 'QMD writer drops shortcode arguments and delimiters'
 date: 2026-04-30
 description: 'Fixes the QMD writer, which reduces shortcodes to a bare name, so that delimiters, arguments and quoting survive a round trip, with keyword arguments kept in source order.'
+braid:
+  strand: bd-ylig
+  priority: P1
 ---
-
-**Beads:** bd-ylig
 
 ## Bug
 

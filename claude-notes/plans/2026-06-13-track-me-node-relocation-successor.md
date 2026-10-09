@@ -4,7 +4,6 @@ date: 2026-06-13
 description: 'Tracks the editor''s block by a position-independent structural hash so the parent can relocate an open editor after a collaborator''s re-render, which fixes nested child edits being dropped.'
 ---
 
-**Date:** 2026-06-13
 **Branch:** feature/block-editing-improvements (worktree `.worktrees/block-editing`)
 **Successor to:** `2026-06-11-block-editing-improvements.md` (Phases 1–3). **Not yet the active plan** —
 finish that plan's P3.4 ("self-heal on write") first; this layers on top. Do **not** repoint

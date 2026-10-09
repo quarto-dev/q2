@@ -2,11 +2,11 @@
 title: 'Video shortcode support in `q2 preview` / hub-client'
 date: 2026-06-22
 description: 'Makes the `video` shortcode render an iframe in `q2 preview` by normalizing the Lua `FORMAT` global to the canonical output format, so format-gated Lua filters behave as they do in render.'
+status: approved  # Diagnosis complete; plan drafted; awaiting go-ahead to implement.
+braid:
+  strand: bd-5b21rbaq
+  priority: P2
 ---
-
-**Strand:** bd-5b21rbaq
-**Date:** 2026-06-22
-**Status:** Diagnosis complete; plan drafted; awaiting go-ahead to implement.
 
 ## Overview
 

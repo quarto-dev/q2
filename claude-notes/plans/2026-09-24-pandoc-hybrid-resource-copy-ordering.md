@@ -4,7 +4,6 @@ date: 2026-09-24
 description: 'Moves the resource-copy flush ahead of the Typst compile stage so that images referenced from a Typst render exist in a differing output directory before `typst compile` reads them.'
 ---
 
-**Date:** 2026-09-24
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md) (new phase, inserted between P2b and P3 — see the epic's phase table)
 **Depends on:** none directly, but discovered while scoping P2's item 49 (figure-numbering integration test needs a compiling book with images).
 **Blocks:** P2's item 49 (and any other P2 item whose fixture needs a compiling Typst document with a local image reference).

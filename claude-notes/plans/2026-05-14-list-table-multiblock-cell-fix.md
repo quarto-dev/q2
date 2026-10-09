@@ -8,7 +8,6 @@ description: 'Fixes the qmd writer so `list-table` cells holding several blocks,
 - **Beads**: bd-oxsr
 - **Worktree**: `.worktrees/issue-183` (branch `issue-183`)
 - **Triage**: `claude-notes/issue-reports/183/triage.md`
-- **Started**: 2026-05-14
 
 ## Overview
 

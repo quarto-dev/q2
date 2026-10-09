@@ -2,10 +2,8 @@
 title: 'Bugreports Category Analysis'
 date: 2025-11-29
 description: 'Groups the 31 unknown bugreports CSL conformance tests in `quarto-citeproc` into failure patterns such as punctuation inside quotes, year suffixes, and en-dash page ranges, with a recommended fix order.'
+status: in-progress
 ---
-
-**Date**: 2025-11-29
-**Status**: In Progress
 
 ## Overview
 

@@ -2,11 +2,12 @@
 title: 'Tree-sitter Grammar Refactoring Plan'
 date: 2025-10-31
 description: 'Tracks the rewrite of the `native_visitor` processor to handle the redesigned tree-sitter grammar node by node, with a dedicated test file and a priority list of node types.'
+status: in-progress
+braid:
+  strand: k-274
+  priority: P0
 ---
 
-**Date**: 2025-10-31
-**Status**: In Progress
-**Beads Issue**: k-274
 **Context**: Major redesign of tree-sitter grammar - all node names changed and grammar now reports much more fine-grained syntax tree
 
 ## Problem Statement

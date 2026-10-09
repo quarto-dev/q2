@@ -2,12 +2,11 @@
 title: 'q2 preview — Phase D plan'
 date: 2026-05-14
 description: 'Polish pass for `q2 preview` covering browser auto-open, port conflict errors, initial page selection, static resources, error overlays, user docs, and dependency-based filtering of re-renders.'
+status: done  # All six sub-tasks (D.1 → D.6 + D.5) merged 2026-05-14. Phase D complete.
 ---
 
 **Epic:** bd-kw93 (q2 preview)
 **Predecessor:** Phases A, B, C all merged on `feature/q2-preview-command`.
-**Date:** 2026-05-14
-**Status:** All six sub-tasks (D.1 → D.6 + D.5) merged 2026-05-14. Phase D complete.
 
 ## Progress
 

@@ -4,7 +4,6 @@ date: 2026-06-09
 description: 'Makes `.embed-example-iframe` demo decks render in `q2 preview` by syncing resources-matched `.html` files into the preview virtual filesystem so the iframe fallback can inline them.'
 ---
 
-**Date:** 2026-06-09
 **Branch:** `beads/bd-z1smhvuo-embed-example-iframe` (9 commits ahead of `main`,
 **nothing pushed** — per project policy, do not push without explicit OK).
 **Working tree:** clean.

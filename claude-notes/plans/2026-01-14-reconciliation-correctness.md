@@ -2,11 +2,10 @@
 title: 'Reconciliation Correctness Plan'
 date: 2026-01-14
 description: 'Defines a property test for AST reconciliation requiring that applying the computed plan to `before` yields `after` structurally, ignoring source locations, using proptest generators with progressive feature sets to expose list-length bugs.'
+status: in-progress  # Phase 3 Complete - Bug Fixed
 ---
 
 **Issue:** kyoto-72j
-**Date:** 2026-01-14
-**Status:** Phase 3 Complete - Bug Fixed
 
 ## Fundamental Property
 

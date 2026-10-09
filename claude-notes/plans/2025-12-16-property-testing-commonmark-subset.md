@@ -2,11 +2,11 @@
 title: 'Property Testing Framework for CommonMark Subset Validation'
 date: 2025-12-16
 description: 'Sets up a property-based round-trip test that generates random Pandoc ASTs, serializes them to qmd, and checks that pampa and comrak agree on the CommonMark subset.'
+status: done  # Implemented ✅
+braid:
+  strand: k-g9uc  # child of k-333
+  priority: P2
 ---
-
-**Issue**: k-g9uc (child of k-333)
-**Date**: 2025-12-16
-**Status**: Implemented ✅
 
 ## Implementation Summary
 

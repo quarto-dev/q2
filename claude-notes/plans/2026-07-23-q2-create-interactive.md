@@ -2,12 +2,13 @@
 title: '`q2 create`: interactive prompting (bd-hh1erpfx)'
 date: 2026-07-23
 description: 'Adds Q1-style interactive prompts to `q2 create` for missing arguments when run on a real terminal, behind a prompter seam so the prompt flow can be tested without a PTY and non-interactive use is unchanged.'
+braid:
+  strand: bd-hh1erpfx  # discovered-from bd-oa5kd2yr
+  priority: P3
 ---
 
-**Strand:** bd-hh1erpfx (discovered-from bd-oa5kd2yr)
 **Branch:** `braid/bd-oa5kd2yr-q2-create-command` (same PR #409 line)
 **Parent plan:** `claude-notes/plans/2026-07-23-q2-create-command.md`
-**Created:** 2026-07-23
 
 ## Overview
 

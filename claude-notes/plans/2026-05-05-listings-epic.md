@@ -2,11 +2,8 @@
 title: 'Listings — implementation epic'
 date: 2026-05-05
 description: 'Parent plan for listings on Quarto 2 websites, covering item auto-fill, doctemplate-based built-in and custom listing templates, a categories sidebar, RSS feeds and dependency-graph integration.'
+status: in-progress  # Filed. Epic `bd-61cd`. Sub-issues filed; ids inline in each phase header below.
 ---
-
-**Date:** 2026-05-05
-**Status:** Filed. Epic `bd-61cd`. Sub-issues filed; ids inline in
-each phase header below.
 
 **bd issue mapping and sub-plan files:**
 

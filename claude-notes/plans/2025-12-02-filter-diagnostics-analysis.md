@@ -2,11 +2,12 @@
 title: 'Filter Diagnostics Infrastructure Analysis'
 date: 2025-12-02
 description: 'Analyzes why the internal and JSON filter paths cannot report diagnostics, compares them with the reader pattern, and lists what diagnostics from Lua filters would require.'
+braid:
+  strand: k-409
+  priority: P2
 ---
 
-**Date:** 2025-12-02
 **Related:** [Lua Filters Design](./2025-11-26-lua-filters-design.md)
-**Issue:** k-409
 
 ## Summary
 

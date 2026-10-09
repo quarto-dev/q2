@@ -4,7 +4,6 @@ date: 2026-10-03
 description: 'Adds a hub-client import service that runs pandoc on its own runner, converts EMF and WMF images to PNG with rtf.js, applies the 10 MB image rule, and returns the qmd and media without any UI.'
 ---
 
-**Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (I8, I9, I10, I15, I16, I19; uses interfaces 1, 2 and 3)
 **Depends on:** P1 (host inputs and collection) and P3 (the wasm exports), both landed. T0 can start earlier. **Unblocks:** P5.
 **Branch:** `import/p4-import-service` from `feature/hub-import`.

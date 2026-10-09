@@ -2,13 +2,12 @@
 title: 'Lua Filter Chain Analysis for Rust Quarto'
 date: 2026-01-24
 description: 'Classifies each filter in the TypeScript Quarto Lua filter chain as format-agnostic or format-specific and notes which ones affect HTML output, to guide the Rust implementation.'
+status: in-progress
 ---
 
 **Parent Plan**: `2026-01-24-html-rendering-parity.md`
 **Parent Epic**: kyoto-6jv
 **Beads Issue**: kyoto-dy3
-**Created**: 2026-01-24
-**Status**: In Progress
 
 ---
 

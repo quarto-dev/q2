@@ -2,15 +2,13 @@
 title: 'Phase 4 — Page navigation (prev / next)'
 date: 2026-04-24
 description: 'Adds bottom-of-page previous and next links computed from each page''s resolved sidebar, switched off by a top-level `page-navigation` key and using the class names Quarto 1 CSS already styles.'
+status: done  # Closed 2026-04-24. Decisions 1–9 confirmed; implementation shipped on `feature/websites` in commit `4a59a9dd`.
 ---
 
-**Date:** 2026-04-24
 **Beads:** `bd-nwun` (closed; parent `bd-0tr6`).
 Follow-ups: `bd-q1pe`, `bd-xwq8`, `bd-q6ky`, `bd-bobp`, `bd-nf50`.
 **Parent plan:** `claude-notes/plans/2026-04-23-website-project-epic.md`
 **Previous phase:** `claude-notes/plans/2026-04-24-websites-phase-3.md`
-**Status:** Closed 2026-04-24. Decisions 1–9 confirmed; implementation
-shipped on `feature/websites` in commit `4a59a9dd`.
 
 ## Goal of this phase
 

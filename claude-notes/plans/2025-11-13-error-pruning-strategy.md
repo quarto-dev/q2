@@ -4,7 +4,6 @@ date: 2025-11-13
 description: 'Compares strategies for reducing the flood of diagnostics that tree-sitter error recovery produces inside large error regions, and recommends a size-threshold hybrid that keeps the top-scoring diagnostic per region.'
 ---
 
-**Date**: 2025-11-13
 **Context**: We're emitting too many error diagnostics due to tree-sitter error recovery branching
 
 ## Problem Analysis

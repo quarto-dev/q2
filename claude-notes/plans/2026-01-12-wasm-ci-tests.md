@@ -2,10 +2,10 @@
 title: 'Plan: Add WASM Compilation Tests to CI'
 date: 2026-01-12
 description: 'Adds a CI job that builds the `wasm-qmd-parser` and `wasm-quarto-hub-client` crates on every push and pull request, since they sit outside the default workspace build and their breakage would otherwise go unnoticed.'
+status: draft  # Draft - awaiting review
 ---
 
 **Issue**: k-685
-**Status**: Draft - awaiting review
 
 ## Problem
 

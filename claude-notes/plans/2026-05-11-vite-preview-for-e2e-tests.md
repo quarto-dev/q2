@@ -2,12 +2,11 @@
 title: 'Switch hub-client e2e to `vite preview` instead of `vite dev`'
 date: 2026-05-11
 description: 'Serves the hub-client end-to-end tests from a prebuilt bundle with `vite preview` instead of `vite dev`, to cut per-test page-load time and reduce flaky timeouts in CI.'
+status: approved  # Planned — not started
 ---
 
-**Date:** 2026-05-11
 **Branch:** `chore/e2e-ci` (PR #172) — stay on this branch, validate by pushing to the open PR
 **Worktree:** `.worktrees/e2e-ci`
-**Status:** Planned — not started
 
 ## Overview
 

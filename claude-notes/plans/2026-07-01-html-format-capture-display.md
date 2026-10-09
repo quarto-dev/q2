@@ -2,6 +2,10 @@
 title: 'Display executed code output in the default `format: html` preview'
 date: 2026-07-01
 description: 'Makes the default `format: html` render show recorded engine output by threading captures through the WASM HTML branches, preview-runtime, and hub-client, which currently ignore them and render source only.'
+status: draft  # Planned — awaiting review. No implementation started.
+braid:
+  strand: bd-uy4uygha  # discovered-from bd-sfet3264
+  priority: P1
 ---
 
 > **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this
@@ -9,10 +13,6 @@ description: 'Makes the default `format: html` render show recorded engine outpu
 > renderer for html documents; the full-DOM MorphIframe path is now reached only
 > with `format: q2-html-render` (or for non-html formats). See
 > `2026-09-09-hub-client-default-q2-preview.md`.
-
-**Strand:** bd-uy4uygha (bug, P1; discovered-from bd-sfet3264).
-**Date:** 2026-07-01.
-**Status:** Planned — awaiting review. No implementation started.
 
 ## Overview
 

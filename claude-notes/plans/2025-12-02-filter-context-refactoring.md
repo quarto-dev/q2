@@ -2,10 +2,11 @@
 title: 'FilterContext Refactoring Plan'
 date: 2025-12-02
 description: 'Refactors the filter traversal in `quarto-markdown-pandoc` to pass a `FilterContext` into filter callbacks, so filters can emit warnings and errors tied to source locations.'
+braid:
+  strand: k-409
+  priority: P2
 ---
 
-**Date:** 2025-12-02
-**Issue:** k-409
 **Related:** [Filter Diagnostics Analysis](./2025-12-02-filter-diagnostics-analysis.md)
 
 ## Goal

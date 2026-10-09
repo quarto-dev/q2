@@ -2,9 +2,12 @@
 title: 'Fix: downloaded project ZIP uses absolute paths'
 date: 2026-07-01
 description: 'Fixes the hub-client project ZIP export so entries are relative and nested under one project-named folder, by stripping leading slashes in `export-zip.ts` and sharing one sanitized folder-name helper with the download filename.'
+braid:
+  strand: bd-esnxtcoy
+  priority: P2
+  labels: [quarto-hub]
 ---
 
-**Strand:** bd-esnxtcoy
 **GitHub issue:** [quarto-dev/q2#147](https://github.com/quarto-dev/q2/issues/147)
 **Related:** bd-1oxt (original "Project ZIP export from hub-client" feature — this is a follow-up bug)
 

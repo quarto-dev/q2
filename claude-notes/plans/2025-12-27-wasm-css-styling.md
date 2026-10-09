@@ -2,11 +2,11 @@
 title: 'WASM Artifact and Styling System'
 date: 2025-12-27
 description: 'Adds CSS and other render artifacts to the WASM client''s virtual file system, then rewrites the preview iframe''s file references to data URIs so the rendered HTML is styled.'
+status: approved  # Ready for implementation
+braid:
+  strand: k-giyy
+  priority: P1
 ---
-
-**Issue:** k-giyy
-**Date:** 2025-12-27
-**Status:** Ready for implementation
 
 ## Problem
 

@@ -4,7 +4,6 @@ date: 2026-09-21
 description: 'Adds multi-file HTML book output in which each chapter renders on its own with an injected chapter number before its cross-reference pass, plus the book stylesheet and cover image.'
 ---
 
-**Date:** 2026-09-21 (revised after a critical review pass)
 **Epic:** [`2026-09-21-book-projects-epic.md`](2026-09-21-book-projects-epic.md)
 **Design (authoritative):** [`../designs/book-projects-architecture.md`](../designs/book-projects-architecture.md) §7
 **Q1 reference:** `book-chapters.ts`\'s `withChapterMetadata`/`formatChapterTitle`/`chapterInfoForInput`, `resources/filters/crossref/sections.lua`, `book.ts`\'s `bookScssBundle`/`bookHtmlPostprocessor`, `book-render.ts`\'s cover-image markdown prepend

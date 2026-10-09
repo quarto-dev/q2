@@ -2,10 +2,9 @@
 title: 'Hub-Client Automated Testing Infrastructure'
 date: 2026-01-27
 description: 'Lays out a three-tier test strategy for hub-client covering unit tests, jsdom integration tests with mocked services, and Playwright end-to-end tests against a sync server and WASM build, with generated fixtures.'
+status: in-progress
 ---
 
-**Date**: 2026-01-27
-**Status**: In Progress
 **Epic**: kyoto-b4x
 **Author**: Claude Code
 

@@ -2,12 +2,13 @@
 title: 'Website sidebar layout: body class + grid placement'
 date: 2026-04-29
 description: 'Moves the website sidebar from the bottom of the page into a left column by setting body classes from the sidebar style and fixing the sidebar''s grid placement, matching Quarto 1''s layout.'
+status: draft  # Draft — awaiting user review before implementation.
+braid:
+  strand: bd-mgoh  # discovered-from bd-2jwk
+  priority: P1
 ---
 
-**Date:** 2026-04-29
-**Beads:** `bd-mgoh` (this task); discovered-from `bd-2jwk` (website examples).
 **Parent epic:** `claude-notes/plans/2026-04-23-website-project-epic.md`
-**Status:** Draft — awaiting user review before implementation.
 
 ## Symptom
 

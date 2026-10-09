@@ -4,8 +4,6 @@ date: 2025-11-28
 description: 'Studies the Haskell reference implementation of CSL disambiguation and proposes how `quarto-citeproc` should add names, given names, and year suffixes to ambiguous citations.'
 ---
 
-**Date**: 2025-11-28
-
 ## Executive Summary
 
 Disambiguation in CSL resolves ambiguous citations (citations that render identically but refer to different works). Currently 13/72 disambiguation tests pass (18%). This document analyzes the Haskell reference implementation and proposes an implementation plan for quarto-citeproc.

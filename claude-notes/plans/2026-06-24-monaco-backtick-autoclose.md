@@ -2,9 +2,11 @@
 title: 'Fix: Monaco editor auto-closes backtick, inserting a doubled `` ` ``'
 date: 2026-06-24
 description: 'Removes the backtick from the Monaco `qmd` auto-closing pairs so that typing a backtick at the end of a word inserts one character instead of a doubled pair, while keeping it for wrapping selections.'
+braid:
+  strand: bd-w1s38lbe
+  priority: P2
+  labels: [bug]
 ---
-
-**Strand:** bd-w1s38lbe
 
 ## Overview
 

@@ -2,11 +2,12 @@
 title: 'Lua Filter Infrastructure Porting to Rust'
 date: 2025-12-20
 description: 'Analyzes the roughly 2,500 lines of Lua filter infrastructure that carry custom nodes such as Callout as wrapped Div elements, and proposes a Rust design with native custom nodes and format-conditional renderers.'
+status: draft  # Research Complete - Design Phase
+braid:
+  strand: k-thpl
+  priority: P1
 ---
 
-**Date**: 2025-12-20
-**Status**: Research Complete - Design Phase
-**Issue**: k-thpl
 **Parent Epic**: k-xlko (quarto render prototype)
 
 ## Executive Summary

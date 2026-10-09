@@ -2,9 +2,9 @@
 title: 'Math-mode (MathJax / KaTeX / …) implementation — handoff from bd-4eyf'
 date: 2026-05-04
 description: 'Handoff notes for adding math typesetting to Quarto 2 HTML, which cannot reuse Pandoc''s injection, covering when to load MathJax, how to inline its config, and whether to vendor it or load it from a CDN.'
+status: draft  # Not started. Notes for the next session.
 ---
 
-**Status:** Not started. Notes for the next session.
 **Predecessor work:** bd-4eyf (Bootstrap JS injection) — see
 `claude-notes/plans/2026-05-04-bootstrap-js-injection.md`.
 

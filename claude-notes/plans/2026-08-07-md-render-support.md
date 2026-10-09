@@ -2,12 +2,8 @@
 title: '`.md` render support (bd-6d2wj4zp)'
 date: 2026-08-07
 description: 'Lets `.md` files render as project inputs when named in explicit `project.render` globs, treating them like `.qmd` files and warning when an engine specification is ignored.'
+status: done  # COMPLETE (2026-08-07). All phases landed on `braid/bd-6d2wj4zp-md-render-support`: render path (Phases 1–4, 6) in session 1, preview + hub + hub-client (Phase 5, decisions D10/D11) in session 2 (`279d7e5e`). Design questions D1–D11 resolved with Carlos. Branch not pushed.
 ---
-
-**Status:** COMPLETE (2026-08-07). All phases landed on
-`braid/bd-6d2wj4zp-md-render-support`: render path (Phases 1–4, 6) in session 1,
-preview + hub + hub-client (Phase 5, decisions D10/D11) in session 2
-(`279d7e5e`). Design questions D1–D11 resolved with Carlos. Branch not pushed.
 
 **Strand:** bd-6d2wj4zp — "Render .md files as inputs (explicit render-list opt-in;
 ignore engine specs with warning)". Related: bd-xxul (the original "non-.qmd input

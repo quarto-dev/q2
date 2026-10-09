@@ -2,6 +2,7 @@
 title: 'Plan 7c — ipynb content processor'
 date: 2026-07-08
 description: 'Adds an `.ipynb` content processor that converts Jupyter notebooks with source locations and cell emission rules, building on the processor registry from Plan 7b.'
+status: in-progress  # IN EXECUTION — Phase 0 complete (2026-09-24); Phase 1 in-repo work complete (2026-09-24: converter core green, flagship mapping half green, clippy + full-crate gates green). Remaining Phase 1 work is the upstream quarto-error-reporting engagement (needs Gordon coordination). Architecture settled; see § Execution decisions.
 ---
 
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md)
@@ -12,12 +13,6 @@ description: 'Adds an `.ipynb` content processor that converts Jupyter notebooks
 question 5), bd-kik3s1vt (transcript surface). (bd-zlemoc6w, previously
 listed here as a dependency, was closed obsolete 2026-09-24 — see
 § Review corrections.)
-**Date:** 2026-07-08 (rewritten 2026-08-17 — promoted from placeholder)
-**Status:** IN EXECUTION — Phase 0 complete (2026-09-24); Phase 1 in-repo work
-complete (2026-09-24: converter core green, flagship mapping half green,
-clippy + full-crate gates green). Remaining Phase 1 work is the upstream
-quarto-error-reporting engagement (needs Gordon coordination). Architecture
-settled; see § Execution decisions.
 **Reviewed for staleness/consistency 2026-09-24** (see § Review corrections below);
 second pass — clarity/consistency/implementability — same day (see § Review-2 pass);
 third pass — round-2 claim verification — same day (see § Review-3 pass).

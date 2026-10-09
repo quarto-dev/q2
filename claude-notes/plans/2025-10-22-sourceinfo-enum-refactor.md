@@ -2,10 +2,10 @@
 title: 'SourceInfo Enum Refactor Plan'
 date: 2025-10-22
 description: 'Converts the `SourceInfo` struct into an enum with per-variant fields that store only offsets, computing rows and columns through `map_offset()` because direct `.range` access gives wrong error locations for derived sources.'
+braid:
+  strand: k-136
+  priority: P1
 ---
-
-**Issue:** k-136
-**Date:** 2025-10-22
 
 ## Problem
 

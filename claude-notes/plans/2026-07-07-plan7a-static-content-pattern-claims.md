@@ -2,9 +2,9 @@
 title: 'Plan 7a — Static content-pattern file claims (TOMBSTONE — superseded by Plan 7b)'
 date: 2026-07-07
 description: 'Withdrawn design that let engines declare arbitrary regex content patterns for file claims, kept as a record of which ideas moved into the named processor registry of Plan 7b.'
+status: superseded  # SUPERSEDED (2026-07-08, session "spin-parse-rust"). Do not execute this plan.
 ---
 
-**Status:** SUPERSEDED (2026-07-08, session "spin-parse-rust"). Do not execute this plan.
 **Superseded by:** [2026-07-08-plan7b-native-content-processors.md](2026-07-08-plan7b-native-content-processors.md)
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md)
 

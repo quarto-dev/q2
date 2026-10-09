@@ -4,7 +4,6 @@ date: 2026-10-03
 description: 'Temporarily carries an unmerged branch of Elliot''s span-comment renderer onto the integration line, so comments that Word import writes as plain spans show as margin bubbles until that branch lands.'
 ---
 
-**Date:** 2026-10-03
 **Epic:** [`2026-10-03-document-import-epic.md`](2026-10-03-document-import-epic.md) (decision I14; interfaces and conventions there apply)
 **Depends on:** nothing. **Unblocks:** the manual bubble checks in P5's Verification and the epic Close-out (no automated test outside P0 depends on it).
 **Branch:** `import/p0-span-comments` from `feature/hub-import`.

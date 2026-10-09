@@ -6,7 +6,6 @@ description: 'Adds an automated test that renders opted-in smoke-all fixtures th
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Created:** 2026-08-24 (revised the same day after a blank-slate review)
 **Branch:** `explore/react-parity-harness` (worktree `.worktrees/workspace-1`, off `main` \@ `cf9c45cc8`)
 **Related strands:** bd-tmb2u5yu (`Math.tsx` drops `math inline|display` —
 found while designing this; blocks opting in any math fixture), bd-qn8yi1su

@@ -2,6 +2,7 @@
 title: 'Plan 8 — HANDLED_LANGUAGES → claiming engines: absorb #241 (mermaid) + graphviz TS extension'
 date: 2026-07-02
 description: 'Tombstoned plan that proposed having mermaid and graphviz `dot` cells handled by claiming engines to drain the `HANDLED_LANGUAGES` list; superseded because diagrams became a render transform and will not be implemented.'
+status: superseded  # ⛔ **TOMBSTONED 2026-07-24** — obsoleted by the "diagrams are not engines" decision on `main` (see banner). ~~plan — ready to implement (two workstreams).~~ **Created:** 2026-07-02.
 ---
 
 > # ⛔ TOMBSTONED — 2026-07-24
@@ -35,8 +36,6 @@ description: 'Tombstoned plan that proposed having mermaid and graphviz `dot` ce
 >
 > Original content is preserved below for historical reference only.
 > **Do not implement any of it.**
-
-**Status:** ⛔ **TOMBSTONED 2026-07-24** — obsoleted by the "diagrams are not engines" decision on `main` (see banner). ~~plan — ready to implement (two workstreams).~~ **Created:** 2026-07-02.
 
 > **Plan 10 opportunity (noted 2026-07-04, bd-4qflzhwh):** once Plan 10 lands,
 > any TS engine implementing `checkInstallation` automatically becomes a

@@ -2,10 +2,9 @@
 title: 'User Filters in the Render Pipeline'
 date: 2026-03-16
 description: 'Wires the `filters` metadata key into the `quarto-core` render pipeline so Lua, JSON and citeproc filters run during `q2 render`, mapping TS Quarto''s eight entry points onto stages before and after AST transforms.'
+status: in-progress  # In Progress (Phases 1-6 complete)
 ---
 
-**Created**: 2026-03-16
-**Status**: In Progress (Phases 1-6 complete)
 **Parent Epic**: k-407 (Extensible filters for quarto-markdown-pandoc)
 **Related Issues**: k-409 (Lua filter support), k-thpl (Port Lua filter infrastructure)
 

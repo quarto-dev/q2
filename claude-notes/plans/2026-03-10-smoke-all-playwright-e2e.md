@@ -2,10 +2,9 @@
 title: 'Smoke-All Tests in Playwright E2E'
 date: 2026-03-10
 description: 'Runs the smoke-all `.qmd` fixtures through the real Quarto Hub pipeline in Chromium with Playwright, creating Automerge projects on a hub server, so bugs that the WASM tests miss can be caught.'
+status: in-progress  # Phases 1-5 complete, Phase 6 (CI) pending
 ---
 
-**Date**: 2026-03-10
-**Status**: Phases 1-5 complete, Phase 6 (CI) pending
 **Depends on**: Phase 6 items from `2026-01-27-hub-client-testing-infrastructure.md`
 
 ---

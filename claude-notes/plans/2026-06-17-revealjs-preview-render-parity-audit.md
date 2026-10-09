@@ -2,13 +2,14 @@
 title: 'revealjs `q2 preview` ↔ `q2 render` parity audit'
 date: 2026-06-17
 description: 'Catalogs DOM divergences between the React reveal.js preview and the native `q2 render` scaffold across the example decks, including dropped section ids and classes, missing footer and logo, and a logo image that fails to load.'
+braid:
+  strand: bd-zaa4m4bd
+  priority: P1
 ---
 
-**Created:** 2026-06-17
 **Epic:** bd-67yja58s (format: revealjs) · GA gate: bd-v053sk3s (Phase 1P)
 **Related strands:** bd-vv8jft5n (section-id + config parity), bd-qn8yi1su
 (automated golden parity test), bd-ocxnva1f (user Lua filters footer/logo)
-**Audit strand:** bd-zaa4m4bd
 **Footer/logo strand:** bd-n2w0sxgd (F3)
 
 ## Overview

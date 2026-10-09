@@ -4,7 +4,6 @@ date: 2026-10-01
 description: 'Builds the main-thread loader for `pandoc.wasm`, covering fetch, Cache API caching, decompression, SHA verification, compilation, abort and timeout handling, idle drop of the compiled module, and Playwright smoke tests.'
 ---
 
-**Date:** 2026-10-01
 **Epic:** [`2026-10-01-pandoc-host-epic.md`](2026-10-01-pandoc-host-epic.md)
 **Design (authoritative):** [`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md) (D2, D4, D6, D8.5, Failure taxonomy)
 **Depends on:** H1. **Unblocks:** H3.

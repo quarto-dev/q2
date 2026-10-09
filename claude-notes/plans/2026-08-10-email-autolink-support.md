@@ -2,12 +2,14 @@
 title: 'Bare email autolinks `<user@example.com>` parsed as raw HTML (bd-email-autolink-dropped-2jj38iiv)'
 date: 2026-08-10
 description: 'Makes bare email autolinks such as `<sales@example.com>` render as mailto links instead of being dropped as raw HTML, by widening the tree-sitter scanner and classifying the token in pampa.'
+status: in-progress  # Design settled 2026-08-10 (user answered all questions); implementation in progress.
+braid:
+  strand: bd-email-autolink-dropped-2jj38iiv
+  priority: P2
+  labels: [pampa, parity]
 ---
 
-**Date:** 2026-08-10
-**Braid:** bd-email-autolink-dropped-2jj38iiv (bug, P2, labels: pampa, parity)
 **Checkout:** invoked on `main` \@ `46cacc88` (no new worktree/branch created; user decides where implementation lands)
-**Status:** Design settled 2026-08-10 (user answered all questions); implementation in progress.
 
 ## Triage verdict
 

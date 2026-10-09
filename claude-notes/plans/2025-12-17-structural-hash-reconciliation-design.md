@@ -2,11 +2,12 @@
 title: 'Structural Hash-Based AST Reconciliation Design'
 date: 2025-12-17
 description: 'Designs a reconciliation step that keeps unchanged AST nodes from the original document and swaps in only the changed nodes after engine execution, using structural hashes as virtual keys in the style of React reconciliation.'
+status: done  # Implemented (2025-12-18)
+braid:
+  strand: k-xvte
+  priority: P2
 ---
 
-**Date**: 2025-12-17
-**Issue**: k-xvte
-**Status**: Implemented (2025-12-18)
 **Parent issue**: k-6daf (Good source location tracking after engine outputs)
 **Related**: claude-notes/plans/2025-12-15-engine-output-source-location-reconciliation.md
 

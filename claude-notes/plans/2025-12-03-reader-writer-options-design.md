@@ -2,11 +2,10 @@
 title: 'Design: Reader/Writer Options for quarto-markdown-pandoc'
 date: 2025-12-03
 description: 'Designs `ReaderOptions` and `WriterOptions` for pandoc.read and pandoc.write in quarto-markdown-pandoc, prioritizing API compatibility so filters run, with most options accepted but ignored at first.'
+status: draft  # Draft v2 - Revised after feedback
 ---
 
-**Date**: 2025-12-03
 **Related Issue**: k-491 (Phase 6: Reader/Writer)
-**Status**: Draft v2 - Revised after feedback
 
 ## Executive Summary
 

@@ -4,7 +4,6 @@ date: 2026-09-27
 description: 'Builds a `/StructTreeRoot` walk that maps each marked-content ID, keyed by page and ID, to its structure role, plus the relational evaluator for `ensurePdfTextPositions` assertions such as left-of and aligned.'
 ---
 
-**Date:** 2026-09-27
 **Epic:** [`2026-09-27-typst-smoke-all-epic.md`](2026-09-27-typst-smoke-all-epic.md) —
 read "Decided" items 2, 3, 5 first: this work is folded into the epic (not a separate
 plan), the research session that scoped it is gone, and the target is full predicate

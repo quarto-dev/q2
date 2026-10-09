@@ -2,12 +2,13 @@
 title: 'quarto-ast-reconcile: proptest counterexample — reconciliation does not preserve structure (bd-9fwn1504)'
 date: 2026-07-27
 description: 'Investigates a failing property test in `quarto-ast-reconcile` where skipped nested plans let reconciliation resurrect deleted or reordered content, and settles on always storing the plan.'
+status: approved  # Design settled (2026-07-27, see "Design decisions") — ready to implement on its own branch.
+braid:
+  strand: bd-9fwn1504
+  priority: P1
 ---
 
-**Date:** 2026-07-27
-**Braid:** bd-9fwn1504
 **Checkout:** worktree for bd-en2hvrwn (branch `main` \@ `78d55deb`) — investigation only; the fix should land on its own branch.
-**Status:** Design settled (2026-07-27, see "Design decisions") — ready to implement on its own branch.
 
 ## Triage verdict
 

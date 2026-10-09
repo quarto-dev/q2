@@ -2,16 +2,14 @@
 title: 'Consolidate the artifact-write family (bd-v8gx + bd-gdhk)'
 date: 2026-07-28
 description: 'Consolidates three near-duplicate artifact flush loops into one `artifact_flush` module, renaming `flush_site_libs` to `flush_project_artifacts` and filtering entries by Project scope.'
+status: done  # ✅ **Complete.** Design settled with user 2026-07-28 (name = as-filed, scope = (c) rename+dedupe, module = move, branch + PR, both strands together). Shipped in [PR #430](https://github.com/quarto-dev/q2/pull/430) (`478f7c37`), all 8 CI checks green; bd-v8gx and bd-gdhk closed.
+braid:
+  strand: bd-v8gx
+  priority: P4
 ---
 
-**Date:** 2026-07-28
-**Braid:** bd-v8gx (chore, p4) — rename `flush_site_libs` → `flush_project_artifacts`
 **Braid:** bd-gdhk (chore, p3) — extract the drain-and-flush-or-merge helper
 **Branch:** `braid/bd-v8gx-flush-project-artifacts`, based on `main` \@ `581e45c0`
-**Status:** ✅ **Complete.** Design settled with user 2026-07-28 (name = as-filed,
-scope = (c) rename+dedupe, module = move, branch + PR, both strands together).
-Shipped in [PR #430](https://github.com/quarto-dev/q2/pull/430) (`478f7c37`),
-all 8 CI checks green; bd-v8gx and bd-gdhk closed.
 
 ## Summary of the decision
 

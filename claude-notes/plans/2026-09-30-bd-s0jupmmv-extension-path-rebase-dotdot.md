@@ -2,11 +2,11 @@
 title: 'Space-aware `..` refusal in `adjust_paths_to_document_dir`'
 date: 2026-09-30
 description: 'Stops `adjust_paths_to_document_dir` from producing long `..` chains for extensions extracted outside the project, keeping absolute paths for filesystem-space keys to avoid Windows `MAX_PATH` failures.'
+braid:
+  strand: bd-s0jupmmv  # implementation bd-9z2258af; discovered-from bd-qi11c7fj; related bd-oejuizi9; liveness on the bd-1klbq2zd stack tip
+  priority: P1
+  labels: [windows]
 ---
-
-**Strands:** bd-s0jupmmv (research, `question`) · bd-9z2258af (implementation,
-`bug`) · discovered-from bd-qi11c7fj · related bd-oejuizi9 (the path-resolution
-epic) · liveness on the bd-1klbq2zd stack tip.
 
 **Research:** `claude-notes/research/2026-09-30-extension-path-rebase-windows-max-path.md`
 **Contract:** `claude-notes/designs/path-resolution-model.md`
