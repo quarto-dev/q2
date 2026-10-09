@@ -94,6 +94,7 @@ pub mod listing_custom_template_diagnostics;
 pub mod listing_glob_resolution;
 pub mod listing_inline_records;
 pub mod listing_pipeline;
+pub mod listing_title_markup;
 pub mod llms_txt;
 pub mod marimo_engine_e2e;
 pub mod marimo_resolution;

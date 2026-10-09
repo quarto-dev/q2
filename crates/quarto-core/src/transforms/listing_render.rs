@@ -231,7 +231,10 @@ fn render_one(
 
     // Re-parse the markdown. Discard the fresh SourceContext
     // (bd-0jyl tracks proper threading); collect any parse
-    // diagnostics into a single host-page warning.
+    // diagnostics into a single host-page diagnostic: a warning when
+    // the parse succeeded, an error when it failed and the listing is
+    // skipped (bd-8a9eum6p) — a page that silently ships without its
+    // listing is too easy to miss.
     let mut sink = std::io::sink();
     let parse_result = pampa::readers::qmd::read(
         markdown.as_bytes(),
@@ -258,7 +261,7 @@ fn render_one(
             parsed.blocks
         }
         Err(parse_diags) => {
-            push_diag(
+            push_error(
                 diags,
                 "Q-12-10",
                 format!(
@@ -425,6 +428,15 @@ fn section_heading_text(section: &Div) -> String {
 fn push_diag(diags: &mut Vec<DiagnosticMessage>, code: &str, message: impl Into<String>) {
     diags.push(
         DiagnosticMessageBuilder::warning(message)
+            .with_code(code)
+            .build(),
+    );
+}
+
+/// Like [`push_diag`], at error severity.
+fn push_error(diags: &mut Vec<DiagnosticMessage>, code: &str, message: impl Into<String>) {
+    diags.push(
+        DiagnosticMessageBuilder::error(message)
             .with_code(code)
             .build(),
     );
@@ -691,9 +703,12 @@ mod tests {
 
     fn make_item(title: &str, date: Option<&str>) -> ListingItem {
         ListingItem {
-            title: title.to_string(),
+            title: crate::document_profile::text(title),
             subtitle: None,
-            description: Some(format!("{} description", title)),
+            description: Some(crate::document_profile::text(format!(
+                "{} description",
+                title
+            ))),
             author: Some("Jane".to_string()),
             authors: vec!["Jane".to_string()],
             date: date.map(String::from),

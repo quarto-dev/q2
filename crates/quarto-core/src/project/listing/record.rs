@@ -14,9 +14,13 @@
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
+use quarto_pandoc_types::inline::split_string_to_inlines;
 use quarto_source_map::SourceInfo;
 
-use super::item::{ItemOrigin, ItemTarget, ListingItem, join_authors, rebase_image_from_dir};
+use super::item::{
+    ItemOrigin, ItemTarget, ListingItem, flattened_prose_warning, join_authors,
+    rebase_image_from_dir,
+};
 use crate::document_profile::{LISTING_ITEM_KEYS, ListingItemInfo, UnknownKeyPolicy};
 
 /// Keys this module owns: typed here, never forwarded to `extra`.
@@ -55,6 +59,13 @@ pub fn parse_record(value: &ConfigValue, diags: &mut Vec<DiagnosticMessage>) -> 
         .and_then(|v| v.as_plain_text().map(|p| (p, v.source_info.clone())));
 
     diagnose_near_misses(value, diags);
+    for key in &info.flattened_prose {
+        diags.push(flattened_prose_warning(
+            key,
+            "this listing record",
+            value.get(key).map(|v| v.source_info.clone()),
+        ));
+    }
     if info.title.is_none() && path.is_none() {
         diags.push(
             DiagnosticMessageBuilder::warning("Listing record has no `title:`")
@@ -85,7 +96,11 @@ pub fn record_item(rec: ListingRecord, target: ItemTarget, base_dir: &str) -> Li
     let li = rec.info;
     let title = li
         .title
-        .or_else(|| target.filename().map(|f| stem(&f)))
+        .or_else(|| {
+            target
+                .filename()
+                .map(|f| split_string_to_inlines(&stem(&f)))
+        })
         .unwrap_or_default();
     ListingItem {
         title,
@@ -289,9 +304,12 @@ mod tests {
             ("link", s("download.qmd")),
         ]));
         assert!(diags.is_empty(), "{diags:?}");
-        assert_eq!(rec.info.title.as_deref(), Some("Get started"));
         assert_eq!(
-            rec.info.description.as_deref(),
+            crate::document_profile::plain(&rec.info.title).as_deref(),
+            Some("Get started")
+        );
+        assert_eq!(
+            crate::document_profile::plain(&rec.info.description).as_deref(),
             Some("Download and install Positron")
         );
         assert_eq!(
@@ -399,7 +417,7 @@ mod tests {
             ItemTarget::Href("guides/report.pdf".to_string()),
             "sub",
         );
-        assert_eq!(item.title, "report");
+        assert_eq!(item.title_text(), "report");
         assert_eq!(item.origin, ItemOrigin::Record);
         assert_eq!(
             item.image.as_deref(),
@@ -419,8 +437,8 @@ mod tests {
             source_path: std::path::PathBuf::from("download.qmd"),
             output_href: "download.html".to_string(),
             format_id: "html".to_string(),
-            title: Some("Download stub".to_string()),
-            description: Some("from the document".to_string()),
+            title: Some(crate::document_profile::text("Download stub")),
+            description: Some(crate::document_profile::text("from the document")),
             categories: vec!["doc-cat".to_string()],
             authors: vec!["Doc Author".to_string()],
             ..DocumentProfile::default()
@@ -433,9 +451,9 @@ mod tests {
             ("icon", s("bi-rocket-takeoff")),
         ]));
         let item = overlay_record(base, rec, "");
-        assert_eq!(item.title, "Get started", "record title wins");
+        assert_eq!(item.title_text(), "Get started", "record title wins");
         assert_eq!(
-            item.description.as_deref(),
+            crate::document_profile::plain(&item.description).as_deref(),
             Some("from the document"),
             "unset record fields keep the document's"
         );

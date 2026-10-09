@@ -315,7 +315,7 @@ fn stage_feed_inner(
     // skipped).
     let mut body = String::new();
     for it in items {
-        if it.title.trim().is_empty() || it.target.href().is_none() {
+        if it.title_text().trim().is_empty() || it.target.href().is_none() {
             continue;
         }
         let fi = build_feed_item(it, feed_options, site_url, project_dir);
@@ -646,9 +646,12 @@ mod tests {
 
     fn make_item(title: &str, date: Option<&str>) -> ListingItem {
         ListingItem {
-            title: title.to_string(),
+            title: crate::document_profile::text(title),
             subtitle: None,
-            description: Some(format!("Description of {}.", title)),
+            description: Some(crate::document_profile::text(format!(
+                "Description of {}.",
+                title
+            ))),
             author: Some("Jane".to_string()),
             authors: vec!["Jane".to_string()],
             date: date.map(String::from),

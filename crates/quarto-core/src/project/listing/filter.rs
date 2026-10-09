@@ -83,9 +83,9 @@ enum Curated {
 
 fn lookup_curated(item: &ListingItem, key: &str) -> Option<Curated> {
     let v = match key {
-        "title" => Curated::Scalar(Some(item.title.clone())),
-        "subtitle" => Curated::Scalar(item.subtitle.clone()),
-        "description" => Curated::Scalar(item.description.clone()),
+        "title" => Curated::Scalar(Some(item.title_text())),
+        "subtitle" => Curated::Scalar(item.subtitle_text()),
+        "description" => Curated::Scalar(item.description_text()),
         "author" => Curated::List(item.authors.clone()),
         "date" => Curated::Scalar(item.date.clone()),
         "date-modified" => Curated::Scalar(item.date_modified.clone()),
@@ -143,7 +143,7 @@ mod tests {
             extra_map.insert(k.to_string(), v);
         }
         ListingItem {
-            title: title.to_string(),
+            title: crate::document_profile::text(title),
             subtitle: None,
             description: None,
             author: if authors.is_empty() {
@@ -184,7 +184,7 @@ mod tests {
         ];
         apply_filters(&mut items, &[filter(vec![("author", s("Foo"))])], &[]);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].title, "a");
+        assert_eq!(items[0].title_text(), "a");
     }
 
     // 12. include filter on list field (curated)
@@ -196,7 +196,7 @@ mod tests {
         ];
         apply_filters(&mut items, &[filter(vec![("categories", s("rust"))])], &[]);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].title, "a");
+        assert_eq!(items[0].title_text(), "a");
     }
 
     // 12b. include filter falls through to extra (D12)
@@ -208,7 +208,7 @@ mod tests {
         ];
         apply_filters(&mut items, &[filter(vec![("status", s("published"))])], &[]);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].title, "a");
+        assert_eq!(items[0].title_text(), "a");
     }
 
     // 12c. curated field shadows extra with the same name
@@ -273,7 +273,7 @@ mod tests {
             &[],
         );
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].title, "a");
+        assert_eq!(items[0].title_text(), "a");
     }
 
     // multiple include records = OR
@@ -304,6 +304,6 @@ mod tests {
         ];
         apply_filters(&mut items, &[], &[filter(vec![("author", s("Foo"))])]);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].title, "b");
+        assert_eq!(items[0].title_text(), "b");
     }
 }

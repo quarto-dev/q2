@@ -211,7 +211,7 @@ mod tests {
 
     fn make_item(title: &str) -> ListingItem {
         ListingItem {
-            title: title.to_string(),
+            title: crate::document_profile::text(title),
             subtitle: None,
             description: None,
             author: None,

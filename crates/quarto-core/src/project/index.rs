@@ -99,7 +99,7 @@ mod tests {
             source_path: PathBuf::from(source),
             output_href: href.to_string(),
             format_id: "html".to_string(),
-            title: Some(title.to_string()),
+            title: Some(crate::document_profile::text(title)),
             ..DocumentProfile::default()
         }
     }
@@ -119,7 +119,7 @@ mod tests {
         let titles: Vec<_> = index
             .profiles()
             .iter()
-            .map(|p| p.title.as_deref().unwrap())
+            .map(|p| crate::document_profile::plain(&p.title).unwrap())
             .collect();
         assert_eq!(titles, vec!["Home", "About", "API"]);
 
@@ -128,7 +128,7 @@ mod tests {
             index
                 .lookup_by_source(Path::new("about.qmd"))
                 .unwrap()
-                .title
+                .title_text()
                 .as_deref(),
             Some("About"),
         );
@@ -137,14 +137,18 @@ mod tests {
             index
                 .lookup_by_source(Path::new("docs/api.qmd"))
                 .unwrap()
-                .title
+                .title_text()
                 .as_deref(),
             Some("API"),
         );
 
         // lookup_by_href
         assert_eq!(
-            index.lookup_by_href("index.html").unwrap().title.as_deref(),
+            index
+                .lookup_by_href("index.html")
+                .unwrap()
+                .title_text()
+                .as_deref(),
             Some("Home"),
         );
     }

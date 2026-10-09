@@ -246,7 +246,7 @@ times. The whole-card link is destroyed and replaced by fragments.
 
 ```
 $for(items)$
-[`<span class="custom-card"><span class="custom-card-icon"><i class="$it.icon$"></i></span><span class="custom-card-title" role="heading" aria-level="3">$it.title$</span><span class="custom-card-description">$it.description$</span></span>`{=html}]($it.link$){.custom-card-wrapper}
+[`<span class="custom-card"><span class="custom-card-icon"><i class="$it.icon$"></i></span><span class="custom-card-title" role="heading" aria-level="3">$it.title-html$</span><span class="custom-card-description">$it.description-html$</span></span>`{=html}]($it.link$){.custom-card-wrapper}
 
 $endfor$
 ```
@@ -271,6 +271,11 @@ The decisions:
   this; it is the accessibility contract the original `<h3>` carried.
 - **The card body stays raw HTML** — that is allowed, because it is link
   *text*. Only the anchor had to be markdown.
+- **Prose inside raw HTML uses the `-html` keys.** `$it.title$`,
+  `$it.subtitle$` and `$it.description$` are markdown (formatting kept,
+  special characters escaped), which would show as source inside
+  `{=html}`; `title-html`, `subtitle-html` and `description-html` are the
+  same values rendered to HTML.
 
 If the card contains a genuinely block-level region that cannot be flattened,
 the whole-card link is not portable as-is. The honest options are a
@@ -283,4 +288,6 @@ Q1 templates sometimes generated `id="…-<slug(item.title)>"` to wire
 `aria-labelledby`. Doctemplates have no slugify pipe and Q2 binds no per-item
 slug, so the id cannot be reproduced. Use an id-free association instead —
 `aria-label="$it.title$"` on the card — rather than dropping the
-accessibility wiring.
+accessibility wiring. (`$it.title$` is markdown, so a title with markup
+or escaped characters reads with that source in the label; plain titles
+read as written.)

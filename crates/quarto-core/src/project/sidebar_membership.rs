@@ -166,7 +166,7 @@ mod tests {
                 source_path: PathBuf::from(p),
                 output_href: p.replace(".qmd", ".html"),
                 format_id: "html".to_string(),
-                title: Some(p.to_string()),
+                title: Some(crate::document_profile::text(p)),
                 ..DocumentProfile::default()
             })
             .collect();

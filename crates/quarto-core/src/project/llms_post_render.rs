@@ -307,14 +307,13 @@ fn collisions_to_parse_error(collisions: &[String]) -> crate::error::ParseError 
 /// One `- [title](href): description` line.
 fn entry_line(profile: &DocumentProfile, md_href: &str, site_url: Option<&str>) -> String {
     let title = profile
-        .title
-        .clone()
+        .title_text()
         .unwrap_or_else(|| stem_of(md_href).to_string());
     let href = match site_url {
         Some(base) => format!("{base}/{md_href}"),
         None => md_href.to_string(),
     };
-    match profile.description.as_deref().map(str::trim) {
+    match profile.description_text().as_deref().map(str::trim) {
         Some(desc) if !desc.is_empty() => format!("- [{title}]({href}): {desc}\n"),
         _ => format!("- [{title}]({href})\n"),
     }
@@ -525,9 +524,9 @@ fn section_heading(text: Option<&ConfigValue>, href: Option<&str>, index: &Proje
         return t;
     }
     if let Some(profile) = href.and_then(|h| resolve_href(h, index))
-        && let Some(title) = &profile.title
+        && let Some(title) = profile.title_text()
     {
-        return title.clone();
+        return title;
     }
     "Section".to_string()
 }
@@ -627,8 +626,7 @@ fn assemble_llms_full(
         };
         let title = page
             .profile
-            .title
-            .clone()
+            .title_text()
             .unwrap_or_else(|| stem_of(&page.md_href).to_string());
         let href = match site_url {
             Some(base) => format!("{base}/{}", page.md_href),

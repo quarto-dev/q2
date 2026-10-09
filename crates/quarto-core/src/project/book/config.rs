@@ -230,7 +230,7 @@ fn chapter_to_sidebar_item(
     let title = explicit_text.clone().or_else(|| {
         index.and_then(|idx| {
             idx.lookup_by_source(Path::new(&href))
-                .and_then(|p| p.title.clone())
+                .and_then(|p| p.title_text())
         })
     });
 
@@ -618,7 +618,7 @@ mod tests {
                 .iter()
                 .map(|(source, title)| DocumentProfile {
                     source_path: PathBuf::from(source),
-                    title: Some(title.to_string()),
+                    title: Some(crate::document_profile::text(title)),
                     ..DocumentProfile::default()
                 })
                 .collect(),

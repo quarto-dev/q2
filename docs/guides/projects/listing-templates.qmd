@@ -248,7 +248,7 @@ extension warning stops firing.
 
 | Quarto 1 (EJS) | Quarto 2 (doctemplate) |
 | --- | --- |
-| `<%= item.title %>` | `$it.title$` |
+| `<%= item.title %>` | `$it.title$` in markdown; `$it.title-html$` inside raw HTML |
 | `<% for (const item of items) { %> … <% } %>` | `$for(items)$ … $endfor$` |
 | `<% if (item.image) { %> … <% } else { %> … <% } %>` | `$if(it.image)$ … $else$ … $endif$` |
 | `<%= item.myfield %>` | `$it.myfield$`, or `$it.extra.myfield$` |

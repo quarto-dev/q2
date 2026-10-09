@@ -126,6 +126,7 @@ pub(crate) mod title_block;
 mod toc_generate;
 mod toc_location;
 mod toc_render;
+pub(crate) use toc_render::strip_links_and_notes;
 mod website_bootstrap_icons;
 mod website_canonical_url;
 mod website_favicon;

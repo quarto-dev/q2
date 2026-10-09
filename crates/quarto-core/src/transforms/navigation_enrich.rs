@@ -55,10 +55,10 @@ pub(crate) fn enrich_one(item: &mut NavigationItem, index: &ProjectIndex) {
         return;
     };
     if let Some(profile) = index.lookup_by_source(Path::new(href))
-        && let Some(title) = &profile.title
+        && let Some(title) = profile.title_text()
     {
         item.text = Some(ConfigValue::new_string(
-            title,
+            &title,
             SourceInfo::generated(By::programmatic_config()),
         ));
     }
@@ -75,7 +75,7 @@ mod tests {
             source_path: PathBuf::from(source),
             output_href: source.replace(".qmd", ".html"),
             format_id: "html".to_string(),
-            title: Some(title.to_string()),
+            title: Some(crate::document_profile::text(title)),
             ..DocumentProfile::default()
         }
     }
