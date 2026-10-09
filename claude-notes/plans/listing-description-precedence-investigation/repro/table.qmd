@@ -1,0 +1,7 @@
+---
+title: table listing
+listing:
+  type: table
+  contents: posts
+  fields: [title, description]
+---

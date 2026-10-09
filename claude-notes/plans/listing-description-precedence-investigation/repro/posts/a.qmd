@@ -1,0 +1,6 @@
+---
+title: Post A
+description: EXPLICIT-A
+---
+
+BODY-A paragraph.

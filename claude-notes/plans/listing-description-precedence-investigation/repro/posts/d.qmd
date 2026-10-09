@@ -1,0 +1,6 @@
+---
+title: Post D
+abstract: ABSTRACT-D
+---
+
+BODY-D paragraph.
