@@ -1,0 +1,10 @@
+---
+title: POST-B
+subtitle: SUBTITLE-B
+author: AUTHOR-B
+date: 2026-01-02
+description: DESC-B
+image: pic.png
+---
+
+Body of B.

@@ -1,0 +1,7 @@
+---
+title: grid narrow
+listing:
+  type: grid
+  contents: posts
+  fields: [date, title, description]
+---
