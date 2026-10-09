@@ -52,3 +52,7 @@ the same narrow rows. Its `*-all` rows differ: it shows no categories
 (Q1 adds `categories` to the field set only when the listing sets
 `categories:`) and, in the grid, no subtitle. That is a difference in the
 default field sets, not in gating. It is tracked as bd-n7g28c3o.
+
+After merging `main` with #814 (description precedence), both cards also
+show their authored `DESC-*` description instead of "Body of …". The gating
+results above are unchanged.

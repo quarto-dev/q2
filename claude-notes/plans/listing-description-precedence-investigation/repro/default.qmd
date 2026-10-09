@@ -1,0 +1,6 @@
+---
+title: default listing
+listing:
+  type: default
+  contents: posts
+---

@@ -4,9 +4,9 @@ $if(show.image)$
 $if(image-html)$
 ::: thumbnail
 $if(path)$
-[`$image-html$`{=html}]($path$){.no-external}
+[`$image-placeholder-begin$$image-html$$image-placeholder-end$`{=html}]($path$){.no-external}
 $else$
-`$image-html$`{=html}
+`$image-placeholder-begin$$image-html$$image-placeholder-end$`{=html}
 $endif$
 :::
 $else$
@@ -51,13 +51,13 @@ $endif$
 $endif$
 
 $if(show.description)$
-$if(description)$
+$if(show-description)$
 ::: {.delink .listing-description}
 ```{=html}
 $description-placeholder-begin$
 ```
 
-$description$
+$if(description)$$description$$endif$
 
 ```{=html}
 $description-placeholder-end$

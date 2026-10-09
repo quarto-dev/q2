@@ -310,6 +310,7 @@ fn pandoc_to_document_ast(pandoc: Pandoc, ast_context: ASTContext, path: PathBuf
         source_context: SourceContext::new(),
         warnings: Vec::new(),
         recorded_includes: Vec::new(),
+        derived_listing: Default::default(),
     }
 }
 

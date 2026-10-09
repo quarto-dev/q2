@@ -1,0 +1,7 @@
+---
+title: Post C
+listing-item:
+  description: LISTING-ITEM-C
+---
+
+BODY-C paragraph.

@@ -1024,7 +1024,7 @@
   "Q-12-13": {
     "subsystem": "listing",
     "title": "Listing Item Produced No Preview Content",
-    "message_template": "Listing item from {href} produced no preview content; using static fallback description. The sibling output file is missing or has no usable first paragraph; the listing remains correct but uses the description from the post's frontmatter / first source paragraph rather than the engine-rendered output.",
+    "message_template": "Listing item from {href} produced no preview content; using static fallback description. The item has no authored description, and its rendered output file is missing or has no usable first paragraph; the listing shows the first paragraph found in the source before rendering instead.",
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-13",
     "since_version": "99.9.9"
   },
