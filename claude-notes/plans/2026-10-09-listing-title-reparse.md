@@ -198,7 +198,12 @@ Added during implementation (2026-10-09):
 - [x] `cargo xtask verify` green (full, including the hub build), 2026-10-09, after `cargo fmt`.
 - [x] Repro project renders with both listings and formatting intact (`q2 render`, no
       diagnostics). A broken custom template now prints `Error [Q-12-10]` and exits 1.
-- [ ] Re-render the bd-fvcip3t5 plans listing under `--strict`.
+- [x] *Simulated* the bd-fvcip3t5 plans listing (that branch is not in this checkout):
+      `listing-title-reparse-investigation/plans-listing-sim.py` gives each of the 1044 top-level plans a
+      title from its H1 and lists them all in a table. `q2 render --strict`: 1045 of 1045 files, exit 0,
+      no diagnostics; 1044 rows, 191 titles keep `<code>` spans, none leak raw HTML.
+- [ ] On the bd-fvcip3t5 branch itself, after merging this: re-render with `--strict` and drop any
+      code-span workarounds (owner of that branch).
 
 ### Phase 6: docs
 - [x] Catalog/docs text for Q-12-10 and the new warning; listing docs say a description should be
