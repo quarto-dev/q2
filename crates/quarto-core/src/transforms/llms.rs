@@ -310,8 +310,8 @@ struct ViewContext<'a> {
     /// (forward-slash, no trailing slash; `""` at the site root).
     cur_dir: String,
     /// Resolved listings for this page (`ListingGenerateTransform`
-    /// output). A rendered listing container whose id matches one of
-    /// these is replaced by a synthesized markdown item list
+    /// output). A rendered listing container (id `listing-<id>`, see
+    /// `Listing::container_id`) for one of these is replaced by a synthesized markdown item list
     /// (bd-5w81o2dh) instead of carrying the listing DOM chrome.
     listings: &'a [crate::project::listing::ResolvedListing],
 }
@@ -411,7 +411,10 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
             // with a clean list synthesized from the resolved items.
             // The wrapper keeps its id, minimal, like float anchors.
             if !div.attr.0.is_empty()
-                && let Some(listing) = cx.listings.iter().find(|l| l.listing.id == div.attr.0)
+                && let Some(listing) = cx
+                    .listings
+                    .iter()
+                    .find(|l| l.listing.container_id() == div.attr.0)
             {
                 out.push(Block::Div(quarto_pandoc_types::block::Div {
                     attr: (div.attr.0.clone(), vec![], hashlink::LinkedHashMap::new()),

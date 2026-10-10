@@ -1,25 +1,27 @@
 ---
-title: "Listing Id Collides With Section Id"
-description: "A listing's `id` is also the id of a section on the page, so both elements claim the same HTML anchor."
+title: "Listing Id Collides With Section Id (retired)"
+description: "Older Quarto 2 releases warned when a listing's `id` was also a section's id; current releases render the listing as `listing-<id>`, so the two no longer collide."
 code: Q-12-25
 subsystem: listing
-status: stub
+status: deprecated
 since: "99.9.9"
 categories:
   - listing
 ---
 
-# `Q-12-25` — Listing Id Collides With Section Id
+# `Q-12-25` — Listing Id Collides With Section Id (retired)
 
-> A listing's `id` is also the id of a section on the page, so both
-> elements claim the same HTML anchor.
+> Older Quarto 2 releases warned when a listing's `id` was also a
+> section's id; current releases render the listing as `listing-<id>`,
+> so the two no longer collide.
 
 ## What this means
 
 A heading with no explicit id gets one derived from its text, so
-`## Learn more` becomes `<section id="learn-more">`. If a listing on
-the same page is also called `learn-more`, the rendered page ends up
-with two elements carrying that id:
+`## Learn more` becomes `<section id="learn-more">`. Quarto 2 releases
+0.29 through 0.32 rendered a listing into an element carrying the
+listing's own `id`, so a listing also called `learn-more` gave the page
+two elements with that id, and Quarto warned with this code:
 
 ``` markdown
 ---
@@ -34,42 +36,17 @@ listing:
 :::
 ```
 
-The section's content is safe — Quarto renders the listing into the
-`:::` slot inside the section, not into the section itself — but
-`#learn-more` no longer identifies one element. A link to it, a table
-of contents entry, and any CSS or JavaScript selecting on the id may
-each resolve to whichever element the browser reaches first.
+Releases after 0.32 render a listing into an element whose id is
+`listing-` followed by the listing's `id` — `listing-learn-more` here —
+as Quarto 1 does. The section keeps `learn-more`, the listing gets its
+own anchor, and this code is no longer emitted. If you see it, you are
+on an older release.
 
-## How to fix
+The `::: {#learn-more}` slot still works as before: Quarto renders the
+listing into it and gives it the new id. Links or CSS that targeted the
+listing as `#learn-more` should now use `#listing-learn-more`.
 
-Rename whichever of the two is easier to move.
+## Related
 
-To rename the listing, change both the `id:` and the slot that
-matches it:
-
-``` markdown
----
-listing:
-  - id: recent-posts
-    contents: posts/*.qmd
----
-
-## Learn more
-
-::: {#recent-posts}
-:::
-```
-
-Or give the heading an explicit id of its own, leaving the listing
-alone:
-
-``` markdown
-## Learn more {#sec-learn-more}
-
-::: {#learn-more}
-:::
-```
-
-Note that changing a heading's id changes the anchor readers use to
-link to that section, so prefer renaming the listing on a page that is
-already published.
+- [`Q-12-4`](/errors/listing/Q-12-4.qmd) — two listings on one page
+  share an `id`.

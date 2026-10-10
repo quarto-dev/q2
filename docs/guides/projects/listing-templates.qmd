@@ -180,7 +180,7 @@ have them, and reading an absent value directly is a warning, not a
 silent blank:
 
 ```
-Warning [Q-12-10]: Listing `listing-1` doctemplate produced
+Warning [Q-12-10]: Listing `listing` doctemplate produced
 1 diagnostic(s); first: Undefined variable: it.description
 ```
 
@@ -197,8 +197,13 @@ $if(it.subtitle)$[$it.subtitle$]{.listing-subtitle}$endif$
 
 A custom template is spliced into the same listing container as a
 built-in one, so matching the built-in class names is what lets your
-template inherit the listing CSS. Each built-in layout is a wrapper
-template that applies a per-item partial:
+template inherit the listing CSS. The container is a div with id
+`listing-<id>` — `#listing-listing` for a page's only listing when it
+sets no `id:` — and classes `quarto-listing` and
+`quarto-listing-container-<type>`; when the page has a `::: {#<id>}`
+slot for the listing, that div becomes the container and is renamed.
+Inside it, each built-in layout is a wrapper template that applies a
+per-item partial:
 
 | Layout | Wrapper element | Per-item partial |
 | --- | --- | --- |
@@ -272,7 +277,7 @@ extension warning stops firing.
 | `<%= item.myfield %>` | `$it.myfield$`, or `$it.extra.myfield$` |
 | `<a href="<%- item.path %>">` | `[$it.title$]($it.path$)` — **not** a raw anchor |
 | `<img src="<%= item.image %>">` | `![$it.image-alt$]($it.image$)` — **not** a raw `<img>` |
-| `<%= metadataAttrs(item) %>` | `` `$it.metadata-attrs$`{=html} `` — see below |
+| `<%= metadataAttrs(item) %>` | `::: {.item $it.metadata-attrs$}` — see below |
 | `<div class="card">` … `</div>` | `::: {.card}` … `:::` |
 | `<%= items.length %>`, string manipulation, `process.env` | No expressions — see [What doctemplates cannot do](#what-doctemplates-cannot-do) |
 
@@ -282,12 +287,20 @@ and image rows fail silently, and `metadataAttrs` fails in a way that
 looks like a typo in your CSS. Check those three twice.
 
 `$it.metadata-attrs$` is the direct equivalent of Quarto 1's
-`metadataAttrs()` helper, producing `data-index` and — when the item has
-categories — `data-categories`. It is the one value in the table that
-you **must** put inside a ```` ```{=html} ```` block: interpolated as markdown
-it goes through the typographic filter and comes out as
+`metadataAttrs()` helper: `data-index`, `data-categories` when the item
+has categories (base64, as Quarto 1 encodes them), and a
+`data-listing-<field>-sort` value for each date or number field the item
+has. It is attribute syntax, so put it where attributes go — inside a
+div's braces, `::: {.item $it.metadata-attrs$}`, which is what the
+built-in `item-default` and `item-grid` partials do, or on a tag inside
+a ```` ```{=html} ```` block. Anywhere else it is interpolated as markdown
+text, goes through the typographic filter, and comes out as
 `data-index=“0”` with curly quotes, which is not a valid attribute.
-Note that none of Quarto 2's built-in layouts emit it.
+
+The built-in `default` and `grid` layouts read these attributes in the
+browser to paginate and to filter by category. A `custom` listing gets
+none of that client-side behaviour, so in a custom template the
+attributes are only there for your own CSS or scripts.
 
 ### A worked example
 
@@ -385,9 +398,10 @@ listing.
 
 **`metadataAttrs(tile)` was dropped rather than translated.**
 `$it.metadata-attrs$` is bound per *item*, not per nested map, so the
-tiles have no equivalent. Since no built-in layout emits it either,
-dropping it changes nothing here — but it is the kind of helper call
-that needs a decision rather than a mechanical rewrite.
+tiles have no equivalent. Quarto 2 does not paginate or filter custom
+listings in the browser, so dropping it changes nothing here — but it is
+the kind of helper call that needs a decision rather than a mechanical
+rewrite.
 
 **The outer loop restructured.** The original grouped by
 `item.category`, emitting a heading per group; the port emits a heading

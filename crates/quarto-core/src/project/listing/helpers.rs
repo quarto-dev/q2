@@ -24,9 +24,10 @@ use quarto_pandoc_types::inline::{
 use quarto_pandoc_types::inlines_to_plain_text;
 use quarto_source_map::{By, SourceInfo};
 
-use super::config::Listing;
+use super::config::{ColumnType, Listing};
 use super::item::ListingItem;
 use super::placeholders;
+use crate::dates::parse_date;
 
 /// Build the `<img>` HTML string for a listing item, or an empty
 /// string when no image was discovered. Intentionally minimal in
@@ -115,25 +116,73 @@ pub(crate) fn is_remote_src(src: &str) -> bool {
         || src.starts_with("//")
 }
 
-/// Build the `data-*` attributes string used by `list.min.js` for
-/// per-item filter / sort / category tracking. Empty when the
-/// listing has no `metadata-attrs`-relevant fields configured.
+/// Build the per-item `data-*` attributes the client-side list reads
+/// — Q1's `utilities.metadataAttrs` (`website-listing-template.ts`):
 ///
-/// Q1 emits e.g. `data-categories="rust,design" data-listing-date="…"`.
-/// v1 emits `data-index` plus `data-categories` if any. The
-/// list.min.js sort/filter UI is gated on these attrs.
-pub fn metadata_attrs(item: &ListingItem, item_index: usize) -> String {
-    let mut parts = vec![format!(r#"data-index="{}""#, item_index)];
+/// - `data-index` — the item's position, List.js's "default order"
+///   sort key;
+/// - `data-categories` — the categories joined with `,` and encoded
+///   with Q1's `b64EncodeUnicode`, which `quarto-listing.js`'s
+///   category filter decodes (omitted when the item has none);
+/// - `data-listing-<field>-sort` — for each date / number / minutes
+///   typed field (`listing.field_types`) the item has a value for, a
+///   value that sorts correctly as text: epoch milliseconds for dates,
+///   the number otherwise. Values that don't parse are left out.
+///
+/// The string is attribute syntax shared by HTML and qmd, so the
+/// built-in item templates splice it into the item div's `{…}`
+/// (`listjs` emits the List.js `valueNames` that read it back). Every
+/// value is base64 or a number, so none needs escaping.
+pub fn metadata_attrs(item: &ListingItem, item_index: usize, listing: &Listing) -> String {
+    let mut parts = vec![format!(r#"data-index="{item_index}""#)];
     if !item.categories.is_empty() {
-        let cats = item
-            .categories
-            .iter()
-            .map(|c| c.replace('"', "&quot;"))
-            .collect::<Vec<_>>()
-            .join(",");
-        parts.push(format!(r#"data-categories="{}""#, cats));
+        parts.push(format!(
+            r#"data-categories="{}""#,
+            b64_encode_unicode(&item.categories.join(","))
+        ));
+    }
+    for (field, ty) in &listing.field_types {
+        let is_attr_safe = field
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !is_attr_safe {
+            continue;
+        }
+        if let Some(value) = sort_value(item, field, *ty) {
+            parts.push(format!(r#"data-{}="{value}""#, sort_attr_name(field)));
+        }
     }
     parts.join(" ")
+}
+
+/// The List.js value name (and, prefixed with `data-`, the item
+/// attribute) carrying `field`'s sortable value — Q1's
+/// `sortAttrValue`.
+pub fn sort_attr_name(field: &str) -> String {
+    format!("listing-{field}-sort")
+}
+
+/// A typed field's value in a form that sorts correctly as text (Q1
+/// `resolveItemForTemplate`): epoch milliseconds for dates, the number
+/// for number / minutes. `None` for string-typed fields, absent
+/// values, and values that don't parse as the declared type.
+fn sort_value(item: &ListingItem, field: &str, ty: ColumnType) -> Option<String> {
+    let raw: Option<String> = match field {
+        "date" => item.date.clone(),
+        "date-modified" | "file-modified" => item.date_modified.clone(),
+        "reading-time" => item.reading_time_minutes.map(|n| n.to_string()),
+        "word-count" => item.word_count.map(|n| n.to_string()),
+        _ => item.extra.get(field).and_then(|v| v.as_plain_text()),
+    };
+    let raw = raw?;
+    match ty {
+        ColumnType::Date => parse_date(&raw).map(|d| d.unix_millis().to_string()),
+        ColumnType::Number | ColumnType::Minutes => {
+            let n: f64 = raw.trim().parse().ok().filter(|n: &f64| n.is_finite())?;
+            Some(n.to_string())
+        }
+        ColumnType::String => None,
+    }
 }
 
 /// Build the description envelope's begin marker for an item.
@@ -260,7 +309,7 @@ fn encode_uri_component(s: &str) -> String {
     out
 }
 
-fn escape_attr(s: &str) -> String {
+pub(crate) fn escape_attr(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('"', "&quot;")
         .replace('<', "&lt;")
@@ -595,19 +644,115 @@ mod tests {
         assert_eq!(host_relative_url("/abs.png", "posts"), "/abs.png");
     }
 
-    #[test]
-    fn metadata_attrs_includes_index() {
-        let item = make_item_with_image(None);
-        let attrs = metadata_attrs(&item, 7);
-        assert!(attrs.contains(r#"data-index="7""#));
+    /// A listing with the type defaults applied — the field types
+    /// that decide which `data-listing-<field>-sort` attrs exist.
+    fn hydrated_listing() -> Listing {
+        let mut l = make_listing();
+        crate::project::listing::config::apply_type_defaults(&mut l);
+        l
     }
 
     #[test]
-    fn metadata_attrs_includes_categories_when_present() {
+    fn metadata_attrs_includes_index() {
+        let item = make_item_with_image(None);
+        let attrs = metadata_attrs(&item, 7, &hydrated_listing());
+        assert!(attrs.contains(r#"data-index="7""#), "{attrs}");
+    }
+
+    // bd-nbv80e33: quarto-listing.js reads the item's categories as
+    // `decodeURIComponent(atob(value)).split(",")`, so the attr carries
+    // Q1's `b64EncodeUnicode(categories.join(","))`.
+    #[test]
+    fn metadata_attrs_categories_are_b64_of_uri_encoded_join() {
         let mut item = make_item_with_image(None);
-        item.categories = vec!["rust".to_string(), "design".to_string()];
-        let attrs = metadata_attrs(&item, 0);
-        assert!(attrs.contains(r#"data-categories="rust,design""#));
+        item.categories = vec!["rust".to_string(), "café".to_string()];
+        let attrs = metadata_attrs(&item, 0, &hydrated_listing());
+        // btoa(encodeURIComponent("rust,café")) == btoa("rust%2Ccaf%C3%A9")
+        assert!(
+            attrs.contains(r#"data-categories="cnVzdCUyQ2NhZiVDMyVBOQ==""#),
+            "{attrs}"
+        );
+    }
+
+    #[test]
+    fn metadata_attrs_omits_categories_when_absent() {
+        let item = make_item_with_image(None);
+        let attrs = metadata_attrs(&item, 0, &hydrated_listing());
+        assert!(!attrs.contains("data-categories"), "{attrs}");
+    }
+
+    // Q1 `metadataAttrs`: every date/number/minutes-typed field the
+    // item has carries a sortable value in `data-listing-<field>-sort`
+    // — epoch milliseconds for dates, the number itself otherwise.
+    #[test]
+    fn metadata_attrs_carry_sort_values_for_typed_fields() {
+        let mut item = make_item_with_image(None);
+        item.date = Some("2026-01-02".to_string());
+        item.date_modified = Some("2026-01-03T00:00:01Z".to_string());
+        item.reading_time_minutes = Some(4);
+        item.word_count = Some(812);
+        let attrs = metadata_attrs(&item, 0, &hydrated_listing());
+        assert!(
+            attrs.contains(r#"data-listing-date-sort="1767312000000""#),
+            "{attrs}"
+        );
+        assert!(
+            attrs.contains(r#"data-listing-date-modified-sort="1767398401000""#),
+            "{attrs}"
+        );
+        assert!(
+            attrs.contains(r#"data-listing-file-modified-sort="1767398401000""#),
+            "{attrs}"
+        );
+        assert!(
+            attrs.contains(r#"data-listing-reading-time-sort="4""#),
+            "{attrs}"
+        );
+        assert!(
+            attrs.contains(r#"data-listing-word-count-sort="812""#),
+            "{attrs}"
+        );
+    }
+
+    #[test]
+    fn metadata_attrs_skip_sort_values_the_item_lacks_or_cannot_parse() {
+        let mut item = make_item_with_image(None);
+        item.date = Some("someday".to_string());
+        let attrs = metadata_attrs(&item, 0, &hydrated_listing());
+        assert!(!attrs.contains("-sort="), "{attrs}");
+    }
+
+    // An author `field-types:` entry makes a custom field sortable;
+    // a value that is not a number is skipped rather than emitted.
+    #[test]
+    fn metadata_attrs_sort_values_for_author_typed_custom_fields() {
+        let mut listing = hydrated_listing();
+        listing.field_types.insert(
+            "rank".to_string(),
+            crate::project::listing::config::ColumnType::Number,
+        );
+        listing.field_types.insert(
+            "label".to_string(),
+            crate::project::listing::config::ColumnType::Number,
+        );
+        let mut item = make_item_with_image(None);
+        item.extra.insert(
+            "rank".to_string(),
+            quarto_pandoc_types::ConfigValue::new_string(
+                "12",
+                quarto_source_map::SourceInfo::for_test(),
+            ),
+        );
+        item.extra.insert(
+            "label".to_string(),
+            quarto_pandoc_types::ConfigValue::new_string(
+                "x\"y",
+                quarto_source_map::SourceInfo::for_test(),
+            ),
+        );
+        let attrs = metadata_attrs(&item, 0, &listing);
+        assert!(attrs.contains(r#"data-listing-rank-sort="12""#), "{attrs}");
+        assert!(!attrs.contains("data-listing-label-sort"), "{attrs}");
     }
 
     #[test]

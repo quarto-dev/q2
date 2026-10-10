@@ -53,10 +53,16 @@ pub struct Listing {
     pub field_sort: Vec<String>,
     pub field_filter: Vec<String>,
     pub field_required: Vec<String>,
-    pub page_size: u32,
+    /// Author-supplied `page-size:`; `None` means the type default.
+    /// Read it through [`Listing::page_size`].
+    pub page_size: Option<u32>,
     pub max_items: Option<u32>,
-    pub filter_ui: bool,
-    pub sort_ui: bool,
+    /// Author-supplied `filter-ui:`; `None` means the type default.
+    /// Read it through [`Listing::filter_ui`].
+    pub filter_ui: Option<bool>,
+    /// Author-supplied `sort-ui:`; `None` means the type default.
+    /// Read it through [`Listing::sort_ui`].
+    pub sort_ui: Option<bool>,
     pub image_placeholder: Option<String>,
     pub sort: Option<Vec<ListingSort>>,
     pub template: Option<PathBuf>,
@@ -85,6 +91,42 @@ pub struct Listing {
     pub feed: Option<ListingFeedOptions>,
 }
 
+impl Listing {
+    /// Items per page. Q1's per-type defaults (`defaultPageSize` in
+    /// `website-listing-read.ts`): 30 for table, 18 for grid, 25
+    /// otherwise; an author-supplied `page-size:` wins.
+    ///
+    /// Resolved on read rather than filled in by
+    /// [`apply_type_defaults`] so that "the author set it" stays
+    /// distinguishable from "the type default applies".
+    pub fn page_size(&self) -> u32 {
+        self.page_size.unwrap_or(match self.kind {
+            ListingType::Table => 30,
+            ListingType::Grid => 18,
+            ListingType::Default | ListingType::Custom => 25,
+        })
+    }
+
+    /// The id of the listing's element in the rendered page — Q1's
+    /// `listing-<id>` (`#listing-listing` for a lone listing). The
+    /// author's `::: {#<id>}` slot is renamed to it when filled.
+    pub fn container_id(&self) -> String {
+        format!("listing-{}", self.id)
+    }
+
+    /// Whether the listing shows a filter box. Q1 defaults it on for
+    /// table listings only; an author-supplied `filter-ui:` wins.
+    pub fn filter_ui(&self) -> bool {
+        self.filter_ui.unwrap_or(self.kind == ListingType::Table)
+    }
+
+    /// Whether the listing shows a sort control. Q1 defaults it on for
+    /// table listings only; an author-supplied `sort-ui:` wins.
+    pub fn sort_ui(&self) -> bool {
+        self.sort_ui.unwrap_or(self.kind == ListingType::Table)
+    }
+}
+
 /// Type-specific defaults are applied during hydration; this
 /// constructor returns a "neutral" Listing that the
 /// [`hydrate_type_defaults`] pass adjusts based on `kind`.
@@ -102,10 +144,10 @@ impl Default for Listing {
             field_sort: Vec::new(),
             field_filter: Vec::new(),
             field_required: Vec::new(),
-            page_size: 25,
+            page_size: None,
             max_items: None,
-            filter_ui: false,
-            sort_ui: false,
+            filter_ui: None,
+            sort_ui: None,
             image_placeholder: None,
             sort: None,
             template: None,
@@ -136,6 +178,18 @@ pub enum ListingType {
     Grid,
     Table,
     Custom,
+}
+
+impl ListingType {
+    /// The `type:` name, as authors write it.
+    pub fn name(self) -> &'static str {
+        match self {
+            ListingType::Default => "default",
+            ListingType::Grid => "grid",
+            ListingType::Table => "table",
+            ListingType::Custom => "custom",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -241,6 +295,11 @@ pub enum GridItemAlign {
 // Parser entry point
 // ─────────────────────────────────────────────────────────────────
 
+/// The id a lone listing gets when the author gives none — Q1's
+/// `kDefaultId`. (Several listings on one page get `listing-1`,
+/// `listing-2`, …, as in Q1.)
+pub const SINGLE_LISTING_ID: &str = "listing";
+
 /// Parse the value of a host page's `listing:` frontmatter key into
 /// one or more [`Listing`] records. Returns an empty vec when the
 /// key is absent (caller should check before calling); collects
@@ -269,7 +328,7 @@ pub fn parse_listings(
     // strings "true"/"false" and confuse the type-name lookup.
     if let Some(b) = value.as_bool() {
         if b {
-            return vec![default_listing_with_id("listing-1")];
+            return vec![default_listing_with_id(SINGLE_LISTING_ID)];
         } else {
             push_diag(
                 diagnostics,
@@ -305,7 +364,7 @@ pub fn parse_listings(
         // bake in the *Default* type's defaults, which we then
         // can't undo.
         let mut l = Listing {
-            id: "listing-1".to_string(),
+            id: SINGLE_LISTING_ID.to_string(),
             kind,
             ..Listing::default()
         };
@@ -315,7 +374,7 @@ pub fn parse_listings(
 
     match &value.value {
         ConfigValueKind::Map(_) => {
-            let l = parse_one_listing(value, "listing-1", diagnostics);
+            let l = parse_one_listing(value, SINGLE_LISTING_ID, diagnostics);
             vec![l]
         }
         ConfigValueKind::Array(items) => {
@@ -494,17 +553,17 @@ fn parse_one_listing(
             "field-required" => l.field_required = parse_string_list(&entry.value),
             "page-size" => {
                 if let Some(n) = parse_u32_scalar(&entry.value) {
-                    l.page_size = n;
+                    l.page_size = Some(n);
                 }
             }
             "max-items" => {
                 l.max_items = parse_u32_scalar(&entry.value);
             }
             "filter-ui" => {
-                l.filter_ui = entry.value.as_bool().unwrap_or(l.filter_ui);
+                l.filter_ui = entry.value.as_bool().or(l.filter_ui);
             }
             "sort-ui" => {
-                l.sort_ui = entry.value.as_bool().unwrap_or(l.sort_ui);
+                l.sort_ui = entry.value.as_bool().or(l.sort_ui);
             }
             "image-placeholder" => {
                 l.image_placeholder = entry.value.as_plain_text();
@@ -969,6 +1028,33 @@ pub fn apply_type_defaults(l: &mut Listing) {
             _ => Vec::new(),
         });
     }
+    // Q1's `kDefaultFieldTypes`, under the author's `field-types:`.
+    // The types decide which fields carry a sortable `data-*` value
+    // for the client-side list (see `listjs`).
+    for (field, ty) in [
+        ("date", ColumnType::Date),
+        ("file-modified", ColumnType::Date),
+        ("date-modified", ColumnType::Date),
+        ("reading-time", ColumnType::Minutes),
+        ("word-count", ColumnType::Number),
+    ] {
+        l.field_types.entry(field.to_string()).or_insert(ty);
+    }
+    // Q1's `field-sort` default: `kDefaultFieldSort` for the default
+    // and grid layouts, the type's own field set for table and custom
+    // (`website-listing-read.ts`, `defaultSort`). Like `fields`, an
+    // empty list counts as unset.
+    if l.field_sort.is_empty() {
+        l.field_sort = match l.kind {
+            ListingType::Default | ListingType::Grid => {
+                ["title", "date", "author", "filename", "file-modified"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect()
+            }
+            ListingType::Table | ListingType::Custom => l.fields.clone(),
+        };
+    }
     // Type-specific knobs (only fill None).
     match l.kind {
         ListingType::Default => {
@@ -983,9 +1069,6 @@ pub fn apply_type_defaults(l: &mut Listing) {
             l.image_lazy_loading.get_or_insert(true);
         }
         ListingType::Table => {
-            l.sort_ui = true;
-            l.filter_ui = true;
-            l.page_size = 30;
             l.image_lazy_loading.get_or_insert(true);
         }
         ListingType::Custom => {}
@@ -1263,7 +1346,7 @@ listing:
     page-size: 10
 ";
         let (listings, _diags, _ctx) = parse_from_yaml(yaml);
-        assert_eq!(listings.first().expect("one listing").page_size, 10);
+        assert_eq!(listings.first().expect("one listing").page_size(), 10);
     }
 
     // Guard: the quoted-string form worked before bd-yjsz6hdu and must
@@ -1276,7 +1359,7 @@ listing:
     page-size: \"10\"
 ";
         let (listings, _diags, _ctx) = parse_from_yaml(yaml);
-        assert_eq!(listings.first().expect("one listing").page_size, 10);
+        assert_eq!(listings.first().expect("one listing").page_size(), 10);
     }
 
     #[test]
@@ -1406,7 +1489,7 @@ listing:
     fn config_parses_minimal_default_string() {
         let (listings, diags) = parse(s("default"));
         assert_eq!(listings.len(), 1);
-        assert_eq!(listings[0].id, "listing-1");
+        assert_eq!(listings[0].id, "listing");
         assert_eq!(listings[0].kind, ListingType::Default);
         // Default contents glob filled in.
         assert_eq!(glob_patterns(&listings[0].contents), vec!["*.qmd"]);
@@ -1468,8 +1551,18 @@ listing:
     fn config_parses_listing_true_shorthand() {
         let (listings, diags) = parse(b(true));
         assert_eq!(listings.len(), 1);
-        assert_eq!(listings[0].id, "listing-1");
+        assert_eq!(listings[0].id, "listing");
         assert_eq!(listings[0].kind, ListingType::Default);
+        assert!(diags.is_empty());
+    }
+
+    // bd-nbv80e33: a lone listing map synthesizes Q1's `kDefaultId`
+    // (`listing`), like the string and boolean shorthands; arrays
+    // keep `listing-N`.
+    #[test]
+    fn config_single_map_synthesizes_q1_default_id() {
+        let (listings, diags) = parse(map(vec![("type", s("grid"))]));
+        assert_eq!(listings[0].id, "listing");
         assert!(diags.is_empty());
     }
 
@@ -1631,9 +1724,95 @@ listing:
         let (listings, _) = parse(s("table"));
         assert_eq!(listings[0].fields, vec!["date", "title", "author"]);
         // Table also flips sort_ui / filter_ui to true.
-        assert!(listings[0].sort_ui);
-        assert!(listings[0].filter_ui);
-        assert_eq!(listings[0].page_size, 30);
+        assert!(listings[0].sort_ui());
+        assert!(listings[0].filter_ui());
+        assert_eq!(listings[0].page_size(), 30);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // bd-nbv80e33: Q1 type defaults for page-size / sort-ui /
+    // filter-ui (`website-listing-read.ts` `defaultPageSize` and the
+    // kFilterUi/kSortUi hydration), author values winning.
+    // ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn page_size_defaults_follow_q1_per_type() {
+        for (kind, expected) in [("default", 25), ("grid", 18), ("table", 30)] {
+            let (listings, _) = parse(s(kind));
+            assert_eq!(listings[0].page_size(), expected, "type {kind}");
+        }
+        let (listings, _) = parse(map(vec![
+            ("type", s("custom")),
+            ("template", s("t.template")),
+        ]));
+        assert_eq!(listings[0].page_size(), 25, "type custom");
+    }
+
+    #[test]
+    fn sort_and_filter_ui_default_off_except_table() {
+        for kind in ["default", "grid"] {
+            let (listings, _) = parse(s(kind));
+            assert!(!listings[0].sort_ui(), "type {kind}");
+            assert!(!listings[0].filter_ui(), "type {kind}");
+        }
+    }
+
+    // The table preset used to overwrite these unconditionally after
+    // parsing, discarding the author's values.
+    #[test]
+    fn table_author_page_size_and_ui_flags_survive_type_defaults() {
+        let (listings, _) = parse(map(vec![
+            ("type", s("table")),
+            ("page-size", s("5")),
+            ("sort-ui", b(false)),
+            ("filter-ui", b(false)),
+        ]));
+        assert_eq!(listings[0].page_size(), 5);
+        assert!(!listings[0].sort_ui());
+        assert!(!listings[0].filter_ui());
+    }
+
+    #[test]
+    fn grid_author_page_size_survives_type_defaults() {
+        let (listings, _) = parse(map(vec![("type", s("grid")), ("page-size", s("7"))]));
+        assert_eq!(listings[0].page_size(), 7);
+    }
+
+    // Q1 `kDefaultFieldTypes`, merged under the author's `field-types`.
+    #[test]
+    fn field_types_default_to_q1_and_author_wins() {
+        let (listings, _) = parse(s("default"));
+        let types = &listings[0].field_types;
+        assert_eq!(types.get("date"), Some(&ColumnType::Date));
+        assert_eq!(types.get("file-modified"), Some(&ColumnType::Date));
+        assert_eq!(types.get("date-modified"), Some(&ColumnType::Date));
+        assert_eq!(types.get("reading-time"), Some(&ColumnType::Minutes));
+        assert_eq!(types.get("word-count"), Some(&ColumnType::Number));
+
+        let (listings, _) = parse(map(vec![(
+            "field-types",
+            map(vec![("date", s("string")), ("rank", s("number"))]),
+        )]));
+        let types = &listings[0].field_types;
+        assert_eq!(types.get("date"), Some(&ColumnType::String));
+        assert_eq!(types.get("rank"), Some(&ColumnType::Number));
+        assert_eq!(types.get("reading-time"), Some(&ColumnType::Minutes));
+    }
+
+    // Q1 `kDefaultFieldSort` for default/grid; the type's suggested
+    // fields for table/custom.
+    #[test]
+    fn field_sort_defaults_follow_q1_per_type() {
+        let q1_default = vec!["title", "date", "author", "filename", "file-modified"];
+        for kind in ["default", "grid"] {
+            let (listings, _) = parse(s(kind));
+            assert_eq!(listings[0].field_sort, q1_default, "type {kind}");
+        }
+        let (listings, _) = parse(s("table"));
+        assert_eq!(listings[0].field_sort, listings[0].fields);
+
+        let (listings, _) = parse(map(vec![("field-sort", arr(vec![s("author")]))]));
+        assert_eq!(listings[0].field_sort, vec!["author"]);
     }
 
     // ─────────────────────────────────────────────────────────────
