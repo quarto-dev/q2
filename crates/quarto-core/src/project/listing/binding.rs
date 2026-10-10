@@ -131,7 +131,9 @@ fn effective_fields(
 }
 
 /// Every field at least one item carries: the curated fields in a
-/// fixed order, then custom (`extra`) keys in first-seen order.
+/// fixed order, then custom (`extra`) keys in first-seen order. A
+/// description or image L7 may still derive counts as carried (Q1:
+/// every document item carries both placeholders).
 fn fields_items_carry(items: &[ListingItem], date_style: &DateStyle) -> Vec<String> {
     const CURATED: &[&str] = &[
         "date",
@@ -151,7 +153,11 @@ fn fields_items_carry(items: &[ListingItem], date_style: &DateStyle) -> Vec<Stri
         .iter()
         .filter(|f| {
             items.iter().any(|it| match **f {
-                "image" => it.image.is_some(),
+                "image" => it.image.is_some() || derivable(it, it.image_source),
+                "description" => {
+                    item_field_cell(it, "description", date_style).is_some()
+                        || derivable(it, it.description_source)
+                }
                 f => item_field_cell(it, f, date_style).is_some(),
             })
         })
@@ -1682,6 +1688,52 @@ mod tests {
             !names.contains(&"subtitle"),
             "no item has a subtitle: {names:?}"
         );
+    }
+
+    fn field_names(ctx: &TemplateContext) -> Vec<String> {
+        let TemplateValue::List(fields) =
+            ctx.get("listing").unwrap().get_path(&["fields"]).unwrap()
+        else {
+            panic!("fields not a list");
+        };
+        fields
+            .iter()
+            .map(|f| match f {
+                TemplateValue::String(s) => s.clone(),
+                _ => panic!("non-string field"),
+            })
+            .collect()
+    }
+
+    // A custom listing without `fields:` keeps `description` and
+    // `image` when L7 can still derive them, so `$items:item-default()$`
+    // emits their envelopes instead of dropping them.
+    #[test]
+    fn custom_listing_without_fields_keeps_derivable_fields() {
+        let mut l = Listing {
+            kind: ListingType::Custom,
+            ..Listing::default()
+        };
+        super::super::config::apply_type_defaults(&mut l);
+        let mut i = item("X");
+        i.description = None;
+        i.description_source = FieldSource::Absent;
+        i.image = None;
+        i.image_source = FieldSource::Absent;
+        let names = field_names(&ctx_for(&l, &[i.clone()]));
+        for f in ["description", "image"] {
+            assert!(names.contains(&f.to_string()), "missing `{f}` in {names:?}");
+        }
+
+        // A record with no link has nothing to derive from.
+        i.target = crate::project::listing::item::ItemTarget::None;
+        let names = field_names(&ctx_for(&l, &[i]));
+        for f in ["description", "image"] {
+            assert!(
+                !names.contains(&f.to_string()),
+                "unexpected `{f}` in {names:?}"
+            );
+        }
     }
 
     // `image` is exempt from presence filtering (Q1: placeholders
