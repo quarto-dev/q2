@@ -13,7 +13,7 @@ braid:
 
 **Ready to design** (2026-10-10, morning). The doc-inventory flake has a confirmed root cause with a deterministic repro (five of five runs), and the fix is small and test-local. The "larger pass" the user asked for is bounded: CI history over the last 80 Hub-Client E2E runs names exactly three Playwright specs that flake.
 
-**Decided and implemented** (2026-10-10, afternoon; see "Decisions" below). One question stays open: whether the viewer's swap timeout is acceptable product behavior.
+**Decided and implemented** (2026-10-10; see "Decisions" below). All six questions are settled; the viewer's swap timeout became a watchdog (question 4, the invariant).
 
 ## Decisions
 
@@ -22,7 +22,7 @@ The user answered the six questions the skeleton asked (quoted under "Open desig
 1. Doc-inventory fix is test-side only. Done: `TestHub.hubHasHeads` / `hubHasHeadsOf` in `test-hub.ts`; every project-creating helper in `quarto-sync-client` waits for the creator's heads on the hub before the creator disconnects; the hub-client E2E project factory drains its disconnect and its stale "flush synchronously" comment is corrected.
 2. The digest-delay repro is a permanent test: `ts-packages/quarto-sync-client/src/project-creation-delivery.test.ts`.
 3. Fix the three specs with CI evidence; audit the rest by grep and file findings on bd-ag1q1eho. Done; findings are in that strand's notes. The code is organized for bd-ag1q1eho: the "wait on the state" patterns are documented in `.claude/rules/hub-client-tests.md` (now also scoped to the sync-client and hub-mcp tests), the typing hook waits on trace events rather than a debounce, and the Menu primitive keeps focus when its items change.
-4. Open. See "The swap timeout" below.
+4. The invariant: the frame on top is never an empty viewer. The 5 s promote-anyway timeout is gone; a 30 s watchdog and pdf.js's `documenterror` make the swap fail instead, the previous PDF stays, and the pane shows its error banner. See "The swap timeout" below.
 5. WebKit stays gating with one retry. No CI change in this pass.
 6. The three duplicate strands (bd-fuw5gcni, bd-5sbguner, bd-tg3vnfxg) were closed on 2026-10-10 as duplicates of bd-c72wsugj.
 
@@ -95,7 +95,7 @@ Reading `public/pdfjs/web/viewer.mjs` with the Playwright error-context snapshot
 
 The local WebKit run of the spec takes 3.5 s per test; the failing CI runs took 10 to 14 s, so a 3 to 4x slower environment is enough to flip the race. The 5 s timeout is not needed to explain either snapshot.
 
-**Fix.** The gate is now: `pagesloaded`, `isInitialViewSet` true, and the current page's view in `RenderingStates.FINISHED`, re-checked on `documentinit` and on every `pagerendered`. A render that completes after `setInitialView` was started after the reset (the reset cancels in-flight renders, and cancelled renders dispatch no `pagerendered`), so it is at the final layout. `pdfViewer.test.ts` drives a fake `PDFViewerApplication` through both orders (draw before the initial view, then reset, then draw; and draw that survives the initial view). The 5 s timeout is unchanged pending question 4.
+**Fix.** The gate is now: `pagesloaded`, `isInitialViewSet` true, and the current page's view in `RenderingStates.FINISHED`, re-checked on `documentinit` and on every `pagerendered`. A render that completes after `setInitialView` was started after the reset (the reset cancels in-flight renders, and cancelled renders dispatch no `pagerendered`), so it is at the final layout. `pdfViewer.test.ts` drives a fake `PDFViewerApplication` through both orders (draw before the initial view, then reset, then draw; and draw that survives the initial view), and through a document error and a watchdog expiry.
 
 ### pandoc-warm typing hook: a fixed sleep, not the swap
 
@@ -109,7 +109,7 @@ The New menu renders a placeholder item (`id: 'default'`) until `getProjectChoic
 
 **Fix.** `Menu` keeps keyboard focus: the root's focus and blur events record whether an item of the menu holds focus, and a layout effect after every render refocuses the first item when it did and nothing holds it now (focus that moved to another element, such as the trigger on close, is left alone). A first version recorded that only inside the layout effect, which never runs between the mount-time focus and the item swap; the load run caught it (three of three failures), and the event-based version passed. The spec waits for the real menu (the `Templates` group focused), opens it with ArrowRight, and activates `Default` with Enter, so it exercises the menu users get. While there, the five pre-existing `react-hooks/refs` lint errors in `Menu.tsx` (the focus-return target was read from refs during render) were fixed by capturing it in a mount-time layout effect.
 
-### The swap timeout (question 4, still open)
+### The swap timeout (question 4: the invariant)
 
 The viewer's header comment states the promise: a recompile replaces the live PDF "in one paint", only once the new viewer has drawn, because reopening in place "empties it for a few frames, a visible flash". The spec asserts exactly that promise: zero frames with an unpainted viewer on top.
 
@@ -118,12 +118,12 @@ The viewer's header comment states the promise: a recompile replaces the live PD
 - **An invariant.** The old PDF stays on top until the new one has painted, however long that takes; a viewer that never paints is an error (reject `ready`, keep the old PDF, show the pane's error banner, with a long watchdog of the order of 30 s so a dead viewer still surfaces). The spec then asserts the product's promise and is deterministic in principle.
 - **Best effort.** A blank viewer after 5 s is acceptable. Then the spec cannot assert 0 unconditionally: it must either be told that the swap fell back and only assert when it did not, or disable the timeout through a test hook.
 
-Recommendation: the invariant. Promoting an unpainted viewer is the exact flash the second iframe exists to prevent, and the one case the timeout helps is better shown as an error than as a blank pane. Until that is decided, the residual CI risk on this spec is a swap slower than 5 s, which the local evidence (3.5 s for the whole test, two compiles and two swaps included) puts well below the typical run, but not out of reach of a heavily loaded runner.
+The user chose the invariant. `SWAP_TIMEOUT_MS` is gone. `load()` now rejects on pdf.js's `documenterror` (with its reason) and after `VIEWER_WATCHDOG_MS` (30 s) without a paint; `open()` already dropped a rejected frame and kept the current one. `PdfPreviewPane` turns a rejected `show` into the same error banner a failed compile gets (with "showing the last PDF that compiled" when one is on screen), cleared by the next compile; and its "a PDF is on screen" flag now flips when the viewer has drawn, not at hand-off, so the first-compile spinner stays until the first paint. The spec's zero-empty-frames assertion is now exactly the product's promise.
 
 ## Verification
 
 - `quarto-sync-client`: the eight touched test files plus `exit-drain` pass (26 tests). `project-creation-delivery.test.ts` fails deterministically with the helper reverted to `hubHasDoc`.
-- `hub-client`: `pdfViewer.test.ts` (4), `Menu.submenu.integration.test.tsx` (8), `ProjectsHome.newMenu.integration.test.tsx` (4) pass; ESLint is clean on every touched file.
+- `hub-client`: `pdfViewer.test.ts` (6), `PdfPreviewPane.test.tsx` (9), `Menu.submenu.integration.test.tsx` (8), `ProjectsHome.newMenu.integration.test.tsx` (4) pass; ESLint is clean on every touched file.
 - Harness specs, local, `--retries=0 --workers=1`: `projects-home-dialogs` (chromium) 3 of 3, the pandoc-warm typing-hook test (webkit) 3 of 3, `pandoc-pdf-viewer` (webkit) 6 of 6 at normal load.
 - Under CPU load (36 busy loops on an 18-core machine): dialogs 8 of 8 (the first Menu fix failed 3 of 3 here, see above), typing hook 3 of 3, viewer 6 of 6.
 - The viewer race did not reproduce locally against the old gate: 4 of 4 passes under the same load, and 6 of 6 with Chromium CPU throttling at 8x and 16x applied from the recompile on. Uniform slowdown does not flip the order of pdf.js's first draw and its stored-view read here, so the gate fix rests on the pdf.js source, the two CI snapshots, and the unit test that drives both orders through a fake viewer. CI is the real check for this one.

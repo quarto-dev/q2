@@ -5,6 +5,8 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 const starts: { path: string; projectKey?: string }[] = [];
 let onPdf: (pdf: Uint8Array, info: { path: string; fileName: string; seq: number }) => void = () => {};
 const shown: { key: string }[] = [];
+/** When set, the viewer rejects the next show with this message (it keeps the previous document). */
+let showError: string | null = null;
 let warmFlag = true;
 const controllerOptions: { warm?: boolean }[] = [];
 const lifecycle = { cancel: vi.fn(), acquire: vi.fn(), release: vi.fn() };
@@ -29,7 +31,13 @@ vi.mock('../../pandoc/downloadService', () => ({
 }));
 vi.mock('../../pandoc/featureFlag', () => ({ pandocWarmEnabled: () => warmFlag }));
 vi.mock('../../pandoc/pdfViewer', () => ({
-  mountPdfViewer: () => ({ show: async (_b: Uint8Array, o: { key: string }) => void shown.push(o), dispose: vi.fn() }),
+  mountPdfViewer: () => ({
+    show: async (_b: Uint8Array, o: { key: string }) => {
+      if (showError) throw new Error(showError);
+      shown.push(o);
+    },
+    dispose: vi.fn(),
+  }),
 }));
 
 import PdfPreviewPane, { PDF_PREVIEW_DEBOUNCE_MS, PDF_PREVIEW_WARM_DEBOUNCE_MS } from './PdfPreviewPane';
@@ -42,6 +50,7 @@ const setStatus = (s: unknown) => {
 beforeEach(() => {
   starts.length = 0;
   shown.length = 0;
+  showError = null;
   warmFlag = true;
   controllerOptions.length = 0;
   lifecycle.cancel.mockClear();
@@ -71,7 +80,8 @@ describe('PdfPreviewPane', () => {
     expect(loading.querySelector('.qh-spinner')).toBeTruthy();
     expect(loading.textContent).toContain('5.0 MB');
     expect(screen.queryByTestId('pdf-preview-status')).toBeNull();
-    act(() => onPdf(new Uint8Array([1]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 1 }));
+    // The spinner goes once the viewer has drawn the PDF (show resolved), not at hand-off.
+    await act(async () => onPdf(new Uint8Array([1]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 1 }));
     expect(screen.queryByTestId('pdf-preview-loading')).toBeNull();
     expect(screen.getByTestId('pdf-preview-status')).toBeTruthy();
   });
@@ -92,12 +102,29 @@ describe('PdfPreviewPane', () => {
   it('feeds each compiled PDF to the viewer keyed by the document, and keeps it under an error banner', async () => {
     render(<PdfPreviewPane path="/p/doc.qmd" content="a" />);
     await act(async () => void vi.advanceTimersByTime(0));
-    act(() => onPdf(new Uint8Array([1]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 1 }));
+    await act(async () => onPdf(new Uint8Array([1]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 1 }));
     expect(shown).toEqual([{ key: '/p/doc.qmd', fileName: 'doc.pdf' }]);
     setStatus({ phase: 'failed', clickId: 2, format: FORMAT, state: 'typst-error', diagnostics: [], notices: [], message: 'boom' });
     const banner = screen.getByTestId('pdf-preview-error');
     expect(banner.textContent).toContain('boom');
     expect(banner.textContent).toContain('last PDF that compiled');
+  });
+
+  it('keeps the previous PDF under the banner when the viewer cannot open a compiled one, until the next compile', async () => {
+    render(<PdfPreviewPane path="/p/doc.qmd" content="a" />);
+    await act(async () => void vi.advanceTimersByTime(0));
+    await act(async () => onPdf(new Uint8Array([1]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 1 }));
+    expect(screen.queryByTestId('pdf-preview-error')).toBeNull();
+    showError = 'The PDF viewer drew nothing within 30 s';
+    setStatus({ phase: 'done', clickId: 2, format: FORMAT, fileName: 'doc.pdf', warnings: [], notices: [], unexecutedCells: [] });
+    await act(async () => onPdf(new Uint8Array([2]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 2 }));
+    const banner = screen.getByTestId('pdf-preview-error');
+    expect(banner.textContent).toContain('drew nothing within 30 s');
+    expect(banner.textContent).toContain('last PDF that compiled');
+    // The next compile clears it; the compile's own outcome decides what shows next.
+    setStatus({ phase: 'working', clickId: 3, format: FORMAT, stage: 'preparing' });
+    expect(screen.queryByTestId('pdf-preview-error')).toBeNull();
+    expect(screen.getByTestId('pdf-preview-status')).toBeTruthy();
   });
 
   it('passes the project key to start, and a project change with the same path starts at once with the new key', async () => {

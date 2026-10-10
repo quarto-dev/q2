@@ -8,7 +8,9 @@
  * fingerprint alone, so the host clears it when the viewer moves to another file.
  *
  * A recompile loads into a second iframe under the live one, which it replaces once it has drawn a page:
- * reopening a document inside the live viewer empties it for a few frames, a visible flash.
+ * reopening a document inside the live viewer empties it for a few frames, a visible flash. The frame on
+ * top is never an empty viewer: a new document that fails to draw is dropped (see `VIEWER_WATCHDOG_MS`),
+ * and the previous one stays.
  */
 
 /** The slice of pdf.js's `PDFViewerApplication` this module uses. */
@@ -33,7 +35,9 @@ type ViewerWindow = Window & { PDFViewerApplication?: ViewerApp };
 export interface PdfViewerHandle {
   /**
    * Show `pdf`. A call with the same `key` as the previous one keeps the reader's zoom and scroll;
-   * a new `key` starts from the top. Resolves when the pages are laid out.
+   * a new `key` starts from the top. Resolves once the new document is on screen and painted;
+   * rejects if the viewer fails to open it (pdf.js reports an error, or nothing is drawn within
+   * `VIEWER_WATCHDOG_MS`), in which case the previous document stays on screen.
    */
   show(pdf: Uint8Array, options: { key: string; fileName: string }): Promise<void>;
   dispose(): void;
@@ -49,8 +53,13 @@ export function viewerUrl(base: string = import.meta.env.BASE_URL, file?: string
   return `${root}?file=${encodeURIComponent(file)}${restore ? '' : '#pagemode=none'}`;
 }
 
-/** A swap never waits longer than this for the new viewer's first page; slower than that, show it anyway. */
-const SWAP_TIMEOUT_MS = 5000;
+/**
+ * A viewer that has drawn nothing after this long is treated as dead: the swap fails and the previous
+ * document stays. It is a watchdog, not a fallback: a slow viewer is waited for, however long it takes,
+ * because promoting an unpainted viewer is the flash the second iframe exists to prevent (invariant
+ * decided under bd-c72wsugj: the frame on top is never an empty viewer).
+ */
+export const VIEWER_WATCHDOG_MS = 30_000;
 
 export function mountPdfViewer(container: HTMLElement, base?: string): PdfViewerHandle {
   interface Frame {
@@ -86,31 +95,48 @@ export function mountPdfViewer(container: HTMLElement, base?: string): PdfViewer
     iframe.title = 'PDF preview';
     iframe.style.cssText = `position:absolute;inset:0;width:100%;height:100%;border:0;display:block;z-index:${zIndex}`;
     const ready = new Promise<void>((resolve, reject) => {
+      // `once`: the subscriptions and the watchdog below belong to this one document load.
       iframe.addEventListener('load', () => {
         const app = (iframe.contentWindow as ViewerWindow | null)?.PDFViewerApplication;
         if (!app) return reject(new Error('The PDF viewer did not start'));
         const bus = app.eventBus;
         app.initializedPromise.then(() => {
           let loaded = false;
-          const timer = setTimeout(finish, SWAP_TIMEOUT_MS);
+          const timer = setTimeout(
+            () => fail(new Error(`The PDF viewer drew nothing within ${VIEWER_WATCHDOG_MS / 1000} s`)),
+            VIEWER_WATCHDOG_MS,
+          );
           const painted = () => {
             const v = app.pdfViewer;
             return v?.getPageView(v.currentPageNumber - 1)?.renderingState === RENDERING_FINISHED;
           };
           const check = () => loaded && app.isInitialViewSet === true && painted() && finish();
           const onLoaded = () => ((loaded = true), check());
-          function finish() {
+          const onError = (e: unknown) => {
+            const { message, reason } = (e ?? {}) as { message?: string; reason?: string | null };
+            fail(new Error(reason || message || 'The PDF viewer could not open the document'));
+          };
+          function done() {
             clearTimeout(timer);
             bus.off('pagesloaded', onLoaded);
             bus.off('documentinit', check);
             bus.off('pagerendered', check);
+            bus.off('documenterror', onError);
+          }
+          function finish() {
+            done();
             resolve();
+          }
+          function fail(error: Error) {
+            done();
+            reject(error);
           }
           bus.on('pagesloaded', onLoaded);
           bus.on('documentinit', check);
           bus.on('pagerendered', check);
+          bus.on('documenterror', onError);
         }, reject);
-      });
+      }, { once: true });
     });
     iframe.src = viewerUrl(base, blobUrl, restore);
     container.appendChild(iframe);

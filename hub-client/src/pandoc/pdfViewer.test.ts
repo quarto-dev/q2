@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
-import { mountPdfViewer, viewerUrl } from './pdfViewer';
+import { describe, expect, it, vi } from 'vitest';
+import { mountPdfViewer, VIEWER_WATCHDOG_MS, viewerUrl } from './pdfViewer';
 
 describe('viewerUrl', () => {
   it('addresses the stock viewer under the base path', () => {
@@ -38,14 +38,15 @@ function fakeViewerApp() {
       container: document.createElement('div'),
       getPageView: () => ({ renderingState: app.renderingState }),
     },
-    emit(name: string) {
-      for (const fn of [...(listeners.get(name) ?? [])]) fn({ pageNumber: 1 });
+    emit(name: string, payload: unknown = { pageNumber: 1 }) {
+      for (const fn of [...(listeners.get(name) ?? [])]) fn(payload);
     },
   };
   return app;
 }
 
-const settle = () => new Promise((r) => setTimeout(r, 0));
+/** Let pending promise callbacks and zero-delay timers run (under fake timers too). */
+const settle = () => (vi.isFakeTimers() ? vi.advanceTimersByTimeAsync(0) : new Promise((r) => setTimeout(r, 0)));
 
 /**
  * Give the iframe its "viewer" and fire its load event, as the real viewer page would; back once the
@@ -130,5 +131,68 @@ describe('mountPdfViewer', () => {
     expect(f.style.zIndex).toBe('2');
     viewer.dispose();
     container.remove();
+  });
+
+  it('drops a document pdf.js cannot open and keeps the previous one on screen', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const viewer = mountPdfViewer(container, '/');
+    const frames = () => [...container.querySelectorAll('iframe')];
+    const first = viewer.show(new Uint8Array([1]), { key: 'c', fileName: 'c.pdf' });
+    const [f1] = frames();
+    const app1 = fakeViewerApp();
+    await boot(f1, app1);
+    app1.emit('pagesloaded');
+    app1.isInitialViewSet = true;
+    app1.renderingState = FINISHED;
+    app1.emit('pagerendered');
+    await first;
+
+    const second = viewer.show(new Uint8Array([2]), { key: 'c', fileName: 'c.pdf' });
+    const f2 = frames()[1];
+    const app2 = fakeViewerApp();
+    await boot(f2, app2);
+    app2.emit('documenterror', { message: 'Invalid PDF structure.', reason: 'bad xref' });
+    await expect(second).rejects.toThrow('bad xref');
+    expect(frames()).toEqual([f1]);
+    expect(f1.style.zIndex).toBe('2');
+    viewer.dispose();
+    container.remove();
+  });
+
+  it('drops a viewer that draws nothing within the watchdog and keeps the previous document', async () => {
+    vi.useFakeTimers();
+    try {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const viewer = mountPdfViewer(container, '/');
+      const frames = () => [...container.querySelectorAll('iframe')];
+      const first = viewer.show(new Uint8Array([1]), { key: 'd', fileName: 'd.pdf' });
+      const [f1] = frames();
+      const app1 = fakeViewerApp();
+      await boot(f1, app1);
+      app1.emit('pagesloaded');
+      app1.isInitialViewSet = true;
+      app1.renderingState = FINISHED;
+      app1.emit('pagerendered');
+      await first;
+
+      const second = viewer.show(new Uint8Array([2]), { key: 'd', fileName: 'd.pdf' });
+      const f2 = frames()[1];
+      await boot(f2, fakeViewerApp());
+      // Slow is not dead: well past the old 5 s fallback, the old document is still the one on top.
+      await vi.advanceTimersByTimeAsync(VIEWER_WATCHDOG_MS - 1000);
+      expect(frames()).toEqual([f1, f2]);
+      expect(f1.style.zIndex).toBe('2');
+      // The handler goes on before the clock moves: the rejection must not be unhandled at any point.
+      const rejected = expect(second).rejects.toThrow(/drew nothing/);
+      await vi.advanceTimersByTimeAsync(2000);
+      await rejected;
+      expect(frames()).toEqual([f1]);
+      viewer.dispose();
+      container.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
