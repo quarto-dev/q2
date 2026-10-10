@@ -449,6 +449,21 @@ The plan1c caution points to real work, which is now part of Phase 4:
   pipeline's profile should be identical for the same input. Add a test
   for that, because it is the invariant that stops future drift.
 
+## Follow-up after #815 (2026-10-09)
+
+#814 (this plan) and #815 (bd-p80b9jy9, `fields:` gating) both merged.
+The template conflict resolved as `$if(show.description)$` around
+`$if(show-description)$`.
+
+- [x] `fields_items_carry` (custom listings without `fields:`) counts a
+      description or image that L7 can derive, like `effective_fields`
+      does. Unit test
+      `custom_listing_without_fields_keeps_derivable_fields`; integration
+      test `listing_derives_description_present_only_in_rendered_output`
+      now also covers `custom.html`. Both fail without the fix.
+- [x] Docs: the Fields section in `listings.qmd` says document items
+      count as having a description and an image.
+
 ## Risks / tradeoffs
 
 - **Pass-1 cost and determinism.** L1 reads mtime per document. That makes

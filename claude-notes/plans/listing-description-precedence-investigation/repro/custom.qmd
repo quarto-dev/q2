@@ -1,0 +1,7 @@
+---
+title: custom listing (no fields:, only a derivable description)
+listing:
+  type: custom
+  template: custom.template
+  contents: derived-only/e.qmd
+---

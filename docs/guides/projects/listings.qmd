@@ -153,7 +153,9 @@ These cards show only a date, a title and a description. There is no
 image area, and no author, subtitle, reading time or categories, even
 for items that have them. Without `fields:`, a listing uses its type's
 default set and keeps only the fields at least one item has, plus
-`image`.
+`image`. An item that is a project document always counts as having a
+description and an image, since Quarto can derive both from the
+rendered page.
 
 `image` is the exception: when it's in the set, every card gets an image
 area. An item with no image of its own (see

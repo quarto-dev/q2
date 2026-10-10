@@ -212,9 +212,19 @@ fn listing_derives_description_present_only_in_rendered_output() {
         for t in ["default", "grid", "table"] {
             write(&dir.join(format!("{t}.qmd")), &listing_page(t));
         }
+        // A custom listing without `fields:` takes the fields its
+        // items carry; a description only L7 can derive must count.
+        write(
+            &dir.join("custom.qmd"),
+            "---\ntitle: custom\nlisting:\n  type: custom\n  template: custom.template\n  contents: posts\n---\n",
+        );
+        write(
+            &dir.join("custom.template"),
+            "$for(items)$\n$it:item-default()$\n$endfor$\n",
+        );
     });
     render(&dir);
-    for t in ["default", "grid", "table"] {
+    for t in ["default", "grid", "table", "custom"] {
         let page = format!("{t}.html");
         let html = read(&dir.join("_site").join(&page));
         assert_shows(&html, &page, &["RENDERED-ONLY paragraph."], &[]);

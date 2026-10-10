@@ -65,3 +65,14 @@ Identical to Q1 except c, where q2's documented `listing-item:` override
 wins. No envelope markers remain in the output, and in the grid the
 derived description keeps its link (`<a href="posts/b.html">BODY-B
 paragraph.</a>`).
+
+## Follow-up after #815 (2026-10-09)
+
+#815 (bd-p80b9jy9) gave `type: custom` without `fields:` the fields some
+item carries (`fields_items_carry`). That check didn't count a
+description or image that only L7 can derive, so a custom listing whose
+items had no L1 description dropped the envelope. `custom.qmd` lists
+`derived-only/e.qmd`, whose only paragraph sits inside a div. L1 skips
+that paragraph, but L7 finds it in the rendered page. Before the fix,
+`INSIDE-DIV-E paragraph.` was missing from `custom.html`; after the fix,
+it shows.
