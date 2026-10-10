@@ -858,7 +858,7 @@ listing:
   contents: posts/*.qmd
 ---
 
-::: {#listing-1}
+::: {#listing}
 :::
 ",
     );

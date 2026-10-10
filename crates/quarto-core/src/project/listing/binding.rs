@@ -75,7 +75,7 @@ pub fn build_listing_context(
     // parity, bd-listing-table-fields-peg1w3b3). Everything below
     // (the `listing.fields` binding, `show.*`, the table
     // header/rows) reads this list, not `listing.fields`.
-    let fields = effective_fields(listing, items, &date_style);
+    let fields = effective_fields(listing, items);
     ctx.insert("listing", build_listing_map(listing, &fields));
     ctx.insert(
         "items",
@@ -96,16 +96,12 @@ pub fn build_listing_context(
 /// verbatim. A `custom` listing has no type default; like Q1's
 /// `defaultFields(Custom, itemFields)` it gets every field some
 /// item carries ([`fields_items_carry`]).
-fn effective_fields(
-    listing: &Listing,
-    items: &[ListingItem],
-    date_style: &DateStyle,
-) -> Vec<String> {
+pub(crate) fn effective_fields(listing: &Listing, items: &[ListingItem]) -> Vec<String> {
     if listing.fields_explicit {
         return listing.fields.clone();
     }
     if listing.kind == ListingType::Custom {
-        return fields_items_carry(items, date_style);
+        return fields_items_carry(items);
     }
     let filtered: Vec<String> = listing
         .fields
@@ -113,7 +109,8 @@ fn effective_fields(
         .filter(|f| {
             f.as_str() == "image"
                 || items.iter().any(|it| {
-                    item_field_cell(it, f, date_style).is_some()
+                    // Presence only — the date style doesn't matter.
+                    item_field_cell(it, f, &DateStyle::Medium).is_some()
                         // A description L7 may still derive counts as
                         // present (Q1: every document item carries
                         // the placeholder).
@@ -134,7 +131,7 @@ fn effective_fields(
 /// fixed order, then custom (`extra`) keys in first-seen order. A
 /// description or image L7 may still derive counts as carried (Q1:
 /// every document item carries both placeholders).
-fn fields_items_carry(items: &[ListingItem], date_style: &DateStyle) -> Vec<String> {
+fn fields_items_carry(items: &[ListingItem]) -> Vec<String> {
     const CURATED: &[&str] = &[
         "date",
         "title",
@@ -154,11 +151,12 @@ fn fields_items_carry(items: &[ListingItem], date_style: &DateStyle) -> Vec<Stri
         .filter(|f| {
             items.iter().any(|it| match **f {
                 "image" => it.image.is_some() || derivable(it, it.image_source),
+                // Presence only — the date style doesn't matter.
                 "description" => {
-                    item_field_cell(it, "description", date_style).is_some()
+                    item_field_cell(it, "description", &DateStyle::Medium).is_some()
                         || derivable(it, it.description_source)
                 }
-                f => item_field_cell(it, f, date_style).is_some(),
+                f => item_field_cell(it, f, &DateStyle::Medium).is_some(),
             })
         })
         .map(|f| f.to_string())
@@ -178,7 +176,7 @@ fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
     m.insert("id".to_string(), TemplateValue::String(listing.id.clone()));
     m.insert(
         "type".to_string(),
-        TemplateValue::String(listing_type_name(listing.kind).to_string()),
+        TemplateValue::String(listing.kind.name().to_string()),
     );
     m.insert(
         "fields".to_string(),
@@ -210,7 +208,7 @@ fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
     );
     m.insert(
         "page-size".to_string(),
-        TemplateValue::String(listing.page_size.to_string()),
+        TemplateValue::String(listing.page_size().to_string()),
     );
     if let Some(max) = listing.max_items {
         m.insert(
@@ -220,9 +218,12 @@ fn build_listing_map(listing: &Listing, fields: &[String]) -> TemplateValue {
     }
     m.insert(
         "filter-ui".to_string(),
-        TemplateValue::Bool(listing.filter_ui),
+        TemplateValue::Bool(listing.filter_ui()),
     );
-    m.insert("sort-ui".to_string(), TemplateValue::Bool(listing.sort_ui));
+    m.insert(
+        "sort-ui".to_string(),
+        TemplateValue::Bool(listing.sort_ui()),
+    );
     m.insert(
         "max-description-length".to_string(),
         TemplateValue::String(listing.max_description_length.to_string()),
@@ -486,7 +487,7 @@ fn build_item_map(
     );
     m.insert(
         "metadata-attrs".to_string(),
-        TemplateValue::String(helpers::metadata_attrs(item, index)),
+        TemplateValue::String(helpers::metadata_attrs(item, index, listing)),
     );
     // L7 placeholders per field, only where the value is derived or
     // absent and a rendered document exists to upgrade it from
@@ -913,15 +914,6 @@ fn config_value_to_template_value(cv: &ConfigValue) -> TemplateValue {
     use pampa::template::context::MetaWriter;
     let mut conv = ConfigConversionContext::new(MetaWriter::Html);
     config_to_template_value(cv, &mut conv)
-}
-
-fn listing_type_name(t: ListingType) -> &'static str {
-    match t {
-        ListingType::Default => "default",
-        ListingType::Grid => "grid",
-        ListingType::Table => "table",
-        ListingType::Custom => "custom",
-    }
 }
 
 fn image_align_name(a: ImageAlign) -> &'static str {

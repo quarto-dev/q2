@@ -17,10 +17,12 @@ categories:
 ## What this means
 
 Every listing on a page gets an `id`: either one the author set
-explicitly, or one Quarto assigned (`listing-1`, `listing-2`,
-...). The id is used to attach inserts in the rendered HTML
-(`{{{< include >}}}`-style references, CSS targeting, anchor
-links). The parser requires the ids on a page to be unique.
+explicitly, or one Quarto assigned — `listing` for a page's only
+listing, `listing-1`, `listing-2`, ... for the entries of a
+`listing:` array. The id names the `::: {#id}` div a listing renders
+into, and the rendered listing's HTML element is `listing-<id>`
+(`#listing-listing` for the default), which CSS and anchor links
+target. The parser requires the ids on a page to be unique.
 
 When two listings on the same page share an id, the first one
 keeps it and any later listings with the same id are dropped
@@ -28,10 +30,9 @@ entirely.
 
 ## Why this happens
 
-Almost always: a `listings:` array in front matter has two
-entries that explicitly set `id:` to the same string, or the
-author manually used `listing-1` (the default first-listing id)
-for one entry and a second one is auto-assigned the same name.
+A `listing:` array in front matter has two entries that explicitly
+set `id:` to the same string. (Assigned ids never collide: Quarto
+skips any `listing-N` an entry has already claimed explicitly.)
 
 ## How to fix
 

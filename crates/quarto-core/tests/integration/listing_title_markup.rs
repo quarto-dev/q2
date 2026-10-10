@@ -99,9 +99,15 @@ fn codes(diags: &[DiagnosticMessage]) -> Vec<String> {
 
 /// Split the host page into the table, default and grid listings' HTML.
 fn listing_sections(html: &str) -> (&str, &str, &str) {
-    let tbl = html.find("id=\"tbl\"").expect("table listing present");
-    let dflt = html.find("id=\"dflt\"").expect("default listing present");
-    let grd = html.find("id=\"grd\"").expect("grid listing present");
+    let tbl = html
+        .find("id=\"listing-tbl\"")
+        .expect("table listing present");
+    let dflt = html
+        .find("id=\"listing-dflt\"")
+        .expect("default listing present");
+    let grd = html
+        .find("id=\"listing-grd\"")
+        .expect("grid listing present");
     assert!(tbl < dflt && dflt < grd, "listings out of order");
     (&html[tbl..dflt], &html[dflt..grd], &html[grd..])
 }

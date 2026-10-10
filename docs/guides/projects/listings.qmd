@@ -169,6 +169,33 @@ YAML files in `contents:` (Quarto 1's `contents: items.yml`) are skipped
 with a warning ([`Q-12-23`](/errors/listing/Q-12-23.qmd)); move the
 records inline.
 
+## Pages and categories in the browser
+
+A `default` or `grid` listing with more items than its `page-size:`
+shows one page at a time, with page links below it. The default page
+size is 25 for `default` listings, 18 for `grid` and 30 for `table`.
+
+When `categories:` is on, clicking a category — in the sidebar list or
+on an item — narrows the listing to the items in that category, and a
+"No matching items" message stands in when nothing matches. The current
+page and category are kept in the address (`#category=…`), so a
+filtered view can be linked to.
+
+The listing's element on the page has the id `listing-` followed by the
+listing's `id:`. A page's only listing, when it sets no `id:`, is
+`#listing-listing`.
+
+Not yet supported:
+
+- **`table` listings** paginate and filter in Quarto 1, but not yet in
+  Quarto 2: every row is shown.
+- **`sort-ui` and `filter-ui`** controls are not rendered yet.
+- **`custom` listings** are left as your template wrote them, without
+  paging or category filtering in the browser.
+- **The live preview** — the default `q2 preview`, and Quarto Hub —
+  shows every item on one page. `q2 render` and
+  [`q2 preview --static`](preview.qmd) produce the interactive page.
+
 ## Custom templates
 
 Beyond the built-in `default`, `grid` and `table` layouts, a listing can
@@ -262,10 +289,12 @@ Four more per-item values exist for specific jobs:
   its `fields:`, or the type's defaults (see [Fields](#fields)). A
   `type: custom` listing without `fields:` uses every field that at
   least one item has, as in Quarto 1.
-- **`metadata-attrs`** — `data-index` and `data-categories` attributes,
-  the equivalent of Quarto 1's `metadataAttrs()`. It must be emitted
-  inside a ```` ```{=html} ```` block; interpolated as markdown its
-  quotes are curled into invalid HTML.
+- **`metadata-attrs`** — `data-index`, `data-categories` and
+  `data-listing-<field>-sort` attributes, the equivalent of Quarto 1's
+  `metadataAttrs()`. Emit it in attribute position — inside a div's
+  braces (`::: {.item $it.metadata-attrs$}`) or on a tag in a
+  ```` ```{=html} ```` block; interpolated as markdown text its quotes
+  are curled into invalid HTML.
 
 These are the most useful values; the built-in templates show the rest.
 

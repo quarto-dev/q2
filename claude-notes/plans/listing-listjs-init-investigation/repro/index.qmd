@@ -1,0 +1,10 @@
+---
+title: "Listing"
+listing:
+  contents: posts
+  type: default
+  page-size: 2
+  categories: true
+  sort-ui: true
+  filter-ui: true
+---

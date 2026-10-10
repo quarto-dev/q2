@@ -1,0 +1,8 @@
+---
+title: "Post 2"
+date: 2026-01-02
+categories: [cat2, shared]
+description: "Description of post 2."
+---
+
+Body 2.

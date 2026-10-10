@@ -61,6 +61,13 @@ impl ParsedDate {
         }
     }
 
+    /// Milliseconds since the Unix epoch, assuming UTC when the input
+    /// carried no offset — JavaScript's `Date.valueOf()`, for values the
+    /// browser sorts (listing `data-listing-<field>-sort` attrs).
+    pub fn unix_millis(&self) -> i128 {
+        self.to_offset_datetime().unix_timestamp_nanos() / 1_000_000
+    }
+
     /// The datetime as an [`OffsetDateTime`], assuming UTC when the
     /// input carried no offset (used for unix-timestamp tokens).
     fn to_offset_datetime(&self) -> OffsetDateTime {
