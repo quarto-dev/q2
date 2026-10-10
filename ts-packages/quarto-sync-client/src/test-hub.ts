@@ -17,9 +17,11 @@
 import * as http from 'node:http';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { Repo, type DocumentId, type PeerId } from '@automerge/automerge-repo';
+import { decodeChange, getAllChanges } from '@automerge/automerge';
+import { decodeHeads, Repo, type DocumentId, type PeerId, type UrlHeads } from '@automerge/automerge-repo';
 import { WebSocketServerAdapter } from '@automerge/automerge-repo-network-websocket';
 
+import type { SyncClient } from './client.js';
 import { MemoryStorageAdapter } from './storage-adapter.js';
 
 export interface TestHub {
@@ -33,8 +35,30 @@ export interface TestHub {
    * True iff the hub holds the document (bounded wait). Uses the
    * repo's find with an overall deadline; "unavailable" or timeout
    * map to false.
+   *
+   * Presence is not delivery: a client pushes its changes through
+   * automerge-repo's 100 ms sync throttle, so the hub can hold a doc
+   * that is still a change or two behind the client. A test that is
+   * about to disconnect the client, or to read what it wrote from
+   * another client, must wait with `hubHasHeads` / `hubHasHeadsOf`
+   * instead (bd-c72wsugj: the doc-inventory test dropped its binary
+   * file's index entry this way).
    */
   hubHasDoc(docId: string, timeoutMs?: number): Promise<boolean>;
+  /**
+   * True iff the hub holds the document with every change in `heads`
+   * (bounded wait). `heads` are as `DocHandle.heads()` and
+   * `SyncClient.getDocInventory()` report them (URL-encoded).
+   */
+  hubHasHeads(docId: string, heads: string[], timeoutMs?: number): Promise<boolean>;
+  /**
+   * True iff the hub holds every document `client` knows, at the heads
+   * the client has right now (bounded wait). The discipline for a
+   * creator about to disconnect: wait on the state the test asserts,
+   * which is "the hub has what I wrote", not "the hub has heard of
+   * my docs".
+   */
+  hubHasHeadsOf(client: SyncClient, timeoutMs?: number): Promise<boolean>;
   stop(): Promise<void>;
 }
 
@@ -95,6 +119,43 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
     throw new Error('test hub failed to bind a TCP port');
   }
 
+  /**
+   * Poll `repo.find` until `ready(doc)` holds or the deadline passes.
+   * "unavailable" (find rejects) keeps polling: the doc may still be
+   * on its way from a peer.
+   */
+  async function pollDoc(
+    docId: string,
+    deadline: number,
+    ready: (doc: unknown) => boolean,
+  ): Promise<boolean> {
+    while (Date.now() < deadline) {
+      try {
+        const handle = await repo.find(docId as DocumentId);
+        const doc = handle.doc();
+        if (doc !== undefined && ready(doc)) return true;
+      } catch {
+        // unavailable — keep polling until the deadline
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return false;
+  }
+
+  const hubHasHeads = (docId: string, heads: string[], timeoutMs = 5000): Promise<boolean> => {
+    // The handle API reports heads URL-encoded; change hashes are hex.
+    const want = decodeHeads(heads as UrlHeads);
+    return pollDoc(docId, Date.now() + timeoutMs, (doc) => {
+      // Every change the hub holds, by hash; a head the hub has not
+      // received is absent. (getHeads equality would also do for a hub
+      // that only receives, but a hub-side edit must not mask delivery.)
+      const have = new Set(
+        getAllChanges(doc as Parameters<typeof getAllChanges>[0]).map((c) => decodeChange(c).hash),
+      );
+      return want.every((h) => have.has(h));
+    });
+  };
+
   return {
     url: `ws://127.0.0.1:${address.port}/ws`,
     repo,
@@ -102,18 +163,21 @@ export async function startTestHub(opts: TestHubOptions = {}): Promise<TestHub> 
       holding = false;
       for (const proceed of queued.splice(0)) proceed();
     },
-    async hubHasDoc(docId: string, timeoutMs = 5000): Promise<boolean> {
+    hubHasDoc(docId: string, timeoutMs = 5000): Promise<boolean> {
+      return pollDoc(docId, Date.now() + timeoutMs, () => true);
+    },
+    hubHasHeads,
+    async hubHasHeadsOf(client: SyncClient, timeoutMs = 8000): Promise<boolean> {
       const deadline = Date.now() + timeoutMs;
-      while (Date.now() < deadline) {
-        try {
-          const handle = await repo.find(docId as DocumentId);
-          if (handle.doc() !== undefined) return true;
-        } catch {
-          // unavailable — keep polling until the deadline
-        }
-        await new Promise((r) => setTimeout(r, 100));
+      // The client's heads as of now; a later local change is the
+      // caller's business.
+      for (const entry of client.getDocInventory()) {
+        // A doc the client itself has not loaded cannot be delivered.
+        if (entry.heads === null) return false;
+        const ok = await hubHasHeads(entry.docId, entry.heads, Math.max(0, deadline - Date.now()));
+        if (!ok) return false;
       }
-      return false;
+      return true;
     },
     async stop(): Promise<void> {
       // shutdown() flushes storage, and flush() throws "DocHandle is

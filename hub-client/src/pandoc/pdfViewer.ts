@@ -15,8 +15,18 @@
 interface ViewerApp {
   initializedPromise: Promise<void>;
   eventBus: { on(name: string, fn: (e: unknown) => void): void; off(name: string, fn: (e: unknown) => void): void };
-  pdfViewer?: { currentScaleValue: string | number; currentPageNumber: number; container: HTMLElement };
+  /** Set (synchronously) by `setInitialView`, which applies the saved zoom and scroll, or the URL hash, on open. */
+  isInitialViewSet?: boolean;
+  pdfViewer?: {
+    currentScaleValue: string | number;
+    currentPageNumber: number;
+    container: HTMLElement;
+    getPageView(index: number): { renderingState: number } | undefined;
+  };
 }
+
+/** pdf.js's `RenderingStates.FINISHED`: the page's canvas has been drawn at its current layout. */
+const RENDERING_FINISHED = 3;
 
 type ViewerWindow = Window & { PDFViewerApplication?: ViewerApp };
 
@@ -59,8 +69,16 @@ export function mountPdfViewer(container: HTMLElement, base?: string): PdfViewer
 
   /**
    * Load `pdf` into a new viewer iframe, appended to `container` at `zIndex`. Resolves once its pages
-   * are laid out and the first has painted. The viewer opens whatever `?file=` names, so there is no
-   * default sample to suppress.
+   * are laid out and the page the reader is on has painted at its final layout. The viewer opens
+   * whatever `?file=` names, so there is no default sample to suppress.
+   *
+   * "Final layout" matters: pdf.js draws the first page at the default zoom as soon as the pages
+   * exist, and only then (after its stored-view read and a few worker round trips) applies the saved
+   * zoom and scroll in `setInitialView`, which resets every page and draws the restored one afresh.
+   * Under load the first draw can finish before that reset, so "any page rendered" would promote a
+   * viewer that is about to empty itself for a few frames: the flash the second iframe exists to
+   * prevent (bd-c72wsugj). The gate is therefore: pages loaded, the initial view set, and the current
+   * page's view in the FINISHED state, re-checked on every `pagerendered` and on `documentinit`.
    */
   function load(pdf: Uint8Array, zIndex: number, restore: boolean): { frame: Frame; ready: Promise<void> } {
     const blobUrl = URL.createObjectURL(new Blob([pdf as BlobPart], { type: 'application/pdf' }));
@@ -74,19 +92,23 @@ export function mountPdfViewer(container: HTMLElement, base?: string): PdfViewer
         const bus = app.eventBus;
         app.initializedPromise.then(() => {
           let loaded = false;
-          let painted = false;
           const timer = setTimeout(finish, SWAP_TIMEOUT_MS);
+          const painted = () => {
+            const v = app.pdfViewer;
+            return v?.getPageView(v.currentPageNumber - 1)?.renderingState === RENDERING_FINISHED;
+          };
+          const check = () => loaded && app.isInitialViewSet === true && painted() && finish();
           const onLoaded = () => ((loaded = true), check());
-          const onPainted = () => ((painted = true), check());
-          const check = () => loaded && painted && finish();
           function finish() {
             clearTimeout(timer);
             bus.off('pagesloaded', onLoaded);
-            bus.off('pagerendered', onPainted);
+            bus.off('documentinit', check);
+            bus.off('pagerendered', check);
             resolve();
           }
           bus.on('pagesloaded', onLoaded);
-          bus.on('pagerendered', onPainted);
+          bus.on('documentinit', check);
+          bus.on('pagerendered', check);
         }, reject);
       });
     });

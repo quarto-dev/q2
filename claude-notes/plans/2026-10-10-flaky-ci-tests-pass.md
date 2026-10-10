@@ -1,24 +1,36 @@
 ---
 title: 'Flaky CI tests: the doc-inventory binary-entry race, and a pass over the October harness specs (bd-c72wsugj)'
 date: 2026-10-10
-description: 'Root-causes the quarto-sync-client doc-inventory flake (a 100 ms sync-throttle window the test disconnects inside) with a deterministic repro, inventories the other tests flaking in CI, and sketches a bounded fix pass.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+description: 'Root-causes the quarto-sync-client doc-inventory flake (a 100 ms sync-throttle window the test disconnects inside) with a deterministic repro, inventories the other tests flaking in CI, and fixes the three with CI evidence.'
+status: in-progress
 braid:
   strand: bd-c72wsugj
 ---
 
 **Branch:** `braid/bd-c72wsugj-flaky-ci-tests-pass` (topic branch in the main checkout, based on `main` @ `3b3e8aeaf`; no worktree by request)
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
-**Ready to design.** The doc-inventory flake has a confirmed root cause with a deterministic repro (five of five runs), and the fix is small and test-local. The "larger pass" the user asked for is bounded: CI history over the last 80 Hub-Client E2E runs names exactly three Playwright specs that flake, and two of them share one mechanism in the PDF viewer swap.
+**Ready to design** (2026-10-10, morning). The doc-inventory flake has a confirmed root cause with a deterministic repro (five of five runs), and the fix is small and test-local. The "larger pass" the user asked for is bounded: CI history over the last 80 Hub-Client E2E runs names exactly three Playwright specs that flake.
+
+**Decided and implemented** (2026-10-10, afternoon; see "Decisions" below). One question stays open: whether the viewer's swap timeout is acceptable product behavior.
+
+## Decisions
+
+The user answered the six questions the skeleton asked (quoted under "Open design questions" below, kept for the record):
+
+1. Doc-inventory fix is test-side only. Done: `TestHub.hubHasHeads` / `hubHasHeadsOf` in `test-hub.ts`; every project-creating helper in `quarto-sync-client` waits for the creator's heads on the hub before the creator disconnects; the hub-client E2E project factory drains its disconnect and its stale "flush synchronously" comment is corrected.
+2. The digest-delay repro is a permanent test: `ts-packages/quarto-sync-client/src/project-creation-delivery.test.ts`.
+3. Fix the three specs with CI evidence; audit the rest by grep and file findings on bd-ag1q1eho. Done; findings are in that strand's notes. The code is organized for bd-ag1q1eho: the "wait on the state" patterns are documented in `.claude/rules/hub-client-tests.md` (now also scoped to the sync-client and hub-mcp tests), the typing hook waits on trace events rather than a debounce, and the Menu primitive keeps focus when its items change.
+4. Open. See "The swap timeout" below.
+5. WebKit stays gating with one retry. No CI change in this pass.
+6. The three duplicate strands (bd-fuw5gcni, bd-5sbguner, bd-tg3vnfxg) were closed on 2026-10-10 as duplicates of bd-c72wsugj.
 
 ## Issue context
 
 bd-c72wsugj (bug, P2, filed 2026-08-26 by Gordon Woodhull, labels `ci`, `flaky-test`): `ts-packages/quarto-sync-client/src/doc-inventory.test.ts` > "reports index, text, and binary docs with states and heads" fails intermittently at step 12 of `cargo xtask verify`. The inventory comes back with the index and `main.qmd` but no `logo.png` entry. Passes in isolation. The description suspects a timeout derivation because of `TimeoutNegativeWarning` noise in the same log.
 
-The same failure has been filed three more times by three other people, each after one hit under load and clean reruns:
+The same failure had been filed three more times by three other people, each after one hit under load and clean reruns:
 
 | Strand | Filed | By | Context |
 | --- | --- | --- | --- |
@@ -27,14 +39,14 @@ The same failure has been filed three more times by three other people, each aft
 | bd-5sbguner | 2026-09-19 | Andrew Holz | two hits on 2026-09-18, one standalone `npm test -w`; first runs after a fresh `npm install` |
 | bd-tg3vnfxg | 2026-09-23 | shikokuchuo | verify on the samod 0.14 bump |
 
-Four strands, one test, one diff. The investigation linked them as `related`; whether to close three as duplicates is a question below.
+Four strands, one test, one diff. The three others are closed as duplicates.
 
 ## Dependency graph
 
 - **discovered-from** bd-listing-inline-records-order-eq8n2usm (closed): a Rust-only listing change whose verify went red on this test. Confirms the flake is independent of the change under test.
 - **related (incoming)** bd-c2yz067a (open): CLAUDE.md documents 5 verify steps while verify runs 14. Only connected because this flake aborts verify at step 12 of 14.
 - **related (incoming)** bd-f1dr7gs1 (closed): hub-mcp Phase 0 conformance harness, which promised "no new flake modes" and listed this strand as a known one.
-- **related (added here)** bd-fuw5gcni, bd-5sbguner, bd-tg3vnfxg (the duplicates) and bd-ag1q1eho (open: "fix async-settle races found in the PR #734 audit", the existing home for the Playwright one-shot-read sweep).
+- **related (added here)** bd-fuw5gcni, bd-5sbguner, bd-tg3vnfxg (the duplicates, now closed) and bd-ag1q1eho (open: "fix async-settle races found in the PR #734 audit", the existing home for the Playwright one-shot-read sweep; this pass filed its audit findings there).
 
 No blockers in either direction.
 
@@ -53,66 +65,92 @@ Failing Playwright specs across the last 80 Hub-Client E2E runs on all branches,
 
 The four other red `main` runs in the window (2026-10-02 and 2026-10-03) failed in "Build TypeScript packages", and the two red TS Test Suite runs on `main` failed in "Lint hub-client CSS". Neither is a test flake. The doc-inventory test has not failed in CI in this window; its hits are all local `cargo xtask verify` runs.
 
-Every flaking spec but one was added in the 2026-10-01 to 2026-10-05 pandoc/typst host batch (28 of the 31 harness specs date from those five days). `projects-home-dialogs` is from 2026-08-28.
+Every flaking spec but one was added in the 2026-10-01 to 2026-10-05 pandoc/typst host batch (19 harness specs date from those five days). `projects-home-dialogs` is from 2026-08-28.
 
-## What the code looks like today
+## What the code looked like, and what changed
 
-### doc-inventory: confirmed root cause
+### doc-inventory: confirmed root cause, fixed test-side
 
 Not a timeout derivation and not inventory logic. It is a flush race in the test helper, and the repro under `flaky-ci-tests-pass-investigation/` triggers it on every run.
 
 1. automerge-repo 2.6.0-alpha.5 pushes local changes to peers from a trailing-edge `asyncThrottle` on each handle's `change` event (`DocSynchronizer.syncDebounceRate`, 100 ms). A change is sent no sooner than 100 ms after the previous flush of that doc.
 2. `createNewProject` creates the index doc, then `main.qmd` (doc plus index change), then `await computeSHA256(...)`, then `logo.png` (doc plus index change). That `await` is the only yield between the two index changes.
 3. When the yield outlasts the remaining throttle window (true under the CPU load of a full verify), the index doc flushes with only `main.qmd`, and the `logo.png` index entry lands in a second window 100 ms later.
-4. The test helper then checks `hub.hubHasDoc(id)` for the index and both files. `hubHasDoc` is a presence check (`handle.doc() !== undefined`), satisfied by the partial index already on the hub. The `logo.png` doc itself arrives through the request path (the hub asks the creator for it), which is not throttled.
-5. `creator.disconnect()` runs with the default `drainMs: 0` and closes the socket before the second window fires. The hub keeps an index with one file. The reader then loads exactly that: index plus `main.qmd`.
+4. The test helper then checked `hub.hubHasDoc(id)` for the index and both files. `hubHasDoc` is a presence check (`handle.doc() !== undefined`), satisfied by the partial index already on the hub. The `logo.png` doc itself arrives through the request path (the hub asks the creator for it), which is not throttled.
+5. `creator.disconnect()` ran with the default `drainMs: 0` and closed the socket before the second window fired. The hub kept an index with one file. The reader then loaded exactly that: index plus `main.qmd`.
 
-The repro delays `crypto.subtle.digest` by 150 ms (case A, fails with the CI diff) and shows the same schedule passing when the creator disconnects with `drainMs: 5000` (case B). `drainOutbound` already exists in `client.ts` and waits on `remote-heads` until a storage peer confirms the local heads; it just is not used here.
+The repro delays `crypto.subtle.digest` by 150 ms (case A, fails with the CI diff) and shows the same schedule passing when the creator disconnects with `drainMs: 5000` (case B). The `TimeoutNegativeWarning` lines in the strand are the throttle computing `lastCall + delay - Date.now()` as a negative wait; the copy of automerge-repo now in `node_modules` clamps it to 0. Harmless then, gone now.
 
-The `TimeoutNegativeWarning` lines in the strand are the throttle computing `lastCall + delay - Date.now()` as a negative wait. The copy of automerge-repo now in `node_modules` clamps it to 0 ("passing a negative delay to setTimeout warns on some runtimes"). Harmless then, gone now.
+**Fix.** `TestHub` gained `hubHasHeads(docId, heads)` (the hub holds every change up to the given heads, checked by change hash) and `hubHasHeadsOf(client)` (the same for every doc in the client's inventory). The seven project-creating helpers across `doc-inventory`, `dangling-entries`, `sync-diagnostics`, `network-wrapper`, `author-id` and `offline-creation` now wait on that before the creator disconnects; `hubHasDoc` keeps its presence semantics (the exit-drain tests need it after the client is gone) and documents the difference. `project-creation-delivery.test.ts` forces the slow-digest schedule against the fixed helper; reverting the helper to `hubHasDoc` fails it deterministically. The hub-client E2E `createProjectOnServer` drains its disconnect (`drainMs: 5000`), and its comment no longer claims that online creation flushes synchronously.
 
-The same helper is copy-pasted in `sync-diagnostics.test.ts`, `dangling-entries.test.ts` (both packages), `offline-creation.test.ts` and `network-wrapper.test.ts`, and `hub-client/e2e/helpers/projectFactory.ts` has the browser version (`waitForServerDocuments` polls an HTTP presence endpoint, then `client.disconnect()`). Those create text files only, so there is no `await` between index changes and the hub's request for the index returns the full state; they are safe by accident. The `projectFactory` comment that documents "flush synchronously in online mode" is wrong about the library.
+### PDF viewer: the promotion gate accepted a draw that pdf.js was about to throw away
 
-### PDF viewer: two failure shapes, one swap
+`hub-client/src/pandoc/pdfViewer.ts` loads a recompile into a second iframe under the live one and promotes it (z-index 2, old frame removed) once the new viewer has painted. The gate was `pagesloaded` plus the first `pagerendered`, or `SWAP_TIMEOUT_MS` (5 s), whichever came first. The spec runs a `requestAnimationFrame` loop that counts frames in which the top iframe has no `.page canvas`, and asserts 0.
 
-`hub-client/src/pandoc/pdfViewer.ts` loads a recompile into a second iframe under the live one and promotes it (z-index 2, old frame removed) once `pagesloaded` and the first `pagerendered` have fired, or after `SWAP_TIMEOUT_MS` (5 s), whichever is first. The spec runs a `requestAnimationFrame` loop that counts frames in which the top iframe has no `.page canvas`, and asserts 0.
+Reading `public/pdfjs/web/viewer.mjs` with the Playwright error-context snapshots from PR #816 (page 7 selected at 150%, page 1 the only page with content; or every page region empty) gives one mechanism for both shapes:
 
-The Playwright error-context snapshots from PR #816 show two different end states:
+- `PDFViewer.setDocument` creates the page views, dispatches `pagesinit`, and immediately calls `update()`, which draws the first page at the default zoom.
+- `PDFViewerApplication.load` applies the saved zoom and page only after `storedPromise` and three worker round trips (`getPageLayout`, `getPageMode`, `getOpenAction`) resolve: `setInitialView(hash)` sets `isInitialViewSet`, changes the scale, resets every page view (canvases removed, in-flight renders cancelled) and scrolls to page 7, then dispatches `documentinit`.
+- On a fast machine the second step wins and the first draw is cancelled before it finishes; the first `pagerendered` is page 7 at 150%. Under load the first draw finishes first: `pagerendered` (page 1, default zoom) and `pagesloaded` (twelve pages, cheap) fire, the host promotes the new frame, and then `setInitialView` empties it. Two empty frames when the redraw is quick; 42 when the 150% redraw in WebKit is slow.
 
-- **Received 42** (retry): page 7 at 150% is selected, all twelve page regions exist and all are empty, the annotation-editor buttons are disabled. That is a viewer that was promoted before it had painted anything, which is what the 5 s timeout fallback produces. In the single-worker WebKit step, after eight minutes of pandoc and typst specs, a compile takes 5 to 10 s (the memory probe logs `ms: 9770`), so a pdf.js boot past 5 s is plausible.
-- **Received 2** (first attempt): the final state is fine, page 1 painted at 150%. Two empty frames after promotion is the shape of a re-layout after the swap, for example the history restore applying scale 1.5 and page 7 after a first render at another scale, which makes pdf.js reset every page and redraw. The promotion condition is "any page rendered", not "the restored view rendered".
+The local WebKit run of the spec takes 3.5 s per test; the failing CI runs took 10 to 14 s, so a 3 to 4x slower environment is enough to flip the race. The 5 s timeout is not needed to explain either snapshot.
 
-Both need a local WebKit reproduction under load before a fix is chosen; neither is resolvable by reading alone.
+**Fix.** The gate is now: `pagesloaded`, `isInitialViewSet` true, and the current page's view in `RenderingStates.FINISHED`, re-checked on `documentinit` and on every `pagerendered`. A render that completes after `setInitialView` was started after the reset (the reset cancels in-flight renders, and cancelled renders dispatch no `pagerendered`), so it is at the final layout. `pdfViewer.test.ts` drives a fake `PDFViewerApplication` through both orders (draw before the initial view, then reset, then draw; and draw that survives the initial view). The 5 s timeout is unchanged pending question 4.
 
-### pandoc-warm typing hook: likely the same swap
+### pandoc-warm typing hook: a fixed sleep, not the swap
 
-`test-hooks.ts` `typing()` returns once every run has ended plus one debounce, and counts `shown` trace events as frames. A frame is `shown` when the pane's `viewer.show` resolves, which is after the iframe swap, which can lag the run end by up to the 5 s swap timeout in a slow WebKit. One failure (frames 1, expected 2) matches the hook returning between the run end and the frame. Same fix family as the viewer.
+The skeleton guessed this was the viewer swap. It is not: `DownloadController` emits the `shown` trace event before `onPdf` hands the bytes to the viewer and before `end`, so a run's frame is always logged before the run ends. The hook's problem was its ending: after the last edit it slept one debounce plus 50 ms, checked `live === 0`, and repeated once. The first frame's `shown` fires while the viewer iframe is still booting pdf.js on the same thread; that boot delays the React commit of the edit and the pane's 100 ms debounce timer, so the edit's run can start after both checks. The hook then returned with one frame and one start, which is the CI failure (frames 1, expected 2).
 
-### projects-home-dialogs: one-shot flake, old spec
+**Fix.** `typing()` waits for a run start at or after the last edit's timestamp (the trailing-edge debounce always produces one), then for every run to end. No sleeps.
 
-Menu visible, first item focused, Enter pressed, then `[role=dialog]` never appears within 5 s; passed on retry. One hit in the window. It is the kind of race bd-ag1q1eho already covers (press before the handler is attached, or focus assertion passing on a stale node). Worth a look in the same pass but not worth a design discussion.
+### projects-home-dialogs: the menu's items changed under the focused item
 
-## Proposed phases (draft)
+The New menu renders a placeholder item (`id: 'default'`) until `getProjectChoices()` resolves, which awaits the WASM module. The registry's choices all live in groups (`Templates`, `Examples`), so when they arrive the placeholder unmounts and two submenu parents take its place. Chromium fires no blur when a focused element is removed; focus falls to `<body>`, and the Enter the spec presses next reaches nothing. The spec passed whenever the WASM load (1 to 3 s in CI) outlasted its first few steps, and asserted on the placeholder, never on the real menu.
 
-- Phase 0: turn the repro into a regression test in `quarto-sync-client` (the digest delay makes it deterministic and cheap). Decide its shape with question 2.
-- Phase 1: doc-inventory. One shared test helper (probably in `test-hub.ts`) that creates a project and waits until the hub holds the creator's *heads*, not just the doc, and/or disconnects the creator with `drainMs`. Replace the six copies. Fix the `projectFactory` comment and consider the same drain there (bd-3nzyd territory). Close the duplicate strands.
-- Phase 2: PDF viewer swap. Reproduce the 42-frame and 2-frame shapes in WebKit under CPU load locally. Then choose between: promote on the restored view (first `pagerendered` after `setInitialView`), a WebKit-aware or load-aware swap timeout, and making the spec assert the no-empty-frame invariant only when the swap did not fall back to the timeout. Re-check `typing()` against the same change.
-- Phase 3: `projects-home-dialogs` plus a grep-driven audit of the 2026-10 harness batch for one-shot reads on async state (`expect(await page.evaluate(...))`), per `.claude/rules/hub-client-tests.md`. File findings on bd-ag1q1eho rather than fix them all here.
-- Phase 4: CI policy. The harness config comment says "assertion failures are deterministic and still fail through the retry", which the timing assertions above have made untrue; the WebKit step is gating with one retry. Decide per question 5.
-- Phase 5: docs. Add the "presence is not delivery" lesson for sync tests to `.claude/rules/hub-client-tests.md` or a sibling rule, and record the throttle semantics somewhere findable.
+**Fix.** `Menu` keeps keyboard focus: the root's focus and blur events record whether an item of the menu holds focus, and a layout effect after every render refocuses the first item when it did and nothing holds it now (focus that moved to another element, such as the trigger on close, is left alone). A first version recorded that only inside the layout effect, which never runs between the mount-time focus and the item swap; the load run caught it (three of three failures), and the event-based version passed. The spec waits for the real menu (the `Templates` group focused), opens it with ArrowRight, and activates `Default` with Enter, so it exercises the menu users get. While there, the five pre-existing `react-hooks/refs` lint errors in `Menu.tsx` (the focus-return target was read from refs during render) were fixed by capturing it in a mount-time layout effect.
+
+### The swap timeout (question 4, still open)
+
+The viewer's header comment states the promise: a recompile replaces the live PDF "in one paint", only once the new viewer has drawn, because reopening in place "empties it for a few frames, a visible flash". The spec asserts exactly that promise: zero frames with an unpainted viewer on top.
+
+`SWAP_TIMEOUT_MS` is the one place the product chooses to break it: if the new viewer has not painted 5 s after pdf.js initialized, it is promoted anyway, blank, and the reader watches it fill in. The comment calls this "slower than that, show it anyway". It exists for a viewer that never paints (a pdf.js failure the host would otherwise wait on forever), but it fires on slowness, not failure, and a loaded CI runner is slow: the memory probe measured a 9.8 s compile in one of the failing runs. So the question is which promise the product makes:
+
+- **An invariant.** The old PDF stays on top until the new one has painted, however long that takes; a viewer that never paints is an error (reject `ready`, keep the old PDF, show the pane's error banner, with a long watchdog of the order of 30 s so a dead viewer still surfaces). The spec then asserts the product's promise and is deterministic in principle.
+- **Best effort.** A blank viewer after 5 s is acceptable. Then the spec cannot assert 0 unconditionally: it must either be told that the swap fell back and only assert when it did not, or disable the timeout through a test hook.
+
+Recommendation: the invariant. Promoting an unpainted viewer is the exact flash the second iframe exists to prevent, and the one case the timeout helps is better shown as an error than as a blank pane. Until that is decided, the residual CI risk on this spec is a swap slower than 5 s, which the local evidence (3.5 s for the whole test, two compiles and two swaps included) puts well below the typical run, but not out of reach of a heavily loaded runner.
+
+## Verification
+
+- `quarto-sync-client`: the eight touched test files plus `exit-drain` pass (26 tests). `project-creation-delivery.test.ts` fails deterministically with the helper reverted to `hubHasDoc`.
+- `hub-client`: `pdfViewer.test.ts` (4), `Menu.submenu.integration.test.tsx` (8), `ProjectsHome.newMenu.integration.test.tsx` (4) pass; ESLint is clean on every touched file.
+- Harness specs, local, `--retries=0 --workers=1`: `projects-home-dialogs` (chromium) 3 of 3, the pandoc-warm typing-hook test (webkit) 3 of 3, `pandoc-pdf-viewer` (webkit) 6 of 6 at normal load.
+- Under CPU load (36 busy loops on an 18-core machine): dialogs 8 of 8 (the first Menu fix failed 3 of 3 here, see above), typing hook 3 of 3, viewer 6 of 6.
+- The viewer race did not reproduce locally against the old gate: 4 of 4 passes under the same load, and 6 of 6 with Chromium CPU throttling at 8x and 16x applied from the recompile on. Uniform slowdown does not flip the order of pdf.js's first draw and its stored-view read here, so the gate fix rests on the pdf.js source, the two CI snapshots, and the unit test that drives both orders through a fake viewer. CI is the real check for this one.
+
+## Proposed phases (as executed)
+
+- Phase 0: the repro became `project-creation-delivery.test.ts`; the viewer gate got a unit test first.
+- Phase 1: doc-inventory, test-side (above).
+- Phase 2: PDF viewer gate; typing hook; Menu focus and the dialogs spec.
+- Phase 3: grep audit of the October batch, filed on bd-ag1q1eho.
+- Phase 4: CI policy unchanged (question 5).
+- Phase 5: `.claude/rules/hub-client-tests.md` gained the sync "presence is not delivery" section and two Playwright bullets, and now applies to the sync-client and hub-mcp test files too.
 
 ## Open design questions for the user
 
+Asked on 2026-10-10; answers recorded under "Decisions".
+
 1. **Where the doc-inventory fix lives.** Test-side only (shared helper: heads-aware wait plus drained disconnect), or also make `createNewProject` drain its own outbound sync before resolving when it is online? The library change would also cover `projectFactory` and any future caller, at the cost of up to one throttle window plus a round trip on every online project creation in hub-client. Recommendation: test-side now, library change as its own strand if wanted.
 2. **Keep the digest-delay repro as a permanent test?** It mocks `crypto.subtle.digest` globally for one file. It is the only way to make this schedule deterministic without a load generator. Recommendation: yes, next to `exit-drain.test.ts`.
-3. **Scope of the harness pass.** The three specs with CI evidence, or all 28 specs from the 2026-10-01 to 10-05 batch? Recommendation: fix the three, audit the rest by grep, and file anything found on bd-ag1q1eho.
-4. **Is "never an empty frame" a product invariant or best effort?** The 5 s swap timeout deliberately shows an unpainted viewer rather than wait forever, so the current product code violates the spec's assertion by design under load. Either the timeout fallback is acceptable and the spec must tolerate it, or it is not and the viewer needs a different fallback (keep the old frame on top until the new one paints, with a longer or no timeout).
+3. **Scope of the harness pass.** The three specs with CI evidence, or all specs from the 2026-10-01 to 10-05 batch? Recommendation: fix the three, audit the rest by grep, and file anything found on bd-ag1q1eho.
+4. **Is "never an empty frame" a product invariant or best effort?** The 5 s swap timeout deliberately shows an unpainted viewer rather than wait forever, so the current product code violates the spec's assertion by design under load. Either the timeout fallback is acceptable and the spec must tolerate it, or it is not and the viewer needs a different fallback (keep the old frame on top until the new one paints, with a longer or no timeout). Expanded above.
 5. **WebKit gating.** Two of the last 40 `main` E2E runs went red on this one WebKit test. Keep WebKit gating with one retry while Phase 2 lands, or make it non-gating like Firefox until then?
 6. **Duplicate strands.** Close bd-fuw5gcni, bd-5sbguner and bd-tg3vnfxg now as duplicates of bd-c72wsugj, or when the fix merges?
 
-## Risks / tradeoffs (draft)
+## Risks / tradeoffs
 
-- A heads-aware `hubHasDoc` depends on automerge-repo internals (`getSyncInfo`, `remote-heads`) that `drainOutbound` already relies on; a future automerge-repo bump can break both at once. The existing `exit-drain.test.ts` is the canary.
-- Raising the swap timeout trades a flash for a longer stale view under load; lowering it trades the other way. The right answer depends on question 4, and the spec cannot assert a timing invariant the product does not promise.
-- The grep audit in Phase 3 can balloon. Keep it to findings filed on bd-ag1q1eho, not fixes, unless they are one-liners.
-- `cargo xtask verify` ran cold in this checkout during the investigation; its result is recorded in the hand-back, not here.
+- `hubHasHeads` depends on automerge's change hashes matching `DocHandle.heads()` after `decodeHeads`; a future automerge-repo bump that changes the heads encoding breaks the helper loudly (every creator wait times out), which is the right failure.
+- The viewer gate reads two pdf.js internals (`isInitialViewSet`, `getPageView(i).renderingState`). A pdf.js upgrade that renames them makes `painted()` false forever and every swap fall back to the timeout, which the spec would catch as empty frames.
+- The Menu focus effect runs after every render of an open menu. It only acts when focus has fallen to `<body>`, so it cannot steal focus from a dialog or the trigger.
+- The dialogs spec now needs the WASM registry to answer in the harness. If WASM init ever fails there, the spec times out waiting for `Templates` instead of passing against the placeholder, which is the honest outcome.

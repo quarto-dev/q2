@@ -163,10 +163,14 @@ function warmHooks() {
           edits.push({ tMs: now() });
           render(text);
         }
-        // Every debounce has fired and every run has ended.
-        await new Promise((r) => setTimeout(r, options.debounceMs + 50));
-        await until(() => live === 0, 'every run to end');
-        await new Promise((r) => setTimeout(r, options.debounceMs + 50));
+        // The last edit always starts a run once the pane's debounce fires, and nothing starts after that run.
+        // Wait for that start, then for every run to end: a run's frame is shown before it ends. (A fixed sleep
+        // of one debounce here returned early when the viewer's iframe, booting for the first frame on the same
+        // thread, delayed the React commit and the debounce timer past it; bd-c72wsugj.)
+        if (edits.length > 0) {
+          const lastEdit = edits[edits.length - 1].tMs;
+          await until(() => starts.some((s) => s.tMs >= lastEdit), 'a run to start for the last edit');
+        }
         await until(() => live === 0, 'every run to end');
       } finally {
         setPreviewTrace(undefined);

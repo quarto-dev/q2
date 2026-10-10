@@ -101,13 +101,10 @@ describe('setNetworkAdapterWrapper', () => {
       peerTimeoutMs: 10000,
       requireOnline: true,
     });
-    // Wait for the hub to hold every doc before the creator disconnects
-    // (same discipline as sync-diagnostics.test.ts — creation syncs in
-    // the background).
-    expect(await hub.hubHasDoc(result.indexDocId, 8000)).toBe(true);
-    for (const f of result.files) {
-      expect(await hub.hubHasDoc(f.docId, 8000)).toBe(true);
-    }
+    // Wait for the hub to hold every change the creator made before it
+    // disconnects (same discipline as sync-diagnostics.test.ts — creation
+    // syncs in the background, and presence is not delivery).
+    expect(await hub.hubHasHeadsOf(creator, 8000)).toBe(true);
     await creator.disconnect();
 
     // Creation traffic went through the wrapper.
@@ -144,7 +141,7 @@ describe('setNetworkAdapterWrapper', () => {
       peerTimeoutMs: 10000,
       requireOnline: true,
     });
-    expect(await hub.hubHasDoc(result.indexDocId, 8000)).toBe(true);
+    expect(await hub.hubHasHeadsOf(creator, 8000)).toBe(true);
     expect(record).toEqual([]);
   });
 });

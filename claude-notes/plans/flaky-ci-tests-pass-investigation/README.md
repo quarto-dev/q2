@@ -30,3 +30,10 @@ rm src/doc-inventory-race.repro.test.ts
 
 Observed on 2026-10-10 (macOS, Node 24.20, automerge-repo 2.6.0-alpha.5):
 five consecutive runs, case A failed and case B passed every time.
+
+The repro graduated to a permanent regression test the same day:
+`ts-packages/quarto-sync-client/src/project-creation-delivery.test.ts`
+runs the same slow-digest schedule against the fixed helper discipline
+(`hub.hubHasHeadsOf(creator)` before the creator disconnects). This copy
+stays as the record of the failing shape; it still runs as described
+above, and case A still fails on purpose.

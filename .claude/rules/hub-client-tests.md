@@ -3,9 +3,14 @@ paths:
   - "hub-client/src/**/*.test.ts"
   - "hub-client/src/**/*.test.tsx"
   - "hub-client/src/test-utils/**"
+  - "hub-client/src/test-hooks.ts"
   - "hub-client/vitest*.ts"
   - "hub-client/e2e/**"
   - "hub-client/playwright*.ts"
+  - "ts-packages/quarto-sync-client/src/**/*.test.ts"
+  - "ts-packages/quarto-sync-client/src/test-hub.ts"
+  - "ts-packages/quarto-hub-mcp/src/**/*.test.ts"
+  - "ts-packages/quarto-hub-mcp/src/test-hub.ts"
 ---
 
 # hub-client tests
@@ -95,3 +100,35 @@ connecting.
 - **Keep helper comments honest.** If a helper's docstring claims an
   ordering ("lands on the home once connected"), check that the app still
   provides it. A stale claim like that is what hid the first-run race.
+- **Test hooks wait for the state too.** A hook in `src/test-hooks.ts`
+  that returns "once everything has settled" must wait on the events
+  that say so (a run started for the last edit, every run ended), not
+  sleep one debounce and look. The `typing()` hook returned early that
+  way when the viewer iframe, booting on the same thread, delayed the
+  debounce timer (bd-c72wsugj).
+- **Menus can change under focus.** The ＋ New menu lists a placeholder
+  until the WASM registry answers. Wait for the real items before
+  pressing keys, and never assume the item focused a moment ago still
+  exists.
+
+## Sync tests: presence is not delivery
+
+A client pushes its changes to the hub through automerge-repo's sync
+throttle (100 ms per document, trailing edge), so the hub can hold a
+document that is still a change or two behind the client that wrote it.
+Two index changes separated by an `await` (a binary file's hash, for
+example) land in different windows. That is how `doc-inventory.test.ts`
+lost its binary file's index entry under load (bd-c72wsugj, filed four
+times).
+
+- Before a creator disconnects, or before a second client reads what the
+  first wrote, wait for the creator's *heads* on the hub:
+  `hub.hubHasHeadsOf(creator)` in `test-hub.ts`, or
+  `creator.disconnect({ drainMs })`, which waits for the hub to confirm
+  the local heads. `hub.hubHasDoc(id)` only says the hub has heard of
+  the document.
+- In hub-client E2E, `createProjectOnServer` drains its disconnect for
+  the same reason; an HTTP "the document exists" poll is a presence
+  check.
+- `project-creation-delivery.test.ts` forces the schedule with a slow
+  digest; run it after touching project creation or the test hub.
