@@ -1,0 +1,10 @@
+---
+title: POST-A
+subtitle: SUBTITLE-A
+author: AUTHOR-A
+date: 2026-01-01
+description: DESC-A
+categories: [CAT-A]
+---
+
+Body of A.

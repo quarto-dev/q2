@@ -1282,10 +1282,11 @@ mod tests {
              :::\n",
         );
         let mut listing = make_custom_listing("fields.template");
-        // apply_type_defaults for `Custom` leaves fields empty; set
-        // explicitly so this test exercises the binding the way an
-        // author would.
+        // Set `fields:` the way config parsing does for an author
+        // who wrote it (a custom listing without `fields:` gets
+        // every field its items carry, which would include author).
         listing.fields = vec!["title".to_string(), "date".to_string()];
+        listing.fields_explicit = true;
         let items = vec![make_item("alpha", Some("2026-01-01"))];
         let resolved = vec![ResolvedListing { listing, items }];
         let (ast, diags) = run_transform_at(empty_pandoc(), resolved, &root, &host).await;
@@ -1875,6 +1876,101 @@ mod tests {
         let mut out = String::new();
         walk_blocks(&ast.blocks, &mut out);
         out
+    }
+
+    /// An item carrying every field the grid/default templates have a
+    /// slot for, each value tagged so a Debug dump of the AST shows
+    /// whether it rendered.
+    fn item_with_every_field(title: &str, image: bool) -> ListingItem {
+        let mut i = make_item(title, Some("2026-01-01"));
+        i.subtitle = Some(crate::document_profile::text(format!("SUB-{title}")));
+        i.author = Some(format!("AUTH-{title}"));
+        i.authors = vec![format!("AUTH-{title}")];
+        i.categories = vec![format!("CAT-{title}")];
+        if image {
+            i.image = Some(format!("/img/IMG-{title}.png"));
+        }
+        i
+    }
+
+    /// bd-p80b9jy9: the grid and default item templates gate every
+    /// field block on `show.<field>` (Q1's `fields.includes(...)`), so
+    /// an explicit `fields:` subset drops the image (and its
+    /// placeholder), subtitle, author, reading time and categories.
+    #[tokio::test]
+    async fn grid_and_default_render_only_explicit_fields() {
+        for kind in [ListingType::Grid, ListingType::Default] {
+            let mut listing = make_listing(kind);
+            listing.fields = ["date", "title", "description"]
+                .into_iter()
+                .map(String::from)
+                .collect();
+            listing.fields_explicit = true;
+            let items = vec![
+                item_with_every_field("a", true),
+                item_with_every_field("b", false),
+            ];
+            let resolved = vec![ResolvedListing { listing, items }];
+            let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+            assert!(diags.is_empty(), "{kind:?} diags: {diags:?}");
+            let rendered = format!("{ast:?}");
+            for absent in [
+                "IMG-a",
+                "listing-item-img-placeholder",
+                "SUB-a",
+                "AUTH-a",
+                "CAT-a",
+                // The class, quoted: Q1's metadata attrs still carry
+                // `data-listing-reading-time-sort` for List.js sorting
+                // whatever `fields:` shows (bd-nbv80e33).
+                "\"listing-reading-time\"",
+            ] {
+                assert!(
+                    !rendered.contains(absent),
+                    "{kind:?}: `{absent}` rendered although not in fields:\n{rendered}"
+                );
+            }
+            for present in ["listing-title", "listing-date", "listing-description"] {
+                assert!(
+                    rendered.contains(present),
+                    "{kind:?}: `{present}` missing:\n{rendered}"
+                );
+            }
+        }
+    }
+
+    /// bd-p80b9jy9: without `fields:`, the defaulted field set keeps
+    /// every block, including the image and the placeholder for an
+    /// image-less item (Q1 parity).
+    #[tokio::test]
+    async fn grid_and_default_render_every_field_by_default() {
+        for kind in [ListingType::Grid, ListingType::Default] {
+            let listing = make_listing(kind);
+            let items = vec![
+                item_with_every_field("a", true),
+                item_with_every_field("b", false),
+            ];
+            let resolved = vec![ResolvedListing { listing, items }];
+            let (ast, diags) = run_transform(empty_pandoc(), resolved).await;
+            assert!(diags.is_empty(), "{kind:?} diags: {diags:?}");
+            let rendered = format!("{ast:?}");
+            for present in [
+                "IMG-a",
+                "listing-item-img-placeholder",
+                "SUB-a",
+                "AUTH-a",
+                "CAT-a",
+                "listing-reading-time",
+                "listing-title",
+                "listing-date",
+                "listing-description",
+            ] {
+                assert!(
+                    rendered.contains(present),
+                    "{kind:?}: `{present}` missing:\n{rendered}"
+                );
+            }
+        }
     }
 
     fn item_with_categories(title: &str, cats: &[&str]) -> ListingItem {

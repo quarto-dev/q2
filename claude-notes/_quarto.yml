@@ -19,6 +19,7 @@ project:
     - "!plans/heading-id-drops-inline-content-investigation/**"
     - "!plans/index-miss-relativize-investigation/repro/**"
     - "!plans/listing-declared-order-investigation/repro/**"
+    - "!plans/listing-fields-gating-investigation/repro/**"
     - "!plans/listing-listjs-init-investigation/repro/**"
     - "!plans/listing-nesting-limit-investigation/repro/**"
     - "!plans/listing-table-fields-investigation/repro/**"
