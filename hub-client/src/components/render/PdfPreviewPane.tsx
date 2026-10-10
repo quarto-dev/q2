@@ -53,7 +53,10 @@ export default function PdfPreviewPane({
   const [warm] = useState(() => warmOverride ?? pandocWarmEnabled());
   const wait = debounceMs ?? (warm ? PDF_PREVIEW_WARM_DEBOUNCE_MS : PDF_PREVIEW_DEBOUNCE_MS);
   const [status, setStatus] = useState<DownloadStatus>({ phase: 'idle' });
+  /** A PDF is on screen: the viewer has drawn one. */
   const [hasPdf, setHasPdf] = useState(false);
+  /** The viewer could not open the last compiled PDF (it keeps the previous one); cleared by the next compile. */
+  const [viewerError, setViewerError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<DownloadController | null>(null);
   const [retry, setRetry] = useState(0);
@@ -63,15 +66,24 @@ export default function PdfPreviewPane({
     const viewer = mountPdfViewer(hostRef.current);
     const controller = createPdfPreviewController(
       (pdf, info) => {
-        setHasPdf(true);
-        void viewer.show(pdf, { key: info.path, fileName: info.fileName });
+        viewer.show(pdf, { key: info.path, fileName: info.fileName }).then(
+          () => {
+            setHasPdf(true);
+            setViewerError(null);
+          },
+          (e: unknown) => setViewerError(e instanceof Error ? e.message : String(e)),
+        );
       },
       { warm },
     );
     controllerRef.current = controller;
     // The pool refcount covers StrictMode's mount, cleanup, mount: the workers outlive the gap.
     controller.acquire();
-    const unsubscribe = controller.subscribe(() => setStatus(controller.getSnapshot()));
+    const unsubscribe = controller.subscribe(() => {
+      const snapshot = controller.getSnapshot();
+      setStatus(snapshot);
+      if (snapshot.phase === 'working') setViewerError(null);
+    });
     return () => {
       unsubscribe();
       controller.cancel();
@@ -79,6 +91,7 @@ export default function PdfPreviewPane({
       controllerRef.current = null;
       viewer.dispose();
       setHasPdf(false);
+      setViewerError(null);
     };
   }, [warm]);
 
@@ -98,6 +111,14 @@ export default function PdfPreviewPane({
     return () => clearTimeout(timer);
   }, [path, projectKey, captureDocId, content, retry, wait]);
 
+  // A failed compile, or a compiled PDF the viewer could not open: the same banner, over whatever was shown last.
+  const failure =
+    status.phase === 'failed'
+      ? { message: status.message, diagnostics: status.diagnostics }
+      : viewerError !== null
+        ? { message: viewerError, diagnostics: [] }
+        : null;
+
   return (
     <div className="pdf-preview-pane" data-testid="pdf-preview-pane">
       <div ref={hostRef} className="pdf-preview-host" />
@@ -111,11 +132,11 @@ export default function PdfPreviewPane({
           {pdfPreview.updating}
         </div>
       )}
-      {status.phase === 'failed' && (
+      {failure && (
         <div className="pdf-preview-error" role="alert" data-testid="pdf-preview-error">
           <strong>{pdfPreview.failedTitle}</strong> {hasPdf && pdfPreview.failedKeeping}
-          {status.message && <div>{status.message}</div>}
-          <DiagnosticList diagnostics={status.diagnostics} />
+          {failure.message && <div>{failure.message}</div>}
+          <DiagnosticList diagnostics={failure.diagnostics} />
           <button type="button" className="qh-btn small outline" onClick={() => setRetry((n) => n + 1)}>
             {pdfPreview.retry}
           </button>

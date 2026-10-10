@@ -59,13 +59,10 @@ async function createProjectOnHub(
     peerTimeoutMs: 10000,
     requireOnline: true,
   });
-  // Wait for the hub to actually hold every doc before the creator
-  // disconnects — creation syncs in the background (same discipline as
-  // dangling-entries.test.ts).
-  expect(await hub.hubHasDoc(result.indexDocId, 8000)).toBe(true);
-  for (const f of result.files) {
-    expect(await hub.hubHasDoc(f.docId, 8000)).toBe(true);
-  }
+  // Wait for the hub to hold every change the creator made before it
+  // disconnects — creation syncs in the background, and presence is not
+  // delivery (same discipline as dangling-entries.test.ts).
+  expect(await hub.hubHasHeadsOf(creator, 8000)).toBe(true);
   await creator.disconnect();
   return result.indexDocId;
 }

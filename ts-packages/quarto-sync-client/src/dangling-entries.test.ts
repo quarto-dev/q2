@@ -102,10 +102,9 @@ async function createProjectOnHub(
     peerTimeoutMs: 10000,
     requireOnline: true,
   });
-  expect(await hub.hubHasDoc(result.indexDocId, 8000), 'index doc must reach the hub').toBe(true);
-  for (const f of result.files) {
-    expect(await hub.hubHasDoc(f.docId, 8000), `file doc for ${f.path} must reach the hub`).toBe(true);
-  }
+  // Presence is not delivery (see TestHub.hubHasDoc): wait for the
+  // creator's heads before it goes.
+  expect(await hub.hubHasHeadsOf(creator, 8000), 'every doc must reach the hub in full').toBe(true);
   await creator.disconnect();
   return result.indexDocId;
 }

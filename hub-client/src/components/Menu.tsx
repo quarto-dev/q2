@@ -107,13 +107,17 @@ export function Menu({
 }: MenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   // Element to return focus to on keyboard-driven close: the trigger if
-  // given, otherwise whatever was focused when the menu opened.
+  // given, otherwise whatever was focused when the menu opened. Captured
+  // in a layout effect on mount: that runs before the passive effect
+  // below moves focus to the first item, and refs are not for reading
+  // during render (react-hooks/refs).
   const returnFocusRef = useRef<HTMLElement | null>(null);
-  if (returnFocusRef.current === null && typeof document !== 'undefined') {
+  useLayoutEffect(() => {
     returnFocusRef.current =
       triggerRef?.current ??
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const items = useCallback((): HTMLElement[] => {
     const root = rootRef.current;
@@ -154,6 +158,31 @@ export function Menu({
     first?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep keyboard focus in the menu when the item holding it is replaced.
+  // The ＋ New menu lists a placeholder until the WASM registry answers,
+  // then swaps in the registry's groups: the focused placeholder is
+  // removed, focus falls to <body> (Chromium fires no blur for that),
+  // and the next Enter goes nowhere (projects-home-dialogs flaked this
+  // way; bd-c72wsugj). The root's focus events record whether an item
+  // of this menu holds focus; focus that moves to another element (the
+  // trigger on close, a dialog, Tab) clears that. After every render:
+  // if the menu held focus and nothing holds it now, focus the first
+  // item again.
+  const heldFocus = useRef(false);
+  const onFocusWithin = () => {
+    heldFocus.current = true;
+  };
+  const onBlurWithin = (e: React.FocusEvent) => {
+    const to = e.relatedTarget as Node | null;
+    if (to && !rootRef.current?.contains(to)) heldFocus.current = false;
+  };
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const active = document.activeElement;
+    if (!root || root.contains(active)) return;
+    if (heldFocus.current && (active === null || active === document.body)) focusItem(items()[0]);
+  });
 
   // Viewport-edge flip for fixed (context-menu) placement: if the menu
   // overflows the viewport, shift it back inside.
@@ -296,6 +325,8 @@ export function Menu({
       onKeyDown={onKeyDown}
       onClick={onClick}
       onMouseOver={onMouseOver}
+      onFocus={onFocusWithin}
+      onBlur={onBlurWithin}
     >
       <SubmenuLevelProvider>{children}</SubmenuLevelProvider>
     </div>

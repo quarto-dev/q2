@@ -104,7 +104,7 @@ describe('author IDs through the real SyncClient', () => {
         AUTHOR,
         'Creator',
       );
-      expect(await hub.hubHasDoc(result.indexDocId, 8000)).toBe(true);
+      expect(await hub.hubHasHeadsOf(creator, 8000)).toBe(true);
 
       // A second client connects with its own author (findDoc path
       // applies it to the index handle).
@@ -220,7 +220,7 @@ describe('author IDs through the real SyncClient', () => {
         AUTHOR,
         'Creator',
       );
-      expect(await hub.hubHasDoc(result.indexDocId, 8000)).toBe(true);
+      expect(await hub.hubHasHeadsOf(creator, 8000)).toBe(true);
 
       // Same user (same author), second tab.
       const reader = client(liveClients);
@@ -255,7 +255,7 @@ describe('author IDs through the real SyncClient', () => {
         AUTHOR,
         'Creator',
       );
-      expect(await hub.hubHasDoc(result.indexDocId, 8000)).toBe(true);
+      expect(await hub.hubHasHeadsOf(creator, 8000)).toBe(true);
 
       const reader = client(liveClients);
       await reader.connect(hub.url, result.indexDocId, AUTHOR, 'Creator', undefined, ONLINE);

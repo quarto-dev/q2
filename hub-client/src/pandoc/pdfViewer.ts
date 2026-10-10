@@ -8,22 +8,36 @@
  * fingerprint alone, so the host clears it when the viewer moves to another file.
  *
  * A recompile loads into a second iframe under the live one, which it replaces once it has drawn a page:
- * reopening a document inside the live viewer empties it for a few frames, a visible flash.
+ * reopening a document inside the live viewer empties it for a few frames, a visible flash. The frame on
+ * top is never an empty viewer: a new document that fails to draw is dropped (see `VIEWER_WATCHDOG_MS`),
+ * and the previous one stays.
  */
 
 /** The slice of pdf.js's `PDFViewerApplication` this module uses. */
 interface ViewerApp {
   initializedPromise: Promise<void>;
   eventBus: { on(name: string, fn: (e: unknown) => void): void; off(name: string, fn: (e: unknown) => void): void };
-  pdfViewer?: { currentScaleValue: string | number; currentPageNumber: number; container: HTMLElement };
+  /** Set (synchronously) by `setInitialView`, which applies the saved zoom and scroll, or the URL hash, on open. */
+  isInitialViewSet?: boolean;
+  pdfViewer?: {
+    currentScaleValue: string | number;
+    currentPageNumber: number;
+    container: HTMLElement;
+    getPageView(index: number): { renderingState: number } | undefined;
+  };
 }
+
+/** pdf.js's `RenderingStates.FINISHED`: the page's canvas has been drawn at its current layout. */
+const RENDERING_FINISHED = 3;
 
 type ViewerWindow = Window & { PDFViewerApplication?: ViewerApp };
 
 export interface PdfViewerHandle {
   /**
    * Show `pdf`. A call with the same `key` as the previous one keeps the reader's zoom and scroll;
-   * a new `key` starts from the top. Resolves when the pages are laid out.
+   * a new `key` starts from the top. Resolves once the new document is on screen and painted;
+   * rejects if the viewer fails to open it (pdf.js reports an error, or nothing is drawn within
+   * `VIEWER_WATCHDOG_MS`), in which case the previous document stays on screen.
    */
   show(pdf: Uint8Array, options: { key: string; fileName: string }): Promise<void>;
   dispose(): void;
@@ -39,8 +53,13 @@ export function viewerUrl(base: string = import.meta.env.BASE_URL, file?: string
   return `${root}?file=${encodeURIComponent(file)}${restore ? '' : '#pagemode=none'}`;
 }
 
-/** A swap never waits longer than this for the new viewer's first page; slower than that, show it anyway. */
-const SWAP_TIMEOUT_MS = 5000;
+/**
+ * A viewer that has drawn nothing after this long is treated as dead: the swap fails and the previous
+ * document stays. It is a watchdog, not a fallback: a slow viewer is waited for, however long it takes,
+ * because promoting an unpainted viewer is the flash the second iframe exists to prevent (invariant
+ * decided under bd-c72wsugj: the frame on top is never an empty viewer).
+ */
+export const VIEWER_WATCHDOG_MS = 30_000;
 
 export function mountPdfViewer(container: HTMLElement, base?: string): PdfViewerHandle {
   interface Frame {
@@ -59,8 +78,16 @@ export function mountPdfViewer(container: HTMLElement, base?: string): PdfViewer
 
   /**
    * Load `pdf` into a new viewer iframe, appended to `container` at `zIndex`. Resolves once its pages
-   * are laid out and the first has painted. The viewer opens whatever `?file=` names, so there is no
-   * default sample to suppress.
+   * are laid out and the page the reader is on has painted at its final layout. The viewer opens
+   * whatever `?file=` names, so there is no default sample to suppress.
+   *
+   * "Final layout" matters: pdf.js draws the first page at the default zoom as soon as the pages
+   * exist, and only then (after its stored-view read and a few worker round trips) applies the saved
+   * zoom and scroll in `setInitialView`, which resets every page and draws the restored one afresh.
+   * Under load the first draw can finish before that reset, so "any page rendered" would promote a
+   * viewer that is about to empty itself for a few frames: the flash the second iframe exists to
+   * prevent (bd-c72wsugj). The gate is therefore: pages loaded, the initial view set, and the current
+   * page's view in the FINISHED state, re-checked on every `pagerendered` and on `documentinit`.
    */
   function load(pdf: Uint8Array, zIndex: number, restore: boolean): { frame: Frame; ready: Promise<void> } {
     const blobUrl = URL.createObjectURL(new Blob([pdf as BlobPart], { type: 'application/pdf' }));
@@ -68,27 +95,48 @@ export function mountPdfViewer(container: HTMLElement, base?: string): PdfViewer
     iframe.title = 'PDF preview';
     iframe.style.cssText = `position:absolute;inset:0;width:100%;height:100%;border:0;display:block;z-index:${zIndex}`;
     const ready = new Promise<void>((resolve, reject) => {
+      // `once`: the subscriptions and the watchdog below belong to this one document load.
       iframe.addEventListener('load', () => {
         const app = (iframe.contentWindow as ViewerWindow | null)?.PDFViewerApplication;
         if (!app) return reject(new Error('The PDF viewer did not start'));
         const bus = app.eventBus;
         app.initializedPromise.then(() => {
           let loaded = false;
-          let painted = false;
-          const timer = setTimeout(finish, SWAP_TIMEOUT_MS);
+          const timer = setTimeout(
+            () => fail(new Error(`The PDF viewer drew nothing within ${VIEWER_WATCHDOG_MS / 1000} s`)),
+            VIEWER_WATCHDOG_MS,
+          );
+          const painted = () => {
+            const v = app.pdfViewer;
+            return v?.getPageView(v.currentPageNumber - 1)?.renderingState === RENDERING_FINISHED;
+          };
+          const check = () => loaded && app.isInitialViewSet === true && painted() && finish();
           const onLoaded = () => ((loaded = true), check());
-          const onPainted = () => ((painted = true), check());
-          const check = () => loaded && painted && finish();
-          function finish() {
+          const onError = (e: unknown) => {
+            const { message, reason } = (e ?? {}) as { message?: string; reason?: string | null };
+            fail(new Error(reason || message || 'The PDF viewer could not open the document'));
+          };
+          function done() {
             clearTimeout(timer);
             bus.off('pagesloaded', onLoaded);
-            bus.off('pagerendered', onPainted);
+            bus.off('documentinit', check);
+            bus.off('pagerendered', check);
+            bus.off('documenterror', onError);
+          }
+          function finish() {
+            done();
             resolve();
           }
+          function fail(error: Error) {
+            done();
+            reject(error);
+          }
           bus.on('pagesloaded', onLoaded);
-          bus.on('pagerendered', onPainted);
+          bus.on('documentinit', check);
+          bus.on('pagerendered', check);
+          bus.on('documenterror', onError);
         }, reject);
-      });
+      }, { once: true });
     });
     iframe.src = viewerUrl(base, blobUrl, restore);
     container.appendChild(iframe);

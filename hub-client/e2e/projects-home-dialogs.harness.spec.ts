@@ -20,11 +20,20 @@ test('New project dialog opens via the New menu and closes with focus return', a
 }) => {
   const trigger = page.getByRole('button', { name: '＋ New ▾' });
   await trigger.click();
-  const menu = page.locator('[role="menu"]');
+  const menu = page.getByRole('menu', { name: 'New project' });
   await expect(menu).toBeVisible();
 
-  // Keyboard: first item focused; Enter opens the dialog.
-  await expect(menu.locator('[role="menuitem"]').first()).toBeFocused();
+  // The menu lists a placeholder item until the WASM registry answers, then the registry's
+  // groups replace it. Wait for the real menu: its first item is the Templates group, and the
+  // Menu keeps keyboard focus on its first item through the swap. (Pressing Enter on whatever
+  // was focused first is what flaked: the placeholder could vanish between the focus check and
+  // the key, taking focus with it; bd-c72wsugj.)
+  const templates = menu.getByRole('menuitem', { name: /^Templates/ });
+  await expect(templates).toBeFocused();
+
+  // Keyboard: ArrowRight opens the group and focuses its first choice; Enter opens the dialog.
+  await page.keyboard.press('ArrowRight');
+  await expect(menu.getByRole('menuitem', { name: /^Default/ })).toBeFocused();
   await page.keyboard.press('Enter');
 
   const dialog = page.locator('[role="dialog"]');

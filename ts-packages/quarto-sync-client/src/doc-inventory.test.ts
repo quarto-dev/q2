@@ -54,8 +54,15 @@ const TINY_PNG_B64 =
 
 /**
  * Create a project on the hub with one text and one binary file, wait
- * for the hub to hold every doc, then disconnect the creator. Returns
- * the index doc id and the created files' doc ids by path.
+ * for the hub to hold every change the creator made, then disconnect
+ * the creator. Returns the index doc id and the created files' doc ids
+ * by path.
+ *
+ * Presence (`hubHasDoc`) is not enough here: the creator's two index
+ * changes can land in different sync-throttle windows, and a creator
+ * that disconnects after the first one takes the binary file's entry
+ * with it (bd-c72wsugj; project-creation-delivery.test.ts forces that
+ * schedule).
  */
 async function createProjectOnHub(): Promise<{
   indexDocId: string;
@@ -77,10 +84,7 @@ async function createProjectOnHub(): Promise<{
     peerTimeoutMs: 10000,
     requireOnline: true,
   });
-  expect(await hub.hubHasDoc(result.indexDocId, 8000)).toBe(true);
-  for (const f of result.files) {
-    expect(await hub.hubHasDoc(f.docId, 8000)).toBe(true);
-  }
+  expect(await hub.hubHasHeadsOf(creator, 8000), 'the hub must hold every change the creator made').toBe(true);
   await creator.disconnect();
   return {
     indexDocId: result.indexDocId,

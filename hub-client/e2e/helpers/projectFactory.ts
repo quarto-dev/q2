@@ -73,13 +73,13 @@ export async function createProjectOnServer(
   const result = await client.createNewProject({
     syncServer: serverUrl,
     files,
-    // Wait for the hub peer to connect before creating documents so they
-    // flush synchronously in online mode. Without this, createNewProject
-    // uses the default 1 ms timeout, falls into offline mode, and the
-    // background WebSocket sync races against waitForServerDocuments —
-    // a race that fails under parallel CI load (two workers syncing
-    // simultaneously through the same hub). 10 s is ample for the
-    // loopback connection (typically <100 ms).
+    // Wait for the hub peer to connect before creating documents, so
+    // they are created in online mode and sync as they are made. Without
+    // this, createNewProject uses the default 1 ms timeout, falls into
+    // offline mode, and the later switch to online races against
+    // waitForServerDocuments — a race that fails under parallel CI load
+    // (two workers syncing simultaneously through the same hub). 10 s is
+    // ample for the loopback connection (typically <100 ms).
     peerTimeoutMs: 10000,
   });
 
@@ -89,7 +89,12 @@ export async function createProjectOnServer(
   const allDocIds = [result.indexDocId, ...result.files.map((f) => f.docId)];
   await waitForServerDocuments(httpUrl, allDocIds);
 
-  await client.disconnect();
+  // Presence is not delivery: even online, a client's changes go out
+  // through automerge-repo's 100 ms sync throttle, so the hub can hold a
+  // doc that is still a change behind this client (bd-c72wsugj). The
+  // drain waits until the hub confirms this client's heads before the
+  // socket closes.
+  await client.disconnect({ drainMs: 5000 });
 
   return result.indexDocId;
 }

@@ -57,9 +57,9 @@ describe('documents created during the offline-fallback window', () => {
     // sequence behind 'Peer connected - switching to online mode'.
     hub.releaseUpgrades();
 
-    // Ground truth: the hub must end up holding BOTH documents.
-    expect(await hub.hubHasDoc(result.indexDocId, 8000), 'index doc must reach the hub').toBe(true);
-    expect(await hub.hubHasDoc(fileDocId, 8000), 'file doc must reach the hub').toBe(true);
+    // Ground truth: the hub must end up holding BOTH documents, in full.
+    expect(fileDocId).toBeTruthy();
+    expect(await hub.hubHasHeadsOf(c, 8000), 'index and file docs must reach the hub with every change').toBe(true);
 
     await c.disconnect();
   }, 30000);
@@ -73,8 +73,8 @@ describe('documents created during the offline-fallback window', () => {
       peerTimeoutMs: 50,
     });
     hub.releaseUpgrades();
-    // Give the creator a window to sync up before the reader arrives.
-    await hub.hubHasDoc(created.indexDocId, 8000);
+    // The creator must have synced up in full before the reader arrives.
+    expect(await hub.hubHasHeadsOf(creator, 8000)).toBe(true);
 
     const readerFiles: string[] = [];
     const reader = createSyncClient({
