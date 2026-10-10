@@ -50,7 +50,7 @@ fixed with this strand.
   parity only. Its design session (2026-08-20, decision 2) explicitly
   deferred the List.js wiring to this strand.
 - **related (by description, no edge)**: bd-bl1e00r6 (open, P2), table
-  listings' sort-ui/filter-ui/table-hover parity: sortable headers, row
+  listings\' sort-ui/filter-ui/table-hover parity: sortable headers, row
   onclick, `listing-<field>` cell classes. It notes that interactive tables
   probably need a raw HTML table instead of a pipe table. This strand is
   the shared bootstrap that bd-bl1e00r6 would sit on.
@@ -251,7 +251,7 @@ so use `Listing::container_id()`.
 - **Known leftover (pre-existing, not a regression):** on a page whose
   only listings are custom (or table), `window['quarto-listings']` is
   never defined, so clicking a category in the sidebar makes
-  `quarto-listing.js`'s `filterListingCategory` throw a `TypeError` in
+  `quarto-listing.js`\'s `filterListingCategory` throw a `TypeError` in
   the console (`Object.keys(undefined)`). It threw before this change
   too, and there is nothing to filter. Left alone rather than patching
   the vendored JS; revisit with bd-bl1e00r6 (tables) or bd-4dfdo8vi.
