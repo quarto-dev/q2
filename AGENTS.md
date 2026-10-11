@@ -28,11 +28,13 @@ Always follow TDD workflow: write/update tests BEFORE implementing features. Whe
 
 **NEVER push to the remote repository without explicit user permission.** Always:
 1. Stage and commit changes as needed
-2. **Verify the full workspace compiles cleanly** (`cargo build --workspace`)
-3. **Verify the full workspace tests pass** (`cargo nextest run --workspace`)
-4. **Run `cargo xtask verify`** — at minimum `cargo xtask verify --skip-hub-build` for Rust-only changes; full `cargo xtask verify` when the WASM leg could be affected (any change under `quarto-core`, `quarto-pandoc-types`, or anything else hub-client depends on). This is the step that matches CI's `-D warnings` strictness; plain `cargo build` / `cargo nextest` from steps 2 and 3 do not.
-5. Ask the user for permission before pushing
-6. Only push after receiving explicit approval
+2. **Run the tests for what you changed** — the specific tests covering the feature or fix (`cargo nextest run -p <crate> [filter]`), plus `cargo clippy -p <crate> --all-targets -- -D warnings`
+3. Ask the user for permission before pushing
+4. Only push after receiving explicit approval
+
+**Recommended before pushing** (not required; CI runs them regardless and is the backstop):
+- `cargo build --workspace` and `cargo nextest run --workspace` — worth doing when you touched a crate with downstream dependents (e.g. `pampa`, `quarto-core`, `quarto-pandoc-types`), since a scoped test run won't catch a break in a dependent crate.
+- `cargo xtask verify` — at minimum `--skip-hub-build` for Rust-only changes; the full command when the WASM leg could be affected (any change under `quarto-core`, `quarto-pandoc-types`, or anything else hub-client depends on). This is the only local step that matches CI's `-D warnings` strictness; plain `cargo build` / `cargo nextest` do not.
 
 This applies even at the end of sessions. Prepare the commit but wait for approval to push.
 
@@ -248,9 +250,9 @@ When fixing ANY bug:
 2. **SECOND**: Run the test and verify it fails as expected
 3. **THIRD**: Implement the fix
 4. **FOURTH**: Run the test and verify it passes
-5. **FIFTH**: Run the full workspace test suite (`cargo nextest run --workspace`) to verify no regressions in other crates
+5. **FIFTH** (recommended): Run the full workspace test suite (`cargo nextest run --workspace`) to catch regressions in other crates
 
-**Step 5 is critical because this is a monorepo — changes in one crate (e.g. `pampa`) can break downstream crates (e.g. `qmd-syntax-helper`) that depend on it. Running only the modified crate's tests is NOT sufficient.**
+Step 5 is a recommendation, not a gate. This is a monorepo, so changes in one crate (e.g. `pampa`) can break downstream crates (e.g. `qmd-syntax-helper`) that depend on it. When you change a widely-used crate, run the workspace suite or at least the dependents' tests. At minimum, run the tests for the code you changed.
 
 **This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior. Only deviate if writing new features.**
 
@@ -529,7 +531,7 @@ the preflight job and `--locked` builds are unforgiving.
 
 ## Full Project Verification
 
-**IMPORTANT**: Before committing changes that affect `quarto-core`, `quarto-pandoc-types`, or other crates used by `wasm-quarto-hub-client`, run full verification:
+**Recommended**: Before pushing changes that affect `quarto-core`, `quarto-pandoc-types`, or other crates used by `wasm-quarto-hub-client`, run full verification (CI will run it regardless):
 
 ```bash
 cargo xtask verify           # Full verification (Rust + hub-client builds + tests)
