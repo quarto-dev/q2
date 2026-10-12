@@ -231,8 +231,12 @@ jobs:
         env:
           RUSTFLAGS: "-D warnings"
         run: |
+          # The JSON stream also carries the `hub` bin artifact (built for
+          # CARGO_BIN_EXE_hub) — select the integration test binary by
+          # target name, or sudo runs clap and fails on --exact.
           BIN=$(cargo test --profile ci -p quarto-hub --test integration --no-run --message-format json \
-            | jq -rs '[.[] | select(.executable != null)] | .[0].executable')
+            | jq -rs '[.[] | select(.executable != null and .target.name == "integration")] | .[0].executable')
+          test -n "$BIN" || { echo "integration test binary not found" >&2; exit 1; }
           sudo Q2_TEST_SETUID=1 "$BIN" --exact uds_server::unix_imp::peer_cred_other_uid_rejected_unless_allowlisted --nocapture
 
       # claude-notes/ is a Quarto 2 website (claude-notes/_quarto.yml; epic
