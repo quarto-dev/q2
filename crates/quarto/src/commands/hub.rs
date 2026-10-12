@@ -33,6 +33,12 @@ pub struct HubArgs {
     /// Additional OAuth client IDs accepted as JWT audiences alongside
     /// `oidc_client_id` (Plan §Phase 2 — hub-mcp device flow).
     pub additional_audiences: Vec<String>,
+    /// Unix domain socket transport (bd-kosgkxjt): `None` = TCP+WS;
+    /// `Some(None)` = UDS at the convention path; `Some(Some(p))` = UDS
+    /// at `p`. Exclusive — no TCP listener in UDS mode.
+    pub socket_path: Option<Option<PathBuf>>,
+    pub socket_group: Option<String>,
+    pub socket_allow_uid: Vec<u32>,
 }
 
 /// Execute the hub command.
@@ -53,18 +59,21 @@ pub fn execute(args: HubArgs) -> Result<()> {
 }
 
 async fn run_hub(args: HubArgs) -> Result<()> {
-    // Initialize storage based on mode
-    let mut storage = if args.no_project {
+    // Mode roots, needed both for storage and for resolving a bare
+    // --socket-path to the convention location.
+    let (project_root, standalone_data_dir) = if args.no_project {
         // Standalone mode: pure sync server
         if args.project.is_some() {
             anyhow::bail!("--no-project and --project are mutually exclusive");
         }
-        let data_dir = args
-            .data_dir
-            .clone()
-            .unwrap_or_else(default_standalone_data_dir);
-        info!(data_dir = %data_dir.display(), "Starting hub (standalone sync mode)");
-        StorageManager::new_standalone(&data_dir)?
+        (
+            None,
+            Some(
+                args.data_dir
+                    .clone()
+                    .unwrap_or_else(default_standalone_data_dir),
+            ),
+        )
     } else {
         // Project mode (default for `quarto hub`): watch a local project
         if args.data_dir.is_some() {
@@ -73,14 +82,56 @@ async fn run_hub(args: HubArgs) -> Result<()> {
                  In project mode, data is stored in <project>/.quarto/hub/"
             );
         }
-        let project_root = args
+        let root = args
             .project
+            .clone()
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
-        let project_root = quarto_system_runtime::canonicalize(&project_root)
-            .expect("Failed to canonicalize project root");
+        (
+            Some(
+                quarto_system_runtime::canonicalize(&root)
+                    .expect("Failed to canonicalize project root"),
+            ),
+            None,
+        )
+    };
 
+    // UDS mode (bd-kosgkxjt): resolve and validate before storage
+    // touches the disk, so a rejected combination fails fast.
+    let socket_path = match &args.socket_path {
+        None => None,
+        Some(explicit) => {
+            quarto_hub::unix_socket::validate_socket_platform().map_err(|e| anyhow::anyhow!(e))?;
+            quarto_hub::unix_socket::validate_socket_args(true, args.oidc_client_id.as_deref())
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let convention_dir = match (&project_root, &standalone_data_dir) {
+                (Some(root), None) => root.join(".quarto").join("hub"),
+                (None, Some(data_dir)) => data_dir.clone(),
+                _ => unreachable!("mode roots are exclusive"),
+            };
+            let requested = explicit
+                .clone()
+                .unwrap_or_else(|| convention_dir.join("hub.sock"));
+            let effective =
+                quarto_hub::unix_socket::apply_sun_path_guard(&requested, &convention_dir)?;
+            if effective != requested {
+                info!(
+                    requested = %requested.display(),
+                    effective = %effective.display(),
+                    "Socket path exceeds sun_path; using hashed fallback"
+                );
+            }
+            Some(effective)
+        }
+    };
+
+    // Initialize storage based on mode
+    let mut storage = if let Some(project_root) = &project_root {
         info!(project_root = %project_root.display(), "Starting hub (project mode)");
-        StorageManager::new(&project_root)?
+        StorageManager::new(project_root)?
+    } else {
+        let data_dir = standalone_data_dir.as_ref().unwrap();
+        info!(data_dir = %data_dir.display(), "Starting hub (standalone sync mode)");
+        StorageManager::new_standalone(data_dir)?
     };
 
     // Determine peers: CLI peers override stored peers
@@ -156,6 +207,9 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         // Long-running server: shutdown acknowledgment stays in the
         // tracing log, nothing user-facing on stdout.
         shutdown_message: None,
+        socket_path,
+        socket_group: args.socket_group.clone(),
+        socket_allow_uid: args.socket_allow_uid.clone(),
     };
 
     server::run_server(storage, config).await?;

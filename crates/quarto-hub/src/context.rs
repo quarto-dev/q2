@@ -149,6 +149,27 @@ pub struct HubConfig {
     /// Default: `None` — nothing printed, library-embedding callers
     /// keep stdout clean.
     pub shutdown_message: Option<String>,
+
+    /// Unix domain socket transport (bd-kosgkxjt): when `Some`, the
+    /// hub listens **exclusively** on this filesystem socket and binds
+    /// no TCP listener. The CLI resolves a bare `--socket-path` to the
+    /// convention path before the server sees the config, so this is
+    /// always a concrete path. Unix only; `run_server_with` errors on
+    /// other platforms. Cannot be combined with `auth_config` (UDS is
+    /// unauthenticated local-trusted).
+    ///
+    /// Default: `None` — TCP+WS exactly as before.
+    pub socket_path: Option<PathBuf>,
+
+    /// Trusted-proxy shape: group granted access to the socket —
+    /// parent dir `0750` and socket `0660`, group-owned by this group
+    /// (when the hub created the dir). Requires `socket_path`.
+    pub socket_group: Option<String>,
+
+    /// Trusted-proxy shape: uids accepted at the accept-time peer-uid
+    /// check beyond the hub's own uid (the proxy's uid). Requires
+    /// `socket_path`.
+    pub socket_allow_uid: Vec<u32>,
 }
 
 impl Default for HubConfig {
@@ -170,6 +191,9 @@ impl Default for HubConfig {
             register_root_ws: true,
             disk_write_policy: DiskWritePolicy::default(),
             shutdown_message: None,
+            socket_path: None,
+            socket_group: None,
+            socket_allow_uid: Vec::new(),
         }
     }
 }

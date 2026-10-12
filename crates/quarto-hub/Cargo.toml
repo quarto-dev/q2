@@ -99,6 +99,11 @@ infer = "0.19"
 # RFC 3339 createdAt stamps on capture-doc meta (bd-eiku4ymo).
 chrono = "0.4"
 
+[target.'cfg(unix)'.dependencies]
+# UDS transport (bd-kosgkxjt): peer credentials (uid), group
+# resolution, and chown for the socket lifecycle.
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3"
 # Phase 2 Bearer-auth integration tests: spin up a mock OIDC provider,
@@ -106,6 +111,15 @@ tempfile = "3"
 rsa = { version = "0.9", features = ["pem", "getrandom"] }
 base64 = "0.22"
 parking_lot = "0.12"
+# UDS transport tests (bd-mfapk5yl): websocket client over unix sockets,
+# matching the version quarto-hub-provider uses for BearerDialer.
+tokio-tungstenite = "0.27.0"
+tungstenite = "0.27.0"
+
+[target.'cfg(unix)'.dev-dependencies]
+# Signals (SIGTERM for graceful-shutdown tests) and setuid/setgid for the
+# root-gated cross-uid accept-check helpers.
+libc = "0.2"
 
 [lints]
 workspace = true

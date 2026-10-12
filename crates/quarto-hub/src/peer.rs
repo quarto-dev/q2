@@ -24,6 +24,16 @@ pub fn spawn_peer_connection(repo: Repo, url: String) {
         }
     };
 
+    // UDS peering was descoped (bd-9mpnaslv): fail loudly rather than
+    // let tungstenite retry a `unix:///` URL forever. Peering is TCP+WS.
+    if ws_url.scheme() == "unix" {
+        warn!(
+            url = %url,
+            "unix:// peer URLs are not supported; peers dial ws:// or wss://"
+        );
+        return;
+    }
+
     match repo.dial_websocket(ws_url.clone(), BackoffConfig::default()) {
         Ok(handle) => {
             info!(url = %ws_url, "Peer dialer started");

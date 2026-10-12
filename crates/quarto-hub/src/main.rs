@@ -54,6 +54,33 @@ struct Args {
     #[arg(long = "peer", value_name = "URL")]
     peers: Vec<String>,
 
+    /// Listen exclusively on a unix domain socket instead of
+    /// TCP+WebSocket; no TCP listener is bound. With no value, uses the
+    /// convention path (<project>/.quarto/hub/hub.sock in project mode,
+    /// <data-dir>/hub.sock standalone). Connections are unauthenticated
+    /// local-trusted: filesystem permissions plus an accept-time uid
+    /// check are the access control. Browsers and `q2 mcp` cannot
+    /// connect in this mode except through an operator-configured
+    /// proxy. Unix only.
+    #[arg(long, value_name = "PATH", num_args = 0..=1)]
+    socket_path: Option<Option<PathBuf>>,
+
+    /// Trusted-proxy shape: grant <group> access to the socket — the
+    /// parent dir becomes 0750 and the socket 0660, group-owned by
+    /// <group>. Requires --socket-path.
+    #[arg(long, value_name = "GROUP", requires = "socket_path")]
+    socket_group: Option<String>,
+
+    /// Trusted-proxy shape: accept connections from this uid at the
+    /// socket (repeatable) — extends the accept-time peer-uid allowlist
+    /// beyond the hub's own uid. Requires --socket-path.
+    #[arg(
+        long = "socket-allow-uid",
+        value_name = "UID",
+        requires = "socket_path"
+    )]
+    socket_allow_uid: Vec<u32>,
+
     /// Periodic filesystem sync interval in seconds.
     /// Set to 0 to disable periodic sync.
     /// Default: 30 seconds. Only relevant in project mode.
@@ -362,30 +389,72 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Initialize storage based on mode
-    let mut storage = if let Some(project) = &args.project {
-        // Project mode: watch a local Quarto project
-        let project_root = quarto_system_runtime::canonicalize(project)
-            .expect("Failed to canonicalize project root");
-
+    // Mode roots, needed both for storage and for resolving a bare
+    // --socket-path to the convention location.
+    let (project_root, standalone_data_dir) = if let Some(project) = &args.project {
         if args.data_dir.is_some() {
             anyhow::bail!(
                 "--data-dir and --project are mutually exclusive. \
                  In project mode, data is stored in <project>/.quarto/hub/"
             );
         }
+        (
+            Some(
+                quarto_system_runtime::canonicalize(project)
+                    .expect("Failed to canonicalize project root"),
+            ),
+            None,
+        )
+    } else {
+        (
+            None,
+            Some(
+                args.data_dir
+                    .clone()
+                    .unwrap_or_else(default_standalone_data_dir),
+            ),
+        )
+    };
 
+    // UDS mode (bd-kosgkxjt): resolve and validate before storage
+    // touches the disk, so a rejected combination fails fast.
+    let socket_path = match &args.socket_path {
+        None => None,
+        Some(explicit) => {
+            quarto_hub::unix_socket::validate_socket_platform().map_err(|e| anyhow::anyhow!(e))?;
+            quarto_hub::unix_socket::validate_socket_args(true, args.oidc_client_id.as_deref())
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let convention_dir = match (&project_root, &standalone_data_dir) {
+                (Some(root), None) => root.join(".quarto").join("hub"),
+                (None, Some(data_dir)) => data_dir.clone(),
+                _ => unreachable!("mode roots are exclusive"),
+            };
+            let requested = explicit
+                .clone()
+                .unwrap_or_else(|| convention_dir.join("hub.sock"));
+            let effective =
+                quarto_hub::unix_socket::apply_sun_path_guard(&requested, &convention_dir)?;
+            if effective != requested {
+                info!(
+                    requested = %requested.display(),
+                    effective = %effective.display(),
+                    "Socket path exceeds sun_path; using hashed fallback"
+                );
+            }
+            Some(effective)
+        }
+    };
+
+    // Initialize storage based on mode
+    let mut storage = if let Some(project_root) = &project_root {
+        // Project mode: watch a local Quarto project
         info!(project_root = %project_root.display(), "Starting hub (project mode)");
-        StorageManager::new(&project_root)?
+        StorageManager::new(project_root)?
     } else {
         // Standalone mode: pure sync server
-        let data_dir = args
-            .data_dir
-            .clone()
-            .unwrap_or_else(default_standalone_data_dir);
-
+        let data_dir = standalone_data_dir.as_ref().unwrap();
         info!(data_dir = %data_dir.display(), "Starting hub (standalone sync mode)");
-        StorageManager::new_standalone(&data_dir)?
+        StorageManager::new_standalone(data_dir)?
     };
 
     // Determine peers: CLI peers override stored peers
@@ -458,6 +527,9 @@ async fn main() -> anyhow::Result<()> {
         // Long-running server: shutdown acknowledgment stays in the
         // tracing log, nothing user-facing on stdout.
         shutdown_message: None,
+        socket_path,
+        socket_group: args.socket_group.clone(),
+        socket_allow_uid: args.socket_allow_uid.clone(),
     };
 
     server::run_server(storage, config).await?;

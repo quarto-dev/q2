@@ -218,6 +218,23 @@ jobs:
           # failure if the "Set up Deno" step above regresses.
           QUARTO_CI: "1"
 
+      # Cross-uid UDS accept-check test (bd-m49e3s5o): the peer-uid
+      # rejection test re-execs the integration binary as `nobody`, so it
+      # needs root. Reuse the already-built test binary (no rebuild —
+      # root-owned files in target/ would break later steps) and run just
+      # this test under sudo with the gate enabled; it skips loudly
+      # everywhere else. jq extracts the binary's path from cargo's
+      # --no-run artifact output.
+      - name: Test UDS cross-uid accept check (root)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: |
+          BIN=$(cargo test --profile ci -p quarto-hub --test integration --no-run --message-format json \
+            | jq -rs '[.[] | select(.executable != null)] | .[0].executable')
+          sudo Q2_TEST_SETUID=1 "$BIN" --exact uds_server::unix_imp::peer_cred_other_uid_rejected_unless_allowlisted --nocapture
+
       # claude-notes/ is a Quarto 2 website (claude-notes/_quarto.yml; epic
       # bd-uk8zgkha), brought to a clean render in PR #807. This keeps it
       # there (bd-7v3trpxn): `--strict` promotes warnings to errors and

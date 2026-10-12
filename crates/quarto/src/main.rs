@@ -676,6 +676,33 @@ enum Commands {
         #[arg(long = "peer", value_name = "URL")]
         peers: Vec<String>,
 
+        /// Listen exclusively on a unix domain socket instead of
+        /// TCP+WebSocket; no TCP listener is bound. With no value, uses
+        /// the convention path (<project>/.quarto/hub/hub.sock in project
+        /// mode, <data-dir>/hub.sock standalone). Connections are
+        /// unauthenticated local-trusted: filesystem permissions plus an
+        /// accept-time uid check are the access control. Browsers cannot
+        /// connect in this mode except through an operator-configured
+        /// proxy. Unix only.
+        #[arg(long, value_name = "PATH", num_args = 0..=1)]
+        socket_path: Option<Option<PathBuf>>,
+
+        /// Trusted-proxy shape: grant <group> access to the socket — the
+        /// parent dir becomes 0750 and the socket 0660, group-owned by
+        /// <group>. Requires --socket-path.
+        #[arg(long, value_name = "GROUP", requires = "socket_path")]
+        socket_group: Option<String>,
+
+        /// Trusted-proxy shape: accept connections from this uid at the
+        /// socket (repeatable) — extends the accept-time peer-uid
+        /// allowlist beyond the hub's own uid. Requires --socket-path.
+        #[arg(
+            long = "socket-allow-uid",
+            value_name = "UID",
+            requires = "socket_path"
+        )]
+        socket_allow_uid: Vec<u32>,
+
         /// Periodic filesystem sync interval in seconds.
         /// Set to 0 to disable periodic sync.
         #[arg(long, default_value = "30")]
@@ -1563,6 +1590,9 @@ fn main() -> Result<()> {
             allowed_emails,
             allowed_domains,
             additional_audiences,
+            socket_path,
+            socket_group,
+            socket_allow_uid,
         } => commands::hub::execute(commands::hub::HubArgs {
             project,
             no_project,
@@ -1581,6 +1611,9 @@ fn main() -> Result<()> {
             allowed_emails,
             allowed_domains,
             additional_audiences,
+            socket_path,
+            socket_group,
+            socket_allow_uid,
         }),
         Commands::Trace { command } => match command {
             TraceCommand::List { trace_dir } => {

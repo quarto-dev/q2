@@ -354,6 +354,17 @@ pub const LOGIN_STATE_COOKIE_SECURE: &str = "__Secure-quarto_hub_login";
 /// Sealed login-state cookie name under `--allow-insecure-auth`.
 pub const LOGIN_STATE_COOKIE_LEGACY: &str = "quarto_hub_login";
 
+/// Inbound transport for a fixture hub (UDS parity tests, bd-mfapk5yl).
+/// `Tcp` binds `127.0.0.1:0` as always; `Unix` serves the same router
+/// over a filesystem socket in a short-path tempdir. Building a Unix
+/// fixture on a non-unix platform panics in `start()`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Transport {
+    #[default]
+    Tcp,
+    Unix,
+}
+
 pub struct TestHub {
     pub base_url: String,
     pub client: reqwest::Client,
@@ -361,6 +372,11 @@ pub struct TestHub {
     /// alive by leaking the TempDir. Exposed so tests can assert
     /// on-disk effects (e.g. revocation persistence).
     pub data_dir: std::path::PathBuf,
+    /// Which transport the hub is listening on.
+    pub transport: Transport,
+    /// The socket path in UDS mode (`None` for TCP). Clients pair it
+    /// with the placeholder authority `ws://localhost/ws`.
+    pub socket_path: Option<std::path::PathBuf>,
 }
 
 /// Configurable fixture hub. Defaults: standalone mode, two allowlisted
@@ -375,6 +391,7 @@ pub struct TestHubBuilder {
     auth_disabled: bool,
     banned_subs: Vec<String>,
     not_before_subs: Vec<(String, i64)>,
+    transport: Transport,
 }
 
 impl Default for TestHubBuilder {
@@ -394,7 +411,17 @@ impl TestHubBuilder {
             auth_disabled: false,
             banned_subs: Vec::new(),
             not_before_subs: Vec::new(),
+            transport: Transport::Tcp,
         }
+    }
+
+    /// Serve the fixture hub over a filesystem unix socket instead of
+    /// TCP (`Transport::Unix`). The router is identical — only the
+    /// listener changes, which is exactly the parity property the UDS
+    /// transport tests assert.
+    pub fn transport(mut self, transport: Transport) -> Self {
+        self.transport = transport;
+        self
     }
 
     /// Start the hub with `auth_config: None` — the no-auth deployment
@@ -559,23 +586,52 @@ impl TestHubBuilder {
         let router = build_router_with_state(ctx.clone()).await.unwrap();
         let router = router.with_state(ctx);
 
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let base_url = format!("http://{addr}");
-
-        tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
-
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .build()
             .unwrap();
 
-        TestHub {
-            base_url,
-            client,
-            data_dir,
+        match self.transport {
+            Transport::Tcp => {
+                let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let addr = listener.local_addr().unwrap();
+                let base_url = format!("http://{addr}");
+
+                tokio::spawn(async move {
+                    axum::serve(listener, router).await.unwrap();
+                });
+
+                TestHub {
+                    base_url,
+                    client,
+                    data_dir,
+                    transport: Transport::Tcp,
+                    socket_path: None,
+                }
+            }
+            #[cfg(unix)]
+            Transport::Unix => {
+                // Short path: `sun_path` is 104 bytes on macOS.
+                let sock_dir = tempfile::Builder::new().prefix("q2h").tempdir().unwrap();
+                let socket_path = sock_dir.path().join("h.sock");
+                // Leak like the data dir: fixture lifetime == test process.
+                Box::leak(Box::new(sock_dir));
+
+                let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+                tokio::spawn(async move {
+                    axum::serve(listener, router).await.unwrap();
+                });
+
+                TestHub {
+                    base_url: "http://localhost".to_string(),
+                    client,
+                    data_dir,
+                    transport: Transport::Unix,
+                    socket_path: Some(socket_path),
+                }
+            }
+            #[cfg(not(unix))]
+            Transport::Unix => panic!("Transport::Unix is only available on unix platforms"),
         }
     }
 }
@@ -643,4 +699,308 @@ impl TestHub {
             .header("sec-websocket-version", "13")
             .header("sec-websocket-key", "dGVzdHNvY2tleS0xMjM0NTY3OA==")
     }
+
+    /// `ws://` URL of the sync endpoint (`/ws`). In UDS mode this is the
+    /// placeholder authority `ws://localhost/ws` that clients pair with
+    /// [`Self::socket_path`].
+    #[cfg(unix)]
+    pub fn ws_url(&self) -> String {
+        let base = self.base_url.replacen("http", "ws", 1);
+        format!("{base}/ws")
+    }
+}
+
+// ── UDS-mode HTTP probing ─────────────────────────────────────────
+
+/// Minimal HTTP/1.1 GET over a unix socket — reqwest cannot dial one.
+/// Returns `(status, body)`. Sends `Connection: close` so the response
+/// ends at EOF.
+#[cfg(unix)]
+pub async fn unix_http_get(socket_path: &std::path::Path, path: &str) -> (u16, String) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut stream = tokio::net::UnixStream::connect(socket_path)
+        .await
+        .expect("connect unix socket");
+    let request = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    stream.write_all(request.as_bytes()).await.unwrap();
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).await.unwrap();
+    let text = String::from_utf8_lossy(&buf);
+    let status: u16 = text
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .expect("HTTP status line");
+    let body = text.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
+    (status, body)
+}
+
+/// A samod [`Dialer`](samod::Dialer) over a filesystem unix socket —
+/// **test-only**. No shipped UDS client exists: the UDS plan descoped
+/// its Phase-3 dialer (bd-9mpnaslv), and the trusted-proxy shape fronts
+/// the socket with an operator proxy. The parity tests use this to
+/// prove the UDS listener carries the full sync protocol.
+#[cfg(unix)]
+pub struct UnixWsDialer {
+    path: std::path::PathBuf,
+    url: url::Url,
+}
+
+#[cfg(unix)]
+impl UnixWsDialer {
+    pub fn new(path: std::path::PathBuf) -> Self {
+        Self {
+            path,
+            // Placeholder authority — the UDS listener serves the same
+            // router, so the request line is the usual `GET /ws`.
+            url: url::Url::parse("ws://localhost/ws").unwrap(),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl samod::Dialer for UnixWsDialer {
+    type Error = std::convert::Infallible;
+
+    fn url(&self) -> url::Url {
+        self.url.clone()
+    }
+
+    fn connect(
+        &self,
+    ) -> futures::future::BoxFuture<'static, Result<samod::Transport, samod::DialError<Self::Error>>>
+    {
+        let path = self.path.clone();
+        let url = self.url.clone();
+        Box::pin(async move {
+            use futures::{SinkExt, StreamExt};
+            use tungstenite::client::IntoClientRequest as _;
+
+            let stream = tokio::net::UnixStream::connect(&path)
+                .await
+                .map_err(samod::DialError::transient)?;
+            let request = url
+                .as_str()
+                .into_client_request()
+                .map_err(samod::DialError::transient)?;
+            let (ws, _) = tokio_tungstenite::client_async(request, stream)
+                .await
+                .map_err(samod::DialError::transient)?;
+            let (write, read) = ws.split();
+
+            // Mirrors samod's private ws_to_bytes: binary frames carry
+            // sync bytes, control frames drop, text is a protocol error.
+            let msg_stream = read
+                .filter_map(|res| async move {
+                    match res {
+                        Ok(tungstenite::Message::Binary(data)) => Some(Ok(data.to_vec())),
+                        Ok(tungstenite::Message::Text(_)) => Some(Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "unexpected text message on sync websocket",
+                        ))),
+                        Ok(_) => None,
+                        Err(e) => {
+                            Some(Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
+                        }
+                    }
+                })
+                .boxed();
+            let msg_sink = write
+                .sink_map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, e))
+                .with(|bytes: Vec<u8>| {
+                    futures::future::ready(Ok::<tungstenite::Message, std::io::Error>(
+                        tungstenite::Message::Binary(bytes.into()),
+                    ))
+                });
+
+            Ok(samod::Transport::new(msg_stream, msg_sink))
+        })
+    }
+}
+
+// ── subprocess fixtures (real `hub` binary, UDS server tests) ─────
+
+/// Path to the `hub` binary under test, built by cargo alongside the
+/// integration binary.
+pub const HUB_BIN: &str = env!("CARGO_BIN_EXE_hub");
+
+/// A short-lived tempdir for socket + data-dir paths. Component names
+/// stay tiny: `sun_path` is 104 bytes on macOS.
+pub struct SockDir(std::path::PathBuf);
+
+impl SockDir {
+    pub fn new(tag: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("q2u-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        Self(dir)
+    }
+
+    /// `h.sock` directly inside the dir.
+    pub fn sock(&self) -> std::path::PathBuf {
+        self.0.join("h.sock")
+    }
+
+    /// A data-dir path (not yet created — the hub creates it).
+    pub fn data(&self, tag: &str) -> std::path::PathBuf {
+        self.0.join(tag)
+    }
+
+    /// A child path (not yet created).
+    pub fn child(&self, name: &str) -> std::path::PathBuf {
+        self.0.join(name)
+    }
+}
+
+impl Drop for SockDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Run the hub to completion expecting an immediate validation failure;
+/// returns `(status, stderr)`.
+pub fn run_hub_expect_failure(args: &[&str]) -> (std::process::ExitStatus, String) {
+    let out = std::process::Command::new(HUB_BIN)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .expect("run hub");
+    assert!(
+        !out.status.success(),
+        "hub unexpectedly succeeded: args {args:?}"
+    );
+    (
+        out.status,
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// A spawned hub with its stderr captured for diagnostics. SIGKILLs the
+/// child on drop so a failed assertion can't leak a running hub.
+#[cfg(unix)]
+pub struct HubChild {
+    child: std::process::Child,
+    stderr: std::sync::Arc<std::sync::Mutex<String>>,
+}
+
+#[cfg(unix)]
+impl HubChild {
+    pub fn spawn(args: &[&str]) -> Self {
+        use std::io::Read as _;
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new(HUB_BIN)
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn hub");
+        let mut pipe = child.stderr.take().unwrap();
+        let stderr = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let sink = std::sync::Arc::clone(&stderr);
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            *sink.lock().unwrap() = String::from_utf8_lossy(&buf).into_owned();
+        });
+        Self { child, stderr }
+    }
+
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+
+    pub fn exited(&mut self) -> bool {
+        self.child.try_wait().unwrap().is_some()
+    }
+
+    pub fn stderr_text(&self) -> String {
+        self.stderr.lock().unwrap().clone()
+    }
+
+    pub fn wait_for_exit(&mut self, timeout: std::time::Duration) -> std::process::ExitStatus {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            if let Some(status) = self.child.try_wait().unwrap() {
+                return status;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "hub did not exit within {timeout:?}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for HubChild {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Wait until the hub answers connections on `sock`, panicking early if
+/// the child exits first (with its captured stderr in the message).
+#[cfg(unix)]
+pub async fn wait_for_hub(
+    child: &mut HubChild,
+    sock: &std::path::Path,
+    timeout: std::time::Duration,
+) {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if child.exited() {
+            panic!(
+                "hub exited before listening on {}; stderr:\n{}",
+                sock.display(),
+                child.stderr_text()
+            );
+        }
+        if tokio::net::UnixStream::connect(sock).await.is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!(
+        "hub did not listen on {} within {timeout:?}; stderr:\n{}",
+        sock.display(),
+        child.stderr_text()
+    );
+}
+
+/// SIGTERM a child process (graceful-shutdown tests).
+#[cfg(unix)]
+pub fn sigterm(pid: u32) {
+    unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+}
+
+/// An ephemeral TCP port that is free right now.
+#[cfg(unix)]
+pub fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
+/// First line of a command's stdout, trimmed (uid/gid resolution).
+#[cfg(unix)]
+pub fn command_stdout(program: &str, args: &[&str]) -> String {
+    let out = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .unwrap_or_else(|e| panic!("spawn {program}: {e}"));
+    assert!(
+        out.status.success(),
+        "{program} {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }

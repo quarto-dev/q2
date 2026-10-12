@@ -691,6 +691,10 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         // before teardown begins, so a fast shutdown can't exit the
         // process before the line appears (bd-wj9smyxg).
         shutdown_message: Some(shutdown_message(config.share).to_string()),
+        // Preview stays on TCP+WS: browsers can't dial unix sockets.
+        socket_path: None,
+        socket_group: None,
+        socket_allow_uid: Vec::new(),
     }
 }
 

@@ -22,6 +22,7 @@ pub mod session;
 pub mod storage;
 pub mod sync;
 pub mod sync_state;
+pub mod unix_socket;
 pub mod watch;
 
 // Test-only modules

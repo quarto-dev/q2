@@ -1932,6 +1932,30 @@ pub type OnFileChangedCallback = std::sync::Arc<
 /// The caller must set `HubConfig::register_root_ws` to `false` when
 /// the extension claims `/`; otherwise axum will panic on the
 /// duplicate route.
+/// Serve `router` on `listener` until the shutdown watch fires, then
+/// drain connections gracefully. Shared by the TCP and UDS listener
+/// arms so both transports shut down identically.
+async fn serve_with_graceful_shutdown<L>(
+    listener: L,
+    router: Router<()>,
+    shutdown_rx: watch::Receiver<bool>,
+) -> Result<()>
+where
+    L: axum::serve::Listener,
+    L::Addr: std::fmt::Debug,
+{
+    let mut shutdown_rx_server = shutdown_rx;
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async move {
+            // Wait until shutdown is signaled
+            let _ = shutdown_rx_server.wait_for(|&v| v).await;
+            info!("Server shutting down...");
+        })
+        .await
+        .map_err(|e| crate::error::Error::Server(e.to_string()))?;
+    Ok(())
+}
+
 pub async fn run_server_with<F>(
     storage: StorageManager,
     config: HubConfig,
@@ -1951,6 +1975,32 @@ where
     let watch_single_file = config.single_file.clone();
     let project_root = storage.project_root().map(|p| p.to_path_buf());
     let has_project = project_root.is_some();
+
+    // Unix domain socket transport (bd-kosgkxjt): exclusive-UDS mode —
+    // exactly one inbound transport per hub. Extracted before `config`
+    // moves into HubContext. Lib-level guards mirror the CLI validation
+    // (`validate_socket_platform` / `validate_socket_args`) for callers
+    // that build HubConfig directly (e.g. quarto-preview).
+    let socket_requested = config.socket_path.is_some();
+    if socket_requested && config.auth_config.is_some() {
+        return Err(crate::error::Error::Server(
+            "socket_path cannot be combined with auth_config: a unix socket hub is \
+             unauthenticated local-trusted"
+                .into(),
+        ));
+    }
+    #[cfg(not(unix))]
+    if socket_requested {
+        return Err(crate::error::Error::Server(
+            "unix domain sockets are not supported on this platform (Linux and macOS only)".into(),
+        ));
+    }
+    #[cfg(unix)]
+    let socket_path = config.socket_path.clone();
+    #[cfg(unix)]
+    let socket_group = config.socket_group.clone();
+    #[cfg(unix)]
+    let socket_allow_uid = config.socket_allow_uid.clone();
 
     // HubContext::new is now async (initializes samod repo and performs initial sync)
     let ctx = Arc::new(HubContext::new(storage, config).await?);
@@ -1976,12 +2026,45 @@ where
     }
     let router = router.with_state(ctx);
 
-    let listener = TcpListener::bind(&addr).await?;
-    if has_project {
-        info!(%addr, "Hub server listening (project mode)");
+    // Listener selection: exactly one inbound transport per hub. In UDS
+    // mode the TCP bind is skipped entirely — nothing to port-scan, no
+    // loopback interface to reach.
+    #[cfg(unix)]
+    let uds_listener = match &socket_path {
+        Some(path) => Some(
+            crate::unix_socket::bind_uds_listener(path, socket_group.as_deref(), &socket_allow_uid)
+                .await
+                .map_err(|e| {
+                    crate::error::Error::Server(format!(
+                        "cannot listen on unix socket {}: {e:#}",
+                        path.display()
+                    ))
+                })?,
+        ),
+        None => None,
+    };
+    let tcp_listener = if socket_requested {
+        #[cfg(unix)]
+        {
+            info!(
+                socket = %socket_path.as_deref().unwrap().display(),
+                "Hub server listening (unix socket mode)"
+            );
+            None
+        }
+        #[cfg(not(unix))]
+        {
+            unreachable!("UDS mode was rejected above on this platform")
+        }
     } else {
-        info!(%addr, "Hub server listening (standalone sync mode)");
-    }
+        let listener = TcpListener::bind(&addr).await?;
+        if has_project {
+            info!(%addr, "Hub server listening (project mode)");
+        } else {
+            info!(%addr, "Hub server listening (standalone sync mode)");
+        }
+        Some(listener)
+    };
 
     // Create shutdown signal channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -2074,15 +2157,37 @@ where
     };
 
     // Run server with graceful shutdown
-    let mut shutdown_rx_server = shutdown_rx.clone();
-    axum::serve(listener, router)
-        .with_graceful_shutdown(async move {
-            // Wait until shutdown is signaled
-            let _ = shutdown_rx_server.wait_for(|&v| v).await;
-            info!("Server shutting down...");
-        })
-        .await
-        .map_err(|e| crate::error::Error::Server(e.to_string()))?;
+    #[cfg(unix)]
+    match uds_listener {
+        Some(listener) => {
+            let socket_file = socket_path.clone().unwrap();
+            serve_with_graceful_shutdown(listener, router, shutdown_rx.clone()).await?;
+            // Graceful shutdown completed — reclaim the socket file so
+            // the next startup doesn't have to probe past a corpse.
+            if let Err(e) = std::fs::remove_file(&socket_file) {
+                tracing::warn!(
+                    error = %e,
+                    socket = %socket_file.display(),
+                    "Failed to remove socket file on shutdown"
+                );
+            }
+        }
+        None => {
+            serve_with_graceful_shutdown(
+                tcp_listener.expect("TCP mode binds a listener"),
+                router,
+                shutdown_rx.clone(),
+            )
+            .await?;
+        }
+    }
+    #[cfg(not(unix))]
+    serve_with_graceful_shutdown(
+        tcp_listener.expect("TCP mode binds a listener"),
+        router,
+        shutdown_rx.clone(),
+    )
+    .await?;
 
     // Wait for background tasks to finish
     if let Some(handle) = periodic_sync_handle {

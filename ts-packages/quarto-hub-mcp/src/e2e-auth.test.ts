@@ -45,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { AsyncEntry } from '@napi-rs/keyring';
 
 import { McpTestClient } from './mcp-test-client.js';
+import { connectProjectAndReadBack, createProjectAndReadBack } from './e2e-sync-flows.js';
 import { startTestIdp, TEST_REFRESH_TOKEN, type TestIdp } from './test-idp.js';
 
 const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -238,15 +239,12 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
       expect(idp.counters.codeExchanges).toBe(1);
 
       // 3. Authenticated writes + reads over Bearer ws.
-      const created = await a.callTool('create_project', {
-        files: [{ path: 'auth-e2e.qmd', content: '---\ntitle: Auth e2e\n---\n\nBearer ws ✓\n' }],
-      });
-      const createdText = created.content[0]!.text;
-      expect(createdText, createdText).toContain('indexDocId');
-      projectId = (JSON.parse(createdText) as { indexDocId: string }).indexDocId;
-
-      const read = await a.callTool('read_file', { project: projectId, path: 'auth-e2e.qmd' });
-      expect(read.content[0]!.text).toContain('Bearer ws ✓');
+      projectId = await createProjectAndReadBack(
+        a,
+        'auth-e2e.qmd',
+        '---\ntitle: Auth e2e\n---\n\nBearer ws ✓\n',
+        'Bearer ws ✓',
+      );
 
       // 4. The 45s TTL forces refresh grants on use.
       expect(idp.counters.refreshGrants).toBeGreaterThanOrEqual(1);
@@ -277,10 +275,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
       });
 
       // No authenticate call: the keyring credential must carry it.
-      const connected = await b.callTool('connect_project', { project: projectId });
-      expect(connected.content[0]!.text).toContain('auth-e2e.qmd');
-      const read = await b.callTool('read_file', { project: projectId, path: 'auth-e2e.qmd' });
-      expect(read.content[0]!.text).toContain('Bearer ws ✓');
+      await connectProjectAndReadBack(b, projectId, 'auth-e2e.qmd', 'Bearer ws ✓');
       expect(idp.counters.codeExchanges).toBe(exchangesBeforeB); // no new sign-in
 
       // 6. Clear: revokes at the IdP, empties the keyring.
@@ -319,8 +314,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
       await authenticateViaLoopback(c);
 
       // The session works.
-      const connected = await c.callTool('connect_project', { project: projectId });
-      expect(connected.content[0]!.text).toContain('auth-e2e.qmd');
+      await connectProjectAndReadBack(c, projectId, 'auth-e2e.qmd', 'Bearer ws ✓');
 
       // The user revokes the grant at the IdP (the real-world analog is
       // myaccount.google.com → Remove Access): every further refresh
@@ -357,8 +351,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
     try {
       await c.start(['--server', hubUrl], { env: serverEnv });
       await authenticateViaLoopback(c);
-      const connected = await c.callTool('connect_project', { project: projectId });
-      expect(connected.content[0]!.text).toContain('auth-e2e.qmd');
+      await connectProjectAndReadBack(c, projectId, 'auth-e2e.qmd', 'Bearer ws ✓');
 
       // Operator bans the sub — the documented stopped-hub procedure.
       const exited = new Promise((r) => hub.once('exit', r));

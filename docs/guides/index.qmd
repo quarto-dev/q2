@@ -13,3 +13,7 @@ title: Guides
 
 - [Creating projects with `q2 create`](./projects/create.qmd)
 - [Project environment files](./projects/environment.qmd)
+
+## Hub
+
+- [Serving the hub over a unix socket](./hub/unix-socket.qmd)

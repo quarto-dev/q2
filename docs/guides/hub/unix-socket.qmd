@@ -1,0 +1,114 @@
+---
+title: "Serving the hub over a unix socket"
+---
+
+`q2 hub` normally listens on a TCP port and speaks WebSocket
+(`--host`/`--port`, default `127.0.0.1:3000`). On Linux and macOS it
+can instead listen **exclusively on a filesystem unix domain socket**:
+no TCP listener is bound at all. The purpose of this mode is the
+classic app-server deployment: a same-host reverse proxy (nginx,
+Caddy, …) terminates TLS and forwards to the socket, and the hub
+itself never touches the network stack — there is no loopback port to
+scan, misconfigure, or reach from another process.
+
+UDS mode is always explicit and opt-in; the default never changes.
+
+## Access control
+
+A socket-mode hub is **unauthenticated local-trusted**. Two layers
+replace the network checks:
+
+- **Filesystem permissions.** The socket lives in a `0700` directory
+  with `0600` permissions, so only processes running as your uid can
+  connect — enforced by the kernel even if the application forgot
+  every check. (The trusted-proxy shape below relaxes this to a
+  group.)
+- **An accept-time uid check.** Every connection's uid is verified
+  against the hub's own (or an operator-configured allowlist);
+  mismatches are dropped and logged.
+
+There is no token validation on the socket, so the proxy in front of
+it is the trust boundary: TLS, authentication, and Origin policy all
+live there.
+
+## Running a socket-mode hub
+
+``` {.bash filename="Terminal"}
+q2 hub --socket-path                            # the convention path (below)
+q2 hub --socket-path /run/user/1000/hub.sock    # an explicit path
+```
+
+The bare flag resolves to the convention path:
+`<project>/.quarto/hub/hub.sock` in project mode, or
+`<data-dir>/hub.sock` with `--data-dir` (standalone mode). If the
+resolved path is too long for the platform's socket-path limit (104
+bytes on macOS), the hub falls back to a short hashed path under
+`$TMPDIR` and records the effective path in a `hub.sock.path` file
+next to the conventional location — read that file to learn where the
+socket actually went.
+
+Restarting a hub on the same path reclaims a stale socket file left by
+a crash; if a *live* hub already answers on the path, startup fails
+with "a hub is already running" rather than clobbering it. The socket
+file is removed on graceful shutdown.
+
+## Fronting the socket with a TLS proxy
+
+Two flags relax the socket's permissions so a proxy running as a
+*different* uid can connect:
+
+- `--socket-group <group>` — the socket's parent directory becomes
+  `0750` and the socket `0660`, group-owned by `<group>` (the hub must
+  be a member of that group, and fails loudly at startup otherwise).
+- `--socket-allow-uid <uid>` (repeatable) — adds `<uid>` to the
+  accept-time uid allowlist, so the proxy's workers are accepted. The
+  hub logs these connections as "proxied" (its own uid logs as
+  "local").
+
+An nginx server block forwarding WebSocket traffic to the socket:
+
+``` {.nginx filename="nginx.conf"}
+server {
+    listen 443 ssl;
+    server_name hub.example.com;
+
+    # TLS certificate, edge authentication / Origin policy, …
+
+    location / {
+        proxy_pass http://unix:/srv/site-a/.quarto/hub/hub.sock;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+```
+
+with nginx\'s worker user in the group named by `--socket-group`, or
+its uid listed via `--socket-allow-uid`.
+
+A public proxy with no edge auth means a world-writable hub — the hub
+performs no Origin check on the no-auth path, so the proxy must.
+
+## What cannot connect directly
+
+**Browsers and `q2 mcp` cannot dial a unix socket** — hub-client
+editing, `q2 preview` sharing, and MCP agents all stay on TCP+WS, which
+is why the default never changes. If those clients need the hub, they
+reach it through the proxy\'s public TLS address. Share URLs need no
+hub-side support: they are built client-side from the browser\'s own
+connection URL, so they carry the proxy\'s address automatically.
+
+For debugging, `curl` speaks HTTP over a socket directly:
+
+``` {.bash filename="Terminal"}
+curl --unix-socket /srv/site-a/.quarto/hub/hub.sock http://localhost/health
+```
+
+## Authentication constraints
+
+Hub-enforced authentication (OIDC) is not available in socket mode:
+`--socket-path` combined with `--oidc-client-id` is rejected at
+startup. A hub that needs OIDC runs TCP behind its TLS proxy, as
+today. `--behind-tls-proxy` is accepted with `--socket-path` but is
+inert without OIDC on any transport.

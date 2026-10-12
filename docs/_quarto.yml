@@ -46,6 +46,7 @@ website:
             - guides/projects/scripts.qmd
             - guides/projects/environment.qmd
             - guides/projects/profiles.qmd
+            - guides/hub/unix-socket.qmd
             - guides/publishing/index.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd
