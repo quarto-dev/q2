@@ -8,9 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import type { FilePayload, CaptureRef } from '@quarto/quarto-sync-client';
 import type { LocalRenderResult } from './local-render.js';
 
@@ -60,22 +58,22 @@ function harness(init: FakeStateInit): {
     },
   } as unknown as ConnectionManager;
 
-  let callToolHandler:
-    | ((req: { params: { name: string; arguments?: Record<string, unknown> } }, extra: unknown) => Promise<CallToolResult>)
+  let toolCallback:
+    | ((args: Record<string, unknown>) => Promise<CallToolResult>)
     | undefined;
   const server = {
-    setRequestHandler(schema: unknown, cb: unknown) {
-      if (schema === CallToolRequestSchema) {
-        callToolHandler = cb as typeof callToolHandler;
+    registerTool(name: string, _config: unknown, cb: unknown) {
+      if (name === 'get_errors') {
+        toolCallback = cb as typeof toolCallback;
       }
     },
-  } as unknown as Server;
+  } as unknown as McpServer;
 
   registerTools(server, manager, false);
-  if (!callToolHandler) throw new Error('CallTool handler was not registered');
+  if (!toolCallback) throw new Error('get_errors callback was not registered');
 
   return {
-    call: (args) => callToolHandler!({ params: { name: 'get_errors', arguments: args } }, {}),
+    call: (args) => toolCallback!(args),
   };
 }
 

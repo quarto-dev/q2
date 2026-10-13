@@ -93,6 +93,7 @@ describe.skipIf(!realWasmHostAvailable())(
     expect(entry.errors).toEqual([]);
     // Sanity: the fixed content really is what we think it is.
     const read = await client.callTool('read_file', { project: indexDocId, path: 'index.qmd' });
-    expect(read.content[0]!.text).toBe(FIXED);
+    const payload = JSON.parse(read.content[0]!.text) as { content: string };
+    expect(payload.content).toBe(FIXED);
   }, 120000);
 });

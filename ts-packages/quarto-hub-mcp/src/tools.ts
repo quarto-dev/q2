@@ -256,6 +256,7 @@ type DataToolName =
   | 'list_files'
   | 'read_file'
   | 'wait_for_change'
+  | 'get_errors'
   | 'write_file'
   | 'patch_file'
   | 'create_file'
@@ -838,12 +839,14 @@ const outWriteFile = z.object({
   hash: z.string(),
   created: z.literal(true).optional(),
   synced: z.boolean().optional(),
+  renderCheck: z.string().optional(),
 });
 
 const outPatchFile = z.object({
   path: z.string(),
   hash: z.string(),
   synced: z.boolean().optional(),
+  renderCheck: z.string().optional(),
 });
 
 const outCreateFile = z.object({
@@ -851,6 +854,7 @@ const outCreateFile = z.object({
   hash: z.string(),
   created: z.literal(true),
   synced: z.boolean().optional(),
+  renderCheck: z.string().optional(),
 });
 
 const outDeleteFile = z.object({

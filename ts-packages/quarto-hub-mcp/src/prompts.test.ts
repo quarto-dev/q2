@@ -2,51 +2,63 @@
  * Tests for the `fix_errors` MCP prompt — the one-command entry into
  * the agent fix loop. The prompt only instructs; the LLM does the
  * fixing with the existing tools (get_errors, read_file, patch_file).
+ *
+ * Post-SDK-v2 the prompt is registered through `McpServer.registerPrompt`:
+ * the harness captures the (name, config, callback) triple and drives the
+ * callback directly. Argument requiredness lives in the zod `argsSchema`
+ * (the SDK validates it at the protocol layer), so these tests assert on
+ * the schema itself. An unknown prompt name is the SDK's own protocol
+ * error, not our handler's concern, so that case is not tested here.
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { McpServer } from '@modelcontextprotocol/server';
+import type { z } from 'zod';
 import { registerPrompts } from './prompts.js';
 
-type Handler = (req: { params?: Record<string, unknown> }) => Promise<Record<string, unknown>>;
+type PromptArgs = { project: string; path?: string };
+type PromptResult = {
+  description?: string;
+  messages: Array<{ role: string; content: { type: string; text: string } }>;
+};
 
-function harness(): { list: Handler; get: Handler } {
-  let list: Handler | undefined;
-  let get: Handler | undefined;
+interface CapturedPrompt {
+  name: string;
+  config: { description?: string; argsSchema: z.ZodType<PromptArgs> };
+  cb: (args: PromptArgs) => PromptResult;
+}
+
+function harness(): { name: string; config: CapturedPrompt['config']; get: CapturedPrompt['cb'] } {
+  let captured: CapturedPrompt | undefined;
   const server = {
-    setRequestHandler(schema: unknown, cb: unknown) {
-      if (schema === ListPromptsRequestSchema) list = cb as Handler;
-      if (schema === GetPromptRequestSchema) get = cb as Handler;
+    registerPrompt(name: string, config: unknown, cb: unknown) {
+      captured = { name, config: config as CapturedPrompt['config'], cb: cb as CapturedPrompt['cb'] };
     },
-  } as unknown as Server;
+  } as unknown as McpServer;
   registerPrompts(server);
-  if (!list || !get) throw new Error('prompt handlers were not registered');
-  return { list, get };
+  if (!captured) throw new Error('prompt was not registered');
+  return { name: captured.name, config: captured.config, get: captured.cb };
 }
 
 describe('fix_errors prompt', () => {
-  it('is listed with a required project argument and optional path', async () => {
-    const { list } = harness();
-    const res = (await list({})) as {
-      prompts: Array<{ name: string; arguments?: Array<{ name: string; required?: boolean }> }>;
-    };
-    const p = res.prompts.find((x) => x.name === 'fix_errors');
-    expect(p).toBeDefined();
-    expect(p!.arguments).toEqual([
-      expect.objectContaining({ name: 'project', required: true }),
-      expect.objectContaining({ name: 'path', required: false }),
-    ]);
+  it('is registered with a required project argument and optional path', () => {
+    const { name, config } = harness();
+    expect(name).toBe('fix_errors');
+    expect(config.description).toBeTruthy();
+    expect(config.argsSchema.safeParse({ project: 'automerge:abc123' }).success).toBe(true);
+    expect(config.argsSchema.safeParse({ project: 'abc', path: 'chapter2.qmd' }).success).toBe(
+      true,
+    );
+    const missing = config.argsSchema.safeParse({});
+    expect(missing.success).toBe(false);
+    if (!missing.success) {
+      expect(missing.error.issues[0]!.path).toContain('project');
+    }
   });
 
-  it('expands to loop instructions naming the project and the tools', async () => {
+  it('expands to loop instructions naming the project and the tools', () => {
     const { get } = harness();
-    const res = (await get({
-      params: { name: 'fix_errors', arguments: { project: 'automerge:abc123' } },
-    })) as { messages: Array<{ role: string; content: { type: string; text: string } }> };
+    const res = get({ project: 'automerge:abc123' });
 
     expect(res.messages).toHaveLength(1);
     expect(res.messages[0]!.role).toBe('user');
@@ -58,23 +70,9 @@ describe('fix_errors prompt', () => {
     expect(text).toMatch(/minimal/i);
   });
 
-  it('scopes the instructions to a single file when path is given', async () => {
+  it('scopes the instructions to a single file when path is given', () => {
     const { get } = harness();
-    const res = (await get({
-      params: { name: 'fix_errors', arguments: { project: 'abc', path: 'chapter2.qmd' } },
-    })) as { messages: Array<{ content: { text: string } }> };
+    const res = get({ project: 'abc', path: 'chapter2.qmd' });
     expect(res.messages[0]!.content.text).toContain('chapter2.qmd');
-  });
-
-  it('rejects an unknown prompt name', async () => {
-    const { get } = harness();
-    await expect(get({ params: { name: 'nope' } })).rejects.toThrow(/unknown prompt/i);
-  });
-
-  it('rejects a missing project argument', async () => {
-    const { get } = harness();
-    await expect(get({ params: { name: 'fix_errors', arguments: {} } })).rejects.toThrow(
-      /project/i,
-    );
   });
 });

@@ -8,29 +8,14 @@
  * calling agent's job — tools stay primitives.
  */
 
-import {
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 const FIX_ERRORS = {
   name: 'fix_errors',
   description:
     'Find and fix the render errors in a Quarto Hub project: checks with ' +
     'get_errors, applies minimal fixes with patch_file, and re-checks until clean.',
-  arguments: [
-    {
-      name: 'project',
-      description: "The project's automerge index document ID, or a quarto-hub.com share URL",
-      required: true,
-    },
-    {
-      name: 'path',
-      description: 'Optional: fix only this file',
-      required: false,
-    },
-  ],
 };
 
 function fixErrorsText(project: string, path?: string): string {
@@ -52,22 +37,22 @@ function fixErrorsText(project: string, path?: string): string {
 }
 
 /** Register the prompt handlers on the MCP server. */
-export function registerPrompts(server: Server): void {
-  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
-    prompts: [FIX_ERRORS],
-  }));
-
-  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-    if (name !== FIX_ERRORS.name) {
-      throw new Error(`Unknown prompt: ${name}`);
-    }
-    const project = args?.['project'];
-    if (typeof project !== 'string' || project === '') {
-      throw new Error("The 'project' argument is required");
-    }
-    const path = typeof args?.['path'] === 'string' && args['path'] !== '' ? args['path'] : undefined;
-    return {
+export function registerPrompts(server: McpServer): void {
+  server.registerPrompt(
+    FIX_ERRORS.name,
+    {
+      description: FIX_ERRORS.description,
+      argsSchema: z.object({
+        project: z
+          .string()
+          .min(1, "The 'project' argument is required")
+          .describe(
+            "The project's automerge index document ID, or a quarto-hub.com share URL",
+          ),
+        path: z.string().describe('Optional: fix only this file').optional(),
+      }),
+    },
+    ({ project, path }) => ({
       description: FIX_ERRORS.description,
       messages: [
         {
@@ -75,6 +60,6 @@ export function registerPrompts(server: Server): void {
           content: { type: 'text' as const, text: fixErrorsText(project, path) },
         },
       ],
-    };
-  });
+    }),
+  );
 }
