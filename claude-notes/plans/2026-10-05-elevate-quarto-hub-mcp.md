@@ -988,7 +988,7 @@ Build fixes the spike had to land first (the crate did not compile on
 the rot was invisible; CI gap filed as bd-s0tm9sdq):
 
 1. **Duplicate strong symbols** (`memcmp`, `vsnprintf`, `fclose`, …):
-   tree-sitter 0.26 compiles `tree-sitter-language`'s `wasm/src/*.c` into
+   tree-sitter 0.26 compiles `tree-sitter-language`\'s `wasm/src/*.c` into
    `libtree_sitter.rlib`, colliding with the crate's `c_shim.rs`. Fixed with
    the established repo pattern the crate was missing:
    `[patch.crates-io] tree-sitter-language = { path =
@@ -1078,7 +1078,7 @@ Work items:
   must displace or consolidate.
 - [x] CAP-10 `clear_capture` decision (Q-4). **DECIDED 2026-10-06: no
   tool — human-only.** `clearCapture` deletes an entry from the shared
-  index document, which drives *other* collaborators' preview engines —
+  index document, which drives *other* collaborators\' preview engines —
   clearing a capture mid-session forces an unexpected re-execution in a
   teammate's web preview, the same invisible-shared-mutation class Q-3
   rejected. The agent's own render loop (CAP-12) renders in a temp dir
@@ -1123,21 +1123,21 @@ Output inspected for every call; server stderr clean.
 
 | task | success | turns | tokens (in/out) | cost | isError | retries | duration |
 |------|---------|-------|-----------------|------|---------|---------|----------|
-| create-project | PASS | 3 | 66/441 | $0.54 | 0 | 0 | 11s |
-| read-and-report | PASS | 4 | 98/785 | $0.56 | 0 | 0 | 18s |
-| patch-typo | PASS | 6 | 130/1415 | $0.64 | 0 | 0 | 33s |
-| write-new-file | PASS | 6 | 130/986 | $0.60 | 0 | 0 | 17s |
-| rename-file | PASS | 7 | 130/1384 | $0.63 | 0 | 0 | 36s |
-| collaborator-edit | PASS | 4 | 98/740 | $0.56 | 0 | 0 | 24s |
-| watch-live-edit | PASS | 5 | 98/766 | $0.57 | 0 | 0 | 50s |
-| stale-write-recovery | PASS | 6 | 162/2254 | $0.71 | 1 | 0 | 38s |
-| add-image-binary | PASS | 6 | 130/1448 | $0.65 | 0 | 0 | 25s |
-| search-and-report | PASS | 4 | 98/438 | $0.55 | 0 | 0 | 10s |
-| watch-project-edit | PASS | 5 | 130/888 | $0.59 | 0 | 0 | 58s |
-| history-and-restore | PASS | 9 | 130/2209 | $0.76 | 0 | 0 | 32s |
-| outline-and-section-edit | PASS | 9 | 162/2004 | $0.71 | 0 | 0 | 29s |
-| docs-lookup | PASS | 5 | 98/776 | $0.59 | 0 | 0 | 15s |
-| fix-render-error | PASS | 7 | 162/1933 | $0.71 | 0 | 0 | 30s |
+| create-project | PASS | 3 | 66/441 | \$0.54 | 0 | 0 | 11s |
+| read-and-report | PASS | 4 | 98/785 | \$0.56 | 0 | 0 | 18s |
+| patch-typo | PASS | 6 | 130/1415 | \$0.64 | 0 | 0 | 33s |
+| write-new-file | PASS | 6 | 130/986 | \$0.60 | 0 | 0 | 17s |
+| rename-file | PASS | 7 | 130/1384 | \$0.63 | 0 | 0 | 36s |
+| collaborator-edit | PASS | 4 | 98/740 | \$0.56 | 0 | 0 | 24s |
+| watch-live-edit | PASS | 5 | 98/766 | \$0.57 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 162/2254 | \$0.71 | 1 | 0 | 38s |
+| add-image-binary | PASS | 6 | 130/1448 | \$0.65 | 0 | 0 | 25s |
+| search-and-report | PASS | 4 | 98/438 | \$0.55 | 0 | 0 | 10s |
+| watch-project-edit | PASS | 5 | 130/888 | \$0.59 | 0 | 0 | 58s |
+| history-and-restore | PASS | 9 | 130/2209 | \$0.76 | 0 | 0 | 32s |
+| outline-and-section-edit | PASS | 9 | 162/2004 | \$0.71 | 0 | 0 | 29s |
+| docs-lookup | PASS | 5 | 98/776 | \$0.59 | 0 | 0 | 15s |
+| fix-render-error | PASS | 7 | 162/1933 | \$0.71 | 0 | 0 | 30s |
 
 15/15 PASS, median 5 turns (Phases 2/3: 5 — no regression), zero
 `isError` except the DESIGNED stale-hash refusal in
@@ -1277,7 +1277,7 @@ Work items:
   rename their identity; never fake cursor presence.
 - **Q-4 (Phase 4):** Is `clear_capture` agent-appropriate (it mutates shared
   project state) or human-only? **Resolved 2026-10-06: human-only.** It
-  deletes shared index state driving other collaborators' preview engines;
+  deletes shared index state driving other collaborators\' preview engines;
   the CAP-12 render loop never touches captures; CAP-2's read surface
   covers observation. See the Phase 4 checklist entry.
 - **Q-5 (Phase 6):** Under the 2026-07-28 stateless model (sessions removed),
