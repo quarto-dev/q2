@@ -1229,7 +1229,7 @@ Work items:
   (per-instance Set, gated by `parseFileResourceUri`) and the bridge
   emits `sendResourceUpdated` unconditionally on modern / subscription-
   gated on legacy. `createServer` gains an `era` option fed by
-  `serveStdio`'s factory context (`ctx.era`).
+  `serveStdio`\'s factory context (`ctx.era`).
   (4) **Event seam:** `ConnectionManager.onProjectEvent` —
   `added/changed/removed` per file plus `connected/disconnected`
   lifecycle. `list_changed` is debounced (150 ms trailing edge, unref'd
@@ -1319,21 +1319,21 @@ inspected for every call; server stderr clean.
 
 | task | success | turns | tokens (in/out) | cost | isError | retries | duration |
 |------|---------|-------|-----------------|------|---------|---------|----------|
-| create-project | PASS | 3 | 66/518 | $0.77 | 0 | 0 | 10s |
-| read-and-report | PASS | 4 | 98/592 | $0.55 | 0 | 0 | 16s |
-| patch-typo | PASS | 6 | 130/1439 | $0.64 | 0 | 0 | 25s |
-| write-new-file | PASS | 6 | 130/992 | $0.60 | 0 | 0 | 20s |
-| rename-file | PASS | 7 | 162/1663 | $0.65 | 0 | 0 | 30s |
-| collaborator-edit | PASS | 4 | 98/621 | $0.54 | 0 | 0 | 14s |
-| watch-live-edit | PASS | 5 | 98/1106 | $0.59 | 0 | 0 | 55s |
-| stale-write-recovery | PASS | 6 | 130/2355 | $0.72 | 1 | 1 | 38s |
-| add-image-binary | PASS | 6 | 130/1175 | $0.62 | 0 | 0 | 42s |
-| search-and-report | PASS | 4 | 66/366 | $0.51 | 0 | 0 | 13s |
-| watch-project-edit | PASS | 5 | 130/812 | $0.59 | 0 | 0 | 60s |
-| history-and-restore | PASS | 9 | 194/3091 | $0.85 | 0 | 0 | 47s |
-| outline-and-section-edit | PASS | 8 | 162/1820 | $0.69 | 0 | 0 | 43s |
-| docs-lookup | PASS | 5 | 98/676 | $0.59 | 0 | 0 | 16s |
-| fix-render-error | PASS | 7 | 130/1529 | $0.68 | 0 | 0 | 25s |
+| create-project | PASS | 3 | 66/518 | \$0.77 | 0 | 0 | 10s |
+| read-and-report | PASS | 4 | 98/592 | \$0.55 | 0 | 0 | 16s |
+| patch-typo | PASS | 6 | 130/1439 | \$0.64 | 0 | 0 | 25s |
+| write-new-file | PASS | 6 | 130/992 | \$0.60 | 0 | 0 | 20s |
+| rename-file | PASS | 7 | 162/1663 | \$0.65 | 0 | 0 | 30s |
+| collaborator-edit | PASS | 4 | 98/621 | \$0.54 | 0 | 0 | 14s |
+| watch-live-edit | PASS | 5 | 98/1106 | \$0.59 | 0 | 0 | 55s |
+| stale-write-recovery | PASS | 6 | 130/2355 | \$0.72 | 1 | 1 | 38s |
+| add-image-binary | PASS | 6 | 130/1175 | \$0.62 | 0 | 0 | 42s |
+| search-and-report | PASS | 4 | 66/366 | \$0.51 | 0 | 0 | 13s |
+| watch-project-edit | PASS | 5 | 130/812 | \$0.59 | 0 | 0 | 60s |
+| history-and-restore | PASS | 9 | 194/3091 | \$0.85 | 0 | 0 | 47s |
+| outline-and-section-edit | PASS | 8 | 162/1820 | \$0.69 | 0 | 0 | 43s |
+| docs-lookup | PASS | 5 | 98/676 | \$0.59 | 0 | 0 | 16s |
+| fix-render-error | PASS | 7 | 130/1529 | \$0.68 | 0 | 0 | 25s |
 
 15/15 PASS, median 5 turns (Phases 2/3/4: 5 — no regression), zero
 `isError` except the DESIGNED stale-hash refusal in
