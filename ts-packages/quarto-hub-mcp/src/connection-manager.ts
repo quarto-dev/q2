@@ -1264,14 +1264,24 @@ export class ConnectionManager {
    * gate: any failure (network, non-OK status, malformed body) logs a
    * warning and yields `undefined`, so the connection proceeds
    * authorless (D8) instead of failing.
+   *
+   * The hub HMACs the `project` parameter verbatim, and its canonical
+   * spelling is the `automerge:`-prefixed URL form — the one the SPA
+   * stores and resolves authors over. hub-mcp's ids are bare
+   * ({@link parseProjectRef}), so without the prefix the same
+   * user+document mints a different author ID here than in the SPA and
+   * MCP edits surface as an unknown author (bd-9t8zsh98).
    */
   private async fetchAuthorId(
     projectId: string,
     getBearer: () => Promise<string>,
   ): Promise<string | undefined> {
+    const canonicalProjectId = projectId.startsWith('automerge:')
+      ? projectId
+      : `automerge:${projectId}`;
     const urlFor = (path: string) => {
       const url = new URL(path, toHttpUrl(this.serverUrlParsed));
-      url.searchParams.set('project', projectId);
+      url.searchParams.set('project', canonicalProjectId);
       return url.toString();
     };
     try {
