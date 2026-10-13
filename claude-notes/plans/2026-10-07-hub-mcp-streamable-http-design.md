@@ -132,9 +132,9 @@ surfaced in `WWW-Authenticate` challenges:
 
 | Scope | Gates |
 |-------|-------|
-| `mcp:read` | read tools, resources/read, prompts, list_* |
+| `mcp:read` | read tools, resources/read, prompts, `list_*` |
 | `mcp:write` | create/patch/write/delete/rename/restore tools |
-| `mcp:listen` | `subscriptions/listen` streams, wait_for_change |
+| `mcp:listen` | `subscriptions/listen` streams, `wait_for_change` |
 
 - `401` challenges carry `scope` hints; `403` on authenticated-but-
   insufficient tokens carries `error="insufficient_scope"` + the
@@ -153,7 +153,7 @@ surfaced in `WWW-Authenticate` challenges:
   present) against the hub's own origins and rejects cross-origin
   browser posts (DNS-rebinding class). The loopback already implements
   this with the SDK helpers; the hub mount does the same, with the
-  connector user-agents' no-Origin behavior noted (non-browser clients
+  connector user-agents\' no-Origin behavior noted (non-browser clients
   send no Origin — allowed).
 - **SSRF on metadata URLs:** the hub fetches client metadata (CIMD) and
   its own AS/PRM documents only over https, rejecting private/loopback

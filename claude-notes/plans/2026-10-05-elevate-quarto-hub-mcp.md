@@ -1517,25 +1517,25 @@ agent-facing surface):** `eval/results/2026-10-07T11-42-20/`
 
 | task | success | turns | tokens (in/out) | cost | isError | retries | duration |
 |------|---------|-------|-----------------|------|---------|---------|----------|
-| create-project | PASS | 3 | 66/463 | $0.79 | 0 | 0 | 16s |
-| read-and-report | PASS | 4 | 98/744 | $0.56 | 0 | 0 | 16s |
-| patch-typo | PASS | 6 | 130/1504 | $0.65 | 0 | 0 | 24s |
-| write-new-file | PASS | 5 | 130/898 | $0.59 | 0 | 0 | 20s |
-| rename-file | PASS | 7 | 162/1361 | $0.63 | 0 | 0 | 24s |
-| collaborator-edit | PASS | 4 | 98/700 | $0.55 | 0 | 0 | 30s |
-| watch-live-edit | PASS | 5 | 130/1429 | $0.62 | 0 | 0 | 51s |
-| stale-write-recovery | PASS | 6 | 130/2058 | $0.69 | 1 | 1 | 33s |
-| add-image-binary | PASS | 6 | 130/1596 | $0.65 | 0 | 0 | 27s |
-| search-and-report | PASS | 6 | 98/1011 | $0.59 | 2 | 2 | 18s |
-| watch-project-edit | PASS | 5 | 130/1066 | $0.60 | 0 | 0 | 58s |
-| history-and-restore | PASS | 9 | 130/2562 | $0.79 | 0 | 0 | 53s |
-| outline-and-section-edit | PASS | 9 | 162/2404 | $0.73 | 0 | 0 | 35s |
-| docs-lookup | PASS | 5 | 98/753 | $0.59 | 0 | 0 | 25s |
-| fix-render-error | PASS | 7 | 130/2021 | $0.71 | 0 | 0 | 34s |
+| create-project | PASS | 3 | 66/463 | \$0.79 | 0 | 0 | 16s |
+| read-and-report | PASS | 4 | 98/744 | \$0.56 | 0 | 0 | 16s |
+| patch-typo | PASS | 6 | 130/1504 | \$0.65 | 0 | 0 | 24s |
+| write-new-file | PASS | 5 | 130/898 | \$0.59 | 0 | 0 | 20s |
+| rename-file | PASS | 7 | 162/1361 | \$0.63 | 0 | 0 | 24s |
+| collaborator-edit | PASS | 4 | 98/700 | \$0.55 | 0 | 0 | 30s |
+| watch-live-edit | PASS | 5 | 130/1429 | \$0.62 | 0 | 0 | 51s |
+| stale-write-recovery | PASS | 6 | 130/2058 | \$0.69 | 1 | 1 | 33s |
+| add-image-binary | PASS | 6 | 130/1596 | \$0.65 | 0 | 0 | 27s |
+| search-and-report | PASS | 6 | 98/1011 | \$0.59 | 2 | 2 | 18s |
+| watch-project-edit | PASS | 5 | 130/1066 | \$0.60 | 0 | 0 | 58s |
+| history-and-restore | PASS | 9 | 130/2562 | \$0.79 | 0 | 0 | 53s |
+| outline-and-section-edit | PASS | 9 | 162/2404 | \$0.73 | 0 | 0 | 35s |
+| docs-lookup | PASS | 5 | 98/753 | \$0.59 | 0 | 0 | 25s |
+| fix-render-error | PASS | 7 | 130/2021 | \$0.71 | 0 | 0 | 34s |
 
 15/15 PASS, median 6 turns (Phases 2–5: 5 — within model variance, no
-surface change). `stale-write-recovery`'s single `isError` is the
-DESIGNED refusal; `search-and-report`'s two are validation retries the
+surface change). `stale-write-recovery`\'s single `isError` is the
+DESIGNED refusal; `search-and-report`\'s two are validation retries the
 agent recovered from on the spot (transcript ends clean; the retry
 counter doing its job), not a server regression.
 
