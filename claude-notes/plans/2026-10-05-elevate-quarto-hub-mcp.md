@@ -486,7 +486,7 @@ entrypoint is `serveStdio(factory)` — the v2 entry that owns era
 classification and instance pinning — replacing hand-wired
 `server.connect(new StdioServerTransport())`, which in v2 serves **legacy
 only**: `supportedProtocolVersions` merely installs the discover handler;
-era pinning happens inside `serveStdio`'s `connectInstance` (SDK-internal
+era pinning happens inside `serveStdio`\'s `connectInstance` (SDK-internal
 `setNegotiatedProtocolVersion`). One migration-found wire detail: the
 2026-07-28 `_meta` envelope keys are camelCase
 (`io.modelcontextprotocol/protocolVersion`), not kebab-case. `path` became
@@ -646,21 +646,21 @@ designed stale-hash refusal → merge → retry recovery):**
 
 | task | success | turns | tokens (in/out) | cost | isError | retries | duration |
 |------|---------|-------|-----------------|------|---------|---------|----------|
-| create-project | PASS | 4 | 98/683 | $0.75 | 0 | 0 | 23s |
-| read-and-report | PASS | 4 | 66/724 | $0.50 | 0 | 0 | 13s |
-| patch-typo | PASS | 6 | 130/1030 | $0.55 | 0 | 0 | 17s |
-| write-new-file | PASS | 6 | 130/1055 | $0.55 | 0 | 0 | 20s |
-| rename-file | PASS | 7 | 130/1074 | $0.56 | 0 | 0 | 21s |
-| collaborator-edit | PASS | 4 | 66/717 | $0.50 | 0 | 0 | 29s |
-| watch-live-edit | PASS | 5 | 98/1025 | $0.54 | 0 | 0 | 50s |
-| stale-write-recovery | PASS | 6 | 130/2160 | $0.64 | 1 | 1 | 51s |
+| create-project | PASS | 4 | 98/683 | \$0.75 | 0 | 0 | 23s |
+| read-and-report | PASS | 4 | 66/724 | \$0.50 | 0 | 0 | 13s |
+| patch-typo | PASS | 6 | 130/1030 | \$0.55 | 0 | 0 | 17s |
+| write-new-file | PASS | 6 | 130/1055 | \$0.55 | 0 | 0 | 20s |
+| rename-file | PASS | 7 | 130/1074 | \$0.56 | 0 | 0 | 21s |
+| collaborator-edit | PASS | 4 | 66/717 | \$0.50 | 0 | 0 | 29s |
+| watch-live-edit | PASS | 5 | 98/1025 | \$0.54 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 130/2160 | \$0.64 | 1 | 1 | 51s |
 
 8/8 PASS, median 5.5 turns (baseline 4 — inside noise; the watch and
-recovery tasks are the long poles by design). `stale-write-recovery`'s
+recovery tasks are the long poles by design). `stale-write-recovery`\'s
 single `isError` is the DESIGNED stale-hash refusal; the transcript
 shows the agent receiving the structured `stale_expected_hash` payload
 (current content + hash) and merging without an extra read. All other
-tasks' zero-`isError` streak holds through the result-shape changes
+tasks\' zero-`isError` streak holds through the result-shape changes
 (ERG-1/2, BP-1).
 
 ### Phase 2 — Complete the file and project surface
