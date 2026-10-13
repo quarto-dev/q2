@@ -770,10 +770,10 @@ Phase 1's branch per the PR-stack rule):
   share-URL semantics, collaboration model (hashes, `synced`, watching,
   ranges), full tool reference, `--read-only`, untrusted-content note;
   new Tools sidebar group; rendered with `q2` (one smart-quote error
-  fixed — plural possessive "collaborators'").
+  fixed — plural possessive "collaborators\'").
 - **Pin updates** (67653400f): `hub-mcp.test.ts` + `inspector-smoke.test.ts`
   keep their own tool-list copies (dist-spawning; a stale dist masked
-  them locally — `cargo xtask verify`'s fresh build caught them). The
+  them locally — `cargo xtask verify`\'s fresh build caught them). The
   live-suite binary-read test flipped to the CAP-4 contract.
 - **Eval** (7068ffff4): two new tasks (`add-image-binary`,
   `search-and-report`).
@@ -808,16 +808,16 @@ every call.
 
 | task | success | turns | tokens (in/out) | cost | isError | retries | duration |
 |------|---------|-------|-----------------|------|---------|---------|----------|
-| create-project | PASS | 3 | 66/508 | $0.59 | 0 | 0 | 11s |
-| read-and-report | PASS | 4 | 98/531 | $0.51 | 0 | 0 | 12s |
-| patch-typo | PASS | 6 | 130/1575 | $0.62 | 0 | 0 | 25s |
-| write-new-file | PASS | 6 | 130/1096 | $0.58 | 0 | 0 | 21s |
-| rename-file | PASS | 7 | 162/1218 | $0.59 | 0 | 0 | 37s |
-| collaborator-edit | PASS | 4 | 98/899 | $0.53 | 0 | 0 | 34s |
-| watch-live-edit | PASS | 5 | 130/1239 | $0.58 | 0 | 0 | 50s |
-| stale-write-recovery | PASS | 6 | 162/1796 | $0.65 | 1 | 1 | 49s |
-| add-image-binary | PASS | 6 | 130/1300 | $0.61 | 0 | 0 | 25s |
-| search-and-report | PASS | 4 | 66/566 | $0.50 | 0 | 0 | 25s |
+| create-project | PASS | 3 | 66/508 | \$0.59 | 0 | 0 | 11s |
+| read-and-report | PASS | 4 | 98/531 | \$0.51 | 0 | 0 | 12s |
+| patch-typo | PASS | 6 | 130/1575 | \$0.62 | 0 | 0 | 25s |
+| write-new-file | PASS | 6 | 130/1096 | \$0.58 | 0 | 0 | 21s |
+| rename-file | PASS | 7 | 162/1218 | \$0.59 | 0 | 0 | 37s |
+| collaborator-edit | PASS | 4 | 98/899 | \$0.53 | 0 | 0 | 34s |
+| watch-live-edit | PASS | 5 | 130/1239 | \$0.58 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 162/1796 | \$0.65 | 1 | 1 | 49s |
+| add-image-binary | PASS | 6 | 130/1300 | \$0.61 | 0 | 0 | 25s |
+| search-and-report | PASS | 4 | 66/566 | \$0.50 | 0 | 0 | 25s |
 
 10/10 PASS, median 5 turns (Phase 1: 5.5 — inside noise, no
 regression). `add-image-binary` shows the agent discovering
