@@ -159,14 +159,21 @@ const SET_B_DOC: ProjectSetDocument = {
 };
 
 describe('default project set (bd-3h5hbfdv)', () => {
-  it('a bare call with no stored default is an actionable error', async () => {
+  it('a bare call with no stored default instructs the caller to provide one', async () => {
     const f = await startInMemoryMcp({ projectSetBackend: new MemoryBackend() });
     try {
       const result = await callTool(f, 'list_projects', {});
       expect(result.isError).toBe(true);
       const block = result.content[0];
       if (block?.type === 'text') {
-        expect(block.text).toMatch(/project_set/);
+        // An instruction to the agent: supply a set now (asking the user
+        // if it isn't known)…
+        expect(block.text).toMatch(/provide/i);
+        expect(block.text).toMatch(/ask the user/i);
+        // …and the promise that doing so once is enough.
+        expect(block.text).toMatch(/stores? it .*default/i);
+        expect(block.text).toMatch(/subsequent/i);
+        expect(block.text).toMatch(/link-project-set/);
         expect(block.text).toMatch(/set_default_project_set/);
       }
     } finally {
