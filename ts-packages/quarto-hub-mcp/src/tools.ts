@@ -807,13 +807,10 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
     explicitArg ?? (store !== undefined ? ((await store.read()) ?? undefined) : undefined);
   if (projectSetArg === undefined) {
     return error(
-      'Error: list_projects needs a `project_set` — none was given and no default is ' +
-        'stored yet. Provide one now: the set\'s doc id or its quarto-hub.com link (the ' +
-        'web client\'s copy-link form for a set is ' +
-        '`https://quarto-hub.com/#/link-project-set/<id>?server=…`); if you do not have ' +
-        'it, ask the user for it. The first successful call stores it in the OS keyring ' +
-        'as the default, so subsequent `list_projects` calls can omit `project_set`. ' +
-        'To change the remembered default later, use set_default_project_set.',
+      'Error: no `project_set` given and no default stored yet. Provide the set\'s doc ' +
+        'id or its `https://quarto-hub.com/#/link-project-set/<id>?server=…` link — ask ' +
+        'the user if you don\'t have it. The first successful call stores it as the ' +
+        'default for subsequent calls; change it later with set_default_project_set.',
     );
   }
   const { doc, errorMessage } = await readProjectSetArg(projectSetArg, manager);
