@@ -65,17 +65,17 @@ describe('multi-server routing (bd-qt7h8h5g)', () => {
 
       const share = shareUrl(created.indexDocId, hubB.url, 'b-file.qmd');
 
-      const listed = await callTool(f, 'list_files', { project: share });
+      const listed = await callTool(f, 'read', { action: 'list', project: share });
       expect(listed.isError).not.toBe(true);
       expect(textOf(listed)).toContain('b-file.qmd');
 
       // The share URL's file= supplies the default path across the hub boundary.
-      const read = await callTool(f, 'read_file', { project: share });
+      const read = await callTool(f, 'read', { action: 'read', project: share });
       expect(read.isError).not.toBe(true);
       expect(textOf(read)).toContain('lives on hub B');
 
       // Writes route too (hub B is no-auth), with delivery confirmation.
-      const written = await callTool(f, 'write_file', {
+      const written = await callTool(f, 'edit', { action: 'write',
         project: share,
         content: 'written across the boundary\n',
       });
@@ -145,7 +145,7 @@ describe('multi-server routing (bd-qt7h8h5g)', () => {
 
     const f = await startInMemoryMcp();
     try {
-      const result = await callTool(f, 'list_files', {
+      const result = await callTool(f, 'read', { action: 'list',
         project: shareUrl('some-doc-id', authHubUrl),
       });
       expect(result.isError).toBe(true);

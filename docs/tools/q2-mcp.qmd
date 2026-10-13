@@ -97,14 +97,14 @@ available; see the Phase 6 design doc in the repository for the plan.
 
 Projects on hubs that require authentication need a one-time sign-in
 per machine. Ask your agent to sign in to Quarto Hub, or it will
-suggest it the first time a call fails with an auth error. The
-`authenticate` tool opens your browser once; credentials are stored in
-your operating system's keyring (never in a file) and refreshed
-automatically.
+suggest it the first time a call fails with an auth error. The `auth`
+tool with `action: "sign_in"` opens your browser once; credentials are
+stored in your operating system's keyring (never in a file) and
+refreshed automatically.
 
-When your credentials are already valid, `authenticate` reports so
-without opening a browser. A related tool, `authenticate_clear`,
-removes the cached credentials from the keyring.
+When your credentials are already valid, the sign-in arm reports so
+without opening a browser. The same tool with `action: "clear"` removes
+the cached credentials from the keyring.
 
 ## Working on a project
 
@@ -139,21 +139,25 @@ the same safety signals you have when editing by hand:
   reports every added, edited, or removed file; passing the agent's own
   post-write `hash` as `since_hash` keeps its own write from being
   reported back to it.
-- **Presence.** `get_project_info` with `include: ["presence"]` shows
+- **Presence.** `project` with `action: "info"` and
+  `include: ["presence"]` shows
   who is in the project and which
   file they are editing, observed passively from the same ephemeral
   messages the web client exchanges — the server never announces
   itself, so collaborators don't see a phantom cursor.
-- **History and undo.** `get_file_history` lists a file's changes with
+- **History and undo.** `read` with `action: "history"` lists a file's
+  changes with
   authors and timestamps, or diffs two versions
-  (`from_hash`/`to_hash`). `restore_file_version` reverts a file to a
+  (`from_hash`/`to_hash`). `edit` with `action: "restore"` reverts a
+  file to a
   prior version as a new change on top of history — nothing is
   rewritten, and the result carries what undoing the restore takes.
-- **Ranges.** Large files read in pages: a truncated `read_file`
-  result carries `next_offset` to continue from, and `list_files`
+- **Ranges.** Large files read in pages: a truncated `read` result
+  carries `next_offset` to continue from, and the list arm
   shows each file's size and line count up front.
-- **Structure.** For `.qmd` files, `get_outline` returns the heading
-  tree with line ranges, and `read_file`/`patch_file` take a `section`
+- **Structure.** For `.qmd` files, `read` with `action: "outline"`
+  returns the heading
+  tree with line ranges, and the read/patch arms take a `section`
   selector naming a heading. A patch replaces exactly the range a read
   with the same selector shows (heading included), so structural edits
   land where intended and a collaborator's edits elsewhere survive.
@@ -190,58 +194,61 @@ channels.
 
 ## Tool reference
 
-### Projects
+The server exposes eight tools. Four of them — `auth`, `project`,
+`read`, and `edit` — are multi-action tools: an `action` argument
+selects the operation, so related verbs share one name and one
+schema. (This surface replaced the earlier per-verb tools —
+`read_file`, `patch_file`, `connect_project`, and so on — which no
+longer exist; hosts that allowlisted the old names must update.)
 
-| Tool | Purpose |
-|------|---------|
-| `connect_project` | Connect to a project by id or share URL; returns its files and share URL |
-| `create_project` | Create a project (optional `name` and initial `files`); returns its id and share URL |
-| `get_project_info` | Project shape and connection health: counts, contributors, engine captures, auth mode, sync diagnostics; `include: ["presence"]` adds who is editing what |
-| `list_projects` | Enumerate a project collection from its share URL |
-| `disconnect_project` | Drop the connection to a project (the next call reconnects) |
+### `auth` — sign-in
 
-### Files
+| Action | Purpose |
+|--------|---------|
+| `sign_in` | Sign in to Quarto Hub (opens the browser once; reports without a flow when already signed in) |
+| `clear` | Remove cached credentials from the OS keyring (best-effort revoke at Google first) |
 
-| Tool | Purpose |
-|------|---------|
-| `list_files` | List files and folders with size, type, and line counts |
-| `read_file` | Read a file (`offset`/`limit`/`max_bytes` for ranges; `section` for one qmd section; binaries return image/blob blocks, `metadata_only` skips the bytes) |
-| `search_files` | Substring or regex search across the project's text files, with snippets |
-| `get_outline` | A .qmd file's heading tree with line ranges — the map for `section` selectors and targeted reads |
-| `write_file` | Replace a file's content (creates if absent — pass `create_only: true` to refuse overwriting an existing file; `encoding: "base64"` for images and other binaries) |
-| `patch_file` | Replace one exact string, or a whole qmd `section` (heading included) — the preferred way to make small edits |
-| `delete_file` | Delete a file |
-| `rename_file` | Rename or move a file |
-| `restore_file_version` | Revert a file to a prior version from `get_file_history` (a new, reversible change) |
-| `wait_for_change` | Long-poll a file — or the whole project with no `path` — for collaborator edits |
-| `render` *(opt-in)* | Render the project (or one file) with `q2 render --json-errors`; returns structured diagnostics — see below |
+### `project` — projects and connections
 
-### Collaboration
+| Action | Purpose |
+|--------|---------|
+| `connect` | Connect to a project by id or share URL; returns its files and share URL |
+| `disconnect` | Drop the connection to a project (the next call reconnects) |
+| `info` | Project shape and connection health: counts, contributors, engine captures, auth mode, sync diagnostics; `include: ["presence"]` adds who is editing what (passive observation) |
+| `list_sets` | Enumerate a project collection from its share URL (or the remembered default) |
+| `set_default_set` | Remember a project collection as the default `list_sets` uses (OS keyring) |
 
-| Tool | Purpose |
-|------|---------|
-| `get_project_info` | With `include: ["presence"]`: who is in the project and which file they are editing (passive observation) |
-| `get_file_history` | A file's changes with authors and timestamps, or a unified diff between two versions |
+### `read` — reading a project
 
-### Folders
+| Action | Purpose |
+|--------|---------|
+| `list` | List files and folders with size, type, and line counts |
+| `read` | Read a file (`offset`/`limit`/`max_bytes` for ranges; `section` for one qmd section; binaries return image/blob blocks, `metadata_only` skips the bytes) |
+| `outline` | A .qmd file's heading tree with line ranges — the map for `section` selectors and targeted reads |
+| `search` | Substring or regex search across the project's text files, with snippets |
+| `history` | A file's changes with authors and timestamps, or a unified diff between two versions (`from_hash`/`to_hash`) |
 
-| Tool | Purpose |
-|------|---------|
+### `edit` — changing a project
+
+| Action | Purpose |
+|--------|---------|
+| `write` | Replace a file's content (creates if absent — pass `create_only: true` to refuse overwriting an existing file; `encoding: "base64"` for images and other binaries) |
+| `patch` | Replace one exact string, or a whole qmd `section` (heading included) — the preferred way to make small edits |
+| `delete` | Delete a file |
+| `rename` | Rename or move a file |
+| `restore` | Revert a file to a prior version from the `read` history arm (a new, reversible change) |
 | `create_folder` | Create a folder (folders are explicit markers; files need no folder to exist) |
 | `delete_folder` | Delete a folder; `recursive: true` deletes contained files first |
 
-### Documentation
+### Standalone tools
 
 | Tool | Purpose |
 |------|---------|
+| `create_project` | Create a project (optional `name` and initial `files`); returns its id and share URL |
+| `wait_for_change` | Long-poll a file — or the whole project with no `path` — for collaborator edits |
+| `get_errors` | Check the project (or one file) for render errors and warnings, on demand |
 | `docs` | Search (`query`) or read (`page`) the Quarto 2 documentation embedded in the `q2` binary — no project or network needed |
-
-### Sign-in
-
-| Tool | Purpose |
-|------|---------|
-| `authenticate` | Sign in to Quarto Hub (opens the browser once; reports without a flow when already signed in) |
-| `authenticate_clear` | Remove cached credentials |
+| `render` *(opt-in)* | Render the project (or one file) with `q2 render --json-errors`; returns structured diagnostics — see below |
 
 ## Rendering (opt-in, `--allow-render`)
 
@@ -265,11 +272,10 @@ enable it for projects you trust.
 ## Read-only mode
 
 To let an agent look but never edit, add `--read-only` to the `args`
-array. The server then exposes only read tools (`connect_project`,
-`list_files`, `read_file`, `search_files`, `wait_for_change`,
-`get_project_info`, `list_projects`,
-`get_file_history`, `get_outline`, `disconnect_project`) — no write,
-create, or delete calls exist in that configuration.
+array. The server then exposes only the read side of the surface
+(`auth`, `project`, `read`, `wait_for_change`, `get_errors`, `docs`) —
+no `edit` or `create_project`, so no write, create, or delete calls
+exist in that configuration.
 
 ## A note on trust
 

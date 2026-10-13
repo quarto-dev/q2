@@ -163,7 +163,7 @@ describe('exit drains outbound sync (bd-10deu8h4)', () => {
     // Hub dies; a file is created during the outage. Its only copy is
     // now in this server process's memory.
     await doomedHub.stop();
-    await client.callTool('write_file', {
+    await client.callTool('edit', { action: 'write',
       project: created.indexDocId,
       path: 'doomed.qmd',
       content: 'created while the hub was down\n',

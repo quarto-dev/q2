@@ -15,12 +15,12 @@ import {
   callTool,
 } from './in-memory-fixture.js';
 
-describe('disconnect_project (HY-5)', () => {
+describe('project/disconnect (HY-5)', () => {
   it('disconnects a connected project; the next call transparently reconnects', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'disconnect_project', { project: seed.indexDocId });
+      const result = await callTool(f, 'project', { action: 'disconnect', project: seed.indexDocId });
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toMatchObject({
         project: seed.indexDocId,
@@ -29,7 +29,7 @@ describe('disconnect_project (HY-5)', () => {
       });
 
       // Reconnect is transparent.
-      const read = await callTool(f, 'read_file', {
+      const read = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'index.qmd',
       });
@@ -44,7 +44,7 @@ describe('disconnect_project (HY-5)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'disconnect_project', {
+      const result = await callTool(f, 'project', { action: 'disconnect',
         project: seed.indexDocId,
         wait_for_sync: false,
       });
@@ -59,7 +59,7 @@ describe('disconnect_project (HY-5)', () => {
   it('not-connected is an actionable error naming the project', async () => {
     const f = await startInMemoryMcp();
     try {
-      const result = await callTool(f, 'disconnect_project', { project: 'neverconnected' });
+      const result = await callTool(f, 'project', { action: 'disconnect', project: 'neverconnected' });
       expect(result.isError).toBe(true);
       const block = result.content[0];
       if (block?.type === 'text') {
@@ -83,7 +83,7 @@ describe('disconnect_project (HY-5)', () => {
       await new Promise((r) => setTimeout(r, 300));
       expect(f.manager.pendingWaiterCount(seed.indexDocId)).toBe(1);
 
-      await callTool(f, 'disconnect_project', { project: seed.indexDocId });
+      await callTool(f, 'project', { action: 'disconnect', project: seed.indexDocId });
       const settled = await pending;
       expect(settled.isError).toBe(true);
       const block = settled.content[0];

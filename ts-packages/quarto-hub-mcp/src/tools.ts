@@ -49,6 +49,7 @@ import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
   extractAuthContext,
+  type AuthAction,
   type ProgressNotification,
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
@@ -136,9 +137,10 @@ function withResourceLink(
  * quarto-hub.com share URL is accepted in place of a bare id — the server
  * extracts the id (and a default `path`) from it. See {@link parseProjectRef}.
  *
- * Deliberately one line (Phase 7, bd-1ilystml): this rides every tool's
- * inputSchema (~20× in the listing), and the full share-URL semantics
- * (`server=` routing, where the id sits) live in the server instructions.
+ * Deliberately one line (Phase 7, bd-1ilystml): this rides every arm of
+ * the merged tools' input schemas (~14× across 4 tools, bd-lj6f7z9s),
+ * and the full share-URL semantics (`server=` routing, where the id
+ * sits) live in the server instructions.
  */
 const PROJECT_PARAM_DESC =
   "The project's automerge index document ID, or a quarto-hub.com share URL " +
@@ -255,7 +257,8 @@ function routedServer(args: ToolArgs): string | undefined {
  * One listed file. `type` is present for loaded files; dangling index
  * entries (bd-vm5e5u10) instead carry `status: 'unavailable'` plus the
  * doc id the index references, so agents can see — and repair via
- * `delete_file` — entries whose documents never reached the hub.
+ * `edit` with `action: "delete"` — entries whose documents never reached
+ * the hub.
  */
 interface ListedFile {
   path: string;
@@ -304,7 +307,7 @@ function findUnavailable(client: SyncClient, path: string): { path: string; docI
 function unavailableFileError(path: string, docId: string): CallToolResult {
   return error(
     `Error: ${fileUnavailableMessage(path, docId)}. ` +
-      'Use delete_file to remove the dangling entry.',
+      'Use `edit` with `action: "delete"` to remove the dangling entry.',
   );
 }
 
@@ -346,15 +349,16 @@ function allPaths(state: ProjectState): string[] {
 
 /**
  * The ERG-4 not-found error: names the failing parameter and the current
- * state, points at `list_files`, and lists up to three closest existing
- * paths so a typo self-corrects in one call instead of three.
+ * state, points at `read` with `action: "list"`, and lists up to three
+ * closest existing paths so a typo self-corrects in one call instead of
+ * three.
  */
 function fileNotFoundError(path: string, state: ProjectState): CallToolResult {
   const paths = allPaths(state);
   const near = closestPaths(path, paths);
   let msg =
     `Error: File not found: "${path}". The project has ` +
-    `${paths.length} file${paths.length === 1 ? '' : 's'}; call list_files to see them.`;
+    `${paths.length} file${paths.length === 1 ? '' : 's'}; call \`read\` with \`action: "list"\` to see them.`;
   if (near.length > 0) {
     msg += ` Closest existing paths: ${near.map((p) => `"${p}"`).join(', ')}.`;
   }
@@ -443,7 +447,7 @@ function windowLines(
         ? {
             hint:
               `Returned lines ${offset}-${end} of ${totalLines}. ` +
-              `Call read_file with offset=${end + 1} to continue.`,
+              `Call \`read\` with \`action: "read"\` and offset=${end + 1} to continue.`,
           }
         : {}),
     };
@@ -470,7 +474,7 @@ function windowLines(
       nextOffset: end + 1,
       hint:
         `Returned lines ${offset}-${end} of ${totalLines} (max_bytes=${maxBytes}). ` +
-        `Call read_file with offset=${end + 1} to continue.`,
+        `Call \`read\` with \`action: "read"\` and offset=${end + 1} to continue.`,
     };
   }
   // Pathological: a single line exceeds the byte cap (minified assets,
@@ -511,50 +515,55 @@ function textMimeType(path: string): string {
   return textTypes[ext] ?? 'text/plain';
 }
 
-/** The data tools (everything except the auth tools). */
+/**
+ * The data tools (everything except the auth tool). bd-lj6f7z9s: the 17
+ * same-subject verbs consolidated into three multi-action tools —
+ * `project` (5 arms), `read` (5 arms), `edit` (7 arms) — selected by the
+ * `action` argument; the rest of the surface stayed standalone.
+ */
 type DataToolName =
-  | 'connect_project'
-  | 'disconnect_project'
-  | 'get_project_info'
-  | 'list_projects'
-  | 'set_default_project_set'
-  | 'list_files'
-  | 'get_file_history'
-  | 'get_outline'
+  | 'project'
+  | 'read'
+  | 'edit'
   | 'docs'
-  | 'read_file'
-  | 'search_files'
   | 'wait_for_change'
   | 'get_errors'
-  | 'write_file'
-  | 'patch_file'
-  | 'delete_file'
-  | 'rename_file'
-  | 'create_folder'
-  | 'delete_folder'
-  | 'restore_file_version'
   | 'render'
   | 'create_project';
 
+/** The `project` tool's arms. */
+type ProjectAction = 'connect' | 'disconnect' | 'info' | 'list_sets' | 'set_default_set';
+/** The `read` tool's arms. */
+type ReadAction = 'list' | 'read' | 'outline' | 'search' | 'history';
+/** The `edit` tool's arms. */
+type EditAction =
+  | 'write'
+  | 'patch'
+  | 'delete'
+  | 'rename'
+  | 'restore'
+  | 'create_folder'
+  | 'delete_folder';
+
 /**
- * Tools whose `path` argument a share URL's `file=` parameter can
- * supply (see {@link normalizeArgs}). Their zod schemas declare `path`
- * optional — a schema-level `required` would reject the share-URL call
- * before normalization runs — so the requirement is enforced here,
- * after normalization.
+ * Tool arms whose `path` argument a share URL's `file=` parameter can
+ * supply (see {@link normalizeArgs}), keyed `"<tool>:<action>"`. Their
+ * zod arm schemas declare `path` optional — a schema-level `required`
+ * would reject the share-URL call before normalization runs — so the
+ * requirement is enforced here, after normalization.
  *
  * `wait_for_change` is deliberately absent: its `path` is genuinely
  * optional since CAP-18 (omitted = project-wide watch). A share URL's
  * `file=` still fills it as a default via normalizeArgs.
  */
-const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
-  'read_file',
-  'write_file',
-  'patch_file',
-  'delete_file',
-  'get_file_history',
-  'get_outline',
-  'restore_file_version',
+const PATH_DEFAULTABLE: ReadonlySet<string> = new Set([
+  'read:read',
+  'read:outline',
+  'read:history',
+  'edit:write',
+  'edit:patch',
+  'edit:delete',
+  'edit:restore',
 ]);
 
 /** Per-call extras threaded from the SDK request context (BP-3, BP-4). */
@@ -567,6 +576,12 @@ interface ToolExtras {
   readonly sendNotification?: (n: ProgressNotification) => Promise<void>;
 }
 
+/**
+ * Dispatch a data-tool call to its handler. The merged tools arrive with
+ * an `action` selector (their zod schemas validate it before this runs);
+ * the (tool, action) pair maps onto the same handlers the pre-merge
+ * per-verb tools used (bd-lj6f7z9s).
+ */
 async function handleTool(
   name: DataToolName,
   rawArgs: ToolArgs,
@@ -574,58 +589,79 @@ async function handleTool(
   extras: ToolExtras = {},
 ): Promise<CallToolResult> {
   const args = normalizeArgs(rawArgs, manager.configuredServerUrl);
-  if (PATH_DEFAULTABLE.has(name) && (typeof args.path !== 'string' || args.path === '')) {
+  const action = typeof args.action === 'string' ? args.action : undefined;
+  if (
+    action !== undefined &&
+    PATH_DEFAULTABLE.has(`${name}:${action}`) &&
+    (typeof args.path !== 'string' || args.path === '')
+  ) {
     return error(
-      `Error: ${name} requires a \`path\` argument — the file path within the project ` +
-        '(or pass a share URL whose `file=` parameter names it).',
+      `Error: \`${name}\` with \`action: "${action}"\` requires a \`path\` argument — the ` +
+        'file path within the project (or pass a share URL whose `file=` parameter names it).',
     );
   }
   switch (name) {
-    case 'connect_project':
-      return handleConnectProject(args, manager);
-    case 'disconnect_project':
-      return handleDisconnectProject(args, manager);
-    case 'get_project_info':
-      return handleGetProjectInfo(args, manager);
-    case 'list_projects':
-      return handleListProjects(args, manager);
-    case 'set_default_project_set':
-      return handleSetDefaultProjectSet(args, manager);
-    case 'list_files':
-      return handleListFiles(args, manager);
-    case 'get_file_history':
-      return handleGetFileHistory(args, manager);
-    case 'get_outline':
-      return handleGetOutline(args, manager);
+    case 'project':
+      switch (action as ProjectAction) {
+        case 'connect':
+          return handleConnectProject(args, manager);
+        case 'disconnect':
+          return handleDisconnectProject(args, manager);
+        case 'info':
+          return handleGetProjectInfo(args, manager);
+        case 'list_sets':
+          return handleListProjects(args, manager);
+        case 'set_default_set':
+          return handleSetDefaultProjectSet(args, manager);
+      }
+      break;
+    case 'read':
+      switch (action as ReadAction) {
+        case 'list':
+          return handleListFiles(args, manager);
+        case 'read':
+          return handleReadFile(args, manager);
+        case 'outline':
+          return handleGetOutline(args, manager);
+        case 'search':
+          return handleSearchFiles(args, manager);
+        case 'history':
+          return handleGetFileHistory(args, manager);
+      }
+      break;
+    case 'edit':
+      switch (action as EditAction) {
+        case 'write':
+          return handleWriteFile(args, manager);
+        case 'patch':
+          return handlePatchFile(args, manager);
+        case 'delete':
+          return handleDeleteFile(args, manager);
+        case 'rename':
+          return handleRenameFile(args, manager);
+        case 'restore':
+          return handleRestoreFileVersion(args, manager);
+        case 'create_folder':
+          return handleCreateFolder(args, manager);
+        case 'delete_folder':
+          return handleDeleteFolder(args, manager);
+      }
+      break;
     case 'docs':
       return handleDocs(args);
-    case 'read_file':
-      return handleReadFile(args, manager);
-    case 'search_files':
-      return handleSearchFiles(args, manager);
     case 'wait_for_change':
       return handleWaitForChange(args, manager, extras);
     case 'get_errors':
       return handleGetErrors(args, manager);
-    case 'write_file':
-      return handleWriteFile(args, manager);
-    case 'patch_file':
-      return handlePatchFile(args, manager);
-    case 'delete_file':
-      return handleDeleteFile(args, manager);
-    case 'rename_file':
-      return handleRenameFile(args, manager);
-    case 'create_folder':
-      return handleCreateFolder(args, manager);
-    case 'delete_folder':
-      return handleDeleteFolder(args, manager);
-    case 'restore_file_version':
-      return handleRestoreFileVersion(args, manager);
     case 'render':
       return handleRender(args, manager, extras);
     case 'create_project':
       return handleCreateProject(args, manager);
   }
+  return error(
+    `Error: unknown action ${JSON.stringify(action)} for \`${name}\` — ` +
+      'check the tool\'s input schema for the valid `action` values.',
+  );
 }
 
 /** hub-client's own display fallback for a nameless project. */
@@ -797,7 +833,7 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
   // (normalizeArgs only rewrites `project`, so parse explicitly here).
   // Omitted (bd-3h5hbfdv): fall back to the remembered default — the
   // first explicit call that reads successfully persists its argument to
-  // the OS keyring, and set_default_project_set overwrites it.
+  // the OS keyring, and the set_default_set arm overwrites it.
   const store = manager.defaultProjectSetStore;
   const explicitArg =
     typeof args.project_set === 'string' && args.project_set.trim() !== ''
@@ -810,7 +846,7 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
       'Error: no `project_set` given and no default stored yet. Provide the set\'s doc ' +
         'id or its `https://quarto-hub.com/#/link-project-set/<id>?server=…` link — ask ' +
         'the user if you don\'t have it. The first successful call stores it as the ' +
-        'default for subsequent calls; change it later with set_default_project_set.',
+        'default for subsequent calls; change it later with `project` and `action: "set_default_set"`.',
     );
   }
   const { doc, errorMessage } = await readProjectSetArg(projectSetArg, manager);
@@ -821,12 +857,12 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
       return error(
         `Error: ${errorMessage}. This value is the remembered default (OS keyring) — the ` +
           'set may have been deleted or belong to another hub. Pass an explicit ' +
-          '`project_set`, or update the remembered default with set_default_project_set.',
+          '`project_set`, or update the remembered default with `project` and `action: "set_default_set"`.',
       );
     }
     return error(
       `Error: ${errorMessage}. Check the id with whoever shared it — and if it names a ` +
-        'project rather than a project set, use connect_project instead.',
+        'project rather than a project set, use `project` with `action: "connect"` instead.',
     );
   }
   const projects = Object.entries(doc.projects)
@@ -878,7 +914,7 @@ async function handleSetDefaultProjectSet(
   }
   if (typeof args.project_set !== 'string' || args.project_set.trim() === '') {
     return error(
-      'Error: set_default_project_set requires a `project_set` argument — the set\'s doc ' +
+      'Error: `project` with `action: "set_default_set"` requires a `project_set` argument — the set\'s doc ' +
         'id or its `https://quarto-hub.com/#/link-project-set/<id>?server=…` link.',
     );
   }
@@ -903,7 +939,7 @@ async function handleSetDefaultProjectSet(
     ...(ref.server !== undefined ? { server: ref.server } : {}),
     ...(doc.name !== undefined ? { name: doc.name } : {}),
     project_count: Object.keys(doc.projects).length,
-    note: 'Remembered in the OS keyring; bare list_projects calls now use this set.',
+    note: 'Remembered in the OS keyring; bare `project` / `action: "list_sets"` calls now use this set.',
   });
 }
 
@@ -921,7 +957,7 @@ async function handleGetFileHistory(args: ToolArgs, manager: ConnectionManager):
   }
   if (payload.type === 'binary') {
     return error(
-      `Error: get_file_history only supports text files; "${path}" is binary ` +
+      `Error: \`read\` with \`action: "history"\` only supports text files; "${path}" is binary ` +
         `(${payload.mimeType}). Binary content is all-or-nothing — there is no per-line ` +
         'history or diff to show.',
     );
@@ -940,7 +976,7 @@ async function handleGetFileHistory(args: ToolArgs, manager: ConnectionManager):
     if (fromHash === undefined) {
       return error(
         'Error: `to_hash` requires `from_hash` — the diff direction would be ambiguous. ' +
-          'Pass both (from `get_file_history` list mode), or pass `from_hash` alone to diff ' +
+          'Pass both (from history list mode), or pass `from_hash` alone to diff ' +
           'against the current content.',
       );
     }
@@ -958,7 +994,7 @@ async function handleGetFileHistory(args: ToolArgs, manager: ConnectionManager):
     } catch (err) {
       if (err instanceof UnknownChangeHashError) {
         return error(
-          `Error: ${err.message} in "${path}". Call get_file_history without ` +
+          `Error: ${err.message} in "${path}". Call \`read\` with \`action: "history"\` without ` +
             '`from_hash`/`to_hash` to list the change hashes this file knows.',
         );
       }
@@ -998,13 +1034,13 @@ async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Prom
 /** The `create_only` refusal (Phase 7): identical on both write arms. */
 function createOnlyRefusal(path: string): CallToolResult {
   return error(
-    `Error: write_file refused: ${path} already exists (create_only). Drop create_only ` +
-      'to overwrite it, or pass expected_hash for a compare-and-swap update.',
+    `Error: \`edit\` with \`action: "write"\` refused: ${path} already exists (create_only). ` +
+      'Drop create_only to overwrite it, or pass expected_hash for a compare-and-swap update.',
   );
 }
 
 function staleHashError(
-  tool: 'write_file' | 'patch_file' | 'restore_file_version',
+  action: 'write' | 'patch' | 'restore',
   path: string,
   currentText: string,
 ): CallToolResult {
@@ -1013,10 +1049,10 @@ function staleHashError(
       {
         error: 'stale_expected_hash',
         message:
-          `${tool} refused: the file changed since you read it (expected_hash does not match ` +
-          'the current content). The current content and its hash are included here — merge ' +
-          'your changes against it and retry with the new expected_hash (or re-read with ' +
-          'read_file first).',
+          `\`edit\` with \`action: "${action}"\` refused: the file changed since you read it ` +
+          '(expected_hash does not match the current content). The current content and its ' +
+          'hash are included here — merge your changes against it and retry with the new ' +
+          'expected_hash (or re-read with `read` and `action: "read"` first).',
         path,
         hash: hashPayload({ type: 'text', text: currentText }),
         content: currentText,
@@ -1034,7 +1070,7 @@ function staleHashError(
  * block) and merges against the included hash.
  */
 function staleHashErrorBinary(
-  tool: 'write_file',
+  action: 'write',
   path: string,
   current: FilePayload & { type: 'binary' },
 ): CallToolResult {
@@ -1043,9 +1079,10 @@ function staleHashErrorBinary(
       {
         error: 'stale_expected_hash',
         message:
-          `${tool} refused: the file changed since you read it (expected_hash does not match ` +
-          'the current content). Re-read with read_file for the current bytes and hash, merge ' +
-          'your changes, and retry with the new expected_hash.',
+          `\`edit\` with \`action: "${action}"\` refused: the file changed since you read it ` +
+          '(expected_hash does not match the current content). Re-read with `read` and ' +
+          '`action: "read"` for the current bytes and hash, merge your changes, and retry ' +
+          'with the new expected_hash.',
         path,
         hash: hashPayload(current),
         type: 'binary',
@@ -1168,7 +1205,7 @@ async function resolveSection(
     ok: false,
     result: error(
       `Error: no section titled "${selector}" in ${path} (matching is exact and case-sensitive). ` +
-        `${available} Call get_outline for the full heading tree with line numbers.`,
+        `${available} Call \`read\` with \`action: "outline"\` for the full heading tree with line numbers.`,
     ),
   };
 }
@@ -1187,12 +1224,12 @@ async function handleGetOutline(args: ToolArgs, manager: ConnectionManager): Pro
     return fileNotFoundError(path, state);
   }
   if (payload.type === 'binary') {
-    return error(`Error: ${path} is a binary file; get_outline applies to .qmd text files only.`);
+    return error(`Error: ${path} is a binary file; the outline arm applies to .qmd text files only.`);
   }
   if (!path.endsWith('.qmd')) {
     return error(
-      `Error: get_outline is supported for .qmd files only; ${path} is not a qmd file. ` +
-        'Use read_file to read it.',
+      `Error: \`read\` with \`action: "outline"\` is supported for .qmd files only; ${path} is not a qmd file. ` +
+        'Use `read` with `action: "read"` to read it.',
     );
   }
   let parser;
@@ -1206,7 +1243,7 @@ async function handleGetOutline(args: ToolArgs, manager: ConnectionManager): Pro
   if (ast === null) {
     return error(
       `Error: ${path} could not be parsed as qmd. The file may contain syntax the parser ` +
-        'rejects; read it with read_file to inspect.',
+        'rejects; read it with `read` and `action: "read"` to inspect.',
     );
   }
   const outline = extractOutline(ast, splitLines(payload.text).length);
@@ -1493,7 +1530,7 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
         : {
             hint: `Section "${s.title}" continues past max_bytes=${maxBytes} — ` +
               (window.nextOffset !== null
-                ? `call read_file with offset=${window.nextOffset} to continue.`
+                ? `call \`read\` with \`action: "read"\` and offset=${window.nextOffset} to continue.`
                 : 'raise max_bytes to see more of it.'),
           }),
       section: sectionInfo(s),
@@ -1919,16 +1956,17 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   if (!existing) {
     // A dangling entry is not writable: silently re-creating the
     // document would repoint the index away from whatever the original
-    // (never-synced) client still holds. Repair is delete_file.
+    // (never-synced) client still holds. Repair is the edit/delete arm.
     const ghost = findUnavailable(state.client, path);
     if (ghost) {
       return unavailableFileError(path, ghost.docId);
     }
     if (expectedHash !== undefined) {
       return error(
-        `Error: write_file refused: expected_hash was given but ${path} does not exist in ` +
-          'the project (it may have been deleted since you read it). Call list_files to see ' +
-          'the current files; drop expected_hash to create a new file.',
+        `Error: \`edit\` with \`action: "write"\` refused: expected_hash was given but ${path} ` +
+          'does not exist in the project (it may have been deleted since you read it). Call ' +
+          '`read` with `action: "list"` to see the current files; drop expected_hash to create ' +
+          'a new file.',
       );
     }
     await state.client.createFile(path, content);
@@ -1955,7 +1993,7 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
     );
   }
   if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
-    return staleHashError('write_file', path, existing.text);
+    return staleHashError('write', path, existing.text);
   }
 
   state.client.updateFileContent(path, content);
@@ -2003,9 +2041,10 @@ async function handleWriteFileBinary(
     }
     if (expectedHash !== undefined) {
       return error(
-        `Error: write_file refused: expected_hash was given but ${path} does not exist in ` +
-          'the project (it may have been deleted since you read it). Call list_files to see ' +
-          'the current files; drop expected_hash to create a new file.',
+        `Error: \`edit\` with \`action: "write"\` refused: expected_hash was given but ${path} ` +
+          'does not exist in the project (it may have been deleted since you read it). Call ' +
+          '`read` with `action: "list"` to see the current files; drop expected_hash to create ' +
+          'a new file.',
       );
     }
     const created = await state.client.createBinaryFile(path, decoded, mimeType);
@@ -2026,11 +2065,11 @@ async function handleWriteFileBinary(
   if (existing.type === 'text') {
     return error(
       `Error: ${path} is a text file. Cannot write binary (base64) content to it — ` +
-        'drop `encoding: "base64"` to write text, or delete_file first and re-create it as binary.',
+        'drop `encoding: "base64"` to write text, or `edit` with `action: "delete"` first and re-create it as binary.',
     );
   }
   if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
-    return staleHashErrorBinary('write_file', path, existing);
+    return staleHashErrorBinary('write', path, existing);
   }
 
   await state.client.updateBinaryFileContent(path, decoded, mimeType);
@@ -2073,12 +2112,12 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   }
   if (sectionSel === undefined && oldString === undefined) {
     return error(
-      'Error: patch_file requires one of `old_string` (replace an exact substring) or ' +
-        '`section` (replace a named qmd section, heading included).',
+      'Error: `edit` with `action: "patch"` requires one of `old_string` (replace an exact ' +
+        'substring) or `section` (replace a named qmd section, heading included).',
     );
   }
   if (expectedHash !== undefined && hashPayload(payload) !== expectedHash) {
-    return staleHashError('patch_file', path, payload.text);
+    return staleHashError('patch', path, payload.text);
   }
 
   const currentContent = payload.text;
@@ -2111,7 +2150,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   if (index === -1) {
     return error(
       `Error: old_string not found in ${path}. The file may have changed since you read it — ` +
-        'call read_file for the current content (and its hash), then retry with an exact substring.',
+        'call `read` with `action: "read"` for the current content (and its hash), then retry with an exact substring.',
     );
   }
 
@@ -2172,8 +2211,8 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
   if (state.files.has(newPath) || findUnavailable(state.client, newPath)) {
     return error(
-      `Error: Destination already exists: ${newPath} — rename_file does not overwrite. ` +
-        `Choose a different new_path, or delete_file "${newPath}" first if replacing it is intended.`,
+      `Error: Destination already exists: ${newPath} — the rename arm does not overwrite. ` +
+        `Choose a different new_path, or \`edit\` with \`action: "delete"\` on "${newPath}" first if replacing it is intended.`,
     );
   }
 
@@ -2212,14 +2251,14 @@ async function handleCreateFolder(args: ToolArgs, manager: ConnectionManager): P
   const path = normalizeProjectPath(args.path as string);
   if (path === '') {
     return error(
-      'Error: create_folder requires a non-empty `path` — the folder to create within the project.',
+      'Error: `edit` with `action: "create_folder"` requires a non-empty `path` — the folder to create within the project.',
     );
   }
   const state = await manager.connect(project, { server: routedServer(args) });
   if (state.files.has(path)) {
     return error(
       `Error: ${path} is a file, not a folder. Choose a different folder name, ` +
-        `or rename_file "${path}" first if it should move.`,
+        `or \`edit\` with \`action: "rename"\` on "${path}" first if it should move.`,
     );
   }
   // Idempotent: the marker is a set member, not a creation event.
@@ -2245,7 +2284,7 @@ async function handleDeleteFolder(args: ToolArgs, manager: ConnectionManager): P
   if (!markerExists && contained.length === 0) {
     const near = closestPaths(path, allFolderCandidates(state));
     let msg =
-      `Error: Folder not found: "${path}". Call list_files to see the project's files and folders.`;
+      `Error: Folder not found: "${path}". Call \`read\` with \`action: "list"\` to see the project's files and folders.`;
     if (near.length > 0) {
       msg += ` Closest existing folders: ${near.map((p) => `"${p}"`).join(', ')}.`;
     }
@@ -2257,7 +2296,7 @@ async function handleDeleteFolder(args: ToolArgs, manager: ConnectionManager): P
       `Error: Folder "${path}" is not empty — ${contained.length} file` +
         `${contained.length === 1 ? '' : 's'} remain${contained.length === 1 ? 's' : ''} under it ` +
         `(${sample}${contained.length > 3 ? ', …' : ''}). Pass \`recursive: true\` to delete ` +
-        'them together with the folder, or delete_file them individually first.',
+        'them together with the folder, or `edit` with `action: "delete"` on them individually first.',
     );
   }
   for (const p of contained) {
@@ -2290,8 +2329,8 @@ async function handleRestoreFileVersion(args: ToolArgs, manager: ConnectionManag
   }
   if (payload.type === 'binary') {
     return error(
-      `Error: restore_file_version only supports text files; "${path}" is binary ` +
-        `(${payload.mimeType}). To roll a binary back, write_file its previous bytes with ` +
+      `Error: \`edit\` with \`action: "restore"\` only supports text files; "${path}" is binary ` +
+        `(${payload.mimeType}). To roll a binary back, \`edit\` with \`action: "write"\` its previous bytes with ` +
         '`encoding: "base64"`.',
     );
   }
@@ -2307,7 +2346,7 @@ async function handleRestoreFileVersion(args: ToolArgs, manager: ConnectionManag
   } catch (err) {
     if (err instanceof UnknownChangeHashError) {
       return error(
-        `Error: ${err.message} in "${path}". Call get_file_history to list the change ` +
+        `Error: ${err.message} in "${path}". Call \`read\` with \`action: "history"\` to list the change ` +
           'hashes this file knows, then pass one as `hash`.',
       );
     }
@@ -2318,7 +2357,7 @@ async function handleRestoreFileVersion(args: ToolArgs, manager: ConnectionManag
   // over a collaborator's racing edit.
   const preRestoreHash = hashPayload(payload);
   if (expectedHash !== undefined && preRestoreHash !== expectedHash) {
-    return staleHashError('restore_file_version', path, payload.text);
+    return staleHashError('restore', path, payload.text);
   }
   const preRestoreHeads = currentHeads(doc);
 
@@ -2402,7 +2441,9 @@ async function runDataTool(
     // isError payload.
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     const message = err instanceof Error ? err.message : String(err);
-    return error(`Error in ${name}: ${redactTokens(message)}`);
+    const label =
+      typeof args.action === 'string' ? `${name} (action: ${args.action})` : name;
+    return error(`Error in ${label}: ${redactTokens(message)}`);
   }
 }
 
@@ -2727,10 +2768,324 @@ const outRestoreFileVersion = z.object({
   synced: z.boolean().optional(),
 });
 
+
+// ---------------------------------------------------------------------------
+// Merged-tool schemas (bd-lj6f7z9s)
+//
+// The 17 same-subject verbs consolidated into three multi-action tools
+// selected by a discriminated `action` argument: `project` (5 arms),
+// `read` (5 arms), `edit` (7 arms). The discriminated union keeps each
+// arm's required fields in the advertised JSON Schema (the SDK's
+// converter emits top-level `type: "object"` + one `oneOf` branch per
+// arm) and gives free input validation for arm-required parameters.
+// `path` stays schema-optional where a share URL's `file=` can supply it
+// — PATH_DEFAULTABLE enforces it post-normalization, per arm.
+// ---------------------------------------------------------------------------
+
+const inProject = z.discriminatedUnion('action', [
+  z.object({
+    action: z
+      .literal('connect')
+      .describe('Connect to a project by id or share URL; returns the file list and shareUrl.'),
+    project: projectParam,
+  }),
+  z.object({
+    action: z
+      .literal('disconnect')
+      .describe('Drop this project\'s connection (bounded sync drain first); the next call reconnects.'),
+    project: projectParam,
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z
+      .literal('info')
+      .describe(
+        'Project health and shape in one call (the "doctor" arm); `include: ["presence"]` adds who is in the project now.',
+      ),
+    project: projectParam,
+    include: z
+      .array(z.enum(['presence']))
+      .optional()
+      .describe(
+        'Optional extras to include. "presence": who is in the project right now ' +
+          '(adds `presences`, and `presence_message` when empty).',
+      ),
+  }),
+  z.object({
+    action: z
+      .literal('list_sets')
+      .describe('Enumerate a project-set (a user\'s collection of projects), most-recently-used first.'),
+    project_set: z
+      .string()
+      .optional()
+      .describe(
+        'The project-set document id, OR its quarto-hub.com link: ' +
+          '`https://quarto-hub.com/#/link-project-set/<id>?server=…` ' +
+          '(a `#/join-collection/<id>` invite link also names a set; the `server=` ' +
+          'parameter, if present, routes the read to that hub). Omit to use the ' +
+          'remembered default — an actionable error results when none is stored yet.',
+      ),
+  }),
+  z.object({
+    action: z
+      .literal('set_default_set')
+      .describe('Remember a project set (OS keyring) as the default bare list_sets calls use.'),
+    project_set: z.string().describe(
+      'The project-set document id, OR its quarto-hub.com link: ' +
+        '`https://quarto-hub.com/#/link-project-set/<id>?server=…` ' +
+        '(a `#/join-collection/<id>` invite link also names a set). The string is ' +
+        'stored verbatim, so a link\'s `server=` keeps routing the reads.',
+    ),
+  }),
+]);
+
+const outProject = z.union([
+  outConnectProject,
+  outDisconnectProject,
+  outGetProjectInfo,
+  outListProjects,
+  outSetDefaultProjectSet,
+]);
+
+const inRead = z.discriminatedUnion('action', [
+  z.object({
+    action: z
+      .literal('list')
+      .describe('List all files (size/mimeType/lines per entry; folders and dangling entries marked).'),
+    project: projectParam,
+  }),
+  z.object({
+    action: z
+      .literal('read')
+      .describe('Read a file (text content, or binary bytes as image/blob blocks).'),
+    project: projectParam,
+    path: pathParam.optional(),
+    offset: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe('First line to return, 1-based (default 1).'),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe('Maximum number of lines to return (default: no line limit).'),
+    max_bytes: z
+      .number()
+      .int()
+      .min(16)
+      .max(MAX_BYTES_CAP)
+      .optional()
+      .describe(
+        `Byte cap on the returned content (default ${DEFAULT_MAX_BYTES}, max ${MAX_BYTES_CAP}). ` +
+          'A read that does not reach EOF returns `truncated: true` with a `next_offset` to continue from.',
+      ),
+    metadata_only: z
+      .boolean()
+      .optional()
+      .describe(
+        'Binary files only: return just `{ path, hash, type, mimeType, size }` without ' +
+          'the bytes. Errors on text files.',
+      ),
+    section: z
+      .string()
+      .optional()
+      .describe(
+        'qmd files only: return just the named section — the heading plus its content up ' +
+          'to the next same-or-higher heading (subsections included), exactly the range ' +
+          'the outline arm reports and the edit patch arm would replace. Mutually exclusive with ' +
+          'offset/limit. Call `action: "outline"` first to discover section titles.',
+      ),
+  }),
+  z.object({
+    action: z
+      .literal('outline')
+      .describe('The heading tree of a .qmd file (level, title, id, 1-based line ranges).'),
+    project: projectParam,
+    path: pathParam.optional(),
+  }),
+  z.object({
+    action: z
+      .literal('search')
+      .describe('Search the content of every text file (substring or regex).'),
+    project: projectParam,
+    query: z.string().describe('The substring (or regex pattern with `regex: true`) to search for'),
+    regex: z.boolean().optional().describe('Treat `query` as a regular expression (default false)'),
+    case_sensitive: z.boolean().optional().describe('Case-sensitive matching (default false)'),
+    max_results: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe('Maximum matches to return (default 20, max 100)'),
+  }),
+  z.object({
+    action: z
+      .literal('history')
+      .describe('History of one text file: recent changes, or a unified diff with from_hash/to_hash.'),
+    project: projectParam,
+    path: pathParam.optional(),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe('Max changes to return in list mode (default 20, cap 100).'),
+    from_hash: z
+      .string()
+      .optional()
+      .describe('Diff mode: the older change `head`. Alone, diffs against the current content.'),
+    to_hash: z
+      .string()
+      .optional()
+      .describe('Diff mode: the newer change `head` (requires `from_hash`).'),
+  }),
+]);
+
+const outRead = z.union([
+  outListFiles,
+  outReadFile,
+  outGetOutline,
+  outSearchFiles,
+  outGetFileHistory,
+]);
+
+const inEdit = z.discriminatedUnion('action', [
+  z.object({
+    action: z
+      .literal('write')
+      .describe('Replace a file\'s entire content (creates if absent); base64 encoding writes binary.'),
+    project: projectParam,
+    path: pathParam.optional(),
+    content: z
+      .string()
+      .describe('The new file content (base64-encoded bytes when `encoding: "base64"`)'),
+    encoding: encodingParam,
+    mime_type: mimeTypeParam,
+    expected_hash: z
+      .string()
+      .optional()
+      .describe(
+        'Optional `hash` from a prior read/write result. When given, the write is ' +
+          'refused (returning the current content and its hash) if the file changed since — ' +
+          'compare-and-swap against collaborator edits.',
+      ),
+    create_only: z
+      .boolean()
+      .optional()
+      .describe(
+        'Refuse to overwrite: the write fails if the file already exists (default false). ' +
+          'Cannot be combined with expected_hash.',
+      ),
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z
+      .literal('patch')
+      .describe('Targeted text edit: replace an exact old_string, or a whole qmd section.'),
+    project: projectParam,
+    path: pathParam.optional(),
+    old_string: z
+      .string()
+      .optional()
+      .describe('The exact string to find and replace. Required unless `section` is given.'),
+    new_string: z
+      .string()
+      .describe(
+        'The replacement string. With `section`, replaces the whole section — heading ' +
+          'line included — so repeat the heading (edit it to rename); an empty string ' +
+          'deletes the section. A read with the same `section` value shows exactly ' +
+          'the range this replaces.',
+      ),
+    section: z
+      .string()
+      .optional()
+      .describe(
+        'qmd files only: replace the entire named section with `new_string` (the read ' +
+          'outline arm shows the candidates). The splice touches only the section\'s lines, so a ' +
+          'collaborator\'s edit elsewhere survives. Mutually exclusive with `old_string`.',
+      ),
+    expected_hash: z
+      .string()
+      .optional()
+      .describe(
+        'Optional `hash` from a prior read/patch result. When given, the patch is ' +
+          'refused (returning the current content and its hash) if the file changed since — ' +
+          'compare-and-swap against collaborator edits.',
+      ),
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z.literal('delete').describe('Delete a file (dangling index entries included).'),
+    project: projectParam,
+    path: z.string().describe('The file path to delete').optional(),
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z.literal('rename').describe('Rename or move a file (old_path → new_path).'),
+    project: projectParam,
+    old_path: z.string().describe('The current file path'),
+    new_path: z.string().describe('The new file path'),
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z
+      .literal('restore')
+      .describe('Revert a text file to a prior version (the agent\'s undo) as a new change.'),
+    project: projectParam,
+    path: pathParam.optional(),
+    hash: z
+      .string()
+      .describe('The change `head` to restore to, from the read history arm\'s list mode.'),
+    expected_hash: z
+      .string()
+      .optional()
+      .describe(
+        'Compare-and-swap: refuse if the file\'s current content hash differs (a ' +
+          'collaborator edited since your read).',
+      ),
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z
+      .literal('create_folder')
+      .describe('Create a folder (explicit marker; empty folders exist only once created).'),
+    project: projectParam,
+    path: z.string().describe('The folder path to create (e.g. `assets/images`)'),
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z
+      .literal('delete_folder')
+      .describe('Delete a folder (recursive: true deletes contained files first).'),
+    project: projectParam,
+    path: z.string().describe('The folder path to delete'),
+    recursive: z
+      .boolean()
+      .optional()
+      .describe('Delete the files under the folder too (default false — refuse if non-empty).'),
+    wait_for_sync: waitForSyncParam,
+  }),
+]);
+
+const outEdit = z.union([
+  outWriteFile,
+  outPatchFile,
+  outDeleteFile,
+  outRenameFile,
+  outRestoreFileVersion,
+  outCreateFolder,
+  outDeleteFolder,
+]);
+
 /**
- * Register all tool handlers on the MCP server. Auth tools register
- * first so they lead the `tools/list` order and the data tools'
- * "no credentials" errors can name them.
+ * Register all tool handlers on the MCP server. The auth tool registers
+ * first so it leads the `tools/list` order and the data tools'
+ * "no credentials" errors can name it.
  */
 export function registerTools(
   server: McpServer,
@@ -2746,190 +3101,106 @@ export function registerTools(
         {
           title: def.title,
           description: def.description,
-          inputSchema: z.object({}),
+          inputSchema: def.inputSchema,
           ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
           annotations: def.annotations,
         },
-        (_args, ctx) => authToolsState.handle(def.name, extractAuthContext(ctx)),
+        (args, ctx) =>
+          authToolsState.handle((args as { action: AuthAction }).action, extractAuthContext(ctx)),
       );
     }
   }
 
   server.registerTool(
-    'connect_project',
+    'project',
     {
-      title: 'Connect to a project',
+      title: 'Connect to and inspect projects',
       description:
-        'Connect to a Quarto Hub project by its automerge index document ID — ' +
-        'or by a quarto-hub.com share URL (`https://quarto-hub.com/#/share/<id>?…`), ' +
-        'from which the id is extracted automatically. ' +
-        'Returns the list of files in the project and its `shareUrl`. ' +
-        'If the hub requires authentication and no valid credentials are cached, ' +
-        'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
-        '`authenticate` to sign in.',
-      inputSchema: z.object({ project: projectParam }),
-      outputSchema: outConnectProject,
-      annotations: ANNOT_READ,
+        'Work with Quarto Hub projects and connections. `project` parameters accept a bare ' +
+        'automerge index document ID or a quarto-hub.com share URL ' +
+        '(`https://quarto-hub.com/#/share/<id>?…` — the id is extracted automatically, and a ' +
+        '`file=` parameter supplies a default `path`). Every tool auto-connects on first use.\n\n' +
+        '`action: "connect"` — connect to a project; returns the list of files and the ' +
+        'project\'s `shareUrl`. If the hub requires authentication and no valid credentials are ' +
+        'cached, this throws an `AuthRequiredError` / `ReauthRequired` — call `auth` with ' +
+        '`action: "sign_in"`.\n\n' +
+        '`action: "disconnect"` — drop the connection to one project (websocket + in-memory ' +
+        'documents) without affecting others — the release valve for long sessions touching ' +
+        'many projects. Outbound sync is drained first (bounded); the next tool call to the ' +
+        'project transparently reconnects.\n\n' +
+        '`action: "info"` — project health and shape in one call: file/folder/binary counts, ' +
+        'contributor identities, engine-capture state (idle/running/error + lastError), the ' +
+        'index document id, sync server, observed auth mode, sync diagnostics (peers, stranded ' +
+        'files), and the share URL. The "doctor" arm — call it to understand an unfamiliar ' +
+        'project or diagnose a connection. Pass `include: ["presence"]` to also see who is in ' +
+        'the project right now (name, file, cursor offsets, last-heard-from). Presence is ' +
+        'observed passively — this server never announces itself — so an empty list does not ' +
+        'prove nobody is watching; check presence before editing a file a teammate may have ' +
+        'open, and combine with wait_for_change to react to their edits.\n\n' +
+        '`action: "list_sets"` — enumerate a project-set (a user\'s collection of projects). ' +
+        'Omit `project_set` to use the remembered default: the first call that names a set ' +
+        'successfully stores it in the OS keyring. The web client\'s copy-link form for a set ' +
+        'is `https://quarto-hub.com/#/link-project-set/<id>?server=…` (note: not the `#/share/` ' +
+        'route, which names a single project; a `#/join-collection/<id>` invite link also names ' +
+        'a set). Returns each project\'s id, sync server, description, and a share URL you can ' +
+        'pass to `action: "connect"`, most-recently-used first.\n\n' +
+        '`action: "set_default_set"` — remember a project set as the default that bare ' +
+        '`list_sets` calls use, stored in the OS keyring (the same secure storage as the ' +
+        'sign-in credentials). The link or id is validated against the hub before storing and ' +
+        'any previous default is overwritten. Local state only: nothing in any project is ' +
+        'modified, so this arm is available in read-only mode.',
+      inputSchema: inProject,
+      outputSchema: outProject,
+      // The merge of the arms' annotations: disconnect/set_default_set
+      // mutate local (keyring/connection) state; every arm is idempotent.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    (args) => runDataTool('connect_project', args, manager),
+    (args) => runDataTool('project', args, manager),
   );
 
   server.registerTool(
-    'list_files',
+    'read',
     {
-      title: 'List files',
-      description: 'List all files in a connected Quarto Hub project.',
-      inputSchema: z.object({ project: projectParam }),
-      outputSchema: outListFiles,
-      annotations: ANNOT_READ,
-    },
-    (args) => runDataTool('list_files', args, manager),
-  );
-
-  server.registerTool(
-    'read_file',
-    {
-      title: 'Read a file',
+      title: 'List, read, and search project files',
       description:
-        'Read a file in a Quarto Hub project. Text files return `{ path, hash, type: "text", content }` — ' +
-        'pass `hash` back as `expected_hash` on write_file/patch_file so an edit a collaborator made ' +
+        'Read from a Quarto Hub project. All arms take `project` (index doc id or share URL).\n\n' +
+        '`action: "list"` — list all files. Entries carry size/mimeType/lines; folders list as ' +
+        '`type: "folder"`; dangling index entries carry `status: "unavailable"` plus the doc ' +
+        'id — repair them with `edit` and `action: "delete"`.\n\n' +
+        '`action: "read"` — read a file. Text files return `{ path, hash, type: "text", content }` ' +
+        '— pass `hash` back as `expected_hash` on `edit` writes so an edit a collaborator made ' +
         'since this read is never silently overwritten. Large reads are capped by `max_bytes` ' +
-        '(default 64 KB): a truncated result carries `next_offset` — call again with `offset` set ' +
-        'to it to continue. Binary files return the bytes as an image ' +
-        'block (image MIME types) or an embedded blob resource (anything else), with structured ' +
-        '`{ path, hash, type: "binary", mimeType, size }`; pass `metadata_only: true` for just the ' +
-        'metadata without the bytes.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: pathParam.optional(),
-        offset: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe('First line to return, 1-based (default 1).'),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe('Maximum number of lines to return (default: no line limit).'),
-        max_bytes: z
-          .number()
-          .int()
-          .min(16)
-          .max(MAX_BYTES_CAP)
-          .optional()
-          .describe(
-            `Byte cap on the returned content (default ${DEFAULT_MAX_BYTES}, max ${MAX_BYTES_CAP}). ` +
-              'A read that does not reach EOF returns `truncated: true` with a `next_offset` to continue from.',
-          ),
-        metadata_only: z
-          .boolean()
-          .optional()
-          .describe(
-            'Binary files only: return just `{ path, hash, type, mimeType, size }` without ' +
-              'the bytes. Errors on text files.',
-          ),
-        section: z
-          .string()
-          .optional()
-          .describe(
-            'qmd files only: return just the named section — the heading plus its content up ' +
-              'to the next same-or-higher heading (subsections included), exactly the range ' +
-              'get_outline reports and patch_file would replace. Mutually exclusive with ' +
-              'offset/limit. Call get_outline first to discover section titles.',
-          ),
-      }),
-      outputSchema: outReadFile,
+        '(default 64 KB): a truncated result carries `next_offset` — call again with `offset` ' +
+        'set to it to continue. Binary files return the bytes as an image block (image MIME ' +
+        'types) or an embedded blob resource (anything else), with structured ' +
+        '`{ path, hash, type: "binary", mimeType, size }`; pass `metadata_only: true` for just ' +
+        'the metadata without the bytes. qmd files only: `section` returns just the named ' +
+        'section (the heading plus content up to the next same-or-higher heading), exactly the ' +
+        'range `action: "outline"` reports and the `edit` patch arm would replace; mutually ' +
+        'exclusive with `offset`/`limit`.\n\n' +
+        '`action: "outline"` — the heading tree of a .qmd file: every heading with its level, ' +
+        'title, id, and 1-based line range (`line`..`end_line`, where the section ends just ' +
+        'before the next same-or-higher heading). The structural map of a document — use it ' +
+        'before a section read or patch, or to aim `offset`/`limit` at a section without ' +
+        'reading the whole file.\n\n' +
+        '`action: "search"` — search the content of every text file (binaries are skipped): a ' +
+        'plain substring (case-insensitive unless `case_sensitive`), or a regular expression ' +
+        'with `regex: true`. Returns matching lines as `{ path, line, snippet }` ranked by ' +
+        'per-file match count, capped by `max_results` (`truncated: true` when capped). Follow ' +
+        'a hit with `action: "read"` and `offset` around the line for full context.\n\n' +
+        '`action: "history"` — history of one text file. List mode (default): the most recent ' +
+        'changes, newest first — each entry carries the change `head` (pass to ' +
+        '`from_hash`/`to_hash`, or to `edit`\'s restore arm), the content `hash` after it, its ' +
+        'author (with display name/color when the project records them), timestamp, and ' +
+        'added/removed character counts. Diff mode: pass `from_hash` and `to_hash` for a ' +
+        'unified diff between those two versions; `from_hash` alone diffs that version against ' +
+        'the current content. Use it to answer "what changed since yesterday", to review a ' +
+        'collaborator\'s edit before building on it, or to pick a restore point.',
+      inputSchema: inRead,
+      outputSchema: outRead,
       annotations: ANNOT_READ,
     },
-    (args) => runDataTool('read_file', args, manager),
-  );
-
-  server.registerTool(
-    'get_outline',
-    {
-      title: 'Get document outline',
-      description:
-        'Return the heading tree of a .qmd file: every heading with its level, title, id, and ' +
-        '1-based line range (`line`..`end_line`, where the section ends just before the next ' +
-        'same-or-higher heading). The structural map of a document — use it before read_file ' +
-        'or patch_file with a `section` selector, or to aim read_file `offset`/`limit` at a ' +
-        'section without reading the whole file.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: pathParam.optional(),
-      }),
-      outputSchema: outGetOutline,
-      annotations: ANNOT_READ,
-    },
-    (args) => runDataTool('get_outline', args, manager),
-  );
-
-  server.registerTool(
-    'docs',
-    {
-      title: 'Search Quarto documentation',
-      description:
-        'Answer Quarto 2 usage questions from the documentation embedded in the q2 binary ' +
-        '(the same corpus `q2 docs llms` serves — no network, no project connection). ' +
-        '`query` searches page titles and full text and returns ranked `{href, title, snippet}` ' +
-        'hits; `page` fetches one page\'s markdown by href (extensionless and .qmd spellings ' +
-        'work). Typical flow: query, then page the best hit.',
-      inputSchema: z.object({
-        query: z
-          .string()
-          .optional()
-          .describe('Search the documentation (titles + full text). Mutually exclusive with `page`.'),
-        page: z
-          .string()
-          .optional()
-          .describe(
-            'Fetch one page by its href (e.g. `guides/authoring/figures.md`). ' +
-              'Mutually exclusive with `query`.',
-          ),
-        max_results: z
-          .number()
-          .int()
-          .min(1)
-          .max(20)
-          .optional()
-          .describe('Maximum search hits to return (default 5, max 20).'),
-      }),
-      outputSchema: z.union([outDocsQuery, outDocsPage]),
-      annotations: ANNOT_READ,
-    },
-    (args) => runDataTool('docs', args, manager),
-  );
-
-  server.registerTool(
-    'search_files',
-    {
-      title: 'Search files',
-      description:
-        'Search the content of every text file in a Quarto Hub project (binaries are skipped). ' +
-        'Plain substring by default (case-insensitive unless `case_sensitive`), or a regular ' +
-        'expression with `regex: true`. Returns matching lines as `{ path, line, snippet }` ' +
-        'ranked by per-file match count, capped by `max_results` (`truncated: true` when capped). ' +
-        'Use read_file with `offset` around a hit to see full context.',
-      inputSchema: z.object({
-        project: projectParam,
-        query: z.string().describe('The substring (or regex pattern with `regex: true`) to search for'),
-        regex: z.boolean().optional().describe('Treat `query` as a regular expression (default false)'),
-        case_sensitive: z.boolean().optional().describe('Case-sensitive matching (default false)'),
-        max_results: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .optional()
-          .describe('Maximum matches to return (default 20, max 100)'),
-      }),
-      outputSchema: outSearchFiles,
-      annotations: ANNOT_READ,
-    },
-    (args) => runDataTool('search_files', args, manager),
+    (args) => runDataTool('read', args, manager),
   );
 
   server.registerTool(
@@ -2945,7 +3216,7 @@ export function registerTools(
         '`timeout_seconds` with `changed: false` (re-call to keep watching). On the per-file arm ' +
         'the result includes a `hash`; pass it back as `since_hash` on the next call so an edit ' +
         'landing between calls is never missed. Lets an agent react to a live collaborator without ' +
-        'busy-polling read_file.',
+        'busy-polling `read` calls.',
       inputSchema: z.object({
         project: projectParam,
         path: z
@@ -3011,351 +3282,85 @@ export function registerTools(
   );
 
   server.registerTool(
-    'get_project_info',
+    'docs',
     {
-      title: 'Get project info',
+      title: 'Search Quarto documentation',
       description:
-        'Project health and shape in one call: file/folder/binary counts, contributor ' +
-        'identities, engine-capture state (idle/running/error + lastError), the index ' +
-        'document id, sync server, observed auth mode, sync diagnostics (peers, stranded ' +
-        'files), and the project\'s share URL. The "doctor" tool — call it to understand ' +
-        'an unfamiliar project or diagnose a connection. Pass `include: ["presence"]` ' +
-        'to also see who is in the project right now: each collaborator\'s name, the ' +
-        'file they are editing, cursor/selection offsets when resolvable, and how long ' +
-        'ago they were last heard from (`active` = within the last 5s, same threshold ' +
-        'the web client shows). Presence is observed passively — this server never ' +
-        'announces itself, and a peer only appears after their editor broadcasts (on ' +
-        'cursor activity), so an empty list does not prove nobody is watching. Check ' +
-        'presence before editing a file a teammate may have open; combine with ' +
-        'wait_for_change to react to their edits.',
+        'Answer Quarto 2 usage questions from the documentation embedded in the q2 binary ' +
+        '(the same corpus `q2 docs llms` serves — no network, no project connection). ' +
+        '`query` searches page titles and full text and returns ranked `{href, title, snippet}` ' +
+        'hits; `page` fetches one page\'s markdown by href (extensionless and .qmd spellings ' +
+        'work). Typical flow: query, then page the best hit.',
       inputSchema: z.object({
-        project: projectParam,
-        include: z
-          .array(z.enum(['presence']))
+        query: z
+          .string()
           .optional()
-          .describe(
-            'Optional extras to include. "presence": who is in the project right now ' +
-              '(adds `presences`, and `presence_message` when empty).',
-          ),
-      }),
-      outputSchema: outGetProjectInfo,
-      annotations: ANNOT_READ,
-    },
-    (args) => runDataTool('get_project_info', args, manager),
-  );
-
-  server.registerTool(
-    'list_projects',
-    {
-      title: 'List projects in a collection',
-      description:
-        'Enumerate a Quarto Hub project-set (a user\'s collection of projects). Omit ' +
-        '`project_set` to use the remembered default: the first call that names a set ' +
-        'successfully stores it in the OS keyring, and set_default_project_set changes ' +
-        'it later. The web client\'s copy-link form for a set is ' +
-        '`https://quarto-hub.com/#/link-project-set/<id>?server=…` (note: not the ' +
-        '`#/share/` route, which names a single project). ' +
-        'Returns each project\'s id, sync server, description, and a share URL you can pass ' +
-        'to connect_project, most-recently-used first.',
-      inputSchema: z.object({
-        project_set: z
+          .describe('Search the documentation (titles + full text). Mutually exclusive with `page`.'),
+        page: z
           .string()
           .optional()
           .describe(
-            'The project-set document id, OR its quarto-hub.com link: ' +
-              '`https://quarto-hub.com/#/link-project-set/<id>?server=…` ' +
-              '(a `#/join-collection/<id>` invite link also names a set; the `server=` ' +
-              'parameter, if present, routes the read to that hub). Omit to use the ' +
-              'remembered default — an actionable error results when none is stored yet.',
+            'Fetch one page by its href (e.g. `guides/authoring/figures.md`). ' +
+              'Mutually exclusive with `query`.',
           ),
-      }),
-      outputSchema: outListProjects,
-      annotations: ANNOT_READ,
-    },
-    (args) => runDataTool('list_projects', args, manager),
-  );
-
-  server.registerTool(
-    'set_default_project_set',
-    {
-      title: 'Set the default project set',
-      description:
-        'Remember a project set as the default that bare `list_projects` calls use, stored ' +
-        'in the OS keyring (the same secure storage as the sign-in credentials). The link ' +
-        'or id is validated against the hub before storing and any previous default is ' +
-        'overwritten — this is the manual update for the value `list_projects` remembers ' +
-        'on first use. Local state only: nothing in any project is modified, so this tool ' +
-        'is available in read-only mode.',
-      inputSchema: z.object({
-        project_set: z.string().describe(
-          'The project-set document id, OR its quarto-hub.com link: ' +
-            '`https://quarto-hub.com/#/link-project-set/<id>?server=…` ' +
-            '(a `#/join-collection/<id>` invite link also names a set). The string is ' +
-            'stored verbatim, so a link\'s `server=` keeps routing the reads.',
-        ),
-      }),
-      outputSchema: outSetDefaultProjectSet,
-      // Mutates only local keyring state; idempotent (same value re-stored).
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    },
-    (args) => runDataTool('set_default_project_set', args, manager),
-  );
-
-  server.registerTool(
-    'get_file_history',
-    {
-      title: 'Get file history',
-      description:
-        'History of one text file. List mode (default): the most recent changes, newest ' +
-        'first — each entry carries the change `head` (pass to `from_hash`/`to_hash` or ' +
-        'restore_file_version), the content `hash` after it, its author (with display ' +
-        'name/color when the project records them), timestamp, and added/removed character ' +
-        'counts. Diff mode: pass `from_hash` and `to_hash` (from a prior listing) for a ' +
-        'unified diff between those two versions; `from_hash` alone diffs that version ' +
-        'against the current content. Use it to answer "what changed since yesterday", to ' +
-        'review a collaborator\'s edit before building on it, or to pick a restore point ' +
-        'for restore_file_version.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: pathParam.optional(),
-        limit: z
+        max_results: z
           .number()
           .int()
           .min(1)
-          .max(100)
+          .max(20)
           .optional()
-          .describe('Max changes to return in list mode (default 20, cap 100).'),
-        from_hash: z
-          .string()
-          .optional()
-          .describe('Diff mode: the older change `head`. Alone, diffs against the current content.'),
-        to_hash: z
-          .string()
-          .optional()
-          .describe('Diff mode: the newer change `head` (requires `from_hash`).'),
+          .describe('Maximum search hits to return (default 5, max 20).'),
       }),
-      outputSchema: outGetFileHistory,
+      outputSchema: z.union([outDocsQuery, outDocsPage]),
       annotations: ANNOT_READ,
     },
-    (args) => runDataTool('get_file_history', args, manager),
-  );
-
-  server.registerTool(
-    'disconnect_project',
-    {
-      title: 'Disconnect from a project',
-      description:
-        'Drop the connection to one project (websocket + in-memory documents) without ' +
-        'affecting others — the release valve for long sessions touching many projects. ' +
-        'Outbound sync is drained first (bounded); the next tool call to the project ' +
-        'transparently reconnects.',
-      inputSchema: z.object({
-        project: projectParam,
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outDisconnectProject,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    },
-    (args) => runDataTool('disconnect_project', args, manager),
+    (args) => runDataTool('docs', args, manager),
   );
 
   if (readOnly) return;
 
   server.registerTool(
-    'write_file',
+    'edit',
     {
-      title: 'Write a file',
+      title: 'Edit project files and folders',
       description:
-        'Replace the entire content of a file in a Quarto Hub project. Creates the file if it ' +
-        'does not exist (`create_only: true` makes the write refuse instead of overwriting ' +
-        'when it does — a create-with-guard). Returns `{ path, hash }` (plus `mimeType`/`size` ' +
-        'for binary). Prefer patch_file for small changes to large text files. ' +
-        'With `encoding: "base64"`, `content` is base64-encoded bytes and the file is binary.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: pathParam.optional(),
-        content: z
-          .string()
-          .describe('The new file content (base64-encoded bytes when `encoding: "base64"`)'),
-        encoding: encodingParam,
-        mime_type: mimeTypeParam,
-        expected_hash: z
-          .string()
-          .optional()
-          .describe(
-            'Optional `hash` from a prior read_file/write_file result. When given, the write is ' +
-              'refused (returning the current content and its hash) if the file changed since — ' +
-              'compare-and-swap against collaborator edits.',
-          ),
-        create_only: z
-          .boolean()
-          .optional()
-          .describe(
-            'Refuse to overwrite: the write fails if the file already exists (default false). ' +
-              'Cannot be combined with expected_hash.',
-          ),
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outWriteFile,
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
-    },
-    (args) => runDataTool('write_file', args, manager),
-  );
-
-  server.registerTool(
-    'patch_file',
-    {
-      title: 'Patch a file',
-      description:
-        'Apply a targeted edit to a text file: replace an exact `old_string`, or replace an ' +
-        'entire qmd `section` (heading line included) with `new_string`. More context-efficient ' +
-        'than write_file for small changes to large files. Returns `{ path, hash }`.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: pathParam.optional(),
-        old_string: z
-          .string()
-          .optional()
-          .describe('The exact string to find and replace. Required unless `section` is given.'),
-        new_string: z
-          .string()
-          .describe(
-            'The replacement string. With `section`, replaces the whole section — heading ' +
-              'line included — so repeat the heading (edit it to rename); an empty string ' +
-              'deletes the section. read_file with the same `section` value shows exactly ' +
-              'the range this replaces.',
-          ),
-        section: z
-          .string()
-          .optional()
-          .describe(
-            'qmd files only: replace the entire named section with `new_string` (get_outline ' +
-              'shows the candidates). The splice touches only the section\'s lines, so a ' +
-              'collaborator\'s edit elsewhere survives. Mutually exclusive with `old_string`.',
-          ),
-        expected_hash: z
-          .string()
-          .optional()
-          .describe(
-            'Optional `hash` from a prior read_file/patch_file result. When given, the patch is ' +
-              'refused (returning the current content and its hash) if the file changed since — ' +
-              'compare-and-swap against collaborator edits.',
-          ),
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outPatchFile,
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    },
-    (args) => runDataTool('patch_file', args, manager),
-  );
-
-  server.registerTool(
-    'delete_file',
-    {
-      title: 'Delete a file',
-      description: 'Delete a file from a Quarto Hub project.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: z.string().describe('The file path to delete').optional(),
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outDeleteFile,
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    },
-    (args) => runDataTool('delete_file', args, manager),
-  );
-
-  server.registerTool(
-    'rename_file',
-    {
-      title: 'Rename a file',
-      description: 'Rename or move a file within a Quarto Hub project.',
-      inputSchema: z.object({
-        project: projectParam,
-        old_path: z.string().describe('The current file path'),
-        new_path: z.string().describe('The new file path'),
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outRenameFile,
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    },
-    (args) => runDataTool('rename_file', args, manager),
-  );
-
-  server.registerTool(
-    'restore_file_version',
-    {
-      title: 'Restore a file version',
-      description:
-        'Revert a text file to a prior version — the agent\'s undo (humans have Ctrl+Z and the ' +
-        'web client\'s history view). `hash` is a change `head` from get_file_history. The restore ' +
-        'is a NEW change on top of history (never a rewrite), attributed to you, so it syncs like ' +
-        'any edit and collaborators keep their concurrent work. The result carries ' +
-        '`pre_restore_hash` and `pre_restore_heads` — pass `pre_restore_heads[0]` back as `hash` ' +
-        'to undo the restore itself. Pass `expected_hash` (from your last read) to refuse ' +
-        'restoring over a collaborator\'s racing edit. Restoring the current version is a no-op ' +
-        '(`already_current: true`).',
-      inputSchema: z.object({
-        project: projectParam,
-        path: pathParam.optional(),
-        hash: z
-          .string()
-          .describe('The change `head` to restore to, from get_file_history list mode.'),
-        expected_hash: z
-          .string()
-          .optional()
-          .describe(
-            'Compare-and-swap: refuse if the file\'s current content hash differs (a ' +
-              'collaborator edited since your read).',
-          ),
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outRestoreFileVersion,
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    },
-    (args) => runDataTool('restore_file_version', args, manager),
-  );
-
-  server.registerTool(
-    'create_folder',
-    {
-      title: 'Create a folder',
-      description:
-        'Create a folder in a Quarto Hub project. Folders are explicit markers: a file at ' +
+        'Edit a Quarto Hub project. All arms take `project` (index doc id or share URL) and ' +
+        'honor `wait_for_sync`; the write/patch/restore arms accept `expected_hash` (from your ' +
+        'last read) for compare-and-swap against collaborator edits.\n\n' +
+        '`action: "write"` — replace the entire content of a file. Creates the file if it does ' +
+        'not exist (`create_only: true` makes the write refuse instead of overwriting when it ' +
+        'does — a create-with-guard). Prefer `action: "patch"` for small changes to large text ' +
+        'files. With `encoding: "base64"`, `content` is base64-encoded bytes and the file is ' +
+        'binary (`mime_type` overrides the extension-inferred type).\n\n' +
+        '`action: "patch"` — apply a targeted edit to a text file: replace an exact ' +
+        '`old_string`, or replace an entire qmd `section` (heading line included) with ' +
+        '`new_string`; the two are mutually exclusive. More context-efficient than `action: ' +
+        '"write"` for small changes to large files.\n\n' +
+        '`action: "delete"` — delete a file. Dangling index entries (`status: "unavailable"`) ' +
+        'are deletable too — the self-service repair.\n\n' +
+        '`action: "rename"` — rename or move a file (`old_path` → `new_path`); refuses to ' +
+        'overwrite an existing path.\n\n' +
+        '`action: "restore"` — revert a text file to a prior version — the agent\'s undo ' +
+        '(humans have Ctrl+Z and the web client\'s history view). `hash` is a change `head` ' +
+        'from the `read` history arm. The restore is a NEW change on top of history (never a ' +
+        'rewrite), attributed to you, so it syncs like any edit and collaborators keep their ' +
+        'concurrent work. The result carries `pre_restore_hash` and `pre_restore_heads` — pass ' +
+        '`pre_restore_heads[0]` back as `hash` to undo the restore itself. Restoring the ' +
+        'current version is a no-op (`already_current: true`).\n\n' +
+        '`action: "create_folder"` — create a folder. Folders are explicit markers: a file at ' +
         '`a/b/c.qmd` needs no folder to exist, but an EMPTY folder is listed only once created. ' +
-        'Idempotent — re-creating an existing folder reports `created: false`.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: z.string().describe('The folder path to create (e.g. `assets/images`)'),
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outCreateFolder,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    },
-    (args) => runDataTool('create_folder', args, manager),
-  );
-
-  server.registerTool(
-    'delete_folder',
-    {
-      title: 'Delete a folder',
-      description:
-        'Delete a folder from a Quarto Hub project. Refuses while files remain under the path ' +
-        'unless `recursive: true`, which deletes the contained files first (reported as ' +
+        'Idempotent — re-creating an existing folder reports `created: false`.\n\n' +
+        '`action: "delete_folder"` — delete a folder. Refuses while files remain under the ' +
+        'path unless `recursive: true`, which deletes the contained files first (reported as ' +
         '`files_deleted`).',
-      inputSchema: z.object({
-        project: projectParam,
-        path: z.string().describe('The folder path to delete'),
-        recursive: z
-          .boolean()
-          .optional()
-          .describe('Delete the files under the folder too (default false — refuse if non-empty).'),
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outDeleteFolder,
+      inputSchema: inEdit,
+      outputSchema: outEdit,
+      // Annotation homogenization (bd-lj6f7z9s, accepted on `edit`): the
+      // merged tool is destructive + non-idempotent, so create_folder
+      // looks scarier than it is.
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
-    (args) => runDataTool('delete_folder', args, manager),
+    (args) => runDataTool('edit', args, manager),
   );
 
   server.registerTool(

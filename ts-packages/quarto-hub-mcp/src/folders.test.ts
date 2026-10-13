@@ -37,18 +37,18 @@ async function listPaths(
   f: InMemoryMcpFixture,
   project: string,
 ): Promise<ListedEntry[]> {
-  const listed = (await callTool(f, 'list_files', { project })).structuredContent as {
+  const listed = (await callTool(f, 'read', { action: 'list', project })).structuredContent as {
     files: ListedEntry[];
   };
   return listed.files;
 }
 
-describe('create_folder (CAP-6)', () => {
-  it('creates a folder that list_files shows as a folder entry', async () => {
+describe('edit/create_folder (CAP-6)', () => {
+  it('creates a folder that read/list shows as a folder entry', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'create_folder', {
+      const result = await callTool(f, 'edit', { action: 'create_folder',
         project: seed.indexDocId,
         path: 'assets/images',
       });
@@ -73,8 +73,8 @@ describe('create_folder (CAP-6)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      await callTool(f, 'create_folder', { project: seed.indexDocId, path: 'docs' });
-      const again = await callTool(f, 'create_folder', { project: seed.indexDocId, path: 'docs' });
+      await callTool(f, 'edit', { action: 'create_folder', project: seed.indexDocId, path: 'docs' });
+      const again = await callTool(f, 'edit', { action: 'create_folder', project: seed.indexDocId, path: 'docs' });
       expect(again.isError).not.toBe(true);
       expect(structuredOf(again)).toMatchObject({ path: 'docs', created: false });
     } finally {
@@ -86,7 +86,7 @@ describe('create_folder (CAP-6)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'create_folder', {
+      const result = await callTool(f, 'edit', { action: 'create_folder',
         project: seed.indexDocId,
         path: 'index.qmd',
       });
@@ -112,13 +112,13 @@ describe('create_folder (CAP-6)', () => {
   });
 });
 
-describe('delete_folder (CAP-6)', () => {
+describe('edit/delete_folder (CAP-6)', () => {
   it('deletes an empty folder', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      await callTool(f, 'create_folder', { project: seed.indexDocId, path: 'scratch' });
-      const result = await callTool(f, 'delete_folder', {
+      await callTool(f, 'edit', { action: 'create_folder', project: seed.indexDocId, path: 'scratch' });
+      const result = await callTool(f, 'edit', { action: 'delete_folder',
         project: seed.indexDocId,
         path: 'scratch',
       });
@@ -143,8 +143,8 @@ describe('delete_folder (CAP-6)', () => {
         { path: 'docs/a.qmd', content: 'a\n' },
         { path: 'docs/b.qmd', content: 'b\n' },
       ]);
-      await callTool(f, 'create_folder', { project: seed.indexDocId, path: 'docs' });
-      const result = await callTool(f, 'delete_folder', {
+      await callTool(f, 'edit', { action: 'create_folder', project: seed.indexDocId, path: 'docs' });
+      const result = await callTool(f, 'edit', { action: 'delete_folder',
         project: seed.indexDocId,
         path: 'docs',
       });
@@ -169,8 +169,8 @@ describe('delete_folder (CAP-6)', () => {
         { path: 'docs/b.qmd', content: 'b\n' },
         { path: 'keep.qmd', content: 'k\n' },
       ]);
-      await callTool(f, 'create_folder', { project: seed.indexDocId, path: 'docs' });
-      const result = await callTool(f, 'delete_folder', {
+      await callTool(f, 'edit', { action: 'create_folder', project: seed.indexDocId, path: 'docs' });
+      const result = await callTool(f, 'edit', { action: 'delete_folder',
         project: seed.indexDocId,
         path: 'docs',
         recursive: true,
@@ -193,7 +193,7 @@ describe('delete_folder (CAP-6)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'delete_folder', {
+      const result = await callTool(f, 'edit', { action: 'delete_folder',
         project: seed.indexDocId,
         path: 'nope',
       });
@@ -201,7 +201,7 @@ describe('delete_folder (CAP-6)', () => {
       const block = result.content[0];
       if (block?.type === 'text') {
         expect(block.text).toMatch(/nope/);
-        expect(block.text).toMatch(/list_files/);
+        expect(block.text).toMatch(/action: "list"/);
       }
     } finally {
       await f.close();

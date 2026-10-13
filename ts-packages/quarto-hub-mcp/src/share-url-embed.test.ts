@@ -68,11 +68,11 @@ describe('embedded shareUrl (CAP-1)', () => {
     }
   });
 
-  it('connect_project embeds a shareUrl that round-trips to the same project', async () => {
+  it('project/connect embeds a shareUrl that round-trips to the same project', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'connect_project', { project: seed.indexDocId });
+      const result = await callTool(f, 'project', { action: 'connect', project: seed.indexDocId });
       expect(result.isError).not.toBe(true);
       const ref = parseProjectRef(structuredOf(result).shareUrl as string);
       expect(ref.project).toBe(seed.indexDocId);
@@ -86,14 +86,14 @@ describe('embedded shareUrl (CAP-1)', () => {
     }
   });
 
-  it('connect_project via a share URL propagates its file= and name=', async () => {
+  it('project/connect via a share URL propagates its file= and name=', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
       const incoming =
         `https://quarto-hub.com/#/share/${seed.indexDocId}` +
         `?server=${encodeURIComponent(f.hub.url)}&file=index.qmd&name=Field+notes`;
-      const result = await callTool(f, 'connect_project', { project: incoming });
+      const result = await callTool(f, 'project', { action: 'connect', project: incoming });
       expect(result.isError).not.toBe(true);
       const ref = parseProjectRef(structuredOf(result).shareUrl as string);
       expect(ref.project).toBe(seed.indexDocId);
@@ -104,11 +104,11 @@ describe('embedded shareUrl (CAP-1)', () => {
     }
   });
 
-  it('get_project_info embeds a complete shareUrl', async () => {
+  it('project/info embeds a complete shareUrl', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'get_project_info', { project: seed.indexDocId });
+      const result = await callTool(f, 'project', { action: 'info', project: seed.indexDocId });
       expect(result.isError).not.toBe(true);
       const ref = parseProjectRef(structuredOf(result).shareUrl as string);
       expect(ref.project).toBe(seed.indexDocId);

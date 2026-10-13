@@ -50,8 +50,8 @@ import { serversMatch } from './share-url.js';
 // ---------------------------------------------------------------------------
 
 /**
- * Observed hub auth-mode (process-local). Phase 7 consults this to
- * decide whether `authenticate` should short-circuit.
+ * Observed hub auth-mode (process-local). The auth tool's sign_in
+ * arm consults this to decide whether it should short-circuit.
  */
 export type ObservedAuthMode = 'no-auth' | 'requires-auth' | 'unknown';
 
@@ -59,7 +59,7 @@ export class AuthRequiredError extends Error {
   override readonly name = 'AuthRequiredError';
   constructor(
     message: string = 'This Quarto Hub requires authentication. ' +
-      'Ask me to call `authenticate` to sign in.',
+      'Ask me to call `auth` with `action: "sign_in"` to sign in.',
   ) {
     super(message);
   }
@@ -108,7 +108,7 @@ export class HubAccessDeniedError extends Error {
     message: string = 'Your account is not allowed on this Quarto Hub ' +
       '(it may be banned or not in the allowlist). Re-authenticating ' +
       'with the same account will not help — contact the hub operator, ' +
-      'or run authenticate_clear and sign in as a different account.',
+      'or run `auth` with `action: "clear"` and sign in as a different account.',
   ) {
     super(message);
   }
@@ -921,7 +921,7 @@ export class ConnectionManager {
     this.emitProjectEvent({ kind: 'disconnected', serverUrl: server, indexDocId });
     const interruptErr = () =>
       new Error(
-        `project ${indexDocId} was disconnected (disconnect_project) while this ` +
+        `project ${indexDocId} was disconnected (the project tool's disconnect arm) while this ` +
           'poll was pending — re-call wait_for_change to keep watching (it reconnects).',
       );
     for (const w of [...state.waiters]) {
@@ -979,7 +979,7 @@ export class ConnectionManager {
     const state = this.get(indexDocId, options);
     if (!state) {
       throw new Error(
-        `Not connected to project ${indexDocId}. Call connect_project first.`,
+        `Not connected to project ${indexDocId}. Call \`project\` with \`action: "connect"\` first.`,
       );
     }
     return state;
@@ -1227,7 +1227,7 @@ export class ConnectionManager {
     this.authConfirmed = false;
     console.error(
       '[hub-mcp] Quarto Hub rejected our credentials mid-session; ' +
-        're-authentication is required. Ask me to run `authenticate`.',
+        're-authentication is required. Ask me to run `auth` with `action: "sign_in"`.',
     );
     await this.dropDeadProjects();
   }

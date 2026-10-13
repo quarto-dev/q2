@@ -73,7 +73,7 @@ async function historyWhenReady(
   let entries: HistoryEntry[] = [];
   await vi.waitFor(
     async () => {
-      const out = parse(await callTool(f, 'get_file_history', { project, path, limit: 100 }));
+      const out = parse(await callTool(f, 'read', { action: 'history', project, path, limit: 100 }));
       entries = out.entries as HistoryEntry[];
       expect(entries.length).toBeGreaterThanOrEqual(minEntries);
     },
@@ -82,7 +82,7 @@ async function historyWhenReady(
   return entries;
 }
 
-describe('get_file_history — list mode (CAP-9)', () => {
+describe('read/history — list mode (CAP-9)', () => {
   it('returns ordered change summaries with author attribution', async () => {
     const f = await startInMemoryMcp();
     let collab: SyncClient | undefined;
@@ -126,14 +126,14 @@ describe('get_file_history — list mode (CAP-9)', () => {
       // The fixture server connects authorless (no OAuth env), so its
       // own write_file lands with no author footer and no identity.
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2\n',
       });
 
       const out = parse(
-        await callTool(f, 'get_file_history', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'history', project: seed.indexDocId, path: 'a.qmd' }),
       );
       const entries = out.entries as HistoryEntry[];
       expect(entries[0].author.length).toBeGreaterThan(0);
@@ -148,19 +148,19 @@ describe('get_file_history — list mode (CAP-9)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2\n',
       });
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v3\n',
       });
 
       const out = parse(
-        await callTool(f, 'get_file_history', {
+        await callTool(f, 'read', { action: 'history',
           project: seed.indexDocId,
           path: 'a.qmd',
           limit: 2,
@@ -179,14 +179,14 @@ describe('get_file_history — list mode (CAP-9)', () => {
   }, 30000);
 });
 
-describe('get_file_history — diff mode (CAP-9)', () => {
+describe('read/history — diff mode (CAP-9)', () => {
   it('returns a unified diff between from_hash and to_hash', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [
         { path: 'notes.txt', content: 'alpha\nbeta\ngamma\n' },
       ]);
-      await callTool(f, 'patch_file', {
+      await callTool(f, 'edit', { action: 'patch',
         project: seed.indexDocId,
         path: 'notes.txt',
         old_string: 'beta',
@@ -198,7 +198,7 @@ describe('get_file_history — diff mode (CAP-9)', () => {
       const toHead = entries[0].head; // latest change
 
       const out = parse(
-        await callTool(f, 'get_file_history', {
+        await callTool(f, 'read', { action: 'history',
           project: seed.indexDocId,
           path: 'notes.txt',
           from_hash: fromHead,
@@ -227,7 +227,7 @@ describe('get_file_history — diff mode (CAP-9)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'one\n' }]);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'one\ntwo\n',
@@ -235,7 +235,7 @@ describe('get_file_history — diff mode (CAP-9)', () => {
       const entries = await historyWhenReady(f, seed.indexDocId, 'a.qmd', 2);
 
       const out = parse(
-        await callTool(f, 'get_file_history', {
+        await callTool(f, 'read', { action: 'history',
           project: seed.indexDocId,
           path: 'a.qmd',
           from_hash: entries[entries.length - 1].head,
@@ -252,7 +252,7 @@ describe('get_file_history — diff mode (CAP-9)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'get_file_history', {
+      const result = await callTool(f, 'read', { action: 'history',
         project: seed.indexDocId,
         path: 'a.qmd',
         from_hash: 'not-a-known-change-hash',
@@ -261,7 +261,7 @@ describe('get_file_history — diff mode (CAP-9)', () => {
       const block = result.content[0];
       if (block?.type !== 'text') throw new Error('expected a text result block');
       expect(block.text).toMatch(/not-a-known-change-hash/);
-      expect(block.text).toMatch(/get_file_history/);
+      expect(block.text).toMatch(/action: "history"/);
     } finally {
       await f.close();
     }
@@ -272,13 +272,13 @@ describe('get_file_history — diff mode (CAP-9)', () => {
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
       const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64');
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'img.png',
         content: png,
         encoding: 'base64',
       });
-      const result = await callTool(f, 'get_file_history', {
+      const result = await callTool(f, 'read', { action: 'history',
         project: seed.indexDocId,
         path: 'img.png',
       });
@@ -295,7 +295,7 @@ describe('get_file_history — diff mode (CAP-9)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'get_file_history', {
+      const result = await callTool(f, 'read', { action: 'history',
         project: seed.indexDocId,
         path: 'nope.qmd',
       });

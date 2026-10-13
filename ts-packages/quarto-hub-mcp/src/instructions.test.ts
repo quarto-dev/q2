@@ -19,16 +19,16 @@ describe('server instructions (ERG-6, ERG-10)', () => {
     try {
       const instructions = f.client.getInstructions() ?? '';
       // The connect → read → edit loop with the artifacts that make it safe.
-      expect(instructions).toContain('connect_project');
-      expect(instructions).toContain('read_file');
-      expect(instructions).toContain('patch_file');
+      expect(instructions).toContain('action: "connect"');
+      expect(instructions).toContain('action: "read"');
+      expect(instructions).toContain('action: "patch"');
       expect(instructions).toContain('expected_hash');
       expect(instructions).toContain('synced');
       expect(instructions).toContain('wait_for_change');
       // The share-URL semantics stay.
       expect(instructions).toContain('#/share/');
       // When to authenticate.
-      expect(instructions).toContain('authenticate');
+      expect(instructions).toContain('action: "sign_in"');
       // Collaboration etiquette: don't clobber the human's file.
       expect(instructions).toMatch(/human/i);
     } finally {

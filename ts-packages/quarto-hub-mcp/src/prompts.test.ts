@@ -9,7 +9,7 @@
  *   etiquette (read-only safe);
  * - `safe-edit-workflow` (project, path) — the read → patch with
  *   expected_hash → confirm `synced` loop (write modes only);
- * - `fix_errors` (project, path?) — the get_errors → patch_file →
+ * - `fix_errors` (project, path?) — the get_errors → edit/patch →
  *   re-check loop (write modes only; 452);
  * - `fix-render-errors` (project, path?) — the render → diagnostics →
  *   patch → re-render loop (only when --allow-render exposed the
@@ -95,7 +95,7 @@ describe('fix_errors prompt', () => {
     const text = res.messages[0]!.content.text;
     expect(text).toContain('automerge:abc123');
     expect(text).toContain('get_errors');
-    expect(text).toContain('patch_file');
+    expect(text).toContain('action: "patch"');
     expect(text).toMatch(/until/i);
     expect(text).toMatch(/minimal/i);
   });
@@ -203,7 +203,7 @@ describe('prompts/get (BP-6)', () => {
       expect(text).toContain('Some text.');
       expect(text).toMatch(/review/i);
       // The prompt must steer toward proposing patches, not rewrites.
-      expect(text).toMatch(/patch_file/);
+      expect(text).toMatch(/action: "patch"/);
     } finally {
       await f.close();
     }
@@ -217,9 +217,9 @@ describe('prompts/get (BP-6)', () => {
         project: seed.indexDocId,
         path: 'a.qmd',
       });
-      expect(text).toMatch(/read_file/);
+      expect(text).toMatch(/action: "read"/);
       expect(text).toMatch(/expected_hash/);
-      expect(text).toMatch(/patch_file/);
+      expect(text).toMatch(/action: "patch"/);
       expect(text).toMatch(/synced/);
     } finally {
       await f.close();
@@ -233,7 +233,7 @@ describe('prompts/get (BP-6)', () => {
       const text = await promptText(f, 'collaborate-with-human', {
         project: seed.indexDocId,
       });
-      expect(text).toMatch(/get_project_info.*presence|presence.*get_project_info/s);
+      expect(text).toMatch(/action: "info".*presence|presence.*action: "info"/s);
       expect(text).toMatch(/wait_for_change/);
       expect(text).toMatch(/expected_hash/);
     } finally {
@@ -251,7 +251,7 @@ describe('prompts/get (BP-6)', () => {
       });
       expect(text).toMatch(/render/);
       expect(text).toMatch(/diagnostics/);
-      expect(text).toMatch(/patch_file/);
+      expect(text).toMatch(/action: "patch"/);
     } finally {
       await f.close();
     }

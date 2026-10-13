@@ -50,45 +50,57 @@ import { PARSER_UNAVAILABLE } from './test-setup.js';
 import { realWasmHostAvailable } from './test-wasm-host.js';
 
 /** Tool budget (ERG-5): the default listing never exceeds this. */
-const TOOL_BUDGET = 24;
+const TOOL_BUDGET = 10;
 
 /**
- * Read-write mode lists these 21 data tools today (auth tools add to
- * this when OAuth env is configured — see EXPECTED_AUTH_TOOLS and the
- * production-posture budget test).
+ * Read-write mode lists these 7 data tools (bd-lj6f7z9s: the 21
+ * same-subject verbs consolidated into four multi-action tools —
+ * `project`, `read`, `edit` — plus the deliberately standalone
+ * `wait_for_change`, `get_errors`, `docs`, `create_project`). The auth
+ * tool adds to this when OAuth env is configured — see
+ * EXPECTED_AUTH_TOOLS and the production-posture budget test.
  */
 const EXPECTED_RW_TOOLS = [
-  'connect_project',
-  'create_folder',
   'create_project',
-  'delete_file',
-  'delete_folder',
-  'disconnect_project',
   'docs',
+  'edit',
   'get_errors',
-  'get_file_history',
-  'get_outline',
-  'get_project_info',
-  'list_files',
-  'list_projects',
-  'patch_file',
-  'read_file',
-  'rename_file',
-  'restore_file_version',
-  'search_files',
-  'set_default_project_set',
+  'project',
+  'read',
   'wait_for_change',
-  'write_file',
 ];
 
 /**
- * The auth tools (Phase 7: exactly two — `authenticate` no-ops with
- * "Already authenticated as <email>" when credentials are valid, so a
- * separate status probe spends a listing slot on nothing). They
- * register only when OAuth env is configured; the fixture registers
- * them via a stubbed AuthToolsState.
+ * The auth surface (bd-lj6f7z9s: `authenticate`/`authenticate_clear`
+ * folded into one `auth` tool selected by `action`: `sign_in` no-ops
+ * with "Already authenticated as <email>" when credentials are valid,
+ * so a separate status probe spends a listing slot on nothing). It
+ * registers only when OAuth env is configured; the fixture registers
+ * it via a stubbed AuthToolsState.
  */
-const EXPECTED_AUTH_TOOLS = ['authenticate', 'authenticate_clear'];
+const EXPECTED_AUTH_TOOLS = ['auth'];
+
+/**
+ * The merged-tool arms (bd-lj6f7z9s), as advertised on the wire: each
+ * arm of a merged tool's `oneOf` input schema carries
+ * `properties.action.const`. The golden-case coverage net uses this to
+ * require a golden call per (tool, action) pair.
+ */
+type AdvertisedArms = Record<string, string[]>;
+function advertisedArms(
+  tools: ReadonlyArray<{ name: string; inputSchema: unknown }>,
+): AdvertisedArms {
+  const out: AdvertisedArms = {};
+  for (const t of tools) {
+    const schema = t.inputSchema as { oneOf?: Array<{ properties?: { action?: { const?: string } } }> };
+    if (!Array.isArray(schema.oneOf)) continue;
+    out[t.name] = schema.oneOf
+      .map((arm) => arm.properties?.action?.const)
+      .filter((a): a is string => typeof a === 'string')
+      .sort();
+  }
+  return out;
+}
 
 // ============================================================================
 // Fixture smoke — the Phase 0 e2e: a real SDK client driving the real server
@@ -112,7 +124,7 @@ describe('in-memory fixture smoke', () => {
       const seed = await seedProject(f, [
         { path: 'index.qmd', content: '---\ntitle: Conformance\n---\n\nHello\n' },
       ]);
-      const listed = await callTool(f, 'list_files', { project: seed.indexDocId });
+      const listed = await callTool(f, 'read', { action: 'list', project: seed.indexDocId });
       expect(listed.isError).not.toBe(true);
       const listedBlock = listed.content[0];
       expect(listedBlock?.type).toBe('text');
@@ -129,7 +141,8 @@ describe('in-memory fixture smoke', () => {
         },
       ]);
 
-      const read = await callTool(f, 'read_file', {
+      const read = await callTool(f, 'read', {
+        action: 'read',
         project: seed.indexDocId,
         path: 'index.qmd',
       });
@@ -148,18 +161,10 @@ describe('in-memory fixture smoke', () => {
     try {
       const tools = await ro.client.listTools();
       expect(tools.tools.map((t) => t.name).sort()).toEqual([
-        'connect_project',
-        'disconnect_project',
         'docs',
         'get_errors',
-        'get_file_history',
-        'get_outline',
-        'get_project_info',
-        'list_files',
-        'list_projects',
-        'read_file',
-        'search_files',
-        'set_default_project_set',
+        'project',
+        'read',
         'wait_for_change',
       ]);
     } finally {
@@ -225,7 +230,7 @@ describe('capability advertisement (Phase 5)', () => {
 // ============================================================================
 
 describe('tool budget (ERG-5)', () => {
-  it('default listing stays within the 24-tool ceiling', async () => {
+  it('default listing stays within the 10-tool ceiling', async () => {
     const f = await startInMemoryMcp();
     try {
       const tools = await f.client.listTools();
@@ -326,7 +331,10 @@ describe('schema conformance (BP-11, BP-14)', () => {
  * Golden result-conformance cases (BP-1, landed Phase 1). Every tool
  * that declares an `outputSchema` must have a case here — the
  * `registered coverage` test fails otherwise — and each golden call's
- * `structuredContent` is validated against the declared schema.
+ * `structuredContent` is validated against the declared schema. For the
+ * merged tools (bd-lj6f7z9s) the net is per (tool, action) arm: every
+ * advertised arm needs a golden call (dispatch-equivalence through the
+ * wire).
  *
  * Cases run sequentially against one seeded project (`index.qmd`
  * present); later cases may depend on earlier ones (create → delete).
@@ -351,22 +359,22 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
    */
   requiresWasmHost?: true;
 }> = [
-  { tool: 'connect_project', args: (seed) => ({ project: seed.indexDocId }) },
-  { tool: 'list_files', args: (seed) => ({ project: seed.indexDocId }) },
+  { tool: 'project', args: (seed) => ({ action: 'connect', project: seed.indexDocId }) },
+  { tool: 'read', args: (seed) => ({ action: 'list', project: seed.indexDocId }) },
   {
-    tool: 'read_file',
-    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+    tool: 'read',
+    args: (seed) => ({ action: 'read', project: seed.indexDocId, path: 'index.qmd' }),
   },
   {
-    // Before rename_file moves index.qmd: the golden calls run in order.
-    tool: 'get_file_history',
-    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+    // Before edit/rename moves index.qmd: the golden calls run in order.
+    tool: 'read',
+    args: (seed) => ({ action: 'history', project: seed.indexDocId, path: 'index.qmd' }),
   },
   {
     // index.qmd has no headings — an empty outline is a valid result.
-    tool: 'get_outline',
+    tool: 'read',
     requiresParser: true,
-    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+    args: (seed) => ({ action: 'outline', project: seed.indexDocId, path: 'index.qmd' }),
   },
   {
     // The docs corpus comes from a fake q2 stub so the case is offline and
@@ -398,12 +406,18 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd', timeout_seconds: 1 }),
   },
   {
-    tool: 'write_file',
-    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd', content: 'v2\n' }),
+    tool: 'edit',
+    args: (seed) => ({
+      action: 'write',
+      project: seed.indexDocId,
+      path: 'index.qmd',
+      content: 'v2\n',
+    }),
   },
   {
-    tool: 'patch_file',
+    tool: 'edit',
     args: (seed) => ({
+      action: 'patch',
       project: seed.indexDocId,
       path: 'index.qmd',
       old_string: 'v2',
@@ -411,19 +425,20 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     }),
   },
   {
-    // Renders index.qmd for real — before rename_file moves it below.
+    // Renders index.qmd for real — before edit/rename moves it below.
     tool: 'get_errors',
     requiresWasmHost: true,
     args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
   },
   {
-    tool: 'delete_file',
-    args: (seed) => ({ project: seed.indexDocId, path: 'golden-new.qmd' }),
+    tool: 'edit',
+    args: (seed) => ({ action: 'delete', project: seed.indexDocId, path: 'golden-new.qmd' }),
     setup: async (f, seed) => {
-      // Phase 7: the file comes from write_file's create arm (create_file
-      // is gone — its refuse-if-exists semantics live on as
-      // write_file's create_only, exercised in create-only.test.ts).
-      await callTool(f, 'write_file', {
+      // Phase 7: the file comes from the write arm's create arm
+      // (create_file is gone — its refuse-if-exists semantics live on as
+      // create_only, exercised in create-only.test.ts).
+      await callTool(f, 'edit', {
+        action: 'write',
         project: seed.indexDocId,
         path: 'golden-new.qmd',
         content: 'new\n',
@@ -432,35 +447,36 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     },
   },
   {
-    tool: 'rename_file',
+    tool: 'edit',
     args: (seed) => ({
+      action: 'rename',
       project: seed.indexDocId,
       old_path: 'index.qmd',
       new_path: 'golden-renamed.qmd',
     }),
   },
   {
-    tool: 'create_folder',
-    args: (seed) => ({ project: seed.indexDocId, path: 'golden-folder' }),
+    tool: 'edit',
+    args: (seed) => ({ action: 'create_folder', project: seed.indexDocId, path: 'golden-folder' }),
   },
   {
-    tool: 'delete_folder',
-    args: (seed) => ({ project: seed.indexDocId, path: 'golden-folder' }),
+    tool: 'edit',
+    args: (seed) => ({ action: 'delete_folder', project: seed.indexDocId, path: 'golden-folder' }),
   },
   {
-    tool: 'search_files',
-    args: (seed) => ({ project: seed.indexDocId, query: 'v3' }),
+    tool: 'read',
+    args: (seed) => ({ action: 'search', project: seed.indexDocId, query: 'v3' }),
   },
   {
     // The include arm doubles as the presence golden case (Phase 7:
-    // list_presence folded into get_project_info). No peers broadcast
+    // list_presence folded into the info arm). No peers broadcast
     // here, so the arm validates as an empty list + guidance message.
-    tool: 'get_project_info',
-    args: (seed) => ({ project: seed.indexDocId, include: ['presence'] }),
+    tool: 'project',
+    args: (seed) => ({ action: 'info', project: seed.indexDocId, include: ['presence'] }),
   },
   {
-    tool: 'list_projects',
-    args: () => ({}),
+    tool: 'project',
+    args: () => ({ action: 'list_sets' }),
     setup: async (f) => {
       // Mint a project-set document on the hub (CAP-3).
       const handle = f.hub.repo.create<ProjectSetDocument>();
@@ -472,8 +488,8 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     },
   },
   {
-    tool: 'set_default_project_set',
-    args: () => ({}),
+    tool: 'project',
+    args: () => ({ action: 'set_default_set' }),
     setup: async (f) => {
       // Mint a project-set document on the hub (bd-3h5hbfdv); the store
       // write lands in the fixture's in-memory keyring backend.
@@ -487,8 +503,8 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   },
   {
     // Needs a real change head, discovered in setup against its own project.
-    tool: 'restore_file_version',
-    args: () => ({}),
+    tool: 'edit',
+    args: () => ({ action: 'restore' }),
     setup: async (f) => {
       const created = await callTool(f, 'create_project', {
         files: [{ path: 'r.qmd', content: 'r1\n' }],
@@ -496,8 +512,8 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
       const createdBlock = created.content[0];
       if (createdBlock?.type !== 'text') throw new Error('unreachable');
       const id = (JSON.parse(createdBlock.text) as { indexDocId: string }).indexDocId;
-      await callTool(f, 'write_file', { project: id, path: 'r.qmd', content: 'r2\n' });
-      const hist = await callTool(f, 'get_file_history', { project: id, path: 'r.qmd' });
+      await callTool(f, 'edit', { action: 'write', project: id, path: 'r.qmd', content: 'r2\n' });
+      const hist = await callTool(f, 'read', { action: 'history', project: id, path: 'r.qmd' });
       const histBlock = hist.content[0];
       if (histBlock?.type !== 'text') throw new Error('unreachable');
       const entries = (JSON.parse(histBlock.text) as { entries: Array<{ head: string }> })
@@ -505,11 +521,11 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
       return { project: id, path: 'r.qmd', hash: entries[entries.length - 1]!.head };
     },
   },
-  // disconnect_project runs last: it drops the seed project's connection
+  // project/disconnect runs last: it drops the seed project's connection
   // (later golden calls would transparently reconnect anyway).
   {
-    tool: 'disconnect_project',
-    args: (seed) => ({ project: seed.indexDocId }),
+    tool: 'project',
+    args: (seed) => ({ action: 'disconnect', project: seed.indexDocId }),
   },
   {
     tool: 'create_project',
@@ -542,17 +558,46 @@ describe('result conformance (BP-1 net)', () => {
     }
   });
 
+  // bd-lj6f7z9s: the merged tools' dispatch net. Every advertised arm
+  // (each `oneOf` branch's `action` const, read off the wire) needs a
+  // golden call — that is what keeps the (tool, action) → handler
+  // mapping honest per arm, not just per tool.
+  it('registers a golden case for every advertised (tool, action) arm', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const { tools } = await f.client.listTools();
+      const arms = advertisedArms(tools);
+      expect(
+        Object.keys(arms).sort(),
+        'the merged tools advertise oneOf action arms',
+      ).toEqual(['edit', 'project', 'read']);
+      const covered = new Set(
+        GOLDEN_RESULT_CASES.map((c) => `${c.tool}:${String(c.args({ indexDocId: '', files: [] } as SeededProject)['action'] ?? '')}`),
+      );
+      for (const [tool, actions] of Object.entries(arms)) {
+        for (const action of actions) {
+          expect(
+            covered.has(`${tool}:${action}`),
+            `${tool} with action "${action}" is advertised but has no golden result case`,
+          ).toBe(true);
+        }
+      }
+    } finally {
+      await f.close();
+    }
+  });
+
   // The BP-1 contract, directly: structuredContent matching the
   // declared outputSchema, with the JSON text fallback retained.
-  it('list_files carries structuredContent matching its outputSchema plus the JSON text fallback', async () => {
+  it('read with action "list" carries structuredContent matching its outputSchema plus the JSON text fallback', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
       const { tools } = await f.client.listTools();
-      const declared = tools.find((t) => t.name === 'list_files')?.outputSchema;
-      expect(declared, 'list_files declares no outputSchema').toBeDefined();
+      const declared = tools.find((t) => t.name === 'read')?.outputSchema;
+      expect(declared, 'read declares no outputSchema').toBeDefined();
 
-      const result = await callTool(f, 'list_files', { project: seed.indexDocId });
+      const result = await callTool(f, 'read', { action: 'list', project: seed.indexDocId });
       expect(result.isError).not.toBe(true);
       // Text fallback retained: the bare JSON array, as today.
       const block = result.content[0];
@@ -806,7 +851,7 @@ describe('security invariants', () => {
         try {
           for (const endpoint of BAD_ENDPOINTS) {
             const { state, browserUrls } = harness(endpoint);
-            const result = await state.handle('authenticate');
+            const result = await state.handle('sign_in');
             expect(
               browserUrls,
               `browser was handed a URL derived from ${endpoint}`,
@@ -821,7 +866,7 @@ describe('security invariants', () => {
 
     it('hands a public https authorization URL to the browser', async () => {
       const { state, browserUrls } = harness('https://idp.example.com/authorize');
-      await state.handle('authenticate');
+      await state.handle('sign_in');
       expect(browserUrls).toHaveLength(1);
       expect(browserUrls[0]).toMatch(/^https:\/\/idp\.example\.com\/authorize\?/);
     });
@@ -935,42 +980,305 @@ describe('tool titles (BP-9)', () => {
       const { tools } = await f.client.listTools();
       const titles = Object.fromEntries(tools.map((t) => [t.name, t.title]));
       expect(titles).toEqual({
-        connect_project: 'Connect to a project',
-        disconnect_project: 'Disconnect from a project',
+        project: 'Connect to and inspect projects',
+        read: 'List, read, and search project files',
+        edit: 'Edit project files and folders',
         docs: 'Search Quarto documentation',
         get_errors: 'Check a project for errors',
-        get_file_history: 'Get file history',
-        get_outline: 'Get document outline',
-        get_project_info: 'Get project info',
-        list_projects: 'List projects in a collection',
-        list_files: 'List files',
-        read_file: 'Read a file',
-        search_files: 'Search files',
         wait_for_change: 'Watch for changes',
-        write_file: 'Write a file',
-        patch_file: 'Patch a file',
-        delete_file: 'Delete a file',
-        rename_file: 'Rename a file',
-        restore_file_version: 'Restore a file version',
-        create_folder: 'Create a folder',
-        delete_folder: 'Delete a folder',
         create_project: 'Create a project',
-        set_default_project_set: 'Set the default project set',
       });
     } finally {
       await f.close();
     }
   });
 
-  it('auth tools carry titles too', async () => {
-    // Auth tools register only with OAuth env configured; the definition
-    // table is the wire source, so assert it directly.
+  it('the auth tool carries a title too', async () => {
+    // The auth tool registers only with OAuth env configured; the
+    // definition table is the wire source, so assert it directly.
     const titles = Object.fromEntries(
       AUTH_TOOL_DEFINITIONS.map((t) => [t.name, (t as { title?: string }).title]),
     );
     expect(titles).toEqual({
-      authenticate: 'Sign in to Quarto Hub',
-      authenticate_clear: 'Clear Quarto Hub credentials',
+      auth: 'Sign in or clear Quarto Hub credentials',
     });
+  });
+});
+
+// ============================================================================
+// Merged-tool schemas (bd-lj6f7z9s): oneOf arms keep per-arm required lists
+// ============================================================================
+
+describe('merged-tool input schemas (bd-lj6f7z9s)', () => {
+  interface Arm {
+    properties?: Record<string, { const?: string }>;
+    required?: string[];
+  }
+  function armsOf(
+    tools: ReadonlyArray<{ name: string; inputSchema: unknown }>,
+    name: string,
+  ): Record<string, Arm> {
+    const schema = tools.find((t) => t.name === name)?.inputSchema as { oneOf?: Arm[] };
+    expect(schema.oneOf, `${name} advertises a oneOf input schema`).toBeDefined();
+    const out: Record<string, Arm> = {};
+    for (const arm of schema.oneOf!) {
+      const action = arm.properties?.['action']?.const;
+      expect(typeof action).toBe('string');
+      out[action as string] = arm;
+    }
+    return out;
+  }
+
+  it('read advertises its five arms with per-arm required lists', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const { tools } = await f.client.listTools();
+      const arms = armsOf(tools, 'read');
+      expect(Object.keys(arms).sort()).toEqual(['history', 'list', 'outline', 'read', 'search']);
+      expect(arms['list']!.required).toEqual(['action', 'project']);
+      // `path` stays schema-optional: a share URL's `file=` fills it
+      // post-validation (the PATH_DEFAULTABLE pattern).
+      expect(arms['read']!.required).toEqual(['action', 'project']);
+      expect(arms['outline']!.required).toEqual(['action', 'project']);
+      expect(arms['search']!.required).toEqual(['action', 'project', 'query']);
+      expect(arms['history']!.required).toEqual(['action', 'project']);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('edit advertises its seven arms with per-arm required lists', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const { tools } = await f.client.listTools();
+      const arms = armsOf(tools, 'edit');
+      expect(Object.keys(arms).sort()).toEqual([
+        'create_folder',
+        'delete',
+        'delete_folder',
+        'patch',
+        'rename',
+        'restore',
+        'write',
+      ]);
+      expect(arms['write']!.required).toEqual(['action', 'project', 'content']);
+      expect(arms['patch']!.required).toEqual(['action', 'project', 'new_string']);
+      expect(arms['delete']!.required).toEqual(['action', 'project']);
+      expect(arms['rename']!.required).toEqual(['action', 'project', 'old_path', 'new_path']);
+      expect(arms['restore']!.required).toEqual(['action', 'project', 'hash']);
+      expect(arms['create_folder']!.required).toEqual(['action', 'project', 'path']);
+      expect(arms['delete_folder']!.required).toEqual(['action', 'project', 'path']);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('project advertises its five arms with per-arm required lists', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const { tools } = await f.client.listTools();
+      const arms = armsOf(tools, 'project');
+      expect(Object.keys(arms).sort()).toEqual([
+        'connect',
+        'disconnect',
+        'info',
+        'list_sets',
+        'set_default_set',
+      ]);
+      expect(arms['connect']!.required).toEqual(['action', 'project']);
+      expect(arms['disconnect']!.required).toEqual(['action', 'project']);
+      expect(arms['info']!.required).toEqual(['action', 'project']);
+      // list_sets' project_set is optional: omitted = remembered default.
+      expect(arms['list_sets']!.required).toEqual(['action']);
+      expect(arms['set_default_set']!.required).toEqual(['action', 'project_set']);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('the merged input schemas compile as JSON Schema 2020-12 with top-level type object', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const ajv = new Ajv2020({ allErrors: true });
+      const { tools } = await f.client.listTools();
+      for (const name of ['project', 'read', 'edit']) {
+        const schema = tools.find((t) => t.name === name)?.inputSchema as Record<string, unknown>;
+        // Hosts key on a top-level object; the arms ride `oneOf` beneath it.
+        expect(schema['type'], `${name} inputSchema has top-level type`).toBe('object');
+        expect(() => ajv.compile(schema), `${name} inputSchema compiles`).not.toThrow();
+      }
+    } finally {
+      await f.close();
+    }
+  });
+});
+
+// ============================================================================
+// Per-arm validation (bd-lj6f7z9s): a missing arm input errors actionably
+// ============================================================================
+
+describe('per-arm validation (bd-lj6f7z9s)', () => {
+  it('read with action "read" and no path errors naming the parameter and the arm', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
+      const result = await callTool(f, 'read', { action: 'read', project: seed.indexDocId });
+      expect(result.isError).toBe(true);
+      const block = result.content[0];
+      if (block?.type !== 'text') throw new Error('unreachable');
+      expect(block.text).toContain('`path`');
+      expect(block.text).toContain('read');
+      expect(block.text).toContain('action');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('read with action "search" and no query fails input validation naming query', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
+      const result = await callTool(f, 'read', { action: 'search', project: seed.indexDocId });
+      expect(result.isError).toBe(true);
+      const block = result.content[0];
+      if (block?.type !== 'text') throw new Error('unreachable');
+      expect(block.text).toContain('query');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('edit with action "patch" and neither old_string nor section errors actionably', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
+      const result = await callTool(f, 'edit', {
+        action: 'patch',
+        project: seed.indexDocId,
+        path: 'index.qmd',
+        new_string: 'v2\n',
+      });
+      expect(result.isError).toBe(true);
+      const block = result.content[0];
+      if (block?.type !== 'text') throw new Error('unreachable');
+      expect(block.text).toContain('old_string');
+      expect(block.text).toContain('section');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('edit with action "write" and no content fails input validation naming content', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
+      const result = await callTool(f, 'edit', {
+        action: 'write',
+        project: seed.indexDocId,
+        path: 'index.qmd',
+      });
+      expect(result.isError).toBe(true);
+      const block = result.content[0];
+      if (block?.type !== 'text') throw new Error('unreachable');
+      expect(block.text).toContain('content');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('an unknown action fails input validation naming the action parameter', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const result = await callTool(f, 'read', { action: 'frobnicate', project: 'x' });
+      expect(result.isError).toBe(true);
+      const block = result.content[0];
+      if (block?.type !== 'text') throw new Error('unreachable');
+      expect(block.text).toContain('action');
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('the auth tool dispatches its arms through the wire', async () => {
+    const f = await startInMemoryMcp({ authToolsState: stubAuthToolsState() });
+    try {
+      // The stub's refresh manager resolves a token, so sign_in takes the
+      // already-authenticated short-circuit — no browser, no listener.
+      const signIn = await callTool(f, 'auth', { action: 'sign_in' });
+      expect(signIn.isError).not.toBe(true);
+      const signInBlock = signIn.content[0];
+      if (signInBlock?.type !== 'text') throw new Error('unreachable');
+      expect(signInBlock.text).toContain('Already authenticated');
+
+      const cleared = await callTool(f, 'auth', { action: 'clear' });
+      expect(cleared.isError).not.toBe(true);
+      const clearedBlock = cleared.content[0];
+      if (clearedBlock?.type !== 'text') throw new Error('unreachable');
+      expect(clearedBlock.text).toContain('credentials cleared');
+    } finally {
+      await f.close();
+    }
+  });
+});
+
+// ============================================================================
+// Merged-tool annotations (bd-lj6f7z9s): the read/write split is load-bearing
+// ============================================================================
+
+describe('merged-tool annotations (bd-lj6f7z9s)', () => {
+  it('read keeps readOnlyHint: true; edit is destructive and non-idempotent', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const { tools } = await f.client.listTools();
+      const byName = Object.fromEntries(tools.map((t) => [t.name, t.annotations]));
+      expect(byName['read']).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      });
+      expect(byName['edit']).toEqual({
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+      });
+      expect(byName['project']).toEqual({
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      });
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('the merged auth tool advertises destructiveHint: true (the clear arm revokes)', async () => {
+    expect(AUTH_TOOL_DEFINITIONS).toHaveLength(1);
+    expect(AUTH_TOOL_DEFINITIONS[0]!.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    });
+  });
+
+  it('read-only mode registers no write tool', async () => {
+    const f = await startInMemoryMcp({ readOnly: true });
+    try {
+      const { tools } = await f.client.listTools();
+      const names = tools.map((t) => t.name);
+      expect(names).not.toContain('edit');
+      expect(names).not.toContain('create_project');
+      // Every remaining tool is either hint-readOnly or a
+      // local-state-only arm carrier (project: disconnect/set_default_set
+      // mutate at most the keyring or connection state).
+      for (const t of tools) {
+        if (t.name === 'project') continue;
+        expect(
+          t.annotations?.readOnlyHint,
+          `${t.name} in read-only mode should be hint-readOnly`,
+        ).toBe(true);
+      }
+    } finally {
+      await f.close();
+    }
   });
 });

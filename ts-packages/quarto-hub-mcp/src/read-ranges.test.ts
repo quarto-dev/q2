@@ -47,13 +47,13 @@ async function seedText(f: InMemoryMcpFixture, text = TEXT): Promise<string> {
   return seed.indexDocId;
 }
 
-describe('read_file ranges (ERG-3)', () => {
+describe('read ranges (ERG-3)', () => {
   it('returns the requested line window with a continuation', async () => {
     const f = await startInMemoryMcp();
     try {
       const project = await seedText(f);
       const read = structuredOf(
-        await callTool(f, 'read_file', { project, path: 'big.qmd', offset: 3, limit: 2 }),
+        await callTool(f, 'read', { action: 'read', project, path: 'big.qmd', offset: 3, limit: 2 }),
       );
       expect(read.content).toBe('line 3\nline 4\n');
       expect(read.total_lines).toBe(20);
@@ -70,7 +70,7 @@ describe('read_file ranges (ERG-3)', () => {
     try {
       const project = await seedText(f);
       const read = structuredOf(
-        await callTool(f, 'read_file', { project, path: 'big.qmd', offset: 19, limit: 50 }),
+        await callTool(f, 'read', { action: 'read', project, path: 'big.qmd', offset: 19, limit: 50 }),
       );
       expect(read.content).toBe('line 19\nline 20\n');
       expect(read.truncated).toBe(false);
@@ -84,7 +84,7 @@ describe('read_file ranges (ERG-3)', () => {
     const f = await startInMemoryMcp();
     try {
       const project = await seedText(f, 'hello\n');
-      const read = structuredOf(await callTool(f, 'read_file', { project, path: 'big.qmd' }));
+      const read = structuredOf(await callTool(f, 'read', { action: 'read', project, path: 'big.qmd' }));
       expect(read.content).toBe('hello\n');
       expect(read.truncated).toBe(false);
       expect(read.total_lines).toBe(1);
@@ -102,7 +102,7 @@ describe('read_file ranges (ERG-3)', () => {
       let pages = 0;
       for (;;) {
         const read = structuredOf(
-          await callTool(f, 'read_file', {
+          await callTool(f, 'read', { action: 'read',
             project,
             path: 'big.qmd',
             offset,
@@ -133,7 +133,7 @@ describe('read_file ranges (ERG-3)', () => {
     const f = await startInMemoryMcp();
     try {
       const project = await seedText(f);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project,
         path: 'big.qmd',
         offset: 100,
@@ -154,7 +154,7 @@ describe('read_file ranges (ERG-3)', () => {
     try {
       const big = 'x'.repeat(70000) + '\n' + 'tail line\n';
       const project = await seedText(f, big);
-      const read = structuredOf(await callTool(f, 'read_file', { project, path: 'big.qmd' }));
+      const read = structuredOf(await callTool(f, 'read', { action: 'read', project, path: 'big.qmd' }));
       expect(read.truncated).toBe(true);
       expect(read.total_lines).toBe(2);
       expect(read.hint).toBeDefined();
@@ -168,18 +168,18 @@ describe('read_file ranges (ERG-3)', () => {
   });
 });
 
-describe('list_files metadata (ERG-3)', () => {
+describe('read/list metadata (ERG-3)', () => {
   it('entries carry size, mimeType, and lines (text) / size and mimeType (binary)', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: TEXT }]);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'logo.png',
         content: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64'),
         encoding: 'base64',
       });
-      const listed = (await callTool(f, 'list_files', { project: seed.indexDocId }))
+      const listed = (await callTool(f, 'read', { action: 'list', project: seed.indexDocId }))
         .structuredContent as {
         files: Array<Record<string, unknown>>;
       };

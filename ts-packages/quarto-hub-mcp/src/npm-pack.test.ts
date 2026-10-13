@@ -158,8 +158,8 @@ describe.skipIf(PARSER_UNAVAILABLE)('npm packaging (CAP-15)', () => {
       const response = await client.sendRequest('tools/list');
       const tools = (response.result as { tools: Array<{ name: string }> }).tools;
       const names = tools.map((t) => t.name);
-      expect(names).toContain('connect_project');
-      expect(names).toContain('read_file');
+      expect(names).toContain('project');
+      expect(names).toContain('read');
       expect(names).toContain('create_project');
     } finally {
       await client.stop();

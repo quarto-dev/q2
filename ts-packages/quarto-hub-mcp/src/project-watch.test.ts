@@ -186,7 +186,7 @@ describe('wait_for_change — project-wide arm (CAP-18)', () => {
 
       // The agent's own write lands while the watch is armed (parallel
       // tool calls) — its echo must NOT fire the watcher.
-      const write = await callTool(f, 'write_file', {
+      const write = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2 by the agent\n',
@@ -217,7 +217,7 @@ describe('wait_for_change — project-wide arm (CAP-18)', () => {
         { timeout: 10000, interval: 25 },
       );
 
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2 by the agent\n',
@@ -319,7 +319,7 @@ describe('wait_for_change — project-wide arm (CAP-18)', () => {
     }
   }, 30000);
 
-  it('disconnect_project interrupts a pending project-wide poll (HY-5 parity)', async () => {
+  it('project/disconnect interrupts a pending project-wide poll (HY-5 parity)', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
@@ -334,7 +334,7 @@ describe('wait_for_change — project-wide arm (CAP-18)', () => {
         { timeout: 10000, interval: 25 },
       );
 
-      await callTool(f, 'disconnect_project', { project: seed.indexDocId });
+      await callTool(f, 'project', { action: 'disconnect', project: seed.indexDocId });
 
       const out = await waitCall;
       expect(out.isError).toBe(true);

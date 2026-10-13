@@ -105,8 +105,8 @@ describe.skipIf(PARSER_UNAVAILABLE || !wasmPkgAvailable())('bundle smoke', () =>
       await client.start(['--server', hub.url], { entry: bundleEntry });
 
       const tools = (await client.listTools()).map((t) => t.name);
-      expect(tools).toContain('connect_project');
-      expect(tools).toContain('patch_file');
+      expect(tools).toContain('project');
+      expect(tools).toContain('edit');
 
       const created = await client.callTool('create_project', {
         files: [{ path: 'smoke.qmd', content: 'bundle smoke ÄöÜ → 🧪\n' }],
@@ -116,14 +116,14 @@ describe.skipIf(PARSER_UNAVAILABLE || !wasmPkgAvailable())('bundle smoke', () =>
       };
       expect(indexDocId).toBeTruthy();
 
-      await client.callTool('connect_project', { project: indexDocId });
-      await client.callTool('patch_file', {
+      await client.callTool('project', { action: 'connect', project: indexDocId });
+      await client.callTool('edit', { action: 'patch',
         project: indexDocId,
         path: 'smoke.qmd',
         old_string: 'bundle smoke',
         new_string: 'bundle smoke (patched)',
       });
-      const readBack = await client.callTool('read_file', {
+      const readBack = await client.callTool('read', { action: 'read',
         project: indexDocId,
         path: 'smoke.qmd',
       });

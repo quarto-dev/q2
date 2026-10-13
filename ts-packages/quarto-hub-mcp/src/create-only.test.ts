@@ -33,12 +33,12 @@ function structuredOf(result: { structuredContent?: unknown }): Record<string, u
   return sc as Record<string, unknown>;
 }
 
-describe('write_file create_only (Phase 7)', () => {
+describe('edit/write create_only (Phase 7)', () => {
   it('creates a text file when the path is absent', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'new-file.qmd',
         content: 'Brand new file',
@@ -49,7 +49,7 @@ describe('write_file create_only (Phase 7)', () => {
       expect(created.created).toBe(true);
       expect(created.hash).toBe(sha256Hex('Brand new file'));
 
-      const read = await callTool(f, 'read_file', {
+      const read = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'new-file.qmd',
       });
@@ -63,7 +63,7 @@ describe('write_file create_only (Phase 7)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'hello.qmd', content: 'original\n' }]);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'hello.qmd',
         content: 'duplicate',
@@ -76,7 +76,7 @@ describe('write_file create_only (Phase 7)', () => {
       expect(block.text).toContain('hello.qmd');
 
       // The refusal never touched the content.
-      const read = await callTool(f, 'read_file', {
+      const read = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'hello.qmd',
       });
@@ -90,7 +90,7 @@ describe('write_file create_only (Phase 7)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const created = await callTool(f, 'write_file', {
+      const created = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'paper.pdf',
         content: b64(PDF),
@@ -102,7 +102,7 @@ describe('write_file create_only (Phase 7)', () => {
       expect(meta.created).toBe(true);
       expect(meta.mimeType).toBe('application/pdf');
 
-      const refused = await callTool(f, 'write_file', {
+      const refused = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'paper.pdf',
         content: b64(PDF),
@@ -122,7 +122,7 @@ describe('write_file create_only (Phase 7)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'new.qmd',
         content: 'x',

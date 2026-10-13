@@ -41,7 +41,7 @@ async function listPresence(
   f: InMemoryMcpFixture,
   project: string,
 ): Promise<PresenceEntry[]> {
-  const result = await callTool(f, 'get_project_info', { project, include: ['presence'] });
+  const result = await callTool(f, 'project', { action: 'info', project, include: ['presence'] });
   expect(result.isError).not.toBe(true);
   const block = result.content[0];
   if (block?.type !== 'text') throw new Error('expected a text result block');
@@ -75,7 +75,7 @@ const PEER = {
   userColor: '#E91E63',
 };
 
-describe('get_project_info include: ["presence"] (CAP-8, Phase 7)', () => {
+describe('project/info include: ["presence"] (CAP-8, Phase 7)', () => {
   it('reflects a fake peer broadcasting on a file document', async () => {
     const f = await startInMemoryMcp();
     try {
@@ -174,7 +174,7 @@ describe('get_project_info include: ["presence"] (CAP-8, Phase 7)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'get_project_info', {
+      const result = await callTool(f, 'project', { action: 'info',
         project: seed.indexDocId,
         include: ['presence'],
       });
@@ -195,7 +195,7 @@ describe('get_project_info include: ["presence"] (CAP-8, Phase 7)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'get_project_info', { project: seed.indexDocId });
+      const result = await callTool(f, 'project', { action: 'info', project: seed.indexDocId });
       const block = result.content[0];
       if (block?.type !== 'text') throw new Error('expected a text result block');
       const out = JSON.parse(block.text) as Record<string, unknown>;

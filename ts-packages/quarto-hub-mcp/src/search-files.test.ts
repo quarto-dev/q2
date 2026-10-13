@@ -34,7 +34,7 @@ async function search(
   project: string,
   args: Record<string, unknown>,
 ): Promise<{ result: Awaited<ReturnType<typeof callTool>>; parsed?: SearchResult }> {
-  const result = await callTool(f, 'search_files', { project, ...args });
+  const result = await callTool(f, 'read', { action: 'search', project, ...args });
   if (result.isError === true) return { result };
   return { result, parsed: result.structuredContent as unknown as SearchResult };
 }
@@ -46,7 +46,7 @@ const FILES = [
   { path: 'README.md', content: 'Turtle soup recipe\n' },
 ];
 
-describe('search_files (CAP-7)', () => {
+describe('read/search (CAP-7)', () => {
   it('finds substring matches with line numbers and snippets, ranked by per-file count', async () => {
     const f = await startInMemoryMcp();
     try {
@@ -134,7 +134,7 @@ describe('search_files (CAP-7)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'plain text\n' }]);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'payload.bin',
         // base64 of bytes whose ASCII decoding contains the query string
@@ -165,7 +165,7 @@ describe('search_files (CAP-7)', () => {
     const ro = await startInMemoryMcp({ readOnly: true });
     try {
       const tools = await ro.client.listTools();
-      expect(tools.tools.map((t) => t.name)).toContain('search_files');
+      expect(tools.tools.map((t) => t.name)).toContain('read');
     } finally {
       await ro.close();
     }

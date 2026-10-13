@@ -69,12 +69,12 @@ interface ListedProject {
   shareUrl: string;
 }
 
-describe('list_projects (CAP-3)', () => {
+describe('project/list_sets (CAP-3)', () => {
   it('enumerates a project-set by doc id, most-recently-accessed first', async () => {
     const f = await startInMemoryMcp();
     try {
       const setId = seedSet(f, SET_DOC);
-      const result = await callTool(f, 'list_projects', { project_set: setId });
+      const result = await callTool(f, 'project', { action: 'list_sets', project_set: setId });
       expect(result.isError).not.toBe(true);
       const sc = result.structuredContent as { name?: string; projects: ListedProject[] };
       expect(sc.name).toBe('Charlie’s collection');
@@ -104,7 +104,7 @@ describe('list_projects (CAP-3)', () => {
       const setId = seedSet(f, SET_DOC);
       const shareUrl =
         `https://quarto-hub.com/#/share/${setId}?server=${encodeURIComponent(f.hub.url)}`;
-      const result = await callTool(f, 'list_projects', { project_set: shareUrl });
+      const result = await callTool(f, 'project', { action: 'list_sets', project_set: shareUrl });
       expect(result.isError).not.toBe(true);
       const sc = result.structuredContent as { projects: ListedProject[] };
       expect(sc.projects.length).toBe(2);
@@ -120,7 +120,7 @@ describe('list_projects (CAP-3)', () => {
       const linkUrl =
         `https://quarto-hub.com/#/link-project-set/${setId}` +
         `?server=${encodeURIComponent(f.hub.url)}`;
-      const result = await callTool(f, 'list_projects', { project_set: linkUrl });
+      const result = await callTool(f, 'project', { action: 'list_sets', project_set: linkUrl });
       expect(result.isError).not.toBe(true);
       const sc = result.structuredContent as { projects: ListedProject[] };
       expect(sc.projects.length).toBe(2);
@@ -133,12 +133,12 @@ describe('list_projects (CAP-3)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'list_projects', { project_set: seed.indexDocId });
+      const result = await callTool(f, 'project', { action: 'list_sets', project_set: seed.indexDocId });
       expect(result.isError).toBe(true);
       const block = result.content[0];
       if (block?.type === 'text') {
         expect(block.text).toMatch(/not a project-set/i);
-        expect(block.text).toMatch(/connect_project/);
+        expect(block.text).toMatch(/action: "connect"/);
       }
     } finally {
       await f.close();
@@ -162,7 +162,7 @@ describe('default project set (bd-3h5hbfdv)', () => {
   it('a bare call with no stored default instructs the caller to provide one', async () => {
     const f = await startInMemoryMcp({ projectSetBackend: new MemoryBackend() });
     try {
-      const result = await callTool(f, 'list_projects', {});
+      const result = await callTool(f, 'project', { action: 'list_sets', });
       expect(result.isError).toBe(true);
       const block = result.content[0];
       if (block?.type === 'text') {
@@ -174,7 +174,7 @@ describe('default project set (bd-3h5hbfdv)', () => {
         expect(block.text).toMatch(/stores? it .*default/i);
         expect(block.text).toMatch(/subsequent/i);
         expect(block.text).toMatch(/link-project-set/);
-        expect(block.text).toMatch(/set_default_project_set/);
+        expect(block.text).toMatch(/set_default_set/);
       }
     } finally {
       await f.close();
@@ -189,12 +189,12 @@ describe('default project set (bd-3h5hbfdv)', () => {
       const link =
         `https://quarto-hub.com/#/link-project-set/${setId}` +
         `?server=${encodeURIComponent(f.hub.url)}`;
-      const explicit = await callTool(f, 'list_projects', { project_set: link });
+      const explicit = await callTool(f, 'project', { action: 'list_sets', project_set: link });
       expect(explicit.isError).not.toBe(true);
       // Persisted verbatim — server= and all — so a bare call routes the same way.
       expect(backend.value).toBe(link);
 
-      const bare = await callTool(f, 'list_projects', {});
+      const bare = await callTool(f, 'project', { action: 'list_sets', });
       expect(bare.isError).not.toBe(true);
       const sc = bare.structuredContent as { name?: string; projects: ListedProject[] };
       expect(sc.name).toBe('Charlie’s collection');
@@ -210,10 +210,10 @@ describe('default project set (bd-3h5hbfdv)', () => {
     try {
       const setA = seedSet(f, SET_DOC);
       const setB = seedSet(f, SET_B_DOC);
-      await callTool(f, 'list_projects', { project_set: setA });
+      await callTool(f, 'project', { action: 'list_sets', project_set: setA });
       expect(backend.value).toBe(setA);
 
-      const other = await callTool(f, 'list_projects', { project_set: setB });
+      const other = await callTool(f, 'project', { action: 'list_sets', project_set: setB });
       expect(other.isError).not.toBe(true);
       expect((other.structuredContent as { name?: string }).name).toBe('Second set');
       // Exploring another set must not switch the user's default.
@@ -228,7 +228,7 @@ describe('default project set (bd-3h5hbfdv)', () => {
     const f = await startInMemoryMcp({ projectSetBackend: backend });
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'list_projects', { project_set: seed.indexDocId });
+      const result = await callTool(f, 'project', { action: 'list_sets', project_set: seed.indexDocId });
       expect(result.isError).toBe(true);
       expect(backend.value).toBeNull();
     } finally {
@@ -242,7 +242,7 @@ describe('default project set (bd-3h5hbfdv)', () => {
     const f = await startInMemoryMcp({ projectSetBackend: backend });
     try {
       const setId = seedSet(f, SET_DOC);
-      const result = await callTool(f, 'list_projects', { project_set: setId });
+      const result = await callTool(f, 'project', { action: 'list_sets', project_set: setId });
       expect(result.isError).not.toBe(true);
       const warning = result.content.find(
         (b) => b.type === 'text' && /could not remember/i.test(b.text),
@@ -253,25 +253,25 @@ describe('default project set (bd-3h5hbfdv)', () => {
     }
   });
 
-  it('set_default_project_set validates before storing, then overwrites', async () => {
+  it('project/set_default_set validates before storing, then overwrites', async () => {
     const backend = new MemoryBackend();
     const f = await startInMemoryMcp({ projectSetBackend: backend });
     try {
       const setA = seedSet(f, SET_DOC);
       const setB = seedSet(f, SET_B_DOC);
-      await callTool(f, 'list_projects', { project_set: setA });
+      await callTool(f, 'project', { action: 'list_sets', project_set: setA });
       expect(backend.value).toBe(setA);
 
       // A project index id is rejected and the default is left alone.
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
-      const bad = await callTool(f, 'set_default_project_set', {
+      const bad = await callTool(f, 'project', { action: 'set_default_set',
         project_set: seed.indexDocId,
       });
       expect(bad.isError).toBe(true);
       expect(backend.value).toBe(setA);
 
       // The manual update.
-      const ok = await callTool(f, 'set_default_project_set', { project_set: setB });
+      const ok = await callTool(f, 'project', { action: 'set_default_set', project_set: setB });
       expect(ok.isError).not.toBe(true);
       expect(backend.value).toBe(setB);
       const sc = ok.structuredContent as {
@@ -283,14 +283,14 @@ describe('default project set (bd-3h5hbfdv)', () => {
       expect(sc.name).toBe('Second set');
       expect(sc.project_count).toBe(1);
 
-      const bare = await callTool(f, 'list_projects', {});
+      const bare = await callTool(f, 'project', { action: 'list_sets', });
       expect((bare.structuredContent as { name?: string }).name).toBe('Second set');
     } finally {
       await f.close();
     }
   });
 
-  it('a stale stored default errors with a pointer to set_default_project_set', async () => {
+  it('a stale stored default errors with a pointer to project/set_default_set', async () => {
     const backend = new MemoryBackend();
     const f = await startInMemoryMcp({ projectSetBackend: backend });
     try {
@@ -298,25 +298,25 @@ describe('default project set (bd-3h5hbfdv)', () => {
       // deleted set reads the same way from the caller's side).
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
       backend.value = seed.indexDocId;
-      const result = await callTool(f, 'list_projects', {});
+      const result = await callTool(f, 'project', { action: 'list_sets', });
       expect(result.isError).toBe(true);
       const block = result.content[0];
       if (block?.type === 'text') {
         expect(block.text).toMatch(/remembered default/);
-        expect(block.text).toMatch(/set_default_project_set/);
+        expect(block.text).toMatch(/set_default_set/);
       }
     } finally {
       await f.close();
     }
   });
 
-  it('set_default_project_set reports a keyring write failure as an error', async () => {
+  it('project/set_default_set reports a keyring write failure as an error', async () => {
     const backend = new MemoryBackend();
     backend.failWrites = true;
     const f = await startInMemoryMcp({ projectSetBackend: backend });
     try {
       const setId = seedSet(f, SET_DOC);
-      const result = await callTool(f, 'set_default_project_set', { project_set: setId });
+      const result = await callTool(f, 'project', { action: 'set_default_set', project_set: setId });
       expect(result.isError).toBe(true);
       const block = result.content[0];
       if (block?.type === 'text') {

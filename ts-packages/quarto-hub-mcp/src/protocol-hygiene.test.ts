@@ -133,7 +133,7 @@ describe('input validation (BP-2, SEP-1303)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 42,
       });
@@ -150,14 +150,14 @@ describe('input validation (BP-2, SEP-1303)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         // path omitted
       });
       expect(result.isError).toBe(true);
       expect(textOf(result)).toMatch(/\bpath\b/);
 
-      const noProject = await callTool(f, 'list_files', {});
+      const noProject = await callTool(f, 'read', { action: 'list', });
       expect(noProject.isError).toBe(true);
       expect(textOf(noProject)).toMatch(/\bproject\b/);
     } finally {
@@ -204,8 +204,8 @@ describe('dual-era handshake (BP-16)', () => {
           const tools = await legacy.client.listTools();
           expect(tools.tools.length).toBeGreaterThan(0);
           const read = await legacy.client.callTool({
-            name: 'read_file',
-            arguments: { project: seed.indexDocId, path: 'era.qmd' },
+            name: 'read',
+            arguments: { action: 'read', project: seed.indexDocId, path: 'era.qmd' },
           });
           expect(read.isError).not.toBe(true);
         } finally {
@@ -221,8 +221,8 @@ describe('dual-era handshake (BP-16)', () => {
           const tools = await modern.client.listTools();
           expect(tools.tools.length).toBeGreaterThan(0);
           const read = await modern.client.callTool({
-            name: 'read_file',
-            arguments: { project: seed.indexDocId, path: 'era.qmd' },
+            name: 'read',
+            arguments: { action: 'read', project: seed.indexDocId, path: 'era.qmd' },
           });
           expect(read.isError).not.toBe(true);
         } finally {

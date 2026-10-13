@@ -222,7 +222,7 @@ describe('resources/list + resources/read (BP-5)', () => {
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
       const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'img.png',
         content: png.toString('base64'),
@@ -366,7 +366,7 @@ describe('resource subscriptions, legacy era (BP-5)', () => {
         listChanged.push(Date.now());
       });
 
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'new.qmd',
         content: 'added\n',
@@ -378,7 +378,7 @@ describe('resource subscriptions, legacy era (BP-5)', () => {
         { timeout: 10000, interval: 25 },
       );
 
-      await callTool(f, 'delete_file', {
+      await callTool(f, 'edit', { action: 'delete',
         project: seed.indexDocId,
         path: 'new.qmd',
       });
@@ -426,20 +426,20 @@ describe('resource_link blocks in write results (BP-5)', () => {
       .map((b) => ({ uri: (b as { uri: string }).uri, name: (b as { name?: string }).name }));
   }
 
-  it('write_file and patch_file results link the file\u2019s hub:// URI', async () => {
+  it('edit/write and edit/patch results link the file\u2019s hub:// URI', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const uri = `hub://project/${seed.indexDocId}/a.qmd`;
 
-      const written = await callTool(f, 'write_file', {
+      const written = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2\n',
       });
       expect(resourceLinks(written)).toEqual([{ uri, name: 'a.qmd' }]);
 
-      const patched = await callTool(f, 'patch_file', {
+      const patched = await callTool(f, 'edit', { action: 'patch',
         project: seed.indexDocId,
         path: 'a.qmd',
         old_string: 'v2',
@@ -451,11 +451,11 @@ describe('resource_link blocks in write results (BP-5)', () => {
     }
   });
 
-  it('write_file (create) and rename_file results link the (new) file URI', async () => {
+  it('edit/write (create) and edit/rename results link the (new) file URI', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
-      const created = await callTool(f, 'write_file', {
+      const created = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'new.qmd',
         content: 'n\n',
@@ -464,7 +464,7 @@ describe('resource_link blocks in write results (BP-5)', () => {
         { uri: `hub://project/${seed.indexDocId}/new.qmd`, name: 'new.qmd' },
       ]);
 
-      const renamed = await callTool(f, 'rename_file', {
+      const renamed = await callTool(f, 'edit', { action: 'rename',
         project: seed.indexDocId,
         old_path: 'new.qmd',
         new_path: 'renamed.qmd',

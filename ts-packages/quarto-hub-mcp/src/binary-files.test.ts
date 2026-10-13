@@ -50,11 +50,11 @@ function structuredOf(result: { structuredContent?: unknown }): Record<string, u
 }
 
 describe('binary write (CAP-5)', () => {
-  it('write_file with encoding base64 creates a binary file and returns its metadata', async () => {
+  it('edit/write with encoding base64 creates a binary file and returns its metadata', async () => {
     const f: InMemoryMcpFixture = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'assets/logo.png',
         content: b64(PNG),
@@ -82,7 +82,7 @@ describe('binary write (CAP-5)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'data/blob.bin',
         content: b64(PDF),
@@ -101,7 +101,7 @@ describe('binary write (CAP-5)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'x.png',
         content: 'not valid base64 !!!',
@@ -118,11 +118,11 @@ describe('binary write (CAP-5)', () => {
     }
   });
 
-  it('write_file base64 over an existing TEXT file is refused', async () => {
+  it('edit/write base64 over an existing TEXT file is refused', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'hello\n' }]);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'index.qmd',
         content: b64(PNG),
@@ -138,11 +138,11 @@ describe('binary write (CAP-5)', () => {
     }
   });
 
-  it('write_file with encoding base64 creates a binary file', async () => {
+  it('edit/write with encoding base64 creates a binary file', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'paper.pdf',
         content: b64(PDF),
@@ -166,7 +166,7 @@ describe('binary read (CAP-4)', () => {
     bytes: Uint8Array,
   ): Promise<{ indexDocId: string }> {
     const seed = await seedProject(f, []);
-    const write = await callTool(f, 'write_file', {
+    const write = await callTool(f, 'edit', { action: 'write',
       project: seed.indexDocId,
       path,
       content: b64(bytes),
@@ -176,11 +176,11 @@ describe('binary read (CAP-4)', () => {
     return seed;
   }
 
-  it('read_file returns an image block for an image MIME type, bytes identical', async () => {
+  it('read returns an image block for an image MIME type, bytes identical', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedBinary(f, 'logo.png', PNG);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'logo.png',
       });
@@ -205,11 +205,11 @@ describe('binary read (CAP-4)', () => {
     }
   });
 
-  it('read_file returns an embedded blob resource for a non-image binary', async () => {
+  it('read returns an embedded blob resource for a non-image binary', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedBinary(f, 'paper.pdf', PDF);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'paper.pdf',
       });
@@ -235,7 +235,7 @@ describe('binary read (CAP-4)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedBinary(f, 'logo.png', PNG);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'logo.png',
         metadata_only: true,
@@ -259,7 +259,7 @@ describe('binary read (CAP-4)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'index.qmd', content: 'hello\n' }]);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'index.qmd',
         metadata_only: true,
@@ -276,22 +276,22 @@ describe('binary read (CAP-4)', () => {
 });
 
 describe('binary compare-and-swap (CAP-4/5 + ERG-1)', () => {
-  it('write_file base64 replaces an existing binary in place; expected_hash gates it', async () => {
+  it('edit/write base64 replaces an existing binary in place; expected_hash gates it', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'logo.png',
         content: b64(PNG),
         encoding: 'base64',
       });
       const read = structuredOf(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'logo.png' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'logo.png' }),
       );
 
       // Stale expected_hash → refused, names the current hash.
-      const stale = await callTool(f, 'write_file', {
+      const stale = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'logo.png',
         content: b64(PDF),
@@ -307,7 +307,7 @@ describe('binary compare-and-swap (CAP-4/5 + ERG-1)', () => {
 
       // Correct expected_hash → applied, same document (path listing stable).
       const PNG2 = new Uint8Array([...PNG, 0xff]);
-      const updated = await callTool(f, 'write_file', {
+      const updated = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'logo.png',
         content: b64(PNG2),
@@ -317,7 +317,7 @@ describe('binary compare-and-swap (CAP-4/5 + ERG-1)', () => {
       expect(updated.isError).not.toBe(true);
       expect(structuredOf(updated).hash).toBe(sha256(PNG2));
 
-      const reread = await callTool(f, 'read_file', {
+      const reread = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'logo.png',
       });

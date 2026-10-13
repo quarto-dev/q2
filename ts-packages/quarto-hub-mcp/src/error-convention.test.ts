@@ -27,7 +27,7 @@ function textOf(result: { content: Array<{ type: string; text?: string }> }): st
 }
 
 describe('actionable errors (ERG-4, HY-1)', () => {
-  it('read_file on a missing path names list_files and the closest existing paths', async () => {
+  it('read with action "read" on a missing path names the list arm and the closest existing paths', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [
@@ -35,7 +35,7 @@ describe('actionable errors (ERG-4, HY-1)', () => {
         { path: 'docs/guide.qmd', content: 'b\n' },
         { path: 'index.qmd', content: 'c\n' },
       ]);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'docs/indx.qmd',
       });
@@ -44,7 +44,7 @@ describe('actionable errors (ERG-4, HY-1)', () => {
       // The failing parameter and the state.
       expect(text).toContain('docs/indx.qmd');
       // The next tool to call.
-      expect(text).toContain('list_files');
+      expect(text).toContain('`read` with `action: "list"`');
       // Up to three closest existing paths, best first.
       expect(text).toContain('docs/index.qmd');
     } finally {
@@ -52,7 +52,7 @@ describe('actionable errors (ERG-4, HY-1)', () => {
     }
   });
 
-  it('read_file reads binary files in place — the phantom read_binary_file_metadata era is over (HY-1, CAP-4)', async () => {
+  it('read reads binary files in place — the phantom read_binary_file_metadata era is over (HY-1, CAP-4)', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
@@ -63,7 +63,7 @@ describe('actionable errors (ERG-4, HY-1)', () => {
         new Uint8Array([137, 80, 78, 71]),
         'image/png',
       );
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'img.png',
       });
@@ -77,11 +77,11 @@ describe('actionable errors (ERG-4, HY-1)', () => {
     }
   });
 
-  it('patch_file with an unmatched old_string names the parameter and points at read_file', async () => {
+  it('edit/patch with an unmatched old_string names the parameter and points at the read arm', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'current text\n' }]);
-      const result = await callTool(f, 'patch_file', {
+      const result = await callTool(f, 'edit', { action: 'patch',
         project: seed.indexDocId,
         path: 'a.qmd',
         old_string: 'stale text',
@@ -90,20 +90,20 @@ describe('actionable errors (ERG-4, HY-1)', () => {
       expect(result.isError).toBe(true);
       const text = textOf(result);
       expect(text).toContain('old_string');
-      expect(text).toContain('read_file');
+      expect(text).toContain('`read` with `action: "read"`');
     } finally {
       await f.close();
     }
   });
 
-  it('rename_file onto an existing destination names the state and the way forward', async () => {
+  it('edit/rename onto an existing destination names the state and the way forward', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [
         { path: 'a.qmd', content: 'a\n' },
         { path: 'b.qmd', content: 'b\n' },
       ]);
-      const result = await callTool(f, 'rename_file', {
+      const result = await callTool(f, 'edit', { action: 'rename',
         project: seed.indexDocId,
         old_path: 'a.qmd',
         new_path: 'b.qmd',

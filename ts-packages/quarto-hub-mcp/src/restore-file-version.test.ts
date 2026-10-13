@@ -35,7 +35,7 @@ async function history(
   project: string,
   path: string,
 ): Promise<HistoryEntry[]> {
-  const out = parse(await callTool(f, 'get_file_history', { project, path, limit: 100 }));
+  const out = parse(await callTool(f, 'read', { action: 'history', project, path, limit: 100 }));
   return out.entries as HistoryEntry[];
 }
 
@@ -44,18 +44,18 @@ async function readText(
   project: string,
   path: string,
 ): Promise<string> {
-  const out = parse(await callTool(f, 'read_file', { project, path }));
+  const out = parse(await callTool(f, 'read', { action: 'read', project, path }));
   return out.content as string;
 }
 
-describe('restore_file_version (CAP-19)', () => {
+describe('edit/restore (CAP-19)', () => {
   it('restores a prior version as a new change and carries the pre-restore hash', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const project = seed.indexDocId;
-      await callTool(f, 'write_file', { project, path: 'a.qmd', content: 'v2\n' });
-      await callTool(f, 'write_file', { project, path: 'a.qmd', content: 'v3\n' });
+      await callTool(f, 'edit', { action: 'write', project, path: 'a.qmd', content: 'v2\n' });
+      await callTool(f, 'edit', { action: 'write', project, path: 'a.qmd', content: 'v3\n' });
 
       const entries = await history(f, project, 'a.qmd');
       // Newest-first: [v3-write, v2-write, v1-create].
@@ -63,7 +63,7 @@ describe('restore_file_version (CAP-19)', () => {
       expect(entries[2].hash).toBe(hashPayload({ type: 'text', text: 'v1\n' }));
 
       const out = parse(
-        await callTool(f, 'restore_file_version', { project, path: 'a.qmd', hash: v1Head }),
+        await callTool(f, 'edit', { action: 'restore', project, path: 'a.qmd', hash: v1Head }),
       );
       expect(out.restored_from).toBe(v1Head);
       expect(out.pre_restore_hash).toBe(hashPayload({ type: 'text', text: 'v3\n' }));
@@ -86,11 +86,11 @@ describe('restore_file_version (CAP-19)', () => {
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const project = seed.indexDocId;
-      await callTool(f, 'write_file', { project, path: 'a.qmd', content: 'v2\n' });
+      await callTool(f, 'edit', { action: 'write', project, path: 'a.qmd', content: 'v2\n' });
 
       const entries = await history(f, project, 'a.qmd');
       const restored = parse(
-        await callTool(f, 'restore_file_version', {
+        await callTool(f, 'edit', { action: 'restore',
           project,
           path: 'a.qmd',
           hash: entries[1].head,
@@ -101,7 +101,7 @@ describe('restore_file_version (CAP-19)', () => {
       const heads = restored.pre_restore_heads as string[];
       expect(heads).toHaveLength(1);
       const undone = parse(
-        await callTool(f, 'restore_file_version', { project, path: 'a.qmd', hash: heads[0] }),
+        await callTool(f, 'edit', { action: 'restore', project, path: 'a.qmd', hash: heads[0] }),
       );
       expect(undone.restored_from).toBe(heads[0]);
       expect(await readText(f, project, 'a.qmd')).toBe('v2\n');
@@ -115,10 +115,10 @@ describe('restore_file_version (CAP-19)', () => {
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const project = seed.indexDocId;
-      await callTool(f, 'write_file', { project, path: 'a.qmd', content: 'v2\n' });
+      await callTool(f, 'edit', { action: 'write', project, path: 'a.qmd', content: 'v2\n' });
       const entries = await history(f, project, 'a.qmd');
 
-      const result = await callTool(f, 'restore_file_version', {
+      const result = await callTool(f, 'edit', { action: 'restore',
         project,
         path: 'a.qmd',
         hash: entries[1].head,
@@ -140,11 +140,11 @@ describe('restore_file_version (CAP-19)', () => {
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const project = seed.indexDocId;
-      await callTool(f, 'write_file', { project, path: 'a.qmd', content: 'v2\n' });
+      await callTool(f, 'edit', { action: 'write', project, path: 'a.qmd', content: 'v2\n' });
       const entries = await history(f, project, 'a.qmd');
 
       const out = parse(
-        await callTool(f, 'restore_file_version', {
+        await callTool(f, 'edit', { action: 'restore',
           project,
           path: 'a.qmd',
           hash: entries[0].head, // the current head
@@ -163,7 +163,7 @@ describe('restore_file_version (CAP-19)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'restore_file_version', {
+      const result = await callTool(f, 'edit', { action: 'restore',
         project: seed.indexDocId,
         path: 'a.qmd',
         hash: 'not-a-known-change-hash',
@@ -172,7 +172,7 @@ describe('restore_file_version (CAP-19)', () => {
       const block = result.content[0];
       if (block?.type !== 'text') throw new Error('expected a text result block');
       expect(block.text).toMatch(/not-a-known-change-hash/);
-      expect(block.text).toMatch(/get_file_history/);
+      expect(block.text).toMatch(/action: "history"/);
     } finally {
       await f.close();
     }
@@ -183,13 +183,13 @@ describe('restore_file_version (CAP-19)', () => {
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
       const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64');
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'img.png',
         content: png,
         encoding: 'base64',
       });
-      const result = await callTool(f, 'restore_file_version', {
+      const result = await callTool(f, 'edit', { action: 'restore',
         project: seed.indexDocId,
         path: 'img.png',
         hash: 'whatever',

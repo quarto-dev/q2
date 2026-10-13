@@ -106,11 +106,11 @@ async function startPausingProxy(targetWsUrl: string): Promise<PausingProxy> {
 // ============================================================================
 
 describe('write delivery confirmation (ERG-2)', () => {
-  it('write_file carries synced: true once the hub has acknowledged the change', async () => {
+  it('edit/write carries synced: true once the hub has acknowledged the change', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2\n',
@@ -124,12 +124,12 @@ describe('write delivery confirmation (ERG-2)', () => {
     }
   });
 
-  it('patch_file and delete_file carry synced: true as well (file doc and index-only writes)', async () => {
+  it('edit/patch and edit/delete carry synced: true as well (file doc and index-only writes)', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const patched = parseJson(
-        await callTool(f, 'patch_file', {
+        await callTool(f, 'edit', { action: 'patch',
           project: seed.indexDocId,
           path: 'a.qmd',
           old_string: 'v1',
@@ -139,7 +139,7 @@ describe('write delivery confirmation (ERG-2)', () => {
       expect(patched.synced).toBe(true);
 
       const deleted = parseJson(
-        await callTool(f, 'delete_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'edit', { action: 'delete', project: seed.indexDocId, path: 'a.qmd' }),
       );
       expect(deleted.synced).toBe(true);
     } finally {
@@ -151,7 +151,7 @@ describe('write delivery confirmation (ERG-2)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
-      const result = await callTool(f, 'write_file', {
+      const result = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2\n',
@@ -199,7 +199,7 @@ describe('write delivery confirmation (ERG-2)', () => {
 
         proxy.pause();
         const stalled = parseJson(
-          await callTool(fixture, 'write_file', {
+          await callTool(fixture, 'edit', { action: 'write',
             project: seed.indexDocId,
             path: 'a.qmd',
             content: 'v2 through the partition\n',

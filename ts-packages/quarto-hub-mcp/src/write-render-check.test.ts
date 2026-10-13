@@ -109,10 +109,10 @@ beforeEach(() => {
 });
 
 describe('write tools render-check the new .qmd content', () => {
-  it('patch_file reports a clean render check for the patched content', async () => {
+  it('edit/patch reports a clean render check for the patched content', async () => {
     const h = harness({ 'a.qmd': { type: 'text', text: 'Hello **world**\n' } });
 
-    const res = await h.call('patch_file', {
+    const res = await h.call('edit', { action: 'patch',
       project: 'idx',
       path: 'a.qmd',
       old_string: 'world',
@@ -133,11 +133,11 @@ describe('write tools render-check the new .qmd content', () => {
     expect(payload?.type === 'text' && payload.text).toBe('Hello **there**\n');
   });
 
-  it('patch_file reports the errors the new content renders with', async () => {
+  it('edit/patch reports the errors the new content renders with', async () => {
     renderDiagnostics.mockResolvedValue(cleanResult({ errors: [ERROR_ITEM] }));
     const h = harness({ 'a.qmd': { type: 'text', text: 'fine\n' } });
 
-    const res = await h.call('patch_file', {
+    const res = await h.call('edit', { action: 'patch',
       project: 'idx',
       path: 'a.qmd',
       old_string: 'fine',
@@ -151,10 +151,10 @@ describe('write tools render-check the new .qmd content', () => {
     expect(res.isError).not.toBe(true); // the write itself succeeded
   });
 
-  it('write_file (update) render-checks the replacement content', async () => {
+  it('edit/write (update) render-checks the replacement content', async () => {
     const h = harness({ 'a.qmd': { type: 'text', text: 'old\n' } });
 
-    const res = await h.call('write_file', { project: 'idx', path: 'a.qmd', content: 'new\n' });
+    const res = await h.call('edit', { action: 'write', project: 'idx', path: 'a.qmd', content: 'new\n' });
 
     expect(parse(res).renderCheck).toMatch(/render check: clean/i);
     const [checkedFiles] = renderDiagnostics.mock.calls[0] as [Map<string, FilePayload>, string];
@@ -162,14 +162,14 @@ describe('write tools render-check the new .qmd content', () => {
     expect(payload?.type === 'text' && payload.text).toBe('new\n');
   });
 
-  it('write_file (plain and create_only creates) render-check the initial content', async () => {
+  it('edit/write (plain and create_only creates) render-check the initial content', async () => {
     const h = harness({});
-    const created = await h.call('write_file', { project: 'idx', path: 'new.qmd', content: 'x\n' });
+    const created = await h.call('edit', { action: 'write', project: 'idx', path: 'new.qmd', content: 'x\n' });
     expect(parse(created).created).toBe(true);
     expect(parse(created).renderCheck).toMatch(/render check: clean/i);
 
     const h2 = harness({});
-    const created2 = await h2.call('write_file', {
+    const created2 = await h2.call('edit', { action: 'write',
       project: 'idx',
       path: 'n2.qmd',
       content: 'y\n',
@@ -183,7 +183,7 @@ describe('write tools render-check the new .qmd content', () => {
     renderDiagnostics.mockResolvedValue(cleanResult({ warnings: [WARNING_ITEM, WARNING_ITEM] }));
     const h = harness({ 'a.qmd': { type: 'text', text: 'x\n' } });
 
-    const res = await h.call('write_file', { project: 'idx', path: 'a.qmd', content: 'y\n' });
+    const res = await h.call('edit', { action: 'write', project: 'idx', path: 'a.qmd', content: 'y\n' });
 
     const out = parse(res);
     expect(out.renderCheck).toMatch(/render check: clean \(2 warnings/i);
@@ -193,7 +193,7 @@ describe('write tools render-check the new .qmd content', () => {
   it('does not render-check non-qmd writes', async () => {
     const h = harness({ '_quarto.yml': { type: 'text', text: 'project:\n' } });
 
-    const res = await h.call('write_file', { project: 'idx', path: '_quarto.yml', content: 'x\n' });
+    const res = await h.call('edit', { action: 'write', project: 'idx', path: '_quarto.yml', content: 'x\n' });
 
     expect(parse(res).path).toBe('_quarto.yml');
     expect(parse(res).renderCheck).toBeUndefined();
@@ -204,7 +204,7 @@ describe('write tools render-check the new .qmd content', () => {
     renderDiagnostics.mockRejectedValue(new Error('wasm exploded'));
     const h = harness({ 'a.qmd': { type: 'text', text: 'x\n' } });
 
-    const res = await h.call('write_file', { project: 'idx', path: 'a.qmd', content: 'y\n' });
+    const res = await h.call('edit', { action: 'write', project: 'idx', path: 'a.qmd', content: 'y\n' });
 
     expect(res.isError).not.toBe(true);
     const out = parse(res);
@@ -219,7 +219,7 @@ describe('write tools render-check the new .qmd content', () => {
       renderDiagnostics.mockReturnValue(new Promise(() => {}));
       const h = harness({ 'a.qmd': { type: 'text', text: 'x\n' } });
 
-      const p = h.call('write_file', { project: 'idx', path: 'a.qmd', content: 'y\n' });
+      const p = h.call('edit', { action: 'write', project: 'idx', path: 'a.qmd', content: 'y\n' });
       await vi.advanceTimersByTimeAsync(RENDER_CHECK_TIMEOUT_MS + 1000);
       const res = await p;
 

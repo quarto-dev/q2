@@ -144,12 +144,12 @@ describe('subscriptions/listen, modern era (BP-5)', () => {
       // Write both files through the same connection — the server's own
       // writes fire the change bridge exactly like a collaborator's.
       await spawned.client.callTool({
-        name: 'write_file',
-        arguments: { project, path: 'a.qmd', content: 'v2\n' },
+        name: 'edit',
+        arguments: { action: 'write', project, path: 'a.qmd', content: 'v2\n' },
       });
       await spawned.client.callTool({
-        name: 'write_file',
-        arguments: { project, path: 'b.qmd', content: 'v2\n' },
+        name: 'edit',
+        arguments: { action: 'write', project, path: 'b.qmd', content: 'v2\n' },
       });
 
       await vi.waitFor(
@@ -167,8 +167,8 @@ describe('subscriptions/listen, modern era (BP-5)', () => {
       await sub.close();
       const before = updated.length;
       await spawned.client.callTool({
-        name: 'write_file',
-        arguments: { project, path: 'a.qmd', content: 'v3\n' },
+        name: 'edit',
+        arguments: { action: 'write', project, path: 'a.qmd', content: 'v3\n' },
       });
       await new Promise((r) => setTimeout(r, 750));
       expect(updated.length).toBe(before);
@@ -191,8 +191,8 @@ describe('subscriptions/listen, modern era (BP-5)', () => {
       expect(sub.honoredFilter.resourcesListChanged).toBe(true);
 
       await spawned.client.callTool({
-        name: 'write_file',
-        arguments: { project, path: 'added.qmd', content: 'new\n' },
+        name: 'edit',
+        arguments: { action: 'write', project, path: 'added.qmd', content: 'new\n' },
       });
       await vi.waitFor(
         () => {

@@ -45,11 +45,11 @@ describe('requireOnline through the MCP server', () => {
     expect(text).not.toContain('indexDocId');
   }, 30000);
 
-  it('connect_project fails loudly when the sync endpoint is unreachable', async () => {
+  it('project/connect fails loudly when the sync endpoint is unreachable', async () => {
     client = new McpTestClient();
     await client.start(['--server', hub.url]);
 
-    const result = await client.callTool('connect_project', {
+    const result = await client.callTool('project', { action: 'connect',
       project: 'badc0ffee0ddf00d',
     });
     const text = result.content[0]!.text;

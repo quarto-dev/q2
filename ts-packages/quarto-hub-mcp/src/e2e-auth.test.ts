@@ -229,7 +229,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
       expect(before.content[0]!.text).toMatch(/authenticate|sign.?in|auth/i);
 
       // 2. authenticate — we are the browser.
-      const authPromise = a.callTool('authenticate', {});
+      const authPromise = a.callTool('auth', { action: 'sign_in', });
       const urlLine = await a.waitForStderr(/open this URL to sign in: /, 15000);
       const authUrl = urlLine.slice(urlLine.indexOf('http'));
       const browserResp = await fetch(authUrl); // follows the 302 to the loopback
@@ -279,7 +279,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
       expect(idp.counters.codeExchanges).toBe(exchangesBeforeB); // no new sign-in
 
       // 6. Clear: revokes at the IdP, empties the keyring.
-      const cleared = await b.callTool('authenticate_clear', {});
+      const cleared = await b.callTool('auth', { action: 'clear', });
       expect(cleared.content[0]!.text).toMatch(/clear|revok/i);
       expect(idp.counters.revokedTokens.length).toBeGreaterThanOrEqual(1);
       const after = await new AsyncEntry(KEYRING_SERVICE, keyringAccount).getPassword();
@@ -329,7 +329,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
         env: serverEnv,
         ...(fresh.ok ? { command: { program: q2Bin, args: ['mcp'] } } : {}),
       });
-      const connected = await e.callTool('connect_project', { project: hy6ProjectId });
+      const connected = await e.callTool('project', { action: 'connect', project: hy6ProjectId });
       expect(connected.isError).not.toBe(true);
       const noise = e.stderrLines.filter(
         (l) =>
@@ -341,7 +341,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
 
       // Leave the keyring empty for the mid-session test (same
       // precondition the main test leaves).
-      await e.callTool('authenticate_clear', {});
+      await e.callTool('auth', { action: 'clear', });
     } finally {
       await e.stop();
     }
@@ -349,7 +349,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
 
   /** Play the browser's role in the loopback+PKCE flow for `client`. */
   async function authenticateViaLoopback(client: McpTestClient): Promise<void> {
-    const authPromise = client.callTool('authenticate', {});
+    const authPromise = client.callTool('auth', { action: 'sign_in', });
     const urlLine = await client.waitForStderr(/open this URL to sign in: /, 15000);
     const authUrl = urlLine.slice(urlLine.indexOf('http'));
     const browserResp = await fetch(authUrl);
@@ -430,7 +430,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
 
       // The next tool call fails fast with the same clear message…
       const started = Date.now();
-      const result = await c.callTool('read_file', {
+      const result = await c.callTool('read', { action: 'read',
         project: projectId,
         path: 'auth-e2e.qmd',
       });
@@ -443,7 +443,7 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
         await new AsyncEntry(KEYRING_SERVICE, keyringAccount).getPassword(),
       ).toBeTruthy();
 
-      await c.callTool('authenticate_clear', {}).catch(() => {});
+      await c.callTool('auth', { action: 'clear', }).catch(() => {});
     } finally {
       idp.counters.revokedTokens.length = 0;
       await c.stop();

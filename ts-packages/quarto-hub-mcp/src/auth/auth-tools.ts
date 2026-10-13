@@ -1,18 +1,16 @@
 /**
  * MCP auth-tool surface — Authorization Code + PKCE + loopback.
  *
- * Exposes two MCP tools:
+ * Exposes one MCP tool (bd-lj6f7z9s) selected by `action`:
  *
- *   - `authenticate` — runs the full loopback sign-in: binds a local
- *     `127.0.0.1` listener, opens the browser at Google's authorization
- *     endpoint, waits for the redirect, exchanges the code (with the
- *     PKCE verifier and the Desktop-app `client_secret`), and stores the
- *     resulting tokens in the OS keyring. Single blocking call —
- *     replaces the device-flow `authenticate_start` / `authenticate_finish`
- *     pair.
- *   - `authenticate_clear` — best-effort revoke at Google, then delete
- *     the local keyring entry. Read → revoke → delete order so a crash
- *     between revoke and delete leaves a retryable state.
+ *   - `auth` with `action: "sign_in"` — runs the full loopback sign-in:
+ *     binds a local `127.0.0.1` listener, opens the browser at Google's
+ *     authorization endpoint, waits for the redirect, exchanges the code
+ *     (with the PKCE verifier and the Desktop-app `client_secret`), and
+ *     stores the resulting tokens in the OS keyring. Single blocking call.
+ *   - `auth` with `action: "clear"` — best-effort revoke at Google, then
+ *     delete the local keyring entry. Read → revoke → delete order so a
+ *     crash between revoke and delete leaves a retryable state.
  *
  * stdio-transport MCP clients capture stderr to log files; the tool
  * response is the only agent-visible channel. All log call sites funnel
@@ -30,6 +28,7 @@ import type {
 } from '@modelcontextprotocol/server';
 import { decodeJwt } from 'jose';
 import * as oauth from 'oauth4webapi';
+import { z } from 'zod';
 
 import { openBrowser as defaultOpenBrowser } from './browser.js';
 import type { CredentialBundle, CredentialStore } from './credential-store.js';
@@ -134,59 +133,72 @@ export interface AuthToolsDeps {
 
 // Phase 7 (bd-1ilystml): `authenticate_status` was removed — a status
 // probe spent an ERG-5 listing slot on what `authenticate`'s
-// already-valid short-circuit and connect_project's AuthRequiredError
+// already-valid short-circuit and the connect arm's AuthRequiredError
 // already tell an agent.
-export type AuthToolName = 'authenticate' | 'authenticate_clear';
+// bd-lj6f7z9s: `authenticate` / `authenticate_clear` folded into one
+// `auth` tool selected by `action`.
+export type AuthToolName = 'auth';
+
+/** The `auth` tool's arm selector. */
+export type AuthAction = 'sign_in' | 'clear';
 
 /**
- * An auth tool's advertised metadata. Input schemas are not part of the
- * definition: all auth tools take no arguments and register with an
- * empty zod schema at the registration layer (tools.ts).
+ * An auth tool's advertised metadata. The single `auth` tool carries its
+ * input schema (a discriminated union on `action`) in the definition —
+ * the registration layer (tools.ts) uses it verbatim.
  */
 export interface AuthToolDefinition {
   readonly name: AuthToolName;
   readonly title: string;
   readonly description: string;
+  readonly inputSchema: StandardSchemaWithJSON;
   readonly annotations: ToolAnnotations;
   /** The tool's `structuredContent` schema (BP-1); prose-text tools omit it. */
   readonly outputSchema?: StandardSchemaWithJSON;
 }
 
+/** The `auth` tool's input schema: a discriminated union on `action`. */
+const authInputSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z
+      .literal('sign_in')
+      .describe(
+        'Sign in: browser loopback OAuth, credentials stored in the OS keyring.',
+      ),
+  }),
+  z.object({
+    action: z
+      .literal('clear')
+      .describe('Clear locally-cached credentials (best-effort revoke at Google first).'),
+  }),
+]);
+
 export const AUTH_TOOL_DEFINITIONS: readonly AuthToolDefinition[] = [
   {
-    name: 'authenticate',
-    title: 'Sign in to Quarto Hub',
+    name: 'auth',
+    title: 'Sign in or clear Quarto Hub credentials',
     description:
-      'Authenticate Quarto Hub MCP against the configured hub. Opens the ' +
-      "user's browser to a Google sign-in page and waits for them to " +
-      'complete it, then stores the credentials in the OS keyring. ' +
-      'Returns "Authenticated as <email>" on success. If credentials are ' +
-      'already valid, returns "Already authenticated as <email>" without ' +
-      'opening a browser. The authorization URL is also printed so a user ' +
-      'on a headless or SSH session can open it manually.',
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-    },
-  },
-  {
-    name: 'authenticate_clear',
-    title: 'Clear Quarto Hub credentials',
-    description:
-      'Remove any locally-cached Quarto Hub credentials from the OS ' +
-      'keyring and discard any in-progress sign-in. Best-effort revokes ' +
-      'the stored refresh token at Google before the local delete, so the ' +
-      'credential is rendered unusable both locally and server-side; if ' +
-      'the revoke fails (offline, token already invalid) the local delete ' +
-      'still proceeds and you can revoke the grant manually at ' +
-      'myaccount.google.com. Use this as an escape hatch when the hub ' +
-      'rejects the cached credentials. Idempotent: safe to call when no ' +
-      'credentials are present.',
+      'Manage Quarto Hub MCP authentication against the configured hub.\n\n' +
+      '`action: "sign_in"` — authenticate: opens the user\'s browser to a ' +
+      'Google sign-in page and waits for them to complete it, then stores ' +
+      'the credentials in the OS keyring. Returns "Authenticated as <email>" ' +
+      'on success. If credentials are already valid, returns "Already ' +
+      'authenticated as <email>" without opening a browser. The authorization ' +
+      'URL is also printed so a user on a headless or SSH session can open ' +
+      'it manually.\n\n' +
+      '`action: "clear"` — remove any locally-cached credentials from the OS ' +
+      'keyring and discard any in-progress sign-in. Best-effort revokes the ' +
+      'stored refresh token at Google before the local delete, so the ' +
+      'credential is rendered unusable both locally and server-side; if the ' +
+      'revoke fails (offline, token already invalid) the local delete still ' +
+      'proceeds and you can revoke the grant manually at myaccount.google.com. ' +
+      'Use this as an escape hatch when the hub rejects the cached ' +
+      'credentials. Idempotent: safe to call when no credentials are present.',
+    inputSchema: authInputSchema,
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
     },
   },
 ];
@@ -218,10 +230,10 @@ export class AuthToolsState {
     this.deps = deps;
   }
 
-  async handle(name: AuthToolName, ctx: AuthToolContext = {}): Promise<CallToolResult> {
-    if (name === 'authenticate') return this.handleAuthenticate(ctx);
-    if (name === 'authenticate_clear') return this.handleClear();
-    return errorResult(`Unknown auth tool: ${String(name)}`);
+  async handle(action: AuthAction, ctx: AuthToolContext = {}): Promise<CallToolResult> {
+    if (action === 'sign_in') return this.handleAuthenticate(ctx);
+    if (action === 'clear') return this.handleClear();
+    return errorResult(`Unknown auth action: ${String(action)}`);
   }
 
   /**
@@ -424,13 +436,13 @@ export class AuthToolsState {
 
     if (revoke === 'skipped') {
       return textResult(
-        'Quarto Hub credentials cleared. Call authenticate to sign in again.',
+        'Quarto Hub credentials cleared. Call `auth` with `action: "sign_in"` to sign in again.',
       );
     }
     if (revoke === 'ok') {
       return textResult(
         'Quarto Hub credentials cleared and revoked at Google. ' +
-          'Call authenticate to sign in again.',
+          'Call `auth` with `action: "sign_in"` to sign in again.',
       );
     }
     return textResult(

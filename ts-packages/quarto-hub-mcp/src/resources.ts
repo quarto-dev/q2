@@ -250,7 +250,7 @@ export function registerResources(
         ProtocolErrorCode.InvalidParams,
         `Resource URI ${uri} is not a hub:// project file URI ` +
           `(${PROJECT_FILE_URI_TEMPLATE}). List this server's resources to see ` +
-          'what is available; connect_project makes a project\u2019s files readable.',
+          'what is available; `project` with `action: "connect"` makes a project\u2019s files readable.',
         { reason: 'invalid_uri' },
       );
     }
@@ -292,7 +292,7 @@ export function registerResources(
           'A file in a Quarto Hub project. indexDocId is the project\u2019s automerge ' +
           'index document id (as in a quarto-hub.com share URL); path is the file path ' +
           'within the project. A project on a non-default hub carries its sync server ' +
-          'as ?server=<url-encoded ws url>. Connect to the project (connect_project) ' +
+          'as ?server=<url-encoded ws url>. Connect to the project (`project` / `action: "connect"`) ' +
           'before reading; subscribe for change notifications.',
         icons: [QUARTO_ICON],
       },

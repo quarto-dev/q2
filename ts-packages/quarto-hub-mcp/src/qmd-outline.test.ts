@@ -66,7 +66,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('get_outline (CAP-11)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'paper.qmd', content: QMD }]);
-      const result = await callTool(f, 'get_outline', {
+      const result = await callTool(f, 'read', { action: 'outline',
         project: seed.indexDocId,
         path: 'paper.qmd',
       });
@@ -90,7 +90,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('get_outline (CAP-11)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'plain.qmd', content: 'Just prose.\n' }]);
-      const result = await callTool(f, 'get_outline', {
+      const result = await callTool(f, 'read', { action: 'outline',
         project: seed.indexDocId,
         path: 'plain.qmd',
       });
@@ -105,7 +105,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('get_outline (CAP-11)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'data.csv', content: 'a,b\n1,2\n' }]);
-      const result = await callTool(f, 'get_outline', {
+      const result = await callTool(f, 'read', { action: 'outline',
         project: seed.indexDocId,
         path: 'data.csv',
       });
@@ -121,7 +121,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('get_outline (CAP-11)', () => {
     const f = await startInMemoryMcp({ readOnly: true });
     try {
       const tools = await f.client.listTools();
-      expect(tools.tools.map((t) => t.name)).toContain('get_outline');
+      expect(tools.tools.map((t) => t.name)).toContain('read');
     } finally {
       await f.close();
     }

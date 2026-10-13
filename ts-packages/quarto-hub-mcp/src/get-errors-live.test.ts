@@ -71,7 +71,7 @@ describe.skipIf(!realWasmHostAvailable())(
   }, 120000);
 
   it('reports clean immediately after the agent fixes the file', async () => {
-    const patched = await client.callTool('patch_file', {
+    const patched = await client.callTool('edit', { action: 'patch',
       project: indexDocId,
       path: 'index.qmd',
       old_string: 'Hello **unclosed strong',
@@ -92,7 +92,7 @@ describe.skipIf(!realWasmHostAvailable())(
     const entry = report.files.find((f) => f.path === 'index.qmd')!;
     expect(entry.errors).toEqual([]);
     // Sanity: the fixed content really is what we think it is.
-    const read = await client.callTool('read_file', { project: indexDocId, path: 'index.qmd' });
+    const read = await client.callTool('read', { action: 'read', project: indexDocId, path: 'index.qmd' });
     const payload = JSON.parse(read.content[0]!.text) as { content: string };
     expect(payload.content).toBe(FIXED);
   }, 120000);

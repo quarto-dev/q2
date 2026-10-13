@@ -31,11 +31,11 @@ function parseJson(result: { content: Array<{ type: string; text?: string }> }):
 const HASH_RE = /^sha256:[0-9a-f]{64}$/;
 
 describe('content hashes and compare-and-swap (ERG-1)', () => {
-  it('read_file returns the file content with its sha256 hash', async () => {
+  it('read returns the file content with its sha256 hash', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'hello\n' }]);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: seed.indexDocId,
         path: 'a.qmd',
       });
@@ -49,15 +49,15 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
     }
   });
 
-  it('write_file returns the new hash; a matching expected_hash applies', async () => {
+  it('edit/write returns the new hash; a matching expected_hash applies', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const read = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
 
-      const write = await callTool(f, 'write_file', {
+      const write = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2\n',
@@ -71,7 +71,7 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
 
       // And the read-back hash matches what the write returned.
       const reread = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
       expect(reread.content).toBe('v2\n');
       expect(reread.hash).toBe(written.hash);
@@ -80,22 +80,22 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
     }
   });
 
-  it('write_file with a stale expected_hash is refused with the current content + hash and changes nothing', async () => {
+  it('edit/write with a stale expected_hash is refused with the current content + hash and changes nothing', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const staleRead = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
       // A collaborator (or an earlier agent step) edits the file.
-      const collab = await callTool(f, 'write_file', {
+      const collab = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'collaborator edit\n',
       });
       expect(collab.isError).not.toBe(true);
 
-      const refused = await callTool(f, 'write_file', {
+      const refused = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'my stale overwrite\n',
@@ -111,7 +111,7 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
 
       // Nothing changed on the hub.
       const after = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
       expect(after.content).toBe('collaborator edit\n');
     } finally {
@@ -119,15 +119,15 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
     }
   });
 
-  it('patch_file with a matching expected_hash succeeds and returns the new hash', async () => {
+  it('edit/patch with a matching expected_hash succeeds and returns the new hash', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'the qick brown fox\n' }]);
       const read = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
 
-      const patched = await callTool(f, 'patch_file', {
+      const patched = await callTool(f, 'edit', { action: 'patch',
         project: seed.indexDocId,
         path: 'a.qmd',
         old_string: 'qick',
@@ -140,7 +140,7 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
       expect(payload.hash).not.toBe(read.hash);
 
       const reread = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
       expect(reread.content).toBe('the quick brown fox\n');
       expect(reread.hash).toBe(payload.hash);
@@ -149,21 +149,21 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
     }
   });
 
-  it('patch_file with a stale expected_hash is refused and splices nothing', async () => {
+  it('edit/patch with a stale expected_hash is refused and splices nothing', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
       const staleRead = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
-      const collab = await callTool(f, 'write_file', {
+      const collab = await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'a.qmd',
         content: 'v2 other\n',
       });
       expect(collab.isError).not.toBe(true);
 
-      const refused = await callTool(f, 'patch_file', {
+      const refused = await callTool(f, 'edit', { action: 'patch',
         project: seed.indexDocId,
         path: 'a.qmd',
         old_string: 'v1',
@@ -176,7 +176,7 @@ describe('content hashes and compare-and-swap (ERG-1)', () => {
       expect(payload.hash).not.toBe(staleRead.hash);
 
       const after = parseJson(
-        await callTool(f, 'read_file', { project: seed.indexDocId, path: 'a.qmd' }),
+        await callTool(f, 'read', { action: 'read', project: seed.indexDocId, path: 'a.qmd' }),
       );
       expect(after.content).toBe('v2 other\n');
     } finally {

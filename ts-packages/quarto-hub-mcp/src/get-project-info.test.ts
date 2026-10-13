@@ -28,12 +28,12 @@ interface ProjectInfo {
 }
 
 async function info(f: InMemoryMcpFixture, project: string): Promise<ProjectInfo> {
-  const result = await callTool(f, 'get_project_info', { project });
+  const result = await callTool(f, 'project', { action: 'info', project });
   expect(result.isError).not.toBe(true);
   return result.structuredContent as unknown as ProjectInfo;
 }
 
-describe('get_project_info (CAP-2)', () => {
+describe('project/info (CAP-2)', () => {
   it('reports counts, ids, server, auth mode, and sync diagnostics', async () => {
     const f = await startInMemoryMcp();
     try {
@@ -41,13 +41,13 @@ describe('get_project_info (CAP-2)', () => {
         { path: 'index.qmd', content: 'x\n' },
         { path: 'a/b.qmd', content: 'y\n' },
       ]);
-      await callTool(f, 'write_file', {
+      await callTool(f, 'edit', { action: 'write',
         project: seed.indexDocId,
         path: 'logo.png',
         content: Buffer.from([1, 2, 3]).toString('base64'),
         encoding: 'base64',
       });
-      await callTool(f, 'create_folder', { project: seed.indexDocId, path: 'assets' });
+      await callTool(f, 'edit', { action: 'create_folder', project: seed.indexDocId, path: 'assets' });
 
       const got = await info(f, seed.indexDocId);
       expect(got.project).toBe(seed.indexDocId);

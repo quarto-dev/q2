@@ -82,10 +82,10 @@ describe('dangling index entries at the MCP tool surface', () => {
     await hub.stop();
   });
 
-  it('connect_project succeeds and marks the ghost unavailable', async () => {
+  it('project/connect succeeds and marks the ghost unavailable', async () => {
     // RED today: the tool returns `Error in connect_project:
     // Document automerge:… is unavailable`.
-    const result = await client.callTool('connect_project', { project: indexDocId });
+    const result = await client.callTool('project', { action: 'connect', project: indexDocId });
     expect(result.isError).not.toBe(true);
 
     const payload = JSON.parse(result.content[0]!.text) as {
@@ -109,8 +109,8 @@ describe('dangling index entries at the MCP tool surface', () => {
     }
   }, 60000);
 
-  it('read_file of the ghost errors naming the path; real files still read', async () => {
-    const ghostRead = await client.callTool('read_file', {
+  it('read of the ghost errors naming the path; real files still read', async () => {
+    const ghostRead = await client.callTool('read', { action: 'read',
       project: indexDocId,
       path: 'ghost.qmd',
     });
@@ -120,7 +120,7 @@ describe('dangling index entries at the MCP tool surface', () => {
 
     // The project stays connected and usable in the same session
     // (ERG-1: read results are { path, hash, content }).
-    const realRead = await client.callTool('read_file', {
+    const realRead = await client.callTool('read', { action: 'read',
       project: indexDocId,
       path: 'real-one.qmd',
     });
@@ -128,15 +128,15 @@ describe('dangling index entries at the MCP tool surface', () => {
     expect(JSON.parse(realRead.content[0]!.text).content).toBe('first real file\n');
   }, 60000);
 
-  it('delete_file of the ghost succeeds and removes the index entry', async () => {
-    const deleted = await client.callTool('delete_file', {
+  it('edit/delete of the ghost succeeds and removes the index entry', async () => {
+    const deleted = await client.callTool('edit', { action: 'delete',
       project: indexDocId,
       path: 'ghost.qmd',
     });
     expect(deleted.isError).not.toBe(true);
     expect(deleted.content[0]!.text).toContain('ghost.qmd');
 
-    const listed = await client.callTool('list_files', { project: indexDocId });
+    const listed = await client.callTool('read', { action: 'list', project: indexDocId });
     expect(listed.isError).not.toBe(true);
     const files = JSON.parse(listed.content[0]!.text) as Array<{ path: string }>;
     expect(files.map((f) => f.path).sort()).toEqual(['real-one.qmd', 'real-two.qmd']);

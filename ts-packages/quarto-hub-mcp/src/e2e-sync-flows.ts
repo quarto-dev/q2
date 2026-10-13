@@ -29,7 +29,7 @@ export async function createProjectAndReadBack(
   expect(createdText, createdText).toContain('indexDocId');
   const projectId = (JSON.parse(createdText) as { indexDocId: string }).indexDocId;
 
-  const read = await client.callTool('read_file', { project: projectId, path: fileName });
+  const read = await client.callTool('read', { action: 'read', project: projectId, path: fileName });
   expect(read.content[0]!.text).toContain(expectedMarker ?? fileContent.trim());
   return projectId;
 }
@@ -41,8 +41,8 @@ export async function connectProjectAndReadBack(
   fileName: string,
   expectedMarker: string,
 ): Promise<void> {
-  const connected = await client.callTool('connect_project', { project: projectId });
+  const connected = await client.callTool('project', { action: 'connect', project: projectId });
   expect(connected.content[0]!.text).toContain(fileName);
-  const read = await client.callTool('read_file', { project: projectId, path: fileName });
+  const read = await client.callTool('read', { action: 'read', project: projectId, path: fileName });
   expect(read.content[0]!.text).toContain(expectedMarker);
 }

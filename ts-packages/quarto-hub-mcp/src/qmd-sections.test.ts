@@ -76,7 +76,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
     const f = await startInMemoryMcp();
     try {
       const project = await seed(f);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project,
         path: 'paper.qmd',
         section: 'Background',
@@ -100,7 +100,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
     try {
       const project = await seed(f);
       const read = structured<SectionRead>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd', section: 'Methods' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd', section: 'Methods' }),
       );
       expect(read.content).toBe('# Methods\n\nMethod text.\n\n### Details\n\nDetail text.\n\n');
       expect(read.section.end_line).toBe(20);
@@ -114,7 +114,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
     try {
       const project = await seed(f);
       const read = structured<SectionRead>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd', section: 'Results' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd', section: 'Results' }),
       );
       expect(read.content).toBe('# Results\n\nResult text.\n');
       expect(read.section.end_line).toBe(23);
@@ -130,7 +130,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
       const body = Array.from({ length: 100 }, (_, i) => `section line ${i + 1} ${'x'.repeat(40)}`).join('\n');
       const project = await seed(f, `# Big\n\n${body}\n\n# Small\n\ntiny.\n`);
       const read = structured<SectionRead>(
-        await callTool(f, 'read_file', {
+        await callTool(f, 'read', { action: 'read',
           project,
           path: 'paper.qmd',
           section: 'Big',
@@ -150,7 +150,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
     const f = await startInMemoryMcp();
     try {
       const project = await seed(f);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project,
         path: 'paper.qmd',
         section: 'Conclusion',
@@ -160,7 +160,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
       expect(text).toMatch(/Conclusion/);
       expect(text).toMatch(/Introduction/);
       expect(text).toMatch(/Results/);
-      expect(text).toMatch(/get_outline/);
+      expect(text).toMatch(/action: "outline"/);
     } finally {
       await f.close();
     }
@@ -173,7 +173,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
         f,
         '# Alpha\n\n## Notes\n\na\n\n# Beta\n\n## Notes\n\nb\n',
       );
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project,
         path: 'paper.qmd',
         section: 'Notes',
@@ -191,7 +191,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
     const f = await startInMemoryMcp();
     try {
       const project = await seed(f);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project,
         path: 'paper.qmd',
         section: 'Methods',
@@ -209,7 +209,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
     const f = await startInMemoryMcp();
     try {
       const s = await seedProject(f, [{ path: 'notes.txt', content: '# Not qmd\n' }]);
-      const result = await callTool(f, 'read_file', {
+      const result = await callTool(f, 'read', { action: 'read',
         project: s.indexDocId,
         path: 'notes.txt',
         section: 'Not qmd',
@@ -223,11 +223,11 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
 });
 
 describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)', () => {
-  it('replaces exactly the section read_file shows, heading included', async () => {
+  it('replaces exactly the section read shows, heading included', async () => {
     const f = await startInMemoryMcp();
     try {
       const project = await seed(f);
-      const result = await callTool(f, 'patch_file', {
+      const result = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         section: 'Methods',
@@ -239,7 +239,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       expect(patched.section.name).toBe('Methods');
 
       const after = structured<{ content: string }>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd' }),
       );
       expect(after.content).toBe(
         [
@@ -274,7 +274,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
     const f = await startInMemoryMcp();
     try {
       const project = await seed(f);
-      const result = await callTool(f, 'patch_file', {
+      const result = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         section: 'Methods',
@@ -282,7 +282,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       });
       expect(result.isError).not.toBe(true);
       const after = structured<{ content: string }>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd' }),
       );
       expect(after.content).not.toContain('### Details');
       expect(after.content).not.toContain('Detail text.');
@@ -298,13 +298,13 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       const project = await seed(f);
       // The agent reads the section it means to replace.
       const before = structured<SectionRead>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd', section: 'Methods' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd', section: 'Methods' }),
       );
       expect(before.section.name).toBe('Methods');
       // A collaborator edits a different section before the agent's patch
       // lands. (Sequential changes through the same updateText path the
       // CRDT merges — the splice must be computed against current text.)
-      const collab = await callTool(f, 'patch_file', {
+      const collab = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         old_string: 'Result text.',
@@ -312,7 +312,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       });
       expect(collab.isError).not.toBe(true);
 
-      const mine = await callTool(f, 'patch_file', {
+      const mine = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         section: 'Methods',
@@ -321,7 +321,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       expect(mine.isError).not.toBe(true);
 
       const after = structured<{ content: string }>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd' }),
       );
       expect(after.content).toContain('Result text (collaborator).');
       expect(after.content).toContain('# Methods\n\nRewritten methods.\n');
@@ -335,7 +335,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
     const f = await startInMemoryMcp();
     try {
       const project = await seed(f);
-      const result = await callTool(f, 'patch_file', {
+      const result = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         section: 'Background',
@@ -343,7 +343,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       });
       expect(result.isError).not.toBe(true);
       const after = structured<{ content: string }>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd' }),
       );
       expect(after.content).not.toContain('Background');
       expect(after.content).toContain('Intro paragraph.\n\n# Methods');
@@ -356,7 +356,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
     const f = await startInMemoryMcp();
     try {
       const project = await seed(f);
-      const both = await callTool(f, 'patch_file', {
+      const both = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         section: 'Methods',
@@ -367,7 +367,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       expect(errorText(both)).toMatch(/section/);
       expect(errorText(both)).toMatch(/old_string/);
 
-      const neither = await callTool(f, 'patch_file', {
+      const neither = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         new_string: 'x',
@@ -383,9 +383,9 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
     try {
       const project = await seed(f);
       const stale = structured<{ hash: string }>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd' }),
       );
-      const collab = await callTool(f, 'patch_file', {
+      const collab = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         old_string: 'Result text.',
@@ -393,7 +393,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       });
       expect(collab.isError).not.toBe(true);
 
-      const refused = await callTool(f, 'patch_file', {
+      const refused = await callTool(f, 'edit', { action: 'patch',
         project,
         path: 'paper.qmd',
         section: 'Methods',
@@ -402,7 +402,7 @@ describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)
       });
       expect(refused.isError).toBe(true);
       const after = structured<{ content: string }>(
-        await callTool(f, 'read_file', { project, path: 'paper.qmd' }),
+        await callTool(f, 'read', { action: 'read', project, path: 'paper.qmd' }),
       );
       expect(after.content).toContain('Method text.');
     } finally {
