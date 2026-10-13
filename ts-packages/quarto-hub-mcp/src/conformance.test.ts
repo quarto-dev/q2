@@ -53,7 +53,7 @@ import { realWasmHostAvailable } from './test-wasm-host.js';
 const TOOL_BUDGET = 24;
 
 /**
- * Read-write mode lists these 20 data tools today (auth tools add to
+ * Read-write mode lists these 21 data tools today (auth tools add to
  * this when OAuth env is configured — see EXPECTED_AUTH_TOOLS and the
  * production-posture budget test).
  */
@@ -76,6 +76,7 @@ const EXPECTED_RW_TOOLS = [
   'rename_file',
   'restore_file_version',
   'search_files',
+  'set_default_project_set',
   'wait_for_change',
   'write_file',
 ];
@@ -158,6 +159,7 @@ describe('in-memory fixture smoke', () => {
         'list_projects',
         'read_file',
         'search_files',
+        'set_default_project_set',
         'wait_for_change',
       ]);
     } finally {
@@ -461,6 +463,20 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     args: () => ({}),
     setup: async (f) => {
       // Mint a project-set document on the hub (CAP-3).
+      const handle = f.hub.repo.create<ProjectSetDocument>();
+      handle.change((d) => {
+        d.version = 1;
+        d.projects = {};
+      });
+      return { project_set: handle.documentId };
+    },
+  },
+  {
+    tool: 'set_default_project_set',
+    args: () => ({}),
+    setup: async (f) => {
+      // Mint a project-set document on the hub (bd-3h5hbfdv); the store
+      // write lands in the fixture's in-memory keyring backend.
       const handle = f.hub.repo.create<ProjectSetDocument>();
       handle.change((d) => {
         d.version = 1;
@@ -939,6 +955,7 @@ describe('tool titles (BP-9)', () => {
         create_folder: 'Create a folder',
         delete_folder: 'Delete a folder',
         create_project: 'Create a project',
+        set_default_project_set: 'Set the default project set',
       });
     } finally {
       await f.close();

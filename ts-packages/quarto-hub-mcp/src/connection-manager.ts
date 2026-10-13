@@ -39,6 +39,7 @@ import {
 } from '@quarto/quarto-sync-client';
 
 import type { CredentialStore } from './auth/credential-store.js';
+import type { DefaultProjectSetStore } from './default-project-set.js';
 import { ReauthRequired, type RefreshManager } from './auth/refresh-manager.js';
 import { redactTokens } from './auth/redact.js';
 import { PresenceTracker, type PresenceSnapshotEntry } from './presence-tracker.js';
@@ -117,6 +118,12 @@ export interface ConnectionManagerDeps {
   readonly serverUrl: string;
   readonly credentialStore?: CredentialStore;
   readonly refreshManager?: RefreshManager;
+  /**
+   * The remembered-default store behind a bare `list_projects`
+   * (bd-3h5hbfdv). Optional so tests that never exercise the default can
+   * omit it; the handlers degrade to asking for an explicit `project_set`.
+   */
+  readonly defaultProjectSetStore?: DefaultProjectSetStore;
   /** Test seam. Defaults to `globalThis.fetch`. */
   readonly fetch?: typeof fetch;
   /** Test seam. Defaults to `process.env`. */
@@ -403,6 +410,8 @@ export class ConnectionManager {
   private readonly serverUrlParsed: URL;
   private readonly credentialStore: CredentialStore | undefined;
   private readonly refreshManager: RefreshManager | undefined;
+  /** Public: the tool handlers reach the remembered default through here. */
+  readonly defaultProjectSetStore: DefaultProjectSetStore | undefined;
   private readonly httpFetch: typeof fetch;
   private readonly env: NodeJS.ProcessEnv;
   private readonly syncClientFactory: (cbs: SyncClientCallbacks) => SyncClient;
@@ -436,6 +445,7 @@ export class ConnectionManager {
     this.serverUrlParsed = new URL(opts.serverUrl);
     this.credentialStore = opts.credentialStore;
     this.refreshManager = opts.refreshManager;
+    this.defaultProjectSetStore = opts.defaultProjectSetStore;
     this.httpFetch =
       opts.fetch ??
       ((input, init) => globalThis.fetch(input, init));

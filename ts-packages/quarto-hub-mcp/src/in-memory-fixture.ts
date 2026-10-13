@@ -27,6 +27,35 @@ import { ConnectionManager } from './connection-manager.js';
 import { createServer } from './index.js';
 import { startTestHub, type TestHub } from './test-hub.js';
 import type { AuthToolsState } from './auth/auth-tools.js';
+import type { KeyringBackend } from './auth/credential-store.js';
+import { DefaultProjectSetStore } from './default-project-set.js';
+
+/**
+ * In-memory `KeyringBackend` with failure switches — the fixture's default
+ * for the remembered project set (bd-3h5hbfdv), so tests never touch the
+ * real OS keyring. Inspect `value` to assert what was persisted.
+ */
+export class MemoryBackend implements KeyringBackend {
+  value: string | null = null;
+  failReads = false;
+  failWrites = false;
+
+  async read(): Promise<string | null> {
+    if (this.failReads) throw new Error('keyring locked');
+    return this.value;
+  }
+
+  async write(value: string): Promise<void> {
+    if (this.failWrites) throw new Error('keyring locked');
+    this.value = value;
+  }
+
+  async clear(): Promise<boolean> {
+    const had = this.value !== null;
+    this.value = null;
+    return had;
+  }
+}
 
 export interface InMemoryMcpFixture {
   /** The in-process hub stand-in (server-side ground truth). */
@@ -51,13 +80,25 @@ export interface InMemoryMcpOptions {
    * production listing). Pass a stubbed state; see conformance.test.ts.
    */
   authToolsState?: AuthToolsState;
+  /**
+   * Keyring backend for the remembered default project set
+   * (bd-3h5hbfdv). Defaults to a fresh {@link MemoryBackend} — the
+   * fixture mirrors production by always having a store, without ever
+   * touching the real keyring.
+   */
+  projectSetBackend?: KeyringBackend;
 }
 
 export async function startInMemoryMcp(
   opts: InMemoryMcpOptions = {},
 ): Promise<InMemoryMcpFixture> {
   const hub = await startTestHub();
-  const manager = new ConnectionManager({ serverUrl: hub.url });
+  const manager = new ConnectionManager({
+    serverUrl: hub.url,
+    defaultProjectSetStore: new DefaultProjectSetStore(
+      opts.projectSetBackend ?? new MemoryBackend(),
+    ),
+  });
   const server = createServer({
     manager,
     readOnly: opts.readOnly ?? false,

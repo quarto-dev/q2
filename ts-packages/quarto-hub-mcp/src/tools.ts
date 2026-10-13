@@ -27,6 +27,7 @@ import {
   inferMimeType,
   normalizeProjectPath,
   type FilePayload,
+  type ProjectSetDocument,
   type SyncClient,
 } from '@quarto/quarto-sync-client';
 import { ConnectionManager, hashPayload } from './connection-manager.js';
@@ -51,7 +52,12 @@ import {
   type ProgressNotification,
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
-import { buildShareUrl, parseProjectRef, serversMatch } from './share-url.js';
+import {
+  buildShareUrl,
+  parseProjectRef,
+  serversMatch,
+  type ProjectRef,
+} from './share-url.js';
 import { buildFileResourceUri } from './resources.js';
 import { loadQmdParser } from './qmd-parser.js';
 import {
@@ -511,6 +517,7 @@ type DataToolName =
   | 'disconnect_project'
   | 'get_project_info'
   | 'list_projects'
+  | 'set_default_project_set'
   | 'list_files'
   | 'get_file_history'
   | 'get_outline'
@@ -582,6 +589,8 @@ async function handleTool(
       return handleGetProjectInfo(args, manager);
     case 'list_projects':
       return handleListProjects(args, manager);
+    case 'set_default_project_set':
+      return handleSetDefaultProjectSet(args, manager);
     case 'list_files':
       return handleListFiles(args, manager);
     case 'get_file_history':
@@ -755,23 +764,70 @@ async function handleGetProjectInfo(args: ToolArgs, manager: ConnectionManager):
   });
 }
 
-async function handleListProjects(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
-  // `project_set` takes the same id-or-share-URL forms as `project`
-  // (normalizeArgs only rewrites `project`, so parse explicitly here).
-  const ref = parseProjectRef(args.project_set as string);
+/**
+ * Shared read of a project-set argument through `parseProjectRef`. On
+ * failure returns the bare message (`could not read project-set …`); each
+ * caller wraps it with its own advice.
+ */
+async function readProjectSetArg(
+  projectSetArg: string,
+  manager: ConnectionManager,
+): Promise<
+  | { doc: ProjectSetDocument; ref: ProjectRef; errorMessage?: undefined }
+  | { doc?: undefined; ref: ProjectRef; errorMessage: string }
+> {
+  const ref = parseProjectRef(projectSetArg);
   const server =
     ref.server && !serversMatch(ref.server, manager.configuredServerUrl)
       ? ref.server
       : undefined;
-  let doc;
   try {
-    doc = await manager.readProjectSet(ref.project, { server });
+    return { doc: await manager.readProjectSet(ref.project, { server }), ref };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ref,
+      errorMessage: `could not read project-set ${ref.project}: ${redactTokens(msg)}`,
+    };
+  }
+}
+
+async function handleListProjects(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  // `project_set` takes the same id-or-share-URL forms as `project`
+  // (normalizeArgs only rewrites `project`, so parse explicitly here).
+  // Omitted (bd-3h5hbfdv): fall back to the remembered default — the
+  // first explicit call that reads successfully persists its argument to
+  // the OS keyring, and set_default_project_set overwrites it.
+  const store = manager.defaultProjectSetStore;
+  const explicitArg =
+    typeof args.project_set === 'string' && args.project_set.trim() !== ''
+      ? args.project_set.trim()
+      : undefined;
+  const projectSetArg =
+    explicitArg ?? (store !== undefined ? ((await store.read()) ?? undefined) : undefined);
+  if (projectSetArg === undefined) {
     return error(
-      `Error: could not read project-set ${ref.project}: ${redactTokens(msg)}. ` +
-        'Check the id with whoever shared it — and if it names a project rather than a ' +
-        'project set, use connect_project instead.',
+      'Error: list_projects was called with no `project_set` and no default is stored ' +
+        'yet. Pass the set\'s doc id or its ' +
+        '`https://quarto-hub.com/#/link-project-set/<id>?server=…` link — a successful ' +
+        'call remembers it as the default in the OS keyring. To set or change the ' +
+        'default directly, use set_default_project_set.',
+    );
+  }
+  const { doc, errorMessage } = await readProjectSetArg(projectSetArg, manager);
+  if (errorMessage !== undefined) {
+    if (explicitArg === undefined) {
+      // The failing value came from the keyring, not from this call — say
+      // so, or the user cannot tell which id is being complained about.
+      return error(
+        `Error: ${errorMessage}. This value is the remembered default (OS keyring) — the ` +
+          'set may have been deleted or belong to another hub. Pass an explicit ' +
+          '`project_set`, or update the remembered default with set_default_project_set.',
+      );
+    }
+    return error(
+      `Error: ${errorMessage}. Check the id with whoever shared it — and if it names a ` +
+        'project rather than a project set, use connect_project instead.',
     );
   }
   const projects = Object.entries(doc.projects)
@@ -792,9 +848,63 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
       }),
     }))
     .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : a.lastAccessed > b.lastAccessed ? -1 : 0));
-  return structured({
+  const result = structured({
     ...(doc.name !== undefined ? { name: doc.name } : {}),
     projects,
+  });
+  // First-time persist (bd-3h5hbfdv): only when nothing is stored, so
+  // exploring someone else's set link never switches the user's default.
+  // A keyring failure degrades to a warning — the listing still stands.
+  if (explicitArg !== undefined && store !== undefined && (await store.read()) === null) {
+    try {
+      await store.write(explicitArg);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      result.content.push({
+        type: 'text',
+        text: `Warning: could not remember this project set as the default: ${redactTokens(msg)}`,
+      });
+    }
+  }
+  return result;
+}
+
+async function handleSetDefaultProjectSet(
+  args: ToolArgs,
+  manager: ConnectionManager,
+): Promise<CallToolResult> {
+  const store = manager.defaultProjectSetStore;
+  if (store === undefined) {
+    return error('Error: this server was started without a default-project-set store.');
+  }
+  if (typeof args.project_set !== 'string' || args.project_set.trim() === '') {
+    return error(
+      'Error: set_default_project_set requires a `project_set` argument — the set\'s doc ' +
+        'id or its `https://quarto-hub.com/#/link-project-set/<id>?server=…` link.',
+    );
+  }
+  const projectSetArg = args.project_set.trim();
+  // Validate before storing: a bad link must fail fast, not poison the default.
+  const { doc, ref, errorMessage } = await readProjectSetArg(projectSetArg, manager);
+  if (errorMessage !== undefined) {
+    return error(
+      `Error: not stored — ${errorMessage}. The stored default was left unchanged. ` +
+        'Check the link with whoever shared it — and note it must name a project set, ' +
+        'not a single project.',
+    );
+  }
+  try {
+    await store.write(projectSetArg);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return error(`Error: could not store the default project set: ${redactTokens(msg)}`);
+  }
+  return structured({
+    default_project_set: ref.project,
+    ...(ref.server !== undefined ? { server: ref.server } : {}),
+    ...(doc.name !== undefined ? { name: doc.name } : {}),
+    project_count: Object.keys(doc.projects).length,
+    note: 'Remembered in the OS keyring; bare list_projects calls now use this set.',
   });
 }
 
@@ -2473,6 +2583,14 @@ const outListProjects = z.object({
   ),
 });
 
+const outSetDefaultProjectSet = z.object({
+  default_project_set: z.string(),
+  server: z.string().optional(),
+  name: z.string().optional(),
+  project_count: z.number(),
+  note: z.string(),
+});
+
 const outListFiles = z.object({ files: z.array(outListedFile) });
 
 /** Section metadata for the CAP-11 `section` arms of read_file/patch_file. */
@@ -2932,26 +3050,56 @@ export function registerTools(
     {
       title: 'List projects in a collection',
       description:
-        'Enumerate a Quarto Hub project-set (a user\'s collection of projects), given its ' +
-        'document id or its quarto-hub.com link — the web client\'s copy-link form for a ' +
-        'set is `https://quarto-hub.com/#/link-project-set/<id>?server=…` (note: not the ' +
+        'Enumerate a Quarto Hub project-set (a user\'s collection of projects). Omit ' +
+        '`project_set` to use the remembered default: the first call that names a set ' +
+        'successfully stores it in the OS keyring, and set_default_project_set changes ' +
+        'it later. The web client\'s copy-link form for a set is ' +
+        '`https://quarto-hub.com/#/link-project-set/<id>?server=…` (note: not the ' +
         '`#/share/` route, which names a single project). ' +
         'Returns each project\'s id, sync server, description, and a share URL you can pass ' +
         'to connect_project, most-recently-used first.',
       inputSchema: z.object({
         project_set: z
           .string()
+          .optional()
           .describe(
             'The project-set document id, OR its quarto-hub.com link: ' +
               '`https://quarto-hub.com/#/link-project-set/<id>?server=…` ' +
               '(a `#/join-collection/<id>` invite link also names a set; the `server=` ' +
-              'parameter, if present, routes the read to that hub).',
+              'parameter, if present, routes the read to that hub). Omit to use the ' +
+              'remembered default — an actionable error results when none is stored yet.',
           ),
       }),
       outputSchema: outListProjects,
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('list_projects', args, manager),
+  );
+
+  server.registerTool(
+    'set_default_project_set',
+    {
+      title: 'Set the default project set',
+      description:
+        'Remember a project set as the default that bare `list_projects` calls use, stored ' +
+        'in the OS keyring (the same secure storage as the sign-in credentials). The link ' +
+        'or id is validated against the hub before storing and any previous default is ' +
+        'overwritten — this is the manual update for the value `list_projects` remembers ' +
+        'on first use. Local state only: nothing in any project is modified, so this tool ' +
+        'is available in read-only mode.',
+      inputSchema: z.object({
+        project_set: z.string().describe(
+          'The project-set document id, OR its quarto-hub.com link: ' +
+            '`https://quarto-hub.com/#/link-project-set/<id>?server=…` ' +
+            '(a `#/join-collection/<id>` invite link also names a set). The string is ' +
+            'stored verbatim, so a link\'s `server=` keeps routing the reads.',
+        ),
+      }),
+      outputSchema: outSetDefaultProjectSet,
+      // Mutates only local keyring state; idempotent (same value re-stored).
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    (args) => runDataTool('set_default_project_set', args, manager),
   );
 
   server.registerTool(
