@@ -26,6 +26,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { ConnectionManager } from './connection-manager.js';
 import { createServer } from './index.js';
 import { startTestHub, type TestHub } from './test-hub.js';
+import type { AuthToolsState } from './auth/auth-tools.js';
 
 export interface InMemoryMcpFixture {
   /** The in-process hub stand-in (server-side ground truth). */
@@ -45,6 +46,11 @@ export interface InMemoryMcpOptions {
   readOnly?: boolean;
   /** Expose the `render` tool (mirrors `--allow-render`, CAP-12). */
   allowRender?: boolean;
+  /**
+   * Register the auth tools (mirrors OAuth env being configured — the
+   * production listing). Pass a stubbed state; see conformance.test.ts.
+   */
+  authToolsState?: AuthToolsState;
 }
 
 export async function startInMemoryMcp(
@@ -56,6 +62,7 @@ export async function startInMemoryMcp(
     manager,
     readOnly: opts.readOnly ?? false,
     allowRender: opts.allowRender ?? false,
+    authToolsState: opts.authToolsState,
   });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

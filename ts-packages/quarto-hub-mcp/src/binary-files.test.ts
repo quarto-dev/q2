@@ -3,7 +3,7 @@
  * ERG-5 rule (a) — same verb, varied by parameter, no `read_binary_file`
  * sibling; HY-1 closed for real):
  *
- * - `write_file`/`create_file` with `encoding: "base64"` store binary
+ * - `write_file` with `encoding: "base64"` stores binary
  *   bytes (`mime_type` optional; inferred from the path extension).
  * - `read_file` on a binary returns an `image` content block for image
  *   MIME types, an embedded blob resource otherwise, plus structured
@@ -138,11 +138,11 @@ describe('binary write (CAP-5)', () => {
     }
   });
 
-  it('create_file with encoding base64 creates a binary file', async () => {
+  it('write_file with encoding base64 creates a binary file', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, []);
-      const result = await callTool(f, 'create_file', {
+      const result = await callTool(f, 'write_file', {
         project: seed.indexDocId,
         path: 'paper.pdf',
         content: b64(PDF),

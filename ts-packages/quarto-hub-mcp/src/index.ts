@@ -255,8 +255,9 @@ function buildInstructions(readOnly: boolean, allowRender: boolean): string {
     '(pass its `hash` back as `since_hash` on the next call so no edit between polls is missed); ' +
     'without `path` it watches the whole project and reports every added/edited/removed file — ' +
     'pass your own just-written `hash` as `since_hash` so your own write is not reported back.' +
-    '\n6. Collaborating with humans: list_presence shows who is editing what (observed ' +
-    'passively — check it before editing a file a teammate has open). get_file_history ' +
+    '\n6. Collaborating with humans: get_project_info with `include: ["presence"]` shows ' +
+    'who is editing what (observed passively — check it before editing a file a teammate ' +
+    'has open). get_file_history ' +
     'lists a file\'s changes with authors, or diffs two versions with from_hash/to_hash. ' +
     'restore_file_version is your undo: it reverts a file to a prior change `head` from ' +
     'get_file_history as a new, reversible change.' +

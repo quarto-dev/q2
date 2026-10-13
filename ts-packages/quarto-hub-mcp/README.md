@@ -35,9 +35,8 @@ argument.
 
 | Tool | What it does |
 |------|--------------|
-| `write_file` | Replace a text file's entire content (creates it if absent). |
+| `write_file` | Replace a text file's entire content (creates it if absent; `create_only: true` refuses to overwrite an existing file). |
 | `patch_file` | Replace one unique substring in a text file. |
-| `create_file` | Create a new text file. |
 | `delete_file` | Delete a file. |
 | `rename_file` | Rename / move a file. |
 | `create_project` | Create a new project on the sync server with optional initial files. |

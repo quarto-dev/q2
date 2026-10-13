@@ -38,7 +38,6 @@ describe('MCP protocol', () => {
     const names = tools.map(t => t.name).sort();
     expect(names).toEqual([
       'connect_project',
-      'create_file',
       'create_folder',
       'create_project',
       'delete_file',
@@ -50,7 +49,6 @@ describe('MCP protocol', () => {
       'get_outline',
       'get_project_info',
       'list_files',
-      'list_presence',
       'list_projects',
       'patch_file',
       'read_file',
@@ -154,7 +152,6 @@ describe('MCP protocol (read-only mode)', () => {
       'get_outline',
       'get_project_info',
       'list_files',
-      'list_presence',
       'list_projects',
       'read_file',
       'search_files',
@@ -409,7 +406,8 @@ describe('live: create project and mutate files', () => {
   }, 15000);
 
   it('should create a new file', async () => {
-    const result = await client.callTool('create_file', {
+    // Phase 7: file creation rides write_file (create_file is gone).
+    const result = await client.callTool('write_file', {
       project: projectId,
       path: 'new-file.qmd',
       content: 'Brand new file',
@@ -428,11 +426,12 @@ describe('live: create project and mutate files', () => {
     expect(JSON.parse(readResult.content[0]!.text).content).toBe('Brand new file');
   }, 15000);
 
-  it('should error when creating a file that already exists', async () => {
-    const result = await client.callTool('create_file', {
+  it('should error when create_only writes over a file that already exists', async () => {
+    const result = await client.callTool('write_file', {
       project: projectId,
       path: 'hello.qmd',
       content: 'duplicate',
+      create_only: true,
     });
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toContain('already exists');

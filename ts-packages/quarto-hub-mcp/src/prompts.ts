@@ -180,7 +180,8 @@ export function registerPrompts(
               text:
                 `I want you to work in Quarto Hub project ${ref.project} while I (and ` +
                 'possibly others) edit it too. Follow this etiquette:\n' +
-                '1. Call list_presence before editing a file — if someone has it open, ' +
+                '1. Call get_project_info with `include: ["presence"]` before editing ' +
+                'a file — if someone has it open, ' +
                 'expect it to change under you and prefer another file or a section ' +
                 'they are not in.\n' +
                 '2. Every read returns a `hash`; pass it back as `expected_hash` on ' +

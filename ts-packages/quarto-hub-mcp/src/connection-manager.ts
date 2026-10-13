@@ -856,7 +856,8 @@ export class ConnectionManager {
   }
 
   /**
-   * Passive presence snapshot for `list_presence` (CAP-8): every peer
+   * Passive presence snapshot for get_project_info's presence arm
+   * (CAP-8; `list_presence` before Phase 7): every peer
    * heard from recently, freshest first. Connects first if needed;
    * observation starts at connect and never broadcasts anything (Q-3).
    */

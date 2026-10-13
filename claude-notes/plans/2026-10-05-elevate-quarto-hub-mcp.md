@@ -1551,6 +1551,208 @@ touched during packaging. Docs: `docs/tools/q2-mcp.qmd` gains the
 npm/`.mcpb` channels + remote-access note; README leads with the three
 channels.
 
+### Phase 7 — Tool-surface consolidation (bd-1ilystml)
+
+A review of the landed Phase 0–6 stack (PRs #790–#799, 2026-10-13)
+against the ERG-5 rules found the ceiling already breached in the
+configuration real users run, three consolidations the plan\'s own rules
+bless, and one BP-1 violation. Phase 7 applies them; no capability is
+lost — each removed tool\'s behavior survives as a parameter on a
+sibling.
+
+#### Review findings (2026-10-13)
+
+1. **Ceiling breach + test blind spot.** The default listing is 22 data
+   tools + 3 auth tools = **25** when OAuth env is configured (the
+   production posture), over the ERG-5 budget of 24. The conformance
+   ceiling test cannot see it: its fixture registers no auth tools
+   (they need OAuth env), so it asserts against 22. The
+   `EXPECTED_RW_TOOLS` comment is also stale ("21 tools"; the list has
+   22 entries).
+2. **`create_file` is redundant with `write_file`.** `handleCreateFile`
+   duplicates `write_file`\'s create arm (same ghost-entry guard, same
+   binary arm, same result shape); `write_file`\'s description already
+   says "creates the file if it does not exist" and `outWriteFile`
+   already carries `created: true`. The only distinct behavior —
+   refuse-if-exists — is one boolean parameter, ERG-5 rule (a) exactly
+   (the same rule that put binary I/O on `write_file` instead of a
+   `write_binary_file` sibling).
+3. **`authenticate_status` is subsumed by `authenticate`.** The
+   documented "check before deciding" flow works without it:
+   `authenticate` already returns "Already authenticated as \<email\>"
+   without opening a browser when credentials are valid, and a failed
+   `connect_project` names `AuthRequiredError`/`ReauthRequired` — two
+   non-interactive probes already exist. (Pre-Phase-1 main shipped
+   exactly the surviving pair.)
+4. **`list_presence` is a separate info tool against ERG-5 rule (d).**
+   Rule (d) consolidated info tools into one `get_project_info` —
+   then Phase 3 added another. Presence is dynamic, but so is the
+   engine-capture state `get_project_info` already reports; an
+   `include: ["presence"]` parameter keeps the cheap pre-edit check
+   opt-in.
+5. **`get_errors` violates BP-1.** It is the only tool with no
+   `outputSchema`, and its handler returns unstructured `text()` where
+   every sibling returns `structured()`. The conformance net allows it
+   only because the golden-case coverage check is keyed on
+   `outputSchema` presence.
+6. **`PROJECT_PARAM_DESC` repetition.** ~370 chars × 22 tools ≈ 8 KB of
+   the `tools/list` payload for one shared parameter; the share-URL
+   semantics it carries are already in the server `instructions`
+   (ERG-6). Trim to one line.
+
+Explicitly **not** acted on, with rationale: `get_outline` →
+`read_file(format: "outline")` (a fifth arm on read_file\'s
+text|binary|metadata|section output union hurts more than one slot
+helps); `get_errors` vs `render` (different trust gates — always-on
+read-only WASM diagnostics vs opt-in code execution; `render` is
+already outside the budget); `create_folder`/`delete_folder`,
+`disconnect_project`, `restore_file_version` (merging any of these into
+siblings crosses the read/write boundary that `--read-only` gating and
+annotations depend on); `authenticate_clear` stays a separate tool
+(its `destructiveHint` must not contaminate the sign-in flow\'s
+annotations; MCP has no per-call annotations).
+
+#### Phase 7 checklist
+
+Budget tally after this phase: 20 data + 2 auth = **22 in production**
+(was 25); read-only mode 11 + 2 = 13.
+
+Test spec (write first, watch fail):
+
+- [x] Conformance: new ceiling test registers the auth tools
+  (production worst case, via a stubbed `AuthToolsState` fixture
+  option) and asserts ≤ 24 — red first at 25; `EXPECTED_RW_TOOLS`
+  drops `create_file`/`list_presence`, comment corrected
+- [x] `write_file` gains `create_only: true`: creates when absent
+  (`created: true`); refuses when the file exists, naming the file;
+  honored by the base64 arm; `create_only` + `expected_hash` is a
+  usage error (contradictory: expected_hash presumes existence)
+- [x] `get_project_info` gains `include: ["presence"]`: result carries
+  `presences` (same entry shape as today) + the passive-observation
+  message when empty; absence of `include` keeps today\'s payload
+  exactly; the `list_presence` integration tests move to the new arm
+- [x] `get_errors` declares `outGetErrors` and returns `structured()`;
+  golden case added (gated on the real WASM host like the other
+  render-tier cases) so the BP-1 coverage net pins it
+- [x] Auth definitions are exactly `authenticate` + `authenticate_clear`
+  (the BP-13 status tests are removed with the tool; the
+  already-authenticated no-op test on `authenticate` stays and is the
+  probe\'s regression net)
+- [x] Golden-case list updated: `create_file` case removed (the
+  `delete_file` case seeds its own file via `write_file`),
+  `list_presence` case folded into `get_project_info`\'s
+- [x] `write_file`\'s description documents `create_only`;
+  `get_project_info`\'s documents `include`; server `instructions`
+  steps 6/7 rewritten (presence via `get_project_info`);
+  `collaborate-with-human` prompt updated (`list_presence` mention);
+  README + `docs/tools/q2-mcp.qmd` tables updated
+- [x] `PROJECT_PARAM_DESC` trimmed to one line (share-URL semantics
+  stay in `instructions` step 1)
+
+Implementation:
+
+- [x] tools.ts: `create_only` on `write_file` (both arms); delete
+  `create_file` registration/handler/`outCreateFile`/dispatch/type
+  entries/`PATH_DEFAULTABLE` entry; migrate all test call sites
+  (`hub-mcp`, `binary-files`, `resources`, `exit-drain`,
+  `write-render-check`, `inspector-smoke`)
+- [x] tools.ts: `include` on `get_project_info`; delete `list_presence`
+  registration/handler/`outListPresence`/dispatch; migrate
+  `presence.test.ts` to the new arm
+- [x] auth-tools.ts: delete `authenticate_status` (definition,
+  `AuthToolName`, dispatch, `handleStatus`); update its test file
+- [x] tools.ts: `outGetErrors` + `structured()` return
+- [x] index.ts instructions, prompts.ts, README.md,
+  `docs/tools/q2-mcp.qmd`
+- [x] Eval suite re-run (same 15 tasks; record next to Phase 6\'s)
+- [x] Phase-close gate: `npm run test -w ts-packages/quarto-hub-mcp`
+  green; `cargo xtask verify` green (see the completion record for the
+  one flake carve-out, bd-pire6khc)
+
+#### Phase 7 completion record (landed 2026-10-13, bd-1ilystml)
+
+**The surface.** Default listing is now 20 data tools + 2 auth tools =
+**22 in the production posture** (was 25 — over budget); read-only mode
+11 + 2 = 13. `create_file` folded into `write_file`\'s `create_only`
+(identical refusal semantics on both write arms; the old "use
+write_file" error became "drop create_only"); `list_presence` folded
+into `get_project_info`\'s `include: ["presence"]` arm (`presences` +
+`presence_message` keys appear only when requested — the bare doctor
+payload is byte-identical); `authenticate_status` deleted outright
+(`authenticate`\'s already-valid short-circuit and connect_project\'s
+`AuthRequiredError` are the two non-interactive probes). Two conformance
+gaps closed along the way: `get_errors` finally carries BP-1 structure
+(`outGetErrors` + `structured()` — it was the last unstructured tool)
+and a BP-9 title (it had none); the golden-case harness gained a
+`requiresWasmHost` tier so the BP-1 net pins get_errors\'s real render.
+`PROJECT_PARAM_DESC` went from ~370 chars × 20 tools to one line
+(~4 KB off the listing payload).
+
+**The ceiling test that couldn\'t see production.** The old test ran
+the fixture without auth tools (they need OAuth env), so it asserted
+22 ≤ 24 while real users got 25. The fixture now takes an
+`authToolsState` option (stubbed deps, construction-only) and two new
+tests pin the production posture: exact expected names **and** ≤ 24,
+in both read-write and read-only. This is the test that fails first
+the next time anyone adds a tool without freeing a slot.
+
+**TDD record.** Tests first: conformance (production-posture budget,
+updated expected lists, golden cases), new `create-only.test.ts` (5
+tests), `presence.test.ts` rewritten against the include arm (incl. a
+pin that the bare payload carries no presence keys), auth definitions
+test. Watched red: 6 conformance + 5 create-only + 5 presence tests
+failed for the right reasons (25 > 24 with auth registered; listing
+mismatches; "tool declares no outputSchema" on the get_errors golden
+case; `presences` undefined). Two self-inflicted bugs caught by the
+red run: a double-wrapped `error(createOnlyRefusal(...))` (the SDK
+client rejected the malformed result — the wire validation doing its
+job) and a missed read-only expected list in hub-mcp.test.ts.
+
+**Eval suite (same 15 tasks, against the consolidated surface):**
+`eval/results/2026-10-13T15-12-25/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/379 | \$0.95 | 0 | 0 | 10s |
+| read-and-report | PASS | 4 | 98/559 | \$0.89 | 0 | 0 | 14s |
+| patch-typo | PASS | 6 | 162/1254 | \$1.00 | 0 | 0 | 23s |
+| write-new-file | PASS | 5 | 130/904 | \$0.95 | 0 | 0 | 19s |
+| rename-file | PASS | 7 | 162/1248 | \$0.99 | 0 | 0 | 22s |
+| collaborator-edit | PASS | 4 | 98/533 | \$0.89 | 0 | 0 | 13s |
+| watch-live-edit | PASS | 5 | 130/944 | \$0.95 | 0 | 0 | 49s |
+| stale-write-recovery | PASS | 6 | 162/1670 | \$1.04 | 1 | 1 | 36s |
+| add-image-binary | PASS | 5 | 130/978 | \$0.96 | 0 | 0 | 18s |
+| search-and-report | PASS | 4 | 66/411 | \$0.89 | 0 | 0 | 9s |
+| watch-project-edit | PASS | 5 | 130/855 | \$0.94 | 0 | 0 | 52s |
+| history-and-restore | PASS | 11 | 226/2538 | \$1.17 | 1 | 1 | 41s |
+| outline-and-section-edit | PASS | 9 | 194/2163 | \$1.09 | 0 | 0 | 35s |
+| docs-lookup | PASS | 5 | 98/557 | \$0.93 | 0 | 0 | 12s |
+| fix-render-error | PASS | 7 | 130/1565 | \$1.03 | 0 | 0 | 26s |
+
+15/15 PASS, median 5 turns (Phase 6: 6, Phase 5: 5 — within model
+variance; no task regressed past its historical band).
+`write-new-file` passes with `create_file` gone (the agent picks
+`write_file` unprompted — the fold costs nothing); `search-and-report`
+improved 6 → 4. `history-and-restore`\'s 11 turns and 1 isError are
+the agent exploring the history/diff modes (transcript reviewed: it
+diffed against the wrong head first, self-corrected — not a server
+error); `stale-write-recovery`\'s isError is the designed refusal.
+
+**Phase-close gate.** `npm run test -w ts-packages/quarto-hub-mcp`
+green (68 files, 586 passed + 3 skips). `cargo xtask lint` green.
+`q2 render --strict` clean on this plan and `docs/tools/q2-mcp.qmd`.
+`cargo xtask build-hub-mcp-bundle` refreshed (the `q2 mcp` embed picks
+up the new surface). The `cargo xtask verify` Rust leg ran the full
+workspace twice: **15730/15731 passed both times** — the single
+failure is `quarto-system-runtime`
+`fetch_blocking_gives_up_on_a_stalled_connection`, a wall-clock
+assertion (`elapsed < 1200 ms` around a 200 ms timeout) that starves
+under suite-tail parallelism (~7 s elapsed, 3/3 runs); it passes in
+isolation (1.5 s) and the diff contains no Rust, so it cannot be a
+Phase 7 regression. Filed as **bd-pire6khc**; the remaining verify
+legs (hub-client build/tests — untouched by this phase) were skipped
+per user direction and the flake is fixed separately.
+
 ---
 
 ## 6. Explicitly considered and deferred

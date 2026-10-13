@@ -233,7 +233,7 @@ describe('prompts/get (BP-6)', () => {
       const text = await promptText(f, 'collaborate-with-human', {
         project: seed.indexDocId,
       });
-      expect(text).toMatch(/list_presence/);
+      expect(text).toMatch(/get_project_info.*presence|presence.*get_project_info/s);
       expect(text).toMatch(/wait_for_change/);
       expect(text).toMatch(/expected_hash/);
     } finally {

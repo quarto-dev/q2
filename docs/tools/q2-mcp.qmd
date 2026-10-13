@@ -102,11 +102,9 @@ suggest it the first time a call fails with an auth error. The
 your operating system's keyring (never in a file) and refreshed
 automatically.
 
-Two related tools:
-
-- `authenticate_status` — report whether you're signed in, as whom, and
-  until when, without starting a sign-in flow.
-- `authenticate_clear` — remove the cached credentials from the keyring.
+When your credentials are already valid, `authenticate` reports so
+without opening a browser. A related tool, `authenticate_clear`,
+removes the cached credentials from the keyring.
 
 ## Working on a project
 
@@ -141,7 +139,8 @@ the same safety signals you have when editing by hand:
   reports every added, edited, or removed file; passing the agent's own
   post-write `hash` as `since_hash` keeps its own write from being
   reported back to it.
-- **Presence.** `list_presence` shows who is in the project and which
+- **Presence.** `get_project_info` with `include: ["presence"]` shows
+  who is in the project and which
   file they are editing, observed passively from the same ephemeral
   messages the web client exchanges — the server never announces
   itself, so collaborators don't see a phantom cursor.
@@ -197,7 +196,7 @@ channels.
 |------|---------|
 | `connect_project` | Connect to a project by id or share URL; returns its files and share URL |
 | `create_project` | Create a project (optional `name` and initial `files`); returns its id and share URL |
-| `get_project_info` | Project shape and connection health: counts, contributors, engine captures, auth mode, sync diagnostics |
+| `get_project_info` | Project shape and connection health: counts, contributors, engine captures, auth mode, sync diagnostics; `include: ["presence"]` adds who is editing what |
 | `list_projects` | Enumerate a project collection from its share URL |
 | `disconnect_project` | Drop the connection to a project (the next call reconnects) |
 
@@ -209,9 +208,8 @@ channels.
 | `read_file` | Read a file (`offset`/`limit`/`max_bytes` for ranges; `section` for one qmd section; binaries return image/blob blocks, `metadata_only` skips the bytes) |
 | `search_files` | Substring or regex search across the project's text files, with snippets |
 | `get_outline` | A .qmd file's heading tree with line ranges — the map for `section` selectors and targeted reads |
-| `write_file` | Replace a file's content (creates if absent; `encoding: "base64"` for images and other binaries) |
+| `write_file` | Replace a file's content (creates if absent — pass `create_only: true` to refuse overwriting an existing file; `encoding: "base64"` for images and other binaries) |
 | `patch_file` | Replace one exact string, or a whole qmd `section` (heading included) — the preferred way to make small edits |
-| `create_file` | Create a new text or binary file |
 | `delete_file` | Delete a file |
 | `rename_file` | Rename or move a file |
 | `restore_file_version` | Revert a file to a prior version from `get_file_history` (a new, reversible change) |
@@ -222,7 +220,7 @@ channels.
 
 | Tool | Purpose |
 |------|---------|
-| `list_presence` | Who is in the project and which file they are editing (passive observation) |
+| `get_project_info` | With `include: ["presence"]`: who is in the project and which file they are editing (passive observation) |
 | `get_file_history` | A file's changes with authors and timestamps, or a unified diff between two versions |
 
 ### Folders
@@ -242,8 +240,7 @@ channels.
 
 | Tool | Purpose |
 |------|---------|
-| `authenticate` | Sign in to Quarto Hub (opens the browser once) |
-| `authenticate_status` | Report sign-in state without starting a flow |
+| `authenticate` | Sign in to Quarto Hub (opens the browser once; reports without a flow when already signed in) |
 | `authenticate_clear` | Remove cached credentials |
 
 ## Rendering (opt-in, `--allow-render`)
@@ -270,7 +267,7 @@ enable it for projects you trust.
 To let an agent look but never edit, add `--read-only` to the `args`
 array. The server then exposes only read tools (`connect_project`,
 `list_files`, `read_file`, `search_files`, `wait_for_change`,
-`get_project_info`, `list_projects`, `list_presence`,
+`get_project_info`, `list_projects`,
 `get_file_history`, `get_outline`, `disconnect_project`) — no write,
 create, or delete calls exist in that configuration.
 

@@ -1,6 +1,9 @@
 /**
- * Integration tests for `list_presence` (CAP-8, Q-3) — Phase 3
- * (claude-notes/plans/2026-10-05-elevate-quarto-hub-mcp.md, bd-3qe7unp7).
+ * Integration tests for the presence surface (CAP-8, Q-3) — Phase 3
+ * (claude-notes/plans/2026-10-05-elevate-quarto-hub-mcp.md, bd-3qe7unp7),
+ * moved in Phase 7 (bd-1ilystml) from the standalone `list_presence`
+ * tool to `get_project_info` with `include: ["presence"]` (ERG-5
+ * rule (d): one info tool, varied by parameter).
  *
  * The fake peer is the test-hub's own repo: broadcasting a hand-crafted
  * message per hub-client's presenceService schema on a file document
@@ -38,7 +41,7 @@ async function listPresence(
   f: InMemoryMcpFixture,
   project: string,
 ): Promise<PresenceEntry[]> {
-  const result = await callTool(f, 'list_presence', { project });
+  const result = await callTool(f, 'get_project_info', { project, include: ['presence'] });
   expect(result.isError).not.toBe(true);
   const block = result.content[0];
   if (block?.type !== 'text') throw new Error('expected a text result block');
@@ -46,7 +49,7 @@ async function listPresence(
   return out.presences;
 }
 
-/** Broadcast until list_presence reflects the peer (sync delivery is async). */
+/** Broadcast until get_project_info reflects the peer (sync delivery is async). */
 async function waitForPeer(
   f: InMemoryMcpFixture,
   project: string,
@@ -72,7 +75,7 @@ const PEER = {
   userColor: '#E91E63',
 };
 
-describe('list_presence (CAP-8)', () => {
+describe('get_project_info include: ["presence"] (CAP-8, Phase 7)', () => {
   it('reflects a fake peer broadcasting on a file document', async () => {
     const f = await startInMemoryMcp();
     try {
@@ -171,12 +174,36 @@ describe('list_presence (CAP-8)', () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
-      const result = await callTool(f, 'list_presence', { project: seed.indexDocId });
+      const result = await callTool(f, 'get_project_info', {
+        project: seed.indexDocId,
+        include: ['presence'],
+      });
       const block = result.content[0];
       if (block?.type !== 'text') throw new Error('expected a text result block');
-      const out = JSON.parse(block.text) as { presences: PresenceEntry[]; message?: string };
+      const out = JSON.parse(block.text) as {
+        presences: PresenceEntry[];
+        presence_message?: string;
+      };
       expect(out.presences).toEqual([]);
-      expect(out.message).toMatch(/passive|no collaborators/i);
+      expect(out.presence_message).toMatch(/passive|no collaborators/i);
+    } finally {
+      await f.close();
+    }
+  }, 30000);
+
+  it('omits the presence arm entirely without include', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
+      const result = await callTool(f, 'get_project_info', { project: seed.indexDocId });
+      const block = result.content[0];
+      if (block?.type !== 'text') throw new Error('expected a text result block');
+      const out = JSON.parse(block.text) as Record<string, unknown>;
+      expect(out).not.toHaveProperty('presences');
+      expect(out).not.toHaveProperty('presence_message');
+      // The doctor payload is intact.
+      expect(out.counts).toBeDefined();
+      expect(out.shareUrl).toBeDefined();
     } finally {
       await f.close();
     }

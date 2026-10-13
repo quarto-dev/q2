@@ -47,14 +47,18 @@ import {
 } from './in-memory-fixture.js';
 import { resetDocsCorpusForTests } from './docs-tool.js';
 import { PARSER_UNAVAILABLE } from './test-setup.js';
+import { realWasmHostAvailable } from './test-wasm-host.js';
 
 /** Tool budget (ERG-5): the default listing never exceeds this. */
 const TOOL_BUDGET = 24;
 
-/** Read-write mode lists these today (21 tools; auth tools need OAuth env). */
+/**
+ * Read-write mode lists these 20 data tools today (auth tools add to
+ * this when OAuth env is configured — see EXPECTED_AUTH_TOOLS and the
+ * production-posture budget test).
+ */
 const EXPECTED_RW_TOOLS = [
   'connect_project',
-  'create_file',
   'create_folder',
   'create_project',
   'delete_file',
@@ -66,7 +70,6 @@ const EXPECTED_RW_TOOLS = [
   'get_outline',
   'get_project_info',
   'list_files',
-  'list_presence',
   'list_projects',
   'patch_file',
   'read_file',
@@ -76,6 +79,15 @@ const EXPECTED_RW_TOOLS = [
   'wait_for_change',
   'write_file',
 ];
+
+/**
+ * The auth tools (Phase 7: exactly two — `authenticate` no-ops with
+ * "Already authenticated as <email>" when credentials are valid, so a
+ * separate status probe spends a listing slot on nothing). They
+ * register only when OAuth env is configured; the fixture registers
+ * them via a stubbed AuthToolsState.
+ */
+const EXPECTED_AUTH_TOOLS = ['authenticate', 'authenticate_clear'];
 
 // ============================================================================
 // Fixture smoke — the Phase 0 e2e: a real SDK client driving the real server
@@ -143,7 +155,6 @@ describe('in-memory fixture smoke', () => {
         'get_outline',
         'get_project_info',
         'list_files',
-        'list_presence',
         'list_projects',
         'read_file',
         'search_files',
@@ -231,6 +242,34 @@ describe('tool budget (ERG-5)', () => {
       await f.close();
     }
   });
+
+  // The production posture (Phase 7, bd-1ilystml): with OAuth env
+  // configured the auth tools register too — that is the listing real
+  // users see, and the one the ceiling must hold against. The fixture
+  // without OAuth env undercounts by the auth tools' number, which is
+  // how the listing quietly grew past the budget once (25 > 24 at the
+  // Phase 6 tip while this file asserted against 22).
+  it('production listing (auth tools registered) stays within the ceiling', async () => {
+    const f = await startInMemoryMcp({ authToolsState: stubAuthToolsState() });
+    try {
+      const tools = await f.client.listTools();
+      const names = tools.tools.map((t) => t.name).sort();
+      expect(names).toEqual([...EXPECTED_RW_TOOLS, ...EXPECTED_AUTH_TOOLS].sort());
+      expect(tools.tools.length).toBeLessThanOrEqual(TOOL_BUDGET);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('read-only production listing also stays within the ceiling', async () => {
+    const f = await startInMemoryMcp({ readOnly: true, authToolsState: stubAuthToolsState() });
+    try {
+      const tools = await f.client.listTools();
+      expect(tools.tools.length).toBeLessThanOrEqual(TOOL_BUDGET);
+    } finally {
+      await f.close();
+    }
+  });
 });
 
 // ============================================================================
@@ -293,8 +332,8 @@ describe('schema conformance (BP-11, BP-14)', () => {
 const GOLDEN_RESULT_CASES: ReadonlyArray<{
   tool: string;
   args: (seed: SeededProject) => Record<string, unknown>;
-  /** Extra args needing fixture access (e.g. a doc minted on the hub). */
-  setup?: (f: InMemoryMcpFixture) => Promise<Record<string, unknown>>;
+  /** Extra args needing fixture/seed access (e.g. a doc minted on the hub). */
+  setup?: (f: InMemoryMcpFixture, seed: SeededProject) => Promise<Record<string, unknown>>;
   /**
    * The call needs the wasm-qmd-parser (CAP-11). Toolchain-less CI legs
    * (workspace-ts-suites) leave the parser unbuilt and the tool errors by
@@ -303,6 +342,12 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
    * unaffected: the case stays registered either way.
    */
   requiresParser?: true;
+  /**
+   * The call needs the real prebundled WASM render host (get_errors).
+   * Same gated-tier pattern as requiresParser, keyed on
+   * realWasmHostAvailable().
+   */
+  requiresWasmHost?: true;
 }> = [
   { tool: 'connect_project', args: (seed) => ({ project: seed.indexDocId }) },
   { tool: 'list_files', args: (seed) => ({ project: seed.indexDocId }) },
@@ -364,12 +409,25 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     }),
   },
   {
-    tool: 'create_file',
-    args: (seed) => ({ project: seed.indexDocId, path: 'golden-new.qmd', content: 'new\n' }),
+    // Renders index.qmd for real — before rename_file moves it below.
+    tool: 'get_errors',
+    requiresWasmHost: true,
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
   },
   {
     tool: 'delete_file',
     args: (seed) => ({ project: seed.indexDocId, path: 'golden-new.qmd' }),
+    setup: async (f, seed) => {
+      // Phase 7: the file comes from write_file's create arm (create_file
+      // is gone — its refuse-if-exists semantics live on as
+      // write_file's create_only, exercised in create-only.test.ts).
+      await callTool(f, 'write_file', {
+        project: seed.indexDocId,
+        path: 'golden-new.qmd',
+        content: 'new\n',
+      });
+      return {};
+    },
   },
   {
     tool: 'rename_file',
@@ -392,12 +450,11 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
     args: (seed) => ({ project: seed.indexDocId, query: 'v3' }),
   },
   {
+    // The include arm doubles as the presence golden case (Phase 7:
+    // list_presence folded into get_project_info). No peers broadcast
+    // here, so the arm validates as an empty list + guidance message.
     tool: 'get_project_info',
-    args: (seed) => ({ project: seed.indexDocId }),
-  },
-  {
-    tool: 'list_presence',
-    args: (seed) => ({ project: seed.indexDocId }),
+    args: (seed) => ({ project: seed.indexDocId, include: ['presence'] }),
   },
   {
     tool: 'list_projects',
@@ -517,11 +574,13 @@ describe('result conformance (BP-1 net)', () => {
         // Parser-tier cases cannot succeed without the parser build (the
         // tool errors by design) — skip them on toolchain-less legs.
         if (c.requiresParser && PARSER_UNAVAILABLE) continue;
+        // Render-tier cases likewise need the real prebundled WASM host.
+        if (c.requiresWasmHost && !realWasmHostAvailable()) continue;
         const declared = tools.find((t) => t.name === c.tool)?.outputSchema;
         if (declared === undefined) {
           throw new Error(`golden case for ${c.tool}: tool declares no outputSchema`);
         }
-        const extra = c.setup ? await c.setup(f) : {};
+        const extra = c.setup ? await c.setup(f, seed) : {};
         const result = await callTool(f, c.tool, { ...c.args(seed), ...extra });
         expect(result.isError, `golden call for ${c.tool} errored`).not.toBe(true);
         const validate = ajv.compile(declared);
@@ -598,6 +657,35 @@ function stubRefreshManager(): RefreshManager {
   const rm = Object.create(RefreshManager.prototype) as RefreshManager;
   Object.defineProperty(rm, 'getValidIdToken', { value: vi.fn().mockResolvedValue('id-token') });
   return rm;
+}
+
+/**
+ * An AuthToolsState with stubbed deps, for tests that need the auth
+ * tools registered (the production listing) without an OAuth flow.
+ * Construction has no side effects; calling the tools through this
+ * state is not supported (the BP-18 harness below exercises the flow).
+ */
+function stubAuthToolsState(): AuthToolsState {
+  return new AuthToolsState({
+    credentialStore: seededStore(),
+    refreshManager: stubRefreshManager(),
+    connectionManager: { lastObservedAuthMode: () => 'unknown' },
+    flowConfig: {
+      clientId: 'test-client',
+      clientSecret: 'test-secret',
+      issuer: 'https://idp.example.com',
+    },
+    authServer: async () => ({
+      issuer: 'https://idp.example.com',
+      authorization_endpoint: 'https://idp.example.com/authorize',
+      token_endpoint: 'https://idp.example.com/token',
+    }),
+    startListener: async () => {
+      throw new Error('stub: no listener');
+    },
+    openBrowser: () => undefined,
+    logger: () => {},
+  });
 }
 
 describe('security invariants', () => {
@@ -834,18 +922,17 @@ describe('tool titles (BP-9)', () => {
         connect_project: 'Connect to a project',
         disconnect_project: 'Disconnect from a project',
         docs: 'Search Quarto documentation',
+        get_errors: 'Check a project for errors',
         get_file_history: 'Get file history',
         get_outline: 'Get document outline',
         get_project_info: 'Get project info',
         list_projects: 'List projects in a collection',
         list_files: 'List files',
-        list_presence: 'List collaborators present',
         read_file: 'Read a file',
         search_files: 'Search files',
         wait_for_change: 'Watch for changes',
         write_file: 'Write a file',
         patch_file: 'Patch a file',
-        create_file: 'Create a file',
         delete_file: 'Delete a file',
         rename_file: 'Rename a file',
         restore_file_version: 'Restore a file version',
@@ -867,7 +954,6 @@ describe('tool titles (BP-9)', () => {
     expect(titles).toEqual({
       authenticate: 'Sign in to Quarto Hub',
       authenticate_clear: 'Clear Quarto Hub credentials',
-      authenticate_status: 'Check Quarto Hub sign-in status',
     });
   });
 });

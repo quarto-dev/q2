@@ -1,6 +1,7 @@
 /**
- * PresenceTracker — passive presence observation for `list_presence`
- * (CAP-8, Phase 3, bd-3qe7unp7).
+ * PresenceTracker — passive presence observation for the presence arm
+ * of `get_project_info` (CAP-8, Phase 3, bd-3qe7unp7; folded from
+ * `list_presence` in Phase 7, bd-1ilystml).
  *
  * The web client broadcasts presence as automerge ephemeral messages on
  * the *file* document being edited (hub-client/src/services/
@@ -70,7 +71,7 @@ interface PresenceRecord {
   lastSeen: number;
 }
 
-/** One `list_presence` entry (see the tool's outputSchema). */
+/** One presence entry (see the `presences` arm of get_project_info's outputSchema). */
 export interface PresenceSnapshotEntry {
   peer_id: string;
   user_id: string;

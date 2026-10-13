@@ -1,6 +1,6 @@
 /**
  * Write tools auto-check the content they just wrote: after write_file /
- * patch_file / create_file touches a .qmd, the response carries a render
+ * patch_file touches a .qmd, the response carries a render
  * check of the NEW content so the agent sees immediately whether the
  * edit broke (or fixed) the document — no separate get_errors call
  * needed to close a batch of updates.
@@ -162,14 +162,19 @@ describe('write tools render-check the new .qmd content', () => {
     expect(payload?.type === 'text' && payload.text).toBe('new\n');
   });
 
-  it('write_file (create) and create_file render-check the initial content', async () => {
+  it('write_file (plain and create_only creates) render-check the initial content', async () => {
     const h = harness({});
     const created = await h.call('write_file', { project: 'idx', path: 'new.qmd', content: 'x\n' });
     expect(parse(created).created).toBe(true);
     expect(parse(created).renderCheck).toMatch(/render check: clean/i);
 
     const h2 = harness({});
-    const created2 = await h2.call('create_file', { project: 'idx', path: 'n2.qmd', content: 'y\n' });
+    const created2 = await h2.call('write_file', {
+      project: 'idx',
+      path: 'n2.qmd',
+      content: 'y\n',
+      create_only: true,
+    });
     expect(parse(created2).created).toBe(true);
     expect(parse(created2).renderCheck).toMatch(/render check: clean/i);
   });

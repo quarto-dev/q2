@@ -129,12 +129,14 @@ function withResourceLink(
  * Shared description for every `project` parameter. Tells the model that a
  * quarto-hub.com share URL is accepted in place of a bare id — the server
  * extracts the id (and a default `path`) from it. See {@link parseProjectRef}.
+ *
+ * Deliberately one line (Phase 7, bd-1ilystml): this rides every tool's
+ * inputSchema (~20× in the listing), and the full share-URL semantics
+ * (`server=` routing, where the id sits) live in the server instructions.
  */
 const PROJECT_PARAM_DESC =
-  "The project's automerge index document ID, OR a full quarto-hub.com share URL " +
-  'such as `https://quarto-hub.com/#/share/<id>?file=…&name=…` (the link users share ' +
-  'to grant access). Given a share URL, the `<id>` after `#/share/` is used as the ' +
-  'project and the `file=` query parameter, if present, supplies a default `path`.';
+  "The project's automerge index document ID, or a quarto-hub.com share URL " +
+  '(`https://quarto-hub.com/#/share/<id>?…`); a `file=` parameter supplies a default `path`.';
 
 const projectParam = z.string().describe(PROJECT_PARAM_DESC);
 const pathParam = z.string().describe('The file path within the project');
@@ -510,7 +512,6 @@ type DataToolName =
   | 'get_project_info'
   | 'list_projects'
   | 'list_files'
-  | 'list_presence'
   | 'get_file_history'
   | 'get_outline'
   | 'docs'
@@ -520,7 +521,6 @@ type DataToolName =
   | 'get_errors'
   | 'write_file'
   | 'patch_file'
-  | 'create_file'
   | 'delete_file'
   | 'rename_file'
   | 'create_folder'
@@ -544,7 +544,6 @@ const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
   'read_file',
   'write_file',
   'patch_file',
-  'create_file',
   'delete_file',
   'get_file_history',
   'get_outline',
@@ -585,8 +584,6 @@ async function handleTool(
       return handleListProjects(args, manager);
     case 'list_files':
       return handleListFiles(args, manager);
-    case 'list_presence':
-      return handleListPresence(args, manager);
     case 'get_file_history':
       return handleGetFileHistory(args, manager);
     case 'get_outline':
@@ -605,8 +602,6 @@ async function handleTool(
       return handleWriteFile(args, manager);
     case 'patch_file':
       return handlePatchFile(args, manager);
-    case 'create_file':
-      return handleCreateFile(args, manager);
     case 'delete_file':
       return handleDeleteFile(args, manager);
     case 'rename_file':
@@ -691,8 +686,20 @@ async function handleDisconnectProject(args: ToolArgs, manager: ConnectionManage
   });
 }
 
+/**
+ * The empty-presence guidance (CAP-8): observation is passive, so an
+ * empty list is weak evidence. Carried as `presence_message` on
+ * get_project_info's presence arm (Phase 7).
+ */
+const PRESENCE_EMPTY_MESSAGE =
+  'No collaborators heard from recently. Presence is observed passively: a peer ' +
+  'appears here only after their editor broadcasts (on cursor activity), and drops ' +
+  'out about a minute after their last broadcast. Absence of an entry does not prove ' +
+  'nobody has the project open.';
+
 async function handleGetProjectInfo(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
+  const include = Array.isArray(args.include) ? (args.include as readonly string[]) : [];
   const state = await manager.connect(project, { server: routedServer(args) });
   // The index doc is the source of truth for identities/captures; both
   // getters tolerate a V1 doc (absent maps → {}).
@@ -704,6 +711,12 @@ async function handleGetProjectInfo(args: ToolArgs, manager: ConnectionManager):
   for (const payload of state.files.values()) {
     if (payload.type === 'binary') binary++;
   }
+  // Presence arm (Phase 7, bd-1ilystml: the standalone list_presence
+  // tool folded into the doctor — ERG-5 rule (d)). Passive observation;
+  // this server never announces itself.
+  const presences = include.includes('presence')
+    ? await manager.observePresence(project, { server: routedServer(args) })
+    : undefined;
   return structured({
     project,
     server: state.serverUrl,
@@ -733,6 +746,12 @@ async function handleGetProjectInfo(args: ToolArgs, manager: ConnectionManager):
       unavailable_retry_ticks: diag.unavailableRetryTicks,
       stranded: diag.stranded,
     },
+    ...(presences !== undefined
+      ? {
+          presences,
+          ...(presences.length === 0 ? { presence_message: PRESENCE_EMPTY_MESSAGE } : {}),
+        }
+      : {}),
   });
 }
 
@@ -853,24 +872,6 @@ async function handleGetFileHistory(args: ToolArgs, manager: ConnectionManager):
   });
 }
 
-async function handleListPresence(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
-  const project = args.project as string;
-  const presences = await manager.observePresence(project, { server: routedServer(args) });
-  return structured({
-    project,
-    presences,
-    ...(presences.length === 0
-      ? {
-          message:
-            'No collaborators heard from recently. Presence is observed passively: a peer ' +
-            'appears here only after their editor broadcasts (on cursor activity), and drops ' +
-            'out about a minute after their last broadcast. Absence of an entry does not prove ' +
-            'nobody has the project open.',
-        }
-      : {}),
-  });
-}
-
 async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project, { server: routedServer(args) });
@@ -885,6 +886,14 @@ async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Prom
  * read, so the write is refused. The payload carries the CURRENT content
  * and its hash — the caller can merge and retry without an extra read.
  */
+/** The `create_only` refusal (Phase 7): identical on both write arms. */
+function createOnlyRefusal(path: string): CallToolResult {
+  return error(
+    `Error: write_file refused: ${path} already exists (create_only). Drop create_only ` +
+      'to overwrite it, or pass expected_hash for a compare-and-swap update.',
+  );
+}
+
 function staleHashError(
   tool: 'write_file' | 'patch_file' | 'restore_file_version',
   path: string,
@@ -1726,7 +1735,9 @@ async function handleGetErrors(args: ToolArgs, manager: ConnectionManager): Prom
   if (capped) {
     report.note = `Checked the first ${MAX_CHECKED_DOCUMENTS} .qmd documents; pass a path to check a specific other file.`;
   }
-  return text(JSON.stringify(report, null, 2));
+  // BP-1, made true in Phase 7 (bd-1ilystml): structuredContent like
+  // every sibling — this was the last unstructured tool result.
+  return structured(report);
 }
 
 /**
@@ -1772,11 +1783,28 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   const path = args.path as string;
   const content = args.content as string;
   const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
+  const createOnly = args.create_only === true;
+  if (createOnly && expectedHash !== undefined) {
+    return error(
+      'Error: `create_only` and `expected_hash` cannot be combined — create_only means ' +
+        '"the file must not exist", while expected_hash guards an existing file. Pick one.',
+    );
+  }
   const state = await manager.connect(project, { server: routedServer(args) });
   const existing = state.files.get(path);
 
   if (args.encoding === 'base64') {
-    return handleWriteFileBinary(args, manager, state, project, path, content, expectedHash, existing);
+    return handleWriteFileBinary(
+      args,
+      manager,
+      state,
+      project,
+      path,
+      content,
+      expectedHash,
+      existing,
+      createOnly,
+    );
   }
 
   if (!existing) {
@@ -1807,6 +1835,9 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
       path,
       args,
     );
+  }
+  if (createOnly) {
+    return createOnlyRefusal(path);
   }
   if (existing.type === 'binary') {
     return error(
@@ -1847,6 +1878,7 @@ async function handleWriteFileBinary(
   content: string,
   expectedHash: string | undefined,
   existing: FilePayload | undefined,
+  createOnly: boolean,
 ): Promise<CallToolResult> {
   const decoded = decodeBase64(content);
   if (!ArrayBuffer.isView(decoded)) return decoded; // the validation error result
@@ -1878,6 +1910,9 @@ async function handleWriteFileBinary(
       created.path,
       args,
     );
+  }
+  if (createOnly) {
+    return createOnlyRefusal(path);
   }
   if (existing.type === 'text') {
     return error(
@@ -1988,56 +2023,6 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
       hash: hashPayload({ type: 'text', text: newContent }),
       ...(await syncField(args, manager, project, [path])),
       renderCheck: (await renderCheckSuffix(state.files, path, newContent)).trim() || undefined,
-    }),
-    project,
-    path,
-    args,
-  );
-}
-
-async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
-  const project = args.project as string;
-  const path = args.path as string;
-  const content = (args.content as string) ?? '';
-  const state = await manager.connect(project, { server: routedServer(args) });
-
-  if (state.files.has(path)) {
-    return error(`Error: File already exists: ${path}. Use write_file to update it.`);
-  }
-  // Same hazard as write_file: don't silently repoint a dangling entry.
-  const ghost = findUnavailable(state.client, path);
-  if (ghost) {
-    return unavailableFileError(path, ghost.docId);
-  }
-
-  if (args.encoding === 'base64') {
-    const decoded = decodeBase64(content);
-    if (!ArrayBuffer.isView(decoded)) return decoded;
-    const mimeType =
-      typeof args.mime_type === 'string' && args.mime_type !== ''
-        ? args.mime_type
-        : inferMimeType(path);
-    const created = await state.client.createBinaryFile(path, decoded, mimeType);
-    return withResourceLink(
-      structured({
-        ...binaryWriteMeta(created.path, decoded, mimeType),
-        created: true,
-        ...(await syncField(args, manager, project, [created.path])),
-      }),
-      project,
-      created.path,
-      args,
-    );
-  }
-
-  await state.client.createFile(path, content);
-  return withResourceLink(
-    structured({
-      path,
-      hash: hashPayload({ type: 'text', text: content }),
-      created: true,
-      ...(await syncField(args, manager, project, [path])),
-      renderCheck: (await renderCheckSuffix(state.files, path, content)).trim() || undefined,
     }),
     project,
     path,
@@ -2335,12 +2320,6 @@ const outPresenceEntry = z.object({
   active: z.boolean(),
 });
 
-const outListPresence = z.object({
-  project: z.string(),
-  presences: z.array(outPresenceEntry),
-  message: z.string().optional(),
-});
-
 const outHistoryEntry = z.object({
   head: z.string(),
   hash: z.string(),
@@ -2431,6 +2410,45 @@ const outGetProjectInfo = z.object({
       }),
     ),
   }),
+  // Present only with `include: ["presence"]` (Phase 7).
+  presences: z.array(outPresenceEntry).optional(),
+  presence_message: z.string().optional(),
+});
+
+// BP-1: get_errors' report shape (Phase 7 — it was the last tool
+// without a declared outputSchema). Mirrors RenderedDiagnostic in
+// local-render.ts.
+const outDiagnostic = z.object({
+  kind: z.enum(['error', 'warning', 'info', 'note']),
+  title: z.string(),
+  code: z.string().optional(),
+  problem: z.string().optional(),
+  hints: z.array(z.string()),
+  start_line: z.number().optional(),
+  start_column: z.number().optional(),
+  end_line: z.number().optional(),
+  end_column: z.number().optional(),
+  details: z.array(z.unknown()),
+});
+
+const outGetErrors = z.object({
+  project: z.string(),
+  files: z.array(
+    z.object({
+      path: z.string(),
+      checkedContentSha256: z.string().optional(),
+      errors: z.array(outDiagnostic).optional(),
+      warnings: z.array(outDiagnostic).optional(),
+      note: z.string().optional(),
+      execution: z
+        .object({
+          state: z.string(),
+          lastError: z.string().optional(),
+        })
+        .optional(),
+    }),
+  ),
+  note: z.string().optional(),
 });
 
 const outListProjects = z.object({
@@ -2534,16 +2552,6 @@ const outPatchFile = z.object({
   synced: z.boolean().optional(),
   renderCheck: z.string().optional(),
   section: outSectionInfo.optional(),
-});
-
-const outCreateFile = z.object({
-  path: z.string(),
-  hash: z.string(),
-  created: z.literal(true),
-  synced: z.boolean().optional(),
-  renderCheck: z.string().optional(),
-  mimeType: z.string().optional(),
-  size: z.number().optional(),
 });
 
 const outDeleteFile = z.object({
@@ -2864,6 +2872,7 @@ export function registerTools(
   server.registerTool(
     'get_errors',
     {
+      title: 'Check a project for errors',
       description:
         'Check a Quarto Hub project for errors by rendering it with the same pipeline ' +
         'the browser preview uses, locally and on demand. Reports structured render ' +
@@ -2878,6 +2887,7 @@ export function registerTools(
         project: projectParam,
         path: z.string().describe('Optional: check only this file path').optional(),
       }),
+      outputSchema: outGetErrors,
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('get_errors', args, manager),
@@ -2892,8 +2902,25 @@ export function registerTools(
         'identities, engine-capture state (idle/running/error + lastError), the index ' +
         'document id, sync server, observed auth mode, sync diagnostics (peers, stranded ' +
         'files), and the project\'s share URL. The "doctor" tool — call it to understand ' +
-        'an unfamiliar project or diagnose a connection.',
-      inputSchema: z.object({ project: projectParam }),
+        'an unfamiliar project or diagnose a connection. Pass `include: ["presence"]` ' +
+        'to also see who is in the project right now: each collaborator\'s name, the ' +
+        'file they are editing, cursor/selection offsets when resolvable, and how long ' +
+        'ago they were last heard from (`active` = within the last 5s, same threshold ' +
+        'the web client shows). Presence is observed passively — this server never ' +
+        'announces itself, and a peer only appears after their editor broadcasts (on ' +
+        'cursor activity), so an empty list does not prove nobody is watching. Check ' +
+        'presence before editing a file a teammate may have open; combine with ' +
+        'wait_for_change to react to their edits.',
+      inputSchema: z.object({
+        project: projectParam,
+        include: z
+          .array(z.enum(['presence']))
+          .optional()
+          .describe(
+            'Optional extras to include. "presence": who is in the project right now ' +
+              '(adds `presences`, and `presence_message` when empty).',
+          ),
+      }),
       outputSchema: outGetProjectInfo,
       annotations: ANNOT_READ,
     },
@@ -2921,27 +2948,6 @@ export function registerTools(
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('list_projects', args, manager),
-  );
-
-  server.registerTool(
-    'list_presence',
-    {
-      title: 'List collaborators present',
-      description:
-        'Who is in the project right now: each collaborator\'s name, the file they are ' +
-        'editing, cursor/selection offsets when resolvable, and how long ago they were last ' +
-        'heard from (`active` = within the last 5s, same threshold the web client shows). ' +
-        'Observation is passive — this server never announces itself, and a peer only appears ' +
-        'after their editor broadcasts (on cursor activity), so an empty list does not prove ' +
-        'nobody is watching. Check before editing a file a teammate may have open; combine ' +
-        'with wait_for_change to react to their edits.',
-      inputSchema: z.object({
-        project: projectParam,
-      }),
-      outputSchema: outListPresence,
-      annotations: ANNOT_READ,
-    },
-    (args) => runDataTool('list_presence', args, manager),
   );
 
   server.registerTool(
@@ -3010,8 +3016,9 @@ export function registerTools(
       title: 'Write a file',
       description:
         'Replace the entire content of a file in a Quarto Hub project. Creates the file if it ' +
-        'does not exist. Returns `{ path, hash }` (plus `mimeType`/`size` for binary). ' +
-        'Prefer patch_file for small changes to large text files. ' +
+        'does not exist (`create_only: true` makes the write refuse instead of overwriting ' +
+        'when it does — a create-with-guard). Returns `{ path, hash }` (plus `mimeType`/`size` ' +
+        'for binary). Prefer patch_file for small changes to large text files. ' +
         'With `encoding: "base64"`, `content` is base64-encoded bytes and the file is binary.',
       inputSchema: z.object({
         project: projectParam,
@@ -3028,6 +3035,13 @@ export function registerTools(
             'Optional `hash` from a prior read_file/write_file result. When given, the write is ' +
               'refused (returning the current content and its hash) if the file changed since — ' +
               'compare-and-swap against collaborator edits.',
+          ),
+        create_only: z
+          .boolean()
+          .optional()
+          .describe(
+            'Refuse to overwrite: the write fails if the file already exists (default false). ' +
+              'Cannot be combined with expected_hash.',
           ),
         wait_for_sync: waitForSyncParam,
       }),
@@ -3082,30 +3096,6 @@ export function registerTools(
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     (args) => runDataTool('patch_file', args, manager),
-  );
-
-  server.registerTool(
-    'create_file',
-    {
-      title: 'Create a file',
-      description:
-        'Create a new file in a Quarto Hub project. Text by default; with ' +
-        '`encoding: "base64"`, `content` is base64-encoded bytes and the file is binary.',
-      inputSchema: z.object({
-        project: projectParam,
-        path: pathParam.optional(),
-        content: z
-          .string()
-          .describe('Initial file content (defaults to empty; base64 bytes when `encoding: "base64"`)')
-          .default(''),
-        encoding: encodingParam,
-        mime_type: mimeTypeParam,
-        wait_for_sync: waitForSyncParam,
-      }),
-      outputSchema: outCreateFile,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
-    },
-    (args) => runDataTool('create_file', args, manager),
   );
 
   server.registerTool(

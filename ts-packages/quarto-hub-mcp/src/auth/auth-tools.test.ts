@@ -309,16 +309,13 @@ function textOf(res: CallToolResult): string {
 // ===========================================================================
 
 describe('AUTH_TOOL_DEFINITIONS', () => {
-  it('exposes exactly authenticate, authenticate_clear, and authenticate_status', () => {
+  // Phase 7 (bd-1ilystml): authenticate_status is gone — `authenticate`
+  // short-circuits with "Already authenticated as <email>" when
+  // credentials are valid, and a failed connect_project names
+  // AuthRequiredError, so the probe spent a listing slot on nothing.
+  it('exposes exactly authenticate and authenticate_clear', () => {
     const names = AUTH_TOOL_DEFINITIONS.map((t) => t.name).sort();
-    expect(names).toEqual(['authenticate', 'authenticate_clear', 'authenticate_status']);
-  });
-
-  it('marks authenticate_status read-only and idempotent (it never runs a flow)', () => {
-    const status = AUTH_TOOL_DEFINITIONS.find((t) => t.name === 'authenticate_status')!;
-    expect(status.annotations?.readOnlyHint).toBe(true);
-    expect(status.annotations?.idempotentHint).toBe(true);
-    expect(status.outputSchema).toBeDefined();
+    expect(names).toEqual(['authenticate', 'authenticate_clear']);
   });
 
   it('marks authenticate non-idempotent / non-destructive and clear destructive / idempotent', () => {
@@ -809,7 +806,7 @@ describe('lazy discovery failure', () => {
 });
 
 // ===========================================================================
-// authenticate serialization (BP-12) + authenticate_status (BP-13)
+// authenticate serialization (BP-12)
 // ===========================================================================
 
 describe('authenticate concurrency guard (BP-12)', () => {
@@ -859,38 +856,5 @@ describe('authenticate concurrency guard (BP-12)', () => {
     // B ran strictly after A's credential landed: it short-circuits.
     expect(textOf(resB)).toContain('Already authenticated');
     expect(listenerCalls).toBe(1);
-  });
-});
-
-describe('authenticate_status (BP-13)', () => {
-  it('reports unauthenticated with the hub URL and triggers no flow', async () => {
-    const { store } = emptyStore();
-    const listener = fakeListener({});
-    const browser = fakeBrowser();
-    const state = makeState({
-      store,
-      startListener: listener.start,
-      openBrowser: browser.open,
-    });
-    const res = await state.handle('authenticate_status');
-    expect(res.isError).not.toBe(true);
-    const payload = JSON.parse(textOf(res)) as Record<string, unknown>;
-    expect(payload.authenticated).toBe(false);
-    expect(payload.hub).toBe('wss://quarto-hub.com/ws');
-    // No flow: no listener, no browser.
-    expect(listener.recorded.calls).toBe(0);
-    expect(browser.calls).toEqual([]);
-  });
-
-  it('reports identity and expiry from the cached credential without a flow', async () => {
-    const { store } = await seededStore();
-    const listener = fakeListener({});
-    const state = makeState({ store, startListener: listener.start });
-    const res = await state.handle('authenticate_status');
-    const payload = JSON.parse(textOf(res)) as Record<string, unknown>;
-    expect(payload.authenticated).toBe(true);
-    expect(payload.identity).toBe(FAKE_EMAIL);
-    expect(payload.expiry).toBe(new Date(farFutureExp() * 1000).toISOString());
-    expect(listener.recorded.calls).toBe(0);
   });
 });

@@ -28,7 +28,6 @@ import type {
   StandardSchemaWithJSON,
   ToolAnnotations,
 } from '@modelcontextprotocol/server';
-import { z } from 'zod';
 import { decodeJwt } from 'jose';
 import * as oauth from 'oauth4webapi';
 
@@ -70,9 +69,8 @@ const GOOGLE_AUTHORIZATION_ENDPOINT =
 export interface LastObservedAuthModeSource {
   lastObservedAuthMode(): 'no-auth' | 'requires-auth' | 'unknown';
   /**
-   * The hub URL the connection manager is configured for — reported by
-   * `authenticate_status` (BP-13). Optional: minimal stubs may not know
-   * it; the status falls back to `'unknown'`.
+   * The hub URL the connection manager is configured for. Optional:
+   * minimal stubs may not know it.
    */
   readonly configuredServerUrl?: string;
 }
@@ -134,7 +132,11 @@ export interface AuthToolsDeps {
   readonly openBrowser?: typeof defaultOpenBrowser;
 }
 
-export type AuthToolName = 'authenticate' | 'authenticate_clear' | 'authenticate_status';
+// Phase 7 (bd-1ilystml): `authenticate_status` was removed — a status
+// probe spent an ERG-5 listing slot on what `authenticate`'s
+// already-valid short-circuit and connect_project's AuthRequiredError
+// already tell an agent.
+export type AuthToolName = 'authenticate' | 'authenticate_clear';
 
 /**
  * An auth tool's advertised metadata. Input schemas are not part of the
@@ -169,26 +171,6 @@ export const AUTH_TOOL_DEFINITIONS: readonly AuthToolDefinition[] = [
     },
   },
   {
-    name: 'authenticate_status',
-    title: 'Check Quarto Hub sign-in status',
-    description:
-      'Report whether this server holds Quarto Hub credentials: ' +
-      '`{ authenticated, hub, identity?, expiry? }`. Never opens a browser ' +
-      'or runs a sign-in flow — call this to check state before deciding ' +
-      'whether `authenticate` is needed.',
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-    },
-    outputSchema: z.object({
-      authenticated: z.boolean(),
-      hub: z.string(),
-      identity: z.string().optional(),
-      expiry: z.string().optional(),
-    }),
-  },
-  {
     name: 'authenticate_clear',
     title: 'Clear Quarto Hub credentials',
     description:
@@ -221,18 +203,6 @@ function errorResult(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }], isError: true };
 }
 
-/**
- * A structured result (BP-1): `structuredContent` for hosts that
- * validate against the tool's `outputSchema`, plus the same payload as
- * a JSON text block (this module's convention for data answers).
- */
-function structuredResult(payload: Record<string, unknown>): CallToolResult {
-  return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
-    structuredContent: payload,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // AuthToolsState
 // ---------------------------------------------------------------------------
@@ -251,7 +221,6 @@ export class AuthToolsState {
   async handle(name: AuthToolName, ctx: AuthToolContext = {}): Promise<CallToolResult> {
     if (name === 'authenticate') return this.handleAuthenticate(ctx);
     if (name === 'authenticate_clear') return this.handleClear();
-    if (name === 'authenticate_status') return this.handleStatus();
     return errorResult(`Unknown auth tool: ${String(name)}`);
   }
 
@@ -273,26 +242,6 @@ export class AuthToolsState {
     // The chain must survive a rejected flow without itself rejecting.
     this.authMutex = run.catch(() => undefined);
     return run;
-  }
-
-  /**
-   * Report the current credential state without triggering a flow
-   * (BP-13): `{ authenticated, hub, identity?, expiry? }` from the
-   * keyring — no browser, no listener, no network.
-   */
-  async handleStatus(): Promise<CallToolResult> {
-    const hub = this.deps.connectionManager.configuredServerUrl ?? 'unknown';
-    const bundle = await this.deps.credentialStore.read();
-    if (!bundle) {
-      return structuredResult({ authenticated: false, hub });
-    }
-    const email = extractEmail(bundle.idToken);
-    return structuredResult({
-      authenticated: true,
-      hub,
-      ...(email ? { identity: email } : {}),
-      expiry: bundle.idTokenExpiresAt.toISOString(),
-    });
   }
 
   /**

@@ -451,11 +451,11 @@ describe('resource_link blocks in write results (BP-5)', () => {
     }
   });
 
-  it('create_file and rename_file results link the (new) file URI', async () => {
+  it('write_file (create) and rename_file results link the (new) file URI', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'v1\n' }]);
-      const created = await callTool(f, 'create_file', {
+      const created = await callTool(f, 'write_file', {
         project: seed.indexDocId,
         path: 'new.qmd',
         content: 'n\n',
