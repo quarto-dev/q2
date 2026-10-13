@@ -2,7 +2,7 @@
 title: 'Consolidate the quarto-hub MCP tools: 23 to 8 via `action` arguments (bd-lj6f7z9s)'
 date: 2026-10-13
 description: 'Fold same-subject MCP verbs into four multi-action tools (auth, project, read, edit) while keeping the read/write split; a registration-layer refactor with handlers unchanged.'
-status: draft
+status: done
 braid:
   strand: bd-lj6f7z9s
   priority: P2
