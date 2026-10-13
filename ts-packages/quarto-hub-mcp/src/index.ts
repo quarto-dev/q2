@@ -262,7 +262,7 @@ function buildInstructions(readOnly: boolean, allowRender: boolean): string {
     'restore_file_version is your undo: it reverts a file to a prior change `head` from ' +
     'get_file_history as a new, reversible change.' +
     '\n7. Housekeeping: get_project_info reports a project\'s shape and connection health; ' +
-    'list_projects enumerates a collection from its share URL; create_folder/delete_folder ' +
+    'list_projects enumerates a collection from its doc id or `#/link-project-set/` URL; create_folder/delete_folder ' +
     'manage folders; disconnect_project releases a connection you no longer need. docs ' +
     'answers Quarto usage questions from the embedded Quarto 2 documentation (query to ' +
     'search, page to read).' +

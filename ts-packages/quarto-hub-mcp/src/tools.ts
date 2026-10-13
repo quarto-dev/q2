@@ -2933,15 +2933,19 @@ export function registerTools(
       title: 'List projects in a collection',
       description:
         'Enumerate a Quarto Hub project-set (a user\'s collection of projects), given its ' +
-        'document id or a share URL to it — a human gets this link from the web client. ' +
+        'document id or its quarto-hub.com link — the web client\'s copy-link form for a ' +
+        'set is `https://quarto-hub.com/#/link-project-set/<id>?server=…` (note: not the ' +
+        '`#/share/` route, which names a single project). ' +
         'Returns each project\'s id, sync server, description, and a share URL you can pass ' +
         'to connect_project, most-recently-used first.',
       inputSchema: z.object({
         project_set: z
           .string()
           .describe(
-            'The project-set document id, OR a quarto-hub.com share URL to the set ' +
-              '(the `server=` parameter, if present, routes the read to that hub).',
+            'The project-set document id, OR its quarto-hub.com link: ' +
+              '`https://quarto-hub.com/#/link-project-set/<id>?server=…` ' +
+              '(a `#/join-collection/<id>` invite link also names a set; the `server=` ' +
+              'parameter, if present, routes the read to that hub).',
           ),
       }),
       outputSchema: outListProjects,

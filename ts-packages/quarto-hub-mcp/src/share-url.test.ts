@@ -55,6 +55,38 @@ describe('parseProjectRef', () => {
     expect('file' in ref).toBe(false);
     expect('server' in ref).toBe(false);
   });
+
+  // The web client's copy-link form for a project *set* (collection) —
+  // a different fragment route than a project's #/share/ link (bd-lirpxs1u).
+  const LINK_PROJECT_SET_URL =
+    'https://quarto-hub.com/#/link-project-set/3yJCerqv62bwjT3rqFJMFrNMSdM4' +
+    '?server=wss%3A%2F%2Fquarto-hub.com%2Fws';
+
+  it('extracts id and server from a link-project-set URL', () => {
+    expect(parseProjectRef(LINK_PROJECT_SET_URL)).toEqual({
+      project: '3yJCerqv62bwjT3rqFJMFrNMSdM4',
+      server: 'wss://quarto-hub.com/ws',
+    });
+  });
+
+  it('handles a link-project-set URL with no query params', () => {
+    expect(
+      parseProjectRef('https://quarto-hub.com/#/link-project-set/3yJCerqv62bwjT3rqFJMFrNMSdM4'),
+    ).toEqual({ project: '3yJCerqv62bwjT3rqFJMFrNMSdM4' });
+  });
+
+  it('extracts the collection id from a join-collection invite URL', () => {
+    expect(
+      parseProjectRef(
+        'https://quarto-hub.com/#/join-collection/3yJCerqv62bwjT3rqFJMFrNMSdM4' +
+          '?server=wss%3A%2F%2Fquarto-hub.com%2Fws&name=Team+notes&from=Charlie',
+      ),
+    ).toEqual({
+      project: '3yJCerqv62bwjT3rqFJMFrNMSdM4',
+      server: 'wss://quarto-hub.com/ws',
+      name: 'Team notes',
+    });
+  });
 });
 
 describe('buildShareUrl', () => {

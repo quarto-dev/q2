@@ -8,6 +8,12 @@
  *
  *   https://quarto-hub.com/#/share/<id>?server=wss://…&file=_brand.yml&name=…
  *
+ * Project *sets* (collections) have their own fragment routes — the web
+ * client's copy-link form for a set, and the invite link that adds one:
+ *
+ *   https://quarto-hub.com/#/link-project-set/<id>?server=wss://…
+ *   https://quarto-hub.com/#/join-collection/<id>?server=wss://…&name=…&from=…
+ *
  * The catch: everything after `#` is the URL *fragment*, so `<id>`, `file`,
  * `server`, and `name` all live there — and `new URL(u).searchParams` (which
  * only sees the real query string, which is empty here) returns none of them.
@@ -66,25 +72,34 @@ export function buildShareUrl(parts: ShareUrlParts): string {
 }
 
 /**
+ * Fragment routes whose path is `/<route>/<docId>`: `#/share/<id>` names a
+ * project's index document; `#/link-project-set/<id>` and
+ * `#/join-collection/<id>` name a project-set (collection) document
+ * (bd-lirpxs1u). Mirrors hub-client's router (hub-client/src/utils/routing.ts).
+ */
+const DOC_LINK_ROUTE = /\/(?:share|link-project-set|join-collection)\/([^/?#]+)/;
+
+/**
  * Normalize a project reference. Accepts either a bare index doc id or a
- * quarto-hub.com share URL; always returns at least `{ project }`.
+ * quarto-hub.com link naming a document (share, link-project-set, or
+ * join-collection URL); always returns at least `{ project }`.
  */
 export function parseProjectRef(input: string): ProjectRef {
   const raw = input.trim();
 
-  // Not a share link — treat the whole string as a bare index doc id.
-  if (!raw.includes('/share/')) {
+  // Not a doc link — treat the whole string as a bare index doc id.
+  if (!DOC_LINK_ROUTE.test(raw)) {
     return { project: raw };
   }
 
-  // The share link's data is in the fragment; isolate it, then split off its
+  // The link's data is in the fragment; isolate it, then split off its
   // (fragment-local) query string.
   const fragment = raw.includes('#') ? raw.slice(raw.indexOf('#') + 1) : raw;
   const queryStart = fragment.indexOf('?');
   const pathPart = queryStart === -1 ? fragment : fragment.slice(0, queryStart);
   const queryPart = queryStart === -1 ? '' : fragment.slice(queryStart + 1);
 
-  const idMatch = pathPart.match(/\/share\/([^/?#]+)/);
+  const idMatch = pathPart.match(DOC_LINK_ROUTE);
   const project = idMatch ? decodeURIComponent(idMatch[1]) : raw;
 
   // URLSearchParams handles percent-decoding and `+`→space for us.

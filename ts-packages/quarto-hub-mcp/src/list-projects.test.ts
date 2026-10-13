@@ -107,6 +107,22 @@ describe('list_projects (CAP-3)', () => {
     }
   });
 
+  it('accepts a link-project-set URL (the web client\'s copy-link form)', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const setId = seedSet(f, SET_DOC);
+      const linkUrl =
+        `https://quarto-hub.com/#/link-project-set/${setId}` +
+        `?server=${encodeURIComponent(f.hub.url)}`;
+      const result = await callTool(f, 'list_projects', { project_set: linkUrl });
+      expect(result.isError).not.toBe(true);
+      const sc = result.structuredContent as { projects: ListedProject[] };
+      expect(sc.projects.length).toBe(2);
+    } finally {
+      await f.close();
+    }
+  });
+
   it('a project index id is not a project set — actionable error', async () => {
     const f = await startInMemoryMcp();
     try {
