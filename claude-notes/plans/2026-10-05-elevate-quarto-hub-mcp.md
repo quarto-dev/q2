@@ -80,7 +80,7 @@ a feature; `2026-07-28` is the current revision, and BP-16 covers adopting it.
 | BP-3 | **Data tools ignore cancellation.** `extra.signal` is threaded only into the auth tools. `wait_for_change` — the one tool designed to block for up to 55 s — cannot be cancelled; the promise and its doc-handle listener outlive the client's cancel. | `$SRC/tools.ts:566-588` (the `CallToolRequestSchema` dispatcher forwards `extra` only to the auth tools; `handleTool` at `:309` and `handleWaitForChange` at `:376-414` never see it); `ConnectionManager.waitForChange` (`$SRC/connection-manager.ts:333-338`) takes no signal | `notifications/cancelled`, base spec | Hung server-side state per cancelled call; listener leaks on the automerge doc handle |
 | BP-4 | **No progress reporting on long operations.** Only `authenticate` emits `notifications/progress` (to surface the sign-in URL). `wait_for_change` could report elapsed/total when the client supplies a `progressToken`. | `$SRC/auth/auth-tools.ts:426-438` (the one good example); absent in `tools.ts` | Progress, base spec | Host UIs show a dead spinner during a 55 s poll. More importantly, SDK clients can reset their request timeout on each progress notification (`resetTimeoutOnProgress`), so progress is what lets a long poll outlive a host's default per-request timeout — the 55 s clamp exists precisely because there is no progress today |
 | BP-5 | **No resources.** The original design deferred resources explicitly ("Q6 Resources: Deferred"). Files are exactly the kind of read-only, subscribable context resources exist for; binary files could be exposed as blob resources (base64), which the tools API cannot cleanly do. | `capabilities: { tools: {} }` at `$SRC/index.ts:269-270`; deferred at `claude-notes/plans/2026-03-13-hub-mcp-server-design.md` L130 | Resources, resource templates, `notifications/resources/updated` (base spec). `resources/subscribe` was **removed** in 2026-07-28 in favor of `subscriptions/listen`; the SDK maps eras (BP-16) | Agents can only pull content tool-by-tool; humans using MCP-aware hosts cannot attach project files as context |
-| BP-6 | **No prompts.** No guided workflow templates (review-a-draft, fix-render-errors, collaborate-with-a-human). The repo has already learned that steering text matters — `wait_for_change`'s description is a mini-protocol-spec. | absent | Prompts, base spec; the 2026-07-28 **Skills over MCP** extension (`ext-skills`) is the newer vehicle for the same guidance (§6) | Every host/user rediscovers the correct call patterns |
+| BP-6 | **No prompts.** No guided workflow templates (review-a-draft, fix-render-errors, collaborate-with-a-human). The repo has already learned that steering text matters — `wait_for_change`\'s description is a mini-protocol-spec. | absent | Prompts, base spec; the 2026-07-28 **Skills over MCP** extension (`ext-skills`) is the newer vehicle for the same guidance (§6) | Every host/user rediscovers the correct call patterns |
 | BP-7 | **No argument completion.** `project` (known/connected ids) and `path` (files in the project) are the two highest-value completion domains in any MCP server. | absent | Completion capability | Manual id/path entry in hosts that support completion |
 | BP-8 | **No elicitation, and the auth URL hack now has a standard replacement.** `authenticate` smuggles the sign-in URL to the user via a progress notification message. URL-mode elicitation (SEP-1036, 2025-11-25) exists precisely for secure out-of-band interactions like OAuth. | `$SRC/auth/auth-tools.ts:426-438` | Elicitation (2025-06-18); URL mode + enums (SEP-1036, SEP-1330, 2025-11-25). In 2026-07-28 server-initiated `elicitation/create` is replaced by **MRTR** (Multi Round-Trip Requests, SEP-2322): the tool returns `resultType: "input_required"` and the client retries the call with the answer | Non-standard UX that many clients render poorly; falls back silently when no `progressToken` |
 | BP-9 | **No `title` fields on tools; icons unadopted.** Names are snake_case and mostly verb-led — close to the `verb_noun` convention SEP-986 standardized (exceptions: `authenticate`, `authenticate_clear`, `wait_for_change`) — good — but host UIs get no human-friendly titles. Icons (SEP-973, 2025-11-25) are cheap chrome. | tool defs at `$SRC/tools.ts:51-225` and `$SRC/auth/auth-tools.ts:130-167` | SEP-986, SEP-973 (2025-11-25) | Minor presentation |
@@ -126,8 +126,8 @@ Refinements:
 
 | ID | Finding | Evidence |
 |----|---------|----------|
-| HY-1 | **`read_file`'s binary error names a tool that doesn't exist** (`read_binary_file_metadata`). Actively misleads agents into a doomed retry. | `$SRC/tools.ts:371` |
-| HY-2 | **Dead `registerAuthTools`** — an abandoned wiring whose standalone `CallToolRequestSchema` handler would conflict with `registerTools`' if ever called (the SDK allows one handler per method). Never called from `index.ts`. | `$SRC/auth/auth-tools.ts:628-641` |
+| HY-1 | **`read_file`\'s binary error names a tool that doesn't exist** (`read_binary_file_metadata`). Actively misleads agents into a doomed retry. | `$SRC/tools.ts:371` |
+| HY-2 | **Dead `registerAuthTools`** — an abandoned wiring whose standalone `CallToolRequestSchema` handler would conflict with `registerTools`\' if ever called (the SDK allows one handler per method). Never called from `index.ts`. | `$SRC/auth/auth-tools.ts:628-641` |
 | HY-3 | **Stale compiled device-flow artifacts linger in the local `dist/` build output** (`dist/auth/device-flow.*`) — the source was deleted when loopback+PKCE replaced it. `dist/` is **gitignored** (`.gitignore:48`), so nothing stale is committed; the risk is a test or packaging step that consumes `dist/` (the `McpTestClient` spawns `node dist/index.js`) picking up orphaned modules. Fix: `rm -rf dist` before every `tsc` build in the package scripts, and have the npm strand (bd-3tak0lyy) package from a clean build. | `ts-packages/quarto-hub-mcp/dist/` (local), `.gitignore:48`, `$SRC/mcp-test-client.ts` |
 | HY-4 | **`getWriteTools` omits `delete_folder`-class operations entirely** — not a bug, but the write-surface asymmetry (files yes, folders no) has no documented reason. | `$SRC/tools.ts:129-225` |
 | HY-5 | **No per-project disconnect.** `ConnectionManager` exposes `connect`/`disconnectAll` but nothing to drop one project; the sync client likewise only has whole-client `disconnect`. A long agent session touching many projects accumulates websocket + in-memory-doc state with no release valve. | `$SRC/connection-manager.ts:261,463`; `quarto-sync-client/src/client.ts:1449` |
@@ -141,7 +141,7 @@ Refinements:
 
 ### 2.5 Agent ergonomics (the "as smooth as by hand" gap)
 
-A human editing in the web client sees collaborators' text arrive live, sees
+A human editing in the web client sees collaborators\' text arrive live, sees
 their own keystrokes land, can scroll a long file, can undo, and gets an
 inline hint when something is wrong. Each row is a place where an agent
 driving the same project through MCP lacks the equivalent signal. Guidance
@@ -154,7 +154,7 @@ agents"](https://www.anthropic.com/engineering/writing-tools-for-agents)
 | ERG-1 | **No stale-view protection.** `read_file` returns bare text with no content hash; `write_file` takes whole-file content and applies it with automerge `updateText`, a diff against the *current* doc. If a collaborator edited between the agent's read and its write, the diff reverts their edit — silently, attributed to the agent's user. `patch_file` is safer (it splices against the latest merged text and fails if `old_string` is gone) but returns no post-write hash either. `wait_for_change` already computes `sha256:` hashes (`hashPayload`). | `$SRC/tools.ts:357-374` (no hash), `:416-440`; `quarto-sync-client/src/client.ts:1564-1572`; `$SRC/connection-manager.ts:136-143` | The one failure a human would never produce: overwriting what a collaborator just typed. `read_file`/`write_file`/`patch_file` return `hash`; write tools accept optional `expected_hash` and refuse on mismatch, returning the current content + hash — compare-and-swap, the CRDT equivalent of looking at the screen before typing |
 | ERG-2 | **Writes are fire-and-forget.** Write tools return `Updated …` the moment the local automerge change is made; delivery to the hub is asynchronous and only the process-exit drain (`drainOutbound`, bd-10deu8h4) ever waits for it. An agent that says "done, refresh your browser" before the hub has the bytes is the most visible "not like by hand" moment, and a crash or network blip in that window loses the edit with no signal to the agent. `isDelivered`/`remote-heads` already exist in the sync client but are not exported. | `$SRC/tools.ts:438-439`, `:477-478`; `quarto-sync-client/src/client.ts:1386`, `:1405-1439` | Bounded delivery wait on every write (default ≈2 s; `wait_for_sync: false` to opt out); result carries `synced: true\|false` and the new `hash`. Reverses the §6 deferral of "per-write delivery confirmation" — the substrate landed with the exit drain |
 | ERG-3 | **No range, size, or truncation handling on reads.** `read_file` returns the entire file; `list_files` entries carry `{path, type}` (plus `status`/`docId` on unavailable entries) — no size, mime type, or line count to help an agent decide what to read. A large `.qmd`, a notebook, or a data file fills the context window with no warning and no way to ask for less. | `$SRC/tools.ts:351-374`, `:284-294` | `read_file` gains `offset`/`limit` (lines) and `max_bytes`, returning `truncated: true` plus a continuation hint; `list_files` entries carry `size`, `mimeType`, and `lines` for text. Standard guidance: paginate or truncate with sensible defaults and steer the model toward targeted reads |
-| ERG-4 | **Error messages stop at the diagnosis.** `patch_file`'s multi-match message is the model ("Provide a longer, unique string"); most others are terminal. `File not found: <path>` suggests neither `list_files` nor a near match; the share-URL server mismatch tells the user to restart the server (bd-qt7h8h5g removes that); wrong-type and unknown-tool errors (BP-2, BP-15) are raw. | `$SRC/tools.ts:368,455,510,525,528`; `:253-259` | Convention for Phase 1: every error names the failing parameter, the current state, and the next tool to call; path errors list up to three closest existing paths. Spec rationale: `isError` results exist "to enable model self-correction" |
+| ERG-4 | **Error messages stop at the diagnosis.** `patch_file`\'s multi-match message is the model ("Provide a longer, unique string"); most others are terminal. `File not found: <path>` suggests neither `list_files` nor a near match; the share-URL server mismatch tells the user to restart the server (bd-qt7h8h5g removes that); wrong-type and unknown-tool errors (BP-2, BP-15) are raw. | `$SRC/tools.ts:368,455,510,525,528`; `:253-259` | Convention for Phase 1: every error names the failing parameter, the current state, and the next tool to call; path errors list up to three closest existing paths. Spec rationale: `isError` results exist "to enable model self-correction" |
 | ERG-5 | **No tool-surface budget.** §3 proposes roughly twenty new tools on top of twelve. Selection accuracy degrades as the list grows; the guidance is fewer, consolidated, high-impact tools with parameters for variants. | §3 | Rules applied to every CAP below: (a) same verb → same tool, varied by parameter (`read_file` returns an `image`/blob content block for binaries rather than a `read_binary_file` sibling; `write_file` takes `encoding: "base64"`); (b) read-only, browsable content moves to resources where the host supports them; (c) hard ceiling of **24 tools** in the default listing (opt-in render tools excluded); (d) one `get_project_info` instead of separate info tools |
 | ERG-6 | **Server `instructions` cover only share-URL parsing.** `instructions` is the one text every host injects into the model's context before any tool is called. Ours explains the `project` parameter and nothing else: no recommended workflow, no collaboration etiquette, no auth summary, no read-only notice. | `$SRC/index.ts:272-280` | Rewrite as a ~15-line operating guide: connect → read (keep the `hash`) → `patch_file` with `expected_hash` → check `synced` → `wait_for_change` before large rewrites; "prefer `patch_file`; never `write_file` a file a human is editing"; when to call `authenticate`; the untrusted-content note (ERG-10). Delivered via `initialize` to legacy clients and `server/discover` under 2026-07-28 — the SDK handles both |
 | ERG-7 | **Nothing measures agent experience.** §2.4 covers wire conformance; nothing in the repo runs a model against the server on a realistic task and records turns, tokens, wrong-tool calls, or validation retries. §9's criteria were qualitative. | — | A small **agent-task eval suite** (Phase 0): 5–8 scripted tasks (e.g. "from this share link, add a figure and fix the render error"; "a collaborator edited `intro.qmd`; summarize the change") run headless (`claude -p` or the Claude Agent SDK) against the in-process `test-hub`, scored on success, turns, tokens, and `isError` count. Run at phase gates by hand, not in CI (cost, nondeterminism); commit the transcripts. Evaluation-driven iteration is the most-repeated recommendation in current tool-design guidance |
@@ -252,7 +252,7 @@ Process requirements for **every** phase (repo mandates, non-negotiable):
   against the in-process `test-hub` and, for final validation,
   quarto-hub.com). Record the invocation and observed output in the plan file.
 - Commit at clean phase boundaries per the approved-plan execution policy.
-- **Each phase is a separate PR in a stack of PRs.** Phase *n*'s branch is
+- **Each phase is a separate PR in a stack of PRs.** Phase *n*\'s branch is
   based on phase *n*−1's branch (not on `main`), so the stack lands in order
   and each PR's diff shows only that phase's work. Rebase the rest of the
   stack as each PR merges; keep every PR green on its own (the phase-close
@@ -384,13 +384,13 @@ commit of branch tip; transcripts committed at
 
 | task | success | turns | tokens (in/out) | cost | isError | retries | nonMcp | duration |
 |------|---------|-------|-----------------|------|---------|---------|--------|----------|
-| create-project | PASS | 3 | 66/528 | $0.0775 | 0 | 0 | 1 | 12s |
-| read-and-report | PASS | 4 | 98/645 | $0.4918 | 0 | 0 | 1 | 13s |
-| patch-typo | PASS | 5 | 130/1358 | $0.5463 | 0 | 0 | 1 | 25s |
-| write-new-file | PASS | 4 | 98/627 | $0.4850 | 0 | 0 | 1 | 12s |
-| rename-file | PASS | 7 | 130/1425 | $0.5568 | 0 | 0 | 1 | 25s |
-| collaborator-edit | PASS | 3 | 66/353 | $0.4524 | 0 | 0 | 1 | 11s |
-| watch-live-edit | PASS | 4 | 98/1722 | $0.5673 | 0 | 0 | 1 | 64s |
+| create-project | PASS | 3 | 66/528 | \$0.0775 | 0 | 0 | 1 | 12s |
+| read-and-report | PASS | 4 | 98/645 | \$0.4918 | 0 | 0 | 1 | 13s |
+| patch-typo | PASS | 5 | 130/1358 | \$0.5463 | 0 | 0 | 1 | 25s |
+| write-new-file | PASS | 4 | 98/627 | \$0.4850 | 0 | 0 | 1 | 12s |
+| rename-file | PASS | 7 | 130/1425 | \$0.5568 | 0 | 0 | 1 | 25s |
+| collaborator-edit | PASS | 3 | 66/353 | \$0.4524 | 0 | 0 | 1 | 11s |
+| watch-live-edit | PASS | 4 | 98/1722 | \$0.5673 | 0 | 0 | 1 | 64s |
 
 7/7 PASS, median 4 turns, zero `isError`, zero validation retries. The
 `nonMcp=1` everywhere is Claude Code's ToolSearch discovery (host-side,
@@ -458,7 +458,7 @@ Work items:
 - [ ] BP-16: migrate to SDK v2 (`@modelcontextprotocol/server` for the
   server, `@modelcontextprotocol/client` in tests): `McpServer.registerTool`
   with zod v4 input/output schemas, stdio transport from
-  `@modelcontextprotocol/server/stdio`, dual-era enabled. Keep `handleTool`'s
+  `@modelcontextprotocol/server/stdio`, dual-era enabled. Keep `handleTool`\'s
   shape (transport-agnostic): the migration touches registration and types,
   not handler logic. Re-run `bundle.test.ts` and `q2 mcp --launcher-info`;
   Node floor is ≥ 20 (repo pins 24). Record Q-1's outcome.
@@ -558,7 +558,7 @@ Work items:
 Test specifications:
 
 - [ ] `list_presence` reflects a fake peer's ephemeral presence message on the
-  index channel (test-hub + hand-crafted message per `presenceService`'s
+  index channel (test-hub + hand-crafted message per `presenceService`\'s
   schema); the MCP server itself emits **no** presence (CAP-8, Q-3).
 - [ ] `get_file_history` returns ordered change summaries with author
   attribution; called with `from_hash`/`to_hash` it returns a diff between
