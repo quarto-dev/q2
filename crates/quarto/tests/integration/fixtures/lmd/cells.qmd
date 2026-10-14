@@ -1,0 +1,46 @@
+---
+title: cells
+stuff: [a, b, c, d]
+author:
+  name: Ada
+  affil:
+    org: Analytical
+---
+
+## The motivating example, as written
+
+::: foo
+
+```{lmd}
+return meta.stuff:map(function(v) return {=: **`{lmd} v`** :=} end)
+```
+
+:::
+
+## Shared state, setup cells, and inline cells
+
+```{lmd}
+greeting = "Hello"
+count = #meta.stuff
+```
+
+`{lmd} greeting`, `{lmd} quarto.metadata.get("author.name")` of `{lmd} meta.author.affil.org`,
+with `{lmd} tostring(count)` things and `{lmd} {=[ *emphasised* ]=}` inline markdown.
+A missing key is `{lmd} quarto.metadata.get("missing.key") or "nothing"`, and `{lmd} nil` vanishes.
+
+## Nothing
+
+```{lmd}
+-- no return: the cell vanishes
+```
+
+## Echo
+
+```{lmd}
+--| echo: true
+return {=:
+### `{lmd} greeting`, world
+
+A paragraph with *emphasis*.
+:=}
+```

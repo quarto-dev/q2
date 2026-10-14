@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Posit, PBC
  *
  * TsEngine — the Rust struct implementing `ExecutionEngine` by delegating to
- * a shared Deno subprocess via `TsEngineHost`.
+ * a shared Node subprocess via `TsEngineHost`.
  *
  * Gate: `#[cfg(not(target_arch = "wasm32"))]` — same as knitr/jupyter.
  * The host (`TsEngineHost`) and transport are already native-only; TsEngine
@@ -39,7 +39,7 @@ use crate::engine::LanguageClaim;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::error::ExecutionError;
 use crate::engine::traits::ExecutionEngine;
-use crate::engine::ts_process::{TsEngineHost, is_available as deno_is_available};
+use crate::engine::ts_process::{TsEngineHost, is_available as node_is_available};
 use crate::engine::ts_protocol::{
     EngineProjectContext, FromEngine, LaunchEngineResult, LoadEngineResult, ToEngine,
     TsExecuteOptions, TsExecuteResult, TsFormatIdentifier, TsFormatInfo, TsHtmlDependency,
@@ -77,7 +77,7 @@ impl From<Option<TsLanguageClaim>> for LanguageClaim {
 // TsEngine struct
 // ============================================================================
 
-/// A Quarto execution engine backed by a Deno subprocess via `TsEngineHost`.
+/// A Quarto execution engine backed by a Node subprocess via `TsEngineHost`.
 ///
 /// # Lifecycle
 ///
@@ -191,7 +191,7 @@ pub struct TsEngine {
     ///    failing subprocess load per probe, not one per render.
     ///
     /// Deliberately **sticky for the life of the engine**. A probe can fail
-    /// two ways, and both are deterministic within a render: the shared deno
+    /// two ways, and both are deterministic within a render: the shared node
     /// host could not start, or the host started fine and the engine's module
     /// threw on import. Neither gets better by asking again, so retrying only
     /// multiplies the cost of a broken extension.
@@ -294,7 +294,7 @@ impl TsEngine {
 
     /// The name the *harness* addresses this engine by on the wire.
     ///
-    /// The Deno harness keys every loaded engine by its runtime `discovery.name`
+    /// The Node harness keys every loaded engine by its runtime `discovery.name`
     /// (returned in `LoadEngineResult`). For a statically-declared engine that
     /// equals `self.name` (validated in [`Self::ensure_loaded`]); but for an
     /// **unnamed** engine `self.name` is the extension-id registry key
@@ -314,9 +314,9 @@ impl TsEngine {
 
     fn ensure_loaded(&self, c: &Cancellation) -> Result<&LoadEngineResult, ExecutionError> {
         // Q9 (julia epic Step 4, Phase 3): the julia-engine's `julia`
-        // subprocess is spawned deep inside the shared Deno host (by the
+        // subprocess is spawned deep inside the shared Node host (by the
         // bundled `julia-engine.js`), where a missing binary would otherwise
-        // surface as a raw, unhelpful Deno spawn exception. Check here
+        // surface as a raw, unhelpful Node spawn exception. Check here
         // instead — the earliest point that knows both "this is the julia
         // engine" (`self.name`) and can return a coded `ExecutionError`
         // before any subprocess is spawned. Gated on the engine name (not a
@@ -525,7 +525,7 @@ impl TsEngine {
             identifier,
             // P1.1b: merged document metadata, lowered by
             // `EngineExecutionStage` via `document_metadata_to_ts_map` and
-            // threaded through `ExecutionContext.metadata`. The Deno host's
+            // threaded through `ExecutionContext.metadata`. The Node host's
             // `metadataAsFormat` partitions this flat map into the six-bin
             // `Format` the engine's `execute(opts)` receives.
             metadata: ctx.metadata.clone(),
@@ -754,7 +754,7 @@ fn julia_command() -> String {
 
 /// Check whether the resolved julia binary is on PATH.
 ///
-/// Mirrors `ts_process::is_available`'s `deno --version` check: spawns
+/// Mirrors `ts_process::is_available`'s Node check: spawns
 /// `<julia> --version` and looks for a successful exit. Julia's CLI answers
 /// `--version` immediately (no package loading), so this is cheap.
 fn julia_is_available() -> bool {
@@ -824,7 +824,7 @@ impl ExecutionEngine for TsEngine {
     }
 
     fn is_available(&self) -> bool {
-        deno_is_available()
+        node_is_available()
     }
 
     fn can_freeze(&self) -> bool {
@@ -1150,7 +1150,7 @@ impl ExecutionEngine for TsEngine {
         runtime: &Arc<dyn SystemRuntime>,
     ) -> Result<(String, SourceInfo), ExecutionError> {
         // Plan 7b: native-first. A `claims-files` entry naming a content
-        // processor (percent/spin) converts in-process — no Deno launch —
+        // processor (percent/spin) converts in-process — no Node launch —
         // and only a claim with no processor falls through to the wire
         // path below.
         if let Some(result) = self.native_markdown_for_file(file, runtime) {
@@ -1237,7 +1237,7 @@ impl std::fmt::Debug for TsEngine {
 }
 
 // ============================================================================
-// Tests (native-only, MockTransport-backed — no Deno required)
+// Tests (native-only, MockTransport-backed — no Node required)
 // ============================================================================
 
 #[cfg(test)]
@@ -2626,7 +2626,7 @@ mod tests {
     /// A processor-bearing claim converts natively — **zero** wire messages,
     /// not even `LoadEngine`. This is the "zero Pass-1 launch" guarantee at
     /// the `TsEngine` level: a julia/marimo percent script converts without
-    /// ever spawning Deno.
+    /// ever spawning Node.
     #[test]
     fn markdown_for_file_processor_claim_dispatches_native_no_launch() {
         watchdog(Duration::from_secs(10), || {
@@ -2751,7 +2751,7 @@ mod tests {
     /// Loads the REAL bundled julia-engine subtree's `_extension.yml`
     /// (`resources/extension-subtrees/julia-engine/`, julia epic Step 4) —
     /// not a synthetic `FileClaim` — and proves a `.jl` percent script
-    /// converts natively (zero wire messages, no Deno launch) with genuine
+    /// converts natively (zero wire messages, no Node launch) with genuine
     /// `Original` provenance (not the wire path's `Generated(By::unknown())`
     /// placeholder). This is the manifest Plan 4's e2e tests
     /// (`julia_engine_e2e.rs`) already exercise for *execution*; this test
@@ -3252,7 +3252,7 @@ mod tests {
     /// `build_source_map` must resolve each line's *file* offset (not just
     /// its local offset in `input`) through the real `SourceInfo::map_offset`
     /// chain — this is the seam the Plan 4B task review flagged as
-    /// native-untested: only the julia+deno-gated e2e exercised it before
+    /// native-untested: only the julia+node-gated e2e exercised it before
     /// this test.
     ///
     /// Fixture: a file with a leading "before\n" line, so the engine's

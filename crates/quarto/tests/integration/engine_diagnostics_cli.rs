@@ -49,17 +49,7 @@ use tempfile::TempDir;
 
 const Q2_BIN: &str = env!("CARGO_BIN_EXE_q2");
 
-/// Needed by the tests that let an engine actually load. Since the native-set
-/// probe skip, a markdown-only project loads NO engine, so the Q-16-10 tests
-/// no longer depend on deno for their result — but they are gated anyway,
-/// because `markdown_only_project_loads_no_engine` asserts an *absence* and
-/// would pass vacuously on a machine where the load could never have happened.
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 /// Absolute path to a committed fixture extension directory. The
 /// fixtures live in `quarto-core`, so this walks up out of `crates/quarto`.
@@ -262,7 +252,7 @@ fn dynamic_claiming_warning_promoted_under_strict() {
 /// or `.md` is refused no matter what an engine answers. Asking a
 /// dynamically-claiming engine therefore paid a subprocess load for an answer
 /// that was then discarded — pure waste, and the reason a project with zero
-/// computational cells was still starting deno.
+/// computational cells was still starting node.
 ///
 /// Named revert: move the native-set check back below `engine.claims_file(…)`
 /// in `SourceConversionStage` and this goes RED (Q-16-12 reappears, because
@@ -270,8 +260,8 @@ fn dynamic_claiming_warning_promoted_under_strict() {
 /// makes itself visible at all).
 #[test]
 fn markdown_only_project_loads_no_engine() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — markdown_only_project_loads_no_engine");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — markdown_only_project_loads_no_engine");
         return;
     }
     let tmp = project_with_legacy_engine(&[(
@@ -303,8 +293,8 @@ fn markdown_only_project_loads_no_engine() {
 /// *counted* — which requires it to have entered `project_diagnostics`.
 #[test]
 fn pass1_fallthrough_warning_is_counted() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — pass1_fallthrough_warning_is_counted");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — pass1_fallthrough_warning_is_counted");
         return;
     }
     let tmp = project_with_legacy_engine(&[(
@@ -337,8 +327,8 @@ fn pass1_fallthrough_warning_is_counted() {
 /// `TsEngine::claims_language` and this goes RED.
 #[test]
 fn engine_load_failure_is_reported_not_swallowed() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — engine_load_failure_is_reported_not_swallowed");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — engine_load_failure_is_reported_not_swallowed");
         return;
     }
     let tmp = project_with_legacy_engine(&[(
@@ -366,8 +356,8 @@ fn engine_load_failure_is_reported_not_swallowed() {
 /// emit the diagnostic more than once.
 #[test]
 fn engine_load_failure_reported_once_not_per_probe() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — engine_load_failure_reported_once_not_per_probe");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — engine_load_failure_reported_once_not_per_probe");
         return;
     }
     let cell = "---\ntitle: T\n---\n\n```{python}\nprint(\"hi\")\n```\n";

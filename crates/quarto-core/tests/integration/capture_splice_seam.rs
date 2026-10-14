@@ -16,7 +16,7 @@
  *      a documented NO-OP (cell survives as raw source); a prose block is never
  *      mis-paired as a cell's output;
  *   3. end-to-end: the REAL committed echo-engine fixture now emits a `.cell`
- *      wrapper, so a recorded echo capture splices (deno-gated);
+ *      wrapper, so a recorded echo capture splices (node-gated);
  *   4. SC22 (`marimo_shaped_capture_splices`): a marimo-shaped `RawBlock` island
  *      capture splices — the unwrapped-engine-output leg of the contract.
  *
@@ -29,7 +29,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::path::Path;
-use std::process::Command;
 use std::sync::Arc;
 
 use tempfile::TempDir;
@@ -40,12 +39,7 @@ use quarto_core::project::ProjectContext;
 use quarto_pandoc_types::{Block, Pandoc};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 fn parse(md: &str) -> Pandoc {
     pampa::readers::qmd::read(
@@ -119,11 +113,11 @@ fn bare_paragraph_capture_is_a_documented_noop() {
 }
 
 // (3) End-to-end: the REAL committed echo-engine fixture emits a `.cell` wrapper,
-// so a recorded echo capture splices. Deno-gated (echo runs on the Deno host).
+// so a recorded echo capture splices. Node-gated (echo runs on the Node host).
 #[test]
 fn real_echo_capture_splices() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — real_echo_capture_splices");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — real_echo_capture_splices");
         return;
     }
     let tmp = TempDir::new().unwrap();
@@ -220,7 +214,7 @@ fn copy_dir(src: &Path, dst: &Path) {
 //
 // The A2 generalization must NOT break `.cell`-wrapper matching. The two
 // existing tests above — `cell_wrapped_capture_splices` (synthetic `.cell`
-// splice) and `real_echo_capture_splices` (the real echo fixture, deno-gated) —
+// splice) and `real_echo_capture_splices` (the real echo fixture, node-gated) —
 // ARE this test's companion guards: they must stay GREEN under the fix. They
 // are not duplicated here; SC22 (native, unconditional) + SC21 (real marimo,
 // e2e) bind as the frozen set — SC22 guards the matcher logic, SC21 guards that

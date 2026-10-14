@@ -20,8 +20,8 @@ pub(crate) mod paths;
 pub mod read;
 pub mod types;
 
-// Native-only: builds an extension's TS engine bundle by shelling out to
-// `deno bundle` (mirrors `engine::ts_process`'s native gate — unavailable
+// Native-only: builds an extension's TS engine bundle by running the embedded
+// rollup driver under Node (mirrors `engine::ts_process`'s native gate — unavailable
 // on wasm32-unknown-unknown).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod build;

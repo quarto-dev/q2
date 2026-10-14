@@ -11,10 +11,10 @@
  * contending engines. THIS file is Task A1's smoke test: it proves each of
  * the well-formed synthetic fixtures under
  * `crates/quarto-core/tests/fixtures/extensions/` is a valid, loadable
- * TsEngine bundle (real `deno bundle` output, real `_extension.yml` parse) by
+ * TsEngine bundle (real bundler output, real `_extension.yml` parse) by
  * driving each ONE fixture at a time through the REAL render path —
  * `render_to_file` -> discovery -> `resolve_engines` -> LoadEngine /
- * LaunchEngine / execute -> a real Deno engine-host subprocess.
+ * LaunchEngine / execute -> a real Node engine-host subprocess.
  *
  * Deliberately narrow scope: each test below installs exactly ONE synthetic
  * extension, so no fixture ever contends with another here — the tier
@@ -34,16 +34,15 @@
  *   directions of the real `ClaimsFile` wire dispatch.
  * Both fixtures' `dist/<name>.js` bundles are regenerated at test time (not
  * committed) via `crate::engine_fixture_build`: they import only
- * `@quarto/api/claims` (pure, type-only transitive deps), so `deno bundle`
+ * `@quarto/api/claims` (pure, type-only transitive deps), so the bundler
  * resolves hermetically from local `ts-packages/` with no network/lock —
- * real deno bundle output, built fresh into each test's tempdir copy.
+ * real node bundle output, built fresh into each test's tempdir copy.
  */
 
 // Native-only: TsEngine / TsEngineHost are behind cfg(not(target_arch = "wasm32")).
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 
 use tempfile::TempDir;
@@ -51,13 +50,7 @@ use tempfile::TempDir;
 use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-/// Return `true` when `deno` is on PATH (the E2E's subprocess runtime).
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 /// Absolute path to a committed fixture extension directory
 /// (`crates/quarto-core/tests/fixtures/extensions/<name>`).
@@ -122,11 +115,11 @@ fn body_excerpt(html: &str) -> String {
 // Proves the `alpha` fixture's committed dist/alpha.js bundle is valid and its
 // _extension.yml's `claims.synth: { kind: primary, priority: 1 }` parses and
 // resolves: a `{synth}` cell must be claimed, loaded, and executed by alpha
-// (real Deno subprocess LoadEngine/LaunchEngine/execute round trip).
+// (real Node subprocess LoadEngine/LaunchEngine/execute round trip).
 #[test]
 fn smoke_alpha_registers_and_loads() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — smoke_alpha_registers_and_loads");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — smoke_alpha_registers_and_loads");
         return;
     }
     let tmp = setup_project(&["alpha"]);
@@ -152,8 +145,8 @@ fn smoke_alpha_registers_and_loads() {
 // alpha/beta contention pair — that tiebreak is Phase 4b-B's job.
 #[test]
 fn smoke_beta_registers_and_loads() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — smoke_beta_registers_and_loads");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — smoke_beta_registers_and_loads");
         return;
     }
     let tmp = setup_project(&["beta"]);
@@ -181,8 +174,8 @@ fn smoke_beta_registers_and_loads() {
 // smoke test's.
 #[test]
 fn smoke_interop_r_registers_and_loads() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — smoke_interop_r_registers_and_loads");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — smoke_interop_r_registers_and_loads");
         return;
     }
     let tmp = setup_project(&["interop-r"]);
@@ -211,8 +204,8 @@ fn smoke_interop_r_registers_and_loads() {
 // availability on the test machine.
 #[test]
 fn smoke_fallback_univ_registers_and_loads() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — smoke_fallback_univ_registers_and_loads");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — smoke_fallback_univ_registers_and_loads");
         return;
     }
     let tmp = setup_project(&["fallback-univ"]);
@@ -240,8 +233,8 @@ fn smoke_fallback_univ_registers_and_loads() {
 // resolution-tier assertion — Phase 4b-B's job, not this smoke test's.
 #[test]
 fn smoke_whenclass_marimo_registers_and_loads() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — smoke_whenclass_marimo_registers_and_loads");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — smoke_whenclass_marimo_registers_and_loads");
         return;
     }
     let tmp = setup_project(&["whenclass-marimo"]);
@@ -286,8 +279,8 @@ fn smoke_whenclass_marimo_registers_and_loads() {
 // `ts_engine.rs:~2268`; this test does not duplicate that unit coverage.
 #[test]
 fn b10_static_dynamic_mismatch_hard_errors() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — b10_static_dynamic_mismatch_hard_errors");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — b10_static_dynamic_mismatch_hard_errors");
         return;
     }
     let tmp = setup_project(&["mismatch"]);
@@ -360,8 +353,8 @@ fn b10_static_dynamic_mismatch_hard_errors() {
 // always-`false` reddens the "with marker" leg).
 #[test]
 fn b11_dynamic_claims_file_round_trip() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — b11_dynamic_claims_file_round_trip");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — b11_dynamic_claims_file_round_trip");
         return;
     }
 

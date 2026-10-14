@@ -24,6 +24,9 @@
 //! - **`sort`** — multi-key stable sort over hydrated items.
 //! - **`placeholders`** — Q1-verbatim regex tokens shared with
 //!   the (future) L7 post-render upgrade.
+//! - **`metadata`** — the `meta.listings.<id>` bridge: every
+//!   resolved listing published into document metadata for Lua
+//!   consumers (user filters, lmd cells; bd-2oqen84t).
 //!
 //! The two AST transforms that consume these types live in
 //! `crate::transforms::listing_generate` and
@@ -35,6 +38,7 @@ pub mod filter;
 pub mod helpers;
 pub mod item;
 pub mod listjs;
+pub mod metadata;
 pub mod placeholders;
 pub mod record;
 pub mod sort;

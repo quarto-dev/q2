@@ -2068,6 +2068,18 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
         Value::UserData(ref ud) => {
             if let Ok(lua_inline) = ud.borrow::<LuaInline>() {
                 lua_inline.extract_flushed(lua)
+            } else if let Ok(nodes) = ud.borrow::<super::nodes::LuaNodes>() {
+                // pandoc.Nodes where exactly one Inline is required: it
+                // must resolve to exactly one (see nodes.rs).
+                let mut inlines = nodes.to_inlines()?;
+                if inlines.len() == 1 {
+                    Ok(inlines.pop().expect("one element"))
+                } else {
+                    Err(type_mismatch_error_named(
+                        "single Inline",
+                        &format!("pandoc.Nodes resolving to {} inlines", inlines.len()),
+                    ))
+                }
             } else if let Some(inline) = peek_inline_via_metamethod(lua, &val) {
                 Ok(inline)
             } else {
@@ -2089,6 +2101,19 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
             &val,
         )),
     }
+}
+
+/// Whether `table` carries the metatable `get_mt` hands out (the
+/// `pandoc.Inlines` / `pandoc.Blocks` tag).
+pub(crate) fn is_tagged_list(
+    lua: &Lua,
+    table: &mlua::Table,
+    get_mt: fn(&Lua) -> Result<mlua::Table>,
+) -> Result<bool> {
+    let Some(mt) = table.metatable() else {
+        return Ok(false);
+    };
+    Ok(mt.to_pointer() == get_mt(lua)?.to_pointer())
 }
 
 /// Peek a list of Inlines from a Lua value, with fuzzy coercion.
@@ -2113,17 +2138,40 @@ pub fn peek_inlines_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Inline>> {
             let mut inlines = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
+                // A pandoc.Nodes element splices (several inlines, not one).
+                if let Value::UserData(ud) = &value
+                    && let Ok(nodes) = ud.borrow::<super::nodes::LuaNodes>()
+                {
+                    inlines.extend(nodes.to_inlines()?);
+                    continue;
+                }
+                // So does a tagged `pandoc.Inlines` element. Pandoc rejects a
+                // list inside a list, so no valid pandoc program changes
+                // meaning; q2 adds it because metadata strings and lmd
+                // splices arrive as Inlines (`pandoc.Strong({ meta.title })`).
+                if let Value::Table(inner) = &value
+                    && is_tagged_list(lua, inner, super::list::get_or_create_inlines_metatable)?
+                {
+                    inlines.extend(peek_inlines_fuzzy(lua, value)?);
+                    continue;
+                }
                 inlines.push(peek_inline_fuzzy(lua, value)?);
             }
             Ok(inlines)
         }
-        Value::UserData(_) => match peek_inline_fuzzy(lua, val.clone()) {
-            Ok(inline) => Ok(vec![inline]),
-            Err(_) => Err(type_mismatch_error(
-                "Inline, list of Inlines, or string",
-                &val,
-            )),
-        },
+        Value::UserData(ref ud) => {
+            if let Ok(nodes) = ud.borrow::<super::nodes::LuaNodes>() {
+                // pandoc.Nodes as the whole content: inline context.
+                return nodes.to_inlines();
+            }
+            match peek_inline_fuzzy(lua, val.clone()) {
+                Ok(inline) => Ok(vec![inline]),
+                Err(_) => Err(type_mismatch_error(
+                    "Inline, list of Inlines, or string",
+                    &val,
+                )),
+            }
+        }
         _ => Err(type_mismatch_error(
             "Inline, list of Inlines, or string",
             &val,
@@ -2144,6 +2192,20 @@ pub fn peek_block_fuzzy(lua: &Lua, val: Value) -> Result<Block> {
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
                 return lua_block.extract_flushed(lua);
+            }
+            if let Ok(nodes) = ud.borrow::<super::nodes::LuaNodes>() {
+                // pandoc.Nodes where exactly one Block is required: it
+                // must resolve to exactly one (see nodes.rs). Checked
+                // before the inlines fallback, which would wrap a
+                // blocks-shape Nodes in a Plain.
+                let mut blocks = nodes.to_blocks(lua);
+                if blocks.len() == 1 {
+                    return Ok(blocks.pop().expect("one element"));
+                }
+                return Err(type_mismatch_error_named(
+                    "single Block",
+                    &format!("pandoc.Nodes resolving to {} blocks", blocks.len()),
+                ));
             }
             if let Some(block) = peek_block_via_metamethod(lua, &val) {
                 return Ok(block);
@@ -2192,6 +2254,22 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
             let mut blocks = Vec::new();
             for pair in table.sequence_values::<Value>() {
                 let value = pair?;
+                // A pandoc.Nodes element splices (several blocks, not one).
+                if let Value::UserData(ud) = &value
+                    && let Ok(nodes) = ud.borrow::<super::nodes::LuaNodes>()
+                {
+                    blocks.extend(nodes.to_blocks(lua));
+                    continue;
+                }
+                // So does a tagged `pandoc.Blocks` element (see the Inlines
+                // case in `peek_inlines_fuzzy`): `pandoc.Blocks({ card(1),
+                // card(2) })` where each card is Blocks.
+                if let Value::Table(inner) = &value
+                    && is_tagged_list(lua, inner, super::list::get_or_create_blocks_metatable)?
+                {
+                    blocks.extend(peek_blocks_fuzzy(lua, value)?);
+                    continue;
+                }
                 blocks.push(peek_block_fuzzy(lua, value)?);
             }
             Ok(blocks)
@@ -2199,6 +2277,10 @@ pub fn peek_blocks_fuzzy(lua: &Lua, val: Value) -> Result<Vec<Block>> {
         Value::UserData(ud) => {
             if let Ok(lua_block) = ud.borrow::<LuaBlock>() {
                 return Ok(vec![lua_block.extract_flushed(lua)?]);
+            }
+            if let Ok(nodes) = ud.borrow::<super::nodes::LuaNodes>() {
+                // pandoc.Nodes as the whole content: block context.
+                return Ok(nodes.to_blocks(lua));
             }
             if let Some(block) = peek_block_via_metamethod(lua, &val) {
                 return Ok(vec![block]);

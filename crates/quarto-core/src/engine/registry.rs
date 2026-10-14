@@ -537,7 +537,7 @@ mod tests {
         );
     }
 
-    /// Real TsEngine shutdown via `shutdown_all` (Deno-gated).
+    /// Real TsEngine shutdown via `shutdown_all` (Node-gated).
     ///
     /// Registers a TsEngine whose host is backed by a real subprocess,
     /// asserts the host is alive before calling shutdown_all, then asserts
@@ -548,17 +548,17 @@ mod tests {
     /// Exercised-guard: `is_alive()==true` before shutdown prevents a vacuously
     /// passing test where the process never started.
     #[test]
-    // Drives a real deno dial-back child + reaping teardown; conservatively
+    // Drives a real node dial-back child + reaping teardown; conservatively
     // gated to non-wasm unix (matches the proc-tier engine-host tests).
     #[cfg(all(not(target_arch = "wasm32"), unix))]
     fn test_shutdown_all_kills_ts_engine() {
         use crate::engine::ts_engine::TsEngine;
-        use crate::engine::ts_process::{TsEngineHost, is_available as deno_is_available};
+        use crate::engine::ts_process::{TsEngineHost, is_available as node_is_available};
         use crate::engine::ts_protocol::HostGlobalConfig;
         use crate::extension::types::ExtensionId;
         use std::path::PathBuf;
 
-        if !deno_is_available() {
+        if !node_is_available() {
             return;
         }
 
@@ -572,11 +572,11 @@ mod tests {
             quarto_version: "0.1.0".to_string(),
         };
 
-        // Spawn a deno dial-back child that completes the loopback-TCP handshake
+        // Spawn a node dial-back child that completes the loopback-TCP handshake
         // then discards frames and exits when the control socket closes (which
         // shutdown() triggers by half-closing the write side).
-        use crate::engine::ts_process::{DIALBACK_READ_UNTIL_EOF, deno_dialback_child};
-        let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+        use crate::engine::ts_process::{DIALBACK_READ_UNTIL_EOF, node_dialback_child};
+        let (cmd, _script) = node_dialback_child(DIALBACK_READ_UNTIL_EOF);
 
         let host = Arc::new(
             TsEngineHost::start_with_command(cmd, global).expect("start_with_command failed"),
@@ -684,7 +684,7 @@ mod tests {
     }
 
     /// Build a non-spawned `TsEngine` for provenance tests. `TsEngineHost::new`
-    /// does not spawn a subprocess (first round-trip does), so no `deno`
+    /// does not spawn a subprocess (first round-trip does), so no `node`
     /// gating is needed — these tests never call anything that loads/launches.
     fn make_ts_engine(name: &str) -> crate::engine::ts_engine::TsEngine {
         use crate::engine::ts_engine::TsEngine;

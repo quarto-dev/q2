@@ -16,8 +16,6 @@ concurrency:
 
 env:
   PANDOC_VERSION: "3.11"
-  # Deno version for engine-host-deno vitest + deno-test + bundle freshness gate.
-  DENO_VERSION: "2.9.0"
   # Typst — the Pandoc-hybrid typst leg's `L`-tier tests (typst_compile.rs)
   # require a real `typst` binary on PATH (TYPST_VERSION_FLOOR is 0.8+).
   TYPST_VERSION: "0.15.1"
@@ -146,14 +144,6 @@ jobs:
         shell: bash
         run: npm run lint:css -w hub-client --if-present
 
-      # Deno — needed for engine-host-deno deno-test and the freshness gate.
-      # denoland/setup-deno is safe here: this workflow has no "Free disk space"
-      # step (and no remove_tool_cache invariant to preserve).
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: ${{ env.DENO_VERSION }}
-
       # WASM build for hub-client (must happen before TypeScript build)
       - name: Set up Clang (Linux)
         if: runner.os == 'Linux'
@@ -209,47 +199,33 @@ jobs:
           cd hub-client
           npm run test:ci
 
-      # engine-host-deno: vitest suite (105+ Node-side harness tests)
-      - name: Run engine-host-deno tests (vitest)
+      # engine-host-node: vitest suite (harness tests + the TS<->Rust wire-parity gate)
+      - name: Run engine-host-node tests (vitest)
         shell: bash
-        run: npm run test -w @quarto/engine-host-deno
+        run: npm run test -w @quarto/engine-host-node
 
-      # engine-host-deno: deno-native test (the one leg that requires Deno)
-      - name: Run engine-host-deno deno test
-        shell: bash
-        run: deno test --allow-all ts-packages/quarto-engine-host-deno/src/deno-host.deno-test.ts
-
-      # plan1a.6 Phase 2 (Deno dial-back) — seam #8: connectControl round-trip
-      # over a REAL loopback socket (Deno.listen({ port: 0 }) in-test); no mock
-      # Deno.Conn. CI-only tier (cannot be a vitest test — the module references
-      # Deno.*). `--sloppy-imports` lets deno's type-checker resolve
-      # @quarto/types' `.js` internal specifiers pulled in transitively via
-      # ./types.ts (same reason the wire-parity step below needs it).
-      - name: Run engine-host-deno control-transport deno test
-        shell: bash
-        run: deno test --allow-all --sloppy-imports ts-packages/quarto-engine-host-deno/src/control-transport.deno-test.ts
-
-      # T-Gate-parity: TS↔Rust wire-dual parity (Plan 2 Phase B gate). Reads the
-      # Rust-serialized fixture (crates/quarto-core/tests/fixtures/ts_wire_parity.json,
-      # produced by the regen-gated #[test] in ts_protocol.rs) and set-equates each
-      # instance's keys against a KEYS list pinned to the TS wire type via
-      # `satisfies`/`_Exhaustive`. `--sloppy-imports` lets deno's type-checker
-      # resolve @quarto/types' `.js` internal specifiers (so the compile guards
-      # are checked here, not just the runtime set-equality). @quarto/types is
-      # mapped in the repo-root deno.jsonc.
-      - name: Run engine-host-deno wire-parity deno test
-        shell: bash
-        run: deno test --allow-all --sloppy-imports ts-packages/quarto-engine-host-deno/src/wire-parity.deno-test.ts
-
-      # Bundle freshness gate: rebuild engine-host-deno.js from source and assert
+      # Bundle freshness gate: rebuild engine-host-node.mjs from source and assert
       # the committed bytes are unchanged.  Fails if someone edited TS but forgot
       # to run `npm run bundle`.  build-info.json is gitignored (volatile builtAt);
       # the diff targets only the bundle itself.
-      - name: Check engine-host-deno bundle freshness
+      - name: Check engine-host-node bundle freshness
         shell: bash
         run: |
-          npm run bundle -w @quarto/engine-host-deno
-          git diff --exit-code -- ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js
+          npm run bundle -w @quarto/engine-host-node
+          git diff --exit-code -- ts-packages/quarto-engine-host-node/dist/engine-host-node.mjs
+
+      # ts-bundle: vitest suite (the rollup driver behind `q2 call build-ts-extension`)
+      - name: Run ts-bundle tests (vitest)
+        shell: bash
+        run: npm run test -w @quarto/ts-bundle
+
+      # Same freshness gate for the embedded ts-bundle driver: rollup and its
+      # plugins are pinned exactly, so the bytes depend only on the sources.
+      - name: Check ts-bundle driver freshness
+        shell: bash
+        run: |
+          npm run bundle -w @quarto/ts-bundle
+          git diff --exit-code -- ts-packages/quarto-ts-bundle/dist/ts-bundle.mjs
 
       # preview-renderer's integration tier imports wasm-quarto-hub-client
       # (aliased in vitest.integration.config.ts:53-55 to the committed
@@ -285,8 +261,8 @@ jobs:
   # ── Workspace TS suites (GH #250) ────────────────────────────────────────
   #
   # A separate job on purpose. These suites need only Node + npm ci + the
-  # ts-packages dists — no Rust, no WASM, no pandoc/tree-sitter/deno. Keeping
-  # them out of `test-suite` means a red hub-client test, a deno step or the
+  # ts-packages dists — no Rust, no WASM, no pandoc/tree-sitter. Keeping
+  # them out of `test-suite` means a red hub-client test or the
   # bundle-freshness gate cannot mask them, and they are not serialised behind
   # an uncached WASM build on both matrix legs. The one suite that does need
   # the WASM (preview-renderer's integration tier) lives in `test-suite`.

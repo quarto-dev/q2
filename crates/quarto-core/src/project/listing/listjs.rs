@@ -227,6 +227,7 @@ mod tests {
         assert!(supports_listjs(ListingType::Grid));
         assert!(!supports_listjs(ListingType::Table));
         assert!(!supports_listjs(ListingType::Custom));
+        assert!(!supports_listjs(ListingType::Metadata));
     }
 
     // Q1: `listing-<field>` per field, then the index and categories

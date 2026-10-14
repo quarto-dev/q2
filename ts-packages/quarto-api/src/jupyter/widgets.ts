@@ -30,7 +30,7 @@
  *   3. No camelCase rename here. The return type IS the vendored kebab
  *      `PandocIncludes` — identical to `DependenciesResult.includes`. The
  *      kebab -> camel `TsPandocIncludes` rename happens at the wire, in
- *      `engine-host-deno`'s `host.ts`, not in this function.
+ *      `engine-host-node`'s `host.ts`, not in this function.
  */
 
 import type {
