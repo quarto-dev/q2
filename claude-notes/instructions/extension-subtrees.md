@@ -10,7 +10,7 @@ regular `resources/extensions/` bundle — mirroring Quarto 1's
 
 Two real subtrees are registered: **orange-book** (book-projects P2 item
 80, the default Typst book extension, subtreed from `quarto-ext/orange-book`)
-and **julia-engine**, subtreed from the `q2-static-declarations` branch of
+and **julia-engine**, subtreed from the `q2/node-port` branch of
 `gordonwoodhull/quarto-julia-engine` (the parent epic's Step 4,
 `claude-notes/plans/2026-09-03-julia-engine-static-declarations-epic.md`).
 The `synth-echo` fake (`crates/quarto-core/tests/fixtures/extension-subtrees/synth-echo/`,
@@ -37,7 +37,7 @@ remains the hermetic test fixture.
                name: "julia-engine".to_string(),
                prefix: "resources/extension-subtrees/julia-engine".to_string(),
                remote_url: "https://github.com/gordonwoodhull/quarto-julia-engine.git".to_string(),
-               remote_branch: "q2-static-declarations".to_string(),
+               remote_branch: "q2/node-port".to_string(),
            },
            // ... new rows here
        ]

@@ -34,16 +34,15 @@ use crate::transforms::navigation_href::is_external;
 /// needs the same "who am I?" answer to pass to the active-marking
 /// pass or to the sidebar-for-page helper.
 pub fn page_relative_source(ctx: &RenderContext) -> String {
-    let relative = ctx
-        .document
-        .input
-        .strip_prefix(&ctx.project.dir)
-        .unwrap_or_else(|_| {
-            ctx.document
-                .input
-                .file_name()
-                .map_or(&ctx.document.input, std::path::Path::new)
-        });
+    page_relative_source_of(&ctx.document.input, &ctx.project.dir)
+}
+
+/// [`page_relative_source`] for callers that hold the document path and
+/// the project directory but no `RenderContext` (pipeline stages).
+pub fn page_relative_source_of(input: &std::path::Path, project_dir: &std::path::Path) -> String {
+    let relative = input
+        .strip_prefix(project_dir)
+        .unwrap_or_else(|_| input.file_name().map_or(input, std::path::Path::new));
     relative.to_string_lossy().replace('\\', "/")
 }
 

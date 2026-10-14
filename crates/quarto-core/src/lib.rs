@@ -59,6 +59,7 @@ pub mod glob;
 pub mod import;
 pub mod inline_css;
 pub mod language;
+pub mod lmd;
 pub mod math_method;
 pub mod metadata;
 pub mod output_ext;

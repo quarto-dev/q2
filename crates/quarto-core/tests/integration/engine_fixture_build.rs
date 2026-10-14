@@ -8,7 +8,7 @@
  *
  * `build_bundle`/`ensure_bundle` call `quarto_core::extension::build::build_ts_extension`
  * in-process (no subprocess to `q2`, no `CARGO_BIN_EXE`) against the workspace
- * `deno.workspace.json` import map, so the 10 `HERMETIC_FIXTURES` (pure/
+ * alias config, so the 10 `HERMETIC_FIXTURES` (pure/
  * type-only imports) can regenerate their `dist` bundle at test time
  * instead of being committed to git.
  *
@@ -37,26 +37,26 @@ pub const HERMETIC_FIXTURES: &[&str] = &[
     "synth-echo",
 ];
 
-pub fn deno_available() -> bool {
-    std::process::Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
-
-/// Build `<ext_dir>/dist/<name>.js` in place via the workspace import map.
-/// Hermetic (no network/lock). Caller gates on `deno_available()`.
+/// Build `<ext_dir>/dist/<name>.js` in place with the workspace aliases.
+/// Hermetic (no network): bundles with the embedded rollup driver under Node.
 pub fn build_bundle(ext_dir: &Path) {
-    let cfg = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../resources/extension-build/deno.workspace.json");
     quarto_core::extension::build::build_ts_extension(
         quarto_core::extension::build::BuildOptions {
             ext_dir: Some(ext_dir.to_path_buf()),
-            config: Some(cfg),
+            config: None,
             workspace: false,
+            workspace_root: Some(workspace_root()),
         },
     )
     .expect("build fixture bundle");
+}
+
+/// The q2 workspace root (two levels above this crate).
+pub fn workspace_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("workspace root")
 }
 
 /// Build only if `name` is hermetic; else no-op (committed bundle used as-is).
@@ -95,8 +95,8 @@ fn copy_dir(src: &Path, dst: &Path) {
 /// `build_bundle` regenerates `dist/alpha.js` from source.
 #[test]
 fn build_helper_produces_bundle() {
-    if !deno_available() {
-        eprintln!("SKIP: no deno");
+    if !quarto_core::engine::ts_process::node_available_for_tests() {
+        eprintln!("SKIP: no Node.js >= 24 (the bundler runs under it)");
         return;
     }
     let tmp = tempfile::tempdir().unwrap();

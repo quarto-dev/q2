@@ -1,0 +1,42 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "lmd",
+      "scope": "source.lmd",
+      "path": ".",
+      "file-types": [
+        "lmd"
+      ],
+      "highlights": "queries/highlights.scm",
+      "injections": "queries/injections.scm",
+      "locals": "queries/locals.scm",
+      "tags": "queries/tags.scm",
+      "injection-regex": "^lmd$"
+    }
+  ],
+  "metadata": {
+    "version": "0.5.0",
+    "license": "MIT",
+    "authors": [
+      {
+        "name": "Munif Tanjim",
+        "email": "hello@muniftanjim.dev",
+        "url": "https://muniftanjim.dev"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/posit-dev/quarto-markdown-syntax"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": true,
+    "java": false,
+    "node": true,
+    "python": true,
+    "rust": true,
+    "swift": true,
+    "zig": false
+  }
+}

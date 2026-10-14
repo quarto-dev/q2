@@ -1397,7 +1397,7 @@ pub(crate) fn document_metadata_to_ts_map(
 ///
 /// # Wire shape note (top-level `output-dir`, not nested under `project`)
 ///
-/// The engine-host-deno harness's `reconstructRichProject` reads a
+/// The engine-host-node harness's `reconstructRichProject` reads a
 /// **top-level** `config["output-dir"]` (or `config["outputDir"]`) and *bridges*
 /// it into the rich Q1 `EngineProjectContext.config.project.outputDir` the
 /// engine actually sees. So the wire carries `output-dir` flat; the host

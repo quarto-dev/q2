@@ -352,3 +352,28 @@ three q2-core fixes above are q2-side infrastructure, already landed, not part o
 change for existing marimo users: bare `{sql}` cells in a document that also contains a `{python .marimo}` (or
 `{sql .marimo}`) cell now execute via marimo instead of being left as plain unexecuted text — additive, no
 existing claim or execution path is narrowed.
+
+## Addendum (2026-10-13): legacy fences, Node runtime, rewritten upstream
+
+- **Legacy fence `python {.marimo}` is not supported in q2.** q2 blesses only
+  `` ```{python .marimo} `` (with or without the space) and the dot-joined
+  `{python.marimo}`. The legacy form is marimo's Lua-filter-era syntax; it
+  yields a profile-pass parse error in q2 (no claim, no spawn). The marimo
+  extension keeps its `claimsFile` sniff and legacy-tolerant detection for
+  Quarto 1 only; q2 never calls it because the static `claims-files: []`
+  answers the file-claim question. Diagnostic improvement: strand
+  `bd-iv9zxs5y`.
+- **Node, not Deno.** The ported extension (fork branch `q2/node-port`,
+  version 0.6.0) uses `node:` built-ins only and runs under q2's Node host and
+  Quarto 1's Deno 2.x alike. Third-party engines that call `Deno.*` must move
+  to `node:` equivalents (see the engine migration note shipped with the
+  Deno-to-Node flip).
+- **Upstream rewrote the engine** (marimo-team/quarto-marimo v0.5.0, island
+  pages compiled by a Python package, `src/engine/*.ts`). The q2 deltas of
+  sections 1-2 above (interop `sql` claim, `cellOwnedByMarimo`, `bare_sql`
+  argv, static claims) were re-applied on that layout rather than rebased:
+  `claimsLanguage`/`_extension.yml` static claims, `cellOwnedByMarimo` +
+  `MARIMO_CELL_REGEX_WITH_BARE_SQL` in `src/engine/authoring.ts`, and
+  `rewrite_bare_sql` in `quarto_marimo/authoring.py` (argv\[4\], the compiler's
+  optional fourth argument). `buildCommand` (section 6) is gone: upstream's
+  `process.ts` builds the `uv` command itself.

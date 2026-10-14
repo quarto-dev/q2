@@ -5,7 +5,7 @@
  * Task 7b registry-build seam tests (P1-1..P1-6, warning, bundle-missing).
  * All tests use real temp dir fixtures with `_extensions/<name>/_extension.yml`
  * plus a present (empty) `.js` file for tests that expect success.
- * Registration is zero-spawn — no Deno subprocess is started during construction.
+ * Registration is zero-spawn — no Node subprocess is started during construction.
  */
 
 // Native-only: TsEngine / TsEngineHost are behind cfg(not(target_arch = "wasm32")).
@@ -39,7 +39,7 @@ mod registry_build_tests {
     // `alpha`/`beta` synthetic-engine fixtures (Task A1) which both declare a
     // static `Primary(1)` claim on the `synth` language — an unbreakable tie
     // absent an explicit ordering source. `resolve_engines` is a pure
-    // function (no engine load / subprocess / Deno — `TsEngine::claims_language`
+    // function (no engine load / subprocess / Node — `TsEngine::claims_language`
     // short-circuits on the fixtures' static `claims` map), so this stays RI
     // (Rust integration), matching p1_2/p1_3's harness.
 
@@ -102,7 +102,7 @@ mod registry_build_tests {
     /// alpha.
     ///
     /// Writes placeholder stub `dist/{alpha,beta}.js` files (existence-only;
-    /// never loaded/executed — this suite is zero-spawn/no-deno) alongside
+    /// never loaded/executed — this suite is zero-spawn/no-node) alongside
     /// their identical static Primary(1)-on-`synth` claim shape (verbatim
     /// from each fixture's own `_extension.yml`), declared from one
     /// consolidated YAML document instead of two.
@@ -269,7 +269,7 @@ contributes:
     // TsEngineHost::new(global) and never calls ensure_started(); the zero-load
     // mechanism is separately bound by the TsEngine unit tests (T4 P1-12).
     //
-    // Zero-spawn guard: if any spawn had been attempted it would error (Deno not
+    // Zero-spawn guard: if any spawn had been attempted it would error (Node not
     // available in typical CI).
 
     #[test]
@@ -295,8 +295,8 @@ contributes:
             "engine 'echo' (declared via `name:`) should be registered; got: {:?}",
             project.registry.engine_names()
         );
-        // Zero-spawn: if the registry build had spawned Deno it would have been
-        // observable (error or slow); the test must pass without Deno present.
+        // Zero-spawn: if the registry build had spawned Node it would have been
+        // observable (error or slow); the test must pass without Node present.
     }
 
     // ── P1-6 (alias seam, registration half): unnamed engine → ext-id key ──────

@@ -56,20 +56,7 @@ pub fn build_listing_context(
 ) -> TemplateContext {
     let mut ctx = TemplateContext::new();
 
-    // Effective date style for date-typed item fields (bd-13f821l5):
-    // listing-level `date-format` > document `date-format` > `medium`
-    // — Q1's precedence in website-listing-template.ts, with items
-    // pre-formatted before the (logic-less) template interpolates
-    // them, exactly like Q1 pre-formats its EJS records.
-    let date_style = listing
-        .date_format
-        .clone()
-        .or_else(|| {
-            project_meta
-                .get("date-format")
-                .and_then(|v| v.as_plain_text())
-        })
-        .map_or(DateStyle::Medium, |s| DateStyle::parse(&s));
+    let date_style = effective_date_style(listing, project_meta);
     // Effective field set: author-explicit `fields:` verbatim;
     // defaulted sets presence-filtered against the items (Q1
     // parity, bd-listing-table-fields-peg1w3b3). Everything below
@@ -86,6 +73,25 @@ pub fn build_listing_context(
     ctx
 }
 
+/// Effective date style for date-typed item fields (bd-13f821l5):
+/// listing-level `date-format` > document `date-format` > `medium`
+/// — Q1's precedence in website-listing-template.ts, with items
+/// pre-formatted before the (logic-less) template interpolates
+/// them, exactly like Q1 pre-formats its EJS records. The
+/// `meta.listings.<id>` bridge ([`super::metadata`]) formats its
+/// `date` fields with the same style so the two contracts agree.
+pub(crate) fn effective_date_style(listing: &Listing, project_meta: &ConfigValue) -> DateStyle {
+    listing
+        .date_format
+        .clone()
+        .or_else(|| {
+            project_meta
+                .get("date-format")
+                .and_then(|v| v.as_plain_text())
+        })
+        .map_or(DateStyle::Medium, |s| DateStyle::parse(&s))
+}
+
 /// Q1 parity (`website-listing-read.ts` suggested-fields filter):
 /// a *defaulted* field set keeps only fields at least one item
 /// carries — `image` always survives (a listing-level
@@ -95,12 +101,13 @@ pub fn build_listing_context(
 /// sets can never fully empty). Author-explicit `fields:` is used
 /// verbatim. A `custom` listing has no type default; like Q1's
 /// `defaultFields(Custom, itemFields)` it gets every field some
-/// item carries ([`fields_items_carry`]).
+/// item carries ([`fields_items_carry`]); so does a `metadata`
+/// listing, whose consumer is code reading `meta.listings.<id>`.
 pub(crate) fn effective_fields(listing: &Listing, items: &[ListingItem]) -> Vec<String> {
     if listing.fields_explicit {
         return listing.fields.clone();
     }
-    if listing.kind == ListingType::Custom {
+    if matches!(listing.kind, ListingType::Custom | ListingType::Metadata) {
         return fields_items_carry(items);
     }
     let filtered: Vec<String> = listing
@@ -303,7 +310,7 @@ fn build_items_list(
 
 /// Format a raw item date for display; unparseable values pass
 /// through unchanged (the item metadata may carry arbitrary strings).
-fn display_date(raw: &str, style: &DateStyle) -> String {
+pub(crate) fn display_date(raw: &str, style: &DateStyle) -> String {
     match parse_date(raw) {
         Some(parsed) => format_date(&parsed, style).0,
         None => raw.to_string(),
@@ -646,7 +653,7 @@ fn display_name(field: &str, overrides: &std::collections::BTreeMap<String, Stri
 /// and math protect their own), so the result is also a safe pipe-table
 /// cell as-is.
 fn prose_markdown(inlines: &[Inline]) -> String {
-    let inlines = single_line(crate::transforms::strip_links_and_notes(inlines));
+    let inlines = prose_inlines(inlines);
     let mut buf = Vec::new();
     match pampa::writers::qmd::write_inlines_fragment(&inlines, &mut buf) {
         Ok(()) => String::from_utf8_lossy(&buf).into_owned(),
@@ -671,13 +678,22 @@ fn prose_markdown(inlines: &[Inline]) -> String {
 /// line, so it also fits an inline raw-HTML span — then the HTML inline
 /// writer, as TOC labels are rendered.
 fn prose_html(inlines: &[Inline]) -> String {
-    let inlines = single_line(crate::transforms::strip_links_and_notes(inlines));
+    let inlines = prose_inlines(inlines);
     let mut out = Vec::new();
     match pampa::writers::html::write_inlines_to(&inlines, &mut out) {
         // Writing to a Vec cannot fail.
         Ok(()) => String::from_utf8_lossy(&out).into_owned(),
         Err(_) => String::new(),
     }
+}
+
+/// Item prose as the inlines every consumer of an item sees: links
+/// and notes dropped, one line. [`prose_markdown`] and [`prose_html`]
+/// write these out; the `meta.listings.<id>` bridge
+/// ([`super::metadata`]) publishes them as `PandocInlines`, so a Lua
+/// consumer gets the same value as a template, in its native type.
+pub(crate) fn prose_inlines(inlines: &[Inline]) -> Inlines {
+    single_line(crate::transforms::strip_links_and_notes(inlines))
 }
 
 /// `inlines` with every `SoftBreak` / `LineBreak` (at any depth)
@@ -856,7 +872,7 @@ fn config_value_cell_string(cv: &ConfigValue) -> Option<String> {
 /// stay project-relative — the `LinkRewriteTransform` resolver
 /// handles either form, but the host-relative form keeps the
 /// emitted markdown closer to what an author would write by hand.
-fn host_relative_qmd(source_path: &std::path::Path, host_dir: &str) -> String {
+pub(crate) fn host_relative_qmd(source_path: &std::path::Path, host_dir: &str) -> String {
     let project_relative = source_path
         .components()
         .filter_map(|c| match c {
