@@ -24,7 +24,7 @@
 /**
  * Process-stable host config consumed by the ambient path/system bodies.
  * @quarto/api's own copy of the subset it reads — deliberately NOT imported
- * from @quarto/engine-host-deno (portability: @quarto/api is standalone).
+ * from @quarto/engine-host-node (portability: @quarto/api is standalone).
  * The engine-host wire `HostGlobalConfig` is structurally compatible (it has
  * these fields plus more), so `buildQuartoAPI` can pass its wire object here.
  */
@@ -83,7 +83,7 @@ export interface ExecResult {
 /**
  * PlatformHost — the single injection point for all host I/O.
  *
- * Implementations: a `denoHost` for the real CLI (routes to Deno.*),
+ * Implementations: a `nodeHost` for the real CLI (routes to node:*),
  * a `nodeHost` for the Node/MCP context, and fake implementations
  * in tests. Every host-only namespace factory accepts a
  * `Pick<PlatformHost, ...>` of the subset it actually needs.
@@ -108,7 +108,7 @@ export interface PlatformHost {
     /**
      * Walk a directory tree and return an entry for each file/directory found.
      * Synchronous; mirrors Deno's `walkSync` / Node's `readdirSync`-recursive pattern.
-     * The Deno implementation has landed (`@quarto/engine-host-deno` `deno-host.ts`,
+     * The Node implementation has landed (`@quarto/engine-host-node` `node-host.ts`,
      * delegating to `jsr:@std/fs` `walkSync`). Mock `PlatformHost`s in tests still
      * need to stub it — `walk: () => []` is the usual no-op.
      */
@@ -134,7 +134,7 @@ export interface PlatformHost {
    * read the process environment (e.g. for conditional behavior or debugging).
    *
    * accepted-untested (Plan 4b-D): implemented in the real host
-   * (`@quarto/engine-host-deno` `deno-host.ts`), but has no production
+   * (`@quarto/engine-host-node` `node-host.ts`), but has no production
    * caller inside `@quarto/api` today — only test fakes exercise it. Record
    * only; the keep-or-remove decision belongs to Plan 2 Phase A.
    */
@@ -159,7 +159,7 @@ export interface PlatformHost {
    * Equivalent to `Deno.realPathSync` / `fs.realpathSync`.
    *
    * accepted-untested (Plan 4b-D): implemented in the real host
-   * (`@quarto/engine-host-deno` `deno-host.ts`), but has no production
+   * (`@quarto/engine-host-node` `node-host.ts`), but has no production
    * caller inside `@quarto/api` today — only test fakes exercise it. Record
    * only; the keep-or-remove decision belongs to Plan 2 Phase A.
    */

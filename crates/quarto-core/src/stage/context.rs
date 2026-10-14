@@ -287,6 +287,19 @@ pub struct StageContext {
     /// provider was installed.
     pub attribution_data: Option<Arc<crate::attribution::AttributionData>>,
 
+    /// Resolved listings for this page, produced by the
+    /// `listing-resolve` stage before `lmd-execute` and bridged into
+    /// `RenderContext::resolved_listings` by `AstTransformsStage`, so
+    /// the listing render / categories / feed transforms consume the
+    /// same set the metadata bridge published at `meta.listings.<id>`
+    /// (bd-2oqen84t, M2). Empty when the page declares no listing.
+    pub resolved_listings: Vec<crate::project::listing::ResolvedListing>,
+
+    /// Whether `listing-resolve` ran for this page. Bridged to
+    /// `RenderContext::listings_resolved`; see its docs for why the
+    /// `Vec` alone is not enough.
+    pub listings_resolved: bool,
+
     /// Code-block decoration sideband (book-projects P5 bridge):
     /// `CodeBlockGenerateTransform` (Normalization) writes it and
     /// `CodeBlockRenderTransform` (Finalization) reads it — both inside
@@ -448,6 +461,8 @@ impl StageContext {
             cancellation: Cancellation::new(),
             attribution_provider: None,
             attribution_data: None,
+            resolved_listings: Vec::new(),
+            listings_resolved: false,
             code_block_decorations: std::collections::HashMap::new(),
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,

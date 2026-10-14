@@ -254,6 +254,9 @@ pub async fn apply_lua_filter(
     })?;
 
     let lua = create_filter_environment(runtime, target_format, filter_path, attribution)?;
+    // quarto.metadata.get / `meta`: a snapshot of the document's metadata
+    // as this filter starts (Q1 parity, quarto-cli PR 13246).
+    super::metadata::register_quarto_metadata(&lua, &pandoc.meta)?;
 
     // Load and run the filter script, KEEPING its return values.
     //
@@ -1723,6 +1726,108 @@ mod unit_tests {
         assert_eq!(result.len(), 2);
         assert!(matches!(&result[0], Inline::Str(s) if s.text == "a b"));
         assert!(matches!(&result[1], Inline::Str(s) if s.text == "c"));
+    }
+
+    /// Build a `pandoc.Nodes` userdata directly (no namespace needed).
+    fn nodes_value(lua: &Lua, shape: super::super::nodes::NodesShape) -> Value {
+        Value::UserData(
+            lua.create_userdata(super::super::nodes::LuaNodes { shape })
+                .unwrap(),
+        )
+    }
+
+    fn para_of(text: &str) -> crate::pandoc::Block {
+        use crate::pandoc::block::Paragraph;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+        crate::pandoc::Block::Paragraph(Paragraph {
+            content: vec![crate::pandoc::Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::for_test(),
+            })],
+            source_info: SourceInfo::for_test(),
+        })
+    }
+
+    /// Pins the `pandoc.Nodes` resolution table (lua/nodes.rs) on the
+    /// filter-return path: an Inline filter is inline context.
+    #[test]
+    fn test_handle_inline_return_nodes() {
+        use super::super::nodes::NodesShape;
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
+        use quarto_source_map::SourceInfo;
+        let lua = Lua::new();
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::for_test(),
+        });
+        // blocks shape, one paragraph → its inlines
+        let ret = nodes_value(&lua, NodesShape::Blocks(vec![para_of("x")]));
+        let result = handle_inline_return(&lua, ret, &original, "Str").unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(matches!(&result[0], Inline::Str(s) if s.text == "x"));
+        // blocks shape, two paragraphs → error naming the count
+        let ret = nodes_value(&lua, NodesShape::Blocks(vec![para_of("x"), para_of("y")]));
+        let err = handle_inline_return(&lua, ret, &original, "Str")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("holds 2 blocks"), "{err}");
+        // inlines shape → the inlines; empty → nothing
+        let ret = nodes_value(
+            &lua,
+            NodesShape::Inlines(vec![Inline::Str(Str {
+                text: "i".to_string(),
+                source_info: SourceInfo::for_test(),
+            })]),
+        );
+        let result = handle_inline_return(&lua, ret, &original, "Str").unwrap();
+        assert!(matches!(&result[0], Inline::Str(s) if s.text == "i"));
+        let ret = nodes_value(&lua, NodesShape::Empty);
+        assert!(
+            handle_inline_return(&lua, ret, &original, "Str")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// Same table on the Block filter path: block context keeps a Para a
+    /// Para and gives bare inlines a Plain.
+    #[test]
+    fn test_handle_block_return_nodes() {
+        use super::super::nodes::NodesShape;
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::{Block, Inline};
+        use quarto_source_map::SourceInfo;
+        let lua = Lua::new();
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        });
+        let ret = nodes_value(&lua, NodesShape::Blocks(vec![para_of("x"), para_of("y")]));
+        let result = handle_block_return(&lua, ret, &original, "Para").unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(matches!(&result[0], Block::Paragraph(_)), "{result:?}");
+        let ret = nodes_value(
+            &lua,
+            NodesShape::Inlines(vec![Inline::Str(Str {
+                text: "i".to_string(),
+                source_info: SourceInfo::for_test(),
+            })]),
+        );
+        let result = handle_block_return(&lua, ret, &original, "Para").unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(
+            matches!(&result[0], Block::Plain(p) if p.content.len() == 1),
+            "{result:?}"
+        );
+        let ret = nodes_value(&lua, NodesShape::Empty);
+        assert!(
+            handle_block_return(&lua, ret, &original, "Para")
+                .unwrap()
+                .is_empty()
+        );
     }
 
     // =========================================================================

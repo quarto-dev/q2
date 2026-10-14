@@ -95,6 +95,8 @@ vendored-openssl = ["dep:openssl-sys", "openssl-sys/vendored"]
 # wire-path precondition in the E2E tests (json_errors, render_cli_e2e,
 # render_scripts_cli).
 dunce = "1"
+# lmd fixture snapshots (tests/integration/lmd_snapshots.rs).
+insta.workspace = true
 tempfile = "3"
 pampa.workspace = true
 sha2 = "0.11"

@@ -1,0 +1,5 @@
+project:
+  type: website
+  output-dir: _site
+website:
+  title: "lmd blog"

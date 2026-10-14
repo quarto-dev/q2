@@ -1,0 +1,34 @@
+[package]
+name = "tree-sitter-lmd"
+version = "0.1.0"
+description = "Tree-sitter grammar for lmd: Lua 5.4 plus `{= markdown =}` fragment expressions"
+publish = false
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+
+build = "build.rs"
+include = [
+  "src/*",
+  "grammar/src/*",
+  "grammar/grammar.js",
+]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+tree-sitter-language = "0.1"
+
+[dev-dependencies]
+tree-sitter = { workspace = true }
+
+[build-dependencies]
+cc = "1.2.55"
+
+[lints]
+workspace = true

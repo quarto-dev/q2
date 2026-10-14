@@ -15,7 +15,7 @@
  * (`derive_cell_outputs` / `is_cell_wrapper`) maps each engine cell to the next
  * `::: {.cell}` wrapper in the executed markdown.
  *
- * Engine: the committed `echo-engine` TS fixture (deno-gated). It is used
+ * Engine: the committed `echo-engine` TS fixture (node-gated). It is used
  * INSTEAD of julia on purpose — echo spawns NO child julia server, so the
  * Bug C engine-host stdout-corruption path CANNOT occur here, which isolates
  * the delivery chain from Bug C.
@@ -58,10 +58,10 @@ const ECHO_ENGINE_FIXTURE = path.join(
 const SOURCE_TOKEN = 'PC5_ECHO_SOURCE_TOKEN';
 const INDEX_QMD = `---\ntitle: PC5 echo capture\n---\n\n# PC5 heading\n\n\`\`\`{echo}\n${SOURCE_TOKEN}\n\`\`\`\n`;
 
-/** `true` when `deno` is on PATH (the echo engine-host runtime). */
-function denoAvailable(): boolean {
+/** `true` when `node` is on PATH (the echo engine-host runtime). */
+function nodeAvailable(): boolean {
   try {
-    execFileSync('deno', ['--version'], { stdio: 'ignore' });
+    execFileSync('node', ['--version'], { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -125,7 +125,7 @@ test.afterEach(async () => {
 // occur here. Fail-on-revert proof: reverting `set_capture` (capture_driver.rs)
 // makes this RED by timeout (recorded in .superpowers/sdd/task-p2-report.md).
 test('PC5: recorded echo capture splices into the pane without reload', async ({ page }) => {
-  test.skip(!denoAvailable(), 'deno not on PATH — echo engine-host unavailable');
+  test.skip(!nodeAvailable(), 'node not found on PATH — echo engine-host unavailable');
 
   page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`));
   page.on('pageerror', (err) => consoleLines.push(`[pageerror] ${err.message}`));

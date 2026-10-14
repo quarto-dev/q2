@@ -7,6 +7,7 @@
  * Runtime name: "echolegacy".  Claims the "echolegacy" language.
  */
 
+import { readFileSync } from "node:fs";
 import type {
   ExecutionEngineDiscovery,
   ExecutionEngineInstance,
@@ -52,7 +53,7 @@ const echoLegacyEngine: ExecutionEngineDiscovery = {
       canFreeze: false,
 
       async markdownForFile(file: string) {
-        const text = Deno.readTextFileSync(file);
+        const text = readFileSync(file, "utf8");
         const wrapped = "```{echolegacy}\n" + text + "\n```\n";
         return _quarto!.mappedString.fromString(wrapped, file);
       },

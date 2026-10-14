@@ -5,10 +5,17 @@
  */
 
 // Standard library imports
-import { dirname, fromFileUrl, join, resolve } from "path";
-import { existsSync } from "fs/exists";
-import { encodeBase64 } from "encoding/base64";
-import { writeAll } from "jsr:@std/io@0.224.0/write-all";
+import {
+  existsSync,
+  readFileSync,
+  type RmOptions,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+import { spawn, spawnSync } from "node:child_process";
 
 // Type imports from Quarto via import map
 import type {
@@ -27,6 +34,15 @@ import type {
   QuartoAPI,
 } from "@quarto/types";
 
+// oneShot worker-close orchestration (busy-recovery lives here so it is
+// unit-testable independent of the socket)
+import {
+  type CloseCommandWriter,
+  errorRunClose,
+  postRunClose,
+  preRunClose,
+} from "./worker-close.ts";
+
 // Constants for this engine
 import {
   kExecuteDaemon,
@@ -40,20 +56,26 @@ import {
   kKeepHidden,
   kKeepIpynb,
 } from "./constants.ts";
+import {
+  connectReady,
+  LineConnection,
+  type ProgressUpdate,
+  sendCommand,
+} from "./transport.ts";
 
 // Platform detection
-const isWindows = Deno.build.os === "windows";
+const isWindows = process.platform === "win32";
 
 // Extension directory (where the bundled JS and resource files live)
-const extensionDir = dirname(fromFileUrl(import.meta.url));
+const extensionDir = dirname(fileURLToPath(import.meta.url));
 
 // Module-level quarto API reference
 let quarto: QuartoAPI;
 
 // Safe file removal helper
-function safeRemoveSync(file: string, options: Deno.RemoveOptions = {}) {
+function safeRemoveSync(file: string, options: RmOptions = {}) {
   try {
-    Deno.removeSync(file, options);
+    rmSync(file, options);
   } catch (e) {
     if (existsSync(file)) {
       throw e;
@@ -61,7 +83,7 @@ function safeRemoveSync(file: string, options: Deno.RemoveOptions = {}) {
   }
 }
 
-// Simple async delay helper (equivalent to Deno std's delay)
+// Simple async delay helper
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface SourceRange {
@@ -138,7 +160,7 @@ export const juliaEngineDiscovery: ExecutionEngineDiscovery = {
 
       partitionedMarkdown: (file: string) => {
         return Promise.resolve(
-          quarto.markdownRegex.partition(Deno.readTextFileSync(file)),
+          quarto.markdownRegex.partition(readFileSync(file, "utf8")),
         );
       },
 
@@ -227,7 +249,7 @@ export const juliaEngineDiscovery: ExecutionEngineDiscovery = {
         if (options.format.execute[kKeepIpynb]) {
           const stem = options.target.source.replace(/\.[^.]+$/, "");
           const ipynbPath = stem + ".ipynb";
-          Deno.writeTextFileSync(ipynbPath, JSON.stringify(nb, null, 2));
+          writeFileSync(ipynbPath, JSON.stringify(nb, null, 2));
         }
 
         // NOTE: for perforance reasons the 'nb' is mutated in place
@@ -328,7 +350,56 @@ export const juliaEngineDiscovery: ExecutionEngineDiscovery = {
 export default juliaEngineDiscovery;
 
 function juliaCmd() {
-  return Deno.env.get("QUARTO_JULIA") ?? "julia";
+  return process.env.QUARTO_JULIA ?? "julia";
+}
+
+// The child gets exactly the environment it is given (unlike Deno, Node's
+// `env` replaces rather than merges), so overrides are layered on process.env.
+function withEnv(overrides: Record<string, string>) {
+  return { ...process.env, ...overrides };
+}
+
+// Run a command with the terminal's stdout/stderr and wait for it. Resolves
+// to whether it exited with status 0; rejects if it could not be started.
+function runInherited(
+  cmd: string,
+  args: string[],
+  env?: Record<string, string | undefined>,
+): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      env,
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    child.once("error", (e: NodeJS.ErrnoException) =>
+      reject(
+        e.code === "ENOENT"
+          ? new Error(`Could not run "${cmd}": command not found.`)
+          : e,
+      ));
+    child.once("close", (code) => resolve(code === 0));
+  });
+}
+
+// Run a command to completion capturing its output, for the launchers that
+// start the detached server. This returns only once the launcher's stdout
+// pipe is closed everywhere, so the detached server must not inherit it (the
+// julia launcher script redirects the server's stdio for that reason).
+function runCaptured(
+  cmd: string,
+  args: string[],
+  env: Record<string, string | undefined>,
+) {
+  const result = spawnSync(cmd, args, { encoding: "utf8", env });
+  if (result.error) {
+    const code = (result.error as NodeJS.ErrnoException).code;
+    throw code === "ENOENT"
+      ? new Error(`Could not run "${cmd}": command not found.`)
+      : result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(result.stderr);
+  }
 }
 
 function powershell_argument_list_to_string(...args: string[]): string {
@@ -348,7 +419,7 @@ async function startOrReuseJuliaServer(
     );
     quarto.console.info("Starting julia control server process. This might take a while...");
 
-    let juliaProject = Deno.env.get("QUARTO_JULIA_PROJECT");
+    let juliaProject = process.env.QUARTO_JULIA_PROJECT;
 
     if (juliaProject === undefined) {
       await ensureQuartoNotebookRunnerEnvironment(options);
@@ -359,21 +430,18 @@ async function startOrReuseJuliaServer(
         options,
         `Custom julia project set via QUARTO_JULIA_PROJECT="${juliaProject}". Checking if QuartoNotebookRunner can be loaded.`,
       );
-      const qnrTestCommand = new Deno.Command(juliaCmd(), {
-        args: [
+      const qnrLoadable = await runInherited(
+        juliaCmd(),
+        [
           "--startup-file=no",
           `--project=${juliaProject}`,
           "-e",
           "using QuartoNotebookRunner",
         ],
-        env: {
-          // ignore the main env
-          "JULIA_LOAD_PATH": isWindows ? "@;@stdlib" : "@:@stdlib",
-        },
-      });
-      const qnrTestProc = qnrTestCommand.spawn();
-      const result = await qnrTestProc.output();
-      if (!result.success) {
+        // ignore the main env
+        withEnv({ JULIA_LOAD_PATH: isWindows ? "@;@stdlib" : "@:@stdlib" }),
+      );
+      if (!qnrLoadable) {
         throw Error(
           `Executing \`using QuartoNotebookRunner\` failed with QUARTO_JULIA_PROJECT="${juliaProject}". Ensure that this project exists, has QuartoNotebookRunner installed and is instantiated correctly.`,
         );
@@ -387,45 +455,43 @@ async function startOrReuseJuliaServer(
     // We need to spawn the julia server in its own process that can outlive quarto.
     // Apparently, `run(detach(cmd))` in julia does not do that reliably on Windows,
     // at least deno never seems to recognize that the spawning julia process has finished,
-    // presumably because it waits for the active child process to exit. This makes the
+    // presumably because it waits for the active child process to exit. Node's spawnSync
+    // waits on the child's pipes the same way. This makes the
     // tests on windows hang forever if we use the same launching mechanism as for Unix systems.
     // So we utilize powershell instead which can start completely detached processes with
     // the Start-Process commandlet.
     if (isWindows) {
-      const command = new Deno.Command(
-        "PowerShell",
-        {
-          args: [
-            "-Command",
-            "Start-Process",
-            juliaCmd(),
-            "-ArgumentList",
-            powershell_argument_list_to_string(
-              "--startup-file=no",
-              `--project=${juliaProject}`,
-              join(extensionDir, "quartonotebookrunner.jl"),
-              transportFile,
-              juliaServerLogFile(),
-            ),
-            "-WindowStyle",
-            "Hidden",
-          ],
-          env: {
-            "JULIA_LOAD_PATH": "@;@stdlib", // ignore the main env
-          },
-        },
-      );
       trace(
         options,
         "Starting detached julia server through powershell, once transport file exists, server should be running.",
       );
-      const result = command.outputSync();
-      if (!result.success) {
-        throw new Error(new TextDecoder().decode(result.stderr));
-      }
+      runCaptured(
+        "PowerShell",
+        [
+          "-Command",
+          "Start-Process",
+          juliaCmd(),
+          "-ArgumentList",
+          powershell_argument_list_to_string(
+            "--startup-file=no",
+            `--project=${juliaProject}`,
+            join(extensionDir, "quartonotebookrunner.jl"),
+            transportFile,
+            juliaServerLogFile(),
+          ),
+          "-WindowStyle",
+          "Hidden",
+        ],
+        withEnv({ JULIA_LOAD_PATH: "@;@stdlib" }), // ignore the main env
+      );
     } else {
-      const command = new Deno.Command(juliaCmd(), {
-        args: [
+      trace(
+        options,
+        "Starting detached julia server through julia, once transport file exists, server should be running.",
+      );
+      runCaptured(
+        juliaCmd(),
+        [
           "--startup-file=no",
           join(extensionDir, "start_quartonotebookrunner_detached.jl"),
           juliaCmd(),
@@ -434,18 +500,8 @@ async function startOrReuseJuliaServer(
           transportFile,
           juliaServerLogFile(),
         ],
-        env: {
-          "JULIA_LOAD_PATH": "@:@stdlib", // ignore the main env
-        },
-      });
-      trace(
-        options,
-        "Starting detached julia server through julia, once transport file exists, server should be running.",
+        withEnv({ JULIA_LOAD_PATH: "@:@stdlib" }), // ignore the main env
       );
-      const result = command.outputSync();
-      if (!result.success) {
-        throw new Error(new TextDecoder().decode(result.stderr));
-      }
     }
   } else {
     trace(
@@ -463,16 +519,12 @@ async function ensureQuartoNotebookRunnerEnvironment(
   const runtimeDir = quarto.path.runtime("julia");
   const projectTomlTemplate = join(extensionDir, "Project.toml");
   const projectToml = join(runtimeDir, "Project.toml");
-  Deno.writeFileSync(projectToml, Deno.readFileSync(projectTomlTemplate));
-  const command = new Deno.Command(juliaCmd(), {
-    args: [
-      "--startup-file=no",
-      `--project=${runtimeDir}`,
-      join(extensionDir, "ensure_environment.jl"),
-    ],
-  });
-  const proc = command.spawn();
-  const { success } = await proc.output();
+  writeFileSync(projectToml, readFileSync(projectTomlTemplate));
+  const success = await runInherited(juliaCmd(), [
+    "--startup-file=no",
+    `--project=${runtimeDir}`,
+    join(extensionDir, "ensure_environment.jl"),
+  ]);
   if (!success) {
     throw (new Error("Ensuring an updated julia server environment failed"));
   }
@@ -512,11 +564,11 @@ async function readTransportFile(
   // it too quickly once it exists, for example when not the whole string
   // has been written to it, yet, we just repeat reading until the string
   // ends in a newline. The overhead doesn't matter as the file is so small.
-  let content = Deno.readTextFileSync(transportFile);
+  let content = readFileSync(transportFile, "utf8");
   let i = 0;
   while (i < 20 && !content.endsWith("\n")) {
     await delay(100);
-    content = Deno.readTextFileSync(transportFile);
+    content = readFileSync(transportFile, "utf8");
     i += 1;
   }
   if (!content.endsWith("\n")) {
@@ -529,37 +581,17 @@ async function getReadyServerConnection(
   transportOptions: JuliaTransportFile,
   executeOptions: JuliaExecuteOptions,
 ) {
-  const conn = await Deno.connect({
-    port: transportOptions.port,
-  });
-  const isready = writeJuliaCommand(
-    conn,
-    { type: "isready", content: {} },
+  return await connectReady(
+    transportOptions.port,
     transportOptions.key,
-    executeOptions,
+    10000,
+    (msg) => trace(executeOptions, msg),
   );
-  const timeoutMilliseconds = 10000;
-  const timeout = new Promise((accept, _) =>
-    setTimeout(() => {
-      accept(
-        `Timed out after getting no response for ${timeoutMilliseconds} milliseconds.`,
-      );
-    }, timeoutMilliseconds)
-  );
-  const result = await Promise.race([isready, timeout]);
-  if (typeof result === "string") {
-    return result;
-  } else if (result !== true) {
-    conn.close();
-    return `Expected isready command to return true, returned ${isready} instead. Closing connection.`;
-  } else {
-    return conn;
-  }
 }
 
 async function getJuliaServerConnection(
   options: JuliaExecuteOptions,
-): Promise<Deno.TcpConn> {
+): Promise<LineConnection> {
   const { reused } = await startOrReuseJuliaServer(options);
 
   let transportOptions: JuliaTransportFile;
@@ -635,8 +667,8 @@ function firstSignificantLine(str: string, n: number): string {
 // from cliffy, MIT licensed
 function getConsoleColumns(): number | null {
   try {
-    // Catch error in none tty mode: Inappropriate ioctl for device (os error 25)
-    return Deno.consoleSize().columns ?? null;
+    // columns is undefined when stdout is not a tty
+    return process.stdout.columns ?? null;
   } catch (_error) {
     return null;
   }
@@ -710,21 +742,16 @@ async function executeJulia(
   const conn = await getJuliaServerConnection(options);
   const transportOptions = await pollTransportFile(options);
   const file = options.target.input;
+
+  // Adapter: worker-close speaks a narrow close-command vocabulary; the generic
+  // writeJuliaCommand covers the full ServerCommand union. Every command
+  // worker-close emits (isopen/close/forceclose) is a valid ServerCommand.
+  const writeCloseCommand: CloseCommandWriter = (command) =>
+    // deno-lint-ignore no-explicit-any
+    writeJuliaCommand(conn, command as any, transportOptions.key, options);
+
   if (options.oneShot || options.format.execute[kExecuteDaemonRestart]) {
-    const isopen = await writeJuliaCommand(
-      conn,
-      { type: "isopen", content: { file } },
-      transportOptions.key,
-      options,
-    );
-    if (isopen) {
-      await writeJuliaCommand(
-        conn,
-        { type: "close", content: { file } },
-        transportOptions.key,
-        options,
-      );
-    }
+    await preRunClose(writeCloseCommand, file);
   }
 
   const sourceRanges = buildSourceRanges(options.target.markdown);
@@ -751,42 +778,28 @@ async function executeJulia(
       },
     );
   } catch (e) {
+    // A failed run must still close the oneShot worker, or it leaks on the
+    // shared control server (and blocks the server's idle timeout). Best
+    // effort — the run error rethrown below is the diagnostic that matters.
     if (options.oneShot) {
-      try {
-        await writeJuliaCommand(
-          conn,
-          { type: "close", content: { file } },
-          transportOptions.key,
-          options,
-        );
-      } catch (closeError) {
-        // must not mask the run error which is the actual diagnostic
-        quarto.console.warning(
-          `Could not close the julia worker after the failed run, it may stay open until the server exits:\n${closeError}`,
-        );
-      }
+      await errorRunClose(
+        writeCloseCommand,
+        file,
+        (message) => quarto.console.warning(message),
+      );
     }
     throw e;
   }
 
   if (options.oneShot) {
-    await writeJuliaCommand(
-      conn,
-      { type: "close", content: { file } },
-      transportOptions.key,
-      options,
+    await postRunClose(
+      writeCloseCommand,
+      file,
+      (message) => quarto.console.warning(message),
     );
   }
 
   return response.notebook;
-}
-
-interface ProgressUpdate {
-  type: "progress_update";
-  chunkIndex: number;
-  nChunks: number;
-  source: string;
-  line: number;
 }
 
 type empty = Record<string | number | symbol, never>;
@@ -817,155 +830,23 @@ type ServerCommandResponseMap = {
   status: string;
 };
 
-type ServerCommandError = {
-  error: string;
-  juliaError?: string;
-};
-
 type ServerCommandResponse<T extends ServerCommand["type"]> =
   ServerCommandResponseMap[T];
 
-function isProgressUpdate(data: any): data is ProgressUpdate {
-  return data && data.type === "progress_update";
-}
-
-function isServerCommandError(data: any): data is ServerCommandError {
-  return data && typeof (data.error) === "string";
-}
-
 async function writeJuliaCommand<T extends ServerCommand["type"]>(
-  conn: Deno.Conn,
+  conn: LineConnection,
   command: Extract<ServerCommand, { type: T }>,
   secret: string,
   options: JuliaExecuteOptions,
   onProgressUpdate?: (update: ProgressUpdate) => void,
 ): Promise<ServerCommandResponse<T>> {
-  const payload = JSON.stringify(command);
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    true,
-    ["sign"],
+  return await sendCommand(
+    conn,
+    command,
+    secret,
+    (msg) => trace(options, msg),
+    onProgressUpdate,
   );
-  const canonicalRequestBytes = new TextEncoder().encode(payload);
-  const signatureArrayBuffer = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    canonicalRequestBytes,
-  );
-  const signatureBytes = new Uint8Array(signatureArrayBuffer);
-  const hmac = encodeBase64(signatureBytes);
-
-  const message = JSON.stringify({ hmac, payload }) + "\n";
-
-  const messageBytes = new TextEncoder().encode(message);
-
-  trace(options, `write command "${command.type}" to socket server`);
-  await writeAll(conn, messageBytes);
-
-  // a string of bytes received from the server could start with a
-  // partial message, contain multiple complete messages (separated by newlines) after that
-  // but they could also end in a partial one.
-  // so to read and process them all correctly, we read in a fixed number of bytes, if there's a newline, we process
-  // the string up to that part and save the rest for the next round.
-  let restOfPreviousResponse = new Uint8Array(512);
-  let restLength = 0; // number of valid bytes in restOfPreviousResponse
-  while (true) {
-    const respArray: Uint8Array[] = [];
-    let respLength = 0;
-    let response = "";
-    const newlineAt = restOfPreviousResponse.indexOf(10);
-    // if we already have a newline, we don't need to read from conn
-    if (newlineAt !== -1 && newlineAt < restLength) {
-      response = new TextDecoder().decode(
-        restOfPreviousResponse.slice(0, newlineAt),
-      );
-      restOfPreviousResponse.set(
-        restOfPreviousResponse.slice(newlineAt + 1, restLength),
-      );
-      restLength -= newlineAt + 1;
-    } // but if we don't have a newline, we read in more until we get one
-    else {
-      respArray.push(restOfPreviousResponse.slice(0, restLength));
-      respLength += restLength;
-      while (true) {
-        const buffer = new Uint8Array(512);
-        const bytesRead = await conn.read(buffer);
-        if (bytesRead === null) {
-          break;
-        }
-
-        if (bytesRead > 0) {
-          const bufferNewlineAt = buffer.indexOf(10);
-          if (bufferNewlineAt === -1 || bufferNewlineAt >= bytesRead) {
-            respArray.push(buffer.slice(0, bytesRead));
-            restLength = 0;
-            respLength += bytesRead;
-          } else {
-            respArray.push(buffer.slice(0, bufferNewlineAt));
-            respLength += bufferNewlineAt;
-            restOfPreviousResponse.set(
-              buffer.slice(bufferNewlineAt + 1, bytesRead),
-            );
-            restLength = bytesRead - bufferNewlineAt - 1;
-            // when we have found a newline in a payload, we can stop reading in more data and continue
-            // with the response first
-
-            let respBuffer = new Uint8Array(respLength);
-            let offset = 0;
-            respArray.forEach((item) => {
-              respBuffer.set(item, offset);
-              offset += item.length;
-            });
-            response = new TextDecoder().decode(respBuffer);
-            break;
-          }
-        }
-      }
-    }
-    trace(options, "received server response");
-    // one command should be sent, ended by a newline, currently just throwing away anything else because we don't
-    // expect multiple commmands at once
-    const json = response.split("\n")[0];
-    const responseData = JSON.parse(json);
-
-    if (isServerCommandError(responseData)) {
-      const data = responseData;
-      let errorMessage =
-        `Julia server returned error after receiving "${command.type}" command:\n\n${data.error}`;
-
-      if (data.juliaError) {
-        errorMessage +=
-          `\n\nThe underlying Julia error was:\n\n${data.juliaError}`;
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    let data: ServerCommandResponse<T>;
-    if (command.type === "run") {
-      const data_or_update: ServerCommandResponse<T> | ProgressUpdate =
-        responseData;
-      if (isProgressUpdate(data_or_update)) {
-        const update = data_or_update;
-        trace(
-          options,
-          "received progress update response, listening for further responses",
-        );
-        if (onProgressUpdate !== undefined) {
-          onProgressUpdate(update);
-        }
-        continue; // wait for the next message
-      } else {
-        data = data_or_update;
-      }
-    } else {
-      data = responseData;
-    }
-
-    return data;
-  }
 }
 
 function juliaRuntimeDir(): string {
@@ -1059,7 +940,7 @@ async function logStatus() {
       {} as JuliaExecuteOptions,
     );
 
-    Deno.stdout.writeSync((new TextEncoder()).encode(status));
+    process.stdout.write(status);
 
     conn.close();
   } else {
@@ -1074,13 +955,13 @@ async function killJuliaServer() {
     return;
   }
   const transportOptions = await readTransportFile(transportFile);
-  Deno.kill(transportOptions.pid, "SIGTERM");
+  process.kill(transportOptions.pid, "SIGTERM");
   quarto.console.info("Sent SIGTERM to server process");
 }
 
 function printJuliaServerLog() {
   if (existsSync(juliaServerLogFile())) {
-    Deno.stdout.writeSync(Deno.readFileSync(juliaServerLogFile()));
+    process.stdout.write(readFileSync(juliaServerLogFile()));
   } else {
     quarto.console.info("Server log file doesn't exist");
   }

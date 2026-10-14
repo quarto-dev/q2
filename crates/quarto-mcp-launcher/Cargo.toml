@@ -12,6 +12,7 @@ dirs = "6"
 fs2 = "0.4"
 include_dir.workspace = true
 quarto-wasm-embed.workspace = true
+quarto-node-discovery = { path = "../quarto-node-discovery" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json.workspace = true
 sha2 = "0.11"

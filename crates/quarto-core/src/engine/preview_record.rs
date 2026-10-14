@@ -176,8 +176,9 @@ pub async fn record_capture(
     Ok(std::mem::take(&mut *slot))
 }
 
-/// Build the staleness-check sub-pipeline: everything up to (and
-/// including) `PreEngineSugaringStage`. The pipeline returns the
+/// Build the staleness-check sub-pipeline: every stage before
+/// `EngineExecutionStage` (`PreEngineSugaringStage`, `LmdDesugarStage`,
+/// and whatever else is inserted there later). The pipeline returns the
 /// `DocumentAst` that `EngineExecutionStage` would serialize to QMD
 /// and hand to the engine — i.e. exactly what
 /// [`record_capture`] passes as `input_qmd`. The Phase C.2 staleness
@@ -185,11 +186,8 @@ pub async fn record_capture(
 /// the existing capture's `input_qmd`.
 fn build_pre_engine_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None);
-    if let Some(idx) = stages
-        .iter()
-        .position(|s| s.name() == "pre-engine-sugaring")
-    {
-        stages.truncate(idx + 1);
+    if let Some(idx) = stages.iter().position(|s| s.name() == "engine-execution") {
+        stages.truncate(idx);
     }
     stages
 }

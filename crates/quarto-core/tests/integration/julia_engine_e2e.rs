@@ -2,16 +2,16 @@
  * tests/integration/julia_engine_e2e.rs
  * Copyright (c) 2026 Posit, PBC
  *
- * Plan 4 (Julia validation) — the julia+deno-gated END-TO-END rows. Drives the
+ * Plan 4 (Julia validation) — the julia+node-gated END-TO-END rows. Drives the
  * BUNDLED julia engine (vendored extension subtree, julia epic Step 4 — see
  * `resources/extension-subtrees/julia-engine/`) through the REAL render path —
- * a TS engine spawning the Deno engine-host subprocess, which in turn spawns a
+ * a TS engine spawning the Node engine-host subprocess, which in turn spawns a
  * real Julia QuartoNotebookRunner control server — and asserts the whole chain
  * works: discovery → static resolution → LoadEngine / LaunchEngine / execute →
  * jupyter `toMarkdown` → HTML writer.
  *
- * These tests are julia+deno-gated: they early-return (skip, with an
- * `eprintln!("SKIP: …")`) when `deno` or `julia` is not on PATH. On a machine
+ * These tests are julia+node-gated: they early-return (skip, with an
+ * `eprintln!("SKIP: …")`) when `node` or `julia` is not found. On a machine
  * with BOTH present they RUN — a skip there is a signal something is wrong, not a
  * pass (Test Seam Spec, CI gating).
  *
@@ -44,13 +44,7 @@ use quarto_core::project::orchestrator::{ProjectPipeline, project_type_for};
 use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-/// Return `true` when `deno` is on PATH (the engine-host subprocess runtime).
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 /// Return `true` when `julia` is on PATH (the QuartoNotebookRunner backend).
 fn julia_available() -> bool {
@@ -102,7 +96,7 @@ fn setup_julia_project() -> TempDir {
 /// `julia_server_log.txt` live (`quarto.path.runtime("julia")` in
 /// julia-engine.ts resolves purely from `HOME`, independent of
 /// `QUARTO_JULIA_PROJECT` — verified by reading + a standalone
-/// `quarto_util::quarto_runtime_dir()` / `Deno.env.get("HOME")` check
+/// `quarto_util::quarto_runtime_dir()` / `process.env.HOME` check
 /// under an overridden `HOME`, both honoring the override; see
 /// task-p3-report.md). Isolating the PROJECT too closes the narrower
 /// remaining exposure: without it, the detached julia server launches
@@ -200,7 +194,7 @@ const MINIMAL_DOC: &str =
 
 // ── J1: minimal Julia render (Phase 4B) ───────────────────────────────────────
 //
-// Renders the 4B minimal doc through the full chain with real Deno + real Julia
+// Renders the 4B minimal doc through the full chain with real Node + real Julia
 // (no mocks): discovery → static `Primary(julia)` resolution → LoadEngine /
 // LaunchEngine / execute → QuartoNotebookRunner runs `1 + 1` → jupyter
 // `toMarkdown` → HTML writer. Asserts the rendered HTML contains the cell result
@@ -212,8 +206,8 @@ const MINIMAL_DOC: &str =
 // RED. (Smoke row: binds the fixture's registration.)
 #[test]
 fn j1_minimal_julia_render() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j1_minimal_julia_render");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j1_minimal_julia_render");
         return;
     }
     if !julia_available() {
@@ -280,10 +274,8 @@ const ECHO_FALSE_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n  e
 // included → RED.
 #[test]
 fn j2_document_level_echo_false_hides_source_keeps_output() {
-    if !deno_available() {
-        eprintln!(
-            "SKIP: deno not on PATH — j2_document_level_echo_false_hides_source_keeps_output"
-        );
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j2_document_level_echo_false_hides_source_keeps_output");
         return;
     }
     if !julia_available() {
@@ -406,8 +398,8 @@ const JULIA_BLOCK_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n--
 // `FOO=BAR`).
 #[test]
 fn j3_exeflags_and_env_through_julia_block() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j3_exeflags_and_env_through_julia_block");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j3_exeflags_and_env_through_julia_block");
         return;
     }
     if !julia_available() {
@@ -451,7 +443,7 @@ const ERROR_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n---\n\n`
 // ── J4: error handling does not wedge the host (Phase 4D) ─────────────────────
 //
 // Renders a Julia doc whose only cell calls `error(...)`, then — through the
-// SAME `TsEngineHost` (same Deno subprocess) — renders the J1 minimal doc, to
+// SAME `TsEngineHost` (same Node subprocess) — renders the J1 minimal doc, to
 // prove a failed execute doesn't leave the host wedged (pending-request
 // cleanup).
 //
@@ -476,8 +468,8 @@ const ERROR_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n---\n\n`
 // swallowed/mistyped and assertion (a) reddens.
 #[test]
 fn j4_error_handling_does_not_wedge_host() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j4_error_handling_does_not_wedge_host");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j4_error_handling_does_not_wedge_host");
         return;
     }
     if !julia_available() {
@@ -544,7 +536,7 @@ fn j4_error_handling_does_not_wedge_host() {
 
     // (c) A subsequent render THROUGH THE SAME HOST (same discovered
     // `project`, same `Arc<EngineRegistry>`, same `Arc<TsEngineHost>`) must
-    // still succeed — proving the failed request didn't leave the Deno
+    // still succeed — proving the failed request didn't leave the Node
     // subprocess / pending-request map wedged.
     let minimal_result = render_document_to_file(
         &minimal_input,
@@ -706,8 +698,8 @@ fn render_julia_website(
 // separately proven by the manual `q2 render` evidence in the 4H report.
 #[test]
 fn j5_website_figure_lands_as_file_and_is_referenced() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j5_website_figure_lands_as_file_and_is_referenced");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j5_website_figure_lands_as_file_and_is_referenced");
         return;
     }
     if !julia_available() {
@@ -790,7 +782,7 @@ fn j5_website_figure_lands_as_file_and_is_referenced() {
 // directories into files (see J5's comment above), the full render
 // completes and this row is un-`#[ignore]`d. The capture's discrimination
 // is separately proven GREEN by `j6_capture_discriminates_two_hosts`
-// (deno-only, no project render).
+// (node-only, no project render).
 //
 // `QUARTO_JOBS=1` (below) forces the Pass-2 SEQUENTIAL dispatch
 // (`render_batch_serial`), same precedent as `fail_fast.rs`. With the
@@ -812,8 +804,8 @@ fn j5_website_figure_lands_as_file_and_is_referenced() {
 #[test]
 fn j6_one_engine_host_per_project_render() {
     use tracing_subscriber::layer::SubscriberExt;
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j6_one_engine_host_per_project_render");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j6_one_engine_host_per_project_render");
         return;
     }
     if !julia_available() {
@@ -849,20 +841,20 @@ fn j6_one_engine_host_per_project_render() {
     );
 }
 
-// J6 discriminator companion (engine-agnostic, deno-only): proves the tracing
+// J6 discriminator companion (engine-agnostic, node-only): proves the tracing
 // capture used by `j6_one_engine_host_per_project_render` genuinely counts
 // per-spawn — two independently-started hosts yield TWO `engine_host` events.
 // This is the cheaper faithful stand-in for J6's invasive named revert (moving
 // host construction into the per-file loop would duplicate the host exactly
 // like this): if the capture could NOT tell one host from two, J6 would pass
-// vacuously. Deno-gated only (no Julia needed — the event fires at spawn).
+// vacuously. Node-gated only (no Julia needed — the event fires at spawn).
 #[test]
 fn j6_capture_discriminates_two_hosts() {
     use quarto_core::engine::ts_process::TsEngineHost;
     use quarto_core::engine::ts_protocol::HostGlobalConfig;
     use tracing_subscriber::layer::SubscriberExt;
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j6_capture_discriminates_two_hosts");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j6_capture_discriminates_two_hosts");
         return;
     }
     let global = HostGlobalConfig {
@@ -878,7 +870,7 @@ fn j6_capture_discriminates_two_hosts() {
     let capture = TargetCapture::default();
     let subscriber = tracing_subscriber::registry().with(capture.clone());
     tracing::subscriber::with_default(subscriber, || {
-        // TWO separate hosts, each spawning the real deno engine-host once.
+        // TWO separate hosts, each spawning the real node engine-host once.
         let h1 = TsEngineHost::new(global.clone());
         h1.ensure_started().expect("host 1 spawn");
         let h2 = TsEngineHost::new(global.clone());
@@ -973,7 +965,7 @@ impl TargetCapture {
 //   1. record_capture #1 runs a cell that writes a SENTINEL file, then sleeps.
 //      The sentinel is the REAL "worker is executing" signal (not a timing
 //      guess): once it appears, the worker is provably mid-run.
-//   2. We ABANDON #1's client by KILLING its Deno engine-host (identified by the
+//   2. We ABANDON #1's client by KILLING its Node engine-host (identified by the
 //      isolated-HOME bundle path in its cmdline). Its QNR socket closes → EPIPE →
 //      QuartoNotebookRunner leaves the worker BUSY (it does not cancel the task).
 //   3. record_capture #2 (fresh host, same file, same isolated server) →
@@ -1061,10 +1053,10 @@ impl Drop for IsolatedJuliaServerGuard {
     }
 }
 
-/// Kill any Deno engine-host whose cmdline references this isolated HOME's
+/// Kill any Node engine-host whose cmdline references this isolated HOME's
 /// bundle dir (the process is unique to this test's temp HOME). This ABANDONS
 /// the in-flight client the way the live EPIPE did.
-fn kill_deno_under_home(home: &Path) {
+fn kill_node_host_under_home(home: &Path) {
     let pattern = home.join("Library/Caches/quarto/bundles");
     if let Ok(out) = Command::new("pgrep")
         .arg("-f")
@@ -1092,8 +1084,8 @@ fn pc4a_abandoned_worker_close_busy() {
         eprintln!("SKIP: pc4a_abandoned_worker_close_busy cleanup requires unix process groups");
         return;
     }
-    if !deno_available() || !julia_available() {
-        eprintln!("SKIP: deno/julia not on PATH — pc4a_abandoned_worker_close_busy");
+    if !node_available_for_tests() || !julia_available() {
+        eprintln!("SKIP: node/julia not found — pc4a_abandoned_worker_close_busy");
         return;
     }
 
@@ -1135,9 +1127,9 @@ fn pc4a_abandoned_worker_close_busy() {
     let input = tmp.path().join("sleepy.qmd");
     write_file(&input, &sleepy_doc(&sentinel));
 
-    // record_capture #1 on a worker thread: opens a Deno host + QNR socket and
+    // record_capture #1 on a worker thread: opens a Node host + QNR socket and
     // launches the per-file worker (which writes the sentinel, then sleeps).
-    // It returns Err once we kill its Deno host below — that's the abandonment.
+    // It returns Err once we kill its Node host below — that's the abandonment.
     let input_1 = input.clone();
     let handle_1 = std::thread::spawn(move || {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
@@ -1162,9 +1154,9 @@ fn pc4a_abandoned_worker_close_busy() {
          (check the isolation env: JULIA_DEPOT_PATH / QUARTO_JULIA_PROJECT / julia on PATH)"
     );
 
-    // ABANDON #1's client mid-run: kill its Deno engine-host. Its QNR socket
+    // ABANDON #1's client mid-run: kill its Node engine-host. Its QNR socket
     // closes → EPIPE → the worker is LEFT BUSY (QNR does not cancel the task).
-    kill_deno_under_home(home.path());
+    kill_node_host_under_home(home.path());
     let _ = handle_1.join();
 
     // record_capture #2: fresh host, same file, same shared (isolated) server.
@@ -1317,8 +1309,8 @@ fn j7_failed_run_does_not_leak_worker() {
         eprintln!("SKIP: j7 worker-count cleanup requires unix process groups");
         return;
     }
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j7_failed_run_does_not_leak_worker");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j7_failed_run_does_not_leak_worker");
         return;
     }
     if !julia_available() {

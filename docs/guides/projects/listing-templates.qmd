@@ -444,6 +444,12 @@ one" logic — have no direct form. `$sep$` covers separators between
 items, which is the common case; a genuine total has to come from
 metadata.
 
+**When the template is the wrong tool**, the listing can be built in
+Lua instead: every listing\'s resolved items are published into the
+page\'s metadata at `meta.listings.<id>`, and `type: metadata` declares
+a listing that resolves its items and leaves the markup to a filter.
+See [Listings as data](listings.qmd#listings-as-data).
+
 ## Verifying a port
 
 Neither of the two silent failures produces a diagnostic, and neither

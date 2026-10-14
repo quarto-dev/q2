@@ -16,6 +16,7 @@
  * time), mirroring `../../echo-engine/src/echo-engine.ts`.
  */
 
+import { readFileSync } from "node:fs";
 import type {
   ExecutionEngineDiscovery,
   ExecutionEngineInstance,
@@ -68,7 +69,7 @@ const fallbackUnivEngine: ExecutionEngineDiscovery = {
       canFreeze: false,
 
       async markdownForFile(file: string) {
-        const text = Deno.readTextFileSync(file);
+        const text = readFileSync(file, "utf8");
         return _quarto!.mappedString.fromString(text, file);
       },
 

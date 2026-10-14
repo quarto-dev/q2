@@ -111,6 +111,9 @@ version = "0.26"
 [workspace.dependencies.tree-sitter-qmd]
 path = "./crates/tree-sitter-qmd"
 
+[workspace.dependencies.tree-sitter-lmd]
+path = "./crates/tree-sitter-lmd"
+
 [workspace.dependencies.tree-sitter-sexpr]
 path = "./crates/tree-sitter-sexpr"
 

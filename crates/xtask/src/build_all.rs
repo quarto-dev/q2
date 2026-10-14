@@ -11,9 +11,11 @@
 //! 4. Build trace-viewer (if present; Phase 4.3+)
 //! 5. Build q2-preview-spa (if present; q2-preview Phase A.4 / bd-501n)
 //! 6. Build the hub MCP bundle (q2-mcp embed artifact; bd-81cfshmw)
-//! 7. Build the engine-host-deno bundle (quarto-core embed artifact; Plan 1b)
-//! 8. Build the Rust workspace (`cargo build --workspace`)
-//! 9. Stage the docs embed for `q2 docs llms` and re-embed it into the
+//! 7. Build the engine-host-node bundle (quarto-core embed artifact; Plan 1b)
+//! 8. Build the ts-bundle driver (quarto-core embed artifact for
+//!    `q2 call build-ts-extension`)
+//! 9. Build the Rust workspace (`cargo build --workspace`)
+//! 10. Stage the docs embed for `q2 docs llms` and re-embed it into the
 //!    `q2` binary (bd-hwop1zii)
 //!
 //! Both SPAs (trace-viewer + q2-preview-spa) must build *before* the
@@ -43,8 +45,10 @@ pub struct BuildAllConfig {
     pub skip_trace_viewer_build: bool,
     /// Skip the hub MCP bundle build step (q2-mcp embed artifact).
     pub skip_hub_mcp_bundle: bool,
-    /// Skip the engine-host-deno bundle build step (quarto-core embed artifact).
+    /// Skip the engine-host-node bundle build step (quarto-core embed artifact).
     pub skip_engine_host_bundle: bool,
+    /// Skip the ts-bundle driver build step (quarto-core embed artifact).
+    pub skip_ts_bundle: bool,
     /// Skip the q2-preview-spa build step. No-op when the SPA dir is
     /// absent (e.g. branches before bd-hfjj Phase 6).
     pub skip_q2_preview_spa_build: bool,
@@ -83,8 +87,12 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
             !config.skip_hub_mcp_bundle && hub_mcp_exists(&project_root),
         ),
         (
-            "engine-host-deno bundle build",
+            "engine-host-node bundle build",
             !config.skip_engine_host_bundle && engine_host_exists(&project_root),
+        ),
+        (
+            "ts-bundle driver build",
+            !config.skip_ts_bundle && ts_bundle_exists(&project_root),
         ),
         ("Rust workspace build", !config.skip_rust_build),
         (
@@ -195,20 +203,37 @@ pub fn run(config: &BuildAllConfig) -> Result<()> {
         println!("✓ hub MCP bundle complete");
     }
 
-    // Step: engine-host-deno bundle (Plan 1b) — the artifact `quarto-core`
+    // Step: engine-host-node bundle (Plan 1b) — the artifact `quarto-core`
     // embeds via `include_str!`; must exist before the Rust build.
     if !config.skip_engine_host_bundle && engine_host_exists(&project_root) {
         step_idx += 1;
-        banner(step_idx, total, "Building engine-host-deno bundle");
-        let pkg_dir = project_root.join("ts-packages/quarto-engine-host-deno");
+        banner(step_idx, total, "Building engine-host-node bundle");
+        let pkg_dir = project_root.join("ts-packages/quarto-engine-host-node");
         run_command(
             "npm",
             &["run", "bundle"],
             &pkg_dir,
             None,
-            "engine-host-deno bundle build failed",
+            "engine-host-node bundle build failed",
         )?;
-        println!("✓ engine-host-deno bundle complete");
+        println!("✓ engine-host-node bundle complete");
+    }
+
+    // Step: ts-bundle driver — the rollup bundle `quarto-core` embeds via
+    // `include_str!` for `q2 call build-ts-extension`; must exist before the
+    // Rust build.
+    if !config.skip_ts_bundle && ts_bundle_exists(&project_root) {
+        step_idx += 1;
+        banner(step_idx, total, "Building ts-bundle driver");
+        let pkg_dir = project_root.join("ts-packages/quarto-ts-bundle");
+        run_command(
+            "npm",
+            &["run", "bundle"],
+            &pkg_dir,
+            None,
+            "ts-bundle driver build failed",
+        )?;
+        println!("✓ ts-bundle driver complete");
     }
 
     // Step: Rust workspace build
@@ -286,9 +311,16 @@ fn hub_mcp_exists(project_root: &Path) -> bool {
         .is_file()
 }
 
+fn ts_bundle_exists(project_root: &Path) -> bool {
+    project_root
+        .join("ts-packages/quarto-ts-bundle")
+        .join("package.json")
+        .is_file()
+}
+
 fn engine_host_exists(project_root: &Path) -> bool {
     project_root
-        .join("ts-packages/quarto-engine-host-deno")
+        .join("ts-packages/quarto-engine-host-node")
         .join("package.json")
         .is_file()
 }

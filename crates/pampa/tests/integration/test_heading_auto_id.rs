@@ -187,11 +187,12 @@ fn test_auto_id_excludes_raw_inline() {
 
 #[test]
 fn test_auto_id_excludes_shortcode() {
-    // q2-only kind with no Pandoc analogue. q2 derives the id in the
-    // reader's postprocess pass, before shortcodes are expanded, so an
-    // unexpanded shortcode contributes nothing. Quarto 1 expands shortcodes
-    // in a pre-Pandoc text pass and therefore includes the expansion --
-    // a deliberate divergence, tracked separately.
+    // q2-only kind with no Pandoc analogue. The reader derives the id
+    // before shortcodes are expanded, so an unexpanded shortcode
+    // contributes nothing to this *provisional* id. quarto-core's
+    // `heading-id` transform re-derives it after expansion, matching
+    // Quarto 1 (bd-2wv8431v; pinned end to end in quarto-core's
+    // tests/integration/heading_id_after_expansion.rs).
     assert_eq!(
         heading_id("## before {{< meta foo >}} after"),
         "before-after"
