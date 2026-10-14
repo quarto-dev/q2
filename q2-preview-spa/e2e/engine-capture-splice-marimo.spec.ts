@@ -257,7 +257,7 @@ test('SC21: recorded marimo capture splices the executed island into the pane wi
     process.env.QUARTO_SC21_LIVE !== '1',
     'SC21 is opt-in (set QUARTO_SC21_LIVE=1) — spawns a real uv/marimo subprocess; see file header',
   );
-  test.skip(!onPath('deno') || !onPath('uv'), 'deno/uv not on PATH — marimo engine unavailable');
+  test.skip(!onPath('node') || !onPath('uv'), 'node/uv not found on PATH — marimo engine unavailable');
 
   consoleLines.length = 0;
   page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`));
@@ -347,7 +347,7 @@ test('SC23: recorded marimo widget capture delivers island markup to the pane (m
     process.env.QUARTO_SC21_LIVE !== '1',
     'SC23 is opt-in (set QUARTO_SC21_LIVE=1) — spawns a real uv/marimo subprocess; see file header',
   );
-  test.skip(!onPath('deno') || !onPath('uv'), 'deno/uv not on PATH — marimo engine unavailable');
+  test.skip(!onPath('node') || !onPath('uv'), 'node/uv not found on PATH — marimo engine unavailable');
 
   consoleLines.length = 0;
   page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`));
@@ -422,7 +422,7 @@ test('SC24: recorded marimo sql-interop capture delivers the executed sql island
     process.env.QUARTO_SC21_LIVE !== '1',
     'SC24 is opt-in (set QUARTO_SC21_LIVE=1) — spawns a real uv/marimo subprocess; see file header',
   );
-  test.skip(!onPath('deno') || !onPath('uv'), 'deno/uv not on PATH — marimo engine unavailable');
+  test.skip(!onPath('node') || !onPath('uv'), 'node/uv not found on PATH — marimo engine unavailable');
 
   consoleLines.length = 0;
   page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`));
@@ -531,7 +531,7 @@ test('SC25: marimo widget include-in-header reaches the pane <head> AND executes
     process.env.QUARTO_SC21_LIVE !== '1',
     'SC25 is opt-in (set QUARTO_SC21_LIVE=1) — spawns a real uv/marimo subprocess; see file header',
   );
-  test.skip(!onPath('deno') || !onPath('uv'), 'deno/uv not on PATH — marimo engine unavailable');
+  test.skip(!onPath('node') || !onPath('uv'), 'node/uv not found on PATH — marimo engine unavailable');
 
   consoleLines.length = 0;
   page.on('console', (msg) => consoleLines.push(`[${msg.type()}] ${msg.text()}`));

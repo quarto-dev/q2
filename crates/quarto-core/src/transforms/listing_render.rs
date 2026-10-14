@@ -131,20 +131,33 @@ impl AstTransform for ListingRenderTransform {
             PipelineProfile::HtmlRender | PipelineProfile::RevealjsRender
         );
 
+        let mut rendered_any = false;
         for r in &resolved {
+            // A `metadata` listing is consumed by Lua code reading
+            // `meta.listings.<id>` (bd-2oqen84t, M3); it has no markup
+            // of its own: no template, no container, no "No matching
+            // items" div, no List.js bootstrap.
+            if r.listing.kind == ListingType::Metadata {
+                continue;
+            }
             render_one(ast, r, &host_dir, &host_input, emit_listjs, &mut diags);
+            rendered_any = true;
         }
 
         // Register the vendored client-side JS artifacts that the
         // List.js bootstrap (see `listjs`) drives. Like Q1, every
-        // listing page links them, whatever its listings' types.
+        // page with a rendered listing links them, whatever the
+        // listings' types; a page whose listings are all `metadata`
+        // has nothing for them to drive.
         // The `js:` key prefix is the convention `ApplyTemplateStage`
         // recognizes for auto-emitting `<script>` tags into the
         // rendered HTML; the resolver maps the relative path to
         // `_site/site_libs/listing/<file>.js` (or the WASM VFS
         // equivalent). `ArtifactStore::store` overwrites by key, so
         // re-running across files is fine.
-        register_listing_js_artifacts(&mut ctx.artifacts);
+        if rendered_any {
+            register_listing_js_artifacts(&mut ctx.artifacts);
+        }
 
         // Restore; downstream stages can still read resolved
         // listings if they want (e.g. L5 categories sidebar).
@@ -944,6 +957,78 @@ mod tests {
         };
         assert_eq!(div.attr.0, "listing-main-listing");
         assert!(div.attr.1.iter().any(|c| c == "quarto-listing"));
+    }
+
+    // bd-2oqen84t (M3): a `metadata` listing renders nothing — no
+    // container appended, an author's slot left alone, no List.js
+    // artifacts registered — while its resolved set stays on the
+    // context for the categories sidebar, the feed and `llms.txt`.
+    #[tokio::test]
+    async fn metadata_listing_renders_nothing_and_registers_no_js() {
+        let listing = make_listing(ListingType::Metadata);
+        let items = vec![make_item("a", Some("2026-01-01"))];
+        let resolved = vec![ResolvedListing { listing, items }];
+        let mut ast = pandoc_with_slot("main-listing");
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/posts/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let index = Arc::new(ProjectIndex::new(Vec::<DocumentProfile>::new()));
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_project_index(index);
+        ctx.resolved_listings = resolved;
+        ListingRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(ast.blocks.len(), 1, "nothing appended");
+        let Block::Div(div) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert_eq!(div.attr.0, "main-listing", "the slot is left as written");
+        assert!(div.content.is_empty());
+        assert!(div.attr.1.is_empty(), "no container classes");
+        assert!(ctx.artifacts.is_empty(), "no List.js artifacts");
+        assert_eq!(ctx.resolved_listings.len(), 1, "still on the context");
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    // A page mixing a `metadata` listing with a rendered one still
+    // gets the List.js artifacts, for the rendered one.
+    #[tokio::test]
+    async fn mixed_page_registers_js_for_the_rendered_listing() {
+        let mut data = make_listing(ListingType::Metadata);
+        data.id = "data".to_string();
+        let shown = make_listing(ListingType::Default);
+        let resolved = vec![
+            ResolvedListing {
+                listing: data,
+                items: vec![make_item("a", Some("2026-01-01"))],
+            },
+            ResolvedListing {
+                listing: shown,
+                items: vec![make_item("b", Some("2026-01-02"))],
+            },
+        ];
+        let mut ast = empty_pandoc();
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/posts/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let index = Arc::new(ProjectIndex::new(Vec::<DocumentProfile>::new()));
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_project_index(index);
+        ctx.resolved_listings = resolved;
+        ListingRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            ast.blocks.len(),
+            1,
+            "one container, for the default listing"
+        );
+        assert!(ctx.artifacts.contains("js:listing:list.min.js"));
     }
 
     // 35. render_idempotent_on_repeat

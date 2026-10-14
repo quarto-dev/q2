@@ -4,16 +4,16 @@
  *
  * Task 14 — the plan-1c END-TO-END gate. Drives the committed echo-engine /
  * echo-legacy fixtures (Task 13) through the REAL render path — a TS engine
- * spawning the Deno engine-host subprocess — and asserts the whole chain works:
+ * spawning the Node engine-host subprocess — and asserts the whole chain works:
  * discovery → registry → `SourceConversionStage` (for `.echo`) → `resolve_engines`
  * → LoadEngine / LaunchEngine / execute → result, plus orchestrator-driven
- * teardown (`registry.shutdown_all()` reaping the Deno subprocess).
+ * teardown (`registry.shutdown_all()` reaping the Node subprocess).
  *
- * These tests are Deno-gated: they early-return (skip) when `deno` is not on
- * PATH. On a machine with Deno present they RUN — a skip in CI-with-Deno is a
+ * These tests are Node-gated: they early-return (skip) when `node` is not found on
+ * PATH. On a machine with Node present they RUN — a skip in CI-with-Node is a
  * signal something is wrong.
  *
- * The `TsEngineHost` spawns the EMBEDDED (`include_str!`) engine-host-deno
+ * The `TsEngineHost` spawns the EMBEDDED (`include_str!`) engine-host-node
  * bundle, and each engine extension imports its committed `dist` bundle. Both are
  * built from current TS source (harness rebuilt in Task 14; fixture bundles
  * committed in Task 13). See the brief and plan lines 1413-1452.
@@ -23,7 +23,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 
 use tempfile::TempDir;
@@ -38,13 +37,7 @@ use quarto_core::project::orchestrator::{ProjectPipeline, ProjectType, project_t
 use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-/// Return `true` when `deno` is on PATH (the E2E's subprocess runtime).
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 /// Absolute path to a committed fixture extension directory
 /// (`crates/quarto-core/tests/fixtures/extensions/<name>`).
@@ -109,8 +102,8 @@ fn render_html(input: &Path) -> String {
 // ECHO_EXECUTED absent.
 #[test]
 fn p3_1a_language_claim_executes_echo() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p3_1a_language_claim_executes_echo");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p3_1a_language_claim_executes_echo");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -149,8 +142,8 @@ fn p3_1a_language_claim_executes_echo() {
 // "unexecuted python listing" assertions go RED.
 #[test]
 fn p3_1b_file_claim_single_engine_passthrough() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p3_1b_file_claim_single_engine_passthrough");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p3_1b_file_claim_single_engine_passthrough");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -201,8 +194,8 @@ fn p3_1b_file_claim_single_engine_passthrough() {
 // unresolved ⇒ ECHOLEGACY_EXECUTED absent (jupyter fallback / render error).
 #[test]
 fn p3_2_dynamic_echolegacy_fallback() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p3_2_dynamic_echolegacy_fallback");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p3_2_dynamic_echolegacy_fallback");
         return;
     }
     let tmp = setup_project(&["echo-legacy"]);
@@ -231,8 +224,8 @@ fn p3_2_dynamic_echolegacy_fallback() {
 // succeeds silently ⇒ this `is_err` + message assertion goes RED.
 #[test]
 fn p1_7_engine_name_mismatch_hard_errors() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p1_7_engine_name_mismatch_hard_errors");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p1_7_engine_name_mismatch_hard_errors");
         return;
     }
     let tmp = TempDir::new().unwrap();
@@ -276,12 +269,12 @@ fn p1_7_engine_name_mismatch_hard_errors() {
     );
 }
 
-// ── P3-3: orchestrator-driven teardown reaps the Deno subprocess ─────────────
+// ── P3-3: orchestrator-driven teardown reaps the Node subprocess ─────────────
 //
 // Drives a render through the orchestrator (`ProjectPipeline::run`), which calls
 // `registry.shutdown_all()` on every exit path before `ProjectContext` drops.
 // After `run()` returns — with `project` (and thus the registry + TsEngine + its
-// host) still in scope, so Drop has NOT fired — the echo engine's backing Deno
+// host) still in scope, so Drop has NOT fired — the echo engine's backing Node
 // subprocess must be GONE (`is_alive() == false`).
 //
 // Exercised-guard: the rendered output contains ECHO_EXECUTED, proving the
@@ -293,8 +286,8 @@ fn p1_7_engine_name_mismatch_hard_errors() {
 // stays true ⇒ the "gone after teardown" assertion goes RED.
 #[test]
 fn p3_3_orchestrator_teardown_reaps_subprocess() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p3_3_orchestrator_teardown_reaps_subprocess");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p3_3_orchestrator_teardown_reaps_subprocess");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -347,7 +340,7 @@ fn p3_3_orchestrator_teardown_reaps_subprocess() {
         .expect("echo engine still registered after render");
     assert!(
         !echo.is_alive(),
-        "the echo Deno subprocess must be reaped by orchestrator shutdown_all() \
+        "the echo Node subprocess must be reaped by orchestrator shutdown_all() \
          at end-of-render (before ProjectContext drops)"
     );
 }
@@ -394,8 +387,8 @@ fn extract_context_json(html: &str) -> serde_json::Value {
 // discriminators go RED. Exercised-guard: the CONTEXT_JSON marker is present.
 #[test]
 fn p1_1_project_context_threaded_project_leg() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p1_1_project_context_threaded_project_leg");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p1_1_project_context_threaded_project_leg");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -463,8 +456,8 @@ fn p1_1_project_context_threaded_project_leg() {
 // branch). Exercised-guard: the CONTEXT_JSON marker is present.
 #[test]
 fn p1_1_project_context_threaded_single_file_leg() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p1_1_project_context_threaded_single_file_leg");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p1_1_project_context_threaded_single_file_leg");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -526,7 +519,7 @@ fn extract_format_json(html: &str) -> serde_json::Value {
 // document metadata (`doc_ast.ast.meta`) and — per the P1.1b threading —
 // lowers it into `ExecutionContext.metadata`, which `build_execute_options`
 // now carries into `TsFormatInfo.metadata` instead of hardcoding
-// `HashMap::new()`. The Deno host's `metadataAsFormat` (already complete,
+// `HashMap::new()`. The Node host's `metadataAsFormat` (already complete,
 // untouched here) partitions that flat map into the six-bin `Format`; the
 // echo fixture's `execute()` echoes `opts.format.execute` +
 // `opts.format.metadata["echo-custom-key"]` back via the FORMAT_JSON marker.
@@ -542,8 +535,8 @@ fn extract_format_json(html: &str) -> serde_json::Value {
 // marker channel works, independent of the threading).
 #[test]
 fn p1_1b_document_metadata_threaded_into_format() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p1_1b_document_metadata_threaded_into_format");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p1_1b_document_metadata_threaded_into_format");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -625,8 +618,8 @@ fn body_excerpt(html: &str) -> String {
 #[test]
 fn j9_resolution_before_spawn_zero_load() {
     use tracing_subscriber::layer::SubscriberExt;
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — j9_resolution_before_spawn_zero_load");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j9_resolution_before_spawn_zero_load");
         return;
     }
     // SAFETY/scope: process-local under nextest (one process per test) — same
@@ -789,7 +782,7 @@ impl OrderedCapture {
 //
 // Binds the Phase-3 production flip (engine-host protocol moved off the
 // child's stdout onto a private loopback-TCP socket): under the flipped
-// transport, anything the Deno child writes DIRECTLY to its stdout fd
+// transport, anything the Node child writes DIRECTLY to its stdout fd
 // (bypassing the protocol framing entirely) can never corrupt a request,
 // because stdout is no longer the protocol channel -- it is drained by
 // `stdout_loop` (`ts_process.rs`, ~line 1734) and forwarded line-by-line to
@@ -798,7 +791,7 @@ impl OrderedCapture {
 // The echo fixture's `execute()` recognizes the sentinel
 // `QUARTO_ECHO_STDOUT_GARBAGE` in the cell body and, unlike
 // `QUARTO_ECHO_CRASH`, does NOT exit -- it writes a burst of 20 non-JSON
-// lines to `Deno.stdout` and then falls through to the normal
+// lines to `process.stdout` and then falls through to the normal
 // echo-transform, so a correct render still succeeds.
 //
 // Two assertions:
@@ -825,7 +818,7 @@ impl OrderedCapture {
 // panics -> RED.
 //
 // Named revert: D-MAIN (`main.ts` wiring `runHost` back to
-// `Deno.stdin`/`Deno.stdout` instead of the loopback-TCP socket) -- under
+// `process.stdin`/`process.stdout` instead of the loopback-TCP socket) -- under
 // that revert stdout IS the protocol channel again, so this fixture's raw
 // writes interleave with real protocol frames and trigger the
 // malformed-line escalation described above.
@@ -841,8 +834,8 @@ impl OrderedCapture {
 fn p3_6a_stdout_garbage_harmless() {
     use tracing_subscriber::layer::SubscriberExt;
 
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p3_6a_stdout_garbage_harmless");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p3_6a_stdout_garbage_harmless");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -895,7 +888,7 @@ fn p3_6a_stdout_garbage_harmless() {
 // ── P3-7 (plan1a.6 Phase 3): console.log is harmless over TCP ───────────────
 //
 // Same seam family as P3-6a, but through `console.log` instead of a raw
-// `Deno.stdout.writeSync` -- `console.log` also writes to stdout (Deno's
+// `process.stdout.write` -- `console.log` also writes to stdout (Node's
 // console implementation), so it exercises the same stdout-is-harmless
 // property via a different, more idiomatic TS-code path (a fixture calling
 // `console.log` for debugging is a much more realistic accident than a raw
@@ -920,8 +913,8 @@ fn p3_6a_stdout_garbage_harmless() {
 fn p3_7_console_log_harmless() {
     use tracing_subscriber::layer::SubscriberExt;
 
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — p3_7_console_log_harmless");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p3_7_console_log_harmless");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -997,8 +990,8 @@ fn p3_7_console_log_harmless() {
 //     edit, also walked through live during this task.
 #[test]
 fn t8_echo_file_converted_via_project_walk_when_listed() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — t8_echo_file_converted_via_project_walk_when_listed");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — t8_echo_file_converted_via_project_walk_when_listed");
         return;
     }
     let tmp = setup_project(&["echo-engine"]);
@@ -1084,13 +1077,13 @@ fn t8_echo_file_converted_via_project_walk_when_listed() {
 
 // ── T13 (plan 1c.2 P4, OPTIONAL): real-process crash mid-execute ─────────────
 //
-// Only the demux reader-thread's EOF->broadcast path -- real Deno subprocess,
+// Only the demux reader-thread's EOF->broadcast path -- real Node subprocess,
 // real pipe EOF, real `handle_crash` -- is not yet covered by an E2E test (the
 // MockTransport unit tests in `ts_process.rs` exercise the broadcast logic
 // but never spawn a real child). T13 renders a `.qmd` whose `{echo}` cell
 // body carries the sentinel `QUARTO_ECHO_CRASH`; the echo fixture's
 // `execute()` recognizes it, writes an identifiable marker to stderr, then
-// calls `Deno.exit(1)` BEFORE returning any result -- i.e. mid-execute, while
+// calls `process.exit(1)` BEFORE returning any result -- i.e. mid-execute, while
 // the request is in flight on the demux. The engine-host's stdout pipe then
 // closes, the reader thread observes EOF, `handle_crash` reaps the child,
 // snapshots the stderr ring, and broadcasts `ExecutionError::ProcessCrashed`
@@ -1141,9 +1134,9 @@ fn t8_echo_file_converted_via_project_walk_when_listed() {
 // action reserved for the controller if independent confirmation is wanted.
 #[test]
 fn t13_crash_mid_execute_yields_process_crashed_with_stderr() {
-    if !deno_available() {
+    if !node_available_for_tests() {
         eprintln!(
-            "SKIP: deno not on PATH -- t13_crash_mid_execute_yields_process_crashed_with_stderr"
+            "SKIP: node not found -- t13_crash_mid_execute_yields_process_crashed_with_stderr"
         );
         return;
     }
@@ -1160,7 +1153,7 @@ fn t13_crash_mid_execute_yields_process_crashed_with_stderr() {
 
     assert!(
         result.is_err(),
-        "a mid-execute crash (stderr marker + Deno.exit(1) before returning) \
+        "a mid-execute crash (stderr marker + process.exit(1) before returning) \
          must fail the render, not succeed or panic"
     );
     let msg = format!("{:#}", result.unwrap_err());
@@ -1180,12 +1173,12 @@ fn t13_crash_mid_execute_yields_process_crashed_with_stderr() {
          ('echo'); got: {msg}"
     );
     // Content: the captured stderr ring must carry the marker the fixture
-    // wrote immediately before Deno.exit(1) -- proves handle_crash's stderr
+    // wrote immediately before process.exit(1) -- proves handle_crash's stderr
     // snapshot actually captured the child's last words, not an empty tail.
     assert!(
         msg.contains("ECHO_CRASH_MARKER"),
         "error message must carry the captured stderr marker the crashing \
-         engine wrote before Deno.exit(1); got: {msg}"
+         engine wrote before process.exit(1); got: {msg}"
     );
 }
 

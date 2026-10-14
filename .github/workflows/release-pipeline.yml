@@ -682,6 +682,18 @@ jobs:
           case "$DOCS_COMMIT_LINE" in
             *"(dirty)") echo "::warning::embedded docs were staged from a dirty tree at $EXPECTED_SHA" ;;
           esac
+
+          # Embedded bundler: build a tiny extension with the release binary.
+          # It runs the embedded rollup driver under the runner's Node 24 (the
+          # same Node TS engine extensions need), so this is where the musl and
+          # Windows binaries' build path is exercised.
+          mkdir -p verify-ext/src
+          printf 'title: T\nversion: 1.0.0\ncontributes:\n  engines:\n    - path: dist/e.js\n' > verify-ext/_extension.yml
+          echo 'export default { name: "verify-ext" };' > verify-ext/src/e.ts
+          if ! "$BIN" call build-ts-extension verify-ext || ! grep -q 'verify-ext' verify-ext/dist/e.js; then
+            echo "::error::release binary cannot build a TS extension (embedded rollup driver or Node failed)"
+            FAIL=1
+          fi
           exit $FAIL
 
       # Live-share local asset serving (plan Phase 2, bd-ee2fqm95): a

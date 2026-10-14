@@ -308,6 +308,12 @@ fn create_type(lua: &Lua) -> Result<Function> {
                 if ud.borrow::<crate::lua::types::LuaCitation>().is_ok() {
                     return Ok("Citation".to_string());
                 }
+                if ud.borrow::<crate::lua::nodes::LuaNodes>().is_ok() {
+                    return Ok("Nodes".to_string());
+                }
+                if ud.borrow::<crate::lua::metadata::LuaMetaProxy>().is_ok() {
+                    return Ok("Meta".to_string());
+                }
                 if ud
                     .borrow::<crate::lua::constructors::LuaListAttributes>()
                     .is_ok()

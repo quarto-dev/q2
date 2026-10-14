@@ -68,8 +68,9 @@ pub fn top_level_template_source(kind: ListingType) -> &'static str {
         ListingType::Default => LISTING_DEFAULT,
         ListingType::Grid => LISTING_GRID,
         ListingType::Table => LISTING_TABLE,
-        // Defensive fallback; not reached on the L8 render path.
-        ListingType::Custom => LISTING_DEFAULT,
+        // Defensive fallbacks; not reached on the L8 render path, and a
+        // `metadata` listing renders nothing at all (bd-2oqen84t).
+        ListingType::Custom | ListingType::Metadata => LISTING_DEFAULT,
     }
 }
 

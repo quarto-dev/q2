@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "es2023"
+    ],
+    "types": [
+      "node"
+    ],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@quarto/types": [
+        "./types/quarto-types.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "tests/unit"
+  ]
+}

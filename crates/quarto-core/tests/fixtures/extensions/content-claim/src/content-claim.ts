@@ -20,6 +20,7 @@
  * whole-file-claim half of `../../echo-engine/src/echo-engine.ts`.
  */
 
+import { readFileSync } from "node:fs";
 import type {
   ExecutionEngineDiscovery,
   ExecutionEngineInstance,
@@ -63,7 +64,7 @@ const contentClaimEngine: ExecutionEngineDiscovery = {
   claimsFile(file: string, ext: string): boolean {
     if (ext !== ".syn") return false;
     try {
-      const text = Deno.readTextFileSync(file);
+      const text = readFileSync(file, "utf8");
       const firstLine = text.split(/\r?\n/, 1)[0];
       return firstLine === "# synth-claim";
     } catch {
@@ -77,7 +78,7 @@ const contentClaimEngine: ExecutionEngineDiscovery = {
       canFreeze: false,
 
       async markdownForFile(file: string) {
-        const text = Deno.readTextFileSync(file);
+        const text = readFileSync(file, "utf8");
         const basename = file.split(/[\\/]/).pop() ?? file;
         const wrapped =
           "# Content-claimed: " +

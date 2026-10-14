@@ -478,20 +478,12 @@ mod tests {
     // R5 seam tests (P2-14 / P2-15): the preview capture path runs a
     // real *extension* engine (the Task-13 echo TS engine) because
     // record_capture uses the DISCOVERED project.registry (Task 8),
-    // not built-ins. Deno-gated — the echo engine spawns a Deno
+    // not built-ins. Node-gated — the echo engine spawns a Node
     // engine-host subprocess (see crates/quarto-core tests/integration
     // /echo_engine_e2e.rs).
     // ──────────────────────────────────────────────────────────────
 
-    /// `true` when `deno` is on PATH (the echo engine's subprocess
-    /// runtime). A skip on a Deno-present machine is a signal something
-    /// is wrong, per the Task-15 brief.
-    fn deno_available() -> bool {
-        std::process::Command::new("deno")
-            .arg("--version")
-            .output()
-            .is_ok_and(|o| o.status.success())
-    }
+    use quarto_core::engine::ts_process::node_available_for_tests;
 
     /// Recursively copy `src` into `dst` (dst is created).
     fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
@@ -530,19 +522,21 @@ mod tests {
         // The committed echo-engine bundle is deleted (plan1c3: hermetic fixtures
         // are regenerated at test time). These tests execute the engine, so
         // regenerate the real bundle in-place via the same public build lib the
-        // quarto-core suites use (callers are `deno_available()`-gated, which is
-        // exactly what `build_ts_extension` requires). Mirrors
+        // quarto-core suites use (the embedded rollup driver, run under Node). Mirrors
         // `engine_fixture_build::build_bundle` — the `../../resources/...` depth is
         // identical because quarto-preview and quarto-core are both one level under
         // `crates/`.
         quarto_core::extension::build::build_ts_extension(
             quarto_core::extension::build::BuildOptions {
                 ext_dir: Some(echo_dst.clone()),
-                config: Some(
-                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("../../resources/extension-build/deno.workspace.json"),
-                ),
+                config: None,
                 workspace: false,
+                workspace_root: Some(
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../..")
+                        .canonicalize()
+                        .expect("workspace root"),
+                ),
             },
         )
         .expect("regenerate echo-engine bundle for preview capture test");
@@ -576,8 +570,8 @@ mod tests {
     /// capture uses the project registry (with extension engines)".
     #[tokio::test]
     async fn p2_14_eager_capture_runs_extension_engine() {
-        if !deno_available() {
-            eprintln!("SKIP: deno not on PATH — p2_14_eager_capture_runs_extension_engine");
+        if !node_available_for_tests() {
+            eprintln!("SKIP: node not found — p2_14_eager_capture_runs_extension_engine");
             return;
         }
         let (_tmp, ctx, runtime) = build_ctx_with_echo_extension(
@@ -635,8 +629,8 @@ mod tests {
     /// post-re-execute `ECHO_EXECUTED` assertion goes RED.
     #[tokio::test]
     async fn p2_15_on_edit_re_execution_keeps_extension_engine() {
-        if !deno_available() {
-            eprintln!("SKIP: deno not on PATH — p2_15_on_edit_re_execution_keeps_extension_engine");
+        if !node_available_for_tests() {
+            eprintln!("SKIP: node not found — p2_15_on_edit_re_execution_keeps_extension_engine");
             return;
         }
         crate::re_execute::reset_in_flight_for_tests();

@@ -53,7 +53,7 @@ stays fast and environment-independent:
 | Flag | Spec | Engine | Notes |
 |---|---|---|---|
 | `QUARTO_PC6_LIVE=1` | `engine-capture-splice-julia` | julia | multi-second server boot; needs `julia` on PATH |
-| `QUARTO_SC21_LIVE=1` | `engine-capture-splice-marimo` | marimo (via `uv`) | needs `deno` + `uv`; ~10s warm. **This spec is a limitation CANARY**: it asserts marimo output does *not* reach the pane (plan-4c FINDING #5, strand `bd-5jxcio5d`) and is expected to redden — then be flipped to a positive test — when that strand's fix lands. See the spec header. |
+| `QUARTO_SC21_LIVE=1` | `engine-capture-splice-marimo` | marimo (via `uv`) | needs `node` + `uv`; ~10s warm. **This spec is a limitation CANARY**: it asserts marimo output does *not* reach the pane (plan-4c FINDING #5, strand `bd-5jxcio5d`) and is expected to redden — then be flipped to a positive test — when that strand's fix lands. See the spec header. |
 
 ```bash
 QUARTO_PC6_LIVE=1 npx playwright test engine-capture-splice-julia --project=chromium

@@ -7,14 +7,14 @@ Quarto's Julia engine, extracted from quarto-cli into a standalone engine extens
 To build the TypeScript engine extension:
 
 ```bash
-quarto call build-ts-extension src/julia-engine.ts
+npm ci && npm run build
 ```
 
-This bundles `src/julia-engine.ts` into `_extensions/julia-engine/julia-engine.js`.
+This bundles `src/julia-engine.ts` into `_extensions/julia-engine/julia-engine.js` with esbuild (Node 24 or later). `npm test` runs the unit tests and `npm run typecheck` type-checks the sources.
 
 ## Implementation notes
 
-A few system utilities are replaced with small Deno wrappers at the top of `src/julia-engine.ts`. Deno has a better `delay` but it's not in Quarto's export map currently; it also uses `setTimeout()`.
+The engine is plain Node: it uses `node:` built-ins only (`fs`, `path`, `child_process`, `net`, `crypto`) and runs unchanged under Quarto 1's Deno and Quarto 2's Node. `src/transport.ts` holds the control-server wire protocol (HMAC-signed requests, newline-delimited JSON replies) separately from the Quarto API so it can be unit tested against a fake server.
 
 There is a new Quarto API for the more significant utilities, such as Jupyter and Markdown functions. Quarto passes the API down in `ExecutionEngineDiscovery.init()` - this may get called multiple times but it will always pass the same Quarto API object.
 

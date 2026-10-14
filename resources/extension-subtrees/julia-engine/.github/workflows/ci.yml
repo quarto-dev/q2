@@ -1,7 +1,8 @@
 name: CI
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, q2/node-port]
   pull_request:
 
 concurrency:
@@ -16,7 +17,7 @@ permissions:
 # Full commit hash for reproducibility; comment documents the human-readable version.
 env:
   QUARTO_CLI_REPO: quarto-dev/quarto-cli
-  QUARTO_CLI_REV: 97e7649bf14607cf39cda13f013185a4146e047b # v1.9.35
+  QUARTO_CLI_REV: c57d2a483d53dc3b4e4483f9ef4091090e7ca7c9 # main (2026-10); includes 8f4cba165, the schema change accepting static engine keys; swap for a release tag once one contains it
 
 jobs:
   test:
@@ -60,27 +61,32 @@ jobs:
         run: |
           "$(Get-ChildItem -Path _quarto-cli/package/dist/bin/quarto.cmd | ForEach-Object { $_.FullName } | Split-Path)" >> $env:GITHUB_PATH
 
-      # Rebuild the bundled JS from our TS source using the configured quarto,
-      # then verify it matches what's checked in. This catches forgotten rebuilds.
-      - name: Verify bundled JS is up to date (Unix)
-        if: runner.os != 'Windows'
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # Rebuild the bundled JS from our TS source, then verify it matches what's
+      # checked in (byte-identical on every OS: the bundle is LF-only). This
+      # catches forgotten rebuilds.
+      - name: Verify bundled JS is up to date
+        shell: bash
         run: |
-          quarto call build-ts-extension src/julia-engine.ts
+          npm run build
           if ! git diff --exit-code _extensions/julia-engine/julia-engine.js; then
-            echo "::error::Bundled JS is out of date. Run 'quarto call build-ts-extension src/julia-engine.ts' and commit the result."
+            echo "::error::Bundled JS is out of date. Run 'npm run build' and commit the result."
             exit 1
           fi
-
-      - name: Verify bundled JS is up to date (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          quarto call build-ts-extension src/julia-engine.ts
-          git diff --exit-code _extensions/julia-engine/julia-engine.js
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Bundled JS is out of date. Run 'quarto call build-ts-extension src/julia-engine.ts' and commit the result."
-            exit 1
-          }
 
       - name: Setup Julia
         uses: julia-actions/setup-julia@5c9647d97b78a5debe5164e9eec09d653d29bd71 # v2.6.1

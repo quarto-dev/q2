@@ -1,0 +1,8 @@
+---
+title: Second *post*, with `code`
+date: 2026-01-15
+author: [Ada, Grace]
+categories: [news]
+---
+
+Second body paragraph, derived as the description.

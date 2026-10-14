@@ -1,0 +1,45 @@
+---
+title: fragments
+---
+
+## Three forms, echoed
+
+```{lmd}
+--| echo: true
+local unmarked = {= **hello** =}
+local blocks = {=: **hello** :=}
+local inlines = {=[ **hello** ]=}
+local strong = pandoc.Strong({=[ *inner* ]=})
+return pandoc.Div({ unmarked, blocks, pandoc.Para(inlines), pandoc.Para({ strong }) }, pandoc.Attr("", {"box"}))
+```
+
+## Nesting in both directions
+
+````{lmd}
+local function card(title, body)
+  return {=:
+::: {.card}
+### `{lmd} title`
+
+```{lmd}
+return body
+```
+:::
+:=}
+end
+return card({=[ Hello ]=}, {=: Some *body* text. :=})
+````
+
+## Immediate markdown values
+
+```{lmd}
+local heading = {=: ## A heading {#sec-a .cls key="val"} :=}
+local list = {=:
+- one with *emphasis*
+- two with [a link](https://quarto.org "title")
+- three with `code` and $x^2$
+:=}
+local para = {=: Plain text, "quoted", and a line  
+break. :=}
+return pandoc.Blocks({ heading, list, para })
+```
