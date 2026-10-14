@@ -69,7 +69,16 @@ fn fetch_blocking(url: &str, timeout: Duration) -> RuntimeResult<(Vec<u8>, Strin
         .get(url)
         .timeout(timeout)
         .send()
-        .map_err(|e| RuntimeError::Network(format!("HTTP request failed for {url}: {e}")))?;
+        .map_err(|e| {
+            if e.is_timeout() {
+                // Name the timeout: reqwest's Display ("error sending
+                // request") never says the request timed out, and a caller
+                // debugging a stalled fetch needs that word.
+                RuntimeError::Network(format!("HTTP request to {url} timed out after {timeout:?}"))
+            } else {
+                RuntimeError::Network(format!("HTTP request failed for {url}: {e}"))
+            }
+        })?;
     let status = response.status();
     if !status.is_success() {
         return Err(RuntimeError::Network(format!("HTTP {status} for {url}")));
@@ -1460,13 +1469,20 @@ mod tests {
         // the thread finish.
         let (base, server) = serve_once(|_| std::thread::sleep(Duration::from_millis(1500)));
         let url = format!("{base}/slow");
-        let started = std::time::Instant::now();
         let err = fetch_blocking(&url, Duration::from_millis(200)).unwrap_err();
-        let elapsed = started.elapsed();
-        assert!(matches!(err, RuntimeError::Network(_)), "{err:?}");
+        // What proves the client gave up on its own is *which* error ends the
+        // request: its own 200 ms timeout, not the connection reset from the
+        // server dropping the stream when its silence ends. Assert on that
+        // identity rather than wall-clock time — under full-suite load this
+        // process can be descheduled for seconds at a time, and a hard
+        // `elapsed < 1200 ms` bound flaked even though the timeout fired
+        // correctly every time (bd-u6pt7ubh).
+        let RuntimeError::Network(msg) = &err else {
+            panic!("expected RuntimeError::Network, got {err:?}")
+        };
         assert!(
-            elapsed < Duration::from_millis(1200),
-            "expected the 200 ms timeout to fire, took {elapsed:?}"
+            msg.contains("timed out after 200ms"),
+            "expected the request's own 200 ms timeout to fire, got: {msg}"
         );
         server.join().unwrap();
     }
