@@ -3,3 +3,4 @@
 .quarto/
 **/*.quarto_ipynb
 scratch/
+node_modules/

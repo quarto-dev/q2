@@ -621,7 +621,7 @@ pub(crate) fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String 
 /// does this span reach to) and licence composing offsets over a parent
 /// that is not byte-identical to its content, which is the bug class
 /// this epic exists to remove.
-fn body_source_for(
+pub(crate) fn body_source_for(
     cb: &quarto_pandoc_types::block::CodeBlock,
     sources: &SourceContext,
 ) -> SourceInfo {

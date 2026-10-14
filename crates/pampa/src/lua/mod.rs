@@ -16,7 +16,12 @@ mod filter;
 mod io_wasm;
 mod json;
 mod list;
+// lmd cell execution (bd-lmd-exploration-jqv2nbl4).
+pub mod lmd;
 pub mod mediabag;
+// quarto.metadata.get and the `meta` proxy (bd-lmd-exploration-jqv2nbl4 spike 6).
+mod metadata;
+mod nodes;
 mod os_wasm;
 mod pandoc_doc;
 mod path;

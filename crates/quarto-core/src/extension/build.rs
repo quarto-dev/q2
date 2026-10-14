@@ -2,38 +2,50 @@
  * extension/build.rs
  * Copyright (c) 2026 Posit, PBC
  *
- * Build a TypeScript engine extension bundle (`deno bundle`).
+ * Build a TypeScript engine extension bundle (rollup, run under Node).
  */
 
 //! Build logic for `q2 call build-ts-extension` — build a TypeScript engine
-//! extension bundle.
+//! extension bundle with rollup.
 //!
 //! Extension authors run this after editing TS source; `q2` never runs it
-//! during render.  It resolves a deno.json config by the precedence rules in
-//! [`resolve_build_config`], then shells out to `deno bundle`.
+//! during render. It resolves an alias config by the precedence rules in
+//! [`resolve_build_config`] and runs the embedded bundler driver
+//! (`ts-packages/quarto-ts-bundle`) under Node — the same Node 24 that runs
+//! TS engine extensions, so building adds no requirement. No Deno, no npx and
+//! no network.
 //!
-//! Native-only (mirrors `engine::ts_process`): spawns `deno` via
+//! Native-only (mirrors `engine::ts_process`): spawns Node via
 //! `std::process`, unavailable on `wasm32-unknown-unknown`.
+//!
+//! The bundle is ESM for `node >= 24`, with `node:*` imports left external.
+//! The same file runs under q2's Node host and Quarto 1's Deno 2.x. Imports
+//! that only exist under Deno (`jsr:`, `@std/*`) are not resolved: they fail
+//! with a message naming the `node:` replacement.
 //!
 //! # Config precedence
 //!
+//! The config is a JSON file `{"alias": {"<import>": "<path>"}}` (named
+//! `esbuild.json` for historical reasons; the format is bundler-neutral);
+//! relative paths resolve against the config file's directory.
+//!
 //! 1. `--config <path>` (explicit override) — always wins.
-//! 2. `deno.json` committed in the extension directory.
-//! 3. Workspace override — when `workspace_root` is `Some` (auto-detected
-//!    or `--workspace`): `<root>/resources/extension-build/deno.workspace.json`.
-//! 4. Shipped published template — embedded at compile time
-//!    (`SHIPPED_DENO_JSON`, via `include_str!`) and materialized to a temp
-//!    file *only when this tier is actually reached* (see
-//!    [`materialize_shipped_config`]). This is the fallback used by
-//!    installed binaries where no workspace is present; resolution is
-//!    lazy so `--config` / an ext-dir `deno.json` / `--workspace` short-
-//!    circuit before it, and an installed binary never touches it unless
-//!    tiers 1-3 are all absent.
+//! 2. `esbuild.json` committed in the extension directory.
+//! 3. Workspace — when `workspace_root` is `Some` (auto-detected or
+//!    `--workspace`): `@quarto/api` and `@quarto/types` alias to the
+//!    workspace's `ts-packages/*/src`, so extensions that import values from
+//!    them (`@quarto/api/claims`) build from source.
+//! 4. Shipped template — embedded at compile time (`SHIPPED_ESBUILD_JSON`).
+//!    Installed binaries land here when tiers 1-3 are absent. It declares no
+//!    aliases: `@quarto/*` is not yet published, so a *value* import of it
+//!    fails with an actionable message (type-only imports are erased and
+//!    need nothing).
 
-use std::io::Write;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use serde::Deserialize;
 
 /// Options for building an extension's TypeScript engine bundle.
 #[derive(Debug)]
@@ -42,59 +54,109 @@ pub struct BuildOptions {
     pub ext_dir: Option<PathBuf>,
     /// Explicit `--config` override; wins over all other config sources.
     pub config: Option<PathBuf>,
-    /// Force use of workspace `deno.workspace.json` (in-repo / pre-publish build).
+    /// Force use of the workspace tier (in-repo / pre-publish build).
     pub workspace: bool,
+    /// Use this q2 workspace root for the workspace tier instead of walking
+    /// up from the extension (for extensions built outside the workspace,
+    /// e.g. in a temp dir).
+    pub workspace_root: Option<PathBuf>,
 }
 
 // ============================================================================
-// Pure config resolver — unit-testable, no I/O
+// Config resolution
 // ============================================================================
 
-/// Resolves which deno.json config to pass to `deno bundle`.
-///
-/// Tiers 1-3 are **pure**: no filesystem I/O, no fallibility. Tier 4
-/// (`shipped_config`) is a **lazy provider closure**, invoked only when
-/// tiers 1-3 are all absent — this function owns the eager/lazy boundary.
-/// That laziness is the whole point: an installed binary with `--config`
-/// set (or an ext-dir `deno.json`, or `--workspace`) must never touch tier
-/// 4, even if materializing it would fail. Callers are responsible for
-/// probing the filesystem for tiers 1-3 (does `ext_dir/deno.json` exist?
-/// is there a workspace root?) and passing the results as arguments.
-///
-/// # Precedence
+/// Which config tier [`resolve_build_config`] selected. Pure data: no I/O
+/// happens until [`load_aliases`] reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigSource {
+    /// Tier 1/2: a user-written `esbuild.json` (explicit or extension-local).
+    File(PathBuf),
+    /// Tier 3: aliases derived from this q2 workspace root.
+    Workspace(PathBuf),
+    /// Tier 4: the embedded shipped template.
+    Shipped,
+}
+
+/// Resolves which alias config applies. Pure: callers probe the filesystem
+/// for tiers 1-3 and pass the results.
 ///
 /// 1. `explicit` wins unconditionally.
-/// 2. `ext_deno_json` — `Some` when a `deno.json` exists in the extension dir.
+/// 2. `ext_esbuild_json` — `Some` when an `esbuild.json` exists in the
+///    extension directory.
 /// 3. `workspace_root` — `Some` when a q2 workspace was detected (or
-///    `--workspace` forced): returns `<root>/resources/extension-build/deno.workspace.json`.
-/// 4. `shipped_config` — lazy provider for the embedded shipped template;
-///    the final fallback, invoked only when 1-3 are all absent.
-pub fn resolve_build_config<F>(
+///    `--workspace` forced).
+/// 4. Otherwise the shipped template.
+pub fn resolve_build_config(
     explicit: Option<&Path>,
-    ext_deno_json: Option<&Path>,
+    ext_esbuild_json: Option<&Path>,
     workspace_root: Option<&Path>,
-    shipped_config: F,
-) -> Result<PathBuf>
-where
-    F: FnOnce() -> Result<PathBuf>,
-{
-    // 1. Explicit --config wins.
+) -> ConfigSource {
     if let Some(p) = explicit {
-        return Ok(p.to_path_buf());
+        return ConfigSource::File(p.to_path_buf());
     }
-    // 2. Extension-committed deno.json.
-    if let Some(p) = ext_deno_json {
-        return Ok(p.to_path_buf());
+    if let Some(p) = ext_esbuild_json {
+        return ConfigSource::File(p.to_path_buf());
     }
-    // 3. In-repo workspace override.
     if let Some(root) = workspace_root {
-        return Ok(root
-            .join("resources")
-            .join("extension-build")
-            .join("deno.workspace.json"));
+        return ConfigSource::Workspace(root.to_path_buf());
     }
-    // 4. Shipped published template — lazy: only materialized when reached.
-    shipped_config()
+    ConfigSource::Shipped
+}
+
+/// The shipped `resources/extension-build/esbuild.json` template (repo root),
+/// embedded at compile time. The release tarball is single-member (just the
+/// `q2` binary), so there is no adjacent `resources/` directory to probe.
+const SHIPPED_ESBUILD_JSON: &str =
+    include_str!("../../../../resources/extension-build/esbuild.json");
+
+/// The on-disk shape of an `esbuild.json`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EsbuildConfigFile {
+    #[serde(default)]
+    alias: BTreeMap<String, String>,
+}
+
+/// Parse an `esbuild.json`; relative alias targets resolve against `base`.
+fn parse_config(text: &str, base: &Path, what: &str) -> Result<BTreeMap<String, PathBuf>> {
+    let file: EsbuildConfigFile =
+        serde_json::from_str(text).with_context(|| format!("Invalid {what}"))?;
+    Ok(file
+        .alias
+        .into_iter()
+        .map(|(name, target)| {
+            let target = PathBuf::from(target);
+            let target = if target.is_absolute() {
+                target
+            } else {
+                base.join(target)
+            };
+            (name, target)
+        })
+        .collect())
+}
+
+/// Read the import aliases a [`ConfigSource`] stands for.
+pub fn load_aliases(source: &ConfigSource) -> Result<BTreeMap<String, PathBuf>> {
+    match source {
+        ConfigSource::File(path) => {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("Failed to read {}", path.display()))?;
+            let base = path.parent().unwrap_or_else(|| Path::new("."));
+            parse_config(&text, base, &path.display().to_string())
+        }
+        ConfigSource::Workspace(root) => {
+            let src = |pkg: &str| root.join("ts-packages").join(pkg).join("src");
+            Ok(BTreeMap::from([
+                ("@quarto/api".to_string(), src("quarto-api")),
+                ("@quarto/types".to_string(), src("quarto-types")),
+            ]))
+        }
+        ConfigSource::Shipped => {
+            parse_config(SHIPPED_ESBUILD_JSON, Path::new("."), "shipped esbuild.json")
+        }
+    }
 }
 
 // ============================================================================
@@ -119,55 +181,6 @@ pub fn find_workspace_root(start_dir: &Path) -> Option<PathBuf> {
 }
 
 // ============================================================================
-// Shipped-config embed (tier 4 — installed-binary fallback)
-// ============================================================================
-
-/// The shipped `resources/extension-build/deno.json` template (repo root),
-/// embedded at compile time.
-///
-/// Fully self-contained: its imports are `jsr:@quarto/api` /
-/// `jsr:@quarto/types` / `jsr:/@std/` specifiers only — no relative paths —
-/// so it works unmodified from a materialized temp file regardless of
-/// working directory. This is what makes embedding (rather than an
-/// exe-adjacent resource probe) the right shape: the release tarball is
-/// single-member (just the `q2` binary), so there is no adjacent
-/// `resources/` directory to probe at runtime. Contrast the workspace
-/// variant (`deno.workspace.json`, tier 3), which has `../../ts-packages/…`
-/// relative imports and therefore stays in-repo-only, resolved via
-/// `workspace_root` rather than embedded.
-const SHIPPED_DENO_JSON: &str = include_str!("../../../../resources/extension-build/deno.json");
-
-/// Materializes the embedded shipped `deno.json` to a temp file and returns
-/// a drop guard for it alongside its path, for use as
-/// `deno bundle --config=<path>`.
-///
-/// Called only when tier 4 is actually selected — see the laziness
-/// contract on [`resolve_build_config`].
-///
-/// Returns a [`tempfile::TempPath`] guard rather than persisting the file
-/// via `NamedTempFile::keep()`. `keep()` detaches the file from RAII
-/// cleanup entirely — the file handle it returns is not itself a live
-/// guard, so a caller that discards it (as this function's previous form
-/// did) leaks one `q2-shipped-deno-*.json` into the OS temp dir on every
-/// installed-binary invocation that reaches tier 4, unboundedly. The
-/// caller (`build_ts_extension()`) instead holds the `TempPath` for exactly
-/// as long as the file needs to exist — through the `deno bundle` subprocess
-/// run — and lets it drop afterward, on every exit path (success or `deno
-/// bundle` failure alike), which deletes the file.
-fn materialize_shipped_config() -> Result<(tempfile::TempPath, PathBuf)> {
-    let mut tmp = tempfile::Builder::new()
-        .prefix("q2-shipped-deno-")
-        .suffix(".json")
-        .tempfile()
-        .context("Failed to create a temp file for the shipped deno.json config")?;
-    tmp.write_all(SHIPPED_DENO_JSON.as_bytes())
-        .context("Failed to write the shipped deno.json config to a temp file")?;
-    let path = tmp.into_temp_path();
-    let path_buf = path.to_path_buf();
-    Ok((path, path_buf))
-}
-
-// ============================================================================
 // Command handler
 // ============================================================================
 
@@ -177,7 +190,9 @@ pub fn build_ts_extension(opts: BuildOptions) -> Result<PathBuf> {
     let ext_dir = resolve_extension_dir(opts.ext_dir.as_deref())?;
 
     // Auto-detect workspace root (walk up from ext_dir).
-    let auto_workspace = if opts.workspace {
+    let workspace_root = if let Some(root) = &opts.workspace_root {
+        Some(root.clone())
+    } else if opts.workspace {
         // --workspace: walk up unconditionally.
         Some(find_workspace_root(&ext_dir).with_context(|| {
             format!(
@@ -190,49 +205,28 @@ pub fn build_ts_extension(opts: BuildOptions) -> Result<PathBuf> {
         find_workspace_root(&ext_dir)
     };
 
-    // Probe for an extension-local deno.json.
-    let ext_deno = {
-        let p = ext_dir.join("deno.json");
-        if p.exists() { Some(p) } else { None }
-    };
+    // Probe for an extension-local esbuild.json. A leftover deno.json is no
+    // longer read; say so rather than silently ignoring it.
+    let ext_esbuild = Some(ext_dir.join("esbuild.json")).filter(|p| p.exists());
+    if ext_esbuild.is_none() && opts.config.is_none() && ext_dir.join("deno.json").exists() {
+        eprintln!(
+            "warning: {} is no longer read; q2 now bundles with rollup. \
+             Add an esbuild.json ({{\"alias\": {{...}}}}) if the extension needs import aliases.",
+            ext_dir.join("deno.json").display()
+        );
+    }
 
-    // Tier 4 (the shipped template) is resolved lazily: `resolve_build_config`
-    // only calls `materialize_shipped_config` when tiers 1-3 are all absent,
-    // so an installed binary with `--config` set (or an ext-dir deno.json,
-    // or `--workspace`) never touches it. No eager resolution happens ahead
-    // of this call — that's the P1.2 fix.
-    //
-    // `shipped_guard` holds tier 4's temp-file drop guard for the rest of
-    // this function, if tier 4 was selected (`None` otherwise). It is
-    // declared here, before `config`, so it stays alive through the
-    // `run_deno_bundle` call below and is dropped — deleting the temp
-    // file — when `build_ts_extension()` returns, on every exit path
-    // (success or `deno bundle` failure alike). This is what stops the
-    // materialized shipped `deno.json` from leaking into the OS temp dir.
-    let mut shipped_guard: Option<tempfile::TempPath> = None;
-    let config = resolve_build_config(
+    let source = resolve_build_config(
         opts.config.as_deref(),
-        ext_deno.as_deref(),
-        auto_workspace.as_deref(),
-        || {
-            let (guard, path) = materialize_shipped_config()?;
-            shipped_guard = Some(guard);
-            Ok(path)
-        },
-    )?;
+        ext_esbuild.as_deref(),
+        workspace_root.as_deref(),
+    );
+    let aliases = load_aliases(&source)?;
 
-    // Locate the TS entry point.
     let entry_ts = find_entry_ts(&ext_dir)?;
-
-    // Locate the output path from _extension.yml.
     let output_js = find_output_path(&ext_dir)?;
 
-    // Run deno bundle. `shipped_guard` (if `Some`) remains in scope through
-    // this call and is dropped when `build_ts_extension()` returns, cleaning
-    // up the tier-4 temp file regardless of whether the bundle succeeds or
-    // fails.
-    run_deno_bundle(&config, &entry_ts, &output_js)?;
-
+    run_bundler(&ext_dir, &aliases, &source, &entry_ts, &output_js)?;
     Ok(output_js)
 }
 
@@ -253,6 +247,11 @@ fn resolve_extension_dir(path: Option<&Path>) -> Result<PathBuf> {
         Some(p) => p.to_path_buf(),
         None => std::env::current_dir().context("Failed to get current working directory")?,
     };
+
+    // The bundler runs with `current_dir = dir`, so every path derived from it
+    // (entry, output, aliases) must not depend on the caller's cwd.
+    let dir = std::path::absolute(&dir)
+        .with_context(|| format!("Failed to resolve {}", dir.display()))?;
 
     // Verify _extension.yml exists in the resolved directory.
     let yml = dir.join("_extension.yml");
@@ -330,11 +329,91 @@ fn find_output_path(ext_dir: &Path) -> Result<PathBuf> {
 }
 
 // ============================================================================
-// deno bundle runner
+// Bundler runner
 // ============================================================================
 
-fn run_deno_bundle(config: &Path, entry: &Path, output: &Path) -> Result<()> {
-    use std::process::Command;
+/// Strip the Windows verbatim prefix (`\\?\C:\...`) that
+/// `Path::canonicalize` adds. Bundlers cannot resolve alias targets that carry
+/// it (esbuild: "Could not resolve ... using the alias feature"). UNC verbatim paths
+/// (`\\?\UNC\...`) and every non-verbatim path are returned unchanged.
+pub fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC\\") => PathBuf::from(rest),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// The bundler driver, built from `ts-packages/quarto-ts-bundle` by
+/// `cargo xtask build-ts-bundle` (committed; CI checks it is fresh). One
+/// self-contained ESM file, piped to `node -`: nothing to extract or cache.
+static BUNDLER_DRIVER: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../ts-packages/quarto-ts-bundle/dist/ts-bundle.mjs"
+));
+
+/// What `BUNDLER_DRIVER` needs to know, passed as JSON in this variable
+/// (an environment variable has no quoting or length trouble that argv has
+/// for a driver read from stdin).
+const JOB_ENV: &str = "Q2_TS_BUNDLE_JOB";
+
+/// The `BundleJob` of `ts-packages/quarto-ts-bundle/src/bundle.ts`. The driver
+/// runs with `cwd = ext_dir` and a relative `entry`.
+fn bundle_job(entry: &Path, output: &Path, aliases: &BTreeMap<String, PathBuf>) -> Result<String> {
+    let text = |p: &Path| {
+        p.to_str()
+            .map(str::to_owned)
+            .with_context(|| format!("Path is not valid UTF-8: {}", p.display()))
+    };
+    let aliases = aliases
+        .iter()
+        .map(|(name, target)| Ok((name.clone(), text(&strip_verbatim_prefix(target))?)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    Ok(serde_json::json!({
+        "entry": text(entry)?,
+        "output": text(output)?,
+        "aliases": aliases,
+    })
+    .to_string())
+}
+
+/// Turn the bundler's stderr into guidance when it names a known migration problem.
+fn explain_failure(stderr: &str, source: &ConfigSource) -> Option<String> {
+    if stderr.contains("\"jsr:") || stderr.contains("\"@std/") || stderr.contains("\"npm:") {
+        return Some(
+            "`jsr:`, `npm:` and `@std/*` imports are Deno-only and are not resolved. \
+             Use the `node:` equivalent (node:path, node:fs, node:process, \
+             node:child_process, ...) or install the package with npm."
+                .to_string(),
+        );
+    }
+    if matches!(source, ConfigSource::Shipped) && stderr.contains("\"@quarto/") {
+        return Some(
+            "`@quarto/api` and `@quarto/types` are not published yet, so an installed q2 \
+             cannot resolve value imports from them. Build inside the q2 workspace \
+             (or pass --workspace), or import only types (`import type`), which need no resolution."
+                .to_string(),
+        );
+    }
+    if stderr.contains("is not exported by") {
+        return Some(
+            "Types are erased without type-checking, so an import that names only a type \
+             must say so: `import type { T } from \"...\"` or `import { type T } from \"...\"`."
+                .to_string(),
+        );
+    }
+    None
+}
+
+fn run_bundler(
+    ext_dir: &Path,
+    aliases: &BTreeMap<String, PathBuf>,
+    source: &ConfigSource,
+    entry: &Path,
+    output: &Path,
+) -> Result<()> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
 
     // Ensure the output parent directory exists.
     if let Some(parent) = output.parent() {
@@ -342,19 +421,51 @@ fn run_deno_bundle(config: &Path, entry: &Path, output: &Path) -> Result<()> {
             .with_context(|| format!("Failed to create output directory {}", parent.display()))?;
     }
 
-    let status = Command::new("deno")
-        .arg("bundle")
-        .arg(format!("--config={}", config.display()))
-        .arg(format!("--output={}", output.display()))
-        .arg(entry)
-        .status()
-        .context("Failed to spawn `deno`. Ensure deno is on PATH.")?;
+    let node = quarto_node_discovery::find_node(
+        &quarto_node_discovery::Discovery::from_env(),
+        "`q2 call build-ts-extension`",
+    )?;
+    let relative_entry = entry.strip_prefix(ext_dir).unwrap_or(entry);
+    let job = bundle_job(relative_entry, output, aliases)?;
 
-    if !status.success() {
+    // `--disable-warning`: the driver strips types with Node's built-in
+    // `module.stripTypeScriptTypes`, which prints an ExperimentalWarning.
+    let mut child = Command::new(&node.path)
+        .args([
+            "--disable-warning=ExperimentalWarning",
+            "--input-type=module",
+            "-",
+        ])
+        .current_dir(ext_dir)
+        .env(JOB_ENV, job)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("Failed to run Node at {}", node.path.display()))?;
+    // Node reads the whole script before running it, so it writes nothing until
+    // this is done. A write error means Node exited early; its status and
+    // stderr, collected below, say why.
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let _ = stdin.write_all(BUNDLER_DRIVER.as_bytes());
+    drop(stdin);
+    let result = child
+        .wait_with_output()
+        .context("Failed to wait for the bundler")?;
+
+    // The driver reports problems on stderr; pass them through either way so
+    // warnings are not lost.
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    if !stderr.is_empty() {
+        eprint!("{stderr}");
+    }
+    if !result.status.success() {
+        let hint = explain_failure(&stderr, source)
+            .map(|h| format!("\n{h}"))
+            .unwrap_or_default();
         bail!(
-            "`deno bundle` exited with status {}. \
-             Check the TypeScript source for errors.",
-            status
+            "The bundler exited with status {}. Check the TypeScript source for errors.{hint}",
+            result.status
         );
     }
 
@@ -368,6 +479,21 @@ fn run_deno_bundle(config: &Path, entry: &Path, output: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn strip_verbatim_prefix_handles_windows_forms() {
+        let strip = |p: &str| strip_verbatim_prefix(Path::new(p));
+        assert_eq!(
+            strip(r"\\?\C:\Users\me\q2\src"),
+            PathBuf::from(r"C:\Users\me\q2\src")
+        );
+        assert_eq!(
+            strip(r"\\?\UNC\server\share\x"),
+            PathBuf::from(r"\\?\UNC\server\share\x")
+        );
+        assert_eq!(strip("/home/me/q2"), PathBuf::from("/home/me/q2"));
+        assert_eq!(strip(r"C:\plain"), PathBuf::from(r"C:\plain"));
+    }
+
     use super::*;
     use std::fs;
     use tempfile::TempDir;
@@ -387,228 +513,145 @@ mod tests {
 
     // ---- resolve_build_config tests ------------------------------------
 
-    /// Panic-if-called stub for the tier-4 provider, for tests where tiers
-    /// 1-3 must short-circuit before it. Also doubles as an assertion that
-    /// `resolve_build_config` really is lazy: a mechanical signature update
-    /// that dropped the laziness would call this and fail the test.
-    fn unreachable_shipped_provider() -> Result<PathBuf> {
-        panic!("shipped_config provider must not be called when an earlier tier is selected")
-    }
-
-    /// P3-config-1: explicit --config wins over everything else.
+    /// Explicit --config wins over everything else.
     #[test]
     fn explicit_config_wins() {
-        let dir = make_dir();
-        let explicit = dir.path().join("custom.json");
-        let ext_deno = dir.path().join("ext/deno.json");
-        let workspace = dir.path().join("workspace");
-
-        let result = resolve_build_config(
+        let explicit = PathBuf::from("/x/custom.json");
+        let source = resolve_build_config(
             Some(&explicit),
-            Some(&ext_deno),
-            Some(&workspace),
-            unreachable_shipped_provider,
-        )
-        .unwrap();
-        assert_eq!(result, explicit, "explicit --config must win");
+            Some(Path::new("/x/ext/esbuild.json")),
+            Some(Path::new("/x/workspace")),
+        );
+        assert_eq!(source, ConfigSource::File(explicit));
     }
 
-    /// P3-config-2: extension-dir deno.json wins over workspace and shipped.
+    /// Extension-dir esbuild.json wins over workspace and shipped.
     #[test]
-    fn ext_dir_deno_json_wins_over_workspace() {
-        let dir = make_dir();
-        let ext_deno = dir.path().join("ext/deno.json");
-        let workspace = dir.path().join("workspace");
+    fn ext_dir_esbuild_json_wins_over_workspace() {
+        let ext = PathBuf::from("/x/ext/esbuild.json");
+        let source = resolve_build_config(None, Some(&ext), Some(Path::new("/x/workspace")));
+        assert_eq!(source, ConfigSource::File(ext));
+    }
 
-        let result = resolve_build_config(
-            None, // no explicit
-            Some(&ext_deno),
-            Some(&workspace),
-            unreachable_shipped_provider,
-        )
-        .unwrap();
+    /// The workspace tier is selected when no explicit/ext config exists.
+    #[test]
+    fn workspace_selected_when_no_ext_config() {
+        let root = PathBuf::from("/x/workspace");
         assert_eq!(
-            result, ext_deno,
-            "extension deno.json must win over workspace"
+            resolve_build_config(None, None, Some(&root)),
+            ConfigSource::Workspace(root)
         );
     }
 
-    /// P3-config-3: workspace override is selected when no explicit/ext-deno.
-    ///
-    /// This also covers the `--workspace` leg's needed behavior described in
-    /// the P1.2 plan item: `workspace_root = Some(root)` selects tier 3, and
-    /// the shipped provider is never touched.
-    #[test]
-    fn workspace_override_selected_when_no_ext_deno() {
-        let dir = make_dir();
-        let workspace = dir.path().join("workspace");
-
-        let result = resolve_build_config(
-            None, // no explicit
-            None, // no ext deno.json
-            Some(&workspace),
-            unreachable_shipped_provider,
-        )
-        .unwrap();
-        let expected = workspace
-            .join("resources")
-            .join("extension-build")
-            .join("deno.workspace.json");
-        assert_eq!(result, expected, "workspace override must be selected");
-    }
-
-    /// P3-config-4: shipped template is the final fallback.
+    /// The shipped template is the final fallback.
     #[test]
     fn shipped_template_is_final_fallback() {
-        let dir = make_dir();
-        let shipped = dir.path().join("shipped/deno.json");
-
-        let result = resolve_build_config(
-            None, // no explicit
-            None, // no ext deno.json
-            None, // no workspace
-            || Ok(shipped.clone()),
-        )
-        .unwrap();
-        assert_eq!(result, shipped, "shipped template must be final fallback");
-    }
-
-    /// RED test: removing the explicit-wins arm would return ext_deno instead.
-    #[test]
-    fn explicit_beats_ext_deno_json() {
-        let dir = make_dir();
-        let explicit = dir.path().join("explicit.json");
-        let ext_deno = dir.path().join("deno.json");
-
-        let result = resolve_build_config(
-            Some(&explicit),
-            Some(&ext_deno),
-            None,
-            unreachable_shipped_provider,
-        )
-        .unwrap();
-        assert_ne!(
-            result, ext_deno,
-            "explicit must beat extension deno.json (not be equal to ext_deno)"
-        );
-        assert_eq!(result, explicit);
-    }
-
-    /// RED test: removing the workspace arm would fall through to shipped.
-    #[test]
-    fn workspace_beats_shipped() {
-        let dir = make_dir();
-        let workspace = dir.path().join("workspace");
-
-        let result =
-            resolve_build_config(None, None, Some(&workspace), unreachable_shipped_provider)
-                .unwrap();
-        assert!(
-            result.ends_with("deno.workspace.json"),
-            "workspace result must end with deno.workspace.json, got: {}",
-            result.display()
-        );
-    }
-
-    // ---- T4/T5 (P1.2, frozen 2026-07-02) --------------------------------
-
-    /// T4: `--config X` wins with `workspace_root = None`, and the lazy
-    /// shipped-config provider is never invoked.
-    ///
-    /// **Why this binds the real fix (vacuity note from the P1.2 seam
-    /// spec):** before the fix, `execute()` resolved the shipped config
-    /// *eagerly* via `shipped_config_path(...).with_context()?` **before**
-    /// calling `resolve_build_config` at all — so an installed binary (no
-    /// workspace root, thus no on-disk shipped config to find) hard-errored
-    /// even when `--config` was passed, regardless of what
-    /// `resolve_build_config`'s own precedence logic said. Unit-testing the
-    /// old `resolve_build_config` (which took `shipped_config: &Path`,
-    /// already resolved) could never catch that bug — it only tested logic
-    /// that was already correct. The fix moves the eager/lazy boundary
-    /// *into* `resolve_build_config` itself (the `shipped_config: F`
-    /// closure parameter) and removes the separate eager call from
-    /// `execute()`, so this function is now literally the seam `execute()`
-    /// routes through with nothing eager ahead of it — testing it directly
-    /// binds the fix.
-    #[test]
-    fn config_wins_without_workspace_and_never_touches_shipped_provider() {
-        let dir = make_dir();
-        let explicit = dir.path().join("custom.json");
-
-        let result = resolve_build_config(
-            Some(&explicit),
-            None, // no ext deno.json
-            None, // no workspace root — the installed-binary case
-            unreachable_shipped_provider,
-        )
-        .unwrap();
-
-        assert_eq!(result, explicit);
-    }
-
-    /// T5: when tiers 1-3 are all absent, tier 4 is selected and the lazy
-    /// provider materializes the embedded `resources/extension-build/deno.json`
-    /// to a temp file. Assert the materialized file's content matches the
-    /// embedded source exactly and parses as JSON — proving the embed
-    /// round-trips through `include_str!` + the temp-file write, not just
-    /// that *some* file got created.
-    ///
-    /// Plumbing note: `materialize_shipped_config` now returns
-    /// `(TempPath, PathBuf)` instead of a bare `PathBuf` (see the temp-file
-    /// leak fix below), so this test wraps it in a closure that stashes the
-    /// guard in a local `Option` — mechanical adaptation only. The asserted
-    /// behavior (content equality + JSON parse) is unchanged, and the guard
-    /// is kept alive across those assertions so the file still exists when
-    /// they run.
-    #[test]
-    fn tier4_materializes_embedded_shipped_config() {
-        let mut guard: Option<tempfile::TempPath> = None;
-        let result = resolve_build_config(None, None, None, || {
-            let (g, path) = materialize_shipped_config()?;
-            guard = Some(g);
-            Ok(path)
-        })
-        .unwrap();
-
-        let content = std::fs::read_to_string(&result).expect("materialized temp file must exist");
         assert_eq!(
-            content, SHIPPED_DENO_JSON,
-            "materialized content must match the embedded deno.json source"
+            resolve_build_config(None, None, None),
+            ConfigSource::Shipped
         );
-
-        let _: serde_json::Value =
-            serde_json::from_str(&content).expect("materialized shipped config must parse as JSON");
-
-        // Guard stays alive through the assertions above; drop it explicitly
-        // here so the cleanup-on-drop behavior is exercised within the test.
-        drop(guard);
     }
 
-    /// P1.2-followup: the materialized shipped-config temp file must be
-    /// removed once its drop guard goes out of scope — it must not leak
-    /// into the OS temp dir on every installed-binary invocation that
-    /// reaches tier 4 (the exact path the P1.2 fix exists to unblock).
-    ///
-    /// RED against the pre-fix `.keep()`-based implementation: `.keep()`
-    /// detaches the file from RAII cleanup entirely, so nothing removes it
-    /// when the returned path falls out of scope — this assertion failed
-    /// before the fix. GREEN once `materialize_shipped_config` returns a
-    /// `TempPath` guard instead of persisting via `.keep()`.
+    /// `--config` wins with no workspace root (the installed-binary case).
     #[test]
-    fn shipped_config_temp_file_removed_after_guard_drops() {
-        let path_buf = {
-            let (_guard, path_buf) = materialize_shipped_config().unwrap();
-            assert!(
-                path_buf.exists(),
-                "materialized file must exist while its guard is alive"
-            );
-            path_buf
-            // `_guard` (TempPath) drops here, deleting the file.
-        };
-        assert!(
-            !path_buf.exists(),
-            "materialized shipped-config temp file must be removed once its guard drops"
+    fn config_wins_without_workspace() {
+        let explicit = PathBuf::from("/x/custom.json");
+        assert_eq!(
+            resolve_build_config(Some(&explicit), None, None),
+            ConfigSource::File(explicit)
         );
+    }
+
+    // ---- load_aliases tests --------------------------------------------
+
+    #[test]
+    fn workspace_aliases_point_at_package_sources() {
+        let root = PathBuf::from("/ws");
+        let aliases = load_aliases(&ConfigSource::Workspace(root.clone())).unwrap();
+        assert_eq!(
+            aliases["@quarto/api"],
+            root.join("ts-packages/quarto-api/src")
+        );
+        assert_eq!(
+            aliases["@quarto/types"],
+            root.join("ts-packages/quarto-types/src")
+        );
+    }
+
+    #[test]
+    fn shipped_template_parses_and_declares_no_aliases() {
+        assert!(load_aliases(&ConfigSource::Shipped).unwrap().is_empty());
+    }
+
+    #[test]
+    fn file_aliases_resolve_relative_to_the_config_dir() {
+        let dir = make_dir();
+        let config = dir.path().join("esbuild.json");
+        fs::write(
+            &config,
+            r#"{"alias": {"lib": "./vendor/lib.ts", "abs": "/already/absolute"}}"#,
+        )
+        .unwrap();
+        let aliases = load_aliases(&ConfigSource::File(config)).unwrap();
+        assert_eq!(aliases["lib"], dir.path().join("./vendor/lib.ts"));
+        assert_eq!(aliases["abs"], PathBuf::from("/already/absolute"));
+    }
+
+    #[test]
+    fn unknown_config_keys_are_rejected() {
+        let dir = make_dir();
+        let config = dir.path().join("esbuild.json");
+        fs::write(&config, r#"{"alais": {}}"#).unwrap();
+        let err = load_aliases(&ConfigSource::File(config)).unwrap_err();
+        assert!(format!("{err:#}").contains("alais"), "got: {err:#}");
+    }
+
+    #[test]
+    fn missing_config_file_is_an_error() {
+        let dir = make_dir();
+        assert!(load_aliases(&ConfigSource::File(dir.path().join("nope.json"))).is_err());
+    }
+
+    // ---- bundler job / failure hints -----------------------------------
+
+    #[test]
+    fn bundle_job_carries_entry_output_and_aliases() {
+        let aliases = BTreeMap::from([("@quarto/api".to_string(), PathBuf::from("/ws/api"))]);
+        let job = bundle_job(Path::new("src/x.ts"), Path::new("/o/x.js"), &aliases).unwrap();
+        let job: serde_json::Value = serde_json::from_str(&job).unwrap();
+        assert_eq!(
+            job,
+            serde_json::json!({
+                "entry": "src/x.ts",
+                "output": "/o/x.js",
+                "aliases": {"@quarto/api": "/ws/api"},
+            })
+        );
+    }
+
+    #[test]
+    fn deno_only_imports_get_a_node_hint() {
+        let hint = explain_failure(
+            r#"error: Could not resolve "jsr:@std/path" (imported by src/x.ts)"#,
+            &ConfigSource::Shipped,
+        )
+        .unwrap();
+        assert!(hint.contains("node:"), "got: {hint}");
+    }
+
+    #[test]
+    fn quarto_value_imports_in_the_shipped_tier_name_the_workspace() {
+        let stderr = r#"error: Could not resolve "@quarto/api/claims" (imported by src/x.ts)"#;
+        let hint = explain_failure(stderr, &ConfigSource::Shipped).unwrap();
+        assert!(hint.contains("--workspace"), "got: {hint}");
+        assert!(explain_failure(stderr, &ConfigSource::Workspace(PathBuf::from("/ws"))).is_none());
+    }
+
+    #[test]
+    fn a_type_imported_as_a_value_gets_an_import_type_hint() {
+        let stderr = r#"error: "Shape" is not exported by "src/types.ts", imported by "src/x.ts"."#;
+        let hint = explain_failure(stderr, &ConfigSource::Shipped).unwrap();
+        assert!(hint.contains("import type"), "got: {hint}");
     }
 
     // ---- find_workspace_root tests ------------------------------------
@@ -645,7 +688,7 @@ mod tests {
         touch(&dir.path().join("_extension.yml"));
 
         let resolved = resolve_extension_dir(Some(dir.path())).unwrap();
-        assert_eq!(resolved, dir.path());
+        assert_eq!(resolved, std::path::absolute(dir.path()).unwrap());
     }
 
     #[test]
@@ -655,7 +698,14 @@ mod tests {
         touch(&yml);
 
         let resolved = resolve_extension_dir(Some(&yml)).unwrap();
-        assert_eq!(resolved, dir.path());
+        assert_eq!(resolved, std::path::absolute(dir.path()).unwrap());
+
+        // A relative path resolves to an absolute directory.
+        let relative = resolve_extension_dir(Some(Path::new("."))).unwrap_err();
+        assert!(
+            relative.to_string().contains("No _extension.yml"),
+            "got {relative}"
+        );
     }
 
     #[test]

@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- Ported the engine from Deno APIs to Node (`node:fs`, `node:child_process`, `node:net`, `node:crypto`), so the same bundle runs under Quarto 1 (Deno) and Quarto 2 (Node). The bundle is now built with esbuild (`npm run build`) instead of `quarto call build-ts-extension`.
+- Replaced the socket reader with a buffering line framer: a server reply split across TCP chunks (including inside a UTF-8 character), or several replies in one chunk, are handled, and a connection that closes mid-reply now reports that rather than a JSON parse error. A connection that times out waiting for `isready` is now closed.
 - Added static engine declarations (`name`, `claims`, `file-extensions`) to the engine's `_extension.yml` entry, allowing Quarto 2 to resolve `{julia}` cells and `.jl` files to this engine without loading the engine module. These keys are reserved for Quarto 2 and rejected by Quarto 1's `external-engine` schema today; merging requires a quarto-cli schema change (accept-and-ignore) to ship in a stable Quarto 1 release.
+- Fixed oneShot renders failing when the file's worker on the shared control server was left busy by a previous client that vanished mid-run: the pre-run close now recovers by force-closing the abandoned worker instead of surfacing the bare "worker is busy" protocol error, and a failed post-run cleanup close warns instead of discarding an otherwise successful run's results.
+- The error-path worker close added in 0.2.2 now escalates to `forceclose` when the worker is still busy (a transport-level failure can leave it running), so a failed run cannot leave the abandoned-busy state the pre-run recovery has to clean up later.
+- Fixed the detached control server inheriting the launching process's stdout/stderr: the server's early startup output (Julia banners, precompile messages) could interleave with quarto's own output, and corrupt structured-output channels in embedding hosts. The server's stdio is now redirected to devnull; the server log file is unaffected.
 
 ## [0.2.2](https://github.com/PumasAI/quarto-julia-engine/releases/tag/v0.2.2) - 2026-09-08
 

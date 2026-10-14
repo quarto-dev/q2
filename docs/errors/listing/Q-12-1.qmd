@@ -19,7 +19,7 @@ categories:
 The `listing:` key in a document's front matter (or under
 `website.listing:` in `_quarto.yml`) accepts several shapes: a
 boolean, a type-name string (`default`, `grid`, `table`,
-`custom`), an object with a richer set of fields, or an array of
+`custom`, `metadata`), an object with a richer set of fields, or an array of
 such objects. This error fires when the value does not match any
 of those shapes, or when an inner field (such as `field-types`)
 uses a name the parser does not recognize.

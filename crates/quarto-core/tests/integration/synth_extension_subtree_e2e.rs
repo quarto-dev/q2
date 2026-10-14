@@ -20,7 +20,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 
 use tempfile::TempDir;
@@ -28,13 +27,7 @@ use tempfile::TempDir;
 use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-/// Return `true` when `deno` is on PATH (the E2E's subprocess runtime).
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 /// Absolute path to the committed `synth-echo` subtree fixture, shaped like
 /// a whole vendored repo: `_extensions/synth-echo/{_extension.yml,src/}`.
@@ -126,8 +119,8 @@ fn discovers_synth_echo_via_subtree_root_env_var_with_zero_extensions_install() 
 
 #[test]
 fn e2e_single_file_render_executes_synthsub_via_subtree_root() {
-    if !deno_available() {
-        eprintln!("SKIP: no deno");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: no node");
         return;
     }
 
@@ -158,7 +151,7 @@ fn e2e_single_file_render_executes_synthsub_via_subtree_root() {
 
     assert!(
         html.contains("SYNTHSUB_EXECUTED:hello from synthsub"),
-        "expected the real Deno engine host to have executed the {{synthsub}} cell; got:\n{html}"
+        "expected the real Node engine host to have executed the {{synthsub}} cell; got:\n{html}"
     );
 
     // D4: q2's extension-contributed engines are registry-only

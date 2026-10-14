@@ -1,0 +1,17 @@
+[package]
+name = "quarto-node-discovery"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Ambient Node.js discovery (QUARTO_NODE, PATH, version-manager trees) shared by `q2 mcp` and the TypeScript engine host."
+
+[dependencies]
+dirs = "6"
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

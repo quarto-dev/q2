@@ -7,7 +7,8 @@ The engine extension requires a compatible version of quarto (>= 1.9.0). If work
 ## Repo structure
 
 - `_extensions/julia-engine/` — the actual extension (contains `_extension.yml`, the bundled `julia-engine.js`, and Julia resource files like `Project.toml`, `*.jl`)
-- `src/` — TypeScript source for the engine (`julia-engine.ts`, `constants.ts`). Changes here must be bundled into `_extensions/julia-engine/julia-engine.js` to take effect.
+- `src/` — TypeScript source for the engine (`julia-engine.ts`, `transport.ts`, `constants.ts`). Changes here must be bundled into `_extensions/julia-engine/julia-engine.js` to take effect.
+- `tests/unit/` — `node:test` unit tests (`npm test`); `tests/smoke/` — Quarto 1 smoke tests, see Testing.
 - `_quarto.yml` — makes the repo root a quarto project so rendering picks up the extension from `_extensions/`
 - `tests/` — self-contained test suite (see Testing below)
 
@@ -16,14 +17,17 @@ The engine extension requires a compatible version of quarto (>= 1.9.0). If work
 After editing the TypeScript source in `src/`, rebuild the bundled JS:
 
 ```sh
-quarto call build-ts-extension src/julia-engine.ts
+npm ci   # first time
+npm run build
 ```
 
-This bundles `src/julia-engine.ts` into `_extensions/julia-engine/julia-engine.js`. CI verifies the bundled JS matches the TS source.
+This bundles `src/julia-engine.ts` into `_extensions/julia-engine/julia-engine.js` with esbuild (Node 24+). CI verifies the bundled JS matches the TS source.
 
 ## Testing
 
-Tests are self-contained Deno tests using `jsr:` imports — no import map or quarto internals needed. `tests/docs/` contains `.qmd` files and quarto projects that the `.test.ts` files in `tests/smoke/` render and verify. These directories mirror quarto-cli's `tests/docs/` and `tests/smoke/` structure and are intended to be merged into those directories when quarto-cli runs its own CI (since this extension is a fixed part of quarto-cli via git subtree).
+`npm test` runs the unit tests in `tests/unit/` (Node's built-in runner, no Quarto needed); `npm run typecheck` type-checks `src/` and the unit tests.
+
+The smoke tests are self-contained Deno tests using `jsr:` imports — no import map or quarto internals needed. `tests/docs/` contains `.qmd` files and quarto projects that the `.test.ts` files in `tests/smoke/` render and verify. These directories mirror quarto-cli's `tests/docs/` and `tests/smoke/` structure and are intended to be merged into those directories when quarto-cli runs its own CI (since this extension is a fixed part of quarto-cli via git subtree).
 
 ### Running tests locally
 

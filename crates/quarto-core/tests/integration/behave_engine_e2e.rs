@@ -10,7 +10,7 @@
  * engines — mirroring `echo-engine`'s `QUARTO_ECHO_CRASH` precedent. This
  * file is that fixture's permanent home: Task A2 (this task) binds ONLY the
  * default (no-sentinel) branch with a smoke test proving the committed
- * `dist/behave.js` bundle loads and executes for real under a live Deno
+ * `dist/behave.js` bundle loads and executes for real under a live Node
  * subprocess. The other branches are bound later, in later phases of Plan 4b:
  *
  *   - `intermediate_files` instance verb   -> Phase 4b-F
@@ -26,8 +26,8 @@
  * file. See the Task A2 report (`.superpowers/sdd/plan4b-task-A2-report.md`)
  * for the full sentinel -> branch table and the FC-1 field-name mapping.
  *
- * Deno-gated exactly like `echo_engine_e2e.rs` / `synth_engines_e2e.rs`:
- * early-return (skip) when `deno` is not on PATH, NOT `#[ignore]`.
+ * Node-gated exactly like `echo_engine_e2e.rs` / `synth_engines_e2e.rs`:
+ * early-return (skip) when `node` is not found on PATH, NOT `#[ignore]`.
  *
  * Task F-relaunch (Phase 4b-F) status: F3 (timeout -> poison -> transparent
  * relaunch) is bound below (`f3_timeout_poisons_then_transparently_relaunches`).
@@ -58,7 +58,6 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -75,13 +74,7 @@ use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
 use quarto_core::stage::Cancellation;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-/// Return `true` when `deno` is on PATH (the E2E's subprocess runtime).
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 /// Absolute path to a committed fixture extension directory
 /// (`crates/quarto-core/tests/fixtures/extensions/<name>`).
@@ -147,7 +140,7 @@ fn body_excerpt(html: &str) -> String {
 // Task A2's binding: proves the `behave` fixture's committed dist/behave.js
 // bundle is valid, its `_extension.yml`'s `claims.behave: {kind: primary,
 // priority: 1}` resolves, and the engine's DEFAULT `execute()` branch (no
-// sentinel present) runs to completion through a real Deno engine-host
+// sentinel present) runs to completion through a real Node engine-host
 // subprocess -- LoadEngine / LaunchEngine / execute round trip, same as
 // `synth_engines_e2e.rs::smoke_alpha_registers_and_loads`. Does NOT assert
 // the FC-1 sentinel payload (metadata/pandoc/resourceFiles/preserve/
@@ -156,8 +149,8 @@ fn body_excerpt(html: &str) -> String {
 // in a test-observable way.
 #[test]
 fn smoke_behave_default_branch_executes() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — smoke_behave_default_branch_executes");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — smoke_behave_default_branch_executes");
         return;
     }
     let tmp = setup_project(&["behave"]);
@@ -172,19 +165,19 @@ fn smoke_behave_default_branch_executes() {
         html.contains("BEHAVE_EXECUTED"),
         "rendered HTML must contain BEHAVE_EXECUTED (behave's static \
          Primary(behave) claim resolved, bundle loaded, default execute() \
-         branch ran under a real Deno subprocess); got:\n{}",
+         branch ran under a real Node subprocess); got:\n{}",
         body_excerpt(&html)
     );
 }
 
-// ── F1: intermediateFiles verb round-trip (real Deno, direct TsEngine entry) ──
+// ── F1: intermediateFiles verb round-trip (real Node, direct TsEngine entry) ──
 //
 // `intermediate_files` is a pure prediction (source path -> the engine's
 // generated sidecar paths, used to EXCLUDE those paths from the project's
 // input-file set -- see `ExecutionEngine::intermediate_files`'s doc comment).
 // It is NOT observable in rendered HTML, so -- per the brief -- this drives
 // `TsEngine::intermediate_files` directly: `ProjectContext::discover` builds
-// the real registry (real Deno `TsEngineHost`, same construction path as the
+// the real registry (real Node `TsEngineHost`, same construction path as the
 // A2 smoke test and `echo_engine_e2e.rs`'s teardown test), then
 // `registry.get("behave")` hands back the live `Arc<dyn ExecutionEngine>` to
 // call `.intermediate_files(&input)` on directly -- no render, no HTML.
@@ -198,8 +191,8 @@ fn smoke_behave_default_branch_executes() {
 // this assertion RED (files absent).
 #[test]
 fn f1_intermediate_files_round_trip() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — f1_intermediate_files_round_trip");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — f1_intermediate_files_round_trip");
         return;
     }
     let tmp = setup_project(&["behave"]);
@@ -228,11 +221,11 @@ fn f1_intermediate_files_round_trip() {
         vec![expected],
         "intermediate_files must round-trip behave.ts's \
          `[`${{input}}.behave-intermediate`]` return value verbatim through a real \
-         Deno subprocess; got {files:?}"
+         Node subprocess; got {files:?}"
     );
 }
 
-// ── F6: FC-1 result-field carriage (real Deno, direct TsEngine entry) ────────
+// ── F6: FC-1 result-field carriage (real Node, direct TsEngine entry) ────────
 //
 // behave's default (no-sentinel) `execute()` branch populates 5 sentinel FC-1
 // fields (metadata / pandoc / resourceFiles / preserve / postProcess) -- the
@@ -257,13 +250,13 @@ fn f1_intermediate_files_round_trip() {
 // from the wire `TsExecuteResult`) makes these assertions RED (sentinels
 // lost). The `post_process` leg of this same hunk is already pinned by
 // `test_map_execute_result_wires_post_process` (`ts_engine.rs:~1851`, a
-// mock-transport unit test); this test is the real-Deno carriage proof for
+// mock-transport unit test); this test is the real-Node carriage proof for
 // the other four fields, plus a real-subprocess confirmation of
 // `post_process` too.
 #[test]
 fn f6_fc1_result_field_carriage() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — f6_fc1_result_field_carriage");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — f6_fc1_result_field_carriage");
         return;
     }
     let tmp = setup_project(&["behave"]);
@@ -288,7 +281,7 @@ fn f6_fc1_result_field_carriage() {
     // branch (the one that populates the FC-1 sentinel payload).
     let result = behave
         .execute("hello from the F6 test\n", &exec_ctx)
-        .expect("behave's default-branch execute must succeed under real Deno");
+        .expect("behave's default-branch execute must succeed under real Node");
 
     let mut expected_metadata = HashMap::new();
     expected_metadata.insert(
@@ -332,12 +325,12 @@ fn f6_fc1_result_field_carriage() {
 
     assert!(
         result.needs_postprocess,
-        "postProcess: true must wire-feed needs_postprocess: true (real-Deno confirmation \
+        "postProcess: true must wire-feed needs_postprocess: true (real-Node confirmation \
          of the mock-pinned test_map_execute_result_wires_post_process)"
     );
 }
 
-// ── F3: timeout -> poison -> transparent relaunch (real Deno, direct TsEngine entry) ──
+// ── F3: timeout -> poison -> transparent relaunch (real Node, direct TsEngine entry) ──
 //
 // Cancel and Timeout BOTH poison the cached `LaunchEngineResult` on the Rust
 // side (`ts_engine.rs::execute`'s `.inspect_err` on `Cancelled | Timeout`,
@@ -345,7 +338,7 @@ fn f6_fc1_result_field_carriage() {
 // that path for real: a `QUARTO_SLOW` execute under a 1s window times out,
 // then a SECOND execute on the SAME `Arc<dyn ExecutionEngine>` handle must
 // succeed via `ensure_launched()` transparently re-issuing `LaunchEngine`
-// (`ts_engine.rs::ensure_launched`, ~:361-372) to the same live Deno
+// (`ts_engine.rs::ensure_launched`, ~:361-372) to the same live Node
 // subprocess -- no new subprocess spawn, just a fresh engine instance.
 //
 // THE WITNESS (anti-vacuity crux, mandatory per the task brief): "execute-2
@@ -412,8 +405,8 @@ fn f3_timeout_poisons_then_transparently_relaunches() {
     use std::time::Duration;
     use tracing_subscriber::layer::SubscriberExt;
 
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — f3_timeout_poisons_then_transparently_relaunches");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — f3_timeout_poisons_then_transparently_relaunches");
         return;
     }
     let tmp = setup_project(&["behave"]);
@@ -521,23 +514,23 @@ fn f3_timeout_poisons_then_transparently_relaunches() {
     );
 }
 
-// ── F4: crash -> ProcessCrashed -> transparent relaunch (real Deno, direct TsEngine entry) ──
+// ── F4: crash -> ProcessCrashed -> transparent relaunch (real Node, direct TsEngine entry) ──
 //
 // Companion to F3, but for a DEAD process instead of a merely-slow one.
 // `BEHAVE_CRASH` makes behave.ts write a stderr marker then call
-// `Deno.exit(1)` mid-`execute()` (mirrors echo-engine's t13 crash-detection
+// `process.exit(1)` mid-`execute()` (mirrors echo-engine's t13 crash-detection
 // test, `echo_engine_e2e.rs::t13_crash_mid_execute_yields_process_crashed_with_stderr`
 // -- t13 proves DETECTION only, never attempts a second execute). This test
 // adds the RELAUNCH half: execute-1 crashes (`Err(ProcessCrashed)`),
 // execute-2 on the SAME `Arc<dyn ExecutionEngine>` handle must transparently
-// respawn a FRESH Deno subprocess, re-load the engine module, re-launch the
+// respawn a FRESH Node subprocess, re-load the engine module, re-launch the
 // engine instance, and succeed.
 //
 // WHY THIS TEST'S WITNESS SHAPE DIFFERS FROM F3'S "marker :1 then :2":
 // F3's timeout/cancel poison reuses the SAME live subprocess -- behave.ts's
 // module-level `_behaveLaunchCount` survives across the poison, so a genuine
 // relaunch increments it to a NEW value (":2"). A CRASH kills the entire
-// Deno process, wiping ALL of its in-memory state -- `_behaveLaunchCount`
+// Node process, wiping ALL of its in-memory state -- `_behaveLaunchCount`
 // resets to 0 in the fresh process, so a genuine relaunch here produces
 // ANOTHER "BEHAVE_LAUNCH_MARKER:1", not ":2". A naive `count_containing(":2")
 // == 0` assertion would therefore be satisfied VACUOUSLY even if crash
@@ -578,9 +571,9 @@ fn f4_crash_yields_process_crashed_then_transparently_relaunches() {
     use std::time::Duration;
     use tracing_subscriber::layer::SubscriberExt;
 
-    if !deno_available() {
+    if !node_available_for_tests() {
         eprintln!(
-            "SKIP: deno not on PATH — f4_crash_yields_process_crashed_then_transparently_relaunches"
+            "SKIP: node not found — f4_crash_yields_process_crashed_then_transparently_relaunches"
         );
         return;
     }
@@ -640,7 +633,7 @@ fn f4_crash_yields_process_crashed_then_transparently_relaunches() {
         capture.wait_for_count_containing("BEHAVE_CRASH_MARKER", 1, Duration::from_secs(10)),
         1,
         "expected the crash marker behave.ts writes immediately before \
-         Deno.exit(1); captured engine_host messages: {:?}",
+         process.exit(1); captured engine_host messages: {:?}",
         capture.all()
     );
     assert_eq!(
@@ -707,7 +700,7 @@ fn f4_crash_yields_process_crashed_then_transparently_relaunches() {
     );
 }
 
-// ── F5: Dependencies verb round-trip (real Deno, direct TsEngineHost entry) ──
+// ── F5: Dependencies verb round-trip (real Node, direct TsEngineHost entry) ──
 //
 // The `Dependencies` protocol verb (`ts_protocol.rs:~84-93` / `~403-465`) has
 // NO production Rust sender: `ExecutionEngine` (`traits.rs`) exposes no
@@ -728,7 +721,7 @@ fn f4_crash_yields_process_crashed_then_transparently_relaunches() {
 // ARE `#[cfg(test)]`-only and therefore invisible to this external
 // integration-test crate). This is the SAME production spawn path
 // `TsEngine`/the registry use under the hood (`ensure_started`'s
-// `extracted_bundle_path()` + `deno run --allow-all <bundle>`), just called
+// `extracted_bundle_path()` + `node <bundle>`), just called
 // without the `TsEngine` wrapper, because `TsEngine` has no `Dependencies`
 // verb to expose. No production code was added or changed to make this
 // reachable.
@@ -748,8 +741,8 @@ fn f4_crash_yields_process_crashed_then_transparently_relaunches() {
 // instead of returning `Ok(FromEngine::DependenciesResult { .. })` → RED.
 #[test]
 fn f5_dependencies_verb_round_trip() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — f5_dependencies_verb_round_trip");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — f5_dependencies_verb_round_trip");
         return;
     }
     let tmp = setup_project(&["behave"]);
@@ -775,7 +768,7 @@ fn f5_dependencies_verb_round_trip() {
     host.load_engine(&engine_path, &cancellation)
         .expect("LoadEngine must succeed against the real committed behave.js bundle");
     host.launch_engine("behave", EngineProjectContext::default(), &cancellation)
-        .expect("LaunchEngine must succeed for behave under a real Deno subprocess");
+        .expect("LaunchEngine must succeed for behave under a real Node subprocess");
 
     let options = TsDependenciesOptions {
         input: "# Hello".to_string(),

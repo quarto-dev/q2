@@ -1,0 +1,210 @@
+================================================================================
+markdown_fragment ::: unmarked [lmd]
+================================================================================
+
+return {= **hello** =}
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (markdown_fragment
+        (markdown_content)))))
+
+================================================================================
+markdown_fragment ::: blocks [lmd]
+================================================================================
+
+return {=: **hello** :=}
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (markdown_fragment
+        (markdown_content)))))
+
+================================================================================
+markdown_fragment ::: inlines [lmd]
+================================================================================
+
+return {=[ **hello** ]=}
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (markdown_fragment
+        (markdown_content)))))
+
+================================================================================
+markdown_fragment ::: empty, all three forms [lmd]
+================================================================================
+
+f({==}, {=::=}, {=[]=})
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (function_call
+    name: (identifier)
+    arguments: (arguments
+      (markdown_fragment)
+      (markdown_fragment)
+      (markdown_fragment))))
+
+================================================================================
+markdown_fragment ::: unmarked content may start with a space then a bracket [lmd]
+================================================================================
+
+return {= [link](u) =}
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (markdown_fragment
+        (markdown_content)))))
+
+================================================================================
+markdown_fragment ::: as argument and in table [lmd]
+================================================================================
+
+f({=[ *a* ]=}, { {=: b :=}, x = {= c =} })
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (function_call
+    name: (identifier)
+    arguments: (arguments
+      (markdown_fragment
+        content: (markdown_content))
+      (table_constructor
+        (field
+          value: (markdown_fragment
+            content: (markdown_content)))
+        (field
+          name: (identifier)
+          value: (markdown_fragment
+            content: (markdown_content)))))))
+
+================================================================================
+markdown_fragment ::: nested fragments of other kinds balance [lmd]
+================================================================================
+
+return {=: **`{lmd} {=[ x ]=}`** and `{lmd} {= y =}` :=}
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (markdown_fragment
+        (markdown_content)))))
+
+================================================================================
+markdown_fragment ::: a bare closer of another kind is content [lmd]
+================================================================================
+
+return {=[ a =} b ]=}
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (markdown_fragment
+        (markdown_content)))))
+
+================================================================================
+markdown_fragment ::: braces, equals, and comments inside are content [lmd]
+================================================================================
+
+return {=: a { b } c = d -- not a comment
+e :=}
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (markdown_fragment
+        (markdown_content)))))
+
+================================================================================
+markdown_fragment ::: inside a function in an expression list [lmd]
+================================================================================
+
+return tmap(xs, function(v) return {=: **`{lmd} v`** :=} end)
+
+--------------------------------------------------------------------------------
+
+(chunk
+  (return_statement
+    (expression_list
+      (function_call
+        name: (identifier)
+        arguments: (arguments
+          (identifier)
+          (function_definition
+            parameters: (parameters
+              name: (identifier))
+            body: (block
+              (return_statement
+                (expression_list
+                  (markdown_fragment
+                    content: (markdown_content)))))))))))
+
+================================================================================
+markdown_fragment ::: a table constructor is still a table [lmd]
+================================================================================
+
+local t = { 1, 2 }
+local u = {}
+local w = { [k] = t[1] }
+local s = { [[long]] }
+
+--------------------------------------------------------------------------------
+
+(chunk
+  local_declaration: (variable_declaration
+    (assignment_statement
+      (variable_list
+        name: (identifier))
+      (expression_list
+        value: (table_constructor
+          (field
+            value: (number))
+          (field
+            value: (number))))))
+  local_declaration: (variable_declaration
+    (assignment_statement
+      (variable_list
+        name: (identifier))
+      (expression_list
+        value: (table_constructor))))
+  local_declaration: (variable_declaration
+    (assignment_statement
+      (variable_list
+        name: (identifier))
+      (expression_list
+        value: (table_constructor
+          (field
+            name: (identifier)
+            value: (bracket_index_expression
+              table: (identifier)
+              field: (number)))))))
+  local_declaration: (variable_declaration
+    (assignment_statement
+      (variable_list
+        name: (identifier))
+      (expression_list
+        value: (table_constructor
+          (field
+            value: (string
+              content: (string_content))))))))

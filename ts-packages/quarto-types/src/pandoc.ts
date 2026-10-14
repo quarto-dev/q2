@@ -18,7 +18,7 @@ export type PandocIncludeLocation =
  * **Field-name note (T-Gate-parity finding):** This Q1-compatible type uses
  * kebab-case string keys (`"include-in-header"`, `"include-before-body"`,
  * `"include-after-body"`), while the wire type `TsPandocIncludes` in
- * `quarto-engine-host-deno/src/types.ts` uses camelCase identifiers
+ * `quarto-engine-host-node/src/types.ts` uses camelCase identifiers
  * (`inHeader`, `beforeBody`, `afterBody`).  The harness's `renameIncludes()`
  * helper (host.ts) converts between the two at the protocol boundary —
  * engines always receive and return `PandocIncludes`; the wire never exposes

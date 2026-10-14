@@ -1,18 +1,30 @@
 title: Quarto Marimo Extension
-author: marimo-team
-version: 0.4.5
+version: 0.6.0
 quarto-required: ">=1.9.20"
 contributes:
   engines:
     - path: marimo-engine.js
       name: marimo
+      # Static declarations read by Quarto 2 without loading the engine.
+      # `claims` mirrors the runtime `claimsLanguage`; a test keeps them in sync.
       claims:
         python:
           - { whenClass: marimo, kind: primary, priority: 2 }
-        "python.marimo":
-          - { kind: primary, priority: 1 }
+        markdown:
+          - { whenClass: marimo, kind: primary, priority: 2 }
         sql:
           - { whenClass: marimo, kind: primary, priority: 2 }
+          # Bare `{sql}` rides along only when marimo is already present.
           - { kind: interop }
+        "python.marimo":
+          - { kind: primary, priority: 1 }
+        "markdown.marimo":
+          - { kind: primary, priority: 1 }
         "sql.marimo":
           - { kind: primary, priority: 1 }
+        marimo:
+          - { kind: primary, priority: 1 }
+      file-extensions: [.qmd, .md]
+      # Marimo is selected by language, never by whole file, so Quarto 2 skips
+      # the runtime `claimsFile` sniff (which only Quarto 1 uses).
+      claims-files: []

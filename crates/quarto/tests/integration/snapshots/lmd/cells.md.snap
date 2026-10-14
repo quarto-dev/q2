@@ -1,0 +1,36 @@
+---
+source: crates/quarto/tests/integration/lmd_snapshots.rs
+expression: md
+---
+## The motivating example, as written
+
+::: foo
+**a**
+
+**b**
+
+**c**
+
+**d**
+:::
+
+## Shared state, setup cells, and inline cells
+
+Hello, Ada of Analytical, with 4 things and *emphasised* inline
+markdown. A missing key is nothing, and vanishes.
+
+## Nothing
+
+## Echo
+
+``` {.lmd .code-with-copy}
+return pandoc.Blocks(
+
+
+
+{pandoc.Header(3, {greeting, pandoc.Str(","), pandoc.Space(), pandoc.Str("world")}), pandoc.Para({pandoc.Str("A"), pandoc.Space(), pandoc.Str("paragraph"), pandoc.Space(), pandoc.Str("with"), pandoc.Space(), pandoc.Emph({pandoc.Str("emphasis")}), pandoc.Str(".")})})
+```
+
+### Hello, world
+
+A paragraph with *emphasis*.

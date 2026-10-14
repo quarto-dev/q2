@@ -71,7 +71,7 @@ pub fn find_rscript_call_count() -> usize {
 
 /// Number of times [`call_r`] has actually spawned an `Rscript` child
 /// process during this run. Plan 7b Phase 6's launch-free regression
-/// tripwire: unlike the Deno side's `TsEngineHost::spawn_count` (a
+/// tripwire: unlike the Node side's `TsEngineHost::spawn_count` (a
 /// long-lived host object), `call_r` spawns a one-shot `Command::new` with
 /// no persistent object to hang a counter on, so this is process-global —
 /// incremented immediately after a successful `spawn()`, never on a failed

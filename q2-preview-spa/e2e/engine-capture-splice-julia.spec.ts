@@ -3,7 +3,7 @@
  * (bd-h4rhohhy, Bug B). The julia sibling of PC5 (echo). Where PC5 isolates the
  * delivery chain from Bug C with the echo fixture, PC6 is the real-engine
  * evidence row: a `{julia}` cell executes server-side (QuartoNotebookRunner via
- * the Deno host), its `.cell`-wrapped output is recorded as a capture, delivered
+ * the Node host), its `.cell`-wrapped output is recorded as a capture, delivered
  * to the SPA, and spliced into the pane — the executed value `2` appears WITHOUT
  * a reload.
  *
@@ -217,7 +217,7 @@ test('PC6: recorded julia capture splices the executed value into the pane witho
     process.env.QUARTO_PC6_LIVE !== '1',
     'PC6 is opt-in (set QUARTO_PC6_LIVE=1) — julia transport is not HOME-isolated; see file header',
   );
-  test.skip(!onPath('deno') || !onPath('julia'), 'deno/julia not on PATH');
+  test.skip(!onPath('node') || !onPath('julia'), 'node/julia not found on PATH');
   const bindir = juliaBindir();
   const project = quartoJuliaProject();
   test.skip(
@@ -310,7 +310,7 @@ test('PC6-FIG: a figure-labeled julia cell shows a VISIBLE image in the pane', a
     process.env.QUARTO_PC6_LIVE !== '1',
     'PC6 is opt-in (set QUARTO_PC6_LIVE=1) — spawns a real julia server; see file header',
   );
-  test.skip(!onPath('deno') || !onPath('julia'), 'deno/julia not on PATH');
+  test.skip(!onPath('node') || !onPath('julia'), 'node/julia not found on PATH');
   const bindir = juliaBindir();
   const project = quartoJuliaProject();
   test.skip(

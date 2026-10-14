@@ -1,0 +1,6 @@
+# tree-sitter build/test artifacts
+*.dylib
+*.so
+*.dll
+*.wasm
+*.o
