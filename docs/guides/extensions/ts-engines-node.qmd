@@ -1,0 +1,97 @@
+---
+title: "TypeScript Engine Extensions on Node"
+---
+
+Quarto 2 runs TypeScript execution-engine extensions (for example the
+marimo and Julia engines) in a **Node.js** subprocess. Quarto 1 ran them
+under its bundled Deno. This page covers what you need installed, and how
+to move an engine extension that still uses the `Deno` namespace.
+
+## What you need installed
+
+Quarto 2 needs **Node.js 24 or newer** when a project uses a TypeScript
+engine extension. Projects that use only the built-in engines never start
+Node.
+
+Quarto looks for Node in this order:
+
+1. The `QUARTO_NODE` environment variable (a full path to a `node`
+   binary). A binary that is too old is an error, not a fall-through.
+2. `node` on `PATH`.
+3. Well-known install locations, including Homebrew, volta, fnm, nvm and
+   Windows `Program Files`.
+
+The same variable and search order apply to `q2 mcp` and to the project
+scripts that run with `node`.
+
+## Why you may see "Deno is not defined"
+
+An engine bundle that calls `Deno.*` fails under Node with a message like:
+
+```
+engine extension /path/to/engine.js uses the `Deno` namespace, which q2
+does not provide: q2 runs TypeScript engines under Node. ...
+```
+
+Quarto does not provide a `Deno` shim. The fix belongs in the extension:
+replace `Deno.*` with `node:` built-ins, then rebuild the bundle.
+
+## `Deno` to `node:` equivalents
+
+| Deno | Node |
+|---|---|
+| `Deno.readTextFileSync(p)` | `fs.readFileSync(p, "utf8")` |
+| `Deno.writeTextFileSync(p, s)` | `fs.writeFileSync(p, s)` |
+| `Deno.makeTempFileSync({ suffix })` | `fs.mkdtempSync(path.join(os.tmpdir(), "x-"))`, then a file name with your suffix inside it |
+| `Deno.stat` / `exists()` | `fs.statSync` / `fs.existsSync` |
+| `Deno.env.get("X")` | `process.env.X` |
+| `Deno.build.os === "windows"` | `process.platform === "win32"` |
+| `Deno.exit(n)` | `process.exitCode = n` and return; avoid `process.exit` after large writes, which can truncate piped output |
+| `Deno.stdout.writeSync(bytes)` | `process.stdout.write(bytes)` |
+| `Deno.consoleSize()` | `process.stdout.columns` (may be `undefined`) |
+| `Deno.kill(pid, sig)` | `process.kill(pid, sig)` |
+| `new Deno.Command(cmd, opts)` | `child_process.spawn` / `spawnSync` (see the environment note below) |
+| `crypto.subtle` + `encodeBase64` | `node:crypto` (`createHmac`) and `Buffer` |
+| `jsr:@std/path`, `jsr:@std/fs` | `node:path`, `node:fs` |
+| `delay(ms)` from `@std/async` | `setTimeout` from `node:timers/promises` |
+
+Import the built-ins explicitly (`import process from "node:process"`,
+`import { Buffer } from "node:buffer"`).
+
+::: {.callout-warning}
+## Environment variables are replaced, not merged
+
+`Deno.Command` merges the `env` you pass into the parent environment.
+`child_process.spawn` **replaces** it. When you set a variable for a
+child, pass `env: { ...process.env, MY_VAR: "…" }`.
+:::
+
+## Keeping one bundle for both Quarto 1 and Quarto 2
+
+Quarto 1 still runs engine extensions under Deno 2. An engine that uses
+only `node:` built-ins runs unchanged on both, because Deno 2 implements
+them. So the recommended port is to move to `node:` APIs and keep a single
+bundle:
+
+- Do not reference a global `Deno` anywhere in the shipped bundle; grep the
+  *built* bundle, not just your sources.
+- Write tests with `node:test` and `node:assert/strict`. The same files run
+  under `node --test` and `deno test --no-check -A`, which gives you a Quarto 1
+  check in CI.
+- If your extension needs a Quarto version that supports static engine
+  declarations (`name`, `claims`, `file-extensions`, `claims-files` in
+  `_extension.yml`), say so with `quarto-required` in `_extension.yml`.
+
+## Building the bundle
+
+Build with `q2 call build-ts-extension` from the extension directory. It
+bundles with rollup (embedded in `q2`, run under the same Node 24 that runs
+the engine) into ESM for Node 24; it needs no Deno, no `npx` and no network.
+TypeScript types are erased (not type-checked), so an import of a type must be
+`import type`. Imports that only exist under Deno (`jsr:`, `npm:` specifiers
+and `@std/*`) are not resolved; the build fails and names the `node:`
+replacement.
+
+If you build with your own tooling, use any bundler (esbuild, rollup, ...) with
+`platform: "node"`, `format: "esm"` and `external: ["node:*"]`, and pin the
+bundler version so the committed bytes are reproducible.

@@ -2,7 +2,7 @@
 //! step in one of the CI workflows, or be listed in `EXCUSED` with a reason.
 //!
 //! Why this exists (GH #250, 2026-08-22): CI ran `hub-client`'s tests and
-//! `engine-host-deno`'s, and nothing else. Roughly 2,000 assertions across a
+//! `engine-host-node`'s, and nothing else. Roughly 2,000 assertions across a
 //! dozen packages sat outside the merge gate for months — long enough for a
 //! KaTeX class rename to redden `preview-renderer` on `main` unnoticed. The
 //! wiring drifted because nothing reconciled "packages that have tests"
@@ -48,7 +48,7 @@ const WORKFLOWS: &[&str] = &[
 ];
 
 /// Substrings that mark a step's `run:` script as actually running tests.
-const TEST_MARKERS: &[&str] = &["npm test", "npm run test", "deno test", "vitest"];
+const TEST_MARKERS: &[&str] = &["npm test", "npm run test", "vitest"];
 
 /// Packages deliberately not gated, with the reason. Keep this list short and
 /// always name the tracking strand or issue — an entry here is a promise to
@@ -321,8 +321,8 @@ mod tests {
     fn accepts_a_package_matched_by_npm_name() {
         let tmp = scaffold(
             &["ts-packages/*"],
-            &[("ts-packages/deno-host", "@quarto/engine-host-deno", true)],
-            "jobs:\n  a-job:\n    steps:\n      - name: Run deno host\n        run: npm run test -w @quarto/engine-host-deno\n",
+            &[("ts-packages/node-host", "@quarto/engine-host-node", true)],
+            "jobs:\n  a-job:\n    steps:\n      - name: Run node host\n        run: npm run test -w @quarto/engine-host-node\n",
             NO_STEPS,
         );
         assert!(check(tmp.path()).unwrap().is_empty());

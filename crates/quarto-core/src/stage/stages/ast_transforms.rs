@@ -273,6 +273,13 @@ impl PipelineStage for AstTransformsStage {
         // so the map must survive on the stage context between them.
         // Single-shot renders move it straight through, unchanged.
         render_ctx.code_block_decorations = std::mem::take(&mut ctx.code_block_decorations);
+        // bd-2oqen84t (M2): the listings `listing-resolve` resolved
+        // upstream (so `lmd-execute` and `user-filters-pre` saw
+        // `meta.listings.<id>`) become the render transform's input;
+        // the flag keeps `ListingGenerateTransform` from resolving
+        // again. Moved both ways, like `code_block_decorations`.
+        render_ctx.resolved_listings = std::mem::take(&mut ctx.resolved_listings);
+        render_ctx.listings_resolved = ctx.listings_resolved;
         // Move the stage context's writer-side options INTO the inner
         // context before the pipeline runs, so the out-move below hands
         // back the same struct transforms mutate rather than a fresh
@@ -295,6 +302,8 @@ impl PipelineStage for AstTransformsStage {
         ctx.ref_type_registry = render_ctx.ref_type_registry;
         ctx.crossref_index = render_ctx.crossref_index;
         ctx.code_block_decorations = render_ctx.code_block_decorations;
+        ctx.resolved_listings = render_ctx.resolved_listings;
+        ctx.listings_resolved = render_ctx.listings_resolved;
         // Bridge `format_options` back so downstream stages
         // (`RenderHtmlBodyStage`, future JSON writer entry) see the
         // attribution lookup + identities populated by

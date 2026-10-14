@@ -367,6 +367,10 @@ pub fn build_html_pipeline_stages_with_options(
     let tail: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(UnwrapProfileStage::new()),
         Box::new(PreEngineSugaringStage::new()),
+        // lmd exploration spike (bd-lmd-exploration-jqv2nbl4): before the
+        // engine so no engine ever sees a `{lmd}` cell. Today it only
+        // *displays* the desugared Lua; see the stage's docs.
+        Box::new(crate::stage::stages::LmdDesugarStage::new()),
         Box::new(engine_stage),
         Box::new(CompileThemeCssStage::new()),
     ];
@@ -397,6 +401,20 @@ pub fn build_html_pipeline_stages_with_options(
     // sidecar in both `pre` and `post` filter passes. No-op when
     // no provider is installed (`ctx.attribution_provider` is None).
     stages.push(Box::new(AttributionGenerateStage::new()));
+    // Listing resolution (bd-2oqen84t, M2): resolve the page's `listing:`
+    // declarations here, before the lmd cells and the user pre-filters,
+    // and publish them at `meta.listings.<id>`, so Lua code can read
+    // the items. Needs only the Pass-1 project index and the page's
+    // own metadata, both available from here on. The resolved set
+    // rides on `StageContext::resolved_listings` into `ast-transforms`,
+    // whose `listing-generate` then skips and `listing-render` renders
+    // the same set.
+    stages.push(Box::new(crate::stage::stages::ListingResolveStage::new()));
+    // lmd exploration spike 2 (bd-lmd-exploration-jqv2nbl4): run the cells
+    // `lmd-desugar` marked, after the engine (so they see its output) and
+    // before user pre-filters (where the eventual cell-as-filter story
+    // lives). Same Lua environment as a user filter.
+    stages.push(Box::new(crate::stage::stages::LmdExecuteStage::new()));
     stages.push(Box::new(UserFiltersStage::pre()));
     stages.push(Box::new(AstTransformsStage::new()));
     stages.push(Box::new(UserFiltersStage::post()));
@@ -2020,6 +2038,8 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// 1. `CalloutTransform` - Convert callout Divs to CustomNodes
 /// 2. `CalloutResolveTransform` - Resolve CustomNodes to structured Divs
 /// 3. `ShortcodeResolveTransform` - Resolve shortcodes (e.g., `{{< meta title >}}`)
+/// 3a. `HeadingIdTransform` - Re-derive heading ids that expansion (shortcodes,
+///     lmd cells) made stale, unique document-wide
 /// 4. `MetadataNormalizeTransform` - Add derived metadata (pagetitle, etc.)
 /// 4a. `WebsiteTitlePrefixTransform` - Combine `website.title` with the page's title
 ///     into the rendered `<title>` (Phase 7)
@@ -2188,6 +2208,11 @@ pub fn build_transform_pipeline(
         project_env,
         quarto_profile,
     )));
+    // Heading ids follow the *final* text: shortcode expansion just above
+    // and lmd cells (`lmd-execute`, before the transforms) both rewrite
+    // heading text after the reader derived ids from it (bd-2wv8431v,
+    // bd-lmd-exploration-jqv2nbl4 spike 5). Before sectionize and the TOC.
+    pipeline.push(Box::new(crate::transforms::HeadingIdTransform::new()));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     // Date normalization (bd-gx9cic8z P4): resolves today/now/
     // last-modified, writes ISO `date-meta`/`date-modified-meta` for
@@ -2852,6 +2877,8 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Format-*parameterized*, not format-specific: `lua_format_for()` hands
     // Lua the canonical Pandoc format string.
     ("shortcode-resolve", Bucket::B1),
+    // Re-derives heading ids from expanded text; format-neutral.
+    ("heading-id", Bucket::B1),
     ("metadata-normalize", Bucket::B1),
     ("date-normalize", Bucket::B1),
     ("authors-normalize", Bucket::B1),
@@ -3510,8 +3537,11 @@ mod tests {
         // stages main added — LanguageResolveStage after metadata-merge
         // (bd-llhlzd7p) and TabsetsJsStage in the JS block
         // (bd-toc-tabset-titles-zq93gjvf) — plus EquationNumberStage and
-        // MathMlStage after the post filters (bd-vlhi2zkj, bd-3evfzwal): 27.
-        assert_eq!(stages.len(), 27);
+        // MathMlStage after the post filters (bd-vlhi2zkj, bd-3evfzwal),
+        // plus LmdDesugarStage before the engine and LmdExecuteStage before
+        // the user pre-filters (bd-lmd-exploration-jqv2nbl4), plus
+        // ListingResolveStage before lmd-execute (bd-2oqen84t): 30.
+        assert_eq!(stages.len(), 30);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -3537,45 +3567,54 @@ mod tests {
         assert_eq!(stages[8].name(), "link-resolution");
         assert_eq!(stages[9].name(), "unwrap-profile");
         assert_eq!(stages[10].name(), "pre-engine-sugaring");
-        assert_eq!(stages[11].name(), "engine-execution");
-        assert_eq!(stages[12].name(), "compile-theme-css");
+        // lmd exploration spike (bd-lmd-exploration-jqv2nbl4): rewrites
+        // `{lmd}` cells before any engine can see them.
+        assert_eq!(stages[11].name(), "lmd-desugar");
+        assert_eq!(stages[12].name(), "engine-execution");
+        assert_eq!(stages[13].name(), "compile-theme-css");
         // Bootstrap JS (bd-4eyf) sits immediately after CompileThemeCssStage
         // so the same theme predicate gates JS and CSS together.
-        assert_eq!(stages[13].name(), "bootstrap-js");
+        assert_eq!(stages[14].name(), "bootstrap-js");
         // ClipboardJsStage (Phase 2 of bd-1tl09) sits next to
         // bootstrap-js because both ship a Project-scoped JS payload
         // gated on minimal-HTML. clipboard-js additionally gates on
         // `code-copy != false`.
-        assert_eq!(stages[14].name(), "clipboard-js");
+        assert_eq!(stages[15].name(), "clipboard-js");
         // TabsetsJsStage (bd-toc-tabset-titles-zq93gjvf) ships the
         // grouped-tabset sync module whenever Bootstrap does — same
         // gate as bootstrap-js, so it sits in the same JS block.
-        assert_eq!(stages[15].name(), "tabsets-js");
+        assert_eq!(stages[16].name(), "tabsets-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[16].name(), "attribution-generate");
-        assert_eq!(stages[17].name(), "user-filters-pre");
-        assert_eq!(stages[18].name(), "ast-transforms");
-        assert_eq!(stages[19].name(), "user-filters-post");
+        assert_eq!(stages[17].name(), "attribution-generate");
+        // Listings resolve before the lmd cells and the user pre-filters
+        // so both see `meta.listings.<id>` (bd-2oqen84t).
+        assert_eq!(stages[18].name(), "listing-resolve");
+        // lmd exploration spike 2: cells run after the engine, before user
+        // pre-filters.
+        assert_eq!(stages[19].name(), "lmd-execute");
+        assert_eq!(stages[20].name(), "user-filters-pre");
+        assert_eq!(stages[21].name(), "ast-transforms");
+        assert_eq!(stages[22].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[20].name(), "resource-report");
+        assert_eq!(stages[23].name(), "resource-report");
         // Equation-number encoding (bd-vlhi2zkj) must follow
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
-        assert_eq!(stages[21].name(), "equation-number");
+        assert_eq!(stages[24].name(), "equation-number");
         // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
         // converts carries no `\tag`) and precedes math-js (which loads
         // MathJax only for what this stage left as TeX).
-        assert_eq!(stages[22].name(), "math-ml");
-        assert_eq!(stages[23].name(), "code-highlight");
+        assert_eq!(stages[25].name(), "math-ml");
+        assert_eq!(stages[26].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[24].name(), "math-js");
-        assert_eq!(stages[25].name(), "render-html-body");
-        assert_eq!(stages[26].name(), "apply-template");
+        assert_eq!(stages[27].name(), "math-js");
+        assert_eq!(stages[28].name(), "render-html-body");
+        assert_eq!(stages[29].name(), "apply-template");
     }
 
     #[test]
@@ -3583,8 +3622,10 @@ mod tests {
         let pipeline = build_html_pipeline();
         // Merged pipeline carries both SourceConversionStage (Task 10, branch)
         // LanguageResolveStage and TabsetsJsStage (main), plus
-        // EquationNumberStage and MathMlStage → 27 stages.
-        assert_eq!(pipeline.len(), 27);
+        // EquationNumberStage and MathMlStage, plus LmdDesugarStage and
+        // LmdExecuteStage, plus ListingResolveStage (bd-2oqen84t) → 30
+        // stages.
+        assert_eq!(pipeline.len(), 30);
     }
 
     #[test]
@@ -6336,6 +6377,7 @@ mod tests {
                 "panel-tabset-resolve",
                 "config-markdown",
                 "shortcode-resolve",
+                "heading-id",
                 "metadata-normalize",
                 "date-normalize",
                 "authors-normalize",
@@ -6425,6 +6467,7 @@ mod tests {
                 "panel-tabset-resolve",
                 "config-markdown",
                 "shortcode-resolve",
+                "heading-id",
                 "metadata-normalize",
                 "date-normalize",
                 "authors-normalize",
@@ -6606,6 +6649,7 @@ mod tests {
                 "panel-tabset",
                 "config-markdown",
                 "shortcode-resolve",
+                "heading-id",
                 "metadata-normalize",
                 "date-normalize",
                 "authors-normalize",
@@ -6799,6 +6843,7 @@ mod tests {
                 "callout",
                 "config-markdown",
                 "shortcode-resolve",
+                "heading-id",
                 "metadata-normalize",
                 "date-normalize",
                 "authors-normalize",
@@ -6927,8 +6972,11 @@ mod tests {
                 "link-resolution",
                 "unwrap-profile",
                 "pre-engine-sugaring",
+                "lmd-desugar",
                 "engine-execution",
                 "attribution-generate",
+                "listing-resolve",
+                "lmd-execute",
                 "user-filters-pre",
                 "ast-transforms",
                 "user-filters-post",

@@ -1,0 +1,66 @@
+---
+source: crates/quarto/tests/integration/lmd_snapshots.rs
+expression: main
+---
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Blog</h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+
+</header>
+
+
+<p>The listing is declared above with <code>type: metadata</code>: it resolves the
+posts and publishes them at <code>meta.listings.posts</code>, and renders nothing.
+The two cells below build the markup.</p>
+<section id="cards" class="section level2">
+<h2>Cards</h2>
+<div id="lmd-posts">
+<section id="third" class="section level3 card">
+<h3><a href="third.html">Third</a></h3>
+<p>Mar 5, 2026 · anonymous ·
+0 categories ·
+derived description</p>
+<p>Third body paragraph.</p>
+</section>
+<section id="second-post-with-code" class="section level3 card">
+<h3><a href="second.html">Second <em>post</em>, with <code>code</code></a></h3>
+<p>Jan 15, 2026 · Ada, Grace ·
+1 categories ·
+derived description</p>
+<p>Second body paragraph, derived as the description.</p>
+</section>
+<section id="first-post" class="section level3 card">
+<h3><a href="first.html">First post</a></h3>
+<p>Nov 2, 2025 · Ada ·
+2 categories ·
+document description</p>
+<p>The one that started it.</p>
+</section>
+</div>
+</section>
+<section id="by-year" class="section level2">
+<h2>By year</h2>
+<div id="lmd-by-year">
+<section id="section" class="section level3">
+<h3>2026</h3>
+<ul>
+<li><a href="third.html">Third</a> (Mar 5, 2026)</li>
+<li><a href="second.html">Second <em>post</em>, with <code>code</code></a> (Jan 15, 2026)</li>
+</ul>
+</section>
+<section id="section-1" class="section level3">
+<h3>2025</h3>
+<ul>
+<li><a href="first.html">First post</a> (Nov 2, 2025)</li>
+</ul>
+</section>
+</div>
+<p>There are 3 posts in all.</p>
+</section>
+
+</main>

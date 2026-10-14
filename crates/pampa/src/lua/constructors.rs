@@ -2614,6 +2614,10 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         })?,
     )?;
 
+    // pandoc.Nodes(content): blocks-or-inlines decided by the context the
+    // value lands in (bd-lmd-exploration-jqv2nbl4). See lua/nodes.rs.
+    super::nodes::register_pandoc_nodes(lua, pandoc)?;
+
     Ok(())
 }
 

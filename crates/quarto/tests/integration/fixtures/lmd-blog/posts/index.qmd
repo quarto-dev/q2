@@ -1,0 +1,62 @@
+---
+title: Blog
+listing:
+  id: posts
+  type: metadata
+  contents: "*.qmd"
+  sort: "date desc"
+---
+
+The listing is declared above with `type: metadata`: it resolves the
+posts and publishes them at `meta.listings.posts`, and renders nothing.
+The two cells below build the markup.
+
+## Cards
+
+```{lmd}
+local cards = meta.listings.posts.items:map(function(it)
+  return {=:
+::: {.card}
+### `{lmd} pandoc.Link(it.title, it.path)`
+
+`{lmd} it.date` · `{lmd} it.author or "anonymous"` ·
+`{lmd} tostring(#it.categories)` categories ·
+`{lmd} it["description-source"]` description
+
+`{lmd} it.description`
+:::
+:=}
+end)
+return pandoc.Div(cards, pandoc.Attr("lmd-posts"))
+```
+
+## By year
+
+```{lmd}
+local by_year, years = {}, {}
+for _, it in ipairs(meta.listings.posts.items) do
+  local y = it["date-iso"]:sub(1, 4)
+  if not by_year[y] then
+    by_year[y] = {}
+    years[#years + 1] = y
+  end
+  table.insert(by_year[y], it)
+end
+table.sort(years, function(a, b) return a > b end)
+
+local out = pandoc.Blocks({})
+for _, y in ipairs(years) do
+  out:extend({=:
+### `{lmd} y`
+:=})
+  -- One list per year: each item is a `Blocks` fragment, which is
+  -- what `pandoc.BulletList` takes for a list item.
+  local entries = pandoc.List(by_year[y]):map(function(it)
+    return {=: `{lmd} pandoc.Link(it.title, it.path)` (`{lmd} it.date`) :=}
+  end)
+  out:insert(pandoc.BulletList(entries))
+end
+return pandoc.Div(out, pandoc.Attr("lmd-by-year"))
+```
+
+There are `{lmd} tostring(#meta.listings.posts.items)` posts in all.

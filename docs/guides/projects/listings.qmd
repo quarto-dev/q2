@@ -341,3 +341,91 @@ If you are carrying a template over from Quarto 1, start there: Quarto 2
 does not run EJS, and a carried-over template warns with
 [`Q-12-9`](/errors/listing/Q-12-9.qmd) at the extension and
 [`Q-12-24`](/errors/listing/Q-12-24.qmd) at the contents.
+
+## Listings as data {#listings-as-data}
+
+A doctemplate interpolates, branches and loops, and nothing more. When a
+listing needs logic — grouping by year, a count, a layout that depends
+on the items — write the markup in Lua instead. Every listing a page
+declares is also published into the page\'s metadata, resolved: the
+items are matched, filtered, sorted and truncated exactly as the
+rendered listing would show them, and a Lua filter reads them from
+`meta.listings.<id>`.
+
+```yaml
+listing:
+  id: posts
+  type: metadata
+  contents: posts/*.qmd
+  sort: "date desc"
+filters: [posts.lua]
+```
+
+`type: metadata` is a listing that resolves its items and renders
+nothing: no container, no "No matching items" placeholder, no paging
+script. The markup is yours to build. Everything that reads the resolved
+items rather than the rendered markup still works — the [categories
+sidebar](#pages-and-categories-in-the-browser), an RSS `feed:`, and the
+dependency tracking that re-renders the page when a post changes.
+
+The metadata is published for *every* listing type, not only
+`metadata`, so a filter can also read the items of a listing the page
+renders in the usual way.
+
+### What a filter reads
+
+`posts.lua`:
+
+```lua
+function Pandoc(doc)
+  local items = doc.meta.listings.posts.items
+  local entries = pandoc.List()
+  for _, it in ipairs(items) do
+    entries:insert({ pandoc.Plain({ pandoc.Link(it.title, it.path),
+                                    pandoc.Str(" (" .. it.date .. ")") }) })
+  end
+  doc.blocks:insert(pandoc.BulletList(entries))
+  return doc
+end
+```
+
+`meta.listings.<id>` is a map with the listing\'s own settings (`id`,
+`type`, `fields`, `sort`, `page-size`, `max-items`,
+`max-description-length`, `date-format`, `image-placeholder`,
+`categories`, `template-params`) and `items`, one entry per item. The
+item keys are the ones a [custom template](#values-a-template-can-read)
+reads, in their natural Lua types rather than as text:
+
+| Key | Type in Lua | Notes |
+| --- | --- | --- |
+| `title`, `subtitle`, `description` | `Inlines` | Markdown kept as inlines: `pandoc.Link(it.title, it.path)` keeps the title\'s emphasis and code. Links and footnotes inside them are dropped, as the templates drop them. `description` is cut at the listing\'s `max-description-length`. |
+| `description-source`, `image-source` | string | Where the value came from: `listing-item`, `document`, `abstract`, `record`, `derived`, or `absent`. |
+| `path` | string | The link target, relative to the page, as a `.qmd` source path. Put it in a `pandoc.Link` or `pandoc.Image` and Quarto rewrites it to the output URL, as it does for a template\'s `$it.path$`. |
+| `output-href`, `filename` | string | The rendered output path and the file name. |
+| `date`, `date-modified` | string | Display strings, formatted with the listing\'s or the document\'s `date-format`, as a template shows them. |
+| `date-iso`, `date-modified-iso` | string | The stored values, for sorting and grouping. |
+| `author` | string | The authors joined with ", ". |
+| `authors`, `categories` | list of strings | Always present; empty when the item has none. |
+| `image`, `image-alt` | string | The image path and its alt text. |
+| `order`, `word-count`, `reading-time-minutes` | number | `reading-time` is the display string ("4 min read"). |
+| `origin` | string | `document`, `record`, or `record-over-document`. |
+| `extra` | table | Custom fields from an inline record or a document\'s `listing-item.extra`. Only here, never mixed into the item itself. |
+
+Keys for values an item does not have are absent (`it.subtitle` is
+`nil`), except the two lists, which are empty. The strings are plain
+Lua strings, not markdown, so `it.path` and `it.date` can be
+concatenated and compared; a YAML string in a document\'s own front
+matter would instead reach a filter as inlines.
+
+Two things a rendered listing does that a filter has to do itself, or
+go without. The description of an item that has none of its own is
+the first paragraph of the item page *as written*; a rendered listing
+upgrades it after both pages render, a filter gets the written form.
+And the `default` and `grid` layouts\' paging and category filtering
+run in the browser on markup the filter does not emit; a listing you
+build is shown in full, as a `custom` listing is.
+
+Links and images obey the [same two rules as templates](listing-templates.qmd#links-and-images-must-be-markdown):
+build them as `pandoc.Link` and `pandoc.Image` nodes with the `path`
+and `image` values, not as raw HTML, or the targets are not rewritten
+and the images are not copied.

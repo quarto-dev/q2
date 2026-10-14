@@ -1,0 +1,96 @@
+---
+source: crates/quarto/tests/integration/lmd_snapshots.rs
+expression: stderr
+---
+Warning: lmd cell could not be desugared
+   ╭─[ <dir>/errors.qmd:9:1 ]
+   │
+ 9 │ return {= a =} +
+   │ ────────┬───────
+   │         ╰───────── lmd: Lua syntax error at line 2, column 17
+───╯
+ℹ The cell is left as written and will not run.
+
+Error: [Q-2-10] Closed Quote Without Matching Open Quote
+    ╭─[ <dir>/errors.qmd:15:42 ]
+    │
+ 15 │ return {=: This line mentions the groups' Unique IDs. :=}
+    │                                         ┬┬
+    │                                         ╰─── No opening quote was found before this mark. If you meant an apostrophe, escape it with a backslash.
+    │                                          │
+    │                                          ╰── A space is causing a quote mark to be interpreted as a quotation close.
+────╯
+ℹ Inside an lmd markdown fragment; the cell is left as written and will not run.
+
+Warning: lmd cell could not be desugared
+    ╭─[ <dir>/errors.qmd:22:1 ]
+    │
+ 22 │ ╭─▶ | a | b |
+    ┆ ┆
+ 24 │ ├─▶ | 1 | 2 |
+    │ │
+    │ ╰─────────────── lmd: `Table` nodes are not supported inside markdown fragments yet
+────╯
+ℹ The cell is left as written and will not run.
+
+Error: lmd cell failed
+    ╭─[ <dir>/errors.qmd:32:1 ]
+    │
+ 32 │ error("boom")
+    │ ──────┬──────
+    │       ╰──────── runtime error: <dir>/errors.qmd:32: boom
+stack traceback:
+	[C]: in function 'error'
+	<dir>/errors.qmd:32: in main chunk
+────╯
+
+Error: lmd cell did not return blocks
+    ╭─[ <dir>/errors.qmd:37:1 ]
+    │
+ 37 │ ╭─▶ ```{lmd}
+    ┆ ┆
+ 39 │ ├─▶ ```
+    │ │
+    │ ╰───────── an lmd cell must return a Block, a list of Blocks, or nil; this one returned Inlines
+────╯
+ℹ Return a Block, a list of Blocks, or nil. Write `{=: … :=}` for a markdown fragment that is blocks.
+
+Error: lmd cell failed
+    ╭─[ <dir>/errors.qmd:41:32 ]
+    │
+ 41 │ An inline runtime error `{lmd} nope()` and a wrong shape `{lmd} pandoc.Para({})` here.
+    │                                ───┬──
+    │                                   ╰──── runtime error: <dir>/errors.qmd:41: attempt to call a nil value (global 'nope')
+stack traceback:
+	<dir>/errors.qmd:41: in main chunk
+────╯
+
+Error: inline lmd cell did not produce inlines
+    ╭─[ <dir>/errors.qmd:41:65 ]
+    │
+ 41 │ An inline runtime error `{lmd} nope()` and a wrong shape `{lmd} pandoc.Para({})` here.
+    │                                                                 ───────┬───────
+    │                                                                        ╰───────── an inline lmd cell must evaluate to an Inline, a list of Inlines, a string, or nil; this one evaluated to a Block
+────╯
+ℹ An inline cell's expression must be an Inline, a list of Inlines, a string, or nil. Write `{=[ … ]=}` for a markdown fragment that is inlines.
+
+Error: lmd cell failed
+    ╭─[ <dir>/errors.qmd:45:1 ]
+    │
+ 45 │ > error("quoted")
+    │ ────────┬────────
+    │         ╰────────── runtime error: <dir>/errors.qmd:45: quoted
+stack traceback:
+	[C]: in function 'error'
+	<dir>/errors.qmd:45: in main chunk
+────╯
+
+Error: lmd cell options are not valid
+    ╭─[ <dir>/errors.qmd:51:12 ]
+    │
+ 51 │ --| echo: [
+    │            │
+    │            ╰─ cell options are not valid YAML: Parse error: while parsing a node, did not find expected node content
+────╯
+
+7 errors, 2 warnings

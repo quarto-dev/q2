@@ -350,6 +350,15 @@ pub struct RenderContext<'a> {
     /// stays unchanged.
     pub resolved_listings: Vec<crate::project::listing::ResolvedListing>,
 
+    /// Whether listing resolution already ran for this page, upstream
+    /// of the transforms: the `listing-resolve` stage (bd-2oqen84t, M2)
+    /// sets it as it bridges `resolved_listings` in, so
+    /// `ListingGenerateTransform` does not resolve (and diagnose) a
+    /// second time — `resolved_listings.is_empty()` alone cannot tell
+    /// "not yet resolved" from "resolved, and the page's `listing:` was
+    /// unusable".
+    pub listings_resolved: bool,
+
     /// Code-block decorations produced by
     /// [`CodeBlockGenerateTransform`](crate::transforms::CodeBlockGenerateTransform)
     /// and consumed by
@@ -583,6 +592,7 @@ impl<'a> RenderContext<'a> {
             resource_report: crate::project_resources::DocumentResourceReport::new(),
             resource_copies: Vec::new(),
             resolved_listings: Vec::new(),
+            listings_resolved: false,
             code_block_decorations: std::collections::HashMap::new(),
             attribution_provider: None,
             attribution_data: None,

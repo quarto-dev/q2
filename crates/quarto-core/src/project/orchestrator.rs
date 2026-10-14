@@ -1012,7 +1012,7 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
     /// The native CLI entry points call this instead of [`Self::run`].
     /// For non-book projects it is exactly `run()`: the same
     /// [`run_inner`](Self::run_inner) body and the same unconditional
-    /// `shutdown_all()` teardown (TS-engine Deno subprocess reaping)
+    /// `shutdown_all()` teardown (TS-engine Node subprocess reaping)
     /// afterward. For books it adds the format-support gate (Q-5-33,
     /// Q1's `projectFormatsOnly` + `isSupportedFormat`) before
     /// rendering; P2/P4/P5's book orchestration (single-file merge,
@@ -1442,7 +1442,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // on *every* exit path — success, the fail-fast early return, or a
         // `?`-propagated hook/resource error — before `ProjectContext` (and its
         // `registry`) drops. This is the caller Plan 1a-host deferred to: q2 uses
-        // explicit `registry.shutdown_all()` (not Drop) to reap TS-engine Deno
+        // explicit `registry.shutdown_all()` (not Drop) to reap TS-engine Node
         // subprocesses at end-of-render. Best-effort: log at WARN and continue;
         // the host's own Drop is the backstop if this errs.
         let result = self.run_inner().await;
@@ -2659,7 +2659,7 @@ mod tests {
 
     /// Build a non-spawned `TsEngine` with the given `_extension.yml` path
     /// set. `TsEngineHost::new` does not spawn a subprocess, so this is
-    /// safe outside a `deno`-gated test.
+    /// safe outside a `node`-gated test.
     fn make_ts_engine_with_extension_yml(
         name: &str,
         extension_yml_path: PathBuf,

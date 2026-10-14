@@ -42,6 +42,10 @@ regex = "1.12"
 # (`wasm-quarto-hub-client` depends on it), so this is not new WASM weight.
 tree-sitter.workspace = true
 tree-sitter-r = "1.2"
+# lmd ("lua+md") exploration: Lua 5.4 plus `{= markdown =}` fragments. The
+# `LmdDesugarStage` parses `{lmd}` cells with it. Cross-target like
+# tree-sitter-r above. See claude-notes/plans/2026-10-12-lmd-exploration.md.
+tree-sitter-lmd.workspace = true
 # `time` for date formatting (used by L1 ListingItemInfoStage; see
 # claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md §D12).
 # `formatting` enables `OffsetDateTime::format`; `parsing` enables
@@ -118,6 +122,8 @@ clap = ["dep:clap"]
 
 # Native-only dependencies (for execution engines and resource extraction)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Node discovery for the TS engine host (QUARTO_NODE / PATH / fnm / nvm / volta).
+quarto-node-discovery = { path = "../quarto-node-discovery" }
 tempfile = "3"
 which = "8"
 # hephaestus plot documents (`.hep`) → SVG at render time

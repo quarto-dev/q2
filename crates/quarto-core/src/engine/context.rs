@@ -144,7 +144,7 @@ pub struct ExecutionContext {
     /// [`crate::project::document_metadata_to_ts_map`] (the same recursive
     /// `ConfigValue → TsMetadataValue` lowering P1.1 built for the `engines`
     /// subtree, called here over the full merged map). `TsEngine::execute`
-    /// carries this into `TsExecuteOptions.format.metadata`, which the Deno
+    /// carries this into `TsExecuteOptions.format.metadata`, which the Node
     /// host's `metadataAsFormat` partitions into Q1's six-bin `Format`
     /// (`execute`/`render`/`pandoc`/`identifier`/`language`/`metadata`).
     /// Built-in engines (knitr/jupyter) ignore this field.

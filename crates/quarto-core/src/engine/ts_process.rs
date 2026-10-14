@@ -51,14 +51,14 @@ use crate::stage::cancellation::Cancellation;
 // Embedded bundle (SCOPE C)
 // ============================================================================
 
-/// The engine-host-deno bundle, embedded at compile time.
+/// The engine-host-node bundle, embedded at compile time.
 ///
 /// Path is anchored at `CARGO_MANIFEST_DIR` (the `quarto-core` crate root,
 /// an absolute path known to rustc) — resilient to `ts_process.rs` moving
 /// within the crate, unlike a source-file-relative `include_str!("../../../../…")`.
 static EMBEDDED_BUNDLE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../ts-packages/quarto-engine-host-deno/dist/engine-host-deno.js"
+    "/../../ts-packages/quarto-engine-host-node/dist/engine-host-node.mjs"
 ));
 
 /// Compute the 16-hex-char content hash (first 8 bytes of SHA-256) of a
@@ -74,7 +74,9 @@ fn bundle_content_hash(bytes: &[u8]) -> String {
     hex
 }
 
-/// Extract the embedded bundle to `<bundles_dir>/engine-host-deno-<sha8>.js`.
+/// Extract the embedded bundle to `<bundles_dir>/engine-host-node-<sha8>.mjs`.
+/// (`.mjs` so a project-local `"type": "commonjs"` package.json cannot change
+/// how Node parses it.)
 ///
 /// - Write-if-absent: if the hash-named file already exists, reuse it.
 /// - Atomic write: write to a sibling temp file in the same directory, then
@@ -84,7 +86,7 @@ fn bundle_content_hash(bytes: &[u8]) -> String {
 fn extract_bundle_to(bundles_dir: &Path) -> std::io::Result<PathBuf> {
     let bytes = EMBEDDED_BUNDLE.as_bytes();
     let hash = bundle_content_hash(bytes);
-    let filename = format!("engine-host-deno-{hash}.js");
+    let filename = format!("engine-host-node-{hash}.mjs");
     let dest = bundles_dir.join(&filename);
 
     if dest.exists() {
@@ -133,7 +135,7 @@ fn cached_extract(
 
 /// Extract the embedded bundle once, caching the result.
 ///
-/// Writes to `<quarto_runtime_dir>/bundles/engine-host-deno-<sha8>.js`.
+/// Writes to `<quarto_runtime_dir>/bundles/engine-host-node-<sha8>.mjs`.
 /// Subsequent calls return a clone of the cached path without I/O.
 /// A failed extraction is NOT cached — the next call retries.
 fn extracted_bundle_path() -> Result<PathBuf, ExecutionError> {
@@ -147,17 +149,37 @@ fn extracted_bundle_path() -> Result<PathBuf, ExecutionError> {
     })
 }
 
-/// Check whether `deno` is available on PATH.
+/// What needs Node, for discovery's error messages.
+const NODE_PURPOSE: &str = "q2's TypeScript engine extensions";
+
+/// Locate a usable Node.js (>= 24): `QUARTO_NODE`, then PATH, then well-known
+/// version-manager locations (see `quarto-node-discovery`).
+pub fn find_node() -> Result<PathBuf, ExecutionError> {
+    quarto_node_discovery::find_node(&quarto_node_discovery::Discovery::from_env(), NODE_PURPOSE)
+        .map(|info| info.path)
+        .map_err(|e| ExecutionError::other(e.to_string()))
+}
+
+/// Check whether a usable Node.js (>= 24) can be found.
 ///
-/// Spawns `deno --version` and checks for a successful exit status.
-/// Returns `false` on any error (not found, permission denied, etc.).
+/// Returns `false` on any discovery failure (not found, too old, etc.).
 pub fn is_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+    find_node().is_ok()
+}
+
+/// Test-only gate shared by every TS-engine e2e (replaces the per-file
+/// availability copies): `true` when a usable Node.js is found.
+///
+/// Under `QUARTO_CI=1` a missing runtime **panics** instead of returning
+/// `false`, so CI cannot silently skip these tests as passes (plan decision
+/// 18). Locally, `false` means "skip".
+#[doc(hidden)]
+pub fn node_available_for_tests() -> bool {
+    let available = is_available();
+    if !available && std::env::var("QUARTO_CI").as_deref() == Ok("1") {
+        panic!("QUARTO_CI=1 but no usable Node.js (>= 24) was found; CI must provision it");
+    }
+    available
 }
 
 // ============================================================================
@@ -578,13 +600,16 @@ pub fn spawn_into_tcp(
     }
 }
 
-/// The loopback-TCP dial-back preamble that every `deno_dialback_child` test
+/// The loopback-TCP dial-back preamble that every `node_dialback_child` test
 /// script begins with: parse `--control 127.0.0.1:<port>` off argv, read the
-/// one-time token from the first line of stdin, `Deno.connect`, and present
-/// the token as the socket pre-line — the tiny hand-rolled equivalent of the
-/// real bundle's `connectControl` (`control-transport.ts`). It leaves three
-/// bindings in scope for the per-test body: the connected socket `conn`, a
-/// `TextDecoder dec`, and a `TextEncoder enc`.
+/// one-time token from the first line of stdin, connect with `node:net`, and
+/// present the token as the socket pre-line — the tiny hand-rolled equivalent
+/// of the real bundle's `connectControl` (`node-control-transport.ts`). The
+/// script is an ES module (top-level `await`) and leaves one binding in scope
+/// for the per-test body: the connected socket `conn` (plus `process`).
+///
+/// The token is read with `fs.readSync(0, …)` one byte at a time, never via
+/// the `process.stdin` getter (which would set O_NONBLOCK on fd 0).
 ///
 /// The only callers are Unix-gated: `proc_tests` is gated because two tests
 /// use `kill -0` or assert a SIGKILL exit code, while
@@ -593,61 +618,67 @@ pub fn spawn_into_tcp(
 /// `-D warnings` reports it as dead code on Windows.
 #[cfg(all(test, unix))]
 const DIALBACK_PREAMBLE: &str = r#"
-const args = Deno.args;
+import net from "node:net";
+import fs from "node:fs";
+import process from "node:process";
+const args = process.argv.slice(2);
 let control = null;
 for (let i = 0; i < args.length; i++) if (args[i] === "--control") control = args[i + 1];
-if (!control) { console.error("dialback: no --control arg"); Deno.exit(2); }
-const dec = new TextDecoder();
-const enc = new TextEncoder();
-const sbuf = new Uint8Array(4096);
-let acc = "";
-let token = null;
-while (token === null) {
-  const n = await Deno.stdin.read(sbuf);
-  if (n === null) break;
-  acc += dec.decode(sbuf.subarray(0, n));
-  const idx = acc.indexOf("\n");
-  if (idx !== -1) token = acc.slice(0, idx);
+if (!control) { console.error("dialback: no --control arg"); process.exit(2); }
+let token = "";
+let gotToken = false;
+const one = Buffer.alloc(1);
+for (;;) {
+  let n;
+  try { n = fs.readSync(0, one, 0, 1, null); }
+  catch (e) { if (e.code === "EAGAIN") continue; if (e.code === "EOF") break; throw e; }
+  if (n === 0) break;
+  if (one[0] === 10) { gotToken = true; break; }
+  token += String.fromCharCode(one[0]);
 }
-if (token === null) { console.error("dialback: no token on stdin"); Deno.exit(3); }
+if (!gotToken) { console.error("dialback: no token on stdin"); process.exit(3); }
 const [ctlHost, ctlPort] = control.split(":");
-const conn = await Deno.connect({ hostname: ctlHost, port: Number(ctlPort) });
-await conn.write(enc.encode(token + "\n"));
+const conn = net.connect({ host: ctlHost, port: Number(ctlPort) });
+await new Promise((resolve, reject) => { conn.once("connect", resolve); conn.once("error", reject); });
+conn.write(token + "\n");
 "#;
 
-/// A [`deno_dialback_child`] body that discards everything the host writes and
+/// A [`node_dialback_child`] body that discards everything the host writes and
 /// exits 0 when the socket read side closes (the host's `shutdown()` half-close,
 /// or `Drop`) — the loopback-TCP equivalent of the old `sh -c 'cat >/dev/null'`
 /// liveness child.
 #[cfg(all(test, unix))]
 pub(crate) const DIALBACK_READ_UNTIL_EOF: &str = r#"
-const rbuf = new Uint8Array(4096);
-while (true) { const n = await conn.read(rbuf); if (n === null) break; }
-Deno.exit(0);
+conn.on("end", () => process.exit(0));
+conn.resume();
 "#;
 
-/// Test-only: build a `deno run` child that performs the loopback-TCP dial-back
-/// handshake ([`DIALBACK_PREAMBLE`]) and then runs `body` (which may use the
-/// `conn`/`dec`/`enc` bindings the preamble leaves in scope).
+/// Test-only: build a `node <script>` child that performs the loopback-TCP
+/// dial-back handshake ([`DIALBACK_PREAMBLE`]) and then runs `body` (which may
+/// use the `conn` binding the preamble leaves in scope).
 ///
-/// Deno reads the script file at process startup, so the returned
+/// Node reads the script file at process startup, so the returned
 /// `NamedTempFile` must be kept alive until `start_with_command` returns; the
 /// caller binds it (`let (cmd, _script) = ...`) for the duration of the test.
 /// `start_with_command` appends the `--control 127.0.0.1:<port>` argument, so
 /// callers must NOT add it themselves.
 #[cfg(all(test, unix))]
-pub(crate) fn deno_dialback_child(body: &str) -> (Command, tempfile::NamedTempFile) {
+pub(crate) fn node_dialback_child(body: &str) -> (Command, tempfile::NamedTempFile) {
     use std::io::Write as _;
     let script = format!("{DIALBACK_PREAMBLE}\n{body}\n");
-    let mut tmp = tempfile::NamedTempFile::new().expect("create dialback tempfile");
+    // `.mjs` so Node parses the script as an ES module (top-level `await`).
+    let mut tmp = tempfile::Builder::new()
+        .suffix(".mjs")
+        .tempfile()
+        .expect("create dialback tempfile");
     tmp.write_all(script.as_bytes())
         .expect("write dialback script");
     tmp.flush().expect("flush dialback script");
-    let mut cmd = Command::new("deno");
-    cmd.arg("run").arg("--allow-all").arg(tmp.path());
+    let node = find_node().expect("node_dialback_child needs a usable Node.js");
+    let mut cmd = Command::new(node);
+    cmd.arg(tmp.path());
     (cmd, tmp)
 }
-
 // ============================================================================
 // TsEngineHost — the demux
 // ============================================================================
@@ -660,7 +691,7 @@ struct PendingSlot {
     tx: SyncSender<Result<FromEngine, ExecutionError>>,
 }
 
-/// The demux: one shared Deno subprocess, multiplexed over many in-flight
+/// The demux: one shared Node subprocess, multiplexed over many in-flight
 /// requests.  All multiplexing lives here — the transport is a dumb framed
 /// duplex.
 ///
@@ -705,7 +736,7 @@ pub struct TsEngineHost {
     /// Doubles as a **generation counter**: `TsEngine::ensure_loaded`
     /// (`ts_engine.rs`) compares its own cached "generation as of last
     /// successful `LoadEngine`" against this value to detect that a crash
-    /// respawned the subprocess out from under it — a fresh Deno process
+    /// respawned the subprocess out from under it — a fresh Node process
     /// has an empty `loadedByPath`/`engineByName` (host.ts), so the module
     /// must be re-`LoadEngine`'d before the next `LaunchEngine`, even though
     /// the cached `LoadEngineResult` (static discovery metadata) itself
@@ -809,7 +840,7 @@ impl TsEngineHost {
     }
 
     /// Test-only: build a host wired to a REAL spawned child (full reaping +
-    /// stderr thread), without requiring the hardcoded deno-bundle path.
+    /// stderr thread), without requiring the hardcoded node-bundle path.
     ///
     /// Drives the exact production loopback-TCP path (bind an ephemeral control
     /// listener, mint a one-time token, append `--control 127.0.0.1:<port>` to
@@ -817,7 +848,7 @@ impl TsEngineHost {
     /// then hands the split halves to `ensure_started_inner` — so the reader
     /// thread, both drain threads, and all teardown paths are exercised exactly
     /// as in production. The caller-supplied `cmd` must be a child that dials
-    /// back over the control socket (see the test-only `deno_dialback_child`
+    /// back over the control socket (see the test-only `node_dialback_child`
     /// helper); a child that never connects makes this time out at the accept
     /// deadline, exactly as production would.
     #[cfg(test)]
@@ -868,12 +899,7 @@ impl TsEngineHost {
     /// leaves `write` unset and the next call retries.
     pub fn ensure_started(&self) -> Result<(), ExecutionError> {
         self.ensure_started_inner(|| {
-            if !is_available() {
-                return Err(ExecutionError::other(
-                    "Deno is required for TS engine extensions but was not found in PATH. \
-                     Install Deno from https://deno.land/ and ensure it is on your PATH.",
-                ));
-            }
+            let node = find_node()?;
             let bundle_path = extracted_bundle_path()?;
 
             // plan1a.6: bind an ephemeral loopback control listener BEFORE spawn. std's
@@ -894,16 +920,16 @@ impl TsEngineHost {
             // child presents it as the socket pre-line that accept_and_handshake validates.
             let token = uuid::Uuid::new_v4().to_string();
 
-            let mut cmd = Command::new("deno");
-            // `--allow-all` is the ACCEPTED v1 security posture (decided 2026-07-01), not an
-            // oversight. Extension bundles are third-party code running at full Deno privilege;
-            // the v1 trust model is "the user installed the extension deliberately." The eventual
-            // real boundary is Phase 1.6 (loopback-TCP transport + one-time token auth), not a
-            // Deno permission set — so any future narrowing to `--allow-read/write/net/run` here
-            // is a deliberate, separately-reviewed change, not a drive-by tightening.
-            cmd.arg("run")
-                .arg("--allow-all")
-                .arg(bundle_path)
+            // No permission flags: Node has no permission model by default, so the host
+            // and every extension bundle run with the user's full privileges. That is the
+            // ACCEPTED v1 security posture (decided 2026-07-01, unchanged by the Deno-to-Node
+            // move), not an oversight: extension bundles are third-party code and the v1 trust
+            // model is "the user installed the extension deliberately." The real boundary is
+            // the loopback-TCP transport + one-time token auth; any future sandboxing (e.g.
+            // Node's `--permission`) is a deliberate, separately-reviewed change, not a
+            // drive-by tightening.
+            let mut cmd = Command::new(node);
+            cmd.arg(bundle_path)
                 .arg("--control")
                 .arg(format!("127.0.0.1:{port}"));
 
@@ -925,7 +951,7 @@ impl TsEngineHost {
 
     /// The double-checked init gate, parameterized over the transport source so
     /// the **race-free spawn-once** contract (seam row 16) is testable with an
-    /// injected counting `init` returning mock halves — no real `deno`.
+    /// injected counting `init` returning mock halves — no real `node`.
     ///
     /// `init` runs **at most once across concurrent callers**: the coarse init
     /// lock (the `reader` mutex) + the re-check under it + committing
@@ -972,7 +998,7 @@ impl TsEngineHost {
         // surface a project-level render can key a spawn count off — J6 asserts
         // exactly one across a two-page render, J9 asserts it orders after
         // resolution-complete. `pid` is 0 for mock-transport hosts (no real
-        // `Child`); the real deno subprocess reports its OS pid.
+        // `Child`); the real node subprocess reports its OS pid.
         let pid = self.child.lock().unwrap().as_ref().map(|c| c.id());
         // NOTE: the `engine_host` target is shared with the child-stderr
         // forwarding below (reader thread). J6/J9's exactly-one-event counts
@@ -2907,7 +2933,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     // P3-1a: freshly constructed host has no child → is_alive() == false.
-    // This assertion is unconditional (no Deno gate) — the method must exist
+    // This assertion is unconditional (no Node gate) — the method must exist
     // and return false before any subprocess is started.
     //
     // Named revert hunk: `is_alive()` method on `TsEngineHost`.
@@ -3064,10 +3090,10 @@ mod tests {
     //
     // These tests call `accept_and_handshake` directly against a real
     // listener + a real (short-lived, non-bundle) child process — the child
-    // only needs to exist/stay alive, never the real deno engine-host.
+    // only needs to exist/stay alive, never the real node engine-host.
 
     /// Spawn a child that stays alive for roughly `secs` seconds and does
-    /// nothing else — a stand-in for the real deno child in these
+    /// nothing else — a stand-in for the real node child in these
     /// handshake-only tests (portable per the cross-platform rule; unix uses
     /// `sleep`, everything else falls back to `powershell Start-Sleep`).
     #[cfg(unix)]
@@ -3328,7 +3354,7 @@ mod tests {
 
     // Standing property test — like seam #10, no named revert hunk. Migrated
     // from the deleted `ts_process_framing_probe.rs` (`pc_c_a`) at the plan1a.6
-    // Phase-4 cutover: the old stdout-reader path (`StdioReadHalf` over a deno
+    // Phase-4 cutover: the old stdout-reader path (`StdioReadHalf` over a node
     // child) is gone, so the property is now pinned over the live TCP transport.
     //
     // Property: a >1 MB single-line frame round-trips through `TcpReadHalf::recv`
@@ -3905,9 +3931,9 @@ mod proc_tests {
     // Named revert hunk: field-clones capture in reader thread (vs Arc<Self>).
     // Revert Arc<Self> → Drop never runs → child PID survives → assertion fails.
     //
-    // Child: a deno dial-back child that hangs forever after completing the
+    // Child: a node dial-back child that hangs forever after completing the
     // handshake (never replies), so it only dies when `Drop` kills it.
-    // Deno-gated (the dial-back is a deno child); CI always has deno.
+    // Node-gated (the dial-back is a node child); CI always has node.
     // Assert: (a) drop returned within bound and (b) PID is gone (kill -0 fails).
     #[test]
     fn test_drop_reaps_no_hang() {
@@ -3915,14 +3941,9 @@ mod proc_tests {
             return;
         }
         watchdog(Duration::from_secs(30), || {
-            // Hang forever via an idle-timer loop — NOT `new Promise(() => {})`,
-            // which deno's deadlock detector aborts with "Top-level await promise
-            // never resolved" (no pending op keeps the loop alive), making the
-            // child exit and get crash-reaped before we capture its PID. A pending
-            // timer is a real op, so the child stays alive until Drop kills it.
-            let (cmd, _script) = deno_dialback_child(
-                "while (true) { await new Promise((r) => setTimeout(r, 3600000)); }",
-            );
+            // Hang forever: the open control socket already keeps the event loop alive; the
+            // idle timer makes that explicit. The child stays alive until Drop kills it.
+            let (cmd, _script) = node_dialback_child("setInterval(() => {}, 3600000);");
             let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 
@@ -3959,15 +3980,15 @@ mod proc_tests {
     // Named revert hunk: `reader.lock().take().join()` / `write.take()` close
     // in `shutdown`.  Revert → threads not joined / socket not closed → hang.
     //
-    // Child: a deno dial-back child that discards frames and exits 0 when the
-    // socket read side closes (shutdown's half-close). Deno-gated.
+    // Child: a node dial-back child that discards frames and exits 0 when the
+    // socket read side closes (shutdown's half-close). Node-gated.
     #[test]
     fn test_graceful_shutdown_joins() {
         if !is_available() {
             return;
         }
         watchdog(Duration::from_secs(30), || {
-            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+            let (cmd, _script) = node_dialback_child(DIALBACK_READ_UNTIL_EOF);
             let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 
@@ -3987,14 +4008,14 @@ mod proc_tests {
     // Named revert hunk: `Option::take()` single-shot guards on child/handles.
     // Revert plain value → shutdown then drop double-wait/join → panic or UB.
     //
-    // Child: same deno dial-back read-until-EOF child. Deno-gated.
+    // Child: same node dial-back read-until-EOF child. Node-gated.
     #[test]
     fn test_double_teardown_idempotent() {
         if !is_available() {
             return;
         }
         watchdog(Duration::from_secs(30), || {
-            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+            let (cmd, _script) = node_dialback_child(DIALBACK_READ_UNTIL_EOF);
             let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 
@@ -4007,18 +4028,18 @@ mod proc_tests {
     }
 
     // -----------------------------------------------------------------------
-    // Row 14 — Real multiplex smoke (deno-gated; SKIPPED if deno not on PATH)
+    // Row 14 — Real multiplex smoke (node-gated; SKIPPED if node not found)
     // -----------------------------------------------------------------------
     //
     // Named revert hunk: newline-delimiter framing in TcpTransport/TcpReadHalf.
     // Revert framing → N distinct ids fail to round-trip → assertion fails.
     //
-    // Child: a deno dial-back echo child that reads Request frames off the
+    // Child: a node dial-back echo child that reads Request frames off the
     // control socket and replies Loaded{name: enginePath} per LoadEngine.
-    // SKIPPED in CI only if deno is absent (CI always installs it).
+    // SKIPPED in CI only if node is absent (CI always provisions it).
     #[test]
-    fn test_real_multiplex_smoke_deno() {
-        // Skip if deno is not on PATH.
+    fn test_real_multiplex_smoke_node() {
+        // Skip if node is not found.
         if !is_available() {
             return;
         }
@@ -4029,12 +4050,10 @@ mod proc_tests {
             // Shutdown. Uses the `conn`/`dec`/`enc` bindings the preamble leaves
             // in scope.
             let body = r#"
-const buf = new Uint8Array(1024 * 64);
 let pending = "";
-while (true) {
-  const n = await conn.read(buf);
-  if (n === null) break;
-  pending += dec.decode(buf.subarray(0, n));
+conn.setEncoding("utf8");
+conn.on("data", (chunk) => {
+  pending += chunk;
   let idx;
   while ((idx = pending.indexOf("\n")) !== -1) {
     const line = pending.slice(0, idx).trim();
@@ -4042,19 +4061,18 @@ while (true) {
     if (!line) continue;
     const req = JSON.parse(line);
     if (req.msg && req.msg.type === "loadEngine") {
-      const resp = JSON.stringify({
+      conn.write(JSON.stringify({
         id: req.id,
         msg: { type: "loaded", discovery: { name: req.msg.enginePath, validExtensions: [] } }
-      }) + "\n";
-      await conn.write(enc.encode(resp));
+      }) + "\n");
     } else if (req.msg && req.msg.type === "shutdown") {
-      Deno.exit(0);
+      process.exit(0);
     }
   }
-}
-Deno.exit(0);
+});
+conn.on("end", () => process.exit(0));
 "#;
-            let (cmd, _script) = deno_dialback_child(body);
+            let (cmd, _script) = node_dialback_child(body);
 
             let host = Arc::new(
                 TsEngineHost::start_with_command(cmd, make_host_global_config())
@@ -4103,26 +4121,23 @@ Deno.exit(0);
     // Named revert hunk: shared `Arc<Mutex<Option<Child>>>` reap in
     // `handle_crash`.  Revert → code/stderr not captured → assertion fails.
     //
-    // Child: a deno dial-back child that writes a stderr line, sleeps 0.3s,
+    // Child: a node dial-back child that writes a stderr line, sleeps 0.3s,
     // then SIGKILLs itself (so ExitStatus::code() == None). It dials back but
     // never replies on the socket, so any in-flight request blocks until the
-    // crash. Deno-gated.
+    // crash. Node-gated.
     #[test]
     fn test_real_crash_reaps_and_reports() {
         if !is_available() {
             return;
         }
         watchdog(Duration::from_secs(30), || {
-            let (cmd, _script) = deno_dialback_child(
+            let (cmd, _script) = node_dialback_child(
                 r#"
 console.error("fatal: boom");
 await new Promise((r) => setTimeout(r, 300));
-Deno.kill(Deno.pid, "SIGKILL");
-// Idle-timer loop (a real pending op), NOT `new Promise(() => {})`: if SIGKILL
-// is momentarily delayed, deno's deadlock detector would otherwise abort with
-// "Top-level await promise never resolved" and exit code 1, breaking the
-// code==None (killed-by-signal) assertion. Wait on a timer until the signal lands.
-while (true) { await new Promise((r) => setTimeout(r, 3600000)); }
+process.kill(process.pid, "SIGKILL");
+// Keep the event loop alive until the signal lands.
+setInterval(() => {}, 3600000);
 "#,
             );
             let host = Arc::new(
@@ -4170,15 +4185,15 @@ while (true) { await new Promise((r) => setTimeout(r, 3600000)); }
     // Named revert hunk: `is_alive()` — `child.lock().unwrap().is_some()`.
     // Revert (always false) → `assert!(host.is_alive())` after start → RED.
     //
-    // Child: a deno dial-back read-until-EOF child — stays alive until the
-    // socket read side closes (i.e. until shutdown). Deno-gated.
+    // Child: a node dial-back read-until-EOF child — stays alive until the
+    // socket read side closes (i.e. until shutdown). Node-gated.
     #[test]
     fn test_is_alive_lifecycle_real_spawn() {
         if !is_available() {
             return;
         }
         watchdog(Duration::from_secs(30), || {
-            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+            let (cmd, _script) = node_dialback_child(DIALBACK_READ_UNTIL_EOF);
             let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 
@@ -4197,14 +4212,14 @@ while (true) { await new Promise((r) => setTimeout(r, 3600000)); }
     }
 
     // -----------------------------------------------------------------------
-    // Task 3 — spawn_count increments once (Deno-gated)
+    // Task 3 — spawn_count increments once (Node-gated)
     // -----------------------------------------------------------------------
     //
     // Named revert hunk: `#[cfg(test)] spawn_count` increment in
     // `ensure_started_inner`.
     // Revert → count stays 0 → `spawn_count() == 1` assertion fails RED.
     //
-    // Gate: skip if Deno is absent.  Uses a trivial dial-back read-until-EOF
+    // Gate: skip if Node is absent.  Uses a trivial dial-back read-until-EOF
     // child so we exercise the real spawn path via `start_with_command`.
     #[test]
     fn test_spawn_count_increments_once() {
@@ -4212,7 +4227,7 @@ while (true) { await new Promise((r) => setTimeout(r, 3600000)); }
             return;
         }
         watchdog(Duration::from_secs(30), || {
-            let (cmd, _script) = deno_dialback_child(DIALBACK_READ_UNTIL_EOF);
+            let (cmd, _script) = node_dialback_child(DIALBACK_READ_UNTIL_EOF);
             let host = TsEngineHost::start_with_command(cmd, make_host_global_config())
                 .expect("start_with_command failed");
 
@@ -4237,7 +4252,7 @@ while (true) { await new Promise((r) => setTimeout(r, 3600000)); }
 }
 
 // ============================================================================
-// Bundle extraction unit test (plain #[cfg(test)], no deno, no unix gate)
+// Bundle extraction unit test (plain #[cfg(test)], no node, no unix gate)
 // ============================================================================
 
 #[cfg(test)]
@@ -4288,7 +4303,7 @@ mod bundle_tests {
         // --- Distinct bytes → distinct filename (hash-binding vacuity guard) ---
         let alt_bytes = b"different content";
         let alt_hash = bundle_content_hash(alt_bytes);
-        let alt_filename = format!("engine-host-deno-{alt_hash}.js");
+        let alt_filename = format!("engine-host-node-{alt_hash}.mjs");
 
         // Write a second "bundle" with different bytes directly, then verify
         // the hash would differ from the real one.
@@ -4360,16 +4375,16 @@ mod bundle_tests {
         );
     }
 
-    /// When QUARTO_CI=1 (set in test-suite.yml), Deno MUST be on PATH — turns the
+    /// When QUARTO_CI=1 (set in test-suite.yml), Node >= 24 MUST be found — turns the
     /// otherwise-silent `is_available()` skip into a hard CI failure if provisioning
     /// regresses. Locally with no QUARTO_CI set, this is a no-op pass.
     #[test]
-    fn deno_available_when_quarto_ci() {
+    fn node_available_when_quarto_ci() {
         if std::env::var("QUARTO_CI").as_deref() == Ok("1") {
             assert!(
                 is_available(),
-                "QUARTO_CI=1 but `deno --version` failed — CI must provision Deno \
-                 (test-suite.yml 'Set up Deno' step)"
+                "QUARTO_CI=1 but no usable Node.js (>= 24) was found — CI must provision \
+                 Node (test-suite.yml 'Set up Node' step)"
             );
         }
     }

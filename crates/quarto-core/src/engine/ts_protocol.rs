@@ -2,13 +2,13 @@
  * engine/ts_protocol.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * JSON wire protocol types for q2 ↔ Deno engine-host communication.
+ * JSON wire protocol types for q2 ↔ Node engine-host communication.
  *
  * Pure serde data — no behavior, no conversion logic, no subprocess code.
  * Conversions to/from q2-native types live in a later plan's `ts_engine.rs`.
  */
 
-//! JSON wire protocol types for q2 ↔ Deno engine-host communication.
+//! JSON wire protocol types for q2 ↔ Node engine-host communication.
 //!
 //! All types carry `#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]`
 //! so callers can construct, assert, and compare protocol values in tests.
@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 
 // ==================== Message enums ====================
 
-/// Messages from Rust (q2) → Deno engine host.
+/// Messages from Rust (q2) → Node engine host.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(tag = "type", rename_all_fields = "camelCase")]
 pub enum ToEngine {
@@ -101,7 +101,7 @@ pub enum ToEngine {
     Cancel { target: u64 },
 }
 
-/// Messages from Deno engine host → Rust (q2).
+/// Messages from Node engine host → Rust (q2).
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(tag = "type", rename_all_fields = "camelCase")]
 pub enum FromEngine {
@@ -1599,14 +1599,14 @@ mod tests {
     //     wire-key rename actually changes the fixture's key-set (defeating the
     //     "two hand lists survive their own revert" Dv/Dv collapse trap).
     //
-    //   Deno side (src/wire-parity.deno-test.ts): reads the same fixture and
+    //   TS side (src/wire-parity.test.ts): reads the same fixture and
     //     set-equates each instance's `Object.keys(...)` against a `KEYS` list
     //     pinned to the TS wire type via `satisfies readonly (keyof T)[]` + an
     //     `_Exhaustive` compile guard. Symmetric set-equality binds Rust shape
     //     (fixture), TS shape (type), and the runtime KEYS list together.
     //
     // The fixture lives at `tests/fixtures/ts_wire_parity.json` (relative to
-    // this crate). This test WRITES it (under regen); the deno test READS it.
+    // this crate). This test WRITES it (under regen); the vitest READS it.
     //
     // Idiomatic invocation (schema_drift.rs-style):
     //
@@ -1630,7 +1630,7 @@ mod tests {
     /// Recursively sort the keys of every JSON object so the committed fixture
     /// is stable regardless of the workspace-wide `serde_json/preserve_order`
     /// feature (see schema_drift.rs for the same rationale). Key ORDER does not
-    /// matter to the deno set-equality, but a stable file avoids spurious diffs.
+    /// matter to the TS set-equality, but a stable file avoids spurious diffs.
     fn canonicalize_keys(value: serde_json::Value) -> serde_json::Value {
         use serde_json::Value;
         match value {
@@ -1729,14 +1729,14 @@ mod tests {
             "TS↔Rust wire-parity fixture drift.\n\
              The checked-in fixture {} {} does not match the JSON serialized from\n\
              the current wire-dual types in this file. This fixture is the Rust\n\
-             half of the T-Gate-parity check (the deno half is\n\
-             src/wire-parity.deno-test.ts). To regenerate, run:\n\
+             half of the T-Gate-parity check (the TS half is\n\
+             src/wire-parity.test.ts). To regenerate, run:\n\
              \n\
              \tQUARTO_REGEN_WIRE_FIXTURES=1 cargo nextest run -p quarto-core -E \\\n\
              \t  'test(ts_protocol::tests::test_ts_wire_parity_fixture)'\n\
              \n\
              Then review the diff AND update the matching TS type in\n\
-             ts-packages/quarto-engine-host-deno/src/types.ts before committing.",
+             ts-packages/quarto-engine-host-node/src/types.ts before committing.",
             path.display(),
             existing_summary,
         );

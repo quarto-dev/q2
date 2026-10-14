@@ -11,11 +11,13 @@
  *
  * Claims the "synthsub" language as Primary(priority 1) and echoes the
  * fenced block's content back inside an executed-cell wrapper, so an e2e
- * render can assert the real Deno engine host actually ran it. Structurally
+ * render can assert the real Node engine host actually ran it. Structurally
  * mirrors `../../../extensions/alpha/src/alpha.ts` (the simplest existing
  * synthetic-engine fixture); the echo-back behavior mirrors
  * `../../../extensions/echo-engine/src/echo-engine.ts`.
  */
+
+import { readFileSync } from "node:fs";
 
 import type {
   ExecutionEngineDiscovery,
@@ -67,7 +69,7 @@ const synthEchoEngine: ExecutionEngineDiscovery = {
       canFreeze: false,
 
       async markdownForFile(file: string) {
-        const text = Deno.readTextFileSync(file);
+        const text = readFileSync(file, "utf8");
         return _quarto!.mappedString.fromString(text, file);
       },
 

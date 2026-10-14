@@ -11,7 +11,7 @@ pub struct BuildTsExtensionArgs {
     pub path: Option<PathBuf>,
     /// Explicit `--config` override; wins over all other config sources.
     pub config: Option<PathBuf>,
-    /// Force use of workspace `deno.workspace.json` (in-repo / pre-publish build).
+    /// Force use of the workspace aliases (in-repo / pre-publish build).
     pub workspace: bool,
 }
 
@@ -21,6 +21,7 @@ pub fn execute(args: BuildTsExtensionArgs) -> Result<()> {
             ext_dir: args.path,
             config: args.config,
             workspace: args.workspace,
+            workspace_root: None,
         },
     )?;
     Ok(())

@@ -8,7 +8,7 @@
  * Spec table + vacuity notes, and the "Static-claims design (Option B)"
  * table.
  *
- * These are pure resolver tests: **no engine load, no subprocess, no deno,
+ * These are pure resolver tests: **no engine load, no subprocess, no node,
  * no uv, no render.** They bind 4c0's Vec-per-language claims-combine
  * machinery (`crates/quarto-core/src/extension/types.rs`) + the committed
  * marimo fixture's Option B claims map (`_extension.yml`) through the REAL

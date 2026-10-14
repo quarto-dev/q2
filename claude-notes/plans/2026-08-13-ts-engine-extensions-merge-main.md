@@ -4,6 +4,8 @@ date: 2026-08-13
 description: 'Step-by-step runbook for merging main into the TS engine extensions work, resolving the conflicted files by hand rather than rebasing, and applying the design changes the merge forces.'
 ---
 
+> **Superseded in part (2026-10-13):** TS engine extensions now run on **Node 24+**, not Deno (`QUARTO_NODE`, PATH, version managers). Read "Deno" below as the historical engine-host runtime. See `2026-10-13-ts-engines-deno-to-node.md` and `docs/guides/extensions/ts-engines-node.qmd`.
+
 > **What this is:** a runbook for bringing `feature/ts-engine-extensions` up to
 > date with `main` via a **merge**, plus the design changes that merge forces us
 > to make. It is written to be executed by someone with **no prior context** —
