@@ -3477,6 +3477,7 @@ dependencies = [
  "quarto-highlight",
  "quarto-math",
  "quarto-navigation",
+ "quarto-node-discovery",
  "quarto-pandoc-types",
  "quarto-sass",
  "quarto-source-map",
@@ -3641,6 +3642,14 @@ dependencies = [
  "quarto-source-map",
  "quarto-util",
  "yaml-rust2",
+]
+
+[[package]]
+name = "quarto-node-discovery"
+version = "0.32.0"
+dependencies = [
+ "dirs",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
