@@ -2,10 +2,10 @@
  * tests/integration/marimo_engine_e2e.rs
  * Copyright (c) 2026 Posit, PBC
  *
- * Plan 4c (marimo validation) — Test Seam Spec SC8, the marimo+deno+uv-gated
+ * Plan 4c (marimo validation) — Test Seam Spec SC8, the marimo+node+uv-gated
  * END-TO-END row for Phase 4cB (minimal marimo render, static claims path).
  * Drives the committed marimo-engine fixture (Phase 4cA) through the REAL
- * render path — a TS engine spawning the Deno engine-host subprocess, which
+ * render path — a TS engine spawning the Node engine-host subprocess, which
  * in turn spawns marimo via `uv run` — and asserts the whole chain works:
  * discovery → static resolution (the `whenClass: marimo` `python` claim,
  * priority 2) → LoadEngine / LaunchEngine / execute → marimo's own
@@ -15,9 +15,9 @@
  * Harness mirrors `julia_engine_e2e.rs`'s J1 row, with one gating
  * difference: marimo has no daemon binary of its own (the default render
  * path shells out to `uv run --with marimo …`), so this test is gated on
- * `deno` + `uv` on PATH — NOT a `marimo` binary (there is deliberately no
+ * `node` + `uv` on PATH — NOT a `marimo` binary (there is deliberately no
  * global `marimo` install; `uv` resolves it into an ephemeral environment on
- * first run). On a machine with BOTH `deno` and `uv` present this test RUNS
+ * first run). On a machine with BOTH `node` and `uv` present this test RUNS
  * — a skip there is a signal something is wrong, not a pass (Test Seam
  * Spec, CI gating).
  *
@@ -51,13 +51,7 @@ use tempfile::TempDir;
 use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-/// Return `true` when `deno` is on PATH (the engine-host subprocess runtime).
-fn deno_available() -> bool {
-    Command::new("deno")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use quarto_core::engine::ts_process::node_available_for_tests;
 
 /// Return `true` when `uv` is on PATH (marimo's default render-path
 /// resolver — there is deliberately no global `marimo` binary; `uv run
@@ -142,8 +136,7 @@ fn setup_marimo_project() -> TempDir {
 // variant is DERIVED at test-setup time from the single committed fixture:
 // copy `_extensions/marimo/` into the tempdir (as `setup_marimo_project`
 // does), then rewrite ONLY the tempdir copy's `_extension.yml` to drop the
-// `claims:` map (keeping `name`/`path`/`title`/`author`/`version`/
-// `quarto-required` — everything else). With `self.claims == None`,
+// `claims:` map (keeping every sibling key). With `self.claims == None`,
 // `TsEngine::claims_language` (`ts_engine.rs:668` else-branch) and
 // `TsEngine::claims_file` (`ts_engine.rs:735` step 3) both take the
 // LEGACY DYNAMIC path: `ensure_loaded` + a live `ClaimsLanguage`/`ClaimsFile`
@@ -154,14 +147,16 @@ fn setup_marimo_project() -> TempDir {
 // report).
 //
 // The rewrite is a targeted line-drop (find the `claims:` key under the
-// engine's map, truncate there) rather than a hardcoded second YAML, so it
-// tracks the committed fixture's header fields (title/author/version/
-// quarto-required) automatically if they ever change. `assert!`s below turn
-// a future `_extension.yml` shape change (e.g. a trailing key coming AFTER
-// `claims:`) into an obvious test-setup failure rather than a silent
+// engine's map and its nested lines) rather than a hardcoded second YAML, so it
+// tracks the committed fixture's other keys automatically if they ever
+// change. `assert!`s below turn a future `_extension.yml` shape change into
+// an obvious test-setup failure rather than a silent
 // wrong-fixture bug.
 //
-// Also appends `claims-files: []` (ratified anti-vacuity correction, task
+// (Since the 0.6.0 re-sync the fork's `_extension.yml` itself declares
+// `claims-files: []`, so the rewrite only drops the `claims:` block and keeps
+// every sibling key. The rationale below is why that empty list matters.)
+// The empty `claims-files: []` is the ratified anti-vacuity correction (task
 // 4cB2's Risk-1 evidence: without it, `TsEngine::claims_file`
 // (`ts_engine.rs:735` step 3) takes the DYNAMIC content-inspecting path —
 // loads the unmodified engine and calls its live `claimsFile`, which
@@ -184,27 +179,39 @@ fn setup_marimo_project() -> TempDir {
 // report's Risk-1 evidence trail for the full before/after transcript.
 fn write_claims_less_extension_yml(extension_yml_path: &Path) {
     let original = std::fs::read_to_string(extension_yml_path).unwrap();
-    let claims_line_idx = original
-        .lines()
+    let lines: Vec<&str> = original.lines().collect();
+    let claims_idx = lines
+        .iter()
         .position(|line| line.trim_start() == "claims:")
         .expect("committed _extension.yml must have a top-level `claims:` key to drop");
-    let derived: String = original
-        .lines()
-        .take(claims_line_idx)
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n      claims-files: []\n";
+    let claims_indent = lines[claims_idx].len() - lines[claims_idx].trim_start().len();
+    // Drop the `claims:` key and everything nested under it (deeper indent,
+    // or blank/comment lines inside the block); keep every sibling key,
+    // including the static `claims-files: []` and `file-extensions`.
+    let block_end = lines[claims_idx + 1..]
+        .iter()
+        .position(|line| {
+            !line.trim().is_empty()
+                && !line.trim_start().starts_with('#')
+                && line.len() - line.trim_start().len() <= claims_indent
+        })
+        .map_or(lines.len(), |i| claims_idx + 1 + i);
+    let derived: String = lines[..claims_idx]
+        .iter()
+        .chain(lines[block_end..].iter())
+        .map(|l| format!("{l}\n"))
+        .collect();
     assert!(
         derived.contains("name: marimo"),
         "derived _extension.yml must keep the `name: marimo` key; got:\n{derived}"
     );
     assert!(
-        !derived.contains("claims:"),
+        !derived.lines().any(|l| l.trim_start() == "claims:"),
         "derived _extension.yml must NOT contain a `claims:` key; got:\n{derived}"
     );
     assert!(
         derived.contains("claims-files: []"),
-        "derived _extension.yml must declare an empty `claims-files:` list \
+        "derived _extension.yml must keep the empty `claims-files:` list \
          (disables the whole-file dynamic claims_file short-circuit); got:\n{derived}"
     );
     std::fs::write(extension_yml_path, derived).unwrap();
@@ -227,7 +234,43 @@ fn render_html(input: &Path) -> anyhow::Result<String> {
     let options = RenderToFileOptions::default();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let result = render_to_file(input, "html", &options, runtime)?;
-    Ok(std::fs::read_to_string(&result.output_path).expect("read rendered HTML"))
+    let html = std::fs::read_to_string(&result.output_path).expect("read rendered HTML");
+    Ok(with_decoded_islands(html))
+}
+
+/// The marimo engine ships each cell as a `<marimo-quarto-island
+/// data-marimo-payload="…" data-marimo-payload-encoding="base64url">`: the
+/// cell's rendered markup (`<marimo-cell-output>`, `<marimo-table>`, …) lives
+/// inside a base64url JSON payload (`cell.html`), not in the page body. To
+/// keep the content assertions below readable, append every decoded
+/// `cell.html` after `</html>` (the browser ignores trailing text; the
+/// assertions only ever `contains`-check). Signature checks stay on the raw
+/// island element via `has_marimo_signature`.
+fn with_decoded_islands(mut html: String) -> String {
+    use base64::Engine as _;
+    const ATTR: &str = "data-marimo-payload=\"";
+    let mut rest = html.clone();
+    while let Some(at) = rest.find(ATTR) {
+        rest = rest[at + ATTR.len()..].to_string();
+        let end = rest.find('"').expect("unterminated data-marimo-payload");
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(&rest[..end])
+            .expect("payload must be unpadded base64url");
+        let payload: serde_json::Value = serde_json::from_slice(&bytes).expect("payload JSON");
+        if let Some(cell_html) = payload["cell"]["html"].as_str() {
+            html.push('\n');
+            html.push_str(cell_html);
+        }
+    }
+    html
+}
+
+/// Marimo-ownership signature: the island element the engine emits for each
+/// owned cell, plus the `include-in-header` browser bundle it splices in
+/// (`<style|script data-marimo-islands>`). Jupyter or any fallback emits
+/// neither.
+fn has_marimo_signature(html: &str) -> bool {
+    html.contains("<marimo-quarto-island ") && html.contains("data-marimo-islands>")
 }
 
 /// The Phase 4cB minimal document, byte-identical to the committed fixture
@@ -307,7 +350,7 @@ fn body_excerpt(html: &str) -> String {
 
 // ── SC8: minimal marimo render, static claims path (Phase 4cB) ────────────
 //
-// Renders the 4cB minimal doc through the full chain with real Deno + real
+// Renders the 4cB minimal doc through the full chain with real Node + real
 // `uv`/marimo (no mocks): discovery → static `Primary(2)` resolution of the
 // `whenClass: marimo` claim on `python` → LoadEngine / LaunchEngine /
 // execute → marimo's own `MarimoMdParser` runs `1 + 1` → the
@@ -361,9 +404,9 @@ fn body_excerpt(html: &str) -> String {
 // test re-confirmed GREEN against the pristine fixture immediately after.
 #[test]
 fn sc8_minimal_marimo_render_shows_marimo_signature_and_result() {
-    if !deno_available() {
+    if !node_available_for_tests() {
         eprintln!(
-            "SKIP: deno not on PATH — sc8_minimal_marimo_render_shows_marimo_signature_and_result"
+            "SKIP: node not found — sc8_minimal_marimo_render_shows_marimo_signature_and_result"
         );
         return;
     }
@@ -384,7 +427,7 @@ fn sc8_minimal_marimo_render_shows_marimo_signature_and_result() {
     // header construction (293-327) — the trust marker script and/or the
     // hidden notebook-source tag.
     assert!(
-        html.contains("__MARIMO_EXPORT_CONTEXT__") || html.contains("<marimo-code"),
+        has_marimo_signature(&html),
         "rendered HTML must contain a marimo-specific signature \
          (__MARIMO_EXPORT_CONTEXT__ or <marimo-code, injected via \
          include-in-header) — proves marimo actually owned and executed the \
@@ -426,10 +469,8 @@ fn sc8_minimal_marimo_render_shows_marimo_signature_and_result() {
 // why it is NOT a committed passing test yet).
 #[test]
 fn p4cb2_dynamic_path_parity_minimal_render_matches_static() {
-    if !deno_available() {
-        eprintln!(
-            "SKIP: deno not on PATH — p4cb2_dynamic_path_parity_minimal_render_matches_static"
-        );
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — p4cb2_dynamic_path_parity_minimal_render_matches_static");
         return;
     }
     if !uv_available() {
@@ -443,7 +484,7 @@ fn p4cb2_dynamic_path_parity_minimal_render_matches_static() {
     let html = render_html(&input).expect("marimo render (dynamic claims path) must succeed");
 
     assert!(
-        html.contains("__MARIMO_EXPORT_CONTEXT__") || html.contains("<marimo-code"),
+        has_marimo_signature(&html),
         "dynamic-path render must contain a marimo-specific signature, matching \
          SC8's static-path result; got:\n{}",
         body_excerpt(&html)
@@ -509,9 +550,9 @@ fn p4cb2_dynamic_path_parity_minimal_render_matches_static() {
 // see the RED-by-revert note on the test below.
 #[test]
 fn sc9_bare_sql_interop_dynamic_path_marimo_executes_sql_cell() {
-    if !deno_available() {
+    if !node_available_for_tests() {
         eprintln!(
-            "SKIP: deno not on PATH — sc9_bare_sql_interop_dynamic_path_marimo_executes_sql_cell"
+            "SKIP: node not found — sc9_bare_sql_interop_dynamic_path_marimo_executes_sql_cell"
         );
         return;
     }
@@ -531,7 +572,7 @@ fn sc9_bare_sql_interop_dynamic_path_marimo_executes_sql_cell() {
     // Discriminator half 1 (python cell, same as SC8/the 4cB2 parity test):
     // marimo-specific signature + the executed `1 + 1` result.
     assert!(
-        html.contains("__MARIMO_EXPORT_CONTEXT__") || html.contains("<marimo-code"),
+        has_marimo_signature(&html),
         "rendered HTML must contain a marimo-specific signature; got:\n{}",
         body_excerpt(&html)
     );
@@ -628,10 +669,8 @@ fn sc9_bare_sql_interop_dynamic_path_marimo_executes_sql_cell() {
 // consumer, plan correction 6).
 #[test]
 fn sc10_widget_render_shows_header_include_and_body_island() {
-    if !deno_available() {
-        eprintln!(
-            "SKIP: deno not on PATH — sc10_widget_render_shows_header_include_and_body_island"
-        );
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — sc10_widget_render_shows_header_include_and_body_island");
         return;
     }
     if !uv_available() {
@@ -651,7 +690,7 @@ fn sc10_widget_render_shows_header_include_and_body_island() {
     // into `<head>` (confirmed in the manual render above: neither marker
     // appears anywhere in `<body>`).
     assert!(
-        html.contains("__MARIMO_EXPORT_CONTEXT__") || html.contains("<marimo-code"),
+        has_marimo_signature(&html),
         "rendered HTML must contain header content routed via \
          includes[\"include-in-header\"] (__MARIMO_EXPORT_CONTEXT__ or \
          <marimo-code); got:\n{}",
@@ -748,8 +787,8 @@ fn sc10_widget_render_shows_header_include_and_body_island() {
 // adds the minimal import cell needed to actually observe execution.
 #[test]
 fn sc13_e2e_tagged_sql_self_activation_renders() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — sc13_e2e_tagged_sql_self_activation_renders");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — sc13_e2e_tagged_sql_self_activation_renders");
         return;
     }
     if !uv_available() {
@@ -763,7 +802,7 @@ fn sc13_e2e_tagged_sql_self_activation_renders() {
     let html = render_html(&input).expect("tagged-sql-only marimo render must succeed");
 
     assert!(
-        html.contains("__MARIMO_EXPORT_CONTEXT__") || html.contains("<marimo-code"),
+        has_marimo_signature(&html),
         "rendered HTML must contain a marimo-specific signature; got:\n{}",
         body_excerpt(&html)
     );
@@ -851,8 +890,8 @@ fn sc13_e2e_tagged_sql_self_activation_renders() {
 // extension author ships by default).
 #[test]
 fn sc14_e2e_static_sql_interop_both_execute_via_marimo() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — sc14_e2e_static_sql_interop_both_execute_via_marimo");
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — sc14_e2e_static_sql_interop_both_execute_via_marimo");
         return;
     }
     if !uv_available() {
@@ -868,7 +907,7 @@ fn sc14_e2e_static_sql_interop_both_execute_via_marimo() {
 
     // Discriminator half 1 (python cell, same markers SC8/SC9 use).
     assert!(
-        html.contains("__MARIMO_EXPORT_CONTEXT__") || html.contains("<marimo-code"),
+        has_marimo_signature(&html),
         "rendered HTML must contain a marimo-specific signature; got:\n{}",
         body_excerpt(&html)
     );
@@ -974,9 +1013,9 @@ fn sc14_e2e_static_sql_interop_both_execute_via_marimo() {
 // `[1] 2` output), with no unexecuted-fence marker for either language.
 #[test]
 fn sc16_e2e_marimo_knitr_coexistence_leaves_each_other_alone() {
-    if !deno_available() {
+    if !node_available_for_tests() {
         eprintln!(
-            "SKIP: deno not on PATH — sc16_e2e_marimo_knitr_coexistence_leaves_each_other_alone"
+            "SKIP: node not found — sc16_e2e_marimo_knitr_coexistence_leaves_each_other_alone"
         );
         return;
     }
@@ -1121,104 +1160,47 @@ fn sc16_e2e_marimo_knitr_coexistence_leaves_each_other_alone() {
 // here). Fixture restored byte-identical afterward; this test re-confirmed
 // GREEN against the pristine fixture immediately after.
 
-// ── SC18: execute() catch shows an error marker, not a crash (Phase 4cD) ───
+// ── SC18: a failing marimo subprocess fails the render loudly (Phase 4cD) ──
 //
-// SC18's frozen row (Test Seam Spec, plan file): render a syntactically-bad
-// marimo cell -> error-marked output substring, gated on marimo/uv, proving
-// `execute()`'s try/catch (marimo-engine.ts ~319-329) converts a subprocess
-// failure into "Error executing marimo" output rather than propagating it
-// and hard-failing the render.
+// History: the old marimo engine caught execution failures and spliced an
+// "Error executing marimo: …" code block into the page, so the render
+// completed. The rewritten upstream engine (`src/engine/index.ts`) has no
+// such catch: `runMarimoCompiler` throws and the render fails with the
+// subprocess's own message ("Execution failed in marimo: …"). That is a
+// deliberate behavior change, so this row now pins the new contract: the
+// failure must surface as a render error carrying uv's diagnostic, never as
+// a silently-wrong page.
 //
-// Dated annotation (2026-07-03, task 4cD-e2e): the brief's suggested
-// trigger — a cell body with a Python `SyntaxError` (e.g. `def (:`) — was
-// tried FIRST and found NOT to reach this catch. Rendering a
-// `{python .marimo}` cell containing `def (:` SUCCEEDS (exit 0) and
-// produces, in the body:
-//
-//   <pre class="marimo-error">SyntaxError: invalid syntax (<unknown>, line 1)</pre>
-//
-// This is marimo's OWN per-cell parse-error isolation (`extract.py`'s
-// `_ParseError` sentinel, wrapping each `app.add_code(...)` call in its own
-// `try`/`except Exception`, documented in `extract.py`'s own doc comment as
-// existing precisely "to surface parse-time exceptions... that would
-// otherwise be swallowed"): the failure is caught INSIDE the Python
-// subprocess, per-cell, before the subprocess ever exits non-zero — so
-// `executePython`'s `if (!output.success) throw ...` never fires, and
-// `execute()`'s OUTER try/catch (the actual unit this row is about) is
-// never reached at all. The row's suggested trigger and its actual target
-// unit are mismatched.
-//
-// The alternate trigger used instead — an unresolvable `pyproject`
-// dependency name (`this-package-definitely-does-not-exist-q2-sc18-test-xyz`)
-// — reaches the SAME code path the row names: `uv run --with <bad-package>`
-// fails at the SUBPROCESS level (non-zero exit), `executePython` throws
-// `Process execution failed: ...`, and `execute()`'s outer catch converts
-// it into the exact error-marked output substring this row specifies.
+// Trigger: an unresolvable `pyproject` dependency name
+// (`this-package-definitely-does-not-exist-q2-sc18-test-xyz`) makes
+// `uv run --with <bad-package>` fail at the SUBPROCESS level (non-zero exit).
+// (A Python `SyntaxError` cell body does not reach this path: marimo isolates
+// parse errors per cell and the render succeeds with a `marimo-error` block.)
 #[test]
-fn sc18_e2e_execute_catch_shows_error_marker_not_crash() {
-    if !deno_available() {
-        eprintln!("SKIP: deno not on PATH — sc18_e2e_execute_catch_shows_error_marker_not_crash");
+fn sc18_e2e_execute_failure_fails_render_with_subprocess_message() {
+    if !node_available_for_tests() {
+        eprintln!(
+            "SKIP: node not found — sc18_e2e_execute_failure_fails_render_with_subprocess_message"
+        );
         return;
     }
     if !uv_available() {
-        eprintln!("SKIP: uv not on PATH — sc18_e2e_execute_catch_shows_error_marker_not_crash");
+        eprintln!(
+            "SKIP: uv not on PATH — sc18_e2e_execute_failure_fails_render_with_subprocess_message"
+        );
         return;
     }
     let tmp = setup_marimo_project();
     let input = tmp.path().join("execute_error.qmd");
     write_file(&input, EXECUTE_ERROR_DOC);
 
-    let html = render_html(&input).expect(
-        "marimo render must COMPLETE (not hard-fail) even when the subprocess itself fails — \
-         execute()'s try/catch must convert the failure into error-marked output, not \
-         propagate it",
-    );
-
+    let err = render_html(&input)
+        .expect_err("a failing marimo subprocess must fail the render, not produce a page");
+    let message = format!("{err:#}");
     assert!(
-        html.contains("Error executing marimo"),
-        "rendered HTML must contain the engine's catch-block error marker \
-         ('Error executing marimo: ...'); got:\n{}",
-        body_excerpt(&html)
+        message.contains("Execution failed in marimo")
+            && message.contains("this-package-definitely-does-not-exist-q2-sc18-test-xyz"),
+        "render error must carry the engine's 'Execution failed in marimo' prefix and uv's \
+         diagnostic naming the unresolvable package; got:\n{message}"
     );
 }
-
-// RED-by-revert for `sc18_e2e_execute_catch_shows_error_marker_not_crash`
-// (named revert per the frozen Test Seam Spec row: "try/catch -> RED (render
-// throws)"): in a TEMPDIR-ONLY copy of the fixture bundle, neutered the
-// catch block in `marimo-engine.js`'s bundled `execute()` (corresponding to
-// upstream `marimo-engine.ts` ~319-329) to rethrow instead of converting to
-// error-marked output:
-//
-//   -  } catch (error) {
-//   -    quarto.console.error(`Error executing marimo: ${error}`);
-//   -    return {
-//   -      engine: "marimo",
-//   -      markdown: `\`\`\`
-//   -  Error executing marimo: ${error.message}
-//   -  \`\`\`
-//   -
-//   -  ${markdown}`,
-//   -      supporting: [],
-//   -      filters: []
-//   -    };
-//   -  }
-//   +  } catch (error) {
-//   +    throw error;
-//   +  }
-//
-// Re-rendering the SAME `EXECUTE_ERROR_DOC` through this reverted tempdir
-// bundle then fails the render OUTRIGHT (captured verbatim, no HTML
-// produced):
-//
-//   Error: Execution failed in marimo: Process execution failed:   × No solution found when resolving `--with` dependencies:
-//     ╰─▶ Because this-package-definitely-does-not-exist-q2-sc18-test-xyz
-//         was not found in the package registry and you require
-//         this-package-definitely-does-not-exist-q2-sc18-test-xyz, we can conclude
-//         that your requirements are unsatisfiable.
-//
-//   1 error
-//
-// i.e. the render throws instead of completing with error-marked output —
-// exactly the row's named RED. Fixture restored byte-identical afterward;
-// this test re-confirmed GREEN against the pristine fixture immediately
-// after.

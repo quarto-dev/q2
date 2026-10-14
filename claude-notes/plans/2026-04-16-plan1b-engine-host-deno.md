@@ -4,6 +4,8 @@ date: 2026-04-16
 description: 'Builds the Deno-side engine host, a TypeScript harness that receives framed requests, dispatches them concurrently across engines with per-engine serialization, and writes responses back to the Rust side.'
 ---
 
+> **Superseded in part (2026-10-13):** TS engine extensions now run on **Node 24+**, not Deno (`QUARTO_NODE`, PATH, version managers). Read "Deno" below as the historical engine-host runtime. See `2026-10-13-ts-engines-deno-to-node.md` and `docs/guides/extensions/ts-engines-node.qmd`.
+
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** plan1a-protocol (Rust core: protocol types), **RTQ
 (`plan1a-return-to-q1`)**, AND Plan 2A (`@quarto/api` foundation — the

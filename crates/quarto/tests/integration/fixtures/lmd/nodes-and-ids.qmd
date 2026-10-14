@@ -1,0 +1,43 @@
+---
+title: nodes and ids
+---
+
+```{lmd}
+name = "world"
+```
+
+## Hello, `{lmd} name`
+
+## Unmarked fragments, resolved by context
+
+```{lmd}
+return pandoc.Div({
+  {= A paragraph that stays a paragraph. =},
+  pandoc.Para({ pandoc.Strong({= bold via inline context =}) }),
+  {= a ``{lmd} {= nested `{lmd} name` =}`` c =},
+  pandoc.Nodes({ pandoc.Str("hand-built inlines become a Plain") }),
+}, pandoc.Attr("", {"box"}))
+```
+
+Inline: `{lmd} {= *hi*, =}` `{lmd} name`.
+
+## A fragment reused as a component
+
+````{lmd}
+local function card(title)
+  return {=:
+### `{lmd} title`
+
+Body.
+:=}
+end
+local out = pandoc.Blocks({})
+for _, t in ipairs({ "Hello", "Bye", "Hello" }) do out:extend(card(t)) end
+return out
+````
+
+```{lmd}
+return {=:
+### Pinned {#pinned}
+:=}
+```

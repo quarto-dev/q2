@@ -44,6 +44,8 @@ pub(crate) enum Grammar {
     Qmd,
     /// The Pandoc-template grammar (grammar name `doctemplate`).
     Doctemplate,
+    /// The lmd grammar: Lua 5.4 plus `{= markdown =}` (grammar name `lmd`).
+    Lmd,
 }
 
 impl Grammar {
@@ -56,6 +58,10 @@ impl Grammar {
             Grammar::Doctemplate => project_root
                 .join("crates")
                 .join("tree-sitter-doctemplate")
+                .join("grammar"),
+            Grammar::Lmd => project_root
+                .join("crates")
+                .join("tree-sitter-lmd")
                 .join("grammar"),
         }
     }
@@ -137,7 +143,7 @@ mod tests {
     #[test]
     fn grammar_dirs_exist_in_the_repo() {
         let root = crate::verify::find_project_root().unwrap();
-        for grammar in [Grammar::Qmd, Grammar::Doctemplate] {
+        for grammar in [Grammar::Qmd, Grammar::Doctemplate, Grammar::Lmd] {
             let dir = grammar.dir(&root);
             assert!(
                 dir.join("grammar.js").is_file(),

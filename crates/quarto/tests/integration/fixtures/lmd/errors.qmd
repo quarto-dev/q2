@@ -1,0 +1,55 @@
+---
+title: errors
+---
+
+A Lua syntax error (left as written):
+
+```{lmd}
+local x = 1
+return {= a =} +
+```
+
+A markdown error inside a fragment (left as written):
+
+```{lmd}
+return {=: This line mentions the groups' Unique IDs. :=}
+```
+
+An unsupported node inside a fragment (left as written):
+
+```{lmd}
+return {=:
+| a | b |
+|---|---|
+| 1 | 2 |
+:=}
+```
+
+A runtime error, displayed:
+
+```{lmd}
+local x = 1
+error("boom")
+```
+
+Wrong shapes, displayed:
+
+```{lmd}
+return {=[ inlines are not blocks ]=}
+```
+
+An inline runtime error `{lmd} nope()` and a wrong shape `{lmd} pandoc.Para({})` here.
+
+> ```{lmd}
+> local x = 1
+> error("quoted")
+> ```
+
+Invalid cell options:
+
+```{lmd}
+--| echo: [
+return nil
+```
+
+After everything.

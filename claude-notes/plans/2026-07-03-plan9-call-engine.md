@@ -7,6 +7,8 @@ braid:
   priority: P3
 ---
 
+> **Superseded in part (2026-10-13):** TS engine extensions now run on **Node 24+**, not Deno (`QUARTO_NODE`, PATH, version managers). Read "Deno" below as the historical engine-host runtime. See `2026-10-13-ts-engines-deno-to-node.md` and `docs/guides/extensions/ts-engines-node.qmd`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 > Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -4,6 +4,8 @@ date: 2026-04-16
 description: 'Grand plan for running TypeScript engine extensions in q2 through one shared Deno subprocess that speaks a multiplexed JSON protocol, validated against the Julia engine from Quarto 1.'
 ---
 
+> **Superseded in part (2026-10-13):** TS engine extensions now run on **Node 24+**, not Deno (`QUARTO_NODE`, PATH, version managers). Read "Deno" below as the historical engine-host runtime. See `2026-10-13-ts-engines-deno-to-node.md` and `docs/guides/extensions/ts-engines-node.qmd`.
+
 ## Overview
 
 Implement TypeScript engine extensions in q2 using a **Deno subprocess** architecture. Engine extensions are TypeScript modules (following Quarto 1's API) that q2 discovers, loads via a long-lived Deno subprocess, and communicates with via a **multiplexed JSON message protocol over the subprocess's stdin/stdout** (each frame carries an `id`; cross-engine requests run concurrently on the Deno event loop, serialized per engine instance). The shared subprocess is reached concurrently because **Pass-2 render is parallel** — see `claude-notes/designs/engine-host-concurrency.md`. (Moving the protocol off stdout onto loopback TCP, to delete the `console.log` footgun, is the deferred **Phase 1.6** cleanup.)

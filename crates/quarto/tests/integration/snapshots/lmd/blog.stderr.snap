@@ -1,0 +1,5 @@
+---
+source: crates/quarto/tests/integration/lmd_snapshots.rs
+expression: stderr
+---
+Rendered 4 of 4 files to <dir>/_site

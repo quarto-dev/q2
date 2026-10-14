@@ -1307,7 +1307,7 @@ mod tests {
     /// A listed percent `.py` and a listed spin `.R` both claim and convert
     /// natively through `EngineRegistry::new()`'s real built-in engines —
     /// no engine object beyond what the registry already constructed, and
-    /// **zero** `Rscript` launches (the Deno side has no built-in engine to
+    /// **zero** `Rscript` launches (the Node side has no built-in engine to
     /// launch here; its own zero-launch proof is
     /// `ts_engine::tests::markdown_for_file_processor_claim_dispatches_native_no_launch`).
     ///

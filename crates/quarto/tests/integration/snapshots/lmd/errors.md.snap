@@ -1,0 +1,51 @@
+---
+source: crates/quarto/tests/integration/lmd_snapshots.rs
+expression: md
+---
+A Lua syntax error (left as written):
+
+``` {.lmd .code-with-copy}
+local x = 1
+return {= a =} +
+```
+
+A markdown error inside a fragment (left as written):
+
+``` {.lmd .code-with-copy}
+return {=: This line mentions the groups' Unique IDs. :=}
+```
+
+An unsupported node inside a fragment (left as written):
+
+``` {.lmd .code-with-copy}
+return {=:
+| a | b |
+|---|---|
+| 1 | 2 |
+:=}
+```
+
+A runtime error, displayed:
+
+``` {.lmd .code-with-copy}
+local x = 1
+error("boom")
+```
+
+Wrong shapes, displayed:
+
+``` {.lmd .code-with-copy}
+return pandoc.Inlines({pandoc.Str("inlines"), pandoc.Space(), pandoc.Str("are"), pandoc.Space(), pandoc.Str("not"), pandoc.Space(), pandoc.Str("blocks")})
+```
+
+An inline runtime error `nope()`{.lmd} and a wrong shape
+`pandoc.Para({})`{.lmd} here.
+
+> ``` {.lmd .code-with-copy}
+> local x = 1
+> error("quoted")
+> ```
+
+Invalid cell options:
+
+After everything.

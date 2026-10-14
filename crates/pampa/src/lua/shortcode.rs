@@ -380,6 +380,9 @@ impl LuaShortcodeEngine {
     }
 
     fn build_meta_table(&self, args: &ShortcodeArgs) -> Result<Value> {
+        // quarto.metadata.get / global `meta` for shortcode handlers too
+        // (Q1 parity); cheap, and `args.metadata` is per call.
+        super::metadata::register_quarto_metadata(&self.lua, &args.metadata)?;
         // TS Quarto compat: `meta` supports both native chaining
         // (`meta.custom.nested.value`) via real nested tables, and Q1's
         // dotted-string lookup (`meta["custom.nested.value"]`, documented as

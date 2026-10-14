@@ -43,7 +43,7 @@ import type { QuartoMdChunks, QuartoMdCell } from "./markdown.js";
  * Namespaces are classified by their host dependency so engine authors know
  * what is safe to call without a live Deno or Node environment. The
  * canonical source for this table is the "Engine API contract"
- * section in `claude-notes/plans/2026-04-16-plan1b-engine-host-deno.md`;
+ * section in `claude-notes/plans/2026-04-16-plan1b-engine-host-node.md`;
  * this comment mirrors it.
  *
  * ### Pure — no PlatformHost required; work in any JavaScript environment
@@ -690,7 +690,7 @@ export interface QuartoAPI {
      *
      * The handler is SYNCHRONOUS (`() => void`). This is Q1-faithful: Q1's
      * cleanup registry (`core/cleanup.ts`) types the handler `VoidFunction`
-     * and calls it without `await`; denoHost's `onExit` registers an `unload`
+     * and calls it without `await`; nodeHost's `onExit` registers an `unload`
      * listener Deno does not await. The former `() => void | Promise<void>`
      * was an aspirational type Q1 never honored (pruned in Plan 2 B2). Note:
      * TS void-return assignability still lets a `() => Promise<void>` handler

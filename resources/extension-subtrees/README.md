@@ -26,7 +26,7 @@ vendored.
   P2, plan item 80). Refresh with
   `cargo xtask pull-extension-subtree orange-book`.
 - **`julia-engine/`** — the [Julia engine](https://github.com/PumasAI/quarto-julia-engine),
-  subtreed from the `q2-static-declarations` branch of
+  subtreed from the `q2/node-port` branch of
   `gordonwoodhull/quarto-julia-engine` (q2's upstream of record until the
   Q1 `external-engine` schema change ships in a stable Quarto 1 release;
   see `claude-notes/plans/2026-09-03-julia-engine-static-declarations-epic.md`,
