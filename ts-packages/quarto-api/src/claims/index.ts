@@ -6,7 +6,7 @@
  * instead of spelling out `{ kind: "primary" }` by hand.
  *
  * **Priority is intentionally omitted from no-arg calls** — the harness
- * (`@quarto/engine-host-deno`) owns the defaults (primary→1, interop/fallback→0)
+ * (`@quarto/engine-host-node`) owns the defaults (primary→1, interop/fallback→0)
  * and fills them in when normalizing to the wire type. Baking defaults here
  * would duplicate that logic and risk drift.
  */

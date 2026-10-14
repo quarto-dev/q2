@@ -1,0 +1,42 @@
+---
+source: crates/quarto/tests/integration/lmd_snapshots.rs
+expression: md
+---
+## Three forms, echoed
+
+``` {.lmd .code-with-copy}
+local unmarked = pandoc.Nodes({pandoc.Para({pandoc.Strong({pandoc.Str("hello")})})})
+local blocks = pandoc.Blocks({pandoc.Para({pandoc.Strong({pandoc.Str("hello")})})})
+local inlines = pandoc.Inlines({pandoc.Strong({pandoc.Str("hello")})})
+local strong = pandoc.Strong(pandoc.Inlines({pandoc.Emph({pandoc.Str("inner")})}))
+return pandoc.Div({ unmarked, blocks, pandoc.Para(inlines), pandoc.Para({ strong }) }, pandoc.Attr("", {"box"}))
+```
+
+::: box
+**hello**
+
+**hello**
+
+**hello**
+
+***inner***
+:::
+
+## Nesting in both directions
+
+::: card
+### Hello
+
+Some *body* text.
+:::
+
+## Immediate markdown values
+
+## A heading {#sec-a .cls key="val"}
+
+- one with *emphasis*
+- two with [a link](https://quarto.org "title")
+- three with `code` and $x^2$
+
+Plain text, "quoted", and a line\
+break.

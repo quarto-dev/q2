@@ -108,7 +108,7 @@ export interface ExecutionEngineDiscovery {
    * `ExecutionEngineInstance` closure). It is **not** passed via `init()`.
    *
    * For the canonical namespace × host-use table see the "Engine API contract"
-   * section in `claude-notes/plans/2026-04-16-plan1b-engine-host-deno.md`.
+   * section in `claude-notes/plans/2026-04-16-plan1b-engine-host-node.md`.
    *
    * @param quarto - The fully assembled Quarto API object for this engine
    */

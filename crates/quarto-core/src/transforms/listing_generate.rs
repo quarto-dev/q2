@@ -26,12 +26,12 @@
 //! transform owns the diagnostic; the profile stage drops them
 //! silently).
 //!
-//! TODO(bd-0fd0): when a Lua filter slot lands between generate and
-//! render transforms, serialize the resolved listings into
-//! `meta.listings.<id>` at that boundary so user filters can
-//! mutate them. Until then, the typed in-memory shape on
-//! `RenderContext` is the only data path between this transform
-//! and `ListingRenderTransform`.
+//! The resolved listings are also published at `meta.listings.<id>`
+//! ([`crate::project::listing::metadata`], bd-2oqen84t) so Lua
+//! consumers can read them. That is the read half of bd-0fd0; the
+//! typed shape on `RenderContext` remains the only path *into*
+//! `ListingRenderTransform`, so a Lua mutation of the metadata does
+//! not yet change what is rendered (bd-0fd0 proper).
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -94,361 +94,424 @@ impl AstTransform for ListingGenerateTransform {
             return Ok(());
         };
 
-        // Skip-condition: another generate path (today: hand-edited
-        // `RenderContext::resolved_listings`, tomorrow: a Lua filter
-        // post-bd-0fd0) already populated the resolved set. Treat as
-        // an override and bail out.
-        if !ctx.resolved_listings.is_empty() {
+        // Skip-condition: another resolution path already ran for this
+        // page — the `listing-resolve` stage upstream (bd-2oqen84t, M2;
+        // it sets `listings_resolved` even when nothing resolved, so
+        // the parse diagnostics are not emitted twice), a hand-edited
+        // `RenderContext::resolved_listings`, or tomorrow a Lua filter
+        // post-bd-0fd0. Treat it as an override and bail out.
+        if ctx.listings_resolved || !ctx.resolved_listings.is_empty() {
             return Ok(());
         }
 
         let mut diags = std::mem::take(&mut ctx.diagnostics);
-        let listings = parse_listings(listing_value, &mut diags);
-
-        if listings.is_empty() {
-            ctx.diagnostics = diags;
-            return Ok(());
-        }
-
-        // Determine the host page's project-relative directory once.
-        // Used to compute "host-directory-relative" item paths for
-        // glob matching. The host page itself is dropped from item
-        // discovery (Q1 default).
-        let host_path_str = page_relative_source(ctx);
-        let host_dir_str = std::path::Path::new(&host_path_str)
-            .parent()
-            .map(path_to_forward_slashes)
-            .unwrap_or_default();
-
-        let mut resolved: Vec<ResolvedListing> = Vec::with_capacity(listings.len());
-
-        let base_ctx = BaseDirContext {
+        let inputs = ListingResolveInputs {
             source_context: ctx.source_context,
             project_dir: &ctx.project.dir,
-            fallback_dir: &host_dir_str,
-        };
-
-        for listing in listings {
-            // Q-12-23: a literal YAML-file entry is Q1's third item
-            // source (bd-hj1ehfn8), not a glob that matched nothing.
-            // Partition it out so it neither resolves nor trips Q-12-19.
-            let mut contents: Vec<ListingContents> = Vec::with_capacity(listing.contents.len());
-            for entry in &listing.contents {
-                match entry {
-                    ListingContents::Glob { pattern, source }
-                        if !has_metacharacters(pattern)
-                            && matches!(
-                                std::path::Path::new(pattern)
-                                    .extension()
-                                    .and_then(|e| e.to_str()),
-                                Some("yml" | "yaml")
-                            ) =>
-                    {
-                        diags.push(yaml_contents_unsupported(pattern, source));
-                    }
-                    other => contents.push(other.clone()),
-                }
-            }
-
-            // Resolve each glob against the directory of the file
-            // it was written in (provenance-based; GH #456).
-            let resolution = resolve_content_globs(
-                &contents,
-                ctx.source_context,
-                &ctx.project.dir,
-                &host_dir_str,
-            );
-            for escaped in &resolution.escaped {
-                diags.push(
-                    DiagnosticMessageBuilder::warning(format!(
-                        "Listing `contents:` pattern `{}` points outside the project \
-                         directory and matches nothing.",
-                        escaped.raw
-                    ))
-                    .with_code("Q-12-17")
-                    .with_location(escaped.source.clone())
-                    .problem("The pattern's `..` segments climb above the project root.")
-                    .add_info(
-                        "Listing contents are limited to files inside the project. \
-                         Adjust the pattern so it stays within the project directory.",
-                    )
-                    .build(),
-                );
-            }
-
-            // Compile the full set once for the global negation
-            // check, and each positive pattern individually: item
-            // collection orders by the FIRST pattern that matches a
-            // candidate (Q1's glob-major semantics,
-            // bd-listing-declared-order-3ixcvc4o), and the Q-12-19
-            // matched-nothing diagnostic credits EVERY pattern a
-            // candidate matches. Resolution already validated these
-            // patterns, so the compiles cannot fail; an empty set on
-            // the impossible path simply matches nothing.
-            let empty_set = || PatternSet::compile(&[], &GlobOptions::LISTING).unwrap();
-            let patterns = resolution
-                .compile(&GlobOptions::LISTING)
-                .unwrap_or_else(|_| empty_set());
-            let positives: Vec<_> = resolution.positives().collect();
-            let positive_sets: Vec<PatternSet> = positives
-                .iter()
-                .map(|(glob, _)| {
-                    PatternSet::compile(std::slice::from_ref(*glob), &GlobOptions::LISTING)
-                        .unwrap_or_else(|_| empty_set())
-                })
-                .collect();
-            let mut matched_any = vec![false; positive_sets.len()];
-
-            // Patterns the glob engine rejected (bd-mt7a6uc4).
-            // Before, these matched nothing in silence — the same
-            // failure mode #456 fixed for asterisk-corrupted globs.
-            for invalid in &resolution.invalid {
-                diags.push(
-                    crate::glob::diagnostics::invalid_pattern(
-                        "Q-12-18",
-                        "Listing `contents:`",
-                        &invalid.raw,
-                        &invalid.message,
-                        &invalid.source,
-                    )
-                    .build(),
-                );
-            }
-
-            // Candidate-major collection, pattern-major order: tag
-            // each item with the index of its first matching
-            // pattern, then stable-sort by that index. Exclusions
-            // stay global — a `!` entry excludes a candidate no
-            // matter where it appears in `contents:`.
-            let mut ordered: Vec<((usize, u8), ListingItem)> = Vec::new();
-            // Which kinds of item this listing ended up with — the
-            // only consumer is the default-sort decision below
-            // (bd-listing-inline-records-order-eq8n2usm). Recorded
-            // during construction, like Q1's `sources` set, so that
-            // `include:`/`exclude:` filters cannot change it.
-            let mut sources: BTreeSet<ListingItemSource> = BTreeSet::new();
-            if let Some(index) = ctx.project_index.as_deref() {
-                for profile in index.profiles() {
-                    let candidate_path_str = path_to_forward_slashes(&profile.source_path);
-                    if candidate_path_str == host_path_str {
-                        continue;
-                    }
-                    if patterns.excluded(&candidate_path_str) {
-                        continue;
-                    }
-                    if !item_visible(profile) {
-                        continue;
-                    }
-                    let mut first_match: Option<usize> = None;
-                    for (i, set) in positive_sets.iter().enumerate() {
-                        if set.matches(&candidate_path_str) {
-                            matched_any[i] = true;
-                            first_match.get_or_insert(i);
-                        }
-                    }
-                    if let Some(pattern_idx) = first_match {
-                        sources.insert(ListingItemSource::Document);
-                        diags.extend(flattened_prose_diagnostics(profile, None));
-                        ordered.push(((pattern_idx, 1), hydrate_item(profile)));
-                    }
-                }
-            }
-
-            // Second item source: inline records
-            // (bd-listing-inline-contents-tyy446ze, plan §D2–D4).
-            // `globs_before` is the record's declared position, on
-            // the SAME scale as a glob item's `pattern_idx` above:
-            // the ordinal a positive pattern declared at this point
-            // would get in `resolution.positives()`. A negated
-            // pattern, or one dropped as escaped (Q-12-17) or invalid
-            // (Q-12-18), contributes no `pattern_idx` and so must not
-            // advance this counter either — otherwise the two indices
-            // drift apart and a record can sort after items it was
-            // written before (review fix, task 5 round 1).
-            //
-            // `resolution.entry_index` gives this structurally — the
-            // outcome resolution itself recorded for each raw entry,
-            // aligned 1:1 with `contents`'s `Glob` entries in
-            // declared order — rather than reconstructed afterward by
-            // matching raw pattern text or `SourceInfo` (both proved
-            // unreliable: the same text can escape from one declaring
-            // file and resolve fine from another, and `SourceInfo`
-            // can be a shared constant in programmatic/test
-            // construction — review fix, task 5 round 2).
-            // `positive_ordinal_by_glob_idx[j]` is the ordinal
-            // `resolution.globs[j]` would get in `positives()`, or
-            // `None` if it's negated.
-            let mut positive_ordinal_by_glob_idx: Vec<Option<usize>> =
-                Vec::with_capacity(resolution.globs.len());
-            {
-                let mut next_positive = 0usize;
-                for g in &resolution.globs {
-                    if g.negated {
-                        positive_ordinal_by_glob_idx.push(None);
-                    } else {
-                        positive_ordinal_by_glob_idx.push(Some(next_positive));
-                        next_positive += 1;
-                    }
-                }
-            }
-            // Starts at 1, not 0, when `contents:` held only
-            // negations and `resolve_content_globs` injected a
-            // synthesized default positive pattern: that pattern has
-            // no declared position of its own, stands for the
-            // implicit "everything", and is defined to precede every
-            // declared entry (team-lead ruling, task 5 round 2) — so
-            // a record declared after the negation sorts after the
-            // default's items, not before them.
-            let mut globs_before = usize::from(resolution.injected_default_positive);
-            let mut raw_ordinal = 0usize;
-            for entry in &contents {
-                let value = match entry {
-                    ListingContents::Glob { .. } => {
-                        if let Some(Some(glob_idx)) = resolution.entry_index.get(raw_ordinal)
-                            && let Some(ordinal) = positive_ordinal_by_glob_idx[*glob_idx]
-                        {
-                            globs_before = ordinal + 1;
-                        }
-                        raw_ordinal += 1;
-                        continue;
-                    }
-                    ListingContents::Inline(value) => value,
-                };
-                let rec = parse_record(value, &mut diags);
-                let base_dir = base_ctx.base_dir_for(&rec.source);
-                let item = match rec.path.clone() {
-                    None => {
-                        sources.insert(ListingItemSource::Metadata);
-                        record_item(rec, ItemTarget::None, &base_dir)
-                    }
-                    Some((raw, path_source)) => match resolve_record_path(
-                        &raw,
-                        &path_source,
-                        &base_ctx,
-                        ctx.project_index.as_deref(),
-                        &mut diags,
-                    ) {
-                        RecordPath::Document(profile) => {
-                            if !item_visible(profile) {
-                                continue;
-                            }
-                            sources.insert(ListingItemSource::MetadataDocument);
-                            diags.extend(flattened_prose_diagnostics(profile, Some(&rec.info)));
-                            overlay_record(hydrate_item(profile), rec, &base_dir)
-                        }
-                        RecordPath::Href(href) => {
-                            sources.insert(ListingItemSource::Metadata);
-                            record_item(rec, ItemTarget::Href(href), &base_dir)
-                        }
-                    },
-                };
-                ordered.push(((globs_before, 0), item));
-            }
-            ordered.sort_by_key(|(key, _)| *key);
-            let mut items: Vec<ListingItem> = ordered.into_iter().map(|(_, item)| item).collect();
-
-            // A pattern that compiled, stayed in the project, and
-            // still matched no document is almost always a Q1
-            // assumption about `*` (D5/D7). Checked before
-            // `include:`/`exclude:` filters run, so this reports on
-            // the *glob*, not on a filter that emptied the set.
-            for (i, (glob, source)) in positives.iter().enumerate() {
-                if !matched_any[i] {
-                    diags.push(
-                        crate::glob::diagnostics::matched_nothing(
-                            "Q-12-19",
-                            "Listing `contents:`",
-                            &glob.pattern,
-                            source,
-                        )
-                        .add_info(
-                            "Patterns resolve against the directory of the file they are \
-                             written in; a leading `/` anchors at the project root.",
-                        )
-                        .build(),
-                    );
-                }
-            }
-
-            apply_filters(&mut items, &listing.include, &listing.exclude);
-
-            if let Some(sort) = listing.sort.as_ref() {
-                // `sort: false` parses to an empty spec, which
-                // `apply_sort` treats as a no-op — declared
-                // `contents:` order flows through untouched.
-                apply_sort(&mut items, sort, &mut diags);
-            } else if sources.iter().any(|s| s.arms_default_sort()) {
-                // Default sort (Q1 parity): `order asc, title asc`,
-                // uniformly across listing types — Q1 applies its
-                // default whenever `title` is among the hydrated
-                // fields, which holds for every built-in type
-                // (table included). Items without `order:` sort
-                // after curated ones, in title order
-                // (bd-listing-declared-order-3ixcvc4o).
-                //
-                // Withheld when no item source arms it — see
-                // `ListingItemSource::arms_default_sort`. A listing
-                // built purely from inline records then keeps the
-                // order the author wrote, which is what `ordered`
-                // already holds
-                // (bd-listing-inline-records-order-eq8n2usm).
-                use crate::project::listing::config::{ListingSort, SortDirection};
-                let default_sort = vec![
-                    ListingSort {
-                        field: "order".to_string(),
-                        direction: SortDirection::Asc,
-                    },
-                    ListingSort {
-                        field: "title".to_string(),
-                        direction: SortDirection::Asc,
-                    },
-                ];
-                apply_sort(&mut items, &default_sort, &mut diags);
-            }
-
-            if let Some(max) = listing.max_items {
-                items.truncate(max as usize);
-            }
-
-            // bd-qv2lsab0: an author-supplied front-matter `image:`
-            // is typically referenced by no page body, so nothing
-            // else copies it into the output tree. Register a copy
-            // intent per project-relative item image; they flush
-            // with the host page's other copies.
-            //
-            // bd-yqlbfrln: not in VFS-root mode (the hub-client).
-            // There the only allowed write root is the synthetic
-            // artifacts root, so a `{output_dir}/{img}` destination
-            // fails the OutputSink check and the whole page render
-            // errors out. The hub's asset walker serves `<img src>`
-            // straight from the VFS, as it does for body images
-            // (see `ResourceCollectorTransform`), so nothing is lost
-            // by skipping.
-            let vfs_root_mode = ctx
+            output_dir: &ctx.project.output_dir,
+            project_index: ctx.project_index.as_deref(),
+            host_path: page_relative_source(ctx),
+            vfs_root_mode: ctx
                 .resource_resolver
                 .as_ref()
-                .is_some_and(|r| r.is_vfs_root_mode());
-            for item in &items {
-                if !vfs_root_mode
-                    && let Some(img) = item.image.as_deref()
-                    && !crate::project::listing::helpers::is_external_src(img)
-                {
-                    ctx.resource_copies.push(crate::render::ResourceCopyIntent {
-                        src: ctx.project.dir.join(img),
-                        dest: ctx.project.output_dir.join(img),
-                        origin: quarto_source_map::SourceInfo::generated(
-                            quarto_source_map::By::programmatic_config(),
-                        ),
-                    });
-                }
-            }
-
-            resolved.push(ResolvedListing { listing, items });
-        }
-
-        ctx.resolved_listings = resolved;
+                .is_some_and(|r| r.is_vfs_root_mode()),
+        };
+        let resolution = resolve_listings(listing_value, &inputs, &mut diags);
+        ctx.resource_copies.extend(resolution.resource_copies);
+        crate::project::listing::metadata::publish_listings(
+            &mut ast.meta,
+            &resolution.resolved,
+            &resolution.host_dir,
+        );
+        ctx.resolved_listings = resolution.resolved;
+        ctx.listings_resolved = true;
         ctx.diagnostics = diags;
         Ok(())
+    }
+}
+
+/// What listing resolution needs from its caller. Two callers share
+/// [`resolve_listings`]: the `listing-resolve` pipeline stage, which
+/// runs before `lmd-execute` and `user-filters-pre` so Lua consumers see
+/// `meta.listings.<id>` (bd-2oqen84t, M2), and
+/// [`ListingGenerateTransform`], which still resolves on its own in
+/// pipelines that lack the stage (and in tests that drive it directly).
+pub(crate) struct ListingResolveInputs<'a> {
+    /// The host document's `SourceContext`, for glob and record
+    /// provenance (which file a `contents:` entry was written in).
+    pub source_context: Option<&'a quarto_source_map::SourceContext>,
+    pub project_dir: &'a std::path::Path,
+    pub output_dir: &'a std::path::Path,
+    pub project_index: Option<&'a ProjectIndex>,
+    /// The host page's project-relative source path, forward slashes
+    /// ([`page_relative_source`]).
+    pub host_path: String,
+    /// Hub-client (VFS-root) mode: no item-image copy intents
+    /// (bd-yqlbfrln).
+    pub vfs_root_mode: bool,
+}
+
+/// What [`resolve_listings`] produces, besides the diagnostics it
+/// appends to the caller's list.
+pub(crate) struct ListingResolution {
+    pub resolved: Vec<ResolvedListing>,
+    /// Item-image copy intents (bd-qv2lsab0), for the caller to push
+    /// onto its context.
+    pub resource_copies: Vec<crate::render::ResourceCopyIntent>,
+    /// The host page's project-relative directory (forward slashes,
+    /// empty at the root): what the metadata bridge and the binding
+    /// need to compute host-relative item paths.
+    pub host_dir: String,
+}
+
+/// Resolve every listing declared under `listing_value` (the host
+/// page's `listing:` metadata): parse, match `contents:` globs against
+/// the project index, overlay inline records, filter, sort, truncate.
+/// Pure with respect to its inputs apart from `diags`.
+pub(crate) fn resolve_listings(
+    listing_value: &quarto_pandoc_types::ConfigValue,
+    inputs: &ListingResolveInputs<'_>,
+    diags: &mut Vec<DiagnosticMessage>,
+) -> ListingResolution {
+    let mut resource_copies: Vec<crate::render::ResourceCopyIntent> = Vec::new();
+    let listings = parse_listings(listing_value, diags);
+
+    // Determine the host page's project-relative directory once.
+    // Used to compute "host-directory-relative" item paths for
+    // glob matching. The host page itself is dropped from item
+    // discovery (Q1 default).
+    let host_path_str = inputs.host_path.clone();
+    let host_dir_str = std::path::Path::new(&host_path_str)
+        .parent()
+        .map(path_to_forward_slashes)
+        .unwrap_or_default();
+
+    let mut resolved: Vec<ResolvedListing> = Vec::with_capacity(listings.len());
+
+    let base_ctx = BaseDirContext {
+        source_context: inputs.source_context,
+        project_dir: inputs.project_dir,
+        fallback_dir: &host_dir_str,
+    };
+
+    for listing in listings {
+        // Q-12-23: a literal YAML-file entry is Q1's third item
+        // source (bd-hj1ehfn8), not a glob that matched nothing.
+        // Partition it out so it neither resolves nor trips Q-12-19.
+        let mut contents: Vec<ListingContents> = Vec::with_capacity(listing.contents.len());
+        for entry in &listing.contents {
+            match entry {
+                ListingContents::Glob { pattern, source }
+                    if !has_metacharacters(pattern)
+                        && matches!(
+                            std::path::Path::new(pattern)
+                                .extension()
+                                .and_then(|e| e.to_str()),
+                            Some("yml" | "yaml")
+                        ) =>
+                {
+                    diags.push(yaml_contents_unsupported(pattern, source));
+                }
+                other => contents.push(other.clone()),
+            }
+        }
+
+        // Resolve each glob against the directory of the file
+        // it was written in (provenance-based; GH #456).
+        let resolution = resolve_content_globs(
+            &contents,
+            inputs.source_context,
+            inputs.project_dir,
+            &host_dir_str,
+        );
+        for escaped in &resolution.escaped {
+            diags.push(
+                DiagnosticMessageBuilder::warning(format!(
+                    "Listing `contents:` pattern `{}` points outside the project \
+                     directory and matches nothing.",
+                    escaped.raw
+                ))
+                .with_code("Q-12-17")
+                .with_location(escaped.source.clone())
+                .problem("The pattern's `..` segments climb above the project root.")
+                .add_info(
+                    "Listing contents are limited to files inside the project. \
+                     Adjust the pattern so it stays within the project directory.",
+                )
+                .build(),
+            );
+        }
+
+        // Compile the full set once for the global negation
+        // check, and each positive pattern individually: item
+        // collection orders by the FIRST pattern that matches a
+        // candidate (Q1's glob-major semantics,
+        // bd-listing-declared-order-3ixcvc4o), and the Q-12-19
+        // matched-nothing diagnostic credits EVERY pattern a
+        // candidate matches. Resolution already validated these
+        // patterns, so the compiles cannot fail; an empty set on
+        // the impossible path simply matches nothing.
+        let empty_set = || PatternSet::compile(&[], &GlobOptions::LISTING).unwrap();
+        let patterns = resolution
+            .compile(&GlobOptions::LISTING)
+            .unwrap_or_else(|_| empty_set());
+        let positives: Vec<_> = resolution.positives().collect();
+        let positive_sets: Vec<PatternSet> = positives
+            .iter()
+            .map(|(glob, _)| {
+                PatternSet::compile(std::slice::from_ref(*glob), &GlobOptions::LISTING)
+                    .unwrap_or_else(|_| empty_set())
+            })
+            .collect();
+        let mut matched_any = vec![false; positive_sets.len()];
+
+        // Patterns the glob engine rejected (bd-mt7a6uc4).
+        // Before, these matched nothing in silence — the same
+        // failure mode #456 fixed for asterisk-corrupted globs.
+        for invalid in &resolution.invalid {
+            diags.push(
+                crate::glob::diagnostics::invalid_pattern(
+                    "Q-12-18",
+                    "Listing `contents:`",
+                    &invalid.raw,
+                    &invalid.message,
+                    &invalid.source,
+                )
+                .build(),
+            );
+        }
+
+        // Candidate-major collection, pattern-major order: tag
+        // each item with the index of its first matching
+        // pattern, then stable-sort by that index. Exclusions
+        // stay global — a `!` entry excludes a candidate no
+        // matter where it appears in `contents:`.
+        let mut ordered: Vec<((usize, u8), ListingItem)> = Vec::new();
+        // Which kinds of item this listing ended up with — the
+        // only consumer is the default-sort decision below
+        // (bd-listing-inline-records-order-eq8n2usm). Recorded
+        // during construction, like Q1's `sources` set, so that
+        // `include:`/`exclude:` filters cannot change it.
+        let mut sources: BTreeSet<ListingItemSource> = BTreeSet::new();
+        if let Some(index) = inputs.project_index {
+            for profile in index.profiles() {
+                let candidate_path_str = path_to_forward_slashes(&profile.source_path);
+                if candidate_path_str == host_path_str {
+                    continue;
+                }
+                if patterns.excluded(&candidate_path_str) {
+                    continue;
+                }
+                if !item_visible(profile) {
+                    continue;
+                }
+                let mut first_match: Option<usize> = None;
+                for (i, set) in positive_sets.iter().enumerate() {
+                    if set.matches(&candidate_path_str) {
+                        matched_any[i] = true;
+                        first_match.get_or_insert(i);
+                    }
+                }
+                if let Some(pattern_idx) = first_match {
+                    sources.insert(ListingItemSource::Document);
+                    diags.extend(flattened_prose_diagnostics(profile, None));
+                    ordered.push(((pattern_idx, 1), hydrate_item(profile)));
+                }
+            }
+        }
+
+        // Second item source: inline records
+        // (bd-listing-inline-contents-tyy446ze, plan §D2–D4).
+        // `globs_before` is the record's declared position, on
+        // the SAME scale as a glob item's `pattern_idx` above:
+        // the ordinal a positive pattern declared at this point
+        // would get in `resolution.positives()`. A negated
+        // pattern, or one dropped as escaped (Q-12-17) or invalid
+        // (Q-12-18), contributes no `pattern_idx` and so must not
+        // advance this counter either — otherwise the two indices
+        // drift apart and a record can sort after items it was
+        // written before (review fix, task 5 round 1).
+        //
+        // `resolution.entry_index` gives this structurally — the
+        // outcome resolution itself recorded for each raw entry,
+        // aligned 1:1 with `contents`'s `Glob` entries in
+        // declared order — rather than reconstructed afterward by
+        // matching raw pattern text or `SourceInfo` (both proved
+        // unreliable: the same text can escape from one declaring
+        // file and resolve fine from another, and `SourceInfo`
+        // can be a shared constant in programmatic/test
+        // construction — review fix, task 5 round 2).
+        // `positive_ordinal_by_glob_idx[j]` is the ordinal
+        // `resolution.globs[j]` would get in `positives()`, or
+        // `None` if it's negated.
+        let mut positive_ordinal_by_glob_idx: Vec<Option<usize>> =
+            Vec::with_capacity(resolution.globs.len());
+        {
+            let mut next_positive = 0usize;
+            for g in &resolution.globs {
+                if g.negated {
+                    positive_ordinal_by_glob_idx.push(None);
+                } else {
+                    positive_ordinal_by_glob_idx.push(Some(next_positive));
+                    next_positive += 1;
+                }
+            }
+        }
+        // Starts at 1, not 0, when `contents:` held only
+        // negations and `resolve_content_globs` injected a
+        // synthesized default positive pattern: that pattern has
+        // no declared position of its own, stands for the
+        // implicit "everything", and is defined to precede every
+        // declared entry (team-lead ruling, task 5 round 2) — so
+        // a record declared after the negation sorts after the
+        // default's items, not before them.
+        let mut globs_before = usize::from(resolution.injected_default_positive);
+        let mut raw_ordinal = 0usize;
+        for entry in &contents {
+            let value = match entry {
+                ListingContents::Glob { .. } => {
+                    if let Some(Some(glob_idx)) = resolution.entry_index.get(raw_ordinal)
+                        && let Some(ordinal) = positive_ordinal_by_glob_idx[*glob_idx]
+                    {
+                        globs_before = ordinal + 1;
+                    }
+                    raw_ordinal += 1;
+                    continue;
+                }
+                ListingContents::Inline(value) => value,
+            };
+            let rec = parse_record(value, diags);
+            let base_dir = base_ctx.base_dir_for(&rec.source);
+            let item = match rec.path.clone() {
+                None => {
+                    sources.insert(ListingItemSource::Metadata);
+                    record_item(rec, ItemTarget::None, &base_dir)
+                }
+                Some((raw, path_source)) => match resolve_record_path(
+                    &raw,
+                    &path_source,
+                    &base_ctx,
+                    inputs.project_index,
+                    diags,
+                ) {
+                    RecordPath::Document(profile) => {
+                        if !item_visible(profile) {
+                            continue;
+                        }
+                        sources.insert(ListingItemSource::MetadataDocument);
+                        diags.extend(flattened_prose_diagnostics(profile, Some(&rec.info)));
+                        overlay_record(hydrate_item(profile), rec, &base_dir)
+                    }
+                    RecordPath::Href(href) => {
+                        sources.insert(ListingItemSource::Metadata);
+                        record_item(rec, ItemTarget::Href(href), &base_dir)
+                    }
+                },
+            };
+            ordered.push(((globs_before, 0), item));
+        }
+        ordered.sort_by_key(|(key, _)| *key);
+        let mut items: Vec<ListingItem> = ordered.into_iter().map(|(_, item)| item).collect();
+
+        // A pattern that compiled, stayed in the project, and
+        // still matched no document is almost always a Q1
+        // assumption about `*` (D5/D7). Checked before
+        // `include:`/`exclude:` filters run, so this reports on
+        // the *glob*, not on a filter that emptied the set.
+        for (i, (glob, source)) in positives.iter().enumerate() {
+            if !matched_any[i] {
+                diags.push(
+                    crate::glob::diagnostics::matched_nothing(
+                        "Q-12-19",
+                        "Listing `contents:`",
+                        &glob.pattern,
+                        source,
+                    )
+                    .add_info(
+                        "Patterns resolve against the directory of the file they are \
+                         written in; a leading `/` anchors at the project root.",
+                    )
+                    .build(),
+                );
+            }
+        }
+
+        apply_filters(&mut items, &listing.include, &listing.exclude);
+
+        if let Some(sort) = listing.sort.as_ref() {
+            // `sort: false` parses to an empty spec, which
+            // `apply_sort` treats as a no-op — declared
+            // `contents:` order flows through untouched.
+            apply_sort(&mut items, sort, diags);
+        } else if sources.iter().any(|s| s.arms_default_sort()) {
+            // Default sort (Q1 parity): `order asc, title asc`,
+            // uniformly across listing types — Q1 applies its
+            // default whenever `title` is among the hydrated
+            // fields, which holds for every built-in type
+            // (table included). Items without `order:` sort
+            // after curated ones, in title order
+            // (bd-listing-declared-order-3ixcvc4o).
+            //
+            // Withheld when no item source arms it — see
+            // `ListingItemSource::arms_default_sort`. A listing
+            // built purely from inline records then keeps the
+            // order the author wrote, which is what `ordered`
+            // already holds
+            // (bd-listing-inline-records-order-eq8n2usm).
+            use crate::project::listing::config::{ListingSort, SortDirection};
+            let default_sort = vec![
+                ListingSort {
+                    field: "order".to_string(),
+                    direction: SortDirection::Asc,
+                },
+                ListingSort {
+                    field: "title".to_string(),
+                    direction: SortDirection::Asc,
+                },
+            ];
+            apply_sort(&mut items, &default_sort, diags);
+        }
+
+        if let Some(max) = listing.max_items {
+            items.truncate(max as usize);
+        }
+
+        // bd-qv2lsab0: an author-supplied front-matter `image:`
+        // is typically referenced by no page body, so nothing
+        // else copies it into the output tree. Register a copy
+        // intent per project-relative item image; they flush
+        // with the host page's other copies.
+        //
+        // bd-yqlbfrln: not in VFS-root mode (the hub-client).
+        // There the only allowed write root is the synthetic
+        // artifacts root, so a `{output_dir}/{img}` destination
+        // fails the OutputSink check and the whole page render
+        // errors out. The hub's asset walker serves `<img src>`
+        // straight from the VFS, as it does for body images
+        // (see `ResourceCollectorTransform`), so nothing is lost
+        // by skipping.
+        for item in &items {
+            if !inputs.vfs_root_mode
+                && let Some(img) = item.image.as_deref()
+                && !crate::project::listing::helpers::is_external_src(img)
+            {
+                resource_copies.push(crate::render::ResourceCopyIntent {
+                    src: inputs.project_dir.join(img),
+                    dest: inputs.output_dir.join(img),
+                    origin: quarto_source_map::SourceInfo::generated(
+                        quarto_source_map::By::programmatic_config(),
+                    ),
+                });
+            }
+        }
+
+        resolved.push(ResolvedListing { listing, items });
+    }
+
+    ListingResolution {
+        resolved,
+        resource_copies,
+        host_dir: host_dir_str,
     }
 }
 
@@ -795,6 +858,83 @@ mod tests {
             "vfs_root mode must not register copy intents; got {:?}",
             copies
         );
+    }
+
+    // bd-2oqen84t (M1): the resolved set is also published at
+    // `meta.listings.<id>` in the binding's vocabulary, so Lua
+    // consumers can read it. Items keep their resolved order and
+    // `path` is host-directory-relative, as the binding computes it.
+    #[tokio::test]
+    async fn resolved_listings_are_published_to_meta_listings() {
+        let mut ast = Pandoc {
+            meta: map(vec![(
+                "listing",
+                map(vec![
+                    ("id", s("posts")),
+                    ("contents", s("*.qmd")),
+                    ("sort", s("date desc")),
+                ]),
+            )]),
+            blocks: vec![],
+        };
+        let profiles = vec![
+            make_profile_with_date("posts/a.qmd", "posts/a.html", "A", "2026-01-01"),
+            make_profile_with_date("posts/b.qmd", "posts/b.html", "B", "2026-03-01"),
+        ];
+        let (project, index) = make_project("posts/index.qmd", profiles);
+        let doc = DocumentInfo::from_path("/project/posts/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_project_index(index);
+        ListingGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(ctx.resolved_listings.len(), 1);
+        let items = ast
+            .meta
+            .get_path(&["listings", "posts", "items"])
+            .and_then(|v| v.as_array())
+            .expect("meta.listings.posts.items");
+        let titles: Vec<String> = items
+            .iter()
+            .map(|it| it.get("title").unwrap().as_plain_text().unwrap())
+            .collect();
+        assert_eq!(titles, vec!["B", "A"], "resolved (sorted) order");
+        assert_eq!(items[1].get("path").unwrap().as_str(), Some("a.qmd"));
+        assert_eq!(
+            items[1].get("date-iso").unwrap().as_str(),
+            Some("2026-01-01")
+        );
+        assert_eq!(
+            ast.meta
+                .get_path(&["listings", "posts", "type"])
+                .and_then(|v| v.as_str()),
+            Some("default")
+        );
+    }
+
+    // bd-2oqen84t (M1): nothing is published when the page declares no
+    // listing, so `meta.listings` is absent rather than an empty map.
+    #[tokio::test]
+    async fn no_listing_key_publishes_nothing() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+        let (project, index) = make_project("index.qmd", vec![]);
+        let doc = DocumentInfo::from_path("/project/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_project_index(index);
+        ListingGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert!(ast.meta.get("listings").is_none());
     }
 
     // 28. generate_skips_when_no_listing_key

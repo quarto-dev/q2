@@ -1,0 +1,31 @@
+{
+  "name": "@quarto/engine-host-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/host.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "bundle": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@quarto/api": "*",
+    "@quarto/types": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

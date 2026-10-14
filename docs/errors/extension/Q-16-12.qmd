@@ -50,7 +50,7 @@ Then:
 2. **Check the bundle exists and is complete** at the `path` named in
    the extension's `_extension.yml`.
 3. **Load it directly** to see the failure without Quarto in the way:
-   `deno run --allow-all <path-to-bundle>`.
+   `node <path-to-bundle>`.
 
 If you do not maintain the extension, report the error to its author.
 

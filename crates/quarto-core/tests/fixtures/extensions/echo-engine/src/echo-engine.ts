@@ -5,6 +5,8 @@
  * Used by Task 13 / Task 14 integration tests.
  */
 
+import { readFileSync, writeSync } from "node:fs";
+import process from "node:process";
 import type {
   ExecutionEngineDiscovery,
   ExecutionEngineInstance,
@@ -102,7 +104,7 @@ const echoEngine: ExecutionEngineDiscovery = {
         // file's basename, so a converted-vs-raw-fall-through render is
         // distinguishable (the raw fixture body carries no heading of its
         // own -- see the `t8_*` e2e test in echo_engine_e2e.rs).
-        const text = Deno.readTextFileSync(file);
+        const text = readFileSync(file, "utf8");
         const basename = file.split(/[\\/]/).pop() ?? file;
         const wrapped =
           "# Echoed: " + basename + "\n\n" +
@@ -179,11 +181,8 @@ const echoEngine: ExecutionEngineDiscovery = {
         // reverted (stdio-transport) build would escalate->kill on this
         // input instead of silently tolerating a single stray line.
         if (input.includes("QUARTO_ECHO_STDOUT_GARBAGE")) {
-          const enc = new TextEncoder();
           for (let i = 0; i < 20; i++) {
-            Deno.stdout.writeSync(
-              enc.encode(`ECHO_STDOUT_GARBAGE_MARKER not-json line ${i}\n`),
-            );
+            writeSync(1, `ECHO_STDOUT_GARBAGE_MARKER not-json line ${i}\n`);
           }
         }
 
@@ -207,15 +206,15 @@ const echoEngine: ExecutionEngineDiscovery = {
         // ONLY when the document body carries the sentinel -- none of the
         // other 9 echo E2E fixtures use it, so this branch is dead code for
         // them. Writes an identifiable marker to stderr, THEN crashes via
-        // Deno.exit(1) BEFORE returning any ExecuteResult, i.e. mid-execute
+        // process.exit(1) BEFORE returning any ExecuteResult, i.e. mid-execute
         // while the request is still in flight on the demux -- exercising
         // the engine-host's reader-thread EOF -> ProcessCrashed broadcast
-        // path against a real Deno subprocess.
+        // path against a real engine-host subprocess.
         if (input.includes("QUARTO_ECHO_CRASH")) {
           console.error(
             "ECHO_CRASH_MARKER: intentional crash for T13 crash-path e2e",
           );
-          Deno.exit(1);
+          process.exit(1);
         }
 
         const executed = input.replace(

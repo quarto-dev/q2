@@ -103,7 +103,7 @@ impl Listing {
         self.page_size.unwrap_or(match self.kind {
             ListingType::Table => 30,
             ListingType::Grid => 18,
-            ListingType::Default | ListingType::Custom => 25,
+            ListingType::Default | ListingType::Custom | ListingType::Metadata => 25,
         })
     }
 
@@ -178,6 +178,13 @@ pub enum ListingType {
     Grid,
     Table,
     Custom,
+    /// Resolve the items and publish them at `meta.listings.<id>`,
+    /// render nothing (bd-2oqen84t, M3). For listings whose markup
+    /// is built by Lua code — an lmd cell or a user filter — from the
+    /// metadata. Everything that reads the resolved set and not the
+    /// rendered markup (categories sidebar, feed, `llms.txt`, the
+    /// dependency graph) works as for any other type.
+    Metadata,
 }
 
 impl ListingType {
@@ -188,6 +195,7 @@ impl ListingType {
             ListingType::Grid => "grid",
             ListingType::Table => "table",
             ListingType::Custom => "custom",
+            ListingType::Metadata => "metadata",
         }
     }
 }
@@ -351,7 +359,7 @@ pub fn parse_listings(
                     diagnostics,
                     "Q-12-1",
                     format!(
-                        "Unknown listing type `{}`; expected one of: default, grid, table, custom.",
+                        "Unknown listing type `{}`; expected one of: default, grid, table, custom, metadata.",
                         name
                     ),
                     value,
@@ -524,7 +532,7 @@ fn parse_one_listing(
                             diagnostics,
                             "Q-12-1",
                             format!(
-                                "Unknown listing type `{}`; expected one of: default, grid, table, custom.",
+                                "Unknown listing type `{}`; expected one of: default, grid, table, custom, metadata.",
                                 name
                             ),
                             &entry.value,
@@ -676,6 +684,7 @@ fn parse_type_name(name: &str) -> Option<ListingType> {
         "grid" => Some(ListingType::Grid),
         "table" => Some(ListingType::Table),
         "custom" => Some(ListingType::Custom),
+        "metadata" => Some(ListingType::Metadata),
         _ => None,
     }
 }
@@ -1012,7 +1021,7 @@ pub fn apply_type_defaults(l: &mut Listing) {
                 "reading-time",
             ],
             ListingType::Table => vec!["date", "title", "author"],
-            ListingType::Custom => vec![],
+            ListingType::Custom | ListingType::Metadata => vec![],
         }
         .into_iter()
         .map(String::from)
@@ -1052,7 +1061,7 @@ pub fn apply_type_defaults(l: &mut Listing) {
                     .map(String::from)
                     .collect()
             }
-            ListingType::Table | ListingType::Custom => l.fields.clone(),
+            ListingType::Table | ListingType::Custom | ListingType::Metadata => l.fields.clone(),
         };
     }
     // Type-specific knobs (only fill None).
@@ -1071,7 +1080,7 @@ pub fn apply_type_defaults(l: &mut Listing) {
         ListingType::Table => {
             l.image_lazy_loading.get_or_insert(true);
         }
-        ListingType::Custom => {}
+        ListingType::Custom | ListingType::Metadata => {}
     }
     // Default contents glob if absent: every `*.qmd` next to the
     // host page (Q1 default; the host file itself gets excluded
@@ -1168,6 +1177,27 @@ fn push_diag(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // bd-2oqen84t (M3): `type: metadata` is a listing that resolves and
+    // publishes to `meta.listings.<id>` but renders nothing. It parses
+    // like the other names and takes the `custom` defaults: no field
+    // set of its own (the binding then uses every field some item
+    // carries), the generic page size, no layout knobs.
+    #[test]
+    fn metadata_type_parses_with_custom_like_defaults() {
+        assert_eq!(parse_type_name("metadata"), Some(ListingType::Metadata));
+        assert_eq!(ListingType::Metadata.name(), "metadata");
+        let mut l = Listing {
+            kind: ListingType::Metadata,
+            ..Listing::default()
+        };
+        apply_type_defaults(&mut l);
+        assert!(l.fields.is_empty());
+        assert_eq!(l.page_size(), 25);
+        assert!(l.grid_columns.is_none() && l.image_align.is_none());
+        assert_eq!(l.field_links, Some(Vec::new()));
+        assert!(!l.filter_ui() && !l.sort_ui());
+    }
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_source_map::SourceInfo;
 

@@ -346,7 +346,7 @@ pub trait ExecutionEngine: Send + Sync {
     /// persistent subprocess, so "alive" is meaningless for them. A `TsEngine`
     /// overrides this to report its shared host's real child-process state, so
     /// callers (and the orchestrator-teardown E2E) can observe that
-    /// `shutdown_all` actually reaped the Deno subprocess.
+    /// `shutdown_all` actually reaped the Node subprocess.
     fn is_alive(&self) -> bool {
         false
     }

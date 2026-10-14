@@ -1,0 +1,24 @@
+{
+  "name": "@quarto/ts-bundle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "rollup-based bundler behind `q2 call build-ts-extension`; built to one embedded file, run under Node",
+  "type": "module",
+  "main": "src/bundle.ts",
+  "scripts": {
+    "bundle": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "29.0.3",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "@rollup/wasm-node": "4.61.1",
+    "@types/node": "^24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

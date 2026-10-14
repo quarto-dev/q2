@@ -79,8 +79,9 @@ mod footer_render;
 mod footnotes;
 mod footnotes_resolve;
 mod format_css;
+mod heading_id;
 mod link_rewrite;
-mod listing_generate;
+pub(crate) mod listing_generate;
 mod listing_render;
 pub mod llms;
 mod mermaid;
@@ -168,6 +169,7 @@ pub use footnotes::FootnotesTransform;
 pub use footnotes_resolve::FootnotesResolveTransform;
 pub use format_css::FormatCssTransform;
 pub(crate) use format_css::user_css_urls;
+pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 #[cfg(not(target_arch = "wasm32"))]
 pub use hephaestus::HephaestusRenderTransform;
 pub use link_rewrite::LinkRewriteTransform;

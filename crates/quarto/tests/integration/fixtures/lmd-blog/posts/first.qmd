@@ -1,0 +1,9 @@
+---
+title: First post
+date: 2025-11-02
+author: Ada
+categories: [news, release]
+description: The one that started it.
+---
+
+First body paragraph.

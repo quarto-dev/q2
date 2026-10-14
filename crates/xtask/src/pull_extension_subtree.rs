@@ -34,11 +34,15 @@ pub struct SubtreeConfig {
 /// just means "re-running `pull-extension-subtree orange-book` later picks
 /// up whatever main has moved to," same as every other row.
 ///
-/// `julia-engine` subtrees from the `q2-static-declarations` branch of the
+/// `julia-engine` subtrees from the `q2/node-port` branch of the
 /// `gordonwoodhull/quarto-julia-engine` fork — q2's upstream of record until
 /// the Q1 `external-engine` schema change (quarto-dev/quarto-cli#14936) ships
 /// in a stable release and the declarations can go upstream to PumasAI
-/// (julia epic, Step 2c pivot, 2026-09-24).
+/// (julia epic, Step 2c pivot, 2026-09-24). `q2/node-port` descends from the
+/// earlier `q2-static-declarations` tip and adds the Deno-to-Node port
+/// (`claude-notes/plans/2026-10-13-ts-engines-deno-to-node.md`, P5); point
+/// the row back at `q2-static-declarations` (or upstream) if that branch
+/// merges there.
 pub fn subtrees() -> Vec<SubtreeConfig> {
     vec![
         SubtreeConfig {
@@ -51,7 +55,7 @@ pub fn subtrees() -> Vec<SubtreeConfig> {
             name: "julia-engine".to_string(),
             prefix: "resources/extension-subtrees/julia-engine".to_string(),
             remote_url: "https://github.com/gordonwoodhull/quarto-julia-engine.git".to_string(),
-            remote_branch: "q2-static-declarations".to_string(),
+            remote_branch: "q2/node-port".to_string(),
         },
     ]
 }
@@ -345,7 +349,7 @@ mod tests {
             .find(|r| r.name == "julia-engine")
             .expect("subtrees() must contain the julia-engine row");
         assert_eq!(
-            julia.remote_branch, "q2-static-declarations",
+            julia.remote_branch, "q2/node-port",
             "the julia row subtrees from the fork's q2 branch, not main (epic Step 2c pivot)"
         );
     }

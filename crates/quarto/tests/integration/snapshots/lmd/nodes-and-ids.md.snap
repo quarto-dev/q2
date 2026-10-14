@@ -1,0 +1,35 @@
+---
+source: crates/quarto/tests/integration/lmd_snapshots.rs
+expression: md
+---
+## Hello, world
+
+## Unmarked fragments, resolved by context
+
+::: box
+A paragraph that stays a paragraph.
+
+**bold via inline context**
+
+a nested world c
+
+hand-built inlines become a Plain
+:::
+
+Inline: *hi*, world.
+
+## A fragment reused as a component
+
+### Hello
+
+Body.
+
+### Bye
+
+Body.
+
+### Hello
+
+Body.
+
+### Pinned

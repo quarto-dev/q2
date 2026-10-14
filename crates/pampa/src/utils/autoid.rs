@@ -91,12 +91,12 @@ fn collect_text(inlines: &Inlines, result: &mut String) {
             Inline::EditComment(_) => {}
             Inline::Custom(_) => {}
 
-            // The id is derived in the reader's postprocess pass, before
-            // shortcodes are expanded, so an unexpanded shortcode has no
-            // text to contribute. Quarto 1 expands shortcodes in a pre-Pandoc
-            // text pass and folds the expansion into the id; matching that
-            // would mean deriving ids after expansion. Tracked as
-            // bd-2wv8431v.
+            // The reader derives ids before shortcodes are expanded, so an
+            // unexpanded shortcode contributes nothing *here*; the reader's
+            // id is provisional. quarto-core's `heading-id` transform
+            // re-derives the id after expansion (Quarto 1 folds the
+            // expansion in the same way), via `dedup_scoped_heading_ids`
+            // below (bd-2wv8431v).
             Inline::Shortcode(_) => {}
         }
     }
