@@ -42,7 +42,7 @@ matters; hub-mcp then drops its prefixing as cleanup.
       an earlier standalone run hit the known-flaky
       `book_refactor_guard` typst pair — passes in isolation and under
       verify, fails only under fail-fast cancellation)
-- [ ] Commit phase 1
+- [x] Commit phase 1 (fdc1ec20b)
 
 ### Phase 2 — hub-mcp cleanup (ships any time after the hub deploys)
 
@@ -66,7 +66,8 @@ matters; hub-mcp then drops its prefixing as cleanup.
       (A curl check against a live hub needs a mock IdP; the
       integration harness is the same route + query extraction a real
       request hits.)
-- [ ] Commit phase 2; ask before pushing
+- [x] Commit phase 2 (b005e71c3); ask before pushing
+- [x] Close bd-evxckg64 and bd-9t8zsh98 (superseded)
 
 ## Details
 
