@@ -87,13 +87,6 @@ async function getFileContent(page: Page, filename: string): Promise<string | nu
 test.describe('P3.5 — Breadcrumb event-isolation + real cross-platform key-chords', () => {
     test.setTimeout(120000);
 
-    // Stagger worker starts to avoid init races.
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) {
-            await page.waitForTimeout(1000);
-        }
-    });
-
     // ── Test A: tight-div nest-out commits, reserializes to loose, and RELANDS ──
     //
     // Regression guard for the tight-div nest-out reland bug (fixed 2026-06-19).

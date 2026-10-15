@@ -182,11 +182,7 @@ async function measureLastVisualLine(iframe: FrameLocator): Promise<{
 test.describe('P2.5b — Block navigation & locked resolution (real browser)', () => {
     test.setTimeout(120000);
 
-    // Stagger worker starts to avoid AMD init races.
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) {
-            await page.waitForTimeout(1000);
-        }
+    test.beforeEach(async ({ page }) => {
         // This suite asserts LOCKED-mode (whole-block / prefixing-atomic)
         // resolution. The nesting cursor is ON by default (P3.2, commit
         // ace639c8), so pin it OFF here as the suite baseline. The two

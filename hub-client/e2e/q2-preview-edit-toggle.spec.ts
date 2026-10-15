@@ -72,10 +72,6 @@ const pill = (page: Page) => page.getByRole('button', { name: /^Editing (on|off)
 test.describe('Edit pill — q2-preview editable / read-only toggle (real browser)', () => {
     test.setTimeout(150000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('turns edit affordances off, makes links plain, persists across reload, and turns back on', async ({ page }) => {
         const serverUrl = getServerUrl();
         const docId = await createProjectOnServer(serverUrl, [

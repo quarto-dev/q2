@@ -82,10 +82,6 @@ async function readTextarea(iframe: FrameLocator) {
 test.describe('§7.e — expand-on-edit collapsed→expanded on first keystroke (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('click opens collapsed (no data-expanded); typing a char expands + grows; deleting it stays ≥ open', async ({ page }) => {
         const serverUrl = getServerUrl();
         const docId = await createProjectOnServer(serverUrl, [

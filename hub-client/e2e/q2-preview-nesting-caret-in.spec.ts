@@ -65,10 +65,6 @@ const QMD = [
 test.describe('§2 — caret-aware nest-in (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('nest-in follows the caret line into the sub-list, not the frozen first item', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({

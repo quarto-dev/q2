@@ -84,13 +84,11 @@ async function openCommentFixture(page: Page): Promise<FrameLocator> {
 test.describe('q2-preview render-components-comment', () => {
     test.setTimeout(120_000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
+    test.beforeEach(async ({ page }) => {
         // Inject author id before any app script runs.
         await page.addInitScript((id) => {
             (window as any).__QUARTO_TEST_AUTHOR_ID__ = id;
         }, TEST_AUTHOR_ID);
-        // Stagger parallel workers to avoid Monaco AMD init race.
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
     });
 
     test('attribution surface + current actor reach user TSX', async ({ page }) => {

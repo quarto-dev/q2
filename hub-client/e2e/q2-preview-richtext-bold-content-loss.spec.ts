@@ -83,10 +83,6 @@ async function assertAutomerge(
 test.describe('bd-hafs0qho — rich-text bold commit content loss', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('bolding a tight bullet-list item preserves its content', async ({ page }) => {
         const serverUrl = getServerUrl();
         const QMD =

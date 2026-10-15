@@ -69,10 +69,6 @@ const QMD = [
 test.describe('§3 — locked-mode hover outlines the outer block (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('hovering a deep list leaf outlines a <ul> (outer block), never the leaf <p>', async ({ page }) => {
         // LOCKED mode: nesting cursor is ON by default (P3.2, commit ace639c8),
         // so this locked-mode test must explicitly OPT OUT by pinning

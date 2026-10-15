@@ -48,10 +48,6 @@ const QMD =
 test.describe('§6.g — delete a paragraph by emptying + commit (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('clearing a paragraph and pressing Ctrl+Enter removes it from the DOM and Automerge', async ({ page }) => {
         const serverUrl = getServerUrl();
         const docId = await createProjectOnServer(serverUrl, [

@@ -78,8 +78,7 @@ async function readOverflowY(iframe: FrameLocator): Promise<string> {
 test.describe('T15 (G12) — scrolljack rule: overflow-y only when genuinely clipped (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
+    test.beforeEach(async ({ page }) => {
         // Enable unlock mode so nesting cursor features are available (consistent with other specs).
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({

@@ -77,10 +77,6 @@ const QMD = [
 test.describe('T13(c) — Crumb jump does NOT carry expansion into destination editor (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('crumb-jump to ancestor relands collapsed (data-expanded absent), not expanded', async ({ page }) => {
         // 1. Enable unlock mode before any navigation.
         await page.addInitScript(() => {

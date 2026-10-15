@@ -74,10 +74,6 @@ const TOL = 2;
 test.describe('§1 — nesting-cursor SIZE-IN geometry (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('nest-in from the whole list sizes the editor to the CHILD\'s height, not the parent\'s full height', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({

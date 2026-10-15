@@ -526,8 +526,7 @@ async function editorVisibleText(page: Page): Promise<string> {
 test.describe('preview→editor scroll sync on click', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
+    test.beforeEach(async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('qh-view-mode', 'both');
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({

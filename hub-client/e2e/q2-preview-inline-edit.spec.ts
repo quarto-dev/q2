@@ -23,8 +23,6 @@
  *       in online mode and flush to the hub immediately (no background-sync race).
  *    2. bootstrapProjectSet stubs /auth/me + sets MonacoEnvironment.getWorkerUrl
  *       + serves monaco-editor from local devDep to prevent AMD init races.
- *    3. beforeEach stagger: workerIndex>0 waits 1 s so both browsers don't enter
- *       Monaco's AMD init window at exactly the same instant.
  *  - Prerequisites: VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build, no hub on port 3031 (test port).
  *
  * Preview-view test (monaco-absent path):
@@ -109,13 +107,7 @@ async function assertAutomerge(
 test.describe('q2-preview inline editing', () => {
     test.setTimeout(120000);
 
-    // Stagger worker start times so two parallel browser contexts don't
-    // race through Monaco's AMD initialisation at exactly the same instant.
-    // workerIndex 0 starts immediately; workerIndex 1 waits 1 s.
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) {
-            await page.waitForTimeout(1000);
-        }
+    test.beforeEach(async ({ page }) => {
         // These tests predate the nesting-cursor feature and assert LOCKED-mode
         // editing (e.g. activating a list opens the WHOLE list at the text
         // column). The nesting cursor is ON by default (P3.2, commit ace639c8),

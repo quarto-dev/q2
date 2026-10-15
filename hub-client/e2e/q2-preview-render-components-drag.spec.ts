@@ -62,11 +62,10 @@ async function openDragFixture(page: Page): Promise<FrameLocator> {
 test.describe('q2-preview render-components-drag', () => {
     test.setTimeout(120_000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
+    test.beforeEach(async ({ page }) => {
         await page.addInitScript((id) => {
             (window as any).__QUARTO_TEST_AUTHOR_ID__ = id;
         }, TEST_AUTHOR_ID);
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
     });
 
     test('drag renders div with grab handle', async ({ page }) => {

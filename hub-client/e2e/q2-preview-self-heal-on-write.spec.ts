@@ -126,12 +126,6 @@ async function getFileContent(page: Page, filename: string): Promise<string | nu
 test.describe('self-heal KEEP (browser tier) — green regression guard (bd-k1evg0g1, fixed 2026-06-19)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) {
-            await page.waitForTimeout(1000);
-        }
-    });
-
     test('self-heal KEEP: editor survives a real collaborator shift (real browser, real blur) without corruption', async ({ page }) => {
         // GREEN REGRESSION GUARD (was a known-failing tripwire for bd-k1evg0g1,
         // deferred 2026-06-13; FIXED 2026-06-19).

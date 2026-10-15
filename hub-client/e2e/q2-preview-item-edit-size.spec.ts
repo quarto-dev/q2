@@ -54,10 +54,6 @@ const TOL = 2;
 test.describe('§0.d — tight-list item activation sizes to the item (real browser)', () => {
     test.setTimeout(120000);
 
-    test.beforeEach(async ({ page }, testInfo) => {
-        if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
-    });
-
     test('clicking a tight bullet item opens the ITEM editor (≈ one line, < the whole-list height)', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('quarto-hub:preferences', JSON.stringify({
