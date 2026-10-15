@@ -1275,23 +1275,23 @@ export class ConnectionManager {
    * warning and yields `undefined`, so the connection proceeds
    * authorless (D8) instead of failing.
    *
-   * The hub HMACs the `project` parameter verbatim, and its canonical
-   * spelling is the `automerge:`-prefixed URL form — the one the SPA
-   * stores and resolves authors over. hub-mcp's ids are bare
-   * ({@link parseProjectRef}), so without the prefix the same
-   * user+document mints a different author ID here than in the SPA and
-   * MCP edits surface as an unknown author (bd-9t8zsh98).
+   * The HMAC's canonical project input is the **bare** document id — the
+   * spelling the author-ID transition E2E pinned, and the one the SPA's
+   * create path resolves and stores. The hub strips a leading
+   * `automerge:` server-side (bd-evxckg64), so the id is sent exactly as
+   * given ({@link parseProjectRef} produces bare ids; a caller passing
+   * the URL form still mints the same value). An earlier revision
+   * prepended the prefix on the premise that the SPA's canonical
+   * spelling was the prefixed URL form (bd-9t8zsh98) — that held only
+   * for share-joined projects and mismatched every SPA-created one.
    */
   private async fetchAuthorId(
     projectId: string,
     getBearer: () => Promise<string>,
   ): Promise<string | undefined> {
-    const canonicalProjectId = projectId.startsWith('automerge:')
-      ? projectId
-      : `automerge:${projectId}`;
     const urlFor = (path: string) => {
       const url = new URL(path, toHttpUrl(this.serverUrlParsed));
-      url.searchParams.set('project', canonicalProjectId);
+      url.searchParams.set('project', projectId);
       return url.toString();
     };
     try {

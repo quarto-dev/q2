@@ -1022,17 +1022,17 @@ describe('author-ID fetch', () => {
     await mgr.connect('idx-1');
 
     const authorCall = fetchSpy.calls[1]!;
-    // bd-9t8zsh98: the HMAC's project input is the `automerge:`-prefixed
-    // URL form, the SPA's canonical spelling — a bare id would mint a
-    // different author ID than the same user's SPA session.
+    // bd-evxckg64: the HMAC's canonical project input is the bare id —
+    // the hub strips an `automerge:` prefix server-side, and the SPA's
+    // create path resolves bare, so hub-mcp sends the id as given.
     expect(authorCall.url).toBe(
-      'https://hub.example.com/auth/author?project=automerge%3Aidx-1',
+      'https://hub.example.com/auth/author?project=idx-1',
     );
     expect(authorCall.headers.Authorization).toBe('Bearer initial-id-token');
     expect(sync.connectCalls[0]!.authorId).toBe(AUTHOR_ID);
   });
 
-  it('does not double-prefix an already-prefixed project id', async () => {
+  it('passes an already-prefixed project id through verbatim', async () => {
     const auth = seededAuth();
     const fetchSpy = scriptedFetch([200, AUTHOR_200]);
     const sync = spySyncClientFactory();
@@ -1065,10 +1065,10 @@ describe('author-ID fetch', () => {
     await mgr.connect('idx-1');
 
     expect(fetchSpy.calls[1]!.url).toBe(
-      'https://hub.example.com/auth/author?project=automerge%3Aidx-1',
+      'https://hub.example.com/auth/author?project=idx-1',
     );
     expect(fetchSpy.calls[2]!.url).toBe(
-      'https://hub.example.com/auth/actor?project=automerge%3Aidx-1',
+      'https://hub.example.com/auth/actor?project=idx-1',
     );
     expect(fetchSpy.calls[2]!.headers.Authorization).toBe('Bearer initial-id-token');
     expect(sync.connectCalls[0]!.authorId).toBe(AUTHOR_ID);
@@ -1123,7 +1123,7 @@ describe('author-ID fetch', () => {
     expect(resolver).toBeDefined();
     await expect(resolver!('idx-new')).resolves.toBe(AUTHOR_ID);
     expect(fetchSpy.calls[1]!.url).toBe(
-      'https://hub.example.com/auth/author?project=automerge%3Aidx-new',
+      'https://hub.example.com/auth/author?project=idx-new',
     );
     expect(fetchSpy.calls[1]!.headers.Authorization).toBe('Bearer initial-id-token');
   });
