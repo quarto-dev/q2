@@ -11,6 +11,11 @@
     font-size: 16px;
 }
 
+/* Focusable so the caret receives keys; the caret itself is the focus indicator. */
+.pandoc-content-debug:focus {
+    outline: none;
+}
+
 .pandoc-content-debug .node.block {
     border: 1px solid #666;
     padding: 4px;
@@ -29,6 +34,27 @@
 
 .pandoc-content-debug .node.run {
     white-space: pre-wrap;
+}
+
+/* An empty inline list's stop (document.ts `emptyRun`): keep a line box so
+   the caret can stop there and the host can be clicked. Styled like the
+   "(empty)" slot marker, not like a text run. */
+.pandoc-content-debug .node.run.empty {
+    border-style: dashed;
+    background-color: #f5f5f5;
+}
+
+.pandoc-content-debug .node.run.empty .label {
+    font-weight: normal;
+    font-size: 11px;
+    color: #999;
+}
+
+.pandoc-content-debug .node.run.empty .run-text {
+    display: inline-block;
+    min-width: 1ch;
+    min-height: 1em;
+    vertical-align: bottom;
 }
 
 .pandoc-content-debug .slot-label {

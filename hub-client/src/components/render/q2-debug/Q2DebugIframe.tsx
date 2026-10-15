@@ -5,8 +5,11 @@ interface Q2DebugIframeProps {
   astJson: string;
   currentFilePath: string;
   onNavigateToDocument?: (path: string, anchor: string | null) => void;
-  setAst: (newAst: any) => void;
+  /** Writes the AST back; returns the QMD it was written as (see the edit acknowledgement below). */
+  setAst: (newAst: any) => string | void;
   customComponentsCode?: Record<string, string>; // Component name -> transpiled JS code
+  /** The QMD that produced `astJson` (same render generation). */
+  renderedContent?: string;
 }
 
 /**
@@ -20,9 +23,15 @@ export function Q2DebugIframe({
   onNavigateToDocument,
   setAst,
   customComponentsCode,
+  renderedContent,
 }: Q2DebugIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeReady, setIframeReady] = useState(false);
+  // The last caret edit the iframe sent (`editSeq`) and the QMD it was
+  // written as. A render whose content equals that QMD reflects the edit, and
+  // its UPDATE_AST carries `editAck: editSeq`; the iframe holds other updates
+  // while an edit is in flight so a stale render can't undo what was typed.
+  const lastEditRef = useRef<{ seq: number; qmd: string } | null>(null);
   // The user's name and colour, for the AST caret's flag in the iframe.
   const [user, setUser] = useState<{ name: string; color: string } | null>(null);
 
@@ -43,7 +52,10 @@ export function Q2DebugIframe({
       } else if (event.data.type === 'NAVIGATE_TO_DOCUMENT') {
         onNavigateToDocument?.(event.data.path, event.data.anchor);
       } else if (event.data.type === 'SET_AST') {
-        setAst(event.data.ast);
+        const qmd = setAst(event.data.ast);
+        if (typeof event.data.editSeq === 'number' && typeof qmd === 'string') {
+          lastEditRef.current = { seq: event.data.editSeq, qmd };
+        }
       }
     };
 
@@ -70,6 +82,8 @@ export function Q2DebugIframe({
   useEffect(() => {
     if (!iframeReady || !iframeRef.current?.contentWindow) return;
 
+    const lastEdit = lastEditRef.current;
+    const editAck = lastEdit !== null && renderedContent === lastEdit.qmd ? lastEdit.seq : null;
     iframeRef.current.contentWindow.postMessage(
       {
         type: 'UPDATE_AST',
@@ -77,11 +91,12 @@ export function Q2DebugIframe({
           astJson,
           currentFilePath,
           user,
+          editAck,
         },
       },
       '*'
     );
-  }, [iframeReady, astJson, currentFilePath, user]);
+  }, [iframeReady, astJson, currentFilePath, user, renderedContent]);
 
   return (
     <iframe

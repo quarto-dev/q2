@@ -49,8 +49,10 @@ export class DebugDocument {
     private readonly container: HTMLElement;
     /** Where the document's boxes live; the container itself is left to overlays (caret, status). */
     private readonly content: HTMLElement;
-    private ast: PandocAST | null = null;
+    private retained: PandocAST | null = null;
     private readonly roots = new WeakMap<object, HTMLElement>();
+    /** Box element → its node (the inverse of `roots`). */
+    private readonly nodeOfBox = new WeakMap<HTMLElement, unknown>();
     private readonly slots = new WeakMap<object, Record<string, HTMLElement>>();
     private readonly elems = new WeakMap<object, Elem>();
     private readonly runKeyOf = new WeakMap<object, object>();
@@ -59,6 +61,14 @@ export class DebugDocument {
     private readonly hostOfNode = new WeakMap<object, HTMLElement>();
     /** Text host → the nodes whose text it holds, in order. */
     private readonly nodesOfHost = new WeakMap<HTMLElement, unknown[]>();
+    /** Run host → the inline list (the AST array itself) its nodes live in. */
+    private readonly listOfHost = new WeakMap<HTMLElement, unknown[]>();
+    /**
+     * An inline list with no inlines still shows one empty run, so the
+     * caret has somewhere to stop and text can be inserted. Keyed by the
+     * list (the applier splices lists in place, so the array is stable).
+     */
+    private readonly emptyRuns = new WeakMap<unknown[], HTMLElement>();
     private ledger: TextChangeLedger = emptyLedger();
     /** Called after every update with the report, e.g. to migrate a caret. */
     onUpdated: ((result: ReconcileResult) => void) | null = null;
@@ -75,22 +85,26 @@ export class DebugDocument {
 
     /** Forget the retained AST; the next update renders from scratch. */
     reset(): void {
-        this.ast = null;
+        this.retained = null;
         this.content.replaceChildren();
     }
 
-    update(fresh: PandocAST): ReconcileResult {
-        const result = reconcileAst(this.ast, fresh);
-        this.ast = result.ast;
+    /**
+     * Reconcile `fresh` in and patch the DOM. Changes are highlighted unless
+     * `highlight` is false (the user's own typing needs no announcement).
+     */
+    update(fresh: PandocAST, { highlight = true } = {}): ReconcileResult {
+        const result = reconcileAst(this.retained, fresh);
+        this.retained = result.ast;
         if (!result.reused) {
             this.ledger = emptyLedger();
             this.content.replaceChildren();
-            this.placeList(this.content, this.ast.blocks, 'block');
+            this.placeList(this.content, this.retained.blocks, 'block');
         } else {
-            this.ledger = ledgerFrom(result.touched);
-            this.ghost(result.touched.removedNodes);
+            this.ledger = highlight ? ledgerFrom(result.touched) : emptyLedger();
+            if (highlight) this.ghost(result.touched.removedNodes);
             this.patch(result.touched);
-            this.paint(result.touched);
+            if (highlight) this.paint(result.touched);
         }
         this.onUpdated?.(result);
         return result;
@@ -100,6 +114,11 @@ export class DebugDocument {
         return this.container;
     }
 
+    /** The retained AST (the one the DOM mirrors), or `null` before the first update. */
+    get ast(): PandocAST | null {
+        return this.retained;
+    }
+
     /** The element holding the document's boxes (no overlays). */
     get contentElement(): HTMLElement {
         return this.content;
@@ -107,8 +126,13 @@ export class DebugDocument {
 
     /** The box element of `node`, if rendered. */
     boxOf(node: unknown): HTMLElement | undefined {
-        if (node === this.ast) return this.content;
+        if (node === this.retained) return this.content;
         return node !== null && typeof node === 'object' ? this.roots.get(node) : undefined;
+    }
+
+    /** The node whose box `el` is, if `el` is a node's box (runs have none). */
+    nodeOf(el: HTMLElement): unknown {
+        return this.nodeOfBox.get(el);
     }
 
     /** The element holding `node`'s text, if `node` is text-bearing and currently on screen. */
@@ -120,9 +144,14 @@ export class DebugDocument {
         return host && host.isConnected && !host.closest(`[${GHOST_ATTR}]`) ? host : undefined;
     }
 
-    /** The nodes whose text `host` holds, in order. */
+    /** The nodes whose text `host` holds, in order (empty for an empty run). */
     nodesOf(host: HTMLElement): unknown[] {
         return this.nodesOfHost.get(host) ?? [];
+    }
+
+    /** The inline list a run host's nodes live in (the AST array itself). */
+    listOf(host: HTMLElement): unknown[] | undefined {
+        return this.listOfHost.get(host);
     }
 
     /** All text hosts, in document order. */
@@ -138,6 +167,7 @@ export class DebugDocument {
         if (existing) return existing;
         const { root, slots } = renderNode(node, elem);
         this.roots.set(key, root);
+        this.nodeOfBox.set(root, node);
         this.slots.set(key, slots);
         this.elems.set(key, elem);
         this.registerTextHost(node, root);
@@ -165,8 +195,8 @@ export class DebugDocument {
 
     /** Re-place `node`'s children from the AST into its slot containers. */
     private placeChildren(node: unknown): void {
-        if (node === this.ast) {
-            this.placeList(this.content, this.ast!.blocks, 'block');
+        if (node === this.retained) {
+            this.placeList(this.content, this.retained!.blocks, 'block');
             return;
         }
         const key = node as object;
@@ -185,9 +215,10 @@ export class DebugDocument {
             const usedKeys = new Set<object>();
             let run: unknown[] = [];
             const flush = () => {
-                if (run.length > 0) desired.push(this.runElement(run, usedKeys));
+                if (run.length > 0) desired.push(this.runElement(run, usedKeys, children));
                 run = [];
             };
+            if (children.length === 0) desired.push(this.emptyRun(children));
             for (const child of children) {
                 if (isTextLike(child)) {
                     run.push(child);
@@ -222,19 +253,45 @@ export class DebugDocument {
         return key;
     }
 
-    private runElement(nodes: unknown[], used: Set<object>): HTMLElement {
+    private runElement(nodes: unknown[], used: Set<object>, list: unknown[]): HTMLElement {
         const key = this.runKey(nodes, used);
         const text = nodes.map(textOf).join('');
         const rec = this.runs.get(key);
         if (rec && rec.text === text && rec.nodes.length === nodes.length && rec.nodes.every((n, i) => n === nodes[i])) {
+            this.listOfHost.set(this.nodesHost(rec.el), list);
             return rec.el;
         }
         const el = buildRun(segmentsFromLedger(nodes, this.ledger), text);
         this.runs.set(key, { el, nodes: nodes.slice(), text });
-        const host = el.querySelector<HTMLElement>(`[${TEXT_HOST_ATTR}]`)!;
+        const host = this.nodesHost(el);
         for (const n of nodes) this.hostOfNode.set(n as object, host);
         this.nodesOfHost.set(host, nodes.slice());
+        this.listOfHost.set(host, list);
         return el;
+    }
+
+    /**
+     * The run shown for an empty inline list. The list itself stands in as
+     * the caret's node there (`hostOfNode` maps it to the empty host).
+     */
+    private emptyRun(list: unknown[]): HTMLElement {
+        let el = this.emptyRuns.get(list);
+        if (!el) {
+            el = buildRun([], '');
+            el.classList.add('empty');
+            // Not a text run: say so, rather than showing an empty "Text:".
+            el.querySelector(':scope > .label')!.textContent = '(no inlines)';
+            this.emptyRuns.set(list, el);
+        }
+        const host = this.nodesHost(el);
+        this.hostOfNode.set(list, host);
+        this.nodesOfHost.set(host, []);
+        this.listOfHost.set(host, list);
+        return el;
+    }
+
+    private nodesHost(run: HTMLElement): HTMLElement {
+        return run.querySelector<HTMLElement>(`[${TEXT_HOST_ATTR}]`)!;
     }
 
     // --- highlighting -----------------------------------------------------

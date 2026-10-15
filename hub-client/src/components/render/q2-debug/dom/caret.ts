@@ -25,21 +25,24 @@
  * The selection is painted as one hull per visual row in an SVG layer
  * (joining the rects of the selected text with diagonals so a Space box
  * next to a taller run reads as one highlight), blended with the text.
+ *
+ * Editing: a printable key replaces the selection (or inserts at the
+ * caret) and Backspace deletes the selection (or the character before the
+ * caret). The edit is made on a copy of the AST (dom/edit.ts), reconciled
+ * into the document right away — so the caret migrates like it does for
+ * any other update and the next key sees the new text — and handed to
+ * `onEdit` for the host to write back as QMD.
  */
 
 import type { ReconcileResult, Touched } from '@quarto/preview-renderer/astdiff';
+import type { PandocAST } from '@quarto/preview-renderer/framework';
 import type { DebugDocument } from './document';
-import { mapOffsetThroughChange, textOf } from './textDiff';
+import { replaceText, type HostPosition } from './edit';
+import { isTextLike, mapOffsetThroughChange, textOf } from './textDiff';
 
 export interface CaretPosition {
     node: unknown;
     /** Offset into `textOf(node)`, in UTF-16 units, `0..length`. */
-    offset: number;
-}
-
-interface HostPosition {
-    host: HTMLElement;
-    /** Offset into the host's AST text (all its nodes' text concatenated). */
     offset: number;
 }
 
@@ -65,6 +68,14 @@ export class AstCaret {
     private placing = false;
     /** Why the caret is where it is (exposed via `current` for debugging). */
     reason = '';
+    /** Receives each edited AST (already applied to the document) for the host to write back. */
+    onEdit: ((ast: PandocAST) => void) | null = null;
+    /**
+     * Where the caret goes after the edit in flight: an offset into the host
+     * it migrates to; `list` is the inline list the edit started in, the
+     * fallback when every node around the caret was deleted.
+     */
+    private landing: { offset: number; list: unknown[] | undefined } | null = null;
 
     constructor(doc: DebugDocument) {
         this.doc = doc;
@@ -79,6 +90,10 @@ export class AstCaret {
         this.layer = document.createElementNS(SVG_NS, 'svg');
         this.layer.setAttribute('class', 'q2-selection');
         this.container.append(this.layer, this.el);
+        // The click's default action (which would move focus into the iframe)
+        // is suppressed below, so take focus explicitly; without it the
+        // parent's editor keeps the keyboard.
+        this.container.tabIndex = -1;
 
         this.container.addEventListener('pointerdown', (e) => this.onPointerDown(e));
         this.container.addEventListener('pointermove', (e) => this.onPointerMove(e));
@@ -157,6 +172,8 @@ export class AstCaret {
     private toHost(pos: CaretPosition): HostPosition | null {
         const host = this.doc.textHostOf(pos.node);
         if (!host) return null;
+        // An empty run: its list is the node, and the only offset is 0.
+        if (this.doc.nodesOf(host).length === 0) return { host, offset: 0 };
         let offset = 0;
         for (const n of this.doc.nodesOf(host)) {
             if (n === pos.node) return { host, offset: offset + pos.offset };
@@ -168,7 +185,10 @@ export class AstCaret {
     /** Boundaries between two nodes attach to the *following* node. */
     private fromHost(hp: HostPosition): CaretPosition | null {
         const nodes = this.doc.nodesOf(hp.host);
-        if (nodes.length === 0) return null;
+        if (nodes.length === 0) {
+            const list = this.doc.listOf(hp.host);
+            return list ? { node: list, offset: 0 } : null;
+        }
         let offset = hp.offset;
         for (let i = 0; i < nodes.length; i++) {
             const len = textOf(nodes[i]).length;
@@ -267,6 +287,7 @@ export class AstCaret {
         const pos = this.positionAtPoint(e.clientX, e.clientY);
         if (!pos) return;
         e.preventDefault();
+        this.container.focus({ preventScroll: true });
         if (e.shiftKey && this.position) {
             this.select(this.anchor ?? this.position, pos, 'shift-click');
         } else {
@@ -295,9 +316,19 @@ export class AstCaret {
 
     private onKeyDown(e: KeyboardEvent): void {
         if (!this.position) return;
-        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-        e.preventDefault();
-        this.move(e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey);
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.move(e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey);
+            return;
+        }
+        if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+        if (e.key === 'Backspace') {
+            e.preventDefault();
+            this.replace('', true);
+        } else if (e.key.length === 1) {
+            e.preventDefault();
+            this.replace(e.key, false);
+        }
     }
 
     /**
@@ -314,21 +345,62 @@ export class AstCaret {
         }
         if (extend && !this.anchor) this.anchor = this.position;
         const hp = this.toHost(this.position);
-        if (!hp) return;
+        const next = hp ? this.step(hp, dir) : null;
+        const pos = next ? this.fromHost(next) : null;
+        if (pos) this.set(pos, dir === 1 ? 'right' : 'left', extend);
+    }
+
+    /** The host position one character from `hp`; at a host's edge, the next / previous host's edge. */
+    private step(hp: HostPosition, dir: -1 | 1): HostPosition | null {
+        const len = this.hostText(hp.host);
+        if (dir === 1 && hp.offset < len) return { host: hp.host, offset: hp.offset + 1 };
+        if (dir === -1 && hp.offset > 0) return { host: hp.host, offset: hp.offset - 1 };
         const hosts = this.doc.textHosts();
         const i = hosts.indexOf(hp.host);
-        if (i === -1) return;
-        let next: HostPosition | null = null;
-        const len = this.hostText(hp.host);
-        if (dir === 1 && hp.offset < len) next = { host: hp.host, offset: hp.offset + 1 };
-        else if (dir === -1 && hp.offset > 0) next = { host: hp.host, offset: hp.offset - 1 };
-        else {
-            const j = i + dir;
-            if (j < 0 || j >= hosts.length) return;
-            next = { host: hosts[j], offset: dir === 1 ? 0 : this.hostText(hosts[j]) };
+        if (i === -1) return null;
+        const j = i + dir;
+        if (j < 0 || j >= hosts.length) return null;
+        return { host: hosts[j], offset: dir === 1 ? 0 : this.hostText(hosts[j]) };
+    }
+
+    // --- editing -------------------------------------------------------------------
+
+    /**
+     * Replace the selection with `text`; with no selection, insert at the
+     * caret, or with `backwards` replace the character before it. The
+     * caret collapses to the range's start and, once the edit has been
+     * reconciled in, lands right after the inserted text.
+     */
+    private replace(text: string, backwards: boolean): void {
+        if (!this.position || !this.onEdit) return;
+        const sel = this.selection;
+        const end = this.toHost(sel ? sel.end : this.position);
+        if (!end) return;
+        const start = sel ? this.toHost(sel.start) : backwards ? this.step(end, -1) : end;
+        if (!start) return;
+        if (text === '' && this.charsBetween(start, end) === 0) return;
+        const ast = replaceText(this.doc, start, end, text);
+        if (!ast) return;
+        this.position = sel ? sel.start : this.position;
+        this.anchor = null;
+        this.landing = { offset: start.offset + text.length, list: this.doc.listOf(start.host) };
+        this.doc.update(ast, { highlight: false });
+        this.onEdit(ast);
+    }
+
+    /** Number of characters in `[start, end)` across the hosts it spans. */
+    private charsBetween(start: HostPosition, end: HostPosition): number {
+        const hosts = this.doc.textHosts();
+        const i = hosts.indexOf(start.host);
+        const j = hosts.indexOf(end.host);
+        if (i === -1 || j === -1 || j < i) return 0;
+        let n = 0;
+        for (let k = i; k <= j; k++) {
+            const a = k === i ? start.offset : 0;
+            const b = k === j ? end.offset : this.hostText(hosts[k]);
+            n += Math.max(0, b - a);
         }
-        const pos = this.fromHost(next);
-        if (pos) this.set(pos, dir === 1 ? 'right' : 'left', extend);
+        return n;
     }
 
     // --- selection painting ------------------------------------------------------
@@ -382,7 +454,7 @@ export class AstCaret {
         const hit = caretHitFromPoint(x, y);
         if (hit) {
             const host = (hit.node instanceof Element ? hit.node : hit.node.parentElement)?.closest<HTMLElement>('[data-q2-text]');
-            if (host && this.doc.nodesOf(host).length > 0) {
+            if (host) {
                 const offset = hit.node.nodeType === Node.TEXT_NODE ? this.hostOffsetOf(host, hit.node, hit.offset) : (x < midX(host) ? 0 : this.hostText(host));
                 return this.fromHost({ host, offset });
             }
@@ -404,6 +476,8 @@ export class AstCaret {
     // --- surviving edits -----------------------------------------------------------
 
     private afterUpdate(result: ReconcileResult): void {
+        const landing = this.landing;
+        this.landing = null;
         if (!this.position) return;
         if (!result.reused) {
             // The document was rebuilt from a fresh parse; the nodes are gone.
@@ -411,8 +485,13 @@ export class AstCaret {
             return;
         }
         const t = result.touched;
-        const migrated = this.migrate(this.position, t);
+        let migrated = this.migrate(this.position, t);
         const anchor = this.anchor ? this.migrate(this.anchor, t) : null;
+        if (migrated === null && anchor === null && landing?.list && this.doc.textHostOf(landing.list)) {
+            // Our edit deleted everything around the caret; the list it was
+            // in now shows as an empty run, which is where the caret belongs.
+            migrated = { node: landing.list, offset: 0 };
+        }
         if (migrated === null && anchor === null) {
             this.position = null;
             this.anchor = null;
@@ -421,18 +500,31 @@ export class AstCaret {
             return;
         }
         // One end gone: collapse onto the other.
-        const head = migrated ?? anchor!;
+        let head = migrated ?? anchor!;
+        if (landing !== null) {
+            // Our own edit: the text before the caret is unchanged in the host
+            // it migrated to, so the landing offset counts from that host's start.
+            const hp = this.toHost(head);
+            const pos = hp ? this.fromHost({ host: hp.host, offset: landing.offset }) : null;
+            if (pos) head = pos;
+        }
         const moved = head.node !== this.position.node || head.offset !== this.position.offset;
         this.position = head;
-        this.anchor = migrated === null ? null : anchor;
+        this.anchor = migrated === null || landing !== null ? null : anchor;
         if (this.anchor && this.compare(this.anchor, this.position) === 0) this.anchor = null;
         this.updatesSurvived++;
-        this.reason = moved ? 'followed edit' : '';
+        this.reason = landing !== null ? 'typed' : moved ? 'followed edit' : '';
         this.render();
     }
 
     private migrate(pos: CaretPosition, t: Touched): CaretPosition | null {
         let { node, offset } = pos;
+        if (Array.isArray(node)) {
+            // On an empty run (the list is the node): follow text inserted
+            // into the list, else stay while the list is still shown empty.
+            if (node.length > 0) return isTextLike(node[0]) ? { node: node[0], offset: 0 } : null;
+            return this.doc.textHostOf(node) ? { node, offset: 0 } : null;
+        }
         // A text cursor, not a fixed index: follow the character diff.
         for (const c of t.textChanges) {
             if (c.node === node) offset = mapOffsetThroughChange(c.old, c.new, offset);

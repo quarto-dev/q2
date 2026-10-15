@@ -9,6 +9,19 @@
  * their DOM, and every highlight is derived from the script. An AST caret
  * (`dom/caret.ts`) rides on that stability: click text to place it on a
  * node, use the arrow keys to move it, and watch it stay put across edits.
+ * Typing and Backspace edit the AST through the caret; the edited AST is
+ * posted back as `SET_AST`, and the parent writes it to the QMD.
+ *
+ * Round trip of an edit: the caret applies it to the document at once,
+ * then the parent writes the QMD, re-renders, and sends the fresh parse
+ * back. That parse reconciles to no change (or just the parser's
+ * normalisation). What must not happen is a render of an *older* state
+ * arriving after a newer keystroke: it would undo the keystroke on
+ * screen until its own render arrived. So each edit carries a sequence
+ * number, the parent acknowledges it on the render that reflects it, and
+ * while an edit is unacknowledged other updates are held (the latest one
+ * is kept and applied if no acknowledgement comes within `HOLD_MS`, e.g.
+ * because a collaborator's change replaced ours before the render).
  */
 
 import './dom/debug.css';
@@ -26,7 +39,12 @@ interface UpdateAstPayload {
   currentFilePath: string;
   /** The current user, for the caret's flag. */
   user?: { name: string; color: string } | null;
+  /** The `editSeq` of the caret edit this render reflects, if any. */
+  editAck?: number | null;
 }
+
+/** How long to hold updates waiting for an edit's acknowledgement. */
+const HOLD_MS = 2000;
 
 /** Last edit script applied, exposed for debugging / e2e inspection. */
 declare global {
@@ -38,6 +56,37 @@ declare global {
 let doc: DebugDocument | null = null;
 let caret: AstCaret | null = null;
 let currentPath: string | null = null;
+/** Sequence number of the last edit sent, and the last one acknowledged. */
+let sentSeq = 0;
+let ackedSeq = 0;
+/** The latest update held back while an edit is unacknowledged. */
+let held: UpdateAstPayload | null = null;
+let holdTimer: ReturnType<typeof setTimeout> | null = null;
+
+function sendEdit(ast: PandocAST): void {
+  sentSeq++;
+  window.parent.postMessage({ type: 'SET_AST', ast, editSeq: sentSeq }, '*');
+  if (holdTimer !== null) clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => {
+    holdTimer = null;
+    ackedSeq = sentSeq;
+    if (held) applyUpdate(held);
+    held = null;
+  }, HOLD_MS);
+}
+
+function updateAst(payload: UpdateAstPayload): void {
+  if (sentSeq > ackedSeq && payload.editAck !== sentSeq) {
+    held = payload;
+    return;
+  }
+  if (payload.editAck === sentSeq) {
+    ackedSeq = sentSeq;
+    held = null;
+    if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+  }
+  applyUpdate(payload);
+}
 
 // Shared dispatcher gates UPDATE_AST on the in-flight LOAD_CUSTOM_COMPONENTS
 // promise so messages run in arrival order (see ../iframeMessageDispatch.ts).
@@ -58,7 +107,7 @@ window.addEventListener('message', (event) => {
   dispatch(event.data as IframeMessage);
 });
 
-function updateAst(payload: UpdateAstPayload) {
+function applyUpdate(payload: UpdateAstPayload) {
   const { astJson, currentFilePath, user } = payload;
   const rootElement = document.getElementById('root');
   if (!rootElement) {
@@ -80,6 +129,7 @@ function updateAst(payload: UpdateAstPayload) {
       // Click to place, arrows to move; attached to an AST node + offset,
       // and migrated through edits by the applier's report (dom/caret.ts).
       caret = new AstCaret(doc);
+      caret.onEdit = sendEdit;
       (window as unknown as { __Q2_DEBUG_CARET__?: AstCaret }).__Q2_DEBUG_CARET__ = caret;
     }
     if (currentPath !== currentFilePath) {
