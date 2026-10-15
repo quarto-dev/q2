@@ -3,7 +3,7 @@
 // standalone mock OIDC IdP (this script). Node built-ins only.
 //
 // Steps:
-//  1. login via POST /auth/refresh with a SHORT-LIVED Google-style
+//  1. login via POST /auth/session with a SHORT-LIVED Google-style
 //     token (exp = now + 45 s) -> hub-minted session cookie (compact).
 //  2. /auth/me -> 200, sliding exp ~ now + 7 d.
 //  3. hard break: the Google token in the cookie -> 401.
@@ -88,7 +88,7 @@ const cookieOf = (res) => {
 };
 const login = async (sub, expIn = 45) => {
   const g = googleToken({ sub, email: 'e2e@posit.co', expIn });
-  const res = await fetch(`${HUB}/auth/refresh`, {
+  const res = await fetch(`${HUB}/auth/session`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
     body: JSON.stringify({ credential: g }),
@@ -99,7 +99,7 @@ const me = (cookie) => fetch(`${HUB}/auth/me`, { headers: { cookie: `quarto_hub_
 
 // ── 1. login mints a compact session cookie ─────────────────────────
 const a = await login(`sub-${randomUUID()}`);
-check('login (POST /auth/refresh) returns 200', a.res.status === 200, `status=${a.res.status}`);
+check('login (POST /auth/session) returns 200', a.res.status === 200, `status=${a.res.status}`);
 check('session cookie minted (not the Google JWT)', !!a.session && a.session !== a.google);
 check('session cookie is compact', a.session.length < 1024,
   `${a.session.length} bytes (Google token was ${a.google.length} bytes)`);
