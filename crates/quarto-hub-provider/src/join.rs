@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use quarto_hub::index::IndexDocument;
-use samod::{BackoffConfig, Repo};
+use samod::{BackoffConfig, DialerFailed, Repo};
 
 use crate::ProviderError;
 use crate::dialer::BearerDialer;
@@ -41,11 +41,18 @@ pub async fn join(
         .dial(BackoffConfig::default(), dialer)
         .map_err(|_| ProviderError::Repo("repo is stopped".into()))?;
 
-    // Wait for the first connection (or a failure) within the timeout.
+    // Wait for the first connection (or a failure) within the timeout. A
+    // permanent dial failure (e.g. a non-ws(s) --server URL) surfaces its
+    // own cause; anything else keeps the generic wording (bd-q96fhj3q).
     tokio::time::timeout(config.connect_timeout, handle.established())
         .await
         .map_err(|_| ProviderError::Repo("timed out connecting to hub".into()))?
-        .map_err(|_| ProviderError::Repo("hub connection failed (auth rejected?)".into()))?;
+        .map_err(|e| match e {
+            DialerFailed::PermanentFailure(err) => {
+                ProviderError::Repo(format!("hub connection failed: {err}"))
+            }
+            e => ProviderError::Repo(format!("hub connection failed: {e}")),
+        })?;
 
     let index = IndexDocument::load(&repo, &config.index_doc_id)
         .await
@@ -68,4 +75,40 @@ pub async fn join_and_list_files(
     let mut files: Vec<String> = index.get_all_files().into_keys().collect();
     files.sort();
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::token::StaticTokenSource;
+
+    // bd-q96fhj3q: a non-ws(s) --server URL is a permanent misconfiguration.
+    // join must fail fast and name the URL as the cause — not burn the whole
+    // connect timeout and then blame a timeout or auth.
+    #[tokio::test]
+    async fn join_with_a_non_ws_server_url_fails_fast_naming_the_url() {
+        let start = std::time::Instant::now();
+        let result = join(
+            JoinConfig {
+                server_ws_url: url::Url::parse("https://127.0.0.1:1/ws").unwrap(),
+                index_doc_id: "irrelevant".to_string(),
+                connect_timeout: Duration::from_secs(3),
+            },
+            Arc::new(StaticTokenSource::new("tok-123")),
+        )
+        .await;
+        let err = match result {
+            Ok(_) => panic!("join must fail for an https:// server URL"),
+            Err(err) => err,
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("invalid websocket url"),
+            "error should name the URL as the cause, got: {msg}"
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(3),
+            "permanent failure should surface before the connect timeout"
+        );
+    }
 }

@@ -39,10 +39,20 @@ impl BearerDialer {
 /// Build a websocket client handshake request for `url` carrying an
 /// `Authorization: Bearer <bearer>` header.
 pub(crate) fn build_auth_request(url: &Url, bearer: &str) -> Result<Request, ProviderError> {
+    // tungstenite validates the scheme only at connect time; reject it here
+    // so a bad --server URL is a permanent, nameable failure (bd-q96fhj3q).
+    match url.scheme() {
+        "ws" | "wss" => {}
+        scheme => {
+            return Err(ProviderError::InvalidUrl(format!(
+                "unsupported scheme '{scheme}'"
+            )));
+        }
+    }
     let mut request = url
         .as_str()
         .into_client_request()
-        .map_err(|e| ProviderError::Handshake(format!("invalid websocket url: {e}")))?;
+        .map_err(|e| ProviderError::InvalidUrl(e.to_string()))?;
     let value = format!("Bearer {bearer}")
         .parse()
         .map_err(|_| ProviderError::Handshake("bearer token is not a valid header value".into()))?;
@@ -71,10 +81,12 @@ pub(crate) fn outbound_to_ws(bytes: Vec<u8>) -> Message {
 }
 
 impl Dialer for BearerDialer {
-    // samod 0.13 treated every connect error as retryable; keep that behavior
-    // by reporting all failures as transient (a fresh token is fetched per
-    // attempt, so even an auth rejection can clear on retry).
-    type Error = std::convert::Infallible;
+    // URL-shaped failures can never succeed on retry — the URL is fixed at
+    // construction — so they are the one permanent case (bd-q96fhj3q).
+    // Everything else stays transient, matching samod 0.13: a fresh token is
+    // fetched per attempt (auth rejections can clear), and connect errors
+    // are network.
+    type Error = ProviderError;
 
     fn url(&self) -> Url {
         self.url.clone()
@@ -90,11 +102,25 @@ impl Dialer for BearerDialer {
                 .fresh_bearer()
                 .await
                 .map_err(DialError::transient)?;
-            let request = build_auth_request(&url, &bearer).map_err(DialError::transient)?;
+            let request = match build_auth_request(&url, &bearer) {
+                Ok(request) => request,
+                Err(err @ ProviderError::InvalidUrl(_)) => {
+                    return Err(DialError::PermanentFailure(err));
+                }
+                Err(err) => return Err(DialError::transient(err)),
+            };
 
-            let (ws, _response) = tokio_tungstenite::connect_async(request)
-                .await
-                .map_err(DialError::transient)?;
+            let (ws, _response) = match tokio_tungstenite::connect_async(request).await {
+                Ok(ok) => ok,
+                // A URL error at connect (e.g. a scheme tungstenite rejects)
+                // is a property of the fixed URL, never of the network.
+                Err(tungstenite::Error::Url(err)) => {
+                    return Err(DialError::PermanentFailure(ProviderError::InvalidUrl(
+                        err.to_string(),
+                    )));
+                }
+                Err(err) => return Err(DialError::transient(err)),
+            };
             let (write, read) = ws.split();
 
             // Inbound: tungstenite frames -> sync bytes (dropping control frames).
@@ -124,6 +150,7 @@ impl Dialer for BearerDialer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::token::{BearerFuture, StaticTokenSource, TokenSource};
 
     #[test]
     fn auth_request_carries_bearer_header_and_target() {
@@ -171,6 +198,76 @@ mod tests {
         match outbound_to_ws(vec![4, 5, 6]) {
             Message::Binary(data) => assert_eq!(data.to_vec(), vec![4, 5, 6]),
             other => panic!("expected Binary frame, got {other:?}"),
+        }
+    }
+
+    // bd-q96fhj3q: Url::parse accepts https://; tungstenite rejects it when
+    // the handshake request is built. That case is a permanent
+    // misconfiguration (the URL is fixed at construction) and must be
+    // distinguishable from the bearer-header case, which stays transient
+    // because a fresh token is fetched per attempt.
+    #[test]
+    fn auth_request_rejects_a_non_ws_scheme_as_invalid_url() {
+        let url = Url::parse("https://hub.example.com/ws").unwrap();
+        let err = build_auth_request(&url, "tok-123").unwrap_err();
+        assert!(
+            matches!(err, ProviderError::InvalidUrl(_)),
+            "expected InvalidUrl, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_with_a_non_ws_scheme_is_a_permanent_failure() {
+        let dialer = BearerDialer::new(
+            Url::parse("https://hub.example.com/ws").unwrap(),
+            Arc::new(StaticTokenSource::new("tok-123")),
+        );
+        match dialer.connect().await {
+            Err(err @ DialError::PermanentFailure(_)) => {
+                let msg = err.to_string();
+                assert!(
+                    msg.contains("invalid websocket url"),
+                    "permanent failure should name the URL as the cause, got: {msg}"
+                );
+            }
+            Err(err) => panic!("expected a permanent failure, got transient: {err}"),
+            Ok(_) => panic!("expected a permanent failure, got a live transport"),
+        }
+    }
+
+    #[tokio::test]
+    async fn connect_with_an_invalid_bearer_header_stays_transient() {
+        // The bearer is refetched per attempt, so a header-invalid token can
+        // clear on retry — this case must NOT become permanent.
+        let dialer = BearerDialer::new(
+            Url::parse("wss://hub.example.com/ws").unwrap(),
+            Arc::new(StaticTokenSource::new("bad\ntoken")),
+        );
+        match dialer.connect().await {
+            Err(DialError::TransientFailure(_)) => {}
+            Err(err) => panic!("expected a transient failure, got permanent: {err}"),
+            Ok(_) => panic!("expected a transient failure, got a live transport"),
+        }
+    }
+
+    struct FailingTokenSource;
+
+    impl TokenSource for FailingTokenSource {
+        fn fresh_bearer(&self) -> BearerFuture {
+            Box::pin(async { Err(ProviderError::Token("auth bridge is down".into())) })
+        }
+    }
+
+    #[tokio::test]
+    async fn connect_with_a_failing_token_source_stays_transient() {
+        let dialer = BearerDialer::new(
+            Url::parse("wss://hub.example.com/ws").unwrap(),
+            Arc::new(FailingTokenSource),
+        );
+        match dialer.connect().await {
+            Err(DialError::TransientFailure(_)) => {}
+            Err(err) => panic!("expected a transient failure, got permanent: {err}"),
+            Ok(_) => panic!("expected a transient failure, got a live transport"),
         }
     }
 }

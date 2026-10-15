@@ -36,9 +36,16 @@ pub use token_bridge::NodeBridge;
 /// Errors from joining a hub as an execution provider.
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
-    /// Failed to build or perform the websocket handshake (bad URL, header).
+    /// Failed to build or perform the websocket handshake (bad header).
     #[error("websocket handshake error: {0}")]
     Handshake(String),
+
+    /// The websocket URL can never form a valid handshake request (e.g. a
+    /// non-ws(s) scheme). The URL is fixed at dialer construction, so
+    /// retrying can never succeed — this surfaces as a permanent dial
+    /// failure, not a retry (bd-q96fhj3q).
+    #[error("invalid websocket url: {0} (the server URL must use ws:// or wss://)")]
+    InvalidUrl(String),
 
     /// A transport-level protocol violation (e.g. a text frame on the sync
     /// socket, or a send/receive error).
