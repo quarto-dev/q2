@@ -754,10 +754,19 @@ pub fn validate_image_domain(domain: &str) -> Result<(), String> {
 /// - **Per-session consistency**: Within a single project, the same user gets
 ///   the same ID across sessions/devices/reconnections.
 ///
+/// The canonical `project_id` is the **bare** document id — the spelling the
+/// author-ID transition's E2E pinned byte-for-byte, and the one the SPA's
+/// create path resolves and stores. A leading `automerge:` (the URL form,
+/// sent by the SPA's share flow and by hub-mcp builds predating
+/// bd-evxckg64) is stripped, so either spelling of one document mints the
+/// same ID and client spelling no longer splits attribution. No collision
+/// risk: a bs58 document id cannot contain `:`.
+///
 /// The null byte separator (`\0`) cannot appear in JWT `sub` claims (which are
 /// JSON strings) or Automerge IDs (`automerge:<bs58>`), preventing separator
 /// injection attacks.
 pub fn sub_to_actor_id_for_project(server_secret: &[u8], sub: &str, project_id: &str) -> String {
+    let project_id = project_id.strip_prefix("automerge:").unwrap_or(project_id);
     let mut mac =
         HmacSha256::new_from_slice(server_secret).expect("HMAC accepts keys of any length");
     mac.update(sub.as_bytes());
@@ -1638,6 +1647,20 @@ mod tests {
         let id1 = sub_to_actor_id_for_project(&secret, "user123", "automerge:abc");
         let id2 = sub_to_actor_id_for_project(&secret, "user123", "automerge:abc");
         assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn actor_id_for_project_bare_and_prefixed_spellings_match() {
+        // bd-evxckg64: the canonical HMAC input is the bare document id
+        // (the spelling the author-ID transition E2E pinned). Clients
+        // send either spelling — the SPA create path sends bare, the SPA
+        // share flow and older hub-mcp send the `automerge:` URL form —
+        // so the mint strips the prefix and both spellings of one
+        // document must yield one author ID.
+        let secret = make_secret();
+        let bare = sub_to_actor_id_for_project(&secret, "user123", "abc");
+        let prefixed = sub_to_actor_id_for_project(&secret, "user123", "automerge:abc");
+        assert_eq!(bare, prefixed);
     }
 
     #[test]

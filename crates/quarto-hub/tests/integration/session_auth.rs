@@ -1261,6 +1261,49 @@ async fn auth_author_supports_bearer() {
 }
 
 #[tokio::test]
+async fn auth_author_bare_and_prefixed_project_spellings_match() {
+    // bd-evxckg64: the canonical HMAC input is the bare document id.
+    // Clients send either spelling (the SPA create path sends bare, the
+    // SPA share flow and older hub-mcp builds send the `automerge:` URL
+    // form); the server strips the prefix, so both spellings of one
+    // document mint one author id — checked through the real HTTP
+    // routes, on both endpoints (D5 covers the normalization too).
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("author-spelling-sub")
+            .to_value(),
+    );
+
+    let get = |endpoint: &str, project: &str| {
+        hub.client
+            .get(hub.url(&format!("/auth/{endpoint}?project={project}")))
+            .bearer_auth(&google)
+    };
+
+    let bare = get("author", "proj-spell").send().await.unwrap();
+    assert_eq!(bare.status(), 200);
+    let bare_body: serde_json::Value = bare.json().await.unwrap();
+    let bare_id = bare_body["author_id"].as_str().unwrap().to_string();
+
+    for endpoint in ["author", "actor"] {
+        let resp = get(endpoint, "automerge:proj-spell").send().await.unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        let key = if endpoint == "author" {
+            "author_id"
+        } else {
+            "actor_id"
+        };
+        assert_eq!(
+            body[key].as_str().unwrap(),
+            bare_id,
+            "prefixed spelling must mint the bare-canonical id on /auth/{endpoint}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn auth_author_requires_authentication() {
     let (_provider, hub) = session_setup().await;
     let resp = hub
