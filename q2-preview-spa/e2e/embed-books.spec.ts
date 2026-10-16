@@ -7,7 +7,7 @@
  *   - the book's typst source holds every chapter, and the chapter-only `.typ` holds just the active one;
  *   - the book PDF and the chapter-only PDF are named for the book and the chapter respectively;
  *   - a page that is not one of the book's chapters downloads standalone, and a stale "book" request for it comes
- *     back as that page alone with the `Q-5-41` notice.
+ *     back as that page alone with the `Q-5-48` notice.
  *
  * Needs a `q2` built with the real embed (`cargo xtask build-hub-client-embed`, then `cargo build --bin q2`),
  * and pandoc and typst on PATH. The PDF case also needs the network (the book template fetches
@@ -123,7 +123,7 @@ test.describe('q2 preview --ui editor: book scope', () => {
     expect((await readFile(chapter.file)).subarray(0, 5).toString()).toBe('%PDF-');
   });
 
-  test('a page outside the book downloads standalone; a stale "book" request for it carries the Q-5-41 notice', async ({ page }) => {
+  test('a page outside the book downloads standalone; a stale "book" request for it carries the Q-5-48 notice', async ({ page }) => {
     const s = await startBook();
     await page.goto(s.url);
     await openFile(page, 'other.qmd');
@@ -144,7 +144,7 @@ test.describe('q2 preview --ui editor: book scope', () => {
     expect(res.status()).toBe(200);
     expect(await res.text()).toContain('DELTA');
     const diagnostics = decodeURIComponent(res.headers()['x-q2-diagnostics'] ?? '');
-    expect(diagnostics).toContain('Q-5-41');
+    expect(diagnostics).toContain('Q-5-48');
     const stats = JSON.parse(decodeURIComponent(res.headers()['x-q2-stats'] ?? '{}'));
     expect(stats.book?.scope).not.toBe('book');
   });
