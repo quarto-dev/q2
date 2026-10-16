@@ -35,7 +35,8 @@ use crate::pdf_preview::{PdfRequest, pdf_handler};
 use crate::render_download::{RenderRequest, render_handler};
 use crate::render_helper::{
     BookDownload, BookDownloadError, BookDownloadOutput, BookDownloadRequest, RenderJob,
-    RenderOutcome, RenderSeam, ScopeParam, render_blocking, set_book_download, set_render_seam,
+    RenderOutcome, RenderSeam, may_render_book, render_blocking, set_book_download,
+    set_render_seam,
 };
 
 // ---- fixtures ------------------------------------------------------------
@@ -211,12 +212,22 @@ fn install(seam: FakeSeam) -> Arc<FakeSeam> {
     seam
 }
 
-fn pdf_req(path: &str, content: Option<&str>, scope: Option<ScopeParam>) -> Json<PdfRequest> {
+/// The request `metadata` that asks for `scope` (`"book"` or `"chapter"`).
+fn scope_metadata(scope: &str) -> Option<serde_json::Value> {
+    Some(serde_json::json!({ "book-scope": scope }))
+}
+
+fn pdf_req(
+    path: &str,
+    content: Option<&str>,
+    metadata: Option<serde_json::Value>,
+) -> Json<PdfRequest> {
     Json(PdfRequest {
         path: path.to_string(),
         content: content.map(str::to_string),
-        scope,
+        metadata,
         attribution_json: None,
+        extra: Default::default(),
     })
 }
 
@@ -224,14 +235,15 @@ fn render_req(
     path: &str,
     format: &str,
     content: Option<&str>,
-    scope: Option<ScopeParam>,
+    metadata: Option<serde_json::Value>,
 ) -> Json<RenderRequest> {
     Json(RenderRequest {
         path: path.to_string(),
         format: format.to_string(),
         content: content.map(str::to_string),
-        scope,
+        metadata,
         attribution_json: None,
+        extra: Default::default(),
     })
 }
 
@@ -628,7 +640,7 @@ async fn chapter_scope_renders_the_chapter_alone_and_a_non_member_renders_as_a_p
 
     let response = pdf_handler(
         State(ctx.clone()),
-        pdf_req("one.qmd", None, Some(ScopeParam::Chapter)),
+        pdf_req("one.qmd", None, scope_metadata("chapter")),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -638,7 +650,7 @@ async fn chapter_scope_renders_the_chapter_alone_and_a_non_member_renders_as_a_p
     // info notice (it states a fact about the output, not about the request).
     let response = pdf_handler(
         State(ctx.clone()),
-        pdf_req("other.qmd", None, Some(ScopeParam::Chapter)),
+        pdf_req("other.qmd", None, scope_metadata("chapter")),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -673,7 +685,7 @@ async fn a_book_seam_without_downloads_answers_501() {
     set_book_download(Some(Arc::new(Nothing)));
     // A member that asks for the book consolidates it (nothing chosen is the
     // chapter: the page is the target).
-    let response = pdf_handler(State(ctx), pdf_req("one.qmd", None, Some(ScopeParam::Book))).await;
+    let response = pdf_handler(State(ctx), pdf_req("one.qmd", None, scope_metadata("book"))).await;
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     let body: serde_json::Value = serde_json::from_slice(&body_bytes(response).await).unwrap();
     assert_eq!(
@@ -730,7 +742,7 @@ async fn a_book_request_reaches_the_book_seam_with_every_capture() {
 
     let response = render_handler(
         State(ctx),
-        render_req("one.qmd", "typst-pdf", None, Some(ScopeParam::Book)),
+        render_req("one.qmd", "typst-pdf", None, scope_metadata("book")),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -759,7 +771,7 @@ async fn an_explicit_scope_for_a_page_format_is_ignored_with_a_notice() {
 
     let response = render_handler(
         State(ctx.clone()),
-        render_req("one.qmd", "docx", None, Some(ScopeParam::Book)),
+        render_req("one.qmd", "docx", None, scope_metadata("book")),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -791,14 +803,12 @@ fn job_with_metadata(
     root: &Path,
     path: &str,
     format_key: &str,
-    scope: Option<quarto_core::BookScope>,
     metadata: Option<serde_json::Value>,
 ) -> RenderJob {
     RenderJob {
         abs_path: root.join(path),
         format_key: format_key.to_string(),
         content: None,
-        scope,
         metadata,
         attribution_json: None,
         captures: Vec::new(),
@@ -816,18 +826,23 @@ async fn render_blocking_hands_the_seam_a_runtime_carrying_the_job_metadata() {
     let metadata = serde_json::json!({"title": "X", "format": {"typst": {"toc": true}}});
 
     // A page render (a non-member, so the document path) and a chapter render.
-    for (path, scope) in [
-        ("other.qmd", None),
-        ("one.qmd", Some(quarto_core::BookScope::Chapter)),
+    let chapter_metadata = serde_json::json!({
+        "title": "X",
+        "format": {"typst": {"toc": true}},
+        "book-scope": "chapter",
+    });
+    for (path, sent) in [
+        ("other.qmd", metadata.clone()),
+        ("one.qmd", chapter_metadata.clone()),
     ] {
-        let job = job_with_metadata(&root, path, "typst-pdf", scope, Some(metadata.clone()));
+        let job = job_with_metadata(&root, path, "typst-pdf", Some(sent));
         let outcome = tokio::task::spawn_blocking(move || render_blocking(job))
             .await
             .unwrap();
         assert!(matches!(outcome, RenderOutcome::Ok(_)), "{path}");
     }
     // And one with no metadata: the seam's runtime has none.
-    let job = job_with_metadata(&root, "other.qmd", "typst-pdf", None, None);
+    let job = job_with_metadata(&root, "other.qmd", "typst-pdf", None);
     tokio::task::spawn_blocking(move || render_blocking(job))
         .await
         .unwrap();
@@ -836,10 +851,7 @@ async fn render_blocking_hands_the_seam_a_runtime_carrying_the_job_metadata() {
     assert_eq!(calls[0].kind, "document");
     assert_eq!(calls[0].runtime_metadata.as_ref(), Some(&metadata));
     assert_eq!(calls[1].kind, "chapter");
-    // The adapter (F4: delete) adds the old `scope` as `book-scope`.
-    let mut with_scope = metadata.clone();
-    with_scope["book-scope"] = serde_json::json!("chapter");
-    assert_eq!(calls[1].runtime_metadata.as_ref(), Some(&with_scope));
+    assert_eq!(calls[1].runtime_metadata.as_ref(), Some(&chapter_metadata));
     assert_eq!(calls[2].runtime_metadata, None);
 }
 
@@ -867,18 +879,176 @@ async fn render_blocking_passes_the_job_metadata_to_the_book_download() {
     install(FakeSeam::default());
     let recorder = Arc::new(Recorder(Mutex::new(None)));
     set_book_download(Some(Arc::new(recorder.clone())));
-    let metadata = serde_json::json!({"title": "Whole book"});
+    let metadata = serde_json::json!({"title": "Whole book", "book-scope": "book"});
 
-    let job = job_with_metadata(
-        &root,
-        "one.qmd",
-        "typst-pdf",
-        Some(quarto_core::BookScope::Book),
-        Some(metadata.clone()),
-    );
+    let job = job_with_metadata(&root, "one.qmd", "typst-pdf", Some(metadata.clone()));
     let outcome = tokio::task::spawn_blocking(move || render_blocking(job))
         .await
         .unwrap();
     assert!(matches!(outcome, RenderOutcome::Ok(_)));
     assert_eq!(recorder.0.lock().unwrap().clone(), Some(metadata));
+}
+
+// ---- the wire: `metadata` replaces `scope` (F4) ------------------------------
+
+/// A book-download seam that records the request and writes a tiny file.
+struct BookRecorder(Mutex<Vec<BookDownloadRequest>>);
+
+impl BookDownload for Arc<BookRecorder> {
+    fn render(&self, req: BookDownloadRequest) -> Result<BookDownloadOutput, BookDownloadError> {
+        let file = req.request_dir.join("book.pdf");
+        std::fs::write(&file, b"%PDF-book").unwrap();
+        self.0.lock().unwrap().push(req);
+        Ok(BookDownloadOutput {
+            file,
+            chapters: 2,
+            unexecuted_cells: 0,
+            diagnostics: Vec::new(),
+        })
+    }
+}
+
+fn install_book_recorder() -> Arc<BookRecorder> {
+    let recorder = Arc::new(BookRecorder(Mutex::new(Vec::new())));
+    set_book_download(Some(Arc::new(recorder.clone())));
+    recorder
+}
+
+#[tokio::test]
+async fn a_book_scope_present_only_in_the_editor_buffer_is_honoured() {
+    let (_project, ctx) = build_ctx(BOOK).await;
+    let fake = install(FakeSeam::default());
+    let recorder = install_book_recorder();
+
+    // The disk copy of one.qmd says nothing about the scope; the buffer asks
+    // for the book, so the book branch runs.
+    let buffer = "---\ntitle: One\nbook-scope: book\n---\n\nEdited.\n";
+    let response = pdf_handler(State(ctx.clone()), pdf_req("one.qmd", Some(buffer), None)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(recorder.0.lock().unwrap().len(), 1, "the book branch ran");
+    assert_eq!(
+        recorder.0.lock().unwrap()[0].content.as_deref(),
+        Some(buffer)
+    );
+    assert!(fake.calls.lock().unwrap().is_empty());
+
+    // Without the buffer's key the same page is its chapter.
+    let response = pdf_handler(State(ctx), pdf_req("one.qmd", Some("one\n"), None)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(recorder.0.lock().unwrap().len(), 1);
+    assert_eq!(fake.calls.lock().unwrap()[0].kind, "chapter");
+}
+
+#[tokio::test]
+async fn an_explicit_chapter_beats_a_document_book_scope() {
+    // The PDF pane sends `chapter`; a document's own `book-scope: book` must
+    // not turn the preview into a book.
+    let (_project, ctx) = build_ctx(&[
+        BOOK[0],
+        BOOK[1],
+        (
+            "one.qmd",
+            "---\ntitle: One\nbook-scope: book\n---\n\nOne.\n",
+        ),
+    ])
+    .await;
+    let fake = install(FakeSeam::default());
+    let recorder = install_book_recorder();
+
+    let response = pdf_handler(
+        State(ctx),
+        pdf_req("one.qmd", None, scope_metadata("chapter")),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(recorder.0.lock().unwrap().is_empty());
+    assert_eq!(fake.calls.lock().unwrap()[0].kind, "chapter");
+}
+
+#[tokio::test]
+async fn a_non_object_metadata_is_a_400_on_both_routes() {
+    let (_project, ctx) = build_ctx(BOOK).await;
+    install(FakeSeam::default());
+    for bad in [
+        serde_json::json!("chapter"),
+        serde_json::json!([1]),
+        serde_json::json!(3),
+    ] {
+        let response = pdf_handler(
+            State(ctx.clone()),
+            pdf_req("one.qmd", None, Some(bad.clone())),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{bad}");
+        let response = render_handler(
+            State(ctx.clone()),
+            render_req("one.qmd", "docx", None, Some(bad.clone())),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{bad}");
+    }
+}
+
+#[tokio::test]
+async fn a_stale_scope_field_is_ignored_and_deserialises() {
+    // No body denies unknown fields: a stale client's `scope` parses (into
+    // `extra`, where it is logged at debug level) and the render proceeds.
+    let body: PdfRequest =
+        serde_json::from_str(r#"{"path":"one.qmd","scope":"chapter","attributionJson":null}"#)
+            .unwrap();
+    assert_eq!(body.metadata, None);
+    assert_eq!(body.extra.get("scope"), Some(&serde_json::json!("chapter")));
+    let body: RenderRequest =
+        serde_json::from_str(r#"{"path":"one.qmd","format":"docx","scope":"book"}"#).unwrap();
+    assert_eq!(body.extra.get("scope"), Some(&serde_json::json!("book")));
+}
+
+#[test]
+fn the_captures_pre_gate_reads_the_requests_book_scope() {
+    let chapter = serde_json::json!({ "book-scope": "chapter" });
+    let book = serde_json::json!({ "book-scope": "book" });
+    let other = serde_json::json!({ "title": "T" });
+    for key in ["typst-pdf", "typst", "epub"] {
+        // The PDF pane's explicit chapter does not load every capture ...
+        assert!(!may_render_book(key, Some(&chapter)), "{key} chapter");
+        // ... an explicit book does, and so does a request with no
+        // `book-scope` (a document, directory or project layer may ask for
+        // the book, which this side cannot see).
+        assert!(may_render_book(key, Some(&book)), "{key} book");
+        assert!(may_render_book(key, Some(&other)), "{key} other");
+        assert!(may_render_book(key, None), "{key} none");
+    }
+    // A format with no whole-book output never loads them.
+    for key in ["docx", "pptx", "odt"] {
+        assert!(!may_render_book(key, None), "{key}");
+        assert!(!may_render_book(key, Some(&book)), "{key}");
+    }
+    // An invalid value is not an explicit chapter: the resolver reports it.
+    let bad = serde_json::json!({ "book-scope": "none" });
+    assert!(may_render_book("typst-pdf", Some(&bad)));
+}
+
+#[tokio::test]
+async fn a_request_with_no_book_scope_on_a_consolidating_format_loads_every_capture() {
+    // The project layer asks for the book; the request says nothing. The
+    // captures of every chapter must reach the book seam.
+    let (_project, ctx) = build_ctx(&[
+        (
+            "_quarto.yml",
+            "project:\n  type: book\nbook-scope: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n",
+        ),
+        BOOK[1],
+        BOOK[2],
+    ])
+    .await;
+    record(&ctx, "one.qmd", &[capture("one\n")]).await;
+    install(FakeSeam::default());
+    let recorder = install_book_recorder();
+
+    let response = render_handler(State(ctx), render_req("one.qmd", "typst-pdf", None, None)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let requests = recorder.0.lock().unwrap();
+    assert_eq!(requests.len(), 1, "the project's book-scope: book applies");
+    let keys: Vec<_> = requests[0].captures.keys().cloned().collect();
+    assert_eq!(keys, vec!["one.qmd".to_string()]);
 }

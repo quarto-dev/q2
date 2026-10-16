@@ -31,6 +31,7 @@ import { TYPST_FONTS_SHA256 } from '../typst/typstAssets';
 import { createFontMemo } from '../typst/fontMemo';
 import type { FontListOutcome, TypstJob, TypstRunFailure, TypstRunOptions, TypstRunOutcome } from '../typst/typstRunner';
 import { TYPST_PDF_KEY } from './formatKeys';
+import { bookScopeMetadata, type RenderMetadata } from './bookScope';
 
 /**
  * Formats the menu offers. The table in Rust says what *can* be produced; this list says
@@ -130,12 +131,13 @@ function previewFontFamilies(runner: NonNullable<ChainRunners['typst']>) {
 }
 
 /**
- * The browser-side dependencies shared by the download controller and the PDF preview's. `scope` is
- * the default for what a book chapter requests: `'chapter'` is the page alone, `'book'` the whole
- * book for typst, pdf and epub (R9); `undefined` sends no scope (the user did not choose; the active page is the target, so Rust treats it as the chapter). A click that carries its own scope (the menu's "Download book
- * as" and "This chapter only") overrides it through `buildRequest`'s sixth argument.
+ * The browser-side dependencies shared by the download controller and the PDF preview's. `defaults` is
+ * the metadata every request carries: `bookScopeMetadata('chapter')` is the page alone, `'book'` the whole
+ * book for typst, pdf and epub (R9); `undefined` sends none (the user did not choose; the active page is the
+ * target, so Rust treats it as the chapter). A click that carries its own metadata (the menu's "Download book
+ * as" and "This chapter only") is merged over it through `buildRequest`'s sixth argument.
  */
-function wasmDeps(scope: 'book' | 'chapter' | undefined, runners: ChainRunners = {}): Omit<DownloadDeps, 'save'> {
+function wasmDeps(defaults: RenderMetadata | undefined, runners: ChainRunners = {}): Omit<DownloadDeps, 'save'> {
   return {
     buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts, extra) => {
       await initWasm();
@@ -145,7 +147,7 @@ function wasmDeps(scope: 'book' | 'chapter' | undefined, runners: ChainRunners =
         sourceDateEpoch,
         signal,
         typstAvailableFonts,
-        scope: extra?.scope ?? scope,
+        metadata: defaults || extra?.metadata ? { ...defaults, ...extra?.metadata } : undefined,
         capturesByPath: extra?.capturesByPath,
         captureGzJson: extra?.captureGzJson,
         onProgress: extra?.onProgress,
@@ -189,7 +191,7 @@ export function createPdfPreviewController(
   // without it the preview is the fresh path, as before H10b. `runners` overrides either runner (tests).
   const warmRunner = options.warm ? getPreviewPandocRunner() : undefined;
   const runners: ChainRunners = warmRunner ? { pandoc: warmRunner, typst: getPreviewTypstRunner(), ...options.runners } : { ...options.runners };
-  return new DownloadController({ ...wasmDeps('chapter', runners), save: () => {}, onPdf, overlap: options.warm === true, pool: warmRunner, trace: (e) => previewTrace?.(e) });
+  return new DownloadController({ ...wasmDeps(bookScopeMetadata('chapter'), runners), save: () => {}, onPdf, overlap: options.warm === true, pool: warmRunner, trace: (e) => previewTrace?.(e) });
 }
 
 /** The embed's executor: the authorship of a Word document's comments and tracked changes goes with the request (E7). */
@@ -225,7 +227,7 @@ export function getDownloadController(): DownloadController {
           onPdf: (pdf, info) => pdfListeners.forEach((l) => l(pdf, info)),
         })
       : new DownloadController({
-          // No default scope: the menu sends one explicitly for the formats that consolidate a book
+          // No default metadata: the menu sends a `book-scope` explicitly for the formats that consolidate a book
           // ('book' for "Download book as", 'chapter' for the rest), and none for docx, odt, pptx, html.
           ...wasmDeps(undefined),
           save: saveBlob,

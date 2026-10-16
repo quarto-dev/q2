@@ -242,12 +242,12 @@ describe('DownloadController', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'done', unexecutedCells: 2 });
   });
 
-  it('native forwards the click scope, and a superseded or busy outcome is dropped or shown respectively', async () => {
+  it('native forwards the click book-scope metadata, and a superseded or busy outcome is dropped or shown respectively', async () => {
     const save = vi.fn();
     const native = vi.fn(async (): Promise<NativeRenderOutcome> => ({ kind: 'superseded' }));
     const controller = new DownloadController({ native, save });
-    await controller.start({ path: 'a.qmd', format: DOCX, content: '', scope: 'chapter' });
-    expect(native).toHaveBeenCalledWith({ path: 'a.qmd', format: 'docx', content: '', scope: 'chapter' }, expect.anything());
+    await controller.start({ path: 'a.qmd', format: DOCX, content: '', metadata: { 'book-scope': 'chapter' } });
+    expect(native).toHaveBeenCalledWith({ path: 'a.qmd', format: 'docx', content: '', metadata: { 'book-scope': 'chapter' } }, expect.anything());
     expect(save).not.toHaveBeenCalled();
     expect(controller.getSnapshot()).toMatchObject({ phase: 'working' });
     native.mockResolvedValueOnce({ kind: 'busy' });
@@ -263,12 +263,12 @@ describe('DownloadController', () => {
       kind: 'ok', blob: new Blob(['x']), fileName: 'Small-Book.epub', warnings: [], unexecutedCells: 0, book: { chapters: 3 },
     }));
     const controller = new DownloadController({ native, save });
-    await controller.start({ path: 'one.qmd', format: EPUB, content: '', scope: 'book' });
-    expect(native).toHaveBeenCalledWith({ path: 'one.qmd', format: 'epub', content: '', scope: 'book' }, expect.anything());
+    await controller.start({ path: 'one.qmd', format: EPUB, content: '', metadata: { 'book-scope': 'book' } });
+    expect(native).toHaveBeenCalledWith({ path: 'one.qmd', format: 'epub', content: '', metadata: { 'book-scope': 'book' } }, expect.anything());
     expect(save).toHaveBeenCalledWith(expect.any(Blob), 'Small-Book.epub');
     expect(controller.getSnapshot()).toMatchObject({ phase: 'done', book: { chapters: 3 } });
     native.mockResolvedValueOnce({ kind: 'ok', blob: new Blob(['x']), fileName: 'one.epub', warnings: [], unexecutedCells: 0 });
-    await controller.start({ path: 'one.qmd', format: EPUB, content: '', scope: 'chapter' });
+    await controller.start({ path: 'one.qmd', format: EPUB, content: '', metadata: { 'book-scope': 'chapter' } });
     expect(controller.getSnapshot()).toMatchObject({ phase: 'done', fileName: 'one.epub', book: undefined });
   });
 
@@ -278,7 +278,7 @@ describe('DownloadController', () => {
     const notice = { kind: 'info', code: 'Q-5-41', title: 'not a chapter of the book; downloaded on its own' };
     const native = vi.fn(async (): Promise<NativeRenderOutcome> => ({ kind: 'ok', blob: new Blob(['x']), fileName: 'other.epub', warnings: [notice], unexecutedCells: 0 }));
     const controller = new DownloadController({ native, save });
-    await controller.start({ path: 'other.qmd', format: EPUB, content: '', scope: 'book' });
+    await controller.start({ path: 'other.qmd', format: EPUB, content: '', metadata: { 'book-scope': 'book' } });
     expect(save).toHaveBeenCalledWith(expect.any(Blob), 'other.epub');
     const status = controller.getSnapshot();
     expect(status).toMatchObject({ phase: 'done', book: undefined });
@@ -291,7 +291,7 @@ describe('DownloadController', () => {
     const onPdf = vi.fn();
     const native = vi.fn(async (): Promise<NativeRenderOutcome> => ({ kind: 'ok', blob: new Blob([new Uint8Array([37, 80])]), fileName: '', warnings: [], unexecutedCells: 1 }));
     const controller = new DownloadController({ native, save, onPdf, overlap: true });
-    await controller.start({ path: 'a.qmd', format: PDF, content: 'x', scope: 'chapter' });
+    await controller.start({ path: 'a.qmd', format: PDF, content: 'x', metadata: { 'book-scope': 'chapter' } });
     expect(save).not.toHaveBeenCalled();
     expect(onPdf).toHaveBeenCalledTimes(1);
     expect(Array.from(onPdf.mock.calls[0][0] as Uint8Array)).toEqual([37, 80]);
@@ -560,29 +560,29 @@ describe('DownloadController: whole-book downloads (R9)', () => {
       request: { stage_name: 'pandoc', json_path: '/x.json', output_path: '/project/_book/My Book.epub' } as unknown as PandocRequest,
     });
 
-  it('an ordinary start calls buildRequest exactly as before (no scope, no extra argument)', async () => {
+  it('an ordinary start calls buildRequest exactly as before (no metadata, no extra argument)', async () => {
     const { controller, buildRequest } = setup();
     await controller.start({ path: 'a.qmd', format: DOCX });
     expect(buildRequest.mock.calls[0]).toHaveLength(4);
   });
 
-  it('a book start passes scope book, the fetched captures and a progress callback as the sixth argument', async () => {
+  it('a book start passes book-scope book, the fetched captures and a progress callback as the sixth argument', async () => {
     const fetchCaptures = vi.fn(async () => ({ byPath: { 'one.qmd': new Uint8Array([1]) }, failed: [] as string[] }));
     const buildRequest = vi.fn(async () => bookEnvelope());
     const { controller } = setup({ buildRequest, fetchCaptures });
-    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'book', captureDocIds: { 'one.qmd': 'doc-1' } });
+    await controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'book' }, captureDocIds: { 'one.qmd': 'doc-1' } });
     expect(fetchCaptures).toHaveBeenCalledWith({ 'one.qmd': 'doc-1' }, expect.any(AbortSignal));
     const call = buildRequest.mock.calls[0] as unknown[];
     expect(call).toHaveLength(6);
     expect(call[4]).toBeUndefined();
-    expect(call[5]).toMatchObject({ scope: 'book', capturesByPath: { 'one.qmd': new Uint8Array([1]) }, onProgress: expect.any(Function) });
+    expect(call[5]).toMatchObject({ metadata: { 'book-scope': 'book' }, capturesByPath: { 'one.qmd': new Uint8Array([1]) }, onProgress: expect.any(Function) });
   });
 
   it('a stale book click comes back as the page alone: no whole-book name, the Q-5-41 notice once in the warnings', async () => {
     const notice = { kind: 'info', title: 'This page is not part of the book, so only this page was downloaded', code: 'Q-5-41' };
     const buildRequest = vi.fn(async () => ({ ...bookEnvelope('none' as 'chapter', 3), diagnostics: [notice] }));
     const { controller, save } = setup({ buildRequest });
-    await controller.start({ path: 'notes.qmd', format: EPUB, scope: 'book' });
+    await controller.start({ path: 'notes.qmd', format: EPUB, metadata: { 'book-scope': 'book' } });
     expect(save.mock.calls[0][1]).toBe('notes.epub');
     const s = controller.getSnapshot();
     expect(s.phase).toBe('done');
@@ -592,13 +592,13 @@ describe('DownloadController: whole-book downloads (R9)', () => {
     }
   });
 
-  it('"this chapter only" passes scope chapter and fetches no book captures', async () => {
+  it('"this chapter only" passes book-scope chapter and fetches no book captures', async () => {
     const fetchCaptures = vi.fn();
     const buildRequest = vi.fn(async () => bookEnvelope('chapter', 1));
     const { controller } = setup({ buildRequest, fetchCaptures });
-    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'chapter', captureDocIds: { 'one.qmd': 'doc-1' } });
+    await controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'chapter' }, captureDocIds: { 'one.qmd': 'doc-1' } });
     expect(fetchCaptures).not.toHaveBeenCalled();
-    expect((buildRequest.mock.calls[0] as unknown[])[5]).toEqual({ scope: 'chapter' });
+    expect((buildRequest.mock.calls[0] as unknown[])[5]).toEqual({ metadata: { 'book-scope': 'chapter' } });
   });
 
   it('a chapter-alone start with a captureDocId fetches that capture and passes it as captureGzJson', async () => {
@@ -606,12 +606,12 @@ describe('DownloadController: whole-book downloads (R9)', () => {
     const fetchCaptures = vi.fn(async () => ({ byPath: { 'one.qmd': bytes }, failed: [] as string[] }));
     const buildRequest = vi.fn(async () => bookEnvelope('chapter', 1));
     const { controller } = setup({ buildRequest, fetchCaptures });
-    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'chapter', captureDocId: 'doc-1' });
+    await controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'chapter' }, captureDocId: 'doc-1' });
     expect(fetchCaptures).toHaveBeenCalledWith({ 'one.qmd': 'doc-1' }, expect.any(AbortSignal));
-    expect((buildRequest.mock.calls[0] as unknown[])[5]).toEqual({ scope: 'chapter', captureGzJson: bytes });
+    expect((buildRequest.mock.calls[0] as unknown[])[5]).toEqual({ metadata: { 'book-scope': 'chapter' }, captureGzJson: bytes });
   });
 
-  it('an unscoped start (the preview) with a captureDocId passes captureGzJson without a scope', async () => {
+  it('an unscoped start (the preview) with a captureDocId passes captureGzJson without metadata', async () => {
     const bytes = new Uint8Array([7]);
     const fetchCaptures = vi.fn(async () => ({ byPath: { 'a.qmd': bytes }, failed: [] as string[] }));
     const { controller, buildRequest } = setup({ fetchCaptures });
@@ -633,7 +633,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
     const fetchCaptures = vi.fn(async () => ({ byPath: {}, failed: [] as string[] }));
     const buildRequest = vi.fn(async () => bookEnvelope());
     const { controller } = setup({ buildRequest, fetchCaptures });
-    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'book', captureDocId: 'doc-1' });
+    await controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'book' }, captureDocId: 'doc-1' });
     expect(fetchCaptures).not.toHaveBeenCalled();
   });
 
@@ -644,10 +644,10 @@ describe('DownloadController: whole-book downloads (R9)', () => {
       buildRequest,
       typst: { runner: { run: vi.fn(), listFonts }, assets: () => ({ vendoredPackages: [], fonts: [] }), datePrelude: () => '' } as unknown as DownloadDeps['typst'],
     });
-    await controller.start({ path: 'one.qmd', format: { ...DOCX, key: 'typst-pdf', extension: 'pdf' }, scope: 'book' });
+    await controller.start({ path: 'one.qmd', format: { ...DOCX, key: 'typst-pdf', extension: 'pdf' }, metadata: { 'book-scope': 'book' } });
     const call = buildRequest.mock.calls[0] as unknown[];
     expect(call[4]).toEqual(['Lato']);
-    expect(call[5]).toMatchObject({ scope: 'book' });
+    expect(call[5]).toMatchObject({ metadata: { 'book-scope': 'book' } });
   });
 
   it('shows "chapter i of N" while rendering, then the book summary; the file is named after the book', async () => {
@@ -664,7 +664,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
     const s = setup({ buildRequest });
     const { controller } = s;
     live.controller = controller;
-    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'book' });
+    await controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'book' } });
     expect(seen).toMatchObject([
       { phase: 'working', stage: 'chapter', chapter: { index: 1, total: 3, file: 'index.qmd' } },
       { phase: 'working', stage: 'chapter', chapter: { index: 2, total: 3, file: 'one.qmd' } },
@@ -676,7 +676,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
   it('a chapter-scope result is named after the active document and carries no book summary', async () => {
     const buildRequest = vi.fn(async () => bookEnvelope('chapter', 1));
     const { controller, save } = setup({ buildRequest });
-    await controller.start({ path: 'dir/one.qmd', format: EPUB, scope: 'chapter' });
+    await controller.start({ path: 'dir/one.qmd', format: EPUB, metadata: { 'book-scope': 'chapter' } });
     expect(save.mock.calls[0][1]).toBe('one.epub');
     const s = controller.getSnapshot();
     expect(s.phase === 'done' && s.book).toBeFalsy();
@@ -685,7 +685,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
   it('a chapter whose capture could not be fetched renders as source, with a note on the finished download', async () => {
     const fetchCaptures = vi.fn(async () => ({ byPath: {}, failed: ['one.qmd', 'two.qmd'] }));
     const { controller } = setup({ buildRequest: vi.fn(async () => bookEnvelope()), fetchCaptures });
-    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'book', captureDocIds: { 'one.qmd': 'a', 'two.qmd': 'b' } });
+    await controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'book' }, captureDocIds: { 'one.qmd': 'a', 'two.qmd': 'b' } });
     const s = controller.getSnapshot();
     expect(s.phase).toBe('done');
     if (s.phase === 'done') expect(s.notices.join(' ')).toMatch(/2 chapters/);
@@ -696,7 +696,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
     const fetchCaptures = vi.fn(() => gate.promise);
     const buildRequest = vi.fn(async () => bookEnvelope());
     const { controller, save } = setup({ buildRequest, fetchCaptures });
-    const p = controller.start({ path: 'one.qmd', format: EPUB, scope: 'book', captureDocIds: { 'one.qmd': 'a' } });
+    const p = controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'book' }, captureDocIds: { 'one.qmd': 'a' } });
     await Promise.resolve();
     controller.cancel();
     gate.resolve({ byPath: {}, failed: [] });
@@ -714,7 +714,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
       return gate.promise;
     });
     const { controller } = setup({ buildRequest: buildRequest as unknown as DownloadDeps['buildRequest'] });
-    const first = controller.start({ path: 'one.qmd', format: EPUB, scope: 'book' });
+    const first = controller.start({ path: 'one.qmd', format: EPUB, metadata: { 'book-scope': 'book' } });
     await Promise.resolve();
     const stale = extra;
     void controller.start({ path: 'one.qmd', format: DOCX });

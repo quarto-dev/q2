@@ -37,12 +37,12 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use quarto_core::book_download::{BookDownloadFailure, BookDownloadParams, render_book_download};
 use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::Format;
-use quarto_core::format_resolution::resolve_render_scope;
-use quarto_core::overlay_runtime::{RenderOverlay, merge_runtime_metadata};
+use quarto_core::format_resolution::{book_scope_in_json, resolve_render_scope};
+use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::pandoc_request::formats::TYPST_PDF_KEY;
 use quarto_core::preview_out::PreviewOutDir;
 use quarto_core::project::ProjectContext;
-use quarto_core::project::book::{ResolvedBookScope, resolve_book_scope};
+use quarto_core::project::book::{ResolvedBookScope, format_consolidates_book, resolve_book_scope};
 use quarto_core::project::orchestrator::RenderMode;
 use quarto_core::render_to_file::{
     RenderToFileOptions, RenderToFileResult, TypstTarget, render_document_to_file,
@@ -56,7 +56,7 @@ use quarto_hub::context::SharedContext;
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::EngineCapture;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Header carrying the render's warnings.
 pub const DIAGNOSTICS_HEADER: &str = "x-q2-diagnostics";
@@ -75,33 +75,30 @@ pub const CHILD_DEADLINE: Duration = Duration::from_secs(120);
 /// far below it; axum's implicit 2 MB is not.
 pub const BODY_LIMIT: usize = 8 * 1024 * 1024;
 
-/// The `scope` request field (epic E11).
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum ScopeParam {
-    Book,
-    Chapter,
-}
-
-impl From<ScopeParam> for BookScope {
-    fn from(s: ScopeParam) -> Self {
-        match s {
-            ScopeParam::Book => BookScope::Book,
-            ScopeParam::Chapter => BookScope::Chapter,
-        }
+/// The request's `metadata` as the overlay's runtime metadata (F4-D1): absent
+/// or `null` adds nothing, a JSON object is the metadata, anything else is a
+/// 400 (the caller's message).
+pub fn request_metadata(
+    metadata: Option<serde_json::Value>,
+) -> Result<Option<serde_json::Value>, String> {
+    match metadata {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(value @ serde_json::Value::Object(_)) => Ok(Some(value)),
+        Some(_) => Err("`metadata` must be a JSON object".to_string()),
     }
 }
 
-/// F4: delete with the wire change. The runtime-layer metadata an old-style
-/// `scope` stands for.
-fn legacy_scope_metadata(scope: Option<BookScope>) -> Option<serde_json::Value> {
-    scope.map(|s| {
-        let value = match s {
-            BookScope::Book => "book",
-            BookScope::Chapter => "chapter",
-        };
-        serde_json::json!({ "book-scope": value })
-    })
+/// A body from a stale client may still carry the removed `scope` field. It is
+/// ignored (no body denies unknown fields), so say so at debug level to keep a
+/// stale embedded SPA diagnosable.
+pub fn note_stale_scope(extra: &serde_json::Map<String, serde_json::Value>, route: &str) {
+    if let Some(scope) = extra.get("scope") {
+        tracing::debug!(
+            route,
+            %scope,
+            "ignoring the removed `scope` request field; send `metadata: {{\"book-scope\": ...}}` (a stale client?)"
+        );
+    }
 }
 
 /// `{ error?, diagnostics }`: the body of a 422.
@@ -169,9 +166,8 @@ pub struct RenderJob {
     pub format_key: String,
     /// The editor's text; the disk copy is rendered when `None`.
     pub content: Option<String>,
-    pub scope: Option<BookScope>,
-    /// Runtime-layer metadata for this render (FR12); `None` adds nothing.
-    /// The wire fills it in F4.
+    /// Runtime-layer metadata for this render (FR12): the request's
+    /// `metadata` object; `None` adds nothing.
     pub metadata: Option<serde_json::Value>,
     pub attribution_json: Option<String>,
     /// The sidecar captures of this path (never a client-named id; E10).
@@ -391,9 +387,23 @@ pub async fn resolve_all_captures(ctx: &SharedContext) -> HashMap<String, Vec<En
 }
 
 /// Whether a request for `format_key` can resolve to a whole book (so the
-/// every-entry capture read is worth doing): the formats that consolidate one.
-pub fn may_render_book(format_key: &str, scope: Option<BookScope>) -> bool {
-    scope != Some(BookScope::Chapter) && matches!(format_key, "typst" | "typst-pdf" | "epub")
+/// every-entry capture read is worth doing): a consolidating format, unless the
+/// request's own `metadata` says `book-scope: chapter` (F4-D3; the PDF pane).
+///
+/// A request with no `book-scope` on a consolidating format deliberately loads
+/// the captures although the target's default for one page is `chapter`: a
+/// `book-scope: book` in the document, directory or project layer, which this
+/// async side cannot see without reading them, would otherwise render a book
+/// with empty captures. The price is one full capture read for every such
+/// request. The same value (through `book_scope_in_json`) drives the resolver.
+pub fn may_render_book(format_key: &str, metadata: Option<&serde_json::Value>) -> bool {
+    let (base_key, _) = render_format_and_target(format_key);
+    let consolidates =
+        Format::from_format_string(base_key).is_ok_and(|f| format_consolidates_book(&f));
+    let explicit_chapter = metadata
+        .and_then(|m| book_scope_in_json(m).ok().flatten())
+        .is_some_and(|scope| scope == BookScope::Chapter);
+    consolidates && !explicit_chapter
 }
 
 /// Split a table key into the render format and the typst target (E8): the
@@ -436,11 +446,9 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
     // `render_chapter` and the render seam (a fake included) all see the
     // wrapped runtime (FR12).
     //
-    // F4: delete with the wire change. The route still receives the old
-    // `scope`; it becomes the runtime-layer `book-scope`. Nothing chosen adds
-    // nothing, and the target (this page) defaults to `chapter`. The editor's
-    // text stands in for the file, keyed by its canonical path, so the
-    // resolver reads the same front matter the render does.
+    // The request's `metadata` is the overlay's runtime metadata and the
+    // editor's text stands in for the file, keyed by its canonical path, so
+    // the resolver reads the same front matter the render does (F4-D4).
     let native: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let active = native
         .canonicalize(&job.abs_path)
@@ -451,10 +459,7 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
             .iter()
             .map(|text| (active.clone(), text.clone().into_bytes()))
             .collect(),
-        metadata: merge_runtime_metadata(
-            job.metadata.clone(),
-            legacy_scope_metadata(job.scope).as_ref(),
-        ),
+        metadata: job.metadata.clone(),
     });
     let runtime: Arc<dyn SystemRuntime> = overlay.apply(native);
     let (base_key, typst_target) = render_format_and_target(&job.format_key);

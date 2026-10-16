@@ -76,9 +76,9 @@ describe('download controller in the preview embed', () => {
     const { getDownloadController } = await import('./downloadService');
     const controller = getDownloadController();
     const epub = { key: 'epub', label: 'EPUB', extension: 'epub', mime: 'application/epub+zip' };
-    await controller.start({ path: 'doc.qmd', format: epub, content: 'x', scope: 'chapter' });
+    await controller.start({ path: 'doc.qmd', format: epub, content: 'x', metadata: { 'book-scope': 'chapter' } });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(init.body as string)).toMatchObject({ format: 'epub', scope: 'chapter' });
+    expect(JSON.parse(init.body as string)).toMatchObject({ format: 'epub', metadata: { 'book-scope': 'chapter' } });
     expect(controller.getSnapshot()).toMatchObject({ phase: 'done', unexecutedCells: 2 });
   });
 
@@ -97,7 +97,7 @@ describe('download controller in the preview embed', () => {
     const seen: number[] = [];
     onPdfCompiled((pdf) => seen.push(pdf.length));
     const pdf = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
-    await getDownloadController().start({ path: 'doc.qmd', format: pdf, content: 'x', scope: 'chapter' });
+    await getDownloadController().start({ path: 'doc.qmd', format: pdf, content: 'x', metadata: { 'book-scope': 'chapter' } });
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][1]).toBe('doc.pdf');
     expect(seen).toEqual([4]);

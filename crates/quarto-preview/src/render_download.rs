@@ -4,7 +4,7 @@
 //!
 //! The embed carries no pandoc.wasm, so it asks the native side to render.
 //! Body: `{ "path": "rel/doc.qmd", "format": "docx", "content": "<editor
-//! text>", "scope"?: "book" | "chapter", "attributionJson"?: "<json>" }`.
+//! text>", "metadata"?: { ... }, "attributionJson"?: "<json>" }`.
 //! `format` is a key of `PANDOC_FORMATS` (docx, odt, pptx, epub, typst,
 //! typst-pdf), looked up in that table so the client's menu and this route
 //! cannot drift; the caller's key beats the document's own `format:`. `typst`
@@ -34,8 +34,8 @@ use serde::Deserialize;
 
 pub use crate::render_helper::DIAGNOSTICS_HEADER;
 use crate::render_helper::{
-    CancelOnDrop, RenderJob, ScopeParam, locate, may_render_book, outcome_response,
-    render_blocking, resolve_all_captures, resolve_captures,
+    CancelOnDrop, RenderJob, locate, may_render_book, note_stale_scope, outcome_response,
+    render_blocking, request_metadata, resolve_all_captures, resolve_captures,
 };
 
 #[derive(Debug, Deserialize)]
@@ -47,11 +47,16 @@ pub struct RenderRequest {
     /// explicit empty string is an empty document).
     #[serde(default)]
     pub content: Option<String>,
+    /// Runtime-layer metadata for this render (a JSON object), e.g.
+    /// `{"book-scope": "chapter"}`; absent adds nothing.
     #[serde(default)]
-    pub scope: Option<ScopeParam>,
+    pub metadata: Option<serde_json::Value>,
     /// Client-built attribution transport JSON (Automerge history).
     #[serde(default)]
     pub attribution_json: Option<String>,
+    /// Fields no longer (or not yet) read: kept to log a stale client's `scope`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// The table row for a downloadable key.
@@ -75,9 +80,13 @@ pub async fn render_handler(
         Ok(located) => located,
         Err(response) => return response,
     };
-    let scope = body.scope.map(Into::into);
+    note_stale_scope(&body.extra, "render");
+    let metadata = match request_metadata(body.metadata) {
+        Ok(m) => m,
+        Err(message) => return (StatusCode::BAD_REQUEST, message).into_response(),
+    };
     let captures = resolve_captures(&ctx, &body.path).await;
-    let all_captures = if may_render_book(info.key, scope) {
+    let all_captures = if may_render_book(info.key, metadata.as_ref()) {
         resolve_all_captures(&ctx).await
     } else {
         Default::default()
@@ -89,8 +98,7 @@ pub async fn render_handler(
         abs_path,
         format_key: info.key.to_string(),
         content: body.content,
-        scope,
-        metadata: None,
+        metadata,
         attribution_json: body.attribution_json,
         captures,
         all_captures,
@@ -138,8 +146,9 @@ mod tests {
             path: path.to_string(),
             format: format.to_string(),
             content: content.map(str::to_string),
-            scope: None,
+            metadata: None,
             attribution_json: None,
+            extra: Default::default(),
         })
     }
 

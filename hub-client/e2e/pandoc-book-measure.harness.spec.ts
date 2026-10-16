@@ -199,7 +199,7 @@ test('measure: whole-book request (chromium)', async () => {
           await page.evaluate(async (sde) => {
             const { wasmRenderer } = window.__quartoTest!;
             const t0 = performance.now();
-            const out = await wasmRenderer.renderPandocRequest('/project/c1.qmd', 'typst', { sourceDateEpoch: sde, scope: 'chapter' });
+            const out = await wasmRenderer.renderPandocRequest('/project/c1.qmd', 'typst', { sourceDateEpoch: sde, metadata: { 'book-scope': 'chapter' } });
             return { ok: out.success, error: out.error, totalMs: Math.round(performance.now() - t0), rustMb: 0 };
           }, SDE),
         );

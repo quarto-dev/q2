@@ -97,7 +97,7 @@ export function PdfPane({ path, contentTick, onBack }: PdfPaneProps) {
         const response = await fetch(PDF_ROUTE, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ path, content: snap.success ? snap.content : undefined, scope: 'chapter' }),
+          body: JSON.stringify({ path, content: snap.success ? snap.content : undefined, metadata: { 'book-scope': 'chapter' } }),
           signal: controller.signal,
         });
         if (stale()) return;

@@ -118,9 +118,11 @@ declare module 'wasm-quarto-hub-client' {
    * `capture_gz_json` is as for `render_page_for_preview` (R3 wires it) and
    * serves the active page when the request is chapter-alone.
    *
-   * A book chapter requested as typst, pdf or epub is the whole book unless
-   * `options.scope` is `'chapter'` (R9); a page that is not a chapter is
-   * delivered alone with the `Q-5-41` notice (`stats.book.scope` `'none'`). `options.capturesByPath` maps each
+   * A book chapter requested as typst, pdf or epub is the chapter alone unless
+   * `options.metadata['book-scope']` is `'book'` (R9); a page that is not a chapter is
+   * delivered alone with the `Q-5-41` notice (`stats.book.scope` `'none'`). `options.metadata`
+   * is this call's runtime-layer metadata (a JSON object; overlaid on the process-wide
+   * `vfs_set_runtime_metadata`, never replacing it). `options.capturesByPath` maps each
    * chapter's `/`-normalized path relative to the VFS project root to its
    * capture blob. `options.onProgress` is awaited before each chapter of a
    * book render (`index` is 1-based); if it rejects the call fails with that
@@ -128,7 +130,7 @@ declare module 'wasm-quarto-hub-client' {
    * no `request`.
    */
   export interface RenderPandocRequestOptions {
-    scope?: 'book' | 'chapter';
+    metadata?: Record<string, unknown>;
     capturesByPath?: Record<string, Uint8Array>;
     onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
     /**

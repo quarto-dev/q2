@@ -2,6 +2,8 @@
 // The preview embed carries no pandoc.wasm, so its "Download as" asks the native side to
 // render. The wire contract is documented in crates/quarto-preview/src/render_download.rs.
 
+import type { RenderMetadata } from './bookScope';
+
 export interface NativeRenderRequest {
   /** Project-relative path of the document (must be in the project index). */
   path: string;
@@ -12,8 +14,11 @@ export interface NativeRenderRequest {
    * omitted `content` as "render the disk copy", but an empty string as the source itself.
    */
   content: string;
-  /** `'book'` or `'chapter'`, only for formats that consolidate a book (E11); absent means the user did not choose. */
-  scope?: 'book' | 'chapter';
+  /**
+   * The render's runtime-layer metadata (a JSON object), e.g. `{ 'book-scope': 'chapter' }` (`bookScopeMetadata`);
+   * absent means the user did not choose and the target's default applies.
+   */
+  metadata?: RenderMetadata;
   /** The authorship JSON for docx and pptx comment and track-change authors (`attributionJsonFor`). */
   attributionJson?: string;
 }

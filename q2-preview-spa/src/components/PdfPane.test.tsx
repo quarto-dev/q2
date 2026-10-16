@@ -56,14 +56,14 @@ const answer = async (i: number, r: Response) => {
 };
 
 describe('PdfPane', () => {
-  it('sends content and scope chapter', async () => {
+  it('sends content and the chapter book-scope metadata', async () => {
     render(<PdfPane path="doc.qmd" contentTick={0} onBack={null} />);
     await flush();
     expect(pending).toHaveLength(1);
     expect(JSON.parse(pending[0].init.body as string)).toEqual({
       path: 'doc.qmd',
       content: 'edited text\n',
-      scope: 'chapter',
+      metadata: { 'book-scope': 'chapter' },
     });
   });
 

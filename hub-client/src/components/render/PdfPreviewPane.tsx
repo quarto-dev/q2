@@ -24,6 +24,7 @@ import LoadingIndicator from '../Loading';
 import '../DownloadAsControl.css';
 import './PdfPreviewPane.css';
 import { TYPST_PDF_KEY } from '../../pandoc/formatKeys';
+import { bookScopeMetadata } from '../../pandoc/bookScope';
 
 /** Edits closer together than this share one compile (the pandoc step alone is 0.2-0.3 s). */
 export const PDF_PREVIEW_DEBOUNCE_MS = 500;
@@ -116,9 +117,9 @@ export default function PdfPreviewPane({
         format,
         projectKey,
         captureDocId,
-        // Only the native executor reads the text and the scope (the browser chain is chapter-alone already and
+        // Only the native executor reads the text and the metadata (the browser chain is chapter-alone already and
         // reads the document from the hub); omitting `content` there gives a blank PDF. The pane shows one page.
-        ...(isPreviewEmbed() ? { content, scope: 'chapter' as const } : {}),
+        ...(isPreviewEmbed() ? { content, metadata: bookScopeMetadata('chapter') } : {}),
       }), delay);
     return () => clearTimeout(timer);
   }, [path, projectKey, captureDocId, content, retry, wait]);

@@ -101,7 +101,7 @@ describe('book download against the real wasm', () => {
     const { controller, saved } = controllerFor(seen);
     const book = resolveBook('one.qmd')!;
     const captures = Object.fromEntries(book.chapters.map((c) => [c, { captureDocId: `doc-${c}`, state: 'idle' as const }]));
-    await controller.start({ path: `${ROOT}/one.qmd`, format: EPUB, scope: 'book', captureDocIds: captureDocIdsFor(book.chapters, captures as never) });
+    await controller.start({ path: `${ROOT}/one.qmd`, format: EPUB, metadata: { 'book-scope': 'book' }, captureDocIds: captureDocIdsFor(book.chapters, captures as never) });
     expect(Object.keys(seen.extra!.capturesByPath!)).toEqual(['index.qmd', 'one.qmd', 'two.qmd']);
     expect(seen.progress).toEqual(['1/3 index.qmd', '2/3 one.qmd', '3/3 two.qmd']);
     const done = controller.getSnapshot();
@@ -114,7 +114,7 @@ describe('book download against the real wasm', () => {
     smallBook();
     const seen = { progress: [] as string[] };
     const { controller, saved } = controllerFor(seen);
-    await controller.start({ path: `${ROOT}/one.qmd`, format: EPUB, scope: 'chapter' });
+    await controller.start({ path: `${ROOT}/one.qmd`, format: EPUB, metadata: { 'book-scope': 'chapter' } });
     expect(seen.progress).toEqual([]);
     expect(saved[0].name).toBe('one.epub');
     const s = controller.getSnapshot();
@@ -131,7 +131,7 @@ describe('book download against the real wasm', () => {
     const { controller, saved } = controllerFor(seen);
     const book = resolveBook('one.qmd')!;
     const captures = Object.fromEntries(book.chapters.map((c) => [c, { captureDocId: `doc-${c}`, state: 'idle' as const }]));
-    await controller.start({ path: `${ROOT}/one.qmd`, format: withOutputExt(row, resolved), scope: 'book', captureDocIds: captureDocIdsFor(book.chapters, captures as never) });
+    await controller.start({ path: `${ROOT}/one.qmd`, format: withOutputExt(row, resolved), metadata: { 'book-scope': 'book' }, captureDocIds: captureDocIdsFor(book.chapters, captures as never) });
     expect(seen.progress).toEqual(['1/3 index.qmd', '2/3 one.qmd', '3/3 two.qmd']);
     expect(saved[0].name).toBe('Small-Book.typst');
   });
@@ -140,7 +140,7 @@ describe('book download against the real wasm', () => {
     smallBook();
     const seen = { progress: [] as string[] };
     const { controller, saved } = controllerFor(seen);
-    await controller.start({ path: `${ROOT}/notes.qmd`, format: EPUB, scope: 'book' });
+    await controller.start({ path: `${ROOT}/notes.qmd`, format: EPUB, metadata: { 'book-scope': 'book' } });
     expect(saved[0].name).toBe('notes.epub');
   });
 });

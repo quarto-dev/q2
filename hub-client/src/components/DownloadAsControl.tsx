@@ -16,6 +16,7 @@ import './DownloadAsControl.css';
 import type { Diagnostic, DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 import { doneText, liveText, workingText } from '../pandoc/downloadText';
 import { TYPST_PDF_KEY } from '../pandoc/formatKeys';
+import { bookScopeMetadata, type RenderMetadata } from '../pandoc/bookScope';
 import type { ImportDiagnostic } from '../pandoc/importService';
 
 export interface DownloadAsControlProps {
@@ -23,8 +24,8 @@ export interface DownloadAsControlProps {
   status: DownloadStatus;
   /** When set, the button is disabled and this text explains why. */
   disabledReason?: string;
-  /** A book chapter's entries pass the scope (`'book'` the whole book, `'chapter'` this chapter); the others pass the format alone. */
-  onSelect: (format: DownloadFormat, scope?: 'book' | 'chapter') => void;
+  /** A book chapter's entries pass the `book-scope` metadata (`'book'` the whole book, `'chapter'` this chapter); the others pass the format alone. */
+  onSelect: (format: DownloadFormat, metadata?: RenderMetadata) => void;
   /** The resolver's book field for the open document; `chapter: true` offers the book entries. */
   book?: { chapter: boolean } | null;
   /** Called when the menu opens, so the host can refresh `book` (the project's chapter list may have changed). */
@@ -143,15 +144,15 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
           {formats.map((f) =>
             book?.chapter && BOOK_FORMATS.includes(f.key) ? (
               <Fragment key={f.key}>
-                <MenuItem onSelect={() => onSelect(f, 'book')}>{download.downloadBookAs(f.label)}</MenuItem>
-                <MenuItem subtext={f.label} onSelect={() => onSelect(f, 'chapter')}>
+                <MenuItem onSelect={() => onSelect(f, bookScopeMetadata('book'))}>{download.downloadBookAs(f.label)}</MenuItem>
+                <MenuItem subtext={f.label} onSelect={() => onSelect(f, bookScopeMetadata('chapter'))}>
                   {download.thisChapterOnly}
                 </MenuItem>
               </Fragment>
             ) : (
               // The plain entry of a format that consolidates a book means "this page", so it says so; the
-              // other formats have no whole-book output and send no scope.
-              <MenuItem key={f.key} onSelect={() => (BOOK_FORMATS.includes(f.key) ? onSelect(f, 'chapter') : onSelect(f))}>
+              // other formats have no whole-book output and send no `book-scope`.
+              <MenuItem key={f.key} onSelect={() => (BOOK_FORMATS.includes(f.key) ? onSelect(f, bookScopeMetadata('chapter')) : onSelect(f))}>
                 {f.label}
               </MenuItem>
             ),

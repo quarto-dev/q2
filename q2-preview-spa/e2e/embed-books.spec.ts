@@ -139,7 +139,7 @@ test.describe('q2 preview --ui editor: book scope', () => {
     // A menu click that went stale (the page left the book after the menu opened) asks for `book`; Rust delivers the
     // page on its own and says so.
     const res = await page.request.post(new URL('api/preview/render', s.url).toString(), {
-      data: { path: 'other.qmd', format: 'typst', content: BOOK_FILES[4].content, scope: 'book' },
+      data: { path: 'other.qmd', format: 'typst', content: BOOK_FILES[4].content, metadata: { 'book-scope': 'book' } },
     });
     expect(res.status()).toBe(200);
     expect(await res.text()).toContain('DELTA');

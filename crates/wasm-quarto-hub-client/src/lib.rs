@@ -1091,8 +1091,8 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
     render_qmd_with_overlay(path, user_grammars, None).await
 }
 
-/// [`render_qmd`] with a per-render overlay (FR12). F4 supplies it from the
-/// request; the exported entry passes `None`.
+/// [`render_qmd`] with a per-render overlay (FR12); the exported entry passes
+/// `None`.
 async fn render_qmd_with_overlay(
     path: &str,
     user_grammars: Option<JsUserGrammars>,
@@ -1453,9 +1453,9 @@ pub async fn render_page_for_preview(
     render_page_for_preview_with_overlay(path, user_grammars, capture_gz_json, None).await
 }
 
-/// [`render_page_for_preview`] with a per-render overlay (FR12). F4 and F8
-/// add the trailing options argument to the exported entry and the
-/// TypeScript surface.
+/// [`render_page_for_preview`] with a per-render overlay (FR12). F8 adds the
+/// trailing options argument to the exported entry and the TypeScript
+/// surface.
 async fn render_page_for_preview_with_overlay(
     path: &str,
     user_grammars: Option<JsUserGrammars>,
@@ -1676,15 +1676,15 @@ fn pandoc_request_envelope(
 /// `request`. A document inside a `_quarto.yml` project renders as the
 /// project's active page (R7): the request carries that page alone, with the
 /// project's metadata and `format:` layers applied. For a book chapter
-/// requested as typst, pdf or epub with `options.scope` `'book'` the request
-/// is the whole book (R9); with `'chapter'` or nothing chosen (the active page
+/// requested as typst, pdf or epub with `options.metadata` `{ 'book-scope': 'book' }` the request
+/// is the whole book (R9); with `'chapter'` or no `book-scope` (the active page
 /// is the target, so it defaults to the chapter) it is the chapter alone, as
 /// docx and pptx always are. A page that is not a chapter is delivered alone
 /// with the `Q-5-41` notice (`stats.book.scope` `'none'`), or, for `'book'`,
 /// the `Q-5-48` warning. `stats.book` is `{ scope: 'book' | 'chapter' | 'none', chapters }`
 /// in a book project, else `null`.
 ///
-/// `options` (optional, trailing) is `{ scope?: 'book' | 'chapter',
+/// `options` (optional, trailing) is `{ metadata?: Record<string, unknown>,
 /// attributionJson?: string (the active file's authorship, stamped onto docx
 /// comments and tracked changes; ignored by a whole-book request),
 /// capturesByPath?: Record<string, Uint8Array>, onProgress?: (index, total,
@@ -1724,8 +1724,8 @@ pub async fn render_pandoc_request(
     .await
 }
 
-/// [`render_pandoc_request`] with a per-render overlay (FR12). F4 supplies
-/// it from the request's `metadata`.
+/// [`render_pandoc_request`] with a per-render overlay (FR12); the request's
+/// `metadata` is merged into it.
 #[allow(clippy::too_many_arguments)]
 async fn render_pandoc_request_with_overlay(
     path: &str,
@@ -1739,14 +1739,15 @@ async fn render_pandoc_request_with_overlay(
 ) -> JsValue {
     let fail =
         |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0, None);
-    let options = match parse_request_options(options) {
+    let mut options = match parse_request_options(options) {
         Ok(o) => o,
         Err(e) => return fail(e),
     };
-    // F4: delete with the wire change. The old `options.scope` becomes the
-    // runtime-layer `book-scope`; nothing chosen adds nothing, and the target
-    // (the active page) defaults to `chapter`.
-    let overlay = legacy_scope_overlay(overlay, options.scope);
+    // The request's `metadata` is this call's runtime layer (F4-D1). It rides
+    // in the overlay, never in process state, so two overlapping renders with
+    // different `metadata` cannot see each other's (F4-D5: the process-wide
+    // `vfs_set_runtime_metadata` stays underneath it).
+    let overlay = overlay_with_metadata(overlay, options.metadata.take());
     // Click-time snapshot: every read in this request, including the ones
     // after the first remote-image `await`, goes through this copy, so the
     // Automerge sync mutating the live VFS cannot change what the request
@@ -1854,31 +1855,28 @@ async fn render_pandoc_request_with_overlay(
     )
 }
 
-/// F4: delete with the wire change. `overlay` with the runtime-layer
-/// `book-scope` an old-style `scope` option stands for.
-fn legacy_scope_overlay(
+/// `overlay` with the request's `metadata` merged on top of its own (objects
+/// recursively, the request wins).
+fn overlay_with_metadata(
     overlay: Option<Arc<RenderOverlay>>,
-    scope: Option<quarto_core::BookScope>,
+    metadata: Option<serde_json::Value>,
 ) -> Option<Arc<RenderOverlay>> {
-    use quarto_core::BookScope;
-    let Some(scope) = scope else {
+    let Some(metadata) = metadata else {
         return overlay;
-    };
-    let value = match scope {
-        BookScope::Book => "book",
-        BookScope::Chapter => "chapter",
     };
     let mut merged = overlay.as_deref().cloned().unwrap_or_default();
     merged.metadata = quarto_core::overlay_runtime::merge_runtime_metadata(
         merged.metadata.take(),
-        Some(&serde_json::json!({ "book-scope": value })),
+        Some(&metadata),
     );
     Some(Arc::new(merged))
 }
 
 /// The unpacked `options` object of [`render_pandoc_request`].
 struct RequestOptions {
-    scope: Option<quarto_core::BookScope>,
+    /// The call's runtime-layer metadata (a JSON object), e.g.
+    /// `{"book-scope": "chapter"}`.
+    metadata: Option<serde_json::Value>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
     on_progress: Option<js_sys::Function>,
     /// The transport JSON of `parse_qmd_to_ast_with_attribution`, for the
@@ -1886,13 +1884,30 @@ struct RequestOptions {
     attribution_json: Option<String>,
 }
 
+/// A JS value as the JSON object it must be (`options.metadata`). It crosses
+/// through `JSON.stringify` (no `serde-wasm-bindgen` here), so only
+/// JSON-representable values survive, as on the native routes.
+fn metadata_object(value: &JsValue) -> Result<serde_json::Value, String> {
+    const MESSAGE: &str = "options.metadata must be a JSON object";
+    if !value.is_object() || js_sys::Array::is_array(value) {
+        return Err(MESSAGE.to_string());
+    }
+    let json = js_sys::JSON::stringify(value)
+        .ok()
+        .and_then(|s| s.as_string())
+        .ok_or_else(|| "options.metadata is not JSON-serialisable".to_string())?;
+    match serde_json::from_str::<serde_json::Value>(&json) {
+        Ok(object @ serde_json::Value::Object(_)) => Ok(object),
+        _ => Err(MESSAGE.to_string()),
+    }
+}
+
 /// Unpack by hand: `serde-wasm-bindgen` is not a dependency, and a
 /// `Uint8Array` is read with `Uint8Array::new` (an `instanceof` check can
 /// fail across realms).
 fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, String> {
-    use quarto_core::BookScope;
     let mut out = RequestOptions {
-        scope: None,
+        metadata: None,
         captures_by_path: Default::default(),
         on_progress: None,
         attribution_json: None,
@@ -1904,13 +1919,9 @@ fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, Str
         return Err("options must be an object".to_string());
     }
     let get = |key: &str| js_sys::Reflect::get(&options, &key.into()).unwrap_or(JsValue::UNDEFINED);
-    let scope = get("scope");
-    if !scope.is_undefined() && !scope.is_null() {
-        out.scope = match scope.as_string().as_deref() {
-            Some("book") => Some(BookScope::Book),
-            Some("chapter") => Some(BookScope::Chapter),
-            _ => return Err("options.scope must be 'book' or 'chapter'".to_string()),
-        };
+    let metadata = get("metadata");
+    if !metadata.is_undefined() && !metadata.is_null() {
+        out.metadata = Some(metadata_object(&metadata)?);
     }
     let captures = get("capturesByPath");
     if !captures.is_undefined() && !captures.is_null() {

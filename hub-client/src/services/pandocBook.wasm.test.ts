@@ -1,7 +1,7 @@
 /**
  * WASM end-to-end tests for the whole-book request (pandoc-wasm epic, R9):
  * `render_pandoc_request` on a book chapter as typst, pdf or epub returns the
- * whole book, and its `options` object (`scope`, `capturesByPath`,
+ * whole book, and its `options` object (`metadata`, `capturesByPath`,
  * `onProgress`). The native twins are in
  * `crates/quarto-core/tests/integration/pandoc_request_books.rs`; the parity
  * book below is an inline copy of that file's `parity_book`, and its
@@ -25,7 +25,7 @@ interface Envelope {
   success: boolean;
   error?: string;
   diagnostics: { kind: string; title: string; code?: string; start_line?: number; rendered?: string }[];
-  stats: { unexecuted_cells: number; book: { scope: 'book' | 'chapter' | 'none'; chapters: number } | null };
+  stats: { unexecuted_cells: number; book: { metadata: { 'book-scope': 'book' } | 'chapter' | 'none'; chapters: number } | null };
   request?: {
     files: RequestFile[];
     resource_refs: RequestFile[];
@@ -35,7 +35,7 @@ interface Envelope {
 }
 
 interface Options {
-  scope?: 'book' | 'chapter';
+  metadata?: Record<string, unknown>;
   capturesByPath?: Record<string, Uint8Array>;
   onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
 }
@@ -97,9 +97,9 @@ function render(rel: string, format: string, options?: Options, signal?: AbortSi
 }
 
 // A request for the whole book. The active page is the target, so with no
-// `scope` a render is the chapter alone; the whole book is asked for.
+// `book-scope` a render is the chapter alone; the whole book is asked for.
 function renderBook(rel: string, format: string, options?: Options, signal?: AbortSignal): Promise<Envelope> {
-  return render(rel, format, { scope: 'book', ...options }, signal);
+  return render(rel, format, { metadata: { 'book-scope': 'book' }, ...options }, signal);
 }
 
 function inputJson(out: Envelope): string {
@@ -210,9 +210,9 @@ describe('whole-book request (R9)', () => {
     }
   });
 
-  it("scope 'chapter' is the page alone; docx and pptx stay chapter-only without a warning", async () => {
+  it("book-scope 'chapter' is the page alone; docx and pptx stay chapter-only without a warning", async () => {
     smallBook();
-    const alone = await render('one.qmd', 'typst', { scope: 'chapter' });
+    const alone = await render('one.qmd', 'typst', { metadata: { 'book-scope': 'chapter' } });
     expect(alone.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
     expect(plainText(alone)).toContain('First chapter.');
     expect(plainText(alone)).not.toContain('Second');
@@ -227,6 +227,19 @@ describe('whole-book request (R9)', () => {
     }
   });
 
+  it('two overlapping renders with different metadata do not see each other\'s (the overlay is per call)', async () => {
+    smallBook();
+    const [book, chapter] = await Promise.all([
+      render('one.qmd', 'typst', { metadata: { 'book-scope': 'book' } }),
+      render('one.qmd', 'typst', { metadata: { 'book-scope': 'chapter' } }),
+    ]);
+    expect(book.stats.book).toEqual({ scope: 'book', chapters: 3 });
+    expect(chapter.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
+    // And a call without metadata afterwards sees neither: nothing was left in process state.
+    const after = await render('one.qmd', 'typst');
+    expect(after.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
+  });
+
   it('is the same request whichever chapter it is asked from', async () => {
     smallBook();
     const a = await renderBook('one.qmd', 'typst');
@@ -237,7 +250,7 @@ describe('whole-book request (R9)', () => {
   it('delivers a page that is not a chapter alone with the Q-5-41 info, whether the chapter or nothing was chosen', async () => {
     smallBook();
     add('notes.qmd', '# Notes\n\nA page outside the book.\n');
-    for (const options of [undefined, { scope: 'chapter' as const }]) {
+    for (const options of [undefined, { metadata: { 'book-scope': 'chapter' } }]) {
       const out = await render('notes.qmd', 'typst', options);
       expect(out.error).toBeUndefined();
       expect(out.stats.book).toEqual({ scope: 'none', chapters: 3 });
@@ -251,7 +264,7 @@ describe('whole-book request (R9)', () => {
   it('asking for the book from a page outside it delivers the page alone with the Q-5-48 warning, once', async () => {
     smallBook();
     add('notes.qmd', '# Notes\n\nA page outside the book.\n');
-    const out = await render('notes.qmd', 'typst', { scope: 'book' });
+    const out = await render('notes.qmd', 'typst', { metadata: { 'book-scope': 'book' } });
     expect(out.error).toBeUndefined();
     expect(out.stats.book).toEqual({ scope: 'none', chapters: 3 });
     expect(plainText(out)).toContain('A page outside the book.');
@@ -260,24 +273,24 @@ describe('whole-book request (R9)', () => {
     expect(out.diagnostics.some((d) => d.code === 'Q-5-41')).toBe(false);
   });
 
-  it("scope 'book' for docx cannot be honoured: the chapter alone, with the Q-5-42 warning", async () => {
+  it("book-scope 'book' for docx cannot be honoured: the chapter alone, with the Q-5-42 warning", async () => {
     smallBook();
-    const out = await render('one.qmd', 'docx', { scope: 'book' });
+    const out = await render('one.qmd', 'docx', { metadata: { 'book-scope': 'book' } });
     expect(out.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
     expect(out.diagnostics.filter((d) => d.code === 'Q-5-42')).toHaveLength(1);
   });
 
-  it('a docx request sends no scope and gets no scope diagnostic', async () => {
+  it('a docx request sends no book-scope and gets no scope diagnostic', async () => {
     smallBook();
     const out = await render('one.qmd', 'docx');
     expect(out.diagnostics.some((d) => d.code === 'Q-5-41' || d.code === 'Q-5-42')).toBe(false);
   });
 
-  it("rejects the old 'auto' scope", async () => {
+  it("ignores an invalid book-scope value (the old 'auto'): the target's default, the chapter alone", async () => {
     smallBook();
-    const out = await render('one.qmd', 'typst', { scope: 'auto' as 'book' });
-    expect(out.success).toBe(false);
-    expect(out.error).toContain("'book' or 'chapter'");
+    const out = await render('one.qmd', 'typst', { metadata: { 'book-scope': 'auto' } });
+    expect(out.success).toBe(true);
+    expect(out.stats.book).toMatchObject({ scope: 'chapter' });
   });
 
   it('fails the whole render when a chapter is broken, naming its file', async () => {
@@ -411,19 +424,19 @@ describe('captures per chapter (R9 D-6)', () => {
       'one.qmd': gz([capture(ONE, 'SAME', 'MAP_ONE')]),
       'two.qmd': gz([capture(TWO, 'SAME', 'MAP_TWO')]),
     };
-    const alone = await render('one.qmd', 'typst', { scope: 'chapter', capturesByPath: byPath });
+    const alone = await render('one.qmd', 'typst', { metadata: { 'book-scope': 'chapter' }, capturesByPath: byPath });
     expect(inputJson(alone)).toContain('MAP_ONE');
     expect(inputJson(alone)).not.toContain('MAP_TWO');
     const blob = gz([capture(ONE, 'SAME', 'BLOB_ONE')]);
     const withBlob = await wasm.render_pandoc_request(
-      `${ROOT}/one.qmd`, 'typst', SDE, blob, undefined, undefined, { scope: 'chapter', capturesByPath: byPath },
+      `${ROOT}/one.qmd`, 'typst', SDE, blob, undefined, undefined, { metadata: { 'book-scope': 'chapter' }, capturesByPath: byPath },
     );
     expect(inputJson(withBlob)).toContain('BLOB_ONE');
     expect(inputJson(withBlob)).not.toContain('MAP_ONE');
     // Whole book: the active file's own blob changes nothing.
     const plain = await renderBook('one.qmd', 'typst', { capturesByPath: byPath });
     const ignored = await wasm.render_pandoc_request(
-      `${ROOT}/one.qmd`, 'typst', SDE, blob, undefined, undefined, { scope: 'book', capturesByPath: byPath },
+      `${ROOT}/one.qmd`, 'typst', SDE, blob, undefined, undefined, { metadata: { 'book-scope': 'book' }, capturesByPath: byPath },
     );
     expect(ignored.request!.job_id).toBe(plain.request!.job_id);
     expect(inputJson(ignored)).not.toContain('BLOB_ONE');
@@ -537,9 +550,11 @@ describe('progress, yield and abort (R9)', () => {
 
   it('rejects a malformed options object without rendering', async () => {
     smallBook();
-    const out = await render('one.qmd', 'typst', { scope: 'sideways' as 'book' });
-    expect(out.success).toBe(false);
-    expect(out.error).toContain('scope');
+    for (const metadata of ['sideways', ['book-scope'], 3]) {
+      const out = await render('one.qmd', 'typst', { metadata: metadata as unknown as Record<string, unknown> });
+      expect(out.success).toBe(false);
+      expect(out.error).toContain('metadata');
+    }
   });
 });
 

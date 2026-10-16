@@ -23,6 +23,7 @@ import type { FontListOutcome, TypstJob, TypstRunFailure, TypstRunOptions, Typst
 import { typstUiStateFor } from '../typst/typstRunner';
 import type { TypstFile } from '@quarto/typst-host';
 import { TYPST_PDF_KEY } from './formatKeys';
+import { requestedBookScope, type RenderMetadata } from './bookScope';
 
 /** One channel for both stages of a chain: pandoc's diagnostics (Rust or host) and typst's. */
 export type Diagnostic = PandocDiagnostic | TypstDiagnostic;
@@ -116,8 +117,8 @@ export interface TypstChainDeps {
 
 /** The sixth `buildRequest` argument, passed only when the click asked for a scope (a book chapter's menu items). */
 export interface BuildRequestExtra {
-  /** Absent for a chapter-alone request that only carries `captureGzJson`: the deps' default scope applies. */
-  scope?: 'book' | 'chapter';
+  /** The click's runtime-layer metadata (`bookScopeMetadata`); absent for a chapter-alone request that only carries `captureGzJson`: the deps' defaults apply. */
+  metadata?: RenderMetadata;
   /** The open page's own capture, for a chapter-alone request. */
   captureGzJson?: Uint8Array;
   /** Capture blobs by chapter path (sidecar keys); only for a whole-book click. */
@@ -177,12 +178,13 @@ export interface StartOptions {
   /** The editor's current text; only the native executor uses it. */
   content?: string;
   /**
-   * The request scope, sent only for formats that consolidate a book (typst, pdf, epub): `'book'` is the whole
-   * book ("Download book as"), `'chapter'` the page alone ("This chapter only"). Absent: the user did not choose
-   * (and the controller's default, if any, applies). A `'book'` for a page that is not a chapter comes back as the
-   * page alone plus the `Q-5-41` notice.
+   * The request's runtime-layer metadata. Its `book-scope` is sent only for formats that consolidate a book
+   * (typst, pdf, epub): `'book'` is the whole book ("Download book as"), `'chapter'` the page alone ("This chapter
+   * only"). Absent: the user did not choose (and the deps' default, if any, applies). A `'book'` for a page that is
+   * not a chapter comes back as the page alone plus the `Q-5-41` notice. The controller reads the `book-scope` only
+   * to decide which captures to fetch; Rust decides the scope.
    */
-  scope?: 'book' | 'chapter';
+  metadata?: RenderMetadata;
   /** For a whole-book click: chapter path (sidecar key) to capture doc id, for every chapter that has a capture. */
   captureDocIds?: Record<string, string>;
   /**
@@ -346,14 +348,14 @@ export class DownloadController {
   }
 
   private async runNative(
-    { path, format, content, scope }: StartOptions,
+    { path, format, content, metadata }: StartOptions,
     run: Run,
     own: AbortController,
     current: () => boolean,
     fail: (state: FailureState, diagnostics: Diagnostic[], notices?: string[], message?: string) => void,
   ): Promise<void> {
     const id = run.seq;
-    const outcome = await this.deps.native!({ path, format: format.key, content: content ?? '', ...(scope ? { scope } : {}) }, { signal: own.signal });
+    const outcome = await this.deps.native!({ path, format: format.key, content: content ?? '', ...(metadata ? { metadata } : {}) }, { signal: own.signal });
     if (!current()) return;
     // A newer request for the same document replaced this one: its result is the newer run's business.
     if (outcome.kind === 'superseded') return;
@@ -387,7 +389,7 @@ export class DownloadController {
   }
 
   private async runWasm(
-    { path, format, scope, captureDocIds, captureDocId, projectKey }: StartOptions,
+    { path, format, metadata, captureDocIds, captureDocId, projectKey }: StartOptions,
     run: Run,
     own: AbortController,
     current: () => boolean,
@@ -423,6 +425,7 @@ export class DownloadController {
       if (driving()) this.setStage('preparing');
     }
 
+    const scope = requestedBookScope(metadata);
     let extra: BuildRequestExtra | undefined;
     let captureNotices: string[] = [];
     if (scope !== 'book' && captureDocId && this.deps.fetchCaptures) {
@@ -432,8 +435,8 @@ export class DownloadController {
       if (bytes) extra = { captureGzJson: bytes };
       else captureNotices = [download.captureFetchFailed(got.failed.length)];
     }
-    if (scope) {
-      extra = { ...extra, scope };
+    if (metadata) {
+      extra = { ...extra, metadata };
       if (scope === 'book') {
         const ids = captureDocIds ?? {};
         if (this.deps.fetchCaptures && Object.keys(ids).length > 0) {

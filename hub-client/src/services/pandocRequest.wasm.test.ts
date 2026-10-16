@@ -29,7 +29,7 @@ interface Envelope {
   success: boolean;
   error?: string;
   diagnostics: { kind: string; title: string; code?: string }[];
-  stats: { unexecuted_cells: number; book: { scope: 'book' | 'chapter'; chapters: number } | null };
+  stats: { unexecuted_cells: number; book: { metadata: { 'book-scope': 'book' } | 'chapter'; chapters: number } | null };
   request?: Record<string, unknown> & {
     files: RequestFile[];
     resource_refs: RequestFile[];
@@ -57,7 +57,7 @@ interface WasmModule {
     typst_available_fonts?: string[],
     abort_signal?: AbortSignal,
     options?: {
-      scope?: 'book' | 'chapter';
+      metadata?: Record<string, unknown>;
       capturesByPath?: Record<string, Uint8Array>;
       onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
     },
@@ -248,7 +248,7 @@ describe('render_pandoc_request', () => {
     wasm.vfs_add_file('/b/one.qmd', '# One\n\nFirst chapter.\n');
     wasm.vfs_add_file('/b/two.qmd', '# Two\n\nSecond chapter.\n');
     const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE, undefined, undefined, undefined, {
-      scope: 'chapter',
+      metadata: { 'book-scope': 'chapter' },
     });
     expect(out.error).toBeUndefined();
     expect(out.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
@@ -650,7 +650,7 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
     wasm.vfs_add_file('/b/_quarto.yml', 'project:\n  type: book\nbook:\n  title: B\n  author: "Gordon"\n  chapters:\n    - index.qmd\n    - one.qmd\n');
     wasm.vfs_add_file('/b/index.qmd', '# Preface\n\nHello\n');
     wasm.vfs_add_file('/b/one.qmd', '# One\n\nFirst chapter.\n');
-    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE, undefined, undefined, undefined, { scope: 'chapter' });
+    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE, undefined, undefined, undefined, { metadata: { 'book-scope': 'chapter' } });
     const tree = wasm.get_pandoc_share_tree();
     const result = await execute(out.request as unknown as PandocRequest, tree, { module });
     if (!result.ok) throw new Error('fail ' + result.stderr);
@@ -667,7 +667,7 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
     // A `title:` plus the chapter's own heading: the merge puts an id-less
     // synthesized title heading first, which the link must not resolve to.
     wasm.vfs_add_file('/b/one.qmd', '---\ntitle: One Title\n---\n\n# One {#sec-one}\n\nFirst chapter.\n');
-    const out = await wasm.render_pandoc_request('/b/index.qmd', 'typst', SDE, undefined, undefined, undefined, { scope: 'book' });
+    const out = await wasm.render_pandoc_request('/b/index.qmd', 'typst', SDE, undefined, undefined, undefined, { metadata: { 'book-scope': 'book' } });
     const tree = wasm.get_pandoc_share_tree();
     const result = await execute(out.request as unknown as PandocRequest, tree, { module });
     if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);

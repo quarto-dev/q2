@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 
-const starts: { path: string; projectKey?: string; content?: string; scope?: string }[] = [];
+const starts: { path: string; projectKey?: string; content?: string; metadata?: Record<string, unknown> }[] = [];
 let onPdf: (pdf: Uint8Array, info: { path: string; fileName: string; seq: number }) => void = () => {};
 const shown: { key: string }[] = [];
 /** When set, the viewer rejects the next show with this message (it keeps the previous document). */
@@ -31,8 +31,8 @@ function fakeController(cb: typeof onPdf) {
   onPdf = cb;
   {
     return {
-      start: async (o: { path: string; projectKey?: string; content?: string; scope?: string }) =>
-        void starts.push({ path: o.path, projectKey: o.projectKey, content: o.content, scope: o.scope }),
+      start: async (o: { path: string; projectKey?: string; content?: string; metadata?: Record<string, unknown> }) =>
+        void starts.push({ path: o.path, projectKey: o.projectKey, content: o.content, metadata: o.metadata }),
       cancel: lifecycle.cancel,
       acquire: lifecycle.acquire,
       release: lifecycle.release,
@@ -79,7 +79,7 @@ afterEach(() => {
 });
 
 describe('PdfPreviewPane in the preview embed', () => {
-  it('uses the native controller and passes the editor text and chapter scope', async () => {
+  it('uses the native controller and passes the editor text and the chapter book-scope metadata', async () => {
     embedFlag = true;
     render(<PdfPreviewPane path="/p/doc.qmd" content="# typed" />);
     await act(async () => {
@@ -87,7 +87,7 @@ describe('PdfPreviewPane in the preview embed', () => {
     });
     expect(nativeCreated).toBe(1);
     expect(controllerOptions).toEqual([]);
-    expect(starts).toEqual([{ path: '/p/doc.qmd', projectKey: undefined, content: '# typed', scope: 'chapter' }]);
+    expect(starts).toEqual([{ path: '/p/doc.qmd', projectKey: undefined, content: '# typed', metadata: { 'book-scope': 'chapter' } }]);
   });
 });
 

@@ -37,7 +37,7 @@ async fn book_server(ch1: &str) -> Server {
 async fn download(server: &Server, path: &str, format: &str, scope: Option<&str>) -> Reply {
     let mut body = json!({ "path": path, "format": format });
     if let Some(scope) = scope {
-        body["scope"] = json!(scope);
+        body["metadata"] = json!({ "book-scope": scope });
     }
     post(server, RENDER, body).await
 }
@@ -251,7 +251,7 @@ async fn the_active_chapters_editor_text_is_what_is_rendered() {
         &server,
         RENDER,
         json!({
-            "path": "ch1.qmd", "format": "typst", "scope": "book",
+            "path": "ch1.qmd", "format": "typst", "metadata": { "book-scope": "book" },
             "content": "# One\n\nEDITED unsaved sentence.\n"
         }),
     )

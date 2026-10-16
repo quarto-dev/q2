@@ -50,6 +50,7 @@ import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
 import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
 import type { CollectionSnapshot } from '../services/projectSetService';
 import type { PwaPromptStore } from '../pwaPrompt';
+import { requestedBookScope } from '../pandoc/bookScope';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
 const noop = async () => {};
@@ -840,7 +841,7 @@ function DownloadAsPage({
             status,
             disabledReason,
             book,
-            start: (format, scope) =>
+            start: (format, metadata) =>
               setLive({
                 phase: 'done',
                 clickId: 1,
@@ -849,7 +850,7 @@ function DownloadAsPage({
                 warnings: [],
                 notices: [],
                 unexecutedCells: 0,
-                book: scope === 'book' ? { chapters: 3 } : undefined,
+                book: requestedBookScope(metadata) === 'book' ? { chapters: 3 } : undefined,
               }),
             cancel: () => setLive({ phase: 'cancelled', clickId: 1, format: HARNESS_DOCX }),
             dismiss: () => setLive({ phase: 'idle' }),

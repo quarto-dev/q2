@@ -1,7 +1,7 @@
 //! `POST /api/preview/pdf`: the inline, supersede-aware PDF for a typst
 //! document's preview pane (epic E1, Plan 9).
 //!
-//! Body `{ path, content?, scope?, attributionJson? }`, the shared contract of
+//! Body `{ path, content?, metadata?, attributionJson? }`, the shared contract of
 //! [`crate::render_helper`]: the response is `application/pdf` without
 //! `Content-Disposition`. The render is `typst-pdf` (E8: a PDF whatever
 //! `output-ext` says).
@@ -37,8 +37,8 @@ use serde::Deserialize;
 use tokio::sync::Notify;
 
 use crate::render_helper::{
-    CancelOnDrop, RenderJob, RenderOutcome, ScopeParam, locate, may_render_book, outcome_response,
-    render_blocking, resolve_all_captures, resolve_captures,
+    CancelOnDrop, RenderJob, RenderOutcome, locate, may_render_book, note_stale_scope,
+    outcome_response, render_blocking, request_metadata, resolve_all_captures, resolve_captures,
 };
 
 #[derive(Debug, Deserialize)]
@@ -49,10 +49,15 @@ pub struct PdfRequest {
     /// empty string is an empty document).
     #[serde(default)]
     pub content: Option<String>,
+    /// Runtime-layer metadata for this render (a JSON object); the PDF pane
+    /// sends `{"book-scope": "chapter"}`.
     #[serde(default)]
-    pub scope: Option<ScopeParam>,
+    pub metadata: Option<serde_json::Value>,
     #[serde(default)]
     pub attribution_json: Option<String>,
+    /// Fields no longer (or not yet) read: kept to log a stale client's `scope`.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Default)]
@@ -177,7 +182,11 @@ pub async fn pdf_handler(
         Ok(located) => located,
         Err(response) => return response,
     };
-    let scope = body.scope.map(Into::into);
+    note_stale_scope(&body.extra, "pdf");
+    let metadata = match request_metadata(body.metadata) {
+        Ok(m) => m,
+        Err(message) => return (StatusCode::BAD_REQUEST, message).into_response(),
+    };
 
     let cancel = Cancellation::new();
     let _client_gone = CancelOnDrop(cancel.clone());
@@ -187,7 +196,7 @@ pub async fn pdf_handler(
     };
     // Captures come from the sidecar entry of this path only (E10).
     let captures = resolve_captures(&ctx, &body.path).await;
-    let all_captures = if may_render_book(TYPST_PDF_KEY, scope) {
+    let all_captures = if may_render_book(TYPST_PDF_KEY, metadata.as_ref()) {
         resolve_all_captures(&ctx).await
     } else {
         Default::default()
@@ -199,8 +208,7 @@ pub async fn pdf_handler(
         abs_path,
         format_key: TYPST_PDF_KEY.to_string(),
         content: body.content,
-        scope,
-        metadata: None,
+        metadata,
         attribution_json: body.attribution_json,
         captures,
         all_captures,

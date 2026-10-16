@@ -73,7 +73,7 @@ describe('renderNatively contract', () => {
     const { fn, calls } = fakeFetch(
       new Response('x', { status: 200, headers: { 'x-q2-stats': encodeURIComponent(JSON.stringify({ unexecuted_cells: 3 })) } }),
     );
-    const request = { ...req, scope: 'chapter' as const, attributionJson: '{"a":1}' };
+    const request = { ...req, metadata: { 'book-scope': 'chapter' }, attributionJson: '{"a":1}' };
     const out = await renderNatively(request, { fetchFn: fn, baseUrl: BASE });
     expect(JSON.parse(calls[0].init.body as string)).toEqual(request);
     expect(out.kind === 'ok' && out.unexecutedCells).toBe(3);
@@ -114,7 +114,7 @@ describe('renderNatively contract', () => {
 describe('renderPdfNatively', () => {
   it('posts to the inline pdf route and leaves the file name empty when the server names none', async () => {
     const { fn, calls } = fakeFetch(new Response(new Uint8Array([37, 80]), { status: 200 }));
-    const out = await renderPdfNatively({ ...req, format: 'typst-pdf', scope: 'chapter' }, { fetchFn: fn, baseUrl: BASE });
+    const out = await renderPdfNatively({ ...req, format: 'typst-pdf', metadata: { 'book-scope': 'chapter' } }, { fetchFn: fn, baseUrl: BASE });
     expect(calls[0].url).toBe('http://127.0.0.1:8080/app/api/preview/pdf');
     expect(out.kind === 'ok' && out.fileName).toBe('');
   });

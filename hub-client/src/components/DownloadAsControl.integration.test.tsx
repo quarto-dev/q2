@@ -46,14 +46,14 @@ describe('DownloadAsControl: book chapters (R9)', () => {
     ]);
   });
 
-  it('selecting passes the scope: book for the book, chapter for this chapter only; ordinary entries pass the format alone', () => {
+  it('selecting passes the book-scope metadata: book for the book, chapter for this chapter only; ordinary entries pass the format alone', () => {
     const { onSelect } = setup({ formats: [DOCX, EPUB], book: { chapter: true } });
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: /Download book as EPUB/ }));
-    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'book');
+    expect(onSelect).toHaveBeenLastCalledWith(EPUB, { 'book-scope': 'book' });
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: /This chapter only/ }));
-    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'chapter');
+    expect(onSelect).toHaveBeenLastCalledWith(EPUB, { 'book-scope': 'chapter' });
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Word' }));
     expect(onSelect).toHaveBeenLastCalledWith(DOCX);
@@ -63,7 +63,7 @@ describe('DownloadAsControl: book chapters (R9)', () => {
     const { onSelect } = setup({ formats: [DOCX, EPUB], book: { chapter: false } });
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: 'EPUB (.epub)' }));
-    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'chapter');
+    expect(onSelect).toHaveBeenLastCalledWith(EPUB, { 'book-scope': 'chapter' });
     open();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Word' }));
     expect(onSelect).toHaveBeenLastCalledWith(DOCX);
