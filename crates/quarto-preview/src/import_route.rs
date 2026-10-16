@@ -840,7 +840,7 @@ mod tests {
             if file.is_dir() {
                 continue;
             }
-            let name = file.name().to_string();
+            let name = file.name().unwrap().to_string();
             out.start_file(&name, options).unwrap();
             if name == "word/document.xml" {
                 out.write_all(
