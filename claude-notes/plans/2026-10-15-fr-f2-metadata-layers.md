@@ -86,7 +86,7 @@ Per task: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus `cargo
 
 ## Handoff log
 
-**Headline.** `quarto_core::metadata_layers` is the one place that knows the metadata layers' order, membership and provenance. `MetadataMergeStage` runs on it with no change in output; `output_ext::resolve_output_ext` reads the same layers. The one visible change: `output-ext` set in a `_metadata.yml` or in the runtime layer is now honoured (for Gordon's changelog pass).
+**Headline.** `quarto_core::metadata_layers` is the one place that knows the metadata layers\' order, membership and provenance. `MetadataMergeStage` runs on it with no change in output; `output_ext::resolve_output_ext` reads the same layers. The one visible change: `output-ext` set in a `_metadata.yml` or in the runtime layer is now honoured (for Gordon's changelog pass).
 
 **Baseline (2.1).** The ledger has no entry for this tip (latest is `Ledger: ae2887867: 16134 passed, 202 skipped`, parity epic Plan 13); no workspace run was made.
 
@@ -103,7 +103,7 @@ fn document_layer_from_content(&str) -> ConfigValue                      // fron
 pub(crate) fn json_to_config_value(&Value) -> ConfigValue                // moved from the stage
 ```
 
-`document_path` feeds the `_metadata.yml` chain, `document_dir` is where document and runtime path values are relative to (the stage passes `doc.path`'s parent, as before). `source` is the config file (project), each `_metadata.yml`, the extension dir (both extension kinds) or the document; `None` for the runtime layer. The project layer's profile overlays and `_quarto.yml.local` are already merged into the one `Project` layer, so provenance cannot tell them apart (the layer tests assert `Project` for all of them). The stage's per-kind flattening/path-adjusting/css-marking lives in `prepare_layer` (`metadata_merge.rs`), a straight lift of the old inline code.
+`document_path` feeds the `_metadata.yml` chain, `document_dir` is where document and runtime path values are relative to (the stage passes `doc.path`\'s parent, as before). `source` is the config file (project), each `_metadata.yml`, the extension dir (both extension kinds) or the document; `None` for the runtime layer. The project layer's profile overlays and `_quarto.yml.local` are already merged into the one `Project` layer, so provenance cannot tell them apart (the layer tests assert `Project` for all of them). The stage's per-kind flattening/path-adjusting/css-marking lives in `prepare_layer` (`metadata_merge.rs`), a straight lift of the old inline code.
 
 **What F3a must know.**
 - Call with `extensions: None, target_format: None` for selection; `is_book` only matters for the extension-format layer. A malformed `_metadata.yml` gives **no directory layers** (the stage has always swallowed the error); a caller that must report it calls `directory_metadata_for_document` itself.

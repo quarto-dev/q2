@@ -120,7 +120,7 @@ not by merging `format:` values:
 - Sharing with the stage is limited to layer collection: a function in
   `quarto-core` that returns the ordered, unflattened layers for
   (project, document path), used by the stage (which then flattens) and by
-  the resolver (which reads only `format:` keys). `render_to_file`'s inline
+  the resolver (which reads only `format:` keys). `render_to_file`\'s inline
   resolution and the CLI's early guess should both call the resolver.
 - The CLI must discover the project before choosing the format. Today it
   chooses first.
@@ -229,7 +229,7 @@ Not found (checked, no format decision): `crates/quarto/src/commands/{check,list
 2. **Q-5-33 bypass (orchestrator.rs:1031).** A book whose project `format:` is `docx`/`pptx`/`revealjs`/`pdf` is not refused, because the gate looks at the early guess (`html`).
 3. **Pass 1 under the wrong format (orchestrator.rs:2028, 2595-2617, 2718-2730).** Pass-1 profiles and their cache key use the early format, Pass 2 uses the per-doc format. Unknown impact; at minimum a project-typst book populates the Pass-1 cache under `html`.
 4. **`post_render` gating (orchestrator.rs:1370, 1731) and css diagnostics (1609)** use `self.format`. With an html early guess on a project that renders docx or typst, website post-render hooks may run on non-HTML outputs (the comment at ~1726 warns one of them hard-fails). Unverified.
-5. **`_metadata.yml` `format:` is read by no resolver** (`resolve_format_key`, `resolve_formats`, `resolve_output_ext`, multi_file_html). Q1 treats it as input keys. `output_ext.rs`'s header already admits the gap. (Note: for books it would be ignored anyway under `projectFormatsOnly`.)
+5. **`_metadata.yml` `format:` is read by no resolver** (`resolve_format_key`, `resolve_formats`, `resolve_output_ext`, multi_file_html). Q1 treats it as input keys. `output_ext.rs`\'s header already admits the gap. (Note: for books it would be ignored anyway under `projectFormatsOnly`.)
 6. **Four front-matter parsers with different edge cases.** `format_key_from_frontmatter` (serde_yaml; `---\n` required at byte 0 after BOM; `\n---` or `\n...`); `frontmatter_format_keys` and `detect_format_from_content` (yaml_rust2; leading whitespace allowed; `\n---` only; `...` terminator not accepted); none skips `null`/`false` map entries (Q1 does); `format: ""` and non-string scalars fall to different defaults. A document can be classified differently by the CLI, the resolver and the wasm detector.
 7. **`publish.rs:282` hard-codes html without forcing it** (no `with_format_override`). Either force html explicitly (then say so) or resolve from the project; today project-level non-html `format:` is re-resolved per doc inside an html-shaped book dispatch.
 8. **`get-config --to` defaults to html (main.rs:560).** A doc in a typst project reports html-flattened config unless `--to typst` is passed.
@@ -250,7 +250,7 @@ Proposed shape, in `quarto-core` (native + wasm, `&dyn SystemRuntime`, no I/O be
 3. **Two entry points over it.**
    - `resolve_document_format(project: &ProjectContext, doc_path, doc_content: Option<&str>, cli_to, runtime) -> FormatSelection` for per-document callers (`render_document_to_file`, `multi_file_html`, wasm, `get-config`).
    - `resolve_project_format(project: &ProjectContext, cli_to) -> FormatSelection` for **document-less** callers: CLI before dispatch (`render_once` must discover the project first and call this, or the per-document one when exactly one file is named), `preview --static` (boot and every watcher action), `publish`, and the orchestrator's `self.format`.
-4. **Single place for the classes and pseudo-formats.** Keep `ResolvedFormats`/`FormatClass` (formats.rs) but build them from the `FormatSelection` (so `resolve_pandoc_formats` stays and gains dir keys and the book rule). Move `map_format_for_preview` / `coerce_format_for_print` / `lua_format_for` into `quarto-core::format` and expose a `preview_format_for(selection)` so wasm and TS stop duplicating the table. `resolve_declared`'s `typst` -> `typst-pdf` stays the classifier's job.
+4. **Single place for the classes and pseudo-formats.** Keep `ResolvedFormats`/`FormatClass` (formats.rs) but build them from the `FormatSelection` (so `resolve_pandoc_formats` stays and gains dir keys and the book rule). Move `map_format_for_preview` / `coerce_format_for_print` / `lua_format_for` into `quarto-core::format` and expose a `preview_format_for(selection)` so wasm and TS stop duplicating the table. `resolve_declared`\'s `typst` -> `typst-pdf` stays the classifier's job.
 5. **wasm surface.** Make the Rust side the decider for the browser: `render_page_in_project_with_attribution`, `render_page_for_preview`, `render_printable`, `render_qmd` and `parse_qmd_to_ast` take (or compute from `path` + buffer) the resolved format, replace `detect_format_from_content`, and report it in `RenderResponse.format`; `parse_qmd_to_ast` needs a `path` (or a project-aware variant) so `meta.format` is correct. Then `classifyPreviewMode` can ignore `meta.format` and use `resolvePandocFormats(path, content)` + the preview mapping, which also repairs `PreviewRouter` / `Editor` `currentFormat`, the PDF pane, and the download-mode and "neither" states in one change.
 6. **Orchestrator.** `ProjectPipeline::new` should receive the resolved project-level format (not the early guess); per-document resolution inside `render_document_to_file` / `multi_file_html` calls (3) with `project_formats_only` so a book is decided once. `format_consolidates_book`, Q-5-33, Q-5-42, Pass 1 and post-render gating then see the same value as Pass 2.
 7. **Diagnostics.** Return the unknown/invalid-key error and the "several keys, one rendered" data from the selection (replace `format_keys_from_frontmatter` + `multi_format_diagnostics` inputs).
@@ -356,7 +356,7 @@ and F5b.
   passes `None` until F8).
 - A render that wrote nothing shows its diagnostics at `/` (`ReloadHub` holds
   the failure the server renders), instead of the page listing.
-- `quarto-test`'s project runner resolves the format with the resolver (`html`
+- `quarto-test`\'s project runner resolves the format with the resolver (`html`
   fallback, no book-means-typst default) and overrides the format only for the
   spec's requested format.
 

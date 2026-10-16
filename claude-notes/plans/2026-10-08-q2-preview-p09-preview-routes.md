@@ -29,7 +29,7 @@ The server side every client uses: one shared render helper and response contrac
 - **Injection points.** `SharedContext = Arc<HubContext>` (`quarto-hub/src/context.rs:956`) has no extension slot, and `extend_with_preview` is passed as a bare fn pointer (`quarto-preview/lib.rs:497`); the precedent for process-wide state in this crate is a static (`re_execute.rs` `CACHE_DIR`, `IN_FLIGHT`). `render_download.rs:349` builds the router with `extend_with_preview(Router::new())`, so the test seams are statics too (tests that swap one run under nextest's process-per-test).
 - **Options struct.** `RenderToFileOptions` derives `Debug, Clone, Default` (`render_to_file.rs:84`); `AttributionSourceProvider: Send + Sync` has no `Debug` bound (`attribution/source.rs:35`), so a trait-object field would not compile.
 - **Books.** Chapter-alone and whole-book requests are Plan 3's `resolve_book_scope` and Plan 10's book entry; this plan only resolves scope and calls a seam for `Book`.
-- **Concurrency.** `re_execute`'s `IN_FLIGHT` is a static synchronous `HashSet` (`re_execute.rs:46`), 409-only and not reusable; tokio has the `sync` feature (`quarto-preview/Cargo.toml:12`), so a `Notify`-based slot is implementable; no `DefaultBodyLimit` exists anywhere in `crates/`, so axum's implicit 2 MB applies today.
+- **Concurrency.** `re_execute`\'s `IN_FLIGHT` is a static synchronous `HashSet` (`re_execute.rs:46`), 409-only and not reusable; tokio has the `sync` feature (`quarto-preview/Cargo.toml:12`), so a `Notify`-based slot is implementable; no `DefaultBodyLimit` exists anywhere in `crates/`, so axum's implicit 2 MB applies today.
 - Runtime requirements: native `typst` (>= 0.8) and `pandoc` are external (`Q-21-1`, `Q-20-1`, `Q-20-2`); five `@preview` packages are vendored and any other `@preview` import is downloaded on every render (+0.35 s, the package cache is per render); `typst-gather` writes progress to stderr with no verbosity parameter (cross-repo follow-up).
 
 ## Decisions
@@ -67,7 +67,7 @@ Per task: `cargo clippy -p <crate> --all-targets -- -D warnings` plus `cargo nex
 ## Risks
 
 - Several tabs on one path coalesce on the server: one tab's request can supersede another's.
-- Typst diagnostics' line numbers refer to the intermediate `.typ`; source mapping is out of scope.
+- Typst diagnostics\' line numbers refer to the intermediate `.typ`; source mapping is out of scope.
 - Native versus wasm output differs (E4); hub PDFs (pinned wasm typst, bundled fonts) and preview PDFs (system typst, system fonts, real packages) need not be byte-identical.
 
 ## Handoff log

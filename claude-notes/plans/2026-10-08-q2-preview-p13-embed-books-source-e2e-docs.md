@@ -68,7 +68,7 @@ Per task: `tsc` plus `vitest` in `hub-client`. Workspace nextest at the end of t
 **Things learned.**
 - hub-client stores an imported image only up to 10 MB (`FILE_SIZE_LIMITS.MAX_FILE_SIZE`; larger ones are skipped), in the browser too. The near-25 MB test therefore uses three 7 MB images, not one 22 MB image (the route itself returns the 22 MB media: verified with `curl`).
 - The viewer SPA's e2e and the pdf.js tree: a stale gitignored `q2-preview-spa/dist` (no `pdfjs/`) makes the embed's PDF pane fail with "The PDF viewer did not start". `npm run build` in `q2-preview-spa` (its `prebuild` fetches pdf.js), then `cargo build --bin q2`, fixes it. Same cause as the `pdfjs_serving` failures Plans 6 and 10 recorded.
-- `--static`'s `--help` text still said "Only html and revealjs"; it now names typst (docs table fixed too).
+- `--static`\'s `--help` text still said "Only html and revealjs"; it now names typst (docs table fixed too).
 - Not reproduced by me: Plan 10's note that a whole-book download fails when a chapter `embed`s another chapter's executed cell (typst `Q-21-3`). It is documented as a limitation in the user docs (13.7); no plan covers splicing a recorded capture into an embed.
 - The `--join` e2e cases need network to iroh's relay (they do not skip without it); CI has network.
 
