@@ -200,6 +200,7 @@ pub async fn pdf_handler(
         format_key: TYPST_PDF_KEY.to_string(),
         content: body.content,
         scope,
+        metadata: None,
         attribution_json: body.attribution_json,
         captures,
         all_captures,

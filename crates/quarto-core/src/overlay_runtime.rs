@@ -1,14 +1,23 @@
-//! A [`SystemRuntime`] that answers reads of chosen files from memory and
-//! forwards everything else (epic E11, P10-D1).
+//! A per-render overlay on a [`SystemRuntime`]: answers reads of chosen files
+//! from memory, layers extra runtime metadata on top, and forwards everything
+//! else (epic E11, P10-D1; format-resolution epic FR12).
 //!
 //! The preview server's whole-book download renders the book on disk but the
 //! active chapter from the editor's current text. Pass 1 and the chapter
 //! renders both read chapters through the runtime, so one overlay serves both.
+//! `-M KEY:VALUE` and per-request metadata travel the same way: they are the
+//! runtime layer of `MetadataMergeStage`, read through `runtime_metadata()`.
+//!
+//! [`RenderOverlay`] is the immutable description; [`RenderOverlay::apply`]
+//! wraps a runtime in an [`OverlayRuntime`]. Whoever creates the runtime for a
+//! render applies it, once. Applying the same overlay twice is harmless (file
+//! reads resolve to the same bytes, and the metadata merge is idempotent), so
+//! nested pipelines need no identity check. The module compiles for wasm too.
 //!
 //! Every trait method is written out and forwards to the inner runtime, so a
 //! method the inner runtime overrides is never replaced by the trait default.
-//! Five methods see the overlay: `file_read`, `file_read_string`, `is_file`,
-//! `is_dir` and `path_metadata`. The trait defaults of `file_read_string`,
+//! Five methods see the file overlay: `file_read`, `file_read_string`,
+//! `is_file`, `is_dir` and `path_metadata`; `runtime_metadata` merges. The trait defaults of `file_read_string`,
 //! `is_file` and `is_dir` route through `self`, and `NativeRuntime` may
 //! override them, so forwarding them plainly would bypass the overlay.
 //! `tests::every_trait_method_is_written_out` checks that no method is missing
@@ -24,10 +33,79 @@ use quarto_system_runtime::{
     RuntimeResult, SassOutput, SystemRuntime, TempDir, XdgDirKind,
 };
 
-/// `inner`, with the bytes of some absolute paths replaced.
+/// An immutable per-render overlay: file overrides and runtime metadata.
+#[derive(Debug, Default, Clone)]
+pub struct RenderOverlay {
+    /// Absolute paths mapped to the bytes they should read as.
+    pub files: HashMap<PathBuf, Vec<u8>>,
+    /// Runtime-layer metadata, merged over the inner runtime's.
+    pub metadata: Option<serde_json::Value>,
+}
+
+impl RenderOverlay {
+    pub fn with_metadata(metadata: serde_json::Value) -> Self {
+        Self {
+            files: HashMap::new(),
+            metadata: Some(metadata),
+        }
+    }
+
+    pub fn with_files(files: HashMap<PathBuf, Vec<u8>>) -> Self {
+        Self {
+            files,
+            metadata: None,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty() && self.metadata.is_none()
+    }
+
+    /// Wrap `inner`; an empty overlay returns `inner` unchanged.
+    pub fn apply(self: &Arc<Self>, inner: Arc<dyn SystemRuntime>) -> Arc<dyn SystemRuntime> {
+        if self.is_empty() {
+            return inner;
+        }
+        Arc::new(OverlayRuntime::from_overlay(inner, self))
+    }
+}
+
+/// Merge `overlay` over `base`: objects recursively with overlay keys winning;
+/// any other overlay value (arrays included) replaces. Idempotent:
+/// `merge(merge(b, o), o) == merge(b, o)`.
+pub fn merge_runtime_metadata(
+    base: Option<serde_json::Value>,
+    overlay: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    use serde_json::Value;
+    fn merge(base: Value, overlay: &Value) -> Value {
+        match (base, overlay) {
+            (Value::Object(mut b), Value::Object(o)) => {
+                for (k, v) in o {
+                    let merged = match b.remove(k) {
+                        Some(existing) => merge(existing, v),
+                        None => v.clone(),
+                    };
+                    b.insert(k.clone(), merged);
+                }
+                Value::Object(b)
+            }
+            (_, o) => o.clone(),
+        }
+    }
+    match (base, overlay) {
+        (b, None) => b,
+        (None, Some(o)) => Some(o.clone()),
+        (Some(b), Some(o)) => Some(merge(b, o)),
+    }
+}
+
+/// `inner`, with the bytes of some absolute paths replaced and runtime
+/// metadata layered on top.
 pub struct OverlayRuntime {
     inner: Arc<dyn SystemRuntime>,
     files: HashMap<PathBuf, Vec<u8>>,
+    metadata: Option<serde_json::Value>,
 }
 
 /// Lexically normalise an absolute path: drop `.` and fold `..`. Overlay keys
@@ -53,7 +131,17 @@ impl OverlayRuntime {
             .into_iter()
             .map(|(path, bytes)| (normalize_overlay_path(&path), bytes))
             .collect();
-        Self { inner, files }
+        Self {
+            inner,
+            files,
+            metadata: None,
+        }
+    }
+
+    fn from_overlay(inner: Arc<dyn SystemRuntime>, overlay: &RenderOverlay) -> Self {
+        let mut rt = Self::new(inner, overlay.files.clone());
+        rt.metadata = overlay.metadata.clone();
+        rt
     }
 
     fn overlaid(&self, path: &Path) -> Option<&Vec<u8>> {
@@ -64,7 +152,8 @@ impl OverlayRuntime {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl SystemRuntime for OverlayRuntime {
     // The five methods that see the overlay.
 
@@ -186,7 +275,7 @@ impl SystemRuntime for OverlayRuntime {
     }
 
     fn runtime_metadata(&self) -> Option<serde_json::Value> {
-        self.inner.runtime_metadata()
+        merge_runtime_metadata(self.inner.runtime_metadata(), self.metadata.as_ref())
     }
 
     fn is_interactive(&self) -> bool {
@@ -383,6 +472,121 @@ mod tests {
         assert!(rt.is_dir(&dir).unwrap());
         assert!(!rt.is_file(&dir.join("missing.qmd")).unwrap());
         assert!(rt.file_read(&dir.join("missing.qmd")).is_err());
+    }
+
+    use serde_json::json;
+
+    fn merged(b: Option<serde_json::Value>, o: serde_json::Value) -> Option<serde_json::Value> {
+        merge_runtime_metadata(b, Some(&o))
+    }
+
+    #[test]
+    fn metadata_objects_merge_recursively_overlay_wins() {
+        let base = json!({"a": {"x": 1, "y": 2}, "keep": true});
+        let got = merged(Some(base), json!({"a": {"y": 3, "z": 4}, "new": 1})).unwrap();
+        assert_eq!(
+            got,
+            json!({"a": {"x": 1, "y": 3, "z": 4}, "keep": true, "new": 1})
+        );
+    }
+
+    #[test]
+    fn metadata_arrays_and_non_objects_replace() {
+        assert_eq!(
+            merged(Some(json!({"l": [1, 2]})), json!({"l": [3]})).unwrap(),
+            json!({"l": [3]})
+        );
+        // A scalar over a map replaces it, and a map over a scalar does too.
+        assert_eq!(
+            merged(
+                Some(json!({"format": {"html": {"toc": true}}})),
+                json!({"format": "typst"})
+            )
+            .unwrap(),
+            json!({"format": "typst"})
+        );
+        assert_eq!(
+            merged(
+                Some(json!({"format": "typst"})),
+                json!({"format": {"html": {}}})
+            )
+            .unwrap(),
+            json!({"format": {"html": {}}})
+        );
+        assert_eq!(merged(Some(json!({"a": 1})), json!(5)).unwrap(), json!(5));
+    }
+
+    #[test]
+    fn metadata_either_side_none_returns_the_other() {
+        assert_eq!(merge_runtime_metadata(None, None), None);
+        let v = json!({"a": 1});
+        assert_eq!(
+            merge_runtime_metadata(Some(v.clone()), None),
+            Some(v.clone())
+        );
+        assert_eq!(merge_runtime_metadata(None, Some(&v)), Some(v));
+    }
+
+    #[test]
+    fn metadata_merge_is_idempotent() {
+        let base = json!({"a": {"x": 1}, "l": [1], "format": {"html": {"s": 1}}});
+        let o = json!({"a": {"y": 2}, "l": [2], "format": "typst"});
+        let once = merged(Some(base), o.clone());
+        let twice = merge_runtime_metadata(once.clone(), Some(&o));
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn empty_overlay_returns_the_inner_runtime() {
+        let inner: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let out = Arc::new(RenderOverlay::default()).apply(inner.clone());
+        assert!(Arc::ptr_eq(&inner, &out));
+    }
+
+    #[test]
+    fn applying_the_same_overlay_twice_equals_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().canonicalize().unwrap();
+        std::fs::write(dir.join("a.qmd"), "on disk").unwrap();
+        let mut files = HashMap::new();
+        files.insert(dir.join("a.qmd"), b"edited".to_vec());
+        let ov = Arc::new(RenderOverlay {
+            files,
+            metadata: Some(json!({"title": "X", "format": {"html": {"toc": true}}})),
+        });
+        let inner: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let once = ov.apply(inner.clone());
+        let twice = ov.apply(ov.apply(inner));
+
+        let a = dir.join("a.qmd");
+        assert_eq!(once.file_read(&a).unwrap(), twice.file_read(&a).unwrap());
+        assert_eq!(
+            once.file_read_string(&a).unwrap(),
+            twice.file_read_string(&a).unwrap()
+        );
+        assert_eq!(
+            once.path_metadata(&a).unwrap().size,
+            twice.path_metadata(&a).unwrap().size
+        );
+        assert_eq!(once.is_file(&a).unwrap(), twice.is_file(&a).unwrap());
+        assert_eq!(once.runtime_metadata(), twice.runtime_metadata());
+        assert_eq!(once.runtime_metadata().unwrap()["title"], json!("X"));
+    }
+
+    #[test]
+    fn overlay_metadata_sits_on_top_of_the_inner_runtime_metadata() {
+        let inner = Arc::new(RenderOverlay::with_metadata(
+            json!({"format": {"html": {"source-location": "full"}}, "title": "inner"}),
+        ))
+        .apply(Arc::new(NativeRuntime::new()));
+        let outer = Arc::new(RenderOverlay::with_metadata(
+            json!({"format": {"html": {"toc": true}}, "title": "outer"}),
+        ))
+        .apply(inner);
+        assert_eq!(
+            outer.runtime_metadata().unwrap(),
+            json!({"format": {"html": {"source-location": "full", "toc": true}}, "title": "outer"})
+        );
     }
 
     #[test]

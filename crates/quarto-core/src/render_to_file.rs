@@ -191,6 +191,14 @@ pub struct RenderToFileOptions {
     /// `capture_materialize_dir`, never beside the source. Empty (the
     /// default) splices nothing.
     pub captures: Vec<quarto_trace::EngineCapture>,
+
+    /// Per-render overlay (file overrides and runtime metadata; FR12).
+    /// Data for whoever creates the render's runtime: the creator calls
+    /// [`RenderOverlay::apply`] once, before project discovery.
+    /// `ProjectPipeline::new`, `render_to_file` and
+    /// `render_document_to_file` never read it, so nothing wraps twice.
+    /// `None` (the default) changes nothing.
+    pub overlay: Option<Arc<crate::overlay_runtime::RenderOverlay>>,
 }
 
 /// Result of rendering a document to a file.

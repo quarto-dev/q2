@@ -34,8 +34,8 @@ use tempfile::TempDir;
 use crate::pdf_preview::{PdfRequest, pdf_handler};
 use crate::render_download::{RenderRequest, render_handler};
 use crate::render_helper::{
-    BookDownload, BookDownloadError, BookDownloadOutput, BookDownloadRequest, RenderSeam,
-    ScopeParam, set_book_download, set_render_seam,
+    BookDownload, BookDownloadError, BookDownloadOutput, BookDownloadRequest, RenderJob,
+    RenderOutcome, RenderSeam, ScopeParam, render_blocking, set_book_download, set_render_seam,
 };
 
 // ---- fixtures ------------------------------------------------------------
@@ -81,6 +81,8 @@ struct Call {
     has_cancellation: bool,
     has_deadline: bool,
     output_dir: PathBuf,
+    /// `runtime.runtime_metadata()` of the runtime the seam was handed.
+    runtime_metadata: Option<serde_json::Value>,
 }
 
 #[derive(Default)]
@@ -102,6 +104,7 @@ impl FakeSeam {
         input: &Path,
         format: &str,
         options: &RenderToFileOptions,
+        runtime: &dyn SystemRuntime,
     ) -> quarto_core::Result<RenderToFileResult> {
         let n = self.started.fetch_add(1, Ordering::SeqCst);
         let output_dir = options.output_dir.clone().expect("output dir");
@@ -118,6 +121,7 @@ impl FakeSeam {
             has_cancellation: options.cancellation.is_some(),
             has_deadline: options.child_deadline.is_some(),
             output_dir: output_dir.clone(),
+            runtime_metadata: runtime.runtime_metadata(),
         });
         if n < self.hold_calls {
             loop {
@@ -178,9 +182,9 @@ impl RenderSeam for Arc<FakeSeam> {
         format: &str,
         options: &RenderToFileOptions,
         _project: &ProjectContext,
-        _runtime: Arc<dyn SystemRuntime>,
+        runtime: Arc<dyn SystemRuntime>,
     ) -> quarto_core::Result<RenderToFileResult> {
-        self.run("document", input, format, options)
+        self.run("document", input, format, options, runtime.as_ref())
     }
 
     fn render_chapter(
@@ -189,9 +193,15 @@ impl RenderSeam for Arc<FakeSeam> {
         abs_path: &Path,
         format: &Format,
         options: &RenderToFileOptions,
-        _runtime: Arc<dyn SystemRuntime>,
+        runtime: Arc<dyn SystemRuntime>,
     ) -> quarto_core::Result<RenderToFileResult> {
-        self.run("chapter", abs_path, &format.identifier.to_string(), options)
+        self.run(
+            "chapter",
+            abs_path,
+            &format.identifier.to_string(),
+            options,
+            runtime.as_ref(),
+        )
     }
 }
 
@@ -771,4 +781,99 @@ fn the_route_contract_constants() {
         crate::render_helper::CHILD_DEADLINE,
         Duration::from_secs(120)
     );
+}
+
+// ---- the render overlay (FR12) ---------------------------------------------
+
+fn job_with_metadata(
+    root: &Path,
+    path: &str,
+    format_key: &str,
+    scope: Option<quarto_core::BookScope>,
+    metadata: Option<serde_json::Value>,
+) -> RenderJob {
+    RenderJob {
+        abs_path: root.join(path),
+        format_key: format_key.to_string(),
+        content: None,
+        scope,
+        metadata,
+        attribution_json: None,
+        captures: Vec::new(),
+        all_captures: Default::default(),
+        hub_root: root.to_path_buf(),
+        cancellation: quarto_core::stage::Cancellation::new(),
+    }
+}
+
+#[tokio::test]
+async fn render_blocking_hands_the_seam_a_runtime_carrying_the_job_metadata() {
+    let (project, _ctx) = build_ctx(BOOK).await;
+    let root = root_of(&project);
+    let fake = install(FakeSeam::default());
+    let metadata = serde_json::json!({"title": "X", "format": {"typst": {"toc": true}}});
+
+    // A page render (a non-member, so the document path) and a chapter render.
+    for (path, scope) in [
+        ("other.qmd", None),
+        ("one.qmd", Some(quarto_core::BookScope::Chapter)),
+    ] {
+        let job = job_with_metadata(&root, path, "typst-pdf", scope, Some(metadata.clone()));
+        let outcome = tokio::task::spawn_blocking(move || render_blocking(job))
+            .await
+            .unwrap();
+        assert!(matches!(outcome, RenderOutcome::Ok(_)), "{path}");
+    }
+    // And one with no metadata: the seam's runtime has none.
+    let job = job_with_metadata(&root, "other.qmd", "typst-pdf", None, None);
+    tokio::task::spawn_blocking(move || render_blocking(job))
+        .await
+        .unwrap();
+
+    let calls = fake.calls.lock().unwrap();
+    assert_eq!(calls[0].kind, "document");
+    assert_eq!(calls[0].runtime_metadata.as_ref(), Some(&metadata));
+    assert_eq!(calls[1].kind, "chapter");
+    assert_eq!(calls[1].runtime_metadata.as_ref(), Some(&metadata));
+    assert_eq!(calls[2].runtime_metadata, None);
+}
+
+#[tokio::test]
+async fn render_blocking_passes_the_job_metadata_to_the_book_download() {
+    struct Recorder(Mutex<Option<serde_json::Value>>);
+    impl BookDownload for Arc<Recorder> {
+        fn render(
+            &self,
+            req: BookDownloadRequest,
+        ) -> Result<BookDownloadOutput, BookDownloadError> {
+            *self.0.lock().unwrap() = req.metadata.clone();
+            let file = req.request_dir.join("book.pdf");
+            std::fs::write(&file, b"%PDF-book").unwrap();
+            Ok(BookDownloadOutput {
+                file,
+                chapters: 2,
+                unexecuted_cells: 0,
+                diagnostics: Vec::new(),
+            })
+        }
+    }
+    let (project, _ctx) = build_ctx(BOOK).await;
+    let root = root_of(&project);
+    install(FakeSeam::default());
+    let recorder = Arc::new(Recorder(Mutex::new(None)));
+    set_book_download(Some(Arc::new(recorder.clone())));
+    let metadata = serde_json::json!({"title": "Whole book"});
+
+    let job = job_with_metadata(
+        &root,
+        "one.qmd",
+        "typst-pdf",
+        Some(quarto_core::BookScope::Book),
+        Some(metadata.clone()),
+    );
+    let outcome = tokio::task::spawn_blocking(move || render_blocking(job))
+        .await
+        .unwrap();
+    assert!(matches!(outcome, RenderOutcome::Ok(_)));
+    assert_eq!(recorder.0.lock().unwrap().clone(), Some(metadata));
 }

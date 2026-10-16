@@ -1104,7 +1104,12 @@ fn pdfjs_embedded_response(ui: PreviewUi, rel: &str, ctx: AssetRequestCtx<'_>) -
         return pdfjs_not_found();
     };
     let file = lookup_embedded(ui, &served).expect("resolve_pdfjs_rel checked presence");
-    asset_response(&served, Bytes::from_static(file), embedded_gz(ui, &served), ctx)
+    asset_response(
+        &served,
+        Bytes::from_static(file),
+        embedded_gz(ui, &served),
+        ctx,
+    )
 }
 
 /// Serve the SPA `index.html` (override dir if set, else the embedded bundle).

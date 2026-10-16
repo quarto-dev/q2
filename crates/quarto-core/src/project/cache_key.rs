@@ -23,6 +23,8 @@
 //!         path                  (length-prefixed UTF-8)
 //!         bytes                 (length-prefixed)
 //!   | _quarto.yml bytes         (length-prefixed; empty if absent)
+//!   | runtime_metadata         (canonical JSON, length-prefixed;
+//!                                empty when the runtime has none)
 //!   | for each extension contribution, sorted by name:
 //!         name                  (length-prefixed UTF-8)
 //!         bytes                 (length-prefixed)
@@ -116,7 +118,12 @@ use crate::document_profile::DOCUMENT_PROFILE_VERSION;
 /// runs `ListingItemInfoStage`, which records it as
 /// `listing_item.date_modified`
 /// (bd-listing-description-precedence-x4bh6w3m).
-pub const PROFILE_KEY_VERSION: u32 = 3;
+///
+/// v4: the key domain gained the canonical JSON of the runtime
+/// metadata (`-M` and per-request overlays; format-resolution epic F1).
+/// A profile is extracted after `MetadataMergeStage`, so `title`,
+/// `description` and the like can come from the runtime layer.
+pub const PROFILE_KEY_VERSION: u32 = 4;
 
 /// Returns the Quarto build identifier baked into every cache key.
 ///
@@ -193,6 +200,35 @@ pub struct Pass1KeyInputs<'a> {
     /// [`metadata_files`](Self::metadata_files): a comment-only edit
     /// to an overlay correctly invalidates the key.
     pub profile_config_files: &'a [(PathBuf, Vec<u8>)],
+
+    /// Canonical JSON (object keys sorted) of the runtime's metadata
+    /// layer, from [`canonical_runtime_metadata`]; empty when the
+    /// runtime has none. The layer sits on top of every other one, so
+    /// a profile extracted under `-M title:X` must not be served to a
+    /// render without it.
+    pub runtime_metadata: &'a str,
+}
+
+/// The canonical text of a runtime metadata value for [`Pass1KeyInputs`]:
+/// compact JSON with object keys sorted at every level, so two equal
+/// values hash alike whatever order they were built in. Empty for `None`.
+pub fn canonical_runtime_metadata(value: Option<&serde_json::Value>) -> String {
+    fn canonical(value: &serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Object(map) => {
+                let sorted: std::collections::BTreeMap<_, _> =
+                    map.iter().map(|(k, v)| (k.clone(), canonical(v))).collect();
+                // `serde_json::Map` keeps insertion order under
+                // `preserve_order`, so rebuild it in sorted order.
+                serde_json::Value::Object(sorted.into_iter().collect())
+            }
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.iter().map(canonical).collect())
+            }
+            other => other.clone(),
+        }
+    }
+    value.map_or_else(String::new, |v| canonical(v).to_string())
 }
 
 /// Compute the SHA-256 cache key for a `DocumentProfile`.
@@ -250,6 +286,9 @@ pub fn pass1_key(inputs: &Pass1KeyInputs<'_>) -> [u8; 32] {
         write_lp_str(&mut hasher, &path.to_string_lossy());
         write_lp_bytes(&mut hasher, bytes);
     }
+
+    // Runtime metadata (canonical JSON; empty when none).
+    write_lp_str(&mut hasher, inputs.runtime_metadata);
 
     // Format-extension contributions, sorted by name (caller's
     // responsibility). Hashing in any other order would change the
@@ -313,6 +352,7 @@ mod tests {
             extension_contributions: &[],
             active_config_profiles: &[],
             profile_config_files: &[],
+            runtime_metadata: "",
         }
     }
 
@@ -326,6 +366,45 @@ mod tests {
         let mut tweaked = minimal_inputs();
         tweaked.active_config_profiles = &names;
         assert_ne!(a, pass1_key(&tweaked));
+    }
+
+    #[test]
+    fn key_changes_on_runtime_metadata() {
+        let none = pass1_key(&minimal_inputs());
+        let a = canonical_runtime_metadata(Some(&serde_json::json!({"title": "A"})));
+        let b = canonical_runtime_metadata(Some(&serde_json::json!({"title": "B"})));
+        let mut with_a = minimal_inputs();
+        with_a.runtime_metadata = &a;
+        let mut with_b = minimal_inputs();
+        with_b.runtime_metadata = &b;
+        let key_a = pass1_key(&with_a);
+        assert_ne!(none, key_a, "an overlay must not share the plain key");
+        assert_ne!(key_a, pass1_key(&with_b), "two overlays, two keys");
+        // Same overlay, same key.
+        let mut again = minimal_inputs();
+        again.runtime_metadata = &a;
+        assert_eq!(key_a, pass1_key(&again));
+    }
+
+    #[test]
+    fn canonical_runtime_metadata_ignores_key_order() {
+        use serde_json::{Map, Value, json};
+        assert_eq!(canonical_runtime_metadata(None), "");
+        let mut m1 = Map::new();
+        m1.insert("b".into(), json!({"y": 1, "x": [{"q": 1, "p": 2}]}));
+        m1.insert("a".into(), json!(true));
+        let mut m2 = Map::new();
+        m2.insert("a".into(), json!(true));
+        m2.insert("b".into(), json!({"x": [{"p": 2, "q": 1}], "y": 1}));
+        assert_eq!(
+            canonical_runtime_metadata(Some(&Value::Object(m1))),
+            canonical_runtime_metadata(Some(&Value::Object(m2)))
+        );
+        // Arrays keep their order.
+        assert_ne!(
+            canonical_runtime_metadata(Some(&json!({"l": [1, 2]}))),
+            canonical_runtime_metadata(Some(&json!({"l": [2, 1]})))
+        );
     }
 
     #[test]

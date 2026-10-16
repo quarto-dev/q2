@@ -2680,6 +2680,8 @@ async fn pass1_profile_with_cache(
         })
         .collect();
 
+    let runtime_metadata =
+        crate::project::cache_key::canonical_runtime_metadata(runtime.runtime_metadata().as_ref());
     let key_inputs = crate::project::cache_key::Pass1KeyInputs {
         format_id: &format_id,
         source_path: &source_path,
@@ -2690,6 +2692,7 @@ async fn pass1_profile_with_cache(
         extension_contributions: &extension_contributions,
         active_config_profiles: &active_profile_names,
         profile_config_files: &profile_config_files,
+        runtime_metadata: &runtime_metadata,
     };
     let key_bytes = crate::project::cache_key::pass1_key(&key_inputs);
     let key_hex = crate::project::cache_key::hex_encode(&key_bytes);

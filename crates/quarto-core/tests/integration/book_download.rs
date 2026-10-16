@@ -109,6 +109,7 @@ fn download(
         captures,
         cancellation,
         child_deadline: Some(std::time::Duration::from_secs(120)),
+        metadata: None,
     })
 }
 
@@ -173,6 +174,36 @@ fn a_typst_book_downloads_as_source() {
         std::fs::read_dir(fx.root.join("_book")).unwrap().count(),
         1,
         "_book/ gained files"
+    );
+}
+
+#[test]
+fn request_metadata_reaches_the_book_render() {
+    require!("pandoc");
+    let fx = Fixture::new();
+    let format = Format::from_format_string("typst").unwrap();
+    let render = |metadata: Option<serde_json::Value>| {
+        let result = render_book_download(BookDownloadParams {
+            path: &fx.root.join("ch1.qmd"),
+            content: None,
+            format: &format,
+            typst_target: Some(TypstTarget::Source),
+            request_dir: &fx.request_dir(),
+            hub_root: &fx.root,
+            captures: &HashMap::new(),
+            cancellation: Cancellation::new(),
+            child_deadline: Some(std::time::Duration::from_secs(120)),
+            metadata,
+        });
+        std::fs::read_to_string(ok(result).file).unwrap()
+    };
+    let plain = render(None);
+    assert!(plain.contains("subtitle: none"));
+    assert!(!plain.contains("ZZSUB"));
+    let overlaid = render(Some(serde_json::json!({"subtitle": "ZZSUB"})));
+    assert!(
+        overlaid.contains("subtitle: [ZZSUB]"),
+        "the request's metadata is not in the book source"
     );
 }
 
@@ -336,6 +367,7 @@ fn a_file_outside_a_book_is_refused() {
         captures: &HashMap::new(),
         cancellation: Cancellation::new(),
         child_deadline: None,
+        metadata: None,
     })
     .unwrap_err();
     assert!(matches!(err, BookDownloadFailure::Failed(_)), "{err:?}");

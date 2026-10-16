@@ -90,6 +90,7 @@ pub async fn render_handler(
         format_key: info.key.to_string(),
         content: body.content,
         scope,
+        metadata: None,
         attribution_json: body.attribution_json,
         captures,
         all_captures,

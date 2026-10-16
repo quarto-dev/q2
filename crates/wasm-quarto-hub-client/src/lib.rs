@@ -19,6 +19,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
+use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::project::render_scripts::RenderHost;
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
@@ -55,6 +56,19 @@ fn get_runtime_arc() -> &'static Arc<WasmRuntime> {
         populate_vfs_with_embedded_resources(&runtime);
         Arc::new(runtime)
     })
+}
+
+/// The runtime for one render: the global VFS runtime wrapped in `overlay`
+/// when there is one (format-resolution epic FR12). Every wasm render entry
+/// that creates a render's runtime calls this once, before its first
+/// `ProjectContext::discover`, and hands the result down; nothing below an
+/// entry wraps again. `None` is the global runtime itself.
+fn render_runtime(overlay: Option<&Arc<RenderOverlay>>) -> Arc<dyn SystemRuntime> {
+    let base = Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
+    match overlay {
+        Some(overlay) => overlay.apply(base),
+        None => base,
+    }
 }
 
 /// Populate the VFS with embedded resources.
@@ -1074,7 +1088,18 @@ pub async fn parse_qmd_to_ast_with_attribution(
 /// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
 pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
-    let runtime = get_runtime();
+    render_qmd_with_overlay(path, user_grammars, None).await
+}
+
+/// [`render_qmd`] with a per-render overlay (FR12). F4 supplies it from the
+/// request; the exported entry passes `None`.
+async fn render_qmd_with_overlay(
+    path: &str,
+    user_grammars: Option<JsUserGrammars>,
+    overlay: Option<Arc<RenderOverlay>>,
+) -> String {
+    let runtime_arc = render_runtime(overlay.as_ref());
+    let runtime = runtime_arc.as_ref();
     let path = Path::new(path);
 
     // Read the file from VFS
@@ -1098,6 +1123,7 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
         Vec::new(),
         None,
         None,
+        runtime_arc.clone(),
     )
     .await
 }
@@ -1125,7 +1151,17 @@ pub async fn render_qmd(path: &str, user_grammars: Option<JsUserGrammars>) -> St
 /// or `{ "success": false, "error": "...", "diagnostics": [...] }`.
 #[wasm_bindgen]
 pub async fn render_printable(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
-    let runtime = get_runtime();
+    render_printable_with_overlay(path, user_grammars, None).await
+}
+
+/// [`render_printable`] with a per-render overlay (FR12).
+async fn render_printable_with_overlay(
+    path: &str,
+    user_grammars: Option<JsUserGrammars>,
+    overlay: Option<Arc<RenderOverlay>>,
+) -> String {
+    let runtime_arc = render_runtime(overlay.as_ref());
+    let runtime = runtime_arc.as_ref();
     let path = Path::new(path);
 
     let content = match runtime.file_read(path) {
@@ -1150,6 +1186,7 @@ pub async fn render_printable(path: &str, user_grammars: Option<JsUserGrammars>)
         Vec::new(),
         None,
         Some(&printable_format),
+        runtime_arc.clone(),
     )
     .await
 }
@@ -1183,6 +1220,8 @@ pub async fn render_qmd_content(
         Vec::new(),
         None,
         None,
+        // No overlay on the path-less render: it has no project to resolve.
+        render_runtime(None),
     )
     .await
 }
@@ -1284,8 +1323,30 @@ pub async fn render_page_in_project_with_attribution(
     // instead of relying on the ToInt32 coercion of `undefined`.
     prefer_preview_format: Option<bool>,
 ) -> String {
+    render_page_in_project_with_overlay(
+        path,
+        user_grammars,
+        attribution_json,
+        capture_gz_json,
+        prefer_preview_format,
+        None,
+    )
+    .await
+}
+
+/// [`render_page_in_project_with_attribution`] with a per-render overlay
+/// (FR12).
+async fn render_page_in_project_with_overlay(
+    path: &str,
+    user_grammars: Option<JsUserGrammars>,
+    attribution_json: Option<String>,
+    capture_gz_json: Option<Vec<u8>>,
+    prefer_preview_format: Option<bool>,
+    overlay: Option<Arc<RenderOverlay>>,
+) -> String {
     let prefer_preview_format = prefer_preview_format.unwrap_or(false);
-    let runtime = get_runtime();
+    let runtime_arc = render_runtime(overlay.as_ref());
+    let runtime = runtime_arc.as_ref();
     let path_buf = std::path::PathBuf::from(path);
     let path = path_buf.as_path();
 
@@ -1331,6 +1392,7 @@ pub async fn render_page_in_project_with_attribution(
             captures,
             attribution_json,
             None,
+            runtime_arc.clone(),
         )
         .await;
     }
@@ -1356,6 +1418,7 @@ pub async fn render_page_in_project_with_attribution(
         RenderHost::HubClient,
         captures,
         attribution_json,
+        runtime_arc.clone(),
     )
     .await
 }
@@ -1387,7 +1450,20 @@ pub async fn render_page_for_preview(
     user_grammars: Option<JsUserGrammars>,
     capture_gz_json: Option<Vec<u8>>,
 ) -> String {
-    let runtime = get_runtime();
+    render_page_for_preview_with_overlay(path, user_grammars, capture_gz_json, None).await
+}
+
+/// [`render_page_for_preview`] with a per-render overlay (FR12). F4 and F8
+/// add the trailing options argument to the exported entry and the
+/// TypeScript surface.
+async fn render_page_for_preview_with_overlay(
+    path: &str,
+    user_grammars: Option<JsUserGrammars>,
+    capture_gz_json: Option<Vec<u8>>,
+    overlay: Option<Arc<RenderOverlay>>,
+) -> String {
+    let runtime_arc = render_runtime(overlay.as_ref());
+    let runtime = runtime_arc.as_ref();
     let path_buf = std::path::PathBuf::from(path);
     let path = path_buf.as_path();
 
@@ -1428,6 +1504,7 @@ pub async fn render_page_for_preview(
             captures,
             None,
             None,
+            runtime_arc.clone(),
         )
         .await;
     }
@@ -1447,6 +1524,7 @@ pub async fn render_page_for_preview(
         RenderHost::NativePreview,
         captures,
         None,
+        runtime_arc.clone(),
     )
     .await
 }
@@ -1632,6 +1710,32 @@ pub async fn render_pandoc_request(
     abort_signal: Option<JsValue>,
     options: Option<JsValue>,
 ) -> JsValue {
+    render_pandoc_request_with_overlay(
+        path,
+        format,
+        source_date_epoch,
+        capture_gz_json,
+        typst_available_fonts,
+        abort_signal,
+        options,
+        None,
+    )
+    .await
+}
+
+/// [`render_pandoc_request`] with a per-render overlay (FR12). F4 supplies
+/// it from the request's `metadata`.
+#[allow(clippy::too_many_arguments)]
+async fn render_pandoc_request_with_overlay(
+    path: &str,
+    format: &str,
+    source_date_epoch: Option<f64>,
+    capture_gz_json: Option<Vec<u8>>,
+    typst_available_fonts: Option<Vec<String>>,
+    abort_signal: Option<JsValue>,
+    options: Option<JsValue>,
+    overlay: Option<Arc<RenderOverlay>>,
+) -> JsValue {
     // Click-time snapshot: every read in this request, including the ones
     // after the first remote-image `await`, goes through this copy, so the
     // Automerge sync mutating the live VFS cannot change what the request
@@ -1643,7 +1747,13 @@ pub async fn render_pandoc_request(
             .snapshot()
             .with_abort_signal(abort_signal.clone().unwrap_or(JsValue::UNDEFINED)),
     );
-    let runtime = &*snapshot;
+    // The snapshot is this request's runtime; the overlay wraps it here, once,
+    // before the project is discovered.
+    let runtime_arc: Arc<dyn SystemRuntime> = match &overlay {
+        Some(overlay) => overlay.apply(Arc::clone(&snapshot) as Arc<dyn SystemRuntime>),
+        None => Arc::clone(&snapshot) as Arc<dyn SystemRuntime>,
+    };
+    let runtime = runtime_arc.as_ref();
     let path_buf = std::path::PathBuf::from(path);
     let fail =
         |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0, None);
@@ -1695,7 +1805,7 @@ pub async fn render_pandoc_request(
                 )) as Arc<dyn quarto_core::attribution::AttributionSourceProvider>
             }),
         },
-        Arc::clone(&snapshot) as Arc<dyn SystemRuntime>,
+        runtime_arc.clone(),
     )
     .await;
 
@@ -2167,6 +2277,9 @@ async fn render_single_doc_to_response(
     // pseudo-format to its HTML-output equivalent so the HTML branch
     // runs. `None` preserves the detect-and-maybe-map behavior.
     format_override: Option<&str>,
+    // The render's runtime, already wrapped in the request's overlay by the
+    // entry that created it (FR12); this function never wraps.
+    runtime_arc: Arc<dyn SystemRuntime>,
 ) -> String {
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
@@ -2210,9 +2323,6 @@ async fn render_single_doc_to_response(
     let resolver = ResourceResolverContext::vfs_root("/.quarto/project-artifacts");
     ctx.resource_resolver = Some(resolver.clone());
     let source_name = path.to_string_lossy();
-
-    let runtime_arc: Arc<dyn SystemRuntime> =
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
     // Dispatch on `format.pipeline_kind`: q2-preview runs the
     // q2-preview entry point and returns AST JSON; everything else
@@ -2352,6 +2462,9 @@ async fn render_project_active_page_to_response(
     // branch ignores it.
     captures: Vec<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
+    // The render's runtime, already wrapped in the request's overlay by the
+    // entry that created it (FR12); this function never wraps.
+    runtime_arc: Arc<dyn SystemRuntime>,
 ) -> String {
     use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use quarto_core::project::pass2_renderer::{
@@ -2361,7 +2474,7 @@ async fn render_project_active_page_to_response(
     // Detect format from the *active* file's content. (Pass 1 in
     // the orchestrator re-reads each file's bytes — for the active
     // file, those bytes are the freshly-edited buffer in VFS.)
-    let active_bytes = match get_runtime().file_read(active_path) {
+    let active_bytes = match runtime_arc.file_read(active_path) {
         Ok(b) => b,
         Err(e) => return error_response(format!("Failed to read active file: {}", e)),
     };
@@ -2390,12 +2503,9 @@ async fn render_project_active_page_to_response(
     // Canonicalize the active path so it matches the form
     // `project.files` was filled with (Pass-2's `RenderMode::ActivePage`
     // filter compares absolute-path equality against `DocumentInfo.input`).
-    let active_canonical = get_runtime()
+    let active_canonical = runtime_arc
         .canonicalize(active_path)
         .unwrap_or_else(|_| active_path.to_path_buf());
-
-    let runtime_arc: Arc<dyn SystemRuntime> =
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>;
 
     // Dispatch on `format.pipeline_kind`. `pipeline_kind` is
     // `Option<&'static str>` (Copy), so reading it doesn't move

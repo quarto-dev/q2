@@ -37,6 +37,7 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use quarto_core::book_download::{BookDownloadFailure, BookDownloadParams, render_book_download};
 use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::Format;
+use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::pandoc_request::formats::TYPST_PDF_KEY;
 use quarto_core::preview_out::PreviewOutDir;
 use quarto_core::project::ProjectContext;
@@ -155,6 +156,9 @@ pub struct RenderJob {
     /// The editor's text; the disk copy is rendered when `None`.
     pub content: Option<String>,
     pub scope: Option<BookScope>,
+    /// Runtime-layer metadata for this render (FR12); `None` adds nothing.
+    /// The wire fills it in F4.
+    pub metadata: Option<serde_json::Value>,
     pub attribution_json: Option<String>,
     /// The sidecar captures of this path (never a client-named id; E10).
     pub captures: Vec<EngineCapture>,
@@ -254,6 +258,8 @@ pub struct BookDownloadRequest {
     /// Every sidecar entry of the hub, keyed by hub-root-relative path.
     pub captures: HashMap<String, Vec<EngineCapture>>,
     pub cancellation: Cancellation,
+    /// Runtime-layer metadata for this render (FR12).
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug)]
@@ -297,6 +303,7 @@ impl BookDownload for NativeBookDownload {
             captures: &req.captures,
             cancellation: req.cancellation,
             child_deadline: Some(CHILD_DEADLINE),
+            metadata: req.metadata,
         })
         .map_err(|e| match e {
             BookDownloadFailure::Busy => BookDownloadError::Busy,
@@ -410,7 +417,14 @@ fn failure_from(error: QuartoError) -> RenderFailed {
 /// directory happens here, and the request directory is removed (its guard
 /// drops) only after the output bytes are read.
 pub fn render_blocking(job: RenderJob) -> RenderOutcome {
-    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    // This function creates the runtime for the whole request, so it applies
+    // the overlay here, once: the scope resolver, `render_chapter` and the
+    // render seam (a fake included) all see the wrapped runtime (FR12).
+    let overlay = Arc::new(RenderOverlay {
+        files: HashMap::new(),
+        metadata: job.metadata.clone(),
+    });
+    let runtime: Arc<dyn SystemRuntime> = overlay.apply(Arc::new(NativeRuntime::new()));
     let (base_key, typst_target) = render_format_and_target(&job.format_key);
     let format = match Format::from_format_string(base_key) {
         Ok(f) => f,
@@ -459,6 +473,7 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
                 hub_root: job.hub_root.clone(),
                 captures: job.all_captures,
                 cancellation: job.cancellation.clone(),
+                metadata: job.metadata.clone(),
             };
             match book_download().render(request) {
                 Ok(out) => {

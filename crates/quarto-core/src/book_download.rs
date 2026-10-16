@@ -12,7 +12,7 @@
 //!   are never touched. (`.quarto/` is not untouched: Pass 1 writes
 //!   `cache/profiles/*` and the crossref filter `crossref-index.json`.)
 //! - The active chapter's text comes from the editor through an
-//!   [`OverlayRuntime`]; every other chapter is read from disk. Unsaved edits
+//!   [`RenderOverlay`]; every other chapter is read from disk. Unsaved edits
 //!   in other chapters are not part of the download.
 //! - Captured cell outputs are resolved per chapter, server-side only (E10),
 //!   from the sidecar entry of that chapter. A chapter without one compiles
@@ -35,7 +35,7 @@ use quarto_trace::EngineCapture;
 
 use crate::error::QuartoError;
 use crate::format::Format;
-use crate::overlay_runtime::{OverlayRuntime, normalize_overlay_path};
+use crate::overlay_runtime::{RenderOverlay, normalize_overlay_path};
 use crate::pipeline::PartialKind;
 use crate::project::book::links::normalize_book_path;
 use crate::project::book::render_item::{BookRenderItem, book_chapter_files};
@@ -69,6 +69,9 @@ pub struct BookDownloadParams<'a> {
     pub cancellation: Cancellation,
     /// Bound on each pandoc or typst child of the merge tail.
     pub child_deadline: Option<Duration>,
+    /// Runtime-layer metadata for this render (FR12); `None` adds nothing.
+    /// Merged into the one overlay the download builds.
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// A finished download.
@@ -174,7 +177,13 @@ pub fn render_book_download(
             overlay.insert(active, content.clone().into_bytes());
         }
     }
-    let runtime: Arc<dyn SystemRuntime> = Arc::new(OverlayRuntime::new(runtime, overlay));
+    // One overlay for the path, applied once: the chapter's text plus the
+    // request's metadata.
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(RenderOverlay {
+        files: overlay,
+        metadata: params.metadata.clone(),
+    })
+    .apply(runtime);
 
     // P10-D2: the target decides the extension; the book's own is ignored.
     let mut format = params.format.clone();
@@ -290,6 +299,7 @@ mod tests {
                 c
             },
             child_deadline: None,
+            metadata: None,
         };
         let held = InFlight::acquire(&root).expect("free");
         assert!(matches!(

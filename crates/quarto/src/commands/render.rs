@@ -113,6 +113,9 @@ pub struct RenderArgs {
     /// `--book-scope`: `None` means nothing was chosen. See
     /// [`quarto_core::BookScope`].
     pub book_scope: Option<quarto_core::BookScope>,
+    /// `-M/--metadata KEY:VALUE` arguments, unparsed. Parsed by
+    /// [`quarto_core::metadata_flag`] into the render's runtime overlay.
+    pub metadata: Vec<String>,
 }
 
 impl RenderArgs {
@@ -983,6 +986,10 @@ pub fn render_once(
         }
     }
 
+    // `-M KEY:VALUE`: the runtime metadata layer for this render.
+    let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&args.metadata)
+        .map_err(|e| RenderAbort::Other(anyhow::anyhow!(e)))?;
+
     // bd-45yw: load replay capture if --replay <path> or
     // QUARTO_REPLAY=<path> is set. Hard-fail on read errors and on
     // traces missing engine_capture so investigators don't waste
@@ -1014,6 +1021,7 @@ pub fn render_once(
         capture_materialize_dir: None,
         typst_target: None,
         captures: Vec::new(),
+        overlay,
     };
 
     match target {
@@ -1058,6 +1066,18 @@ fn echo_active_profiles(project: &ProjectContext) {
     tracing::info!("active project profiles: {}", described.join(", "));
 }
 
+/// Wrap `runtime` in the options' overlay, if any. Called by the functions
+/// that create a render's runtime, once each (FR12).
+fn apply_overlay(
+    options: &RenderToFileOptions,
+    runtime: Arc<dyn SystemRuntime>,
+) -> Arc<dyn SystemRuntime> {
+    match &options.overlay {
+        Some(overlay) => overlay.apply(runtime),
+        None => runtime,
+    }
+}
+
 fn render_single_doc(
     input: PathBuf,
     args: &RenderArgs,
@@ -1065,7 +1085,9 @@ fn render_single_doc(
     format: Format,
     present: &mut dyn FnMut(&RenderReport),
 ) -> std::result::Result<RenderReport, RenderAbort> {
-    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    // This function creates the render's runtime, so it applies the overlay.
+    let runtime_arc: Arc<dyn SystemRuntime> =
+        apply_overlay(options, Arc::new(NativeRuntime::new()));
     let mut project = ProjectContext::discover_with_profile(
         &input,
         runtime_arc.as_ref(),
@@ -1156,9 +1178,12 @@ fn render_project(
 ) -> std::result::Result<RenderReport, RenderAbort> {
     // Build a runtime with cache_dir wired up — same as the pre-Phase-8
     // single-file vs project shape decision.
-    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::with_cache_dir(
-        project_dir.join(".quarto/cache"),
-    ));
+    let runtime_arc: Arc<dyn SystemRuntime> = apply_overlay(
+        options,
+        Arc::new(NativeRuntime::with_cache_dir(
+            project_dir.join(".quarto/cache"),
+        )),
+    );
 
     if args.clean_cache {
         run_clean_cache(runtime_arc.as_ref(), &project_dir)

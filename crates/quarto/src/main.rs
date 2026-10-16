@@ -63,7 +63,12 @@ enum Commands {
         #[arg(long)]
         output_dir: Option<String>,
 
-        /// Metadata value (KEY:VALUE)
+        /// Metadata value (KEY:VALUE, or KEY=VALUE; repeatable). The value is
+        /// parsed as YAML (`-M toc:true`, `-M 'format:{html: {toc: true}}'`)
+        /// and sits above the document's own metadata, for every document in
+        /// the render. A later repeat of a key replaces the earlier one; dotted
+        /// keys are not expanded; path values such as `css:foo.css` are not
+        /// made relative to the document
         #[arg(short = 'M', long)]
         metadata: Vec<String>,
 
@@ -1414,9 +1419,11 @@ fn main() -> Result<()> {
             no_render_scripts,
             profile,
             book_scope,
+            metadata,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             book_scope: book_scope.map(Into::into),
+            metadata,
             inputs,
             to,
             output,
