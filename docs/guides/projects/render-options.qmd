@@ -1,0 +1,83 @@
+---
+title: "Render options: --to, -M and --profile"
+---
+
+Three command-line options shape a render without editing any file:
+`--to` names the output format, `-M` (`--metadata`) sets metadata for
+this one render, and `--profile` activates [project
+profiles](profiles.qmd). `q2 render`, `q2 preview --static` and the live
+`q2 preview` viewer take all three, with the meaning described here.
+`q2 provide-hub` takes `-M` only: it renders no output format, and the
+hub syncs no profile files.
+
+## `--to`: the output format
+
+`--to FORMAT` renders the document, or the whole project, as `FORMAT`
+even when the project or the document names another format. Without it,
+the format comes from the first key of `format:`: the document's own
+keys (then those of its `_metadata.yml` files), else the project's keys,
+else `html`.
+
+```bash
+q2 render --to typst                 # the whole project (a book becomes one PDF)
+q2 render intro.qmd --to typst       # just that document
+```
+
+`--to` never changes how much of a book is rendered; that is
+[`book-scope`](book.qmd#rendering-one-chapter).
+
+If more than one format is declared and none is chosen, only the first
+is rendered and [`Q-20-8`](../../errors/pandoc/Q-20-8.qmd) says which
+were skipped. Naming one of them, with `--to` or `-M format:<name>`,
+keeps the warning quiet. Rendering several formats from one invocation
+is not yet supported.
+
+## `-M KEY:VALUE`: metadata for one render
+
+```bash
+q2 render -M toc:true
+q2 render -M 'format:{html: {toc: true}}'
+q2 render ch1.qmd --to typst -M book-scope:book
+```
+
+- The first `:` or `=` separates the key from the value; an argument
+  with neither is an error.
+- The value is parsed as YAML, so `toc:true` is a boolean and
+  `title:"A: B"` a string. A later `-M` for the same key replaces the
+  earlier one; nested values do not combine.
+- Keys are top-level only: `-M format.html.toc:true` sets a key named
+  `format.html.toc`, it does not reach into `format`. Use the map form
+  above.
+- The values sit above everything else, `_quarto.yml`, `_metadata.yml`
+  and the document's front matter, and apply to every document in the
+  render. They are not read as paths relative to a document, so
+  `-M css:style.css` is relative to where you run `q2`, not to the page.
+- A scalar `-M format:typst` **selects** the format, like `--to`, even
+  when it is not the first one listed. A map-valued `format` only
+  supplies settings and never selects. To select and configure in one
+  command, use `--to typst -M 'format:{typst: {toc: true}}'`: two
+  `-M format:` options do not combine.
+- `-M book-scope:book` and `-M book-scope:chapter` choose how much of a
+  [book](book.qmd#rendering-one-chapter) one render covers.
+
+The options on `q2 preview` apply to the rendered preview, the PDF pane
+and the downloads. They do not change how code is executed.
+
+## `--profile`
+
+`--profile a,b` (or `--profile a --profile b`) activates profiles exactly
+as for `q2 render`; see [Profiles](profiles.qmd), including what the
+live viewer does with it.
+
+## Where each command takes them
+
+| Command | `--to` | `-M` | `--profile` |
+|---|---|---|---|
+| `q2 render` | yes | yes | yes |
+| `q2 preview --static` | yes (html, revealjs and typst can be served) | yes | yes |
+| `q2 preview` (live viewer) | yes | yes (`book-scope` ignored) | native routes only |
+| `q2 preview --ui editor`, `--join`, `--no-project` | refused | refused | refused |
+| `q2 provide-hub` | no | yes | no |
+
+See [Previewing](preview.qmd) for the preview-specific notes, including
+what `--share` guests receive.

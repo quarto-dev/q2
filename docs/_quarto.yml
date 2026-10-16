@@ -32,6 +32,7 @@ website:
             - guides/projects/create.qmd
             - guides/projects/book.qmd
             - guides/projects/preview.qmd
+            - guides/projects/render-options.qmd
             - guides/projects/paths.qmd
             - guides/projects/listings.qmd
             - guides/projects/listing-templates.qmd

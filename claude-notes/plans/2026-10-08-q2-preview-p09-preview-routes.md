@@ -2,6 +2,8 @@
 
 Part of the epic [`2026-10-08-q2-preview-hub-parity-epic.md`](2026-10-08-q2-preview-hub-parity-epic.md) (E1, E2, E7, E8, E10, E11); the execution model and landing procedure are there.
 
+> **Superseded in part by [`2026-10-15-format-resolution-epic.md`](2026-10-15-format-resolution-epic.md):** book scope is now the `book-scope` metadata key (a render overlay carries it), `--book-scope`, the `scope` request fields and the `Option<BookScope>` plumbing described below are gone, and `Page` is `none`. This plan's text and Handoff log are history and are left as written.
+
 ## Execution
 
 - **Lane:** B (`workspace-2`), binding: one agent per plan, in this order: Plan 2, Plan 6, Plan 9, Plan 12. This plan is number 3 of 4 in the lane.

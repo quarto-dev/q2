@@ -3,7 +3,7 @@ title: "Multiple Formats in One Render Not Yet Supported"
 description: "A format: declares more than one output format, and rendering several formats in one invocation is not yet supported."
 code: Q-20-8
 subsystem: pandoc
-status: draft
+status: complete
 since: "99.9.9"
 categories:
   - pandoc

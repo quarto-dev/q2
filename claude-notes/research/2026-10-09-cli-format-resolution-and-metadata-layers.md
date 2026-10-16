@@ -371,3 +371,62 @@ decisions made after §8 (book scope as ordinary `book-scope` metadata supplied 
 runtime overlay, `none` instead of `page`, the render-intent rule for whole-project
 renders, the runtime layer never selecting a format, a narrowed Q-5-42, `-M` wired,
 the Pass 1 key hashing runtime metadata) are FR1-FR17 there.
+
+## 10. Outcome (F7, 2026-10-16): every §7 row, and what was not adopted
+
+Plans: F1 overlay and `-M`; F2 layer collector; F3a resolver; F3b/F3c scope and
+`none`; F4 wire; F5a native render; F5b `--static` and the runner; F6 browser;
+F8 live viewer flags. Each row of §7's table, by the plan that fixed it:
+
+| §7 row | Outcome |
+|---|---|
+| `render_once` early guess; refusal gate; per-doc ctor (`render_single_doc`, `render_project`) | F5a: `resolve_render_formats` after the project is final; the gate judges each format to be used |
+| Q-20-8 (`multi_format_warning_diagnostics`) | F5a: fed by the resolver's key list; also fires for project-level multi-key `format:`; reworded (FR18) |
+| `detect_single_input_format`, `read_single_input_content` | F5a stopped using them; F5b deleted them with `format_key(s)_from_frontmatter` |
+| `preview_static.rs` gate, boot render, watcher (b1) | F5b: one resolver-based gate, base `RenderArgs`, `rerender_action` (whole book for typst) |
+| `get-config` `--to` default html (b8) | Not fixed: strand filed in F7 |
+| `publish.rs:282` hard-coded html (b7) | Not fixed: strand filed in F7 |
+| `quarto-test` runner (Book defaults to typst) | F5b: resolver, `html` fallback, override only for the spec's format |
+| `format_key_from_frontmatter`, `format_keys_from_frontmatter`, `resolve_format_key`, `resolve_output_ext` | F2/F3a: one layer collector and resolver; `_metadata.yml` keys and `-M` now seen (b5); the old peeks deleted in F5b |
+| `render_document_to_file` per-doc resolution, `multi_file_html` | F3a: the resolver, with the book rule (FR4) (b11) |
+| `resolve_formats` / `resolve_document_formats` (wasm classifier) | F6: content override, dir keys, key and class in the result (b9) |
+| Orchestrator Q-5-33 (b2), dispatch, Q-5-41/39, Pass 1 (b3), `post_render` and css gating (b4) | F3b/F5a: dispatch format and project format held separately (FR11); Q-5-42 narrowed (FR10) |
+| `chapter.rs` chapter-alone | F5a: passes the resolved key (`target_format`) |
+| Preview server routes, `render_pandoc_request`, `book_download` | Unchanged where explicit (§7a); F4 changed `scope` to the generic `metadata` wire; F8 gave the routes the session's flags |
+| `preview.rs` (live viewer) | F8: `--to`, `-M`, `--profile`; refused with `--ui editor`, `--join`, `--no-project` |
+| wasm `detect_format_from_content`, `parse_qmd_to_ast`, `render_qmd`, `render_printable`, `render_page_*`, `render_project_active_page_to_response` (b9, b10) | F6: `detect_format_from_content` deleted; entries call the resolver with the editor buffer; `parse_qmd_to_ast` stays front-matter-only on purpose |
+| hub-client `PreviewRouter`, `getQ2Format`, `ReactPreview`, `Preview`, `Editor`, download menu, `PdfPreviewPane` | F6: `classifyPreviewMode` reads the Rust-resolved key and class; `getQ2Format` deleted |
+| `q2-preview-spa` `isTypstPdf`, `PreviewApp` | F6 and F8: reads `key`/`class`, takes the viewer's flags from `/api/preview/config` |
+| `map_format_for_preview`, `coerce_format_for_print`, `lua_format_for`, `pipelineKind.ts` (b12) | Left: all still live; a strand was filed in F7 |
+| LSP and static-analyzer html hard-codes (b13) | Left: strand filed in F7 |
+| `main.rs` help text | F5b corrected it; F8 re-worded it for the viewer |
+
+Answers recorded in the Handoff logs: F2 2.7 (the book's `pre_render` mutates
+the project layer in place and touches neither `format:` nor `book-scope`;
+`seed_missing_book_title_metadata` likewise only book title keys, so the
+collector needed no change); F5a 5a.3 (a)-(j) (Q-5-33 judges the resolved
+format, only for a book-scope request; `q2 render sub/` renders its files; the
+html chapter limit is pinned by two tests; a named non-member renders in every
+format; the extension-format chapter case, `acm-typst` as a chapter, was never
+tested because no typst-based extension fixture was built, so it is read, not
+run).
+
+**Not adopted from Quarto 1** (decided in the epic; the research above is the
+record):
+
+- `-M to:x` and `pandoc.to` as a fallback format when no layer declares one.
+- `metadata-files` includes as a layer.
+- The per-file `formats` filter.
+- `--to all` and `--to default` (render every declared format).
+- Q1's `-M format:x` being inert: q2's runtime layer is the top layer, so a
+  scalar `format` selects (FR2).
+- `projectFormatsOnly` for every render in a book: q2 applies it only to a
+  whole-book (book-scope) render; a chapter render honors its own `format:`
+  (FR4).
+- Rendering a whole book from one named chapter: q2 renders the chapter, and
+  `-M book-scope:book` asks for the book (FR3).
+- Writing a named non-member's output beside its source: q2 keeps `_book/`
+  (FR19).
+
+Open: the meaning of the preview pseudo-formats as `--to` or `-M format:`
+values (`bd-pseudo-format-to-meaning-vxhyni3t`).

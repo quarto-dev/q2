@@ -167,17 +167,17 @@ Same as the parity epic's, with two lanes.
 
 (Ticked by Gordon in workspace-7 after each plan lands.)
 
-- [ ] F1 render overlay
-- [ ] F2 metadata layers
-- [ ] F3a resolver core
-- [ ] F3c `none` rename
-- [ ] F3b scope as metadata
-- [ ] F4 scope boundary
-- [ ] F5a native render
-- [ ] F5b static preview and runner
-- [ ] F6 browser format fixes
-- [ ] F8 live viewer render flags
-- [ ] F7 close-out (every plan's checklist reconciled; strand `bd-7jjzqeys` closed by Gordon)
+- [x] F1 render overlay
+- [x] F2 metadata layers
+- [x] F3a resolver core
+- [x] F3c `none` rename
+- [x] F3b scope as metadata
+- [x] F4 scope boundary
+- [x] F5a native render
+- [x] F5b static preview and runner
+- [x] F6 browser format fixes
+- [x] F8 live viewer render flags
+- [x] F7 close-out (every plan's checklist reconciled; strand `bd-7jjzqeys` closed by Gordon)
 
 ## Cross-cutting rules
 

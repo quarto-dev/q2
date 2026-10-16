@@ -43,6 +43,28 @@ The compile runs the `typst` on your `PATH`, and writes into
 so the project directory must be writable. This view has no **Download
 as** menu; that is part of the editor UI below.
 
+### Render options in the live viewer
+
+`q2 preview --to FORMAT`, `-M KEY:VALUE` and `--profile NAME` work as
+for `q2 render` ([Render options](render-options.qmd)); for instance
+`q2 preview book/ --to typst` shows PDF panes. Notes:
+
+- They are refused with `--ui editor` (the editor has its own settings),
+  `--join` and `--no-project`.
+- `--to` and `-M` are applied to the page preview, the PDF pane and the
+  downloads. They do not reach code execution.
+- `-M book-scope:...` is ignored (a startup notice says so): the viewer
+  renders one page at a time, and the PDF pane always asks for the
+  chapter.
+- `--profile` works as `QUARTO_PROFILE` does: the PDF pane, downloads and
+  the server's project settings honor it, but the page you edit is
+  rendered in the browser from the synced project, which has no profile
+  files, so the html preview ignores it (a startup notice says so).
+- `--to typst` with a page that sets `output-ext: typ` passes the check
+  but has no live preview.
+- With `--share`, the `-M` values and `--to` are sent to every guest's
+  browser. Do not put secrets in `-M`.
+
 ## The editor UI
 
 ``` {.bash filename="Terminal"}
@@ -153,10 +175,12 @@ run, and the output directory is what you would publish.
 `--static` also serves `format: typst` output. The rendered `.pdf` opens
 in a pdf.js viewer rather than the browser's own PDF viewer, and the
 viewer reloads when a re-render finishes, keeping your page and zoom.
-For a book project, `--static` renders the whole book (the `book` scope
-of `q2 render`). The viewer needs `typst` on your `PATH`, like the render
-itself; `--static` does not serve other non-HTML formats (`docx`, `pptx`,
-`epub`).
+For a book project, `--static` renders and serves the whole book, and a
+saved chapter rebuilds the whole book. The viewer needs `typst` on your
+`PATH`, like the render itself. `--static` does not serve other non-HTML
+formats (`docx`, `pptx`, `epub`): they are refused once, before anything
+renders. A render that writes nothing shows its diagnostics in the
+browser instead of an empty page.
 
 ### Flags
 
@@ -165,8 +189,15 @@ itself; `--static` does not serve other non-HTML formats (`docx`, `pptx`,
 | `--no-watch` | Render once and serve; never re-render |
 | `--no-navigate` | After a re-render, reload the current page instead of opening the page that changed |
 | `--to FORMAT` | The output format, as `q2 render --to`. Only `html`, `revealjs` and `typst` can be served |
+| `-M KEY:VALUE` | Metadata for the whole session, as `q2 render -M` |
+| `--profile NAME` | The active profile(s), as `q2 render --profile` |
 | `--port N`, `--host H` | Where to listen. Default: a free port on `127.0.0.1` |
 | `--no-browser`, `--browser APP` | Do not open a browser, or open a specific one |
+
+`--to`, `-M` and `--profile` mean here what they mean for `q2 render`
+([Render options](render-options.qmd)). `-M book-scope:chapter` on a book
+exits with [`Q-5-47`](../../errors/project/Q-5-47.qmd), because the flag is
+fixed for the session and a whole book can never be one chapter.
 
 The live-session flags (`--share`, `--allow-edit`, `--ui`, `--join`)
 do not apply to static mode.

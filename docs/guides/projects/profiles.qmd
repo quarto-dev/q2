@@ -38,9 +38,12 @@ with a letter or digit, and may contain only letters, digits, `.`,
 else is an error).
 
 ::: {.callout-note}
-`quarto preview` currently reads `QUARTO_PROFILE` only:
-`QUARTO_PROFILE=production quarto preview`. Restart the preview to
-change profiles.
+`quarto preview --static` takes `--profile` like `render`. The live
+`quarto preview` viewer takes it too, but only the native side honors it
+(the PDF pane, downloads and project settings, as `QUARTO_PROFILE` does):
+the page you edit is rendered in the browser from the synced project,
+which has no profile files, so its html preview ignores the profile (a
+startup notice says so). Restart the preview to change profiles.
 :::
 
 ## Profile configuration
