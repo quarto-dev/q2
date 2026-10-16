@@ -12,7 +12,7 @@ braid:
 
 ## Triage verdict
 
-**Ready to design; cause confirmed by automated repro (see Phase 0 results).** The editor UI's project-open path has none of bd-jit6pdwq's protections and carries an already-filed sibling bug (bd-vmfc8q1z) that produces exactly the reported error; the hypothesis is code-supported but not yet confirmed in a live Firefox.
+**Ready to design; cause confirmed by automated repro (see Phase 0 results).** The editor UI\'s project-open path has none of bd-jit6pdwq\'s protections and carries an already-filed sibling bug (bd-vmfc8q1z) that produces exactly the reported error; the hypothesis is code-supported but not yet confirmed in a live Firefox.
 
 ## Issue context
 
@@ -30,10 +30,10 @@ P3 bug, filed 2026-10-09 against the preview SPA, extended 2026-10-16 with the e
 - `hub-client/src/App.tsx:101` passes `peerTimeoutMs = 1` (offline-first; E2E uses 15000) to `connect()`. With ephemeral storage (editor-UI preview) there is never a cached index doc, so a peer that has not connected within 1 ms means `findDoc(index)` sees zero peers and fails immediately.
 - `ts-packages/quarto-sync-client/src/client.ts:~776` — the `findDoc` retry loop does `if (state.connectedPeers.size === 0) throw err`, so it never waits for a handshake that is merely slow. This is the exact bug in bd-vmfc8q1z.
 - `grep` for `/health`, `pagehide`, `superviseReconnect` in `hub-client/src`: no hits. Only the SPA has them.
-- `hub-client/src/services/projectSetService.ts:~323` builds its own plain upstream `BrowserWebSocketClientAdapter` (not the Stoppable subclass), so there are two adapters per tab, and the one in projectSetService is subject to the upstream zombie-reconnect bug (`disconnect()` does not cancel the onClose-scheduled retry; fix at cscheid/automerge-repo `8e71a5c0`, never PR'd).
-- Web workers in hub-client are pandoc/typst only; sync is on the main thread. Gordon's "worker holds the socket" hypothesis is therefore unlikely; the more probable holders are zombie/abandoned CONNECTING sockets from the *previous run's still-open tabs* retrying a dead port.
+- `hub-client/src/services/projectSetService.ts:~323` builds its own plain upstream `BrowserWebSocketClientAdapter` (not the Stoppable subclass), so there are two adapters per tab, and the one in projectSetService is subject to the upstream zombie-reconnect bug (`disconnect()` does not cancel the onClose-scheduled retry; fix at cscheid/automerge-repo `8e71a5c0`, never PR\'d).
+- Web workers in hub-client are pandoc/typst only; sync is on the main thread. Gordon\'s "worker holds the socket" hypothesis is therefore unlikely; the more probable holders are zombie/abandoned CONNECTING sockets from the *previous run\'s still-open tabs* retrying a dead port.
 
-**Why "works exactly once" fits:** run 1's tabs connect on a free queue. After run 2 starts, run 1's tabs (still open) retry the dead port forever and abandon CONNECTING sockets that occupy Firefox's per-host slot for up to `network.websocket.timeout.open`. Run 2's handshake queues behind them, loses the 1 ms race, and the open fails permanently. Chrome has no such per-host serialization, hence "much more usage".
+**Why "works exactly once" fits:** run 1's tabs connect on a free queue. After run 2 starts, run 1's tabs (still open) retry the dead port forever and abandon CONNECTING sockets that occupy Firefox\'s per-host slot for up to `network.websocket.timeout.open`. Run 2's handshake queues behind them, loses the 1 ms race, and the open fails permanently. Chrome has no such per-host serialization, hence "much more usage".
 
 Reproducible at HEAD: yes (Gordon, live). Not yet captured as a script; see Phase 0.
 
@@ -43,14 +43,14 @@ Harness: `claude-notes/plans/firefox-ws-wedge-editor-ui-investigation/soak.mjs` 
 
 | Run | Setup | Result |
 | --- | --- | --- |
-| A | 3 tabs/cycle, old tabs left open, server SIGKILLed each cycle | wedged in **cycle 3**: new tab's WS handshake took 2.6 s, peer wait (1 ms) lost, `Peer connection failed, continuing in offline mode`, then "unavailable on the sync server" |
+| A | 3 tabs/cycle, old tabs left open, server SIGKILLed each cycle | wedged in **cycle 3**: new tab\'s WS handshake took 2.6 s, peer wait (1 ms) lost, `Peer connection failed, continuing in offline mode`, then "unavailable on the sync server" |
 | B | same, `--close-old-tabs` | **no wedge in 15 cycles** |
 | C | 1 tab/cycle, old tabs left open | wedged in **cycle 7** |
 
 Findings from the socket logs of run A:
-- **Two WebSockets per tab** (the sync client's adapter and `projectSetService`'s), both to `/ws`.
-- After the kill, old tabs retry the dead port. Some of those retry sockets (c1t1, c1t3: 2 each) stay `CONNECTING` forever with no error or close; others fail in ms or ~3.5 s. These are the handshakes that occupy Firefox's per-host admission queue.
-- The new server's handshake then queues behind them: `new` at 707 ms, `open` at 3321 ms. `connect()` gave up at 1 ms and fell to offline mode. The socket did open 2.6 s later, too late. Wedge time grows with the number of stale tabs, which matches "works many times, then eventually wedges".
+- **Two WebSockets per tab** (the sync client\'s adapter and `projectSetService`\'s), both to `/ws`.
+- After the kill, old tabs retry the dead port. Some of those retry sockets (c1t1, c1t3: 2 each) stay `CONNECTING` forever with no error or close; others fail in ms or ~3.5 s. These are the handshakes that occupy Firefox\'s per-host admission queue.
+- The new server\'s handshake then queues behind them: `new` at 707 ms, `open` at 3321 ms. `connect()` gave up at 1 ms and fell to offline mode. The socket did open 2.6 s later, too late. Wedge time grows with the number of stale tabs, which matches "works many times, then eventually wedges".
 - Closing the stale tabs (run B) removes the wedge entirely, so the server leaving half-open connections is **not** needed to explain it.
 
 Confirmed: the cause is stale editor tabs retrying dead ports plus the 1 ms offline-first peer budget. The worker hypothesis is not needed.
@@ -66,14 +66,14 @@ Confirmed: the cause is stale editor tabs retrying dead ports plus the 1 ms offl
 
 ## Open design questions for the user
 
-1. **Scope of the fix.** Limit to the ephemeral/preview-embedded editor session (like bd-sw4xy1vw's `isEphemeralStorage()` gating), or also fix the general hub-client uncached-open race (bd-vmfc8q1z, affects share links on slow connections)? I recommend fixing the `findDoc` zero-peer bail generally (Phase 1) and gating the `Infinity` wait/health arbitration to ephemeral sessions.
-2. **bd-vmfc8q1z ownership.** It is shikokuchuo's and in progress under bd-97v4znb4's neighborhood. Fold Phase 1 into this plan, or coordinate and land it separately first?
-3. **Reuse.** May the SPA's `bootWithRetry`/`superviseReconnect` move into a shared package (`quarto-sync-client` or a new small one) so hub-client and the SPA use one implementation?
+1. **Scope of the fix.** Limit to the ephemeral/preview-embedded editor session (like bd-sw4xy1vw\'s `isEphemeralStorage()` gating), or also fix the general hub-client uncached-open race (bd-vmfc8q1z, affects share links on slow connections)? I recommend fixing the `findDoc` zero-peer bail generally (Phase 1) and gating the `Infinity` wait/health arbitration to ephemeral sessions.
+2. **bd-vmfc8q1z ownership.** It is shikokuchuo\'s and in progress under bd-97v4znb4's neighborhood. Fold Phase 1 into this plan, or coordinate and land it separately first?
+3. **Reuse.** May the SPA\'s `bootWithRetry`/`superviseReconnect` move into a shared package (`quarto-sync-client` or a new small one) so hub-client and the SPA use one implementation?
 4. **Confirmation step.** Are you willing to run the Phase 0 experiment (close run 1's tabs and retry) now, since you can repro live? It decides whether Phase 3 is the real fix or only an aggravator.
 
 ## Risks / tradeoffs (draft)
 
-- Waiting indefinitely changes hub-client's "open offline instantly" contract for uncached projects; it must stay opt-in/ephemeral-gated, or it regresses bd-97v4znb4's instant open.
+- Waiting indefinitely changes hub-client\'s "open offline instantly" contract for uncached projects; it must stay opt-in/ephemeral-gated, or it regresses bd-97v4znb4's instant open.
 - The zombie-adapter fix depends on a local subclass until the upstream PR lands.
 - If Phase 0 shows the wedge persists with no other tabs open, the cause is elsewhere (e.g. the server leaving half-open sockets on restart, the question in the original strand) and Phases 2–3 would only be mitigations.
 
