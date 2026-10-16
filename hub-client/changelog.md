@@ -28,13 +28,12 @@ WASM rebuild is needed for a changelog-only edit.
 - [`9ee269ea0`](https://github.com/quarto-dev/q2/commits/9ee269ea0): The "Link another browser" dialog now says what it actually shares — its warning reads "access and edit every project in your project list" instead of the single-project wording, since the link carries the whole project list.
 - [`fb4daf6b7`](https://github.com/quarto-dev/q2/commits/fb4daf6b7): Remove the stale "collections UI exploration" label shown next to the build hash in the projects home footer.
 
-### 2026-10-08
+### 2026-10-16
 
-- [`08b17fdc8`](https://github.com/quarto-dev/q2/commits/08b17fdc8): In `q2 preview --ui editor`, a page in a book project now offers "Download book as" and "This chapter only" for Typst source, PDF and EPUB, as hub-client does; a page that is not in the book downloads on its own with a notice.
-- [`e4a041d92`](https://github.com/quarto-dev/q2/commits/e4a041d92): In `q2 preview --ui editor`, Download as now offers odt, Typst source and PDF as well as docx, pptx and EPUB, includes code-cell output, names the authors of Word comments and tracked changes, and reports unexecuted code cells; a `format: typst` document shows its PDF in the preview pane and re-renders it as you edit.
-- [`c0312fca1`](https://github.com/quarto-dev/q2/commits/c0312fca1): The Import button, file picker, drop handling and placement dialog now work in `q2 preview --ui editor` (and `--share` guests), reading docx, odt, rtf, epub and pptx files with the machine's own pandoc; a missing or too-old pandoc is reported as such instead of the button being hidden.
-- [`4482cf93f`](https://github.com/quarto-dev/q2/commits/4482cf93f): "Download book as" and "This chapter only" now tell the renderer which one you chose, and the plain typst, PDF and EPUB entries on a page that is not a chapter mean "this page"; a click that no longer holds (the page was removed from, or added to, the book after the menu opened) delivers what you asked for with a notice, instead of silently switching to a different download.
-- [`2eae5f047`](https://github.com/quarto-dev/q2/commits/2eae5f047): Downloading a typst or epub book from a page that is not in the book's chapter list now says so (`Q-5-41`) when it delivers that page on its own, instead of leaving you to wonder why the book is missing; `q2 render` gains `--book-scope book|chapter` to choose between the whole book and one chapter.
+- [`c25ecaf92`](https://github.com/quarto-dev/q2/commits/c25ecaf92): Preview no longer freezes in Firefox after you leave old editor tabs open; stale tabs used to block the live-update connection of the tab you were using.
+- [`e0de5295b`](https://github.com/quarto-dev/q2/commits/e0de5295b): A document now renders to the same format in the live preview, the static preview and `q2 render`, following your project's `_quarto.yml` and any `--to`, `-M` or `--profile` you pass.
+- [`f03100fa1`](https://github.com/quarto-dev/q2/commits/f03100fa1): `q2 preview --ui editor` shows a `format: typst` document as a PDF in the preview pane and re-renders it as you edit.
+- [`286bb6a8c`](https://github.com/quarto-dev/q2/commits/286bb6a8c): In `q2 preview --ui editor`, Download as offers odt, Typst source and PDF alongside docx, pptx and EPUB. Pages in a book can download the whole book or just that chapter, with a notice (`Q-5-48`) if the page isn't part of the book. The Import button now works too, reading docx, odt, rtf, epub and pptx files with your installed pandoc.
 
 ### 2026-10-07
 
