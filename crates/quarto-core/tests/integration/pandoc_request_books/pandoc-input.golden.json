@@ -1948,6 +1948,10 @@
       },
       "t": "MetaMap"
     },
+    "book-scope": {
+      "c": "book",
+      "t": "MetaString"
+    },
     "by-author": {
       "c": [
         {

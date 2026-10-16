@@ -43,6 +43,6 @@ pub use render_item::{
 };
 pub use scope::{
     BookMembership, BookScope, BookScopeResolution, ResolvedBookScope, book_membership,
-    format_consolidates_book, resolve_book_scope, scope_ignored_notice,
+    format_consolidates_book, resolve_book_scope, scope_notices,
 };
 pub(crate) use static_analyzer::analyze_book_project_statically;

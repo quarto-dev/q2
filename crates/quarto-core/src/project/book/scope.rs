@@ -1,5 +1,6 @@
-//! Which part of a book a render covers, as an explicit option shared by every
-//! runtime (the CLI flag, the wasm request option, the native routes).
+//! Which part of a book a render covers: the requested scope
+//! ([`crate::format_resolution::ScopeRequest`]) resolved against the project,
+//! and the notices that go with it.
 
 use std::path::Path;
 
@@ -8,12 +9,12 @@ use quarto_system_runtime::SystemRuntime;
 
 use crate::error::QuartoError;
 use crate::format::{Format, FormatIdentifier};
+use crate::format_resolution::ScopeRequest;
+use crate::metadata_layers::LayerKind;
 use crate::project::{ProjectContext, ProjectKind};
 
-/// What the user chose for a book render. The option is always an
-/// `Option<BookScope>`: `None` means the user did not choose, and behaves as
-/// `Book` wherever the format consolidates a book into one file (typst, pdf,
-/// epub).
+/// A requested book scope (the `book-scope` metadata key). Absent means the
+/// user did not choose, and the render's target decides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BookScope {
     /// The whole book as one document.
@@ -75,8 +76,8 @@ pub struct BookScopeResolution {
     pub scope: ResolvedBookScope,
     /// `Some` for a book project whose chapter list could be read.
     pub membership: Option<BookMembership>,
-    /// Info diagnostics the caller must deliver with the result: the
-    /// non-member notice (`Q-5-41`) and the ignored-option notice (`Q-5-42`).
+    /// Notices the caller must deliver with the result: those of
+    /// [`scope_notices`] (`Q-5-41`, `Q-5-48`, `Q-5-42`).
     pub diagnostics: Vec<DiagnosticMessage>,
 }
 
@@ -90,16 +91,21 @@ pub fn format_consolidates_book(format: &Format) -> bool {
 }
 
 /// Turn (project, active file, requested scope, format) into what the render
-/// covers.
+/// covers. `request` is the scope the resolver computed
+/// ([`crate::format_resolution::resolve_render_scope`]): the target's default
+/// (`Book` for a whole-project render, `Chapter` for one document) is already
+/// inside `request.value`.
 ///
 /// - A non-book project is always `NoBook`, silently.
 /// - A format that does not consolidate a book renders the active page alone:
-///   `Chapter` for a member, `NoBook` otherwise, and an explicit `Some(_)` earns
-///   the `Q-5-42` info diagnostic (`None` is silent).
-/// - A consolidating format renders the whole book (`Book`) unless the user
-///   asked for `Chapter`. A page that is not a member is `NoBook`; unless the
-///   user asked for `Chapter` it carries the `Q-5-41` notice, so it is never
-///   silently downgraded.
+///   `Chapter` for a member, `NoBook` otherwise.
+/// - A consolidating format covers `request.value` (`Book` or `Chapter`) for a
+///   member.
+/// - A page that is not a member is `NoBook` for every request and format: it
+///   renders as a standalone page.
+///
+/// The notices (`Q-5-41`, the non-member warning, `Q-5-42`) come from
+/// [`scope_notices`] and are returned in `diagnostics`.
 ///
 /// `active` must be absolute (the path the book's file list resolves
 /// against). `Err` is the book's own list error (`Q-5-34`/`35`/`36`), returned
@@ -108,49 +114,50 @@ pub fn format_consolidates_book(format: &Format) -> bool {
 pub fn resolve_book_scope(
     project: &ProjectContext,
     active: &Path,
-    scope: Option<BookScope>,
+    request: &ScopeRequest,
     format: &Format,
     runtime: &dyn SystemRuntime,
 ) -> Result<BookScopeResolution, QuartoError> {
-    let none = |scope| BookScopeResolution {
-        scope,
-        membership: None,
-        diagnostics: Vec::new(),
-    };
     if project.project_kind() != ProjectKind::Book {
-        return Ok(none(ResolvedBookScope::NoBook));
+        return Ok(BookScopeResolution {
+            scope: ResolvedBookScope::NoBook,
+            membership: None,
+            diagnostics: Vec::new(),
+        });
     }
     let consolidates = format_consolidates_book(format);
     let membership = match book_membership(project, active, runtime) {
         Ok(m) => Some(m),
-        Err(e) if consolidates && scope != Some(BookScope::Chapter) => return Err(e),
+        Err(e) if consolidates && request.value != BookScope::Chapter => return Err(e),
         Err(_) => None,
     };
     let is_member = membership.is_some_and(|m| m.active_is_chapter);
-    let mut diagnostics = Vec::new();
     let resolved = if !consolidates {
-        if let Some(requested) = scope {
-            diagnostics.push(scope_ignored_notice(requested, format));
-        }
         if is_member {
             ResolvedBookScope::Chapter
         } else {
             ResolvedBookScope::NoBook
         }
-    } else if scope == Some(BookScope::Chapter) {
+    } else if membership.is_none() {
         // Without a readable list a chapter request cannot be told from a
-        // page; it is the active page alone either way.
-        if is_member || membership.is_none() {
-            ResolvedBookScope::Chapter
-        } else {
-            ResolvedBookScope::NoBook
-        }
+        // page; it is the active page alone either way. (A book request
+        // returned the list error above.)
+        ResolvedBookScope::Chapter
     } else if is_member {
-        ResolvedBookScope::Book
+        match request.value {
+            BookScope::Book => ResolvedBookScope::Book,
+            BookScope::Chapter => ResolvedBookScope::Chapter,
+        }
     } else {
-        diagnostics.push(not_a_chapter_notice(active, project));
         ResolvedBookScope::NoBook
     };
+    let diagnostics = scope_notices(
+        request,
+        membership.as_ref(),
+        format,
+        Some(active),
+        &project.dir,
+    );
     Ok(BookScopeResolution {
         scope: resolved,
         membership,
@@ -158,32 +165,91 @@ pub fn resolve_book_scope(
     })
 }
 
-fn not_a_chapter_notice(active: &Path, project: &ProjectContext) -> DiagnosticMessage {
-    let name = active.strip_prefix(&project.dir).unwrap_or(active);
-    DiagnosticMessageBuilder::info("This page is not part of the book")
+/// Every scope notice of one render, decided in one place (epic FR10, FR22).
+/// Pure: no runtime, no I/O. `membership` is `None` for a project that is not
+/// a book (or whose chapter list could not be read), which gets no notices.
+/// `file` is the named file the notice is about, or `None` for a render that
+/// names none (a whole-project render).
+///
+/// For each named file at most one notice is produced:
+///
+/// - A **non-member** (a named file in the book project that is not a
+///   chapter), under any request: an explicit runtime `book` gets the warning
+///   `Q-5-48` (the request cannot be honoured); anything else, the info
+///   `Q-5-41` (the file renders on its own, with its own numbering).
+/// - A **member**, or a render that names no file: `Q-5-42` iff an explicit
+///   runtime `book` meets a format with no whole-book output.
+///
+/// Call it from exactly one place per render: [`resolve_book_scope`] does, so
+/// a dispatch that went through it must not call this again.
+pub fn scope_notices(
+    request: &ScopeRequest,
+    membership: Option<&BookMembership>,
+    format: &Format,
+    file: Option<&Path>,
+    project_dir: &Path,
+) -> Vec<DiagnosticMessage> {
+    let Some(membership) = membership else {
+        return Vec::new();
+    };
+    let explicit_runtime_book =
+        request.explicit == Some(LayerKind::Runtime) && request.value == BookScope::Book;
+    match file {
+        Some(file) if !membership.active_is_chapter => {
+            let name = file.strip_prefix(project_dir).unwrap_or(file);
+            vec![if explicit_runtime_book {
+                book_not_honoured_notice(name)
+            } else {
+                not_a_chapter_notice(name)
+            }]
+        }
+        _ if explicit_runtime_book && !format_consolidates_book(format) => {
+            vec![scope_ignored_notice(format)]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// `Q-5-41`, a quiet info: a named file that is not a chapter was rendered on
+/// its own.
+fn not_a_chapter_notice(name: &Path) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::info("This page is not a chapter of the book")
         .with_code("Q-5-41")
         .problem(format!(
-            "`{}` is not in the book's chapter list, so it was rendered as a standalone \
-             document instead of as part of the book.",
+            "`{}` is not a chapter of this book, so it was rendered on its own: it has its \
+             own numbering, and it cannot link to the book's chapters.",
             name.display()
         ))
         .add_hint("Add the file to `book.chapters` to include it in the book.")
         .build()
 }
 
-/// The `Q-5-42` info diagnostic: a scope was given for a format that has no
-/// whole-book output.
-pub fn scope_ignored_notice(requested: BookScope, format: &Format) -> DiagnosticMessage {
-    let which = match requested {
-        BookScope::Book => "book",
-        BookScope::Chapter => "chapter",
-    };
-    DiagnosticMessageBuilder::info("Book scope does not apply to this format")
+/// `Q-5-48`, a warning: `book-scope: book` was requested for this render, but
+/// the named file is not in the chapter list.
+fn book_not_honoured_notice(name: &Path) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("The book was requested for a page outside it")
+        .with_code("Q-5-48")
+        .problem(format!(
+            "`book-scope: book` was requested, but `{}` is not in the book's chapter list, \
+             so it was rendered on its own.",
+            name.display()
+        ))
+        .add_hint("Add the file to `book.chapters` to include it in the book.")
+        .build()
+}
+
+/// `Q-5-42`, a warning: `book-scope: book` was requested for this render, for
+/// a format that has no whole-book output.
+fn scope_ignored_notice(format: &Format) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("Book scope does not apply to this format")
         .with_code("Q-5-42")
         .problem(format!(
-            "The `{which}` scope was ignored: `{}` has no whole-book output, so each \
-             page is rendered on its own.",
+            "`book-scope: book` was requested for this render, but `{}` has no whole-book \
+             output, so each page is rendered on its own.",
             format.identifier
         ))
         .build()
 }
+
+#[cfg(test)]
+mod tests;

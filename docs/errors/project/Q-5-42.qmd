@@ -1,6 +1,6 @@
 ---
 title: "Book Scope Does Not Apply to This Format"
-description: "A book scope was given for a format with no whole-book output."
+description: "The whole book was requested for a format with no whole-book output."
 code: Q-5-42
 subsystem: project
 status: complete
@@ -11,15 +11,21 @@ categories:
 
 # `Q-5-42` — Book Scope Does Not Apply to This Format
 
-> A book scope was given for a format with no whole-book output.
+> The whole book was requested for a format with no whole-book output.
 
 ## What this means
 
-`--book-scope book|chapter` chooses between the whole book and one chapter
-for formats that put a book into a single file: `typst`, `pdf` and `epub`.
-`html`, `docx` and `pptx` have no whole-book output, so each page is rendered
-on its own and the option is ignored.
+`book-scope: book` was requested for this render (for example with
+`-M book-scope:book`), but the format does not put a book into a single file.
+Only `typst`, `pdf` and `epub` have a whole-book output. `html`, `docx` and
+`pptx` render each page on its own, so the request could not be honoured.
+
+You see this warning only when the request was made for this render. A
+`book-scope` set in `_quarto.yml`, in a `_metadata.yml` or in a document does
+not trigger it, and neither does the default. Asking for `book-scope: chapter`
+never triggers it: each page of these formats is already rendered on its own.
 
 ## How to fix
 
-Drop the option, or render to a format that consolidates the book.
+Drop `-M book-scope:book`, or render to a format that consolidates the book
+(`--to typst` or `--to epub`).

@@ -977,9 +977,6 @@ pub struct ProjectPipeline<'a, R: Pass2Renderer> {
     /// Explicit Pass-2 worker-count override (`with_jobs`). `None`
     /// ⇒ use the `QUARTO_JOBS`/auto default via [`worker_count`].
     jobs: Option<usize>,
-    /// What the user chose for a book render (`--book-scope`); `None` means
-    /// nothing was chosen. See [`crate::BookScope`].
-    book_scope: Option<crate::BookScope>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1036,7 +1033,24 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
     pub async fn run_with_book_support(
         &mut self,
     ) -> Result<ProjectRenderSummary<RenderToFileResult>> {
-        let scope_diagnostics = self.decide_member_format();
+        // The requested scope comes from the target and the `book-scope`
+        // layers (FR3, FR5); nothing else carries it.
+        let request = crate::format_resolution::resolve_render_scope(
+            self.project,
+            &self.mode,
+            self.runtime.as_ref(),
+        );
+        // `book-scope: chapter` with a whole book to render and no file named
+        // (FR6): there is no chapter to choose.
+        if let Some(error) = request.error() {
+            return Err(QuartoError::Parse(crate::error::ParseError::new(
+                vec![error.clone()],
+                quarto_source_map::SourceContext::new(),
+            )));
+        }
+        let scope_diagnostics = self.decide_member_format(&request);
+        // Whether `resolve_book_scope` ran (it emits the scope notices itself).
+        let mut notices_emitted = false;
         let result = if self.project_type.kind() == ProjectKind::Book {
             // Books render only to formats with book support. Unknown
             // (extension) format identifiers fall through — they may
@@ -1065,7 +1079,7 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
                      project's `format:` key.",
                 ))
             } else if crate::project::book::format_consolidates_book(&self.format) {
-                self.run_book_scoped().await
+                self.run_book_scoped(&request, &mut notices_emitted).await
             } else if full_render && self.format.identifier == FormatIdentifier::Html {
                 // book-projects P5: multi-file pass 3 (pause at Navigation
                 // / aggregate the crossref registry / resume from
@@ -1079,18 +1093,15 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             self.run_inner().await
         };
         let mut result = result;
-        // An explicit scope for a format with no whole-book output is
-        // ignored, with a notice (`None` is silent).
-        if let Some(scope) = self.book_scope
+        // The scope notices for a dispatch that did not go through
+        // `resolve_book_scope` (a format with no whole-book output, html
+        // included): `scope_notices` is the one place that builds them.
+        if !notices_emitted
             && !crate::project::book::format_consolidates_book(&self.format)
             && let Ok(summary) = &mut result
         {
-            summary
-                .project_diagnostics
-                .push(crate::project::book::scope_ignored_notice(
-                    scope,
-                    &self.format,
-                ));
+            let notices = self.tail_scope_notices(&request);
+            summary.project_diagnostics.extend(notices);
         }
         if let Ok(summary) = &mut result {
             summary.project_diagnostics.extend(scope_diagnostics);
@@ -1119,17 +1130,15 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
     /// The FR6 error (`book-scope: chapter` with nothing to render) is not
     /// raised here; the CLI's interim check owns it until the dispatch moves
     /// onto the request (F3b), so only the non-error notices are returned.
-    fn decide_member_format(&mut self) -> Vec<DiagnosticMessage> {
-        let request = crate::format_resolution::resolve_render_scope(
-            self.project,
-            &self.mode,
-            self.runtime.as_ref(),
-        );
+    fn decide_member_format(
+        &mut self,
+        request: &crate::format_resolution::ScopeRequest,
+    ) -> Vec<DiagnosticMessage> {
         if self.project_type.kind() == ProjectKind::Book && request.value == crate::BookScope::Book
         {
             let project_format = crate::format_resolution::resolve_project_format(
                 self.project,
-                &request,
+                request,
                 self.renderer.format_override.as_deref(),
                 self.runtime.as_ref(),
             );
@@ -1138,9 +1147,51 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
         }
         request
             .diagnostics
-            .into_iter()
+            .iter()
             .filter(|d| d.kind != quarto_error_reporting::DiagnosticKind::Error)
+            .cloned()
             .collect()
+    }
+
+    /// [`crate::project::book::scope_notices`] for each file this render
+    /// names (one notice at most per file), or once with no file for a
+    /// whole-project render. Empty for a project that is not a book.
+    fn tail_scope_notices(
+        &self,
+        request: &crate::format_resolution::ScopeRequest,
+    ) -> Vec<DiagnosticMessage> {
+        if self.project_type.kind() != ProjectKind::Book {
+            return Vec::new();
+        }
+        let named: Vec<Option<std::path::PathBuf>> = match &self.mode {
+            RenderMode::Full => vec![None],
+            RenderMode::ActivePage(page) => vec![Some(page.clone())],
+            RenderMode::Subset(set) => {
+                let mut files: Vec<std::path::PathBuf> = set.iter().cloned().collect();
+                files.sort();
+                files.into_iter().map(Some).collect()
+            }
+        };
+        let mut notices = Vec::new();
+        for file in named {
+            // A whole-project render has no file: membership only has to
+            // exist, and no file is tested against it.
+            let probe = file.clone().unwrap_or_else(|| self.project.dir.clone());
+            let Ok(membership) =
+                crate::project::book::book_membership(self.project, &probe, self.runtime.as_ref())
+            else {
+                // The pipeline reports a broken chapter list itself.
+                continue;
+            };
+            notices.extend(crate::project::book::scope_notices(
+                request,
+                Some(&membership),
+                &self.format,
+                file.as_deref(),
+                &self.project.dir,
+            ));
+        }
+        notices
     }
 
     /// A book rendered to a format that consolidates it (typst, epub):
@@ -1148,7 +1199,11 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
     /// either merge the whole book or render that page alone through
     /// [`crate::project::book::render_chapter_alone`]'s mechanism. A render
     /// naming no page, or several, covers the whole book.
-    async fn run_book_scoped(&mut self) -> Result<ProjectRenderSummary<RenderToFileResult>> {
+    async fn run_book_scoped(
+        &mut self,
+        request: &crate::format_resolution::ScopeRequest,
+        notices_emitted: &mut bool,
+    ) -> Result<ProjectRenderSummary<RenderToFileResult>> {
         let active = match &self.mode {
             RenderMode::Subset(set) if set.len() == 1 => set.iter().next().cloned(),
             RenderMode::ActivePage(page) => Some(page.clone()),
@@ -1164,10 +1219,11 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
         let resolution = crate::project::book::resolve_book_scope(
             self.project,
             &active,
-            self.book_scope,
+            request,
             &self.format,
             self.runtime.as_ref(),
         )?;
+        *notices_emitted = true;
         if resolution.scope == crate::project::book::ResolvedBookScope::Book {
             return self.run_book_single_file_merge().await;
         }
@@ -1545,16 +1601,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             renderer,
             fail_fast: false,
             jobs: None,
-            book_scope: None,
         }
-    }
-
-    /// Set the explicit book scope (`q2 render --book-scope`). Default
-    /// `None`: nothing chosen, which behaves as `Book` for formats that
-    /// consolidate a book (typst, epub) and is ignored by the others.
-    pub fn with_book_scope(mut self, scope: Option<crate::BookScope>) -> Self {
-        self.book_scope = scope;
-        self
     }
 
     /// Set the render mode. Default is [`RenderMode::Full`]; CLI

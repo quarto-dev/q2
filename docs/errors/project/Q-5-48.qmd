@@ -1,0 +1,38 @@
+---
+title: "Book Requested for a Page Outside the Book"
+description: "The whole book was requested, but the named page is not a chapter of it."
+code: Q-5-48
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-48` — Book Requested for a Page Outside the Book
+
+> The whole book was requested, but the named page is not a chapter of it.
+
+## What this means
+
+`book-scope: book` was requested for this render (for example with
+`-M book-scope:book`), and the page you named is in the project but is not in
+`book.chapters`. A page that is not a chapter cannot be rendered as part of
+the book, so it was rendered on its own instead, with its own numbering and
+without links to the book's chapters.
+
+If the same page is named without asking for the whole book, you get the
+informational notice [`Q-5-41`](Q-5-41.qmd) instead.
+
+## How to fix
+
+If the page belongs in the book, list it:
+
+```yaml
+book:
+  chapters:
+    - index.qmd
+    - notes.qmd
+```
+
+Otherwise drop `-M book-scope:book`.

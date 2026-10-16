@@ -1744,15 +1744,15 @@
   },
   "Q-5-41": {
     "subsystem": "project",
-    "title": "Page Is Not Part of the Book",
-    "message_template": "A page in a book project that is not in the book's chapter list was asked for as part of the book. It was rendered as a standalone document instead. Add the file to `book.chapters` to include it in the book.",
+    "title": "Page Is Not a Chapter of the Book",
+    "message_template": "A page in a book project that is not in the book's chapter list was rendered on its own: it has its own numbering, and it cannot link to the book's chapters. Add the file to `book.chapters` to include it in the book.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-41",
     "since_version": "99.9.9"
   },
   "Q-5-42": {
     "subsystem": "project",
     "title": "Book Scope Does Not Apply to This Format",
-    "message_template": "A book scope (`book` or `chapter`) was given for a format that has no whole-book output (`html`, `docx`, `pptx`). The option was ignored and each page is rendered on its own. Book scope applies to `typst`, `pdf` and `epub`.",
+    "message_template": "`book-scope: book` was requested for this render, but the format has no whole-book output (`html`, `docx`, `pptx`), so each page is rendered on its own. A whole-book output exists for `typst`, `pdf` and `epub`.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-42",
     "since_version": "99.9.9"
   },
@@ -1789,6 +1789,13 @@
     "title": "book-scope chapter Needs a File",
     "message_template": "`book-scope: chapter` needs a file to render: name the chapter(s).",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-47",
+    "since_version": "99.9.9"
+  },
+  "Q-5-48": {
+    "subsystem": "project",
+    "title": "Book Requested for a Page Outside the Book",
+    "message_template": "`book-scope: book` was requested for this render, but the named page is not in the book's chapter list, so it was rendered on its own. Add the file to `book.chapters` to include it in the book.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-48",
     "since_version": "99.9.9"
   },
   "Q-13-8": {

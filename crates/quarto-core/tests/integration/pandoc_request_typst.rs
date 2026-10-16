@@ -40,7 +40,6 @@ pub(crate) fn render_with(
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
             attribution: None,
-            scope: None,
             captures_by_path: Default::default(),
             capture_error: None,
             hooks: None,

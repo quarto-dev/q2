@@ -43,7 +43,6 @@ fn render(
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
             attribution: None,
-            scope: None,
             captures_by_path: Default::default(),
             capture_error: None,
             hooks: None,
@@ -161,7 +160,6 @@ fn typst_available_fonts_are_echoed() {
     let out = pollster::block_on(render_pandoc_request(
         PandocRequestInput {
             attribution: None,
-            scope: None,
             captures_by_path: Default::default(),
             capture_error: None,
             hooks: None,
@@ -265,7 +263,6 @@ fn render_with_attribution(path: &Path, qmd: &str) -> PandocRequestOutcome {
             attribution: Some(Arc::new(
                 quarto_core::attribution::PreBuiltAttributionProvider::new(json),
             )),
-            scope: Some(quarto_core::pandoc_request::render::BookScope::Chapter),
             captures_by_path: Default::default(),
             capture_error: None,
             hooks: None,

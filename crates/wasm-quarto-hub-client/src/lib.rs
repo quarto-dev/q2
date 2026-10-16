@@ -1676,11 +1676,12 @@ fn pandoc_request_envelope(
 /// `request`. A document inside a `_quarto.yml` project renders as the
 /// project's active page (R7): the request carries that page alone, with the
 /// project's metadata and `format:` layers applied. For a book chapter
-/// requested as typst, pdf or epub with `options.scope` `'book'` or absent
-/// (the user did not choose) the request is the whole book (R9); docx and
-/// pptx and `scope: 'chapter'` stay chapter-alone, and a page that is not a
-/// chapter is delivered alone with the `Q-5-41` notice (`stats.book.scope`
-/// `'none'`). `stats.book` is `{ scope: 'book' | 'chapter' | 'none', chapters }`
+/// requested as typst, pdf or epub with `options.scope` `'book'` the request
+/// is the whole book (R9); with `'chapter'` or nothing chosen (the active page
+/// is the target, so it defaults to the chapter) it is the chapter alone, as
+/// docx and pptx always are. A page that is not a chapter is delivered alone
+/// with the `Q-5-41` notice (`stats.book.scope` `'none'`), or, for `'book'`,
+/// the `Q-5-48` warning. `stats.book` is `{ scope: 'book' | 'chapter' | 'none', chapters }`
 /// in a book project, else `null`.
 ///
 /// `options` (optional, trailing) is `{ scope?: 'book' | 'chapter',
@@ -1736,6 +1737,16 @@ async fn render_pandoc_request_with_overlay(
     options: Option<JsValue>,
     overlay: Option<Arc<RenderOverlay>>,
 ) -> JsValue {
+    let fail =
+        |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0, None);
+    let options = match parse_request_options(options) {
+        Ok(o) => o,
+        Err(e) => return fail(e),
+    };
+    // F4: delete with the wire change. The old `options.scope` becomes the
+    // runtime-layer `book-scope`; nothing chosen adds nothing, and the target
+    // (the active page) defaults to `chapter`.
+    let overlay = legacy_scope_overlay(overlay, options.scope);
     // Click-time snapshot: every read in this request, including the ones
     // after the first remote-image `await`, goes through this copy, so the
     // Automerge sync mutating the live VFS cannot change what the request
@@ -1755,12 +1766,6 @@ async fn render_pandoc_request_with_overlay(
     };
     let runtime = runtime_arc.as_ref();
     let path_buf = std::path::PathBuf::from(path);
-    let fail =
-        |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0, None);
-    let options = match parse_request_options(options) {
-        Ok(o) => o,
-        Err(e) => return fail(e),
-    };
 
     let content = match runtime.file_read(&path_buf) {
         Ok(bytes) => bytes,
@@ -1791,7 +1796,6 @@ async fn render_pandoc_request_with_overlay(
                 .map(|s| s as i64),
             captures,
             typst_available_fonts,
-            scope: options.scope,
             captures_by_path: options.captures_by_path,
             capture_error: None,
             hooks: Some(&hooks),
@@ -1850,9 +1854,31 @@ async fn render_pandoc_request_with_overlay(
     )
 }
 
+/// F4: delete with the wire change. `overlay` with the runtime-layer
+/// `book-scope` an old-style `scope` option stands for.
+fn legacy_scope_overlay(
+    overlay: Option<Arc<RenderOverlay>>,
+    scope: Option<quarto_core::BookScope>,
+) -> Option<Arc<RenderOverlay>> {
+    use quarto_core::BookScope;
+    let Some(scope) = scope else {
+        return overlay;
+    };
+    let value = match scope {
+        BookScope::Book => "book",
+        BookScope::Chapter => "chapter",
+    };
+    let mut merged = overlay.as_deref().cloned().unwrap_or_default();
+    merged.metadata = quarto_core::overlay_runtime::merge_runtime_metadata(
+        merged.metadata.take(),
+        Some(&serde_json::json!({ "book-scope": value })),
+    );
+    Some(Arc::new(merged))
+}
+
 /// The unpacked `options` object of [`render_pandoc_request`].
 struct RequestOptions {
-    scope: Option<quarto_core::pandoc_request::render::BookScope>,
+    scope: Option<quarto_core::BookScope>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
     on_progress: Option<js_sys::Function>,
     /// The transport JSON of `parse_qmd_to_ast_with_attribution`, for the
@@ -1864,7 +1890,7 @@ struct RequestOptions {
 /// `Uint8Array` is read with `Uint8Array::new` (an `instanceof` check can
 /// fail across realms).
 fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, String> {
-    use quarto_core::pandoc_request::render::BookScope;
+    use quarto_core::BookScope;
     let mut out = RequestOptions {
         scope: None,
         captures_by_path: Default::default(),

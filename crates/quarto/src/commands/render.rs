@@ -110,9 +110,6 @@ pub struct RenderArgs {
     /// always uses the default (`All`); `q2 preview --static` narrows
     /// it to the pages being viewed. Not a CLI flag.
     pub execution_policy: quarto_core::engine::ExecutionPolicy,
-    /// `--book-scope`: `None` means nothing was chosen. See
-    /// [`quarto_core::BookScope`].
-    pub book_scope: Option<quarto_core::BookScope>,
     /// `-M/--metadata KEY:VALUE` arguments, unparsed. Parsed by
     /// [`quarto_core::metadata_flag`] into the render's runtime overlay.
     pub metadata: Vec<String>,
@@ -971,24 +968,32 @@ pub fn render_once(
     )
     .map_err(RenderAbort::Dispatch)?;
 
-    // `--book-scope chapter` renders one file alone: it needs exactly one.
-    if args.book_scope == Some(quarto_core::BookScope::Chapter) {
-        let one_file = args.inputs.len() == 1
-            && match &target {
-                RenderTarget::SingleDoc(_) => true,
-                RenderTarget::Subset { targets, .. } => targets.len() == 1,
-                RenderTarget::FullProject { .. } => false,
-            };
-        if !one_file {
-            return Err(RenderAbort::Other(anyhow::anyhow!(
-                "`--book-scope chapter` needs exactly one file"
-            )));
-        }
-    }
-
     // `-M KEY:VALUE`: the runtime metadata layer for this render.
     let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&args.metadata)
         .map_err(|e| RenderAbort::Other(anyhow::anyhow!(e)))?;
+
+    // F5a: delete. An explicit `-M book-scope:chapter` renders each named
+    // file alone, but until the orchestrator loops over several named files
+    // a book would merge the whole book for them, so it needs exactly one.
+    // (With no file named, the resolver's own error, `Q-5-47`, applies.)
+    let explicit_chapter = overlay
+        .as_ref()
+        .and_then(|o| o.metadata.as_ref())
+        .is_some_and(|m| {
+            matches!(
+                quarto_core::format_resolution::book_scope_in_json(m),
+                Ok(Some(quarto_core::BookScope::Chapter))
+            )
+        });
+    if explicit_chapter {
+        let several = args.inputs.len() > 1
+            || matches!(&target, RenderTarget::Subset { targets, .. } if targets.len() > 1);
+        if several {
+            return Err(RenderAbort::Other(anyhow::anyhow!(
+                "`-M book-scope:chapter` needs exactly one file"
+            )));
+        }
+    }
 
     // bd-45yw: load replay capture if --replay <path> or
     // QUARTO_REPLAY=<path> is set. Hard-fail on read errors and on
@@ -1125,7 +1130,6 @@ fn render_single_doc(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
-    .with_book_scope(args.book_scope)
     .with_fail_fast(args.fail_fast);
 
     // bd-hxhnnlzs: keep Jupyter kernels warm across the whole pipeline
@@ -1320,7 +1324,6 @@ fn render_project(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
-    .with_book_scope(args.book_scope)
     .with_fail_fast(args.fail_fast);
 
     if let Some(target_set) = targets {

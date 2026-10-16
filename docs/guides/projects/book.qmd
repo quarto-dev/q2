@@ -128,27 +128,36 @@ Which format you render to changes how chapters combine:
 
 ## Rendering one chapter
 
-Naming a chapter renders the whole book to Typst and EPUB, because
-those formats put the book in one file: `q2 render mybook/intro.qmd
---to typst` still produces the whole book. `--book-scope` makes the
-choice explicit:
+Naming a chapter renders that chapter on its own, in every format: `q2
+render mybook/intro.qmd --to typst` produces the chapter alone, as a
+standalone document with the book's title, author and date, named after
+the chapter instead of the book. Rendering the project with no file
+named (`q2 render`) produces the whole book.
+
+To render the whole book from a chapter, ask for it with the
+`book-scope` metadata key. Typst and EPUB put the book in one file, so
+the book is what you get:
 
 ```bash
-q2 render intro.qmd --to typst --book-scope chapter   # intro.pdf: this chapter alone
-q2 render intro.qmd --to typst --book-scope book      # the whole book (the default)
+q2 render intro.qmd --to typst                        # intro.pdf: this chapter alone
+q2 render intro.qmd --to typst -M book-scope:book     # the whole book
 ```
 
-`--book-scope chapter` needs exactly one file. The chapter renders as a
-standalone document, with the book's title, author and date, named
-after the chapter instead of the book.
+`book-scope` is ordinary metadata, so `-M book-scope:book` is the
+per-render request; the same key in `_quarto.yml`, a `_metadata.yml` or
+a document sets a default for the render it applies to. Asking for
+`-M book-scope:chapter` with no file named is an error
+([`Q-5-47`](../../errors/project/Q-5-47.qmd)): there is no chapter to
+choose.
 
 A page that is in the project but not in `book.chapters` has no place
-in the book. Asked for the book (explicitly or by default), it renders
-as a standalone document and reports
-[`Q-5-41`](../../errors/project/Q-5-41.qmd); `--book-scope chapter`
-asks for exactly that, so there is no notice. HTML, DOCX and PPTX have
-no whole-book output, so `--book-scope` is ignored for them with
-[`Q-5-42`](../../errors/project/Q-5-42.qmd).
+in the book. Named by itself it renders as a standalone document, with
+its own numbering and without links to the book's chapters, and reports
+[`Q-5-41`](../../errors/project/Q-5-41.qmd). Asking for the book with
+`-M book-scope:book` cannot include it, and warns with
+[`Q-5-48`](../../errors/project/Q-5-48.qmd). HTML, DOCX and PPTX have no
+whole-book output, so `-M book-scope:book` cannot be honoured for them
+and warns with [`Q-5-42`](../../errors/project/Q-5-42.qmd).
 
 ## Known limitations
 

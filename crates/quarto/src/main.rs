@@ -191,14 +191,6 @@ enum Commands {
         /// Skip the project's `pre-render` and `post-render` scripts.
         #[arg(long = "no-render-scripts")]
         no_render_scripts: bool,
-
-        /// For a book rendered to a format that consolidates it into one
-        /// file (typst, pdf, epub): `book` renders the whole book, `chapter`
-        /// renders the one named file alone as a standalone document.
-        /// `chapter` needs exactly one file. Without the option, a book
-        /// renders whole. Ignored (with a notice) for html, docx and pptx.
-        #[arg(long = "book-scope", value_enum, value_name = "SCOPE")]
-        book_scope: Option<BookScopeArg>,
     },
 
     /// Start a live preview of a Quarto document or project.
@@ -986,22 +978,6 @@ enum TraceCommand {
     },
 }
 
-/// `q2 render --book-scope`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-enum BookScopeArg {
-    Book,
-    Chapter,
-}
-
-impl From<BookScopeArg> for quarto_core::BookScope {
-    fn from(arg: BookScopeArg) -> Self {
-        match arg {
-            BookScopeArg::Book => Self::Book,
-            BookScopeArg::Chapter => Self::Chapter,
-        }
-    }
-}
-
 /// `--ui` values for `q2 preview` (live-share plan Phase 4,
 /// bd-jt1etjbn): which embedded frontend the preview server serves.
 /// CLI-side mirror of [`quarto_preview::PreviewUi`] so the library
@@ -1418,11 +1394,9 @@ fn main() -> Result<()> {
             strict,
             no_render_scripts,
             profile,
-            book_scope,
             metadata,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
-            book_scope: book_scope.map(Into::into),
             metadata,
             inputs,
             to,

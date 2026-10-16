@@ -132,7 +132,7 @@ function previewFontFamilies(runner: NonNullable<ChainRunners['typst']>) {
 /**
  * The browser-side dependencies shared by the download controller and the PDF preview's. `scope` is
  * the default for what a book chapter requests: `'chapter'` is the page alone, `'book'` the whole
- * book for typst, pdf and epub (R9); `undefined` sends no scope (the user did not choose). A click that carries its own scope (the menu's "Download book
+ * book for typst, pdf and epub (R9); `undefined` sends no scope (the user did not choose; the active page is the target, so Rust treats it as the chapter). A click that carries its own scope (the menu's "Download book
  * as" and "This chapter only") overrides it through `buildRequest`'s sixth argument.
  */
 function wasmDeps(scope: 'book' | 'chapter' | undefined, runners: ChainRunners = {}): Omit<DownloadDeps, 'save'> {

@@ -37,11 +37,13 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use quarto_core::book_download::{BookDownloadFailure, BookDownloadParams, render_book_download};
 use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::Format;
-use quarto_core::overlay_runtime::RenderOverlay;
+use quarto_core::format_resolution::resolve_render_scope;
+use quarto_core::overlay_runtime::{RenderOverlay, merge_runtime_metadata};
 use quarto_core::pandoc_request::formats::TYPST_PDF_KEY;
 use quarto_core::preview_out::PreviewOutDir;
 use quarto_core::project::ProjectContext;
 use quarto_core::project::book::{ResolvedBookScope, resolve_book_scope};
+use quarto_core::project::orchestrator::RenderMode;
 use quarto_core::render_to_file::{
     RenderToFileOptions, RenderToFileResult, TypstTarget, render_document_to_file,
 };
@@ -88,6 +90,18 @@ impl From<ScopeParam> for BookScope {
             ScopeParam::Chapter => BookScope::Chapter,
         }
     }
+}
+
+/// F4: delete with the wire change. The runtime-layer metadata an old-style
+/// `scope` stands for.
+fn legacy_scope_metadata(scope: Option<BookScope>) -> Option<serde_json::Value> {
+    scope.map(|s| {
+        let value = match s {
+            BookScope::Book => "book",
+            BookScope::Chapter => "chapter",
+        };
+        serde_json::json!({ "book-scope": value })
+    })
 }
 
 /// `{ error?, diagnostics }`: the body of a 422.
@@ -418,13 +432,31 @@ fn failure_from(error: QuartoError) -> RenderFailed {
 /// drops) only after the output bytes are read.
 pub fn render_blocking(job: RenderJob) -> RenderOutcome {
     // This function creates the runtime for the whole request, so it applies
-    // the overlay here, once: the scope resolver, `render_chapter` and the
-    // render seam (a fake included) all see the wrapped runtime (FR12).
+    // the overlay here, once, before the scope resolver runs: the resolver,
+    // `render_chapter` and the render seam (a fake included) all see the
+    // wrapped runtime (FR12).
+    //
+    // F4: delete with the wire change. The route still receives the old
+    // `scope`; it becomes the runtime-layer `book-scope`. Nothing chosen adds
+    // nothing, and the target (this page) defaults to `chapter`. The editor's
+    // text stands in for the file, keyed by its canonical path, so the
+    // resolver reads the same front matter the render does.
+    let native: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let active = native
+        .canonicalize(&job.abs_path)
+        .unwrap_or_else(|_| job.abs_path.clone());
     let overlay = Arc::new(RenderOverlay {
-        files: HashMap::new(),
-        metadata: job.metadata.clone(),
+        files: job
+            .content
+            .iter()
+            .map(|text| (active.clone(), text.clone().into_bytes()))
+            .collect(),
+        metadata: merge_runtime_metadata(
+            job.metadata.clone(),
+            legacy_scope_metadata(job.scope).as_ref(),
+        ),
     });
-    let runtime: Arc<dyn SystemRuntime> = overlay.apply(Arc::new(NativeRuntime::new()));
+    let runtime: Arc<dyn SystemRuntime> = overlay.apply(native);
     let (base_key, typst_target) = render_format_and_target(&job.format_key);
     let format = match Format::from_format_string(base_key) {
         Ok(f) => f,
@@ -435,15 +467,17 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
         Err(e) => return RenderOutcome::Failed(RenderFailed::message(e.to_string())),
     };
     let project = guard.project();
-    let active = runtime
-        .canonicalize(&job.abs_path)
-        .unwrap_or_else(|_| job.abs_path.clone());
 
-    let resolution =
-        match resolve_book_scope(project, &active, job.scope, &format, runtime.as_ref()) {
-            Ok(r) => r,
-            Err(e) => return RenderOutcome::Failed(failure_from(e)),
-        };
+    let request = resolve_render_scope(
+        project,
+        &RenderMode::ActivePage(active.clone()),
+        runtime.as_ref(),
+    );
+    let resolution = match resolve_book_scope(project, &active, &request, &format, runtime.as_ref())
+    {
+        Ok(r) => r,
+        Err(e) => return RenderOutcome::Failed(failure_from(e)),
+    };
 
     let options = RenderToFileOptions {
         output_dir: Some(guard.path().to_path_buf()),

@@ -282,3 +282,104 @@ fn a_runtime_scalar_selects_and_to_wins_through_the_entry_point() {
     );
     assert_eq!(r.key, "typst", "`--to` wins, and typst-pdf is normalised");
 }
+
+// ── F3b: the requested scope reaches filters; notices come once ────────────
+
+const PROBE_FILTER: &str = "function Pandoc(doc)\n  local v = doc.meta['book-scope']\n  local seen = v and pandoc.utils.stringify(v) or 'nothing'\n  return pandoc.Pandoc({ pandoc.Para({ pandoc.Str('SCOPE-SEEN=' .. seen) }) }, doc.meta)\nend\n";
+
+fn probe_book(root: &Path) {
+    write(&root.join("_quarto.yml"), BOOK);
+    write(&root.join("index.qmd"), "# Home {.unnumbered}\n\nhome\n");
+    write(
+        &root.join("ch1.qmd"),
+        "---\nfilters:\n  - probe.lua\n---\n\n# One\n\ntext\n",
+    );
+    write(&root.join("ch2.qmd"), PLAIN);
+    write(&root.join("probe.lua"), PROBE_FILTER);
+}
+
+fn rendered_text(root: &Path, runtime: Arc<dyn SystemRuntime>) -> String {
+    let outputs = render(root, runtime, subset(root, &["ch1.qmd"]), None);
+    std::fs::read_to_string(output(&outputs, "ch1")).unwrap()
+}
+
+#[test]
+fn a_filter_sees_the_requested_book_scope_and_nothing_when_none_was_requested() {
+    let temp = TempDir::new().unwrap();
+    let root = canonical(temp.path());
+    probe_book(&root);
+    // Asked for: the filter reads the requested value from the metadata.
+    let asked = rendered_text(
+        &root,
+        with_metadata(serde_json::json!({"book-scope": "chapter"})),
+    );
+    assert!(asked.contains("SCOPE-SEEN=chapter"), "{asked}");
+    // Not asked for: only the target's default applies, and it is not
+    // written back into the metadata.
+    let default = rendered_text(&root, native());
+    assert!(default.contains("SCOPE-SEEN=nothing"), "{default}");
+}
+
+fn project_notices(
+    root: &Path,
+    runtime: Arc<dyn SystemRuntime>,
+    mode: RenderMode,
+    format: &str,
+) -> Vec<String> {
+    let mut project = ProjectContext::discover(root, runtime.as_ref()).unwrap();
+    let project_type = project_type_for(&project);
+    let options = RenderToFileOptions::default();
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        Format::from_format_string(format).unwrap(),
+        format,
+        &options,
+        runtime,
+    )
+    .with_mode(mode)
+    .with_format_override(Some(format.to_string()));
+    let summary = pollster::block_on(pipeline.run_with_book_support())
+        .unwrap_or_else(|e| panic!("render failed: {e}"));
+    summary
+        .project_diagnostics
+        .iter()
+        .filter_map(|d| d.code.clone())
+        .filter(|c| matches!(c.as_str(), "Q-5-41" | "Q-5-42" | "Q-5-48"))
+        .collect()
+}
+
+#[test]
+fn the_scope_notices_are_emitted_once_on_both_dispatch_paths() {
+    let temp = TempDir::new().unwrap();
+    let root = canonical(temp.path());
+    book(&root, PLAIN);
+    write(&root.join("notes.qmd"), PLAIN);
+    let asked_book = || with_metadata(serde_json::json!({"book-scope": "book"}));
+    let asked_chapter = || with_metadata(serde_json::json!({"book-scope": "chapter"}));
+
+    // html: the orchestrator's tail path (`resolve_book_scope` is never called).
+    let html = |rt: Arc<dyn SystemRuntime>, file: &str| {
+        project_notices(&root, rt, subset(&root, &[file]), "html")
+    };
+    assert_eq!(html(native(), "notes.qmd"), ["Q-5-41"]);
+    assert_eq!(html(asked_chapter(), "notes.qmd"), ["Q-5-41"]);
+    assert_eq!(html(asked_book(), "notes.qmd"), ["Q-5-48"]);
+    // A member with an explicit runtime `book` on html: the Q-5-42 warning, once.
+    assert_eq!(html(asked_book(), "ch1.qmd"), ["Q-5-42"]);
+    assert!(html(native(), "ch1.qmd").is_empty());
+    assert!(html(asked_chapter(), "ch1.qmd").is_empty());
+
+    // epub: `run_book_scoped` emits them, and the tail does not repeat them.
+    let epub = |rt: Arc<dyn SystemRuntime>, file: &str| {
+        project_notices(&root, rt, subset(&root, &[file]), "epub")
+    };
+    if quarto_system_runtime::NativeRuntime::new()
+        .find_binary("pandoc", "QUARTO_PANDOC")
+        .is_some()
+    {
+        assert_eq!(epub(native(), "notes.qmd"), ["Q-5-41"]);
+        assert_eq!(epub(asked_book(), "notes.qmd"), ["Q-5-48"]);
+        assert!(epub(native(), "ch1.qmd").is_empty());
+    }
+}

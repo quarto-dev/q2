@@ -1,7 +1,7 @@
 //! A book chapter rendered alone, as a standalone document: the one
-//! mechanism behind the browser's chapter-scope request, `q2 render
-//! --book-scope chapter`, and (via `render_chapter_alone`) the native preview
-//! routes.
+//! mechanism behind the browser's chapter-scope request, `q2 render ch.qmd`
+//! (a named chapter renders alone unless `-M book-scope:book` asks for the
+//! book), and (via `render_chapter_alone`) the native preview routes.
 
 use std::path::Path;
 

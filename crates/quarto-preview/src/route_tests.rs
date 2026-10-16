@@ -634,14 +634,15 @@ async fn chapter_scope_renders_the_chapter_alone_and_a_non_member_renders_as_a_p
     assert_eq!(response.status(), StatusCode::OK);
     assert!(!codes(&response).contains("Q-5-41"));
 
-    // Asking for the chapter of a non-member is just that page, no notice.
+    // Asking for the chapter of a non-member is just that page, with the
+    // info notice (it states a fact about the output, not about the request).
     let response = pdf_handler(
         State(ctx.clone()),
         pdf_req("other.qmd", None, Some(ScopeParam::Chapter)),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(!codes(&response).contains("Q-5-41"));
+    assert!(codes(&response).contains("Q-5-41"), "{}", codes(&response));
 
     // Nothing chosen: the non-member is delivered standalone with the notice.
     let response = pdf_handler(State(ctx.clone()), pdf_req("other.qmd", None, None)).await;
@@ -670,8 +671,9 @@ async fn a_book_seam_without_downloads_answers_501() {
     let (_project, ctx) = build_ctx(BOOK).await;
     install(FakeSeam::default());
     set_book_download(Some(Arc::new(Nothing)));
-    // A member with no scope chosen consolidates the book.
-    let response = pdf_handler(State(ctx), pdf_req("one.qmd", None, None)).await;
+    // A member that asks for the book consolidates it (nothing chosen is the
+    // chapter: the page is the target).
+    let response = pdf_handler(State(ctx), pdf_req("one.qmd", None, Some(ScopeParam::Book))).await;
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     let body: serde_json::Value = serde_json::from_slice(&body_bytes(response).await).unwrap();
     assert_eq!(
@@ -834,7 +836,10 @@ async fn render_blocking_hands_the_seam_a_runtime_carrying_the_job_metadata() {
     assert_eq!(calls[0].kind, "document");
     assert_eq!(calls[0].runtime_metadata.as_ref(), Some(&metadata));
     assert_eq!(calls[1].kind, "chapter");
-    assert_eq!(calls[1].runtime_metadata.as_ref(), Some(&metadata));
+    // The adapter (F4: delete) adds the old `scope` as `book-scope`.
+    let mut with_scope = metadata.clone();
+    with_scope["book-scope"] = serde_json::json!("chapter");
+    assert_eq!(calls[1].runtime_metadata.as_ref(), Some(&with_scope));
     assert_eq!(calls[2].runtime_metadata, None);
 }
 

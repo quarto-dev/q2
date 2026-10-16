@@ -15,13 +15,12 @@ use super::formats::{TYPST_PDF_KEY, pandoc_format};
 use super::{PandocRequest, PrepareOptions, RequestPost, constants};
 use crate::error::QuartoError;
 use crate::format::Format;
+use crate::format_resolution::resolve_render_scope;
 use crate::pipeline::{build_pandoc_request_stages_fetching, run_pipeline};
 use crate::project::book::{BookScopeResolution, resolve_book_scope};
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
 use crate::resource_resolver::ResourceResolverContext;
-
-pub use crate::project::book::BookScope;
 
 pub use crate::project::book::ResolvedBookScope;
 
@@ -51,7 +50,6 @@ pub struct PandocRequestInput<'a> {
     /// The hub prelude installs the vfs-root resolver for every render;
     /// `None` leaves the pipeline's default.
     pub resolver: Option<ResourceResolverContext>,
-    pub scope: Option<BookScope>,
     /// Every chapter's gzipped `EngineCapture[]`, keyed by sidecar key (see
     /// [`super::captures`]). Only the whole-book path (and, as the fallback
     /// when `captures` is empty, the active file's entry for a chapter-scope
@@ -117,7 +115,6 @@ pub async fn render_pandoc_request(
         captures,
         typst_available_fonts,
         resolver,
-        scope,
         captures_by_path,
         capture_error,
         hooks,
@@ -167,7 +164,6 @@ pub async fn render_pandoc_request(
             project,
             prepare_options,
             ProjectRequestInputs {
-                scope,
                 captures,
                 capture_error,
                 captures_by_path,
@@ -320,10 +316,9 @@ fn active_file_captures(
     }
 }
 
-/// What `render_project_request` needs beyond the document: the scope and
-/// the capture inputs.
+/// What `render_project_request` needs beyond the document: the capture
+/// inputs.
 struct ProjectRequestInputs<'a> {
-    scope: Option<BookScope>,
     captures: Vec<quarto_trace::EngineCapture>,
     capture_error: Option<String>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
@@ -349,8 +344,16 @@ async fn render_project_request(
     let active = runtime
         .canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf());
+    // The requested scope: the target is the active page, so the default is
+    // `chapter`; a request for the book arrives as `book-scope` metadata in
+    // the runtime layer.
+    let request = resolve_render_scope(
+        project,
+        &crate::project::orchestrator::RenderMode::ActivePage(active.clone()),
+        runtime.as_ref(),
+    );
     let mut resolution =
-        match resolve_book_scope(project, &active, inputs.scope, &format, runtime.as_ref()) {
+        match resolve_book_scope(project, &active, &request, &format, runtime.as_ref()) {
             Ok(resolution) => resolution,
             Err(QuartoError::Parse(parse_error)) => {
                 return PandocRequestOutcome {
@@ -400,7 +403,6 @@ async fn render_project_request_resolved(
     use crate::project::pass2_renderer::RenderToPandocRequestRenderer;
 
     let ProjectRequestInputs {
-        scope: _,
         captures,
         capture_error,
         captures_by_path,

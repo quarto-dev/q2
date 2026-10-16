@@ -96,6 +96,12 @@ function render(rel: string, format: string, options?: Options, signal?: AbortSi
   return wasm.render_pandoc_request(`${ROOT}/${rel}`, format, SDE, undefined, undefined, signal, options);
 }
 
+// A request for the whole book. The active page is the target, so with no
+// `scope` a render is the chapter alone; the whole book is asked for.
+function renderBook(rel: string, format: string, options?: Options, signal?: AbortSignal): Promise<Envelope> {
+  return render(rel, format, { scope: 'book', ...options }, signal);
+}
+
 function inputJson(out: Envelope): string {
   const file = out.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!;
   return new TextDecoder().decode(file.bytes);
@@ -177,7 +183,7 @@ function stripUnstable(value: unknown): unknown {
 describe('whole-book request (R9)', () => {
   it('equals the native golden for the parity book, typst', async () => {
     parityBook();
-    const out = await render('one.qmd', 'typst');
+    const out = await renderBook('one.qmd', 'typst');
     expect(out.error).toBeUndefined();
     expect(out.stats.book).toEqual({ scope: 'book', chapters: 9 });
     const json = JSON.parse(inputJson(out));
@@ -196,7 +202,7 @@ describe('whole-book request (R9)', () => {
   it('is one request containing every chapter, for typst, pdf and epub', async () => {
     smallBook();
     for (const format of ['typst', 'typst-pdf', 'epub']) {
-      const out = await render('one.qmd', format);
+      const out = await renderBook('one.qmd', format);
       expect(out.error, format).toBeUndefined();
       expect(out.stats.book, format).toEqual({ scope: 'book', chapters: 3 });
       const text = plainText(out);
@@ -210,6 +216,9 @@ describe('whole-book request (R9)', () => {
     expect(alone.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
     expect(plainText(alone)).toContain('First chapter.');
     expect(plainText(alone)).not.toContain('Second');
+    // Nothing chosen: the target is the active page, so it is the chapter too.
+    const nothing = await render('one.qmd', 'typst');
+    expect(nothing.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
     for (const format of ['docx', 'pptx']) {
       const out = await render('one.qmd', format);
       expect(out.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
@@ -220,31 +229,42 @@ describe('whole-book request (R9)', () => {
 
   it('is the same request whichever chapter it is asked from', async () => {
     smallBook();
-    const a = await render('one.qmd', 'typst');
-    const b = await render('two.qmd', 'typst');
+    const a = await renderBook('one.qmd', 'typst');
+    const b = await renderBook('two.qmd', 'typst');
     expect(a.request!.job_id).toBe(b.request!.job_id);
   });
 
-  it('delivers a page that is not a chapter alone with the Q-5-41 notice, whether book or nothing was chosen', async () => {
+  it('delivers a page that is not a chapter alone with the Q-5-41 info, whether the chapter or nothing was chosen', async () => {
     smallBook();
     add('notes.qmd', '# Notes\n\nA page outside the book.\n');
-    for (const options of [undefined, { scope: 'book' as const }]) {
+    for (const options of [undefined, { scope: 'chapter' as const }]) {
       const out = await render('notes.qmd', 'typst', options);
       expect(out.error).toBeUndefined();
       expect(out.stats.book).toEqual({ scope: 'none', chapters: 3 });
       expect(plainText(out)).toContain('A page outside the book.');
       expect(plainText(out)).not.toContain('First');
       expect(out.diagnostics.filter((d) => d.code === 'Q-5-41')).toHaveLength(1);
+      expect(out.diagnostics.some((d) => d.code === 'Q-5-48')).toBe(false);
     }
   });
 
-  it('asking for the chapter of a page outside the book is just that page, with no notice', async () => {
+  it('asking for the book from a page outside it delivers the page alone with the Q-5-48 warning, once', async () => {
     smallBook();
     add('notes.qmd', '# Notes\n\nA page outside the book.\n');
-    const out = await render('notes.qmd', 'typst', { scope: 'chapter' });
+    const out = await render('notes.qmd', 'typst', { scope: 'book' });
     expect(out.error).toBeUndefined();
+    expect(out.stats.book).toEqual({ scope: 'none', chapters: 3 });
     expect(plainText(out)).toContain('A page outside the book.');
+    expect(plainText(out)).not.toContain('First');
+    expect(out.diagnostics.filter((d) => d.code === 'Q-5-48')).toHaveLength(1);
     expect(out.diagnostics.some((d) => d.code === 'Q-5-41')).toBe(false);
+  });
+
+  it("scope 'book' for docx cannot be honoured: the chapter alone, with the Q-5-42 warning", async () => {
+    smallBook();
+    const out = await render('one.qmd', 'docx', { scope: 'book' });
+    expect(out.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
+    expect(out.diagnostics.filter((d) => d.code === 'Q-5-42')).toHaveLength(1);
   });
 
   it('a docx request sends no scope and gets no scope diagnostic', async () => {
@@ -263,7 +283,7 @@ describe('whole-book request (R9)', () => {
   it('fails the whole render when a chapter is broken, naming its file', async () => {
     smallBook();
     add('two.qmd', '# Two\n\n{{< include missing-file.qmd >}}\n');
-    const out = await render('one.qmd', 'typst');
+    const out = await renderBook('one.qmd', 'typst');
     expect(out.success).toBe(false);
     expect(out.request).toBeUndefined();
     expect(out.error).toContain('two.qmd');
@@ -272,7 +292,7 @@ describe('whole-book request (R9)', () => {
   it("reports a later chapter's warning against that chapter's file and line", async () => {
     smallBook();
     add('two.qmd', '# Two\n\nSecond chapter {{< nosuchshortcode >}}.\n');
-    const out = await render('one.qmd', 'typst');
+    const out = await renderBook('one.qmd', 'typst');
     expect(out.error).toBeUndefined();
     const warning = out.diagnostics.find((d) => d.code === 'Q-16-3')!;
     expect(warning).toBeDefined();
@@ -303,7 +323,7 @@ describe('whole-book request (R9)', () => {
       },
     ];
     const gz = gzipSync(new TextEncoder().encode(JSON.stringify(capture)));
-    const out = await render('one.qmd', 'typst', {
+    const out = await renderBook('one.qmd', 'typst', {
       capturesByPath: { 'two.qmd': gz, 'not-a-chapter.qmd': new Uint8Array([1, 2, 3]) },
     });
     expect(out.error).toBeUndefined();
@@ -317,7 +337,7 @@ describe('whole-book request (R9)', () => {
   it('mounts each chapter-relative image under its own directory for pdf and epub, with no Q-11-1', async () => {
     parityBook();
     for (const format of ['typst-pdf', 'epub']) {
-      const out = await render('one.qmd', format);
+      const out = await renderBook('one.qmd', format);
       expect(out.error, format).toBeUndefined();
       expect(out.diagnostics.map((d) => d.code), format).not.toContain('Q-11-1');
       const refs = out.request!.resource_refs.map((f) => f.path);
@@ -335,10 +355,10 @@ describe('whole-book request (R9)', () => {
     add('refs.bib', REFS_BIB);
     add('index.qmd', '# Preface\n\nHello\n');
     add('one.qmd', '# One\n\nKnuth wrote it [@knuth1984].\n');
-    const pdf = await render('one.qmd', 'typst-pdf');
+    const pdf = await renderBook('one.qmd', 'typst-pdf');
     expect(pdf.error).toBeUndefined();
     expect(pdf.request!.resource_refs.map((f) => f.path)).toContain(`${ROOT}/refs.bib`);
-    const typst = await render('one.qmd', 'typst');
+    const typst = await renderBook('one.qmd', 'typst');
     expect(typst.request!.resource_refs.map((f) => f.path)).not.toContain(`${ROOT}/refs.bib`);
   });
 });
@@ -378,7 +398,7 @@ describe('captures per chapter (R9 D-6)', () => {
       '```{r}\nTHREE_SRC\n```',
       '::: {.cell}\n::: {.cell-output-display}\n![](doc_files/fig.png)\n:::\n:::',
     );
-    const out = await render('one.qmd', 'typst-pdf', { capturesByPath: { 'sub/three.qmd': gz([cap]) } });
+    const out = await renderBook('one.qmd', 'typst-pdf', { capturesByPath: { 'sub/three.qmd': gz([cap]) } });
     expect(out.error).toBeUndefined();
     const refs = out.request!.resource_refs.map((f) => f.path);
     expect(refs).toContain(`${ROOT}/sub/doc_files/fig.png`);
@@ -401,9 +421,9 @@ describe('captures per chapter (R9 D-6)', () => {
     expect(inputJson(withBlob)).toContain('BLOB_ONE');
     expect(inputJson(withBlob)).not.toContain('MAP_ONE');
     // Whole book: the active file's own blob changes nothing.
-    const plain = await render('one.qmd', 'typst', { capturesByPath: byPath });
+    const plain = await renderBook('one.qmd', 'typst', { capturesByPath: byPath });
     const ignored = await wasm.render_pandoc_request(
-      `${ROOT}/one.qmd`, 'typst', SDE, blob, undefined, undefined, { capturesByPath: byPath },
+      `${ROOT}/one.qmd`, 'typst', SDE, blob, undefined, undefined, { scope: 'book', capturesByPath: byPath },
     );
     expect(ignored.request!.job_id).toBe(plain.request!.job_id);
     expect(inputJson(ignored)).not.toContain('BLOB_ONE');
@@ -412,7 +432,7 @@ describe('captures per chapter (R9 D-6)', () => {
   it('splices a stale capture where it still matches and leaves the rest as source', async () => {
     captureBook();
     const stale = gz([capture(TWO.replace('SAME', 'OLD'), 'OLD', 'STALE_OUT')]);
-    const out = await render('one.qmd', 'typst', { capturesByPath: { 'two.qmd': stale } });
+    const out = await renderBook('one.qmd', 'typst', { capturesByPath: { 'two.qmd': stale } });
     expect(out.error).toBeUndefined();
     expect(inputJson(out)).not.toContain('STALE_OUT');
     expect(inputJson(out).match(/SAME/g)).toHaveLength(2);
@@ -426,11 +446,11 @@ describe('captures per chapter (R9 D-6)', () => {
     const inc = (marker: string) => ({
       includes: { header_includes: [marker], include_before: [], include_after: [] },
     });
-    const later = await render('index.qmd', 'typst', {
+    const later = await renderBook('index.qmd', 'typst', {
       capturesByPath: { 'two.qmd': gz([capture(TWO, 'SAME', 'OUT', inc('LATER_HEADER'))]) },
     });
     expect(inputJson(later)).not.toContain('LATER_HEADER');
-    const first = await render('index.qmd', 'typst', {
+    const first = await renderBook('index.qmd', 'typst', {
       capturesByPath: { 'index.qmd': gz([capture(index, 'SAME', 'OUT', inc('FIRST_HEADER'))]) },
     });
     expect(inputJson(first)).toContain('FIRST_HEADER');
@@ -438,7 +458,7 @@ describe('captures per chapter (R9 D-6)', () => {
 
   it('ignores a key that is not a chapter and degrades a corrupt capture to source with a diagnostic naming the chapter', async () => {
     captureBook();
-    const out = await render('one.qmd', 'typst', {
+    const out = await renderBook('one.qmd', 'typst', {
       capturesByPath: { 'nowhere.qmd': gz([]), 'two.qmd': new TextEncoder().encode('not gzip at all') },
     });
     expect(out.error).toBeUndefined();
@@ -459,7 +479,7 @@ describe('progress, yield and abort (R9)', () => {
   it('calls onProgress once per chapter in order, yielding to timers between them', async () => {
     bigBook(20);
     const calls: [number, number, string][] = [];
-    const out = await render('c1.qmd', 'typst', {
+    const out = await renderBook('c1.qmd', 'typst', {
       onProgress: async (i, n, file) => {
         calls.push([i, n, file]);
         await new Promise((r) => setTimeout(r, 0));
@@ -478,7 +498,7 @@ describe('progress, yield and abort (R9)', () => {
     const ac = new AbortController();
     const calls: number[] = [];
     setTimeout(() => ac.abort(), 0);
-    const out = await render(
+    const out = await renderBook(
       'c1.qmd',
       'typst',
       {
@@ -498,14 +518,14 @@ describe('progress, yield and abort (R9)', () => {
     bigBook(20);
     const ac = new AbortController();
     setTimeout(() => ac.abort(), 0);
-    const out = await render('c1.qmd', 'typst', undefined, ac.signal);
+    const out = await renderBook('c1.qmd', 'typst', undefined, ac.signal);
     expect(out.success).toBe(false);
     expect(out.request).toBeUndefined();
   });
 
   it('fails the call with the error of a rejecting onProgress', async () => {
     bigBook(5);
-    const out = await render('c1.qmd', 'typst', {
+    const out = await renderBook('c1.qmd', 'typst', {
       onProgress: (i) => {
         if (i === 3) return Promise.reject(new Error('status pane is gone'));
       },
@@ -549,7 +569,7 @@ describe('the resolver\'s book field (R9)', () => {
     const files = [...resolve('one.qmd').book!.chapters, 'notes.qmd'];
     for (const file of files) {
       const says = resolve(file).book!.chapter;
-      const out = await render(file, 'typst');
+      const out = await renderBook(file, 'typst');
       expect(out.stats.book!.scope === 'book', file).toBe(says);
     }
     wasm.vfs_clear();
@@ -561,7 +581,7 @@ describe('the resolver\'s book field (R9)', () => {
     add('_quarto.yml', 'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - missing.qmd\n');
     add('index.qmd', '# Preface\n');
     expect(resolve('index.qmd').book).toEqual({ chapter: false, chapters: [] });
-    const out = await render('index.qmd', 'typst');
+    const out = await renderBook('index.qmd', 'typst');
     expect(out.success).toBe(false);
     expect(JSON.stringify(out)).toContain('Q-5-35');
   });

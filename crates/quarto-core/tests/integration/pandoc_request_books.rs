@@ -10,11 +10,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use quarto_core::BookScope;
 use quarto_core::ResourceResolverContext;
 use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::Format;
+use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::pandoc_request::render::{
-    BookScope, PandocRequestInput, PandocRequestOutcome, ResolvedBookScope, render_pandoc_request,
+    PandocRequestInput, PandocRequestOutcome, ResolvedBookScope, render_pandoc_request,
 };
 use quarto_core::pandoc_request::{PandocRequest, constants};
 use quarto_core::project::ProjectContext;
@@ -130,7 +132,6 @@ fn input<'a>(
     content: &'a [u8],
     format: &'a str,
     project: &'a ProjectContext,
-    scope: Option<BookScope>,
 ) -> PandocRequestInput<'a> {
     let _ = runtime;
     PandocRequestInput {
@@ -146,19 +147,38 @@ fn input<'a>(
         resolver: Some(ResourceResolverContext::vfs_root(
             "/.quarto/project-artifacts",
         )),
-        scope,
         captures_by_path: Default::default(),
         capture_error: None,
         hooks: None,
     }
 }
 
+/// The runtime of a render that asks for `scope`, if it does: the request's
+/// `book-scope` is runtime-layer metadata. Asking for nothing leaves the
+/// target (the active page) to decide, which is the chapter.
+fn runtime_asking(scope: Option<BookScope>) -> Arc<dyn SystemRuntime> {
+    let native: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    match scope {
+        None => native,
+        Some(scope) => {
+            let value = match scope {
+                BookScope::Book => "book",
+                BookScope::Chapter => "chapter",
+            };
+            Arc::new(RenderOverlay::with_metadata(
+                serde_json::json!({ "book-scope": value }),
+            ))
+            .apply(native)
+        }
+    }
+}
+
 fn render(path: &Path, format: &str, scope: Option<BookScope>) -> PandocRequestOutcome {
-    let runtime = Arc::new(NativeRuntime::new());
+    let runtime = runtime_asking(scope);
     let project = ProjectContext::discover(path, runtime.as_ref()).unwrap();
     let content = std::fs::read(path).unwrap();
     pollster::block_on(render_pandoc_request(
-        input(runtime.as_ref(), path, &content, format, &project, scope),
+        input(runtime.as_ref(), path, &content, format, &project),
         runtime,
     ))
 }
@@ -311,7 +331,7 @@ fn whole_book_typst_request_equals_native() {
 
     let native = native_typ(&root);
 
-    let out = render(&root.join("one.qmd"), "typst", None);
+    let out = render(&root.join("one.qmd"), "typst", Some(BookScope::Book));
     let book = out.book.as_ref().expect("a book outcome").scope;
     assert_eq!(book, ResolvedBookScope::Book);
     let request = request_of(out);
@@ -450,7 +470,7 @@ fn whole_book_epub_request_equals_native() {
     let native = epub_text_entries(&std::fs::read(&summary.outputs[0].output_path).unwrap());
 
     // Request, replayed.
-    let out = render(&root.join("one.qmd"), "epub", None);
+    let out = render(&root.join("one.qmd"), "epub", Some(BookScope::Book));
     assert_eq!(out.book.as_ref().unwrap().scope, ResolvedBookScope::Book);
     let request = request_of(out);
     assert!(
@@ -572,7 +592,7 @@ fn auto_scope_on_a_chapter_is_the_whole_book_and_reports_it() {
     let (_g, root) = scratch();
     small_book(&root);
     for format in ["typst", "typst-pdf", "epub"] {
-        let out = render(&root.join("one.qmd"), format, None);
+        let out = render(&root.join("one.qmd"), format, Some(BookScope::Book));
         let book = out.book.as_ref().expect("book info");
         assert_eq!(book.scope, ResolvedBookScope::Book, "{format}");
         assert_eq!(book.chapters, 3, "{format}");
@@ -625,8 +645,16 @@ fn docx_and_pptx_on_a_chapter_stay_chapter_only_without_a_warning() {
 fn the_same_book_requested_from_two_chapters_is_one_request() {
     let (_g, root) = scratch();
     small_book(&root);
-    let a = request_of(render(&root.join("one.qmd"), "typst", None));
-    let b = request_of(render(&root.join("two.qmd"), "typst", None));
+    let a = request_of(render(
+        &root.join("one.qmd"),
+        "typst",
+        Some(BookScope::Book),
+    ));
+    let b = request_of(render(
+        &root.join("two.qmd"),
+        "typst",
+        Some(BookScope::Book),
+    ));
     assert_eq!(
         a.job_id, b.job_id,
         "the active chapter is not in the request"
@@ -661,11 +689,17 @@ fn a_page_in_the_project_but_not_in_the_book_renders_alone() {
         let out = render(&root.join("notes.qmd"), format, None);
         let book = out.book.as_ref().map(|b| (b.scope, b.chapters));
         assert_eq!(book, Some((ResolvedBookScope::NoBook, 3)), "{format}");
-        // A consolidating format was asked for the book (nothing chosen):
-        // the standalone page carries the notice; docx never consolidates.
+        // Nothing chosen (the target defaults to the chapter): the standalone
+        // page carries the info notice, once, in every format: it states a
+        // fact about the output, not about what was asked.
+        let notices: Vec<_> = out
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-5-41"))
+            .collect();
         assert_eq!(
-            has_notice(&out, "Q-5-41"),
-            format != "docx",
+            notices.len(),
+            1,
             "{format}: {:?}",
             out.diagnostics.iter().map(|d| &d.title).collect::<Vec<_>>()
         );
@@ -677,7 +711,7 @@ fn a_page_in_the_project_but_not_in_the_book_renders_alone() {
 }
 
 #[test]
-fn chapter_scope_on_a_page_outside_the_book_is_that_page_without_a_notice() {
+fn chapter_scope_on_a_page_outside_the_book_is_that_page_with_the_info_notice() {
     let (_g, root) = scratch();
     small_book(&root);
     write(&root, "notes.qmd", b"# Notes\n\nA page outside the book.\n");
@@ -688,22 +722,31 @@ fn chapter_scope_on_a_page_outside_the_book_is_that_page_without_a_notice() {
             Some(ResolvedBookScope::NoBook),
             "{format}"
         );
-        assert!(!has_notice(&out, "Q-5-41"), "{format}");
+        assert!(has_notice(&out, "Q-5-41"), "{format}");
+        assert!(!has_notice(&out, "Q-5-48"), "{format}");
         assert!(plain_text(&request_of(out)).contains("A page outside the book"));
     }
-    // `Some(Book)` is asking for the book: the page still renders alone, with the notice.
+    // An explicit `book` cannot be honoured: the page still renders alone,
+    // with the warning in place of the info.
     let out = render(&root.join("notes.qmd"), "typst", Some(BookScope::Book));
-    assert!(has_notice(&out, "Q-5-41"));
+    assert!(has_notice(&out, "Q-5-48"));
+    assert!(!has_notice(&out, "Q-5-41"));
 }
 
 #[test]
-fn an_explicit_scope_for_docx_and_pptx_is_ignored_with_a_notice() {
+fn an_explicit_book_for_docx_and_pptx_is_ignored_with_a_warning() {
     let (_g, root) = scratch();
     small_book(&root);
     for format in ["docx", "pptx"] {
         for scope in [BookScope::Book, BookScope::Chapter] {
             let out = render(&root.join("one.qmd"), format, Some(scope));
-            assert!(has_notice(&out, "Q-5-42"), "{format} {scope:?}");
+            // Only a request for the book cannot be honoured; `chapter` is
+            // honoured and never warns.
+            assert_eq!(
+                has_notice(&out, "Q-5-42"),
+                scope == BookScope::Book,
+                "{format} {scope:?}"
+            );
             let text = plain_text(&request_of(out));
             assert!(text.contains("First chapter") && !text.contains("Second chapter"));
         }
@@ -766,7 +809,7 @@ fn a_book_below_the_vfs_root_keys_its_captures_from_that_root() {
     let out = render_with_captures(
         &book.join("one.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         // Keyed from the project directory, not the VFS root: not a chapter.
         &[("book/two.qmd", blob), ("two.qmd", wrong)],
         Vec::new(),
@@ -800,7 +843,7 @@ fn a_chapter_href_that_needs_normalizing_is_still_found() {
     ));
     assert!(plain_text(&alone).contains("First chapter"));
     // ... and as the whole book.
-    let out = render(&root.join("one.qmd"), "typst", None);
+    let out = render(&root.join("one.qmd"), "typst", Some(BookScope::Book));
     assert_eq!(out.book.as_ref().unwrap().scope, ResolvedBookScope::Book);
     assert!(plain_text(&request_of(out)).contains("Hello"));
 }
@@ -818,7 +861,7 @@ fn a_chapter_whose_stages_fail_fails_the_whole_render_naming_its_file() {
         "two.qmd",
         b"# Two\n\n{{< include missing-file.qmd >}}\n",
     );
-    let out = render(&root.join("one.qmd"), "typst", None);
+    let out = render(&root.join("one.qmd"), "typst", Some(BookScope::Book));
     assert!(
         out.request.is_none(),
         "no request for a book with a broken chapter"
@@ -847,7 +890,7 @@ fn a_chapter_with_broken_front_matter_fails_before_any_chapter_renders() {
     let (_g, root) = scratch();
     small_book(&root);
     write(&root, "two.qmd", b"---\ntitle: [unclosed\n---\n\nBroken.\n");
-    let out = render(&root.join("one.qmd"), "typst", None);
+    let out = render(&root.join("one.qmd"), "typst", Some(BookScope::Book));
     assert!(out.request.is_none());
     // The summary is the error's title; since bd-x30aq7ae that is the
     // catalog's "YAML Syntax Error" (Q-1-1), and the front-matter context
@@ -880,7 +923,7 @@ fn a_warning_in_a_later_chapter_is_reported_against_that_chapter() {
         "two.qmd",
         b"# Two\n\nSecond chapter {{< nosuchshortcode >}}.\n",
     );
-    let out = render(&root.join("one.qmd"), "typst", None);
+    let out = render(&root.join("one.qmd"), "typst", Some(BookScope::Book));
     assert!(out.error.is_none(), "{:?}", out.error);
     let book = out.book.as_ref().unwrap();
     let chapter = book
@@ -930,10 +973,10 @@ impl quarto_core::project::book::BookRenderHooks for Hooks {
 }
 
 fn render_with_hooks(path: &Path, hooks: &Hooks) -> PandocRequestOutcome {
-    let runtime = Arc::new(NativeRuntime::new());
+    let runtime = runtime_asking(Some(BookScope::Book));
     let project = ProjectContext::discover(path, runtime.as_ref()).unwrap();
     let content = std::fs::read(path).unwrap();
-    let mut request_input = input(runtime.as_ref(), path, &content, "typst", &project, None);
+    let mut request_input = input(runtime.as_ref(), path, &content, "typst", &project);
     request_input.hooks = Some(hooks);
     pollster::block_on(render_pandoc_request(request_input, runtime))
 }
@@ -1035,10 +1078,10 @@ fn render_with_captures(
     by_path: &[(&str, Vec<u8>)],
     active_blob: Vec<EngineCapture>,
 ) -> PandocRequestOutcome {
-    let runtime = Arc::new(NativeRuntime::new());
+    let runtime = runtime_asking(scope);
     let project = ProjectContext::discover(path, runtime.as_ref()).unwrap();
     let content = std::fs::read(path).unwrap();
-    let mut request_input = input(runtime.as_ref(), path, &content, format, &project, scope);
+    let mut request_input = input(runtime.as_ref(), path, &content, format, &project);
     request_input.captures_by_path = by_path
         .iter()
         .map(|(k, v)| (k.to_string(), v.clone()))
@@ -1056,7 +1099,7 @@ fn a_chapters_capture_shows_there_and_never_in_an_identical_cell_elsewhere() {
     let out = render_with_captures(
         &root.join("one.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &[("two.qmd", blob)],
         Vec::new(),
     );
@@ -1100,7 +1143,7 @@ fn engine_includes_in_a_capture_count_only_for_the_first_chapter() {
     let later = render_with_captures(
         &root.join("index.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &[("two.qmd", with_includes(&two, "TWO", "LATER_HEADER"))],
         Vec::new(),
     );
@@ -1112,7 +1155,7 @@ fn engine_includes_in_a_capture_count_only_for_the_first_chapter() {
     let first = render_with_captures(
         &root.join("index.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &[("index.qmd", with_includes(&index, "IDX", "FIRST_HEADER"))],
         Vec::new(),
     );
@@ -1142,7 +1185,7 @@ fn a_captured_figure_in_a_subdirectory_chapter_mounts_under_its_own_directory() 
     let out = render_with_captures(
         &root.join("one.qmd"),
         "typst-pdf",
-        None,
+        Some(BookScope::Book),
         &[("sub/three.qmd", gz(&[cap]))],
         Vec::new(),
     );
@@ -1221,14 +1264,14 @@ fn a_book_request_ignores_the_active_files_own_blob() {
     let plain = request_of(render_with_captures(
         &root.join("one.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &by_path,
         Vec::new(),
     ));
     let with_blob = request_of(render_with_captures(
         &root.join("one.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &by_path,
         vec![capture_for(&one, "SAME", "DIFFERENT", Vec::new())],
     ));
@@ -1238,7 +1281,7 @@ fn a_book_request_ignores_the_active_files_own_blob() {
     let from_two = request_of(render_with_captures(
         &root.join("two.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &by_path,
         Vec::new(),
     ));
@@ -1255,7 +1298,7 @@ fn a_stale_capture_splices_what_still_matches() {
     let out = render_with_captures(
         &root.join("one.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &[("two.qmd", stale)],
         Vec::new(),
     );
@@ -1275,7 +1318,7 @@ fn a_path_key_that_is_not_a_chapter_is_ignored_and_a_corrupt_one_degrades_that_c
     let out = render_with_captures(
         &root.join("one.qmd"),
         "typst",
-        None,
+        Some(BookScope::Book),
         &[
             ("nowhere.qmd", gz(&[])),
             ("two.qmd", b"not gzip at all".to_vec()),
@@ -1316,7 +1359,7 @@ fn a_path_key_that_is_not_a_chapter_is_ignored_and_a_corrupt_one_degrades_that_c
 fn pdf_request_mounts_each_chapters_images_under_its_own_directory() {
     let (_g, root) = scratch();
     parity_book(&root);
-    let out = render(&root.join("one.qmd"), "typst-pdf", None);
+    let out = render(&root.join("one.qmd"), "typst-pdf", Some(BookScope::Book));
     assert!(
         out.diagnostics
             .iter()
@@ -1389,7 +1432,7 @@ fn strip_unstable(value: &mut serde_json::Value) {
 fn the_parity_books_input_json_matches_its_golden_and_holds_no_absolute_path() {
     let (_g, root) = scratch();
     parity_book(&root);
-    let out = render(&root.join("one.qmd"), "typst", None);
+    let out = render(&root.join("one.qmd"), "typst", Some(BookScope::Book));
     let request = request_of(out);
     let mut json: serde_json::Value = serde_json::from_str(&input_json(&request)).unwrap();
     json.as_object_mut().unwrap().remove("astContext");
@@ -1483,7 +1526,7 @@ fn the_resolver_and_the_exports_auto_scope_agree_for_every_file_of_the_book() {
     files.push("notes.qmd".to_string());
     for file in files {
         let (_, says_chapter) = resolved_book(&root.join(&file)).unwrap();
-        let out = render(&root.join(&file), "typst", None);
+        let out = render(&root.join(&file), "typst", Some(BookScope::Book));
         let scope = out.book.as_ref().expect("book info").scope;
         assert_eq!(
             scope == ResolvedBookScope::Book,
@@ -1504,7 +1547,7 @@ fn a_book_listing_a_missing_chapter_degrades_in_the_resolver_and_fails_the_expor
     write(&root, "index.qmd", b"# Preface\n");
     let (chapters, chapter) = resolved_book(&root.join("index.qmd")).expect("a book");
     assert!(chapters.is_empty() && !chapter);
-    let out = render(&root.join("index.qmd"), "typst", None);
+    let out = render(&root.join("index.qmd"), "typst", Some(BookScope::Book));
     assert!(out.request.is_none());
     assert!(
         out.diagnostics

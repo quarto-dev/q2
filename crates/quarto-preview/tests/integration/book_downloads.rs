@@ -147,14 +147,20 @@ async fn an_epub_book_holds_every_chapter_and_the_image() {
 }
 
 #[tokio::test]
-async fn an_absent_scope_consolidates_the_book_and_chapter_scope_does_not() {
+async fn a_book_scope_consolidates_the_book_and_an_absent_or_chapter_scope_does_not() {
     if !require(&["pandoc"]) {
         return;
     }
     let server = book_server(CH1).await;
-    let whole = download(&server, "ch1.qmd", "typst", None).await;
+    let whole = download(&server, "ch1.qmd", "typst", Some("book")).await;
     assert_eq!(whole.status, 200, "{}", whole.text());
     assert!(whole.text().contains("Chapter two text"));
+
+    // Nothing chosen: the page is the target, so it is the chapter.
+    let nothing = download(&server, "ch1.qmd", "typst", None).await;
+    assert_eq!(nothing.status, 200, "{}", nothing.text());
+    assert!(!nothing.text().contains("Chapter two text"));
+    assert_eq!(stats(&nothing)["book"]["scope"], "chapter");
 
     let chapter = download(&server, "ch1.qmd", "typst", Some("chapter")).await;
     assert_eq!(chapter.status, 200, "{}", chapter.text());
@@ -175,7 +181,9 @@ async fn a_page_outside_the_book_renders_alone_with_a_notice() {
     let typ = reply.text();
     assert!(typ.contains("A page outside the book"));
     assert!(!typ.contains("Chapter one text"));
-    assert!(codes(&reply).contains("Q-5-41"), "{}", codes(&reply));
+    // An explicit book cannot be honoured: the warning, not the info.
+    assert!(codes(&reply).contains("Q-5-48"), "{}", codes(&reply));
+    assert!(!codes(&reply).contains("Q-5-41"), "{}", codes(&reply));
     assert_eq!(stats(&reply)["book"]["scope"], "none");
 }
 

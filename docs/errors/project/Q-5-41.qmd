@@ -1,5 +1,5 @@
 ---
-title: "Page Is Not Part of the Book"
+title: "Page Is Not a Chapter of the Book"
 description: "A page that is not in the book's chapter list was rendered on its own."
 code: Q-5-41
 subsystem: project
@@ -9,19 +9,24 @@ categories:
   - project
 ---
 
-# `Q-5-41` — Page Is Not Part of the Book
+# `Q-5-41` — Page Is Not a Chapter of the Book
 
 > A page that is not in the book's chapter list was rendered on its own.
 
 ## What this means
 
-A book renders to a single document (typst, pdf and epub) from the files
-listed in `book.chapters`. The page you asked for is in the project but is
-not in that list, so there is no place for it in the book. Quarto renders it
-as a standalone document and tells you, rather than refusing or silently
-rendering a different file.
+A book is built from the files listed in `book.chapters`. The page you named is
+in the project but is not in that list, so it has no place in the book. Quarto
+renders it on its own, as a standalone document, and tells you so. Because it
+is not part of the book, the page has its own numbering (its first heading is
+number 1), and it cannot link to the book's chapters.
 
-Asking for the page alone (`--book-scope chapter`) does not show this notice.
+This notice is informational. You see it whenever you render a page like this
+by name, whether you asked for the page alone (`-M book-scope:chapter`), set
+`book-scope: chapter` in a configuration file or in the page itself, or asked
+for nothing in particular. If you ask for the whole book with
+`-M book-scope:book`, the page still renders on its own, and you get the
+warning [`Q-5-48`](Q-5-48.qmd) instead.
 
 ## How to fix
 

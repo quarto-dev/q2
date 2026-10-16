@@ -166,7 +166,6 @@ fn render(root: &Path, qmd: &str, format: &str, net: &Arc<ScriptedNet>) -> Pando
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
             attribution: None,
-            scope: None,
             captures_by_path: Default::default(),
             capture_error: None,
             hooks: None,
