@@ -66,6 +66,8 @@ import { resolveAuthorId as resolveAuthorIdRequest } from './services/authServic
 import type { Route, ShareRoute, LinkProjectSetRoute, JoinCollectionRoute } from './utils/routing';
 import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath, savePreAuthHash, clearPreAuthHash, buildHashRoute } from './utils/routing';
 import { isEphemeralStorage } from './services/ephemeralStorage';
+import { probeHealth, startEphemeralServerWatchdog } from './services/ephemeralServerWatchdog';
+import { disconnect as disconnectProjectSet } from './services/projectSetService';
 import { fetchPreviewSessionConfig } from './services/previewConfig';
 import type { StorageKind } from '@quarto/quarto-sync-client';
 import './App.css';
@@ -98,7 +100,14 @@ async function connectAndLoadContents(
   // under CI contention the render-target doc loses, is marked
   // unavailable, and the preview fails "Path not found" (stage
   // EDITOR_NO_PREVIEW; sometimes the index loses it too → CONNECT_STALL).
-  const peerTimeoutMs = import.meta.env.VITE_E2E === '1' ? 15000 : 1;
+  //
+  // Ephemeral (q2 preview embed) sessions have no cache to open from, so
+  // a 1 ms probe can only lose: under Firefox's per-host WebSocket
+  // handshake serialization, stale tabs retrying a dead port delay the
+  // new server's handshake past it and the index doc comes back
+  // "unavailable" (bd-ug0doz5q). Give them the long budget.
+  const peerTimeoutMs =
+    import.meta.env.VITE_E2E === '1' || isEphemeralStorage() ? 30000 : 1;
   // Ephemeral storage mode (bd-sw4xy1vw): the q2 preview embed build
   // keeps the automerge document cache in memory — each preview session
   // is a fresh origin, so a persisted cache could never hit and would
@@ -175,6 +184,22 @@ function App() {
     enabled: AUTH_ENABLED && !!auth && !!project && !isOnline,
     onAuthRejected: expireSession,
   });
+
+  // Preview sessions: a dead per-run server never returns on this page's
+  // port, and a stale tab retrying it starves the next server's
+  // WebSocket handshakes in Firefox (bd-ug0doz5q). Stop retrying once
+  // /health says it is gone; reload if it comes back.
+  useEffect(() => {
+    if (!isEphemeralStorage()) return;
+    return startEphemeralServerWatchdog({
+      checkHealth: probeHealth,
+      teardown: async () => {
+        await disconnect();
+        await disconnectProjectSet();
+      },
+      onServerBack: () => window.location.reload(),
+    });
+  }, []);
 
   // While sync is online, keep the sliding session alive: WS traffic
   // never slides the server-side idle window (validate-once at
