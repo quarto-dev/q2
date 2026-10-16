@@ -76,8 +76,8 @@ fn odt_render_into_another_directory_keeps_its_image() {
     assert_eq!(mimetype, "application/vnd.oasis.opendocument.text");
     let pictures: Vec<String> = zip
         .file_names()
+        .map(|n| n.unwrap().to_string())
         .filter(|n| n.starts_with("Pictures/"))
-        .map(str::to_string)
         .collect();
     assert!(!pictures.is_empty(), "no Pictures/ entry in the odt");
 }

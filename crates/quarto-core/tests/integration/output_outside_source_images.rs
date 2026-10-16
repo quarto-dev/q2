@@ -93,7 +93,7 @@ fn zip_media_entries(path: &Path) -> Vec<String> {
     let mut media = Vec::new();
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).unwrap();
-        let name = entry.name().to_string();
+        let name = entry.name().unwrap().to_string();
         let lower = name.to_ascii_lowercase();
         if !entry.is_dir() && (lower.contains("media/") || lower.contains("pictures/")) {
             let mut buf = Vec::new();

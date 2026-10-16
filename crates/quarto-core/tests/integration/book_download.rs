@@ -286,7 +286,7 @@ fn an_epub_book_downloads_with_its_chapter_image() {
     let result = ok(simple(&fx, "epub", None));
     assert_eq!(result.file.extension().unwrap(), "epub");
     let mut zip = zip::ZipArchive::new(std::fs::File::open(&result.file).unwrap()).unwrap();
-    let names: Vec<String> = zip.file_names().map(str::to_string).collect();
+    let names: Vec<String> = zip.file_names().map(|n| n.unwrap().to_string()).collect();
     assert!(
         names.iter().any(|n| n.ends_with(".png")),
         "no image in the epub: {names:?}"

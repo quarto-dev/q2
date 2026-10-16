@@ -79,7 +79,7 @@ fn docx_has_image(path: &Path) -> bool {
     let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).unwrap();
-        if entry.name().contains("media/") {
+        if entry.name().unwrap().contains("media/") {
             let mut buf = Vec::new();
             entry.read_to_end(&mut buf).unwrap();
             if buf == PNG {
