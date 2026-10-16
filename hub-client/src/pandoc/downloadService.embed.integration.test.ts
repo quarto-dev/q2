@@ -5,6 +5,7 @@
  * with the native executor, so a click POSTs the editor's current text to the preview server's
  * render route and saves the returned file; pandoc.wasm is not touched.
  */
+import { Blob as NodeBlob } from 'node:buffer';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 const save = vi.fn();
@@ -92,7 +93,17 @@ describe('download controller in the preview embed', () => {
   });
 
   it('Download as PDF saves the file from the render route and hands the bytes to the pdf listeners', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([37, 80, 68, 70]), { status: 200, headers: { 'content-disposition': 'attachment; filename="doc.pdf"' } })));
+    // The controller reads the PDF with `blob.arrayBuffer()`. Newer Node (24.21) builds `Response.blob()` with the global Blob,
+    // which under jsdom has no `arrayBuffer()`, so hand back Node's own Blob (browsers have the method either way).
+    const bytes = new Uint8Array([37, 80, 68, 70]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const res = new Response(bytes, { status: 200, headers: { 'content-disposition': 'attachment; filename="doc.pdf"' } });
+        res.blob = async () => new NodeBlob([bytes]) as unknown as Blob;
+        return res;
+      }),
+    );
     const { getDownloadController, onPdfCompiled } = await import('./downloadService');
     const seen: number[] = [];
     onPdfCompiled((pdf) => seen.push(pdf.length));
