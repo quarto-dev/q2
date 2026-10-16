@@ -1,0 +1,63 @@
+---
+title: "Attribute List After Code Block Language"
+description: "A fenced code block's opening line has a language word followed by a `{...}` attribute list."
+code: Q-2-57
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-57` — Attribute List After Code Block Language
+
+> A fenced code block's opening line has a language word followed by a `{...}` attribute list.
+
+## What this means
+
+The opening line of a fenced code block takes either one language word
+(```` ```python ````) or one attribute list in braces (```` ```{#id .python} ````),
+not both. This error fires when a language word is followed by an attribute
+list, as in ```` ```python {.marimo} ````.
+
+The parser reports the error at the point where the word ends and adds a hint
+that rewrites your own attribute list with the language moved inside the
+braces, using the identifier, classes and values you actually wrote. The hint
+shows two forms:
+
+- `{#id .python .cls key=val}` — a plain code block with the language as its
+  first class.
+- `{python #id .cls key=val}` — an executable cell for the `python` engine.
+
+Which one you want depends on whether the code should run. Pandoc reads
+`python {.cls}` as a code block, so the first form keeps that meaning.
+
+## How to fix
+
+Move the language word inside the braces:
+
+````markdown
+```{#id .python .marimo}      <!-- code block, correct -->
+```{python .marimo}           <!-- executable cell, correct -->
+```python {.marimo}           <!-- triggers Q-2-57 -->
+````
+
+A word followed by something other than a braced list (for example
+```` ```python .marimo ````) does not get this hint.
+
+`qmd-syntax-helper` does not rewrite this form, because it cannot know whether
+a code block or an executable cell was intended.
+
+## Example
+
+The parser flags this input:
+
+````markdown
+```python {.marimo}
+code
+```
+````
+
+## Related
+
+- [`Q-2-55`](Q-2-55.qmd), [`Q-2-56`](Q-2-56.qmd) — attribute lists whose items are out of order.

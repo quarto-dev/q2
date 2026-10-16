@@ -1,0 +1,41 @@
+{
+  "code": "Q-2-57",
+  "title": "Attribute List After Code Block Language",
+  "message": "I didn't expect this after the code block's language.",
+  "suggestion": "language-with-attributes",
+  "notes": [
+    {
+      "message": "This is the code block's language. The opening line takes either one language word or one attribute list in braces, not both.",
+      "noteType": "simple",
+      "label": "language"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Language word, space, then an attribute list",
+      "content": "```python {.marimo}\ncode\n```\n",
+      "captures": [
+        {
+          "label": "language",
+          "row": 0,
+          "column": 3,
+          "size": 6
+        }
+      ]
+    },
+    {
+      "name": "no-space",
+      "description": "Language word directly followed by an attribute list",
+      "content": "```python{.marimo}\ncode\n```\n",
+      "captures": [
+        {
+          "label": "language",
+          "row": 0,
+          "column": 3,
+          "size": 6
+        }
+      ]
+    }
+  ]
+}
