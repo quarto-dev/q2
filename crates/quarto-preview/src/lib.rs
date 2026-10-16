@@ -337,7 +337,7 @@ where
         .project_root
         .as_deref()
         .map(|root| {
-            config::resolve_project_resource_files(root, &NativeRuntime::new())
+            config::resolve_project_resource_files(root, &NativeRuntime::new(), None)
                 .into_iter()
                 .collect()
         })

@@ -6,6 +6,8 @@
 //! and `EventSource` reconnects on its own, so a restarted server picks
 //! its tabs back up without any client-side retry logic.
 
+use std::sync::{Arc, Mutex};
+
 use axum::response::sse::Event;
 use serde::Serialize;
 use tokio::sync::{broadcast, watch};
@@ -66,6 +68,11 @@ pub struct ReloadHub {
     /// shutdown finish (an `EventSource` connection never closes on
     /// its own).
     closing: watch::Sender<bool>,
+    /// The diagnostics of the last render when it produced no outputs;
+    /// `None` after a render that did. The server shows them at `/`
+    /// instead of the page listing, so a build that renders nothing says
+    /// why in the browser.
+    failure: Arc<Mutex<Option<String>>>,
 }
 
 impl Default for ReloadHub {
@@ -78,7 +85,25 @@ impl ReloadHub {
     pub fn new() -> Self {
         let (tx, _rx) = broadcast::channel(CHANNEL_CAPACITY);
         let (closing, _) = watch::channel(false);
-        Self { tx, closing }
+        Self {
+            tx,
+            closing,
+            failure: Arc::default(),
+        }
+    }
+
+    /// Record (or, with `None`, clear) the failure the server shows at
+    /// `/` when there is nothing to serve.
+    pub fn set_failure(&self, text: Option<String>) {
+        *self.failure.lock().unwrap_or_else(|e| e.into_inner()) = text;
+    }
+
+    /// The failure recorded by [`Self::set_failure`], if any.
+    pub fn failure(&self) -> Option<String> {
+        self.failure
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// End every open SSE stream. Idempotent.

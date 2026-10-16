@@ -352,10 +352,23 @@ enum Commands {
         #[arg(long, requires = "static_mode")]
         no_navigate: bool,
 
-        /// With --static: the output format to render, as `q2 render
-        /// --to`. Defaults to the document's `format:`, else `html`.
+        /// With --static: output format for this preview (one per
+        /// invocation), as `q2 render --to`. Without it the document uses
+        /// its own `format:`, else the project's, else `html`.
         #[arg(long, value_name = "FORMAT", requires = "static_mode")]
         to: Option<String>,
+
+        /// With --static: metadata value (KEY:VALUE, or KEY=VALUE;
+        /// repeatable), as `q2 render -M`. It sits above the document's own
+        /// metadata, for every document in the render; `-M format:typst`
+        /// previews as typst.
+        #[arg(short = 'M', long, requires = "static_mode")]
+        metadata: Vec<String>,
+
+        /// With --static: active project profile(s) (comma-separated or
+        /// repeated), as `q2 render --profile`.
+        #[arg(long, requires = "static_mode")]
+        profile: Vec<String>,
     },
 
     /// Serve a Shiny interactive document
@@ -1153,6 +1166,53 @@ mod cli_parse_tests {
     }
 
     #[test]
+    fn preview_static_takes_metadata_and_profile() {
+        let Commands::Preview {
+            metadata,
+            profile,
+            to,
+            ..
+        } = parse_preview(&[
+            "preview",
+            "--static",
+            "-M",
+            "format:typst",
+            "--metadata",
+            "toc:true",
+            "--profile",
+            "a,b",
+            "--profile",
+            "c",
+            "--to",
+            "html",
+        ])
+        else {
+            unreachable!()
+        };
+        assert_eq!(metadata, vec!["format:typst", "toc:true"]);
+        assert_eq!(profile, vec!["a,b", "c"]);
+        assert_eq!(to.as_deref(), Some("html"));
+    }
+
+    #[test]
+    fn preview_metadata_and_profile_require_static() {
+        for args in [
+            &["preview", "-M", "toc:true"][..],
+            &["preview", "--profile", "p"][..],
+        ] {
+            let err = match try_parse(args) {
+                Ok(_) => panic!("must require --static: {args:?}"),
+                Err(e) => e,
+            };
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::MissingRequiredArgument,
+                "args: {args:?}"
+            );
+        }
+    }
+
+    #[test]
     fn preview_share_conflicts_with_join() {
         // (match instead of expect_err: `Cli` deliberately has no Debug impl)
         let err = match try_parse(&["preview", "--share", "--join", "x"]) {
@@ -1436,6 +1496,8 @@ fn main() -> Result<()> {
             no_watch,
             no_navigate,
             to,
+            metadata,
+            profile,
         } => {
             if print_asset_manifest_hashes {
                 // Binary diagnostic (release CI drift check); answers
@@ -1453,6 +1515,8 @@ fn main() -> Result<()> {
                     no_watch,
                     no_navigate,
                     to,
+                    metadata,
+                    profile,
                 })
             } else if let Some(ticket) = join {
                 // Guest mode (live-share plan Phase 3): clap has already

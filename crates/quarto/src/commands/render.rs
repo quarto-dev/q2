@@ -46,7 +46,7 @@ use quarto_source_map::SourceContext;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 /// Arguments for the render command.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RenderArgs {
     /// Input paths (zero or more). Each is a `.qmd` file, a
     /// directory, or (after the shell has expanded it) the result of
@@ -1892,40 +1892,6 @@ pub(crate) fn strip_ansi_escapes(s: &str) -> String {
 /// Resolve format string to Format (without metadata)
 pub(crate) fn resolve_format(format_str: &str) -> Result<Format> {
     Format::from_format_string(format_str).map_err(|e| anyhow::anyhow!("{}", e))
-}
-
-/// Read a single `.qmd`/`.md` input's content for front-matter format
-/// detection. Returns `None` for project renders (multiple inputs or a
-/// directory) — per-file format inside a project is a later phase.
-/// Best-effort: any read failure yields `None`.
-fn read_single_input_content(inputs: &[String]) -> Option<String> {
-    if inputs.len() != 1 {
-        return None;
-    }
-    let path = std::path::Path::new(&inputs[0]);
-    // `.md` inputs read front matter exactly like `.qmd`
-    // (bd-6d2wj4zp S3/S4) — without this, a `.md` declaring a
-    // non-native format slips past the early "not yet supported"
-    // refusal below and renders HTML into a mismatched output file.
-    if !matches!(
-        path.extension().and_then(|e| e.to_str()),
-        Some("qmd" | "md")
-    ) || !path.is_file()
-    {
-        return None;
-    }
-    std::fs::read_to_string(path).ok()
-}
-
-/// When `--to` is absent, detect the target format from a single input's
-/// front-matter `format:` key. Best-effort: any parse failure yields
-/// `None` (caller falls back to `"html"`).
-///
-/// Shared with the project pipeline's per-document format resolution so
-/// the single-file and project paths agree on how `format:` is read.
-pub(crate) fn detect_single_input_format(inputs: &[String]) -> Option<String> {
-    let content = read_single_input_content(inputs)?;
-    quarto_core::format::format_key_from_frontmatter(&content)
 }
 
 /// What the format resolver decided for one render (F5a-D1).

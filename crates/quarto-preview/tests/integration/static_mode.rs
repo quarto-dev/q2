@@ -25,7 +25,9 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderMap, Method, Request, StatusCode};
 use http_body_util::BodyExt;
-use quarto_preview::static_mode::{ReloadEvent, ReloadHub, StaticServerConfig, build_router};
+use quarto_preview::static_mode::{
+    EVENTS_PATH, ReloadEvent, ReloadHub, StaticServerConfig, build_router,
+};
 use tower::ServiceExt;
 
 const INDEX: &str = "<!DOCTYPE html>\n<html><head><title>Home</title></head>\n<body>\n<p>Welcome home.</p>\n</body>\n</html>\n";
@@ -127,6 +129,26 @@ fn header_str<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
 
 fn text(body: &[u8]) -> String {
     String::from_utf8(body.to_vec()).expect("utf-8 body")
+}
+
+#[tokio::test]
+async fn root_shows_the_render_failure_when_nothing_was_rendered() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let (app, hub) = router(root, None);
+
+    hub.set_failure(Some("Error: [Q-1-1] broken <chapter>".to_string()));
+    let (status, _, body) = get(&app, "/").await;
+    let page = text(&body);
+    assert_eq!(status, StatusCode::OK);
+    assert!(page.contains("The render failed"), "{page}");
+    assert!(page.contains("broken &lt;chapter&gt;"), "escaped: {page}");
+    assert!(!page.contains("has no <code>index.html</code>"), "{page}");
+    assert!(page.contains(EVENTS_PATH), "client injected: {page}");
+
+    hub.set_failure(None);
+    let (_, _, body) = get(&app, "/").await;
+    assert!(text(&body).contains("Rendered pages"));
 }
 
 #[tokio::test]

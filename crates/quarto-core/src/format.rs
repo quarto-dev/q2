@@ -597,52 +597,6 @@ pub fn lua_format_for(target_format: &str) -> &str {
     }
 }
 
-/// Extract the chosen output format from a document's leading YAML
-/// front-matter: the `format:` scalar, or the first key when `format:` is a
-/// map (e.g. `format: {revealjs: {...}}`). Returns `None` when there is no
-/// front matter or no `format:` key.
-///
-/// This is the lightweight, pre-pipeline peek used to resolve a per-document
-/// format (e.g. a `format: revealjs` deck inside an otherwise-HTML project)
-/// before the render context — and thus the transform pipeline / output
-/// extension — is chosen. The CLI's single-input detection delegates here so
-/// the two paths agree.
-pub fn format_key_from_frontmatter(content: &str) -> Option<String> {
-    let yaml = extract_yaml_frontmatter(content)?;
-    let value: serde_yaml::Value = serde_yaml::from_str(&yaml).ok()?;
-    match value.get("format")? {
-        serde_yaml::Value::String(s) => Some(s.clone()),
-        serde_yaml::Value::Mapping(m) => m.keys().find_map(|k| k.as_str().map(str::to_string)),
-        _ => None,
-    }
-}
-
-/// Extract every key a document's leading YAML front-matter `format:`
-/// declares, in declaration order: the scalar wrapped as a single-element
-/// vec, or every key when it is a map (e.g. `format: {docx: default, html:
-/// default}` → `["docx", "html"]`). Returns an empty vec when there is no
-/// front matter or no `format:` key.
-///
-/// The counterpart to [`format_key_from_frontmatter`], which returns only
-/// the single key that reduction picks; this returns the full declaration so
-/// [`multi_format_diagnostics`] can name what else was skipped.
-pub fn format_keys_from_frontmatter(content: &str) -> Vec<String> {
-    let Some(yaml) = extract_yaml_frontmatter(content) else {
-        return Vec::new();
-    };
-    let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&yaml) else {
-        return Vec::new();
-    };
-    match value.get("format") {
-        Some(serde_yaml::Value::String(s)) => vec![s.clone()],
-        Some(serde_yaml::Value::Mapping(m)) => m
-            .keys()
-            .filter_map(|k| k.as_str().map(str::to_string))
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
 /// Warn (`Q-20-8`: not yet supported) when a layer's `format:` declares more
 /// than one key but only one is actually rendered — a signal `render.rs`'s blanket non-native-format
 /// refusal used to provide as a side effect before P7-foundation relaxed it
@@ -2083,27 +2037,6 @@ mod tests {
     fn test_single_format_no_warning() {
         assert!(multi_format_diagnostics(&keys(&["html"]), "html").is_empty());
         assert!(multi_format_diagnostics(&[], "html").is_empty());
-    }
-
-    #[test]
-    fn test_format_keys_from_frontmatter_map_preserves_order() {
-        let content =
-            "---\nformat:\n  docx: default\n  pptx: default\n  html: default\n---\nbody\n";
-        assert_eq!(
-            format_keys_from_frontmatter(content),
-            vec!["docx", "pptx", "html"]
-        );
-    }
-
-    #[test]
-    fn test_format_keys_from_frontmatter_scalar() {
-        let content = "---\nformat: html\n---\nbody\n";
-        assert_eq!(format_keys_from_frontmatter(content), vec!["html"]);
-    }
-
-    #[test]
-    fn test_format_keys_from_frontmatter_absent() {
-        assert!(format_keys_from_frontmatter("no front matter here").is_empty());
     }
 
     // === long-tail Phase 2: Tier A bulk tail (25 variants) ===

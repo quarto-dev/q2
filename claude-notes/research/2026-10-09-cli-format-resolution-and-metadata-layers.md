@@ -337,6 +337,32 @@ Still open: html chapter and non-member renders leave cross-chapter references
 unresolved (`bd-html-chapter-xref-szfxmvyg`); the wasm and preview sites are F6
 and F5b.
 
+### Outcome of F5b (`q2 preview --static` and the test runner, 2026-10-16)
+
+- `preview_static.rs` no longer peeks at front matter. The servable-format gate
+  (`check_servable`) runs once, before any render, on the resolved format:
+  `classify_inputs`, then `resolve_project_format` for a project root (a file
+  inside a project is mapped to the root first) or `resolve_document_format`
+  for a standalone file, with `--to`, `-M` and `--profile` applied. A resolver
+  error (malformed `-M`, discovery failure) leaves the gate open so the render
+  reports it. `detect_single_input_format`, `read_single_input_content` and
+  `format_key(s)_from_frontmatter` are deleted.
+- Boot and every re-render clone one base `RenderArgs` (`--to`, `-M`,
+  `--profile`). `rerender_action` turns a `Subset` into `Full` for a
+  consolidating book (typst); html books and typst websites keep the
+  per-document re-render. `LastRender` carries the fact from `RenderReport`.
+- `--static` takes `-M` and `--profile`; the four config readers in
+  `quarto-preview/src/config.rs` take the profile selection (the live viewer
+  passes `None` until F8).
+- A render that wrote nothing shows its diagnostics at `/` (`ReloadHub` holds
+  the failure the server renders), instead of the page listing.
+- `quarto-test`'s project runner resolves the format with the resolver (`html`
+  fallback, no book-means-typst default) and overrides the format only for the
+  spec's requested format.
+
+Still open: `--to q2-preview` and its siblings are accepted as before
+(`bd-pseudo-format-to-meaning-vxhyni3t`); the live viewer's flags are F8.
+
 ## 9. Where this went (2026-10-15)
 
 §7's survey and §8's rule are implemented by the epic

@@ -446,32 +446,20 @@ fn render_project_document(
     project_root: &Path,
     requested_format: Option<&str>,
 ) -> Result<ProjectRender> {
-    use quarto_core::format::{Format, format_key_from_config_value};
+    use quarto_core::format::Format;
+    use quarto_core::format_resolution::{resolve_project_format, resolve_render_scope};
     use quarto_core::project::ProjectContext;
-    use quarto_core::project::orchestrator::{ProjectPipeline, project_type_for};
+    use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use quarto_core::render_to_file::RenderToFileOptions;
     use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let mut project = ProjectContext::discover(project_root, runtime.as_ref())
         .with_context(|| format!("failed to discover project at {}", project_root.display()))?;
-    // Use the explicit requested format for whole-project rendering when provided,
-    // otherwise fall back to project configuration, then book default (typst), then html
-    let format = requested_format
-        .map(str::to_owned)
-        .or_else(|| {
-            project
-                .config
-                .metadata
-                .as_ref()
-                .and_then(|metadata| metadata.get("format"))
-                .and_then(format_key_from_config_value)
-        })
-        .or_else(|| {
-            (project.project_kind() == quarto_core::project::ProjectKind::Book)
-                .then(|| "typst".to_string())
-        })
-        .unwrap_or_else(|| "html".to_string());
+    // The format comes from the resolver (FR1): a requested format wins, then
+    // the project's own `format:`, then `html`.
+    let request = resolve_render_scope(&project, &RenderMode::Full, runtime.as_ref());
+    let format = resolve_project_format(&project, &request, requested_format, runtime.as_ref()).key;
     let parsed_format = Format::from_format_string(&format)
         .map_err(anyhow::Error::msg)
         .with_context(|| format!("failed to resolve project format '{format}'"))?;
@@ -500,7 +488,9 @@ fn render_project_document(
         runtime,
     )
     .with_fail_fast(true)
-    .with_format_override(Some(format));
+    // An override only when the spec named a format; without one the
+    // resolver's choice stands (an override would bypass FR1 selection).
+    .with_format_override(requested_format.map(str::to_owned));
     let summary = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
         pollster::block_on(pipeline.run_with_book_support())
@@ -927,6 +917,33 @@ Content here.
         // Should succeed and render the appropriate format
         assert!(matches!(result, TestResult::Pass));
         assert!(!cache.projects.is_empty());
+    }
+
+    #[test]
+    fn a_project_render_with_no_requested_format_follows_the_resolver() {
+        // F5b-D5: no spec format and no project `format:` is `html`, not the
+        // old book default of typst; the project's own format wins when it
+        // has one.
+        for (format_line, expected) in [
+            ("", quarto_core::format::FormatIdentifier::Html),
+            (
+                "format: html\n",
+                quarto_core::format::FormatIdentifier::Html,
+            ),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let project_root = temp.path();
+            fs::write(
+                project_root.join("_quarto.yml"),
+                format!(
+                    "project:\n  type: book\nbook:\n  title: T\n  chapters: [index.qmd]\n{format_line}"
+                ),
+            )
+            .unwrap();
+            fs::write(project_root.join("index.qmd"), "# Content\n").unwrap();
+            let render = render_project_document(project_root, None).unwrap();
+            assert_eq!(render.format, expected, "{format_line:?}");
+        }
     }
 
     #[test]

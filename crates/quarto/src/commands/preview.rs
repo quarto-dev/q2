@@ -231,7 +231,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // re-execute on edits (`auto`). Single-file projects with no
     // `_quarto.yml` get `Manual` (the safe pre-C.6 default).
     let engine_policy = match project_root.as_deref() {
-        Some(root) => read_engine_policy_from_project(root, &NativeRuntime::new()),
+        Some(root) => read_engine_policy_from_project(root, &NativeRuntime::new(), None),
         None => EnginePolicy::Manual,
     };
     info!(?engine_policy, "resolved preview engine policy");
@@ -243,7 +243,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // server to answer the iframe's request in preview). Single-file
     // mode has no `_quarto.yml`, hence no project resources.
     let resource_html_files = match project_root.as_deref() {
-        Some(root) => resolve_project_resource_html(root, &NativeRuntime::new()),
+        Some(root) => resolve_project_resource_html(root, &NativeRuntime::new(), None),
         None => Vec::new(),
     };
     info!(

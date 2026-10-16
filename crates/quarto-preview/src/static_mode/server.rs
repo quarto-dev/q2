@@ -361,6 +361,10 @@ async fn serve_root(state: &StaticState, is_head: bool) -> Response {
         }
         return redirect(StatusCode::FOUND, &location);
     }
+    if let Some(text) = state.hub.failure() {
+        let html = render_failure(&text);
+        return html_response(inject_client(html.into_bytes()), StatusCode::OK, is_head);
+    }
     let pages = list_html_pages(&state.root);
     let html = render_listing(&pages);
     html_response(inject_client(html.into_bytes()), StatusCode::OK, is_head)
@@ -405,6 +409,20 @@ fn list_html_pages(root: &Path) -> Vec<String> {
     }
     pages.sort();
     pages
+}
+
+/// The page shown at `/` when the last render wrote nothing: its
+/// diagnostics, as plain text. The client script is injected, so the page
+/// reloads itself once a render succeeds.
+fn render_failure(text: &str) -> String {
+    format!(
+        "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">\
+         <title>q2 preview: render failed</title></head>\n<body>\n\
+         <h1>The render failed</h1>\n<p>Nothing was rendered. Fix the \
+         errors below; this page reloads when a render succeeds.</p>\n\
+         <pre>{}</pre>\n</body>\n</html>\n",
+        escape_html(text)
+    )
 }
 
 fn render_listing(pages: &[String]) -> String {

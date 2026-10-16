@@ -850,3 +850,290 @@ fn cli_flags_override_project_preview_keys() {
         "project.preview.watch-inputs: false disables the watcher"
     );
 }
+
+// ── F5b: the resolved format, the render flags, the failure page ─────
+
+/// A two-chapter book (`one.qmd`, `two.qmd` after `index.qmd`) whose
+/// project config is `_quarto.yml` with `extra` appended after the book.
+fn book(temp: &TempDir, extra: &str) -> PathBuf {
+    let dir = temp.path().canonicalize().unwrap();
+    write(
+        &dir.join("_quarto.yml"),
+        &format!(
+            "project:\n  type: book\nbook:\n  title: Test Book\n  author: Me\n  chapters:\n    \
+             - index.qmd\n    - one.qmd\n    - two.qmd\n{extra}"
+        ),
+    );
+    write(&dir.join("index.qmd"), "# Preface\n\nHello.\n");
+    write(&dir.join("one.qmd"), "# One\n\nFirst chapter.\n");
+    write(&dir.join("two.qmd"), "# Two\n\nSecond chapter.\n");
+    dir
+}
+
+/// `q2 preview --static ARGS` that is expected to exit on its own.
+fn exits(cwd: &Path, args: &[&str]) -> std::process::Output {
+    Command::new(Q2_BIN)
+        .arg("preview")
+        .arg("--static")
+        .arg("--no-browser")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("run q2 preview --static")
+}
+
+fn stderr_of(output: &std::process::Output) -> String {
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+/// Whether a whole-book typst render works on this machine (the binary and
+/// the `@preview/orange-book` package, which is fetched). A skip is a
+/// silent pass, so the reason is printed.
+fn typst_book_renders(dir: &Path, extra_args: &[&str]) -> bool {
+    if which_typst().is_none() {
+        eprintln!("skipping: no typst binary");
+        return false;
+    }
+    let copy = TempDir::new().unwrap();
+    let copy_dir = copy.path().canonicalize().unwrap();
+    for name in ["_quarto.yml", "index.qmd", "one.qmd", "two.qmd"] {
+        std::fs::copy(dir.join(name), copy_dir.join(name)).unwrap();
+    }
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with("_quarto-") {
+            std::fs::copy(entry.path(), copy_dir.join(&name)).unwrap();
+        }
+    }
+    let ok = Command::new(Q2_BIN)
+        .arg("render")
+        .args(extra_args)
+        .current_dir(&copy_dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !ok {
+        eprintln!("skipping: a whole-book typst render does not work here (package fetch?)");
+    }
+    ok
+}
+
+fn which_typst() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("QUARTO_TYPST") {
+        return Some(PathBuf::from(p));
+    }
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths)
+            .map(|d| d.join(if cfg!(windows) { "typst.exe" } else { "typst" }))
+            .find(|p| p.is_file())
+    })
+}
+
+#[test]
+fn a_format_that_cannot_be_served_is_refused_once_before_any_render() {
+    for fmt in ["epub", "docx", "pptx"] {
+        let temp = TempDir::new().unwrap();
+        let dir = book(&temp, &format!("format: {fmt}\n"));
+        let out = exits(&dir, &[dir.to_str().unwrap()]);
+        let err = stderr_of(&out);
+        assert_eq!(out.status.code(), Some(1), "{fmt}: {err}");
+        assert_eq!(
+            err.matches("not supported with --static").count(),
+            1,
+            "{fmt}: refused once; stderr:\n{err}"
+        );
+        assert!(
+            !err.contains("Rendering project"),
+            "{fmt}: no render ran: {err}"
+        );
+        assert!(!dir.join("_book").exists(), "{fmt}: nothing was written");
+    }
+
+    // The same through the flags, on an html book.
+    let temp = TempDir::new().unwrap();
+    let dir = book(&temp, "format: html\n");
+    for args in [&["--to", "epub"][..], &["-M", "format:epub"][..]] {
+        let mut full = args.to_vec();
+        full.push(dir.to_str().unwrap());
+        let out = exits(&dir, &full);
+        let err = stderr_of(&out);
+        assert_eq!(out.status.code(), Some(1), "{args:?}: {err}");
+        assert!(
+            err.contains("not supported with --static"),
+            "{args:?}: {err}"
+        );
+        assert!(!dir.join("_book").exists(), "{args:?}: nothing was written");
+    }
+}
+
+#[test]
+fn to_q2_preview_still_serves_html() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    let server = Server::spawn(&dir, &["--to", "q2-preview", dir.to_str().unwrap()]);
+    assert_eq!(server.get("/index.html").status, 200);
+}
+
+#[test]
+fn a_malformed_metadata_flag_fails_before_anything_renders() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    let out = exits(&dir, &["-M", "nocolon", dir.to_str().unwrap()]);
+    let err = stderr_of(&out);
+    assert_eq!(out.status.code(), Some(1), "{err}");
+    assert!(err.contains("invalid metadata argument"), "{err}");
+    assert!(!dir.join("_site").exists(), "nothing rendered");
+}
+
+#[test]
+fn book_scope_chapter_on_a_book_exits_with_the_message() {
+    let temp = TempDir::new().unwrap();
+    let dir = book(&temp, "");
+    // A directory, and a chapter inside the book (which previews the whole
+    // project): both are the FR6 error, not a failure page and not a gate
+    // error.
+    for target in [dir.clone(), dir.join("one.qmd")] {
+        let out = exits(
+            &dir,
+            &["-M", "book-scope:chapter", target.to_str().unwrap()],
+        );
+        let err = stderr_of(&out);
+        assert_eq!(out.status.code(), Some(1), "{target:?}: {err}");
+        assert!(err.contains("Q-5-47"), "{target:?}: {err}");
+        assert!(!err.contains("not supported with --static"), "{err}");
+    }
+}
+
+#[test]
+fn book_scope_chapter_on_a_website_is_only_a_notice() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    let server = Server::spawn(&dir, &["-M", "book-scope:chapter", dir.to_str().unwrap()]);
+    assert_eq!(server.get("/index.html").status, 200);
+    assert!(!server.stderr().contains("Q-5-47"), "{}", server.stderr());
+}
+
+#[test]
+fn an_html_book_has_no_scope_notice_and_re_renders_only_the_changed_chapter() {
+    let temp = TempDir::new().unwrap();
+    let dir = book(&temp, "format: html\n");
+    let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    assert!(
+        !server.stderr().contains("Q-5-42"),
+        "a default scope must not warn; stderr:\n{}",
+        server.stderr()
+    );
+    assert_eq!(server.get("/one.html").status, 200);
+    let mut sse = server.sse();
+    append(&dir.join("one.qmd"), "\n\nCHAPTER-EDIT-MARKER\n");
+    let reload = sse.wait_for("reload");
+    assert_eq!(reload, r#"{"type":"reload","target":"/one.html"}"#);
+    assert!(
+        server
+            .get("/one.html")
+            .text()
+            .contains("CHAPTER-EDIT-MARKER")
+    );
+    let log = server.stderr();
+    assert!(log.contains("re-rendering changed inputs"), "{log}");
+    assert!(!log.contains("re-rendering the whole project"), "{log}");
+}
+
+#[test]
+fn a_typst_book_is_served_and_a_chapter_edit_re_renders_the_whole_book() {
+    let temp = TempDir::new().unwrap();
+    let dir = book(&temp, "format: typst\n");
+    if !typst_book_renders(&dir, &[]) {
+        return;
+    }
+    let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    let log = server.stderr();
+    for code in ["Q-5-42", "Q-21-3"] {
+        assert!(!log.contains(code), "{code} in boot output:\n{log}");
+    }
+    let root = server.get("/");
+    assert_eq!(root.status, 302);
+    assert!(
+        root.header("location")
+            .is_some_and(|l| l.contains("Test-Book.pdf")),
+        "the book's PDF opens in the viewer: {:?}",
+        root.header("location")
+    );
+    let mut sse = server.sse();
+    let before = std::fs::metadata(dir.join("_book/Test-Book.pdf"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    append(&dir.join("one.qmd"), "\n\nCHAPTER-EDIT-MARKER\n");
+    let reload = sse.wait_for("reload");
+    // The merged output has no per-chapter page: a plain reload.
+    assert_eq!(reload, r#"{"type":"reload","target":null}"#);
+    let log = server.stderr();
+    assert!(log.contains("re-rendering the whole project"), "{log}");
+    assert!(!log.contains("re-rendering changed inputs"), "{log}");
+    let after = std::fs::metadata(dir.join("_book/Test-Book.pdf"))
+        .unwrap()
+        .modified()
+        .unwrap();
+    assert!(after > before, "the book PDF was rebuilt");
+}
+
+#[test]
+fn a_profile_can_make_the_project_a_typst_book() {
+    let temp = TempDir::new().unwrap();
+    let dir = book(&temp, "format: html\n");
+    write(&dir.join("_quarto-pdf.yml"), "format: typst\n");
+    if !typst_book_renders(&dir, &["--profile", "pdf"]) {
+        return;
+    }
+    let server = Server::spawn(&dir, &["--profile", "pdf", dir.to_str().unwrap()]);
+    let root = server.get("/");
+    assert_eq!(root.status, 302);
+    assert!(
+        root.header("location").is_some_and(|l| l.contains(".pdf")),
+        "{:?}",
+        root.header("location")
+    );
+}
+
+#[test]
+fn a_render_that_wrote_nothing_shows_the_failure_at_the_root() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    // A missing filter fails the page before any output is written.
+    for page in ["index.qmd", "about.qmd"] {
+        write(
+            &dir.join(page),
+            "---\ntitle: T\nfilters:\n  - nonexistent.lua\n---\n\nBroken.\n",
+        );
+    }
+    let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    let root = server.get("/");
+    let page = root.text();
+    assert_eq!(root.status, 200, "{page}");
+    assert!(page.contains("The render failed"), "{page}");
+    assert!(
+        page.contains("nonexistent.lua"),
+        "the diagnostics are on the page: {page}"
+    );
+    assert!(!page.contains("has no <code>index.html</code>"), "{page}");
+
+    // Fixing the pages replaces the failure with the site.
+    let mut sse = server.sse();
+    write(&dir.join("index.qmd"), "# Home\n\nFIXED-MARKER\n");
+    write(&dir.join("about.qmd"), "# About\n\nFixed.\n");
+    // The two saves may arrive as two renders; wait for the one that has
+    // both pages.
+    let mut fixed = String::new();
+    for _ in 0..5 {
+        sse.wait_for("reload");
+        fixed = server.get("/").text();
+        if fixed.contains("FIXED-MARKER") {
+            break;
+        }
+    }
+    assert!(
+        fixed.contains("FIXED-MARKER"),
+        "{fixed}\n{}",
+        server.stderr()
+    );
+}

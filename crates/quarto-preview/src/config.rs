@@ -150,8 +150,11 @@ pub fn read_static_preview_defaults(meta: &ConfigValue) -> StaticPreviewDefaults
 pub fn read_static_preview_defaults_from_project(
     project_root: &std::path::Path,
     runtime: &dyn SystemRuntime,
+    profile: Option<&[String]>,
 ) -> StaticPreviewDefaults {
-    let Ok(project) = quarto_core::project::ProjectContext::discover(project_root, runtime) else {
+    let Ok(project) =
+        quarto_core::project::ProjectContext::discover_with_profile(project_root, runtime, profile)
+    else {
         return StaticPreviewDefaults::default();
     };
     let Some(meta) = project.config.metadata.as_ref() else {
@@ -172,8 +175,11 @@ pub fn read_static_preview_defaults_from_project(
 pub fn read_engine_policy_from_project(
     project_root: &std::path::Path,
     runtime: &dyn SystemRuntime,
+    profile: Option<&[String]>,
 ) -> EnginePolicy {
-    let Ok(project) = quarto_core::project::ProjectContext::discover(project_root, runtime) else {
+    let Ok(project) =
+        quarto_core::project::ProjectContext::discover_with_profile(project_root, runtime, profile)
+    else {
         return EnginePolicy::Manual;
     };
     let Some(meta) = project.config.metadata.as_ref() else {
@@ -211,10 +217,13 @@ pub fn read_engine_policy_from_project(
 pub fn resolve_project_resource_html(
     project_root: &std::path::Path,
     runtime: &dyn SystemRuntime,
+    profile: Option<&[String]>,
 ) -> Vec<std::path::PathBuf> {
     use quarto_core::project_resources::{ResourceOrigin, ResourceScope, expand_patterns};
 
-    let Ok(project) = quarto_core::project::ProjectContext::discover(project_root, runtime) else {
+    let Ok(project) =
+        quarto_core::project::ProjectContext::discover_with_profile(project_root, runtime, profile)
+    else {
         return Vec::new();
     };
     let patterns = &project.config.resources;
@@ -273,10 +282,13 @@ pub fn resolve_project_resource_html(
 pub fn resolve_project_resource_files(
     project_root: &std::path::Path,
     runtime: &dyn SystemRuntime,
+    profile: Option<&[String]>,
 ) -> Vec<(String, std::path::PathBuf)> {
     use quarto_core::project_resources::{ResourceOrigin, ResourceScope, expand_patterns};
 
-    let Ok(project) = quarto_core::project::ProjectContext::discover(project_root, runtime) else {
+    let Ok(project) =
+        quarto_core::project::ProjectContext::discover_with_profile(project_root, runtime, profile)
+    else {
         return Vec::new();
     };
     let patterns = &project.config.resources;
@@ -927,8 +939,41 @@ mod tests {
         let temp = TempDir::with_prefix("c6-config-").unwrap();
         let runtime = NativeRuntime::new();
         assert_eq!(
-            read_engine_policy_from_project(temp.path(), &runtime),
+            read_engine_policy_from_project(temp.path(), &runtime, None),
             EnginePolicy::Manual
+        );
+    }
+
+    #[test]
+    fn readers_honor_the_profile_selection() {
+        let temp = TempDir::with_prefix("c6-config-profile-").unwrap();
+        std::fs::write(
+            temp.path().join("_quarto.yml"),
+            "project:\n  type: website\n",
+        )
+        .unwrap();
+        std::fs::write(
+            temp.path().join("_quarto-off.yml"),
+            "preview:\n  engine: off\nproject:\n  preview:\n    port: 4321\n",
+        )
+        .unwrap();
+        let runtime = NativeRuntime::new();
+        let off = ["off".to_string()];
+        assert_eq!(
+            read_engine_policy_from_project(temp.path(), &runtime, None),
+            EnginePolicy::Manual
+        );
+        assert_eq!(
+            read_engine_policy_from_project(temp.path(), &runtime, Some(&off)),
+            EnginePolicy::Off
+        );
+        assert_eq!(
+            read_static_preview_defaults_from_project(temp.path(), &runtime, None).port,
+            None
+        );
+        assert_eq!(
+            read_static_preview_defaults_from_project(temp.path(), &runtime, Some(&off)).port,
+            Some(4321)
         );
     }
 
@@ -942,7 +987,7 @@ mod tests {
         .unwrap();
         let runtime = NativeRuntime::new();
         assert_eq!(
-            read_engine_policy_from_project(temp.path(), &runtime),
+            read_engine_policy_from_project(temp.path(), &runtime, None),
             EnginePolicy::Auto
         );
     }
@@ -953,7 +998,7 @@ mod tests {
         std::fs::write(temp.path().join("_quarto.yml"), "preview:\n  engine: off\n").unwrap();
         let runtime = NativeRuntime::new();
         assert_eq!(
-            read_engine_policy_from_project(temp.path(), &runtime),
+            read_engine_policy_from_project(temp.path(), &runtime, None),
             EnginePolicy::Off
         );
     }
@@ -966,7 +1011,7 @@ mod tests {
         std::fs::write(temp.path().join("slides.html"), "<html></html>").unwrap();
         let runtime = NativeRuntime::new();
         // No `_quarto.yml` → no project `resources:` → nothing synced.
-        assert!(resolve_project_resource_html(temp.path(), &runtime).is_empty());
+        assert!(resolve_project_resource_html(temp.path(), &runtime, None).is_empty());
     }
 
     #[test]
@@ -981,7 +1026,7 @@ mod tests {
         let runtime = NativeRuntime::new();
         // `.html` is NOT auto-synced just because it exists — only the
         // resources-scoped set is (bd-teh4hbli trust boundary).
-        assert!(resolve_project_resource_html(temp.path(), &runtime).is_empty());
+        assert!(resolve_project_resource_html(temp.path(), &runtime, None).is_empty());
     }
 
     #[test]
@@ -1003,7 +1048,7 @@ mod tests {
         std::fs::write(temp.path().join("examples/logo.png"), [0x89, 0x50]).unwrap();
 
         let runtime = NativeRuntime::new();
-        let html = resolve_project_resource_html(temp.path(), &runtime);
+        let html = resolve_project_resource_html(temp.path(), &runtime, None);
         assert_eq!(html, vec![std::path::PathBuf::from("examples/slides.html")]);
     }
 
@@ -1020,7 +1065,7 @@ mod tests {
         std::fs::write(temp.path().join("decks/b.html"), "<html>b</html>").unwrap();
 
         let runtime = NativeRuntime::new();
-        let html = resolve_project_resource_html(temp.path(), &runtime);
+        let html = resolve_project_resource_html(temp.path(), &runtime, None);
         assert_eq!(
             html,
             vec![
@@ -1057,7 +1102,7 @@ mod tests {
         .unwrap();
 
         let runtime = NativeRuntime::new();
-        let mut files = resolve_project_resource_files(temp.path(), &runtime);
+        let mut files = resolve_project_resource_files(temp.path(), &runtime, None);
         files.sort_by(|a, b| a.0.cmp(&b.0));
 
         let rels: Vec<&str> = files.iter().map(|(r, _)| r.as_str()).collect();

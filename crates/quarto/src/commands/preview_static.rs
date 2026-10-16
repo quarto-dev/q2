@@ -34,6 +34,13 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::FormatIdentifier;
+use quarto_core::format_resolution::{
+    ScopeRequest, resolve_document_format, resolve_project_format, resolve_render_scope,
+};
+use quarto_core::project::book::format_consolidates_book;
+use quarto_core::project::orchestrator::RenderMode;
+use quarto_core::project::project_profile::cli_selection;
+use quarto_core::{ProjectContext, metadata_flag};
 use quarto_hub::watch::{FileWatcher, WatchConfig, WatchEvent, WatchFilter};
 use quarto_preview::EnginePolicy;
 use quarto_preview::config::{
@@ -43,14 +50,13 @@ use quarto_preview::static_mode::{
     Action, ContentTracker, ReloadEvent, ReloadHub, StaticServerConfig, WatchContext, build_router,
     classify, is_config_like, is_input_extension, serve,
 };
-use quarto_system_runtime::NativeRuntime;
+use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use tracing::{debug, info, warn};
 
 use super::preview::spawn_browser_open_when_ready;
 use super::render::{
-    RenderAbort, RenderArgs, RenderReport, RenderTarget, detect_single_input_format,
-    exit_with_abort, find_project_root_upward, present_report, render_once, resolve_format,
-    strip_ansi_escapes,
+    RenderAbort, RenderArgs, RenderReport, RenderTarget, classify_inputs, exit_with_abort,
+    find_project_root_upward, present_report, render_once, resolve_format, strip_ansi_escapes,
 };
 
 /// Concrete shape passed through from clap (`Commands::Preview` with
@@ -74,19 +80,35 @@ pub struct StaticArgs {
     pub no_navigate: bool,
     /// Explicit render format (`--to`), as `q2 render --to`.
     pub to: Option<String>,
+    /// `-M/--metadata` arguments, unparsed, as `q2 render -M`.
+    pub metadata: Vec<String>,
+    /// `--profile` values, as `q2 render --profile`.
+    pub profile: Vec<String>,
+}
+
+impl StaticArgs {
+    /// The render flags every render of the session shares (F5b-D1): the
+    /// boot render and every re-render clone this and fill in the inputs
+    /// and the execution policy.
+    fn base_render_args(&self) -> RenderArgs {
+        RenderArgs {
+            to: self.to.clone(),
+            metadata: self.metadata.clone(),
+            profile: self.profile.clone(),
+            ..RenderArgs::default()
+        }
+    }
 }
 
 /// Formats a static server can usefully show: html and revealjs pages,
 /// and typst's PDF (in the bundled pdf.js viewer, hub-parity Plan 8).
 /// `docx`/`pptx`/`epub` render fine but produce nothing to browse, so
-/// they are refused up front, before any render (plan § CLI). `None`
-/// means nothing decided the format yet (no `--to`, no front matter),
-/// which resolves to `html`.
-fn check_servable_format(to: Option<&str>) -> Result<()> {
-    let Some(to) = to else {
+/// they are refused up front, before any render (plan § CLI). A key that
+/// names no built-in format (an extension format) is not judged here.
+fn check_servable_format(key: &str) -> Result<()> {
+    let Ok(format) = resolve_format(key) else {
         return Ok(());
     };
-    let format = resolve_format(to)?;
     if matches!(
         format.identifier,
         FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Typst
@@ -99,8 +121,66 @@ fn check_servable_format(to: Option<&str>) -> Result<()> {
     );
 }
 
+/// The format the render of `input` will use, decided the way `q2 render`
+/// decides it (F5b-D4): the project's format for a project root, the
+/// document's own for a standalone file, with `--to`, `-M` and `--profile`
+/// applied. `None` when the resolver cannot get that far (a profile that
+/// does not exist, a malformed `-M`): the render reports that error, which
+/// is more specific than anything the gate could say.
+fn resolved_format_key(input: &Path, base: &RenderArgs) -> Option<String> {
+    let overlay = metadata_flag::overlay_from_metadata_flags(&base.metadata).ok()?;
+    let plain = NativeRuntime::new();
+    let selection = cli_selection(&base.profile);
+    let cwd = plain.cwd().ok()?;
+    let target = classify_inputs(
+        &[input.to_string_lossy().into_owned()],
+        &cwd,
+        &plain,
+        selection,
+    )
+    .ok()?;
+    let runtime: Arc<dyn SystemRuntime> = match overlay {
+        Some(overlay) => overlay.apply(Arc::new(plain)),
+        None => Arc::new(plain),
+    };
+    let to = base.to.as_deref();
+    match target {
+        RenderTarget::FullProject { project_dir } => {
+            let project =
+                ProjectContext::discover_with_profile(&project_dir, runtime.as_ref(), selection)
+                    .ok()?;
+            let request = resolve_render_scope(&project, &RenderMode::Full, runtime.as_ref());
+            Some(resolve_project_format(&project, &request, to, runtime.as_ref()).key)
+        }
+        RenderTarget::SingleDoc(path) => {
+            let project =
+                ProjectContext::discover_with_profile(&path, runtime.as_ref(), selection).ok()?;
+            Some(
+                resolve_document_format(
+                    &project,
+                    &path,
+                    None,
+                    &ScopeRequest::chapter(),
+                    to,
+                    runtime.as_ref(),
+                )
+                .key,
+            )
+        }
+        RenderTarget::Subset { .. } => None,
+    }
+}
+
+/// The one servable-format gate (F5b-D4), run before any render on the
+/// resolved format. F8 reuses it for the live viewer.
+pub(crate) fn check_servable(input: &Path, base: &RenderArgs) -> Result<()> {
+    match resolved_format_key(input, base) {
+        Some(key) => check_servable_format(&key),
+        None => Ok(()),
+    }
+}
+
 pub fn execute(args: StaticArgs) -> Result<()> {
-    check_servable_format(args.to.as_deref())?;
     // Multi-threaded runtime: the server, the watcher, and the blocking
     // render thread all run at once.
     let runtime = tokio::runtime::Runtime::new()?;
@@ -154,15 +234,28 @@ fn policy_for(executed: &BTreeSet<PathBuf>, engine_off: bool) -> ExecutionPolicy
     }
 }
 
-/// `RenderArgs` for one pass of the loop: the whole target for a full
-/// render, the changed inputs for a subset render.
+/// The action whose arguments a re-render is built from (F5b-D2, FR16): a
+/// book that consolidates into one file (typst) re-renders whole whatever
+/// changed, since one chapter alone is not the served output. Anything else
+/// keeps the per-document re-render.
+fn rerender_action(is_consolidating_book: bool, action: Action) -> Action {
+    match action {
+        Action::Subset(_) if is_consolidating_book => Action::Full,
+        other => other,
+    }
+}
+
+/// `RenderArgs` for one pass of the loop: `base` (`--to`, `-M`,
+/// `--profile`) plus the whole target for a full render or the changed
+/// inputs for a subset render, converted by [`rerender_action`].
 fn render_args_for(
     action: &Action,
     full_input: &Path,
-    to: Option<&str>,
+    base: &RenderArgs,
+    is_consolidating_book: bool,
     execution_policy: ExecutionPolicy,
 ) -> RenderArgs {
-    let inputs = match action {
+    let inputs = match rerender_action(is_consolidating_book, action.clone()) {
         Action::Subset(paths) => paths
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
@@ -171,9 +264,8 @@ fn render_args_for(
     };
     RenderArgs {
         inputs,
-        to: to.map(str::to_string),
         execution_policy,
-        ..RenderArgs::default()
+        ..base.clone()
     }
 }
 
@@ -185,6 +277,9 @@ struct LastRender {
     outputs: Vec<(PathBuf, PathBuf)>,
     /// Inputs rendered inert because the policy excluded them.
     unexecuted: BTreeSet<PathBuf>,
+    /// The project is a book whose resolved format consolidates into one
+    /// file: a re-render is whole ([`rerender_action`]).
+    consolidating_book: bool,
 }
 
 impl LastRender {
@@ -193,6 +288,9 @@ impl LastRender {
             ctx: watch_context(report),
             outputs: report.outputs(),
             unexecuted: report.unexecuted_inputs(),
+            consolidating_book: report.project_is_book
+                && resolve_format(&report.project_format_key)
+                    .is_ok_and(|f| format_consolidates_book(&f)),
         }
     }
 
@@ -296,15 +394,8 @@ async fn run(args: StaticArgs) -> Result<()> {
         .unwrap_or_else(|| std::env::current_dir().expect("cwd"));
     let path = quarto_system_runtime::canonicalize(&raw)
         .with_context(|| format!("resolving {}", raw.display()))?;
-    let path_arg = path.to_string_lossy().into_owned();
 
-    // The front-matter format is decided before any render happens, so
-    // a typst document is refused without first producing a PDF.
-    let effective_format = args
-        .to
-        .clone()
-        .or_else(|| detect_single_input_format(std::slice::from_ref(&path_arg)));
-    check_servable_format(effective_format.as_deref())?;
+    let base_args = args.base_render_args();
 
     // A file inside a project previews the *project*, opened on that
     // page (Q1 `cmd.ts:362-390`): the whole site renders, so sidebars,
@@ -320,6 +411,12 @@ async fn run(args: StaticArgs) -> Result<()> {
         _ => path.clone(),
     };
 
+    // The resolved format decides whether this can be served, before any
+    // render happens, so an epub project is refused without first
+    // producing an epub.
+    check_servable(&full_input, &base_args)?;
+
+    let profile = cli_selection(&args.profile);
     // `preview.engine: off` (the hub preview's knob, shared here) turns
     // lazy execution off entirely: code cells stay inert.
     let policy_root = if full_input.is_dir() {
@@ -330,14 +427,15 @@ async fn run(args: StaticArgs) -> Result<()> {
             .map_or_else(|| full_input.clone(), Path::to_path_buf)
     };
     let engine_off = matches!(
-        read_engine_policy_from_project(&policy_root, &NativeRuntime::new()),
+        read_engine_policy_from_project(&policy_root, &NativeRuntime::new(), profile),
         EnginePolicy::Off
     );
     // Q1's `project: preview:` keys are the defaults; CLI flags win
     // (plan Phase 4). `--no-watch` / `--no-navigate` / `--no-browser`
     // only ever turn things off, so a config `false` cannot be undone
     // from the command line — the same shape as Q1's flags.
-    let defaults = read_static_preview_defaults_from_project(&policy_root, &NativeRuntime::new());
+    let defaults =
+        read_static_preview_defaults_from_project(&policy_root, &NativeRuntime::new(), profile);
     for key in &defaults.unsupported {
         eprintln!(
             "warning: `project.preview.{key}` in _quarto.yml is not supported by \
@@ -360,21 +458,16 @@ async fn run(args: StaticArgs) -> Result<()> {
     let boot_args = render_args_for(
         &Action::Full,
         &full_input,
-        args.to.as_deref(),
+        &base_args,
+        false,
         policy_for(&executed, engine_off),
     );
-    let report = match render_blocking(boot_args).await {
+    let report = match render_blocking(boot_args.clone()).await {
         RenderOutcome::Report(report) => *report,
         RenderOutcome::Abort(abort) => {
             // Fails the way `q2 render` would: structured errors print
             // and exit 1, the rest surface through `main`.
-            let args_for_exit = render_args_for(
-                &Action::Full,
-                &full_input,
-                args.to.as_deref(),
-                policy_for(&executed, engine_off),
-            );
-            return Err(exit_with_abort(abort, &args_for_exit));
+            return Err(exit_with_abort(abort, &boot_args));
         }
         RenderOutcome::Panicked(message) => anyhow::bail!("render panicked: {message}"),
     };
@@ -443,6 +536,7 @@ async fn run(args: StaticArgs) -> Result<()> {
         .and_then(|(_, o)| output_rel(&report, o));
     let default_file = requested_page.clone().or(first_output);
     let hub = ReloadHub::new();
+    record_failure(&hub, &report);
     let (page_tx, mut page_rx) = tokio::sync::mpsc::channel::<PathBuf>(64);
     let router = build_router(
         StaticServerConfig {
@@ -484,7 +578,6 @@ async fn run(args: StaticArgs) -> Result<()> {
     }));
 
     // ── Loop ───────────────────────────────────────────────────────
-    let to = args.to.clone();
     let mut last = LastRender::from_report(&report);
     let mut pending = Action::Ignore;
     let mut in_flight: Option<Action> = None;
@@ -506,7 +599,8 @@ async fn run(args: StaticArgs) -> Result<()> {
             &mut pending,
             &mut in_flight,
             &full_input,
-            to.as_deref(),
+            &base_args,
+            last.consolidating_book,
             policy_for(&executed, engine_off),
             &hub,
             &done_tx,
@@ -533,7 +627,8 @@ async fn run(args: StaticArgs) -> Result<()> {
                         &mut pending,
                         &mut in_flight,
                         &full_input,
-                        to.as_deref(),
+                        &base_args,
+            last.consolidating_book,
                         policy_for(&executed, engine_off),
                         &hub,
                         &done_tx,
@@ -575,7 +670,8 @@ async fn run(args: StaticArgs) -> Result<()> {
                         &mut pending,
                         &mut in_flight,
                         &full_input,
-                        to.as_deref(),
+                        &base_args,
+            last.consolidating_book,
                         policy_for(&executed, engine_off),
                         &hub,
                         &done_tx,
@@ -590,7 +686,8 @@ async fn run(args: StaticArgs) -> Result<()> {
                         &mut pending,
                         &mut in_flight,
                         &full_input,
-                        to.as_deref(),
+                        &base_args,
+            last.consolidating_book,
                         policy_for(&executed, engine_off),
                         &hub,
                         &done_tx,
@@ -660,14 +757,22 @@ fn start_render(
     pending: &mut Action,
     in_flight: &mut Option<Action>,
     full_input: &Path,
-    to: Option<&str>,
+    base: &RenderArgs,
+    is_consolidating_book: bool,
     execution_policy: ExecutionPolicy,
     hub: &ReloadHub,
     done_tx: &tokio::sync::mpsc::Sender<(Action, RenderOutcome)>,
 ) {
     let action = std::mem::replace(pending, Action::Ignore);
-    let args = render_args_for(&action, full_input, to, execution_policy);
-    match &action {
+    let args = render_args_for(
+        &action,
+        full_input,
+        base,
+        is_consolidating_book,
+        execution_policy,
+    );
+    // Logged as what will render; `in_flight` keeps the original action.
+    match &rerender_action(is_consolidating_book, action.clone()) {
         Action::Subset(paths) => {
             let names: BTreeSet<String> = paths
                 .iter()
@@ -689,6 +794,22 @@ fn start_render(
         let outcome = render_blocking(args).await;
         let _ = done_tx.send((action, outcome)).await;
     });
+}
+
+/// Tell the server what to show at `/` when there is nothing to serve: the
+/// diagnostics of a render that wrote no output (F5b-D3), cleared by one
+/// that did.
+fn record_failure(hub: &ReloadHub, report: &RenderReport) {
+    if !report.outputs().is_empty() {
+        hub.set_failure(None);
+        return;
+    }
+    let text = report.diagnostics_text(false);
+    hub.set_failure(Some(if text.trim().is_empty() {
+        "The render produced no output.".to_string()
+    } else {
+        text
+    }));
 }
 
 /// Broadcast a finished render's result and refresh the loop's
@@ -720,11 +841,13 @@ fn finish_render(
                 };
                 hub.send(ReloadEvent::Reload { target });
             }
+            record_failure(hub, &report);
             *last = LastRender::from_report(&report);
         }
         RenderOutcome::Abort(abort) => {
             let message = abort.user_message();
             eprintln!("{message}");
+            hub.set_failure(Some(strip_ansi_escapes(&message)));
             hub.send(ReloadEvent::RenderStop {
                 ok: false,
                 errors: 1,
@@ -734,6 +857,7 @@ fn finish_render(
         }
         RenderOutcome::Panicked(message) => {
             eprintln!("Error: the render panicked: {message}");
+            hub.set_failure(Some(format!("The render panicked: {message}")));
             hub.send(ReloadEvent::RenderStop {
                 ok: false,
                 errors: 1,
@@ -748,21 +872,41 @@ fn finish_render(
 mod tests {
     use super::*;
 
+    fn write(dir: &Path, rel: &str, body: &str) {
+        let path = dir.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    }
+
+    /// A project root (canonical) with the given `_quarto.yml`.
+    fn project(yml: &str) -> (tempfile::TempDir, PathBuf) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        write(&root, "_quarto.yml", yml);
+        write(&root, "index.qmd", "# Home\n");
+        (temp, root)
+    }
+
+    fn base(to: Option<&str>, metadata: &[&str], profile: &[&str]) -> RenderArgs {
+        RenderArgs {
+            to: to.map(str::to_string),
+            metadata: metadata.iter().map(|s| s.to_string()).collect(),
+            profile: profile.iter().map(|s| s.to_string()).collect(),
+            ..RenderArgs::default()
+        }
+    }
+
     #[test]
     fn servable_formats_pass_the_gate() {
-        assert!(check_servable_format(None).is_ok());
-        assert!(check_servable_format(Some("html")).is_ok());
-        assert!(check_servable_format(Some("revealjs")).is_ok());
-        assert!(
-            check_servable_format(Some("typst")).is_ok(),
-            "typst's PDF is shown in the pdf.js viewer"
-        );
+        for key in ["html", "revealjs", "typst", "my-extension-format"] {
+            assert!(check_servable_format(key).is_ok(), "{key}");
+        }
     }
 
     #[test]
     fn unservable_formats_are_refused_by_name() {
         for to in ["docx", "pptx", "epub"] {
-            let err = check_servable_format(Some(to))
+            let err = check_servable_format(to)
                 .expect_err("format should be refused")
                 .to_string();
             assert!(
@@ -777,18 +921,179 @@ mod tests {
     }
 
     #[test]
+    fn the_gate_judges_the_project_format() {
+        for fmt in ["epub", "docx", "pptx"] {
+            let (_t, root) = project(&format!("project:\n  type: book\nformat: {fmt}\n"));
+            assert_eq!(
+                resolved_format_key(&root, &base(None, &[], &[])).as_deref(),
+                Some(fmt)
+            );
+            assert!(
+                check_servable(&root, &base(None, &[], &[])).is_err(),
+                "{fmt}"
+            );
+        }
+        for fmt in ["html", "typst", "revealjs"] {
+            let (_t, root) = project(&format!("project:\n  type: book\nformat: {fmt}\n"));
+            assert!(
+                check_servable(&root, &base(None, &[], &[])).is_ok(),
+                "{fmt}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_gate_judges_a_file_inside_the_project_by_the_project_root() {
+        let (_t, root) = project("project:\n  type: book\nformat: epub\n");
+        // `run` maps a file inside a project to the project root first.
+        assert!(check_servable(&root, &base(None, &[], &[])).is_err());
+    }
+
+    #[test]
+    fn to_and_scalar_metadata_format_reach_the_gate() {
+        let (_t, root) = project("project:\n  type: book\nformat: html\n");
+        assert!(check_servable(&root, &base(Some("epub"), &[], &[])).is_err());
+        assert!(check_servable(&root, &base(None, &["format:epub"], &[])).is_err());
+        // `--to` beats a scalar `-M format:` (FR2).
+        assert!(check_servable(&root, &base(Some("html"), &["format:epub"], &[])).is_ok());
+        assert_eq!(
+            resolved_format_key(&root, &base(None, &["format:typst"], &[])).as_deref(),
+            Some("typst")
+        );
+    }
+
+    #[test]
+    fn pseudo_format_to_still_passes_the_gate() {
+        let (_t, root) = project("project:\n  type: website\n");
+        assert!(check_servable(&root, &base(Some("q2-preview"), &[], &[])).is_ok());
+    }
+
+    #[test]
+    fn a_standalone_document_is_judged_by_its_own_format() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().canonicalize().unwrap();
+        write(&dir, "a.qmd", "---\nformat: docx\n---\n\nhi\n");
+        write(&dir, "b.qmd", "---\nformat: html\n---\n\nhi\n");
+        assert!(check_servable(&dir.join("a.qmd"), &base(None, &[], &[])).is_err());
+        assert!(check_servable(&dir.join("b.qmd"), &base(None, &[], &[])).is_ok());
+        // `-M format:typst` selects typst over the document's own (FR2).
+        assert_eq!(
+            resolved_format_key(&dir.join("b.qmd"), &base(None, &["format:typst"], &[])).as_deref(),
+            Some("typst")
+        );
+    }
+
+    #[test]
+    fn a_profile_can_supply_the_project_format() {
+        let (_t, root) = project("project:\n  type: book\nformat: html\n");
+        write(&root, "_quarto-epub.yml", "format: epub\n");
+        assert!(check_servable(&root, &base(None, &[], &[])).is_ok());
+        assert!(check_servable(&root, &base(None, &[], &["epub"])).is_err());
+    }
+
+    #[test]
+    fn a_resolver_error_is_left_to_the_render() {
+        let (_t, root) = project("project:\n  type: book\nformat: html\n");
+        // A malformed `-M`, and a profile that does not exist: the gate
+        // passes and the render reports the specific error.
+        assert_eq!(
+            resolved_format_key(&root, &base(None, &["nocolon"], &[])),
+            None
+        );
+        assert!(check_servable(&root, &base(None, &["nocolon"], &[])).is_ok());
+        assert!(check_servable(&root, &base(None, &[], &["no-such-profile"])).is_ok());
+    }
+
+    #[test]
+    fn rerender_action_table() {
+        let one = Action::Subset(BTreeSet::from([PathBuf::from("/p/a.qmd")]));
+        // A consolidating book re-renders whole.
+        assert_eq!(rerender_action(true, one.clone()), Action::Full);
+        assert_eq!(rerender_action(true, Action::Full), Action::Full);
+        assert_eq!(rerender_action(true, Action::Ignore), Action::Ignore);
+        // html books and typst websites keep the per-document re-render.
+        assert_eq!(rerender_action(false, one.clone()), one);
+        assert_eq!(rerender_action(false, Action::Full), Action::Full);
+        assert_eq!(rerender_action(false, Action::Ignore), Action::Ignore);
+    }
+
+    #[test]
     fn subset_actions_render_the_changed_inputs_and_full_renders_the_target() {
         let a = PathBuf::from("/p/a.qmd");
         let b = PathBuf::from("/p/b.qmd");
         let subset = Action::Subset([a.clone(), b.clone()].into_iter().collect());
-        let args = render_args_for(&subset, Path::new("/p"), Some("html"), ExecutionPolicy::All);
+        let html = base(Some("html"), &[], &[]);
+        let args = render_args_for(&subset, Path::new("/p"), &html, false, ExecutionPolicy::All);
         assert_eq!(args.inputs, vec!["/p/a.qmd", "/p/b.qmd"]);
         assert_eq!(args.to.as_deref(), Some("html"));
         assert_eq!(args.execution_policy, ExecutionPolicy::All);
-        let args = render_args_for(&Action::Full, Path::new("/p"), None, ExecutionPolicy::None);
+        let args = render_args_for(
+            &Action::Full,
+            Path::new("/p"),
+            &base(None, &[], &[]),
+            false,
+            ExecutionPolicy::None,
+        );
         assert_eq!(args.inputs, vec!["/p"]);
         assert_eq!(args.to, None);
         assert_eq!(args.execution_policy, ExecutionPolicy::None);
+    }
+
+    #[test]
+    fn a_consolidating_book_re_renders_the_project_for_a_subset() {
+        let subset = Action::Subset(BTreeSet::from([PathBuf::from("/p/a.qmd")]));
+        let args = render_args_for(
+            &subset,
+            Path::new("/p"),
+            &base(None, &[], &[]),
+            true,
+            ExecutionPolicy::All,
+        );
+        assert_eq!(args.inputs, vec!["/p"]);
+    }
+
+    #[test]
+    fn render_flags_reach_every_render() {
+        let flags = base(Some("typst"), &["toc:true", "format:typst"], &["a", "b"]);
+        let subset = Action::Subset(BTreeSet::from([PathBuf::from("/p/a.qmd")]));
+        for action in [Action::Full, subset] {
+            let args = render_args_for(
+                &action,
+                Path::new("/p"),
+                &flags,
+                false,
+                ExecutionPolicy::All,
+            );
+            assert_eq!(args.to.as_deref(), Some("typst"));
+            assert_eq!(args.metadata, vec!["toc:true", "format:typst"]);
+            assert_eq!(args.profile, vec!["a", "b"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn the_action_recorded_as_in_flight_stays_the_subset() {
+        let one = PathBuf::from("/definitely/not/here/a.qmd");
+        let mut pending = Action::Subset(BTreeSet::from([one]));
+        let expected = pending.clone();
+        let mut in_flight = None;
+        let hub = ReloadHub::new();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        start_render(
+            &mut pending,
+            &mut in_flight,
+            Path::new("/definitely/not/here"),
+            &base(None, &[], &[]),
+            true,
+            ExecutionPolicy::None,
+            &hub,
+            &tx,
+        );
+        assert_eq!(pending, Action::Ignore);
+        assert_eq!(in_flight, Some(expected.clone()));
+        // The render itself was the whole project (it aborts: no such path),
+        // but `finish_render` is handed the original subset.
+        let (ran, _outcome) = rx.recv().await.expect("render finished");
+        assert_eq!(ran, expected);
     }
 
     #[test]
