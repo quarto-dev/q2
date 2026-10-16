@@ -88,7 +88,7 @@ export interface RequestEnvelope {
   success: boolean;
   error?: string;
   diagnostics: unknown[];
-  stats?: { unexecuted_cells: number; book?: { scope: 'book' | 'chapter' | 'page'; chapters: number } | null };
+  stats?: { unexecuted_cells: number; book?: { scope: 'book' | 'chapter' | 'none'; chapters: number } | null };
   request?: unknown;
 }
 

@@ -104,7 +104,7 @@ async function post(
     return { kind: 'error', message: (await response.text().catch(() => '')) || `HTTP ${response.status}` };
   }
   const warnings = jsonHeader<NativeDiagnostic[]>(response, DIAGNOSTICS_HEADER) ?? [];
-  const stats = jsonHeader<{ unexecuted_cells?: number; book?: { scope: 'book' | 'chapter' | 'page'; chapters: number } | null }>(response, STATS_HEADER);
+  const stats = jsonHeader<{ unexecuted_cells?: number; book?: { scope: 'book' | 'chapter' | 'none'; chapters: number } | null }>(response, STATS_HEADER);
   return {
     kind: 'ok',
     blob: await response.blob(),

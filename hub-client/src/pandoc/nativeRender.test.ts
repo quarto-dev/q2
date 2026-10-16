@@ -97,7 +97,7 @@ describe('renderNatively contract', () => {
     const whole = await respond({ scope: 'book', chapters: 3 });
     expect(whole.kind === 'ok' && whole.book).toEqual({ chapters: 3 });
     expect(whole.kind === 'ok' && whole.fileName).toBe('Small-Book.typ');
-    for (const book of [{ scope: 'chapter', chapters: 3 }, { scope: 'page', chapters: 3 }, null]) {
+    for (const book of [{ scope: 'chapter', chapters: 3 }, { scope: 'none', chapters: 3 }, null]) {
       const out = await respond(book);
       expect(out.kind === 'ok' && out.book).toBeUndefined();
     }

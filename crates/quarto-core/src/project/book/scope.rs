@@ -63,9 +63,10 @@ pub enum ResolvedBookScope {
     Book,
     /// A chapter of the book, as a standalone document.
     Chapter,
-    /// A page that is not a chapter of the book (or not in a book at all),
-    /// as a standalone document.
-    Page,
+    /// No book mode: the project is not a book, or the file is not in the
+    /// chapter list. Rendered as a standalone document. Echoed on the wire
+    /// as `none`; a resolution result only, never an accepted input.
+    NoBook,
 }
 
 /// The outcome of [`resolve_book_scope`].
@@ -91,12 +92,12 @@ pub fn format_consolidates_book(format: &Format) -> bool {
 /// Turn (project, active file, requested scope, format) into what the render
 /// covers.
 ///
-/// - A non-book project is always `Page`, silently.
+/// - A non-book project is always `NoBook`, silently.
 /// - A format that does not consolidate a book renders the active page alone:
-///   `Chapter` for a member, `Page` otherwise, and an explicit `Some(_)` earns
+///   `Chapter` for a member, `NoBook` otherwise, and an explicit `Some(_)` earns
 ///   the `Q-5-42` info diagnostic (`None` is silent).
 /// - A consolidating format renders the whole book (`Book`) unless the user
-///   asked for `Chapter`. A page that is not a member is `Page`; unless the
+///   asked for `Chapter`. A page that is not a member is `NoBook`; unless the
 ///   user asked for `Chapter` it carries the `Q-5-41` notice, so it is never
 ///   silently downgraded.
 ///
@@ -117,7 +118,7 @@ pub fn resolve_book_scope(
         diagnostics: Vec::new(),
     };
     if project.project_kind() != ProjectKind::Book {
-        return Ok(none(ResolvedBookScope::Page));
+        return Ok(none(ResolvedBookScope::NoBook));
     }
     let consolidates = format_consolidates_book(format);
     let membership = match book_membership(project, active, runtime) {
@@ -134,7 +135,7 @@ pub fn resolve_book_scope(
         if is_member {
             ResolvedBookScope::Chapter
         } else {
-            ResolvedBookScope::Page
+            ResolvedBookScope::NoBook
         }
     } else if scope == Some(BookScope::Chapter) {
         // Without a readable list a chapter request cannot be told from a
@@ -142,13 +143,13 @@ pub fn resolve_book_scope(
         if is_member || membership.is_none() {
             ResolvedBookScope::Chapter
         } else {
-            ResolvedBookScope::Page
+            ResolvedBookScope::NoBook
         }
     } else if is_member {
         ResolvedBookScope::Book
     } else {
         diagnostics.push(not_a_chapter_notice(active, project));
-        ResolvedBookScope::Page
+        ResolvedBookScope::NoBook
     };
     Ok(BookScopeResolution {
         scope: resolved,

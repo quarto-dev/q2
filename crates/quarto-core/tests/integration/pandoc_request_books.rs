@@ -660,7 +660,7 @@ fn a_page_in_the_project_but_not_in_the_book_renders_alone() {
     for format in ["typst", "typst-pdf", "epub", "docx"] {
         let out = render(&root.join("notes.qmd"), format, None);
         let book = out.book.as_ref().map(|b| (b.scope, b.chapters));
-        assert_eq!(book, Some((ResolvedBookScope::Page, 3)), "{format}");
+        assert_eq!(book, Some((ResolvedBookScope::NoBook, 3)), "{format}");
         // A consolidating format was asked for the book (nothing chosen):
         // the standalone page carries the notice; docx never consolidates.
         assert_eq!(
@@ -685,7 +685,7 @@ fn chapter_scope_on_a_page_outside_the_book_is_that_page_without_a_notice() {
         let out = render(&root.join("notes.qmd"), format, Some(BookScope::Chapter));
         assert_eq!(
             out.book.as_ref().map(|b| b.scope),
-            Some(ResolvedBookScope::Page),
+            Some(ResolvedBookScope::NoBook),
             "{format}"
         );
         assert!(!has_notice(&out, "Q-5-41"), "{format}");
@@ -739,7 +739,7 @@ fn a_page_excluded_from_the_render_list_renders_alone() {
         for format in ["typst", "epub"] {
             let out = render(&root.join(rel), format, None);
             let book = out.book.as_ref().map(|b| b.scope);
-            assert_eq!(book, Some(ResolvedBookScope::Page), "{rel} {format}");
+            assert_eq!(book, Some(ResolvedBookScope::NoBook), "{rel} {format}");
             assert!(has_notice(&out, "Q-5-41"), "{rel} {format}");
             let request = request_of(out);
             let text = plain_text(&request);

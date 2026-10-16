@@ -580,7 +580,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
 
   it('a stale book click comes back as the page alone: no whole-book name, the Q-5-41 notice once in the warnings', async () => {
     const notice = { kind: 'info', title: 'This page is not part of the book, so only this page was downloaded', code: 'Q-5-41' };
-    const buildRequest = vi.fn(async () => ({ ...bookEnvelope('page' as 'chapter', 3), diagnostics: [notice] }));
+    const buildRequest = vi.fn(async () => ({ ...bookEnvelope('none' as 'chapter', 3), diagnostics: [notice] }));
     const { controller, save } = setup({ buildRequest });
     await controller.start({ path: 'notes.qmd', format: EPUB, scope: 'book' });
     expect(save.mock.calls[0][1]).toBe('notes.epub');

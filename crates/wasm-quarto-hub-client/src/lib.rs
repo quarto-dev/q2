@@ -1561,7 +1561,7 @@ fn pandoc_request_envelope(
                 scope: match b.scope {
                     quarto_core::pandoc_request::render::ResolvedBookScope::Book => "book",
                     quarto_core::pandoc_request::render::ResolvedBookScope::Chapter => "chapter",
-                    quarto_core::pandoc_request::render::ResolvedBookScope::Page => "page",
+                    quarto_core::pandoc_request::render::ResolvedBookScope::NoBook => "none",
                 },
                 chapters: b.chapters,
             }),
@@ -1602,7 +1602,7 @@ fn pandoc_request_envelope(
 /// (the user did not choose) the request is the whole book (R9); docx and
 /// pptx and `scope: 'chapter'` stay chapter-alone, and a page that is not a
 /// chapter is delivered alone with the `Q-5-41` notice (`stats.book.scope`
-/// `'page'`). `stats.book` is `{ scope: 'book' | 'chapter' | 'page', chapters }`
+/// `'none'`). `stats.book` is `{ scope: 'book' | 'chapter' | 'none', chapters }`
 /// in a book project, else `null`.
 ///
 /// `options` (optional, trailing) is `{ scope?: 'book' | 'chapter',

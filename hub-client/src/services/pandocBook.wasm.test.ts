@@ -25,7 +25,7 @@ interface Envelope {
   success: boolean;
   error?: string;
   diagnostics: { kind: string; title: string; code?: string; start_line?: number; rendered?: string }[];
-  stats: { unexecuted_cells: number; book: { scope: 'book' | 'chapter' | 'page'; chapters: number } | null };
+  stats: { unexecuted_cells: number; book: { scope: 'book' | 'chapter' | 'none'; chapters: number } | null };
   request?: {
     files: RequestFile[];
     resource_refs: RequestFile[];
@@ -231,7 +231,7 @@ describe('whole-book request (R9)', () => {
     for (const options of [undefined, { scope: 'book' as const }]) {
       const out = await render('notes.qmd', 'typst', options);
       expect(out.error).toBeUndefined();
-      expect(out.stats.book).toEqual({ scope: 'page', chapters: 3 });
+      expect(out.stats.book).toEqual({ scope: 'none', chapters: 3 });
       expect(plainText(out)).toContain('A page outside the book.');
       expect(plainText(out)).not.toContain('First');
       expect(out.diagnostics.filter((d) => d.code === 'Q-5-41')).toHaveLength(1);

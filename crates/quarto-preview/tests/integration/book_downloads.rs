@@ -176,7 +176,7 @@ async fn a_page_outside_the_book_renders_alone_with_a_notice() {
     assert!(typ.contains("A page outside the book"));
     assert!(!typ.contains("Chapter one text"));
     assert!(codes(&reply).contains("Q-5-41"), "{}", codes(&reply));
-    assert_eq!(stats(&reply)["book"]["scope"], "page");
+    assert_eq!(stats(&reply)["book"]["scope"], "none");
 }
 
 #[tokio::test]

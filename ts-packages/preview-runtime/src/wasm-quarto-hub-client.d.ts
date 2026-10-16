@@ -105,7 +105,7 @@ declare module 'wasm-quarto-hub-client' {
     diagnostics: AstDiagnostic[];
     stats: {
       unexecuted_cells: number;
-      book: { scope: 'book' | 'chapter' | 'page'; chapters: number } | null;
+      book: { scope: 'book' | 'chapter' | 'none'; chapters: number } | null;
     };
     request?: PandocRequestWire;
   }
@@ -120,7 +120,7 @@ declare module 'wasm-quarto-hub-client' {
    *
    * A book chapter requested as typst, pdf or epub is the whole book unless
    * `options.scope` is `'chapter'` (R9); a page that is not a chapter is
-   * delivered alone with the `Q-5-41` notice (`stats.book.scope` `'page'`). `options.capturesByPath` maps each
+   * delivered alone with the `Q-5-41` notice (`stats.book.scope` `'none'`). `options.capturesByPath` maps each
    * chapter's `/`-normalized path relative to the VFS project root to its
    * capture blob. `options.onProgress` is awaited before each chapter of a
    * book render (`index` is 1-based); if it rejects the call fails with that

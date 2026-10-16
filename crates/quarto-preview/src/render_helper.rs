@@ -118,7 +118,7 @@ pub struct RenderedFile {
 }
 
 /// What `X-Q2-Stats` says about a book render: the scope it resolved to
-/// (`book`, `chapter` or `page`) and the book's file-bearing chapters.
+/// (`book`, `chapter` or `none`) and the book's file-bearing chapters.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct BookStats {
     pub scope: &'static str,
@@ -129,7 +129,7 @@ fn scope_name(scope: ResolvedBookScope) -> &'static str {
     match scope {
         ResolvedBookScope::Book => "book",
         ResolvedBookScope::Chapter => "chapter",
-        ResolvedBookScope::Page => "page",
+        ResolvedBookScope::NoBook => "none",
     }
 }
 
