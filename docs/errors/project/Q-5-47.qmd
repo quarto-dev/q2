@@ -1,0 +1,22 @@
+---
+title: "book-scope chapter Needs a File"
+description: "`book-scope: chapter` was requested for a whole-book render of a book."
+code: Q-5-47
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-47` — book-scope chapter Needs a File
+
+> `book-scope: chapter` was requested for a whole-book render of a book.
+
+## What this means
+
+A request for `book-scope: chapter` (for example `-M book-scope:chapter`) was made while rendering a whole book with no file named. There is no chapter to choose.
+
+## How to fix
+
+Name the chapter to render (`q2 render ch1.qmd -M book-scope:chapter`), or drop the option to render the whole book.

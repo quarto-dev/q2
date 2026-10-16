@@ -24,9 +24,7 @@ use crate::artifact::ArtifactStore;
 use crate::crossref::index::CrossrefIndex;
 use crate::crossref::project_index::{ChapterCrossrefInventory, aggregate_chapter_inventories};
 use crate::error::QuartoError;
-use crate::format::{
-    Format, format_key_from_config_value, format_key_from_frontmatter, resolve_format_key,
-};
+use crate::format::Format;
 use crate::pipeline::{
     BookChapterPauseState, PartialKind, RenderOutput, build_html_pipeline_finishing_stages,
     render_qmd_to_ast_partial, run_pipeline_from_ast,
@@ -127,17 +125,6 @@ pub(crate) async fn render_book_multi_file_html(
     let binaries = BinaryDependencies::discover(runtime.as_ref());
     let project_type = crate::project::orchestrator::project_type_for(project);
     let seeds = crate::project::book::render_item::chapter_seed_map(&project.dir, book_items);
-    // Per-document format resolution reads the project-level `format:`
-    // declarations once; each chapter's front matter and the `--to`
-    // override layer on top (the same prefer-merge
-    // `render_document_to_file` applies).
-    let project_format = project
-        .config
-        .metadata
-        .as_ref()
-        .and_then(|m| m.get("format"))
-        .and_then(format_key_from_config_value);
-
     let mut held: Vec<HeldChapter> = Vec::with_capacity(book_items.len());
     let mut inventories: Vec<ChapterCrossrefInventory> = Vec::with_capacity(book_items.len());
     let mut citation_manifests: Vec<ChapterCitationManifest> = Vec::with_capacity(book_items.len());
@@ -179,15 +166,19 @@ pub(crate) async fn render_book_multi_file_html(
         // also grow its own duplicate, unmerged local bibliography.
         let is_references = item.kind == BookRenderItemKind::References;
 
-        let document_format = std::str::from_utf8(&content)
-            .ok()
-            .and_then(format_key_from_frontmatter);
-        let resolved_format = resolve_format_key(
-            project_format.as_deref(),
-            document_format.as_deref(),
+        // The same resolver `render_document_to_file` calls; a chapter's own
+        // `format:` is honoured unless the orchestrator decided the format
+        // for the whole book (`format_override`).
+        let resolved_format = crate::format_resolution::resolve_document_format(
+            project,
+            &input_path,
+            std::str::from_utf8(&content).ok(),
+            &crate::format_resolution::ScopeRequest::chapter(),
             format_override,
-            format_str,
-        );
+            runtime.as_ref(),
+        )
+        .key_or(format_str)
+        .to_string();
         let render_format =
             Format::from_format_string(&resolved_format).map_err(QuartoError::other)?;
 

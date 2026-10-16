@@ -1316,6 +1316,78 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_runtime_scalar_format_is_tolerated_by_the_merge() {
+        // F3a: `-M format:typst` puts a scalar `format` in the runtime layer.
+        // The stage still picks the selected format's settings from the
+        // project's and the document's `format.<key>:` maps, ignores the
+        // other formats', and ends with `format` set to the format's name.
+        let runtime = Arc::new(MockRuntimeWithMetadata::new(serde_json::json!({
+            "format": "typst"
+        })));
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::with_metadata(config_map(vec![(
+                "format",
+                config_map(vec![
+                    ("typst", config_map(vec![("toc", config_bool(true))])),
+                    ("html", config_map(vec![("html-only", config_bool(true))])),
+                ]),
+            )])),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("typst").unwrap();
+
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        let stage = MetadataMergeStage::new();
+
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: config_map(vec![(
+                    "format",
+                    config_map(vec![(
+                        "typst",
+                        config_map(vec![("number-sections", config_bool(true))]),
+                    )]),
+                )]),
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+            recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
+        };
+
+        let output = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+        let result = output.into_document_ast().unwrap();
+
+        assert_eq!(result.ast.meta.get("toc").unwrap().as_bool(), Some(true));
+        assert_eq!(
+            result.ast.meta.get("number-sections").unwrap().as_bool(),
+            Some(true)
+        );
+        assert!(
+            result.ast.meta.get("html-only").is_none(),
+            "another format's settings must not leak in"
+        );
+        assert_eq!(
+            result.ast.meta.get("format").unwrap().as_str(),
+            Some("typst"),
+            "format is dropped and re-injected as the name"
+        );
+    }
+
     // ============================================================================
     // Format name preservation tests
     // ============================================================================

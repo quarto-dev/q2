@@ -8,7 +8,6 @@
 
 use std::path::Path;
 
-use quarto_pandoc_types::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
 use serde::Serialize;
 
@@ -167,40 +166,16 @@ pub struct BookResolution {
     pub chapter: bool,
 }
 
-/// The keys of a `format:` value: a string, or the keys of a map in order.
-fn keys_of_format_value(value: &ConfigValue) -> Vec<String> {
-    if let Some(entries) = value.as_map_entries() {
-        return entries.iter().map(|e| e.key.clone()).collect();
-    }
-    value.as_plain_text().into_iter().collect()
-}
-
-/// The `format:` keys of a QMD document's YAML front matter, in order, or
-/// `None` when the document names none (no front matter, no `format` key, an
-/// unparsable block).
-pub fn frontmatter_format_keys(content: &str) -> Option<Vec<String>> {
-    let trimmed = content.trim_start();
-    let after_first = trimmed.strip_prefix("---")?;
-    let end = after_first.find("\n---")?;
-    let docs = yaml_rust2::YamlLoader::load_from_str(&after_first[..end]).ok()?;
-    let doc = docs.first()?;
-    let keys: Vec<String> = match &doc["format"] {
-        yaml_rust2::Yaml::String(s) => vec![s.clone()],
-        yaml_rust2::Yaml::Hash(map) => map
-            .keys()
-            .filter_map(|k| k.as_str().map(str::to_string))
-            .collect(),
-        _ => Vec::new(),
-    };
-    (!keys.is_empty()).then_some(keys)
-}
-
-/// Pure resolution: the document's own `format:` wins; otherwise the
-/// project's; otherwise `html`.
+/// Pure resolution through [`crate::format_resolution`]: Quarto 1's key-list
+/// rule over the document's front matter, the `_metadata.yml` chain and the
+/// project's `format:`; `html` when none declares one. The selected format
+/// comes first, then the other declared keys in order.
 ///
 /// `location` is the document's project and runtime, when it has them: the
-/// project's `format:` is the project's formats, and `output-ext` is read
-/// from every metadata layer (`_metadata.yml` and runtime included).
+/// project's `format:` is the project's formats, `_metadata.yml` and the
+/// runtime layer (a scalar `format`) take part, and `output-ext` is read from
+/// every metadata layer. Without one only the document's own front matter is
+/// consulted. The request is for a chapter, the browser preview's scope.
 ///
 /// The `typst-pdf` key is the internal "typst compiled to PDF" artifact, never
 /// something a document may name: a `typst` document resolves to it (the
@@ -211,18 +186,43 @@ pub fn resolve_formats(
     content: &str,
     location: Option<crate::output_ext::DocumentLocation<'_>>,
 ) -> ResolvedFormats {
-    let project_metadata = location.and_then(|l| l.project.config.metadata.as_ref());
-    let project_format = project_metadata.and_then(|m| m.get("format"));
-    let (source, keys) = if let Some(keys) = frontmatter_format_keys(content) {
-        (FormatSource::Document, keys)
-    } else if let Some(keys) = project_format
-        .map(keys_of_format_value)
-        .filter(|k| !k.is_empty())
-    {
-        (FormatSource::Project, keys)
-    } else {
-        (FormatSource::Default, vec!["html".to_string()])
+    use crate::format_resolution::{
+        FormatInputs, FormatResolution, ScopeRequest, format_keys_of, resolve_document_format,
+        select_formats,
     };
+    use crate::metadata_layers::LayerKind;
+
+    let resolution: FormatResolution = match location {
+        Some(l) => resolve_document_format(
+            l.project,
+            l.path,
+            Some(content),
+            &ScopeRequest::chapter(),
+            None,
+            l.runtime,
+        ),
+        None => {
+            let document_keys = crate::metadata_layers::document_layer_from_content(content)
+                .get("format")
+                .map(format_keys_of)
+                .unwrap_or_default();
+            select_formats(FormatInputs {
+                document_keys: &document_keys,
+                ..Default::default()
+            })
+            .into()
+        }
+    };
+    let source = match resolution.source {
+        Some(LayerKind::Document | LayerKind::Directory) => FormatSource::Document,
+        Some(_) => FormatSource::Project,
+        None => FormatSource::Default,
+    };
+    let selected = resolution.key.clone();
+    let others = resolution.all_keys.iter().filter(|k| **k != selected);
+    let keys: Vec<String> = std::iter::once(selected.clone())
+        .chain(others.cloned())
+        .collect();
     ResolvedFormats {
         source,
         formats: keys

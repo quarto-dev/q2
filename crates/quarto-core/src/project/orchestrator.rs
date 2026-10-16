@@ -1036,6 +1036,7 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
     pub async fn run_with_book_support(
         &mut self,
     ) -> Result<ProjectRenderSummary<RenderToFileResult>> {
+        let scope_diagnostics = self.decide_member_format();
         let result = if self.project_type.kind() == ProjectKind::Book {
             // Books render only to formats with book support. Unknown
             // (extension) format identifiers fall through — they may
@@ -1091,10 +1092,55 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
                     &self.format,
                 ));
         }
+        if let Ok(summary) = &mut result {
+            summary.project_diagnostics.extend(scope_diagnostics);
+        }
         if let Err(e) = self.project.registry.shutdown_all() {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
         }
         result
+    }
+
+    /// Decide once, for the whole render, the format every member of a book
+    /// renders in (epic FR4, F3a-D2), and return the scope request's notices.
+    ///
+    /// The requested scope comes from the render's target and the
+    /// `book-scope` layers ([`crate::format_resolution::resolve_render_scope`]).
+    /// For a **Book** project whose requested scope is `Book`, only the
+    /// project's formats select, so the project format (the project's keys
+    /// plus a `--to` or runtime scalar `format`) is installed as the
+    /// renderer's `format_override`: every per-document render, Pass 3
+    /// included, then uses it, even when a chapter's front matter says
+    /// otherwise. For any other project, and for a chapter render, nothing is
+    /// forced: each document resolves its own format, so a website's
+    /// `format: revealjs` page stays a deck and a named chapter renders in
+    /// its own format. `render_document_to_file` never learns the target.
+    ///
+    /// The FR6 error (`book-scope: chapter` with nothing to render) is not
+    /// raised here; the CLI's interim check owns it until the dispatch moves
+    /// onto the request (F3b), so only the non-error notices are returned.
+    fn decide_member_format(&mut self) -> Vec<DiagnosticMessage> {
+        let request = crate::format_resolution::resolve_render_scope(
+            self.project,
+            &self.mode,
+            self.runtime.as_ref(),
+        );
+        if self.project_type.kind() == ProjectKind::Book && request.value == crate::BookScope::Book
+        {
+            let project_format = crate::format_resolution::resolve_project_format(
+                self.project,
+                &request,
+                self.renderer.format_override.as_deref(),
+                self.runtime.as_ref(),
+            );
+            let key = project_format.key_or(&self.format_str).to_string();
+            self.renderer.format_override = Some(key);
+        }
+        request
+            .diagnostics
+            .into_iter()
+            .filter(|d| d.kind != quarto_error_reporting::DiagnosticKind::Error)
+            .collect()
     }
 
     /// A book rendered to a format that consolidates it (typst, epub):

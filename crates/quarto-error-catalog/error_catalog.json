@@ -1756,6 +1756,41 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-42",
     "since_version": "99.9.9"
   },
+  "Q-5-43": {
+    "subsystem": "project",
+    "title": "Invalid book-scope Value",
+    "message_template": "`book-scope` takes `book` or `chapter`. Any other value, including `none` (which only describes the output of a render that is not in book mode) and a non-string value, was ignored and the next lower layer applies.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-43",
+    "since_version": "99.9.9"
+  },
+  "Q-5-44": {
+    "subsystem": "project",
+    "title": "book-scope Is Not a Format Option",
+    "message_template": "`book-scope` under `format.<name>:` was ignored. Set it at the top level: which format a render uses depends on the scope, so the scope cannot depend on the format.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-44",
+    "since_version": "99.9.9"
+  },
+  "Q-5-45": {
+    "subsystem": "project",
+    "title": "book-scope chapter Ignored for a Whole-Book Render",
+    "message_template": "`book-scope: chapter` in the project, a `_metadata.yml` or a document describes how to render one chapter, so it was ignored in a render of the whole book.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-45",
+    "since_version": "99.9.9"
+  },
+  "Q-5-46": {
+    "subsystem": "project",
+    "title": "book-scope Only Applies to Books",
+    "message_template": "`book-scope` has no effect in a project that is not a book.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-46",
+    "since_version": "99.9.9"
+  },
+  "Q-5-47": {
+    "subsystem": "project",
+    "title": "book-scope chapter Needs a File",
+    "message_template": "`book-scope: chapter` needs a file to render: name the chapter(s).",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-47",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",

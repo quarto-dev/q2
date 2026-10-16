@@ -62,6 +62,7 @@ pub mod fail_fast;
 pub mod footnotes_dedup;
 pub mod format_css;
 pub mod format_path_keys;
+pub mod format_resolution;
 pub mod get_config_merge;
 pub mod heading_id_after_expansion;
 pub mod headroom_pipeline;

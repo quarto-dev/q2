@@ -87,7 +87,7 @@ fn render_fixture(qmd: &str, resources: &[&str], format: &str) -> Vec<u8> {
         .unwrap_or_else(|e| panic!("project discovery for {qmd} must succeed: {e}"));
     // `format` (the 2nd positional) is only a last-resort *default*,
     // outranked by the document's own front-matter `format:` key in
-    // `resolve_format_key`'s prefer-merge — several real quarto-cli-
+    // `format_resolution::resolve_document_format` — several real quarto-cli-
     // sourced fixtures declare `format: latex` (they were authored for
     // Q1's latex output), which would otherwise win and error with
     // "Unknown format: latex" (latex is a documented stub, no

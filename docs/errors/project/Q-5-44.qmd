@@ -1,0 +1,22 @@
+---
+title: "book-scope Is Not a Format Option"
+description: "`book-scope` was set under `format:` and ignored."
+code: Q-5-44
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-44` — book-scope Is Not a Format Option
+
+> `book-scope` was set under `format:` and ignored.
+
+## What this means
+
+`book-scope` is read only at the top level of a metadata layer. Which format a render uses depends on the requested scope (a whole-book render uses the project's formats), so a scope that depends on the format would be circular.
+
+## How to fix
+
+Move `book-scope` out of `format:` to the top level of the same file.

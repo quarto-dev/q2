@@ -345,30 +345,25 @@ pub fn render_document_to_file(
         }
     };
 
-    // Per-document format resolution (bd-l6itt34u minimal slice). The
-    // effective format key is a prefer-merge of the `format:` declarations:
-    // project config → this document's front matter → `--to` (synthesized as
-    // `format: !prefer`). So a `format: revealjs` deck inside an otherwise-HTML
-    // `type: default` project — or a project-level `format: revealjs` — renders
-    // as a real deck, while an explicit `--to` still wins for every document.
-    // The result drives BOTH the transform pipeline (reveal assembly) and the
-    // output paths/extension, so it must be resolved here, before the pipeline
-    // is built. `format` is the caller's fallback default (e.g. "html").
-    let project_format = project
-        .config
-        .metadata
-        .as_ref()
-        .and_then(|m| m.get("format"))
-        .and_then(crate::format::format_key_from_config_value);
-    let document_format = std::str::from_utf8(&input_bytes)
-        .ok()
-        .and_then(crate::format::format_key_from_frontmatter);
-    let resolved_format = crate::format::resolve_format_key(
-        project_format.as_deref(),
-        document_format.as_deref(),
+    // Per-document format resolution (epic FR1-FR4, F3a): the resolver reads
+    // the same layers the merge stage does (project, `_metadata.yml` chain,
+    // this document's front matter, runtime) and applies Quarto 1's
+    // key-list rule. `format_override` is the requested format (`--to`, or
+    // the project format the orchestrator decided once for a whole-book
+    // render); it wins over every declaration. `format` is the caller's
+    // default for a document no layer gives a format. The document layer is
+    // read from `input_bytes`, the same bytes the render uses, so an
+    // editor-buffer render and its format cannot disagree.
+    let resolved_format = crate::format_resolution::resolve_document_format(
+        project,
+        input_path,
+        std::str::from_utf8(&input_bytes).ok(),
+        &crate::format_resolution::ScopeRequest::chapter(),
         format_override,
-        format,
-    );
+        runtime.as_ref(),
+    )
+    .key_or(format)
+    .to_string();
     let format: &str = &resolved_format;
 
     // Determine output paths. If the options don't specify an

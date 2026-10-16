@@ -709,66 +709,6 @@ pub fn format_key_from_config_value(value: &ConfigValue) -> Option<String> {
         .and_then(|entries| entries.first().map(|e| e.key.clone()))
 }
 
-/// Resolve a document's effective output format key by prefer-merging the
-/// `format:` declarations, lowest precedence to highest:
-///
-/// ```text
-///   project config   →   document front matter   →   `--to` override
-/// ```
-///
-/// The `--to` override is modeled as a synthesized `format: !prefer <to>`
-/// layer merged on top — uniform with a document that had written that
-/// instruction itself — so an explicit `--to` wins over every in-document
-/// declaration, while in its absence a per-file or project-level `format:` is
-/// honored (the per-file one winning over the project default). Returns
-/// `default` when no layer declares a format.
-///
-/// This runs *before* the render pipeline is built because the format key
-/// selects both the transform pipeline (reveal vs. generic) and the output
-/// file extension; the full format-specific config flattening still happens
-/// later in `MetadataMergeStage`.
-pub fn resolve_format_key(
-    project_format: Option<&str>,
-    document_format: Option<&str>,
-    cli_to: Option<&str>,
-    default: &str,
-) -> String {
-    use quarto_config::MergedConfig;
-    use quarto_pandoc_types::{ConfigMapEntry, MergeOp};
-    use quarto_source_map::{By, SourceInfo};
-
-    // One `{format: !prefer <key>}` layer. All layers use `Prefer` (last
-    // wins); ordering project → document → `--to` encodes the precedence.
-    let format_layer = |key: &str| -> ConfigValue {
-        let si = SourceInfo::generated(By::unknown());
-        ConfigValue::new_map(
-            vec![ConfigMapEntry {
-                key: "format".to_string(),
-                key_source: si.clone(),
-                value: ConfigValue::new_string(key, si.clone()).with_merge_op(MergeOp::Prefer),
-            }],
-            si,
-        )
-    };
-
-    let owned: Vec<ConfigValue> = [project_format, document_format, cli_to]
-        .into_iter()
-        .flatten()
-        .map(format_layer)
-        .collect();
-    if owned.is_empty() {
-        return default.to_string();
-    }
-    let layers: Vec<&ConfigValue> = owned.iter().collect();
-    MergedConfig::new(layers)
-        .materialize()
-        .ok()
-        .as_ref()
-        .and_then(|merged| merged.get("format"))
-        .and_then(format_key_from_config_value)
-        .unwrap_or_else(|| default.to_string())
-}
-
 /// Map a FormatIdentifier to its output file extension.
 fn output_extension_for(id: FormatIdentifier) -> String {
     match id {

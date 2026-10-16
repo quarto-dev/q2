@@ -59,6 +59,7 @@ pub mod error;
 pub mod extension;
 pub mod filter_resolve;
 pub mod format;
+pub mod format_resolution;
 pub mod get_config;
 pub mod glob;
 pub mod import;

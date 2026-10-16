@@ -1,0 +1,24 @@
+---
+title: "Invalid book-scope Value"
+description: "A `book-scope` value was not `book` or `chapter`."
+code: Q-5-43
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-43` — Invalid book-scope Value
+
+> A `book-scope` value was not `book` or `chapter`.
+
+## What this means
+
+A `book-scope` value was ignored because it is not `book` or `chapter`.
+
+`none` is not accepted as input: it is what a render reports when no book mode applies (the project is not a book, or the file is not in the chapter list). A value that is not a string is invalid too. The next layer down (runtime, document, `_metadata.yml`, project) applies instead.
+
+## How to fix
+
+Use `book` or `chapter`, or remove the key.

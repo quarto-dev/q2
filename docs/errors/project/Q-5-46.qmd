@@ -1,0 +1,22 @@
+---
+title: "book-scope Only Applies to Books"
+description: "`book-scope` was set in a project that is not a book."
+code: Q-5-46
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-46` — book-scope Only Applies to Books
+
+> `book-scope` was set in a project that is not a book.
+
+## What this means
+
+`book-scope` chooses between the whole book and one chapter. In a project that is not a book (a website, a default project, a single document) there is no book to choose, so the value is ignored.
+
+## How to fix
+
+Remove `book-scope`, or use it in a book project.

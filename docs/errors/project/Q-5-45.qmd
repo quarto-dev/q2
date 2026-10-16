@@ -1,0 +1,22 @@
+---
+title: "book-scope chapter Ignored for a Whole-Book Render"
+description: "A project, directory or document `book-scope: chapter` was ignored in a render of the whole book."
+code: Q-5-45
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-45` — book-scope chapter Ignored for a Whole-Book Render
+
+> A project, directory or document `book-scope: chapter` was ignored in a render of the whole book.
+
+## What this means
+
+A `book-scope: chapter` set in `_quarto.yml`, a `_metadata.yml` or a document applies when one chapter is rendered. It does not turn a whole-book render (`q2 render` with no file) into a chapter render, and it is not an error.
+
+## How to fix
+
+Nothing to fix. To render one chapter, name it (`q2 render ch1.qmd`).
