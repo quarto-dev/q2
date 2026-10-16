@@ -240,10 +240,8 @@ fn a_non_member_in_an_html_book_gets_exactly_one_notice() {
     assert!(!text(&out).contains("Q-5-41"), "{}", text(&out));
 }
 
-// F5a: delete the two-file shape's expectation (it flips to success), and
-// the interim message.
 #[test]
-fn scope_chapter_needs_exactly_one_file_until_the_loop_exists() {
+fn scope_chapter_with_nothing_to_render_is_the_resolvers_error() {
     let (_t, dir) = book("");
     // No file, and a directory: the resolver's own error.
     for args in [
@@ -259,7 +257,14 @@ fn scope_chapter_needs_exactly_one_file_until_the_loop_exists() {
         );
         assert!(text(&out).contains("Q-5-47"), "{args:?}: {}", text(&out));
     }
-    // Two files: the interim check.
+}
+
+#[test]
+fn scope_chapter_with_several_files_renders_each_on_its_own() {
+    if !pandoc_available() {
+        return;
+    }
+    let (_t, dir) = book("");
     let out = q2(
         &dir,
         &[
@@ -271,11 +276,6 @@ fn scope_chapter_needs_exactly_one_file_until_the_loop_exists() {
             "book-scope:chapter",
         ],
     );
-    assert!(!out.status.success(), "{}", text(&out));
-    assert!(
-        text(&out).contains("`-M book-scope:chapter` needs exactly one file"),
-        "{}",
-        text(&out)
-    );
-    assert!(books(&dir).is_empty());
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(books(&dir), ["one.epub", "two.epub"], "{}", text(&out));
 }

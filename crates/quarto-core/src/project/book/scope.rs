@@ -56,6 +56,27 @@ pub fn book_membership(
     })
 }
 
+/// Whether `named` includes every chapter of the book (pass-free, like
+/// [`book_membership`]). The orchestrator's collapse rule uses it: naming
+/// every chapter of an html book is the whole-book render.
+pub fn names_every_chapter(
+    project: &ProjectContext,
+    named: &[std::path::PathBuf],
+    runtime: &dyn SystemRuntime,
+) -> Result<bool, QuartoError> {
+    let key = |p: &Path| -> Option<String> {
+        p.strip_prefix(&project.dir)
+            .ok()
+            .map(|rel| super::links::normalize_book_path(&rel.to_string_lossy().replace('\\', "/")))
+    };
+    let named_keys: Vec<String> = named.iter().filter_map(|p| key(p)).collect();
+    let files = super::book_chapter_files(project, runtime)?;
+    Ok(files.iter().all(|file| {
+        let chapter = super::links::normalize_book_path(&file.to_string_lossy().replace('\\', "/"));
+        named_keys.contains(&chapter)
+    }))
+}
+
 /// What a render actually covers once the request is resolved against the
 /// project; also the response echo (`stats.book.scope`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

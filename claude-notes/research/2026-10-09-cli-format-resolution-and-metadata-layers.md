@@ -304,6 +304,39 @@ Consequences for the resolver (§7 (c)):
   the chapter's resolved one); (2) a non-member page (Page scope, Q-5-41):
   presumed document-wins; (3) multiple `format:` keys (first only, as today).
 
+### Outcome of F5a (native `q2 render`, 2026-10-16)
+
+Fixed among §7's native CLI and dispatch sites:
+
+- `render.rs` `render_once` no longer guesses a format before the project is
+  known. `render_single_doc` and `render_project` call one function,
+  `resolve_render_formats`, where the project is final (after pre-render
+  scripts): `resolve_render_scope`, `resolve_project_format` and
+  `resolve_document_format` per named file. It owns the "not yet supported"
+  refusal (every format to be used, before any render) and Q-20-8 (fed by the
+  resolver's key list, so a project-level multi-key `format:` warns too).
+- `render_once`, `render_single_doc` and `render_project` no longer call
+  `detect_single_input_format` or the `format_key(s)_from_frontmatter`
+  helpers (they stay for `preview_static.rs`; F5b). `multi_format_warning_diagnostics`
+  is deleted.
+- The Q-5-33 gate judges the book's resolved format and only when the requested
+  scope is the book; its message names `--to` or the project's `format:`.
+- The dispatch (`run_with_book_support`): several named files with a chapter
+  request either collapse to the whole-book html render (every chapter named,
+  all in the project's html) or each render on their own through one head, one
+  Pass 2 per partition and one tail (`run_book_named_separately`).
+  `classify_inputs` no longer collapses a Book project.
+- `render_chapter_alone_summary` takes the resolved key (`target_format`), so an
+  extension format stays itself, and the project format for Pass 1
+  (`ProjectPipeline::with_project_format`); it no longer shuts the engines down
+  (the caller does, once).
+- Named non-member pages join the book's render list as extras, so an html book
+  renders them (it rendered nothing before).
+
+Still open: html chapter and non-member renders leave cross-chapter references
+unresolved (`bd-html-chapter-xref-szfxmvyg`); the wasm and preview sites are F6
+and F5b.
+
 ## 9. Where this went (2026-10-15)
 
 §7's survey and §8's rule are implemented by the epic

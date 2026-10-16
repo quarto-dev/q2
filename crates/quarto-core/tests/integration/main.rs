@@ -20,6 +20,7 @@ pub mod book_download;
 pub mod book_epub;
 pub mod book_multifile_bibliography;
 pub mod book_multifile_html;
+pub mod book_named_files;
 pub mod book_numbering_lua;
 pub mod book_numbering_pipeline;
 pub mod book_numbering_torture;

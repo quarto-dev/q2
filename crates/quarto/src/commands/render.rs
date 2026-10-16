@@ -32,6 +32,7 @@ use anyhow::{Context, Result};
 use tracing::info;
 
 use quarto_core::attribution::AttributionMode;
+use quarto_core::project::ProjectKind;
 use quarto_core::project::orchestrator::{
     DiagnosticCounts, ProjectPipeline, RenderMode, project_type_for,
 };
@@ -416,7 +417,11 @@ pub fn classify_inputs(
     // If the targets cover the entire project, also collapse to Mode A.
     // Mode-B-with-all-files is functionally identical but goes through
     // the dependency-graph augmentation, which is wasted work.
-    if targets.len() == project_files.len() {
+    // A Book project is the exception: whether naming every file is the same
+    // as rendering the book depends on each file's format and on which files
+    // are chapters, which the orchestrator decides (it knows formats; this
+    // function stays pure).
+    if targets.len() == project_files.len() && project.project_kind() != ProjectKind::Book {
         return Ok(RenderTarget::FullProject { project_dir });
     }
 
@@ -696,6 +701,12 @@ pub struct RenderReport {
     /// The format string the render resolved to (`"html"`,
     /// `"revealjs"`, …).
     pub format_str: String,
+    /// The project's own format key: the project's `format:` plus a requested
+    /// format (`--to`, `-M format:`), whatever each named file resolved to.
+    pub project_format_key: String,
+    /// Whether the project is a book (the re-render policy of `--static`
+    /// differs for a book that consolidates into one file).
+    pub project_is_book: bool,
     /// Number of inputs the project pipeline considered (the "M" in
     /// "Rendered N of M"). `None` for a single-document render, which
     /// prints no such line.
@@ -910,54 +921,14 @@ pub fn render_once(
     args: &RenderArgs,
     present: &mut dyn FnMut(&RenderReport),
 ) -> std::result::Result<RenderReport, RenderAbort> {
-    // Create the system runtime
+    // Create the system runtime. The render's format is not decided here: it
+    // depends on the project, which `render_single_doc` and `render_project`
+    // discover (F5a-D1).
     let runtime = NativeRuntime::new();
 
     let cwd = runtime.cwd().map_err(|e| {
         RenderAbort::Other(anyhow::anyhow!("Failed to get current directory: {}", e))
     })?;
-
-    // Determine the target format. An explicit `--to` always wins; otherwise
-    // resolve from the document's front-matter `format:` (matching Quarto 1,
-    // which reads the front-matter to choose output formats). Falling back to
-    // `"html"` only when neither is present. Single-format-per-render for now;
-    // multi-format/project resolution is a later phase
-    // (claude-notes/plans/2026-06-08-revealjs-presentations.md, decision 5).
-    let format_str: String = match args.to.as_deref() {
-        Some(to) => to.to_string(),
-        None => detect_single_input_format(&args.inputs).unwrap_or_else(|| "html".to_string()),
-    };
-    let format = resolve_format(&format_str).map_err(RenderAbort::Other)?;
-
-    // P7-foundation Task 1/3 (design doc §14): relaxing the format gate
-    // below removes the only existing signal that a multi-format
-    // `format:` declaration silently reduces to one rendered format.
-    // Emit the replacement warning at the same site that made the
-    // reduction, before the gate below decides whether to bail.
-    // Only a single-input render can trip it, so that input is the
-    // file it is about.
-    let single_input = match args.inputs.as_slice() {
-        [only] => Some(Path::new(only)),
-        _ => None,
-    };
-    for diagnostic in
-        multi_format_warning_diagnostics(&args.inputs, args.to.as_deref(), &format_str)
-    {
-        emit_cli_diagnostic(&diagnostic, args, &SourceContext::new(), single_input);
-    }
-
-    // Native formats (HTML, revealjs) render in-process. Every
-    // pandoc-hybrid format (`FormatIdentifier::is_pandoc_hybrid`) routes
-    // through Pandoc via `render_qmd_to_pandoc`. Only non-hybrid,
-    // non-native formats (Pdf for now — the latex/beamer epic owns it —
-    // and future enum additions that have not yet gained a
-    // `pandoc_writer_name_for` arm) are refused here.
-    if !format.identifier.is_native() && !format.identifier.is_pandoc_hybrid() {
-        return Err(RenderAbort::Other(anyhow::anyhow!(
-            "Format '{}' is not yet supported.",
-            format.identifier
-        )));
-    }
 
     // Classify inputs into a render target.
     let target = classify_inputs(
@@ -971,29 +942,6 @@ pub fn render_once(
     // `-M KEY:VALUE`: the runtime metadata layer for this render.
     let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&args.metadata)
         .map_err(|e| RenderAbort::Other(anyhow::anyhow!(e)))?;
-
-    // F5a: delete. An explicit `-M book-scope:chapter` renders each named
-    // file alone, but until the orchestrator loops over several named files
-    // a book would merge the whole book for them, so it needs exactly one.
-    // (With no file named, the resolver's own error, `Q-5-47`, applies.)
-    let explicit_chapter = overlay
-        .as_ref()
-        .and_then(|o| o.metadata.as_ref())
-        .is_some_and(|m| {
-            matches!(
-                quarto_core::format_resolution::book_scope_in_json(m),
-                Ok(Some(quarto_core::BookScope::Chapter))
-            )
-        });
-    if explicit_chapter {
-        let several = args.inputs.len() > 1
-            || matches!(&target, RenderTarget::Subset { targets, .. } if targets.len() > 1);
-        if several {
-            return Err(RenderAbort::Other(anyhow::anyhow!(
-                "`-M book-scope:chapter` needs exactly one file"
-            )));
-        }
-    }
 
     // bd-45yw: load replay capture if --replay <path> or
     // QUARTO_REPLAY=<path> is set. Hard-fail on read errors and on
@@ -1030,28 +978,14 @@ pub fn render_once(
     };
 
     match target {
-        RenderTarget::SingleDoc(input) => render_single_doc(input, args, &options, format, present),
-        RenderTarget::FullProject { project_dir } => render_project(
-            project_dir,
-            None,
-            args,
-            &options,
-            format,
-            &format_str,
-            present,
-        ),
+        RenderTarget::SingleDoc(input) => render_single_doc(input, args, &options, present),
+        RenderTarget::FullProject { project_dir } => {
+            render_project(project_dir, None, args, &options, present)
+        }
         RenderTarget::Subset {
             project_dir,
             targets,
-        } => render_project(
-            project_dir,
-            Some(targets),
-            args,
-            &options,
-            format,
-            &format_str,
-            present,
-        ),
+        } => render_project(project_dir, Some(targets), args, &options, present),
     }
 }
 
@@ -1087,7 +1021,6 @@ fn render_single_doc(
     input: PathBuf,
     args: &RenderArgs,
     options: &RenderToFileOptions,
-    format: Format,
     present: &mut dyn FnMut(&RenderReport),
 ) -> std::result::Result<RenderReport, RenderAbort> {
     // This function creates the render's runtime, so it applies the overlay.
@@ -1119,18 +1052,28 @@ fn render_single_doc(
         input.display()
     );
 
+    let resolved = resolve_render_formats(
+        &project,
+        &RenderMode::ActivePage(input.clone()),
+        args,
+        runtime_arc.as_ref(),
+        Some(&input),
+    )?;
     let project_type = project_type_for(&project);
-    let format_str = format.identifier.to_string();
+    let format_str = resolved.format.identifier.to_string();
     let mut pipeline = ProjectPipeline::new(
         &mut project,
         project_type,
-        format,
+        resolved.format.clone(),
         &format_str,
         options,
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
     .with_fail_fast(args.fail_fast);
+    if resolved.is_book {
+        pipeline = pipeline.with_project_format(resolved.project_format.clone());
+    }
 
     // bd-hxhnnlzs: keep Jupyter kernels warm across the whole pipeline
     // run. Scoped to the `block_on` (not the surrounding function)
@@ -1161,6 +1104,8 @@ fn render_single_doc(
         project_dir: project.dir.clone(),
         output_dir: project.output_dir.clone(),
         format_str,
+        project_format_key: resolved.project_format_key,
+        project_is_book: resolved.is_book,
         total_files: None,
         inputs: vec![input],
         summary,
@@ -1176,8 +1121,6 @@ fn render_project(
     targets: Option<Vec<PathBuf>>,
     args: &RenderArgs,
     options: &RenderToFileOptions,
-    format: Format,
-    format_str: &str,
     present: &mut dyn FnMut(&RenderReport),
 ) -> std::result::Result<RenderReport, RenderAbort> {
     // Build a runtime with cache_dir wired up — same as the pre-Phase-8
@@ -1311,6 +1254,15 @@ fn render_project(
         project.project_type_label()
     );
 
+    // The project is final (any pre-render script has run and the project was
+    // re-discovered): decide the format here (F5a-D1).
+    let mode = match &targets {
+        None => RenderMode::Full,
+        Some(t) => RenderMode::Subset(t.iter().cloned().collect()),
+    };
+    let resolved = resolve_render_formats(&project, &mode, args, runtime_arc.as_ref(), None)?;
+    let format_str = resolved.format.target_format.clone();
+
     let project_type = project_type_for(&project);
     let total_files = project.files.len();
     let inputs: Vec<PathBuf> = project.files.iter().map(|f| f.input.clone()).collect();
@@ -1318,17 +1270,19 @@ fn render_project(
     let mut pipeline = ProjectPipeline::new(
         &mut project,
         project_type,
-        format,
-        format_str,
+        resolved.format.clone(),
+        &format_str,
         options,
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
     .with_fail_fast(args.fail_fast);
+    if resolved.is_book {
+        pipeline = pipeline.with_project_format(resolved.project_format.clone());
+    }
 
-    if let Some(target_set) = targets {
-        let set: std::collections::HashSet<PathBuf> = target_set.into_iter().collect();
-        pipeline = pipeline.with_mode(RenderMode::Subset(set));
+    if matches!(mode, RenderMode::Subset(_)) {
+        pipeline = pipeline.with_mode(mode);
     }
 
     // bd-hxhnnlzs: one kernel scope for the whole project render, so
@@ -1359,7 +1313,9 @@ fn render_project(
         target,
         project_dir: project.dir.clone(),
         output_dir: project.output_dir.clone(),
-        format_str: format_str.to_string(),
+        format_str,
+        project_format_key: resolved.project_format_key,
+        project_is_book: resolved.is_book,
         total_files: Some(total_files),
         inputs,
         summary,
@@ -1972,26 +1928,108 @@ pub(crate) fn detect_single_input_format(inputs: &[String]) -> Option<String> {
     quarto_core::format::format_key_from_frontmatter(&content)
 }
 
-/// P7-foundation Task 1/3 (design doc §14): when a single input's
-/// front-matter `format:` declares more than one key but only `used_key`
-/// is actually rendered, emit the `Q-18-*` warning naming which was used
-/// and which were skipped. A no-op when `--to` was given explicitly (the
-/// user made the choice on the command line, not via a declaration this
-/// render silently reduced), for project renders, or when the input has
-/// no front matter.
-fn multi_format_warning_diagnostics(
-    inputs: &[String],
-    cli_to: Option<&str>,
-    used_key: &str,
-) -> Vec<quarto_error_reporting::DiagnosticMessage> {
-    if cli_to.is_some() {
-        return Vec::new();
-    }
-    let Some(content) = read_single_input_content(inputs) else {
-        return Vec::new();
+/// What the format resolver decided for one render (F5a-D1).
+struct ResolvedRender {
+    /// The dispatch format: the project's for a whole-book render, otherwise
+    /// the one named document's, or the project's when no single document is
+    /// named.
+    format: Format,
+    project_format: Format,
+    project_format_key: String,
+    is_book: bool,
+}
+
+/// Decide the render's formats once the project is final (FR1-FR4, FR11,
+/// FR18): the requested scope, the project's format, and each named file's
+/// format. Refuses a format no render path supports (for every file that will
+/// be named, before any render starts) and warns, once per distinct list,
+/// when a layer declares several formats and none was requested (Q-20-8).
+/// `runtime` must be the render's own (overlaid) runtime.
+fn resolve_render_formats(
+    project: &ProjectContext,
+    mode: &RenderMode,
+    args: &RenderArgs,
+    runtime: &dyn SystemRuntime,
+    single_input: Option<&Path>,
+) -> std::result::Result<ResolvedRender, RenderAbort> {
+    use quarto_core::format_resolution::{
+        FormatResolution, resolve_document_format, resolve_project_format, resolve_render_scope,
     };
-    let all_keys = quarto_core::format::format_keys_from_frontmatter(&content);
-    quarto_core::format::multi_format_diagnostics(&all_keys, used_key)
+
+    let request = resolve_render_scope(project, mode, runtime);
+    let to = args.to.as_deref();
+    let project_resolution = resolve_project_format(project, &request, to, runtime);
+    let is_book = project.project_kind() == ProjectKind::Book;
+    let whole_book = is_book && request.value == quarto_core::BookScope::Book;
+
+    let named: Vec<PathBuf> = match mode {
+        RenderMode::ActivePage(page) => vec![page.clone()],
+        RenderMode::Subset(set) => {
+            let mut files: Vec<PathBuf> = set.iter().cloned().collect();
+            files.sort();
+            files
+        }
+        RenderMode::Full => Vec::new(),
+    };
+    let documents: Vec<FormatResolution> = if whole_book {
+        Vec::new()
+    } else {
+        named
+            .iter()
+            .map(|path| resolve_document_format(project, path, None, &request, to, runtime))
+            .collect()
+    };
+    let dispatch = match documents.as_slice() {
+        [only] => only.clone(),
+        _ => project_resolution.clone(),
+    };
+
+    // The refusal gate: every format a render will use, all judged before any
+    // render starts.
+    let mut judged: Vec<&FormatResolution> = vec![&dispatch];
+    judged.extend(documents.iter());
+    for resolution in judged {
+        let format = resolve_format(&resolution.key).map_err(RenderAbort::Other)?;
+        // Native formats (HTML, revealjs) render in-process. Every
+        // pandoc-hybrid format (`FormatIdentifier::is_pandoc_hybrid`) routes
+        // through Pandoc via `render_qmd_to_pandoc`. Only non-hybrid,
+        // non-native formats (Pdf for now — the latex/beamer epic owns it —
+        // and future enum additions that have not yet gained a
+        // `pandoc_writer_name_for` arm) are refused here.
+        if !format.identifier.is_native() && !format.identifier.is_pandoc_hybrid() {
+            return Err(RenderAbort::Other(anyhow::anyhow!(
+                "Format '{}' is not yet supported.",
+                format.identifier
+            )));
+        }
+    }
+
+    // Q-20-8: a layer declared several formats and this render picked one.
+    let mut warned: Vec<(&[String], &str)> = Vec::new();
+    for resolution in std::iter::once(&dispatch).chain(documents.iter()) {
+        if resolution.requested {
+            continue;
+        }
+        let entry = (resolution.all_keys.as_slice(), resolution.key.as_str());
+        if warned.contains(&entry) {
+            continue;
+        }
+        warned.push(entry);
+        for diagnostic in
+            quarto_core::format::multi_format_diagnostics(&resolution.all_keys, &resolution.key)
+        {
+            emit_cli_diagnostic(&diagnostic, args, &SourceContext::new(), single_input);
+        }
+    }
+
+    let format = resolve_format(&dispatch.key).map_err(RenderAbort::Other)?;
+    let project_format = resolve_format(&project_resolution.key).map_err(RenderAbort::Other)?;
+    Ok(ResolvedRender {
+        format,
+        project_format,
+        project_format_key: project_resolution.key,
+        is_book,
+    })
 }
 
 // ====================================================================
@@ -3235,6 +3273,29 @@ mod tests {
             RenderTarget::FullProject {
                 project_dir: project
             }
+        );
+    }
+
+    #[test]
+    fn classify_subset_covering_all_files_of_a_book_stays_a_subset() {
+        // A Book project is the exception to the collapse: whether naming
+        // every file is the whole-book render depends on the files' formats
+        // and on which are chapters, which the orchestrator decides.
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - a.qmd\n    - b.qmd\n",
+        );
+        for f in ["a.qmd", "b.qmd"] {
+            write_file(&dir.join(f), "# H\n");
+        }
+        let runtime = NativeRuntime::new();
+        let target =
+            classify_inputs(&["a.qmd".into(), "b.qmd".into()], &dir, &runtime, None).unwrap();
+        assert!(
+            matches!(&target, RenderTarget::Subset { targets, .. } if targets.len() == 2),
+            "{target:?}"
         );
     }
 

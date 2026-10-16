@@ -51,7 +51,9 @@ enum Commands {
         /// single project (one project per render).
         inputs: Vec<String>,
 
-        /// Specify output format(s)
+        /// Output format for this render (one per invocation). Without it, each
+        /// document uses its own `format:`, else the project's; naming several
+        /// files renders each on its own.
         #[arg(short = 't', long)]
         to: Option<String>,
 

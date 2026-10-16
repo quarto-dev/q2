@@ -23,8 +23,17 @@ pub(crate) fn prepare_page_in_book(project: &mut ProjectContext, active: &Path, 
     if let Ok(rel) = active.strip_prefix(&project.dir) {
         project.extra_render_files = vec![rel.to_path_buf()];
     }
-    if format.identifier == FormatIdentifier::Typst
-        && let Some(meta) = project.config.metadata.as_mut()
+    if format.identifier == FormatIdentifier::Typst {
+        seed_book_title_metadata(project);
+    }
+}
+
+/// Give a typst page rendered outside the book merge the book's title, author
+/// and date as project metadata (the page's own win). The orchestrator's loop
+/// over several named files calls it on the shared project around the
+/// consolidating files only, so the other files do not see it.
+pub(crate) fn seed_book_title_metadata(project: &mut ProjectContext) {
+    if let Some(meta) = project.config.metadata.as_mut()
         && let Some(book) = meta.get("book").cloned()
     {
         super::merge::seed_missing_book_title_metadata(meta, &book);
@@ -52,7 +61,19 @@ pub async fn render_chapter_alone(
     let active = runtime
         .canonicalize(abs_path)
         .unwrap_or_else(|_| abs_path.to_path_buf());
-    let summary = render_chapter_alone_summary(project, &active, format, options, runtime).await?;
+    // `format` is the caller's explicit request, so it is the project's format
+    // for this render too: Pass 1 (and the sibling output extensions its index
+    // records) run under it, as they always did for this API. (The
+    // orchestrator's own chapter-alone path passes the project's resolved
+    // format instead, FR11.)
+    let summary =
+        render_chapter_alone_summary(project, &active, format, format, options, runtime).await;
+    // The summary leaves the engine shutdown to its caller (the orchestrator
+    // shuts down once per render); this is that caller.
+    if let Err(e) = project.registry.shutdown_all() {
+        tracing::warn!("engine registry shutdown_all failed after a chapter render: {e}");
+    }
+    let summary = summary?;
     if let Some(output) = summary.outputs.into_iter().next() {
         return Ok(output);
     }
@@ -77,12 +98,15 @@ pub async fn render_chapter_alone(
 
 /// [`render_chapter_alone`] with the whole project summary (failures and
 /// project diagnostics included), for the orchestrator, whose report lists
-/// them. `active` must be canonical.
+/// them. `active` must be canonical. `format` is the page's own resolved
+/// format; `project_format` is the project's, which Pass 1 runs under. The
+/// engine registry is **not** shut down: the caller does that once.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn render_chapter_alone_summary(
     project: &ProjectContext,
     active: &Path,
     format: &Format,
+    project_format: &Format,
     options: &crate::render_to_file::RenderToFileOptions,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> crate::Result<crate::project::orchestrator::ProjectRenderSummary> {
@@ -90,17 +114,20 @@ pub(crate) async fn render_chapter_alone_summary(
 
     let mut project = project.clone();
     prepare_page_in_book(&mut project, active, format);
-    let format_str = format.identifier.to_string();
+    // The resolved key, not the base identifier: an extension format such as
+    // `acm-typst` stays itself.
+    let format_str = format.target_format.clone();
     let project_type = project_type_for(&project);
     let mut pipeline = ProjectPipeline::new(
         &mut project,
         project_type,
         format.clone(),
-        format_str.clone(),
+        format.identifier.to_string(),
         options,
         runtime,
     )
+    .with_project_format(project_format.clone())
     .with_format_override(Some(format_str))
     .with_mode(RenderMode::ActivePage(active.to_path_buf()));
-    pipeline.run().await
+    pipeline.run_without_shutdown().await
 }

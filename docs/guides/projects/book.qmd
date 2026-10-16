@@ -132,7 +132,16 @@ Naming a chapter renders that chapter on its own, in every format: `q2
 render mybook/intro.qmd --to typst` produces the chapter alone, as a
 standalone document with the book's title, author and date, named after
 the chapter instead of the book. Rendering the project with no file
-named (`q2 render`) produces the whole book.
+named (`q2 render`) produces the whole book, in the project's `format:`
+(you do not need `--to`).
+
+Naming several files renders each one on its own, in the format its own
+front matter gives it, else the project's: `q2 render one.qmd two.qmd`
+makes two outputs, and naming every chapter of a typst or EPUB book does
+not merge them (use `-M book-scope:book` for one book). Naming every
+chapter of an HTML book still renders the whole book, so cross-chapter
+references resolve. Quarto 1 renders one HTML book there and does not
+write a separate page per chapter.
 
 To render the whole book from a chapter, ask for it with the
 `book-scope` metadata key. Typst and EPUB put the book in one file, so
@@ -153,7 +162,9 @@ choose.
 A page that is in the project but not in `book.chapters` has no place
 in the book. Named by itself it renders as a standalone document, with
 its own numbering and without links to the book's chapters, and reports
-[`Q-5-41`](../../errors/project/Q-5-41.qmd). Asking for the book with
+[`Q-5-41`](../../errors/project/Q-5-41.qmd). In an HTML book it is written
+under the book's output directory (`_book/`); Quarto 1 writes it beside
+the source file. Asking for the book with
 `-M book-scope:book` cannot include it, and warns with
 [`Q-5-48`](../../errors/project/Q-5-48.qmd). HTML, DOCX and PPTX have no
 whole-book output, so `-M book-scope:book` cannot be honoured for them

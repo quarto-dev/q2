@@ -16,6 +16,7 @@ pub mod diagnostic_render_panic_boundary;
 pub mod docs_llms_cli;
 pub mod engine_diagnostics_cli;
 pub mod extension_config_spans;
+pub mod format_resolution_cli;
 pub mod founding_crash_config_span_e2e;
 pub mod get_config_cli;
 pub mod json_errors;

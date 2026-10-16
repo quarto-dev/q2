@@ -643,8 +643,8 @@ pub fn format_keys_from_frontmatter(content: &str) -> Vec<String> {
     }
 }
 
-/// Warn when a document's `format:` declares more than one key but only one
-/// is actually rendered — a signal `render.rs`'s blanket non-native-format
+/// Warn (`Q-20-8`: not yet supported) when a layer's `format:` declares more
+/// than one key but only one is actually rendered — a signal `render.rs`'s blanket non-native-format
 /// refusal used to provide as a side effect before P7-foundation relaxed it
 /// to admit `Docx`/`Pptx` (design doc §14). Returns an empty vec when
 /// `all_keys` has zero or one entries, or when every declared key besides
@@ -671,15 +671,18 @@ pub fn multi_format_diagnostics(
         return Vec::new();
     }
     vec![
-        DiagnosticMessageBuilder::warning(
-            "`format:` declares more than one format; only one is rendered",
-        )
-        .with_code("Q-20-8")
-        .problem(format!(
-            "rendered `{used_key}`; skipped `{}`.",
-            skipped.join("`, `")
-        ))
-        .build(),
+        DiagnosticMessageBuilder::warning("Multiple formats in one render are not yet supported")
+            .with_code("Q-20-8")
+            .problem(format!(
+                "`format:` declares more than one format, and rendering several formats in one \
+             invocation is not yet supported: rendered `{used_key}`; skipped `{}`.",
+                skipped.join("`, `")
+            ))
+            .add_hint(
+                "Render each format on its own: name it with `--to <format>` or \
+             `-M format:<format>`.",
+            )
+            .build(),
     ]
 }
 
