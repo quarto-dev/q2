@@ -83,6 +83,25 @@ pub fn cli_selection(values: &[String]) -> Option<&[String]> {
     }
 }
 
+/// The native runtime for a session whose `--profile` selection is
+/// `selection` (the clap `Vec`, as for [`cli_selection`]).
+///
+/// An empty selection is a plain [`NativeRuntime`]. A non-empty one
+/// answers `env_get("QUARTO_PROFILE")` with the comma-joined values on
+/// this runtime only, so `ProjectContext::discover`'s fallback to the
+/// environment variable resolves to the flag's value (which **replaces**
+/// the real variable, Q1 parity) without touching the process
+/// environment. Every native site of the live preview server obtains
+/// its runtime here, so the selection cannot be skipped by one of them.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn native_runtime_for_selection(selection: &[String]) -> quarto_system_runtime::NativeRuntime {
+    let runtime = quarto_system_runtime::NativeRuntime::new();
+    match cli_selection(selection) {
+        Some(values) => runtime.with_env_override(QUARTO_PROFILE_VAR, values.join(",")),
+        None => runtime,
+    }
+}
+
 /// The `QUARTO_PROFILE` value user code (engine cells, render
 /// scripts) sees: the **normalized, group-expanded** active list,
 /// comma-joined — Q1 wrote exactly this back into the environment.

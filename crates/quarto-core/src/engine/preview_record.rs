@@ -399,6 +399,36 @@ mod tests {
         );
     }
 
+    /// F8-D9: a `-M` overlay on the runtime reaches the engine (the input it
+    /// receives is the merged document), and the overlay-free recompute
+    /// differs from what was recorded, which is why `provide-hub` stores the
+    /// recompute as the staleness key.
+    #[tokio::test]
+    async fn runtime_metadata_reaches_the_engine_input() {
+        use crate::overlay_runtime::RenderOverlay;
+
+        let (_tmp, path, project, plain) =
+            fixture("---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n1\n```\n");
+        let overlay = Arc::new(RenderOverlay::with_metadata(
+            serde_json::json!({ "subtitle": "ZZOVERLAY" }),
+        ));
+        let runtime = overlay.apply(plain.clone());
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(PassthroughTestEngine));
+
+        let captures = record_capture(&path, &project, runtime, Some(Arc::new(registry)))
+            .await
+            .expect("pipeline runs");
+        let recorded = &captures[0].input_qmd;
+        assert!(recorded.contains("ZZOVERLAY"), "{recorded}");
+        let markdown = captures[0].result.get("markdown").and_then(|v| v.as_str());
+        assert!(markdown.unwrap().contains("ZZOVERLAY"));
+
+        let source = compute_input_qmd(&path, &project, plain).await.unwrap();
+        assert_ne!(source, recorded.as_bytes());
+        assert!(!String::from_utf8(source).unwrap().contains("ZZOVERLAY"));
+    }
+
     #[tokio::test]
     async fn observer_is_silent_for_pipeline_without_capture() {
         // Defensive: a prose-only doc must NOT leave the capture slot

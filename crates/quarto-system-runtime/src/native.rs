@@ -105,6 +105,11 @@ pub struct NativeRuntime {
     /// Optional cache directory for persistent caching.
     /// When `None`, all cache operations are silent no-ops.
     cache_dir: Option<PathBuf>,
+    /// Environment reads answered from this instance before the process
+    /// environment (`env_get`, `env_all`). Instance-scoped: nothing is
+    /// set process-wide, so two runtimes with different overrides in one
+    /// process do not see each other's.
+    env_overrides: Vec<(String, String)>,
 }
 
 impl NativeRuntime {
@@ -119,7 +124,23 @@ impl NativeRuntime {
     pub fn with_cache_dir(cache_dir: PathBuf) -> Self {
         Self {
             cache_dir: Some(cache_dir),
+            ..Self::default()
         }
+    }
+
+    /// Answer `env_get(name)` (and `env_all`) with `value` on this runtime
+    /// instead of the process environment. A later override of the same
+    /// name replaces an earlier one.
+    ///
+    /// The live preview server uses it to carry `--profile` as
+    /// `QUARTO_PROFILE` to project discovery without touching the process
+    /// environment.
+    #[must_use]
+    pub fn with_env_override(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        let name = name.into();
+        self.env_overrides.retain(|(n, _)| *n != name);
+        self.env_overrides.push((name, value.into()));
+        self
     }
 
     /// Returns the configured cache directory, if any.
@@ -321,11 +342,16 @@ impl SystemRuntime for NativeRuntime {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn env_get(&self, name: &str) -> RuntimeResult<Option<String>> {
+        if let Some((_, value)) = self.env_overrides.iter().find(|(n, _)| n == name) {
+            return Ok(Some(value.clone()));
+        }
         Ok(std::env::var(name).ok())
     }
 
     fn env_all(&self) -> RuntimeResult<HashMap<String, String>> {
-        Ok(std::env::vars().collect())
+        let mut vars: HashMap<String, String> = std::env::vars().collect();
+        vars.extend(self.env_overrides.iter().cloned());
+        Ok(vars)
     }
 
     fn is_interactive(&self) -> bool {
@@ -1134,6 +1160,47 @@ mod tests {
         let css = result.unwrap().css;
         // Minified output should not have newlines between selectors and braces
         assert!(css.contains(".container{") || css.contains(".container {"));
+    }
+
+    // ── Environment override ─────────────────────────────────────────────
+
+    /// The override answers on its own instance only: a plain runtime
+    /// (and the process environment) never sees it, and two overridden
+    /// runtimes stay independent.
+    #[test]
+    fn test_env_override_is_instance_scoped() {
+        use crate::traits::SystemRuntime;
+        const NAME: &str = "Q2_TEST_ENV_OVERRIDE_INSTANCE_SCOPED";
+        let a = NativeRuntime::new().with_env_override(NAME, "a");
+        let b = NativeRuntime::new().with_env_override(NAME, "b");
+        let plain = NativeRuntime::new();
+        assert_eq!(a.env_get(NAME).unwrap().as_deref(), Some("a"));
+        assert_eq!(b.env_get(NAME).unwrap().as_deref(), Some("b"));
+        assert_eq!(plain.env_get(NAME).unwrap(), None);
+        assert!(std::env::var(NAME).is_err(), "nothing set process-wide");
+        assert_eq!(
+            a.env_all().unwrap().get(NAME).map(String::as_str),
+            Some("a")
+        );
+        assert!(!plain.env_all().unwrap().contains_key(NAME));
+    }
+
+    /// An unrelated name still reads the process environment, and a
+    /// second override of the same name replaces the first.
+    #[test]
+    fn test_env_override_falls_through_and_replaces() {
+        use crate::traits::SystemRuntime;
+        let rt = NativeRuntime::new()
+            .with_env_override("Q2_TEST_ENV_OVERRIDE_X", "1")
+            .with_env_override("Q2_TEST_ENV_OVERRIDE_X", "2");
+        assert_eq!(
+            rt.env_get("Q2_TEST_ENV_OVERRIDE_X").unwrap().as_deref(),
+            Some("2")
+        );
+        assert_eq!(
+            rt.env_get("PATH").unwrap(),
+            NativeRuntime::new().env_get("PATH").unwrap()
+        );
     }
 
     // ── Cache: NativeRuntime construction ────────────────────────────────

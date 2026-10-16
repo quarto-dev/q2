@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let ready = true;
 let response: unknown;
+const resolve = vi.fn((..._args: unknown[]) => response);
 vi.mock('@quarto/preview-runtime', () => ({
   isWasmReady: () => ready,
-  resolvePandocFormats: () => response,
+  resolvePandocFormats: (...args: unknown[]) => resolve(...args),
 }));
 
 import { isTypstPdf } from './pdfPage';
@@ -36,5 +37,24 @@ describe('isTypstPdf follows the resolver’s resolved key', () => {
     response = ok('typst-pdf', 'download');
     ready = false;
     expect(isTypstPdf('a.qmd')).toBe(false);
+  });
+});
+
+describe('isTypstPdf takes the session’s render flags (F8)', () => {
+  beforeEach(() => {
+    ready = true;
+    resolve.mockClear();
+  });
+
+  it('with no flags the resolver is asked as before', () => {
+    response = ok('html', 'preview');
+    expect(isTypstPdf('a.qmd')).toBe(false);
+    expect(resolve).toHaveBeenCalledWith('a.qmd', undefined);
+  });
+
+  it('passes to and metadata to the resolver, which decides', () => {
+    response = ok('typst-pdf', 'download');
+    expect(isTypstPdf('a.qmd', { to: 'typst', metadata: { toc: true } })).toBe(true);
+    expect(resolve).toHaveBeenCalledWith('a.qmd', { to: 'typst', metadata: { toc: true } });
   });
 });

@@ -800,11 +800,14 @@ fn front_matter_format(content: &str) -> String {
 /// (`quarto_core::format_resolution`) over the document text, the
 /// `_metadata.yml` chain, the project and the runtime layer. The request is
 /// for a chapter, the browser preview's scope, so a chapter's own `format:`
-/// wins over the project's even in a book.
+/// wins over the project's even in a book. `requested` is the call's `to` (the
+/// live viewer's `--to`), which wins over both (FR2); every entry but the
+/// viewer's passes `None`.
 fn resolve_entry_format(
     project: &ProjectContext,
     path: &Path,
     content: &str,
+    requested: Option<&str>,
     runtime: &dyn SystemRuntime,
 ) -> String {
     quarto_core::format_resolution::resolve_document_format(
@@ -812,7 +815,7 @@ fn resolve_entry_format(
         path,
         Some(content),
         &quarto_core::format_resolution::ScopeRequest::chapter(),
-        None,
+        requested,
         runtime,
     )
     .key
@@ -1122,6 +1125,7 @@ async fn render_qmd_with_overlay(
         Vec::new(),
         None,
         None,
+        None,
         runtime_arc.clone(),
     )
     .await
@@ -1177,6 +1181,7 @@ async fn render_printable_with_overlay(
         &project,
         path,
         std::str::from_utf8(&content).unwrap_or(""),
+        None,
         runtime,
     );
     let printable_format = coerce_format_for_print(&detected).to_string();
@@ -1190,6 +1195,7 @@ async fn render_printable_with_overlay(
         Vec::new(),
         None,
         Some(&printable_format),
+        None,
         runtime_arc.clone(),
     )
     .await
@@ -1222,6 +1228,7 @@ pub async fn render_qmd_content(
         user_grammars,
         false,
         Vec::new(),
+        None,
         None,
         None,
         // No overlay on the path-less render: it has no project to resolve.
@@ -1396,6 +1403,7 @@ async fn render_page_in_project_with_overlay(
             captures,
             attribution_json,
             None,
+            None,
             runtime_arc.clone(),
         )
         .await;
@@ -1422,6 +1430,7 @@ async fn render_page_in_project_with_overlay(
         RenderHost::HubClient,
         captures,
         attribution_json,
+        None,
         runtime_arc.clone(),
     )
     .await
@@ -1448,23 +1457,44 @@ async fn render_page_in_project_with_overlay(
 /// stays on the default registry. The SPA reads the capture binary
 /// doc out of the IndexDocument's capture sidecar (V2 schema, C.3)
 /// and threads it through this argument.
+///
+/// `options` (optional, trailing) is `{ to?: string, metadata?: Record<string,
+/// unknown> }`: the live viewer's `--to` (the requested format, which wins over
+/// the document's and the project's) and `-M` (the render's runtime metadata
+/// layer). Absent, the render is what it always was.
 #[wasm_bindgen]
 pub async fn render_page_for_preview(
     path: &str,
     user_grammars: Option<JsUserGrammars>,
     capture_gz_json: Option<Vec<u8>>,
+    options: Option<JsValue>,
 ) -> String {
-    render_page_for_preview_with_overlay(path, user_grammars, capture_gz_json, None).await
+    // The viewer's `to` / `metadata` (F8-D2): `metadata` is this call's
+    // runtime layer, like every other overlay (FR12); `to` is the requested
+    // format. Both are per call, so two renders cannot see each other's.
+    let options = match parse_preview_options(options) {
+        Ok(o) => o,
+        Err(e) => return error_response(e),
+    };
+    let overlay = overlay_with_metadata(None, options.metadata);
+    render_page_for_preview_with_overlay(
+        path,
+        user_grammars,
+        capture_gz_json,
+        overlay,
+        options.to.as_deref(),
+    )
+    .await
 }
 
-/// [`render_page_for_preview`] with a per-render overlay (FR12). F8 adds the
-/// trailing options argument to the exported entry and the TypeScript
-/// surface.
+/// [`render_page_for_preview`] with a per-render overlay (FR12) and the
+/// requested format.
 async fn render_page_for_preview_with_overlay(
     path: &str,
     user_grammars: Option<JsUserGrammars>,
     capture_gz_json: Option<Vec<u8>>,
     overlay: Option<Arc<RenderOverlay>>,
+    requested_format: Option<&str>,
 ) -> String {
     let runtime_arc = render_runtime(overlay.as_ref());
     let runtime = runtime_arc.as_ref();
@@ -1508,6 +1538,7 @@ async fn render_page_for_preview_with_overlay(
             captures,
             None,
             None,
+            requested_format,
             runtime_arc.clone(),
         )
         .await;
@@ -1528,6 +1559,7 @@ async fn render_page_for_preview_with_overlay(
         RenderHost::NativePreview,
         captures,
         None,
+        requested_format,
         runtime_arc.clone(),
     )
     .await
@@ -1881,6 +1913,11 @@ struct RequestOptions {
     /// The call's runtime-layer metadata (a JSON object), e.g.
     /// `{"book-scope": "chapter"}`.
     metadata: Option<serde_json::Value>,
+    /// The viewer's requested format (`--to`), accepted beside `metadata`
+    /// so one options shape serves every entry. A pandoc request already
+    /// names its output format positionally, so nothing reads it here.
+    #[allow(dead_code)]
+    to: Option<String>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
     on_progress: Option<js_sys::Function>,
     /// The transport JSON of `parse_qmd_to_ast_with_attribution`, for the
@@ -1906,12 +1943,49 @@ fn metadata_object(value: &JsValue) -> Result<serde_json::Value, String> {
     }
 }
 
+/// `options.to`: the requested format, a non-empty string when present.
+fn get_to(options: &JsValue) -> Result<Option<String>, String> {
+    let to = js_sys::Reflect::get(options, &"to".into()).unwrap_or(JsValue::UNDEFINED);
+    if to.is_undefined() || to.is_null() {
+        return Ok(None);
+    }
+    match to.as_string() {
+        Some(s) if !s.is_empty() => Ok(Some(s)),
+        _ => Err("options.to must be a non-empty string".to_string()),
+    }
+}
+
+/// The `{ to?, metadata? }` options of [`render_page_for_preview`] and the
+/// metadata and format of [`resolve_pandoc_formats`].
+#[derive(Default)]
+struct PreviewOptions {
+    to: Option<String>,
+    metadata: Option<serde_json::Value>,
+}
+
+fn parse_preview_options(options: Option<JsValue>) -> Result<PreviewOptions, String> {
+    let mut out = PreviewOptions::default();
+    let Some(options) = options.filter(|o| !o.is_undefined() && !o.is_null()) else {
+        return Ok(out);
+    };
+    if !options.is_object() {
+        return Err("options must be an object".to_string());
+    }
+    out.to = get_to(&options)?;
+    let metadata = js_sys::Reflect::get(&options, &"metadata".into()).unwrap_or(JsValue::UNDEFINED);
+    if !metadata.is_undefined() && !metadata.is_null() {
+        out.metadata = Some(metadata_object(&metadata)?);
+    }
+    Ok(out)
+}
+
 /// Unpack by hand: `serde-wasm-bindgen` is not a dependency, and a
 /// `Uint8Array` is read with `Uint8Array::new` (an `instanceof` check can
 /// fail across realms).
 fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, String> {
     let mut out = RequestOptions {
         metadata: None,
+        to: None,
         captures_by_path: Default::default(),
         on_progress: None,
         attribution_json: None,
@@ -1927,6 +2001,7 @@ fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, Str
     if !metadata.is_undefined() && !metadata.is_null() {
         out.metadata = Some(metadata_object(&metadata)?);
     }
+    out.to = get_to(&options)?;
     let captures = get("capturesByPath");
     if !captures.is_undefined() && !captures.is_null() {
         if !captures.is_object() {
@@ -2315,12 +2390,13 @@ pub fn project_cache_stats() -> String {
     serde_json::json!({ "hits": hits, "misses": misses }).to_string()
 }
 
-/// Options of [`resolve_pandoc_formats`]. Only `contentOverride` is read
-/// today; the requested format and the request's metadata join it later
-/// (format-resolution F8) without changing the signature again.
+/// Options of [`resolve_pandoc_formats`]: the editor buffer, the requested
+/// format (`to`) and the call's runtime metadata (F8-D2).
 #[derive(Default)]
 struct ResolveFormatsOptions {
     content_override: Option<String>,
+    to: Option<String>,
+    metadata: Option<serde_json::Value>,
 }
 
 fn parse_resolve_formats_options(
@@ -2342,6 +2418,9 @@ fn parse_resolve_formats_options(
                 .ok_or_else(|| "options.contentOverride must be a string".to_string())?,
         );
     }
+    let PreviewOptions { to, metadata } = parse_preview_options(Some(options))?;
+    out.to = to;
+    out.metadata = metadata;
     Ok(out)
 }
 
@@ -2367,7 +2446,11 @@ pub fn resolve_pandoc_formats(path: &str, options: Option<JsValue>) -> String {
         Err(e) => return error(e),
     };
     let path = Path::new(path);
-    let runtime = get_runtime();
+    // `metadata` is this call's runtime layer, in an overlay as everywhere
+    // (FR12), so it is never process state.
+    let overlay = overlay_with_metadata(None, options.metadata);
+    let runtime_arc = render_runtime(overlay.as_ref());
+    let runtime = runtime_arc.as_ref();
     let content = match options.content_override {
         Some(c) => c,
         None => match runtime.file_read_string(path) {
@@ -2380,7 +2463,11 @@ pub fn resolve_pandoc_formats(path: &str, options: Option<JsValue>) -> String {
         Err(e) => return error(e),
     };
     let resolved = quarto_core::pandoc_request::formats::resolve_document_formats_in(
-        &project, path, &content, runtime,
+        &project,
+        path,
+        &content,
+        runtime,
+        options.to.as_deref(),
     );
     let mut value = serde_json::to_value(&resolved).unwrap();
     value["success"] = serde_json::Value::Bool(true);
@@ -2430,6 +2517,9 @@ async fn render_single_doc_to_response(
     // pseudo-format to its HTML-output equivalent so the HTML branch
     // runs. `None` preserves the detect-and-maybe-map behavior.
     format_override: Option<&str>,
+    // The requested format (`to`; the live viewer's `--to`), which wins over
+    // the document's and the project's (FR2). `None` for every other entry.
+    requested_format: Option<&str>,
     // The render's runtime, already wrapped in the request's overlay by the
     // entry that created it (FR12); this function never wraps.
     runtime_arc: Arc<dyn SystemRuntime>,
@@ -2441,7 +2531,13 @@ async fn render_single_doc_to_response(
     let format_str = if let Some(ov) = format_override {
         ov.to_string()
     } else {
-        let detected = resolve_entry_format(project, path, content_str, runtime_arc.as_ref());
+        let detected = resolve_entry_format(
+            project,
+            path,
+            content_str,
+            requested_format,
+            runtime_arc.as_ref(),
+        );
         if prefer_preview_format {
             map_format_for_preview(&detected).to_string()
         } else {
@@ -2615,6 +2711,8 @@ async fn render_project_active_page_to_response(
     // branch ignores it.
     captures: Vec<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
+    // The requested format (`to`), as for `render_single_doc_to_response`.
+    requested_format: Option<&str>,
     // The render's runtime, already wrapped in the request's overlay by the
     // entry that created it (FR12); this function never wraps.
     runtime_arc: Arc<dyn SystemRuntime>,
@@ -2632,7 +2730,13 @@ async fn render_project_active_page_to_response(
         Err(e) => return error_response(format!("Failed to read active file: {}", e)),
     };
     let content_str = std::str::from_utf8(&active_bytes).unwrap_or("");
-    let detected = resolve_entry_format(&project, active_path, content_str, runtime_arc.as_ref());
+    let detected = resolve_entry_format(
+        &project,
+        active_path,
+        content_str,
+        requested_format,
+        runtime_arc.as_ref(),
+    );
     let format_str = if prefer_preview_format {
         map_format_for_preview(&detected).to_string()
     } else {

@@ -176,6 +176,9 @@ pub struct BookResolution {
 /// runtime layer (a scalar `format`) take part, and `output-ext` is read from
 /// every metadata layer. Without one only the document's own front matter is
 /// consulted. The request is for a chapter, the browser preview's scope.
+/// `requested` is the session's `--to` (the live viewer's): it wins over the
+/// document and the project (FR2), and is why the first key can name a format
+/// no layer declares.
 ///
 /// The `typst-pdf` key is the internal "typst compiled to PDF" artifact, never
 /// something a document may name: a `typst` document resolves to it (the
@@ -185,6 +188,7 @@ pub struct BookResolution {
 pub fn resolve_formats(
     content: &str,
     location: Option<crate::output_ext::DocumentLocation<'_>>,
+    requested: Option<&str>,
 ) -> ResolvedFormats {
     use crate::format_resolution::{
         FormatInputs, FormatResolution, ScopeRequest, format_keys_of, resolve_document_format,
@@ -198,7 +202,7 @@ pub fn resolve_formats(
             l.path,
             Some(content),
             &ScopeRequest::chapter(),
-            None,
+            requested,
             l.runtime,
         ),
         None => {
@@ -208,6 +212,7 @@ pub fn resolve_formats(
                 .unwrap_or_default();
             select_formats(FormatInputs {
                 document_keys: &document_keys,
+                cli_to: requested,
                 ..Default::default()
             })
             .into()
@@ -284,7 +289,7 @@ pub fn resolve_document_formats(
     let project = ProjectContext::discover(path, runtime)
         .map_err(|e| format!("Failed to discover project context: {e}"))?;
     Ok(resolve_document_formats_in(
-        &project, path, &content, runtime,
+        &project, path, &content, runtime, None,
     ))
 }
 
@@ -296,6 +301,7 @@ pub fn resolve_document_formats_in(
     path: &Path,
     content: &str,
     runtime: &dyn SystemRuntime,
+    requested: Option<&str>,
 ) -> ResolvedFormats {
     let mut resolved = resolve_formats(
         content,
@@ -304,6 +310,7 @@ pub fn resolve_document_formats_in(
             runtime,
             path,
         }),
+        requested,
     );
     if project.project_kind() == crate::project::ProjectKind::Book {
         // Membership compares against the project's absolute file list, and the hub client asks with the
@@ -405,10 +412,26 @@ mod tests {
         r.formats.iter().map(|f| f.key.as_str()).collect()
     }
 
+    /// F8: the requested format (`q2 preview --to`) wins over the document's
+    /// own `format:`, and over a document that names none.
+    #[test]
+    fn the_requested_format_wins_over_the_document() {
+        let r = resolve_formats("---\nformat: html\n---\n", None, Some("typst"));
+        assert_eq!(keys(&r)[0], "typst-pdf", "{r:?}");
+        let r = resolve_formats("# no front matter\n", None, Some("typst"));
+        assert_eq!(keys(&r)[0], "typst-pdf", "{r:?}");
+        let r = resolve_formats("# no front matter\n", None, Some("revealjs"));
+        assert_eq!(keys(&r)[0], "revealjs", "{r:?}");
+        // Not asked: unchanged.
+        let r = resolve_formats("---\nformat: html\n---\n", None, None);
+        assert_eq!(keys(&r)[0], "html");
+    }
+
     #[test]
     fn the_first_key_of_a_format_map_comes_first() {
         let r = resolve_formats(
             "---\nformat:\n  docx: default\n  html: default\n---\n",
+            None,
             None,
         );
         assert_eq!(r.source, FormatSource::Document);
@@ -418,16 +441,16 @@ mod tests {
 
     #[test]
     fn a_string_format_and_no_format() {
-        let r = resolve_formats("---\nformat: pptx\n---\n", None);
+        let r = resolve_formats("---\nformat: pptx\n---\n", None, None);
         assert_eq!(keys(&r), ["pptx"]);
-        let r = resolve_formats("# no front matter\n", None);
+        let r = resolve_formats("# no front matter\n", None, None);
         assert_eq!(r.source, FormatSource::Default);
         assert_eq!(keys(&r), ["html"]);
     }
 
     #[test]
     fn an_unknown_format_is_neither() {
-        let r = resolve_formats("---\nformat: nonsense\n---\n", None);
+        let r = resolve_formats("---\nformat: nonsense\n---\n", None, None);
         assert_eq!(r.formats[0].class, FormatClass::Neither);
     }
 }
@@ -437,7 +460,7 @@ mod output_ext_tests {
     use super::*;
 
     fn first(content: &str) -> ResolvedFormat {
-        resolve_formats(content, None).formats.remove(0)
+        resolve_formats(content, None, None).formats.remove(0)
     }
 
     #[test]

@@ -82,6 +82,7 @@ async fn eager_capture_populates_index_sidecar() {
     registry.register(Arc::new(PassthroughTestEngine));
 
     let config = PreviewConfig {
+        render: Default::default(),
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -199,6 +200,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
     let data = tempfile::TempDir::with_prefix("q2-preview-c1-prose-data-").unwrap();
 
     let config = PreviewConfig {
+        render: Default::default(),
         host: "127.0.0.1".to_string(),
         port: pick_free_port(),
         project_root: Some(project.path().to_path_buf()),

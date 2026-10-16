@@ -352,22 +352,40 @@ enum Commands {
         #[arg(long, requires = "static_mode")]
         no_navigate: bool,
 
-        /// With --static: output format for this preview (one per
-        /// invocation), as `q2 render --to`. Without it the document uses
-        /// its own `format:`, else the project's, else `html`.
-        #[arg(long, value_name = "FORMAT", requires = "static_mode")]
+        /// Output format for this preview (one per invocation), as
+        /// `q2 render --to`. Without it the document uses its own
+        /// `format:`, else the project's, else `html`. Wins over the
+        /// document and the project, for every page at once: `--to typst`
+        /// previews every page as a PDF, `--to revealjs` as slides. Only
+        /// `html`, `revealjs` and `typst` can be previewed; a document
+        /// with `output-ext: typ` passes but shows no live preview, since
+        /// its format is `typst`, not `typst-pdf`. Not with `--ui editor`,
+        /// which has its own settings UI, nor with `--join` or
+        /// `--no-project`.
+        #[arg(long, value_name = "FORMAT", conflicts_with_all = ["join", "no_project"])]
         to: Option<String>,
 
-        /// With --static: metadata value (KEY:VALUE, or KEY=VALUE;
-        /// repeatable), as `q2 render -M`. It sits above the document's own
-        /// metadata, for every document in the render; `-M format:typst`
-        /// previews as typst.
-        #[arg(short = 'M', long, requires = "static_mode")]
+        /// Metadata value (KEY:VALUE, or KEY=VALUE; repeatable), as
+        /// `q2 render -M`. The value is parsed as YAML and sits above the
+        /// document's own metadata, for every document in the preview; the
+        /// first `=` or `:` separates key and value, dotted keys are not
+        /// expanded and path values are not made relative to the document.
+        /// `-M format:typst` previews as typst. `book-scope` is ignored by
+        /// the live preview, which renders one page at a time. `-M` and
+        /// `--to` shape the rendered preview and downloads, not engine
+        /// execution. With `--share` the values are served to every guest,
+        /// so do not put secrets in `-M`. Not with `--ui editor`, `--join`
+        /// or `--no-project`.
+        #[arg(short = 'M', long, conflicts_with_all = ["join", "no_project"])]
         metadata: Vec<String>,
 
-        /// With --static: active project profile(s) (comma-separated or
-        /// repeated), as `q2 render --profile`.
-        #[arg(long, requires = "static_mode")]
+        /// Active project profile(s) (comma-separated or repeated), as
+        /// `q2 render --profile`. In the live preview it selects the
+        /// profile for the native routes (PDF, downloads, config readers),
+        /// as `QUARTO_PROFILE` does; the browser's html preview, which
+        /// renders from the synced project, ignores it. Not with
+        /// `--ui editor`, `--join` or `--no-project`.
+        #[arg(long, conflicts_with_all = ["join", "no_project"])]
         profile: Vec<String>,
     },
 
@@ -662,6 +680,18 @@ enum Commands {
         /// bridge. Only for a local, no-auth hub (`q2 hub`), which ignores it.
         #[arg(long, env = "QUARTO_HUB_TOKEN")]
         token: Option<String>,
+
+        /// Metadata value (KEY:VALUE, or KEY=VALUE; repeatable), as
+        /// `q2 render -M`, for the code this machine runs: `-M
+        /// execute:eval:false`, `-M jupyter:python3`. The value is parsed as
+        /// YAML and sits above the document's own metadata; the first `=`
+        /// or `:` separates key and value, dotted keys are not expanded and
+        /// path values are not made relative to the document. There is no
+        /// `--to` here (nothing is rendered to an output format) and no
+        /// `--profile` (the hub syncs only `_quarto.yml`, `_metadata.yml`
+        /// and `_brand.yml`, so profile files never reach this machine).
+        #[arg(short = 'M', long)]
+        metadata: Vec<String>,
     },
 
     /// Start collaborative hub server for real-time editing.
@@ -1194,11 +1224,69 @@ mod cli_parse_tests {
         assert_eq!(to.as_deref(), Some("html"));
     }
 
+    /// F8: the three render flags parse in the live viewer too, alone and
+    /// together, and with `--share` (viewer and `--ui viewer`).
     #[test]
-    fn preview_metadata_and_profile_require_static() {
+    fn preview_render_flags_parse_without_static() {
+        for extra in [
+            &[][..],
+            &["--share"][..],
+            &["--share", "--ui", "viewer"][..],
+            &["--allow-edit"][..],
+        ] {
+            let mut args = vec![
+                "preview",
+                "--to",
+                "typst",
+                "-M",
+                "toc:true",
+                "--profile",
+                "a,b",
+                "--profile",
+                "c",
+            ];
+            args.extend_from_slice(extra);
+            let Commands::Preview {
+                to,
+                metadata,
+                profile,
+                static_mode,
+                ..
+            } = parse_preview(&args)
+            else {
+                unreachable!()
+            };
+            assert!(!static_mode, "args: {args:?}");
+            assert_eq!(to.as_deref(), Some("typst"));
+            assert_eq!(metadata, vec!["toc:true"]);
+            assert_eq!(profile, vec!["a,b", "c"]);
+        }
+    }
+
+    /// Each render flag conflicts with `--join` (the guest has no local
+    /// project) and `--no-project` (no project to render).
+    #[test]
+    fn preview_render_flags_conflict_with_join_and_no_project() {
+        for flag in [
+            &["--to", "typst"][..],
+            &["-M", "a:b"][..],
+            &["--profile", "p"][..],
+        ] {
+            for other in [&["--join", "x"][..], &["--no-project"][..]] {
+                let mut args = vec!["preview"];
+                args.extend_from_slice(flag);
+                args.extend_from_slice(other);
+                assert_join_conflict(&args);
+            }
+        }
+    }
+
+    /// `--no-watch` and `--no-navigate` keep their `requires = "static_mode"`.
+    #[test]
+    fn preview_no_watch_and_no_navigate_still_require_static() {
         for args in [
-            &["preview", "-M", "toc:true"][..],
-            &["preview", "--profile", "p"][..],
+            &["preview", "--no-watch"][..],
+            &["preview", "--no-navigate"][..],
         ] {
             let err = match try_parse(args) {
                 Ok(_) => panic!("must require --static: {args:?}"),
@@ -1209,6 +1297,55 @@ mod cli_parse_tests {
                 clap::error::ErrorKind::MissingRequiredArgument,
                 "args: {args:?}"
             );
+        }
+    }
+
+    /// clap cannot condition on `--ui`'s value, so the dispatch refuses the
+    /// render flags next to `--ui editor`, naming the flag and `--ui editor`.
+    #[test]
+    fn preview_render_flags_refused_with_ui_editor() {
+        use crate::commands::preview::reject_render_flags_with_editor as reject;
+        use quarto_preview::PreviewUi::{Editor, Viewer};
+        let none: [String; 0] = [];
+        let m = ["a:b".to_string()];
+        let p = ["p".to_string()];
+        for (to, metadata, profile, flag) in [
+            (Some("typst"), &none[..], &none[..], "--to"),
+            (None, &m[..], &none[..], "-M"),
+            (None, &none[..], &p[..], "--profile"),
+        ] {
+            let err = reject(Editor, to, metadata, profile)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(flag) && err.contains("--ui editor"), "{err}");
+            assert!(reject(Viewer, to, metadata, profile).is_ok());
+        }
+        assert!(reject(Editor, None, &none, &none).is_ok());
+    }
+
+    /// F8-D9: `provide-hub` takes `-M` (repeatable) and no `--to` or
+    /// `--profile`.
+    #[test]
+    fn provide_hub_takes_metadata_only() {
+        let cli = try_parse(&[
+            "provide-hub",
+            "someid",
+            "--file",
+            "a.qmd",
+            "-M",
+            "execute:eval:false",
+            "--metadata",
+            "jupyter=python3",
+        ])
+        .expect("parses");
+        let Commands::ProvideHub { metadata, .. } = cli.command else {
+            panic!("expected provide-hub");
+        };
+        assert_eq!(metadata, vec!["execute:eval:false", "jupyter=python3"]);
+        for flag in [&["--to", "typst"][..], &["--profile", "p"][..]] {
+            let mut args = vec!["provide-hub", "someid", "--file", "a.qmd"];
+            args.extend_from_slice(flag);
+            assert!(try_parse(&args).is_err(), "{flag:?} must not exist here");
         }
     }
 
@@ -1529,6 +1666,14 @@ fn main() -> Result<()> {
                     browser,
                 })
             } else {
+                let ui = ui.into();
+                // clap cannot condition on the value of `--ui`.
+                commands::preview::reject_render_flags_with_editor(
+                    ui,
+                    to.as_deref(),
+                    &metadata,
+                    &profile,
+                )?;
                 commands::preview::execute(commands::preview::PreviewArgs {
                     path,
                     port,
@@ -1540,7 +1685,10 @@ fn main() -> Result<()> {
                     no_project,
                     allow_edit,
                     share,
-                    ui: ui.into(),
+                    ui,
+                    to,
+                    metadata,
+                    profile,
                 })
             }
         }
@@ -1649,6 +1797,7 @@ fn main() -> Result<()> {
             watch,
             dangerously_accept_requests,
             token,
+            metadata,
         } => commands::provide_hub::execute(commands::provide_hub::ProvideHubArgs {
             project,
             file,
@@ -1656,6 +1805,7 @@ fn main() -> Result<()> {
             watch,
             dangerously_accept_requests,
             token,
+            metadata,
         }),
 
         Commands::Hub {

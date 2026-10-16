@@ -60,6 +60,7 @@ async fn guest_syncs_project_through_tunnel() {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        render: Default::default(),
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),

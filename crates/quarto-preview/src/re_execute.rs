@@ -33,7 +33,7 @@ use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::HubContext;
 use quarto_hub::context::SharedContext;
 use quarto_hub::index::{CaptureRef, CaptureState};
-use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+use quarto_system_runtime::SystemRuntime;
 use quarto_trace::EngineCapture;
 use serde::{Deserialize, Serialize};
 
@@ -298,7 +298,7 @@ async fn perform_re_execute(
         .ok_or_else(|| "no project root (standalone mode?)".to_string())?;
     let abs_path = project_root.join(rel_path);
 
-    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(crate::render_flags::native_runtime());
 
     let project = ProjectContext::discover(&abs_path, runtime.as_ref())
         .map_err(|e| format!("project discovery failed: {e}"))?;
@@ -357,6 +357,7 @@ async fn write_capture_doc(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_system_runtime::NativeRuntime;
     use std::sync::Arc;
 
     use quarto_core::engine::{ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError};

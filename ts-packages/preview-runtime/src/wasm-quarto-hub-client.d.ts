@@ -46,10 +46,20 @@ declare module 'wasm-quarto-hub-client' {
     path: string,
     user_grammars?: JsUserGrammars,
   ): Promise<string>;
+  /**
+   * `options` is the live viewer's `{ to?, metadata? }`: `to` is the requested
+   * format (`q2 preview --to`; wins over the document's and the project's) and
+   * `metadata` the render's runtime metadata layer (`-M`, a JSON object).
+   */
+  export interface RenderPageForPreviewOptions {
+    to?: string;
+    metadata?: Record<string, unknown>;
+  }
   export function render_page_for_preview(
     path: string,
     user_grammars?: JsUserGrammars,
     capture_gz_json?: Uint8Array,
+    options?: RenderPageForPreviewOptions,
   ): Promise<string>;
 
   // ---- pandoc-wasm epic (R2): build a pandoc request inside the wasm ----
@@ -131,6 +141,12 @@ declare module 'wasm-quarto-hub-client' {
    */
   export interface RenderPandocRequestOptions {
     metadata?: Record<string, unknown>;
+    /**
+     * The viewer's requested format, accepted beside `metadata` so one options
+     * shape serves every entry. The request already names its output format
+     * (`format`), so nothing reads it.
+     */
+    to?: string;
     capturesByPath?: Record<string, Uint8Array>;
     onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
     /**
@@ -330,7 +346,10 @@ declare module 'wasm-quarto-hub-client' {
         book?: { chapter: boolean; chapters: string[] } | null;
       }
     | { success: false; error: string };
-  export function resolve_pandoc_formats(path: string, options?: { contentOverride?: string }): string;
+  export function resolve_pandoc_formats(
+    path: string,
+    options?: { contentOverride?: string; to?: string; metadata?: Record<string, unknown> },
+  ): string;
   /** `{ hits, misses }` of the resolver's project cache. Test support. */
   export function project_cache_stats(): string;
 

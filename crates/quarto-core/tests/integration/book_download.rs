@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 use base64::Engine as _;
 use quarto_core::book_download::{
@@ -19,8 +20,14 @@ use quarto_core::book_download::{
 use quarto_core::format::Format;
 use quarto_core::render_to_file::TypstTarget;
 use quarto_core::stage::Cancellation;
+use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::{CaptureFile, EngineCapture};
+
 use tempfile::TempDir;
+
+fn native() -> Arc<dyn SystemRuntime> {
+    Arc::new(NativeRuntime::new())
+}
 
 fn have(bin: &str) -> bool {
     Command::new(bin)
@@ -110,6 +117,7 @@ fn download(
         cancellation,
         child_deadline: Some(std::time::Duration::from_secs(120)),
         metadata: None,
+        runtime: native(),
     })
 }
 
@@ -194,6 +202,7 @@ fn request_metadata_reaches_the_book_render() {
             cancellation: Cancellation::new(),
             child_deadline: Some(std::time::Duration::from_secs(120)),
             metadata,
+            runtime: native(),
         });
         std::fs::read_to_string(ok(result).file).unwrap()
     };
@@ -204,6 +213,45 @@ fn request_metadata_reaches_the_book_render() {
     assert!(
         overlaid.contains("subtitle: [ZZSUB]"),
         "the request's metadata is not in the book source"
+    );
+}
+
+/// F8-D6: the runtime in the params carries the live preview's `--profile`
+/// into the whole-book render: a profile that sets `book.title` shows in the
+/// book source on the profile's runtime and on no other.
+#[test]
+fn the_runtime_in_the_params_carries_the_profile() {
+    require!("pandoc");
+    let fx = Fixture::new();
+    write(
+        &fx.root.join("_quarto-pt.yml"),
+        "book:\n  title: \"ZZPROFILETITLE\"\n",
+    );
+    let format = Format::from_format_string("typst").unwrap();
+    let render = |runtime: Arc<dyn SystemRuntime>| {
+        let result = render_book_download(BookDownloadParams {
+            path: &fx.root.join("ch1.qmd"),
+            content: None,
+            format: &format,
+            typst_target: Some(TypstTarget::Source),
+            request_dir: &fx.request_dir(),
+            hub_root: &fx.root,
+            captures: &HashMap::new(),
+            cancellation: Cancellation::new(),
+            child_deadline: Some(std::time::Duration::from_secs(120)),
+            metadata: None,
+            runtime,
+        });
+        std::fs::read_to_string(ok(result).file).unwrap()
+    };
+    let plain = render(native());
+    assert!(plain.contains("Small Book") && !plain.contains("ZZPROFILETITLE"));
+    let profiled = render(Arc::new(
+        quarto_core::project::project_profile::native_runtime_for_selection(&["pt".to_string()]),
+    ));
+    assert!(
+        profiled.contains("ZZPROFILETITLE"),
+        "the profile did not reach the whole-book download"
     );
 }
 
@@ -368,6 +416,7 @@ fn a_file_outside_a_book_is_refused() {
         cancellation: Cancellation::new(),
         child_deadline: None,
         metadata: None,
+        runtime: native(),
     })
     .unwrap_err();
     assert!(matches!(err, BookDownloadFailure::Failed(_)), "{err:?}");

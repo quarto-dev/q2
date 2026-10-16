@@ -221,11 +221,12 @@ fn preview_static_rejects_hub_mode_flags() {
 }
 
 /// The static-only flags require `--static`; without it they are a
-/// usage error, not a silent no-op.
+/// usage error, not a silent no-op. (`--to`, `-M` and `--profile` are not
+/// static-only since F8: the live viewer takes them.)
 #[test]
 fn preview_static_only_flags_require_static() {
     let temp = tempfile::TempDir::new().expect("tempdir");
-    let cases: &[&[&str]] = &[&["--no-watch"], &["--no-navigate"], &["--to", "html"]];
+    let cases: &[&[&str]] = &[&["--no-watch"], &["--no-navigate"]];
     for args in cases {
         let output = preview_output(args, temp.path());
         let stderr = String::from_utf8_lossy(&output.stderr);

@@ -72,6 +72,7 @@ import { StaleCaptureOverlay } from './components/StaleCaptureOverlay';
 import { PdfPane } from './components/PdfPane';
 import { nextNavState, readNavIndex, seedNavIndex } from './navIndex';
 import { isTypstPdf } from './pdfPage';
+import { fetchPreviewConfig, wasmRenderOptions, type RenderBlock } from './previewConfig';
 import { pickInitialPage } from './pickInitialPage';
 
 /**
@@ -221,6 +222,13 @@ interface PreviewAppState {
    * preview is the safe state.
    */
   allowEdit: boolean;
+  /**
+   * The session's `--to` / `-M` (F8-D2), from the `render` block of
+   * `GET /api/preview/config`; `undefined` for a session without those flags.
+   * Held for the session: every wasm render call, `isTypstPdf` and the PDF
+   * pane read it.
+   */
+  renderFlags: RenderBlock | undefined;
   /**
    * P3.2: nesting-cursor mode for nested blocks. Read once at boot from
    * `?nestingCursor=1` in the boot URL. When true the SPA passes
@@ -421,6 +429,7 @@ function buildInitialState(): PreviewAppState {
     customComponents: EMPTY_CUSTOM_COMPONENTS,
     captures: {},
     allowEdit: false,
+    renderFlags: undefined,
     nestingCursor: typeof window !== 'undefined'
       ? parseNestingCursorParam(window.location.search)
       : false,
@@ -570,24 +579,6 @@ async function fetchIndexDocId(loc: Location = window.location): Promise<string>
 }
 
 /**
- * Fetch the session's edit permission from `GET /api/preview/config`
- * (bd-ov4gqk3m). Mirrors the CLI's `--allow-edit` flag. Fails closed:
- * any network error, non-2xx status, or malformed body yields `false`
- * — a read-only preview is always the safe state, and the server
- * independently refuses disk write-back when the flag is off.
- */
-async function fetchAllowEdit(loc: Location = window.location): Promise<boolean> {
-  try {
-    const resp = await fetch(`${loc.protocol}//${loc.host}/api/preview/config`);
-    if (!resp.ok) return false;
-    const body = (await resp.json()) as { allowEdit?: unknown };
-    return body.allowEdit === true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Derive the websocket URL from the page location. The CLI serves the
  * SPA on the same host:port that hosts the samod ws endpoint, so we
  * just swap the scheme.
@@ -615,9 +606,9 @@ export default function PreviewApp() {
   // P11-D1: a `format: typst` page shows as a live PDF instead of going through the HTML render.
   // Recomputed whenever the content changes, since an edit to `format:` flips the kind.
   const pageKind: 'html' | 'pdf' = useMemo(
-    () => (state.boot === 'ready' && state.activeFile !== null && isTypstPdf(state.activeFile) ? 'pdf' : 'html'),
+    () => (state.boot === 'ready' && state.activeFile !== null && isTypstPdf(state.activeFile, state.renderFlags) ? 'pdf' : 'html'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.boot, state.activeFile, state.contentTick, state.files],
+    [state.boot, state.activeFile, state.contentTick, state.files, state.renderFlags],
   );
 
   // Force-refresh trigger (bd-b5hf): bumping `contentTick` re-fires
@@ -799,9 +790,11 @@ export default function PreviewApp() {
         // id itself is re-fetched per connect attempt below.
         await fetchIndexDocId();
         const wsUrl = deriveWsUrl();
-        // bd-ov4gqk3m: learn whether this session may edit documents.
-        // Fail-closed helper — never throws, defaults to read-only.
-        const allowEdit = await fetchAllowEdit();
+        // bd-ov4gqk3m + F8-D2: the session config. `allowEdit` fails closed
+        // (a 404 means an older server: read-only, no flags). A failure that
+        // could hide `--to` / `-M` is retried and then rejects into the
+        // error state below rather than rendering a flagged session as html.
+        const { allowEdit, render: renderFlags } = await fetchPreviewConfig();
 
         await initWasm();
 
@@ -956,6 +949,7 @@ export default function PreviewApp() {
           // requested," which the iframe ignores.
           pendingAnchorEpoch: initialHash ? 1 : 0,
           allowEdit,
+          renderFlags,
           boot: 'ready',
         }));
 
@@ -1203,6 +1197,7 @@ export default function PreviewApp() {
           state.activeFile!,
           undefined,
           captureGzJson,
+          wasmRenderOptions(state.renderFlags),
         );
         if (cancelled) return;
         // Phase D.3 (bd-kw93.9) + bd-0mji: a test-only render
@@ -1319,7 +1314,7 @@ export default function PreviewApp() {
     return () => {
       cancelled = true;
     };
-  }, [state.activeFile, state.contentTick, state.captures, pageKind]);
+  }, [state.activeFile, state.contentTick, state.captures, pageKind, state.renderFlags]);
 
   // Entering a PDF page drops the HTML page's render state, so that going back to HTML shows the
   // boot spinner until a fresh render rather than the previous page's stale AST.
@@ -1424,6 +1419,7 @@ export default function PreviewApp() {
           path={state.activeFile}
           contentTick={state.contentTick}
           onBack={canGoBack ? handlePdfBack : null}
+          render={state.renderFlags}
         />
         {connectionBanner}
       </div>

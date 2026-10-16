@@ -112,6 +112,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
     registry.register(Arc::new(PassthroughTestEngine));
 
     let config = PreviewConfig {
+        render: Default::default(),
         host: "127.0.0.1".to_string(),
         port: pick_free_port(),
         project_root: Some(project_root.clone()),

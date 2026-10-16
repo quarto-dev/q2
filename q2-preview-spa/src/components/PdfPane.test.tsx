@@ -55,6 +55,30 @@ const answer = async (i: number, r: Response) => {
   await flush();
 };
 
+describe('PdfPane with the session’s --to / -M (F8)', () => {
+  it('sends the CLI metadata under its own chapter book-scope', async () => {
+    render(
+      <PdfPane
+        path="doc.qmd"
+        contentTick={0}
+        onBack={null}
+        render={{ to: 'typst', metadata: { toc: true, 'book-scope': 'book' } }}
+      />,
+    );
+    await flush();
+    expect(JSON.parse(pending[0].init.body as string).metadata).toEqual({
+      toc: true,
+      'book-scope': 'chapter',
+    });
+  });
+
+  it('with no flags sends only the chapter scope', async () => {
+    render(<PdfPane path="doc.qmd" contentTick={0} onBack={null} />);
+    await flush();
+    expect(JSON.parse(pending[0].init.body as string).metadata).toEqual({ 'book-scope': 'chapter' });
+  });
+});
+
 describe('PdfPane', () => {
   it('sends content and the chapter book-scope metadata', async () => {
     render(<PdfPane path="doc.qmd" contentTick={0} onBack={null} />);

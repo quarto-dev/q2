@@ -18,6 +18,7 @@ import type {
   PandocFormatInfo,
   PandocRequestFile,
   PrepareImportResponse,
+  RenderPageForPreviewOptions,
   RenderPandocRequestOptions,
   RenderPandocRequestResponse,
   ResolvePandocFormatsResponse,
@@ -84,6 +85,7 @@ interface WasmModuleExtended {
     path: string,
     user_grammars?: unknown,
     capture_gz_json?: Uint8Array,
+    options?: RenderPageForPreviewOptions,
   ) => Promise<string>;
   // Attribution-aware sibling. When `attribution_json` is `undefined`,
   // behaviour is byte-identical to `render_page_in_project` (the
@@ -138,7 +140,7 @@ interface WasmModuleExtended {
     json_path: string,
   ) => string;
   get_pandoc_formats: () => string;
-  resolve_pandoc_formats: (path: string, options?: { contentOverride?: string }) => string;
+  resolve_pandoc_formats: (path: string, options?: ResolvePandocFormatsOptions) => string;
   // Document import (epic 2026-10-03-document-import-epic.md, interface 2)
   get_import_formats: () => string;
   prepare_import: (file_name: string, size: number, sha256_hex: string) => string;
@@ -642,16 +644,18 @@ export async function renderPageForPreview(
   path: string,
   userGrammars?: unknown,
   captureGzJson?: Uint8Array,
+  options?: RenderPageForPreviewOptions,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   return JSON.parse(
-    await wasm.render_page_for_preview(path, userGrammars, captureGzJson),
+    await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
   );
 }
 
 // ---- pandoc-wasm epic (R2): the request exports --------------------------
 
 export type {
+  RenderPageForPreviewOptions,
   PandocFormatClass,
   PandocFormatInfo,
   PandocRequestFile,
@@ -692,6 +696,8 @@ export async function renderPandocRequest(
     onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
     /** The active file's authorship, for comment and change authors (see `RenderPandocRequestOptions`). */
     attributionJson?: string;
+    /** The viewer's requested format; accepted for symmetry, the request names its own `format`. */
+    to?: string;
   } = {},
 ): Promise<RenderPandocRequestResponse> {
   const wasm = getWasm();
@@ -704,6 +710,7 @@ export async function renderPandocRequest(
     options.signal,
     {
       metadata: options.metadata,
+      to: options.to,
       capturesByPath: options.capturesByPath,
       onProgress: options.onProgress,
       attributionJson: options.attributionJson,
@@ -814,6 +821,13 @@ export function classifyImportFailure(
 export interface ResolvePandocFormatsOptions {
   /** The editor buffer: its front matter is read instead of the VFS copy of `path`. */
   contentOverride?: string;
+  /**
+   * The requested format (`q2 preview --to`): wins over the document's own and the project's,
+   * for every page (FR2).
+   */
+  to?: string;
+  /** This call's runtime metadata layer (`-M`); a scalar `format` in it selects, a map never does. */
+  metadata?: Record<string, unknown>;
 }
 
 /**

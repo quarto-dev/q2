@@ -18,7 +18,6 @@ use quarto_preview::{
     EnginePolicy, PreviewConfig,
     config::{read_engine_policy_from_project, resolve_project_resource_html},
 };
-use quarto_system_runtime::NativeRuntime;
 use tempfile::TempDir;
 use tracing::info;
 
@@ -59,6 +58,93 @@ pub struct PreviewArgs {
     /// plan Phase 4, bd-jt1etjbn): the read-only preview SPA (default)
     /// or the full hub-client editor. Never changes the write policy.
     pub ui: quarto_preview::PreviewUi,
+    /// `--to`, as `q2 render --to` (F8). Applies to the viewer UI only.
+    pub to: Option<String>,
+    /// `-M/--metadata` arguments, unparsed, as `q2 render -M` (F8).
+    pub metadata: Vec<String>,
+    /// `--profile` values, as `q2 render --profile` (F8).
+    pub profile: Vec<String>,
+}
+
+/// `--to`, `-M` and `--profile` belong to the read-only viewer: the editor
+/// has its own settings UI, so the combination is refused instead of
+/// silently ignored (F8-D1). clap cannot condition a conflict on the value
+/// of `--ui`, so the dispatch calls this.
+pub fn reject_render_flags_with_editor(
+    ui: quarto_preview::PreviewUi,
+    to: Option<&str>,
+    metadata: &[String],
+    profile: &[String],
+) -> Result<()> {
+    if ui != quarto_preview::PreviewUi::Editor {
+        return Ok(());
+    }
+    let flag = if to.is_some() {
+        "--to"
+    } else if !metadata.is_empty() {
+        "-M/--metadata"
+    } else if !profile.is_empty() {
+        "--profile"
+    } else {
+        return Ok(());
+    };
+    anyhow::bail!(
+        "{flag} does not combine with --ui editor: the editor has its own settings UI \
+         (use it with the default --ui viewer)"
+    )
+}
+
+/// Parse and vet the render flags of a viewer session (F8-D1, D3, D4, D6).
+///
+/// A malformed `-M` is an error here, before the server starts. When any
+/// flag is given, the resolved format is judged by the same servable gate
+/// as `--static` (an epub, docx or pptx format is refused, once). Startup
+/// notices go to stderr: `book-scope` is ignored by the live preview, and
+/// `--profile` reaches the native routes only.
+fn resolve_render_flags(
+    to: &Option<String>,
+    metadata: &[String],
+    profile: &[String],
+    project_root: Option<&Path>,
+    single_file: Option<&Path>,
+) -> Result<quarto_preview::RenderFlags> {
+    let overlay = quarto_core::metadata_flag::parse_metadata_flags(metadata)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    let flags = quarto_preview::RenderFlags {
+        to: to.clone(),
+        metadata: overlay,
+        profile: profile.to_vec(),
+    };
+    if to.is_none() && metadata.is_empty() && profile.is_empty() {
+        return Ok(flags);
+    }
+    if let Some(root) = project_root {
+        let input = match single_file {
+            Some(rel) => root.join(rel),
+            None => root.to_path_buf(),
+        };
+        let base = super::render::RenderArgs {
+            to: to.clone(),
+            metadata: metadata.to_vec(),
+            profile: profile.to_vec(),
+            ..super::render::RenderArgs::default()
+        };
+        super::preview_static::check_servable(&input, &base)?;
+    }
+    if let Some(serde_json::Value::Object(map)) = &flags.metadata
+        && map.contains_key("book-scope")
+    {
+        eprintln!(
+            "note: `-M book-scope` is ignored by the live preview, which renders one page at a time"
+        );
+    }
+    if !profile.is_empty() {
+        eprintln!(
+            "note: --profile applies to the native routes (PDF, downloads, project settings); \
+             the browser's html preview renders from the synced project and ignores it"
+        );
+    }
+    Ok(flags)
 }
 
 pub fn execute(args: PreviewArgs) -> Result<()> {
@@ -142,6 +228,17 @@ async fn run(args: PreviewArgs) -> Result<()> {
             resolved.single_file,
         )
     };
+
+    // F8: `--to`, `-M` and `--profile`. A malformed `-M` fails here, before
+    // any port is probed or server started; an unservable format is refused
+    // once, up front, as `--static` does.
+    let render_flags = resolve_render_flags(
+        &args.to,
+        &args.metadata,
+        &args.profile,
+        project_root.as_deref(),
+        single_file.as_deref(),
+    )?;
 
     // Each invocation gets a fresh `TempDir` by default — when this
     // `_temp` binding drops at function end (or after Ctrl-C), the
@@ -230,8 +327,11 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // driver knows whether to skip eager execution (`off`) or auto-
     // re-execute on edits (`auto`). Single-file projects with no
     // `_quarto.yml` get `Manual` (the safe pre-C.6 default).
+    // Every native site goes through the factory, so `--profile` reaches
+    // them all (F8-D6).
+    let session_runtime = quarto_preview::render_flags::native_runtime_for(&render_flags.profile);
     let engine_policy = match project_root.as_deref() {
-        Some(root) => read_engine_policy_from_project(root, &NativeRuntime::new(), None),
+        Some(root) => read_engine_policy_from_project(root, &session_runtime, None),
         None => EnginePolicy::Manual,
     };
     info!(?engine_policy, "resolved preview engine policy");
@@ -243,7 +343,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // server to answer the iframe's request in preview). Single-file
     // mode has no `_quarto.yml`, hence no project resources.
     let resource_html_files = match project_root.as_deref() {
-        Some(root) => resolve_project_resource_html(root, &NativeRuntime::new(), None),
+        Some(root) => resolve_project_resource_html(root, &session_runtime, None),
         None => Vec::new(),
     };
     info!(
@@ -269,6 +369,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         allow_edit: args.allow_edit,
         share: args.share,
         ui: args.ui,
+        render: render_flags,
     };
 
     // Host-side Ctrl-C acknowledgment, symmetric with the guest's line
@@ -1122,6 +1223,78 @@ mod tests {
         t.path()
             .canonicalize()
             .expect("canonicalize tempdir for cross-platform stability")
+    }
+
+    fn flags_project(config: &str) -> (TempDir, std::path::PathBuf) {
+        let tmp = TempDir::with_prefix("f8-flags-").unwrap();
+        let root = canonical_dir(&tmp);
+        std::fs::write(root.join("_quarto.yml"), config).unwrap();
+        std::fs::write(root.join("index.qmd"), "# Hi\n").unwrap();
+        (tmp, root)
+    }
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn no_flags_resolve_to_empty_render_flags() {
+        let (_t, root) = flags_project("project:\n  type: book\nformat: epub\n");
+        // No flag given: the gate does not run, so an epub project still
+        // previews in the viewer exactly as before.
+        let flags = resolve_render_flags(&None, &[], &[], Some(&root), None).unwrap();
+        assert_eq!(flags, quarto_preview::RenderFlags::default());
+        assert!(flags.config_block().is_none());
+    }
+
+    #[test]
+    fn a_malformed_metadata_flag_fails_before_the_server_starts() {
+        let err = resolve_render_flags(&None, &strings(&["no-separator"]), &[], None, None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no-separator"), "{err}");
+    }
+
+    #[test]
+    fn flags_become_the_config_render_block() {
+        let (_t, root) = flags_project("project:\n  type: book\nformat: html\n");
+        let flags = resolve_render_flags(
+            &Some("typst".to_string()),
+            &strings(&["toc:true"]),
+            &[],
+            Some(&root),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            flags.config_block().unwrap(),
+            serde_json::json!({ "to": "typst", "metadata": { "toc": true } })
+        );
+    }
+
+    #[test]
+    fn an_unservable_format_is_refused_by_the_gate() {
+        let (_t, root) = flags_project("project:\n  type: book\nformat: html\n");
+        for to in ["docx", "epub", "pptx"] {
+            let err = resolve_render_flags(&Some(to.to_string()), &[], &[], Some(&root), None)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(to), "{to}: {err}");
+        }
+        // A project whose own format is unservable is refused when any flag
+        // is given (here `-M`), by the resolved format.
+        let (_t2, epub) = flags_project("project:\n  type: book\nformat: epub\n");
+        assert!(
+            resolve_render_flags(&None, &strings(&["toc:true"]), &[], Some(&epub), None).is_err()
+        );
+    }
+
+    #[test]
+    fn a_profile_supplied_format_is_judged_by_the_gate() {
+        let (_t, root) = flags_project("project:\n  type: book\nformat: html\n");
+        std::fs::write(root.join("_quarto-print.yml"), "format: docx\n").unwrap();
+        assert!(resolve_render_flags(&None, &[], &strings(&["print"]), Some(&root), None).is_err());
+        assert!(resolve_render_flags(&None, &[], &[], Some(&root), None).is_ok());
     }
 
     #[test]

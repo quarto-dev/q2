@@ -320,3 +320,67 @@ async fn rejected_request_writes_no_capture() {
     let _ = shutdown_tx.send(());
     let _ = run_handle.await;
 }
+
+/// F8-D9 / 8.3c: a provider started with a `-M` executes with the overlay
+/// (the engine receives the merged metadata, so the recorded output shows
+/// it) but records an overlay-free `input_qmd`, the staleness key, so the
+/// viewer's overlay-free recompute does not mark the capture stale.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_dash_m_reaches_execution_but_not_the_staleness_key() {
+    let (server_repo, ws_url) = spawn_server().await;
+    let file_id = create_text_doc(&server_repo, PASSTHROUGH_QMD).await;
+    let (server_index, index_id) = IndexDocument::create(&server_repo).await.unwrap();
+    server_index.add_file("doc.qmd", &file_id).unwrap();
+
+    let (provider_repo, provider_index) = join(
+        JoinConfig {
+            server_ws_url: ws_url,
+            index_doc_id: index_id.clone(),
+            connect_timeout: Duration::from_secs(10),
+        },
+        Arc::new(StaticTokenSource::new("test-token")),
+    )
+    .await
+    .expect("provider joins");
+
+    let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&[
+        "subtitle:ZZOVERLAYSUB".to_string(),
+    ])
+    .unwrap();
+    assert!(overlay.is_some());
+    let provider = Provider::new_with_overlay(
+        provider_repo,
+        provider_index,
+        "provider-actor",
+        Arc::new(AlwaysAccept),
+        Some(Arc::new(passthrough_registry())),
+        overlay,
+    );
+    let ExecOutcome::Executed(doc_id) = provider
+        .execute_once("doc.qmd")
+        .await
+        .expect("execution succeeds")
+    else {
+        panic!("expected Executed");
+    };
+    provider
+        .flush_to_hub(&doc_id, Duration::from_secs(10))
+        .await;
+
+    let captures = fetch_captures(&server_repo, &doc_id).await;
+    let markdown = captures[0]
+        .result
+        .get("markdown")
+        .and_then(|v| v.as_str())
+        .expect("recorded markdown");
+    assert!(
+        markdown.contains("ZZOVERLAYSUB"),
+        "the engine did not receive the -M metadata: {markdown}"
+    );
+    assert!(
+        !captures[0].input_qmd.contains("ZZOVERLAYSUB"),
+        "input_qmd (the staleness key) must describe the source, not the -M: {}",
+        captures[0].input_qmd
+    );
+    assert!(captures[0].input_qmd.contains("1 + 1"));
+}

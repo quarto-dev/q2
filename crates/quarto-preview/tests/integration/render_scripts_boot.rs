@@ -106,6 +106,7 @@ async fn pre_render_scripts_run_once_at_boot() {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        render: Default::default(),
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project_dir.clone()),

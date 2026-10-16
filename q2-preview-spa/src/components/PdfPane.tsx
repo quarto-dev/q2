@@ -13,6 +13,7 @@ import { vfsReadFile } from '@quarto/preview-runtime';
 import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { installBackButton } from '../pdfBackButton';
+import { pdfMetadata, type RenderBlock } from '../previewConfig';
 import './PdfPane.css';
 
 export const PDF_ROUTE = '/api/preview/pdf';
@@ -28,6 +29,8 @@ interface PdfPaneProps {
   contentTick: number;
   /** `null` hides the Back button. */
   onBack: (() => void) | null;
+  /** The session's `--to` / `-M` block; its metadata goes under the pane's own `book-scope: chapter`. */
+  render?: RenderBlock;
 }
 
 interface Banner {
@@ -50,11 +53,14 @@ function pdfFileName(path: string): string {
   return base.replace(/\.[^.]*$/, '') + '.pdf';
 }
 
-export function PdfPane({ path, contentTick, onBack }: PdfPaneProps) {
+export function PdfPane({ path, contentTick, onBack, render }: PdfPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<PdfViewerHandle | null>(null);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
+  // The render block is fixed for a session; a ref keeps it out of the compile effect's deps.
+  const renderRef = useRef(render);
+  renderRef.current = render;
   const seqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const hasPdfRef = useRef(false);
@@ -97,7 +103,7 @@ export function PdfPane({ path, contentTick, onBack }: PdfPaneProps) {
         const response = await fetch(PDF_ROUTE, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ path, content: snap.success ? snap.content : undefined, metadata: { 'book-scope': 'chapter' } }),
+          body: JSON.stringify({ path, content: snap.success ? snap.content : undefined, metadata: pdfMetadata(renderRef.current) }),
           signal: controller.signal,
         });
         if (stale()) return;

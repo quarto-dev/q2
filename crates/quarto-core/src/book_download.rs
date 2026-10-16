@@ -30,7 +30,7 @@ use std::time::Duration;
 
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::SourceContext;
-use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+use quarto_system_runtime::SystemRuntime;
 use quarto_trace::EngineCapture;
 
 use crate::error::QuartoError;
@@ -72,6 +72,11 @@ pub struct BookDownloadParams<'a> {
     /// Runtime-layer metadata for this render (FR12); `None` adds nothing.
     /// Merged into the one overlay the download builds.
     pub metadata: Option<serde_json::Value>,
+    /// The native runtime the whole render uses, project discovery
+    /// included. The live preview builds it from its `--profile`
+    /// selection, so a whole-book download resolves the same profile
+    /// as the single-page routes do.
+    pub runtime: Arc<dyn SystemRuntime>,
 }
 
 /// A finished download.
@@ -147,7 +152,7 @@ impl BookRenderHooks for CancelHook {
 pub fn render_book_download(
     params: BookDownloadParams<'_>,
 ) -> Result<BookDownloadResult, BookDownloadFailure> {
-    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let runtime = Arc::clone(&params.runtime);
     let failed = BookDownloadFailure::Failed;
 
     let mut project = ProjectContext::discover(params.path, runtime.as_ref()).map_err(failed)?;
@@ -271,6 +276,7 @@ pub fn render_book_download(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_system_runtime::NativeRuntime;
 
     #[test]
     fn a_second_download_of_the_same_project_is_busy_until_the_first_ends() {
@@ -300,6 +306,7 @@ mod tests {
             },
             child_deadline: None,
             metadata: None,
+            runtime: Arc::new(NativeRuntime::new()),
         };
         let held = InFlight::acquire(&root).expect("free");
         assert!(matches!(

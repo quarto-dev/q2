@@ -32,7 +32,7 @@ vi.mock('@quarto/preview-renderer/iframe/Q2PreviewIframe', () => ({
 }));
 
 // P11: capture the props <PdfPane> gets, and stand in for it (the real one mounts pdf.js and POSTs).
-const capturedPdfProps: Array<{ path: string; contentTick: number; onBack: (() => void) | null }> = [];
+const capturedPdfProps: Array<{ path: string; contentTick: number; onBack: (() => void) | null; render?: unknown }> = [];
 vi.mock('./components/PdfPane', () => ({
   PdfPane: (props: { path: string; contentTick: number; onBack: (() => void) | null }) => {
     capturedPdfProps.push(props);
@@ -60,8 +60,8 @@ vi.mock('@quarto/preview-runtime', () => ({
   isWasmReady: vi.fn(() => true),
   // P11: the format the active page resolves to; tests flip `formatKey` to make a page typst-pdf.
   resolvePandocFormats: vi.fn((path: string) => (runtimeMockState.pdfPaths?.includes(path) ?? runtimeMockState.formatKey === 'typst-pdf')
-    ? { success: true, source: 'document', formats: [{ key: 'typst-pdf', class: 'download' }] }
-    : { success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] }),
+    ? { success: true, source: 'document', key: 'typst-pdf', class: 'download', formats: [{ key: 'typst-pdf', class: 'download' }] }
+    : { success: true, source: 'default', key: 'html', class: 'preview', formats: [{ key: 'html', class: 'preview' }] }),
   connect: vi.fn(async (..._args: unknown[]) => {
     if (runtimeMockState.connectError) {
       throw new Error(runtimeMockState.connectError);
@@ -1672,5 +1672,78 @@ describe('PreviewApp: live PDF pane for typst pages (Plan 11)', () => {
         back.mockRestore();
       }
     });
+  });
+});
+
+describe('PreviewApp: the session’s --to / -M (F8)', () => {
+  const FLAGS = { to: 'typst', metadata: { toc: true } };
+
+  /** `GET /api/preview/config` answers `config` (a Response factory), `/health` as usual. */
+  function stubConfig(config: () => Response | Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('/health')) {
+          return new Response(JSON.stringify({ status: 'ok', index_document_id: 'automerge:test-index-doc' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/api/preview/config')) return config();
+        return new Response('not found', { status: 404 });
+      }),
+    );
+  }
+  const ok = (body: unknown) =>
+    new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('sends the render block on every wasm render call and to the format resolver', async () => {
+    stubConfig(() => ok({ allowEdit: false, render: FLAGS }));
+    const runtime = await import('@quarto/preview-runtime');
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
+    const renderMock = runtime.renderPageForPreview as ReturnType<typeof vi.fn>;
+    expect(renderMock.mock.calls.at(-1)?.[3]).toEqual(FLAGS);
+    const resolveMock = runtime.resolvePandocFormats as ReturnType<typeof vi.fn>;
+    expect(resolveMock.mock.calls.at(-1)?.[1]).toEqual(FLAGS);
+  });
+
+  it('with no flags nothing changes: no options reach the wasm calls', async () => {
+    stubConfig(() => ok({ allowEdit: false }));
+    const runtime = await import('@quarto/preview-runtime');
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
+    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[3]).toBeUndefined();
+    expect((runtime.resolvePandocFormats as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]).toBeUndefined();
+  });
+
+  it('an older server (config 404) changes nothing either', async () => {
+    stubConfig(() => new Response('nope', { status: 404 }));
+    const runtime = await import('@quarto/preview-runtime');
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
+    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[3]).toBeUndefined();
+  });
+
+  it('hands the render block to the PDF pane', async () => {
+    stubConfig(() => ok({ allowEdit: false, render: { ...FLAGS, metadata: { 'book-scope': 'book' } } }));
+    runtimeMockState.formatKey = 'typst-pdf';
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByTestId('pdf-pane-mock')).not.toBeNull());
+    expect(capturedPdfProps.at(-1)?.render).toEqual({ ...FLAGS, metadata: { 'book-scope': 'book' } });
+  });
+
+  it('a config fetch that keeps failing is an error, not an unflagged html preview', async () => {
+    stubConfig(() => new Response('boom', { status: 500 }));
+    const runtime = await import('@quarto/preview-runtime');
+    render(<PreviewApp />);
+    await waitFor(() => expect(screen.queryByText(/preview settings/i)).not.toBeNull(), { timeout: 5000 });
+    expect(screen.queryByTestId('q2-preview-iframe-mock')).toBeNull();
+    expect(runtime.renderPageForPreview).not.toHaveBeenCalled();
   });
 });

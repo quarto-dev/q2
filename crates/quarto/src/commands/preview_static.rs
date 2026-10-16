@@ -46,11 +46,12 @@ use quarto_preview::EnginePolicy;
 use quarto_preview::config::{
     read_engine_policy_from_project, read_static_preview_defaults_from_project,
 };
+use quarto_preview::render_flags::native_runtime_for;
 use quarto_preview::static_mode::{
     Action, ContentTracker, ReloadEvent, ReloadHub, StaticServerConfig, WatchContext, build_router,
     classify, is_config_like, is_input_extension, serve,
 };
-use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+use quarto_system_runtime::SystemRuntime;
 use tracing::{debug, info, warn};
 
 use super::preview::spawn_browser_open_when_ready;
@@ -129,7 +130,7 @@ fn check_servable_format(key: &str) -> Result<()> {
 /// is more specific than anything the gate could say.
 fn resolved_format_key(input: &Path, base: &RenderArgs) -> Option<String> {
     let overlay = metadata_flag::overlay_from_metadata_flags(&base.metadata).ok()?;
-    let plain = NativeRuntime::new();
+    let plain = native_runtime_for(&base.profile);
     let selection = cli_selection(&base.profile);
     let cwd = plain.cwd().ok()?;
     let target = classify_inputs(
@@ -403,7 +404,7 @@ async fn run(args: StaticArgs) -> Result<()> {
     // file with no `_quarto.yml` above it, is rendered as given.
     let full_input = match path.parent() {
         Some(parent) if path.is_file() => {
-            match find_project_root_upward(parent, &NativeRuntime::new()) {
+            match find_project_root_upward(parent, &native_runtime_for(&args.profile)) {
                 Ok(Some(root)) => root,
                 _ => path.clone(),
             }
@@ -427,15 +428,18 @@ async fn run(args: StaticArgs) -> Result<()> {
             .map_or_else(|| full_input.clone(), Path::to_path_buf)
     };
     let engine_off = matches!(
-        read_engine_policy_from_project(&policy_root, &NativeRuntime::new(), profile),
+        read_engine_policy_from_project(&policy_root, &native_runtime_for(&args.profile), profile),
         EnginePolicy::Off
     );
     // Q1's `project: preview:` keys are the defaults; CLI flags win
     // (plan Phase 4). `--no-watch` / `--no-navigate` / `--no-browser`
     // only ever turn things off, so a config `false` cannot be undone
     // from the command line — the same shape as Q1's flags.
-    let defaults =
-        read_static_preview_defaults_from_project(&policy_root, &NativeRuntime::new(), profile);
+    let defaults = read_static_preview_defaults_from_project(
+        &policy_root,
+        &native_runtime_for(&args.profile),
+        profile,
+    );
     for key in &defaults.unsupported {
         eprintln!(
             "warning: `project.preview.{key}` in _quarto.yml is not supported by \
@@ -484,7 +488,7 @@ async fn run(args: StaticArgs) -> Result<()> {
     // only reports changes made after the stream exists; likewise a
     // Ctrl-C right after connecting must find its handler installed.
     let mut watcher = if watching {
-        Some(start_watcher(&report)?)
+        Some(start_watcher(&report, &args.profile)?)
     } else {
         None
     };
@@ -727,7 +731,7 @@ async fn watcher_recv(watcher: &mut Option<FileWatcher>) -> Option<WatchEvent> {
 /// excludes the output and generated directories). A single document
 /// outside a project watches the file plus its include / image closure,
 /// non-recursively — the same allow-list the hub preview uses.
-fn start_watcher(report: &RenderReport) -> Result<FileWatcher> {
+fn start_watcher(report: &RenderReport, profile: &[String]) -> Result<FileWatcher> {
     let mut config = WatchConfig::with_filter(WatchFilter::All);
     if let RenderTarget::SingleDoc(input) = &report.target {
         let root = report.project_dir.clone();
@@ -738,7 +742,7 @@ fn start_watcher(report: &RenderReport) -> Result<FileWatcher> {
         let deps = quarto_preview::config::resolve_single_file_deps(
             &root,
             &rel,
-            Arc::new(NativeRuntime::new()),
+            Arc::new(native_runtime_for(profile)),
         );
         config.single_file = Some(input.clone());
         config.single_file_deps = deps

@@ -265,6 +265,14 @@ struct Rig {
 }
 
 async fn boot_rig(ui: PreviewUi, serving: LocalServing) -> Rig {
+    boot_rig_with(ui, serving, Default::default()).await
+}
+
+async fn boot_rig_with(
+    ui: PreviewUi,
+    serving: LocalServing,
+    render: quarto_preview::RenderFlags,
+) -> Rig {
     let project = tempfile::TempDir::with_prefix("q2-join-frontend-proj-").unwrap();
     std::fs::write(
         project.path().join("_quarto.yml"),
@@ -277,6 +285,7 @@ async fn boot_rig(ui: PreviewUi, serving: LocalServing) -> Rig {
 
     let port = pick_free_port();
     let config = PreviewConfig {
+        render,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -941,4 +950,29 @@ async fn editor_ui_boots_from_local_editor_index() {
     );
 
     rig.shutdown().await;
+}
+
+/// F8: the host's `--to` / `-M` reach a `--share` guest: the guest's
+/// `/api/preview/config` is the host's, byte for byte, `render` block
+/// included (the guest's browser then applies it).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn guest_config_carries_the_hosts_render_block() {
+    let rig = boot_rig_with(
+        PreviewUi::Viewer,
+        LocalServing::Tunnel,
+        quarto_preview::RenderFlags {
+            to: Some("typst".to_string()),
+            metadata: Some(serde_json::json!({ "toc": true })),
+            profile: Vec::new(),
+        },
+    )
+    .await;
+    let guest = raw_http(rig.guest, "GET", "/api/preview/config", &[]).await;
+    let host = raw_http(rig.hub, "GET", "/api/preview/config", &[]).await;
+    assert_eq!(guest.body, host.body);
+    let body: serde_json::Value = serde_json::from_slice(&guest.body).unwrap();
+    assert_eq!(
+        body["render"],
+        serde_json::json!({ "to": "typst", "metadata": { "toc": true } })
+    );
 }

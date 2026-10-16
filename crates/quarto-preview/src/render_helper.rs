@@ -54,7 +54,7 @@ use quarto_error_reporting::{
 };
 use quarto_hub::context::SharedContext;
 use quarto_source_map::SourceContext;
-use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+use quarto_system_runtime::SystemRuntime;
 use quarto_trace::EngineCapture;
 use serde::Serialize;
 
@@ -314,6 +314,9 @@ impl BookDownload for NativeBookDownload {
             cancellation: req.cancellation,
             child_deadline: Some(CHILD_DEADLINE),
             metadata: req.metadata,
+            // The server's runtime, so a whole-book download resolves the
+            // session's `--profile` like the single-page routes (F8-D6).
+            runtime: Arc::new(crate::render_flags::native_runtime()),
         })
         .map_err(|e| match e {
             BookDownloadFailure::Busy => BookDownloadError::Busy,
@@ -449,7 +452,7 @@ pub fn render_blocking(job: RenderJob) -> RenderOutcome {
     // The request's `metadata` is the overlay's runtime metadata and the
     // editor's text stands in for the file, keyed by its canonical path, so
     // the resolver reads the same front matter the render does (F4-D4).
-    let native: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let native: Arc<dyn SystemRuntime> = Arc::new(crate::render_flags::native_runtime());
     let active = native
         .canonicalize(&job.abs_path)
         .unwrap_or_else(|_| job.abs_path.clone());

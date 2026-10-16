@@ -22,7 +22,7 @@ use axum::{
 };
 use quarto_core::engine::EngineRegistry;
 use quarto_hub::{StorageManager, context::HubConfig, server, watch::WatchFilter};
-use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+use quarto_system_runtime::SystemRuntime;
 
 pub mod asset_manifest;
 pub mod cache;
@@ -35,9 +35,12 @@ pub mod join_frontend;
 pub mod pdf_preview;
 pub mod re_execute;
 pub mod render_download;
+pub mod render_flags;
 pub mod render_helper;
 pub mod share;
 pub mod static_mode;
+
+pub use render_flags::RenderFlags;
 
 #[cfg(test)]
 mod route_tests;
@@ -300,6 +303,8 @@ pub struct PreviewConfig {
     /// editor. Orthogonal to `allow_edit` — the UI choice never changes
     /// the disk write policy.
     pub ui: PreviewUi,
+    /// `--to`, `-M` and `--profile` (F8). Default: none of them.
+    pub render: RenderFlags,
 }
 
 /// Run the preview server. Returns when the server is shut down (ctrl-c
@@ -328,6 +333,12 @@ where
     // first call's override wins.
     let _ = SPA_DIR_OVERRIDE.set(config.spa_dir_override.clone());
 
+    // F8: the render flags (`--to`, `-M`, `--profile`) are session state
+    // like the settings above; stash them before anything below builds a
+    // native runtime, since every native site goes through
+    // `render_flags::native_runtime()`.
+    render_flags::set(config.render.clone());
+
     // bd-kjrpya2d: resolve the project's `resources:` set to (output-relative
     // → disk path) so the artifact route can SERVE embedded-example decks +
     // their `slides_files/…` from disk. Best-effort; empty for single-file /
@@ -337,7 +348,7 @@ where
         .project_root
         .as_deref()
         .map(|root| {
-            config::resolve_project_resource_files(root, &NativeRuntime::new(), None)
+            config::resolve_project_resource_files(root, &render_flags::native_runtime(), None)
                 .into_iter()
                 .collect()
         })
@@ -422,7 +433,7 @@ where
     let on_ready: server::OnReadyCallback = Box::new(move |ctx| {
         let registry = registry_for_on_ready;
         let cache_dir = cache_dir_for_on_ready;
-        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(render_flags::native_runtime());
         let ctx_for_driver = ctx.clone();
         tokio::task::spawn_blocking(move || {
             // bd-w348iu63 (plan D7): run the project's `pre-render`
@@ -481,7 +492,7 @@ where
             return;
         };
         let rel_path = rel.to_string_lossy().to_string();
-        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(render_flags::native_runtime());
         let registry = registry_for_on_file_changed.clone();
         let cache_dir = cache_dir_for_on_file_changed.clone();
         tokio::task::spawn_blocking(move || {
@@ -573,7 +584,7 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
     use quarto_core::ProjectContext;
     use quarto_core::project::render_scripts;
 
-    let runtime = NativeRuntime::new();
+    let runtime = render_flags::native_runtime();
     let project = match ProjectContext::discover(project_root, &runtime) {
         Ok(p) => p,
         Err(e) => {
@@ -669,9 +680,11 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         config.project_root.as_deref(),
         config.single_file.as_deref(),
     ) {
-        (Some(root), Some(rel)) => {
-            config::resolve_single_file_deps(root, rel, std::sync::Arc::new(NativeRuntime::new()))
-        }
+        (Some(root), Some(rel)) => config::resolve_single_file_deps(
+            root,
+            rel,
+            std::sync::Arc::new(render_flags::native_runtime()),
+        ),
         _ => config::SingleFileDeps::default(),
     };
 
@@ -828,6 +841,11 @@ async fn preview_config_handler() -> Response {
     let mut body = serde_json::json!({ "allowEdit": allow_edit });
     if let Some(boot) = EDITOR_BOOT.get() {
         body["editorBoot"] = serde_json::to_value(boot).expect("EditorBootInfo always serializes");
+    }
+    // F8: `--to` / `-M` for the browser's renders. Absent when neither
+    // flag was given, so a flagless session answers as it always did.
+    if let Some(render) = render_flags::get().config_block() {
+        body["render"] = render;
     }
     // Live-share plan Phase 2 (bd-ee2fqm95, design decision 5):
     // advertise the embedded bundles' manifest hashes so a `--join`
@@ -1379,6 +1397,7 @@ mod tests {
 
     fn test_config(ui: PreviewUi, allow_edit: bool) -> PreviewConfig {
         PreviewConfig {
+            render: Default::default(),
             host: "127.0.0.1".to_string(),
             port: 0,
             project_root: None,

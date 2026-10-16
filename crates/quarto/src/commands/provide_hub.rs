@@ -49,6 +49,8 @@ pub struct ProvideHubArgs {
     /// hub** (`q2 hub`), which ignores the bearer entirely. Never needed
     /// against quarto-hub.com.
     pub token: Option<String>,
+    /// `-M/--metadata` arguments, unparsed, as `q2 render -M` (F8-D9).
+    pub metadata: Vec<String>,
 }
 
 const DEFAULT_SERVER_WS: &str = "wss://quarto-hub.com/ws";
@@ -93,8 +95,11 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     let server_ws_url = url::Url::parse(&server_ws)
         .with_context(|| format!("invalid hub server URL: {server_ws}"))?;
 
-    // Validate mode/args before connecting so mistakes fail fast.
+    // Validate mode/args before connecting so mistakes fail fast. A
+    // malformed `-M` fails here, before any network.
     validate_mode(args.watch, &args.file)?;
+    let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&args.metadata)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     // Build the consent gate up front. `--dangerously-accept-requests` opts out
     // of the prompt entirely; otherwise we prompt interactively, and if there
@@ -135,7 +140,7 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     // The beacon's actorId is the samod peer id (stable for this process);
     // Phase 5 swaps in the per-project actor id from /auth/actor.
     let self_actor_id = repo.peer_id().to_string();
-    let provider = Provider::new(repo, index, self_actor_id, consent, None);
+    let provider = Provider::new_with_overlay(repo, index, self_actor_id, consent, None, overlay);
 
     if args.watch {
         run_watch(&provider).await;
@@ -246,6 +251,31 @@ async fn run_watch(provider: &Arc<Provider>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn args(metadata: &[&str]) -> ProvideHubArgs {
+        ProvideHubArgs {
+            project: "someid".to_string(),
+            file: Some("doc.qmd".to_string()),
+            // Unreachable on purpose: a test that connects would hang or fail
+            // differently from the error asserted below.
+            server: Some("ws://127.0.0.1:1".to_string()),
+            watch: false,
+            dangerously_accept_requests: true,
+            token: Some("t".to_string()),
+            metadata: metadata.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    /// F8-D9: a malformed `-M` fails before any network.
+    #[test]
+    fn a_malformed_metadata_flag_fails_before_connecting() {
+        let err = execute(args(&["no-separator"])).unwrap_err().to_string();
+        assert!(err.contains("no-separator"), "{err}");
+        assert!(
+            !err.contains("joining the hub"),
+            "must not have connected: {err}"
+        );
+    }
 
     #[test]
     fn parses_a_share_url() {

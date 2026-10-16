@@ -79,6 +79,7 @@ async fn capture_failure_lands_in_sink() {
     registry.register(Arc::new(FailingTestEngine));
 
     let config = PreviewConfig {
+        render: Default::default(),
         host: "127.0.0.1".to_string(),
         port: pick_free_port(),
         project_root: Some(project.path().to_path_buf()),

@@ -39,6 +39,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use quarto_core::engine::EngineRegistry;
 use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
+use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::project::ProjectContext;
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -87,6 +88,10 @@ pub struct Provider {
     /// Paths currently executing, to collapse a duplicate request for a path
     /// already in flight (mirrors `re_execute.rs`'s `IN_FLIGHT`).
     in_flight: Mutex<HashSet<String>>,
+    /// `-M` for `provide-hub` (F8-D9): runtime metadata every execution
+    /// sees, so a `-M` that changes how code runs (`execute:eval:false`,
+    /// `jupyter:python3`) reaches the engine. `None` adds nothing.
+    overlay: Option<Arc<RenderOverlay>>,
 }
 
 impl Provider {
@@ -98,6 +103,19 @@ impl Provider {
         consent: Arc<dyn ConsentGate>,
         registry: Option<Arc<EngineRegistry>>,
     ) -> Arc<Self> {
+        Self::new_with_overlay(repo, index, self_actor_id, consent, registry, None)
+    }
+
+    /// [`Provider::new`] with a `-M` overlay (F8-D9) that every execution's
+    /// runtime carries.
+    pub fn new_with_overlay(
+        repo: Repo,
+        index: IndexDocument,
+        self_actor_id: impl Into<String>,
+        consent: Arc<dyn ConsentGate>,
+        registry: Option<Arc<EngineRegistry>>,
+        overlay: Option<Arc<RenderOverlay>>,
+    ) -> Arc<Self> {
         let probe = registry.clone().unwrap_or_default();
         let engines = available_engines(&probe);
         Arc::new(Self {
@@ -108,6 +126,7 @@ impl Provider {
             consent,
             registry,
             in_flight: Mutex::new(HashSet::new()),
+            overlay,
         })
     }
 
@@ -264,7 +283,13 @@ impl Provider {
             .canonicalize()
             .map_err(|e| format!("canonicalizing the materialization temp dir: {e}"))?;
         let abs_path = root.join(rel_path);
-        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        // The plain runtime is the source's view (what the viewer's staleness
+        // check sees); the overlay-wrapped one is what executes (F8-D9).
+        let plain: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let runtime: Arc<dyn SystemRuntime> = match &self.overlay {
+            Some(overlay) => overlay.apply(plain.clone()),
+            None => plain.clone(),
+        };
         let project = ProjectContext::discover(&abs_path, runtime.as_ref())
             .map_err(|e| format!("project discovery failed: {e}"))?;
 
@@ -304,11 +329,27 @@ impl Provider {
 
         // Decision #4: always a fresh run (uncached record_capture) — code may
         // have side effects and we don't prove it side-effect-free.
-        let captures = record_capture(&abs_path, &project, runtime.clone(), self.registry.clone())
-            .await
-            .map_err(|e| format!("engine pipeline failed: {e}"))?;
+        let mut captures =
+            record_capture(&abs_path, &project, runtime.clone(), self.registry.clone())
+                .await
+                .map_err(|e| format!("engine pipeline failed: {e}"))?;
         if captures.is_empty() {
             return Err("engine produced no capture (no code cells?)".to_string());
+        }
+        if self.overlay.is_some() {
+            // F8-D9 / 8.3c: the staleness key (the first capture's `input_qmd`)
+            // describes the *source*, not this provider's execution settings.
+            // Recorded under a `-M`, it would embed the overlay's metadata and
+            // differ from the viewer's overlay-free recompute, marking every
+            // capture stale. Store the overlay-free bytes; execution and the
+            // outputs above still saw the overlay.
+            let source_project = ProjectContext::discover(&abs_path, plain.as_ref())
+                .map_err(|e| format!("project discovery failed: {e}"))?;
+            let source_qmd = compute_input_qmd(&abs_path, &source_project, plain)
+                .await
+                .map_err(|e| format!("computing the source input_qmd failed: {e}"))?;
+            captures[0].input_qmd = String::from_utf8(source_qmd)
+                .map_err(|e| format!("source input_qmd is not UTF-8: {e}"))?;
         }
 
         let new_doc_id = write_capture_doc(&self.repo, rel_path, &captures)
