@@ -107,8 +107,7 @@ describe('download controller in the preview embed', () => {
     const { pdfPreviewAvailable } = await import('./downloadService');
     const { classifyPreviewMode } = await import('../components/render/getQ2Format');
     expect(pdfPreviewAvailable()).toBe(true);
-    const resolved = { success: true, formats: [{ key: 'typst-pdf', class: 'download' }] } as never;
-    const ast = JSON.stringify({ 'pandoc-api-version': [1, 23], meta: { format: { t: 'MetaString', c: 'pdf' } }, blocks: [] });
-    expect(classifyPreviewMode(ast, 'a.qmd', { resolve: () => resolved, canDownload: () => true, canPreviewPdf: pdfPreviewAvailable })).toEqual({ mode: 'pdf', formatKey: 'typst-pdf' });
+    const resolved = { success: true, key: 'typst-pdf', class: 'download', pseudoFormat: null, scope: 'chapter', formats: [{ key: 'typst-pdf', class: 'download' }] } as never;
+    expect(classifyPreviewMode('a.qmd', { resolve: () => resolved, canDownload: () => true, canPreviewPdf: pdfPreviewAvailable })).toEqual({ mode: 'pdf', formatKey: 'typst-pdf' });
   });
 });

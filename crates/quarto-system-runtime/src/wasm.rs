@@ -363,6 +363,13 @@ impl WasmRuntime {
         f(&mut self.vfs.write().unwrap())
     }
 
+    /// The VFS's project-structure generation
+    /// ([`VirtualFileSystem::generation`]): moves only for writes that can
+    /// change how a project is discovered, so it can key a project cache.
+    pub fn vfs_generation(&self) -> u64 {
+        self.vfs.read().unwrap().generation()
+    }
+
     /// Update a file in the virtual filesystem.
     pub fn update_file(&self, path: &Path, contents: Vec<u8>) {
         self.vfs.write().unwrap().update_file(path, contents);

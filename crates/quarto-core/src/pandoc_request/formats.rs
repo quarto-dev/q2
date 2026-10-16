@@ -283,10 +283,24 @@ pub fn resolve_document_formats(
         .map_err(|e| format!("Failed to read file: {e}"))?;
     let project = ProjectContext::discover(path, runtime)
         .map_err(|e| format!("Failed to discover project context: {e}"))?;
+    Ok(resolve_document_formats_in(
+        &project, path, &content, runtime,
+    ))
+}
+
+/// [`resolve_document_formats`] over a project the caller already holds (a
+/// cached discovery) and the document text to read (an editor buffer, which
+/// wins over whatever the runtime holds for `path`).
+pub fn resolve_document_formats_in(
+    project: &ProjectContext,
+    path: &Path,
+    content: &str,
+    runtime: &dyn SystemRuntime,
+) -> ResolvedFormats {
     let mut resolved = resolve_formats(
-        &content,
+        content,
         Some(crate::output_ext::DocumentLocation {
-            project: &project,
+            project,
             runtime,
             path,
         }),
@@ -297,9 +311,23 @@ pub fn resolve_document_formats(
         let active = runtime
             .canonicalize(path)
             .unwrap_or_else(|_| path.to_path_buf());
-        resolved.book = Some(book_resolution(&project, &active, runtime));
+        resolved.book = Some(book_resolution(project, &active, runtime));
     }
-    Ok(resolved)
+    resolved
+}
+
+/// The format the live preview renders `key` with, or `None` when the preview
+/// does not render it through the React pipeline (the full-DOM renderer, a
+/// download or nothing takes it): `html` previews as `q2-preview`, `revealjs`
+/// and the other `q2-*` pseudo-formats as themselves, `q2-html-render` is the
+/// explicit opt-out. The Rust half of the hub-client's former `getQ2Format`.
+pub fn preview_pseudo_format(key: &str) -> Option<String> {
+    match key {
+        "q2-html-render" => None,
+        "html" => Some("q2-preview".to_string()),
+        k if k.starts_with("q2-") || k == "revealjs" => Some(k.to_string()),
+        _ => None,
+    }
 }
 
 /// Computed without Pass 1 from the book's file list alone. A broken list
@@ -353,6 +381,23 @@ mod tests {
         }
         for key in ["latex", "opendocument", "no-such-format", "my-docx"] {
             assert_eq!(format_class(key), FormatClass::Neither, "{key}");
+        }
+    }
+
+    #[test]
+    fn the_preview_pseudo_format_follows_the_react_rule() {
+        assert_eq!(preview_pseudo_format("html").as_deref(), Some("q2-preview"));
+        assert_eq!(
+            preview_pseudo_format("revealjs").as_deref(),
+            Some("revealjs")
+        );
+        assert_eq!(
+            preview_pseudo_format("q2-slides").as_deref(),
+            Some("q2-slides")
+        );
+        assert_eq!(preview_pseudo_format("q2-html-render"), None);
+        for key in ["typst-pdf", "docx", "acm-html", "latex"] {
+            assert_eq!(preview_pseudo_format(key), None, "{key}");
         }
     }
 

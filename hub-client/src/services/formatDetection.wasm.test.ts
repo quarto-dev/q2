@@ -125,12 +125,13 @@ describe('format detection via parse_qmd_to_ast', () => {
     expect(response.error).toContain('Unknown format');
   });
 
-  it('returns error for empty format string', async () => {
-    // format: "" (empty string) is represented as format: '' in YAML
+  it('treats an empty format string as no format (the shared resolver reads it as none declared)', async () => {
+    // F6: `parse_qmd_to_ast` reads the front matter through the same layer reader as the format
+    // resolver, which does not see an empty `format: ''` as a key; it used to be "Unknown format".
     const content = "---\nformat: ''\n---\n\n# Hello\n";
     const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
-    expect(response.success).toBe(false);
-    expect(response.error).toContain('Unknown format');
+    expect(response.success).toBe(true);
+    expect(getMetaFormat(JSON.parse(response.ast!))).toBe('html');
   });
 });
 

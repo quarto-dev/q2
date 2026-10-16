@@ -1,7 +1,7 @@
 /**
- * The three-class classifier against the real wasm (pandoc pandoc-host H5, D8.4/D8.7): the
- * AST's `meta.format`, the Rust-owned resolver and `getQ2Format` agree on which mode each
- * kind of document gets.
+ * The three-class classifier against the real wasm (pandoc pandoc-host H5, D8.4/D8.7; the
+ * project-aware resolver since format-resolution F6): each kind of document, and each kind of
+ * project-level `format:`, gets the right preview mode.
  *
  * Run with: npm run test:wasm
  */
@@ -17,11 +17,8 @@ interface WasmModule {
   vfs_add_file: (path: string, content: string) => string;
   vfs_clear: () => string;
   vfs_set_runtime_metadata: (yaml: string) => string;
-  parse_qmd_to_ast_with_attribution: (content: string, attribution?: string) => Promise<string>;
-  resolve_pandoc_formats: (path: string) => string;
+  resolve_pandoc_formats: (path: string, options?: { contentOverride?: string }) => string;
 }
-
-const NO_AST = JSON.stringify({ meta: {}, blocks: [] });
 
 let wasm: WasmModule;
 
@@ -40,14 +37,22 @@ beforeEach(() => {
 async function modeOf(frontMatter: string, canDownload: (key: string) => boolean = () => true, canPreviewPdf?: () => boolean): Promise<PreviewMode> {
   const content = `---\n${frontMatter}\n---\n\nBody.\n`;
   wasm.vfs_add_file('/project/doc.qmd', content);
-  const parsed = JSON.parse(await wasm.parse_qmd_to_ast_with_attribution(content));
-  // A format the parser's metadata merge does not know (`latex`) fails the parse; the router
-  // then classifies from the resolver alone (an AST with no `meta.format`).
-  return classifyPreviewMode(parsed.success ? parsed.ast : NO_AST, '/project/doc.qmd', {
-    resolve: (path) => JSON.parse(wasm.resolve_pandoc_formats(path)) as ResolvePandocFormatsResponse,
+  return modeOfBuffer('/project/doc.qmd', content, canDownload, canPreviewPdf);
+}
+
+/** What `PreviewRouter` does: classify `path` through the resolver, passing the editor buffer. */
+function modeOfBuffer(path: string, buffer: string, canDownload: (key: string) => boolean = () => true, canPreviewPdf?: () => boolean): PreviewMode {
+  return classifyPreviewMode(path, {
+    resolve: (p) => JSON.parse(wasm.resolve_pandoc_formats(p, { contentOverride: buffer })) as ResolvePandocFormatsResponse,
     canDownload,
     canPreviewPdf,
   });
+}
+
+function book(format: string) {
+  wasm.vfs_add_file('/project/_quarto.yml', `project:\n  type: book\nbook:\n  title: T\n  chapters:\n    - index.qmd\n    - ch1.qmd\nformat: ${format}\n`);
+  wasm.vfs_add_file('/project/index.qmd', '# Index\n');
+  wasm.vfs_add_file('/project/ch1.qmd', '# One\n');
 }
 
 describe('classifyPreviewMode against the real wasm', () => {
@@ -86,5 +91,37 @@ describe('classifyPreviewMode against the real wasm', () => {
   it('a typst document with another output-ext is the typst-source download, not the PDF viewer', async () => {
     expect(await modeOf('format: typst\noutput-ext: typ', () => true, () => true)).toEqual({ mode: 'download', formatKey: 'typst' });
     expect(await modeOf('format:\n  typst:\n    output-ext: typst', () => true, () => true)).toEqual({ mode: 'download', formatKey: 'typst' });
+  });
+
+  // The strand's third symptom: the project's `format:` reaches a chapter that names none.
+  describe('project-level format', () => {
+    it('a front-matter-less chapter of a `format: typst` book gets the PDF pane', () => {
+      book('typst');
+      expect(modeOfBuffer('/project/ch1.qmd', '# One\n', () => true, () => true)).toEqual({ mode: 'pdf', formatKey: 'typst-pdf' });
+    });
+
+    it('a chapter whose front matter says `format: html` gets the html preview (the document wins in chapter scope)', () => {
+      book('typst');
+      const buffer = '---\nformat: html\n---\n\n# One\n';
+      expect(modeOfBuffer('/project/ch1.qmd', buffer, () => true, () => true)).toEqual({ mode: 'react', format: 'q2-preview' });
+    });
+
+    it('the buffer wins over a different VFS copy', () => {
+      book('typst');
+      wasm.vfs_add_file('/project/ch1.qmd', '---\nformat: html\n---\n\n# One\n');
+      expect(modeOfBuffer('/project/ch1.qmd', '# One\n', () => true, () => true)).toEqual({ mode: 'pdf', formatKey: 'typst-pdf' });
+    });
+
+    it('a project-level `format: revealjs` page previews as slides', () => {
+      wasm.vfs_add_file('/project/_quarto.yml', 'project:\n  type: default\nformat: revealjs\n');
+      wasm.vfs_add_file('/project/slides.qmd', '# Slide\n');
+      expect(modeOfBuffer('/project/slides.qmd', '# Slide\n')).toEqual({ mode: 'react', format: 'revealjs' });
+    });
+
+    it('a project with no format: key previews as q2-preview', () => {
+      wasm.vfs_add_file('/project/_quarto.yml', 'project:\n  type: default\n');
+      wasm.vfs_add_file('/project/a.qmd', '# A\n');
+      expect(modeOfBuffer('/project/a.qmd', '# A\n')).toEqual({ mode: 'react', format: 'q2-preview' });
+    });
   });
 });

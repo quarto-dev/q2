@@ -260,10 +260,10 @@ async function doRender(
     // One entry point for every preview-pipeline format (bd-kltzdhle, D3):
     // `renderPageInProjectWithAttribution` with `preferPreviewFormat = true`.
     //
-    // The WASM re-detects the format from the file's own front matter, so
+    // The WASM re-resolves the format (document, project) itself, so
     // the flag is what makes the router's decision stick: a plain document
     // (no `format:` key, which the WASM reports as `html`) reaches us as
-    // `q2-preview` from `getQ2Format`, and the flag applies the same
+    // `q2-preview` from `classifyPreviewMode`, and the flag applies the same
     // `html → q2-preview` substitution inside the pipeline so the response
     // carries `ast_json` rather than `html`. The same flag maps
     // `revealjs → q2-slides` (convergence, bd-vwp4y5ku): the full transform

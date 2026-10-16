@@ -83,7 +83,7 @@ interface PreviewRouterProps {
 
 /**
  * Router component that selects between ReactPreview and Preview based on
- * the document's resolved format (see `getQ2Format` for the rule).
+ * the document's resolved format (see `classifyPreviewMode` for the rule).
  *
  * - The default — no `format:` key, `format: html`, or a `format: html: {…}`
  *   map — and every `q2-*` pseudo-format except `q2-html-render`, plus
@@ -139,16 +139,18 @@ export default function PreviewRouter(props: PreviewRouterProps) {
           return;
         }
 
-        // Parse the QMD to AST to check metadata
+        // Parse the QMD only to learn whether it parses: a mid-edit syntax error keeps the
+        // previous mode. The format itself comes from the Rust resolver.
         const result = await parseQmdToAst(props.content);
         const deps = {
-          resolve: (path: string) => (isWasmReady() ? resolvePandocFormats(path) : null),
+          // The editor buffer, not the VFS copy: it can lag a keystroke behind.
+          resolve: (path: string) => (isWasmReady() ? resolvePandocFormats(path, { contentOverride: props.content }) : null),
           canDownload: (key: string) => menuFormats().some((f) => f.key === key),
           canPreviewPdf: pdfPreviewAvailable,
         };
         // A format the parser's metadata merge does not know (`latex`) fails the parse. The
         // resolver still classifies it; a failed parse of a previewable document changes nothing.
-        const mode = classifyPreviewMode(result.success ? result.ast : '{"meta":{}}', props.currentFile?.path, deps);
+        const mode = classifyPreviewMode(props.currentFile?.path, deps);
         if (result.success || mode.mode === 'download' || mode.mode === 'pdf' || mode.mode === 'neither') {
           const format = mode.mode === 'react' ? mode.format : null;
           // Keep the same object when nothing changed, so a keystroke does not re-render consumers.

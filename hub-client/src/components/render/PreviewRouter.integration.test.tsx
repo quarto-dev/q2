@@ -1,8 +1,9 @@
 /**
  * Routing test for `PreviewRouter` (bd-kltzdhle).
  *
- * The router probes the document (`parseQmdToAst` → `meta.format` →
- * `getQ2Format`) and mounts either `ReactPreview` (React AST renderer,
+ * The router asks the Rust resolver for the document's format
+ * (`resolvePandocFormats`, passing the editor buffer, then
+ * `classifyPreviewMode`) and mounts either `ReactPreview` (React AST renderer,
  * Q2PreviewIframe) or `Preview` (full-DOM MorphIframe). It also echoes
  * the resolved format up through `onFormatChange`, which `Editor.tsx`
  * uses to enable the Edit / Authors pills and the printable-document
@@ -29,9 +30,11 @@ import React from 'react';
 const capturedReactPreviewProps: any[] = [];
 const capturedPreviewProps: any[] = [];
 
-// The probe result is set per test. `meta.format` is what
-// `MetadataMergeStage` writes: the normalised `Format::target_format`.
+// The resolver result is set per test: the resolved key (`html` for a document and project
+// that name none) and the preview pseudo-format Rust maps it to.
 let probeFormat = 'html';
+const PSEUDO: Record<string, string | null> = { html: 'q2-preview', 'q2-debug': 'q2-debug', 'q2-html-render': null };
+const resolveCalls: { path: string; options: any }[] = [];
 
 vi.mock('@quarto/preview-runtime', () => ({
   parseQmdToAst: vi.fn(async () => ({
@@ -42,6 +45,18 @@ vi.mock('@quarto/preview-runtime', () => ({
       blocks: [],
     }),
   })),
+  resolvePandocFormats: vi.fn((path: string, options: any) => {
+    resolveCalls.push({ path, options });
+    return {
+      success: true,
+      source: 'document',
+      key: probeFormat,
+      class: 'preview',
+      pseudoFormat: PSEUDO[probeFormat] ?? null,
+      scope: 'chapter',
+      formats: [{ key: probeFormat, class: 'preview' }],
+    };
+  }),
   isWasmReady: () => true,
   initWasm: vi.fn(async () => {}),
 }));
@@ -85,6 +100,7 @@ describe('PreviewRouter renderer dispatch (bd-kltzdhle)', () => {
   beforeEach(() => {
     capturedReactPreviewProps.length = 0;
     capturedPreviewProps.length = 0;
+    resolveCalls.length = 0;
   });
 
   it('mounts ReactPreview as q2-preview for a document with no format: key', async () => {
@@ -96,6 +112,8 @@ describe('PreviewRouter renderer dispatch (bd-kltzdhle)', () => {
     expect(capturedPreviewProps).toHaveLength(0);
     expect(capturedReactPreviewProps.at(-1).format).toBe('q2-preview');
     expect(onFormatChange).toHaveBeenLastCalledWith('q2-preview');
+    // The resolver reads the editor buffer, not the VFS copy.
+    expect(resolveCalls.at(-1)).toEqual({ path: 'doc.qmd', options: { contentOverride: '# Hello\n\nPlain document.\n' } });
   });
 
   it('mounts the full-DOM Preview for format: q2-html-render', async () => {

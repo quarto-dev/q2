@@ -783,40 +783,39 @@ fn coerce_format_for_print(format_str: &str) -> &str {
     }
 }
 
-/// Detect the format string from QMD content's YAML frontmatter.
-/// Returns the format name (e.g., "q2-slides", "q2-debug", "html", "acm-html")
-/// or "html" as default when no format key is present.
-fn detect_format_from_content(content: &str) -> String {
-    let trimmed = content.trim_start();
-    if !trimmed.starts_with("---") {
-        return "html".to_string();
-    }
-    let after_first = &trimmed[3..];
-    let end = after_first.find("\n---");
-    let yaml_str = match end {
-        Some(pos) => &after_first[..pos],
-        None => return "html".to_string(),
-    };
-    let docs = match yaml_rust2::YamlLoader::load_from_str(yaml_str) {
-        Ok(docs) => docs,
-        Err(_) => return "html".to_string(),
-    };
-    let doc = match docs.first() {
-        Some(doc) => doc,
-        None => return "html".to_string(),
-    };
-    match doc["format"] {
-        yaml_rust2::Yaml::String(ref s) => s.clone(),
-        yaml_rust2::Yaml::Hash(ref map) => {
-            // yaml-rust2 preserves insertion order (uses LinkedHashMap)
-            map.keys()
-                .next()
-                .and_then(|k| k.as_str())
-                .unwrap_or("html")
-                .to_string()
-        }
-        _ => "html".to_string(),
-    }
+/// The format a document names in its **own** front matter: the first `format:`
+/// key, else `html`. Only for entries that have no path (so no project to
+/// resolve against): `parse_qmd_to_ast*` and the path-less `render_qmd_content`'s
+/// synthetic project. Every path-bearing entry calls [`resolve_entry_format`].
+fn front_matter_format(content: &str) -> String {
+    use quarto_core::format_resolution::format_keys_of;
+    quarto_core::metadata_layers::document_layer_from_content(content)
+        .get("format")
+        .map(format_keys_of)
+        .and_then(|keys| keys.into_iter().next())
+        .unwrap_or_else(|| "html".to_string())
+}
+
+/// The format of the document at `path` for a render entry: the one resolver
+/// (`quarto_core::format_resolution`) over the document text, the
+/// `_metadata.yml` chain, the project and the runtime layer. The request is
+/// for a chapter, the browser preview's scope, so a chapter's own `format:`
+/// wins over the project's even in a book.
+fn resolve_entry_format(
+    project: &ProjectContext,
+    path: &Path,
+    content: &str,
+    runtime: &dyn SystemRuntime,
+) -> String {
+    quarto_core::format_resolution::resolve_document_format(
+        project,
+        path,
+        Some(content),
+        &quarto_core::format_resolution::ScopeRequest::chapter(),
+        None,
+        runtime,
+    )
+    .key
 }
 
 /// Parse QMD content to Pandoc AST JSON using the unified pipeline.
@@ -881,7 +880,7 @@ pub async fn parse_qmd_to_ast_with_attribution(
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
 
-    let format_str = detect_format_from_content(content);
+    let format_str = front_matter_format(content);
     let format = match Format::from_format_string(&format_str) {
         Ok(f) => f,
         Err(e) => {
@@ -1174,7 +1173,12 @@ async fn render_printable_with_overlay(
         Err(e) => return error_response(format!("Failed to discover project context: {}", e)),
     };
 
-    let detected = detect_format_from_content(std::str::from_utf8(&content).unwrap_or(""));
+    let detected = resolve_entry_format(
+        &project,
+        path,
+        std::str::from_utf8(&content).unwrap_or(""),
+        runtime,
+    );
     let printable_format = coerce_format_for_print(&detected).to_string();
 
     render_single_doc_to_response(
@@ -1425,7 +1429,7 @@ async fn render_page_in_project_with_overlay(
 
 /// Like [`render_page_in_project`], but applies the `q2 preview`
 /// format-default substitution: a document with no explicit
-/// `format:` key (which `detect_format_from_content` reports as
+/// `format:` key (which the format resolver reports as
 /// `html`) renders through the q2-preview pipeline and returns
 /// `ast_json`. Explicit non-html formats are honoured as-is.
 ///
@@ -2258,24 +2262,136 @@ pub fn classify_import_failure(kind: &str, status: Option<i32>, stderr: &str) ->
     serde_json::json!({ "diagnostics": import_diagnostics_json(&diagnostics) }).to_string()
 }
 
-/// The project-aware format resolver (D8.7): the document's own `format:`
-/// keys (the first is its format), else the surrounding `_quarto.yml`'s, else
-/// `html`. JSON `{ success, error?, source, formats: [{ key, class }] }` with
-/// `source` one of `document | project | default` and `class` one of
-/// `preview | download | neither`.
-#[wasm_bindgen]
-pub fn resolve_pandoc_formats(path: &str) -> String {
-    match quarto_core::pandoc_request::formats::resolve_document_formats(
-        Path::new(path),
-        get_runtime(),
-    ) {
-        Ok(resolved) => {
-            let mut value = serde_json::to_value(&resolved).unwrap();
-            value["success"] = serde_json::Value::Bool(true);
-            value.to_string()
-        }
-        Err(error) => serde_json::json!({ "success": false, "error": error }).to_string(),
+thread_local! {
+    /// Discovered projects, keyed by the directory the lookup started from and
+    /// valid for one VFS generation (`VirtualFileSystem::generation`). A
+    /// document's editor buffer is resolved on every keystroke; discovery
+    /// (reading and parsing `_quarto.yml`, listing the project) must not be.
+    static PROJECT_CACHE: RefCell<std::collections::HashMap<std::path::PathBuf, (u64, Rc<ProjectContext>)>> =
+        RefCell::new(std::collections::HashMap::new());
+    /// (hits, misses) of [`PROJECT_CACHE`], for the wasm tests.
+    static PROJECT_CACHE_STATS: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// The project around `path`, discovered once per VFS generation.
+fn cached_project(path: &Path) -> Result<Rc<ProjectContext>, String> {
+    let runtime = get_runtime();
+    let generation = runtime.vfs_generation();
+    let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    if let Some(project) = PROJECT_CACHE.with(|c| {
+        c.borrow()
+            .get(&dir)
+            .filter(|(g, _)| *g == generation)
+            .map(|(_, p)| Rc::clone(p))
+    }) {
+        PROJECT_CACHE_STATS.with(|s| s.set((s.get().0 + 1, s.get().1)));
+        return Ok(project);
     }
+    // A buffer whose file is not in the VFS yet (a just-created document) is discovered from its
+    // directory: discovery from a file needs the file to exist.
+    let start = if runtime.is_file(path).unwrap_or(false) {
+        path
+    } else {
+        dir.as_path()
+    };
+    let project = Rc::new(
+        ProjectContext::discover(start, runtime)
+            .map_err(|e| format!("Failed to discover project context: {e}"))?,
+    );
+    PROJECT_CACHE_STATS.with(|s| s.set((s.get().0, s.get().1 + 1)));
+    PROJECT_CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        // Entries of an older generation can never be used again.
+        c.retain(|_, (g, _)| *g == generation);
+        c.insert(dir, (generation, Rc::clone(&project)));
+    });
+    Ok(project)
+}
+
+/// `{ hits, misses }` of the resolver's project cache. Test support.
+#[wasm_bindgen]
+pub fn project_cache_stats() -> String {
+    let (hits, misses) = PROJECT_CACHE_STATS.with(|s| s.get());
+    serde_json::json!({ "hits": hits, "misses": misses }).to_string()
+}
+
+/// Options of [`resolve_pandoc_formats`]. Only `contentOverride` is read
+/// today; the requested format and the request's metadata join it later
+/// (format-resolution F8) without changing the signature again.
+#[derive(Default)]
+struct ResolveFormatsOptions {
+    content_override: Option<String>,
+}
+
+fn parse_resolve_formats_options(
+    options: Option<JsValue>,
+) -> Result<ResolveFormatsOptions, String> {
+    let mut out = ResolveFormatsOptions::default();
+    let Some(options) = options.filter(|o| !o.is_undefined() && !o.is_null()) else {
+        return Ok(out);
+    };
+    if !options.is_object() {
+        return Err("options must be an object".to_string());
+    }
+    let content =
+        js_sys::Reflect::get(&options, &"contentOverride".into()).unwrap_or(JsValue::UNDEFINED);
+    if !content.is_undefined() && !content.is_null() {
+        out.content_override = Some(
+            content
+                .as_string()
+                .ok_or_else(|| "options.contentOverride must be a string".to_string())?,
+        );
+    }
+    Ok(out)
+}
+
+/// The project-aware format resolver (D8.7), the same resolver the render
+/// entries use: the document's own `format:` keys (the first is its format),
+/// else the `_metadata.yml` chain's, else the surrounding `_quarto.yml`'s, else
+/// `html`. The request is for a chapter (the preview's scope).
+///
+/// `options.contentOverride` is the editor buffer: when present its front
+/// matter is read instead of the VFS copy of `path`.
+///
+/// JSON `{ success, error?, source, key, class, pseudoFormat, scope, formats:
+/// [{ key, class }], book }` with `source` one of `document | project |
+/// default`, `class` one of `preview | download | neither`, and `key`/`class`
+/// the document's own resolved format (`formats[0]`; a `typst` document
+/// resolves to `typst-pdf`). `pseudoFormat` is the format the live preview
+/// renders `key` with, or `null`. `formats` keeps every declared key.
+#[wasm_bindgen]
+pub fn resolve_pandoc_formats(path: &str, options: Option<JsValue>) -> String {
+    let error = |error: String| serde_json::json!({ "success": false, "error": error }).to_string();
+    let options = match parse_resolve_formats_options(options) {
+        Ok(o) => o,
+        Err(e) => return error(e),
+    };
+    let path = Path::new(path);
+    let runtime = get_runtime();
+    let content = match options.content_override {
+        Some(c) => c,
+        None => match runtime.file_read_string(path) {
+            Ok(c) => c,
+            Err(e) => return error(format!("Failed to read file: {e}")),
+        },
+    };
+    let project = match cached_project(path) {
+        Ok(p) => p,
+        Err(e) => return error(e),
+    };
+    let resolved = quarto_core::pandoc_request::formats::resolve_document_formats_in(
+        &project, path, &content, runtime,
+    );
+    let mut value = serde_json::to_value(&resolved).unwrap();
+    value["success"] = serde_json::Value::Bool(true);
+    if let Some(first) = resolved.formats.first() {
+        value["key"] = first.key.clone().into();
+        value["class"] = serde_json::to_value(first.class).unwrap();
+        value["pseudoFormat"] =
+            quarto_core::pandoc_request::formats::preview_pseudo_format(&first.key).into();
+    }
+    value["scope"] = "chapter".into();
+    value.to_string()
 }
 
 /// Single-doc render path — used by `render_qmd` directly and by
@@ -2325,7 +2441,7 @@ async fn render_single_doc_to_response(
     let format_str = if let Some(ov) = format_override {
         ov.to_string()
     } else {
-        let detected = detect_format_from_content(content_str);
+        let detected = resolve_entry_format(project, path, content_str, runtime_arc.as_ref());
         if prefer_preview_format {
             map_format_for_preview(&detected).to_string()
         } else {
@@ -2516,7 +2632,7 @@ async fn render_project_active_page_to_response(
         Err(e) => return error_response(format!("Failed to read active file: {}", e)),
     };
     let content_str = std::str::from_utf8(&active_bytes).unwrap_or("");
-    let detected = detect_format_from_content(content_str);
+    let detected = resolve_entry_format(&project, active_path, content_str, runtime_arc.as_ref());
     let format_str = if prefer_preview_format {
         map_format_for_preview(&detected).to_string()
     } else {

@@ -308,6 +308,17 @@ declare module 'wasm-quarto-hub-client' {
          * is not `pdf`: the literal file extension to download it under.
          */
         formats: { key: string; class: PandocFormatClass; extension?: string }[];
+        /** The document's own resolved format (`formats[0]`); a `typst` document resolves to `typst-pdf`. */
+        key: string;
+        class: PandocFormatClass;
+        /**
+         * The format the live preview renders `key` with (`html` → `q2-preview`, `revealjs`
+         * and the `q2-*` formats as themselves), or `null` when the preview does not render
+         * it through the React pipeline.
+         */
+        pseudoFormat: string | null;
+        /** The scope the resolution was made for: the preview always asks for a chapter. */
+        scope: 'chapter';
         /**
          * `null` outside a book project. In a book: `chapters` are the
          * file-bearing chapters in book order as sidecar keys (`/`-normalized,
@@ -319,7 +330,9 @@ declare module 'wasm-quarto-hub-client' {
         book?: { chapter: boolean; chapters: string[] } | null;
       }
     | { success: false; error: string };
-  export function resolve_pandoc_formats(path: string): string;
+  export function resolve_pandoc_formats(path: string, options?: { contentOverride?: string }): string;
+  /** `{ hits, misses }` of the resolver's project cache. Test support. */
+  export function project_cache_stats(): string;
 
   /** Test-only: calls the user-grammar bridge directly. Phase 4.3 of syntax-highlighting. */
   export function quarto_highlight_with_user_for_test(

@@ -25,6 +25,29 @@ pub(crate) fn not_found_error(path: &Path) -> RuntimeError {
     ))
 }
 
+/// Paths whose writes never move [`VirtualFileSystem::generation`]: render
+/// artifacts and the embedded resources.
+fn is_generation_free_path(normalized: &Path) -> bool {
+    normalized.starts_with("/.quarto") || normalized.starts_with("/__quarto_resources__")
+}
+
+/// A write that leaves the discovered project as it was: under a free prefix,
+/// or an in-place edit of an existing document.
+fn is_generation_free_write(normalized: &Path, replaced_existing: bool) -> bool {
+    if is_generation_free_path(normalized) {
+        return true;
+    }
+    replaced_existing
+        && normalized
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| {
+                ["qmd", "md", "ipynb"]
+                    .iter()
+                    .any(|doc| e.eq_ignore_ascii_case(doc))
+            })
+}
+
 /// Write-path counters for the VFS (bd-q3bxnq2e). Printed on Drop when
 /// `QUARTO_PERF_STATS=1` (gauge `perf.vfs-write`). Free when unused.
 ///
@@ -70,6 +93,8 @@ pub struct VirtualFileSystem {
     project_root: PathBuf,
     /// Write-path diagnostic counters (bd-q3bxnq2e).
     stats: VfsWriteStats,
+    /// Project-structure generation; see [`VirtualFileSystem::generation`].
+    generation: u64,
 }
 
 impl VirtualFileSystem {
@@ -80,6 +105,7 @@ impl VirtualFileSystem {
             directories: HashSet::new(),
             project_root: PathBuf::from("/project"),
             stats: VfsWriteStats::default(),
+            generation: 0,
         };
         // Create the root directory
         vfs.directories.insert(PathBuf::from("/"));
@@ -94,6 +120,7 @@ impl VirtualFileSystem {
             directories: HashSet::new(),
             project_root: project_root.clone(),
             stats: VfsWriteStats::default(),
+            generation: 0,
         };
         // Create the root directory and project root
         vfs.directories.insert(PathBuf::from("/"));
@@ -112,7 +139,26 @@ impl VirtualFileSystem {
         }
         self.stats.writes += 1;
         self.stats.bytes_written += contents.len();
-        self.files.insert(normalized, contents);
+        let path_for_generation = normalized.clone();
+        let replaced = self.files.insert(normalized, contents).is_some();
+        if !is_generation_free_write(&path_for_generation, replaced) {
+            self.generation += 1;
+        }
+    }
+
+    /// A counter over the writes that can change how the project around a
+    /// document is discovered or configured (bd-f6 format resolution cache).
+    ///
+    /// It does **not** move for a content edit of an *existing* `.qmd`, `.md`
+    /// or `.ipynb` (the keystroke case: the editor writes the buffer here on
+    /// every change), nor for anything under `/.quarto/` or
+    /// `/__quarto_resources__/` (artifact flushes create files there on every
+    /// render). Every other write moves it: a create or remove of any path, a
+    /// config, brand or `_extensions/` file, a directory change and every
+    /// `clear*`. The rule is an exclusion list, so a mistake errs toward an
+    /// extra cache miss, never a stale project.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// Snapshot of the write-path counters (bd-q3bxnq2e). Counters are
@@ -158,12 +204,19 @@ impl VirtualFileSystem {
     /// Returns true if the file existed and was removed.
     pub fn remove_file(&mut self, path: &Path) -> bool {
         let normalized = self.normalize_path(path);
-        self.files.remove(&normalized).is_some()
+        let removed = self.files.remove(&normalized).is_some();
+        if removed && !is_generation_free_path(&normalized) {
+            self.generation += 1;
+        }
+        removed
     }
 
     /// Add a directory (and all parent directories).
     pub fn add_directory(&mut self, path: &Path) {
         let normalized = self.normalize_path(path);
+        if !is_generation_free_path(&normalized) {
+            self.generation += 1;
+        }
         self.add_directory_and_parents(&normalized);
     }
 
@@ -208,6 +261,9 @@ impl VirtualFileSystem {
             self.directories.remove(&dir);
         }
         self.directories.remove(&normalized);
+        if !is_generation_free_path(&normalized) {
+            self.generation += 1;
+        }
 
         Ok(())
     }
@@ -251,6 +307,7 @@ impl VirtualFileSystem {
 
     /// Clear all files from the virtual filesystem.
     pub fn clear(&mut self) {
+        self.generation += 1;
         self.files.clear();
         self.directories.clear();
         // Re-add root
@@ -263,6 +320,7 @@ impl VirtualFileSystem {
     /// This is used to clear project files while preserving embedded resources
     /// (like Bootstrap SCSS files under `/__quarto_resources__/`).
     pub fn clear_preserving_prefix(&mut self, preserved_prefix: &str) {
+        self.generation += 1;
         // Retain files that start with the preserved prefix
         self.files
             .retain(|path, _| path.to_string_lossy().starts_with(preserved_prefix));
@@ -385,6 +443,87 @@ impl Drop for VirtualFileSystem {
 
 #[cfg(test)]
 mod tests {
+
+    // --- generation counter (format-resolution cache key) ---
+
+    fn gen_after(vfs: &mut VirtualFileSystem, f: impl FnOnce(&mut VirtualFileSystem)) -> bool {
+        let before = vfs.generation();
+        f(vfs);
+        vfs.generation() != before
+    }
+
+    #[test]
+    fn generation_is_free_for_a_content_edit_of_an_existing_document() {
+        let mut vfs = VirtualFileSystem::new();
+        vfs.add_file(Path::new("/project/a.qmd"), b"one".to_vec());
+        for name in ["a.qmd", "a.md", "a.ipynb"] {
+            vfs.add_file(Path::new(&format!("/project/{name}")), b"x".to_vec());
+            assert!(
+                !gen_after(&mut vfs, |v| v
+                    .add_file(Path::new(&format!("/project/{name}")), b"y".to_vec())),
+                "{name}"
+            );
+        }
+        assert!(!gen_after(&mut vfs, |v| {
+            v.add_file_if_changed(Path::new("/project/a.qmd"), b"edited");
+        }));
+    }
+
+    #[test]
+    fn generation_is_free_for_artifact_and_resource_writes() {
+        let mut vfs = VirtualFileSystem::new();
+        assert!(!gen_after(&mut vfs, |v| v.add_file(
+            Path::new("/.quarto/project-artifacts/a.css"),
+            vec![1]
+        )));
+        assert!(!gen_after(&mut vfs, |v| v
+            .add_file(Path::new("/__quarto_resources__/x.scss"), vec![1])));
+        assert!(!gen_after(&mut vfs, |v| {
+            v.remove_file(Path::new("/.quarto/project-artifacts/a.css"));
+        }));
+    }
+
+    #[test]
+    fn generation_moves_for_everything_else() {
+        let mut vfs = VirtualFileSystem::new();
+        // a create, even of a document
+        assert!(gen_after(&mut vfs, |v| v
+            .add_file(Path::new("/project/new.qmd"), vec![])));
+        // config, metadata, a custom-named brand file, extensions: creates and edits
+        for p in [
+            "/project/_quarto.yml",
+            "/project/_metadata.yml",
+            "/project/my-brand.yml",
+            "/project/_extensions/a/_extension.yml",
+        ] {
+            assert!(
+                gen_after(&mut vfs, |v| v.add_file(Path::new(p), vec![1])),
+                "{p} create"
+            );
+            assert!(
+                gen_after(&mut vfs, |v| v.add_file(Path::new(p), vec![2])),
+                "{p} edit"
+            );
+        }
+        assert!(gen_after(&mut vfs, |v| {
+            v.remove_file(Path::new("/project/new.qmd"));
+        }));
+        assert!(gen_after(&mut vfs, |v| v.add_directory(Path::new("/project/sub"))));
+        assert!(gen_after(&mut vfs, |v| {
+            v.remove_directory(Path::new("/project/sub"), true).unwrap();
+        }));
+        assert!(gen_after(&mut vfs, |v| v
+            .clear_preserving_prefix("/__quarto_resources__")));
+        assert!(gen_after(&mut vfs, |v| v.clear()));
+    }
+
+    #[test]
+    fn removing_a_missing_file_does_not_move_the_generation() {
+        let mut vfs = VirtualFileSystem::new();
+        assert!(!gen_after(&mut vfs, |v| {
+            v.remove_file(Path::new("/project/nope.qmd"));
+        }));
+    }
     use super::*;
 
     #[test]

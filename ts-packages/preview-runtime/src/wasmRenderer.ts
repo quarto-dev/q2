@@ -138,7 +138,7 @@ interface WasmModuleExtended {
     json_path: string,
   ) => string;
   get_pandoc_formats: () => string;
-  resolve_pandoc_formats: (path: string) => string;
+  resolve_pandoc_formats: (path: string, options?: { contentOverride?: string }) => string;
   // Document import (epic 2026-10-03-document-import-epic.md, interface 2)
   get_import_formats: () => string;
   prepare_import: (file_name: string, size: number, sha256_hex: string) => string;
@@ -810,9 +810,19 @@ export function classifyImportFailure(
   return JSON.parse(getWasm().classify_import_failure(kind, status, stderr));
 }
 
-/** The document's own format(s): `format:` of the document, else `_quarto.yml`, else `html`. */
-export function resolvePandocFormats(path: string): ResolvePandocFormatsResponse {
-  return JSON.parse(getWasm().resolve_pandoc_formats(path));
+/** Options of {@link resolvePandocFormats}. */
+export interface ResolvePandocFormatsOptions {
+  /** The editor buffer: its front matter is read instead of the VFS copy of `path`. */
+  contentOverride?: string;
+}
+
+/**
+ * The document's own format(s), resolved in Rust for a chapter: `format:` of the document, else
+ * the `_metadata.yml` chain, else `_quarto.yml`, else `html`. The result's `key`/`class` are the
+ * document's own format; `formats` lists every declared key.
+ */
+export function resolvePandocFormats(path: string, options?: ResolvePandocFormatsOptions): ResolvePandocFormatsResponse {
+  return JSON.parse(getWasm().resolve_pandoc_formats(path, options));
 }
 
 /**
