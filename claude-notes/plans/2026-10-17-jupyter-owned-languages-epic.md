@@ -14,8 +14,8 @@ plans. Not started.
 
 The Jupyter engine runs exactly the languages the resolver assigned to it, and
 finds each language's kernel the way Q1 does. No language is named in q2 source
-except where an alias table is genuinely needed. A document may use several
-kernels.
+except where an alias table is genuinely needed. Letting one document use several
+kernels is a stretch goal that needs further design and discussion (Phase 3).
 
 ## Starting point (verified 2026-10-17, main `fe52ed0fb`)
 
@@ -62,7 +62,10 @@ Other facts the epic builds on:
    kernelspec check at resolution time.
 2. **The epic subsumes Plan 4d.** Its Rust phases come first; the TS-wire phases
    ride along.
-3. **Multiple kernels per document are in scope.**
+3. **Multiple kernels per document are a stretch goal.** Earlier in the session
+   this was marked in scope; on 2026-10-17 it was downgraded. It goes beyond Q1
+   (one kernel per document) and needs further design and discussion before it is
+   planned in detail. Decisions 4 and 6 below are provisional until then.
 4. **`jupyter:` key:** the scalar keeps its Q1 meaning (the kernel for the primary
    language, i.e. the first executable one). A new map form
    `jupyter: {python: python3, ggsql: ggsql}` overrides per language.
@@ -105,7 +108,13 @@ Other facts the epic builds on:
   (`test_sql_is_not_executable_language` becomes "sql is not owned by jupyter
   in these configurations").
 
-### Phase 3: several kernels per document
+### Phase 3: several kernels per document (stretch; needs design and discussion)
+
+Everything in this phase is provisional. Q1 runs one kernel per document, so this
+is new behavior with open design questions (how `jupyter:` should express several
+kernels, session lifecycle, record/replay and preview capture, error attribution).
+Phases 1, 2, 4 and 5 stand without it; until it lands, a mixed-language document
+keeps today's one-kernel behavior.
 
 - Resolve a kernel per distinct owned language (decision 4's `jupyter:` forms
   first, then kernelspec lookup); start sessions lazily, key by `SessionKey`,
