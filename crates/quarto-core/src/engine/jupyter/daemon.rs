@@ -171,9 +171,9 @@ impl JupyterDaemon {
             })?;
 
         // 5. Spawn kernel process
-        let process = kernel
-            .spec
-            .clone()
+        let mut spec = kernel.spec.clone();
+        expand_resource_dir(&mut spec);
+        let process = spec
             .command(&connection_file, None, None)
             .map_err(|e| JupyterError::ProcessSpawnError {
                 kernel: key.kernel_name.clone(),
@@ -446,9 +446,65 @@ impl Drop for KernelScope {
     }
 }
 
+/// Expand `{resource_dir}` in a kernelspec's `argv`.
+///
+/// `runtimelib` substitutes only `{connection_file}`, but the Jupyter
+/// kernelspec contract also defines `{resource_dir}` (the kernelspec's own
+/// directory), e.g. ggsql's `{resource_dir}/ggsql-jupyter`.
+fn expand_resource_dir(spec: &mut runtimelib::KernelspecDir) {
+    // Absolutize: the kernel is spawned with a different cwd than the one
+    // the (possibly relative, via JUPYTER_PATH) kernelspec was found from.
+    let dir = std::path::absolute(&spec.path).unwrap_or_else(|_| spec.path.clone());
+    let resource_dir = dir.to_string_lossy().into_owned();
+    for arg in &mut spec.kernelspec.argv {
+        *arg = arg.replace("{resource_dir}", &resource_dir);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn spec_with_argv(argv: &[&str]) -> runtimelib::KernelspecDir {
+        runtimelib::KernelspecDir {
+            kernel_name: "k".to_string(),
+            path: std::path::PathBuf::from("kernels").join("k"),
+            kernelspec: serde_json::from_value(serde_json::json!({
+                "argv": argv,
+                "display_name": "k",
+                "language": "k",
+            }))
+            .unwrap(),
+        }
+    }
+
+    #[test]
+    fn test_expand_resource_dir_substitutes_argv() {
+        let mut spec = spec_with_argv(&["{resource_dir}/bin", "-f", "{connection_file}"]);
+        let dir = std::path::absolute(&spec.path)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        expand_resource_dir(&mut spec);
+        assert_eq!(
+            spec.kernelspec.argv,
+            vec![
+                format!("{dir}/bin"),
+                "-f".to_string(),
+                "{connection_file}".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_expand_resource_dir_leaves_other_argv_alone() {
+        let mut spec = spec_with_argv(&["python3", "-m", "ipykernel_launcher"]);
+        expand_resource_dir(&mut spec);
+        assert_eq!(
+            spec.kernelspec.argv,
+            vec!["python3", "-m", "ipykernel_launcher"]
+        );
+    }
 
     #[tokio::test]
     async fn test_daemon_initial_state() {

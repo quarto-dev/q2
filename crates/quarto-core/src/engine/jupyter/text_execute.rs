@@ -239,6 +239,7 @@ fn is_executable_language(language: &str) -> bool {
             | "ts"
             | "javascript"
             | "js"
+            | "ggsql"
     )
 }
 
@@ -1450,6 +1451,8 @@ print("hello")
         assert!(is_executable_language("ts"));
         assert!(is_executable_language("javascript"));
         assert!(is_executable_language("js"));
+        assert!(is_executable_language("ggsql"));
+        assert!(is_executable_language("GGSQL"));
         assert!(!is_executable_language("json"));
         assert!(!is_executable_language("markdown"));
     }
