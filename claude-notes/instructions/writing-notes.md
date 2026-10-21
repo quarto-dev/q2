@@ -97,12 +97,21 @@ other strands go in its comment or in the body. Dates are ISO `YYYY-MM-DD`.
 Single-quote the title (write a `'` inside it as `''`): in single quotes a
 backslash escape such as `\@` reaches the markdown parser unchanged, while in
 double quotes YAML rejects it. The title is markdown, so code spans work.
-The `description:` is parsed as markdown too (it feeds the plans table), so
-every rule above applies inside front matter — a possessive like
-`connect-satellites'' build.sh` unescapes to apostrophe-plus-space and fails
-with Q-1-20. Rewording ("build.sh in connect-satellites") beats escaping.
 `scripts/claude-notes-plan-frontmatter.py` adds both keys to a plan that has
 only a `#` heading and a dated filename.
+
+**Every string scalar in front matter is markdown, not just the title.** Like
+Pandoc, q2 parses any string-valued YAML entry — `title:`, `description:`, a
+sidebar label, a nested mapping value — as markdown, so every rule in the
+list above applies inside YAML too. The failure is Q-1-20 ("Failed to parse
+metadata value as markdown") and carries the same span diagnostics a body
+paragraph would: a possessive like `` `connect-satellites'' build.sh` ``
+unescapes to apostrophe-plus-space, a close quote without an open (rule 2).
+Plain values such as `status: in-progress` parse trivially; the rule bites on
+punctuation. Rewording beats escaping, but when the text must stay verbatim,
+tag the value `!str` (`description: !str "..."`) to skip the markdown parse
+entirely — YAML quoting still applies underneath the tag (`` `!str 'don''t'` ``).
+The user-facing reference is `docs/errors/yaml/Q-1-20.qmd`.
 
 ## Checking
 
