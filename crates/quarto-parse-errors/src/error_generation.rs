@@ -199,18 +199,36 @@ fn error_diagnostic_from_parse_state(
             // this entry describes (same parser state, different cause) and
             // drop the entry, leaving any other candidate or the generic
             // fallback to answer.
-            let suggested_hint = match entry.error_info.suggestion {
+            let (suggested_hint, suggested_span) = match entry.error_info.suggestion {
                 Some(name) => match suggest(name, input_bytes, byte_offset) {
-                    Suggestion::Hint(hint) => Some(hint),
-                    Suggestion::Nothing => None,
+                    Suggestion::Hint(hint) => (Some(hint), None),
+                    Suggestion::HintAt { hint, start, end } => (Some(hint), Some((start, end))),
+                    Suggestion::Nothing => (None, None),
                     Suggestion::Reject => return None,
                 },
-                None => None,
+                None => (None, None),
+            };
+            // The parser fails at one token, but the unexpected text may
+            // run further; a suggester that has read it says how far.
+            let entry_source_info = match suggested_span {
+                Some((start, end)) => {
+                    match (
+                        offset_to_location_bytes(input_bytes, start),
+                        offset_to_location_bytes(input_bytes, end),
+                    ) {
+                        (Some(start), Some(end)) => quarto_source_map::SourceInfo::from_range(
+                            quarto_source_map::FileId(0),
+                            quarto_source_map::Range { start, end },
+                        ),
+                        _ => source_info.clone(),
+                    }
+                }
+                None => source_info.clone(),
             };
 
             // Build diagnostic from error table entry
             let mut builder = DiagnosticMessageBuilder::error(entry.error_info.title)
-                .with_location(source_info.clone())
+                .with_location(entry_source_info)
                 .problem(entry.error_info.message);
 
             // Add error code if present

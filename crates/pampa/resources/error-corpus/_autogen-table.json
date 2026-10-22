@@ -22454,6 +22454,72 @@
     "name": "Q-2-56/simple"
   },
   {
+    "column": 9,
+    "row": 0,
+    "state": 3727,
+    "sym": "_commonmark_single_quote_string_token3",
+    "errorInfo": {
+      "code": "Q-2-57",
+      "title": "Attribute List After Code Block Language",
+      "message": "I didn't expect this after the code block's language.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 3727,
+          "row": 0,
+          "size": 6,
+          "sym": "info_string",
+          "label": "language"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the code block's language. The opening line takes either one language word or one attribute list in braces, not both.",
+          "noteType": "simple",
+          "label": "language"
+        }
+      ],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false,
+      "suggestion": "language-with-attributes"
+    },
+    "name": "Q-2-57/simple"
+  },
+  {
+    "column": 9,
+    "row": 0,
+    "state": 3727,
+    "sym": "{",
+    "errorInfo": {
+      "code": "Q-2-57",
+      "title": "Attribute List After Code Block Language",
+      "message": "I didn't expect this after the code block's language.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 3727,
+          "row": 0,
+          "size": 6,
+          "sym": "info_string",
+          "label": "language"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the code block's language. The opening line takes either one language word or one attribute list in braces, not both.",
+          "noteType": "simple",
+          "label": "language"
+        }
+      ],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false,
+      "suggestion": "language-with-attributes"
+    },
+    "name": "Q-2-57/no-space"
+  },
+  {
     "column": 1,
     "row": 0,
     "state": 782,

@@ -79,6 +79,7 @@ pub mod test_brace_hint_contexts;
 pub mod test_citeproc_integration;
 pub mod test_cli_input_arg;
 pub mod test_code_block_attributes;
+pub mod test_code_block_language_attributes;
 pub mod test_code_block_writer_roundtrip;
 pub mod test_code_span;
 pub mod test_concrete_tree_dump;

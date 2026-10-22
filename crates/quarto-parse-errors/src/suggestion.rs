@@ -21,6 +21,13 @@
 pub(crate) enum Suggestion {
     /// Add this text as a hint.
     Hint(String),
+    /// Add this text as a hint, and report the error over the source bytes
+    /// `start..end` instead of the single token the parser failed at.
+    HintAt {
+        hint: String,
+        start: usize,
+        end: usize,
+    },
     /// Nothing useful to add; report the entry's fixed text alone.
     Nothing,
     /// The source is not the mistake this entry describes, even though it
@@ -32,6 +39,7 @@ pub(crate) enum Suggestion {
 pub(crate) fn suggest(name: &str, input: &[u8], error_offset: usize) -> Suggestion {
     match name {
         "attribute-order" => attribute_order(input, error_offset),
+        "language-with-attributes" => language_with_attributes(input, error_offset),
         _ => Suggestion::Nothing,
     }
 }
@@ -63,30 +71,15 @@ fn attribute_order(input: &[u8], error_offset: usize) -> Suggestion {
         return Suggestion::Nothing;
     };
 
-    let mut tokens: Vec<(Kind, &str)> = Vec::new();
-    for token in split_unquoted_whitespace(body) {
-        let kind = if token.len() > 1 && token.starts_with('#') {
-            Kind::Id
-        } else if token.len() > 1 && token.starts_with('.') {
-            Kind::Class
-        } else if token.find('=').is_some_and(|eq| eq > 0) {
-            Kind::KeyValue
-        } else {
-            return Suggestion::Nothing;
-        };
-        tokens.push((kind, token));
-    }
+    let Some(tokens) = classify(body) else {
+        return Suggestion::Nothing;
+    };
 
-    if tokens.iter().filter(|(k, _)| *k == Kind::Id).count() > 1 {
+    if has_two_identifiers(&tokens) {
         return Suggestion::Reject;
     }
 
-    let in_order = |kind: Kind| tokens.iter().filter(move |(k, _)| *k == kind);
-    let ordered: Vec<&str> = in_order(Kind::Id)
-        .chain(in_order(Kind::Class))
-        .chain(in_order(Kind::KeyValue))
-        .map(|(_, t)| *t)
-        .collect();
+    let ordered = in_accepted_order(&tokens, None);
     if ordered.iter().eq(tokens.iter().map(|(_, t)| t)) {
         return Suggestion::Nothing;
     }
@@ -95,6 +88,124 @@ fn attribute_order(input: &[u8], error_offset: usize) -> Suggestion {
         "Reorder the attributes as `{{{}}}`: the identifier comes first, then classes, then key-value pairs.",
         ordered.join(" ")
     ))
+}
+
+/// Split an attribute list body into identifiers, classes and key-value
+/// pairs. `None` if it holds anything else (a raw-format `=html`, a bare
+/// word).
+fn classify(body: &str) -> Option<Vec<(Kind, &str)>> {
+    split_unquoted_whitespace(body)
+        .into_iter()
+        .map(|token| {
+            let kind = if token.len() > 1 && token.starts_with('#') {
+                Kind::Id
+            } else if token.len() > 1 && token.starts_with('.') {
+                Kind::Class
+            } else if token.find('=').is_some_and(|eq| eq > 0) {
+                Kind::KeyValue
+            } else {
+                return None;
+            };
+            Some((kind, token))
+        })
+        .collect()
+}
+
+fn has_two_identifiers(tokens: &[(Kind, &str)]) -> bool {
+    tokens.iter().filter(|(k, _)| *k == Kind::Id).count() > 1
+}
+
+/// The tokens in the accepted order: identifier, classes, key-value pairs,
+/// each kind keeping the author's relative order. `language`, when given,
+/// is placed first among the classes.
+fn in_accepted_order<'a>(tokens: &[(Kind, &'a str)], language: Option<&'a str>) -> Vec<&'a str> {
+    let in_order = |kind: Kind| {
+        tokens
+            .iter()
+            .filter(move |(k, _)| *k == kind)
+            .map(|(_, t)| *t)
+    };
+    in_order(Kind::Id)
+        .chain(language)
+        .chain(in_order(Kind::Class))
+        .chain(in_order(Kind::KeyValue))
+        .collect()
+}
+
+/// Suggest where the language word of a fenced code block goes when it is
+/// followed by an attribute list, as in ```` ```python {.cls #id} ````.
+///
+/// The opening line takes one language word *or* one attribute list. The
+/// hint carries the author's own list in the accepted order with the word
+/// folded in: as the first class for a code block, or as the leading word of
+/// an executable cell `{python ...}`.
+///
+/// The error is reported over the braced list, the text the parser did not
+/// expect, rather than the one character where it gave up.
+///
+/// Only a braced list after the word gets a hint. Anything else after the
+/// word (`python .cls`, `python extra`) is not this mistake and is
+/// [`Suggestion::Reject`]ed, as is a list with two identifiers (which
+/// reordering cannot repair) and a word that is not a plain language name.
+fn language_with_attributes(input: &[u8], error_offset: usize) -> Suggestion {
+    let error_offset = error_offset.min(input.len());
+    let line_start = input[..error_offset]
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map_or(0, |i| i + 1);
+    let line_end = input[error_offset..]
+        .iter()
+        .position(|&b| b == b'\n')
+        .map_or(input.len(), |i| error_offset + i);
+    let (Ok(before), Ok(after)) = (
+        std::str::from_utf8(&input[line_start..error_offset]),
+        std::str::from_utf8(&input[error_offset..line_end]),
+    ) else {
+        return Suggestion::Reject;
+    };
+
+    // `before` is the fence, optional spaces, and the word.
+    let fence_len = before
+        .trim_start()
+        .find(|c| c != '`' && c != '~')
+        .unwrap_or(0);
+    let Some(word) = before.trim_start()[fence_len..].split_whitespace().next() else {
+        return Suggestion::Reject;
+    };
+    if fence_len < 3
+        || !word
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-'))
+    {
+        return Suggestion::Reject;
+    }
+
+    let trimmed = after.trim_start();
+    let list_start = error_offset + (after.len() - trimmed.len());
+    let after = trimmed;
+    let Some(close) = closing_brace(after.as_bytes()).filter(|_| after.starts_with('{')) else {
+        return Suggestion::Reject;
+    };
+    let Some(tokens) = classify(&after[1..close]) else {
+        return Suggestion::Nothing;
+    };
+    if has_two_identifiers(&tokens) {
+        return Suggestion::Reject;
+    }
+
+    let class_word = format!(".{word}");
+    let code_block = in_accepted_order(&tokens, Some(&class_word)).join(" ");
+    let cell = std::iter::once(word)
+        .chain(in_accepted_order(&tokens, None))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Suggestion::HintAt {
+        hint: format!(
+            "Put the language inside the braces: `{{{code_block}}}` for a code block, or `{{{cell}}}` for an executable cell."
+        ),
+        start: list_start,
+        end: list_start + close + 1,
+    }
 }
 
 /// Byte range `[open, close)` of the innermost `{...}` on the error's line
@@ -265,6 +376,84 @@ mod tests {
     fn only_the_error_line_is_read() {
         let h = hint("{\n[x]{.c #i}\n}", "#i");
         assert!(h.contains("`{#i .c}`"), "{h}");
+    }
+
+    fn language_hint(line: &str) -> Suggestion {
+        // The parser fails at the first character after the word.
+        let word_start = line.rfind(['`', '~']).expect("fence") + 1;
+        let offset = word_start + line[word_start..].find([' ', '{']).expect("end of word");
+        language_with_attributes(line.as_bytes(), offset)
+    }
+
+    fn hint_and_span(s: Suggestion) -> (String, (usize, usize)) {
+        match s {
+            Suggestion::HintAt { hint, start, end } => (hint, (start, end)),
+            other => panic!("expected a ranged hint, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn language_hint_spans_the_braced_list_not_the_space() {
+        let line = "```python {.marimo} trailing";
+        let (_, (start, end)) = hint_and_span(language_hint(line));
+        assert_eq!(&line[start..end], "{.marimo}");
+        let line = "```python{.marimo}";
+        let (_, (start, end)) = hint_and_span(language_hint(line));
+        assert_eq!(&line[start..end], "{.marimo}");
+    }
+
+    #[test]
+    fn language_goes_first_among_classes_for_a_code_block() {
+        let (h, _) = hint_and_span(language_hint("```python {.cls #id key=val}"));
+        assert!(
+            h.contains("`{#id .python .cls key=val}` for a code block"),
+            "{h}"
+        );
+        assert!(
+            h.contains("`{python #id .cls key=val}` for an executable cell"),
+            "{h}"
+        );
+    }
+
+    #[test]
+    fn language_hint_without_a_space_before_the_brace() {
+        let (h, _) = hint_and_span(language_hint("```python{.marimo}"));
+        assert!(
+            h.contains("`{.python .marimo}`") && h.contains("`{python .marimo}`"),
+            "{h}"
+        );
+    }
+
+    #[test]
+    fn language_hint_with_indented_fence_and_tildes() {
+        assert!(matches!(
+            language_hint("  ~~~r {.x}"),
+            Suggestion::HintAt { .. }
+        ));
+    }
+
+    #[test]
+    fn language_hint_keeps_quoted_values() {
+        let (h, _) = hint_and_span(language_hint(r#"```python {title="a b" .c}"#));
+        assert!(h.contains(r#"`{.python .c title="a b"}`"#), "{h}");
+    }
+
+    #[test]
+    fn language_hint_declines_without_braces() {
+        assert_eq!(language_hint("```python .marimo"), Suggestion::Reject);
+        assert_eq!(language_hint("```python extra"), Suggestion::Reject);
+        assert_eq!(language_hint("```python {.unclosed"), Suggestion::Reject);
+    }
+
+    #[test]
+    fn language_hint_declines_two_identifiers_and_odd_words() {
+        assert_eq!(language_hint("```python {#a #b}"), Suggestion::Reject);
+        assert_eq!(language_hint("```c++ {.x}"), Suggestion::Reject);
+    }
+
+    #[test]
+    fn language_hint_for_uninterpretable_list_is_fixed_text_only() {
+        assert_eq!(language_hint("```python {=html}"), Suggestion::Nothing);
     }
 
     #[test]
