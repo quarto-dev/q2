@@ -273,6 +273,29 @@ export interface FindDocRetryOptions {
 }
 
 /**
+ * Backoff policy for the file-document duplicate-seq self-heal
+ * (bd-0h8crv6u). A legacy client actively editing under a shared stable
+ * actor re-wedges a document after every recovery, so recoveries for
+ * one document are capped and spaced: at most {@link maxAttempts}
+ * recoveries, each at least {@link cooldownMs} after the previous one,
+ * within a quiet window of {@link quietWindowMs} (a collision gap
+ * longer than the window resets the attempt count). At the cap the
+ * client stops recovering, deletes the local copy, and routes the file
+ * into the unavailable-files retry poll as a circuit breaker.
+ */
+export interface RecoveryBackoffOptions {
+  /** Recoveries allowed per document within the quiet window. Default 3. */
+  maxAttempts?: number;
+  /** Minimum spacing between recoveries for one document. Default 30000 ms. */
+  cooldownMs?: number;
+  /**
+   * Collision-free gap after which the attempt count resets. Default
+   * 10 × cooldownMs.
+   */
+  quietWindowMs?: number;
+}
+
+/**
  * Options bag for `connect()` (bd-jit6pdwq). Passed in place of the
  * legacy positional `peerTimeoutMs` number; all fields optional and
  * defaults preserve the legacy behavior exactly.
@@ -311,6 +334,11 @@ export interface ConnectOptions {
   retryIntervalMs?: number;
   /** Cold-start "unavailable" retry policy. See {@link FindDocRetryOptions}. */
   findDocRetry?: FindDocRetryOptions;
+  /**
+   * File-document duplicate-seq recovery backoff. See
+   * {@link RecoveryBackoffOptions}.
+   */
+  recoveryBackoff?: RecoveryBackoffOptions;
   /** Bearer-auth options (alternative to the positional `auth` param). */
   auth?: SyncClientAuthOptions;
 }
@@ -435,6 +463,11 @@ export interface CreateProjectOptions {
   retryIntervalMs?: number;
   /** Cold-start "unavailable" retry policy for post-create index syncs. */
   findDocRetry?: FindDocRetryOptions;
+  /**
+   * File-document duplicate-seq recovery backoff. See
+   * {@link RecoveryBackoffOptions}.
+   */
+  recoveryBackoff?: RecoveryBackoffOptions;
 }
 
 /**

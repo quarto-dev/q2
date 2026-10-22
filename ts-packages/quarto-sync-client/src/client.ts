@@ -9,7 +9,6 @@
 import { Repo, DocHandle, updateText, splice, generateAutomergeUrl, parseAutomergeUrl } from '@automerge/automerge-repo';
 import type {
   DocumentId,
-  Patch,
   StorageId,
   DocHandleChangePayload,
 } from '@automerge/automerge-repo';
@@ -60,6 +59,7 @@ import type {
   DisconnectOptions,
   DisconnectReport,
   FindDocRetryOptions,
+  RecoveryBackoffOptions,
   SyncClientAuthOptions,
 } from './types.js';
 import { computeSHA256 } from './hash.js';
@@ -308,6 +308,36 @@ interface SyncClientState {
    * for a file that never recovered. Reset on disconnect.
    */
   unavailableRetryTicks: number;
+  /**
+   * Live 'change' subscription per tracked file document, keyed by
+   * document id (not path, so renameFile needs no re-key and recovery
+   * looks the handler up directly from the colliding message's
+   * documentId). Tracked so a duplicate-seq recovery can detach the old
+   * handle's subscription without waiting for disconnect() — the
+   * unsubscribe closures in state.cleanupFns are unreachable for a
+   * targeted swap. Entries are added by subscribeToFile /
+   * subscribeToFileInternal and removed wherever fileHandles entries are
+   * dropped (the removed-files branch of syncWithFiles, deleteFile,
+   * disconnect()).
+   */
+  fileChangeHandlers: Map<
+    DocumentId,
+    { handle: DocHandle<FileDocument>; handler: (payload: DocHandleChangePayload<FileDocument>) => void }
+  >;
+  /**
+   * Per-document duplicate-seq recovery bookkeeping (bd-0h8crv6u):
+   * attempts so far within the current quiet window and when the last
+   * recovery started. Reset lazily inside the recovery path once a
+   * collision-free gap exceeds the quiet window — deliberately NOT
+   * reset on clean inbound sync messages, which would put a branch on
+   * the every-message hot path and couple the generic wrapper to
+   * recovery bookkeeping for no real gain.
+   */
+  fileRecoveryAttempts: Map<DocumentId, { attempts: number; lastAt: number }>;
+  /** Documents with a recovery currently running (per-document guard). */
+  fileRecoveryInFlight: Set<DocumentId>;
+  /** Resolved recovery backoff policy for the current connection. */
+  recoveryBackoff: Required<RecoveryBackoffOptions>;
 }
 
 /**
@@ -363,6 +393,39 @@ const DEFAULT_FIND_DOC_RETRY: Required<FindDocRetryOptions> = {
   attempts: 3,
   baseDelayMs: 250,
 };
+
+/**
+ * Default backoff for the file-document duplicate-seq self-heal
+ * (bd-0h8crv6u): at most 3 recoveries per document, each at least 30 s
+ * after the previous, with the count resetting after a 5-minute
+ * collision-free gap. A legacy client *actively editing* under a shared
+ * stable actor re-wedges the document after every recovery, so without
+ * the cap each colliding message would trigger a full discard + refetch
+ * — and with binary contents stored inline and no automerge compaction
+ * anywhere in the system, refetch cost only grows over a project's
+ * lifetime. Past the cap the circuit breaker routes the file into the
+ * bounded unavailable-files retry poll instead.
+ */
+const DEFAULT_RECOVERY_COOLDOWN_MS = 30_000;
+const DEFAULT_RECOVERY_BACKOFF: Required<RecoveryBackoffOptions> = {
+  maxAttempts: 3,
+  cooldownMs: DEFAULT_RECOVERY_COOLDOWN_MS,
+  quietWindowMs: 10 * DEFAULT_RECOVERY_COOLDOWN_MS,
+};
+
+/** Resolve a partial recovery-backoff config against the defaults. */
+function resolveRecoveryBackoff(
+  options?: RecoveryBackoffOptions,
+): Required<RecoveryBackoffOptions> {
+  const cooldownMs = options?.cooldownMs ?? DEFAULT_RECOVERY_BACKOFF.cooldownMs;
+  return {
+    maxAttempts: options?.maxAttempts ?? DEFAULT_RECOVERY_BACKOFF.maxAttempts,
+    cooldownMs,
+    // The default quiet window is relative to the configured cooldown,
+    // not to the default cooldown.
+    quietWindowMs: options?.quietWindowMs ?? 10 * cooldownMs,
+  };
+}
 
 /**
  * Per-attempt deadline for `repo.find()` inside {@link findDoc}.
@@ -428,6 +491,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     initialLoadComplete: false,
     unavailableRetryTimer: null,
     unavailableRetryTicks: 0,
+    fileChangeHandlers: new Map(),
+    fileRecoveryAttempts: new Map(),
+    fileRecoveryInFlight: new Set(),
+    recoveryBackoff: DEFAULT_RECOVERY_BACKOFF,
   };
 
   // AST cache: last successful parse per file (for round-tripping)
@@ -818,8 +885,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // can't affect any other Repo instance.
   // ---------------------------------------------------------------------
 
-  type IndexSynchronizer = Repo['synchronizer'];
-  type IndexReceivedMessage = Parameters<IndexSynchronizer['receiveMessage']>[0];
+  type RepoSynchronizer = Repo['synchronizer'];
+  type ReceivedSyncMessage = Parameters<RepoSynchronizer['receiveMessage']>[0];
 
   // Helper: reconcile file/identity/capture state against the index
   // document's current content. Shared by the live 'change' subscription
@@ -847,13 +914,18 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
-   * Detect the swallowed duplicate-seq collision (H4) for
-   * `targetDocumentId` and trigger recovery. Returns an uninstall
-   * function; callers push it onto state.cleanupFns so disconnect()
-   * restores the original method.
+   * Detect the swallowed duplicate-seq collision (H4) and trigger
+   * recovery, routing by the colliding message's documentId: this
+   * connection's index document (`targetDocumentId`) goes to
+   * recoverIndexDocument; a tracked file document goes to
+   * recoverFileDocument (bd-0h8crv6u); anything else (e.g. a capture
+   * binary doc, or a file already circuit-broken into the unavailable
+   * set) is left alone, as before. Returns an uninstall function;
+   * callers push it onto state.cleanupFns so disconnect() restores the
+   * original method.
    */
   function installDuplicateSeqRecovery(repo: Repo, targetDocumentId: DocumentId): () => void {
-    const synchronizer = repo.synchronizer as IndexSynchronizer | undefined;
+    const synchronizer = repo.synchronizer as RepoSynchronizer | undefined;
     // Defensive: some test doubles (and conceivably a future
     // automerge-repo version) don't expose a real .synchronizer. This is
     // a best-effort enhancement, not a required invariant for connect()
@@ -862,13 +934,29 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       return () => {};
     }
     const original = synchronizer.receiveMessage.bind(synchronizer);
-    const handleCollision = (message: IndexReceivedMessage, err: unknown): void => {
+    const handleCollision = (message: ReceivedSyncMessage, err: unknown): void => {
       if (
-        message.documentId === targetDocumentId &&
-        err instanceof RangeError &&
-        /duplicate seq \d+ found for actor/.test(err.message)
+        !(err instanceof RangeError) ||
+        !/duplicate seq \d+ found for actor/.test(err.message)
       ) {
+        return;
+      }
+      if (message.documentId === targetDocumentId) {
         void recoverIndexDocument(message.documentId);
+        return;
+      }
+      // Resolve the document id to a tracked file by scanning
+      // state.fileHandles — the same comparison recoverIndexDocument
+      // relies on. The scan runs only on this error path and needs no
+      // maintained reverse map (which would have to be kept in sync
+      // across subscribeToFile / subscribeToFileInternal, the
+      // removed-files branch of syncWithFiles, renameFile, deleteFile,
+      // and disconnect()).
+      for (const handle of state.fileHandles.values()) {
+        if (handle.documentId === message.documentId) {
+          void recoverFileDocument(message.documentId);
+          return;
+        }
       }
     };
     // Handle both shapes receiveMessage has had across automerge-repo
@@ -878,7 +966,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     // directly and re-thrown so the repo's own handling still runs
     // unchanged; a rejecting promise (v2.5.6) is tapped with an
     // additional `.catch` without altering what's returned to the caller.
-    const wrapped = (message: IndexReceivedMessage) => {
+    const wrapped = (message: ReceivedSyncMessage) => {
       try {
         const result: unknown = original(message);
         if (result instanceof Promise) {
@@ -951,6 +1039,144 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     }
   }
 
+  /**
+   * Recover a permanently-wedged file document (bd-0h8crv6u): the file
+   * counterpart of {@link recoverIndexDocument}. Discards the local
+   * copy (dropping its DocSynchronizer's poisoned per-peer sync state)
+   * and re-fetches from the hub, then resubscribes — which re-fires
+   * `onFileAdded` with the fresh content. Consumers fully replace state
+   * on `onFileAdded` (e.g. `vfsAddFile(path, text)` in preview-runtime),
+   * so this rebuilds the VFS, preview, and editor model from the
+   * recovered document; the Monaco cursor/undo-history disruption on
+   * recovering the open file is accepted UX (the alternative is a
+   * permanently stale file).
+   *
+   * Two safety additions the index-only version did not need:
+   *
+   *  - Per-document backoff. A legacy client *actively editing* under a
+   *    shared stable actor re-wedges the document after every recovery,
+   *    so recoveries are spaced by `cooldownMs` and capped at
+   *    `maxAttempts` per quiet window (`quietWindowMs`). The count
+   *    resets lazily here once a collision-free gap exceeds the window
+   *    (deliberately not on clean inbound messages — that would put a
+   *    branch on the every-message hot path).
+   *  - A circuit breaker. At the cap the local copy is deleted FIRST —
+   *    load-bearing, not hygiene: the retry poll's plain findDoc would
+   *    otherwise return the same wedged handle (the poison lives in the
+   *    local DocSynchronizer's per-peer sync state), so without the
+   *    delete the poll could never heal a circuit-broken file — then
+   *    the file is marked unavailable and routed into the bounded
+   *    unavailable-files retry poll, and no further recoveries are
+   *    scheduled while it is marked.
+   */
+  async function recoverFileDocument(collidedDocumentId: DocumentId): Promise<void> {
+    const repo = state.repo;
+    if (!repo) return;
+
+    // Resolve the document id to its current path (scan on the error
+    // path only; see the routing comment in installDuplicateSeqRecovery).
+    let path: string | null = null;
+    for (const [p, handle] of state.fileHandles) {
+      if (handle.documentId === collidedDocumentId) {
+        path = p;
+        break;
+      }
+    }
+    if (!path) return;
+
+    // A circuit-broken file stays with the retry poll — no further
+    // recoveries while it is marked unavailable.
+    if (state.unavailableFiles.has(path)) return;
+
+    if (state.fileRecoveryInFlight.has(collidedDocumentId)) return;
+
+    const backoff = state.recoveryBackoff;
+    const now = Date.now();
+    const entry = state.fileRecoveryAttempts.get(collidedDocumentId) ?? {
+      attempts: 0,
+      lastAt: 0,
+    };
+    // Quiet-window reset, evaluated lazily on the recovery path only.
+    if (now - entry.lastAt > backoff.quietWindowMs) entry.attempts = 0;
+
+    if (entry.attempts >= backoff.maxAttempts) {
+      // Circuit breaker: delete FIRST (see the doc comment), then mark
+      // and poll. repo.delete() is a no-op for a document the repo no
+      // longer holds, so repeat collisions while marked are safe.
+      console.warn(
+        `[quarto-sync-client] file document ${collidedDocumentId} (${path}) hit the ` +
+          `duplicate-seq recovery cap (${backoff.maxAttempts} attempts); deleting the local ` +
+          `copy and marking the file unavailable for the bounded retry poll`,
+      );
+      state.fileRecoveryAttempts.delete(collidedDocumentId);
+      detachFileChangeHandler(collidedDocumentId);
+      repo.delete(collidedDocumentId);
+      state.fileHandles.delete(path);
+      markFileUnavailable(path, String(collidedDocumentId));
+      startUnavailableRetry();
+      return;
+    }
+
+    // Inside the cooldown after a previous recovery: stay wedged until
+    // the next collision once the cooldown has elapsed.
+    if (entry.attempts > 0 && now - entry.lastAt < backoff.cooldownMs) return;
+
+    entry.attempts += 1;
+    entry.lastAt = now;
+    state.fileRecoveryAttempts.set(collidedDocumentId, entry);
+
+    state.fileRecoveryInFlight.add(collidedDocumentId);
+    try {
+      console.warn(
+        `[quarto-sync-client] file document ${collidedDocumentId} (${path}) hit a duplicate-seq ` +
+          `actor collision (bd-0h8crv6u); discarding the local copy and re-fetching from the hub`,
+      );
+      detachFileChangeHandler(collidedDocumentId);
+      repo.delete(collidedDocumentId);
+
+      let freshHandle: DocHandle<FileDocument>;
+      try {
+        freshHandle = await findDoc<FileDocument>(collidedDocumentId);
+      } catch (err) {
+        console.warn(
+          `[quarto-sync-client] re-fetch of file document ${collidedDocumentId} (${path}) after a ` +
+            `duplicate-seq collision failed; will retry on the next collision`,
+          err,
+        );
+        return;
+      }
+
+      // The connection may have been torn down (or replaced by a new
+      // connect()) while we were awaiting the re-fetch above — same race
+      // findDoc's own retry loop guards against. Applying a stale
+      // recovery's result to unrelated new state would be worse than the
+      // original collision.
+      if (state.repo !== repo) return;
+
+      await subscribeToFile(path, freshHandle);
+
+      console.warn(
+        `[quarto-sync-client] recovered file document ${collidedDocumentId} (${path})`,
+      );
+    } finally {
+      state.fileRecoveryInFlight.delete(collidedDocumentId);
+    }
+  }
+
+  // Helper: detach a file document's tracked 'change' handler from its
+  // handle, if one is registered (bd-0h8crv6u). Used by the recovery
+  // path (the old handle is about to be repo.delete'd), by the removal
+  // paths that drop fileHandles entries, and defensively by the
+  // subscribe helpers so a re-subscribe of the same document id never
+  // leaves two live handlers.
+  function detachFileChangeHandler(documentId: DocumentId): void {
+    const entry = state.fileChangeHandlers.get(documentId);
+    if (entry) {
+      entry.handle.off('change', entry.handler);
+      state.fileChangeHandlers.delete(documentId);
+    }
+  }
+
   // Helper: subscribe to a file document (assumes handle is already ready).
   async function subscribeToFile(path: string, handle: DocHandle<FileDocument>): Promise<void> {
     state.fileHandles.set(path, handle);
@@ -985,7 +1211,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     }
 
     // Subscribe to changes
-    const changeHandler = ({ patches }: { patches: Patch[] }) => {
+    const changeHandler = ({ patches }: DocHandleChangePayload<FileDocument>) => {
       const changedDoc = handle.doc();
       if (!changedDoc) return;
 
@@ -1002,7 +1228,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       }
     };
 
+    detachFileChangeHandler(handle.documentId);
     handle.on('change', changeHandler);
+    state.fileChangeHandlers.set(handle.documentId, { handle, handler: changeHandler });
     state.cleanupFns.push(() => handle.off('change', changeHandler));
   }
 
@@ -1010,7 +1238,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   async function subscribeToFileInternal(path: string, handle: DocHandle<FileDocument>): Promise<void> {
     state.fileHandles.set(path, handle);
 
-    const changeHandler = ({ patches }: { patches: Patch[] }) => {
+    const changeHandler = ({ patches }: DocHandleChangePayload<FileDocument>) => {
       const changedDoc = handle.doc();
       if (!changedDoc) return;
 
@@ -1027,7 +1255,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       }
     };
 
+    detachFileChangeHandler(handle.documentId);
     handle.on('change', changeHandler);
+    state.fileChangeHandlers.set(handle.documentId, { handle, handler: changeHandler });
     state.cleanupFns.push(() => handle.off('change', changeHandler));
   }
 
@@ -1169,6 +1399,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     // Find removed files
     for (const path of currentPaths) {
       if (!newPaths.has(path)) {
+        const handle = state.fileHandles.get(path);
+        if (handle) detachFileChangeHandler(handle.documentId);
         state.fileHandles.delete(path);
         state.binaryFiles.delete(path);
         astCache.delete(path);
@@ -1240,6 +1472,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       });
       state.authorId = authorId ?? null;
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };
+      state.recoveryBackoff = resolveRecoveryBackoff(options.recoveryBackoff);
       trackPeers(state.repo);
       state.cleanupFns.push(
         installDuplicateSeqRecovery(state.repo, indexDocId as DocumentId),
@@ -1534,6 +1767,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     state.fileHandles.clear();
     state.unavailableFiles.clear();
     state.binaryFiles.clear();
+    state.fileChangeHandlers.clear();
+    state.fileRecoveryAttempts.clear();
+    state.fileRecoveryInFlight.clear();
     astCache.clear();
 
     if (state.wsAdapter) {
@@ -1549,6 +1785,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     state.connectedPeers = new Set();
     state.peerStorageIds = new Map();
     state.findDocRetry = DEFAULT_FIND_DOC_RETRY;
+    state.recoveryBackoff = DEFAULT_RECOVERY_BACKOFF;
     state.unavailableRetryTicks = 0;
     lastIdentities = {};
     lastCaptures = {};
@@ -1838,6 +2075,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       delete doc.files[path];
     });
 
+    const handle = state.fileHandles.get(path);
+    if (handle) detachFileChangeHandler(handle.documentId);
     state.fileHandles.delete(path);
     // Deleting a dangling entry is the self-service repair for
     // bd-vm5e5u10 — only the index is edited, no document fetch needed.
@@ -2200,6 +2439,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         storage: buildStorageAdapter(options.storage),
       });
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };
+      state.recoveryBackoff = resolveRecoveryBackoff(options.recoveryBackoff);
       trackPeers(state.repo);
 
       // Try to connect to peer, but continue in offline mode if it fails.

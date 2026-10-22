@@ -51,6 +51,7 @@ export type {
   DisconnectOptions,
   DisconnectReport,
   FindDocRetryOptions,
+  RecoveryBackoffOptions,
   StorageKind,
   SyncClientAuthOptions,
   UndeliveredDoc,
