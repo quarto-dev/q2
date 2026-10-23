@@ -68,8 +68,9 @@ interface ReactRendererProps {
   fileContents: Map<string, string>;
   // Callback when user navigates to a different document (with optional anchor)
   onNavigateToDocument: (targetPath: string, anchor: string | null) => void;
-  // Callback when AST is modified
-  setAst: (newAst: PandocAST) => void;
+  // Callback when AST is modified. For q2-debug it returns the QMD the
+  // edit was written as (see `Q2DebugIframe`'s edit acknowledgement).
+  setAst: (newAst: PandocAST) => string | void;
   // Optional controlled current slide index
   currentSlideIndex?: number;
   // Callback when slide changes (for manual navigation via arrows/buttons)
@@ -325,6 +326,7 @@ function ReactRenderer({
             onNavigateToDocument={stableNavigate}
             setAst={stableSetAst}
             customComponentsCode={customComponentsCode}
+            renderedContent={renderedContent}
           />
         </div>
       </ErrorBoundary>

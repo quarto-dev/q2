@@ -1,6 +1,7 @@
 import React, { useContext } from 'react';
 import { RegistryContext } from './RegistryContext';
 import { liItemAttrProps } from './listItemAttr';
+import { childKey } from './nodeKey';
 import { isAtomicSourceInfo, ATOMIC_KINDS } from '../utils/sourceInfo';
 import { isAtomicCustomNode } from '../utils/atomicCustomNodes';
 
@@ -69,7 +70,7 @@ const renderChildrenRegistry: Record<string, (args: {
     // Ast type
     Ast: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as PandocAST).blocks.map((block, i) => (
-            <Node key={i} node={block} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(block, i)} node={block} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newBlock: BlockNode | InlineNode) => {
                     const newBlocks = [...(node as PandocAST).blocks];
                     newBlocks[i] = newBlock as BlockNode;
@@ -80,7 +81,7 @@ const renderChildrenRegistry: Record<string, (args: {
     // Inline types
     Emph: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as EmphInline).c.map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as EmphInline).c];
                     newChildren[i] = newChild as InlineNode;
@@ -90,7 +91,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Strong: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as StrongInline).c.map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as StrongInline).c];
                     newChildren[i] = newChild as InlineNode;
@@ -106,7 +107,7 @@ const renderChildrenRegistry: Record<string, (args: {
     SmallCaps: makeFlatInlineRenderer('SmallCaps'),
     Link: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as LinkInline).c[1].map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as LinkInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
@@ -116,7 +117,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Image: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as ImageInline).c[1].map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as ImageInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
@@ -126,7 +127,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Span: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as SpanInline).c[1].map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as SpanInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
@@ -136,7 +137,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Quoted: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as QuotedInline).c[1].map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as QuotedInline).c[1]];
                     newChildren[i] = newChild as InlineNode;
@@ -147,7 +148,7 @@ const renderChildrenRegistry: Record<string, (args: {
     // Block types
     Para: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as ParaBlock).c.map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as ParaBlock).c];
                     newChildren[i] = newChild as InlineNode;
@@ -157,7 +158,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Plain: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as PlainBlock).c.map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as PlainBlock).c];
                     newChildren[i] = newChild as InlineNode;
@@ -167,7 +168,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Header: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as HeaderBlock).c[2].map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as HeaderBlock).c[2]];
                     newChildren[i] = newChild as InlineNode;
@@ -177,7 +178,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     BlockQuote: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as BlockQuoteBlock).c.map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as BlockQuoteBlock).c];
                     newChildren[i] = newChild as BlockNode;
@@ -187,7 +188,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Div: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as DivBlock).c[1].map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as DivBlock).c[1]];
                     newChildren[i] = newChild as BlockNode;
@@ -202,8 +203,8 @@ const renderChildrenRegistry: Record<string, (args: {
     // text edit drops the item's class — accepted for v1 (see plan).
     BulletList: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as BulletListBlock).c.map((item, i) => (
-            <li key={i} {...liItemAttrProps((node as BulletListBlock).itemAttr?.[i], false)}>{item.map((block, j) => (
-                <Node key={JSON.stringify([i, j])} node={block} onNavigateToDocument={onNavigateToDocument}
+            <li key={childKey(item, i)} {...liItemAttrProps((node as BulletListBlock).itemAttr?.[i], false)}>{item.map((block, j) => (
+                <Node key={childKey(block, j)} node={block} onNavigateToDocument={onNavigateToDocument}
                     setLocalAst={(newBlock: BlockNode | InlineNode) => {
                         const newItems = [...(node as BulletListBlock).c];
                         const newItem = [...newItems[i]];
@@ -216,8 +217,8 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     OrderedList: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as OrderedListBlock).c[1].map((item, i) => (
-            <li key={i} {...liItemAttrProps((node as OrderedListBlock).itemAttr?.[i], false)}>{item.map((block, j) => (
-                <Node key={JSON.stringify([i, j])} node={block} onNavigateToDocument={onNavigateToDocument}
+            <li key={childKey(item, i)} {...liItemAttrProps((node as OrderedListBlock).itemAttr?.[i], false)}>{item.map((block, j) => (
+                <Node key={childKey(block, j)} node={block} onNavigateToDocument={onNavigateToDocument}
                     setLocalAst={(newBlock: BlockNode | InlineNode) => {
                         const newItems = [...(node as OrderedListBlock).c[1]];
                         const newItem = [...newItems[i]];
@@ -230,7 +231,7 @@ const renderChildrenRegistry: Record<string, (args: {
         )),
     Figure: ({ node, setLocalAst, onNavigateToDocument }) =>
         (node as FigureBlock).c[2].map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const newChildren = [...(node as FigureBlock).c[2]];
                     newChildren[i] = newChild as BlockNode;
@@ -254,7 +255,7 @@ function makeFlatInlineRenderer(tag: string) {
     }): React.ReactNode => {
         const children = (node as { c: InlineNode[] }).c;
         return children.map((child, i) => (
-            <Node key={i} node={child} onNavigateToDocument={onNavigateToDocument}
+            <Node key={childKey(child, i)} node={child} onNavigateToDocument={onNavigateToDocument}
                 setLocalAst={(newChild: BlockNode | InlineNode) => {
                     const next = children.slice();
                     next[i] = newChild as InlineNode;
@@ -294,7 +295,7 @@ function renderCustomNodeChildren({
                 ];
             case 'blocks':
                 return slot.value.map((b, i) => (
-                    <Node key={`${name}-${i}`} node={b} onNavigateToDocument={onNavigateToDocument}
+                    <Node key={childKey(b, i)} node={b} onNavigateToDocument={onNavigateToDocument}
                         setLocalAst={(n) => {
                             const next = slot.value.slice();
                             next[i] = n as BlockNode;
@@ -304,7 +305,7 @@ function renderCustomNodeChildren({
                 ));
             case 'inlines':
                 return slot.value.map((inl, i) => (
-                    <Node key={`${name}-${i}`} node={inl} onNavigateToDocument={onNavigateToDocument}
+                    <Node key={childKey(inl, i)} node={inl} onNavigateToDocument={onNavigateToDocument}
                         setLocalAst={(n) => {
                             const next = slot.value.slice();
                             next[i] = n as InlineNode;
@@ -399,7 +400,19 @@ const NOOP_SET_LOCAL_AST: (newNode: BlockNode | InlineNode) => void = () => {};
  * the gate for descendants. See plan §"Recursion contract for the
  * atomic gate" + the negative regression fixture.
  */
-export function Node({
+export function Node(props: {
+    node: BlockNode | InlineNode,
+    onNavigateToDocument?: (path: string, anchor: string | null) => void,
+    setLocalAst: (newNode: BlockNode | InlineNode) => void
+}) {
+    return <NodeContent {...props} />;
+}
+
+/**
+ * A node's actual markup: the atomic gate plus dispatch to the format's
+ * 'Block' / 'Inline' component.
+ */
+export function NodeContent({
     node,
     onNavigateToDocument,
     setLocalAst
