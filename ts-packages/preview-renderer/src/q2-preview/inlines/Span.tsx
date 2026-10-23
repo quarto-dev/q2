@@ -12,8 +12,9 @@ export const Span = (args: NodeArgs<SpanInline>) => {
     if (id) props.id = id;
     const classList = highlighted ? [...classes, 'q2-comment-span-hover'] : classes;
     if (classList.length) props.className = classList.join(' ');
+    // `aria-hidden`: decorative spans, e.g. the link-external icon span.
     for (const [k, v] of kvs) {
-        if (k.startsWith('data-')) props[k] = v;
+        if (k.startsWith('data-') || k === 'aria-hidden') props[k] = v;
     }
     // `[text]{style="color: red"}` — the native writer emits the style
     // attribute verbatim; React needs a style object (same as Div).

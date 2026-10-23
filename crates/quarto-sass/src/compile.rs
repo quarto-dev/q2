@@ -76,7 +76,8 @@ pub fn assemble_theme_scss(
 ) -> Result<(String, Vec<PathBuf>), SassError> {
     use crate::bundle::{
         load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_listing_layer, load_search_layer, load_title_block_layer,
+        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
+        load_title_block_layer,
     };
 
     // Process theme specs into layers
@@ -91,6 +92,7 @@ pub fn assemble_theme_scss(
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let equation_number_layer = load_equation_number_layer()?;
+    let link_external_layer = load_link_external_layer()?;
     let listing_layer = load_listing_layer()?;
     let search_layer = load_search_layer()?;
     let mut user_layers = Vec::new();
@@ -104,6 +106,7 @@ pub fn assemble_theme_scss(
         embed_example_layer,
         copy_code_layer,
         equation_number_layer,
+        link_external_layer,
         listing_layer,
         search_layer,
     ]);
@@ -214,7 +217,8 @@ pub fn compile_with_doc_vars(
 ) -> Result<SassOutput, SassError> {
     use crate::bundle::{
         load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_listing_layer, load_search_layer, load_title_block_layer,
+        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
+        load_title_block_layer,
     };
     use crate::themes::process_theme_specs;
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
@@ -251,6 +255,7 @@ pub fn compile_with_doc_vars(
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let equation_number_layer = load_equation_number_layer()?;
+    let link_external_layer = load_link_external_layer()?;
     let listing_layer = load_listing_layer()?;
     let search_layer = load_search_layer()?;
     let mut user_layers = Vec::new();
@@ -262,6 +267,7 @@ pub fn compile_with_doc_vars(
         embed_example_layer,
         copy_code_layer,
         equation_number_layer,
+        link_external_layer,
         listing_layer,
         search_layer,
     ]);
@@ -379,7 +385,8 @@ pub fn compile_default_css(
 ) -> Result<String, SassError> {
     use crate::bundle::{
         load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_listing_layer, load_search_layer, load_title_block_layer,
+        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
+        load_title_block_layer,
     };
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
@@ -395,6 +402,7 @@ pub fn compile_default_css(
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let equation_number_layer = load_equation_number_layer()?;
+    let link_external_layer = load_link_external_layer()?;
     let listing_layer = load_listing_layer()?;
     let search_layer = load_search_layer()?;
 
@@ -406,6 +414,7 @@ pub fn compile_default_css(
         embed_example_layer,
         copy_code_layer,
         equation_number_layer,
+        link_external_layer,
         listing_layer,
         search_layer,
     ])?;
@@ -529,7 +538,8 @@ pub async fn compile_with_doc_vars(
 ) -> Result<SassOutput, SassError> {
     use crate::bundle::{
         load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_listing_layer, load_search_layer, load_title_block_layer,
+        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
+        load_title_block_layer,
     };
     use crate::themes::process_theme_specs;
 
@@ -557,6 +567,7 @@ pub async fn compile_with_doc_vars(
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let equation_number_layer = load_equation_number_layer()?;
+    let link_external_layer = load_link_external_layer()?;
     let listing_layer = load_listing_layer()?;
     let search_layer = load_search_layer()?;
     let mut user_layers = Vec::new();
@@ -568,6 +579,7 @@ pub async fn compile_with_doc_vars(
         embed_example_layer,
         copy_code_layer,
         equation_number_layer,
+        link_external_layer,
         listing_layer,
         search_layer,
     ]);
@@ -639,7 +651,8 @@ pub async fn compile_default_css(
 ) -> Result<String, SassError> {
     use crate::bundle::{
         load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_listing_layer, load_search_layer, load_title_block_layer,
+        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
+        load_title_block_layer,
     };
 
     // Return cached version if available (only for minified, matching
@@ -661,6 +674,7 @@ pub async fn compile_default_css(
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
     let equation_number_layer = load_equation_number_layer()?;
+    let link_external_layer = load_link_external_layer()?;
     let listing_layer = load_listing_layer()?;
     let search_layer = load_search_layer()?;
 
@@ -672,6 +686,7 @@ pub async fn compile_default_css(
         embed_example_layer,
         copy_code_layer,
         equation_number_layer,
+        link_external_layer,
         listing_layer,
         search_layer,
     ])?;
@@ -1294,6 +1309,44 @@ mod tests {
         assert!(
             css.contains(".hl-function-builtin"),
             "reveal theme CSS must contain the nested-capture .hl-function-builtin rule"
+        );
+    }
+
+    /// bd-t3n1nghb: the external-link layer is unconditional, so a
+    /// hand-written `.external` link gets its icon without
+    /// `link-external-icon`, and the SVG fill is a real color (Quarto 1's
+    /// `colorToRGB()` is undefined on the HTML path and would be emitted
+    /// verbatim).
+    #[test]
+    fn test_compile_default_css_includes_link_external_rules() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        assert!(
+            css.contains("a.external:after{"),
+            "missing a.external:after rule"
+        );
+        assert!(
+            css.contains(".quarto-ext-icon{"),
+            "missing .quarto-ext-icon rule"
+        );
+        assert!(
+            css.contains("bi-box-arrow-up-right") && css.contains("fill=\"rgb("),
+            "the external icon should be a data-URI SVG with an rgb() fill"
+        );
+        assert!(!css.contains("red($link-color)"), "fill left uncompiled");
+    }
+
+    #[test]
+    fn test_compile_reveal_theme_includes_link_external_rules() {
+        let runtime = NativeRuntime::new();
+        let css = compile_reveal_theme_css(&runtime, true, &[], &[]).unwrap();
+        assert!(
+            css.contains("a.external:after{"),
+            "missing a.external:after rule"
+        );
+        assert!(
+            css.contains(".quarto-ext-icon{"),
+            "missing .quarto-ext-icon rule"
         );
     }
 

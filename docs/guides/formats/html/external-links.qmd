@@ -1,0 +1,101 @@
+---
+title: External Links
+---
+
+## Overview
+
+HTML output can mark links that leave your site, open them in a new
+tab, or both:
+
+``` yaml
+format:
+  html:
+    link-external-icon: true
+    link-external-newwindow: true
+```
+
+| Option                    | Effect on each external link                                                         |
+|---------------------------|--------------------------------------------------------------------------------------|
+| `link-external-icon`      | `true` adds the class `external`, which draws a small box-arrow icon after the text. A string names a [Bootstrap icon](https://icons.getbootstrap.com/) to show instead, e.g. `box-arrow-up-right`. |
+| `link-external-newwindow` | `true` adds `target="_blank"` and, unless the link already has a `rel`, `rel="noopener"`. |
+| `link-external-filter`    | A regular expression. Links whose URL matches it count as internal.                 |
+
+Both switches are off by default. The options apply to every
+HTML-based format, including `revealjs`, and work in project config
+(`_quarto.yml`) as well as front matter.
+
+## Which links count as external
+
+Quarto decides when it renders the document, from each link's URL:
+
+- Relative links (`about.qmd`, `../img/x.png`, `#section`) are
+  internal.
+- Only `http:`, `https:` and protocol-relative `//host/…` URLs can be
+  external. `mailto:`, `tel:` and other schemes are left alone.
+- Links to `localhost`, on any port, are internal.
+- A URL that matches `link-external-filter` is internal.
+- On a website without `link-external-filter`, the filter defaults to
+  `website.site-url`: absolute links into your own site stay
+  internal.
+- Everything else is external. Without `site-url` or a filter, that
+  means every absolute `http(s)` link.
+
+Only links written in the document body are adorned. Links in raw
+HTML (`<a href=…>`) and in navigation chrome (navbar, sidebar,
+footer) are not.
+
+## Per-link control
+
+Add `.no-external` to a link to leave it alone:
+
+``` markdown
+[Our partner site](https://partner.example.com/){.no-external}
+```
+
+You can also adorn a single link by hand, with or without the
+options. The icon styling is always included:
+
+``` markdown
+[example](https://example.com){.external target="_blank"}
+```
+
+A `target` or `rel` you write yourself is kept.
+
+## The filter is a Rust regular expression
+
+`link-external-filter` is compiled with Rust's
+[`regex` syntax](https://docs.rs/regex/latest/regex/#syntax). That
+syntax has no look-around (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`) and
+no backreferences. A pattern that does not compile produces the
+warning [`Q-13-14`](../../../errors/navigation/Q-13-14.qmd) and is
+ignored. Quote the pattern in single quotes so that YAML passes its
+backslashes through unchanged:
+
+``` yaml
+format:
+  html:
+    link-external-icon: true
+    link-external-filter: '^https://(www\.)?quarto\.org/'
+```
+
+The pattern is matched anywhere in the URL unless you anchor it with
+`^`.
+
+## Differences from Quarto 1
+
+- **Rendering time instead of browser time.** Quarto 1 classified
+  links with JavaScript in the reader's browser, so with no
+  `site-url` or filter it compared links against the page's own
+  host. Quarto 2 cannot know where the page will be served, so an
+  absolute link to your own host counts as external unless
+  `site-url` or `link-external-filter` covers it.
+- **Regex dialect.** Quarto 1 used JavaScript regular expressions.
+  Patterns with look-around or backreferences need rewriting.
+- **Scope.** Quarto 1 adorned every `<a>` on the page, raw HTML
+  included. Quarto 2 adorns body links only. Other URL schemes such
+  as `tel:` are never external.
+- **String icons.** Quarto 1's schema rejected a string
+  `link-external-icon`. Quarto 2 accepts one, places the icon after
+  the link, and ships the Bootstrap Icons font for that page.
+- **Icon styling.** Quarto 1 included the `.external` icon styling
+  only when `link-external-icon` was on. Quarto 2 always includes it.

@@ -1,0 +1,27 @@
+---
+title: "link-external: named icon"
+# bd-t3n1nghb: a string `link-external-icon` places a Bootstrap Icons
+# span after each external link (no `external` class), and the icons
+# stylesheet ships even though this is not a website.
+format:
+  html:
+    link-external-icon: box-arrow-up-right
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureHtmlElements:
+        - [
+            'a[href="https://example.com/"] + span.bi.bi-box-arrow-up-right.quarto-ext-icon[aria-hidden="true"]',
+          ]
+        - [
+            'a.external',
+            'a[href="about.html"] + span.quarto-ext-icon',
+            'a[target]',
+          ]
+      ensureFileRegexMatches:
+        - ['<link rel="stylesheet" href="[^"]*bootstrap-icons\.css">']
+        - []
+---
+
+An [internal](about.html) link and an [external](https://example.com/) one.

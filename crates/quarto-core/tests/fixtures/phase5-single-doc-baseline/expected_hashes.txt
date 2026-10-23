@@ -452,5 +452,17 @@
 # Verified those three rules are the only CSS delta (rendered with and without
 # the SCSS change, diffed on `}`). doc.html hash unchanged: CSS-only change,
 # and the fixture has no diagram.
+#
+# Re-captured 2026-10-22 (bd-t3n1nghb): doc_files/styles.css hash updated
+# because a new built-in SCSS layer `link-external.scss`
+# (`load_link_external_layer`, bundled at every HTML compile site and in
+# `assemble_reveal_scss`, unconditionally) ships the external-link rules:
+# `a.external:after` (data-URI box-arrow icon), its `div.sourceCode code`
+# and `:hover` variants, and `.quarto-ext-icon`. Verified the only delta is
+# those four rules: removing them from the new styles.css reproduces the
+# previous hash (07c6ce19…) exactly. Re-verified after merging main's
+# bd-2pmjmjmj change: removing the same rules reproduces 4a1515b8…. doc.html
+# hash unchanged: the fixture has no links and sets no `link-external-*`
+# option.
 doc.html 8bc5f1b52f07aa842a9420d2d08a24243e851ca7f18e3d55a089e5d1ffe84f59
-doc_files/styles.css 4a1515b8a68f1d6863acd5a2ac9fd62ebd43d6d45e3887ad62326cc0e06daf66
+doc_files/styles.css b3be07a7a0a322141ea5a12fb40c9dda640c9cc85066e8cc31e15acd52488a8c

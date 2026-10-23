@@ -22,8 +22,15 @@
 //! ship on any individual feature would mean re-checking every time a
 //! consumer is added.
 //!
+//! Outside websites they ship only when `link-external-icon` names an
+//! icon (`LinkExternalTransform` places a `bi-<name>` span after each
+//! external link), the one consumer a standalone document has today.
+//! Quarto 1 ships them with every Bootstrap HTML document; the narrower
+//! gate was chosen to keep single pages light (bd-t3n1nghb).
+//!
 //! [`apply_template`]: crate::stage::stages::apply_template
 
+use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
@@ -31,6 +38,8 @@ use crate::artifact::{Artifact, ArtifactScope, ArtifactStore};
 use crate::project::ProjectKind;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
+
+use super::link_external::{ExternalIcon, external_icon};
 
 /// Vendored Bootstrap Icons CSS. See `resources/bootstrap-icons/README.md`.
 const BOOTSTRAP_ICONS_CSS: &[u8] =
@@ -69,13 +78,19 @@ impl AstTransform for WebsiteBootstrapIconsTransform {
         TransformPhase::Normalization
     }
 
-    async fn transform(&self, _ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        if ctx.project.project_kind() != ProjectKind::Website {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+        if !needs_bootstrap_icons(ctx.project.project_kind(), &ast.meta) {
             return Ok(());
         }
         store_artifacts(&mut ctx.artifacts);
         Ok(())
     }
+}
+
+/// Websites always ship the icons; other projects only for a named
+/// `link-external-icon`.
+fn needs_bootstrap_icons(kind: ProjectKind, meta: &ConfigValue) -> bool {
+    kind == ProjectKind::Website || matches!(external_icon(meta), Some(ExternalIcon::Named(_)))
 }
 
 /// Idempotently store the CSS + woff as Project-scope artifacts.
@@ -141,5 +156,34 @@ mod tests {
             "running twice should overwrite, not duplicate; got {} → {}",
             len_first, len_second
         );
+    }
+
+    fn meta_icon(value: ConfigValue) -> ConfigValue {
+        use quarto_pandoc_types::ConfigMapEntry;
+        use quarto_source_map::SourceInfo;
+        ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "link-external-icon".to_string(),
+                key_source: SourceInfo::for_test(),
+                value,
+            }],
+            SourceInfo::for_test(),
+        )
+    }
+
+    #[test]
+    fn icons_ship_for_websites_and_for_a_named_external_icon() {
+        use quarto_source_map::SourceInfo;
+        let empty = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        let named = meta_icon(ConfigValue::new_string(
+            "box-arrow-up-right".to_string(),
+            SourceInfo::for_test(),
+        ));
+        let class = meta_icon(ConfigValue::new_bool(true, SourceInfo::for_test()));
+        assert!(needs_bootstrap_icons(ProjectKind::Website, &empty));
+        assert!(needs_bootstrap_icons(ProjectKind::Default, &named));
+        assert!(!needs_bootstrap_icons(ProjectKind::Default, &empty));
+        // `true` draws the icon from the SCSS layer's data-URI SVG; no font needed.
+        assert!(!needs_bootstrap_icons(ProjectKind::Default, &class));
     }
 }

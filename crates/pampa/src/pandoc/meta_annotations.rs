@@ -109,6 +109,15 @@ const ANNOTATIONS: &[(&[&str], Interpretation)] = &[
     // bracket-label patterns as HTML tags (Q-2-9) and fails to parse
     // some regex strings outright (Q-1-20).
     (&["_quarto", "tests", "**"], Interpretation::PlainString),
+    // `link-external-filter` is a regular expression. Read as markdown,
+    // its backslash escapes are consumed (`\/\/www\.quarto\.org` became
+    // `//www.quarto.org`) and `|` / `^` gain escapes of their own on the
+    // way back to text (bd-t3n1nghb).
+    (&["link-external-filter"], Interpretation::PlainString),
+    (
+        &["format", "*", "link-external-filter"],
+        Interpretation::PlainString,
+    ),
 ];
 
 /// Interpretation annotated for the value at `path`, if any.
@@ -266,6 +275,25 @@ mod tests {
         // ...nor is an unrelated user key that merely echoes the shape.
         assert_eq!(
             annotated_interpretation(&path(&["my", "_quarto", "tests"])),
+            None
+        );
+    }
+
+    #[test]
+    fn link_external_filter_is_plain_string_top_level_and_per_format() {
+        for p in [
+            path(&["link-external-filter"]),
+            path(&["format", "html", "link-external-filter"]),
+            path(&["format", "revealjs", "link-external-filter"]),
+        ] {
+            assert_eq!(
+                annotated_interpretation(&p),
+                Some(Interpretation::PlainString),
+                "{p:?}"
+            );
+        }
+        assert_eq!(
+            annotated_interpretation(&path(&["link-external-icon"])),
             None
         );
     }

@@ -1861,6 +1861,13 @@
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-13",
     "since_version": "99.9.9"
   },
+  "Q-13-14": {
+    "subsystem": "navigation",
+    "title": "Invalid link-external-filter",
+    "message_template": "`link-external-filter` is not a valid regular expression. The filter is ignored; links are classified using the `website.site-url` default, if any.",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-14",
+    "since_version": "99.9.9"
+  },
   "Q-14-6": {
     "subsystem": "theme",
     "title": "Theme SCSS compilation failed",

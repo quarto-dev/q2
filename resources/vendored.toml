@@ -1027,6 +1027,7 @@ paths = [
   "resources/scss/html/templates/equation-number.scss",
   "resources/scss/html/templates/highlight-default.scss",
   "resources/scss/html/templates/highlight.scss",
+  "resources/scss/html/templates/link-external.scss",
   "resources/scss/revealjs/README.md",
   "resources/scss/revealjs/quarto-revealjs.scss",
 ]

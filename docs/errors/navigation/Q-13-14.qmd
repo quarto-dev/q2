@@ -1,0 +1,70 @@
+---
+title: "Invalid link-external-filter"
+description: "The link-external-filter option is not a regular expression Quarto can compile, so it is ignored."
+code: Q-13-14
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+  - html
+---
+
+# `Q-13-14` — Invalid link-external-filter
+
+> The `link-external-filter` option is not a regular expression
+> Quarto can compile, so it is ignored.
+
+## What this means
+
+`link-external-filter` tells Quarto which absolute links count as
+*internal* when `link-external-icon` or `link-external-newwindow`
+is on. Any link whose URL matches the expression is left alone.
+
+``` yaml
+format:
+  html:
+    link-external-icon: true
+    link-external-filter: '^https://(www\.)?quarto\.org/'
+```
+
+This warning fires when the expression does not compile. The render
+still succeeds. Quarto ignores the filter and falls back to the
+default, which treats links under `website.site-url` as internal.
+Without a `site-url`, every absolute `http(s)` link counts as
+external.
+
+## Why this happens
+
+- **The pattern uses JavaScript-only syntax.** Quarto 1 evaluated
+  this filter as a JavaScript regular expression in the browser.
+  Quarto 2 compiles it with Rust's
+  [`regex`](https://docs.rs/regex/latest/regex/#syntax) syntax,
+  which has no look-around (`(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`)
+  and no backreferences (`\1`).
+- **A typo.** An unbalanced parenthesis or bracket, or a dangling
+  `\` at the end of the pattern.
+
+## How to fix
+
+- Rewrite look-arounds as a plain prefix match. For example, to
+  treat both `quarto.org` and `posit.co` as internal, list them
+  instead of excluding everything else:
+
+  ``` yaml
+  # JavaScript-only (look-ahead): rejected
+  link-external-filter: '^https://(?!example\.com)'
+
+  # Rust regex: accepted
+  link-external-filter: '^https://(quarto\.org|posit\.co)/'
+  ```
+
+- Quote the pattern in single quotes in YAML so that backslashes
+  reach Quarto unchanged.
+- Escaping `/` as `\/` is harmless. Quarto 1's documentation
+  example, `^(?:http:|https:)\/\/www\.quarto\.org\/custom`, still
+  works.
+
+## Related
+
+- `Q-13-4` — body link referencing a missing document.

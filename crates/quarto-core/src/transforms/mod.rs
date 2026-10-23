@@ -82,6 +82,7 @@ mod footnotes;
 mod footnotes_resolve;
 mod format_css;
 mod heading_id;
+mod link_external;
 mod link_rewrite;
 pub(crate) mod listing_generate;
 mod listing_render;
@@ -181,6 +182,7 @@ pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 #[cfg(not(target_arch = "wasm32"))]
 pub use hephaestus::HephaestusRenderTransform;
 pub use image_alt_normalize::ImageAltNormalizeTransform;
+pub use link_external::LinkExternalTransform;
 pub use link_rewrite::LinkRewriteTransform;
 pub use listing_generate::ListingGenerateTransform;
 pub use listing_render::ListingRenderTransform;

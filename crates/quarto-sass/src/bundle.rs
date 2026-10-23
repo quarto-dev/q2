@@ -395,6 +395,25 @@ pub fn load_equation_number_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("equation-number.scss"))
 }
 
+/// Load the external-link SCSS layer (`link-external.scss`).
+///
+/// Styles the `a.external` class and the `.quarto-ext-icon` span that
+/// `LinkExternalTransform` emits for `link-external-icon` (bd-t3n1nghb).
+/// Unconditional, unlike Quarto 1, so a hand-written `.external` link
+/// always gets its icon. Shared by the HTML and revealjs paths, like
+/// [`load_copy_code_layer`].
+pub fn load_link_external_layer() -> Result<SassLayer, SassError> {
+    use crate::resources::TEMPLATES_RESOURCES;
+
+    let content = TEMPLATES_RESOURCES
+        .read_str(Path::new("link-external.scss"))
+        .ok_or_else(|| SassError::CompilationFailed {
+            message: "link-external.scss not found in templates resources".to_string(),
+        })?;
+
+    parse_layer(content, Some("link-external.scss"))
+}
+
 /// Load the listing (cards / table / category chips / pagination) SCSS
 /// layer (bd-57y4).
 ///
@@ -595,10 +614,15 @@ pub fn assemble_reveal_scss(theme_layers: &[SassLayer]) -> Result<String, SassEr
     // HTML path includes: revealjs is HTML-based, so `EquationNumberStage`
     // applies the `Sibling` encoding to decks too (bd-vlhi2zkj).
     let equation_number = load_equation_number_layer()?;
-    let mut combined: Vec<SassLayer> = Vec::with_capacity(3 + theme_layers.len());
+    // External-link adornments (`link-external.scss`), the same layer the
+    // HTML path includes: `LinkExternalTransform` runs for decks too
+    // (bd-t3n1nghb).
+    let link_external = load_link_external_layer()?;
+    let mut combined: Vec<SassLayer> = Vec::with_capacity(4 + theme_layers.len());
     combined.push(highlight);
     combined.push(copy_code);
     combined.push(equation_number);
+    combined.push(link_external);
     combined.extend_from_slice(theme_layers);
     let merged = merge_layers(&combined);
 

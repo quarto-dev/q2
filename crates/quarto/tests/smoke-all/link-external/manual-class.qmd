@@ -1,0 +1,19 @@
+---
+title: "link-external: hand-written .external"
+# bd-t3n1nghb: the link-external.scss layer is unconditional, so a
+# hand-written `.external` gets its icon with no option set, and the
+# transform touches nothing.
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureHtmlElements:
+        - ['a.external[href="https://example.com/"]']
+        - ['a[target]', 'a.external[href="https://example.org/"]']
+      ensureCssRegexMatches:
+        - ['a\.external:after\{']
+        - []
+---
+
+[Marked by hand](https://example.com/){.external} and
+[unmarked](https://example.org/).

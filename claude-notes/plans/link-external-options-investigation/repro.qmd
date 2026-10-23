@@ -1,0 +1,13 @@
+---
+title: link-external repro
+format:
+  html:
+    link-external-icon: true
+    link-external-newwindow: true
+    link-external-filter: '^(?:http:|https:)\/\/www\.quarto\.org\/'
+---
+
+- internal relative: [about](about.html)
+- external: [example](https://example.com/)
+- filter-matched: [quarto](https://www.quarto.org/docs/)
+- mailto: [mail](mailto:someone@example.com)

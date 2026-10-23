@@ -52,6 +52,7 @@ website:
             - guides/hub/unix-socket.qmd
             - guides/extensions/ts-engines-node.qmd
             - guides/publishing/index.qmd
+            - guides/formats/html/external-links.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd
             - guides/formats/pandoc/index.qmd
@@ -284,6 +285,7 @@ website:
             - errors/navigation/Q-13-11.qmd
             - errors/navigation/Q-13-12.qmd
             - errors/navigation/Q-13-13.qmd
+            - errors/navigation/Q-13-14.qmd
         - section: "template"
           contents:
             - errors/template/Q-10-1.qmd

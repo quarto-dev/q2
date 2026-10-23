@@ -1,0 +1,8 @@
+project:
+  type: website
+website:
+  title: link-external website
+  site-url: https://docs.example.com/
+format:
+  html:
+    link-external-icon: true

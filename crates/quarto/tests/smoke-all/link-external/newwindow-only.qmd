@@ -1,0 +1,21 @@
+---
+title: "link-external: newwindow only"
+# bd-t3n1nghb: `link-external-newwindow` alone sets target/rel and adds
+# no class. Without `site-url` or a filter, any absolute http(s) link
+# is external; localhost is not.
+format:
+  html:
+    link-external-newwindow: true
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureHtmlElements:
+        - ['a[href="https://example.com/"][target="_blank"][rel="noopener"]']
+        - ['a.external', 'a[href^="http://localhost"][target]']
+      ensureFileRegexMatches:
+        - []
+        - ['bootstrap-icons\.css']
+---
+
+[External](https://example.com/) and [local](http://localhost:4200/x.html).

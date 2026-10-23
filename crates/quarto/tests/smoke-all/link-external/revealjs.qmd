@@ -1,0 +1,20 @@
+---
+title: "link-external: revealjs"
+# bd-t3n1nghb: the transform runs for every HTML-family format, decks
+# included, and the deck theme bundles the link-external layer.
+format:
+  revealjs:
+    link-external-icon: true
+    link-external-newwindow: true
+_quarto:
+  tests:
+    revealjs:
+      noErrorsOrWarnings: true
+      ensureHtmlElements:
+        - ['section a.external[href="https://example.com/"][target="_blank"][rel="noopener"]']
+        - ['a.external[href="about.html"]']
+---
+
+## Slide
+
+[External](https://example.com/) and [internal](about.html).

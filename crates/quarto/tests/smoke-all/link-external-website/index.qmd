@@ -1,0 +1,19 @@
+---
+title: "link-external: site-url default filter"
+# bd-t3n1nghb: on a website without `link-external-filter`, links under
+# `website.site-url` are internal (Quarto 1's default); other absolute
+# links are external. Navigation chrome is never adorned.
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureHtmlElements:
+        - ['main a.external[href="https://example.org/"]']
+        - [
+            'a.external[href^="https://docs.example.com/"]',
+            'nav a.external',
+          ]
+---
+
+- [Same site, absolute](https://docs.example.com/guide/)
+- [Elsewhere](https://example.org/)

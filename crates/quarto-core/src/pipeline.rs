@@ -88,16 +88,17 @@ use crate::transforms::{
     DateNormalizeTransform, DraftAlertTransform, EditorialMarksOoxmlTransform,
     EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
     FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesResolveTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ReferenceLinkDiagnosticsTransform,
-    RepoActionsRenderTransform, ResourceCollectorTransform, ResponsiveImageTransform,
-    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
-    SidebarRenderTransform, TableBootstrapClassTransform, TableFloatClassForwardTransform,
-    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
-    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    FootnotesResolveTransform, FootnotesTransform, LinkExternalTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
+    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TableFloatClassForwardTransform, TheoremSugarTransform, TitleBannerTransform,
+    TitleBlockTransform, TocGenerateTransform, TocLocationTransform, TocRenderTransform,
+    WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform, WebsiteFaviconTransform,
+    WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -2732,6 +2733,14 @@ pub fn build_transform_pipeline(
     // must run whenever that transform does.
     pipeline.push(Box::new(crate::transforms::LlmsCaptureTransform::new()));
 
+    // bd-t3n1nghb: adorn external body links per `link-external-icon` /
+    // `link-external-newwindow` / `link-external-filter` (class `external`,
+    // `target`/`rel`, or a named `bi-*` icon after the link). After
+    // `link-rewrite`, so hrefs are final, and after `llms-capture`, so the
+    // markdown companion keeps clean links. HTML-family self-gated; runs
+    // in the q2-preview too.
+    pipeline.push(Box::new(LinkExternalTransform::new()));
+
     // Very last transform: bake the per-node attribution lookup and
     // the pruned actors table onto `ctx.format_options`. No-op when
     // `ctx.attribution_data` is None (i.e. no provider was installed,
@@ -2945,6 +2954,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "draft-alert",
     "format-css",
     "responsive-image",
+    "link-external",
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact;
     // no Pandoc-writer analog exists yet (bd-3qych45b covers HTML only).
     "hephaestus-render",
@@ -3163,6 +3173,8 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // which it runs immediately before). No Pandoc-writer analog exists yet.
     ("hephaestus-render", Bucket::B4),
     ("responsive-image", Bucket::B4),
+    // Adorns external body links (`link-external-*`): HTML presentation.
+    ("link-external", Bucket::B4),
     // Both bake per-node attribution onto `ctx.format_options` fields that
     // only the HTML/JSON writers read.
     ("attribution-render", Bucket::B4),
@@ -6620,6 +6632,7 @@ mod tests {
                 "table-bootstrap-class",
                 "responsive-image",
                 "llms-capture",
+                "link-external",
                 "attribution-render",
                 "attribution-viewer",
             ]
@@ -6716,6 +6729,7 @@ mod tests {
                 "table-bootstrap-class",
                 "responsive-image",
                 "llms-capture",
+                "link-external",
                 "attribution-render",
                 "attribution-viewer",
             ]
@@ -7090,6 +7104,7 @@ mod tests {
                 "table-bootstrap-class",
                 "responsive-image",
                 "llms-capture",
+                "link-external",
                 "attribution-render",
             ]
         );

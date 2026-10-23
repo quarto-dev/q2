@@ -1,0 +1,22 @@
+---
+title: "link-external: invalid filter"
+# bd-t3n1nghb: a filter that Rust's regex cannot compile (look-ahead is
+# JavaScript-only) warns Q-13-14 and is ignored; links are still
+# classified without it.
+format:
+  html:
+    link-external-icon: true
+    link-external-filter: '^https://(?!example\.com)'
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Invalid link-external-filter"
+      ensureHtmlElements:
+        - ['a.external[href="https://example.com/"]', 'a.external[href="https://example.org/"]']
+        - []
+---
+
+[One](https://example.com/) and [two](https://example.org/).

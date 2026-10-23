@@ -1,0 +1,41 @@
+---
+title: "link-external: icon true + newwindow"
+# bd-t3n1nghb: external body links get class `external` (drawn by the
+# link-external.scss layer) and target/rel; relative, filter-matched,
+# mailto and `.no-external` links are untouched, and an author's own
+# `target` survives.
+format:
+  html:
+    link-external-icon: true
+    link-external-newwindow: true
+    link-external-filter: '^(?:http:|https:)\/\/www\.quarto\.org\/'
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureHtmlElements:
+        - [
+            'a.external[href="https://example.com/"][target="_blank"][rel="noopener"]',
+            'a.external[href="https://example.org/own"][target="frame"][rel="noopener"]',
+            'a[href="mailto:someone@example.com"]',
+          ]
+        - [
+            'a[href="about.html"][target]',
+            'a.external[href="about.html"]',
+            'a[href^="https://www.quarto.org/"][target]',
+            'a.external[href^="https://www.quarto.org/"]',
+            'a.external[href^="mailto:"]',
+            'a.no-external[target]',
+            'a.no-external.external',
+          ]
+      ensureCssRegexMatches:
+        - ['a\.external:after\{', '\.quarto-ext-icon\{']
+        - []
+---
+
+- internal: [about](about.html)
+- external: [example](https://example.com/)
+- author target: [own](https://example.org/own){target="frame"}
+- filter-matched: [quarto](https://www.quarto.org/docs/)
+- mailto: [mail](mailto:someone@example.com)
+- opted out: [skip](https://example.net/){.no-external}
