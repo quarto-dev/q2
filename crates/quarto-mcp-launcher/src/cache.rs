@@ -203,12 +203,29 @@ fn remove_bundle_dir(cache_root: &Path, path: &Path) {
         path.file_name().and_then(|n| n.to_str()).unwrap_or("x")
     );
     let trash = cache_root.join(nonce);
-    if fs::rename(path, &trash).is_ok() {
-        // The locked inode moved with the rename; safe to release and
-        // delete — no launcher can reach the dir at its canonical path
-        // anymore, and any holding the old path retries by design.
+    #[cfg(unix)]
+    {
+        if fs::rename(path, &trash).is_ok() {
+            // The locked inode moved with the rename; safe to release and
+            // delete — no launcher can reach the dir at its canonical path
+            // anymore, and any holding the old path retries by design.
+            drop(lock);
+            let _ = fs::remove_dir_all(&trash);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows refuses to rename a directory while any handle inside
+        // it is open (ERROR_ACCESS_DENIED) — including this probe lock,
+        // which would make the rename fail unconditionally. Drop it
+        // first: the rename then doubles as the in-use check, since it
+        // succeeds only when nothing in the dir is open, and every
+        // locker opens `.lock` inside the dir. A failed rename just
+        // skips the entry, exactly like a lost try-lock above.
         drop(lock);
-        let _ = fs::remove_dir_all(&trash);
+        if fs::rename(path, &trash).is_ok() {
+            let _ = fs::remove_dir_all(&trash);
+        }
     }
 }
 
