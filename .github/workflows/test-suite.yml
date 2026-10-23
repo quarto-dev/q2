@@ -299,6 +299,39 @@ jobs:
           # step built is reused rather than rebuilt.
           RUSTFLAGS: "-D warnings"
 
+  # Windows clippy-only leg (no tests): the same gate as the matrix job's
+  # "Clippy (deny warnings)" step, on windows-latest. Compile-only —
+  # --all-targets also compiles test code, which is where Unix-only APIs
+  # (std::os::unix, OsStringExt::from_vec, ...) and asymmetric #[cfg] gates
+  # hide; Linux/macOS clippy cannot see them (.claude/rules/cross-platform.md).
+  # Needs none of the matrix job's pandoc/typst/tree-sitter/node setup:
+  # verified green on a fresh Windows checkout. A full Windows test leg is
+  # deliberately out of scope here.
+  windows-clippy:
+    name: Clippy (Windows)
+    runs-on: windows-latest
+    if: github.repository == 'quarto-dev/q2'
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          # See the matrix job: don't clobber ~/.cargo/bin with stale proxies.
+          cache-bin: false
+          shared-key: "rust-test-suite"
+
+      - name: Clippy (deny warnings)
+        shell: bash
+        run: cargo clippy --workspace --all-targets --profile ci -- -D warnings
+        env:
+          RUSTFLAGS: "-D warnings"
+
   wasm-tests:
     name: WASM Tests
     runs-on: ubuntu-latest
