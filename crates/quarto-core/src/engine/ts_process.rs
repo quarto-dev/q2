@@ -1732,6 +1732,28 @@ mod mock {
         /// assumption in concurrent tests where id assignment order is
         /// non-deterministic.
         auto_echo_load_engine: bool,
+        /// Predicate-keyed auto-responders, consulted in registration order
+        /// (see `MockWriteHalf::auto_respond`).
+        responders: Vec<Responder>,
+    }
+
+    /// Answers every sent message its predicate matches, under the
+    /// message's real request id.
+    struct Responder {
+        matches: Box<dyn Fn(&ToEngine) -> bool + Send>,
+        /// Responses in delivery order; the last one repeats indefinitely.
+        responses: VecDeque<FromEngine>,
+        delay: Option<Duration>,
+    }
+
+    impl Responder {
+        fn next_response(&mut self) -> FromEngine {
+            if self.responses.len() > 1 {
+                self.responses.pop_front().unwrap()
+            } else {
+                self.responses[0].clone()
+            }
+        }
     }
 
     impl MockState {
@@ -1743,6 +1765,7 @@ mod mock {
                 eof: false,
                 malformed: VecDeque::new(),
                 auto_echo_load_engine: false,
+                responders: Vec::new(),
             }
         }
     }
@@ -1786,27 +1809,24 @@ mod mock {
                 return Ok(());
             }
 
+            // Auto-responders: answer under the frame's real id, so tests
+            // never have to infer ids from `sent` order (which can differ
+            // from id order when threads race between id allocation and
+            // `send()`).
+            if let Some(responder) = state
+                .responders
+                .iter_mut()
+                .find(|r| (r.matches)(&frame.msg))
+            {
+                let response_msg = responder.next_response();
+                let delay = responder.delay;
+                self.respond(state, id, response_msg, delay);
+                return Ok(());
+            }
+
             // Fulfil any scripted response for this id.
             if let Some((response_msg, delay)) = state.scripted.remove(&id) {
-                if let Some(d) = delay {
-                    let inner = Arc::clone(&self.inner);
-                    drop(state); // release lock before spawning
-                    std::thread::spawn(move || {
-                        std::thread::sleep(d);
-                        let mut s = inner.state.lock().unwrap();
-                        s.ready.push_back(Response {
-                            id,
-                            msg: response_msg,
-                        });
-                        inner.cvar.notify_one();
-                    });
-                } else {
-                    state.ready.push_back(Response {
-                        id,
-                        msg: response_msg,
-                    });
-                    self.inner.cvar.notify_one();
-                }
+                self.respond(state, id, response_msg, delay);
             }
             Ok(())
         }
@@ -1820,6 +1840,49 @@ mod mock {
     }
 
     impl MockWriteHalf {
+        /// Queue `msg` as the response to `id`, after `delay` if given.
+        fn respond(
+            &self,
+            mut state: std::sync::MutexGuard<'_, MockState>,
+            id: u64,
+            msg: FromEngine,
+            delay: Option<Duration>,
+        ) {
+            if let Some(d) = delay {
+                let inner = Arc::clone(&self.inner);
+                drop(state); // release lock before spawning
+                std::thread::spawn(move || {
+                    std::thread::sleep(d);
+                    let mut s = inner.state.lock().unwrap();
+                    s.ready.push_back(Response { id, msg });
+                    inner.cvar.notify_one();
+                });
+            } else {
+                state.ready.push_back(Response { id, msg });
+                self.inner.cvar.notify_one();
+            }
+        }
+
+        /// Answer every future message matching `matches` with the next of
+        /// `responses` (the last one repeats), after `delay` if given, under
+        /// that message's own request id. Use this instead of a polling
+        /// thread + `deliver_late` whenever the test cannot know ids up
+        /// front. Responders are consulted in registration order, after
+        /// auto-echo and before id-scripted responses.
+        pub fn auto_respond(
+            &self,
+            matches: impl Fn(&ToEngine) -> bool + Send + 'static,
+            responses: Vec<FromEngine>,
+            delay: Option<Duration>,
+        ) {
+            assert!(!responses.is_empty(), "auto_respond needs a response");
+            self.inner.state.lock().unwrap().responders.push(Responder {
+                matches: Box::new(matches),
+                responses: responses.into(),
+                delay,
+            });
+        }
+
         /// Enable auto-echo mode: any `LoadEngine` message is immediately
         /// answered with `Loaded { name: engine_path }`.  Use this in
         /// concurrent tests where id assignment order is non-deterministic
@@ -1912,6 +1975,12 @@ mod mock {
                 .iter()
                 .map(|(_, m)| m.clone())
                 .collect()
+        }
+
+        /// Return all `ToEngine` messages sent so far with their request ids,
+        /// in `send()` order (not necessarily id order under concurrency).
+        pub fn sent_requests(&self) -> Vec<(u64, ToEngine)> {
+            self.inner.state.lock().unwrap().sent.clone()
         }
     }
 
@@ -2035,6 +2104,60 @@ mod tests {
         });
         rx.recv_timeout(timeout)
             .expect("DEADLOCK DETECTED: test did not complete within timeout")
+    }
+
+    // -----------------------------------------------------------------------
+    // MockWriteHalf::auto_respond — the harness other tests rely on
+    // -----------------------------------------------------------------------
+    //
+    // Binds the contract the ts_engine race/poison tests depend on (bd-cig41dcs):
+    // a responder answers matching messages under their real ids, yields its
+    // responses in order and then repeats the last one, honours its delay,
+    // and leaves non-matching messages alone.
+    #[test]
+    fn test_mock_auto_respond_contract() {
+        watchdog(Duration::from_secs(10), || {
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let host = TsEngineHost::with_transport(write, read, make_host_global_config());
+            let delay = Duration::from_millis(30);
+            mock.auto_respond(
+                |m| matches!(m, ToEngine::LoadEngine { .. }),
+                vec![make_loaded_response("first"), make_loaded_response("rest")],
+                Some(delay),
+            );
+
+            let cancel = Cancellation::new();
+            let window = Some(Duration::from_secs(5));
+            let mut names = vec![];
+            for _ in 0..3 {
+                let start = Instant::now();
+                match host.request(make_load_engine_msg(), window, &cancel) {
+                    Ok(FromEngine::Loaded { discovery }) => names.push(discovery.name),
+                    other => panic!("unexpected result: {other:?}"),
+                }
+                assert!(start.elapsed() >= delay, "responder ignored its delay");
+            }
+            assert_eq!(names, ["first", "rest", "rest"]);
+
+            // A non-matching message is not answered by the responder.
+            let result = host.request(
+                ToEngine::MarkdownForFile {
+                    engine: "e".to_string(),
+                    file: "f.qmd".to_string(),
+                },
+                Some(Duration::from_millis(100)),
+                &cancel,
+            );
+            assert!(
+                matches!(result, Err(ExecutionError::Timeout { .. })),
+                "non-matching message must not be answered, got: {result:?}"
+            );
+
+            let ids: Vec<u64> = mock.sent_requests().iter().map(|(id, _)| *id).collect();
+            assert_eq!(ids[..4], [0, 1, 2, 3]);
+
+            mock.signal_eof();
+        });
     }
 
     // -----------------------------------------------------------------------

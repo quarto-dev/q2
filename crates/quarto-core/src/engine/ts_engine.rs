@@ -1483,30 +1483,17 @@ mod tests {
                 diag,
             ));
 
+            // Answer every LaunchEngine under its real id. The delay keeps the
+            // launch in flight long enough that a naive get/launch/set would
+            // let the second thread send its own LaunchEngine (the named
+            // revert above); an instant answer would hide that race.
+            mock.auto_respond(
+                |m| matches!(m, ToEngine::LaunchEngine { .. }),
+                vec![launched_response()],
+                Some(Duration::from_millis(50)),
+            );
+
             let barrier = Arc::new(Barrier::new(2));
-            let mock_clone = Arc::clone(&mock);
-
-            // Watcher: delivers response when it sees a LaunchEngine message.
-            let launch_watcher = std::thread::spawn(move || {
-                let mut delivered_ids = std::collections::HashSet::new();
-                for _ in 0..300 {
-                    std::thread::sleep(Duration::from_millis(10));
-                    let sent = mock_clone.sent_messages();
-                    for (i, msg) in sent.iter().enumerate() {
-                        if matches!(msg, ToEngine::LaunchEngine { .. })
-                            && !delivered_ids.contains(&i)
-                        {
-                            delivered_ids.insert(i);
-                            mock_clone.deliver_late(i as u64, launched_response());
-                        }
-                    }
-                    if !delivered_ids.is_empty() {
-                        break;
-                    }
-                }
-                delivered_ids.len()
-            });
-
             let engine1 = Arc::clone(&engine);
             let engine2 = Arc::clone(&engine);
             let barrier1 = Arc::clone(&barrier);
@@ -1525,9 +1512,8 @@ mod tests {
 
             let r1 = h1.join().unwrap();
             let r2 = h2.join().unwrap();
-            let _ = launch_watcher.join();
 
-            assert!(r1 || r2, "at least one ensure_launched must succeed");
+            assert!(r1 && r2, "both ensure_launched calls must succeed");
 
             let sent = mock.sent_messages();
             let launch_count = sent
@@ -1571,30 +1557,18 @@ mod tests {
                 diag,
             ));
 
-            let mock_clone = Arc::clone(&mock);
-            let deliver_thread = std::thread::spawn(move || {
-                let mut delivered = 0usize;
-                let responses = [
+            // Distinct payloads for the first and second LoadEngine, so a
+            // double send that is NOT converged by OnceLock would surface as
+            // the two threads observing different names. The delay widens
+            // the window in which both threads send.
+            mock.auto_respond(
+                |m| matches!(m, ToEngine::LoadEngine { .. }),
+                vec![
                     loaded_response("mockengine-v1", vec!["jl"]),
                     loaded_response("mockengine-v2", vec!["jl", "julia"]),
-                ];
-                for _ in 0..300 {
-                    std::thread::sleep(Duration::from_millis(5));
-                    let sent = mock_clone.sent_messages();
-                    let load_count = sent
-                        .iter()
-                        .filter(|m| matches!(m, ToEngine::LoadEngine { .. }))
-                        .count();
-                    while delivered < load_count && delivered < responses.len() {
-                        mock_clone.deliver_late(delivered as u64, responses[delivered].clone());
-                        delivered += 1;
-                    }
-                    if delivered >= 1 {
-                        break;
-                    }
-                }
-                delivered
-            });
+                ],
+                Some(Duration::from_millis(20)),
+            );
 
             let barrier = Arc::new(Barrier::new(2));
             let e1 = Arc::clone(&engine);
@@ -1615,7 +1589,6 @@ mod tests {
 
             let name1 = h1.join().unwrap();
             let name2 = h2.join().unwrap();
-            let _ = deliver_thread.join();
 
             // BINDING: both threads observe the SAME cached value.
             assert_eq!(
@@ -1694,32 +1667,22 @@ mod tests {
                 .filter(|m| matches!(m, ToEngine::LaunchEngine { .. }))
                 .count();
 
-            let mock2 = Arc::clone(&mock);
-            let deliver_relaunch = std::thread::spawn(move || {
-                for _ in 0..200 {
-                    std::thread::sleep(Duration::from_millis(10));
-                    let sent = mock2.sent_messages();
-                    let curr = sent
-                        .iter()
-                        .filter(|m| matches!(m, ToEngine::LaunchEngine { .. }))
-                        .count();
-                    if curr > prev_launch_count {
-                        let idx = sent.len() - 1;
-                        mock2.deliver_late(idx as u64, launched_response());
-                        mock2.deliver_late(
-                            idx as u64 + 1,
-                            FromEngine::ExecuteResult {
-                                result: crate::engine::ts_protocol::TsExecuteResult {
-                                    markdown: "# done".to_string(),
-                                    ..Default::default()
-                                },
-                            },
-                        );
-                        return curr;
-                    }
-                }
-                prev_launch_count
-            });
+            // Answer the relaunch and its Execute under their real ids.
+            mock.auto_respond(
+                |m| matches!(m, ToEngine::LaunchEngine { .. }),
+                vec![launched_response()],
+                None,
+            );
+            mock.auto_respond(
+                |m| matches!(m, ToEngine::Execute { .. }),
+                vec![FromEngine::ExecuteResult {
+                    result: TsExecuteResult {
+                        markdown: "# done".to_string(),
+                        ..Default::default()
+                    },
+                }],
+                None,
+            );
 
             let exec_ctx2 = ExecutionContext::new(
                 PathBuf::from("/tmp"),
@@ -1728,8 +1691,11 @@ mod tests {
                 "html",
             )
             .with_execute_timeout(Some(Duration::from_secs(5)));
-            let _result2 = engine.execute("# test2", &exec_ctx2);
-            let _ = deliver_relaunch.join();
+            let result2 = engine.execute("# test2", &exec_ctx2);
+            assert_eq!(
+                result2.expect("relaunched execute must succeed").markdown,
+                "# done"
+            );
 
             let sent = mock.sent_messages();
             let total_launches = sent
@@ -1849,32 +1815,22 @@ mod tests {
                 .filter(|m| matches!(m, ToEngine::LaunchEngine { .. }))
                 .count();
 
-            let mock2 = Arc::clone(&mock);
-            let deliver_relaunch = std::thread::spawn(move || {
-                for _ in 0..200 {
-                    std::thread::sleep(Duration::from_millis(10));
-                    let sent = mock2.sent_messages();
-                    let curr = sent
-                        .iter()
-                        .filter(|m| matches!(m, ToEngine::LaunchEngine { .. }))
-                        .count();
-                    if curr > prev_launch_count {
-                        let idx = sent.len() - 1;
-                        mock2.deliver_late(idx as u64, launched_response());
-                        mock2.deliver_late(
-                            idx as u64 + 1,
-                            FromEngine::ExecuteResult {
-                                result: TsExecuteResult {
-                                    markdown: "# done".to_string(),
-                                    ..Default::default()
-                                },
-                            },
-                        );
-                        return curr;
-                    }
-                }
-                prev_launch_count
-            });
+            // Answer the relaunch and its Execute under their real ids.
+            mock.auto_respond(
+                |m| matches!(m, ToEngine::LaunchEngine { .. }),
+                vec![launched_response()],
+                None,
+            );
+            mock.auto_respond(
+                |m| matches!(m, ToEngine::Execute { .. }),
+                vec![FromEngine::ExecuteResult {
+                    result: TsExecuteResult {
+                        markdown: "# done".to_string(),
+                        ..Default::default()
+                    },
+                }],
+                None,
+            );
 
             let exec_ctx2 = ExecutionContext::new(
                 PathBuf::from("/tmp"),
@@ -1883,8 +1839,11 @@ mod tests {
                 "html",
             )
             .with_execute_timeout(Some(Duration::from_secs(5)));
-            let _result2 = engine.execute("# test2", &exec_ctx2);
-            let _ = deliver_relaunch.join();
+            let result2 = engine.execute("# test2", &exec_ctx2);
+            assert_eq!(
+                result2.expect("relaunched execute must succeed").markdown,
+                "# done"
+            );
 
             let sent = mock.sent_messages();
             let total_launches = sent
