@@ -26,6 +26,14 @@ When gated code changes, update the comment that explains why the gate is needed
 - Use `std::path::Path`/`PathBuf`, never hardcode `/` or `\` separators
 - Don't assume case-sensitive filesystems (Windows is case-insensitive by default)
 
+## File handles and directory rename/delete
+
+On Windows, `fs::rename` of a **directory** fails with `ERROR_ACCESS_DENIED` while *any* handle is open inside it — including handles your own code holds (lock files, probe files), even though Rust opens files with delete-sharing. Unix allows the rename regardless (inode semantics), so code that holds a handle across a directory rename passes on Unix/macOS and fails only on Windows (bd-5tdzaf3t: a cache GC held its `.lock` probe across the trash-rename, which then failed unconditionally).
+
+- Never hold a handle into a directory across `fs::rename` of that directory. Drop probes/locks first; the rename then doubles as the in-use check, succeeding only when nothing inside the dir is open.
+- `remove_dir_all` is not affected: files open with Rust's share flags enter delete-pending state and disappear when the last handle closes.
+- A failed rename on Windows usually means "something has this dir open" — treat it as a skip signal, not a retryable error (retrying never helps when the handle is yours).
+
 ## Line endings
 
 - Don't assume `\n` — use `lines()` for iteration, or normalize when comparing output
