@@ -36,3 +36,16 @@ significantly.
 ## CI
 
 Windows is not currently in the CI matrix. All Windows testing is manual.
+
+Until a Windows leg exists, the pre-landing gate is a cross-check, which works
+from any OS because `cargo check`/`cargo clippy` do not link:
+
+```bash
+rustup target add x86_64-pc-windows-msvc   # once
+cargo clippy -p <crate> --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+```
+
+Run it for every crate you touch when your change uses `std::os::unix` /
+`std::os::windows`, adds `#[cfg(...)]` gates, or touches test helpers. The full
+rules and patterns are in `.claude/rules/cross-platform.md`; failure history:
+bd-j0pgiips, bd-lhi82470, bd-5tdzaf3t.

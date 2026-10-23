@@ -21,6 +21,22 @@ When the gated code uses no platform-specific API and only *running* it is platf
 
 When gated code changes, update the comment that explains why the gate is needed. A stale explanation can lead someone to widen or copy an unnecessary gate.
 
+## Verify before landing
+
+Windows is not in CI, so the person (or agent) writing platform-specific code is the only line of defense. `cargo check` and `cargo clippy` do not link, so you can type-check the Windows build from any OS without an MSVC toolchain:
+
+```bash
+rustup target add x86_64-pc-windows-msvc   # once
+cargo clippy -p <crate> --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+```
+
+`--all-targets` matters: the breakage is usually in tests (bd-j0pgiips, bd-lhi82470). This catches `std::os::unix` misuse (E0433/E0599) and, under `-D warnings`, cfg-gated dead code. Run it for every crate you touched; run the same command without `--target` for the host platform.
+
+Caveats:
+
+- Crates whose build scripts compile C for the target (e.g. `ring`, `v8`) may not cross-check from unix. If a crate you touched can't cross-check, say so in the PR so a Windows user can run the native check: `cargo clippy -p <crate> --all-targets -- -D warnings`.
+- Cross-checking proves compilation only. Runtime behavior (file locking, line endings, process signals) still needs a Windows run — flag tests that exercise those for manual verification.
+
 ## File paths
 
 - Use `std::path::Path`/`PathBuf`, never hardcode `/` or `\` separators
