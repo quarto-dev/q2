@@ -504,10 +504,26 @@ mod tests {
         );
     }
 
+    /// Building a non-UTF-8 `OsString` is platform-specific, so the
+    /// fixture is a `cfg` pair and the test itself stays portable
+    /// (`.claude/rules/cross-platform.md`; bd-j0pgiips).
+    #[cfg(unix)]
+    fn non_utf8_os_string() -> std::ffi::OsString {
+        use std::os::unix::ffi::OsStringExt;
+        std::ffi::OsString::from_vec(vec![0xff, 0xfe])
+    }
+
+    /// A lone surrogate is ill-formed UTF-16, so `to_str()` returns
+    /// `None` for it just as it does for non-UTF-8 bytes on unix.
+    #[cfg(windows)]
+    fn non_utf8_os_string() -> std::ffi::OsString {
+        use std::os::windows::ffi::OsStringExt;
+        std::ffi::OsString::from_wide(&[0xD800])
+    }
+
     #[test]
     fn q2_path_injection_skips_non_utf8_exe_paths() {
-        use std::os::unix::ffi::OsStringExt;
-        let weird = std::ffi::OsString::from_vec(vec![0xff, 0xfe]);
+        let weird = non_utf8_os_string();
         assert_eq!(q2_path_for_child(None, Some(PathBuf::from(weird))), None);
     }
 }
