@@ -306,8 +306,8 @@ Actions, by what they mean:
 `ws_connect` adds `outcome=allow` and fires once the upgrade has completed,
 before samod sees the socket — a refused upgrade emits nothing.
 `ws_disconnect` fires when the connection ends and adds `reason`: the samod
-`ConnFinishedReason` when a disconnect was observed, `stream_closed`
-otherwise. They replace the per-document "Document accessed" line removed
+`ConnFinishedReason` when a disconnect was observed, `repo_stopped` when the
+repo refused the socket, `stream_closed` otherwise. They replace the per-document "Document accessed" line removed
 in bd-jvag5d4w: samod 0.16's `SharePolicy` subscribes eagerly per (loaded
 doc, connected peer), so a policy-driven log attributed documents the user
 never opened; session boundaries are the honest granularity. Auth-disabled

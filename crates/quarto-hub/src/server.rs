@@ -30,7 +30,7 @@ use crate::storage::StorageManager;
 use crate::watch::{FileWatcher, WatchConfig, WatchEvent};
 
 /// Extract peer_id and storage_id as clean display strings from a `PeerInfo`.
-pub(crate) fn format_peer_info(info: &Option<samod::PeerInfo>) -> (String, String) {
+pub(crate) fn format_peer_info(info: Option<&samod::PeerInfo>) -> (String, String) {
     match info {
         Some(info) => (
             info.peer_id.to_string(),
@@ -1731,7 +1731,8 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, identity: Optio
     }
 
     // What the `ws_disconnect` event reports: the samod reason when a
-    // ClientDisconnected was observed, "stream_closed" otherwise.
+    // ClientDisconnected was observed, "repo_stopped" when the repo
+    // refused the socket, "stream_closed" otherwise.
     let mut disconnect_reason: Option<String> = None;
 
     // accept_axum returns immediately; the connection runs in the background.
@@ -1751,7 +1752,7 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, identity: Optio
                         peer_info,
                         connection_id: _,
                     } => {
-                        let (peer_id_str, storage_id) = format_peer_info(&Some(peer_info.clone()));
+                        let (peer_id_str, storage_id) = format_peer_info(Some(&peer_info));
 
                         debug!(
                             peer_id = peer_id_str,
@@ -1779,6 +1780,7 @@ async fn handle_websocket(socket: WebSocket, ctx: SharedContext, identity: Optio
         }
         Err(samod::Stopped) => {
             tracing::warn!("WebSocket rejected: repo is stopped");
+            disconnect_reason = Some("repo_stopped".to_string());
         }
     }
 
@@ -2859,7 +2861,7 @@ mod tests {
             storage_id: Some(samod::StorageId::from("store-xyz")),
         });
         assert_eq!(
-            format_peer_info(&info),
+            format_peer_info(info.as_ref()),
             ("peer-abc123".to_string(), "store-xyz".to_string())
         );
     }
@@ -2871,13 +2873,13 @@ mod tests {
             storage_id: None,
         });
         assert_eq!(
-            format_peer_info(&info),
+            format_peer_info(info.as_ref()),
             ("peer-abc123".to_string(), "-".to_string())
         );
     }
 
     #[test]
     fn format_peer_info_none() {
-        assert_eq!(format_peer_info(&None), ("-".to_string(), "-".to_string()));
+        assert_eq!(format_peer_info(None), ("-".to_string(), "-".to_string()));
     }
 }
