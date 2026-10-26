@@ -464,18 +464,15 @@ folded into the sections above and the work items below.
       --skip-hub-build --skip-hub-tests --skip-hub-mcp-tests
       --skip-shared-package-tests --skip-trace-viewer-build
       --skip-trace-viewer-tests --skip-q2-preview-spa-build --skip-css-lint
-      --skip-feature-sets`. npm legs are environmentally blocked (no
-      node_modules in the worktree, as in July); rust-tests and
-      feature-sets were run in Phase 4 with the single proven
-      worktree-nesting artifact. Ran: custom lints, clippy -D warnings,
-      fmt, workspace build -D warnings, claude-notes strict render
-      (1552/1552, this plan included), check-noop-rebuild, tree-sitter
-      grammars. One fix along the way: `cargo fmt` also reverted a stale
-      non-canonical import ordering in `lib.rs` left by an earlier
-      session's different-rustfmt run — the committed diff is only the
-      `mod access_policy;` deletion.)
+      --skip-feature-sets`. npm legs environmentally blocked (no node_modules
+      in the worktree, as in July); rust-tests/feature-sets covered in
+      Phase 4. Ran green: custom lints, clippy -D warnings, fmt, workspace
+      build -D warnings, claude-notes strict render (1552/1552, this plan
+      included), check-noop-rebuild, tree-sitter grammars. `cargo fmt` also
+      reverted a stale non-canonical import ordering in `lib.rs` left by an
+      earlier session's different-rustfmt run.)
 - [x] `cargo xtask lint`. (Ran as verify step 1 — pass.)
-- [ ] Commit on the worktree branch. Commit message must call out: the fork →
+- [x] Commit on the worktree branch. Commit message must call out: the fork →
       crates.io source switch (Cargo.lock `source` lines change), the
       `AnnouncePolicy` → `SharePolicy` upstream replacement, the
       `accept_axum` signature change, the inherited 0.15 protocol-hardening
@@ -484,6 +481,9 @@ folded into the sections above and the work items below.
       lines for unrequested docs), and the `ws_connect` / `ws_disconnect`
       audit events that replace it at session granularity. **Do not
       push without explicit approval.**
+      (Committed 2026-10-26 as **a1dcd1502** on
+      `braid/bd-jvag5d4w-rewire-hub-samod-access` — 14 files, +770/−330.
+      Not pushed; awaiting explicit approval.)
 
 ## Follow-ups (out of scope; file as strands)
 
