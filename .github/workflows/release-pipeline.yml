@@ -97,9 +97,10 @@
 #   can use `install.sh --from-source`.
 # - The linux legs still build with `--features vendored-openssl` so
 #   the binary has no runtime libssl dependency. openssl reaches q2
-#   only through our samod fork's tungstenite/native-tls wiring;
-#   bd-r7s13dfb tracks moving that to rustls, which would let this
-#   feature (and the openssl build entirely) go away.
+#   only through samod's tungstenite/native-tls wiring (the upstream
+#   crate's `tungstenite` feature); bd-r7s13dfb tracks moving that to
+#   rustls, which would let this feature (and the openssl build
+#   entirely) go away.
 #
 # Signing key: MINISIGN_SECRET_KEY repo secret; the public half is pinned
 # in install.sh (MINISIGN_PUBKEY) and README. The sign step verifies its

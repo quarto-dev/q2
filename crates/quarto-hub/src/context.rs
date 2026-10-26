@@ -2,19 +2,17 @@
 //!
 //! Contains the automerge repo and storage manager.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex as StdMutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 
 use automerge::{Automerge, ObjType, ROOT, transaction::Transactable};
 use axum::http::StatusCode;
 use axum_jwt_auth::JwtDecoder;
 use samod::storage::TokioFilesystemStorage;
-use samod::{AcceptorHandle, NeverAnnounce, PeerId, Repo};
+use samod::{AcceptorHandle, Repo, ShareConfig};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
-use crate::access_policy::AuditAccessPolicy;
 use crate::auth::{self, AuthConfig, AuthState, OidcClaims};
 use crate::discovery::ProjectFiles;
 use crate::error::Result;
@@ -198,6 +196,16 @@ impl Default for HubConfig {
     }
 }
 
+/// The hub's samod share policy (bd-jvag5d4w): read-write, but **never
+/// announce**. samod's default (`ShareConfig::read_write()`) announces every
+/// loaded document ID to every connected peer; the hub instead serves only
+/// the documents an authenticated peer actively requests. A named seam so
+/// the announce-off guard in the unit tests pins the security-critical
+/// value by its fields.
+pub(crate) fn hub_share_policy() -> ShareConfig {
+    ShareConfig::read_write().with_announce(false)
+}
+
 /// Shared context for the hub server.
 ///
 /// This is wrapped in `Arc` and shared across all request handlers.
@@ -260,15 +268,6 @@ pub struct HubContext {
     /// See [`HubConfig::disk_write_policy`]. Applied to every filesystem
     /// sync this context performs (initial, periodic, watcher-triggered).
     disk_write_policy: DiskWritePolicy,
-
-    /// Maps peer IDs to authenticated user emails.
-    /// Populated by handle_websocket when auth is enabled; read by the
-    /// AuditAccessPolicy for audit logging.
-    peer_emails: Arc<StdMutex<HashMap<PeerId, String>>>,
-
-    /// The access policy installed on the repo. Held so the WebSocket handler
-    /// can prune a peer's audit-dedup entries on disconnect via `forget_peer`.
-    audit_policy: AuditAccessPolicy,
 }
 
 impl HubContext {
@@ -336,13 +335,10 @@ impl HubContext {
         info!(automerge_dir = %automerge_dir.display(), "Initializing samod repo");
 
         let samod_storage = TokioFilesystemStorage::new(&automerge_dir);
-        let peer_emails = Arc::new(StdMutex::new(HashMap::new()));
-        let audit_policy = AuditAccessPolicy::new(peer_emails.clone());
 
         let builder = Repo::build_tokio()
             .with_storage(samod_storage)
-            .with_announce_policy(NeverAnnounce)
-            .with_access_policy(audit_policy.clone());
+            .with_share_policy(hub_share_policy());
 
         let repo = builder.load().await;
 
@@ -448,8 +444,6 @@ impl HubContext {
             revocations,
             register_root_ws,
             disk_write_policy,
-            peer_emails,
-            audit_policy,
         })
     }
 
@@ -571,17 +565,6 @@ impl HubContext {
     /// See [`HubConfig::register_root_ws`].
     pub fn register_root_ws(&self) -> bool {
         self.register_root_ws
-    }
-
-    /// Peer→email map for document access audit logging.
-    pub fn peer_emails(&self) -> &Arc<StdMutex<HashMap<PeerId, String>>> {
-        &self.peer_emails
-    }
-
-    /// Audit access policy, exposed so the WebSocket handler can prune a peer's
-    /// audit-dedup entries when it disconnects.
-    pub fn audit_policy(&self) -> &AuditAccessPolicy {
-        &self.audit_policy
     }
 
     /// Validate a **Google ID token** against JWKS and return its
@@ -1101,6 +1084,29 @@ async fn reconcile_files_with_index(
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    /// bd-jvag5d4w: the hub's samod share policy is security-critical. samod
+    /// 0.16's default (`ShareConfig::read_write()`) announces every document
+    /// ID to every connected peer; the hub must serve only what peers
+    /// actively request. Pin the value by its **fields**, not by equality
+    /// with the upstream constructor expression — comparing against
+    /// `ShareConfig::read_write().with_announce(false)` would track an
+    /// upstream semantic change instead of catching it.
+    #[test]
+    fn hub_share_policy_is_read_write_without_announce() {
+        use samod::ShareAccess;
+
+        let policy = hub_share_policy();
+        assert!(
+            matches!(policy.access, ShareAccess::ReadWrite),
+            "hub share policy must allow read-write access; got {:?}",
+            policy.access
+        );
+        assert!(
+            !policy.announce,
+            "hub share policy must not announce document IDs to peers"
+        );
+    }
 
     #[tokio::test]
     async fn test_hub_context_standalone_mode() {

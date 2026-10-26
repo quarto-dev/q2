@@ -299,6 +299,19 @@ Actions, by what they mean:
 | `auth_ok` / `auth_fail` | Per-request authentication decision. |
 | `login_mint` | A **new session family** was created. Carries `sub`, the new `sid`, and `endpoint=callback\|session` (which login path). |
 | `revoke_all_sessions` | Logout-everywhere: every prior session for `sub` is dead. |
+| `ws_connect` / `ws_disconnect` | An authenticated `/ws` sync session opened / closed. The per-session replacement for the removed per-document "Document accessed" line (bd-jvag5d4w). |
+
+`ws_connect` / `ws_disconnect` bracket a sync session on `/ws`. Both are
+**INFO** on the audit target and carry `credential_kind` and `sub`.
+`ws_connect` adds `outcome=allow` and fires once the upgrade has completed,
+before samod sees the socket — a refused upgrade emits nothing.
+`ws_disconnect` fires when the connection ends and adds `reason`: the samod
+`ConnFinishedReason` when a disconnect was observed, `stream_closed`
+otherwise. They replace the per-document "Document accessed" line removed
+in bd-jvag5d4w: samod 0.16's `SharePolicy` subscribes eagerly per (loaded
+doc, connected peer), so a policy-driven log attributed documents the user
+never opened; session boundaries are the honest granularity. Auth-disabled
+hubs (UDS mode) emit neither, matching `auth_ok`.
 
 `login_mint` is the one to join sessions against: `sid` is immutable
 across sliding re-issues, so it identifies a login for as long as that

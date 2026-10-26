@@ -13,10 +13,10 @@ name = "quarto_hub_provider"
 path = "src/lib.rs"
 
 [dependencies]
-# Automerge sync via the same samod fork the hub uses. Must match quarto-hub's
-# version/branch exactly, else samod (and its automerge) resolve to a second copy
-# and DocHandle types no longer unify across the crate boundary.
-samod = { version = "0.14.0", git = "https://github.com/quarto-dev/samod.git", branch = "access-policy", features = ["tokio", "tungstenite"] }
+# Automerge sync via the same crates.io samod the hub uses. Must match
+# quarto-hub's version exactly, else samod (and its automerge) resolve to a
+# second copy and DocHandle types no longer unify across the crate boundary.
+samod = { version = "0.16.0", features = ["tokio", "tungstenite"] }
 # Reused index-document model (file list, capture sidecar) for the join+list path.
 quarto-hub = { path = "../quarto-hub" }
 # Read file documents out of the VFS during materialization (must match the

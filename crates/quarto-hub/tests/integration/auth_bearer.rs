@@ -541,6 +541,104 @@ async fn audit_event_on_auth_ok() {
     assert_eq!(hit.fields.get("outcome").map(|s| s.as_str()), Some("allow"));
 }
 
+// ── Session-attribution audit events (bd-jvag5d4w) ────────────────
+//
+// The samod 0.16 SharePolicy rewire removes the per-document "Document
+// accessed" audit line: SharePolicy subscription is eager per (loaded
+// doc, connected peer), so a policy-driven log would attribute documents
+// the user never opened. Session-granularity events replace it —
+// `ws_connect` when the upgrade completes and `ws_disconnect` when the
+// connection ends. Plan:
+// claude-notes/plans/2026-10-26-samod-0-16-share-policy.md.
+
+/// Poll the captured tracing events until one matches `pred`, bounded by
+/// `timeout`. Unlike `auth_ok` (emitted synchronously during request
+/// handling), the ws events fire in the spawned upgrade task, so the
+/// 101 response can race the emission.
+async fn poll_for_event(
+    timeout: std::time::Duration,
+    pred: impl Fn(&crate::support::CapturedEvent) -> bool,
+) -> Option<crate::support::CapturedEvent> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if let Some(hit) = snapshot_events().into_iter().find(|e| pred(e)) {
+            return Some(hit);
+        }
+        if std::time::Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+#[tokio::test]
+async fn audit_event_on_ws_connect_and_disconnect() {
+    let (provider, hub) = shared_setup().await;
+    let sub = "audit-ws-connect-bearer";
+    let token = provider.sign(&ClaimsBuilder::from_provider(provider).sub(sub).to_value());
+
+    // Hold the response so the upgraded socket stays open.
+    let resp = hub.ws_upgrade().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(resp.status(), 101, "expected 101 Switching Protocols");
+
+    let connect = poll_for_event(std::time::Duration::from_secs(5), |e| {
+        e.fields.get("action").map(|s| s.as_str()) == Some("ws_connect")
+            && e.fields.get("sub").map(|s| s.as_str()) == Some(sub)
+    })
+    .await
+    .expect("expected ws_connect audit event for the upgraded bearer connection");
+    assert_eq!(
+        connect.fields.get("credential_kind").map(|s| s.as_str()),
+        Some("bearer")
+    );
+    assert_eq!(
+        connect.fields.get("outcome").map(|s| s.as_str()),
+        Some("allow")
+    );
+
+    // Dropping the response closes the socket; the hub must log the end
+    // of the session under the same subject.
+    drop(resp);
+    let disconnect = poll_for_event(std::time::Duration::from_secs(5), |e| {
+        e.fields.get("action").map(|s| s.as_str()) == Some("ws_disconnect")
+            && e.fields.get("sub").map(|s| s.as_str()) == Some(sub)
+    })
+    .await
+    .expect("expected ws_disconnect audit event after the socket closed");
+    assert!(
+        disconnect
+            .fields
+            .get("reason")
+            .is_some_and(|r| !r.is_empty()),
+        "ws_disconnect must carry a reason; got fields: {:?}",
+        disconnect.fields
+    );
+}
+
+#[tokio::test]
+async fn no_ws_connect_event_on_refused_upgrade() {
+    // Negative pin: a refused upgrade (banned sub → 403) must not emit
+    // `ws_connect` — the event fires only after authentication succeeds
+    // and the upgrade completes.
+    let (provider, hub, now) = revocation_setup().await;
+    let token = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("banned-bearer-sub")
+            .iat(now - 5)
+            .to_value(),
+    );
+    let resp = hub.ws_upgrade().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(resp.status(), 403, "banned sub must be refused");
+
+    assert!(
+        !snapshot_events().iter().any(|e| {
+            e.fields.get("action").map(|s| s.as_str()) == Some("ws_connect")
+                && e.fields.get("sub").map(|s| s.as_str()) == Some("banned-bearer-sub")
+        }),
+        "a refused upgrade must not leave a ws_connect audit event"
+    );
+}
+
 #[tokio::test]
 async fn audit_event_on_auth_fail() {
     // Three failure shapes, each with a distinct sub/correlation hook.

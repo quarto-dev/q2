@@ -10,7 +10,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use quarto_hub::index::IndexDocument;
-use samod::{BackoffConfig, DocumentId, NeverAnnounce, Repo};
+use samod::{BackoffConfig, DocumentId, Repo, ShareConfig};
 use tokio::net::TcpListener;
 
 async fn spawn_relay() -> (Repo, url::Url) {
@@ -20,7 +20,7 @@ async fn spawn_relay() -> (Repo, url::Url) {
 async fn spawn_relay_never_announce() -> (Repo, url::Url) {
     spawn_relay_with(
         Repo::build_tokio()
-            .with_announce_policy(NeverAnnounce)
+            .with_share_policy(ShareConfig::read_write().with_announce(false))
             .load()
             .await,
     )
@@ -104,7 +104,7 @@ async fn peer_b_syncs_a_doc_created_by_peer_a_through_the_relay() {
 async fn peer_b_syncs_through_a_never_announce_relay() {
     // The real servers (quarto-hub, sync.automerge.org) do NOT proactively
     // announce docs to a connecting peer. If peer B still can't sync A's doc
-    // here, we've pinned the provider's "0 file(s)" bug to a NeverAnnounce
+    // here, we've pinned the provider's "0 file(s)" bug to an announce-off
     // relay — B must actively request/pull, not wait to be announced to.
     let (_relay, url) = spawn_relay_never_announce().await;
 
@@ -133,5 +133,5 @@ async fn peer_b_syncs_through_a_never_announce_relay() {
         }
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
-    assert_eq!(last, 2, "peer B never synced through a NeverAnnounce relay");
+    assert_eq!(last, 2, "peer B never synced through an announce-off relay");
 }
