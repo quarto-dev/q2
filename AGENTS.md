@@ -422,7 +422,7 @@ The changelog is rendered in the About section of the hub-client UI.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
 - **CRITICAL**: For hub-client changes, passing tests alone is NOT sufficient. You must also verify that `npm run build:all` (from `hub-client/`) succeeds before claiming work is done. The production build (`tsc -b && vite build`) is stricter than `tsc --noEmit` and `vitest` — it uses project references mode and catches errors the other tools miss.
 - **CRITICAL**: For any CLI- or user-visible feature, passing tests alone is NOT sufficient. See **End-to-end verification before declaring success** below.
-- **Windows**: Windows is not in CI. When your change uses platform-specific APIs (`std::os::unix`/`std::os::windows`), adds `#[cfg(...)]` gates, or touches test helpers, cross-check before landing: `cargo clippy -p <crate> --all-targets --target x86_64-pc-windows-msvc -- -D warnings` (works from any OS; no linking). See `.claude/rules/cross-platform.md` and claude-notes/instructions/windows-dev.md.
+- **Windows**: Windows is not in CI. When your change uses platform-specific APIs (`std::os::unix`/`std::os::windows`), adds `#[cfg(...)]` gates, touches test helpers, or asserts on file paths or line endings in test output, cross-check before landing: `cargo clippy -p <crate> --all-targets --target x86_64-pc-windows-msvc -- -D warnings` (works from any OS; no linking). See `.claude/rules/cross-platform.md` and claude-notes/instructions/windows-dev.md.
 
 ## End-to-end verification before declaring success
 
