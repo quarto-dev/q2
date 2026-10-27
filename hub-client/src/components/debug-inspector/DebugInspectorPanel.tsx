@@ -72,6 +72,10 @@ function RefreshPane({
     }
   }, [get]);
   const [value, setValue] = useState<unknown>(read);
+  // Deliberate polling, not a missing subscription: the report getters
+  // read ad-hoc debug state with no change event to subscribe to, and
+  // this is a debug-only panel where a simple interval beats adding a
+  // notify surface to the inspected services. Do not "modernize".
   useEffect(() => {
     const t = setInterval(() => setValue(read()), intervalMs);
     return () => clearInterval(t);
@@ -96,6 +100,8 @@ function MessagesPane({ am }: { am: QuartoDebugAutomergeApi }) {
     }));
   }, [am]);
   const [entries, setEntries] = useState<MessageLogEntry[]>(read);
+  // Deliberate polling, as in RefreshPane: the tap's ring buffer has no
+  // subscription surface, and this debug-only pane does not justify one.
   useEffect(() => {
     const t = setInterval(() => setEntries(read()), 1000);
     return () => clearInterval(t);

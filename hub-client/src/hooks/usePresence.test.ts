@@ -26,6 +26,10 @@ import type { Doc } from '@automerge/automerge';
 // directly via `emitPresences` instead of going through the ephemeral-message
 // round trip.
 let presenceCallback: ((presences: PresenceState[]) => void) | null = null;
+// The store behind the mock's `getRemotePresences`; `emitPresences`
+// replaces it before firing the callback so a useSyncExternalStore
+// consumer re-reads the new array.
+let currentPresences: PresenceState[] = [];
 
 vi.mock('../services/presenceService', () => ({
   initPresence: vi.fn().mockResolvedValue(undefined),
@@ -34,9 +38,10 @@ vi.mock('../services/presenceService', () => ({
   updatePresence: vi.fn(),
   refreshIdentity: vi.fn().mockResolvedValue(undefined),
   getLocalPeerId: vi.fn(() => 'local-peer'),
+  getRemotePresences: () => currentPresences,
   onPresenceChange: vi.fn((cb: (presences: PresenceState[]) => void) => {
     presenceCallback = cb;
-    cb([]);
+    cb(currentPresences);
     return () => {
       presenceCallback = null;
     };
@@ -220,6 +225,7 @@ function makePresence(overrides: Partial<PresenceState>): PresenceState {
 
 function emitPresences(presences: PresenceState[]): void {
   act(() => {
+    currentPresences = presences;
     presenceCallback?.(presences);
   });
 }
@@ -243,6 +249,7 @@ function cursorOffset(
 describe('usePresence — remote cursor tracking across content edits', () => {
   beforeEach(() => {
     presenceCallback = null;
+    currentPresences = [];
     handleThrows = false;
     localDoc = A.from({ text: '' });
   });
@@ -386,6 +393,7 @@ describe('usePresence — remote cursor tracking across content edits', () => {
 describe('usePresence — Automerge-cursor race scenarios', () => {
   beforeEach(() => {
     presenceCallback = null;
+    currentPresences = [];
     handleThrows = false;
     localDoc = A.from({ text: '' });
   });

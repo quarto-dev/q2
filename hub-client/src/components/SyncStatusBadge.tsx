@@ -29,6 +29,8 @@ import { useEffect, useState } from 'react';
 import { getDocSyncActivity } from '@quarto/quarto-sync-client';
 import { getFileHandle, getIndexHandle, getConnectionInfo } from '@quarto/preview-runtime';
 import ConnectionStatusDialog from './ConnectionStatusDialog';
+import { useNow } from '../hooks/useNow';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { syncStatus as s } from '../strings';
 import './SyncStatusBadge.css';
 
@@ -79,20 +81,11 @@ export default function SyncStatusBadge({
   verbose = false,
   dotPosition = 'start',
 }: SyncStatusBadgeProps) {
-  const [now, setNow] = useState(() => Date.now());
+  // 1s clock for the relative-time text; connectivity as a real
+  // subscription (the `connected` check below reads it during render).
+  const now = useNow(1000);
+  const online = useOnlineStatus();
   const [showDialog, setShowDialog] = useState(false);
-
-  useEffect(() => {
-    const refresh = () => setNow(Date.now());
-    const intervalId = setInterval(refresh, 1000);
-    window.addEventListener('online', refresh);
-    window.addEventListener('offline', refresh);
-    return () => {
-      clearInterval(intervalId);
-      window.removeEventListener('online', refresh);
-      window.removeEventListener('offline', refresh);
-    };
-  }, []);
 
   // Resolve the watched doc on every tick; handles appear as the
   // project loads / files open.
@@ -119,7 +112,7 @@ export default function SyncStatusBadge({
 
   const connInfo = getConnectionInfo();
   const connected =
-    navigator.onLine &&
+    online &&
     connInfo?.wsReadyState === WS_OPEN &&
     (connInfo?.peers.length ?? 0) > 0;
 

@@ -12,7 +12,7 @@
  * operational transformation on the receiver.
  */
 
-import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useSyncExternalStore } from 'react';
 import type * as Monaco from 'monaco-editor';
 import { next as A } from '@automerge/automerge';
 import {
@@ -23,9 +23,13 @@ import {
   onPresenceChange,
   refreshIdentity,
   getLocalPeerId,
+  getRemotePresences,
   type PresenceState,
 } from '../services/presenceService';
 import { getFileHandle } from '@quarto/preview-runtime';
+
+/** Shared empty result for the disabled hook — one constant keeps the snapshot referentially stable. */
+const EMPTY_REMOTE_USERS: PresenceState[] = [];
 
 /**
  * Options for the usePresence hook.
@@ -138,8 +142,23 @@ export function usePresence(
 ): UsePresenceResult {
   const { enabled = true } = options;
 
-  // State for remote users
-  const [remoteUsers, setRemoteUsers] = useState<PresenceState[]>([]);
+  // Remote users, subscribed from the presence service. The service's
+  // memoized array makes this a proper external store; its visibility
+  // gate defers notifications while the tab is hidden exactly as the old
+  // setState-in-callback subscription did. When disabled, report nobody
+  // (the subscription is skipped and the snapshot is the shared empty).
+  const subscribePresences = useCallback(
+    (onStoreChange: () => void) => {
+      if (!enabled) return () => {};
+      return onPresenceChange(() => onStoreChange());
+    },
+    [enabled],
+  );
+  const getPresencesSnapshot = useCallback(
+    () => (enabled ? getRemotePresences() : EMPTY_REMOTE_USERS),
+    [enabled],
+  );
+  const remoteUsers = useSyncExternalStore(subscribePresences, getPresencesSnapshot);
 
   // State to track when editor is mounted
   const [editor, setEditor] = useState<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -180,17 +199,6 @@ export function usePresence(
     if (!enabled) return;
     setCurrentFile(currentFilePath);
   }, [currentFilePath, enabled]);
-
-  // Subscribe to presence changes
-  useEffect(() => {
-    if (!enabled) return;
-
-    const unsubscribe = onPresenceChange((presences) => {
-      setRemoteUsers(presences);
-    });
-
-    return unsubscribe;
-  }, [enabled]);
 
   // Bump modelVersion on every content change so the render effect
   // re-resolves Automerge cursors against the updated doc state. This

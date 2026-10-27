@@ -8,7 +8,7 @@
  * Refreshes once per second while open.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import {
   getDocSyncActivityWithPersisted,
@@ -21,6 +21,8 @@ import { getFileHandle, getIndexHandle, getConnectionInfo } from '@quarto/previe
 import type { Patch } from '@automerge/automerge-repo';
 import fastDiff from 'fast-diff';
 import ModalDialog from './ModalDialog';
+import { useNow } from '../hooks/useNow';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { dialogs } from '../strings';
 import './ConnectionStatusDialog.css';
 
@@ -211,25 +213,10 @@ export default function ConnectionStatusDialog({
   currentFilePath,
   onClose,
 }: ConnectionStatusDialogProps) {
-  const [now, setNow] = useState(() => Date.now());
-  const [liveBrowserOnline, setLiveBrowserOnline] = useState(() => navigator.onLine);
-
-  useEffect(() => {
-    const refresh = () => {
-      setNow(Date.now());
-      setLiveBrowserOnline(navigator.onLine);
-    };
-    const intervalId = setInterval(refresh, 1000);
-    window.addEventListener('online', refresh);
-    window.addEventListener('offline', refresh);
-    return () => {
-      clearInterval(intervalId);
-      window.removeEventListener('online', refresh);
-      window.removeEventListener('offline', refresh);
-    };
-  }, []);
-
-  const browserOnline = liveBrowserOnline;
+  // 1s clock for the relative-time cells; browser connectivity as a real
+  // subscription rather than the old poll-navigator.onLine-every-tick.
+  const now = useNow(1000);
+  const browserOnline = useOnlineStatus();
 
   // Resolve the two documents of interest; re-evaluated every tick
   // because handles appear as the project loads / files open.

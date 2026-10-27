@@ -315,10 +315,31 @@ export function getPresenceDebugSnapshot(): PresenceDebugSnapshot {
 }
 
 /**
+ * Memoized array view of `remotePresences`. `useSyncExternalStore`
+ * requires `getSnapshot` to return an identical reference until the data
+ * changes, and `Array.from(...)` per call cannot provide that. The version
+ * is bumped by `notifySubscribers` — the funnel every mutation goes
+ * through — including while the tab is hidden (the visibility gate defers
+ * subscriber callbacks, not data freshness).
+ */
+let presencesVersion = 0;
+let presencesCache: { version: number; presences: PresenceState[] } = {
+  version: -1,
+  presences: [],
+};
+
+/**
  * Get the current remote presences for the current file.
+ * Referentially stable between mutations; treat the result as read-only.
  */
 export function getRemotePresences(): PresenceState[] {
-  return Array.from(state.remotePresences.values());
+  if (presencesCache.version !== presencesVersion) {
+    presencesCache = {
+      version: presencesVersion,
+      presences: Array.from(state.remotePresences.values()),
+    };
+  }
+  return presencesCache.presences;
 }
 
 /**
@@ -507,6 +528,9 @@ function cleanupStalePresences(): void {
 }
 
 function notifySubscribers(): void {
+  // Data changed — invalidate the memoized `getRemotePresences` array even
+  // when the visibility gate below defers the subscriber callbacks.
+  presencesVersion++;
   // Visibility gate: while the tab is hidden, flag a pending notify and
   // coalesce to a single callback fire on visibilitychange → visible (or
   // window focus). Data stays fresh in `remotePresences` — only the
@@ -596,6 +620,8 @@ export function _resetForTesting(): void {
   state.focusHandler = null;
   state.pendingNotify = false;
   state.config = { ...DEFAULT_CONFIG };
+  presencesVersion = 0;
+  presencesCache = { version: -1, presences: [] };
 }
 
 /**

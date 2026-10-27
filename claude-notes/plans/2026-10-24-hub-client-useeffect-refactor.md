@@ -123,6 +123,54 @@ positive, `FileSidebar.tsx:280`, was dropped from Phase 1).
 
 ## Phase 2 — `useSyncExternalStore` conversions
 
+**Done 2026-10-27 (bd-06s9sufx).** Findings that shaped the landing:
+
+- The `branchService` prerequisite landed as a version counter plus per-path
+  snapshot cache (`getBranchSnapshot(path)`), covering `branches` and
+  `activeBranchId` in one object. Every mutation already funneled through
+  `notify()`, which now bumps the version; the cache also re-resolves when
+  the path\'s docId changes (a file handle can appear without any
+  branchService event, and must not pin the empty snapshot). The
+  push-model escape hatch was not needed.
+- `usePresence` needed the same memoization one layer down:
+  `getRemotePresences()` returned a fresh array per call, so the service
+  now memoizes it on a version bumped at the top of `notifySubscribers` —
+  before the visibility gate, so data freshness is not deferred even when
+  subscriber callbacks are. One intended semantic difference from the old
+  push model: an unrelated re-render while the tab is hidden now reads
+  fresh presence data rather than the last pushed array (fresher, never
+  staler). `enabled: false` keeps its old behavior via a shared
+  `EMPTY_REMOTE_USERS` snapshot.
+- `usePreference` converted directly: all preference values are primitives,
+  so `getPreference(key)` is a stable snapshot by value, and the writer\'s
+  local echo was redundant (`setPreference` dispatches synchronously).
+- `useNow(intervalMs)` is one shared ticking store per interval (interval
+  runs only while subscribed; clock refreshes on resubscribe so a remount
+  never reads a stale timestamp). `useOnlineStatus()` is the textbook
+  `navigator.onLine` + online/offline `useSyncExternalStore`. Both
+  `SyncStatusBadge` and `ConnectionStatusDialog` now use both hooks; the
+  badge\'s old immediate-refresh-on-online-event is approximated by the
+  connectivity flip re-rendering and the clock catching up within one
+  tick (≤ 1 s, imperceptible for "n minutes ago" text).
+- Characterization tests were pinned before touching each uncovered site:
+  `useDocBranches.test.tsx` and `ConnectionStatusDialog.test.tsx` (the
+  dialog had no coverage). A stale-cleanup memoization test was drafted
+  and dropped: existing `stale presence cleanup` tests already cover
+  expiry, and its interval predates `vi.useFakeTimers()` in the test.
+- Verification: `npm run test:ci` unit and integration legs green; the
+  WASM leg has 3 golden-parity failures (`pandocBook`, `pandocRequest`,
+  `smokeAll`) that reproduce identically on the clean tree — the
+  pre-existing announcement-string skew Phase 1 documented, unrelated to
+  this phase. **Root-caused 2026-10-27 on rebase:** the skew was a stale
+  local WASM build against post-announcement goldens; after `npm run
+  build:wasm` all three files pass, and the full `test:ci` on the rebased
+  stack is green (1720 unit + 225 integration + 434 WASM). `npm run
+  build` green; eslint clean on touched files (one pre-existing
+  `usePresence` ref-cleanup warning, unchanged). Not
+  browser-smoked: no browser session was run for this phase (refactor
+  with characterization tests; the badge/dialog render paths are covered
+  by `SyncStatusBadge.test.tsx` and the new dialog test).
+
 Only `useDocBranches` can actually tear under concurrent rendering: it bumps
 a version counter in the subscription callback and re-reads `branchService`
 during render. `usePreference` and `usePresence` instead push the data into
@@ -131,7 +179,7 @@ tearing; converting them is simplification, not a correctness fix, and they
 are safe to defer. Replace with `useSyncExternalStore`, following the
 existing in-repo template.
 
-- [ ] Prerequisite: `branchService` memoizes its snapshots (version counter
+- [x] Prerequisite: `branchService` memoizes its snapshots (version counter
   plus cached per-path snapshot) so `getSnapshot` returns a stable reference
   — `getBranches(path)` currently returns a fresh array per call, which
   `useSyncExternalStore` cannot tolerate. The snapshot must cover everything
@@ -142,14 +190,14 @@ existing in-repo template.
   `getBranches(path)` and `getActiveBranchId(path)`, with `subscribe`
   updating both — also eliminates tearing and has no snapshot-stability
   requirement.
-- [ ] `src/hooks/useDocBranches.ts:15` — replace
+- [x] `src/hooks/useDocBranches.ts:15` — replace
   `useEffect(() => subscribe(...), [])` + `setVersion` with
   `useSyncExternalStore`.
-- [ ] `src/hooks/usePreference.ts:40` — convert the custom-event
+- [x] `src/hooks/usePreference.ts:40` — convert the custom-event
   subscription (simplification, not a tear-fix; safe to defer or drop).
-- [ ] `src/hooks/usePresence.ts:185` — convert the `onPresenceChange`
+- [x] `src/hooks/usePresence.ts:185` — convert the `onPresenceChange`
   subscription (simplification, not a tear-fix; safe to defer or drop).
-- [ ] Add two shared hooks: `useNow(intervalMs)` (one ticking store on
+- [x] Add two shared hooks: `useNow(intervalMs)` (one ticking store on
   `useSyncExternalStore`) and `useOnlineStatus()` (`navigator.onLine` plus
   online/offline events — a textbook `useSyncExternalStore`). Replace the
   duplicated 1 s ticker + online/offline listener blocks in
@@ -158,7 +206,7 @@ existing in-repo template.
   connectivity during render (`SyncStatusBadge.tsx:122` reads
   `navigator.onLine` at render time, today freshened only by the ticker
   re-render; `useOnlineStatus()` turns that into a proper subscription).
-- [ ] `src/components/debug-inspector/DebugInspectorPanel.tsx:75` and `:99` —
+- [x] `src/components/debug-inspector/DebugInspectorPanel.tsx:75` and `:99` —
   document why polling is intentional in a debug-only panel (a code comment
   is enough); do not convert.
 

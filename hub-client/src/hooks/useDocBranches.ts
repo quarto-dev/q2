@@ -1,20 +1,28 @@
 /**
  * useDocBranches — minimal React binding for branchService.
- * Re-renders on service notifications; actions are called on the service
- * directly by the consumer (Editor.tsx). Prototype-simple by design.
+ * Subscribes via useSyncExternalStore over the service's memoized
+ * per-path snapshots; actions are called on the service directly by the
+ * consumer (Editor.tsx). Prototype-simple by design.
  */
 
-import { useEffect, useState } from 'react';
-import { getBranches, getActiveBranchId, subscribe, type BranchMeta } from '../services/branchService';
+import { useCallback, useSyncExternalStore } from 'react';
+import {
+  getBranchSnapshot,
+  subscribe,
+  type BranchSnapshot,
+} from '../services/branchService';
 
-export function useDocBranches(path: string | null): {
-  branches: BranchMeta[];
-  activeBranchId: string | null;
-} {
-  const [, setVersion] = useState(0);
-  useEffect(() => subscribe(() => setVersion((v) => v + 1)), []);
-  return {
-    branches: path ? getBranches(path) : [],
-    activeBranchId: path ? getActiveBranchId(path) : null,
-  };
+/** Shared empty result; one constant so the snapshot stays referentially stable. */
+const EMPTY_SNAPSHOT: BranchSnapshot = { branches: [], activeBranchId: null };
+
+export function useDocBranches(path: string | null): BranchSnapshot {
+  const subscribeFn = useCallback(
+    (onStoreChange: () => void) => subscribe(onStoreChange),
+    [],
+  );
+  const getSnapshot = useCallback(
+    () => (path ? getBranchSnapshot(path) : EMPTY_SNAPSHOT),
+    [path],
+  );
+  return useSyncExternalStore(subscribeFn, getSnapshot);
 }

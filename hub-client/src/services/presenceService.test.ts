@@ -809,4 +809,31 @@ describe('presenceService — visibility gating', () => {
 
     expect(cb).toHaveBeenCalledTimes(1);
   });
+
+  describe('getRemotePresences memoization (useSyncExternalStore backing)', () => {
+    it('returns the identical reference across reads without a mutation', () => {
+      const first = getRemotePresences();
+      expect(getRemotePresences()).toBe(first);
+    });
+
+    it('returns a new reference carrying the mutation after a message lands', () => {
+      const before = getRemotePresences();
+      deliver(presenceMsg('peer-1', 'Alice'));
+      const after = getRemotePresences();
+      expect(after).not.toBe(before);
+      expect(after.map((p) => p.peerId)).toEqual(['peer-1']);
+      // And the new reference is then stable again.
+      expect(getRemotePresences()).toBe(after);
+    });
+
+    it('a subscriber notification and a fresh read see the same array', () => {
+      let notified: PresenceState[] | null = null;
+      onPresenceChange((presences) => {
+        notified = presences;
+      });
+      deliver(presenceMsg('peer-1', 'Alice'));
+      expect(notified).not.toBeNull();
+      expect(getRemotePresences()).toBe(notified);
+    });
+  });
 });

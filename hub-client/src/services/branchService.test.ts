@@ -18,6 +18,7 @@ import { next as A } from '@automerge/automerge';
 import {
   getBranches,
   getActiveBranchId,
+  getBranchSnapshot,
   setActiveBranch,
   createBranch,
   getBranchText,
@@ -247,6 +248,64 @@ describe('branchService', () => {
         expect(decoded.author ?? null).toBeNull();
         expect(A.getAuthorForActor(doc, decoded.actor) ?? null).toBeNull();
       }
+    });
+  });
+
+  describe('getBranchSnapshot (useSyncExternalStore backing)', () => {
+    it('returns the identical reference across reads without a mutation', () => {
+      const first = getBranchSnapshot(PATH);
+      expect(getBranchSnapshot(PATH)).toBe(first);
+    });
+
+    it('returns a new reference carrying the mutation after createBranch', () => {
+      const before = getBranchSnapshot(PATH);
+      const meta = createBranch(PATH)!;
+      const after = getBranchSnapshot(PATH);
+      expect(after).not.toBe(before);
+      expect(after.branches).toEqual([meta]);
+      expect(after.activeBranchId).toBe(meta.id);
+    });
+
+    it('returns a new reference after setActiveBranch and deleteBranch', () => {
+      const meta = createBranch(PATH)!;
+      const created = getBranchSnapshot(PATH);
+
+      setActiveBranch(PATH, null);
+      const backOnMain = getBranchSnapshot(PATH);
+      expect(backOnMain).not.toBe(created);
+      expect(backOnMain.activeBranchId).toBeNull();
+
+      setActiveBranch(PATH, meta.id);
+      deleteBranch(PATH, meta.id);
+      const deleted = getBranchSnapshot(PATH);
+      expect(deleted.branches).toEqual([]);
+      expect(deleted.activeBranchId).toBeNull();
+    });
+
+    it('re-resolves when the path\'s docId appears without a notify', () => {
+      // The handle for a file arrives on the sync client's schedule, not
+      // branchService's: a snapshot taken while unresolved must not pin
+      // the empty result once the docId becomes resolvable.
+      _setHandleGetterForTesting(() => null);
+      const unresolved = getBranchSnapshot(PATH);
+      expect(unresolved.branches).toEqual([]);
+
+      _setHandleGetterForTesting((path: string) => (path === PATH ? handle : null));
+      createBranch(PATH, 'draft');
+      const resolved = getBranchSnapshot(PATH);
+      expect(resolved).not.toBe(unresolved);
+      expect(resolved.branches).toHaveLength(1);
+    });
+
+    it('keeps snapshots per path independent', () => {
+      const other = makeFakeHandle('other doc', 'doc-test-2');
+      _setHandleGetterForTesting((path: string) =>
+        path === PATH ? handle : path === 'other.qmd' ? other : null,
+      );
+      createBranch(PATH, 'draft');
+      expect(getBranchSnapshot(PATH).branches).toHaveLength(1);
+      expect(getBranchSnapshot('other.qmd').branches).toEqual([]);
+      expect(getBranchSnapshot('other.qmd').activeBranchId).toBeNull();
     });
   });
 });

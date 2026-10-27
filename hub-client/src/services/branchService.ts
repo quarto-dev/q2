@@ -77,6 +77,34 @@ let branchDocs = new Map<string, A.Doc<FileDocShape>>();
 let activeByPath = new Map<string, string | null>();
 let listeners = new Set<() => void>();
 
+/**
+ * Mutation counter backing the memoized per-path snapshots below. Every
+ * state change funnels through `notify()`, which bumps it.
+ */
+let version = 0;
+
+/**
+ * Everything a component reads about one path's branches at render time,
+ * as one referentially stable object — `useSyncExternalStore` requires
+ * `getSnapshot` to return the same reference until the data changes
+ * (`getBranches` alone returns a fresh array per call and cannot serve).
+ */
+export interface BranchSnapshot {
+  branches: BranchMeta[];
+  activeBranchId: string | null;
+}
+
+/**
+ * Per-path memoized snapshot. Recomputed when the version moved (any
+ * mutation) or when the path now resolves to a different docId (the file's
+ * handle appeared after the first read — resolveDocId can go null → real
+ * without a notify, since handle arrival is not a branchService event).
+ */
+const snapshotCache = new Map<
+  string,
+  { version: number; docId: string | null; snapshot: BranchSnapshot }
+>();
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 function indexKey(docId: string): string {
@@ -92,6 +120,7 @@ function memKey(docId: string, branchId: string): string {
 }
 
 function notify(): void {
+  version++;
   for (const listener of listeners) listener();
 }
 
@@ -181,6 +210,26 @@ export function getBranches(path: string): BranchMeta[] {
 
 export function getActiveBranchId(path: string): string | null {
   return activeByPath.get(path) ?? null;
+}
+
+/**
+ * Memoized `{ branches, activeBranchId }` for `path`, stable by reference
+ * until the next mutation (or until the path resolves to a different
+ * docId). This is the `getSnapshot` for `useSyncExternalStore` consumers
+ * (useDocBranches); the returned object must be treated as read-only.
+ */
+export function getBranchSnapshot(path: string): BranchSnapshot {
+  const docId = resolveDocId(path);
+  const cached = snapshotCache.get(path);
+  if (cached && cached.version === version && cached.docId === docId) {
+    return cached.snapshot;
+  }
+  const snapshot: BranchSnapshot = {
+    branches: docId ? readIndex(docId) : [],
+    activeBranchId: activeByPath.get(path) ?? null,
+  };
+  snapshotCache.set(path, { version, docId, snapshot });
+  return snapshot;
 }
 
 export function setActiveBranch(path: string, branchId: string | null): void {
@@ -312,6 +361,8 @@ export function _resetForTesting(opts?: { keepStorage?: boolean }): void {
   branchDocs = new Map();
   activeByPath = new Map();
   listeners = new Set();
+  version = 0;
+  snapshotCache.clear();
   handleGetter = defaultHandleGetter;
   authorGetter = defaultAuthorGetter;
   if (!opts?.keepStorage && typeof localStorage !== 'undefined') {
