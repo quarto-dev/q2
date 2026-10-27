@@ -4290,7 +4290,8 @@ mod tests {
         let err = apply_citeproc_filter(pandoc, ASTContext::new(), "typst", Path::new("/mem"), &rt)
             .expect_err("a missing bibliography must fail");
         let msg = err.to_string();
-        assert!(msg.contains("/mem/refs.bib"), "{msg}");
+        let expected = Path::new("/mem").join("refs.bib");
+        assert!(msg.contains(&expected.display().to_string()), "{msg}");
         assert!(!msg.contains("not supported on this platform"), "{msg}");
     }
 
@@ -4304,6 +4305,7 @@ mod tests {
         let err = apply_citeproc_filter(pandoc, ASTContext::new(), "typst", Path::new("/mem"), &rt)
             .expect_err("a missing CSL must fail");
         let msg = err.to_string();
-        assert!(msg.contains("/mem/absent.csl"), "{msg}");
+        let expected = Path::new("/mem").join("absent.csl");
+        assert!(msg.contains(&expected.display().to_string()), "{msg}");
     }
 }
