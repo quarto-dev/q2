@@ -41,6 +41,7 @@ Caveats:
 
 - Use `std::path::Path`/`PathBuf`, never hardcode `/` or `\` separators
 - Don't assume case-sensitive filesystems (Windows is case-insensitive by default)
+- A test that expects a path inside a message or output builds it the way the code does (`Path::new("/mem").join("refs.bib").display()`), never as a literal with `/`: `join` uses `\` on Windows. First decide which side is wrong: a path that leaves the process in a wire format (JSON, HTML, Lua, URLs) must use `/` (fix the product with `quarto_util::to_forward_slashes`); a native path in a local diagnostic is correct with `\` (fix the test). Lookups keyed by `PathBuf` are unaffected, since Windows compares `/` and `\` as equal separators (bd-f430dl78).
 
 ## File handles and directory rename/delete
 
