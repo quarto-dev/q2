@@ -194,6 +194,64 @@ can read the document metadata directly through `quarto.metadata.get("a.b")`
 and the `meta` global, in the same shapes. The [lmd page](lmd.qmd#reaching-for-metadata)
 describes both.
 
+## Publishing extra files: `meta.resources` {#publishing-extra-files}
+
+A document's `resources` list names files to copy into the output
+directory with it. A filter can add to that list in two ways, and
+both publish the file:
+
+``` lua
+function Meta(meta)
+  quarto.doc.add_resource("data/extra.csv")  -- relative to the document
+
+  local r = meta.resources or pandoc.List()  -- or edit the list itself
+  r:insert("data/more.csv")
+  meta.resources = r
+  return meta
+end
+```
+
+Removing an entry works only for entries Quarto added itself. Quarto
+puts every local file that a markdown link points at into
+`meta.resources`
+([Linked files are copied](../projects/paths.qmd#linked-files-are-copied)),
+and a filter can drop any of those. Entries the author declared under
+`resources:` in YAML are always published, even if a filter removes
+them, so a filter that rebuilds `meta` carelessly cannot unpublish
+them.
+
+Quarto adds the linked files *after* pre filters run, so only a
+**post** filter (`at: post-quarto` or later) sees them and can remove
+them:
+
+``` {.yaml filename="page.qmd"}
+filters:
+  - at: post-quarto
+    path: keep-big-files-out.lua
+```
+
+``` {.lua filename="keep-big-files-out.lua"}
+function Meta(meta)
+  local kept = pandoc.List()
+  for _, r in ipairs(meta.resources or {}) do
+    -- YAML entries arrive as Inlines, Quarto's as strings
+    if not pandoc.utils.stringify(r):match("%.zip$") then
+      kept:insert(r)
+    end
+  end
+  meta.resources = kept
+  return meta
+end
+```
+
+A pre filter can instead turn link discovery off for the whole
+document with `meta["resource-discovery"] = false`.
+
+For Word, PowerPoint and Typst output, post filters run inside Pandoc,
+after Quarto has already collected the document's resources, so they
+cannot remove entries. Use `resource-discovery: false` (in YAML, or
+from a pre filter) for those formats.
+
 ## Constructing configuration values: `quarto.config`
 
 The `quarto.config` table mirrors Quarto's YAML tag system, so a filter

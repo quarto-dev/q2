@@ -2621,6 +2621,12 @@ pub fn build_transform_pipeline(
     // `ProjectIndex` and `ResourceResolverContext`. Standalone
     // renders without a `ProjectIndex` are a no-op. See
     // `claude-notes/plans/2026-04-24-websites-phase-6.md`.
+    // bd-twfep08m: publish local files that body links point at, via
+    // `meta.resources`. Must precede `LinkRewriteTransform`, which
+    // page-relativizes the targets this reads source-relative.
+    pipeline.push(Box::new(
+        crate::transforms::LinkResourceDiscoveryTransform::new(runtime.clone()),
+    ));
     pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
     // Cross-chapter crossref resolution (book-projects P5). Must run
@@ -3107,6 +3113,10 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // `--section-divs` is an HTML-writer concern.
     ("sectionize", Bucket::B2),
     // --- B3: shared post-core services ------------------------------------
+    // Publishes local files that body links point at through
+    // `meta.resources` (bd-twfep08m). Format-agnostic like the resources
+    // channel itself, so a docx/typst render copies linked files too.
+    ("link-resource-discovery", Bucket::B3),
     ("link-rewrite", Bucket::B3),
     ("appendix-structure", Bucket::B3),
     // Cross-chapter crossref resolution (book-projects P5). A shared
@@ -6608,6 +6618,7 @@ mod tests {
                 "search-ui",
                 "page-nav-render",
                 "footer-render",
+                "link-resource-discovery",
                 "link-rewrite",
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
@@ -6705,6 +6716,7 @@ mod tests {
                 "search-ui",
                 "page-nav-render",
                 "reveal-footer-logo",
+                "link-resource-discovery",
                 "link-rewrite",
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
@@ -6856,6 +6868,7 @@ mod tests {
                 "image-alt-normalize",
                 "crossref-index",
                 "crossref-resolve",
+                "link-resource-discovery",
                 "link-rewrite",
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
@@ -7080,6 +7093,7 @@ mod tests {
                 "search-ui",
                 "page-nav-render",
                 "footer-render",
+                "link-resource-discovery",
                 "link-rewrite",
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",

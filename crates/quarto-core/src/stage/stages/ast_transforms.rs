@@ -260,6 +260,10 @@ impl PipelineStage for AstTransformsStage {
         // the outer renderer for the final sink flush. Move ownership
         // across the bridge in both directions, same as `artifacts`.
         render_ctx.resource_copies = std::mem::take(&mut ctx.resource_copies);
+        // bd-twfep08m: what link discovery added to `meta.resources`
+        // rides out to `ResourceReportStage`, both ways like
+        // `resource_copies` (a phase-bounded split moves it across).
+        render_ctx.discovered_resources = std::mem::take(&mut ctx.discovered_resources);
         // book-projects P5: the code-block decoration sideband moves
         // both ways, like `artifacts` — a book chapter's pause/resume
         // split puts `code-block-generate` (writer) and
@@ -292,6 +296,7 @@ impl PipelineStage for AstTransformsStage {
         // Transfer mutable state back to StageContext
         ctx.artifacts = render_ctx.artifacts;
         ctx.resource_copies = render_ctx.resource_copies;
+        ctx.discovered_resources = render_ctx.discovered_resources;
         ctx.includes = render_ctx.includes;
         ctx.ref_type_registry = render_ctx.ref_type_registry;
         ctx.crossref_index = render_ctx.crossref_index;
@@ -316,8 +321,14 @@ impl PipelineStage for AstTransformsStage {
             pampa::lua::register_read_sources(source_context, &read_sources);
         }
 
-        // Handle result
-        result.map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+        // Handle result. A transform that failed with a structured
+        // diagnostic (e.g. `Q-5-52` from link-resource-discovery) keeps
+        // it, and its SourceContext, so the span can point into
+        // `_quarto.yml` or a `_metadata.yml` as well as the document.
+        result.map_err(|e| match e {
+            crate::error::QuartoError::Parse(pe) => PipelineError::Structured(pe),
+            e => PipelineError::stage_error(self.name(), e.to_string()),
+        })?;
 
         trace_event!(ctx, EventLevel::Debug, "AST transforms complete");
 

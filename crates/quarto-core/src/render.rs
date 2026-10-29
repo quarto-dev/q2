@@ -341,6 +341,14 @@ pub struct RenderContext<'a> {
     /// the one validated sink — see bd-cfl67.
     pub resource_copies: Vec<ResourceCopyIntent>,
 
+    /// Paths [`crate::transforms::LinkResourceDiscoveryTransform`]
+    /// appended to `meta.resources`, as written there (doc-relative,
+    /// `/`-separated). `ResourceReportStage` uses the list to tell
+    /// auto-discovered entries from filter additions (bd-twfep08m).
+    /// Bridged to/from `StageContext::discovered_resources` by
+    /// `AstTransformsStage`.
+    pub discovered_resources: Vec<String>,
+
     /// The virtual files `pandoc.read` minted in Lua shortcode handlers
     /// (GH #884). `AstTransformsStage` registers them in the document's
     /// source contexts once the transforms finish, so the spans of nodes a
@@ -616,6 +624,7 @@ impl<'a> RenderContext<'a> {
             user_grammar_provider: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),
             resource_copies: Vec::new(),
+            discovered_resources: Vec::new(),
             read_sources: Vec::new(),
             resolved_listings: Vec::new(),
             listings_resolved: false,

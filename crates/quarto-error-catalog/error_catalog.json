@@ -1826,6 +1826,13 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-51",
     "since_version": "99.9.9"
   },
+  "Q-5-52": {
+    "subsystem": "project",
+    "title": "Invalid `resource-discovery` Value",
+    "message_template": "`resource-discovery` must be `true` or `false`. Any other value stops the document from rendering, so that a typo cannot publish linked files the author meant to keep out.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-52",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
