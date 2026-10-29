@@ -879,6 +879,9 @@ export default function ReactPreview({
       try {
         const newQmd = incrementalWriteQmd(content, newAst);
         onContentRewrite(newQmd);
+        // Returned so the q2-debug iframe wrapper can tell which later
+        // render reflects this edit (its `renderedContent` equals this).
+        return newQmd;
       } catch (err) {
         console.error('Failed to write AST back to QMD:', err);
       }
