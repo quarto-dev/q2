@@ -21,7 +21,7 @@ import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import { PreviewErrorOverlay } from '@quarto/preview-renderer/overlays/PreviewErrorOverlay';
 import { usePreference } from '../../hooks/usePreference';
 import { useScrollSync } from '../../hooks/useScrollSync';
-import { perfNow, perfSegment } from '../../utils/perfCounters';
+import { perfNow, perfSegment, perfMark } from '../../utils/perfCounters';
 import type { Q2PreviewIframeHandle } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import ReactRenderer from './ReactRenderer';
 
@@ -715,7 +715,13 @@ export default function ReactPreview({
       attributionJson: attributionPayload,
       captureGzJson: captureBytes,
     });
-    if (qmdContent !== lastContentRef.current) return;
+    if (qmdContent !== lastContentRef.current) {
+      // A newer edit superseded this render while it was in flight; drop
+      // the stale result (finding 2's second line of defense — the wasted
+      // work already happened, which `render.started/completed` counts).
+      perfMark('render.discarded-stale');
+      return;
+    }
 
     // Update diagnostics
     onDiagnosticsChange(result.diagnostics);

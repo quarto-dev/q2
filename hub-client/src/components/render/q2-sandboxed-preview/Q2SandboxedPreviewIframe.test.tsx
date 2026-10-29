@@ -317,6 +317,38 @@ describe('Q2SandboxedPreviewIframe', () => {
     });
   });
 
+  it('pins the exact UPDATE_AST payload key set (Phase 0 characterization, bd-k8ptcrd9)', async () => {
+    // The main-thread render-path plan's Phase 3 drops `assetManifest` from
+    // this payload; the exact key set is the contract it changes, so pin it.
+    const { iframe, postMessage } = renderIframe();
+    signalIframeReady(iframe);
+
+    await waitFor(() => {
+      const updateAst = postMessage.mock.calls.find(
+        ([msg]) => (msg as { type?: string }).type === 'UPDATE_AST',
+      );
+      expect(updateAst).toBeDefined();
+      const payload = (updateAst![0] as { payload: Record<string, unknown> }).payload;
+      expect(Object.keys(payload).sort()).toEqual(
+        [
+          'astJson',
+          'currentFilePath',
+          'assetManifest',
+          'projectFilePaths',
+          'pendingAnchor',
+          'pendingAnchorEpoch',
+          'renderedContent',
+          'untransformedAstJson',
+          'currentActor',
+          'commentsMode',
+          'unlockNestingCursor',
+          'richText',
+          'nestedEditBuffers',
+        ].sort(),
+      );
+    });
+  });
+
   it('ignores messages whose source is not the sandboxed iframe window', async () => {
     // Any window can postMessage the parent; only the embedded frame's
     // own contentWindow may drive this component. A forged SET_AST from

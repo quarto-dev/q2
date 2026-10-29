@@ -26,6 +26,7 @@ import type {
 import { discoverUserGrammars } from './userGrammar/Discovery';
 import { UserGrammarCache } from './userGrammar/Cache';
 import { loadUserGrammar } from './userGrammar/Highlight';
+import { perfNow, perfSegment, perfMark, perfExtra } from './perfCounters';
 
 // Response types from WASM module
 interface VfsResponse {
@@ -321,6 +322,23 @@ function getWasm() {
   return wasmModule;
 }
 
+/**
+ * Parse a WASM JSON-string response envelope, recording parse time and
+ * payload size under the `wasm-envelope.parse` gauge (finding 4 of the
+ * 2026-10-24 main-thread render-path plan: every WASM call pays a
+ * JSON-envelope tax). Sizes are `String.length` (UTF-16 code units) —
+ * exact for ASCII payloads, proportionate otherwise.
+ */
+function parseEnvelope<T>(json: string): T {
+  const t0 = perfNow();
+  try {
+    return JSON.parse(json) as T;
+  } finally {
+    perfSegment('wasm-envelope.parse', t0);
+    perfExtra('wasm-envelope.parse', 'bytes', json.length);
+  }
+}
+
 // ============================================================================
 // VFS Operations
 // ============================================================================
@@ -330,7 +348,16 @@ function getWasm() {
  */
 export function vfsAddFile(path: string, content: string): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_add_file(path, content));
+  // Full document text crosses the JS→WASM boundary here on every
+  // keystroke (the render-path plan's "amplifier"); count, time and size
+  // it. `bytes` is String.length (UTF-16 code units).
+  const t0 = perfNow();
+  try {
+    return parseEnvelope(wasm.vfs_add_file(path, content));
+  } finally {
+    perfSegment('vfs.write', t0);
+    perfExtra('vfs.write', 'bytes', content.length);
+  }
 }
 
 /**
@@ -338,7 +365,13 @@ export function vfsAddFile(path: string, content: string): VfsResponse {
  */
 export function vfsAddBinaryFile(path: string, content: Uint8Array): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_add_binary_file(path, content));
+  const t0 = perfNow();
+  try {
+    return parseEnvelope(wasm.vfs_add_binary_file(path, content));
+  } finally {
+    perfSegment('vfs.write', t0);
+    perfExtra('vfs.write', 'bytes', content.byteLength);
+  }
 }
 
 /**
@@ -346,7 +379,7 @@ export function vfsAddBinaryFile(path: string, content: Uint8Array): VfsResponse
  */
 export function vfsRemoveFile(path: string): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_remove_file(path));
+  return parseEnvelope(wasm.vfs_remove_file(path));
 }
 
 /**
@@ -354,7 +387,7 @@ export function vfsRemoveFile(path: string): VfsResponse {
  */
 export function vfsListFiles(): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_list_files());
+  return parseEnvelope(wasm.vfs_list_files());
 }
 
 /**
@@ -362,7 +395,7 @@ export function vfsListFiles(): VfsResponse {
  */
 export function vfsClear(): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_clear());
+  return parseEnvelope(wasm.vfs_clear());
 }
 
 /**
@@ -370,7 +403,7 @@ export function vfsClear(): VfsResponse {
  */
 export function vfsReadFile(path: string): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_read_file(path));
+  return parseEnvelope(wasm.vfs_read_file(path));
 }
 
 /**
@@ -379,7 +412,7 @@ export function vfsReadFile(path: string): VfsResponse {
  */
 export function vfsReadBinaryFile(path: string): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_read_binary_file(path));
+  return parseEnvelope(wasm.vfs_read_binary_file(path));
 }
 
 // ============================================================================
@@ -396,7 +429,7 @@ export function vfsReadBinaryFile(path: string): VfsResponse {
  */
 export function setRuntimeMetadata(yaml: string): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_set_runtime_metadata(yaml));
+  return parseEnvelope(wasm.vfs_set_runtime_metadata(yaml));
 }
 
 /**
@@ -404,7 +437,7 @@ export function setRuntimeMetadata(yaml: string): VfsResponse {
  */
 export function getRuntimeMetadata(): VfsResponse {
   const wasm = getWasm();
-  return JSON.parse(wasm.vfs_get_runtime_metadata());
+  return parseEnvelope(wasm.vfs_get_runtime_metadata());
 }
 
 /**
@@ -512,7 +545,14 @@ export async function renderQmd(
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(await wasm.render_qmd(path, userGrammars));
+  perfMark('render.started');
+  const t0 = perfNow();
+  try {
+    return parseEnvelope(await wasm.render_qmd(path, userGrammars));
+  } finally {
+    perfSegment('render.wasm-call', t0);
+    perfMark('render.completed');
+  }
 }
 
 /**
@@ -531,7 +571,14 @@ export async function renderPrintable(
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(await wasm.render_printable(path, userGrammars));
+  perfMark('render.started');
+  const t0 = perfNow();
+  try {
+    return parseEnvelope(await wasm.render_printable(path, userGrammars));
+  } finally {
+    perfSegment('render.wasm-call', t0);
+    perfMark('render.completed');
+  }
 }
 
 /**
@@ -607,15 +654,22 @@ export async function renderPageInProjectWithAttribution(
   preferPreviewFormat?: boolean,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(
-    await wasm.render_page_in_project_with_attribution(
-      path,
-      userGrammars,
-      attributionJson ?? undefined,
-      captureGzJson,
-      preferPreviewFormat,
-    ),
-  );
+  perfMark('render.started');
+  const t0 = perfNow();
+  try {
+    return parseEnvelope(
+      await wasm.render_page_in_project_with_attribution(
+        path,
+        userGrammars,
+        attributionJson ?? undefined,
+        captureGzJson,
+        preferPreviewFormat,
+      ),
+    );
+  } finally {
+    perfSegment('render.wasm-call', t0);
+    perfMark('render.completed');
+  }
 }
 
 /**
@@ -647,9 +701,16 @@ export async function renderPageForPreview(
   options?: RenderPageForPreviewOptions,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(
-    await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
-  );
+  perfMark('render.started');
+  const t0 = perfNow();
+  try {
+    return parseEnvelope(
+      await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
+    );
+  } finally {
+    perfSegment('render.wasm-call', t0);
+    perfMark('render.completed');
+  }
 }
 
 // ---- pandoc-wasm epic (R2): the request exports --------------------------
@@ -761,14 +822,14 @@ export function classifyPandocCompletion(
   stderr: string,
   jsonPath: string,
 ): { success: boolean; diagnostics: AstDiagnostic[] } {
-  return JSON.parse(
+  return parseEnvelope(
     getWasm().classify_pandoc_completion(stageName, success, status, stderr, jsonPath),
   );
 }
 
 /** The formats pandoc.wasm can produce, in menu order. */
 export function getPandocFormats(): PandocFormatInfo[] {
-  return JSON.parse(getWasm().get_pandoc_formats()).formats;
+  return parseEnvelope<{ formats: PandocFormatInfo[] }>(getWasm().get_pandoc_formats()).formats;
 }
 
 // ============================================================================
@@ -781,7 +842,7 @@ export function getPandocFormats(): PandocFormatInfo[] {
 
 /** The importable formats (the picker's `accept` list, drop interception) and the source size cap. */
 export function getImportFormatTable(): ImportFormatTable {
-  return JSON.parse(getWasm().get_import_formats());
+  return parseEnvelope(getWasm().get_import_formats());
 }
 
 /**
@@ -790,7 +851,7 @@ export function getImportFormatTable(): ImportFormatTable {
  * only: no `request`. `size` is the length of the bytes actually read.
  */
 export function prepareImport(fileName: string, size: number, sha256Hex: string): PrepareImportResponse {
-  return JSON.parse(getWasm().prepare_import(fileName, size, sha256Hex));
+  return parseEnvelope(getWasm().prepare_import(fileName, size, sha256Hex));
 }
 
 /**
@@ -805,7 +866,7 @@ export function finishImport(
   mediaManifestJson: string,
   format?: string,
 ): FinishImportResponse {
-  return JSON.parse(getWasm().finish_import(jsonText, stderr, targetQmdPath, mediaManifestJson, format));
+  return parseEnvelope(getWasm().finish_import(jsonText, stderr, targetQmdPath, mediaManifestJson, format));
 }
 
 /** Turn a failed import run (`kind`: the host's failure kind) into Q-24 diagnostics. */
@@ -814,7 +875,7 @@ export function classifyImportFailure(
   status: number | null,
   stderr: string,
 ): ClassifyImportFailureResponse {
-  return JSON.parse(getWasm().classify_import_failure(kind, status, stderr));
+  return parseEnvelope(getWasm().classify_import_failure(kind, status, stderr));
 }
 
 /** Options of {@link resolvePandocFormats}. */
@@ -836,7 +897,7 @@ export interface ResolvePandocFormatsOptions {
  * document's own format; `formats` lists every declared key.
  */
 export function resolvePandocFormats(path: string, options?: ResolvePandocFormatsOptions): ResolvePandocFormatsResponse {
-  return JSON.parse(getWasm().resolve_pandoc_formats(path, options));
+  return parseEnvelope(getWasm().resolve_pandoc_formats(path, options));
 }
 
 /**
@@ -849,9 +910,16 @@ export async function renderQmdContent(
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(
-    await wasm.render_qmd_content(content, templateBundle, userGrammars),
-  );
+  perfMark('render.started');
+  const t0 = perfNow();
+  try {
+    return parseEnvelope(
+      await wasm.render_qmd_content(content, templateBundle, userGrammars),
+    );
+  } finally {
+    perfSegment('render.wasm-call', t0);
+    perfMark('render.completed');
+  }
 }
 
 
@@ -955,12 +1023,16 @@ export async function parseQmdToAstWithAttribution(
   try {
     await initWasm();
     const wasm = getWasm();
+    // Finding 1: PreviewRouter calls this per keystroke only to read
+    // `success`; the AST is serialized, shipped, parsed and discarded.
+    const pT0 = perfNow();
     const responseJson = await wasm.parse_qmd_to_ast_with_attribution(
       qmdContent,
       attributionJson ?? undefined,
     );
+    perfSegment('parse.qmd-to-ast', pT0);
 
-    const response: ParseResult = JSON.parse(responseJson);
+    const response: ParseResult = parseEnvelope(responseJson);
 
     if (response.success) {
       return {
@@ -1014,7 +1086,7 @@ export async function writeQmd(astJson: string): Promise<WriteQmdResult> {
     const responseJson = await wasm.write_qmd(astJson);
 
     // The response reuses AstResponse structure, but with "qmd" in the "ast" field
-    const response: { success: boolean; ast?: string; error?: string } = JSON.parse(responseJson);
+    const response: { success: boolean; ast?: string; error?: string } = parseEnvelope(responseJson);
 
     if (response.success) {
       return {
@@ -1045,7 +1117,7 @@ export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): s
 
   const newAstJson = JSON.stringify(newAst)
   const responseJson = wasmModule.incremental_write_qmd(originalQmd, newAstJson)
-  const response: AstResponse = JSON.parse(responseJson)
+  const response: AstResponse = parseEnvelope(responseJson)
 
   if (!response.success || !response.qmd) {
     throw new Error(`Incremental write failed: ${response.error}`)
@@ -1077,7 +1149,7 @@ export function parseQmdContentSync(qmdText: string): AstResponse {
   if (!wasmModule) {
     throw new Error('WASM not initialized. Call initWasm() first.')
   }
-  return JSON.parse(wasmModule.parse_qmd_content(qmdText)) as AstResponse
+  return parseEnvelope(wasmModule.parse_qmd_content(qmdText)) as AstResponse
 }
 
 export function applyNodeEdit(
@@ -1096,7 +1168,7 @@ export function applyNodeEdit(
     destinationSourceInfoJson,
     modifiedSubtreeJson,
   )
-  const response: AstResponse = JSON.parse(responseJson)
+  const response: AstResponse = parseEnvelope(responseJson)
 
   if (!response.success || !response.qmd) {
     throw new Error(`apply_node_edit failed: ${response.error}`)
@@ -1123,7 +1195,7 @@ export function regenerateNestedBuffers(
     throw new Error('WASM not initialized. Call initWasm() first.')
   }
   try {
-    return JSON.parse(
+    return parseEnvelope(
       wasmModule.regenerate_nested_buffers(content, untransformedAstJson),
     ) as Record<string, string>
   } catch {
@@ -1168,7 +1240,7 @@ export async function convert(
     const responseJson = await wasm.convert(document, inputFormat, outputFormat);
 
     // The response reuses AstResponse structure, but with output in the "ast" field
-    const response: { success: boolean; ast?: string; error?: string } = JSON.parse(responseJson);
+    const response: { success: boolean; ast?: string; error?: string } = parseEnvelope(responseJson);
 
     if (response.success) {
       return {
@@ -1375,7 +1447,7 @@ export interface CreateProjectResponse {
 export async function getProjectChoices(): Promise<ProjectChoice[]> {
   await initWasm();
   const wasm = getWasm();
-  const response: ProjectChoicesResponse = JSON.parse(wasm.get_project_choices());
+  const response: ProjectChoicesResponse = parseEnvelope(wasm.get_project_choices());
   return response.choices;
 }
 
@@ -1386,7 +1458,7 @@ export async function getProjectChoices(): Promise<ProjectChoice[]> {
 export async function getProjectChoiceGroups(): Promise<ProjectChoiceGroup[]> {
   await initWasm();
   const wasm = getWasm();
-  const response: ProjectChoicesResponse = JSON.parse(wasm.get_project_choices());
+  const response: ProjectChoicesResponse = parseEnvelope(wasm.get_project_choices());
   return response.groups ?? [];
 }
 
@@ -1400,7 +1472,7 @@ export async function getProjectChoiceGroups(): Promise<ProjectChoiceGroup[]> {
 export async function createProject(choiceId: string, title: string): Promise<CreateProjectResponse> {
   await initWasm();
   const wasm = getWasm();
-  return JSON.parse(await wasm.create_project(choiceId, title));
+  return parseEnvelope(await wasm.create_project(choiceId, title));
 }
 
 /**
