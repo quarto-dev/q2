@@ -67,6 +67,10 @@ function sink(): PerfSink {
   return s;
 }
 
+// Cache the sink once: the disabled fast path reads this object's fields
+// directly (one property read) instead of re-resolving globalThis per call.
+const S = sink();
+
 // `process` is not declared by every consumer's tsconfig; reach it
 // through globalThis so Node drivers and browsers both compile and run.
 const nodeProcess = (
@@ -106,9 +110,9 @@ function readEnabledFlag(): boolean {
 
 let enabled = readEnabledFlag();
 
-/** Whether perf recording is on. Cheap: one cached boolean + one sink read. */
+/** Whether perf recording is on. One property read on the cached sink. */
 export function perfEnabled(): boolean {
-  return sink().override ?? enabled;
+  return S.override ?? enabled;
 }
 
 /**
@@ -116,15 +120,14 @@ export function perfEnabled(): boolean {
  * the result straight to {@link perfSegment} without branching.
  */
 export function perfNow(): number {
-  return perfEnabled() ? performance.now() : 0;
+  return S.override ?? enabled ? performance.now() : 0;
 }
 
 function gauge(name: string): Gauge {
-  const s = sink();
-  let g = s.gauges.get(name);
+  let g = S.gauges.get(name);
   if (!g) {
     g = { runs: 0, totalMs: 0, maxMs: 0, extras: new Map() };
-    s.gauges.set(name, g);
+    S.gauges.set(name, g);
   }
   return g;
 }
@@ -175,14 +178,14 @@ function formatGauge(name: string, g: Gauge): string {
 
 /** Log all recorded gauges, sorted by name. Cumulative; does not reset. */
 export function perfDump(): void {
-  for (const [name, g] of [...sink().gauges.entries()].sort()) {
+  for (const [name, g] of [...S.gauges.entries()].sort()) {
     console.log(formatGauge(name, g));
   }
 }
 
 /** Clear all gauges. Exposed for drivers and tests. */
 export function perfReset(): void {
-  sink().gauges.clear();
+  S.gauges.clear();
 }
 
 /**
@@ -191,7 +194,7 @@ export function perfReset(): void {
  * the realm (the override lives on the shared sink).
  */
 export function setPerfOverrideForTests(value: boolean | null): void {
-  sink().override = value;
+  S.override = value;
   if (value === null) {
     enabled = readEnabledFlag();
   }
@@ -201,9 +204,8 @@ export function setPerfOverrideForTests(value: boolean | null): void {
 // most once per realm (guarded via the sink). Skipped in Node drivers
 // (they call perfDump themselves at checkpoints).
 {
-  const s = sink();
-  if (perfEnabled() && !enabledByNodeEnv && !s.intervalInstalled && typeof window !== 'undefined') {
-    s.intervalInstalled = true;
+  if (perfEnabled() && !enabledByNodeEnv && !S.intervalInstalled && typeof window !== 'undefined') {
+    S.intervalInstalled = true;
     window.setInterval(perfDump, 5000);
     (window as unknown as { quartoPerfDump: () => void }).quartoPerfDump = perfDump;
   }

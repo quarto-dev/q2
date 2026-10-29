@@ -206,6 +206,17 @@ wall. End-to-end A/B (same driver, pre-Phase-0 worktree vs instrumented
 checkout, profiling off, interleaved runs): old walls 5580.8–5675.5 ms,
 new 5575.8–5605.2 ms — identical within run-to-run spread.
 
+Follow-up (same day, PR review): the wrappers were restructured to an
+early-return fast path — disabled code is one `perfEnabled()` property
+read, then the exact pre-instrumentation shape (no `try/finally`, no
+gauge calls); the sink object is cached at module scope so
+`perfEnabled()` itself is a single property read. Re-measured: +0.005 µs
+on 21-B, +0.3 µs on 130-KB, and 16-MB/100-KB deltas lost in noise
+(wrapped measures *faster* than bare) — payload-scaled overhead
+eliminated, residual ≈ 5 ns per instrumented call. Both paths are pinned
+by `perfGauges.test.ts` (enabled records, disabled is identical-result
+and records nothing).
+
 ## Phase 1 — Latest-wins render coalescing (finding 2)
 
 Smallest change, largest perceived-latency win: stop executing renders

@@ -23,7 +23,7 @@ import type {
 } from '@quarto/preview-renderer/types/intelligence';
 import { initWasm, vfsAddFile } from '@quarto/preview-runtime';
 import { isSourceFile } from '@quarto/preview-renderer/types/project';
-import { perfNow, perfSegment, perfMark, perfExtra } from '../utils/perfCounters';
+import { perfEnabled, perfSegment, perfMark, perfExtra } from '../utils/perfCounters';
 
 // Re-export types for convenience
 export type { Symbol, Diagnostic, FoldingRange, DocumentAnalysis, SemanticToken } from '@quarto/preview-renderer/types/intelligence';
@@ -238,8 +238,11 @@ export async function getSemanticTokens(path: string): Promise<SemanticToken[]> 
 
   try {
     const wasm = await getWasm();
+    if (!perfEnabled()) {
+      return parseSemanticTokensResponse(wasm.lsp_get_semantic_tokens(path));
+    }
     perfMark('intelligence.semantic-tokens');
-    const t0 = perfNow();
+    const t0 = performance.now();
     const tokens = parseSemanticTokensResponse(wasm.lsp_get_semantic_tokens(path));
     perfSegment('intelligence.semantic-tokens.tokenize', t0);
     return tokens;
@@ -275,8 +278,14 @@ export async function getSemanticTokensForContent(
 
   try {
     const wasm = await getWasm();
+    if (!perfEnabled()) {
+      // Synchronous from here: align the VFS image to the model, then
+      // tokenise it in the same macrotask (see the enabled path below).
+      vfsAddFile(path, content);
+      return parseSemanticTokensResponse(wasm.lsp_get_semantic_tokens(path));
+    }
     perfMark('intelligence.semantic-tokens');
-    const t0 = perfNow();
+    const t0 = performance.now();
     // Synchronous from here: align the VFS image to the model, then tokenise it
     // in the same macrotask so nothing can re-drift the two in between.
     vfsAddFile(path, content);
@@ -293,7 +302,15 @@ export async function getSemanticTokensForContent(
 function parseSemanticTokensResponse(json: string): SemanticToken[] {
   // Finding 5's envelope tax on the token path folds into the shared
   // `wasm-envelope.parse` gauge. `bytes` is String.length (UTF-16 units).
-  const t0 = perfNow();
+  if (!perfEnabled()) {
+    const result: LspSemanticTokensResponse = JSON.parse(json);
+    if (result.success) {
+      return result.tokens ?? [];
+    }
+    console.warn('Failed to get semantic tokens:', result.error);
+    return [];
+  }
+  const t0 = performance.now();
   const result: LspSemanticTokensResponse = JSON.parse(json);
   perfSegment('wasm-envelope.parse', t0);
   perfExtra('wasm-envelope.parse', 'bytes', json.length);

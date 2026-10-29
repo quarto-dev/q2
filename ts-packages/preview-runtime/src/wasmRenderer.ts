@@ -26,7 +26,7 @@ import type {
 import { discoverUserGrammars } from './userGrammar/Discovery';
 import { UserGrammarCache } from './userGrammar/Cache';
 import { loadUserGrammar } from './userGrammar/Highlight';
-import { perfNow, perfSegment, perfMark, perfExtra } from './perfCounters';
+import { perfEnabled, perfNow, perfSegment, perfMark, perfExtra } from './perfCounters';
 
 // Response types from WASM module
 interface VfsResponse {
@@ -340,9 +340,16 @@ function getWasm() {
  * 2026-10-24 main-thread render-path plan: every WASM call pays a
  * JSON-envelope tax). Sizes are `String.length` (UTF-16 code units) —
  * exact for ASCII payloads, proportionate otherwise.
+ *
+ * The disabled path is an early return with the exact pre-instrumentation
+ * shape — one flag read, no try/finally — so the gauges are free when
+ * off (see the plan's disabled-overhead verification).
  */
 function parseEnvelope<T>(json: string): T {
-  const t0 = perfNow();
+  if (!perfEnabled()) {
+    return JSON.parse(json) as T;
+  }
+  const t0 = performance.now();
   try {
     return JSON.parse(json) as T;
   } finally {
@@ -363,7 +370,10 @@ export function vfsAddFile(path: string, content: string): VfsResponse {
   // Full document text crosses the JS→WASM boundary here on every
   // keystroke (the render-path plan's "amplifier"); count, time and size
   // it. `bytes` is String.length (UTF-16 code units).
-  const t0 = perfNow();
+  if (!perfEnabled()) {
+    return JSON.parse(wasm.vfs_add_file(path, content));
+  }
+  const t0 = performance.now();
   try {
     return parseEnvelope(wasm.vfs_add_file(path, content));
   } finally {
@@ -377,7 +387,10 @@ export function vfsAddFile(path: string, content: string): VfsResponse {
  */
 export function vfsAddBinaryFile(path: string, content: Uint8Array): VfsResponse {
   const wasm = getWasm();
-  const t0 = perfNow();
+  if (!perfEnabled()) {
+    return JSON.parse(wasm.vfs_add_binary_file(path, content));
+  }
+  const t0 = performance.now();
   try {
     return parseEnvelope(wasm.vfs_add_binary_file(path, content));
   } finally {
@@ -557,8 +570,11 @@ export async function renderQmd(
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
+  if (!perfEnabled()) {
+    return JSON.parse(await wasm.render_qmd(path, userGrammars));
+  }
   perfMark('render.started');
-  const t0 = perfNow();
+  const t0 = performance.now();
   try {
     return parseEnvelope(await wasm.render_qmd(path, userGrammars));
   } finally {
@@ -583,8 +599,11 @@ export async function renderPrintable(
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
+  if (!perfEnabled()) {
+    return JSON.parse(await wasm.render_printable(path, userGrammars));
+  }
   perfMark('render.started');
-  const t0 = perfNow();
+  const t0 = performance.now();
   try {
     return parseEnvelope(await wasm.render_printable(path, userGrammars));
   } finally {
@@ -666,8 +685,19 @@ export async function renderPageInProjectWithAttribution(
   preferPreviewFormat?: boolean,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
+  if (!perfEnabled()) {
+    return JSON.parse(
+      await wasm.render_page_in_project_with_attribution(
+        path,
+        userGrammars,
+        attributionJson ?? undefined,
+        captureGzJson,
+        preferPreviewFormat,
+      ),
+    );
+  }
   perfMark('render.started');
-  const t0 = perfNow();
+  const t0 = performance.now();
   try {
     return parseEnvelope(
       await wasm.render_page_in_project_with_attribution(
@@ -713,8 +743,13 @@ export async function renderPageForPreview(
   options?: RenderPageForPreviewOptions,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
+  if (!perfEnabled()) {
+    return JSON.parse(
+      await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
+    );
+  }
   perfMark('render.started');
-  const t0 = perfNow();
+  const t0 = performance.now();
   try {
     return parseEnvelope(
       await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
@@ -922,8 +957,13 @@ export async function renderQmdContent(
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
+  if (!perfEnabled()) {
+    return JSON.parse(
+      await wasm.render_qmd_content(content, templateBundle, userGrammars),
+    );
+  }
   perfMark('render.started');
-  const t0 = perfNow();
+  const t0 = performance.now();
   try {
     return parseEnvelope(
       await wasm.render_qmd_content(content, templateBundle, userGrammars),
@@ -1042,7 +1082,7 @@ export async function parseQmdToAstWithAttribution(
       qmdContent,
       attributionJson ?? undefined,
     );
-    perfSegment('parse.qmd-to-ast', pT0);
+    if (pT0) perfSegment('parse.qmd-to-ast', pT0);
 
     const response: ParseResult = parseEnvelope(responseJson);
 
