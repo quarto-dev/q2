@@ -69,6 +69,7 @@ pub mod regenerate_nested_buffers_tests;
 pub mod table_caption_provenance;
 pub mod test;
 pub mod test_ansi_writer;
+pub mod test_apostrophe_after_word;
 pub mod test_attr_source_parsing;
 pub mod test_attr_source_structure;
 pub mod test_attribute_order_contexts;

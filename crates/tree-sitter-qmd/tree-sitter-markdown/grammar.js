@@ -301,7 +301,14 @@ module.exports = grammar({
         )),
         pandoc_horizontal_rule: $ => seq($._thematic_break, choice($._newline, $._eof)),
 
+        // `_paragraph_start` is a zero-width external token the scanner
+        // emits only when it has to commit the parser to a paragraph before
+        // it can emit the paragraph's first real token (GH #943: a first
+        // word with a trailing apostrophe, `Dogs' toys`; see
+        // parse_pipe_table_or_word_apostrophe in scanner.c). It is absent
+        // from every other paragraph.
         pandoc_paragraph: $ => seq(
+            optional($._paragraph_start),
             optional($._inline_whitespace),
             $._inlines, 
             choice($._newline, $._eof)
@@ -1308,6 +1315,19 @@ module.exports = grammar({
         // so `:::` no longer matches caption-start. Emission site: scanner.c,
         // EMIT_TOKEN(CAPTION_START) inside parse_fenced_div_marker.
         $._caption_start,
+
+        // Zero-width "this block is a paragraph, not a pipe table". At a
+        // block start the scanner must decide whether the line is a
+        // pipe-table header (a zero-width PIPE_TABLE_START at the line's
+        // first character) before it can hand the first word to the
+        // internal lexer, and tree-sitter cannot move a token's end back
+        // once the scanner has read past it. So when the first word ends
+        // in an apostrophe (GH #943, `Dogs' toys`), the scanner checks for
+        // a table, and if there is none emits this token so that the next
+        // scan call, now inside `pandoc_paragraph`, can emit the word as
+        // `_pandoc_literal_str`. Emission site: scanner.c,
+        // parse_pipe_table_or_word_apostrophe.
+        $._paragraph_start,
     ],
     precedences: $ => [],
     extras: $ => [],

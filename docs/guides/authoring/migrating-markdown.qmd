@@ -28,13 +28,13 @@ Any character that qmd uses for markup can be written literally by
 putting a backslash in front of it:
 
 ``` qmd
-costs \$5 and \$10; the engines\' state; see \_quarto.yml;
+costs \$5 and \$10; `a.rs`\'s module; see \_quarto.yml;
 N \* D; pass \{ a, b \}; a \[bracketed\] note; an \<anonymous\> tag
 ```
 
 renders as
 
-> costs \$5 and \$10; the engines\' state; see \_quarto.yml;
+> costs \$5 and \$10; `a.rs`\'s module; see \_quarto.yml;
 > N \* D; pass \{ a, b \}; a \[bracketed\] note; an \<anonymous\> tag
 
 The escape is never wrong: `\A` is always a literal `A`, so a
@@ -52,7 +52,6 @@ them point at the exact character to escape.
 | You wrote | Pandoc | q2 | Fix |
 |---|---|---|---|
 | `` `a.rs`'s `` (an apostrophe right after a code span, `_x_` or `**x**`) | apostrophe | Q-2-7, unclosed quote | `` `a.rs`\'s `` |
-| `the engines' state` (a plural possessive) | apostrophe | Q-2-10, close quote without an open | `engines\'` |
 | `_quarto.yml and _brand.yml` (a `_` at a word boundary) | literal | Q-2-5, unclosed emphasis | `\_quarto.yml` |
 | `Q-2-*` or `epub_*` (a `*` at the end of a word) | literal | Q-2-12, unclosed emphasis | `Q-2-\*` |
 | `$5 and $10`, `$ q2 render` (a `$` that is not inline math) | literal | parse error | `\$5`, or a code span |
@@ -86,10 +85,12 @@ document that was never rendered with q2 before.
 
 Word-internal underscores are fine: `snake_case_name` renders as
 written. So does a `*`, `_`, `~` or `^` with whitespace on both sides
-(`a * b * c`), a `~` before a number (`~16 files`), and a bare `@`
-that is not a citation (`` `main` @ `6bee9ebe` ``). Earlier versions
-of q2 rejected some of these; if an old document carries escapes for
-them, the escapes are harmless.
+(`a * b * c`), a `~` before a number (`~16 files`), a bare `@` that
+is not a citation (`` `main` @ `6bee9ebe` ``), and an apostrophe
+directly after a word, including a plural possessive (`the engines'
+state`, `the cats'.`). Earlier versions of q2 rejected some of these;
+if an old document carries escapes for them, the escapes are
+harmless.
 
 ## Warnings: the render continues, but check the output
 

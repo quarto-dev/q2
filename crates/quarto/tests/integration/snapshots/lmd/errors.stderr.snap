@@ -1,5 +1,6 @@
 ---
 source: crates/quarto/tests/integration/lmd_snapshots.rs
+assertion_line: 293
 expression: stderr
 ---
 Warning: [Q-26-1] Lua syntax error in an lmd cell
@@ -12,13 +13,13 @@ Warning: [Q-26-1] Lua syntax error in an lmd cell
 ℹ The cell is left as written and will not run.
 
 Error: [Q-2-10] Closed Quote Without Matching Open Quote
-    ╭─[ <dir>/errors.qmd:16:42 ]
+    ╭─[ <dir>/errors.qmd:16:43 ]
     │
- 16 │ return {=: This line mentions the groups' Unique IDs. :=}
-    │                                         ┬┬
-    │                                         ╰─── No opening quote was found before this mark. If you meant an apostrophe, escape it with a backslash.
-    │                                          │
-    │                                          ╰── A space is causing a quote mark to be interpreted as a quotation close.
+ 16 │ return {=: This line mentions the groups ' Unique IDs. :=}
+    │                                          ┬┬
+    │                                          ╰─── No opening quote was found before this mark. If you meant an apostrophe, escape it with a backslash.
+    │                                           │
+    │                                           ╰── A space is causing a quote mark to be interpreted as a quotation close.
 ────╯
 ℹ Inside an lmd markdown fragment; the cell is left as written and will not run.
 

@@ -1,3 +1,9 @@
+//! The `apostrophe-quotes` rule escapes a `'` that pampa reports as Q-2-10
+//! (a closing quote with no opener). Since GH #943 a `'` directly after a
+//! word (`a' b.`, `the cats' toys`) is an apostrophe and parses, so the
+//! fixtures here use a quote mark with whitespace on both sides, which is
+//! still Q-2-10.
+
 use qmd_syntax_helper::rule::RuleRegistry;
 use qmd_syntax_helper::utils::resources::ResourceManager;
 use std::fs;
@@ -29,7 +35,7 @@ fn test_detects_single_violation_plain_text() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    fs::write(&test_file, "a' b.\n").unwrap();
+    fs::write(&test_file, "a ' b.\n").unwrap();
 
     let registry = RuleRegistry::new().unwrap();
     let rule = registry.get("apostrophe-quotes").unwrap();
@@ -44,7 +50,7 @@ fn test_converts_single_violation_plain_text() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "a' b.\n";
+    let original = "a ' b.\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -55,7 +61,7 @@ fn test_converts_single_violation_plain_text() {
     assert_eq!(result.fixes_applied, 1);
 
     let converted = result.message.unwrap();
-    assert_eq!(converted, "a\\' b.\n", "Should escape the apostrophe");
+    assert_eq!(converted, "a \\' b.\n", "Should escape the apostrophe");
 }
 
 #[test]
@@ -63,7 +69,7 @@ fn test_converts_single_violation_in_bold() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "**a' b.**\n";
+    let original = "**a ' b.**\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -74,7 +80,7 @@ fn test_converts_single_violation_in_bold() {
 
     let converted = result.message.unwrap();
     assert_eq!(
-        converted, "**a\\' b.**\n",
+        converted, "**a \\' b.**\n",
         "Should escape apostrophe in bold"
     );
 }
@@ -84,7 +90,7 @@ fn test_converts_single_violation_in_emphasis() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "*a' b.*\n";
+    let original = "*a ' b.*\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -95,7 +101,7 @@ fn test_converts_single_violation_in_emphasis() {
 
     let converted = result.message.unwrap();
     assert_eq!(
-        converted, "*a\\' b.*\n",
+        converted, "*a \\' b.*\n",
         "Should escape apostrophe in emphasis"
     );
 }
@@ -105,7 +111,7 @@ fn test_converts_single_violation_in_link() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "[a' b](url)\n";
+    let original = "[a ' b](url)\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -116,7 +122,7 @@ fn test_converts_single_violation_in_link() {
 
     let converted = result.message.unwrap();
     assert_eq!(
-        converted, "[a\\' b](url)\n",
+        converted, "[a \\' b](url)\n",
         "Should escape apostrophe in link text"
     );
 }
@@ -128,9 +134,9 @@ fn test_converts_multiple_violations() {
 
     fs::write(
         &test_file,
-        r#"First apostrophe: a' b.
+        r#"First stray quote: a ' b.
 
-Second in bold: **c' d.**
+Second in bold: **c ' d.**
 "#,
     )
     .unwrap();
@@ -143,11 +149,11 @@ Second in bold: **c' d.**
 
     let converted = result.message.unwrap();
     assert!(
-        converted.contains("a\\' b."),
+        converted.contains("a \\' b."),
         "Should escape first apostrophe"
     );
     assert!(
-        converted.contains("**c\\' d.**"),
+        converted.contains("**c \\' d.**"),
         "Should escape second apostrophe"
     );
 }
@@ -157,7 +163,7 @@ fn test_in_place_conversion() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "a' b.\n";
+    let original = "a ' b.\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -169,8 +175,8 @@ fn test_in_place_conversion() {
 
     // Verify file was modified
     let content = fs::read_to_string(&test_file).unwrap();
-    assert_eq!(content, "a\\' b.\n");
-    assert!(!content.contains("a' b."));
+    assert_eq!(content, "a \\' b.\n");
+    assert!(!content.contains("a ' b."));
 }
 
 #[test]
@@ -178,7 +184,7 @@ fn test_check_mode() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "a' b.\n";
+    let original = "a ' b.\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();

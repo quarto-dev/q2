@@ -1,7 +1,7 @@
 local M = {}
 
 function M.go()
-  return {=: pages' :=}
+  return {=: pages ' :=}
 end
 
 return M

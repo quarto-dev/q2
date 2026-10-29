@@ -24,9 +24,11 @@ matching close.
 ## Why this happens
 
 The most common cause is an apostrophe being read as an opening
-quote. The parser distinguishes apostrophes from quotes by
-context, but in some constructions (a `'` adjacent to whitespace
-or at the start of a token) the parser sees a quote opener.
+quote. A `'` directly after a word (`it's`, `the dogs' toys`,
+`d'` before a code span) is always an apostrophe, but a `'` after
+a closing delimiter such as `` ` ``, `**` or `_` (`` `a.rs`'s ``),
+after whitespace, or at the start of a token is read as a quote
+opener.
 
 ## How to fix
 

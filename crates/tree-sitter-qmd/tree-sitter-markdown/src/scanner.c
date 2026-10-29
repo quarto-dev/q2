@@ -171,6 +171,14 @@ typedef enum {
     // `:::` (fenced div open/close) after a pipe table row. Emission site:
     // parse_fenced_div_marker (`level == 1` branch).
     CAPTION_START,
+
+    // GH #943: zero-width "this block is a paragraph". Emitted at a block
+    // start only when the first word of the line ends in an apostrophe and
+    // the line is not a pipe-table header, so that the next scan call can
+    // emit the word as LITERAL_STR without PIPE_TABLE_START still being an
+    // option. See grammar.js (`pandoc_paragraph`) and
+    // parse_pipe_table_or_word_apostrophe below.
+    PARAGRAPH_START,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -289,6 +297,7 @@ static char* token_names[] = {
 
     "INDENTED_CODE_BLOCK_DISALLOWED", // simply for good error reporting
     "CAPTION_START",
+    "PARAGRAPH_START",
 };
 
 #endif
@@ -438,6 +447,17 @@ typedef struct {
     // token this call emits (0 if none). Copied into line_content_column
     // by tree_sitter_markdown_external_scanner_scan on success.
     uint8_t pending_line_content_column;
+    // GH #943: how many `pandoc_single_quote` spans are open at this point
+    // of the paragraph: +1 on SINGLE_QUOTE_OPEN, -1 on SINGLE_QUOTE_CLOSE,
+    // back to 0 at every token that ends inline content (LINE_ENDING,
+    // PIPE_TABLE_LINE_ENDING, BLOCK_CLOSE, TOKEN_EOF), all maintained in
+    // tree_sitter_markdown_external_scanner_scan. Read by
+    // word_apostrophe_candidate: a `'` after a word is an apostrophe only
+    // when no span is open, since inside one it is the span's closer. The
+    // parse state cannot answer this on its own: right after whitespace,
+    // SINGLE_QUOTE_CLOSE is not a valid symbol even inside a span, because
+    // the span's content cannot end in a space. Serialized.
+    uint8_t single_quote_depth;
 
     bool simulate;
 } Scanner;
@@ -486,6 +506,7 @@ static unsigned serialize(Scanner *s, char *buffer) {
     buffer[size++] = (char)s->code_span_delimiter_length;
     buffer[size++] = (char)s->latex_span_delimiter_length;
     buffer[size++] = (char)s->line_content_column;
+    buffer[size++] = (char)s->single_quote_depth;
     size_t blocks_count = s->open_blocks.size;
     if (blocks_count > 0) {
         memcpy(&buffer[size], s->open_blocks.items,
@@ -510,6 +531,7 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
     s->code_span_delimiter_length = 0;
     s->latex_span_delimiter_length = 0;
     s->line_content_column = 0;
+    s->single_quote_depth = 0;
     if (length > 0) {
         size_t size = 0;
         s->own_size = length;
@@ -522,6 +544,7 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
         s->code_span_delimiter_length = (uint8_t)buffer[size++];
         s->latex_span_delimiter_length = (uint8_t)buffer[size++];
         s->line_content_column = (uint8_t)buffer[size++];
+        s->single_quote_depth = (uint8_t)buffer[size++];
         size_t blocks_size = length - size;
         if (blocks_size > 0) {
             size_t blocks_count = blocks_size / sizeof(Block);
@@ -1965,25 +1988,19 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     return false;
 }
 
-static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
-                             const bool *valid_symbols) {
-
-    // unused
-    (void)(valid_symbols);
-
-    // PIPE_TABLE_START is zero width
-    mark_end(s, lexer);
+// Decide whether the current line is a pipe-table header: a row with at
+// least one cell, followed by a delimiter row with the same number of
+// cells. The lexer may already be somewhere inside the first line's leading
+// content (parse_pipe_table_or_word_apostrophe enters here after reading
+// the first word); `starting_pipe` says whether the line began with `|`.
+// Pure look-ahead: never calls mark_end, so the caller's token end stands.
+static bool pipe_table_header_ahead(Scanner *s, TSLexer *lexer, bool starting_pipe) {
     // count number of cells
     size_t cell_count = 0;
     // also remember if we see starting and ending pipes, as empty headers have
     // to have both
-    bool starting_pipe = false;
     bool ending_pipe = false;
     bool empty = true;
-    if (lexer->lookahead == '|') {
-        starting_pipe = true;
-        advance(s, lexer);
-    }
     while (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
            !lexer->eof(lexer)) {
         if (lexer->lookahead == '|') {
@@ -2093,11 +2110,151 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
         }
     }
     // if the cell counts are not equal then this is not a table
-    if (cell_count != delimiter_cell_count) {
+    return cell_count == delimiter_cell_count;
+}
+
+static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
+                             const bool *valid_symbols) {
+
+    // unused
+    (void)(valid_symbols);
+
+    // PIPE_TABLE_START is zero width
+    mark_end(s, lexer);
+    bool starting_pipe = false;
+    if (lexer->lookahead == '|') {
+        starting_pipe = true;
+        advance(s, lexer);
+    }
+    if (pipe_table_header_ahead(s, lexer, starting_pipe)) {
+        EMIT_TOKEN(PIPE_TABLE_START);
+    }
+    return false;
+}
+
+// GH #943: an apostrophe directly after a word is an apostrophe, not a
+// quote opener. Pandoc never opens a single quote right after a string
+// (`notAfterString` in Text.Pandoc.Parsing), and it closes one only inside
+// an open single-quoted span. So outside such a span, `Dogs' toys`,
+// `the cats'.`, `d'`Arrow`` and `Cats'` at end of block are each a Str that
+// ends in `'` (smart typography later makes it U+2019), not the Q-2-7 /
+// Q-2-10 errors they used to be.
+//
+// The scanner cannot look behind, so the decision is made from the START of
+// the word: the scanner is consulted at every token boundary, and at a word
+// it reads ahead to see whether the word is immediately followed by a `'`
+// that is not itself followed by a letter or digit (that form, `it's`, is
+// already one pandoc_str: see PANDOC_REGEX_STR). When it is, the whole
+// `word'` is emitted as one LITERAL_STR; otherwise the scanner returns
+// false and the internal lexer lexes the word as it always did.
+//
+// "Outside a single-quoted span" comes from the scanner's own count of
+// open spans (Scanner.single_quote_depth), so `'Dogs' toys'` still closes
+// at the first `'`. The parse state alone is not enough: SINGLE_QUOTE_CLOSE
+// is valid only where the span's content may end, and that excludes the
+// position right after a space, where `'Hello world'` would otherwise lose
+// its closer to this rule. No grammar ambiguity is involved: the choice is
+// made here, deterministically, and the grammar keeps its no-`conflicts`
+// invariant.
+//
+// The word recognised below is an ASCII subset of what PANDOC_REGEX_STR
+// lexes as one pandoc_str: letters and digits, `-`, `.`, and `_` or `'`
+// when followed by a letter or digit. It must never extend FURTHER than the
+// regex would (that would move a token boundary); when it stops earlier
+// (`foo@bar'`, `café'`, `foo_'`) it simply does not match, and the `'`
+// keeps today's behaviour. A `'` followed by a non-ASCII code point is
+// treated as possibly word-internal (`l'été`) and also does not match.
+static bool is_ascii_alnum(int32_t chr) {
+    return is_ascii_alpha(chr) || (chr >= '0' && chr <= '9');
+}
+
+// Reads a word that starts at the lexer (first character must be an ASCII
+// letter; the caller checks). Returns true when the word is immediately
+// followed by a `'` that is not followed by a letter or digit; the lexer is
+// then just past that `'`, and nothing has been mark_end'ed. Returns false
+// otherwise, with the lexer inside or just past the word.
+static bool scan_word_then_apostrophe(TSLexer *lexer) {
+    for (;;) {
+        int32_t chr = lexer->lookahead;
+        if (is_ascii_alnum(chr) || chr == '-' || chr == '.') {
+            lexer->advance(lexer, false);
+            continue;
+        }
+        if (chr == '_' || chr == '\'') {
+            lexer->advance(lexer, false);
+            int32_t next = lexer->lookahead;
+            if (is_ascii_alnum(next) || next >= 0x80) {
+                // Word-internal (`foo_bar`, `it's`); for a non-ASCII code
+                // point the loop stops on it next and reports no match.
+                continue;
+            }
+            return chr == '\'';
+        }
         return false;
     }
+}
 
-    EMIT_TOKEN(PIPE_TABLE_START);
+static bool word_apostrophe_candidate(Scanner *s, TSLexer *lexer,
+                                      const bool *valid_symbols) {
+    return valid_symbols[LITERAL_STR] &&
+           s->single_quote_depth == 0 &&
+           !valid_symbols[LANGUAGE_SPECIFIER] &&
+           !valid_symbols[KEY_SPECIFIER] &&
+           !valid_symbols[NAKED_VALUE_SPECIFIER] &&
+           is_ascii_alpha(lexer->lookahead);
+}
+
+// Inline position (PIPE_TABLE_START not valid): emit `word'` as one
+// LITERAL_STR, or let the internal lexer have the word.
+static bool parse_word_apostrophe(TSLexer *lexer, const bool *valid_symbols) {
+    (void)(valid_symbols);
+    if (!scan_word_then_apostrophe(lexer)) {
+        return false;
+    }
+    lexer->mark_end(lexer);
+    EMIT_TOKEN(LITERAL_STR);
+}
+
+// Block start (PIPE_TABLE_START valid), lookahead is a letter. Two tokens
+// compete here and need different ends: a zero-width PIPE_TABLE_START at
+// the first character if the line is a table header, or LITERAL_STR
+// covering `word'` if the first word ends in an apostrophe. Telling a
+// header apart needs the whole line and the next one, and a token's end
+// cannot be moved back once the scanner has read past it, so the two
+// cannot be decided in one scan call. Instead: read the word, run the
+// header check from there, and
+//   - if it is a table, emit PIPE_TABLE_START as before (the next scan
+//     call, inside the first cell, handles the word);
+//   - if it is not and the word ends in an apostrophe, emit the zero-width
+//     PARAGRAPH_START so the next scan call is inside `pandoc_paragraph`,
+//     where PIPE_TABLE_START is no longer valid and parse_word_apostrophe
+//     emits the word;
+//   - otherwise return false, exactly as parse_pipe_table did.
+// A table header line parses as before: the header check sees the same
+// line, entered after its first word instead of at its start.
+static bool parse_pipe_table_or_word_apostrophe(Scanner *s, TSLexer *lexer,
+                                                const bool *valid_symbols) {
+    // Both tokens end here. Remember the mid-line position state too: the
+    // header check crosses into the next line and resets it, and a
+    // PARAGRAPH_START must carry the state of the position it ends at.
+    mark_end(s, lexer);
+    uint8_t indentation = s->indentation;
+    uint8_t column = s->column;
+
+    bool apostrophe = scan_word_then_apostrophe(lexer);
+    // The line began with a letter, so there is no starting pipe, and the
+    // word read so far is content of the first cell.
+    if (pipe_table_header_ahead(s, lexer, false)) {
+        EMIT_TOKEN(PIPE_TABLE_START);
+    }
+    if (apostrophe && valid_symbols[PARAGRAPH_START]) {
+        s->indentation = indentation;
+        s->column = column;
+        // No note_line_content_start: the token after this one is always
+        // the word itself, never a construct that consults the anchor.
+        EMIT_TOKEN(PARAGRAPH_START);
+    }
+    return false;
 }
 
 // parse_open_square_brace has already advanced the '['
@@ -3262,6 +3419,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     }
     if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
         valid_symbols[PIPE_TABLE_START]) {
+        if (word_apostrophe_candidate(s, lexer, valid_symbols)) {
+            return parse_pipe_table_or_word_apostrophe(s, lexer, valid_symbols);
+        }
         return parse_pipe_table(s, lexer, valid_symbols);
     }
     if ((valid_symbols[LANGUAGE_SPECIFIER] || 
@@ -3276,6 +3436,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[NAKED_VALUE_SPECIFIER] && (lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
         DEBUG_HERE;
         return parse_language_specifier(lexer, valid_symbols);
+    }
+    // GH #943: a word followed by an apostrophe, in inline content.
+    if (word_apostrophe_candidate(s, lexer, valid_symbols)) {
+        return parse_word_apostrophe(lexer, valid_symbols);
     }
 
     // The parser just encountered a line break. Setup the state correspondingly
@@ -3850,6 +4014,27 @@ bool tree_sitter_markdown_external_scanner_scan(void *payload, TSLexer *lexer,
         // Every emitted token replaces the anchor, so it only ever
         // describes the position right after the token that set it.
         scanner->line_content_column = scanner->pending_line_content_column;
+        // GH #943: keep the open single-quote count (see the field).
+        switch (lexer->result_symbol) {
+            case SINGLE_QUOTE_OPEN:
+                if (scanner->single_quote_depth < UINT8_MAX) {
+                    scanner->single_quote_depth++;
+                }
+                break;
+            case SINGLE_QUOTE_CLOSE:
+                if (scanner->single_quote_depth > 0) {
+                    scanner->single_quote_depth--;
+                }
+                break;
+            case LINE_ENDING:
+            case PIPE_TABLE_LINE_ENDING:
+            case BLOCK_CLOSE:
+            case TOKEN_EOF:
+                scanner->single_quote_depth = 0;
+                break;
+            default:
+                break;
+        }
     }
     return found;
 }

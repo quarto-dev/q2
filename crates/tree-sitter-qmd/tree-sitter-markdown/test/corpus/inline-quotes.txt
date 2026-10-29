@@ -125,3 +125,194 @@ single quotes spacing 4
           (pandoc_str))
         (single_quote))
       (pandoc_str))))
+================================================================================
+apostrophe after a word: plural possessive (GH #943)
+================================================================================
+Dogs' toys and cats' toys.
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+apostrophe after a word at end of block (GH #943)
+================================================================================
+Cats'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+apostrophe after a word before punctuation (GH #943)
+================================================================================
+the cats'. Yes
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+apostrophe after a word before a code span (GH #943, GH #221)
+================================================================================
+d'`Arrow`
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+================================================================================
+apostrophe after a word inside an open single quote is its closer (GH #943)
+================================================================================
+'Dogs' toys'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote))
+      (pandoc_str))))
+================================================================================
+apostrophe after a word inside double quotes (GH #943)
+================================================================================
+"Dogs' toys"
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_double_quote
+        (double_quote)
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (double_quote)))))
+================================================================================
+apostrophe after a word at the start of a list item and a heading (GH #943)
+================================================================================
+- Dogs' toys.
+- Cats' toys.
+
+## Dogs' toys
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)))))
+  (section
+    (atx_heading
+      (atx_h2_marker)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+apostrophe after the first word of a pipe table header cell (GH #943)
+================================================================================
+Dogs' toys | count
+---|---
+cats' | 2
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pipe_table
+      (pipe_table_header
+        (pipe_table_cell
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pipe_table_cell
+          (pandoc_str)))
+      (pipe_table_delimiter_row
+        (pipe_table_delimiter_cell)
+        (pipe_table_delimiter_cell))
+      (pipe_table_row
+        (pipe_table_cell
+          (pandoc_str))
+        (pipe_table_cell
+          (pandoc_str))))))
+================================================================================
+apostrophe after the first word of a block quote and of a continuation line (GH #943)
+================================================================================
+> Dogs' toys
+
+first line
+Dogs' toys
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+a quote mark with whitespace on both sides is still a quote (GH #943)
+================================================================================
+a ' b.
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (ERROR
+        (single_quote))
+      (pandoc_space)
+      (pandoc_str))))
