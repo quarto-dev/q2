@@ -193,9 +193,9 @@ Caveats: Node proxy of the browser path (release WASM, real production
 modules; browser cross-check deferred to phase regressions). Fixture
 body is verbatim-duplicated sections. 8x BURST=10 exceeded a 10-minute
 driver run (memory pressure from 10 concurrent 800-KB renders) — burst
-at 8x recorded with BURST=5. The gauges' app-bundle wiring was verified
-through unit/integration tests and this driver, **not** a live browser
-session.
+at 8x recorded with BURST=5. The gauge wiring in the app bundle was
+verified through unit/integration tests and this driver, **not** a live
+browser session.
 
 ## Phase 1 — Latest-wins render coalescing (finding 2)
 
