@@ -124,4 +124,44 @@ describe('classifyPreviewMode against the real wasm', () => {
       expect(modeOfBuffer('/project/a.qmd', '# A\n')).toEqual({ mode: 'react', format: 'q2-preview' });
     });
   });
+
+  // Phase 0 characterization for the main-thread render-path plan
+  // (bd-k8ptcrd9): the outcomes PreviewRouter depends on per keystroke,
+  // pinned so Phase 2's parse-check-only classification can assert parity.
+  // Expected values below are DISCOVERED behavior (probed against the real
+  // resolver 2026-10-29), not the plan's guesses.
+  describe('editor-edge inputs (Phase 0 characterization, bd-k8ptcrd9)', () => {
+    it('an unknown format key classifies as neither (not dom)', async () => {
+      // The resolver succeeds with class 'neither' for a scalar format key
+      // it does not know. (Extension formats such as `acm-html` are a
+      // different path — class 'preview' → dom — pinned in
+      // getQ2Format.test.ts.)
+      expect(await modeOf('format: some-unknown-format')).toEqual({
+        mode: 'neither',
+        formatKey: 'some-unknown-format',
+      });
+    });
+
+    it('a mid-edit broken body still classifies from the front matter', async () => {
+      // Unclosed code fence mid-typing: the resolver reads the YAML, so the
+      // mode must not flicker while the body is transiently unparsable.
+      const buffer = '---\nformat: revealjs\n---\n\n# Deck\n\n```{r}\n';
+      expect(modeOfBuffer('/project/doc.qmd', buffer)).toEqual({ mode: 'react', format: 'revealjs' });
+    });
+
+    it('an unterminated front-matter block still resolves — as the default html', async () => {
+      // Mid-edit YAML: no closing fence. The resolver SUCCEEDS but does not
+      // see the unterminated block's `format:` key — it falls back to the
+      // default (html → q2-preview). So an in-progress edit of the format
+      // key itself can transiently reclassify to q2-preview; PreviewRouter's
+      // parse guard is what suppresses the flicker (component logic).
+      const buffer = '---\ntitle: T\nformat: revealjs\n';
+      const resolved = JSON.parse(
+        wasm.resolve_pandoc_formats('/project/doc.qmd', { contentOverride: buffer }),
+      ) as ResolvePandocFormatsResponse;
+      expect(resolved.success).toBe(true);
+      expect(resolved.key).toBe('html');
+      expect(modeOfBuffer('/project/doc.qmd', buffer)).toEqual({ mode: 'react', format: 'q2-preview' });
+    });
+  });
 });

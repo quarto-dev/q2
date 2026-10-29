@@ -1,7 +1,20 @@
 /**
- * Browser-side perf counters — the hub-client counterpart of the Rust
+ * Perf counters — the hub-client / preview-runtime counterpart of the Rust
  * `QUARTO_PERF_STATS` gauges (see
  * claude-notes/instructions/performance-profiling.md).
+ *
+ * TWO COPIES OF THIS FILE EXIST and must be kept in sync:
+ *   - hub-client/src/utils/perfCounters.ts   (this one)
+ *   - ts-packages/preview-runtime/src/perfCounters.ts
+ * The duplication is deliberate (bd-k8ptcrd9): hub-client app code cannot
+ * import the package copy through the package boundary without breaking
+ * the repo's many PARTIAL `vi.mock('@quarto/preview-runtime', ...)` test
+ * mocks (any export they don't stub goes undefined). Both copies delegate
+ * all state to a `globalThis` sink, so there is exactly ONE gauge table
+ * per JS realm (hub app window, preview iframe, Node driver) no matter
+ * how many bundle copies exist — `perfDump` from either copy prints
+ * everything, and gauges recorded through one copy aggregate with the
+ * other. When editing one copy, edit the other identically.
  *
  * Enablement is read once at startup, from the first match:
  *
@@ -18,7 +31,7 @@
  * [key=value ...]`, so a session log can be grepped with `^perf.` and
  * parsed column-wise.
  *
- * Gauges are process-global by name; counters are never reset
+ * Gauges are realm-global by name; counters are never reset
  * automatically (dump is cumulative).
  */
 
@@ -33,7 +46,36 @@ interface Gauge {
   extras: Map<string, number>;
 }
 
-const gauges = new Map<string, Gauge>();
+/** Shared state across every copy of this module loaded in one realm. */
+interface PerfSink {
+  gauges: Map<string, Gauge>;
+  /** Test override: true/false forces recording on/off for all copies. */
+  override: boolean | null;
+  /** Guards the 5s browser interval so two copies don't double-dump. */
+  intervalInstalled: boolean;
+}
+
+const SINK_KEY = '__quartoPerfSink';
+
+function sink(): PerfSink {
+  const g = globalThis as { __quartoPerfSink?: PerfSink };
+  let s = g[SINK_KEY];
+  if (!s) {
+    s = { gauges: new Map(), override: null, intervalInstalled: false };
+    g[SINK_KEY] = s;
+  }
+  return s;
+}
+
+// Cache the sink once: the disabled fast path reads this object's fields
+// directly (one property read) instead of re-resolving globalThis per call.
+const S = sink();
+
+// `process` is not declared by every consumer's tsconfig; reach it
+// through globalThis so Node drivers and browsers both compile and run.
+const nodeProcess = (
+  globalThis as { process?: { env?: Record<string, string | undefined> } }
+).process;
 
 /**
  * True when the flag came from the Node env var rather than a browser
@@ -41,8 +83,7 @@ const gauges = new Map<string, Gauge>();
  * (interval dump, window handle) that would pollute driver output and
  * keep the process alive.
  */
-const enabledByNodeEnv =
-  typeof process !== 'undefined' && process.env?.QUARTO_PERF_STATS === '1';
+const enabledByNodeEnv = nodeProcess?.env?.QUARTO_PERF_STATS === '1';
 
 function readEnabledFlag(): boolean {
   // Node driver path (tsx scripts under scripts/perf or throwaway
@@ -69,9 +110,9 @@ function readEnabledFlag(): boolean {
 
 let enabled = readEnabledFlag();
 
-/** Whether perf recording is on. Cheap: one cached boolean. */
+/** Whether perf recording is on. One property read on the cached sink. */
 export function perfEnabled(): boolean {
-  return enabled;
+  return S.override ?? enabled;
 }
 
 /**
@@ -79,14 +120,14 @@ export function perfEnabled(): boolean {
  * the result straight to {@link perfSegment} without branching.
  */
 export function perfNow(): number {
-  return enabled ? performance.now() : 0;
+  return S.override ?? enabled ? performance.now() : 0;
 }
 
 function gauge(name: string): Gauge {
-  let g = gauges.get(name);
+  let g = S.gauges.get(name);
   if (!g) {
     g = { runs: 0, totalMs: 0, maxMs: 0, extras: new Map() };
-    gauges.set(name, g);
+    S.gauges.set(name, g);
   }
   return g;
 }
@@ -96,7 +137,7 @@ function gauge(name: string): Gauge {
  * No-op when disabled. Omit `endMs` to measure up to the call.
  */
 export function perfSegment(name: string, startMs: number, endMs?: number): void {
-  if (!enabled) return;
+  if (!perfEnabled()) return;
   const end = endMs ?? performance.now();
   const ms = end - startMs;
   const g = gauge(name);
@@ -107,7 +148,7 @@ export function perfSegment(name: string, startMs: number, endMs?: number): void
 
 /** Increment the run counter of `name` without a duration (e.g. early-outs). */
 export function perfMark(name: string): void {
-  if (!enabled) return;
+  if (!perfEnabled()) return;
   gauge(name).runs += 1;
 }
 
@@ -116,7 +157,7 @@ export function perfMark(name: string): void {
  * `perfExtra('effect.project-search', 'changed', changed)`).
  */
 export function perfExtra(name: string, key: string, n = 1): void {
-  if (!enabled) return;
+  if (!perfEnabled()) return;
   const g = gauge(name);
   g.extras.set(key, (g.extras.get(key) ?? 0) + n);
 }
@@ -137,28 +178,35 @@ function formatGauge(name: string, g: Gauge): string {
 
 /** Log all recorded gauges, sorted by name. Cumulative; does not reset. */
 export function perfDump(): void {
-  for (const [name, g] of [...gauges.entries()].sort()) {
+  for (const [name, g] of [...S.gauges.entries()].sort()) {
     console.log(formatGauge(name, g));
   }
 }
 
 /** Clear all gauges. Exposed for drivers and tests. */
 export function perfReset(): void {
-  gauges.clear();
+  S.gauges.clear();
 }
 
 /**
  * Test-only override: force recording on (`true`), off (`false`), or
- * back to the startup flag (`null`). Kept out of the flag reader so the
- * production path stays a single cached boolean.
+ * back to the startup flag (`null`) — for EVERY copy of this module in
+ * the realm (the override lives on the shared sink).
  */
 export function setPerfOverrideForTests(value: boolean | null): void {
-  enabled = value ?? readEnabledFlag();
+  S.override = value;
+  if (value === null) {
+    enabled = readEnabledFlag();
+  }
 }
 
-// Browser conveniences: periodic dump + manual dump handle. Skipped in
-// Node drivers (they call perfDump themselves at checkpoints).
-if (enabled && !enabledByNodeEnv && typeof window !== 'undefined') {
-  window.setInterval(perfDump, 5000);
-  (window as unknown as { quartoPerfDump: () => void }).quartoPerfDump = perfDump;
+// Browser conveniences: periodic dump + manual dump handle, installed at
+// most once per realm (guarded via the sink). Skipped in Node drivers
+// (they call perfDump themselves at checkpoints).
+{
+  if (perfEnabled() && !enabledByNodeEnv && !S.intervalInstalled && typeof window !== 'undefined') {
+    S.intervalInstalled = true;
+    window.setInterval(perfDump, 5000);
+    (window as unknown as { quartoPerfDump: () => void }).quartoPerfDump = perfDump;
+  }
 }

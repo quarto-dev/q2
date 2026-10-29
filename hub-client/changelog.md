@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-10-29
+
+- [`d3b294042`](https://github.com/quarto-dev/q2/commits/d3b294042): Added opt-in performance gauges to the preview render path (renders, envelope parsing, VFS writes, semantic tokens), enabled with QUARTO_PERF_STATS=1, localStorage quartoPerfStats=1, or a perf=1 URL parameter and dumped with window.quartoPerfDump() — the measurement baseline for upcoming typing-latency work.
+
 ### 2026-10-27
 
 - [`6a4a0d214`](https://github.com/quarto-dev/q2/commits/6a4a0d214): Fixed the "Connection lost - working offline" banner never clearing after the connection is restored, and the share dialog once again selects the link text shortly after it opens (the select-all had silently stopped firing).

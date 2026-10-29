@@ -12,6 +12,11 @@ export default defineConfig({
         __dirname,
         '../../hub-client/wasm-quarto-hub-client/wasm_quarto_hub_client.js',
       ),
+      // The WASM glue and wasmRenderer.ts import the SASS bridge by its
+      // Vite-root absolute path (the same one the Rust `raw_module`
+      // annotation uses). Map it to the workspace copy so `initWasm()`
+      // works outside the dev server (hub-client's configs do the same).
+      '/src/wasm-js-bridge': path.resolve(__dirname, '../wasm-js-bridge/src'),
       // Workspace-package aliases to source — mirrors the pattern in
       // hub-client/vitest.config.ts. Vitest doesn't honor the `source`
       // export condition on fresh clones, so workspace deps need

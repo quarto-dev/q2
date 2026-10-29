@@ -305,6 +305,22 @@ node hub-client/scripts/perf/analyze-cpuprofile.mjs \
   the real bottleneck is inside the shimmed dep, you'll need a
   browser profile to see it.
 
+**Driving the real render path.** A driver that exercises the production
+render-path modules (`wasmRenderer.ts`, `intelligenceService.ts`, …)
+needs three shims beyond the template. First, extend the resolve hook:
+map `wasm-quarto-hub-client` and `/src/wasm-js-bridge/*` into the
+workspace, `@quarto/*` to their `src/`, and any `*.wasm?url` import to
+a stub string module — otherwise Node tries to load the `.wasm` as ESM
+and fails on its WASI import. Second, shim `fetch` for `file:` URLs so
+`initWasm()`\'s own `.wasm` load succeeds — that keeps the production
+init path in the profile instead of a test-only bypass. Third, import
+`fake-indexeddb/auto` **before** `initWasm()`: the SASS cache bridge
+(`wasm-js-bridge/cache.js`) needs IndexedDB, and without it every
+render recompiles the theme, roughly doubling the measured
+per-keystroke cost. A full driver + fixture built this way is Phase 0
+of `claude-notes/plans/2026-10-24-hub-client-main-thread-render-path.md`
+(bd-k8ptcrd9).
+
 ### 4. Read the numbers before designing the fix
 
 Put the numbers in a table with expected shapes next to them. If you

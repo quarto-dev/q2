@@ -13,6 +13,7 @@ import { DownloadOnlyView, NeitherView } from './DownloadOnlyViews';
 import PdfPreviewPane from './PdfPreviewPane';
 import { formatByKey, menuFormats, pdfPreviewAvailable, withOutputExt } from '../../pandoc/downloadService';
 import { useDownloadAs } from '../../pandoc/useDownloadAs';
+import { perfNow, perfSegment } from '../../utils/perfCounters';
 
 interface PreviewRouterProps {
   content: string;
@@ -133,6 +134,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   // Check the format whenever content changes
   useEffect(() => {
     async function checkFormat() {
+      const fxT0 = perfNow();
       try {
         // Skip format check if WASM isn't ready yet (will retry when it is)
         if (!isWasmReady()) {
@@ -141,7 +143,11 @@ export default function PreviewRouter(props: PreviewRouterProps) {
 
         // Parse the QMD only to learn whether it parses: a mid-edit syntax error keeps the
         // previous mode. The format itself comes from the Rust resolver.
+        const parseT0 = perfNow();
         const result = await parseQmdToAst(props.content);
+        // Finding 1 of the render-path plan: this per-keystroke full parse's
+        // AST is discarded — only `success` is read.
+        perfSegment('router.format-check.parse', parseT0);
         const deps = {
           // The editor buffer, not the VFS copy: it can lag a keystroke behind.
           resolve: (path: string) => (isWasmReady() ? resolvePandocFormats(path, { contentOverride: props.content }) : null),
@@ -150,7 +156,9 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         };
         // A format the parser's metadata merge does not know (`latex`) fails the parse. The
         // resolver still classifies it; a failed parse of a previewable document changes nothing.
+        const classifyT0 = perfNow();
         const mode = classifyPreviewMode(props.currentFile?.path, deps);
+        perfSegment('router.format-check.classify', classifyT0);
         if (result.success || mode.mode === 'download' || mode.mode === 'pdf' || mode.mode === 'neither') {
           const format = mode.mode === 'react' ? mode.format : null;
           // Keep the same object when nothing changed, so a keystroke does not re-render consumers.
@@ -162,6 +170,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
       } catch (err) {
         console.error('[PreviewRouter] Error checking format:', err);
       } finally {
+        perfSegment('router.format-check', fxT0);
         setCheckedPath(props.currentFile?.path);
       }
     }
