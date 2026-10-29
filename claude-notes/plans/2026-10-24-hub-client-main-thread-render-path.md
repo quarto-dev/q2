@@ -197,6 +197,15 @@ at 8x recorded with BURST=5. The gauge wiring in the app bundle was
 verified through unit/integration tests and this driver, **not** a live
 browser session.
 
+**Disabled-overhead verification (2026-10-29):** "free when off"
+checked two ways. Microbench (bare vs gauge-wrapped, profiling off,
+min of 5 batches): +0.005 µs/call on 21-B envelopes, +2.1 µs on 130-KB,
++9.4 µs on 16-MB, +2.0 µs on a 100-KB `vfs_add_file` — projected
+≤ ~20 µs per keystroke at 1x, i.e. ~0.005 % of the 431-ms per-keystroke
+wall. End-to-end A/B (same driver, pre-Phase-0 worktree vs instrumented
+checkout, profiling off, interleaved runs): old walls 5580.8–5675.5 ms,
+new 5575.8–5605.2 ms — identical within run-to-run spread.
+
 ## Phase 1 — Latest-wins render coalescing (finding 2)
 
 Smallest change, largest perceived-latency win: stop executing renders
