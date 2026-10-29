@@ -39,30 +39,30 @@ const { state, mkDeferred } = vi.hoisted(() => {
   return { state, mkDeferred };
 });
 
-vi.mock('wasm-quarto-hub-client', () => ({
-  default: async () => {},
-  get_builtin_template: () => '{}',
-  render_page_in_project_with_attribution: vi.fn(() => {
-    state.active += 1;
-    state.maxActive = Math.max(state.maxActive, state.active);
-    const d = mkDeferred<string>();
-    state.pending.push(d);
-    return d.promise.finally(() => {
-      state.active -= 1;
-    });
-  }),
-  // The CSS-version read after every successful render: a miss keeps the
-  // 'default' version suffix.
-  vfs_read_file: () => JSON.stringify({ success: false }),
-}));
-
-import { initWasm, renderToHtml } from './wasmRenderer';
+import { _setWasmModuleForTest, renderToHtml } from './wasmRenderer';
 
 /** Let the queued microtasks + a macrotask fire so the serial queue advances. */
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
-beforeAll(async () => {
-  await initWasm();
+beforeAll(() => {
+  // Install the stub directly rather than mocking the
+  // 'wasm-quarto-hub-client' import: with the stub in place, initWasm()
+  // early-returns and the dynamic import (whose glue file only exists
+  // after a WASM build, absent in the CI TS-suites job) never fires.
+  _setWasmModuleForTest({
+    render_page_in_project_with_attribution: vi.fn(() => {
+      state.active += 1;
+      state.maxActive = Math.max(state.maxActive, state.active);
+      const d = mkDeferred<string>();
+      state.pending.push(d);
+      return d.promise.finally(() => {
+        state.active -= 1;
+      });
+    }),
+    // The CSS-version read after every successful render: a miss keeps
+    // the 'default' version suffix.
+    vfs_read_file: () => JSON.stringify({ success: false }),
+  });
 });
 
 beforeEach(() => {

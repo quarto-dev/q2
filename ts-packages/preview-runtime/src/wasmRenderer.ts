@@ -313,6 +313,18 @@ export function isWasmReady(): boolean {
 }
 
 /**
+ * Test-only: install a WASM module stub directly, bypassing
+ * `initWasm()`'s dynamic `import('wasm-quarto-hub-client')`. Unit tests
+ * use this so they never resolve the wasm-pack glue, which does not
+ * exist in CI jobs that skip the WASM build (bd-k8ptcrd9; the
+ * vi.mock approach resolves the aliased real file and fails there).
+ * Pass `null` to reset.
+ */
+export function _setWasmModuleForTest(module: unknown): void {
+  wasmModule = module as WasmModuleExtended | null;
+}
+
+/**
  * Get the WASM module, throwing if not initialized
  */
 function getWasm() {
