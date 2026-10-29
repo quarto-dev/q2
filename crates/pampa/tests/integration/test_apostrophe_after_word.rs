@@ -67,8 +67,7 @@ fn first_inlines(blocks: &[Block]) -> &[Inline] {
 
 #[track_caller]
 fn assert_inlines(input: &str, expected: &str) {
-    let pandoc =
-        read(input).unwrap_or_else(|codes| panic!("{input:?} failed to parse: {codes:?}"));
+    let pandoc = read(input).unwrap_or_else(|codes| panic!("{input:?} failed to parse: {codes:?}"));
     assert_eq!(
         show(first_inlines(&pandoc.blocks)),
         expected,
@@ -95,15 +94,24 @@ fn plural_possessive_is_an_apostrophe() {
         "Dogs' toys and cats' toys.\n",
         "Str(Dogs’) Space Str(toys) Space Str(and) Space Str(cats’) Space Str(toys.)",
     );
-    assert_inlines("It's the cats' toys.\n", "Str(It’s) Space Str(the) Space Str(cats’) Space Str(toys.)");
+    assert_inlines(
+        "It's the cats' toys.\n",
+        "Str(It’s) Space Str(the) Space Str(cats’) Space Str(toys.)",
+    );
 }
 
 #[test]
 fn apostrophe_at_end_of_block_and_before_punctuation() {
     assert_inlines("Cats'\n", "Str(Cats’)");
     assert_inlines("Cats'", "Str(Cats’)");
-    assert_inlines("the cats'. Yes\n", "Str(the) Space Str(cats’.) Space Str(Yes)");
-    assert_inlines("(the cats' toys)\n", "Str((the) Space Str(cats’) Space Str(toys))");
+    assert_inlines(
+        "the cats'. Yes\n",
+        "Str(the) Space Str(cats’.) Space Str(Yes)",
+    );
+    assert_inlines(
+        "(the cats' toys)\n",
+        "Str((the) Space Str(cats’) Space Str(toys))",
+    );
 }
 
 #[test]
@@ -113,17 +121,17 @@ fn apostrophe_before_a_code_span() {
 
 #[test]
 fn apostrophe_in_every_block_context() {
-    assert_inlines("- Dogs' toys.\n- Cats' toys.\n", "Str(Dogs’) Space Str(toys.)");
+    assert_inlines(
+        "- Dogs' toys.\n- Cats' toys.\n",
+        "Str(Dogs’) Space Str(toys.)",
+    );
     assert_inlines("## Dogs' toys\n", "Str(Dogs’) Space Str(toys)");
     assert_inlines("> Dogs' toys\n", "Str(Dogs’) Space Str(toys)");
     assert_inlines(
         "first line\nDogs' toys\n",
         "Str(first) Space Str(line) SoftBreak Str(Dogs’) Space Str(toys)",
     );
-    assert_inlines(
-        "\"Dogs' toys\"\n",
-        "Quoted[Str(Dogs’) Space Str(toys)]",
-    );
+    assert_inlines("\"Dogs' toys\"\n", "Quoted[Str(Dogs’) Space Str(toys)]");
     assert_inlines(
         "*the dogs' toys* are **cats' toys**\n",
         "Emph[Str(the) Space Str(dogs’) Space Str(toys)] Space Str(are) Space Strong[Str(cats’) Space Str(toys)]",
@@ -143,7 +151,10 @@ fn apostrophe_in_a_pipe_table_header_cell() {
 #[test]
 fn quotes_still_pair() {
     assert_inlines("'Hello world'\n", "Quoted[Str(Hello) Space Str(world)]");
-    assert_inlines("These are 'quotes'.\n", "Str(These) Space Str(are) Space Quoted[Str(quotes)] Str(.)");
+    assert_inlines(
+        "These are 'quotes'.\n",
+        "Str(These) Space Str(are) Space Quoted[Str(quotes)] Str(.)",
+    );
     // Inside an open single quote, the `'` after a word is the closer.
     assert_inlines("'Dogs' toys'\n", "Quoted[Str(Dogs)] Space Str(toys’)");
 }

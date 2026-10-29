@@ -315,7 +315,7 @@ runtime. Do **not** run Phase B before 1b.
 - [x] **At Phase B:** the engine TS packages' **per-package `tsc --noEmit`** are green with every
    *present* consumer compiling against the one `@quarto/types` — 1b's `buildQuartoAPI` assembly
    (typed `: QuartoAPI`, B2's conforming version; already a compiled unit in
-   `quarto-engine-host-deno`'s `tsc`) **and** an author-style fixture. **Mechanism — there is *no*
+   `quarto-engine-host-deno`\'s `tsc`) **and** an author-style fixture. **Mechanism — there is *no*
    `tsc -b` project-references graph over ts-packages** (each package runs plain `tsc`; cross-package
    types resolve via node16 `exports`): add the fixture as an **`include`d source file** in an engine
    TS package (e.g. `ts-packages/quarto-engine-host-deno/src/__fixtures__/engine-fixture.ts`, or
