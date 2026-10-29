@@ -1,0 +1,61 @@
+---
+title: "Invalid `resource-discovery` Value"
+description: "`resource-discovery` must be `true` or `false`. Any other value stops the document from rendering, so that a typo cannot publish linked files the author meant to keep out."
+code: Q-5-52
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-52` — Invalid `resource-discovery` Value
+
+> `resource-discovery` must be `true` or `false`. Any other value
+> stops the document from rendering, so that a typo cannot publish
+> linked files the author meant to keep out.
+
+## What this means
+
+Quarto copies the local files that a page's markdown links point at
+into the output directory, so that a link like `[Data](data.csv)`
+works on the rendered site (see
+[Linked files are copied](../../guides/projects/paths.qmd#linked-files-are-copied)).
+`resource-discovery` turns that on (`true`, the default) or off
+(`false`):
+
+```yaml
+---
+title: Internal notes
+resource-discovery: flase   # Q-5-52: a typo, not `false`
+---
+```
+
+Any value that is not a YAML boolean is rejected, wherever it is set:
+a page's front matter, a directory's `_metadata.yml`, `_quarto.yml`,
+a `format:` block, `-M resource-discovery:…` on the command line, or a
+Lua filter. Quoted values are strings, not booleans, so `"false"` and
+`"no"` are rejected too.
+
+This is an error rather than a warning because of what the setting
+protects. Someone who writes `resource-discovery: false` usually wants
+some linked files to stay off the published site. If Quarto warned
+and carried on, a render in a publishing pipeline that doesn't stop on
+warnings would publish exactly those files. Instead, the document is
+not rendered and none of the files it links to are copied. The other
+documents in the project render normally.
+
+## How to fix it
+
+Write the value as an unquoted boolean:
+
+```yaml
+resource-discovery: false
+```
+
+Or remove the key to keep the default, which copies linked files.
+
+## Difference from Quarto 1
+
+Quarto 1 always copies linked files and has no setting to turn this
+off. `resource-discovery` is new in Quarto 2.

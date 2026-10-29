@@ -26,10 +26,17 @@
 //! filters that misbehave. A future "filter hygiene" pass can
 //! upgrade this to a structured warning (see plan §"Future work:
 //! misbehaviour detection").
+//!
+//! Entries `LinkResourceDiscoveryTransform` appended (listed on
+//! `ctx.discovered_resources`, bd-twfep08m) are not in the snapshot
+//! either, so they arrive here as additions too. The ones a post filter
+//! left in place are published as `ResourceOrigin::AutoDiscovery`; the
+//! ones it removed are simply gone, which is the Lua way to prune
+//! discovery.
 
 use async_trait::async_trait;
 
-use crate::project_resources::extract_resource_patterns;
+use crate::project_resources::{AutoDiscoveryKind, extract_resource_patterns};
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -107,10 +114,17 @@ impl PipelineStage for ResourceReportStage {
         // removals (in snapshot, not in post-filter). Removals are
         // already defended structurally because the static-channel
         // collector reads `profile.resources` directly.
+        let discovered = std::mem::take(&mut ctx.discovered_resources);
         let mut additions: Vec<String> = Vec::new();
+        let mut surviving_discoveries: Vec<String> = Vec::new();
         let mut removals: Vec<String> = Vec::new();
         for entry in &post_filter {
-            if !snapshot.contains(&entry.pattern) {
+            if snapshot.contains(&entry.pattern) {
+                continue;
+            }
+            if discovered.contains(&entry.pattern) {
+                surviving_discoveries.push(entry.pattern.clone());
+            } else {
                 additions.push(entry.pattern.clone());
             }
         }
@@ -129,6 +143,22 @@ impl PipelineStage for ResourceReportStage {
             );
             ctx.resource_report
                 .add_lua_filter_files(&doc.path, additions.into_iter().map(Into::into));
+        }
+        if surviving_discoveries.len() < discovered.len() {
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "resource-report: filters pruned {} of {} discovered entries",
+                discovered.len() - surviving_discoveries.len(),
+                discovered.len()
+            );
+        }
+        if !surviving_discoveries.is_empty() {
+            ctx.resource_report.add_discovered_files(
+                AutoDiscoveryKind::Link,
+                &doc.path,
+                surviving_discoveries.into_iter().map(Into::into),
+            );
         }
         if !removals.is_empty() {
             trace_event!(
@@ -248,6 +278,56 @@ mod tests {
             ctx.resource_report.entries[0].origin,
             ResourceOrigin::LuaFilter { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn discovered_entries_are_attributed_and_pruned_ones_dropped() {
+        let doc_path = PathBuf::from("/project/doc.qmd");
+        let mut ctx = make_ctx(vec![], doc_path.clone());
+        // Discovery appended two entries; a post filter removed one and
+        // added its own.
+        ctx.discovered_resources = vec!["kept.csv".into(), "pruned.csv".into()];
+
+        let doc = DocumentAst {
+            path: doc_path.clone(),
+            ast: Pandoc {
+                meta: make_meta_with_resources(&["kept.csv", "filter-added.txt"]),
+                blocks: Vec::new(),
+            },
+            ast_context: Default::default(),
+            source_context: Default::default(),
+            warnings: Vec::new(),
+            recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
+        };
+
+        let _ = ResourceReportStage::new()
+            .run(PipelineData::DocumentAst(doc), &mut ctx)
+            .await
+            .unwrap();
+
+        let entries: Vec<_> = ctx
+            .resource_report
+            .entries
+            .iter()
+            .map(|e| (e.raw_path.to_string_lossy().into_owned(), &e.origin))
+            .collect();
+        assert_eq!(entries.len(), 2, "{entries:?}");
+        assert!(entries.iter().any(|(p, o)| p == "kept.csv"
+            && matches!(
+                o,
+                ResourceOrigin::AutoDiscovery {
+                    via: crate::project_resources::AutoDiscoveryKind::Link,
+                    ..
+                }
+            )));
+        assert!(
+            entries
+                .iter()
+                .any(|(p, o)| p == "filter-added.txt"
+                    && matches!(o, ResourceOrigin::LuaFilter { .. }))
+        );
+        assert!(ctx.discovered_resources.is_empty(), "the list is consumed");
     }
 
     #[tokio::test]

@@ -56,7 +56,60 @@ The image renders page-relative on every page, and Quarto copies
 `images/logo.svg` into the output directory for you. If the file is
 missing, the render completes with a warning naming the missing path.
 
-## Raw HTML is not rewritten
+## Linked files are copied {#linked-files-are-copied}
+
+A markdown link to a local file that is not a page, such as a dataset
+or a dashboard offered as a download, is copied into the output
+directory next to the page, the same way an image is:
+
+``` {.markdown filename="guide/index.qmd"}
+- [Dashboard](dashboard.json){download="my-dashboard.json"}
+- [Data](data.csv)
+- [Data, from the root](/guide/data.csv)
+```
+
+`guide/dashboard.json` and `guide/data.csv` land in `_site/guide/`.
+Quarto finds the file by dropping any `?query` or `#fragment` from the
+link and decoding `%20`-style escapes. Links produced by shortcodes
+and by filters that run before Quarto's own processing are found too.
+
+A link is left alone, and nothing is copied, when its target:
+
+- is not a file in the project: a URL, a `#section` anchor, a
+  directory (`data/`), a file that does not exist, or a path that
+  climbs out of the project;
+- is a project document (`.qmd` files are never copied this way, even
+  unrendered drafts), or looks like another format's output of one,
+  such as `report.pdf` next to `report.qmd`;
+- is hidden (any part of the path starts with `.`), or lives in
+  `_freeze/` or the output directory.
+
+Only markdown links are examined. A path in raw HTML, in an attribute
+value (`data-href="…"`), in code, or in a navbar, sidebar or footer
+`href:` is not copied; declare those files under `resources` (see
+[Raw HTML is not rewritten](#raw-html-is-not-rewritten)). An
+unrendered notebook or `.md` file that a page links to *is* copied,
+which is the usual way to offer a notebook as a download.
+
+### Turning it off {#resource-discovery}
+
+Set `resource-discovery: false` to stop copying linked files. It is
+ordinary metadata, so it applies at whatever level you set it: a
+page's front matter, a directory's `_metadata.yml`, the top level of
+`_quarto.yml`, or a single format (`format: html: resource-discovery:
+false`). An inner level overrides an outer one, so a page can turn
+discovery back on with `resource-discovery: true`. On the command
+line, use `-M resource-discovery:false`.
+
+The value must be `true` or `false`. Anything else, such as a typo
+like `flase`, is an error ([`Q-5-52`](../../errors/project/Q-5-52.qmd))
+and the page is not rendered.
+
+To exclude individual files rather than all of them, remove them from
+`meta.resources` in a post filter; see
+[Publishing extra files](../authoring/lua-filters.qmd#publishing-extra-files).
+
+## Raw HTML is not rewritten {#raw-html-is-not-rewritten}
 
 Quarto 2 does not parse or rewrite HTML you author yourself. A raw
 HTML block or inline like

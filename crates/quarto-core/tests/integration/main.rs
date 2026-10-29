@@ -98,6 +98,7 @@ pub mod language_catalog;
 pub mod language_pipeline;
 pub mod language_resolve;
 pub mod link_rewriting_pipeline;
+pub mod linked_resources;
 pub mod listing_custom_template_diagnostics;
 pub mod listing_description_precedence;
 pub mod listing_glob_resolution;

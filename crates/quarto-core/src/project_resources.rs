@@ -19,6 +19,12 @@
 //! 3. **Engine and Lua filter** (Phase 2 / Phase 3) — accumulated
 //!    into a `DocumentResourceReport` by a late-pipeline collector
 //!    stage.
+//! 4. **Auto-discovery** (bd-twfep08m) — local files that Markdown
+//!    links point at, appended to `meta.resources` by
+//!    [`crate::transforms::LinkResourceDiscoveryTransform`] and
+//!    reported as [`ResourceOrigin::AutoDiscovery`] if they survive the
+//!    post filters. See
+//!    `claude-notes/plans/2026-10-29-linked-resource-discovery.md`.
 //!
 //! This module owns the type definitions and the glob/path helpers.
 //! The wiring into the render pipeline lives in
@@ -50,9 +56,22 @@ pub enum ResourceOrigin {
     Engine { engine: String, source: PathBuf },
     /// Added by a Lua filter via `quarto.doc.add_resource(path)`.
     LuaFilter { source: PathBuf },
-    // Reserved for future built-in walkers (Image src, OJS
-    // FileAttachment, includes). See plan §"Internal use".
-    // AutoDiscovery { kind: AutoDiscoveryKind, source: PathBuf },
+    /// Found by a built-in walker over the document (bd-twfep08m):
+    /// today, the targets of Markdown links to local files. The field
+    /// is `via`, not `kind`, because `kind` is this enum's serde tag.
+    AutoDiscovery {
+        via: AutoDiscoveryKind,
+        source: PathBuf,
+    },
+}
+
+/// What a built-in walker found a resource through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoDiscoveryKind {
+    /// The target of a Markdown `Link` node
+    /// ([`crate::transforms::LinkResourceDiscoveryTransform`]).
+    Link,
 }
 
 /// Where the resource's output path is anchored.
@@ -798,6 +817,24 @@ impl DocumentResourceReport {
         }
     }
 
+    /// Append every path a built-in walker discovered (bd-twfep08m).
+    pub fn add_discovered_files(
+        &mut self,
+        via: AutoDiscoveryKind,
+        doc_source: &Path,
+        files: impl IntoIterator<Item = PathBuf>,
+    ) {
+        for file in files {
+            self.entries.push(ReportedResource {
+                raw_path: file,
+                origin: ResourceOrigin::AutoDiscovery {
+                    via,
+                    source: doc_source.to_path_buf(),
+                },
+            });
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -821,6 +858,7 @@ pub fn resolve_reported_resources(
         let doc_source = match &entry.origin {
             ResourceOrigin::Engine { source, .. }
             | ResourceOrigin::LuaFilter { source }
+            | ResourceOrigin::AutoDiscovery { source, .. }
             | ResourceOrigin::DocumentMetadata { source } => source.clone(),
             ResourceOrigin::ProjectMetadata => project_root.to_path_buf(),
         };

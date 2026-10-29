@@ -184,6 +184,12 @@ pub struct StageContext {
     /// rather than inside it.
     pub resource_copies: Vec<crate::render::ResourceCopyIntent>,
 
+    /// Entries `LinkResourceDiscoveryTransform` appended to
+    /// `meta.resources` (bd-twfep08m). Bridged out of the inner
+    /// `RenderContext` by `AstTransformsStage`; read by
+    /// `ResourceReportStage` to attribute the post-filter survivors.
+    pub discovered_resources: Vec<String>,
+
     // === Observation & Control ===
     /// Observer for tracing, progress reporting, and WASM callbacks
     pub observer: Arc<dyn PipelineObserver>,
@@ -480,6 +486,7 @@ impl StageContext {
             crossref_index: None,
             resource_report: crate::project_resources::DocumentResourceReport::new(),
             resource_copies: Vec::new(),
+            discovered_resources: Vec::new(),
             project_index: None,
             engine_resolution: None,
             document_profile: None,
