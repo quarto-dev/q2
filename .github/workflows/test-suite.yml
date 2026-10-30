@@ -52,11 +52,19 @@ jobs:
         uses: Homebrew/actions/setup-homebrew@main
 
       # Consistent Rust setup for both platforms: install the toolchain pinned
-      # in rust-toolchain.toml, the only one the build uses.
+      # in rust-toolchain.toml, the only one the build uses, and remove the
+      # rest. rust-cache hashes every installed toolchain into its key, so an
+      # unused stable on the runner image changed the key and missed the cache
+      # (bd-ejomahfu). Don't use add-rust-environment-hash-key: false for this:
+      # it also drops the lockfile hash, and the cache then never updates.
       - name: Set up pinned Rust toolchain
         shell: bash
         run: |
           rustup toolchain install --no-self-update
+          active=$(rustup show active-toolchain | cut -d' ' -f1)
+          for t in $(rustup toolchain list | cut -d' ' -f1); do
+            [ "$t" = "$active" ] || rustup toolchain uninstall "$t"
+          done
           rustup --version
           rustc --version
 
@@ -73,11 +81,6 @@ jobs:
           # action's prebuilts each run, which is cheap (~1-2s).
           cache-bin: false
           shared-key: "rust-test-suite"
-          # The default environment hash covers every installed toolchain, so
-          # an unused stable on the runner image changed the key and missed
-          # the cache (bd-ejomahfu). Key on the pin instead.
-          add-rust-environment-hash-key: false
-          prefix-key: v1-rust-${{ hashFiles('rust-toolchain.toml') }}
 
       # Cache cargo-nextest and insta separately to avoid reinstalling
       - name: Install nextest
@@ -327,7 +330,12 @@ jobs:
 
       - name: Set up pinned Rust toolchain
         shell: bash
-        run: rustup toolchain install --no-self-update
+        run: |
+          rustup toolchain install --no-self-update
+          active=$(rustup show active-toolchain | cut -d' ' -f1)
+          for t in $(rustup toolchain list | cut -d' ' -f1); do
+            [ "$t" = "$active" ] || rustup toolchain uninstall "$t"
+          done
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -336,9 +344,6 @@ jobs:
           # See the matrix job: don't clobber ~/.cargo/bin with stale proxies.
           cache-bin: false
           shared-key: "rust-test-suite"
-          # See the matrix job: key on the pin, not on installed toolchains.
-          add-rust-environment-hash-key: false
-          prefix-key: v1-rust-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Clippy (deny warnings)
         shell: bash
@@ -367,13 +372,20 @@ jobs:
           version: latest
           platform: x64
 
+      # See the matrix job: rust-cache hashes every installed toolchain.
+      - name: Set up pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install --no-self-update
+          active=$(rustup show active-toolchain | cut -d' ' -f1)
+          for t in $(rustup toolchain list | cut -d' ' -f1); do
+            [ "$t" = "$active" ] || rustup toolchain uninstall "$t"
+          done
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-wasm-tests
-          # See the matrix job: key on the pin, not on installed toolchains.
-          add-rust-environment-hash-key: false
-          prefix-key: v1-rust-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Install wasm-bindgen-cli
         run: cargo xtask dev-setup
