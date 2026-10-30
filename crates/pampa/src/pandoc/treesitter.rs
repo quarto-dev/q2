@@ -1721,7 +1721,13 @@ fn native_visitor<T: Write>(
                     })],
                     target: (format!("#{}", anchor_id), String::new()),
                     source_info,
-                    attr_source: AttrSourceInfo::empty(),
+                    // The `anchor` class is synthesized; a `None` placeholder
+                    // keeps the sidecar aligned with attr.1 (bd-nq3ed2im).
+                    attr_source: AttrSourceInfo {
+                        id: None,
+                        classes: vec![None],
+                        attributes: Vec::new(),
+                    },
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
                 }));
 

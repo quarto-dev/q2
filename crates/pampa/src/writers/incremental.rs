@@ -1156,9 +1156,14 @@ struct AuditUnit {
 ///
 /// # Attr ranges
 ///
-/// For each attr-bearing node the kv key/value `SourceInfo`s are checked
-/// for tightness (c), containment (b), and mutual disjointness (a),
-/// guarded by the alignment check (`kvs.len() == attributes.len()`).
+/// For each attr-bearing node the id, class and kv key/value `SourceInfo`s
+/// are checked for tightness (c), containment (b), and mutual disjointness
+/// (a), guarded by the alignment check (`kvs.len() == attributes.len()`
+/// and `classes.len() == attr_source.classes.len()`). Identical class
+/// ranges count as one unit: classes promoted from a `class="a b"` kv all
+/// point at the whole quoted value (bd-0vfgz2cl). Id and class auditing
+/// was added for bd-01hx04kh, after the GH #964 span defect went
+/// undetected in its `{.cls}` / `{#id}` forms.
 ///
 /// See `claude-notes/plans/2026-06-01-q2-preview-plan-7g-source-range-tiling.md`.
 pub fn audit_source_range_tiling(ast: &Pandoc, source: &str) -> Vec<TilingFinding> {
@@ -1642,31 +1647,51 @@ fn audit_attr_source(
         return;
     }
 
-    // Collect all kv source-info ranges that resolve, checking tightness and
-    // containment on each, then check mutual disjointness among them.
-    let mut kv_units: Vec<AuditUnit> = Vec::new();
-    for (key_src, val_src) in &attr_source.attributes {
-        for (label, opt_si) in [
-            ("attr-key", key_src as &Option<SourceInfo>),
-            ("attr-val", val_src),
-        ] {
-            let Some(si) = opt_si else { continue };
-            let Some(range) = si.preimage_in(target) else {
-                continue;
-            };
-            // `None`: an attr key/value must never retain boundary whitespace.
-            check_tightness(label, &range, src, None, findings);
-            if let Some(ref par) = parent_range {
-                check_containment(par, &range, label, findings);
-            }
-            kv_units.push(AuditUnit {
-                node_type: label,
-                range,
-                invocation_key: None,
-            });
+    // Collect every attr component's source range that resolves — id,
+    // classes, kv keys and values — checking tightness and containment on
+    // each, then check mutual disjointness among them.
+    let id_iter = attr_source.id.iter().map(|si| ("attr-id", si));
+    let class_iter = attr_source
+        .classes
+        .iter()
+        .flatten()
+        .map(|si| ("attr-class", si));
+    let kv_iter = attr_source
+        .attributes
+        .iter()
+        .flat_map(|(key_src, val_src)| {
+            key_src
+                .iter()
+                .map(|si| ("attr-key", si))
+                .chain(val_src.iter().map(|si| ("attr-val", si)))
+        });
+
+    let mut units: Vec<AuditUnit> = Vec::new();
+    for (label, si) in id_iter.chain(class_iter).chain(kv_iter) {
+        let Some(range) = si.preimage_in(target) else {
+            continue;
+        };
+        // `None`: an attr component must never retain boundary whitespace.
+        check_tightness(label, &range, src, None, findings);
+        if let Some(ref par) = parent_range {
+            check_containment(par, &range, label, findings);
         }
+        // Classes promoted from a `class="a b"` kv all point at the whole
+        // quoted value (bd-0vfgz2cl), so identical ranges are one unit, not
+        // an overlap.
+        if units
+            .iter()
+            .any(|u| u.node_type == label && u.range == range)
+        {
+            continue;
+        }
+        units.push(AuditUnit {
+            node_type: label,
+            range,
+            invocation_key: None,
+        });
     }
-    check_sibling_disjointness(&kv_units, findings);
+    check_sibling_disjointness(&units, findings);
 }
 
 // ─── Unit resolution (same-Invocation grouping + None-preimage census) ────────
