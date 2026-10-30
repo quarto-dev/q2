@@ -251,8 +251,9 @@ function buildInstructions(readOnly: boolean, allowRender: boolean): string {
     'that hash back as ' +
     '`expected_hash` — the write is refused if a collaborator edited since your read, and ' +
     'you get the current content + hash to merge against. Never write a file a human ' +
-    'is editing without a fresh read. Images and other binaries: `action: "write"` with ' +
-    '`encoding: "base64"`; the read arm returns them as image/blob blocks (`metadata_only` ' +
+    'is editing without a fresh read. Images on this machine: `action: "upload"` with ' +
+    '`local_path` — the server reads the file, so the bytes stay out of the conversation. ' +
+    'Other binaries: `action: "write"` with `encoding: "base64"`; the read arm returns them as image/blob blocks (`metadata_only` ' +
     'skips the bytes).' +
     '\n4. Every write reports `synced: true|false` (hub acknowledgement). `synced: false` ' +
     'means "not yet confirmed", not "lost" — verify before claiming completion.' +

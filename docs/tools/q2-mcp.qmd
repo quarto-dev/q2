@@ -233,6 +233,7 @@ longer exist; hosts that allowlisted the old names must update.)
 | Action | Purpose |
 |--------|---------|
 | `write` | Replace a file's content (creates if absent — pass `create_only: true` to refuse overwriting an existing file; `encoding: "base64"` for images and other binaries) |
+| `upload` | Create or replace a file from an image on the machine running the server: `local_path` is its absolute path, `path` the destination in the project. The server reads the file, so its bytes stay out of the conversation. PNG, JPEG, GIF, and WebP only, up to 10 MB |
 | `patch` | Replace one exact string, or a whole qmd `section` (heading included) — the preferred way to make small edits |
 | `delete` | Delete a file |
 | `rename` | Rename or move a file |
