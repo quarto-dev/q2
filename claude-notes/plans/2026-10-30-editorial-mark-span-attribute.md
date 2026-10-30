@@ -2,7 +2,7 @@
 title: 'Editorial mark span excludes its trailing attribute (bd-87t8pnx6)'
 date: 2026-10-30
 description: 'The incremental writer dropped author/date attributes from untouched editorial marks because the mark''s source span ended at the closing delimiter; the span now extends to the end of the grammar node.'
-status: implemented  # on branch issue-964; full verify + PR pending
+status: done  # PR #990 merged 2026-10-30; follow-ups bd-01hx04kh + bd-nq3ed2im on branch braid/bd-01hx04kh-tiling-auditor-id-class
 braid:
   strand: bd-87t8pnx6
 ---
@@ -37,12 +37,12 @@ GH #964 (davidrsch, 2026-10-29). Editing a `Str` next to an untouched `[++ added
 
 ## Open questions
 
-None blocking. Two follow-ups are filed rather than folded in:
+None blocking. Two follow-ups were filed rather than folded in, and both were then implemented on `braid/bd-01hx04kh-tiling-auditor-id-class` (2026-10-30, after PR #990 merged):
 
-1. bd-01hx04kh — extend `audit_attr_source` to id/class ranges so the auditor would have caught the `{.cls}`/`{#id}` variants on its own.
-2. bd-nq3ed2im — make the producers behind the 16 census findings record or drop `AttrSourceInfo` in step with `Attr`, then delete the `KNOWN` entries.
+1. bd-nq3ed2im — the 16 census findings reduced to four producers (anchor shorthand, URI/email autolink, math-with-attribute Span, note-reference Span, and the list-table Div to Table lowering). Each now keeps `AttrSourceInfo` aligned with `Attr`, using `None` placeholders for synthesized components and filtering the sidecar in step with the attr for list-table. `KNOWN` in `tiling_corpus_tests.rs` is empty. Six JSON snapshots changed only by `classes: []` becoming `[null]`.
+2. bd-01hx04kh — `audit_attr_source` now checks id and class ranges with the same tightness, containment and disjointness checks as kvs. Identical class ranges from `class="a b"` (bd-0vfgz2cl) count as one unit. Zero new findings across the 307-document corpus; against the pre-#964 reader it reports the `{.cls}` and `{#id}` variants. Five tests in `tiling_phase3_tests.rs`.
 
 ## Risks
 
 - The clamp uses `fallback_range.end` only when it is strictly past the delimiter end, so documents without attributes are byte-for-byte unchanged in span terms. The one behavioural change is that an editorial mark's span now includes its attribute, which is what every other attr-bearing inline already did.
-- `KNOWN` grew from 1 to 17 entries. Each is keyed by file and finding kind, so an unrelated regression in the same file still fails, but the list is now long enough that bd-nq3ed2im should be worked rather than left to accrete.
+- `KNOWN` grew from 1 to 17 entries in PR #990. The follow-up branch above empties it.
