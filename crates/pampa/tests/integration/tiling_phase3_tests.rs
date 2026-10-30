@@ -241,3 +241,117 @@ fn abbreviation_nbsp_str_not_tightness_violation() {
         "abbreviation NBSP Str should not be a TightnessViolation, got: {msgs:?}"
     );
 }
+
+// ─── Attr id/class auditing (bd-01hx04kh) ────────────────────────────────────
+//
+// The auditor used to build attr units from kv pairs only. The GH #964 span
+// defect (an editorial mark's span stopped before its `{...}`) was therefore
+// visible to it only in the kv form; `{.cls}` and `{#id}` reported nothing.
+// These tests shrink a correctly parsed node's span to re-create that shape
+// and assert the id/class findings now appear.
+
+/// Parse `src`, then replace the span of the first paragraph's inline at
+/// `index` with `[start, end)` so its attr ranges fall outside it.
+fn audit_with_shrunk_inline_span(
+    src: &str,
+    index: usize,
+    start: usize,
+    end: usize,
+) -> Vec<pampa::writers::incremental::TilingFinding> {
+    use pampa::pandoc::{Block, Inline};
+    use quarto_source_map::SourceInfo;
+
+    let mut ast = parse_qmd(src);
+    let Some(Block::Paragraph(p)) = ast.blocks.first_mut() else {
+        panic!("expected a paragraph");
+    };
+    let inline = p.content.get_mut(index).expect("inline at index");
+    // A single-file parse puts every node in FileId(0).
+    let file_id = quarto_source_map::FileId(0);
+    match inline {
+        Inline::Span(s) => s.source_info = SourceInfo::original(file_id, start, end),
+        Inline::Link(l) => l.source_info = SourceInfo::original(file_id, start, end),
+        other => panic!("unexpected inline shape: {other:?}"),
+    }
+    audit_source_range_tiling(&ast, src)
+}
+
+fn containment_messages(findings: &[pampa::writers::incremental::TilingFinding]) -> Vec<String> {
+    findings
+        .iter()
+        .filter(|f| f.kind == TilingFindingKind::ContainmentViolation)
+        .map(|f| f.message.clone())
+        .collect()
+}
+
+#[test]
+fn attr_class_outside_node_span_is_a_containment_violation() {
+    // Span is `[x]{.cls}` at 5..14; shrink it to `[x]` (5..8) so the class
+    // range (`.cls`, 9..13) lies outside. Pre-bd-01hx04kh: no finding.
+    let src = "Last [x]{.cls} text.\n";
+    let msgs = containment_messages(&audit_with_shrunk_inline_span(src, 2, 5, 8));
+    assert_eq!(msgs.len(), 1, "got: {msgs:?}");
+    assert!(
+        msgs[0].contains("`attr-class` [9..13]"),
+        "expected an attr-class finding, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn attr_id_outside_node_span_is_a_containment_violation() {
+    let src = "Last [x]{#id} text.\n";
+    let msgs = containment_messages(&audit_with_shrunk_inline_span(src, 2, 5, 8));
+    assert_eq!(msgs.len(), 1, "got: {msgs:?}");
+    assert!(
+        msgs[0].contains("`attr-id` [9..12]"),
+        "expected an attr-id finding, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn attr_id_classes_and_kvs_are_all_audited_together() {
+    // Every component outside the shrunk span is reported, once each.
+    let src = "Last [x]{#id .a .b key=\"v\"} text.\n";
+    let msgs = containment_messages(&audit_with_shrunk_inline_span(src, 2, 5, 8));
+    let labels: Vec<&str> = msgs
+        .iter()
+        .map(|m| m.split('`').nth(1).unwrap_or(""))
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            "attr-id",
+            "attr-class",
+            "attr-class",
+            "attr-key",
+            "attr-val"
+        ],
+        "got: {msgs:?}"
+    );
+}
+
+#[test]
+fn well_formed_attrs_report_nothing() {
+    for src in [
+        "Last [x]{#id .a .b key=\"v\"} text.\n",
+        "Last [x]{ #id .a } text.\n",
+        "# Heading {#hid .hc}\n",
+        "::: {#did .dc k=\"v\"}\nx\n:::\n",
+        "```{.python}\nx\n```\n",
+        "[link](u){.lc}\n",
+        // Now-correct editorial mark spans (GH #964).
+        "Last [++ added]{.cls} text.\n",
+        "Last [++ added]{#id} text.\n",
+    ] {
+        let findings = audit(src);
+        assert!(findings.is_empty(), "{src:?} -> {findings:?}");
+    }
+}
+
+#[test]
+fn classes_promoted_from_kv_share_one_range_without_overlap_finding() {
+    // `class="a b"` gives both classes the same whole-value range
+    // (bd-0vfgz2cl); that is one unit, not a sibling overlap.
+    let findings = audit("Last [x]{class=\"a b\"} text.\n");
+    assert!(findings.is_empty(), "got: {findings:?}");
+}
