@@ -13,7 +13,7 @@ return {= a =} +
 A markdown error inside a fragment (left as written):
 
 ```{lmd}
-return {=: This line mentions the groups' Unique IDs. :=}
+return {=: This line mentions the groups ' Unique IDs. :=}
 ```
 
 An unsupported node inside a fragment (left as written; the shortcode is

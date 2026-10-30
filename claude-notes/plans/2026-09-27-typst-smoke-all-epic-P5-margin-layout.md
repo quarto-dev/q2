@@ -754,12 +754,12 @@ worktree per `git worktree list`, so its branch could not be rebased/rewritten
 from here regardless). **The rebase completed with zero conflicts.** The
 handoff's expectation of a conflict in
 `resources/pandoc-filters/filters/quarto-post/typst.lua` was wrong, not a
-red flag: Group 1 (this branch)'s actual changes landed in
+red flag: Group 1 (this branch)\'s actual changes landed in
 `crates/quarto-core/src/pandoc_filters/typst_params.rs` and
 `stage/stages/pandoc_write.rs`, not `typst.lua` — Group 1's own same-day
 "Correction" entry above already established that `typst.lua` on this branch
 was byte-identical to Q1's own copy. Group 2 (workspace-7) touched
-`typst.lua`'s caption/figure-emission code exclusively; the two branches
+`typst.lua`\'s caption/figure-emission code exclusively; the two branches
 never touched the same lines of the same file. The plan doc itself merged
 cleanly too, for the same reason: each branch's `## Decisions`/`## Status`
 updates were appended in different, non-overlapping locations.
@@ -777,23 +777,23 @@ via `ensurePdfRegexMatches`) — only the single `ensurePdfTextPositions` miss
 ("Figure 3:") remained, confirming the handoff's framing of two separate bugs
 on this fixture was right.
 
-**Loose end (b), `citation-margin-locator.qmd`'s "p. 42" miss under
-`ensurePdfTextPositions`, and loose end (a)'s residual "Figure 3:" miss: same
+**Loose end (b), `citation-margin-locator.qmd`\'s "p. 42" miss under
+`ensurePdfTextPositions`, and loose end (a)\'s residual "Figure 3:" miss: same
 root cause, now fixed.** Compiled both fixtures' `.typ` directly with the
 local `typst` binary and confirmed both target strings *are* present in the
 rendered PDF (`pdftotext -layout` shows `[1, p. 42]` and, for
 `crossref-grand-finale`, `Figure 3: FIG-MARGINCAP-GAMMA`) — the rendering
 pipeline was never at fault. `crates/quarto-test/src/assertions/pdf_text_position.rs`
-builds its own `TextItem.text` values directly from `pdf_extract`'s
+builds its own `TextItem.text` values directly from `pdf_extract`\'s
 per-character `output_character` callback (a different code path from
-`pdf_regex.rs`'s `extract_text`, which workspace-7's `normalize_pdf_text` fix
+`pdf_regex.rs`\'s `extract_text`, which workspace-7's `normalize_pdf_text` fix
 already covered) and never normalized them — so Typst's non-breaking space
 between a caption's supplement and number (`"Figure\u{a0}3:"`, the same
 mechanism as workspace-7's Root cause 2) survived into the literal
 `.contains(search)` comparison and failed to match the plain-space search
 string. Fixed by calling the existing `normalize_pdf_text` helper (already
 `pub(super)` inside the shared `assertions` module, so directly importable)
-on each `TextItem`'s text at the point it's constructed in `flush_word`
+on each `TextItem`\'s text at the point it's constructed in `flush_word`
 (`pdf_text_position.rs`). Both fixtures now pass; `cargo nextest run -p quarto
 smoke_all` after this fix: **73/86 P5 fixtures passing, 10 skipped, 3
 failing** (219 → 221 passed in the full corpus; 6 → 4 total smoke-all
@@ -814,11 +814,11 @@ flagged as "a hypothesis, not yet confirmed for the extract_text entry point"
 at the time. It doesn't hold. Compiled `citation-margin-elaborate-citeproc.typ`
 directly and inspected the PDF: inline citations render via Typst's own
 **native numeric bibliography style** (`[1, p. 51]`, `(1936)`, etc.), and the
-margin note next to each one shows `citeprocBibliography[c.id]`'s content —
+margin note next to each one shows `citeprocBibliography[c.id]`\'s content —
 a full Chicago-style reference-list entry (e.g. "Borges, Jorge Luis. 1941.
 'La Biblioteca de Babel.' ... Editorial Sur.") with **no locator or suffix
 anywhere**, because that lookup table (`typst.lua:36-65`) is built by running
-`pandoc.utils.citeproc(doc)` and extracting each bibliography `Div`'s
+`pandoc.utils.citeproc(doc)` and extracting each bibliography `Div`\'s
 rendered entry — which is inherently per-reference, not per-citation-instance,
 so it structurally cannot carry a locator (`[p. 51]`), suffix (`and
 throughout`), or author-suppression that only exist on the individual `Cite`
@@ -880,10 +880,10 @@ own anywhere in the general pipeline.
 
 This foundational gap sits *underneath* the narrower "Pandoc `-citations`
 variant" question raised earlier in this doc (`format.rs:953-962`,
-`pandoc_write.rs:564-568`'s "handled by pandoc's own `--citeproc` mechanism
+`pandoc_write.rs:564-568`\'s "handled by pandoc's own `--citeproc` mechanism
 elsewhere" comment — that "elsewhere" mechanism does not actually exist,
 confirmed by the same HTML experiment). But it turns out to be **a red
-herring for fixing the 3 remaining P5 fixtures**: `quarto-post/typst.lua`'s
+herring for fixing the 3 remaining P5 fixtures**: `quarto-post/typst.lua`\'s
 Cite handler already sidesteps the whole missing-auto-invocation problem by
 calling `pandoc.utils.citeproc(doc)` directly from Lua — Pandoc's citeproc
 engine, invoked manually, independent of Q2's filter-resolution pipeline or
@@ -895,12 +895,12 @@ document `pandoc.utils.citeproc(doc)` returns already has every **body**
 `Cite` node replaced in place with its fully rendered, locator-aware text —
 e.g. a source citation `[@borges1941library, p. 51]` comes back as literal
 text `"(Borges 1941, 51)"` in the returned document's block content, not just
-in the bibliography Div. `typst.lua`'s existing `citeprocBibliography` build
+in the bibliography Div. `typst.lua`\'s existing `citeprocBibliography` build
 (Pass 0, `Pandoq = function(doc)`) discards this rewritten body entirely and
 only harvests the bibliography Div's reference-list entries — which are
 structurally per-work, not per-citation-instance, and can never carry a
 locator. **It is throwing away the exact data it needs.** The fix: capture
-each `Cite` node's own rewritten replacement from `processed`'s body,
+each `Cite` node's own rewritten replacement from `processed`\'s body,
 matched positionally against the original document's `Cite`-node traversal
 order (both trees are structurally identical apart from the `Cite`→
 rendered-text swap, so a synchronized counter/walk works), and use that
@@ -928,12 +928,12 @@ failures**, none investigated before this session:
   **`margin-table-great-tables-caption-below.qmd`**: both fail on the same
   missing pattern, `'position: bottom'` never appears in the generated
   `.typ`. Root cause **confirmed**, same mechanism as Root cause 3 above:
-  `codeblock_shorthand.rs`'s `wrapper_column_classes` only special-cases
+  `codeblock_shorthand.rs`\'s `wrapper_column_classes` only special-cases
   `cap_location == Some("margin")` — a `lst-cap-location: bottom` /
   `cap-location: bottom` cell option value is silently dropped, never
   forwarded as a class onto the wrapper Div. Root cause 3 fixed the
   `"margin"` value; the `"bottom"` value needs the same treatment (turned
-  into whatever class/param `floatreftarget.rs`'s Typst renderer needs to
+  into whatever class/param `floatreftarget.rs`\'s Typst renderer needs to
   emit `position: bottom` on `#notefigure`/`#notetable`).
 - **`margin-listing-cell-option.qmd`**: fails because `#| eval: false` is
   **not honored** for this Python code cell — confirmed directly (rendered
@@ -972,7 +972,7 @@ actual behavior mid-session. Recording both so the false start isn't
 silently lost.
 
 **Attempt 1 (wrong): duplicate the short form into the margin note.**
-`typst.lua`'s Pass 0 was extended to walk `pandoc.utils.citeproc(doc)`'s
+`typst.lua`\'s Pass 0 was extended to walk `pandoc.utils.citeproc(doc)`\'s
 processed body with a `Cite` handler, capturing each `Cite` node's own
 rewritten `.content` (Pandoc rewrites `Cite.content` in place while
 preserving node identity/order — confirmed with a standalone
@@ -1069,14 +1069,14 @@ Of the 5 Jupyter-revealed failures above, this closes the
 `"bottom"` for `fig`) instead of honoring the author's cell option.
 
 **Fix, landed (uncommitted, in this worktree):**
-`codeblock_shorthand.rs`'s `Wrapper::Float` enum variant gained an
+`codeblock_shorthand.rs`\'s `Wrapper::Float` enum variant gained an
 `attributes: Vec<(String, String)>` field. A new function
 `wrapper_cap_location_attribute(parsed: &CellOptions, ref_type: &str) ->
 Vec<(String, String)>`, sibling to `wrapper_column_classes` and called at
 the same call site, reads `<reftype>-cap-location` (falling back to
 generic `cap-location`) and forwards it verbatim as a single
 `("cap-location", value)` tuple (empty vec if the option wasn't set). The
-wrapper `Div`'s `attr` `LinkedHashMap` — previously always constructed
+wrapper `Div`\'s `attr` `LinkedHashMap` — previously always constructed
 empty — is now built from this vec via `.into_iter().collect()`. The
 existing `"margin"` → `margin-caption` class push in
 `wrapper_column_classes` is untouched (kept in case something downstream
@@ -1147,7 +1147,7 @@ pre-existing, unrelated `typst/pdf-text-position-test.qmd`.
   fixture: both cells also call `GT(...).tab_spanner(label=..., columns=
   cs.all())`, which raises `TypeError: expected a selector; found [...]
   instead` — reproduced standalone in plain Python with zero Quarto/Q2
-  involvement (`great_tables 0.4.0`'s `tab_spanner` → `cols_move` →
+  involvement (`great_tables 0.4.0`\'s `tab_spanner` → `cols_move` →
   `eval_select` unconditionally calls `polars.selectors.expand_selector`
   even when the resolved columns are already a plain list of strings, and
   `expand_selector` rejects anything that isn't a polars selector object —
@@ -1194,7 +1194,7 @@ pre-existing, unrelated `typst/pdf-text-position-test.qmd`.
   First confirmed the pre-engine Rust wrapping (Root cause 4's fix) *does*
   apply correctly and engine-agnostically to this Python cell: `label:
   tbl-margin-panel` + `tbl-subcap` correctly hits
-  `codeblock_shorthand.rs`'s generic `<reftype>-subcap` check (branches on
+  `codeblock_shorthand.rs`\'s generic `<reftype>-subcap` check (branches on
   `def.ref_type`, not hardcoded to `"fig"`) and returns `Wrapper::None`,
   leaving the cell's `label`/`tbl-cap`/`tbl-subcap` options untouched for
   the engine — this part of the in-plan Rust code is working exactly as
@@ -1206,7 +1206,7 @@ pre-existing, unrelated `typst/pdf-text-position-test.qmd`.
   knitr, whose `hooks.R` (`output_label`/`output_label_placeholder`,
   `figure_cap`) uses the still-present `label`/`subcap` options to
   synthesize each panel's own id/caption from multiple R plot outputs
-  under one chunk, the Jupyter engine (`text_execute.rs`'s
+  under one chunk, the Jupyter engine (`text_execute.rs`\'s
   `render_cell`/`format_outputs`) has no equivalent per-panel
   id/caption-synthesis logic at all for multiple IPython `display()` calls
   under one label+subcap. This is a missing feature in the generic

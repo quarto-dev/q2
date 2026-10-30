@@ -695,9 +695,9 @@ mod tests {
 
     #[test]
     fn markdown_parse_errors_carry_the_readers_diagnostics() {
-        // Q-2-10: a bare apostrophe after a plural noun reads as an
-        // unmatched closing smart quote.
-        let src = "return {=: the groups' Unique IDs :=}";
+        // Q-2-10: a stray quote mark with whitespace on both sides opens
+        // a quote that never closes.
+        let src = "return {=: the groups ' Unique IDs :=}";
         let err = desugar_lua(src).unwrap_err();
         let LmdError::MarkdownParse { diagnostics, .. } = &err else {
             panic!("expected MarkdownParse, got {err}");

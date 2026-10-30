@@ -456,7 +456,7 @@ fn pass1_failure_triggers_non_zero_exit() {
     // Q-2-10 quote-mark error: unescaped apostrophe after a space.
     write_file(
         &project.join("about.qmd"),
-        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages' titles within the next render\n",
+        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages ' titles within the next render\n",
     );
 
     let out = run_q2(&project, &[]);

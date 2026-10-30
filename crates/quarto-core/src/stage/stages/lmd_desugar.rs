@@ -344,9 +344,9 @@ mod tests {
 
     #[test]
     fn a_fragment_markdown_error_is_located_inside_the_fragment() {
-        // Q-2-10 from the reader, rerooted: the bare apostrophe.
+        // Q-2-10 from the reader, rerooted: the stray quote mark.
         let (mut blocks, sources) =
-            parse("```{lmd}\nlocal x = 1\nreturn {=: the groups' Unique IDs :=}\n```\n");
+            parse("```{lmd}\nlocal x = 1\nreturn {=: the groups ' Unique IDs :=}\n```\n");
         let errors = desugar_lmd_cells(&mut blocks, &sources);
         assert_eq!(errors.len(), 1, "{errors:?}");
         let LmdError::MarkdownParse { diagnostics, .. } = &errors[0].error else {

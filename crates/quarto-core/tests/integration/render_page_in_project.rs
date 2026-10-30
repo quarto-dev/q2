@@ -401,7 +401,7 @@ fn pass1_parse_error_in_sibling_surfaces_alongside_active_render() {
     // Same Q-2-10 quote-mark error as the bd-mwtf test.
     write(
         &project_dir.join("about.qmd"),
-        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages' titles within the next render\n",
+        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages ' titles within the next render\n",
     );
 
     let active = canonical(&project_dir.join("index.qmd"));
@@ -474,7 +474,7 @@ fn pass1_parse_error_on_active_page_carries_diagnostics() {
 
     // Two-file website where `about.qmd` contains an unescaped
     // apostrophe Q2 reads as a Q-2-10 quote-mark error
-    // (`pages'` in `*other* pages' titles`).
+    // (`pages'` in `*other* pages ' titles`).
     write(
         &project_dir.join("_quarto.yml"),
         "project:\n  type: website\nwebsite:\n  sidebar:\n    contents:\n      - index.qmd\n      - about.qmd\n",
@@ -485,7 +485,7 @@ fn pass1_parse_error_on_active_page_carries_diagnostics() {
     );
     write(
         &project_dir.join("about.qmd"),
-        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages' titles within the next render\n",
+        "---\ntitle: About\n---\n\n- Reflect changes to *other* pages ' titles within the next render\n",
     );
 
     let active = canonical(&project_dir.join("about.qmd"));

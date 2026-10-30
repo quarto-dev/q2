@@ -16,43 +16,49 @@ categories:
 
 ## What this means
 
-Quarto markdown treats single quotes as a paired construct: a
-`'` preceded by a word-character is read as a closing quote.
-When the parser sees a closing position without an earlier
-matching open, it raises this error.
+Quarto markdown treats single quotes as a paired construct. A `'`
+that is not directly attached to a word is read as a quote mark:
+when it opens a quote that the parser then cannot close, because a
+space follows it, it raises this error.
 
-The diagnostic message points at the closing quote as the
-trigger; the actual mistake is usually the missing opening
-quote.
+The diagnostic message points at the quote mark as the trigger; the
+actual mistake is usually a stray `'` or a missing opening quote.
 
 ## Why this happens
 
-The most common cause is a contraction or possessive — `it's`,
-`don't`, `Mary's` — where the apostrophe is being read as a
-closing quote. The parser distinguishes apostrophes from quote
-marks by surrounding context, and a stray space can flip the
-interpretation.
+A `'` directly after a word is an apostrophe, and never produces
+this error: `it's`, `don't`, `Mary's`, the plural possessives `the
+dogs' toys` and `the cats'.`, and `d'` before a code span all render
+as written, with a typographic apostrophe.
+
+The error fires for a `'` followed by a space that the parser
+cannot attach to a word:
+one with whitespace in front of it (`the admins ' console`), one
+after a closing delimiter such as `` ` `` or `**`, and one after a
+word that starts with a digit or a non-ASCII letter (`the 1990s'
+music`, `Agnès' house`).
 
 ## How to fix
 
-If the mark is an apostrophe, ensure no spurious whitespace
-precedes it. If the construction really is a quotation, add the
-opening `'` at the intended start.
+If the mark is a stray character, remove it or close the space before
+it. If the construction really is a quotation, add the opening `'` at
+the intended start.
 
-For literal apostrophes that the parser keeps mis-reading,
-escape them:
+For a literal apostrophe that the parser keeps mis-reading, escape
+it:
 
 ```markdown
-The variable \'x\' (treated literally).
+The 1990s\' music; `a.rs`\'s module.
 ```
 
 ## Example
 
 ```markdown
-a' b.
+a ' b.
 ```
 
-The `'` after `a` is read as a closing quote with no opener.
+The `'` after `a ` is read as a quote that opens and is never
+closed.
 
 ## Related
 

@@ -901,7 +901,7 @@ mod tests {
         write_module(
             tmp.path(),
             "bad.lmd",
-            "local M = {}\nfunction M.go()\n  return {=: pages' :=}\nend\nreturn M\n",
+            "local M = {}\nfunction M.go()\n  return {=: pages ' :=}\nend\nreturn M\n",
         );
         let (_, diags, sources) = render_at(
             "```{lmd}\nlocal m = require(\"bad\")\nreturn m.go()\n```\n",

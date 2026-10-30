@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn a_markdown_error_carries_the_readers_diagnostics() {
         let err = LmdDialect
-            .compile("return {=: pages' :=}\n", Path::new("bad.lmd"))
+            .compile("return {=: pages ' :=}\n", Path::new("bad.lmd"))
             .unwrap_err();
         assert!(
             err.message.contains("markdown fragment failed to parse"),

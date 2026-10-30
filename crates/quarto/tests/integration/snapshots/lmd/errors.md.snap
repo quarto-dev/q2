@@ -1,5 +1,6 @@
 ---
 source: crates/quarto/tests/integration/lmd_snapshots.rs
+assertion_line: 292
 expression: md
 ---
 A Lua syntax error (left as written):
@@ -12,7 +13,7 @@ return {= a =} +
 A markdown error inside a fragment (left as written):
 
 ``` {.lmd .code-with-copy}
-return {=: This line mentions the groups' Unique IDs. :=}
+return {=: This line mentions the groups ' Unique IDs. :=}
 ```
 
 An unsupported node inside a fragment (left as written; the shortcode is

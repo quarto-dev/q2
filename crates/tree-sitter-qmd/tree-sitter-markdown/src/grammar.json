@@ -773,6 +773,18 @@
           "members": [
             {
               "type": "SYMBOL",
+              "name": "_paragraph_start"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
               "name": "_inline_whitespace"
             },
             {
@@ -5479,6 +5491,10 @@
     {
       "type": "SYMBOL",
       "name": "_caption_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_paragraph_start"
     }
   ],
   "inline": [],

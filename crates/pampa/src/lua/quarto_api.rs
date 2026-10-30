@@ -1393,7 +1393,9 @@ mod tests {
     fn quarto_markdown_reports_a_parse_error() {
         let lua = create_test_lua();
         let err = lua
-            .load(r#"return quarto.markdown("the groups' Unique IDs")"#)
+            // A `'` directly after a word is an apostrophe since GH #943, so
+            // the stray quote needs whitespace in front of it to be an error.
+            .load(r#"return quarto.markdown("the groups ' Unique IDs")"#)
             .eval::<Value>()
             .unwrap_err()
             .to_string();

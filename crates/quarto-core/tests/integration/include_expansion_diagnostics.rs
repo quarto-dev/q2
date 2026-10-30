@@ -43,12 +43,13 @@ use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
 use quarto_error_reporting::DiagnosticMessage;
 
-/// A fixture line that trips the qmd parser: the bare apostrophe after
-/// a plural noun is read as a closing smart quote with no opener
-/// (Q-2-10). Line 3 of `BAD_QMD` (0-indexed row 2).
+/// A fixture line that trips the qmd parser: a stray `'` with whitespace
+/// on both sides is read as a quote that opens and never closes
+/// (Q-2-10). Line 3 of `BAD_QMD` (0-indexed row 2). (A `'` directly after
+/// the word, `groups'`, is an apostrophe since GH #943 and parses.)
 const BAD_QMD: &str = "Some text before the error.\n\
     \n\
-    This line mentions the groups' Unique IDs instead of their names.\n";
+    This line mentions the groups ' Unique IDs instead of their names.\n";
 
 /// Write `files` into a temp dir and render `main` through the real
 /// HTML pipeline, returning whatever the pipeline returned.

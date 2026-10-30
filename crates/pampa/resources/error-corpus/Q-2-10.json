@@ -6,20 +6,21 @@
     {
       "message": "No opening quote was found before this mark. If you meant an apostrophe, escape it with a backslash.",
       "label": "quote-start",
-      "noteType": "simple"
+      "noteType": "simple",
+      "trimLeadingSpace": true
     }
   ],
   "cases": [
     {
       "name": "simple",
-      "description": "Simple case and variants in different contexts",
-      "content": "a' b.",
+      "description": "A quote mark with whitespace on both sides. (A `'` directly after a word, `a' b.`, is an apostrophe since GH #943 and no longer an error.)",
+      "content": "a ' b.",
       "captures": [
         {
           "label": "quote-start",
           "row": 0,
           "column": 1,
-          "size": 1
+          "size": 2
         }
       ],
       "prefixesAndSuffixes": [

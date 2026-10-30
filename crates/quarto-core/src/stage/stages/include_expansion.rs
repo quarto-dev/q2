@@ -1709,10 +1709,10 @@ mod tests {
         assert_eq!(doc.ast.blocks.len(), original_block_count);
     }
 
-    /// Trips the parser: bare apostrophe after a plural noun reads as
-    /// an unmatched closing smart quote (Q-2-10).
+    /// Trips the parser: a stray quote mark with whitespace on both
+    /// sides opens a quote that never closes (Q-2-10).
     const UNPARSEABLE_QMD: &str =
-        "This line mentions the groups' Unique IDs instead of their names.\n";
+        "This line mentions the groups ' Unique IDs instead of their names.\n";
 
     fn has_include_shortcode_block(blocks: &[Block]) -> bool {
         blocks.iter().any(|b| extract_include_path(b).is_some())
