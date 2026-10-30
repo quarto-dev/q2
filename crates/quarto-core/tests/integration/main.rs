@@ -188,6 +188,7 @@ pub mod table_bootstrap_classes_preview;
 pub mod tabset_pipeline;
 pub mod theme_light_dark;
 pub mod title_block_pipeline;
+pub mod toc_js_pipeline;
 pub mod toc_location;
 pub mod toc_markup;
 pub mod toc_title_context;

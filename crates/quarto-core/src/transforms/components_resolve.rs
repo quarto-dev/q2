@@ -57,7 +57,7 @@ use crate::components::runtime::{
     HEAD_SENTINEL, ManifestEntry, asset_url, head_block, script_json,
 };
 use crate::components::{
-    COMPONENT_HOST_ATTR, COMPONENTS_KEY, ComponentDecl, ComponentSource, ContentMode,
+    Binding, COMPONENT_HOST_ATTR, COMPONENTS_KEY, ComponentDecl, ComponentSource, ContentMode,
     parse_components, register_component_assets,
 };
 use crate::format::PipelineProfile;
@@ -480,7 +480,14 @@ fn bind_elements(
     });
 
     for (i, decl) in decls.iter().enumerate() {
-        if matched[i] == 0 {
+        if decl.bind == Binding::Chrome {
+            // The host is template chrome (`nav#TOC` for `toc-component:`,
+            // bd-toc-scrollspy-js-41e624d8), not an AST element: always
+            // bound, and never Q-25-4.
+            if !order.contains(&i) {
+                order.push(i);
+            }
+        } else if matched[i] == 0 {
             diags.push(unbound_diagnostic(decl));
         }
     }

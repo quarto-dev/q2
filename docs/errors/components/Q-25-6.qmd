@@ -28,6 +28,9 @@ and the entry is skipped.
   supported: bindings are resolved on the document tree at render time,
   where only ids and classes are known.
 - `bind:` has a space or a second `#`/`.` in it.
+- `bind: chrome`, which is reserved for the components Quarto declares
+  itself for page chrome (`toc-component`); an author's entry binds with
+  `#id` or `.class`.
 - `content:` is misspelled or capitalized.
 
 ## How to fix

@@ -380,6 +380,82 @@ test('TOC renders on a doc with sections', async ({ page }) => {
     );
 });
 
+// bd-toc-scrollspy-js-41e624d8: entry.tsx injects `quarto-toc.js`, the
+// same file `q2 render` ships. The script keys its binding off the nav
+// element through a MutationObserver (React mounts `TocSlot` after the
+// first UPDATE_AST), so this is the one automated browser check that the
+// scroll tracking works at all: the active link follows the scroll
+// position, and nested lists collapse around it (default depth 1).
+test('TOC active link follows scroll and nested lists collapse', async ({ page }) => {
+    const filler = Array.from({ length: 12 }, (_, i) => `Paragraph ${i} of filler text.`).join('\n\n');
+    const body = [
+        '# Section A',
+        'A content.',
+        '## Subsection A1',
+        filler,
+        '# Section B',
+        filler,
+        '## Subsection B1',
+        filler,
+    ].join('\n\n');
+    server = await startPreviewServer({
+        fixtureFiles: [
+            { path: '_quarto.yml', content: 'project:\n  type: website\n' },
+            {
+                path: 'index.qmd',
+                content: `---\ntitle: Scroll Page\ntoc: true\n---\n\n${body}\n`,
+            },
+        ],
+    });
+
+    await page.goto(server.url);
+    await waitForInnerHeading(page, 'Scroll Page');
+    await waitForInnerSelector(page, '#quarto-margin-sidebar nav#TOC a.active');
+
+    const readToc = () => {
+        const outer = document.querySelector('iframe') as HTMLIFrameElement;
+        const innerDoc = outer.contentDocument!;
+        const navEl = innerDoc.querySelector('nav#TOC')!;
+        const active = Array.from(navEl.querySelectorAll('a.active')).map(
+            (a) => a.textContent?.trim(),
+        );
+        const collapsed = Array.from(navEl.querySelectorAll('ul.collapse')).map(
+            (ul) => ul.previousElementSibling?.textContent?.trim(),
+        );
+        return { active, collapsed };
+    };
+
+    // At the top: the first entry is active and its own sublist is open;
+    // Section B's sublist is collapsed.
+    await page.waitForFunction(() => {
+        const outer = document.querySelector('iframe') as HTMLIFrameElement;
+        return outer.contentDocument?.querySelector('nav#TOC ul.collapse') != null;
+    });
+    expect(await page.evaluate(readToc)).toEqual({
+        active: ['Section A'],
+        collapsed: ['Section B'],
+    });
+
+    // Scroll to Section B. The preview's scroll container is `#root`
+    // (the iframe's html/body are viewport-sized), which is exactly why
+    // the script resolves the container instead of assuming the window.
+    await page.evaluate(() => {
+        const outer = document.querySelector('iframe') as HTMLIFrameElement;
+        const innerDoc = outer.contentDocument!;
+        const section = innerDoc.getElementById('section-b')!;
+        innerDoc.getElementById('root')!.scrollTo(0, section.offsetTop + 10);
+    });
+    await page.waitForFunction(() => {
+        const outer = document.querySelector('iframe') as HTMLIFrameElement;
+        const active = outer.contentDocument?.querySelector('nav#TOC a.active');
+        return active?.textContent?.trim() === 'Section B';
+    });
+    expect(await page.evaluate(readToc)).toEqual({
+        active: ['Section B'],
+        collapsed: ['Section A'],
+    });
+});
+
 test('favicon link lands in iframe document.head', async ({ page }) => {
     // Inline the favicon as a tiny PNG fixture so the project actually
     // has a file at that path. We only assert the `<link rel="icon">`

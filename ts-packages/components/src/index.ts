@@ -82,3 +82,42 @@ export const HOST_ATTR = "data-quarto-component";
 export const STATE_ATTR = "data-quarto-component-state";
 /** Dispatched (bubbling) on a host right after its component is rendered. */
 export const MOUNTED_EVENT = "quarto-component:mounted";
+
+/**
+ * One table-of-contents entry, as `toc-component:` hands it to the TOC
+ * component (bd-toc-scrollspy-js-41e624d8). Titles are plain text; the
+ * markup is in `children`.
+ */
+export interface QuartoTocEntry {
+  /** The section id the entry links to (`#id`). */
+  id: string;
+  /** The heading text. */
+  title: string;
+  /** The heading level, 1 to 6. */
+  level: number;
+  /** The section number when `number-sections` is on (`"1.2"`). */
+  number?: string;
+  children: QuartoTocEntry[];
+}
+
+/**
+ * The `props` of the component named by `toc-component:`. The component
+ * is mounted over `nav#TOC` with the static TOC (`<h2 id="toc-title">`,
+ * the `<ul>`, `.toc-actions`) as `children`, and `host` is the nav.
+ */
+export interface QuartoTocProps {
+  /** The TOC title (`toc-title`, or the localized default). */
+  title?: string;
+  entries: QuartoTocEntry[];
+  /**
+   * `toc-expand` as the default script reads it: 99 for `true`, -1 for
+   * `false`, the number itself otherwise; null when unset (the default
+   * script then opens one level).
+   */
+  expanded: number | null;
+  /** The normalized `toc-location`. */
+  location: "left" | "right" | "body";
+}
+
+/** The reserved component name `toc-component:` declares. */
+export const TOC_COMPONENT_NAME = "quarto-toc";

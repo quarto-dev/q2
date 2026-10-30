@@ -64,6 +64,14 @@ import bootstrapJsSrc from '../../../../resources/js/bootstrap/bootstrap.bundle.
 // opt-out.
 import headroomJsSrc from '../../../../resources/js/headroom/headroom.min.js?raw';
 import quartoNavJsSrc from '../../../../resources/js/quarto-nav/quarto-nav.js?raw';
+// bd-toc-scrollspy-js-41e624d8: the TOC scroll tracking (active link,
+// toc-expand collapse), the same file the native render ships as the
+// `js:quarto-toc` artifact (`transforms/toc_js.rs`). It binds to
+// `nav#TOC` by element identity through a MutationObserver, so React
+// mounting `TocSlot` after the first UPDATE_AST, and replacing its
+// `<ul>` on every heading edit, rebinds it; a nav tagged
+// `data-quarto-component` (`toc-component:`) is skipped.
+import quartoTocJsSrc from '../../../../resources/js/quarto-toc/quarto-toc.js?raw';
 
 (() => {
     const inject = (marker: string, src: string) => {
@@ -76,6 +84,7 @@ import quartoNavJsSrc from '../../../../resources/js/quarto-nav/quarto-nav.js?ra
     inject('data-q2-bootstrap', bootstrapJsSrc);
     inject('data-q2-headroom', headroomJsSrc);
     inject('data-q2-quarto-nav', quartoNavJsSrc);
+    inject('data-q2-quarto-toc', quartoTocJsSrc);
 })();
 
 import {

@@ -156,6 +156,10 @@ const FORMAT_PATH_KEYS: &[(&str, MarkPolicy, KeyForms)] = &[
     // once, at copy time, by the resource-copy drain (Q-5-6 at the `src`
     // entry), not here.
     ("components", MarkPolicy::Always, KeyForms::Components),
+    // bd-toc-scrollspy-js-41e624d8: `toc-component` names the module of
+    // the TOC's React component; it becomes a `components[].src`, so it
+    // gets the same policy.
+    ("toc-component", MarkPolicy::Always, KeyForms::Entries),
 ];
 
 /// Apply `f` to a value's string-bearing leaves: the scalar forms

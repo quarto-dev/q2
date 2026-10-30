@@ -30,6 +30,18 @@ use quarto_source_map::SourceInfo;
 /// The metadata key.
 pub const COMPONENTS_KEY: &str = "components";
 
+/// The reserved name of the table-of-contents component, declared through
+/// `toc-component:` and synthesized by
+/// [`TocJsTransform`](crate::transforms::TocJsTransform)
+/// (bd-toc-scrollspy-js-41e624d8).
+pub const TOC_COMPONENT_NAME: &str = "quarto-toc";
+
+/// The names a [`Binding::Chrome`] declaration may carry. Chrome
+/// components are declared through their own option (`toc-component:`),
+/// never by an author's `components:` entry, so `bind: chrome` on any
+/// other name is Q-25-6.
+pub const CHROME_COMPONENT_NAMES: &[&str] = &[TOC_COMPONENT_NAME];
+
 /// Prefix of an npm package source (`npm:<pkg>@<version>`); deferred by
 /// decision 5 of the plan.
 const NPM_PREFIX: &str = "npm:";
@@ -60,12 +72,21 @@ pub enum Binding {
     Id(String),
     /// `.class`: every `Div`/`Span` carrying the class.
     Class(String),
+    /// `chrome`: the host is emitted by the template (`nav#TOC` for
+    /// `toc-component:`), not found in the AST. Never matches an element
+    /// and never raises Q-25-4; the emitter puts `data-quarto-component`
+    /// on the host itself. Reserved for declarations q2 synthesizes
+    /// ([`CHROME_COMPONENT_NAMES`]); internal, not documented for authors.
+    Chrome,
 }
 
 impl Binding {
     /// Parse a `bind:` value; `None` when it is neither `#id` nor `.class`.
     pub fn parse(spec: &str) -> Option<Self> {
         let spec = spec.trim();
+        if spec == "chrome" {
+            return Some(Binding::Chrome);
+        }
         if let Some(id) = spec.strip_prefix('#') {
             return Self::name(id).map(Binding::Id);
         }
@@ -89,6 +110,7 @@ impl Binding {
         match self {
             Binding::Id(want) => id == want,
             Binding::Class(want) => classes.iter().any(|c| c == want),
+            Binding::Chrome => false,
         }
     }
 
@@ -97,6 +119,7 @@ impl Binding {
         match self {
             Binding::Id(id) => format!("#{id}"),
             Binding::Class(class) => format!(".{class}"),
+            Binding::Chrome => "chrome".to_string(),
         }
     }
 }
@@ -299,6 +322,19 @@ fn parse_entry(
             }
         }
     };
+
+    if bind == Binding::Chrome && !CHROME_COMPONENT_NAMES.contains(&name.as_str()) {
+        push_diag(
+            diagnostics,
+            "Q-25-6",
+            format!(
+                "component `{name}`: `bind: chrome` is reserved for Quarto's own chrome components"
+            ),
+            item.get("bind").unwrap_or(item),
+            "Chrome components are declared through their own option (`toc-component:`); bind yours with `bind: \"#some-id\"` or `bind: .some-class`.",
+        );
+        return None;
+    }
 
     let content = match item.get("content") {
         None => ContentMode::Dom,
@@ -547,6 +583,9 @@ mod tests {
         assert_eq!(Binding::parse("#"), None);
         assert_eq!(Binding::parse("#a.b"), None);
         let classes = vec!["x".to_string(), "card".to_string()];
+        assert_eq!(Binding::parse("chrome"), Some(Binding::Chrome));
+        assert!(!Binding::Chrome.matches("TOC", &classes));
+        assert_eq!(Binding::Chrome.selector(), "chrome");
         assert!(Binding::Id("c".into()).matches("c", &classes));
         assert!(!Binding::Id("c".into()).matches("d", &classes));
         assert!(Binding::Class("card".into()).matches("", &classes));

@@ -29,14 +29,17 @@ import { createRoot } from 'react-dom/client';
 import React from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-// Bootstrap 5 bundled JS, headroom, and quarto-nav, vendored at the
+// Bootstrap 5 bundled JS, headroom, quarto-nav, and quarto-toc, vendored at the
 // repo's `resources/js/`. Embedded as raw text and injected as inline
 // `<script>` at module top so Bootstrap's data-API click delegates are
 // attached before any chrome HTML arrives — same injection (and
-// ordering: bootstrap, headroom, quarto-nav) as the q2-preview entry.
+// ordering: bootstrap, headroom, quarto-nav, quarto-toc) as the q2-preview
+// entry. quarto-toc.js is the TOC scroll tracking the native render ships
+// as the `js:quarto-toc` artifact (transforms/toc_js.rs).
 import bootstrapJsSrc from '../../../resources/js/bootstrap/bootstrap.bundle.min.js?raw';
 import headroomJsSrc from '../../../resources/js/headroom/headroom.min.js?raw';
 import quartoNavJsSrc from '../../../resources/js/quarto-nav/quarto-nav.js?raw';
+import quartoTocJsSrc from '../../../resources/js/quarto-toc/quarto-toc.js?raw';
 
 (() => {
     const inject = (marker: string, src: string) => {
@@ -49,6 +52,7 @@ import quartoNavJsSrc from '../../../resources/js/quarto-nav/quarto-nav.js?raw';
     inject('data-q2-bootstrap', bootstrapJsSrc);
     inject('data-q2-headroom', headroomJsSrc);
     inject('data-q2-quarto-nav', quartoNavJsSrc);
+    inject('data-q2-quarto-toc', quartoTocJsSrc);
 })();
 
 import {

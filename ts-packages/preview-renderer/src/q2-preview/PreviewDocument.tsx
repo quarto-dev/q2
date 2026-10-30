@@ -263,6 +263,12 @@ export const PreviewDocument = ({
         extractMetaString(
             getMetaPath(meta, ['rendered', 'navigation', 'toc-title']),
         ) ?? '';
+    // `toc-component:` (bd-toc-scrollspy-js-41e624d8): `TocJsTransform`
+    // names the component the nav is bound to; `TocSlot` puts it on the
+    // nav as `data-quarto-component`, as the template does.
+    const tocComponentName = extractMetaString(
+        getMetaPath(meta, ['rendered', 'navigation', 'toc-component']),
+    );
     // `meta.rendered.includes.header` collects favicon / RSS links /
     // any user includes-in-header (already a list; q2 render's
     // template wires `$header-includes$` into `<head>`). The banner
@@ -425,7 +431,13 @@ export const PreviewDocument = ({
 
                 {/* TOC — INSIDE quarto-content, before main
                     (template.rs:189-200). */}
-                {tocHtml ? <TocSlot html={tocHtml} titleHtml={tocTitleHtml} /> : null}
+                {tocHtml ? (
+                    <TocSlot
+                        html={tocHtml}
+                        titleHtml={tocTitleHtml}
+                        componentName={tocComponentName}
+                    />
+                ) : null}
 
                 <main
                     className={`content${mainColumn ? ` ${mainColumn}` : ''}${bannerTitleBlock ? ' quarto-banner-title-block' : ''}`}

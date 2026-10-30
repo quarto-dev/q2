@@ -226,7 +226,20 @@ fn toc_block_html(meta: &ConfigValue) -> Option<String> {
     if toc.is_empty() {
         return None;
     }
-    let mut html = String::from("<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\">\n");
+    let mut html = String::from("<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\"");
+    // `toc-component:` (bd-toc-scrollspy-js-41e624d8): same attribute as
+    // `TOC_BLOCK_PARTIAL`, so the bound-components runtime finds the nav.
+    if let Some(component) = meta
+        .get_path(&["rendered", "navigation", "toc-component"])
+        .and_then(|v| v.as_plain_text())
+        .filter(|s| !s.is_empty())
+    {
+        html.push_str(&format!(
+            " data-quarto-component=\"{}\"",
+            component.replace('&', "&amp;").replace('"', "&quot;")
+        ));
+    }
+    html.push_str(">\n");
     if let Some(title) = meta
         .get_path(&["rendered", "navigation", "toc-title"])
         .and_then(|v| v.as_plain_text())
@@ -413,6 +426,29 @@ mod tests {
         assert!(
             html.find("ACTIONS").unwrap() < html.find("</nav>").unwrap(),
             "actions must precede the closing nav tag"
+        );
+    }
+
+    #[test]
+    fn toc_block_html_twin_carries_the_component_attribute() {
+        let mut meta = config_map(vec![]);
+        meta.insert_path(&["rendered", "navigation", "toc"], s("<ul><li>x</li></ul>"));
+        assert!(
+            toc_block_html(&meta)
+                .unwrap()
+                .starts_with("<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\">\n"),
+            "no attribute without toc-component"
+        );
+        meta.insert_path(
+            &["rendered", "navigation", "toc-component"],
+            s("quarto-toc"),
+        );
+        let html = toc_block_html(&meta).unwrap();
+        assert!(
+            html.starts_with(
+                "<nav id=\"TOC\" role=\"doc-toc\" class=\"toc-active\" data-quarto-component=\"quarto-toc\">\n"
+            ),
+            "{html}"
         );
     }
 

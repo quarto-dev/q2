@@ -37,6 +37,83 @@ toc-title: Contents
 - `toc-title` sets the heading shown above the table of contents
   (default: "Table of contents", localized to the document language).
 
+## Following the reader
+
+As the page scrolls, the entry for the current section is highlighted,
+and nested entries open around it: by default only the top level is
+shown, plus the branch that holds the current section. Use `toc-expand`
+to show more (or less) of the tree from the start:
+
+``` yaml
+---
+title: My Document
+toc: true
+toc-expand: 2
+---
+```
+
+| Value   | Behavior                                                   |
+|---------|------------------------------------------------------------|
+| `1`     | The default: top-level entries, plus the current branch    |
+| `N`     | Entries down to level `N` stay open; deeper ones follow the reader |
+| `true`  | Every entry is always open                                 |
+| `false` | Nested entries are shown only while their section is current |
+
+The tracking is a small script shipped with the page
+(`quarto-toc.js`). Without JavaScript the table of contents is a plain
+list with its first entry marked as current. On a page too short to
+scroll, the last entry is current, as in Quarto 1. A page script can listen
+for the `quarto-sectionChanged` event on `window`, which fires whenever
+the current section changes.
+
+## Replacing the table of contents with a component
+
+To render the table of contents yourself, point `toc-component` at a
+React component, written the same way as any
+[component](components.qmd):
+
+``` yaml
+---
+title: My Document
+toc: true
+toc-component: my-toc.tsx
+---
+```
+
+The component is mounted over the `nav#TOC` element in place of the
+default script, and receives:
+
+- `props`: the table of contents as data, typed as `QuartoTocProps` in
+  the `@quarto/components` package: `title`, `entries` (each with `id`,
+  `title`, `level`, `number` and `children`), `expanded` (the
+  `toc-expand` value as a number, or `null`) and `location`;
+- `children`: the default markup (the title, the list, and any
+  repository action links), which a component can render as-is or
+  replace;
+- `host`: the `nav` element.
+
+``` tsx
+import type { QuartoComponentProps, QuartoTocProps } from "@quarto/components";
+
+export default function Toc({ props }: QuartoComponentProps<QuartoTocProps>) {
+  return (
+    <ol>
+      {props.entries.map((e) => (
+        <li key={e.id}><a href={`#${e.id}`}>{e.title}</a></li>
+      ))}
+    </ol>
+  );
+}
+```
+
+Without JavaScript the page shows the default list. The option is
+inert on pages that render no table of contents, like `toc-location`.
+
+::: callout-note
+The q2 preview shows the default table of contents for a page that sets
+`toc-component`; mounting the component in the preview is planned.
+:::
+
 ## Location
 
 Use `toc-location` to choose where the table of contents appears:
