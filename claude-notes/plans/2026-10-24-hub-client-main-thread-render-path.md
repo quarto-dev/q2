@@ -285,6 +285,27 @@ preview-runtime sources under the Node driver (the Phase 0 proxy);
 is two try/catch blocks and comment updates, but a dev-server typing
 smoke is still owed before Phase 2 builds on this.
 
+Review follow-ups (2026-10-30, PR review of bd-r8iqmg2f; three commits
+on the same branch):
+
+- The dead `isRenderSupersededError` export was removed — the
+  components deliberately inline the name check so partial
+  `vi.mock('@quarto/preview-runtime')` doubles cannot break it, which
+  left the helper with no possible consumers.
+- The one-slot-per-key invariant is now structural: the waiting-slots
+  store is a `Map<key, slot>` (was array + `find`); insertion-ordered
+  iteration is the FIFO the pump drains in, and supersede mutates the
+  slot in place so it keeps its position. Behavior-preserved; the
+  characterization tests pinned it.
+- `renderPrintable` — the last unqueued render entry with a live
+  caller (`openPrintableDocument`) — now serializes through the queue
+  under a fresh coalesce key per call (bd-gj6fk5hc): prints never
+  coalesce, since each is an explicit user action. A print fired
+  mid-render previously overlapped the non-reentrant VFS state.
+  `renderQmd` stays unqueued (exported but caller-less).
+  Re-verification: preview-runtime 88/88, hub-client `test:ci`
+  437 passed / 28 skipped.
+
 ## Phase 2 — Parse-check-only format classification (finding 1)
 
 The router pays a full parse + AST serialization + main-thread
