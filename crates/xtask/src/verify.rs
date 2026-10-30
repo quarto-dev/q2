@@ -368,7 +368,7 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
     // `rustflags` as the build, or cargo rebuilds the whole tree.
     if !config.skip_rust_build {
         println!("  ↳ no-op rebuild check (cargo xtask check-noop-rebuild)...");
-        crate::check_noop_rebuild::run(None, rustflags)?;
+        crate::check_noop_rebuild::run(None, false, rustflags)?;
     }
 
     // Step 4: Tree-sitter grammar tests
@@ -976,17 +976,14 @@ mod tests {
 
     /// Same guard for the strict claude-notes render (bd-zn87vwi8: CI got
     /// the step via bd-7v3trpxn, verify did not). Matches only the q2 args,
-    /// not the cargo line, since CI builds under `--profile ci`.
+    /// since CI runs the binary its nextest step built.
     #[test]
     fn claude_notes_render_command_matches_ci_workflow() {
         let workflow = include_str!("../../../.github/workflows/test-suite.yml");
-        let local = format!("--bin q2 -- {}", CLAUDE_NOTES_RENDER_ARGS.join(" "));
+        let local = format!("run: ./target/ci/q2 {}", CLAUDE_NOTES_RENDER_ARGS.join(" "));
         assert!(
-            workflow
-                .lines()
-                .any(|line| line.trim_start().starts_with("run: cargo run")
-                    && line.trim_end().ends_with(&local)),
-            "test-suite.yml has no `run: cargo run … {local}` step; keep CI and verify in sync"
+            workflow.lines().any(|line| line.trim() == local),
+            "test-suite.yml has no `{local}` step; keep CI and verify in sync"
         );
     }
 
