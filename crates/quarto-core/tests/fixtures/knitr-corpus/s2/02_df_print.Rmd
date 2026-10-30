@@ -1,0 +1,7 @@
+```{r df_auto}
+data.frame(a = 1:3, b = c("x", "y", "z"))
+```
+
+```{r df_explicit_print}
+print(data.frame(a = 1:2))
+```

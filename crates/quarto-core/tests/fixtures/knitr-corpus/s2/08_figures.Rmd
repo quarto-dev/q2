@@ -1,0 +1,12 @@
+```{r two_plots, fig.cap=c("first", "second")}
+plot(1:3)
+plot(3:1)
+```
+
+```{r alt_text, fig.alt="alt text here"}
+plot(1:3)
+```
+
+```{r svg_pdf, dev=c("png", "pdf")}
+plot(1:3)
+```

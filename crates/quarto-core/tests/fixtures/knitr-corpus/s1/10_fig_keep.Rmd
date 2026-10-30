@@ -1,0 +1,29 @@
+```{r keep_none, fig.keep='none'}
+plot(1:5)
+lines(1:5)
+plot(5:1)
+```
+
+```{r keep_high, fig.keep='high'}
+plot(1:5)
+lines(1:5)
+plot(5:1)
+```
+
+```{r keep_all, fig.keep='all'}
+plot(1:5)
+lines(1:5)
+plot(5:1)
+```
+
+```{r keep_first, fig.keep='first'}
+plot(1:5)
+lines(1:5)
+plot(5:1)
+```
+
+```{r keep_last, fig.keep='last'}
+plot(1:5)
+lines(1:5)
+plot(5:1)
+```

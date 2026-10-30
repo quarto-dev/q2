@@ -1,0 +1,19 @@
+```{r groups_default}
+x <- 1
+x
+y <- 2
+y
+print("three")
+```
+
+```{r groups_collapse, collapse=TRUE}
+x <- 1
+x
+y <- 2
+y
+```
+
+```{r groups_no_echo, echo=FALSE}
+x <- 1
+x
+```

@@ -1,0 +1,10 @@
+```{r err, error=TRUE}
+a <- 1
+stop("boom")
+b <- 2
+print("after error")
+```
+
+```{r check}
+exists("b")
+```

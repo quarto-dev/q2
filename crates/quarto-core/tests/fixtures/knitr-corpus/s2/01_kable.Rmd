@@ -1,0 +1,9 @@
+```{r kable_plain}
+knitr::kable(data.frame(a = 1:2, b = c("x", "y")))
+```
+
+```{r kable_labeled}
+#| label: tbl-demo
+#| tbl-cap: "A demo table"
+knitr::kable(data.frame(a = 1:2, b = c("x", "y")))
+```
