@@ -281,9 +281,8 @@ Verification: preview-runtime unit 86/86, hub-client `test:ci`
 437 passed / 28 skipped, `npm run build:all` green, no snapshot changes.
 End-to-end: measured through the real WASM and production
 preview-runtime sources under the Node driver (the Phase 0 proxy);
-**no live-browser verification was done** — the component-level change
-is two try/catch blocks and comment updates, but a dev-server typing
-smoke is still owed before Phase 2 builds on this.
+live-browser verification was initially owed and landed 2026-10-30 —
+see "Live-browser smoke" under the review follow-ups below.
 
 Review follow-ups (2026-10-30, PR review of bd-r8iqmg2f; three commits
 on the same branch):
@@ -305,6 +304,32 @@ on the same branch):
   `renderQmd` stays unqueued (exported but caller-less).
   Re-verification: preview-runtime 88/88, hub-client `test:ci`
   437 passed / 28 skipped.
+
+Live-browser smoke (2026-10-30; closes the verification debt recorded
+above). A throwaway Playwright spec (deleted after the run, same
+precedent as the Phase 0 driver) drove the **dev server** end-to-end:
+vite dev with `VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
+VITE_HUB_SERVER=http://localhost:3031
+VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html`, the
+functional suite's globalSetup hub on 3031, headless chromium; recipe
+`cd hub-client && npx playwright test --config
+playwright.smoke.config.ts`. Scenario: seed a project with a ~300 KB
+qmd via the e2e projectFactory, wait for the initial render in the
+q2-preview iframe (`iframe[title="q2-preview Renderer"]` — NOT the
+sandboxed-preview title), type a 10-keystroke burst (`BURSTMARK!`)
+paced at 250 ms, click the print button immediately after the burst.
+Two consecutive runs passed, observed gauges:
+`render.started=5 completed=5 superseded=6→7 discarded-stale=1
+effect.react-preview-rerender=10–11` — a 10-keystroke burst ran ~3
+burst renders instead of ~10, the in-flight render's stale result was
+discarded once, the printable popup contained the burst text (proving
+the print serialized FIFO behind the burst renders), the preview
+converged to the last content, and no `RenderSupersededError` reached
+console/pageerror. Recipe gotchas, for the next driver: ~99 KB renders
+too fast (~150 ms warm) for CDP keystroke cadence — nothing queues, so
+nothing coalesces; `keyboard.type(..., { delay: 0 })` lets React batch
+keystrokes into as few as 3 effect fires, same symptom; the 250 ms
+pace makes overlap deterministic.
 
 ## Phase 2 — Parse-check-only format classification (finding 1)
 
