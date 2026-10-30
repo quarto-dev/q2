@@ -118,6 +118,48 @@ describe('binary write (CAP-5)', () => {
     }
   });
 
+  // bd-jiwob9g7: the validation regex repeated a group per 4 characters,
+  // which overflowed V8's regexp stack above ~3 MB of decoded bytes.
+  it('edit/write accepts a base64 payload larger than the old regex could validate', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, []);
+      const big = new Uint8Array(6 * 1024 * 1024).fill(7);
+      const result = await callTool(f, 'edit', { action: 'write',
+        project: seed.indexDocId,
+        path: 'assets/big.png',
+        content: b64(big),
+        encoding: 'base64',
+      });
+      expect(result.isError).not.toBe(true);
+      expect(structuredOf(result)['size']).toBe(big.byteLength);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it.each([
+    ['a bad character', 'AAA!'],
+    ['a length that is not a multiple of 4', 'AAAAA'],
+    ['three padding characters', 'A==='],
+    ['padding in the middle', 'AB==AAAA'],
+  ])('edit/write refuses base64 with %s', async (_label, content) => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, []);
+      const result = await callTool(f, 'edit', { action: 'write',
+        project: seed.indexDocId,
+        path: 'x.png',
+        content,
+        encoding: 'base64',
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toMatch(/not valid base64/);
+    } finally {
+      await f.close();
+    }
+  });
+
   it('edit/write base64 over an existing TEXT file is refused', async () => {
     const f = await startInMemoryMcp();
     try {

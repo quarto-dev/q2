@@ -1098,7 +1098,9 @@ function staleHashErrorBinary(
 /** Strict base64 decode (Node's Buffer.from is lenient — it silently drops invalid characters). */
 function decodeBase64(content: string): Uint8Array | CallToolResult {
   const compact = content.replace(/\s+/g, '');
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
+  // A flat scan plus a length check: repeating a 4-character group here
+  // overflows V8's regexp stack on payloads above ~3 MB (bd-jiwob9g7).
+  if (compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
     return error(
       'Error: parameter `content` is not valid base64. Pass the file bytes base64-encoded, ' +
         'or drop `encoding: "base64"` to write UTF-8 text.',
