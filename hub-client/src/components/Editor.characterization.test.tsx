@@ -336,6 +336,50 @@ describe('Editor default file selection', () => {
   });
 });
 
+// ---- share links -------------------------------------------------------------
+
+describe('Editor file sidebar "Copy share link"', () => {
+  let writeText: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+  });
+
+  async function copyLinkFor(path: string): Promise<string> {
+    fireEvent.contextMenu(screen.getByRole('treeitem', { name: new RegExp(path) }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy share link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    return writeText.mock.calls[0][0] as string;
+  }
+
+  it('copies a #/share/ URL for the clicked file, not the browser-local #/p/ URL', async () => {
+    renderEditor({ files: [indexQmd, otherQmd], userName: 'Ada Lovelace' });
+
+    const copied = await copyLinkFor('other.qmd');
+
+    expect(copied).toContain('#/share/idx1?');
+    expect(copied).not.toContain('#/p/');
+    const params = new URLSearchParams(copied.split('?')[1]);
+    expect(params.get('server')).toBe('wss://sync.example.com');
+    expect(params.get('file')).toBe('other.qmd');
+    expect(params.get('name')).toBe('Test project');
+    expect(params.get('from')).toBe('Ada Lovelace');
+  });
+
+  it('matches the "Share this project" URL when the clicked file is the current one', async () => {
+    renderEditor({ files: [indexQmd, otherQmd], userName: 'Ada Lovelace' });
+
+    const copied = await copyLinkFor('index.qmd');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share this project' }));
+    expect(screen.getByRole<HTMLInputElement>('textbox').value).toBe(copied);
+  });
+});
+
 // ---- 2. diagnostics ----------------------------------------------------------
 
 describe('Editor diagnostics', () => {
