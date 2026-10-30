@@ -1,0 +1,17 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "TOC component"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Custom
+      - href: plain.qmd
+        text: Default
+
+format:
+  html:
+    toc: true
+    toc-depth: 3

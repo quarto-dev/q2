@@ -111,8 +111,11 @@ impl AstTransform for TocRenderTransform {
             return Ok(());
         }
 
-        // Render to HTML
-        let html = render_toc_entries_to_html(&toc.entries);
+        // Render to HTML. The top-level list carries `data-toc-expanded`
+        // (`toc-expand`) for the scroll-tracking script, and the first link
+        // is `.active` so the no-script page shows one current entry; Q1
+        // does both at render time (bd-toc-scrollspy-js-41e624d8).
+        let html = render_toc_entries_to_html(&toc.entries, toc_expand_depth(&ast.meta));
 
         // Store rendered HTML
         ast.meta.insert_path(
@@ -272,17 +275,44 @@ fn render_toc_label(title: &[Inline]) -> String {
     }
 }
 
-/// Render TOC entries to HTML string (recursive).
-fn render_toc_entries_to_html(entries: &[TocEntry]) -> String {
+/// `toc-expand` as the scroll-tracking script reads it
+/// (bd-toc-scrollspy-js-41e624d8), mirroring Q1's render step
+/// (`format-html-bootstrap.ts`): `true` is 99 (every level open), an
+/// integer is that depth, `false` is -1 (every nested level closed), and
+/// anything else is `None` (no attribute; the script defaults to 1).
+pub(crate) fn toc_expand_depth(meta: &ConfigValue) -> Option<i64> {
+    let value = meta.get("toc-expand")?;
+    if let Some(b) = value.as_bool() {
+        return Some(if b { 99 } else { -1 });
+    }
+    value.as_int().or_else(|| value.as_int_lenient())
+}
+
+/// Render TOC entries to HTML string. The top-level `<ul>` carries
+/// `data-toc-expanded` when `expanded` is set (one producer for the
+/// three `nav#TOC` emitters), and the first top-level link is `active`.
+fn render_toc_entries_to_html(entries: &[TocEntry], expanded: Option<i64>) -> String {
+    render_toc_level(entries, expanded, true)
+}
+
+fn render_toc_level(entries: &[TocEntry], expanded: Option<i64>, top: bool) -> String {
     if entries.is_empty() {
         return String::new();
     }
 
-    let mut html = String::from("<ul>\n");
-    for entry in entries {
+    let mut html = match expanded {
+        Some(depth) if top => format!("<ul data-toc-expanded=\"{depth}\">\n"),
+        _ => String::from("<ul>\n"),
+    };
+    for (i, entry) in entries.iter().enumerate() {
+        let class = if top && i == 0 {
+            "nav-link active"
+        } else {
+            "nav-link"
+        };
         html.push_str("<li>\n");
         html.push_str(&format!(
-            "<a href=\"#{}\" class=\"nav-link\" data-scroll-target=\"#{}\">\n",
+            "<a href=\"#{}\" class=\"{class}\" data-scroll-target=\"#{}\">\n",
             html_escape(&entry.id),
             html_escape(&entry.id)
         ));
@@ -297,7 +327,7 @@ fn render_toc_entries_to_html(entries: &[TocEntry]) -> String {
 
         if !entry.children.is_empty() {
             // Recursive call for nested entries
-            html.push_str(&render_toc_entries_to_html(&entry.children));
+            html.push_str(&render_toc_level(&entry.children, None, false));
         }
         html.push_str("</li>\n");
     }
@@ -1195,5 +1225,113 @@ mod tests {
             !entries_html.contains("Quick Links"),
             "the title must not be duplicated into the entries markup"
         );
+    }
+
+    // --- toc-expand and the first-link `active` (bd-toc-scrollspy-js-41e624d8) ---
+
+    fn config_bool(b: bool) -> ConfigValue {
+        ConfigValue::new_bool(b, dummy_source_info())
+    }
+
+    fn config_str(s: &str) -> ConfigValue {
+        ConfigValue::new_string(s, dummy_source_info())
+    }
+
+    fn config_int(n: i64) -> ConfigValue {
+        ConfigValue::new_scalar(yaml_rust2::Yaml::Integer(n), dummy_source_info())
+    }
+
+    async fn render_with(meta_extra: &[(&str, ConfigValue)]) -> String {
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+        let toc = NavigationToc {
+            title: None,
+            entries: vec![
+                TocEntry {
+                    id: "intro".into(),
+                    title: plain_title("Introduction"),
+                    level: 1,
+                    number: None,
+                    children: vec![make_toc_entry("why", "Why", 2)],
+                },
+                make_toc_entry("methods", "Methods", 1),
+            ],
+        };
+        ast.meta
+            .insert_path(&["navigation", "toc"], toc.to_config_value());
+        for (k, v) in meta_extra {
+            ast.meta.insert_path(&[k], v.clone());
+        }
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        TocRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ast.meta
+            .get_path(&["rendered", "navigation", "toc"])
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn test_first_top_level_link_is_active_only() {
+        let html = render_with(&[]).await;
+        assert!(
+            html.contains(
+                "<a href=\"#intro\" class=\"nav-link active\" data-scroll-target=\"#intro\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains("<a href=\"#why\" class=\"nav-link\" data-scroll-target=\"#why\">"),
+            "a nested first link is not active: {html}"
+        );
+        assert!(
+            html.contains(
+                "<a href=\"#methods\" class=\"nav-link\" data-scroll-target=\"#methods\">"
+            ),
+            "{html}"
+        );
+        assert_eq!(html.matches("active").count(), 1, "{html}");
+    }
+
+    #[tokio::test]
+    async fn test_toc_expand_unset_emits_no_attribute() {
+        let html = render_with(&[]).await;
+        assert!(html.starts_with("<ul>\n"), "{html}");
+        assert!(!html.contains("data-toc-expanded"), "{html}");
+    }
+
+    #[tokio::test]
+    async fn test_toc_expand_values_map_like_q1() {
+        for (value, expected) in [
+            (config_bool(true), "99"),
+            (config_bool(false), "-1"),
+            (config_int(2), "2"),
+        ] {
+            let html = render_with(&[("toc-expand", value)]).await;
+            let open = format!("<ul data-toc-expanded=\"{expected}\">\n");
+            assert!(html.starts_with(&open), "{html}");
+            // Only the top-level list carries it.
+            assert_eq!(html.matches("data-toc-expanded").count(), 1, "{html}");
+        }
+    }
+
+    #[test]
+    fn test_toc_expand_depth_ignores_other_values() {
+        let mut meta = ConfigValue::default();
+        assert_eq!(toc_expand_depth(&meta), None);
+        meta.insert_path(&["toc-expand"], config_str("sideways"));
+        assert_eq!(toc_expand_depth(&meta), None);
+        meta.insert_path(&["toc-expand"], config_str("3"));
+        assert_eq!(toc_expand_depth(&meta), Some(3));
     }
 }

@@ -1,0 +1,27 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-expand: 2
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC ul[data-toc-expanded=\"2\"]",
+           "nav#TOC a.nav-link[data-scroll-target=\"#deep\"]"]
+      ensureFileRegexMatches:
+        - ['<ul data-toc-expanded="2">']
+---
+
+bd-toc-scrollspy-js-41e624d8. An integer `toc-expand` is the depth the
+script keeps open.
+
+## Outer
+
+### Inner
+
+#### Deep
+
+Body.

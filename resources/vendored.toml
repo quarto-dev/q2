@@ -1018,10 +1018,11 @@ paths = [
   "resources/js/clipboard/code-copy-init.js",
   "resources/js/quarto-components",
   "resources/js/quarto-nav",
+  "resources/js/quarto-toc",
   "resources/js/tabsets",
 ]
 policy = "native"
-notes = "quarto-nav.js and tabsets.js began as Quarto 1 ports and have diverged; they are maintained here."
+notes = "quarto-nav.js, quarto-toc.js and tabsets.js began as Quarto 1 ports and have diverged; they are maintained here."
 
 [[asset]]
 id = "native-scss"

@@ -182,14 +182,31 @@ FooterSlot.displayName = 'FooterSlot';
  * `q2 render`'s template read that one value
  * (bd-toc-smart-quotes-6nro57ed). It is writer output, escaped at the
  * source, which is the same trust boundary as `html` above.
+ *
+ * `componentName` is `meta.rendered.navigation.toc-component`, set by
+ * `TocJsTransform` for `toc-component:` (bd-toc-scrollspy-js-41e624d8):
+ * the nav then carries `data-quarto-component`, exactly as the template's
+ * `TOC_BLOCK_PARTIAL` emits it, so the default scroll-tracking script
+ * (`quarto-toc.js`, injected by entry.tsx) leaves it alone and the
+ * bound-components dispatch (bd-s73m7at2) can mount the author's
+ * component over it.
  */
 export const TocSlot = memo(
-    ({ html, titleHtml }: SlotProps & { titleHtml: string }) => (
+    ({
+        html,
+        titleHtml,
+        componentName,
+    }: SlotProps & { titleHtml: string; componentName?: string }) => (
         <div
             id="quarto-margin-sidebar"
             className="sidebar margin-sidebar"
         >
-            <nav id="TOC" role="doc-toc" className="toc-active">
+            <nav
+                id="TOC"
+                role="doc-toc"
+                className="toc-active"
+                data-quarto-component={componentName || undefined}
+            >
                 {titleHtml && (
                     <h2
                         id="toc-title"

@@ -1,0 +1,25 @@
+---
+format:
+  html:
+    toc: true
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC a.nav-link.active[data-scroll-target=\"#outer\"]"]
+        - ["nav#TOC [data-toc-expanded]"]
+      ensureFileRegexMatches:
+        - ['class="nav-link active"']
+        - ['data-toc-expanded', 'data-quarto-component']
+---
+
+bd-toc-scrollspy-js-41e624d8. Without `toc-expand` no attribute is
+written (the script defaults to depth 1, as Q1 does), and without
+`toc-component` the nav carries no component host attribute.
+
+## Outer
+
+### Inner
+
+Body.

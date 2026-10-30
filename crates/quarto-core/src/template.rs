@@ -647,7 +647,13 @@ pub const TITLE_META_AUTHOR_PARTIAL: &str = r##"$if(it.url)$<a href="$it.url$">$
 /// `RepoActionsRenderTransform` and appears inside the nav, after the
 /// TOC entries. It must be kept in sync with the Rust twin
 /// (`toc_block_html`).
-pub const TOC_BLOCK_PARTIAL: &str = r#"<nav id="TOC" role="doc-toc" class="toc-active">
+///
+/// `$rendered.navigation.toc-component$` (written by `TocJsTransform` for
+/// `toc-component:`, bd-toc-scrollspy-js-41e624d8) puts
+/// `data-quarto-component` on the nav, so the bound-components runtime
+/// mounts the author's TOC component over it; the preview's `TocSlot`
+/// emits the same attribute.
+pub const TOC_BLOCK_PARTIAL: &str = r#"<nav id="TOC" role="doc-toc" class="toc-active"$if(rendered.navigation.toc-component)$ data-quarto-component="$rendered.navigation.toc-component$"$endif$>
 $if(rendered.navigation.toc-title)$
 <h2 id="toc-title">$rendered.navigation.toc-title$</h2>
 $endif$

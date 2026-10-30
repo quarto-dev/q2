@@ -1,0 +1,31 @@
+---
+format:
+  html:
+    toc: true
+    toc-expand: false
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC ul[data-toc-expanded=\"-1\"]",
+           "nav#TOC a.nav-link.active[data-scroll-target=\"#outer\"]",
+           "nav#TOC a.nav-link[data-scroll-target=\"#inner\"]"]
+        - ["nav#TOC ul ul[data-toc-expanded]",
+           "nav#TOC a.nav-link.active[data-scroll-target=\"#inner\"]"]
+---
+
+bd-toc-scrollspy-js-41e624d8. `toc-expand: false` is Q1's `-1`: every
+nested list starts collapsed. The attribute rides on the top-level list
+only (one producer, `toc_render.rs`), and the first top-level link is
+`active` at render time so the no-script page shows one current entry.
+
+## Outer
+
+### Inner
+
+Body.
+
+## Second
+
+Body.

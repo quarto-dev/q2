@@ -2195,6 +2195,8 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// 13a. `RepoActionsRenderTransform` - Render repository action links
 ///     (source/edit/issue) for the TOC and footer slots
 ///     (bd-repo-actions-missing-99ezd2fe)
+/// 13b. `TocJsTransform` - Ship the TOC scroll-tracking script, or declare
+///     the `toc-component:` React component (bd-toc-scrollspy-js-41e624d8)
 /// 14. `NavbarRenderTransform` - Render navbar to HTML for template insertion
 /// 15. `SidebarRenderTransform` - Render sidebar to HTML (w/ .qmd→.html rewrite)
 /// 15a. `BreadcrumbsRenderTransform` - Derive the page's breadcrumb trail from
@@ -2533,6 +2535,12 @@ pub fn build_transform_pipeline(
     // `toc-in-sidebar` directive to merge the TOC into
     // `nav#quarto-sidebar` for website pages).
     pipeline.push(Box::new(TocLocationTransform::new()));
+    // The TOC's client side (bd-toc-scrollspy-js-41e624d8): ship the
+    // scroll-tracking script, or declare the `toc-component:` React
+    // component. After TocLocationTransform (the component's props carry
+    // `rendered.navigation.toc-location`) and before SidebarRenderTransform
+    // (whose `toc_block_html` reads `rendered.navigation.toc-component`).
+    pipeline.push(Box::new(crate::transforms::TocJsTransform::new()));
     // Repository action links (bd-repo-actions-missing-99ezd2fe).
     // Ordering is load-bearing in both directions.
     //
@@ -2953,6 +2961,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "toc-generate",
     "toc-render",
     "toc-location",
+    "toc-js",
     "footer-generate",
     "footer-render",
     "announcement-generate",
@@ -3162,6 +3171,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("listing-feed-link", Bucket::B4),
     ("toc-render", Bucket::B4),
     ("toc-location", Bucket::B4),
+    ("toc-js", Bucket::B4),
     ("repo-actions-render", Bucket::B4),
     ("announcement-render", Bucket::B4),
     ("navbar-render", Bucket::B4),
@@ -5391,6 +5401,45 @@ mod tests {
         );
     }
 
+    /// bd-toc-scrollspy-js-41e624d8: toc-js must be in the Navigation phase
+    /// after toc-location (its component props carry the normalized
+    /// `toc-location`) and before sidebar-render (whose `toc_block_html`
+    /// reads `rendered.navigation.toc-component`).
+    #[test]
+    fn test_toc_js_registered_between_toc_location_and_sidebar_render() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        let pos = |n: &str| names.iter().position(|x| *x == n);
+
+        let toc_js = pos("toc-js").expect("toc-js registered");
+        assert_eq!(
+            pipeline
+                .iter()
+                .find(|t| t.name() == "toc-js")
+                .map(|t| t.phase()),
+            Some(TransformPhase::Navigation),
+            "toc-js must be in the Navigation phase; pipeline: {names:?}"
+        );
+        let toc_location = pos("toc-location").expect("toc-location registered");
+        let sidebar = pos("sidebar-render").expect("sidebar-render registered");
+        assert!(
+            toc_location < toc_js && toc_js < sidebar,
+            "toc-js must run after toc-location ({toc_location}) and before \
+             sidebar-render ({sidebar}), got {toc_js}; pipeline: {names:?}"
+        );
+    }
+
     /// bd-sidebar-title-with-navbar-82wxow6m: sidebar-render must be
     /// registered in the Navigation phase AFTER navbar-render — its
     /// sidebar-title gate reads the `rendered.navigation.navbar` key
@@ -6608,6 +6657,7 @@ mod tests {
                 "listing-feed-link",
                 "toc-render",
                 "toc-location",
+                "toc-js",
                 "repo-actions-render",
                 "announcement-render",
                 "navbar-render",
@@ -6706,6 +6756,7 @@ mod tests {
                 "listing-feed-link",
                 "toc-render",
                 "toc-location",
+                "toc-js",
                 "repo-actions-render",
                 "announcement-render",
                 "navbar-render",
@@ -6811,8 +6862,8 @@ mod tests {
 
         assert_eq!(
             nav_names.len(),
-            23,
-            "expected exactly 23 Navigation-phase transforms in the HTML pipeline; got: \
+            24,
+            "expected exactly 24 Navigation-phase transforms in the HTML pipeline; got: \
              {nav_names:?}",
         );
         assert!(
@@ -7083,6 +7134,7 @@ mod tests {
                 "listing-feed-link",
                 "toc-render",
                 "toc-location",
+                "toc-js",
                 "repo-actions-render",
                 "announcement-render",
                 "navbar-render",

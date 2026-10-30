@@ -90,3 +90,38 @@ The client runtime for components bound to document elements
 `components-resolve` transform in `crates/quarto-core/src/components/`
 rather than by a stage, because the same transform decides which pages
 need it. See `quarto-components/README.md`.
+
+## `quarto-toc/`
+
+"On this page" scroll tracking for the HTML table of contents
+(bd-toc-scrollspy-js-41e624d8).
+
+- **`quarto-toc.js`** — q2 port of the TOC subset of Quarto 1's
+  `src/resources/formats/html/quarto.js`: the current section's link is
+  `.active`, nested lists collapse and expand per `toc-expand`
+  (`data-toc-expanded`), and `quarto-sectionChanged` fires on `window`.
+  Not minified. Deviations (no anchor reveal, no overlap rollup, no
+  reader mode), the fix over Q1 (the first entry is active above the
+  first section) and the three q2 extensions (binding keyed off the TOC
+  elements through a MutationObserver; sections looked up per pass; the
+  scroll container resolved rather than assumed to be the window) are
+  documented in the file header; the Q1 original is quoted in
+  `claude-notes/plans/toc-scrollspy-investigation/q1-toc-reference.md`.
+
+Shipped by `TocJsTransform`
+(`crates/quarto-core/src/transforms/toc_js.rs`) as the `js:quarto-toc`
+artifact on every page with a rendered TOC, unless the page declares
+`toc-component:`, in which case the author's React component owns the
+nav instead. The hub-client preview injects the same file via a `?raw`
+import in `ts-packages/preview-renderer/src/q2-preview/entry.tsx` — native
+and preview must load the same bytes.
+
+### Version contract
+
+Reads `nav.toc-active[role="doc-toc"]`, `a[data-scroll-target]` and
+`[data-toc-expanded]`, all written by `transforms/toc_render.rs` and the
+`nav#TOC` emitters (`template.rs` `TOC_BLOCK_PARTIAL`, `sidebar_render.rs`
+`toc_block_html`, the preview's `TocSlot`); the `a.active` and
+`ul.collapse` classes it toggles are styled by
+`resources/scss/bootstrap/_bootstrap-rules.scss` and Bootstrap. Change
+the markup and the script together.

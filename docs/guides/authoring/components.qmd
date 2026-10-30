@@ -159,6 +159,11 @@ element ([`Q-25-7`](/errors/components/Q-25-7.qmd)), or a TypeScript module
 that does not compile ([`Q-25-9`](/errors/components/Q-25-9.qmd), with the
 position inside the module).
 
+Quarto's own page chrome can be taken over the same way where an option
+exists for it: [`toc-component`](navigation.qmd#replacing-the-table-of-contents-with-a-component)
+mounts a component over the table of contents, with the entries as
+`props`.
+
 Components are an HTML feature: other formats render the markdown and
 ignore the binding. The q2 preview currently shows the static content for
 bound elements; mounting the same components in the preview is planned.

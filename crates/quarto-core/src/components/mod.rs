@@ -35,6 +35,7 @@ pub mod config;
 pub mod runtime;
 
 pub use config::{
-    Binding, COMPONENTS_KEY, ComponentDecl, ComponentSource, ContentMode, parse_components,
+    Binding, CHROME_COMPONENT_NAMES, COMPONENTS_KEY, ComponentDecl, ComponentSource, ContentMode,
+    TOC_COMPONENT_NAME, parse_components,
 };
 pub use runtime::{COMPONENT_HOST_ATTR, register_component_assets};
