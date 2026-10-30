@@ -1,0 +1,1 @@
+Last [++ added]{author="Bob"} text.
