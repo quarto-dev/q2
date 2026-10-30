@@ -7,16 +7,21 @@ _quarto:
     html:
       noErrors: true
       ensureHtmlElements:
-        - ["nav#TOC a.nav-link.active[data-scroll-target=\"#outer\"]"]
+        - ["nav#TOC a.nav-link.active"]
         - ["nav#TOC [data-toc-expanded]"]
       ensureFileRegexMatches:
-        - ['class="nav-link active"']
+        - ['<a href="#outer" class="nav-link active" data-scroll-target="#outer">']
         - ['data-toc-expanded', 'data-quarto-component']
 ---
 
 bd-toc-scrollspy-js-41e624d8. Without `toc-expand` no attribute is
 written (the script defaults to depth 1, as Q1 does), and without
 `toc-component` the nav carries no component host attribute.
+
+The regex pins the first entry as the one marked active at render time.
+The live-DOM check only asks that some entry is active: once the script
+runs (the hub-client runner), which entry depends on the viewport, and a
+page too short to scroll makes the last entry current, as Q1 does.
 
 ## Outer
 

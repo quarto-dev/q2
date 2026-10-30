@@ -61,7 +61,8 @@ toc-expand: 2
 
 The tracking is a small script shipped with the page
 (`quarto-toc.js`). Without JavaScript the table of contents is a plain
-list with its first entry marked as current. A page script can listen
+list with its first entry marked as current. On a page too short to
+scroll, the last entry is current, as in Quarto 1. A page script can listen
 for the `quarto-sectionChanged` event on `window`, which fires whenever
 the current section changes.
 

@@ -425,3 +425,22 @@ Two further choices made while implementing:
   `q2 render` output is hand-verified until bd-3swqhbsa; the integration
   test pins the bytes and the tag, which is what caught nothing in the
   components work (the import-map bug was browser-only).
+
+## CI follow-up (2026-10-30)
+
+The hub-client smoke-all runner (both browsers) failed the two fixtures
+that asserted `a.nav-link.active[data-scroll-target="#outer"]` through
+`ensureHtmlElements`. That runner reads the live preview DOM after the
+script has run, and the script applies Q1's rules: the entry whose
+section is within `SECTION_MARGIN` of the top is current, and a page too
+short to scroll makes the last entry current. Confirmed in Chromium on
+the rendered fixture: `#inner` at a 300 px viewport, `#second` with no
+scrollbar. The Rust and WASM runners parse the static HTML, where the
+first link is active by construction.
+
+Fix: the live-DOM assertions now ask only that some entry is active;
+the first-link-active check moved to `ensureFileRegexMatches`, which
+every runner evaluates on the rendered HTML. While there, the sandboxed
+preview entry (`hub-client/quarto-hub-sandboxed-preview/src/entry.tsx`,
+an adapted copy of the q2-preview entry) gained the same
+`quarto-toc.js` injection, and the docs mention the short-page rule.
