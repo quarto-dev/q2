@@ -196,7 +196,13 @@ pub fn process_uri_autolink(
             &autolink_range,
             context,
         ),
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        // The `uri`/`email` class is synthesized; a `None` placeholder keeps
+        // the sidecar aligned with attr.1 (bd-nq3ed2im).
+        attr_source: crate::pandoc::attr::AttrSourceInfo {
+            id: None,
+            classes: vec![None],
+            attributes: Vec::new(),
+        },
         target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
     }));
 

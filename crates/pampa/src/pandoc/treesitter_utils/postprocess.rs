@@ -414,22 +414,45 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
     let aligns_str = div.attr.2.get("aligns").map(|v| v.as_str());
     let widths_str = div.attr.2.get("widths").map(|v| v.as_str());
 
-    // Build table attr from div attr, excluding list-table specific attributes
+    // Build table attr from div attr, excluding list-table specific
+    // attributes. The AttrSourceInfo sidecar is filtered in step so its
+    // `classes`/`attributes` stay positionally aligned with the attr
+    // (bd-nq3ed2im); a short or empty sidecar is padded with `None`.
     let table_id = div.attr.0.clone();
-    let table_classes: Vec<String> = div
+    let class_sources = div
+        .attr_source
+        .classes
+        .iter()
+        .cloned()
+        .chain(std::iter::repeat(None));
+    let (table_classes, table_class_sources): (Vec<String>, Vec<Option<SourceInfo>>) = div
         .attr
         .1
         .iter()
-        .filter(|c| *c != "list-table")
         .cloned()
-        .collect();
+        .zip(class_sources)
+        .filter(|(c, _)| c != "list-table")
+        .unzip();
+    let kv_sources = div
+        .attr_source
+        .attributes
+        .iter()
+        .cloned()
+        .chain(std::iter::repeat((None, None)));
     let mut table_kvs: LinkedHashMap<String, String> = LinkedHashMap::new();
-    for (k, v) in &div.attr.2 {
+    let mut table_kv_sources = Vec::new();
+    for ((k, v), kv_source) in div.attr.2.iter().zip(kv_sources) {
         if k != "header-rows" && k != "aligns" && k != "widths" {
             table_kvs.insert(k.clone(), v.clone());
+            table_kv_sources.push(kv_source);
         }
     }
     let table_attr = (table_id, table_classes, table_kvs);
+    let table_attr_source = AttrSourceInfo {
+        id: div.attr_source.id.clone(),
+        classes: table_class_sources,
+        attributes: table_kv_sources,
+    };
 
     // Split content: caption blocks vs the rows BulletList
     let mut content = div.content;
@@ -590,7 +613,7 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         bodies,
         foot,
         source_info,
-        attr_source: div.attr_source,
+        attr_source: table_attr_source,
     })
 }
 
@@ -1477,7 +1500,13 @@ pub fn postprocess(
                         attr: (String::new(), vec!["quarto-note-reference".to_string()], kv),
                         content: vec![],
                         source_info: note_ref.source_info,
-                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                        // Both the class and the kv are synthesized; `None`
+                        // placeholders keep the sidecar aligned (bd-nq3ed2im).
+                        attr_source: crate::pandoc::attr::AttrSourceInfo {
+                            id: None,
+                            classes: vec![None],
+                            attributes: vec![(None, None)],
+                        },
                     })],
                     false,
                 )
@@ -1605,7 +1634,9 @@ pub fn postprocess(
                                     &inline_attr.source_info,
                                     &inline_attr.attr_source,
                                 ),
-                                attr_source: inline_attr.attr_source.clone(),
+                                attr_source: with_synthesized_leading_class(
+                                    inline_attr.attr_source.clone(),
+                                ),
                             }));
 
                             // Skip the Math, optional Space, and Attr
