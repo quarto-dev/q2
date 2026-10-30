@@ -44,14 +44,14 @@ Two-space breaks are unaffected because that `LineBreak` is built from a single 
 
 **Does a `Concat` on a body node break the "all-`Original`" pin (`preview_untransformed_baseline_body_pool_is_all_original_own_file`, `crates/quarto-core/src/pipeline.rs:5045`)?** The pin stayed green because its fixture has no hard break. Its message reads as a claim about every body node, but unpatched `a\_b c` already yields `Concat` body entries, so this fix adds a new instance of an existing shape rather than a new one. The bytes the `LineBreak` copies are its own, so the copy site's safety argument holds. The pin's wording overstating its reach is existing and is not part of this fix.
 
-**Do the TS consumers accept the regenerated fixtures?** Not established. The `annotated-qmd` suite is already red at HEAD for an unrelated reason (below), so it gives no signal either way. `hub-client`'s WASM tests were not run under the trial, so the fix must run them with a rebuilt bundle.
+**Do the TS consumers accept the regenerated fixtures?** Not established. The `annotated-qmd` suite is already red at HEAD for an unrelated reason (below), so it gives no signal either way. The WASM tests in `hub-client` were not run under the trial, so the fix must run them with a rebuilt bundle.
 
 ## Outcome / recommended next step
 
 Filed bd-o662eis5 (P1: silent content change on edit). Fix scope:
 
 1. Regression tests in `crates/pampa/tests/integration/incremental_writer_tests.rs`, covering at least the issue, two-break and break-before-emphasis cases.
-2. In Step 0, combine the dropped `SoftBreak`'s span into the preceding `LineBreak`.
+2. In Step 0, combine the span of the dropped `SoftBreak` into the preceding `LineBreak`.
 3. Regenerate and review `ts-packages/annotated-qmd/examples/{inline-types,zero-width}.json`.
 4. Run full `cargo xtask verify` with a rebuilt WASM bundle.
 
