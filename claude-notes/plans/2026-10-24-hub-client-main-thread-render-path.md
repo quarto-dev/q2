@@ -222,23 +222,114 @@ and records nothing).
 Smallest change, largest perceived-latency win: stop executing renders
 whose result is already known-stale.
 
-- [ ] Test first: a burst of N content updates while a render is in
+**Status: done 2026-10-29 (bd-r8iqmg2f).** Results below; per-keystroke
+baseline is unchanged (Phase 1 removes wasted renders from a burst, it
+does not make a single render cheaper).
+
+- [x] Test first: a burst of N content updates while a render is in
   flight results in at most one additional render executing (the
   latest); the final preview reflects the last content; a rejection in a
-  superseded render neither jams the queue nor surfaces. Add to the
-  wasmRenderer/ReactPreview test surface at the queue level
-  (`enqueueRender` is the seam, `wasmRenderer.ts:494`).
-- [ ] Implement latest-wins coalescing: when a new render request
-  arrives and earlier requests are still queued (not yet started), drop
-  the superseded ones before they run. Keep first-render-after-idle
-  immediate (no debounce regression — the debounce-free design at
-  `ReactPreview.tsx:768` is deliberate for typing feel; coalescing
-  targets wasted work, not latency of the final render).
-- [ ] Verify the `lastContentRef` stale-result guard
-  (`ReactPreview.tsx:718`) stays as the second line of defense; add a
-  comment noting it now fires only for the in-flight render.
-- [ ] Re-run Phase 0 burst measurement; record renders-executed per
-  burst before/after in the plan.
+  superseded render neither jams the queue nor surfaces. Added at the
+  queue level in `ts-packages/preview-runtime/src/renderQueue.test.ts`
+  (5 tests; flips the Phase 0 no-coalescing pin, plus cross-entry
+  serialisation, first-render-after-idle, and both rejection shapes).
+- [x] Implement latest-wins coalescing: `enqueueRender`
+  (`wasmRenderer.ts`) is now a keyed pump — at most one waiting slot per
+  entry point; a same-key enqueue supersedes the waiting slot's render
+  (the slot keeps its FIFO position, so one entry point cannot starve
+  another). The in-flight render is never interrupted and the first
+  render after an idle queue still starts synchronously (no debounce
+  regression). Found during implementation:
+  **`renderPageInProjectWithAttribution` — the ReactPreview entry — was
+  not queued at all**, so burst renders *overlapped* on the
+  non-reentrant VFS state rather than queueing; it now routes through
+  the queue (and `renderToHtmlInner` calls the raw, unqueued body to
+  avoid self-deadlock). Superseded callers settle by rejecting with
+  `RenderSupersededError`; `ReactPreview` / `Preview` swallow it
+  name-matched (not `instanceof`) so partial
+  `vi.mock('@quarto/preview-runtime')` doubles cannot break the check.
+  New gauge: `render.superseded`.
+- [x] `lastContentRef` stale-result guard (`ReactPreview.tsx`) stays as
+  the second line of defense, with a comment noting it now fires only
+  for the render that was in flight when the edit landed (superseded
+  queued renders never execute; they arrive as the swallowed rejection
+  instead).
+- [x] Re-run Phase 0 burst measurement; before/after below.
+
+### Phase 1 result (2026-10-29, Node driver, release WASM, warm SASS cache)
+
+Phase B protocol, reconstructed driver (the Phase 0 driver did not
+survive /tmp; same design: fire-and-forget burst, each "keystroke" a
+full-document VFS write plus a `renderPageInProjectWithAttribution`
+call, warm SASS cache via fake-indexeddb). "Before" is the same driver
+run at HEAD (changes stashed); the Phase 0 recorded baseline (10/10 at
+1x, 5/5 at 8x) reproduces.
+
+| Scale | Burst | renders started/completed, before | after | superseded | wall before | wall after |
+|---|---|---|---|---|---|---|
+| 1x (~99 KB) | 10 | 10 / 10 | 2 / 2 | 8 | 3026 ms | 554 ms |
+| 8x (~800 KB) | 5 | 5 / 5 | 2 / 2 | 3 | 12 367 ms | 4476 ms |
+
+Envelope `JSON.parse` bytes per burst fell with the render count
+(106.9 → 21.4 MB at 1x; 439.9 → 176.0 MB at 8x). The 2 renders that
+remain are the in-flight one and the latest; freed from contending
+with the rest of the burst, their per-render wall returns to solo cost
+(~277 ms at 1x). The plan's Phase 0 estimate ("a coalesced burst would
+cost ~0.4 s" at 1x) matches the measured 554 ms on this fixture.
+
+Verification: preview-runtime unit 86/86, hub-client `test:ci`
+437 passed / 28 skipped, `npm run build:all` green, no snapshot changes.
+End-to-end: measured through the real WASM and production
+preview-runtime sources under the Node driver (the Phase 0 proxy);
+live-browser verification was initially owed and landed 2026-10-30 —
+see "Live-browser smoke" under the review follow-ups below.
+
+Review follow-ups (2026-10-30, PR review of bd-r8iqmg2f; three commits
+on the same branch):
+
+- The dead `isRenderSupersededError` export was removed — the
+  components deliberately inline the name check so partial
+  `vi.mock('@quarto/preview-runtime')` doubles cannot break it, which
+  left the helper with no possible consumers.
+- The one-slot-per-key invariant is now structural: the waiting-slots
+  store is a `Map<key, slot>` (was array + `find`); insertion-ordered
+  iteration is the FIFO the pump drains in, and supersede mutates the
+  slot in place so it keeps its position. Behavior-preserved; the
+  characterization tests pinned it.
+- `renderPrintable` — the last unqueued render entry with a live
+  caller (`openPrintableDocument`) — now serializes through the queue
+  under a fresh coalesce key per call (bd-gj6fk5hc): prints never
+  coalesce, since each is an explicit user action. A print fired
+  mid-render previously overlapped the non-reentrant VFS state.
+  `renderQmd` stays unqueued (exported but caller-less).
+  Re-verification: preview-runtime 88/88, hub-client `test:ci`
+  437 passed / 28 skipped.
+
+Live-browser smoke (2026-10-30; closes the verification debt recorded
+above). A throwaway Playwright spec (deleted after the run, same
+precedent as the Phase 0 driver) drove the **dev server** end-to-end:
+vite dev with `VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
+VITE_HUB_SERVER=http://localhost:3031
+VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html`, the
+functional suite's globalSetup hub on 3031, headless chromium; recipe
+`cd hub-client && npx playwright test --config
+playwright.smoke.config.ts`. Scenario: seed a project with a ~300 KB
+qmd via the e2e projectFactory, wait for the initial render in the
+q2-preview iframe (`iframe[title="q2-preview Renderer"]` — NOT the
+sandboxed-preview title), type a 10-keystroke burst (`BURSTMARK!`)
+paced at 250 ms, click the print button immediately after the burst.
+Two consecutive runs passed, observed gauges:
+`render.started=5 completed=5 superseded=6→7 discarded-stale=1
+effect.react-preview-rerender=10–11` — a 10-keystroke burst ran ~3
+burst renders instead of ~10, the in-flight render's stale result was
+discarded once, the printable popup contained the burst text (proving
+the print serialized FIFO behind the burst renders), the preview
+converged to the last content, and no `RenderSupersededError` reached
+console/pageerror. Recipe gotchas, for the next driver: ~99 KB renders
+too fast (~150 ms warm) for CDP keystroke cadence — nothing queues, so
+nothing coalesces; `keyboard.type(..., { delay: 0 })` lets React batch
+keystrokes into as few as 3 effect fires, same symptom; the 250 ms
+pace makes overlap deterministic.
 
 ## Phase 2 — Parse-check-only format classification (finding 1)
 

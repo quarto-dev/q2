@@ -154,6 +154,15 @@ async function doRender(
       };
     }
   } catch (err) {
+    // bd-r8iqmg2f: a render a newer edit superseded while it was still
+    // queued never runs; it settles with a RenderSupersededError
+    // rejection. Rethrow so the caller can drop it silently — folding it
+    // into an error result here would flash the error overlay on every
+    // superseded keystroke. Name-matched (not instanceof) so partial
+    // vi.mock('@quarto/preview-runtime') doubles cannot break the check.
+    if (err instanceof Error && err.name === 'RenderSupersededError') {
+      throw err;
+    }
     const errorMsg =
       err instanceof Error ? err.message : JSON.stringify(err, null, 2);
 
@@ -300,7 +309,18 @@ export default function Preview({
     // any user-defined tree-sitter grammars under `_quarto/grammars/*`.
     // The discovery step is pure + cache-backed so this is ~free when
     // grammars haven't changed since the last render.
-    const result = await doRender(documentPath, projectFilePaths, captureBytes);
+    let result: RenderResult;
+    try {
+      result = await doRender(documentPath, projectFilePaths, captureBytes);
+    } catch (err) {
+      // A render superseded while queued (bd-r8iqmg2f) reports via a
+      // tagged rejection; the superseding render owns the state machine,
+      // so drop silently.
+      if (err instanceof Error && err.name === 'RenderSupersededError') {
+        return;
+      }
+      throw err;
+    }
     if (qmdContent !== lastContentRef.current) return;
 
     // Update diagnostics

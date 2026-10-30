@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-10-29
 
+- [`f4768a2a9`](https://github.com/quarto-dev/q2/commits/f4768a2a9): Typing bursts no longer run one full preview render per keystroke — queued renders now coalesce latest-wins, so a fast typing burst renders at most twice (the in-flight render plus the latest), cutting burst render work about 80% in measurements.
 - [`d3b294042`](https://github.com/quarto-dev/q2/commits/d3b294042): Added opt-in performance gauges to the preview render path (renders, envelope parsing, VFS writes, semantic tokens), enabled with QUARTO_PERF_STATS=1, localStorage quartoPerfStats=1, or a perf=1 URL parameter and dumped with window.quartoPerfDump() — the measurement baseline for upcoming typing-latency work.
 
 ### 2026-10-27
