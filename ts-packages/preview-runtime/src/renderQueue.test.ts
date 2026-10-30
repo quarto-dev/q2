@@ -15,6 +15,11 @@
  *   and Phase 1 deliberately flipped it.);
  * - different render entry points serialize but never supersede each
  *   other;
+ * - `renderPrintable` SERIALIZES with everything else but never
+ *   coalesces: each print is an explicit user action that must run, so
+ *   every call enqueues under a fresh key no waiting slot can match
+ *   (bd-gj6fk5hc — it previously bypassed the queue entirely and could
+ *   overlap a preview render on the non-reentrant VFS state);
  * - a superseded render settles by rejecting with RenderSupersededError
  *   (preview callers swallow it: it neither jams the queue nor
  *   surfaces), while a render whose EXECUTION rejects reaches its own
@@ -51,6 +56,7 @@ import {
   _setWasmModuleForTest,
   renderToHtml,
   renderPageInProjectWithAttribution,
+  renderPrintable,
   RenderSupersededError,
 } from './wasmRenderer';
 
@@ -70,6 +76,15 @@ beforeAll(() => {
   // after a WASM build, absent in the CI TS-suites job) never fires.
   _setWasmModuleForTest({
     render_page_in_project_with_attribution: vi.fn(() => {
+      state.active += 1;
+      state.maxActive = Math.max(state.maxActive, state.active);
+      const d = mkDeferred<string>();
+      state.pending.push(d);
+      return d.promise.finally(() => {
+        state.active -= 1;
+      });
+    }),
+    render_printable: vi.fn(() => {
       state.active += 1;
       state.maxActive = Math.max(state.maxActive, state.active);
       const d = mkDeferred<string>();
@@ -222,6 +237,55 @@ describe('render serial queue (enqueueRender) characterization', () => {
     expect(state.pending.length).toBe(3);
     state.pending[2].resolve(JSON.stringify({ success: true, html: '<p>4</p>' }));
     await expect(p4).resolves.toMatchObject({ success: true });
+  });
+
+  it('serializes renderPrintable with the other render entries — a print fired mid-render waits its turn (bd-gj6fk5hc)', async () => {
+    const p1 = renderToHtml({ documentPath: 'a.qmd' });
+    const p2 = renderPrintable('a.qmd');
+    const p3 = renderPageInProjectWithAttribution('a.qmd', undefined, null);
+    await flush();
+
+    // Only the first render has started; the print and the page render wait.
+    expect(state.pending.length).toBe(1);
+
+    state.pending[0].resolve(JSON.stringify({ success: true, html: '<p>1</p>' }));
+    await flush();
+
+    // FIFO: the print started next, the page render still waits.
+    expect(state.pending.length).toBe(2);
+    state.pending[1].resolve(JSON.stringify({ success: true, html: '<p>print</p>' }));
+    await expect(p2).resolves.toMatchObject({ success: true, html: '<p>print</p>' });
+    await flush();
+
+    expect(state.pending.length).toBe(3);
+    state.pending[2].resolve(JSON.stringify({ success: true, ast_json: '{}' }));
+    await expect(p1).resolves.toMatchObject({ success: true });
+    await expect(p3).resolves.toMatchObject({ success: true });
+
+    // Never concurrent — the print never overlapped either preview render.
+    expect(state.maxActive).toBe(1);
+  });
+
+  it('never coalesces renderPrintable: every explicit print executes', async () => {
+    const p1 = renderPrintable('a.qmd');
+    const p2 = renderPrintable('a.qmd');
+    const p3 = renderPrintable('a.qmd');
+    await flush();
+
+    // Only the first print has started; the other two WAIT (they do
+    // not supersede each other — each is an explicit user action).
+    expect(state.pending.length).toBe(1);
+
+    for (let i = 0; i < 3; i++) {
+      state.pending[i].resolve(JSON.stringify({ success: true, html: `<p>${i}</p>` }));
+      await flush();
+    }
+
+    await expect(p1).resolves.toMatchObject({ success: true, html: '<p>0</p>' });
+    await expect(p2).resolves.toMatchObject({ success: true, html: '<p>1</p>' });
+    await expect(p3).resolves.toMatchObject({ success: true, html: '<p>2</p>' });
+    expect(state.pending.length).toBe(3);
+    expect(state.maxActive).toBe(1);
   });
 
   it('a rejected render reports failure to its own caller and does not jam the queue', async () => {

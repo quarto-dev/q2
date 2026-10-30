@@ -556,7 +556,10 @@ export function setRenderListener(listener: RenderListener | null): void {
 //   whose coalesce key matches a WAITING slot replaces that slot's
 //   render (latest wins); the superseded caller settles by rejecting
 //   with `RenderSupersededError`, which preview callers swallow — it
-//   must never surface as a user-facing error.
+//   must never surface as a user-facing error. An entry whose every
+//   call must run (`renderPrintable`: each print is an explicit user
+//   action) enqueues under a fresh key per call instead, so it
+//   serializes but is never superseded.
 // - The render IN FLIGHT is never interrupted, and the first render
 //   after the queue drains starts immediately: typing feel depends on
 //   both (the debounce-free design is deliberate).
@@ -586,6 +589,10 @@ export class RenderSupersededError extends Error {
 // Different entry points serialize but never supersede each other.
 const RENDER_TO_HTML_KEY = 'renderToHtml';
 const RENDER_PAGE_RENDER_KEY = 'renderPageInProject';
+// `renderPrintable` serializes but never supersedes (see the header
+// comment): each call enqueues under a fresh key no waiting slot can
+// match.
+let _renderPrintableCounter = 0;
 
 interface QueuedRenderSlot {
   /** The render to run; replaced when a newer render supersedes. */
@@ -698,18 +705,25 @@ export async function renderPrintable(
   path: string,
   userGrammars?: unknown,
 ): Promise<RenderResponse> {
-  const wasm = getWasm();
-  if (!perfEnabled()) {
-    return JSON.parse(await wasm.render_printable(path, userGrammars));
-  }
-  perfMark('render.started');
-  const t0 = performance.now();
-  try {
-    return parseEnvelope(await wasm.render_printable(path, userGrammars));
-  } finally {
-    perfSegment('render.wasm-call', t0);
-    perfMark('render.completed');
-  }
+  // Serialized with every other render through the queue
+  // (bd-gj6fk5hc): the WASM render pipeline is non-reentrant w.r.t.
+  // VFS state, so a print overlapping a preview render could corrupt
+  // either side. Never COALESCED — each print is an explicit user
+  // action that must run — hence the fresh key per call.
+  return enqueueRender(async () => {
+    const wasm = getWasm();
+    if (!perfEnabled()) {
+      return JSON.parse(await wasm.render_printable(path, userGrammars));
+    }
+    perfMark('render.started');
+    const t0 = performance.now();
+    try {
+      return parseEnvelope(await wasm.render_printable(path, userGrammars));
+    } finally {
+      perfSegment('render.wasm-call', t0);
+      perfMark('render.completed');
+    }
+  }, `renderPrintable:${_renderPrintableCounter++}`);
 }
 
 /**
