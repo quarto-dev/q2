@@ -411,11 +411,15 @@ enum Command {
     /// ones watching a path that does not exist), which turn every
     /// `cargo run --bin q2` into a rebuild (bd-7xlph6ki). `cargo xtask
     /// verify` runs this after its workspace build; CI runs it with
-    /// `--profile ci`.
+    /// `--tests --profile ci`.
     CheckNoopRebuild {
         /// Cargo profile to build with (e.g. `ci`); defaults to `dev`.
         #[arg(long)]
         profile: Option<String>,
+
+        /// Check the test targets nextest builds instead of `--bin q2`.
+        #[arg(long)]
+        tests: bool,
 
         /// `RUSTFLAGS` for both builds. Pass it here rather than in the
         /// environment so the xtask itself is not rebuilt with them; it
@@ -680,9 +684,11 @@ fn main() -> Result<()> {
         }
         Command::BuildAgentsDocs { release } => build_agents_docs::run(release),
         Command::StageDocExamples { release } => stage_doc_examples::run(release),
-        Command::CheckNoopRebuild { profile, rustflags } => {
-            check_noop_rebuild::run(profile.as_deref(), rustflags.as_deref())
-        }
+        Command::CheckNoopRebuild {
+            profile,
+            tests,
+            rustflags,
+        } => check_noop_rebuild::run(profile.as_deref(), tests, rustflags.as_deref()),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
         Command::PullExtensionSubtree { name, table } => {
             pull_extension_subtree::run(pull_extension_subtree::Args { name, table })

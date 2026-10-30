@@ -186,6 +186,10 @@ jobs:
       - name: Run custom lints
         shell: bash
         run: cargo xtask lint
+        env:
+          # Must match the later xtask steps: RUSTFLAGS is part of cargo's
+          # fingerprint, so without it they build xtask a second time.
+          RUSTFLAGS: "-D warnings"
 
       # Clippy gate: the workspace clippy policy lives in the root Cargo.toml
       # `[workspace.lints.clippy]` table (architectural lints allowed, the rest
@@ -234,18 +238,20 @@ jobs:
       # root-owned files in target/ would break later steps) and run just
       # this test under sudo with the gate enabled; it skips loudly
       # everywhere else. jq extracts the binary's path from cargo's
-      # --no-run artifact output.
+      # --no-run artifact output. Select the same targets as nextest above:
+      # `-p quarto-hub` resolves dependency features differently, which
+      # recompiles part of the tree.
       - name: Test UDS cross-uid accept check (root)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         env:
           RUSTFLAGS: "-D warnings"
         run: |
-          # The JSON stream also carries the `hub` bin artifact (built for
-          # CARGO_BIN_EXE_hub) — select the integration test binary by
-          # target name, or sudo runs clap and fails on --exact.
-          BIN=$(cargo test --profile ci -p quarto-hub --test integration --no-run --message-format json \
-            | jq -rs '[.[] | select(.executable != null and .target.name == "integration")] | .[0].executable')
+          # The JSON stream carries every crate's artifacts — select
+          # quarto-hub's integration test binary by manifest and target name,
+          # or sudo runs the wrong binary and fails on --exact.
+          BIN=$(cargo test --tests --profile ci --no-run --message-format json \
+            | jq -rs '[.[] | select(.executable != null and .target.name == "integration" and (.manifest_path | endswith("/crates/quarto-hub/Cargo.toml")))] | .[0].executable // empty')
           test -n "$BIN" || { echo "integration test binary not found" >&2; exit 1; }
           sudo Q2_TEST_SETUID=1 "$BIN" --exact uds_server::unix_imp::peer_cred_other_uid_rejected_unless_allowlisted --nocapture
 
@@ -260,43 +266,39 @@ jobs:
       # It lives here, after nextest, rather than in its own workflow so
       # the q2 binary is reused: the crates/quarto integration tests run
       # it via CARGO_BIN_EXE_q2, so `--tests --cargo-profile ci` has
-      # already built target/ci/q2 (`cargo run` makes this a link-only
-      # step if that ever changes). The render takes seconds and needs
-      # nothing on PATH. Built from the branch, it also catches a parser
-      # change that breaks the notes — ~1,450 documents of qmd corpus.
+      # already built target/ci/q2. Run that binary directly: `cargo run
+      # --bin q2` resolves dependency features without the test build's
+      # dev-dependencies, which recompiled 135 crates (about 6 min). The
+      # render needs nothing on PATH. Built from the branch, it also catches
+      # a parser change that breaks the notes — ~1,450 documents of qmd
+      # corpus.
       # Linux-only: parsing is platform-independent. `!cancelled()` so a
       # red test does not hide a bad note, or the other way round.
       # Guidance for notes that pass: claude-notes/instructions/writing-notes.md.
       # `cargo xtask verify` runs the same render after its Rust build
       # (bd-zn87vwi8); a test in crates/xtask/src/verify.rs fails if this
-      # line's q2 args and verify's CLAUDE_NOTES_RENDER_ARGS diverge.
+      # line's q2 args and verify's CLAUDE_NOTES_RENDER_ARGS diverge. The
+      # step fails with "No such file" if nextest could not build q2.
       - name: Render claude-notes (warnings are errors)
         if: runner.os == 'Linux' && !cancelled()
         shell: bash
-        run: cargo run --profile ci --bin q2 -- render --strict claude-notes
-        env:
-          # Must match the nextest step above: RUSTFLAGS is part of
-          # cargo's fingerprint, so a different value here rebuilds the
-          # entire tree (836 crates, 12 min, in the first run of this
-          # step — PR #809) instead of reusing target/ci/q2.
-          RUSTFLAGS: "-D warnings"
+        run: ./target/ci/q2 render --strict claude-notes
 
-      # A second `cargo build --bin q2` must compile nothing. A build script
-      # that watches a missing path (or is otherwise always stale) makes
-      # every `cargo run --bin q2` rebuild quarto-preview + quarto, which
-      # made `build-agents-docs` pay ~16s per example project (GH #870,
-      # bd-7xlph6ki). Runs after the claude-notes render so target/ci/q2 is
-      # already built. `cargo xtask verify` runs the same check after its
-      # Rust build.
+      # A second build must compile nothing. A build script that watches a
+      # missing path (or is otherwise always stale) makes every `cargo run
+      # --bin q2` rebuild quarto-preview + quarto, which made
+      # `build-agents-docs` pay ~16s per example project (GH #870,
+      # bd-7xlph6ki). `--tests` selects the same targets as nextest above,
+      # so the tree is already built. `cargo xtask verify` runs the check on
+      # `--bin q2` after its Rust build.
       - name: Check no-op rebuild of q2
         if: runner.os == 'Linux' && !cancelled()
         shell: bash
-        run: cargo xtask check-noop-rebuild --profile ci
+        run: cargo xtask check-noop-rebuild --tests --profile ci
         env:
-          # Must match the steps above: it is inherited by the q2 builds
-          # (see the claude-notes render step), and it also matches the
-          # "Check pampa consumer feature sets" step, so the xtask that
-          # step built is reused rather than rebuilt.
+          # Must match the steps above: RUSTFLAGS is part of cargo's
+          # fingerprint, so a different value rebuilds the entire tree
+          # (836 crates, 12 min, in PR #809) and xtask too.
           RUSTFLAGS: "-D warnings"
 
   # Windows clippy-only leg (no tests): the same gate as the matrix job's

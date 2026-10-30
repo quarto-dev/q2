@@ -12,8 +12,9 @@
 //! The check runs `cargo build --bin q2` once to settle the tree, then again
 //! with `--message-format=json`, and fails if the second run reports any
 //! `compiler-artifact` with `"fresh": false`. `cargo xtask verify` runs it
-//! after its workspace build; CI runs it in `test-suite.yml` with
-//! `--profile ci`.
+//! after its workspace build. CI runs it in `test-suite.yml` with `--tests
+//! --profile ci`, which builds what nextest built: a plain `--bin q2` resolves
+//! dependency features differently and would recompile much of the tree.
 
 use anyhow::{Context, Result, bail};
 use std::process::Stdio;
@@ -22,15 +23,13 @@ use crate::switch_task::current_worktree_root;
 
 /// Run the check. `profile` is passed to cargo as `--profile <name>` (CI
 /// builds with `ci`); `None` uses cargo's default `dev` profile.
+/// `tests` checks the default members' test targets instead of `--bin q2`.
 /// `rustflags`, when set, overrides `RUSTFLAGS` for both builds; it must
 /// match the build that came before, or cargo rebuilds the whole tree.
-pub fn run(profile: Option<&str>, rustflags: Option<&str>) -> Result<()> {
+pub fn run(profile: Option<&str>, tests: bool, rustflags: Option<&str>) -> Result<()> {
     let root = current_worktree_root()?;
 
-    let mut args = vec!["build", "--bin", "q2"];
-    if let Some(profile) = profile {
-        args.extend(["--profile", profile]);
-    }
+    let mut args = build_args(profile, tests);
 
     println!(
         "check-noop-rebuild: settling build (cargo {})",
@@ -65,7 +64,7 @@ pub fn run(profile: Option<&str>, rustflags: Option<&str>) -> Result<()> {
     let stale = stale_units(&String::from_utf8_lossy(&output.stdout));
     if !stale.is_empty() {
         bail!(
-            "a second `cargo build --bin q2` recompiled {} unit(s), so some build \
+            "a second `cargo {}` recompiled {} unit(s), so some build \
              script or input is always stale:\n  {}\n\
              Find the cause with:\n  \
              CARGO_LOG=cargo::core::compiler::fingerprint=info cargo build --bin q2 \
@@ -74,12 +73,27 @@ pub fn run(profile: Option<&str>, rustflags: Option<&str>) -> Result<()> {
              exist; a `changed` entry naming a broad directory (cargo scans it \
              recursively) is one watching a tree the build writes into. Use \
              `quarto_build_support::watch_dir`/`watch_file` (bd-7xlph6ki).",
+            build_args(profile, tests).join(" "),
             stale.len(),
             stale.join("\n  ")
         );
     }
     println!("✓ check-noop-rebuild: second build was a no-op");
     Ok(())
+}
+
+/// The cargo arguments for one build under the given selection.
+fn build_args(profile: Option<&str>, tests: bool) -> Vec<&str> {
+    let mut args = vec!["build"];
+    if tests {
+        args.push("--tests");
+    } else {
+        args.extend(["--bin", "q2"]);
+    }
+    if let Some(profile) = profile {
+        args.extend(["--profile", profile]);
+    }
+    args
 }
 
 /// The `package_id`s (with target names) of every `compiler-artifact`
@@ -102,7 +116,25 @@ fn stale_units(json_lines: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::stale_units;
+    use super::{build_args, stale_units};
+
+    #[test]
+    fn build_args_select_q2_or_the_test_targets() {
+        assert_eq!(build_args(None, false), ["build", "--bin", "q2"]);
+        assert_eq!(
+            build_args(Some("ci"), true),
+            ["build", "--tests", "--profile", "ci"]
+        );
+    }
+
+    /// The `--tests` selection is only a no-op if it matches nextest's;
+    /// otherwise CI's check recompiles part of the tree.
+    #[test]
+    fn ci_check_selects_the_same_targets_as_nextest() {
+        let workflow = include_str!("../../../.github/workflows/test-suite.yml");
+        assert!(workflow.contains("run: cargo nextest run --tests --cargo-profile ci"));
+        assert!(workflow.contains("run: cargo xtask check-noop-rebuild --tests --profile ci"));
+    }
 
     #[test]
     fn all_fresh_artifacts_report_nothing() {
