@@ -1999,3 +1999,63 @@ fn quoted_quote_type_change_survives_incremental_write() {
         "quote-type edit must survive the incremental write; got: {out:?}"
     );
 }
+
+// =============================================================================
+// Backslash hard breaks (GH #965, bd-o662eis5)
+//
+// The reader's `LineBreak` must own the newline after the backslash: editing a
+// sibling inline rebuilds the block by concatenating each kept inline's span,
+// so a span covering only the backslash loses the newline.
+// =============================================================================
+
+/// Append `Z` to the paragraph's first `Str` and write incrementally.
+fn append_z_to_first_str(input: &str) -> String {
+    use pampa::pandoc::{Block, Inline};
+
+    let mut edited = parse_qmd(input);
+    let Block::Paragraph(p) = &mut edited.blocks[0] else {
+        panic!("Expected Paragraph");
+    };
+    let Inline::Str(s) = &mut p.content[0] else {
+        panic!("Expected Str");
+    };
+    s.text.push('Z');
+    incremental_write_via_json_roundtrip(input, &edited)
+}
+
+#[test]
+fn hard_break_keeps_newline_when_sibling_edited() {
+    assert_eq!(
+        append_z_to_first_str("Last line\\\nnext line.\n"),
+        "LastZ line\\\nnext line.\n"
+    );
+}
+
+#[test]
+fn hard_break_keeps_crlf_when_sibling_edited() {
+    assert_eq!(
+        append_z_to_first_str("Last line\\\r\nnext line.\r\n"),
+        "LastZ line\\\r\nnext line.\r\n"
+    );
+}
+
+#[test]
+fn multiple_hard_breaks_keep_newlines_when_sibling_edited() {
+    assert_eq!(
+        append_z_to_first_str("Last\\\nmid\\\nend.\n"),
+        "LastZ\\\nmid\\\nend.\n"
+    );
+}
+
+#[test]
+fn hard_break_before_emphasis_keeps_emphasis_when_sibling_edited() {
+    assert_eq!(
+        append_z_to_first_str("Last\\\n*next* line.\n"),
+        "LastZ\\\n*next* line.\n"
+    );
+}
+
+#[test]
+fn idempotent_hard_break() {
+    assert_idempotent("Last line\\\nnext line.\n");
+}

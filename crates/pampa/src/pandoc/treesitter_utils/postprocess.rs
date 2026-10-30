@@ -1545,13 +1545,20 @@ pub fn postprocess(
                 // This fixes an issue where tree-sitter emits both break types when
                 // a hard break (backslash-newline) is present. Pandoc only emits LineBreak
                 // in this case, so we match that behavior by dropping the redundant SoftBreak.
+                // Its span moves to the LineBreak, which otherwise covers only the backslash:
+                // the incremental writer rebuilds a block from its kept inlines' spans, so
+                // the newline would vanish on any sibling edit (GH #965).
                 // Move the inlines through rather than cloning them: this
                 // closure runs on every inline vector in the document, and
                 // a deep clone here was paid once per ancestor level.
                 let mut break_cleaned = Vec::with_capacity(inlines.len());
                 let mut skip_next_softbreak = false;
                 for inline in inlines {
-                    if skip_next_softbreak && matches!(inline, Inline::SoftBreak(_)) {
+                    if skip_next_softbreak && let Inline::SoftBreak(soft_break) = &inline {
+                        if let Some(Inline::LineBreak(line_break)) = break_cleaned.last_mut() {
+                            line_break.source_info =
+                                line_break.source_info.combine(&soft_break.source_info);
+                        }
                         skip_next_softbreak = false;
                         continue;
                     }
