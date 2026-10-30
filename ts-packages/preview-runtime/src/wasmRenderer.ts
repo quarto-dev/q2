@@ -580,11 +580,6 @@ export class RenderSupersededError extends Error {
   }
 }
 
-/** True for the queue's superseded-render rejection (name-matched). */
-export function isRenderSupersededError(err: unknown): boolean {
-  return err instanceof Error && err.name === 'RenderSupersededError';
-}
-
 // Coalesce keys for `enqueueRender`. Renders from the same entry point
 // render the same thing ("the current state of the active document"),
 // so a waiting one is always safe to replace with a newer one.
