@@ -1,0 +1,16 @@
+FIXTURE tests/roundtrip_tests/qmd-json-qmd/editorial_marks_author_date.qmd: 14 finding(s)
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [31..37] not contained in parent [17..30]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [39..49] not contained in parent [17..30]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [51..55] not contained in parent [17..30]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [57..77] not contained in parent [17..30]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [97..103] not contained in parent [84..96]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [105..115] not contained in parent [84..96]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [117..121] not contained in parent [84..96]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [123..143] not contained in parent [84..96]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [164..170] not contained in parent [149..163]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [172..182] not contained in parent [149..163]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [233..239] not contained in parent [208..232]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [241..251] not contained in parent [208..232]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [253..257] not contained in parent [208..232]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [259..279] not contained in parent [208..232]" }
+INCREMENTAL OUTPUT: "TrackedZ changes: [++ inserted] and [-- deleted], a [!! highlight] and a commented [range [>> Please reword this.]{author=\"Ann Author\" date=\"2026-09-01T10:00:00Z\"}]{.note} here.\n"
