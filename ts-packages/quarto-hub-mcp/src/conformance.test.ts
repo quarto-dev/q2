@@ -417,6 +417,23 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   {
     tool: 'edit',
     args: (seed) => ({
+      action: 'upload',
+      project: seed.indexDocId,
+      path: 'golden-upload.png',
+    }),
+    setup: async () => {
+      const { mkdtempSync, writeFileSync } = await import('node:fs');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const dir = mkdtempSync(join(tmpdir(), 'hub-mcp-golden-'));
+      const localPath = join(dir, 'golden.png');
+      writeFileSync(localPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      return { local_path: localPath };
+    },
+  },
+  {
+    tool: 'edit',
+    args: (seed) => ({
       action: 'patch',
       project: seed.indexDocId,
       path: 'index.qmd',
@@ -1051,7 +1068,7 @@ describe('merged-tool input schemas (bd-lj6f7z9s)', () => {
     }
   });
 
-  it('edit advertises its seven arms with per-arm required lists', async () => {
+  it('edit advertises its eight arms with per-arm required lists', async () => {
     const f = await startInMemoryMcp();
     try {
       const { tools } = await f.client.listTools();
@@ -1063,9 +1080,11 @@ describe('merged-tool input schemas (bd-lj6f7z9s)', () => {
         'patch',
         'rename',
         'restore',
+        'upload',
         'write',
       ]);
       expect(arms['write']!.required).toEqual(['action', 'project', 'content']);
+      expect(arms['upload']!.required).toEqual(['action', 'project', 'path', 'local_path']);
       expect(arms['patch']!.required).toEqual(['action', 'project', 'new_string']);
       expect(arms['delete']!.required).toEqual(['action', 'project']);
       expect(arms['rename']!.required).toEqual(['action', 'project', 'old_path', 'new_path']);

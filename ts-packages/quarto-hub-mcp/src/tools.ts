@@ -14,6 +14,9 @@
  * v2 migration is registration-only.
  */
 
+import { open, stat } from 'node:fs/promises';
+import { isAbsolute } from 'node:path';
+
 import { z } from 'zod';
 import type {
   CallToolResult,
@@ -538,6 +541,7 @@ type ReadAction = 'list' | 'read' | 'outline' | 'search' | 'history';
 /** The `edit` tool's arms. */
 type EditAction =
   | 'write'
+  | 'upload'
   | 'patch'
   | 'delete'
   | 'rename'
@@ -633,6 +637,8 @@ async function handleTool(
       switch (action as EditAction) {
         case 'write':
           return handleWriteFile(args, manager);
+        case 'upload':
+          return handleUploadFile(args, manager);
         case 'patch':
           return handlePatchFile(args, manager);
         case 'delete':
@@ -1032,9 +1038,9 @@ async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Prom
  * and its hash — the caller can merge and retry without an extra read.
  */
 /** The `create_only` refusal (Phase 7): identical on both write arms. */
-function createOnlyRefusal(path: string): CallToolResult {
+function createOnlyRefusal(path: string, action: 'write' | 'upload' = 'write'): CallToolResult {
   return error(
-    `Error: \`edit\` with \`action: "write"\` refused: ${path} already exists (create_only). ` +
+    `Error: \`edit\` with \`action: "${action}"\` refused: ${path} already exists (create_only). ` +
       'Drop create_only to overwrite it, or pass expected_hash for a compare-and-swap update.',
   );
 }
@@ -1070,7 +1076,7 @@ function staleHashError(
  * block) and merges against the included hash.
  */
 function staleHashErrorBinary(
-  action: 'write',
+  action: 'write' | 'upload',
   path: string,
   current: FilePayload & { type: 'binary' },
 ): CallToolResult {
@@ -1098,7 +1104,9 @@ function staleHashErrorBinary(
 /** Strict base64 decode (Node's Buffer.from is lenient — it silently drops invalid characters). */
 function decodeBase64(content: string): Uint8Array | CallToolResult {
   const compact = content.replace(/\s+/g, '');
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
+  // A flat scan plus a length check: repeating a 4-character group here
+  // overflows V8's regexp stack on payloads above ~3 MB (bd-jiwob9g7).
+  if (compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact)) {
     return error(
       'Error: parameter `content` is not valid base64. Pass the file bytes base64-encoded, ' +
         'or drop `encoding: "base64"` to write UTF-8 text.',
@@ -1940,13 +1948,21 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   const existing = state.files.get(path);
 
   if (args.encoding === 'base64') {
+    const decoded = decodeBase64(content);
+    if (!ArrayBuffer.isView(decoded)) return decoded; // the validation error result
+    const mimeType =
+      typeof args.mime_type === 'string' && args.mime_type !== ''
+        ? args.mime_type
+        : inferMimeType(path);
     return handleWriteFileBinary(
+      'write',
       args,
       manager,
       state,
       project,
       path,
-      content,
+      decoded,
+      mimeType,
       expectedHash,
       existing,
       createOnly,
@@ -2011,29 +2027,24 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
 }
 
 /**
- * The `encoding: "base64"` arm of write_file (CAP-5): create or replace
- * a binary file. Same contract as the text arm — dangling entries are
- * refused, `expected_hash` compare-and-swaps, the result carries the
- * new `hash` and `synced` — plus `mimeType`/`size`.
+ * Create or replace a binary file, for the `encoding: "base64"` write
+ * arm (CAP-5) and the upload arm. Same contract as the text arm —
+ * dangling entries are refused, `expected_hash` compare-and-swaps, the
+ * result carries the new `hash` and `synced` — plus `mimeType`/`size`.
  */
 async function handleWriteFileBinary(
+  action: 'write' | 'upload',
   args: ToolArgs,
   manager: ConnectionManager,
   state: ProjectState,
   project: string,
   path: string,
-  content: string,
+  decoded: Uint8Array,
+  mimeType: string,
   expectedHash: string | undefined,
   existing: FilePayload | undefined,
   createOnly: boolean,
 ): Promise<CallToolResult> {
-  const decoded = decodeBase64(content);
-  if (!ArrayBuffer.isView(decoded)) return decoded; // the validation error result
-  const mimeType =
-    typeof args.mime_type === 'string' && args.mime_type !== ''
-      ? args.mime_type
-      : inferMimeType(path);
-
   if (!existing) {
     const ghost = findUnavailable(state.client, path);
     if (ghost) {
@@ -2041,7 +2052,7 @@ async function handleWriteFileBinary(
     }
     if (expectedHash !== undefined) {
       return error(
-        `Error: \`edit\` with \`action: "write"\` refused: expected_hash was given but ${path} ` +
+        `Error: \`edit\` with \`action: "${action}"\` refused: expected_hash was given but ${path} ` +
           'does not exist in the project (it may have been deleted since you read it). Call ' +
           '`read` with `action: "list"` to see the current files; drop expected_hash to create ' +
           'a new file.',
@@ -2060,16 +2071,17 @@ async function handleWriteFileBinary(
     );
   }
   if (createOnly) {
-    return createOnlyRefusal(path);
+    return createOnlyRefusal(path, action);
   }
   if (existing.type === 'text') {
     return error(
-      `Error: ${path} is a text file. Cannot write binary (base64) content to it — ` +
-        'drop `encoding: "base64"` to write text, or `edit` with `action: "delete"` first and re-create it as binary.',
+      `Error: ${path} is a text file. Cannot write binary content to it — ` +
+        (action === 'write' ? 'drop `encoding: "base64"` to write text, or ' : '') +
+        '`edit` with `action: "delete"` first and re-create it as binary.',
     );
   }
   if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
-    return staleHashErrorBinary('write', path, existing);
+    return staleHashErrorBinary(action, path, existing);
   }
 
   await state.client.updateBinaryFileContent(path, decoded, mimeType);
@@ -2081,6 +2093,123 @@ async function handleWriteFileBinary(
     project,
     path,
     args,
+  );
+}
+
+/**
+ * Largest file the upload arm reads, in bytes. Matches the per-file
+ * limit of the hub-client uploader (`FILE_SIZE_LIMITS.MAX_FILE_SIZE`).
+ */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+/** The image type of `bytes` from its signature, or undefined if it is not an accepted image. */
+function sniffImageMimeType(bytes: Uint8Array): string | undefined {
+  const ascii = (start: number, end: number) =>
+    String.fromCharCode(...bytes.subarray(start, end));
+  if (
+    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, i) => bytes[i] === byte)
+  ) {
+    return 'image/png';
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') return 'image/gif';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp';
+  return undefined;
+}
+
+/**
+ * Read an image for the upload arm. Project text can carry prompt
+ * injection asking an agent to upload a secret from this machine, so
+ * only regular files under the size cap whose content is an accepted
+ * image are read, and no refusal echoes file content. `stat` follows
+ * symlinks, so the checks apply to the link's target.
+ */
+async function readLocalImage(
+  localPath: string,
+): Promise<{ data: Uint8Array; mimeType: string } | CallToolResult> {
+  if (!isAbsolute(localPath)) {
+    return error(
+      `Error: \`local_path\` must be an absolute path, got ${JSON.stringify(localPath)}: the ` +
+        'server does not share your working directory.',
+    );
+  }
+  try {
+    // Checked before open: opening a FIFO would block until a writer appears.
+    const info = await stat(localPath);
+    if (!info.isFile()) return error(`Error: ${localPath} is not a regular file.`);
+    if (info.size > MAX_UPLOAD_BYTES) {
+      return error(
+        `Error: ${localPath} is ${(info.size / (1024 * 1024)).toFixed(1)} MB; the upload limit ` +
+          'is 10 MB. Reduce its size and retry.',
+      );
+    }
+    const handle = await open(localPath, 'r');
+    try {
+      const data = new Uint8Array(info.size);
+      const { bytesRead } = await handle.read(data, 0, info.size, 0);
+      if (bytesRead !== info.size) {
+        return error(`Error: ${localPath} changed while it was being read. Retry the upload.`);
+      }
+      const mimeType = sniffImageMimeType(data);
+      if (mimeType === undefined) {
+        return error(
+          `Error: ${localPath} is not a PNG, JPEG, GIF, or WebP image, judging by its content. ` +
+            'Only those types can be uploaded from a local path.',
+        );
+      }
+      return { data, mimeType };
+    } finally {
+      await handle.close();
+    }
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return error(
+        `Error: ${localPath} not found on this machine. The MCP server reads the machine it ` +
+          'runs on, so a sandboxed agent may see files the server cannot; a remote server ' +
+          'cannot read your files at all.',
+      );
+    }
+    if (code === 'EACCES' || code === 'EPERM') {
+      return error(
+        `Error: permission denied reading ${localPath}. Move the file somewhere the MCP ` +
+          'server can read, such as a temp directory, or grant its host access to that folder.',
+      );
+    }
+    throw e;
+  }
+}
+
+/**
+ * The upload arm (issue #987): the server reads the bytes itself, so a
+ * full-size image never travels through the conversation as base64.
+ */
+async function handleUploadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = args.path as string;
+  const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
+  const createOnly = args.create_only === true;
+  if (createOnly && expectedHash !== undefined) {
+    return error(
+      'Error: `create_only` and `expected_hash` cannot be combined — create_only means ' +
+        '"the file must not exist", while expected_hash guards an existing file. Pick one.',
+    );
+  }
+  const image = await readLocalImage(args.local_path as string);
+  if ('content' in image) return image;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  return handleWriteFileBinary(
+    'upload',
+    args,
+    manager,
+    state,
+    project,
+    path,
+    image.data,
+    image.mimeType,
+    expectedHash,
+    state.files.get(path),
+    createOnly,
   );
 }
 
@@ -2985,6 +3114,34 @@ const inEdit = z.discriminatedUnion('action', [
   }),
   z.object({
     action: z
+      .literal('upload')
+      .describe('Create or replace a binary file from a local image, without sending its bytes.'),
+    project: projectParam,
+    path: pathParam,
+    local_path: z
+      .string()
+      .describe(
+        'Absolute path of a PNG, JPEG, GIF, or WebP file of at most 10 MB on the machine ' +
+          'running this server.',
+      ),
+    expected_hash: z
+      .string()
+      .optional()
+      .describe(
+        'Optional `hash` from a prior read/write result; the upload is refused if the file ' +
+          'changed since.',
+      ),
+    create_only: z
+      .boolean()
+      .optional()
+      .describe(
+        'Refuse to overwrite: the upload fails if the file already exists (default false). ' +
+          'Cannot be combined with expected_hash.',
+      ),
+    wait_for_sync: waitForSyncParam,
+  }),
+  z.object({
+    action: z
       .literal('patch')
       .describe('Targeted text edit: replace an exact old_string, or a whole qmd section.'),
     project: projectParam,
@@ -3332,6 +3489,11 @@ export function registerTools(
         'does — a create-with-guard). Prefer `action: "patch"` for small changes to large text ' +
         'files. With `encoding: "base64"`, `content` is base64-encoded bytes and the file is ' +
         'binary (`mime_type` overrides the extension-inferred type).\n\n' +
+        '`action: "upload"` — create or replace a binary file from an image on this machine: ' +
+        'the server reads `local_path` itself, so the bytes stay out of the conversation. Use ' +
+        'it instead of base64 for screenshots and other images of any real size. PNG, JPEG, ' +
+        'GIF, and WebP only (checked by content), at most 10 MB; the type comes from the ' +
+        'content. `path` is the destination in the project.\n\n' +
         '`action: "patch"` — apply a targeted edit to a text file: replace an exact ' +
         '`old_string`, or replace an entire qmd `section` (heading line included) with ' +
         '`new_string`; the two are mutually exclusive. More context-efficient than `action: ' +

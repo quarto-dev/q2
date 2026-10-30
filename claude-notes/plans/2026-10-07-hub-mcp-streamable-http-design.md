@@ -211,7 +211,7 @@ a fresh automerge handshake per request.
 ## 8. The tool surface over HTTP
 
 Identical to stdio (the handlers are transport-agnostic by design),
-with two deliberate exceptions in the first implementation:
+with three deliberate exceptions in the first implementation:
 
 - **`render` is not registered.** Rendering shells out to `q2` on the
   host — fine on a user's machine, a compute-amplification and
@@ -221,6 +221,9 @@ with two deliberate exceptions in the first implementation:
   the connector↔hub OAuth flow; a tool that opens a browser makes no
   sense server-side. Credential state errors surface as 401 challenges
   instead.
+- **`edit` with `action: "upload"` is not offered.** Its `local_path`
+  would name a file on the hub machine (bd-llklgl70). Browser-hosted
+  agents need their own upload channel, which is a separate design.
 
 Everything else — including resources and `subscriptions/listen` —
 serves unchanged. `wait_for_change` long-polls ride the request's SSE
