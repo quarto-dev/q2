@@ -588,8 +588,6 @@ const RENDER_TO_HTML_KEY = 'renderToHtml';
 const RENDER_PAGE_RENDER_KEY = 'renderPageInProject';
 
 interface QueuedRenderSlot {
-  /** Only waiting slots with equal keys supersede each other. */
-  key: string;
   /** The render to run; replaced when a newer render supersedes. */
   run: () => Promise<unknown>;
   /** Settles the caller's promise (the newest caller after a supersede). */
@@ -599,15 +597,18 @@ interface QueuedRenderSlot {
   };
 }
 
-// Waiting (not yet started) render slots. At most one per coalesce key —
-// a same-key enqueue merges into the existing slot — so this stays
-// microscopic (two keys today).
-const _renderQueue: QueuedRenderSlot[] = [];
+// Waiting (not yet started) render slots, keyed by coalesce key — the
+// Map makes "at most one waiting slot per key" structural: a same-key
+// enqueue merges into the existing slot instead of adding a new one.
+// Insertion-ordered iteration is the FIFO the pump drains in, and
+// supersede mutates the slot in place, so it keeps its FIFO position
+// and a burst on one entry point cannot starve another.
+const _renderQueue = new Map<string, QueuedRenderSlot>();
 let _renderPumping = false;
 
 function enqueueRender<T>(fn: () => Promise<T>, coalesceKey: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const existing = _renderQueue.find((slot) => slot.key === coalesceKey);
+    const existing = _renderQueue.get(coalesceKey);
     if (existing) {
       // Latest-wins: the waiting render never starts, and its caller
       // settles with RenderSupersededError.
@@ -620,8 +621,7 @@ function enqueueRender<T>(fn: () => Promise<T>, coalesceKey: string): Promise<T>
       perfMark('render.superseded');
       return;
     }
-    _renderQueue.push({
-      key: coalesceKey,
+    _renderQueue.set(coalesceKey, {
       run: fn as () => Promise<unknown>,
       settle: { resolve: resolve as (value: unknown) => void, reject },
     });
@@ -634,8 +634,15 @@ async function pumpRenderQueue(): Promise<void> {
   if (_renderPumping) return;
   _renderPumping = true;
   try {
-    let slot: QueuedRenderSlot | undefined;
-    while ((slot = _renderQueue.shift()) !== undefined) {
+    for (;;) {
+      // The first entry is the oldest waiting slot (insertion order).
+      // Delete it BEFORE starting its render so a same-key enqueue
+      // landing while it runs queues a fresh slot rather than
+      // "superseding" the render already in flight.
+      const oldest = _renderQueue.entries().next();
+      if (oldest.done) break;
+      const [key, slot] = oldest.value;
+      _renderQueue.delete(key);
       try {
         slot.settle.resolve(await slot.run());
       } catch (err) {
