@@ -1053,42 +1053,28 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     window.open(url, '_blank');
   }, [project.id]);
 
-  // Handle copying a file link to clipboard
-  const handleCopyLink = useCallback(async (file: FileEntry) => {
-    const url = buildFullUrl({
-      type: 'file',
-      projectId: project.id,
-      filePath: file.path,
-    });
-    try {
-      await navigator.clipboard.writeText(url);
-      // Could show a toast notification here in the future
-    } catch (err) {
-      console.error('Failed to copy link:', err);
-    }
-  }, [project.id]);
-
   // Handle opening share dialog
   const handleShare = useCallback(() => {
     setShowShareDialog(true);
   }, []);
 
-  // Build shareable URL for the current file, with the display-only
-  // invite-landing preview (bd-fxdcxbpq): file name, sibling files, and
-  // contributor initials from the index doc's identity map.
-  const shareableUrl = currentFile
-    ? buildShareableUrl(
+  // Build a shareable URL for a file, with the display-only invite-landing
+  // preview (bd-fxdcxbpq): file name, sibling files, and contributor initials
+  // from the index doc's identity map.
+  const buildFileShareUrl = useCallback(
+    (filePath: string) =>
+      buildShareableUrl(
         project.indexDocId,
         project.syncServer,
         project.description,
-        currentFile.path,
+        filePath,
         {
           from: userName,
           preview: {
             kind: 'project',
-            fileName: currentFile.path,
+            fileName: filePath,
             topFiles: files
-              .filter((f) => f.path !== currentFile.path)
+              .filter((f) => f.path !== filePath)
               .slice(0, 2)
               .map((f) => f.path),
             fileCount: files.length,
@@ -1103,8 +1089,22 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
               .slice(0, 4),
           },
         }
-      )
-    : undefined;
+      ),
+    [project.indexDocId, project.syncServer, project.description, files, identities, userName]
+  );
+
+  const shareableUrl = currentFile ? buildFileShareUrl(currentFile.path) : undefined;
+
+  // Handle copying a file's share link to clipboard. This must be the #/share/
+  // URL: #/p/ URLs hold a browser-local project id that means nothing to anyone else.
+  const handleCopyLink = useCallback(async (file: FileEntry) => {
+    try {
+      await navigator.clipboard.writeText(buildFileShareUrl(file.path));
+      // Could show a toast notification here in the future
+    } catch (err) {
+      console.error('Failed to copy link:', err);
+    }
+  }, [buildFileShareUrl]);
 
   // Handle opening new file dialog (text files only after Phase C).
   // Pre-fill the filename with the current file's directory path

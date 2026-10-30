@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-10-30
+
+- [`56494f69c`](https://github.com/quarto-dev/q2/commits/56494f69c): The "Copy share link" command in the Files tab's context menu now copies a link other people can open, pointing at the clicked file, instead of a URL that only works in your own browser.
+
 ### 2026-10-29
 
 - [`f4768a2a9`](https://github.com/quarto-dev/q2/commits/f4768a2a9): Typing bursts no longer run one full preview render per keystroke — queued renders now coalesce latest-wins, so a fast typing burst renders at most twice (the in-flight render plus the latest), cutting burst render work about 80% in measurements.
