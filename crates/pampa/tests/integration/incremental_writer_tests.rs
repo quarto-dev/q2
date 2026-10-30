@@ -1999,3 +1999,116 @@ fn quoted_quote_type_change_survives_incremental_write() {
         "quote-type edit must survive the incremental write; got: {out:?}"
     );
 }
+
+// =============================================================================
+// GH #964 / bd-87t8pnx6: an editorial mark's source span must include its
+// trailing explicit attribute. `extract_delimiter_space_info` used to end the
+// span at the closing delimiter token, so `[++ added]{author="Bob"}` recorded
+// the span `[++ added]` and the inline-level KeepBefore copy of the untouched
+// mark dropped the attribute whenever a sibling inline was edited.
+// =============================================================================
+
+/// Append `Z` to the first `Str` of the first paragraph and incremental-write.
+fn edit_first_str_incremental(original_qmd: &str) -> String {
+    use pampa::pandoc::{Block, Inline};
+    use quarto_source_map::SourceInfo;
+
+    let orig = parse_qmd(original_qmd);
+    let mut new = orig.clone();
+    if let Some(Block::Paragraph(p)) = new.blocks.get_mut(0)
+        && let Some(Inline::Str(s)) = p.content.get_mut(0)
+    {
+        s.text = format!("{}Z", s.text);
+        s.source_info = SourceInfo::for_test();
+    }
+    let plan = compute_reconciliation(&orig, &new);
+    writers::incremental::incremental_write(original_qmd, &orig, &new, &plan)
+        .expect("incremental_write failed")
+}
+
+#[test]
+fn editorial_mark_attribute_survives_sibling_edit() {
+    // (input, expected): only the first word changes; the mark and its
+    // attribute are byte-identical to the input.
+    let cases = [
+        (
+            "Last [++ added]{author=\"Bob\"} text.\n",
+            "LastZ [++ added]{author=\"Bob\"} text.\n",
+        ),
+        (
+            "Last [++ added]{author=\"Bob\" date=\"2026-01-01\"} text.\n",
+            "LastZ [++ added]{author=\"Bob\" date=\"2026-01-01\"} text.\n",
+        ),
+        (
+            "Last [-- gone]{author=\"Bob\"} text.\n",
+            "LastZ [-- gone]{author=\"Bob\"} text.\n",
+        ),
+        (
+            "Last [!! hot]{author=\"Bob\"} text.\n",
+            "LastZ [!! hot]{author=\"Bob\"} text.\n",
+        ),
+        (
+            "Last [>> note]{author=\"Bob\"} text.\n",
+            "LastZ [>> note]{author=\"Bob\"} text.\n",
+        ),
+        (
+            "Last [++ added]{.cls} text.\n",
+            "LastZ [++ added]{.cls} text.\n",
+        ),
+        (
+            "Last [++ added]{#id} text.\n",
+            "LastZ [++ added]{#id} text.\n",
+        ),
+        // Controls: no attribute, and the Span shape that was already correct.
+        ("Last [++ added] text.\n", "LastZ [++ added] text.\n"),
+        (
+            "Last [added]{author=\"Bob\"} text.\n",
+            "LastZ [added]{author=\"Bob\"} text.\n",
+        ),
+    ];
+    for (input, expected) in cases {
+        let out = edit_first_str_incremental(input);
+        assert_eq!(out, expected, "input: {input:?}");
+    }
+}
+
+#[test]
+fn editorial_mark_span_covers_trailing_attribute() {
+    use pampa::pandoc::{Block, Inline};
+
+    // The span of the mark itself must run to the closing `}`; the following
+    // Space must start right after it, leaving no un-owned bytes between.
+    let input = "Last [++ added]{author=\"Bob\"} text.\n";
+    let ast = parse_qmd(input);
+    let Some(Block::Paragraph(p)) = ast.blocks.first() else {
+        panic!("expected paragraph");
+    };
+    // Depending on reader mode the mark is an `Insert` or is lowered to a
+    // `Span` with class `quarto-insert`; the span invariant holds either way.
+    let mark = p.content.get(2).expect("mark at index 2");
+    assert!(
+        matches!(mark, Inline::Insert(_) | Inline::Span(_)),
+        "expected the mark at index 2, got {mark:?}"
+    );
+    let si = mark.source_info().clone();
+    assert_eq!(
+        &input[si.start_offset()..si.end_offset()],
+        "[++ added]{author=\"Bob\"}"
+    );
+    let Some(Inline::Space(sp)) = p.content.get(3) else {
+        panic!("expected Space at index 3");
+    };
+    assert_eq!(sp.source_info.start_offset(), si.end_offset());
+}
+
+#[test]
+fn editorial_mark_attribute_survives_sibling_edit_roundtrip_fixture() {
+    // The real tracked-changes fixture: three top-level marks with
+    // author/date attrs plus one nested inside a Span.
+    let path = "tests/roundtrip_tests/qmd-json-qmd/editorial_marks_author_date.qmd";
+    let src = std::fs::read_to_string(path).expect("fixture present");
+    let out = edit_first_str_incremental(&src);
+    let expected = format!("{}Z{}", &src[..7], &src[7..]);
+    assert_eq!(&src[..7], "Tracked", "fixture starts with the word Tracked");
+    assert_eq!(out, expected);
+}

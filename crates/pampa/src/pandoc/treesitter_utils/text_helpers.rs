@@ -532,17 +532,29 @@ pub fn extract_delimiter_space_info(
     let adjusted_range = if let (Some(first_delim), Some(last_delim)) =
         (&first_delimiter_range, &last_delimiter_range)
     {
+        // Trailing-whitespace trimming only ever applies to bytes inside the
+        // closing delimiter token. When the grammar node extends past that
+        // token — an editorial mark with an explicit attribute,
+        // `[++ added]{author="Bob"}` — the attribute is part of the node and
+        // must stay inside its span, or the incremental writer's verbatim
+        // copy of the node drops it (GH #964 / bd-87t8pnx6).
+        let delimiter_end_offset = last_delim.end.offset - trailing_ws_count;
+        let end = if fallback_range.end.offset > delimiter_end_offset {
+            fallback_range.end
+        } else {
+            quarto_source_map::Location {
+                offset: delimiter_end_offset,
+                row: last_delim.end.row,
+                column: last_delim.end.column - trailing_ws_count,
+            }
+        };
         quarto_source_map::Range {
             start: quarto_source_map::Location {
                 offset: first_delim.start.offset + leading_ws_count,
                 row: first_delim.start.row,
                 column: first_delim.start.column + leading_ws_count,
             },
-            end: quarto_source_map::Location {
-                offset: last_delim.end.offset - trailing_ws_count,
-                row: last_delim.end.row,
-                column: last_delim.end.column - trailing_ws_count,
-            },
+            end,
         }
     } else {
         fallback_range
