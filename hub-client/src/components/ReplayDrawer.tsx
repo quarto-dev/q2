@@ -272,10 +272,10 @@ interface EditToggleProps {
 
 /**
  * The Edit pill (bd-ew0vak6b): q2-preview block editing on/off. Same
- * anatomy as the Authors pill. With editing off the preview behaves
- * like a read-only `q2 preview` — no hover outlines, no edit
- * affordances, and links are plain links (with editing on, a click on
- * a link inside a paragraph also opens that paragraph's editor).
+ * anatomy as the Authors pill. With editing off the preview has no
+ * hover outlines or content edit affordances, and links are plain links
+ * (with editing on, a click on a link inside a paragraph also opens that
+ * paragraph's editor). Comments can still be added and resolved (GH #973).
  */
 function EditToggle({ previewEditing, onPreviewEditingChange, disabled }: EditToggleProps) {
   const on = previewEditing && !disabled;

@@ -1,6 +1,7 @@
 import { useContext } from 'react';
 import type { BlockNode } from '../framework/types';
 import { PreviewContext } from './PreviewContext';
+import type { SubtreeEditOptions } from './PreviewContext';
 import type { ResolvedSource } from './sourceIndex';
 
 /**
@@ -15,7 +16,7 @@ import type { ResolvedSource } from './sourceIndex';
  */
 export function usePreviewEdit(): {
     resolveSource: (node: BlockNode) => ResolvedSource | null;
-    commitSubtreeEdit: (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => void;
+    commitSubtreeEdit: (destinationSourceInfoJson: string, modifiedBlock: BlockNode, options?: SubtreeEditOptions) => void;
     commitTextEdit: (destinationSourceInfoJson: string, newText: string) => void;
 } {
     const ctx = useContext(PreviewContext);

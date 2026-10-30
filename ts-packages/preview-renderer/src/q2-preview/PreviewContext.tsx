@@ -31,6 +31,9 @@ export type { ReachabilityClass, SourceIndexEntry, ResolvedSource };
 /** Comment-bubble display mode (host three-way toggle). */
 export type CommentsMode = 'expand' | 'show' | 'hide';
 
+/** Options for `commitSubtreeEdit`; `scope` is forwarded on the edit payload. */
+export type SubtreeEditOptions = { scope?: 'comment' };
+
 export interface PreviewContextValue {
     currentFilePath: string;
     /** Source-info pool from the rendered AST — `astContext.p` array. */
@@ -38,7 +41,7 @@ export interface PreviewContextValue {
     /** Commit a raw-QMD text edit (text channel, Plan 2b). */
     commitTextEdit?: (destinationSourceInfoJson: string, newText: string) => void;
     /** Commit a Pandoc subtree replacement (subtree channel, Plan 2b). Used by render-component authors via `usePreviewEdit`. */
-    commitSubtreeEdit?: (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => void;
+    commitSubtreeEdit?: (destinationSourceInfoJson: string, modifiedBlock: BlockNode, options?: SubtreeEditOptions) => void;
     /** The QMD source content that produced the current render. Used by editable blocks to slice source bytes. */
     content?: string;
     /**
@@ -175,8 +178,16 @@ export interface PreviewContextValue {
      * block renders an edit affordance (`data-block-pool-id`) and
      * `useBlockEditHover` is inert. Set by hosts that are read-only —
      * `q2 preview` without `--allow-edit`. Absent/false ⇒ editable.
+     * Governs content editing only; see `commentingDisabled`.
      */
     editingDisabled?: boolean;
+    /**
+     * Comments are read-only (GH #973): bubbles still display, but nothing
+     * offers to add or resolve one. Independent of `editingDisabled`, since
+     * hub-client's Edit pill leaves comments working. Set by hosts that
+     * cannot write at all. Absent/false ⇒ comments can be written.
+     */
+    commentingDisabled?: boolean;
     /**
      * Comment-bubble display mode (three-way toggle in the host UI):
      * 'expand' pins every commented block's popup open, 'show' is the

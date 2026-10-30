@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-10-30
 
+- [`8acbc6d63`](https://github.com/quarto-dev/q2/commits/8acbc6d63): Comments can now be added and resolved with the Edit toggle off. Pressing Enter used to discard the comment silently.
 - [`56494f69c`](https://github.com/quarto-dev/q2/commits/56494f69c): The "Copy share link" command in the Files tab's context menu now copies a link other people can open, pointing at the clicked file, instead of a URL that only works in your own browser.
 
 ### 2026-10-29

@@ -39,6 +39,7 @@ import type { CommentsMode } from '../PreviewContext';
 import { usePreviewEdit } from '../usePreviewEdit';
 import { claimPendingCommentOpen } from '../commentPending';
 import {
+    COMMENT_EDIT,
     CommentWrapper,
     EDITORIAL_MARK_CLASSES,
     EnclosingBlockContext,
@@ -175,7 +176,7 @@ export const CommentInline = (args: NodeArgs<InlineNode>) => {
             t: 'Span',
             c: [['', ['quarto-edit-comment'], []], [{ t: 'Str', c: text }]],
         });
-        edit.commitSubtreeEdit(JSON.stringify(found.sourceEntry), found.modified);
+        edit.commitSubtreeEdit(JSON.stringify(found.sourceEntry), found.modified, COMMENT_EDIT);
     };
 
     const resolveCommentAtIndex = (index: number) => {
@@ -191,7 +192,7 @@ export const CommentInline = (args: NodeArgs<InlineNode>) => {
                 break;
             }
         }
-        edit.commitSubtreeEdit(JSON.stringify(found.sourceEntry), found.modified);
+        edit.commitSubtreeEdit(JSON.stringify(found.sourceEntry), found.modified, COMMENT_EDIT);
     };
 
     return (

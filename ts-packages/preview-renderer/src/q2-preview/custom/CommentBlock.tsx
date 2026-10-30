@@ -29,7 +29,9 @@
  * The three-way mode arrives via `PreviewContext.commentsMode` from the
  * host toolbar. Adds/resolves round-trip through
  * `usePreviewEdit().commitSubtreeEdit` (no-ops where `PreviewContext`
- * is absent). Blocks without an inline slot (code blocks, incl.
+ * is absent), tagged `COMMENT_EDIT`. `PreviewContext.editingDisabled`
+ * does not affect them; `commentingDisabled` makes bubbles display-only
+ * (GH #973). Blocks without an inline slot (code blocks, incl.
  * mermaid) get wrapped in a `CONTAINER_CLASS` Div holding the comment
  * paragraphs; the Div owns the thread's single bubble and its children
  * render chrome-free.
@@ -69,6 +71,10 @@ import type { CommentAnchorTarget } from '../commentAnchor';
 const CHROME_BLUE = '#4a7ba7';
 const DIVIDER = '1px solid rgba(74, 123, 167, 0.3)';
 const GLOW = '0 0 8px 2px rgba(140, 190, 240, 0.6)';
+
+// Tags every comment commit, so a host whose content editing is off can
+// still accept it (GH #973).
+export const COMMENT_EDIT = { scope: 'comment' } as const;
 
 export function isComment(inline: InlineNode): boolean {
     if (inline.t === 'Span' && 'c' in inline) {
@@ -413,11 +419,11 @@ const CommentBlockInner = (args: NodeArgs<BlockNode>) => {
                 (inlineSlot(ch) ?? []).some(isComment),
             );
             if (!anyLeft && children.length === 1) {
-                edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), children[0]);
+                edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), children[0], COMMENT_EDIT);
                 return;
             }
         }
-        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified);
+        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified, COMMENT_EDIT);
     };
 
     // Append a comment span (text) to the source node and commit.
@@ -443,7 +449,7 @@ const CommentBlockInner = (args: NodeArgs<BlockNode>) => {
                     [modified, { t: 'Para', c: [newComment] } as ParaBlock],
                 ],
             };
-            edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), wrapper as BlockNode);
+            edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), wrapper as BlockNode, COMMENT_EDIT);
             return;
         } else if (isCommentContainer(modified)) {
             // Append to the container's last comment paragraph, or add
@@ -458,7 +464,7 @@ const CommentBlockInner = (args: NodeArgs<BlockNode>) => {
                 children.push({ t: 'Para', c: [newComment] } as ParaBlock);
             }
         }
-        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified);
+        edit.commitSubtreeEdit(JSON.stringify(resolved.sourceEntry), modified, COMMENT_EDIT);
     };
 
     const inner = (
@@ -1231,7 +1237,10 @@ export const CommentWrapper = ({
         };
     }, [selfExpanded]);
 
-    const chromeVisible = comments.length > 0 || isHovered || selfExpanded;
+    // Display-only bubbles (GH #973): a host that can't write offers no `+`,
+    // no input, and no ✓ — anything typed there would be silently lost.
+    const readOnly = !!previewCtx?.commentingDisabled;
+    const chromeVisible = comments.length > 0 || (!readOnly && (isHovered || selfExpanded));
 
     // Register this bubble with the force layout while visible. Mounts
     // (and size changes via the deps) reflow; unmounts deliberately
@@ -1497,7 +1506,7 @@ export const CommentWrapper = ({
                             // Clicking a compact bubble expands it in
                             // place; any click opens the inline input.
                             if (!expanded) setSelfExpanded(true);
-                            setShowInlineInput(true);
+                            if (!readOnly) setShowInlineInput(true);
                         }}
                         title={`${comments.length} comment${comments.length !== 1 ? 's' : ''}`}
                     >
@@ -1539,7 +1548,7 @@ export const CommentWrapper = ({
                                             }}>
                                                 <CommentSpanContent span={c} onNavigateToDocument={onNavigateToDocument} />
                                             </span>
-                                            <button
+                                            {!readOnly && <button
                                                 onClick={(ev) => {
                                                     // Resolve without also
                                                     // triggering the bubble's
@@ -1563,7 +1572,7 @@ export const CommentWrapper = ({
                                                 onMouseLeave={(ev) => ev.currentTarget.style.backgroundColor = 'transparent'}
                                             >
                                                 ✓
-                                            </button>
+                                            </button>}
                                         </div>
                                     );
                                 })}

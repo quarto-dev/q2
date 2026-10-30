@@ -1494,6 +1494,8 @@ export default function PreviewApp() {
         // bd-ov4gqk3m: without --allow-edit the preview is read-only —
         // no edit affordance renders inside the iframe at all.
         editingDisabled={!state.allowEdit}
+        // GH #973: comments can't be saved either, so don't offer to add any.
+        commentingDisabled={!state.allowEdit}
         // P3.2: nesting-cursor mode + per-key nested buffers.
         unlockNestingCursor={state.nestingCursor}
         // Rich-text editor (bd-sjb4pzx8): on by default; `?richText=0` opts out.

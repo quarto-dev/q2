@@ -94,6 +94,13 @@ interface Q2PreviewIframeProps {
    */
   editingDisabled?: boolean;
   /**
+   * Comments are read-only (GH #973): displayed, but not addable or
+   * resolvable. Set by hosts that cannot write at all. Separate from
+   * `editingDisabled`, because hub-client's Edit pill leaves comments
+   * working. Absent/false ⇒ comments can be written.
+   */
+  commentingDisabled?: boolean;
+  /**
    * Comment-bubble display mode (host three-way toggle: expand / show /
    * hide). Forwarded unchanged in the UPDATE_AST payload. Absent ⇒ 'show'.
    */
@@ -187,6 +194,7 @@ export function Q2PreviewIframe({
   untransformedAstJson,
   currentActor,
   editingDisabled,
+  commentingDisabled,
   commentsMode,
   unlockNestingCursor,
   richText,
@@ -418,6 +426,7 @@ export function Q2PreviewIframe({
           currentActor,
           // bd-ov4gqk3m: read-only hosts disable the edit surface.
           editingDisabled,
+          commentingDisabled,
           // Comment-bubble mode (expand / show / hide).
           commentsMode,
           // P3.2: nesting-cursor mode + per-key nested buffers.
@@ -441,6 +450,7 @@ export function Q2PreviewIframe({
     untransformedAstJson,
     currentActor,
     editingDisabled,
+    commentingDisabled,
     commentsMode,
     unlockNestingCursor,
     richText,
