@@ -61,6 +61,8 @@ So once the bytes are in the server process, the write path handles full-size im
 
 This meets the reported need, screenshots, with default-on behaviour. An image can still contain private content, so this reduces the exposure rather than removing it. Non-image files are left for a later opt-in flag on the `--allow-render` model if someone asks.
 
+**What workflow is the arm for?** An agent that generates a screenshot at a known file location and then uploads it with a second tool call. This is the maintainer's reading of the request for "a tool that takes a local file path". Images pasted into a chat are out of scope, because they may have no path the agent can pass. Acceptance check: generate a screenshot in a temp directory and upload it through a plain `q2 mcp` stdio config.
+
 **Should URLs be supported too?** Not in the first version. The issue offers them only as an example, the reported case is local, and fetching URLs adds SSRF handling.
 
 **Does the bug block the feature?** No. The new arm does not decode base64, and it is unreachable for most model-driven calls anyway. The bug is filed separately because it gives a misleading error to any scripted client sending more than 3 MB. A linear check passed on 70 M chars during triage.
