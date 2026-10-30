@@ -1,0 +1,112 @@
+INPUT : "Last [++ added]{author=\"Bob\"} text.\n"
+OUTPUT: "LastZ [++ added] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..15 "[++ added]"
+  Discriminant(11) 29..30 " "
+  Discriminant(0) 30..35 "text."
+TILING: 2 finding(s)
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [16..22] not contained in parent [5..15]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [24..27] not contained in parent [5..15]" }
+
+INPUT : "Last [++ added]{author=\"Bob\" date=\"2026-01-01\"} text.\n"
+OUTPUT: "LastZ [++ added] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..15 "[++ added]"
+  Discriminant(11) 47..48 " "
+  Discriminant(0) 48..53 "text."
+TILING: 4 finding(s)
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [16..22] not contained in parent [5..15]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [24..27] not contained in parent [5..15]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [29..33] not contained in parent [5..15]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [35..45] not contained in parent [5..15]" }
+
+INPUT : "Last [-- gone]{author=\"Bob\"} text.\n"
+OUTPUT: "LastZ [-- gone] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..14 "[-- gone]"
+  Discriminant(11) 28..29 " "
+  Discriminant(0) 29..34 "text."
+TILING: 2 finding(s)
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [15..21] not contained in parent [5..14]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [23..26] not contained in parent [5..14]" }
+
+INPUT : "Last [!! hot]{author=\"Bob\"} text.\n"
+OUTPUT: "LastZ [!! hot] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..13 "[!! hot]"
+  Discriminant(11) 27..28 " "
+  Discriminant(0) 28..33 "text."
+TILING: 2 finding(s)
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [14..20] not contained in parent [5..13]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [22..25] not contained in parent [5..13]" }
+
+INPUT : "Last [>> note]{author=\"Bob\"} text.\n"
+OUTPUT: "LastZ [>> note] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..14 "[>> note]"
+  Discriminant(11) 28..29 " "
+  Discriminant(0) 29..34 "text."
+TILING: 2 finding(s)
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-key` [15..21] not contained in parent [5..14]" }
+  TilingFinding { kind: ContainmentViolation, message: "ContainmentViolation: child `attr-val` [23..26] not contained in parent [5..14]" }
+
+INPUT : "Last [++ added]{.cls} text.\n"
+OUTPUT: "LastZ [++ added] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..15 "[++ added]"
+  Discriminant(11) 21..22 " "
+  Discriminant(0) 22..27 "text."
+TILING: 0 finding(s)
+
+INPUT : "Last [++ added]{#id} text.\n"
+OUTPUT: "LastZ [++ added] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..15 "[++ added]"
+  Discriminant(11) 20..21 " "
+  Discriminant(0) 21..26 "text."
+TILING: 0 finding(s)
+
+INPUT : "Last [++ added] text.\n"
+OUTPUT: "LastZ [++ added] text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..15 "[++ added]"
+  Discriminant(11) 15..16 " "
+  Discriminant(0) 16..21 "text."
+TILING: 0 finding(s)
+
+INPUT : "Last [added]{author=\"Bob\"} text.\n"
+OUTPUT: "LastZ [added]{author=\"Bob\"} text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(19) 5..26 "[added]{author=\"Bob\"}"
+  Discriminant(11) 26..27 " "
+  Discriminant(0) 27..32 "text."
+TILING: 0 finding(s)
+
+INPUT : "Last *added* text.\n"
+OUTPUT: "LastZ *added* text.\n"
+SPANS :
+  Discriminant(0) 0..4 "Last"
+  Discriminant(11) 4..5 " "
+  Discriminant(1) 5..12 "*added*"
+  Discriminant(11) 12..13 " "
+  Discriminant(0) 13..18 "text."
+TILING: 0 finding(s)
+

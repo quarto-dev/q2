@@ -45,6 +45,14 @@ const CORPUS_ROOTS: &[&str] = &[
     "crates/pampa/tests/smoke",
     "crates/pampa/tests/writers",
     "crates/pampa/tests/claude-examples",
+    // Added for GH #964 / bd-87t8pnx6: this root holds the only
+    // attr-bearing editorial-mark fixtures in the tree, which the auditor
+    // flagged (attr key/value outside the mark's span) long before anyone
+    // noticed the incremental writer dropping those attrs. Only the
+    // `qmd-json-qmd/` subdirectory is a live fixture set (see the glob in
+    // `test.rs`); the loose files above it use unsupported syntax (triple
+    // star emphasis, indented code blocks) and are consumed by nothing.
+    "crates/pampa/tests/roundtrip_tests/qmd-json-qmd",
 ];
 
 /// Documents in the corpus that do not parse. Asserted as an exact set rather
@@ -65,14 +73,81 @@ const EXPECTED_UNPARSEABLE: &[&str] = &[
 /// still fails.
 ///
 /// `(repo-relative path suffix, finding kind, why)`
-const KNOWN: &[(&str, TilingFindingKind, &str)] = &[(
-    "pandoc-match-corpus/markdown/034.qmd",
-    TilingFindingKind::AttrAlignmentSkipped,
-    "Autolink `<https://example.com>` carries a synthesized class in Attr.1 \
-     with no matching AttrSourceInfo.classes entry, so the alignment guard \
-     skips attr auditing for that node. Census finding, not a range defect \
-     (bd-3aolj / bd-1e6a5).",
-)];
+const KNOWN: &[(&str, TilingFindingKind, &str)] = &[
+    (
+        "pandoc-match-corpus/markdown/034.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "Autolink `<https://example.com>` carries a synthesized class in Attr.1 \
+         with no matching AttrSourceInfo.classes entry, so the alignment guard \
+         skips attr auditing for that node. Census finding, not a range defect \
+         (bd-3aolj / bd-1e6a5).",
+    ),
+    (
+        "qmd-json-qmd/anchor_shorthand_simple.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "Attr carries a synthesized class/kv with no AttrSourceInfo counterpart, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/anchor_shorthand_variants.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "Attr carries a synthesized class/kv with no AttrSourceInfo counterpart, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/labeled_display_math_in_blockquote.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "Attr carries a synthesized class/kv with no AttrSourceInfo counterpart, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/labeled_display_math_top_level_indented.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "Attr carries a synthesized class/kv with no AttrSourceInfo counterpart, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/note_definition_mixed_para_and_fenced.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "Attr carries a synthesized class/kv with no AttrSourceInfo counterpart, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/definition_list_in_list_table_cell.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/definition_list_list_table_in_definition.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/list_table_cell_para_then_codeblock.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/list_table_cell_single_codeblock.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/list_table_cell_two_paragraphs.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/list_table_empty_cell.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/list_table_empty_cell_with_attrs.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+    (
+        "qmd-json-qmd/table_list_colspan.qmd",
+        TilingFindingKind::AttrAlignmentSkipped,
+        "AttrSourceInfo records a class the Attr no longer carries after postprocessing, so the alignment guard skips attr auditing for that node. Census finding, not a range defect (bd-nq3ed2im).",
+    ),
+];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
