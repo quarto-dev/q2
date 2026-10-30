@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-10-30
+
+- [`8acbc6d63`](https://github.com/quarto-dev/q2/commits/8acbc6d63): Comments can now be added and resolved with the Edit toggle off. Pressing Enter used to discard the comment silently.
+
 ### 2026-10-29
 
 - [`f4768a2a9`](https://github.com/quarto-dev/q2/commits/f4768a2a9): Typing bursts no longer run one full preview render per keystroke — queued renders now coalesce latest-wins, so a fast typing burst renders at most twice (the in-flight render plus the latest), cutting burst render work about 80% in measurements.
