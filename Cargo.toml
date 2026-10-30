@@ -26,7 +26,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "0.38.0"
+version = "0.39.0"
 authors = ["Posit Software, PBC"]
 homepage = "https://github.com/posit-dev/quarto-markdown-syntax"
 keywords = ["parser"]
