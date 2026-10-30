@@ -1,16 +1,24 @@
 /**
  * Characterization tests for the serial render queue in wasmRenderer.ts
  * (`enqueueRender`), written for bd-k8ptcrd9 (the 2026-10-24 main-thread
- * render-path plan, Phase 0). These pin the CURRENT behavior that plan's
- * phases build on:
+ * render-path plan, Phase 0) and updated for bd-r8iqmg2f (Phase 1,
+ * latest-wins coalescing). These pin the queue's contract:
  *
  * - renders execute strictly one at a time, in call order;
- * - EVERY enqueued render executes — there is no coalescing of queued
- *   work (the plan's finding 2: a burst of N updates runs N full
- *   pipelines). Phase 1 (latest-wins coalescing) will deliberately
- *   change this pin; update it when that lands;
- * - a rejected render reaches its own caller as a `{ success: false }`
- *   result and does not jam the queue for later renders.
+ * - the render IN FLIGHT is never superseded, and the first render
+ *   after an idle queue starts immediately (no debounce: typing feel
+ *   depends on both);
+ * - QUEUED (not yet started) renders from the same entry point coalesce
+ *   latest-wins: a burst of N content updates executes at most the
+ *   in-flight render plus the latest queued one. (Phase 0 pinned the
+ *   opposite — every enqueued render executed, the plan's finding 2 —
+ *   and Phase 1 deliberately flipped it.);
+ * - different render entry points serialize but never supersede each
+ *   other;
+ * - a superseded render settles by rejecting with RenderSupersededError
+ *   (preview callers swallow it: it neither jams the queue nor
+ *   surfaces), while a render whose EXECUTION rejects reaches its own
+ *   caller as a `{ success: false }` result and does not jam the queue.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -39,10 +47,21 @@ const { state, mkDeferred } = vi.hoisted(() => {
   return { state, mkDeferred };
 });
 
-import { _setWasmModuleForTest, renderToHtml } from './wasmRenderer';
+import {
+  _setWasmModuleForTest,
+  renderToHtml,
+  renderPageInProjectWithAttribution,
+  RenderSupersededError,
+} from './wasmRenderer';
 
 /** Let the queued microtasks + a macrotask fire so the serial queue advances. */
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+
+/** Narrow a settled result to its rejection reason for assertions. */
+function rejectionOf(result: PromiseSettledResult<unknown>): unknown {
+  expect(result.status).toBe('rejected');
+  return (result as PromiseRejectedResult).reason;
+}
 
 beforeAll(() => {
   // Install the stub directly rather than mocking the
@@ -73,8 +92,11 @@ beforeEach(() => {
 
 describe('render serial queue (enqueueRender) characterization', () => {
   it('runs renders one at a time, starting them in call order as slots free up', async () => {
+    // Mixed entry points: renderToHtml and the ReactPreview path
+    // (renderPageInProjectWithAttribution) have different coalesce keys,
+    // so none of these supersede — they serialize.
     const p1 = renderToHtml({ documentPath: 'a.qmd' });
-    const p2 = renderToHtml({ documentPath: 'a.qmd' });
+    const p2 = renderPageInProjectWithAttribution('a.qmd', undefined, null);
     const p3 = renderToHtml({ documentPath: 'a.qmd' });
     await flush();
 
@@ -95,28 +117,111 @@ describe('render serial queue (enqueueRender) characterization', () => {
     // Never concurrent...
     expect(state.maxActive).toBe(1);
     // ...and each caller got its own render's output, in order.
+    // (renderToHtml appends the css-version comment; the raw
+    // renderPageInProjectWithAttribution does not.)
     expect(results.map((r) => r.html)).toEqual([
       '<p>1</p><!-- css-version: default -->',
-      '<p>2</p><!-- css-version: default -->',
+      '<p>2</p>',
       '<p>3</p><!-- css-version: default -->',
     ]);
   });
 
-  it('executes every enqueued render — no coalescing of queued work (finding 2 pin)', async () => {
-    // A burst of N content updates with a render already in flight: today
-    // every queued render still runs to completion. Phase 1 of the plan
-    // changes this to latest-wins; this test is the baseline it moves.
-    const promises = Array.from({ length: 5 }, () => renderToHtml({ documentPath: 'a.qmd' }));
+  it('coalesces a burst of same-entry renders latest-wins: only the in-flight render and the latest queued one execute (finding 2)', async () => {
+    // Five content updates fire while the first render is still in
+    // flight. Before Phase 1 all five executed; now the middle three
+    // are superseded before they start and only the latest queued
+    // render runs.
+    const p1 = renderToHtml({ documentPath: 'a.qmd' });
+    const p2 = renderToHtml({ documentPath: 'a.qmd' });
+    const p3 = renderToHtml({ documentPath: 'a.qmd' });
+    const p4 = renderToHtml({ documentPath: 'a.qmd' });
+    const p5 = renderToHtml({ documentPath: 'a.qmd' });
+    // Attach handlers now (same task) so a supersede rejection — which
+    // happens synchronously during the superseding enqueue — is never
+    // unhandled; assert on the settled shapes at the end.
+    const middleSettled = Promise.allSettled([p2, p3, p4]);
     await flush();
 
-    // Drain the queue one slot at a time until all five have run.
-    for (let started = 0; started < 5; started++) {
-      await flush();
-      expect(state.pending.length).toBe(started + 1);
-      state.pending[started].resolve(JSON.stringify({ success: true, html: `<p>${started}</p>` }));
+    // Only the first render has started; the other four share ONE
+    // waiting slot (each newer enqueue superseded the previous).
+    expect(state.pending.length).toBe(1);
+
+    state.pending[0].resolve(JSON.stringify({ success: true, html: '<p>first</p>' }));
+    await flush();
+
+    // Exactly one additional render started: the latest one.
+    expect(state.pending.length).toBe(2);
+
+    state.pending[1].resolve(JSON.stringify({ success: true, html: '<p>latest</p>' }));
+
+    // The in-flight render and the latest render get their own results;
+    // the final preview reflects the last content.
+    await expect(p1).resolves.toMatchObject({
+      success: true,
+      html: '<p>first</p><!-- css-version: default -->',
+    });
+    await expect(p5).resolves.toMatchObject({
+      success: true,
+      html: '<p>latest</p><!-- css-version: default -->',
+    });
+
+    // The superseded three settled by rejecting with the tagged error.
+    for (const settled of await middleSettled) {
+      expect(rejectionOf(settled)).toBeInstanceOf(RenderSupersededError);
     }
-    await Promise.all(promises);
-    expect(state.pending.length).toBe(5);
+
+    // Still never concurrent, and exactly two renders ran in total.
+    expect(state.maxActive).toBe(1);
+    expect(state.pending.length).toBe(2);
+  });
+
+  it('coalesces the ReactPreview render entry (renderPageInProjectWithAttribution) the same way', async () => {
+    const p1 = renderPageInProjectWithAttribution('a.qmd', undefined, null);
+    const p2 = renderPageInProjectWithAttribution('a.qmd', undefined, null);
+    const p3 = renderPageInProjectWithAttribution('a.qmd', undefined, null);
+    const p2Settled = Promise.allSettled([p2]);
+    await flush();
+    expect(state.pending.length).toBe(1);
+
+    state.pending[0].resolve(JSON.stringify({ success: true, html: '<p>first</p>' }));
+    await flush();
+    expect(state.pending.length).toBe(2);
+
+    state.pending[1].resolve(JSON.stringify({ success: true, ast_json: '{}' }));
+    await expect(p1).resolves.toMatchObject({ success: true, html: '<p>first</p>' });
+    await expect(p3).resolves.toMatchObject({ success: true, ast_json: '{}' });
+    expect(rejectionOf((await p2Settled)[0])).toBeInstanceOf(RenderSupersededError);
+    expect(state.maxActive).toBe(1);
+  });
+
+  it('a superseded render rejects without jamming the queue, and the first render after an idle queue starts immediately', async () => {
+    const p1 = renderToHtml({ documentPath: 'a.qmd' });
+    const p2 = renderToHtml({ documentPath: 'a.qmd' });
+    const p3 = renderToHtml({ documentPath: 'a.qmd' }); // supersedes p2
+    const p2Settled = Promise.allSettled([p2]);
+    await flush();
+    expect(state.pending.length).toBe(1);
+
+    state.pending[0].resolve(JSON.stringify({ success: true, html: '<p>1</p>' }));
+    await flush();
+    // The superseding render took over the waiting slot and runs next.
+    expect(state.pending.length).toBe(2);
+
+    state.pending[1].resolve(JSON.stringify({ success: true, html: '<p>3</p>' }));
+    await expect(p1).resolves.toMatchObject({ success: true });
+    await expect(p3).resolves.toMatchObject({
+      success: true,
+      html: '<p>3</p><!-- css-version: default -->',
+    });
+    expect(rejectionOf((await p2Settled)[0])).toBeInstanceOf(RenderSupersededError);
+
+    // The queue is now idle: the next render starts on its own, with no
+    // debounce and no second enqueue to nudge it.
+    const p4 = renderToHtml({ documentPath: 'a.qmd' });
+    await flush();
+    expect(state.pending.length).toBe(3);
+    state.pending[2].resolve(JSON.stringify({ success: true, html: '<p>4</p>' }));
+    await expect(p4).resolves.toMatchObject({ success: true });
   });
 
   it('a rejected render reports failure to its own caller and does not jam the queue', async () => {

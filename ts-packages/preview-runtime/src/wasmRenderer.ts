@@ -538,21 +538,119 @@ export function setRenderListener(listener: RenderListener | null): void {
   renderListener = listener;
 }
 
-// Serial queue — ensures renders and VFS clears are never concurrent.
-// The WASM render pipeline is non-reentrant w.r.t. VFS state: it reads
-// project files and writes artifact files (styles.css, etc.) during a
-// single async call. Because render_page_in_project_with_attribution is
-// a Rust `async fn`, it yields the JS event loop at internal await points,
-// so two overlapping render calls share VFS state in undefined ways.
-// Serialising here is the minimal correct fix: each call waits for the
-// previous one to finish before it starts. The tail swallows errors so a
-// failed render does not permanently jam the queue.
-let _renderSerial: Promise<void> = Promise.resolve();
+// Serial queue with latest-wins coalescing — ensures renders are never
+// concurrent, and that a queued render a newer request has superseded
+// never executes (bd-r8iqmg2f; finding 2 of the 2026-10-24 main-thread
+// render-path plan). The WASM render pipeline is non-reentrant w.r.t.
+// VFS state: it reads project files and writes artifact files
+// (styles.css, etc.) during a single async call. Because
+// render_page_in_project_with_attribution is a Rust `async fn`, it
+// yields the JS event loop at internal await points, so two overlapping
+// render calls share VFS state in undefined ways. Serialising here
+// keeps that impossible; coalescing keeps the serialisation from
+// wasting whole pipelines on results that are already stale:
+//
+// - Every render entry point renders "the current state of the active
+//   document", so of two not-yet-started renders from the same entry
+//   point only the newest can produce a useful result. A new enqueue
+//   whose coalesce key matches a WAITING slot replaces that slot's
+//   render (latest wins); the superseded caller settles by rejecting
+//   with `RenderSupersededError`, which preview callers swallow — it
+//   must never surface as a user-facing error.
+// - The render IN FLIGHT is never interrupted, and the first render
+//   after the queue drains starts immediately: typing feel depends on
+//   both (the debounce-free design is deliberate).
+// - Slots keep their FIFO position across supersession, so a burst on
+//   one entry point cannot starve another.
+//
+// Rejections settle only the failing slot's caller; the queue itself
+// always drains.
 
-function enqueueRender<T>(fn: () => Promise<T>): Promise<T> {
-  const next = _renderSerial.then(fn);
-  _renderSerial = next.then(() => {}, () => {});
-  return next;
+/**
+ * Rejection used to settle a render that a newer same-entry render
+ * superseded before it started. Preview callers match on `name` (not
+ * `instanceof`) and return silently — partial
+ * `vi.mock('@quarto/preview-runtime')` test doubles omit this class,
+ * and the check must survive them.
+ */
+export class RenderSupersededError extends Error {
+  constructor() {
+    super('render superseded by a newer request before it started');
+    this.name = 'RenderSupersededError';
+  }
+}
+
+/** True for the queue's superseded-render rejection (name-matched). */
+export function isRenderSupersededError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'RenderSupersededError';
+}
+
+// Coalesce keys for `enqueueRender`. Renders from the same entry point
+// render the same thing ("the current state of the active document"),
+// so a waiting one is always safe to replace with a newer one.
+// Different entry points serialize but never supersede each other.
+const RENDER_TO_HTML_KEY = 'renderToHtml';
+const RENDER_PAGE_RENDER_KEY = 'renderPageInProject';
+
+interface QueuedRenderSlot {
+  /** Only waiting slots with equal keys supersede each other. */
+  key: string;
+  /** The render to run; replaced when a newer render supersedes. */
+  run: () => Promise<unknown>;
+  /** Settles the caller's promise (the newest caller after a supersede). */
+  settle: {
+    resolve: (value: unknown) => void;
+    reject: (reason: unknown) => void;
+  };
+}
+
+// Waiting (not yet started) render slots. At most one per coalesce key —
+// a same-key enqueue merges into the existing slot — so this stays
+// microscopic (two keys today).
+const _renderQueue: QueuedRenderSlot[] = [];
+let _renderPumping = false;
+
+function enqueueRender<T>(fn: () => Promise<T>, coalesceKey: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const existing = _renderQueue.find((slot) => slot.key === coalesceKey);
+    if (existing) {
+      // Latest-wins: the waiting render never starts, and its caller
+      // settles with RenderSupersededError.
+      existing.settle.reject(new RenderSupersededError());
+      existing.run = fn as () => Promise<unknown>;
+      existing.settle = {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      };
+      perfMark('render.superseded');
+      return;
+    }
+    _renderQueue.push({
+      key: coalesceKey,
+      run: fn as () => Promise<unknown>,
+      settle: { resolve: resolve as (value: unknown) => void, reject },
+    });
+    void pumpRenderQueue();
+  });
+}
+
+async function pumpRenderQueue(): Promise<void> {
+  // A pump is already draining; its loop picks up slots pushed behind it.
+  if (_renderPumping) return;
+  _renderPumping = true;
+  try {
+    let slot: QueuedRenderSlot | undefined;
+    while ((slot = _renderQueue.shift()) !== undefined) {
+      try {
+        slot.settle.resolve(await slot.run());
+      } catch (err) {
+        // A failed render rejects its own caller but never jams the queue.
+        slot.settle.reject(err);
+      }
+    }
+  } finally {
+    _renderPumping = false;
+  }
 }
 
 /**
@@ -624,6 +722,9 @@ export async function renderPrintable(
  *
  * Returns the same `RenderResponse` shape as `renderQmd`; the
  * project flavor is opaque to callers.
+ *
+ * Serialised and latest-wins coalesced with the other page renders
+ * (bd-r8iqmg2f): see {@link renderPageInProjectWithAttribution}.
  */
 export async function renderPageInProject(
   path: string,
@@ -681,6 +782,36 @@ export async function renderPageInProjectWithAttribution(
   // project's capture sidecar. When provided, the q2-preview pipeline splices
   // the recorded engine output into the AST alongside attribution. Omit (or
   // `undefined`) to render code cells as source.
+  captureGzJson?: Uint8Array,
+  preferPreviewFormat?: boolean,
+): Promise<RenderResponse> {
+  // Serialised and latest-wins coalesced against other page renders
+  // (bd-r8iqmg2f): a render a newer request supersedes while still
+  // queued never runs and rejects with `RenderSupersededError` — callers
+  // rendering live previews (ReactPreview) swallow it; one-shot callers
+  // awaiting each render sequentially are unaffected.
+  return enqueueRender(
+    () =>
+      renderPageInProjectWithAttributionRaw(
+        path,
+        userGrammars,
+        attributionJson,
+        captureGzJson,
+        preferPreviewFormat,
+      ),
+    RENDER_PAGE_RENDER_KEY,
+  );
+}
+
+/**
+ * The unqueued body of {@link renderPageInProjectWithAttribution}. Only
+ * `renderToHtmlInner` calls this — it already holds a queue slot, so
+ * routing through the queued entry would deadlock.
+ */
+async function renderPageInProjectWithAttributionRaw(
+  path: string,
+  userGrammars: unknown,
+  attributionJson: string | null,
   captureGzJson?: Uint8Array,
   preferPreviewFormat?: boolean,
 ): Promise<RenderResponse> {
@@ -1630,7 +1761,7 @@ export function renderToHtml(
       }
     }
     return result;
-  });
+  }, RENDER_TO_HTML_KEY);
 }
 
 async function renderToHtmlInner(
@@ -1653,10 +1784,13 @@ async function renderToHtmlInner(
     // Phase 9: render with full project context. The WASM side
     // handles project discovery itself — single-file projects fall
     // through to the same path `renderQmd` used to take, so this
-    // switch is unconditional.
-    const result: RenderResponse = await renderPageInProject(
+    // switch is unconditional. Calls the RAW (unqueued) entry: this
+    // function already runs inside a queue slot, and the queued entry
+    // would deadlock waiting for it.
+    const result: RenderResponse = await renderPageInProjectWithAttributionRaw(
       documentPath,
       grammarsHandle,
+      null,
       captureGzJson,
     );
 

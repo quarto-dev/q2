@@ -708,17 +708,35 @@ export default function ReactPreview({
   const doRenderWithStateManagement = useCallback(async (qmdContent: string, documentPath?: string) => {
     lastContentRef.current = qmdContent;
 
-    const result = await doRender(qmdContent, {
-      scrollSyncEnabled,
-      documentPath,
-      format,
-      attributionJson: attributionPayload,
-      captureGzJson: captureBytes,
-    });
+    let result: RenderResult;
+    try {
+      result = await doRender(qmdContent, {
+        scrollSyncEnabled,
+        documentPath,
+        format,
+        attributionJson: attributionPayload,
+        captureGzJson: captureBytes,
+      });
+    } catch (err) {
+      // bd-r8iqmg2f: a render a newer edit superseded while it was still
+      // queued never runs; it settles with a RenderSupersededError
+      // rejection, and the superseding render owns the state machine —
+      // drop silently. Name-matched (not instanceof) so partial
+      // vi.mock('@quarto/preview-runtime') doubles, which omit the
+      // class, cannot break the check.
+      if (err instanceof Error && err.name === 'RenderSupersededError') {
+        return;
+      }
+      throw err;
+    }
     if (qmdContent !== lastContentRef.current) {
       // A newer edit superseded this render while it was in flight; drop
-      // the stale result (finding 2's second line of defense — the wasted
-      // work already happened, which `render.started/completed` counts).
+      // the stale result (finding 2's second line of defense). Since
+      // bd-r8iqmg2f's latest-wins queue, superseded QUEUED renders never
+      // execute and arrive as the rejection handled above, so this guard
+      // now fires only for the render that was IN FLIGHT when the edit
+      // landed (the wasted work already happened, which
+      // `render.started/completed` counts).
       perfMark('render.discarded-stale');
       return;
     }
@@ -790,9 +808,11 @@ export default function ReactPreview({
   // brand/theme change underneath the deck never recompiled the theme CSS
   // until a manual reload. This matches the HTML path's effect in
   // `Preview.tsx` (Phase 9 Decision 6). `updatePreview` here is
-  // debounce-free, but `doRenderWithStateManagement`'s `lastContentRef`
-  // guard discards stale in-flight results, so a burst settles on the
-  // latest content.
+  // debounce-free, but renders pass through preview-runtime's serial
+  // queue, which coalesces queued renders latest-wins (bd-r8iqmg2f), and
+  // `doRenderWithStateManagement`'s `lastContentRef` guard discards the
+  // stale result of the one render that was in flight — so a burst
+  // settles on the latest content.
   useEffect(() => {
     const fxT0 = perfNow();
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
