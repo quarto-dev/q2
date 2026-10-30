@@ -268,5 +268,7 @@ describe('PreviewApp edit write-back (bd-ov4gqk3m)', () => {
     await mountAndGetSetAst();
     const props = capturedIframeProps[capturedIframeProps.length - 1];
     expect(props.editingDisabled).toBe(true);
+    // GH #973: comments can't be saved either, so bubbles are display-only.
+    expect(props.commentingDisabled).toBe(true);
   });
 });

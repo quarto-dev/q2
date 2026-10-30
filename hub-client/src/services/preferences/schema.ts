@@ -41,8 +41,9 @@ export const UserPreferencesSchema = z.object({
   /**
    * bd-ew0vak6b: q2-preview block editing on/off (default-ON) — the Edit
    * pill in the document bottom bar. When false the preview iframe runs
-   * read-only (`editingDisabled`), exactly like `q2 preview` without
-   * `--allow-edit`: no edit affordances, links are plain links. Persisted
+   * with no content editing (`editingDisabled`): no edit affordances, links
+   * are plain links. Comments can still be added and resolved (GH #973),
+   * unlike a read-only `q2 preview` without `--allow-edit`. Persisted
    * (unlike the session-only Authors/Comments toggles) because read mode
    * is a way of working that should survive reloads. `.default(true)`
    * keeps prefs written before this key existed parsing cleanly.

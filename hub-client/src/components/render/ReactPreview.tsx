@@ -506,9 +506,10 @@ export default function ReactPreview({
   // q2-preview iframe so editable paragraphs/headings open the tiptap editor
   // instead of the monospaced textarea.
   const [richText] = usePreference('richText');
-  // bd-ew0vak6b: the bottom-bar Edit pill. Off ⇒ the iframe runs read-only
-  // (`editingDisabled`), and `handleSetAst` below drops any edit payload
-  // that still arrives (defense in depth, mirroring the q2-preview SPA).
+  // bd-ew0vak6b: the bottom-bar Edit pill. Off ⇒ no content edit surface in
+  // the iframe (`editingDisabled`), and `handleSetAst` below drops any content
+  // edit that still arrives (defense in depth, mirroring the q2-preview SPA).
+  // Comments keep working (GH #973).
   const [previewEditing] = usePreference('previewEditing');
   // Track previewState in a ref for use in callbacks
   const previewStateRef = useRef<PreviewState>('START');
@@ -857,7 +858,10 @@ export default function ReactPreview({
         // bd-ew0vak6b: read-only mode never writes. The iframe renders no
         // edit surface while editing is off, but a payload can still be in
         // flight from a session that was open when the pill was flipped.
-        if (!previewEditing) return;
+        // Comments are exempt: the pill governs content editing, and adding
+        // or resolving a comment stays available in read mode (GH #973).
+        const isCommentEdit = edit.channel === 'subtree' && edit.scope === 'comment';
+        if (!previewEditing && !isCommentEdit) return;
         if (!rendered.untransformedAstJson) {
           console.warn(
             'q2-preview setAst: no untransformedAstJson retained; render first',

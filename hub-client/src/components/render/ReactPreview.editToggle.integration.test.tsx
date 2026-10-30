@@ -9,6 +9,8 @@
  *  2. drop any `PreviewNodeEditPayload` that still arrives through `setAst`
  *     while editing is off (defense in depth, mirroring the q2-preview SPA's
  *     `handleSetAst` guard) — no `applyNodeEdit`, no `onContentRewrite`.
+ *     Comment-scoped payloads are the exception: the pill governs content
+ *     editing, and comments keep working in read mode (GH #973).
  *
  * With editing on, the existing commit path runs unchanged.
  *
@@ -138,6 +140,25 @@ describe('ReactPreview edit toggle (bd-ew0vak6b)', () => {
 
     expect(applyNodeEdit).not.toHaveBeenCalled();
     expect(onContentRewrite).not.toHaveBeenCalled();
+  });
+
+  it('applies a comment-scoped payload while editing is off (GH #973)', async () => {
+    prefs.previewEditing = false;
+    const onContentRewrite = vi.fn();
+    const latest = await mountAndSettle(onContentRewrite);
+
+    await act(async () => {
+      latest().setAst({
+        __isPreviewNodeEdit: true,
+        channel: 'subtree',
+        scope: 'comment',
+        destinationSourceInfoJson: '{"t":0,"r":[0,5],"d":0}',
+        modifiedSubtreeJson: AST,
+      });
+    });
+
+    expect(applyNodeEdit).toHaveBeenCalledOnce();
+    expect(onContentRewrite).toHaveBeenCalledWith('rewritten qmd');
   });
 
   it('applies a PreviewNodeEditPayload while editing is on (regression baseline)', async () => {

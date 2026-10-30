@@ -166,4 +166,10 @@ export type PreviewNodeEditPayload =
       destinationSourceInfoJson: string;
       /** Pandoc JSON of the replacement block (full Pandoc document; only `blocks[0]` is used). */
       modifiedSubtreeJson: string;
+      /**
+       * `'comment'`: this edit only adds or resolves a comment. hub-client
+       * applies these even with the Edit pill off, which governs content
+       * editing only (GH #973).
+       */
+      scope?: 'comment';
     };

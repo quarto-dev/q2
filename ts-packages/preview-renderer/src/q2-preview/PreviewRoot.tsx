@@ -19,7 +19,7 @@ import type { FormatRegistry, NoteInline, PandocAST } from '../framework';
 import type { BlockNode } from '../framework/types';
 import type { PreviewNodeEditPayload } from '../types/diagnostic';
 import { previewRegistry, PreviewContext } from '.';
-import type { CommentsMode } from './PreviewContext';
+import type { CommentsMode, SubtreeEditOptions } from './PreviewContext';
 import { buildSourceIndex, serializeSourceEntry } from './sourceIndex';
 import { stripSourceInfoFields } from './stripSourceInfoFields';
 import type { ResolvedSource } from './sourceIndex';
@@ -158,6 +158,8 @@ export interface PreviewRootProps {
     untransformedAstJson?: string | null;
     /** Globally disable the edit surface (bd-ov4gqk3m). */
     editingDisabled?: boolean;
+    /** Comments are read-only: displayed, but not addable or resolvable (GH #973). */
+    commentingDisabled?: boolean;
     /** Comment-bubble display mode ('expand' | 'show' | 'hide'). */
     commentsMode?: CommentsMode;
     /**
@@ -1539,7 +1541,11 @@ export function PreviewRoot(props: PreviewRootProps) {
     // stripSourceInfoFields removes every pool-index-carrying sidecar key
     // (`s`, `a`, `targetS`, …) — a surviving index caused
     // InvalidSourceInfoRef on any subtree containing a link.
-    const commitSubtreeEdit = (destinationSourceInfoJson: string, modifiedBlock: BlockNode) => {
+    const commitSubtreeEdit = (
+        destinationSourceInfoJson: string,
+        modifiedBlock: BlockNode,
+        options?: SubtreeEditOptions,
+    ) => {
         const stripped = stripSourceInfoFields(modifiedBlock);
         const wrappedDoc = {
             'pandoc-api-version': [1, 23, 0],
@@ -1552,6 +1558,7 @@ export function PreviewRoot(props: PreviewRootProps) {
             channel: 'subtree',
             destinationSourceInfoJson,
             modifiedSubtreeJson,
+            ...(options?.scope ? { scope: options.scope } : {}),
         };
         props.setAst(payload as unknown as PandocAST);
     };
@@ -1574,6 +1581,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 sourceIndex,
                 resolveSource,
                 editingDisabled: props.editingDisabled,
+                commentingDisabled: props.commentingDisabled,
                 commentsMode: props.commentsMode,
                 unlockNestingCursor: props.unlockNestingCursor,
                 unlockNestingCursorRef,

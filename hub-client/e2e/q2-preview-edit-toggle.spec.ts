@@ -133,4 +133,37 @@ test.describe('Edit pill — q2-preview editable / read-only toggle (real browse
         await expect(pill(page)).toHaveAttribute('aria-pressed', 'true');
         await expect(iframe.locator('p[data-block-pool-id]')).toHaveCount(1, { timeout: 10_000 });
     });
+
+    // GH #973: the pill governs content editing. Comments stay available in
+    // read mode; Enter used to be silently dropped by the host.
+    test('adds a comment with editing off, and it lands in the source', async ({ page }) => {
+        const serverUrl = getServerUrl();
+        const docId = await createProjectOnServer(serverUrl, [
+            { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
+            { path: 'main.qmd', content: MAIN_QMD, contentType: 'text' },
+            { path: 'other.qmd', content: OTHER_QMD, contentType: 'text' },
+        ]);
+        const iframe = await openProjectFile(page, serverUrl, docId, 'main.qmd');
+        await iframe.locator('p[data-block-pool-id]').first().waitFor({ timeout: 15_000 });
+
+        await pill(page).click();
+        await expect(iframe.locator('[data-block-pool-id]')).toHaveCount(0, { timeout: 10_000 });
+
+        // The bubble's `+` appears over the paragraph's right half.
+        const para = iframe.getByText('Second paragraph', { exact: false });
+        const box = await para.boundingBox();
+        await para.hover({ position: { x: box!.width - 10, y: box!.height / 2 } });
+        await iframe.locator('.q2-comment-bubble').click();
+        const input = iframe.locator('textarea.q2-comment-input');
+        await input.fill('A note from a reviewer');
+        await input.press('Enter');
+
+        // The commit round-trip re-renders the block with the new comment.
+        await expect(iframe.locator('.q2-comment-bubble')).toContainText('A note from a reviewer', {
+            timeout: 15_000,
+        });
+        await expect(input).toHaveCount(0);
+        // Still no content edit surface.
+        await expect(iframe.locator('[data-block-pool-id]')).toHaveCount(0);
+    });
 });

@@ -232,6 +232,11 @@ interface UpdateAstPayload {
      */
     editingDisabled?: boolean;
     /**
+     * Comments are read-only (GH #973). Forwarded into
+     * `PreviewContext.commentingDisabled`. Absent/false ⇒ writable.
+     */
+    commentingDisabled?: boolean;
+    /**
      * Comment-bubble display mode (host three-way toggle). Forwarded
      * into `PreviewContext.commentsMode`. Absent ⇒ 'show'.
      */
@@ -388,6 +393,7 @@ function updateAst(payload: UpdateAstPayload) {
         untransformedAstJson,
         currentActor,
         editingDisabled,
+        commentingDisabled,
         commentsMode,
         unlockNestingCursor,
         richText,
@@ -415,6 +421,7 @@ function updateAst(payload: UpdateAstPayload) {
                 untransformedAstJson={untransformedAstJson}
                 currentActor={currentActor ?? null}
                 editingDisabled={editingDisabled}
+                commentingDisabled={commentingDisabled}
                 commentsMode={commentsMode}
                 unlockNestingCursor={unlockNestingCursor}
                 richText={richText}
