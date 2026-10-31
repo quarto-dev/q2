@@ -2,7 +2,7 @@
 title: 'EXR-1: extract the presenter (cell outputs to markdown) into a target-neutral module'
 date: 2026-10-28
 description: 'Moves the Jupyter output types, figure writing and cell presentation out of the native-only Jupyter module so one Rust presenter can run natively and in WASM, with golden parity tests written before anything moves.'
-status: draft
+status: in progress (Phases 0-4 done except the Phase 2 WASM VFS test; Phase 5 waits on EXR-2 Phase 4)
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
@@ -166,7 +166,7 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
 
 ### Phase 0: golden characterization (on unmodified code)
 
-- [ ] Build a presenter corpus of kernel-free inputs: each stored.rs notebook plus
+- [x] Build a presenter corpus of kernel-free inputs: each stored.rs notebook plus
   new fixtures for stderr stream, `execute_result` text/plain, `display_data`
   html, valid and invalid-base64 png/jpeg/svg, error with ANSI traceback,
   an empty-output cell, `ExecuteStatus::Error` with no outputs (built by hand from Rust
@@ -181,7 +181,7 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
   array-form text (the `extract_text_content` array arm), and unhandled mimes
   (`text/markdown`, `text/latex`, widgets), whose silent drop is pinned today only by a
   comment at `text_execute.rs:725-727`.
-- [ ] Test `presenter_goldens`: drive today's `IpynbReplayEngine` and
+- [x] Test `presenter_goldens`: drive today's `IpynbReplayEngine` and
   `render_cell` on each fixture and compare the markdown **and** the written
   figure file names and bytes against checked-in files under
   `crates/quarto-core/tests/fixtures/presenter-goldens/`. The harness is a unit test under
@@ -189,11 +189,11 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
   `pub(super)`; Phase 3 re-points it at the new paths. Directory comparison is sorted, so
   file order cannot matter (output priority is explicit in `format_outputs`, `:733-796`,
   so the output is deterministic).
-- [ ] Generate the goldens from the unmodified tree in the first commit; the
+- [x] Generate the goldens from the unmodified tree in the first commit; the
   commit message says so. Goldens are never regenerated in later phases.
-- [ ] Negative control: perturb one byte of `format_outputs` output locally and confirm the
+- [x] Negative control: perturb one byte of `format_outputs` output locally and confirm the
   goldens fail (as EXR-5 does), then revert.
-- [ ] A mechanical check that the goldens directory is unchanged since the first commit
+- [x] A mechanical check that the goldens directory is unchanged since the first commit
   (`git diff --exit-code <first-commit> -- crates/quarto-core/tests/fixtures/presenter-goldens/`
   in a script or test); it runs at every later phase exit.
 - Exit: goldens committed and green on unmodified code. Gate:
@@ -202,51 +202,61 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
 
 ### Phase 1: target-neutral output types
 
-- [ ] Move the types to `presenter/output.rs`; re-export from `jupyter/execute.rs`. Rename
+- [x] Move the types to `presenter/output.rs`; re-export from `jupyter/execute.rs`. Rename
   the kernel result struct on the move (it would otherwise be a second `ExecuteResult`
   beside `engine::context::ExecuteResult`); `text_execute.rs` drops its
   `KernelExecuteResult` alias.
-- [ ] The kernel code (`KernelSession`, `media_to_mime_bundle`) now produces the
+- [x] The kernel code (`KernelSession`, `media_to_mime_bundle`) now produces the
   neutral types.
-- [ ] The WASM check (recipe in Background) compiles the types.
+- [x] The WASM check (recipe in Background) compiles the types.
 - Exit: goldens green and the goldens-unchanged check passes. Gate:
   `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core`.
 
 ### Phase 2: figure sink
 
-- [ ] Tests first, with an in-memory sink: numbering across cells and outputs,
+- [x] Tests first, with an in-memory sink: numbering across cells and outputs,
   hidden cells advance numbering, base64 newlines stripped, literal `<svg`
   written as text, write failure returns `None` (fail-soft, then the placeholder).
-- [ ] `FigureSink` trait; `FsFigureSink` (the current code verbatim).
-- [ ] Goldens green with `FsFigureSink`.
-- [ ] Decide and test how `RuntimeFigureSink` obtains its `SystemRuntime`. Pick one: a
+- [x] `FigureSink` trait; `FsFigureSink` (the current code verbatim).
+- [x] Goldens green with `FsFigureSink`.
+- [x] Decide and test how `RuntimeFigureSink` obtains its `SystemRuntime`. Pick one: a
   field on `IpynbReplayEngine` supplied by the stage when it builds the engine
   (`engine_execution.rs:431`), or a runtime field on `ExecutionContext`. Write the test
   first: a mock `SystemRuntime` records `dir_create` and `file_write` calls, and the sink
   writes every figure through it with no `std::fs` access.
-- [ ] `RuntimeFigureSink` over that `SystemRuntime`, passing the mock-runtime test.
+- [x] `RuntimeFigureSink` over that `SystemRuntime`, passing the mock-runtime test.
 - [ ] WASM test (style of `crates/pampa/tests/wasm_lua.rs`) that a stored notebook's
-  figures are written to the VFS, not degraded to `[Image output]`.
+  figures are written to the VFS, not degraded to `[Image output]`. **Moved to Phase 5.** `quarto-core` has
+  no WASM test harness yet (no `wasm_bindgen_test`, no `wasm-c-shim` dev-dependency), and the stored-notebook
+  half cannot run on WASM until the replay engine leaves the native-only module. One Phase 5 WASM test
+  covers both. Native coverage today: `presenter::figures` mock-runtime tests and
+  `stored::png_output_with_a_runtime_writes_through_it_not_the_filesystem`; `RuntimeFigureSink` compiles
+  under the WASM check. Decision: the runtime is a field on `IpynbReplayEngine` (`with_runtime`); the native
+  stage uses `IpynbReplayEngine::new()` (filesystem), and Phase 5 passes `ctx.runtime` on WASM.
 - Exit: Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core`; the WASM check passes.
 
 ### Phase 3: move the presenter functions
 
-- [ ] Move `render_cell`, `format_outputs`, the helpers, `CellVisibility` and
+> **Landed 2026-10-31 ahead of the rest of Phase 2** (lane A's EXR-2 Phases 1, 4, 5 were waiting on it). Phase 2's
+> `FigureSink`/`FsFigureSink` core was done first because `render_cell` needs it. Phase 0 corpus is 58 notebook
+> cases plus 6 direct cases; the live-path splice loop needs a kernel and is not pinned (see the goldens README).
+
+- [x] Move `render_cell`, `format_outputs`, the helpers, `CellVisibility` and
   `describe_location` (`text_execute.rs:494`); adjust visibility from `pub(super)`.
   `describe_location` is not a presenter function, but `stored.rs:33-36` imports it and
   Phase 5 needs it outside the native-only module; it takes only a `SourceInfo`, an offset and an
   `ExecutionContext`, so it moves with the presenter.
-- [ ] `text_execute.rs` and `stored.rs` call the new paths.
-- [ ] Re-point the Phase 0 golden harness at the new paths; the goldens are untouched.
+- [x] `text_execute.rs` and `stored.rs` call the new paths.
+- [x] Re-point the Phase 0 golden harness at the new paths; the goldens are untouched.
 - Exit: goldens byte-identical with zero edits (the goldens-unchanged check passes). Gate:
   `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core`. This phase must land before EXR-2 Phases 1, 4 and 5.
 
 ### Phase 4: record the second presenter
 
-- [ ] Add a short note to `claude-notes/instructions/` listing the two
+- [x] Add a short note to `claude-notes/instructions/` listing the two
   nbformat-to-markdown implementations (Rust here, TS in `quarto-api`) and the
   rule that EXR-8 owns their parity.
 - Exit: Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus

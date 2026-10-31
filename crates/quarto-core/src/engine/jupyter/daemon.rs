@@ -286,7 +286,7 @@ impl JupyterDaemon {
         &self,
         key: &SessionKey,
         code: &str,
-    ) -> Option<Result<super::execute::ExecuteResult>> {
+    ) -> Option<Result<super::execute::CellResult>> {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(key) {
             Some(session.execute(code).await)

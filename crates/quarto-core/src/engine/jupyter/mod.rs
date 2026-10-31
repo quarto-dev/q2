@@ -41,13 +41,15 @@ mod daemon;
 mod error;
 mod execute;
 mod kernelspec;
+#[cfg(test)]
+mod presenter_goldens;
 mod session;
 mod stored;
 mod text_execute;
 
 pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
 pub use error::{JupyterError, Result};
-pub use execute::{CellOutput, ExecuteResult, ExecuteStatus, MimeBundle};
+pub use execute::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
 pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
 pub use session::{KernelInfo, KernelSession, SessionKey};
 pub use stored::IpynbReplayEngine;

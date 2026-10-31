@@ -20,66 +20,16 @@ use tokio::time::timeout;
 use super::error::{JupyterError, Result};
 use super::session::KernelSession;
 use crate::engine::DEFAULT_EXECUTE_TIMEOUT;
-
-/// Result of executing code in a kernel.
-#[derive(Debug, Clone)]
-pub struct ExecuteResult {
-    /// Execution status.
-    pub status: ExecuteStatus,
-    /// Collected outputs.
-    pub outputs: Vec<CellOutput>,
-    /// Execution count from the kernel.
-    pub execution_count: Option<u32>,
-}
-
-/// Execution status.
-#[derive(Debug, Clone)]
-pub enum ExecuteStatus {
-    /// Execution completed successfully.
-    Ok,
-    /// Execution failed with an error.
-    Error {
-        ename: String,
-        evalue: String,
-        traceback: Vec<String>,
-    },
-    /// Execution was aborted.
-    Aborted,
-}
-
-/// Output from a code cell.
-#[derive(Debug, Clone)]
-pub enum CellOutput {
-    /// Stream output (stdout/stderr).
-    Stream { name: String, text: String },
-    /// Rich display data (images, HTML, etc.).
-    DisplayData {
-        data: MimeBundle,
-        metadata: serde_json::Value,
-    },
-    /// Execute result (the value of the last expression).
-    ExecuteResult {
-        execution_count: u32,
-        data: MimeBundle,
-        metadata: serde_json::Value,
-    },
-    /// Error output.
-    Error {
-        ename: String,
-        evalue: String,
-        traceback: Vec<String>,
-    },
-}
-
-/// MIME bundle mapping mime types to content.
-pub type MimeBundle = std::collections::HashMap<String, serde_json::Value>;
+// Re-exported so existing `jupyter::execute::*` paths keep compiling; the types
+// themselves are target-neutral and live in the presenter.
+pub use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
 
 impl KernelSession {
     /// Execute code in the kernel and collect outputs.
     ///
     /// This sends an execute_request, collects outputs from iopub until
     /// the kernel returns to idle state, then returns the collected outputs.
-    pub async fn execute(&mut self, code: &str) -> Result<ExecuteResult> {
+    pub async fn execute(&mut self, code: &str) -> Result<CellResult> {
         self.execute_with_timeout(code, DEFAULT_EXECUTE_TIMEOUT)
             .await
     }
@@ -89,7 +39,7 @@ impl KernelSession {
         &mut self,
         code: &str,
         exec_timeout: Duration,
-    ) -> Result<ExecuteResult> {
+    ) -> Result<CellResult> {
         let _execution_count = self.next_execution_count();
 
         // Build execute request
@@ -115,7 +65,7 @@ impl KernelSession {
     }
 
     /// Collect outputs from iopub until execution completes.
-    async fn collect_outputs(&mut self, request_id: &str) -> Result<ExecuteResult> {
+    async fn collect_outputs(&mut self, request_id: &str) -> Result<CellResult> {
         let mut outputs = Vec::new();
         let mut status = ExecuteStatus::Ok;
         let mut execution_count = None;
@@ -187,7 +137,7 @@ impl KernelSession {
             }
         }
 
-        Ok(ExecuteResult {
+        Ok(CellResult {
             status,
             outputs,
             execution_count,

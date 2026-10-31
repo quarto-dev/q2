@@ -430,7 +430,8 @@ impl PipelineStage for EngineExecutionStage {
             // a kernel).
             #[cfg(not(target_arch = "wasm32"))]
             to_run.push((
-                Arc::new(crate::engine::jupyter::IpynbReplayEngine) as Arc<dyn ExecutionEngine>,
+                Arc::new(crate::engine::jupyter::IpynbReplayEngine::new())
+                    as Arc<dyn ExecutionEngine>,
                 None,
             ));
         } else {

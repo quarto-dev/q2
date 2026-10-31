@@ -25,20 +25,24 @@
 //! and stays inert.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use quarto_system_runtime::SystemRuntime;
 
 use quarto_source_map::SourceInfo;
 use serde_json::Value;
 
-use super::execute::{CellOutput, ExecuteResult as KernelExecuteResult, ExecuteStatus, MimeBundle};
-use super::text_execute::{
-    CellVisibility, CodeBlock, FigureWriter, describe_location, extract_text_content,
-    parse_code_blocks, render_cell, resolve_cell_options,
-};
+use super::execute::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
+use super::text_execute::{CodeBlock, parse_code_blocks};
 use crate::cell_options::partition_cell_options;
 use crate::engine::content_processors::ORIGINAL_FILE_ID;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::error::ExecutionError;
 use crate::engine::traits::ExecutionEngine;
+use crate::presenter::cell::{describe_location, render_cell};
+use crate::presenter::figures::{FigureSink, FsFigureSink, RuntimeFigureSink};
+use crate::presenter::output::extract_text_content;
+use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
 
 /// Renders `.ipynb` documents' stored outputs (Plan 7c Phase 3, option B).
 ///
@@ -48,7 +52,26 @@ use crate::engine::traits::ExecutionEngine;
 /// loop a live engine rides — mask → serialize → execute → unmask →
 /// capture → reparse — so capture/splice of `::: {.cell}` wrappers works
 /// unchanged.
-pub struct IpynbReplayEngine;
+#[derive(Default)]
+pub struct IpynbReplayEngine {
+    /// When set, figures are written through this runtime (the WASM VFS) instead of
+    /// `std::fs`. The native stage leaves it unset.
+    runtime: Option<Arc<dyn SystemRuntime>>,
+}
+
+impl IpynbReplayEngine {
+    /// Replay writing figures to the real filesystem.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Replay writing figures through `runtime`.
+    pub fn with_runtime(runtime: Arc<dyn SystemRuntime>) -> Self {
+        Self {
+            runtime: Some(runtime),
+        }
+    }
+}
 
 impl ExecutionEngine for IpynbReplayEngine {
     fn name(&self) -> &str {
@@ -81,7 +104,7 @@ impl ExecutionEngine for IpynbReplayEngine {
         input: &str,
         ctx: &ExecutionContext,
     ) -> Result<ExecuteResult, ExecutionError> {
-        replay_stored_outputs(input, ctx)
+        replay_stored_outputs(input, ctx, self.runtime.as_ref())
     }
 }
 
@@ -93,6 +116,7 @@ impl ExecutionEngine for IpynbReplayEngine {
 fn replay_stored_outputs(
     input: &str,
     ctx: &ExecutionContext,
+    runtime: Option<&Arc<dyn SystemRuntime>>,
 ) -> Result<ExecuteResult, ExecutionError> {
     let blocks = parse_code_blocks(input);
     if blocks.is_empty() {
@@ -132,7 +156,10 @@ fn replay_stored_outputs(
 
     let mut output = String::new();
     let mut last_end = 0;
-    let mut fig = FigureWriter::new(&ctx.source_path);
+    let mut fig: Box<dyn FigureSink> = match runtime {
+        Some(runtime) => Box::new(RuntimeFigureSink::new(runtime.clone(), &ctx.source_path)),
+        None => Box::new(FsFigureSink::new(&ctx.source_path)),
+    };
 
     for block in blocks {
         let Some(cell_index) = owning_code_cell_index(&block, ctx, cells) else {
@@ -185,7 +212,7 @@ fn replay_stored_outputs(
             &block.language,
             &cell.code,
             &exec_result,
-            &mut fig,
+            fig.as_mut(),
             visibility,
         ));
 
@@ -195,7 +222,7 @@ fn replay_stored_outputs(
     output.push_str(&input[last_end..]);
 
     let mut result = ExecuteResult::new(output);
-    if fig.wrote_any {
+    if fig.wrote_any() {
         result = result.with_supporting_files(vec![fig.files_dir()]);
     }
     Ok(result)
@@ -226,7 +253,7 @@ fn owning_code_cell_index(
 /// appear in any notebook produced this century. The status is always
 /// `Ok`: a stored `error` output is content to show, not a status to
 /// abort on.
-fn stored_result_for_cell(cell: &Value) -> KernelExecuteResult {
+fn stored_result_for_cell(cell: &Value) -> CellResult {
     let execution_count = cell
         .get("execution_count")
         .and_then(|v| v.as_u64())
@@ -288,7 +315,7 @@ fn stored_result_for_cell(cell: &Value) -> KernelExecuteResult {
             }
         }
     }
-    KernelExecuteResult {
+    CellResult {
         status: ExecuteStatus::Ok,
         outputs,
         execution_count,
@@ -363,7 +390,7 @@ mod tests {
             markdown.contains(fence),
             "converter must emit the code cell as a {{python}} fence, got:\n{markdown}"
         );
-        let out = replay_stored_outputs(&markdown, &ctx).unwrap();
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
         let expected = markdown.replacen(
             fence,
             "::: {.cell}\n\n```{.python .cell-code}\nprint('hello from the notebook')\n```\n\n::: {.cell-output .cell-output-stdout}\n\n```\nhello from the notebook\n```\n\n:::\n\n:::\n",
@@ -377,7 +404,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (ctx, markdown) = ctx_for(LITERAL_FENCE_NB, dir.path());
 
-        let out = replay_stored_outputs(&markdown, &ctx).unwrap();
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
         assert!(
             out.markdown.contains("not a real cell"),
             "markdown-cell fence content must survive verbatim, got:\n{}",
@@ -401,7 +428,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (ctx, markdown) = ctx_for(ERROR_OUTPUT_NB, dir.path());
 
-        let out = replay_stored_outputs(&markdown, &ctx).unwrap();
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
         assert!(
             out.markdown.contains("ZeroDivisionError"),
             "got:\n{}",
@@ -424,7 +451,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (ctx, markdown) = ctx_for(HTML_OUTPUT_NB, dir.path());
 
-        let out = replay_stored_outputs(&markdown, &ctx).unwrap();
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
         assert!(
             out.markdown.contains("<b>rich stored output</b>"),
             "got:\n{}",
@@ -447,7 +474,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (ctx, markdown) = ctx_for(PNG_OUTPUT_NB, dir.path());
 
-        let out = replay_stored_outputs(&markdown, &ctx).unwrap();
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
         assert!(
             out.markdown
                 .contains("notebook_files/figure-html/cell-1-output-1.png"),
@@ -474,7 +501,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (ctx, markdown) = ctx_for(ECHO_FALSE_NB, dir.path());
 
-        let out = replay_stored_outputs(&markdown, &ctx).unwrap();
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
         assert!(
             !out.markdown.contains("cell-code"),
             "echo: false must suppress the echoed source, got:\n{}",
@@ -492,7 +519,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (ctx, markdown) = ctx_for(MARKDOWN_ONLY_NB, dir.path());
 
-        let out = replay_stored_outputs(&markdown, &ctx).unwrap();
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
         assert_eq!(out.markdown, markdown);
     }
 
@@ -522,11 +549,48 @@ mod tests {
         )
         .with_source_info(converted.source_info, Arc::new(sc));
 
-        let err = replay_stored_outputs(&converted.markdown, &ctx).unwrap_err();
+        let err = replay_stored_outputs(&converted.markdown, &ctx, None).unwrap_err();
         let message = err.to_string();
         assert!(
             message.contains("ORIGINAL_FILE_ID"),
             "the error must name the broken invariant, got: {message}"
+        );
+    }
+
+    #[test]
+    fn png_output_with_a_runtime_writes_through_it_not_the_filesystem() {
+        use crate::presenter::recording_runtime::{Call, RecordingRuntime};
+
+        let dir = tempfile::tempdir().unwrap();
+        let (ctx, markdown) = ctx_for(PNG_OUTPUT_NB, dir.path());
+        let runtime = Arc::new(RecordingRuntime::default());
+
+        let out = IpynbReplayEngine::with_runtime(runtime.clone())
+            .execute(&markdown, &ctx)
+            .unwrap();
+
+        assert!(
+            out.markdown
+                .contains("![](notebook_files/figure-html/cell-1-output-1.png)"),
+            "the figure must be referenced, not degraded to a placeholder; got:\n{}",
+            out.markdown
+        );
+        assert_eq!(
+            out.supporting_files,
+            vec![dir.path().join("notebook_files")]
+        );
+        let calls = runtime.calls.lock().unwrap();
+        let wrote_png = calls.iter().any(|c| {
+            matches!(c, Call::FileWrite(path, _)
+                if path == &dir.path().join("notebook_files/figure-html/cell-1-output-1.png"))
+        });
+        assert!(
+            wrote_png,
+            "figure written through the runtime; calls: {calls:?}"
+        );
+        assert!(
+            !dir.path().join("notebook_files").exists(),
+            "nothing may be written with std::fs"
         );
     }
 }
