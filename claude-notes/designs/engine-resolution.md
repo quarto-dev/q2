@@ -318,7 +318,11 @@ scan is non-empty). A doc resolves load-free at Pass-1 iff any of:
 
 - **P1** — the file is claimed (`claimed = Some(engine)`): §8's short-circuit
   consults no claims at all.
-- **P2** — the language scan is empty (markdown passthrough).
+- **P2** — the language scan is empty *and* the document's own front matter
+  declares no engine (markdown passthrough). A declaration counts as the
+  document's own when its value roots at the document's file id (`FileId(0)`),
+  not at `_quarto.yml`, `_metadata.yml`, an extension or a format default
+  (JOL-2a).
 - **P3** — an explicit `engine: markdown` opt-out.
 - **P4** — **every claim consultation the resolution needs returns a static
   answer.** For each `(candidate engine, language)` pair, either a metadata

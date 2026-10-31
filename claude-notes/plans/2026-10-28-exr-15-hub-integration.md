@@ -6,9 +6,9 @@ status: draft  # not started
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
-**Depends on:** [EXR-13](2026-10-28-exr-13-hub-wire.md) (wire, writer helper, gate),
+**Depends on:** [EXR-13b](2026-10-28-exr-13-hub-wire.md) (writer helper and gate; the reader half, 13a, is implied),
 [EXR-14](2026-10-28-exr-14-preview-splice.md) (read side), [EXR-5](2026-10-28-exr-05-jupyter-records-shadow.md)
-(something that produces records), [EXR-4](2026-10-28-exr-04-record-format.md).
+(Phase 2: the record handoff to the capture writers), [EXR-4](2026-10-28-exr-04-record-format.md).
 Soft: [EXR-11](2026-10-28-exr-11-knitr-k1-chunk-records.md) (knitr records appear on the hub
 once it lands).
 **Blocks:** [EXR-17](2026-10-28-exr-17-legacy-removal.md)

@@ -24,6 +24,11 @@ so they do not wait for this plan.
 
 ## Why deferred, and when to reopen
 
+> Review 2026-10-31 (Gordon): leave deferred with no explicit triggers and no owner. The
+> reopen conditions below stay as guidance only. The SoS claim that justifies the deferral is
+> only partly verified: `%use` lines work through q2 with the real `sos` kernelspec (a review
+> run), but plain `{ggsql}` fences on SoS need `cell_kernel` (JOL-2a Phase 3 research item).
+
 A multiplexing kernel (SoS), selected with the `jupyter:` key that
 [JOL-2a](2026-10-28-jol-2a-jupyter-key.md) makes work, gets mixed-language documents
 running, so a q2-managed set of kernels is not needed now. Reopen this plan if:

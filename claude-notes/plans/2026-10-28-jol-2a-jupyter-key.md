@@ -2,7 +2,7 @@
 title: 'JOL-2a: the Jupyter engine honors the `jupyter:` key'
 date: 2026-10-28
 description: 'Wires the dead `resolve_kernel` metadata-first order into the text execution path so `jupyter: <kernel>` selects the kernel for the whole document, which makes multiplexing kernels such as SoS usable and gives span-only documents a kernel.'
-status: draft
+status: in-progress
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md), as JOL-2a, the first
@@ -18,6 +18,125 @@ this plan does not define the seam.
 **Estimated sessions:** 1
 
 > **For implementers:** TDD, task by task. Steps use `- [ ]` checkboxes.
+
+## Progress (2026-10-31, lane B session 2)
+
+Landed on `exr/JOL-1` (`ecb493183`, `0e4089f7f`), gates: clippy clean; `nextest -p
+quarto-core` 6533 passed, 2 failed, 32 skipped. The two failures are
+`vendored_reveal_assets_match_npm_package` (node_modules drift in workspace-5, unrelated) and
+`julia_engine_e2e::j1_minimal_julia_render`, which passes alone in 2.6s and failed at 19.8s
+while another lane ran nextest (load, not this change).
+
+Done: `kernel_from_ts_metadata`, `select_kernel` and its call in `execute_qmd`, deletion of
+`resolve_kernel`, the engine-config second source, the cell-less declared-engine resolver
+(`own_file`, option 1), the Pass-1 lift, and the audit of tests that assume an empty
+sequence. The stages already pass `DOCUMENT_OWN_FILE_ID`.
+
+Open: everything still unticked below. Two have a known starting point: the kernelspec
+language reading (`find_kernelspec_for_language` matches `kernelspec.language` only, and the
+installed `sos` spec has `language: sos`), and the `.ipynb` provenance gap above.
+
+### Review decisions (2026-10-31, Gordon)
+
+A design and implementation review of the JOL epic (two review agents, claims re-checked by
+the orchestrator) settled the following. Facts marked "run" were re-run; the rest were read.
+
+- **All owned cells go to the one kernel** (divergence 1 below stands). Deliberate divergence
+  from Q1, to be stated as such in JOL-5. It is what makes SoS mixed-language documents work.
+- **A project-level engine may start on a cell-less page that declares a different engine.**
+  Accepted quirk. Run: project `engine: [knitr]` plus document `engine: [jupyter]`, no cells,
+  R missing: render fails with "Engine 'knitr' is registered but its runtime is not
+  available". The merged array roots at `FileId(0)`, so the own-file rule fires and the
+  sequence is `["knitr","jupyter"]`. The mirror case (project `jupyter: python3`, document
+  `knitr: true`) does not run knitr, because `declares_engine_in_file` inspects only the first
+  declaring value. Document both in JOL-5; no filtering of `raw_explicit`.
+- **A `jupyter:` map without `kernel`, and Q1's `kernelspec:` object, warn and fall back** to
+  the next source (the first cell's language). Q1 errors on both. Replaces the "silent
+  fallthrough" in divergence 2.
+- **A cell-less page that declares an engine hard-errors when the runtime is missing**
+  (Q1-compatible, run for knitr and for `jupyter: python3` without `jupyter` on PATH). In WASM
+  and the hub the same page now carries the "not available in this build" warning
+  (`engine_execution.rs:177-186`, inferred from code, not run). List as a behavior change in
+  JOL-5.
+- **`DOCUMENT_PROFILE_VERSION` bumps to 17 at merge time**, with a changelog line in
+  `claude-notes/designs/document-profile-contract.md` (whose header says 13 and whose changelog
+  lacks v14 and v16; fix that drift in the same commit). Done at merge, not earlier, to avoid
+  colliding with the other lanes.
+- **JOL-2a's finished core merges to the integration branch early** with `status:
+  in-progress`; the unticked tail below stays open and must not hold up EXR-3. EXR-3 needs
+  only the resolver rule and `select_kernel`. This needs a matching edit to the dependency
+  table in the execution-records epic (Gordon's file, done in the same commit as this note).
+- **`.ipynb` and percent scripts: do not synthesize a `jupyter:` value.** Run: both are
+  claimed by `jupyter`, and the claimed-engine short-circuit precedes the own-file rule, so
+  engine choice is unaffected. `ipynb.rs` uses `kernelspec.language` only (lowercased) and
+  never reads `kernelspec.name`; selection stays with `select_kernel`. The "Known gap" below
+  is therefore moot for resolution; it still applies to any consumer that applies the
+  own-front-matter test to spans or YAML (decision 41, EXR-2, EXR-3, EXR-14).
+- **Run results from the review**: `.md` with `jupyter: python3` still emits Q-2-40 and does
+  not execute; a span-only page with `jupyter: python3` renders its span literally and starts
+  no kernel (EXR-3 owns this); `jupyter: sos` with `%use` lines in `{python}` cells renders
+  with the real `sos` kernelspec (new `q2`: 6 outputs, no errors; the old `q2` failed on
+  `%use`). Plain `{ggsql}` fences on SoS remain untested.
+- **Reading a kernelspec's language is not needed for `jupyter: <name>`**: lookup is by exact
+  name (`find_kernelspec`). `find_kernelspec_for_language` is dead code and uses the bare
+  `runtimelib::list_kernelspecs()`, which misses venv kernels; JOL-2b must switch it to the
+  augmented list.
+- **Out-of-plan finding, not part of JOL**: a `.py` percent script that opens with a `# ---`
+  front-matter block followed by `# %% [markdown]` panics in `q2 render` (`line_writer.rs:125`,
+  "provenance must tile contiguously"); a `# ---` block followed directly by `# %%` is not
+  sniffed as a percent script ("Can't determine execution engine"). Percent front matter works
+  only inside a `# %% [markdown]` cell.
+
+### SoS recorded run (2026-10-31, lane B session 3)
+
+Built `target/debug/q2` from this worktree (the `q2` on PATH is the 2026-10-27 nightly, which
+predates this plan). Copied `~/docs/ggsql-sos/mixed.qmd` to the scratchpad and changed
+`engine: jupyter` to `jupyter: sos`, so the three cells are `{python}` (`x = 21`,
+`print(x * 2)`), `{ggsql}` (`%use ggsql`, a penguins histogram) and `{python}` (`%use sos`,
+`print(x + 1)`). Rendered with the SoS venv (`~/docs/ggsql-sos/.venv/bin`) first on `PATH`,
+since `jupyter` is not otherwise installed. The kernelspec is the real `sos` one
+(`language: sos`), with no shim named `python3`.
+
+Result: **`42`, one PNG (`cell-2-output-1.png`, 1000 x 618) and `22`**, no errors, as in the
+2026-10-17 shim experiment. The ggsql subkernel's INFO log lines appear as stderr in that
+cell's output (the known SoS rough edge, not q2's). So SoS covers a mixed `python`/`ggsql`
+document with `%use` lines and `jupyter: sos`. Plain `{ggsql}` fences without `%use` were not
+tried (see below).
+
+### `cell_kernel` research (2026-10-31, lane B session 3)
+
+- SoS (`sos_notebook/kernel.py:1285-1296`, `init_metadata`) reads its per-cell settings from
+  **`message.metadata["sos"]` first**, then `content["sos"]`. `cell_kernel` selects the subkernel
+  for the cell, and `default_kernel` is the fallback.
+- q2 builds every execute request as `ExecuteRequest::new(code)` converted with `.into()`
+  (`engine/jupyter/execute.rs:46`). `jupyter-protocol` 2.0.0's `ExecuteRequest` has no slot for
+  extra content fields, so `content.sos` cannot be sent through the typed struct. But
+  `JupyterMessage` has a `metadata: Value` and a `with_metadata` builder, so q2 can send
+  `{"sos": {"cell_kernel": "<name>"}}` there without touching the protocol crate.
+- Cost: about ten lines in `execute.rs`, plus one thing that is not small: a map from a fence
+  language to a SoS subkernel name (`{ggsql}` to `ggsql`, `{python}` to `sos` or `python3`).
+  That map is the ownership question JOL-2b owns, and is SoS-specific.
+- **Recommendation: document the `%use <kernel>` line as the supported form now, and do not
+  build `cell_kernel` in JOL-2a.** The recorded run shows `%use` works. Revisit after JOL-2b,
+  when fence-to-kernel ownership exists, as a small follow-up and not a revived JOL-3. Not
+  tested: whether SoS honors `cell_kernel` sent this way (read, not run).
+
+### Note for JOL-5
+
+`jupyter: <kernel>` (or `jupyter: {kernel: <kernel>}`) now selects the kernel for the whole
+document; before, the key was ignored and the kernel came from the first executable cell's
+language. Unlike Quarto 1, which only runs fences in the kernelspec's language and leaves the
+rest display-only, q2 sends every Jupyter-owned cell to that one kernel, which is what makes a
+multiplexing kernel such as SoS work (`jupyter: sos` with `%use <kernel>` lines). The language
+allowlist still decides which cells run until JOL-2b, so `{sos}` and `{bash}` fences are not
+executed yet. A `jupyter:` map with no `kernel`, or Quarto 1's `kernelspec:` object, warns
+(`Q-18-4`) and falls back to the first cell's language instead of erroring as Quarto 1 does.
+Also for JOL-5: a cell-less page whose own front matter declares an engine now runs it, and
+fails hard if the runtime is missing (Quarto 1 behavior; in a WASM build the page renders
+silently, unchanged); a project-level declaration alone starts nothing; and the accepted
+mixed-layer quirk (project `engine: [knitr]` merged with document `engine: [jupyter]` starts
+knitr on a cell-less page, while project `jupyter: python3` with document `knitr: true` does
+not start knitr).
 
 ## Goal
 
@@ -126,10 +245,12 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
 
 1. **Every Jupyter-owned cell runs on the kernel named by `jupyter:`.** Q1 turns only
    fences in the kernelspec\'s language into code cells and leaves the rest display-only
-   (verified by run with `jupyter: sos`, above). Behavior change for Q1 documents.
-2. **A `jupyter:` map without `kernel` falls through to language lookup.** Q1 rejects it
-   with "Invalid Jupyter kernelspec" (`jupyter.ts:578`). q2 keeps the key free for the
-   per-language form that JOL-2b parses.
+   (verified by run with `jupyter: sos`, above). Behavior change for Q1 documents. DECIDED
+   (Gordon, 2026-10-31): keep.
+2. **A `jupyter:` map without `kernel` warns and falls back to language lookup.** Q1 rejects
+   it with "Invalid Jupyter kernelspec" (`jupyter.ts:578`). DECIDED (Gordon, 2026-10-31):
+   warn, not silent and not an error. The same for the `kernelspec:` object (4). The
+   per-language map is not built by any plan; JOL-2b must not claim it unless it reopens it.
 3. **The `ctx.engine_config` source** (`engine: [{jupyter: {kernel: x}}]`, Phase 2) has no
    Q1 equivalent.
 4. **The full `kernelspec:` object form** that Q1 accepts is not supported (known gap,
@@ -146,7 +267,7 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
 
 ## Phase 1: tests first
 
-- [ ] Unit tests for a new pure function `kernel_from_ts_metadata(&HashMap<String,
+- [x] Unit tests for a new pure function `kernel_from_ts_metadata(&HashMap<String,
   TsMetadataValue>) -> Option<String>` next to `extract_kernel_from_metadata`:
   - `test_kernel_from_ts_metadata_scalar` (`jupyter: python3` gives `python3`)
   - `test_kernel_from_ts_metadata_kernel_key` (`jupyter: {kernel: julia-1.9}`)
@@ -154,7 +275,7 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
   - `test_kernel_from_ts_metadata_map_without_kernel_key` (`jupyter: {python: x}` gives
     `None`, reserved for JOL-2b; the Q1 divergence 2 above)
   - `test_kernel_from_ts_metadata_non_string` (a number or bool gives `None`, no panic)
-- [ ] Unit tests for a pure `select_kernel(metadata: &HashMap<String, TsMetadataValue>,
+- [x] Unit tests for a pure `select_kernel(metadata: &HashMap<String, TsMetadataValue>,
   engine_config: Option<&ConfigValue>, first_owned_language: Option<&str>) -> Option<String>`
   that wraps the explicit-name check and the existing first-cell fallback. With zero cells
   (`first_owned_language` is `None`) and a key it returns that kernel; with zero cells and
@@ -168,25 +289,36 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
   `crates/quarto-core/tests/integration/jupyter_integration.rs`: a document with
   `jupyter: python3` and a first cell in a different allowlisted language still starts
   `python3` (assert on the `SessionKey` the daemon reports).
-- [ ] Integration test, same gating: `jupyter: no-such-kernel` fails with an error that
-  names the kernel (the daemon path surfaces `find_kernelspec` errors through
-  `execution_failed("jupyter", ...)` at `text_execute.rs:93`).
+- [x] `jupyter: no-such-kernel` fails with an error that names the kernel. Done as an
+  ordinary unit test, not an ignored integration test: the lookup fails before any kernel
+  starts, so it needs no ipykernel (`test_missing_explicit_kernel_gives_the_rich_error`; it
+  also covers the `format_kernelspec_not_found` task below).
 
 ## Phase 2: implementation
 
-- [ ] Add `kernel_from_ts_metadata` in `engine/jupyter/kernelspec.rs`. The `ctx.metadata`
+- [x] Add `kernel_from_ts_metadata` in `engine/jupyter/kernelspec.rs`. The `ctx.metadata`
   route is safe for bare YAML strings: `config_value_to_ts_metadata` lowers them with
   `as_plain_text` (`project/mod.rs:1379-1383`). The old extractor is not: see the delete
   task below.
-- [ ] Resolver, tests first (`resolution.rs`). The rule: a document with no computational
+- [x] Resolver, tests first (`resolution.rs`). The rule: a document with no computational
   languages whose **own front matter** declares a non-markdown engine (`engine:` or the
   top-level shorthand such as `jupyter:`) resolves to that engine in the sequence, with an
   empty ownership map. "Own front matter" is decided by provenance, as in EXR-2 decision 11:
   the declaring value's `SourceInfo` root file id is the document's own file (a value from
-  `_quarto.yml`, `_metadata.yml`, an extension or a format default does not count). UNVERIFIED:
-  how `prepare_resolution` learns the document's own file id (candidates: the AST's source
-  context, or a parameter passed by `DocumentProfileStage` and `EngineExecutionStage`); settle
-  it first. Tests:
+  `_quarto.yml`, `_metadata.yml`, an extension or a format default does not count). SETTLED
+  (Gordon chose option 1, 2026-10-31): `resolve_engines_for_document` and
+  `resolve_engines_pass1_for_document` take `own_file: Option<FileId>`; the old entry points
+  pass `None`, which keeps the rule off. Both stages pass `DOCUMENT_OWN_FILE_ID` =
+  `FileId(0)`, the dense id a parsed `.qmd`\'s front matter roots at (layers such as
+  `_quarto.yml` root at hash-based ids). A declaration counts as the document's own when the
+  declaring value (`engine:`, else the first shorthand key) has `own_file` among its root
+  file ids. **Known gap (narrowed 2026-10-31):** an `.ipynb` conversion roots at virtual cell
+  files (`[2,3]`) and a percent script at `[1]`, so their declarations are not recognized as
+  the document's own. This does not affect engine choice, because both are claimed by
+  `jupyter` and the claimed short-circuit comes first (run). Confirmed by probe against a real
+  discovered project: front matter roots at `[0]`; `_quarto.yml`, `_metadata.yml`, a format
+  extension default and project `format:` all root at hash ids. The probe is not committed;
+  turn it into a committed integration test (task below). Tests:
   - `declared_engine_without_cells_resolves_to_the_engine` (front matter `jupyter: python3`
     and `engine: jupyter`, no cells: the engine, empty ownership map);
   - `project_level_declared_engine_without_cells_stays_empty` (`engine: knitr` only in
@@ -198,7 +330,7 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
     with a `claims:` table and no cells resolves with the config stripped);
   - a document with neither a declaration nor cells stays markdown passthrough
     (`generated-languages` alone still does not manufacture an engine, as today).
-- [ ] Implement it inside `run_tiers`, not as a second early return in `prepare_resolution`.
+- [x] Implement it inside `run_tiers`, not as a second early return in `prepare_resolution`.
   Keep the empty scan result but continue to the sequence build instead of returning at
   `resolution.rs:493-503`; when `languages` is empty, step 4 appends the engines of
   `raw_explicit` in declared order with the same config handling. Sequence build otherwise
@@ -206,7 +338,7 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
   early return would skip `strip_claims_key` (the `claims:` key must not leak into
   `ExecutionContext` through `with_engine_config`), the duplicate-config note and the
   unknown-engine notes. Keep the `engine: markdown` P3 behavior above.
-- [ ] `resolve_engines_pass1` (`:878`), test first `pass1_lifts_declared_engine_without_cells`:
+- [x] `resolve_engines_pass1` (`:878`), test first `pass1_lifts_declared_engine_without_cells`:
   the declared-engine return consults no claim, so Pass 1 returns `Some` with that sequence
   and an empty ownership map. Returning `None` would count the document as `fell_through`
   and trigger the project-wide "engine extension declares no static claims" warning
@@ -214,9 +346,17 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
   unchanged (its meta declares only `generated-languages`). Check what a `.md` input does:
   the `Q-2-40` guard reads the declared engines (`explicitly_declared_engines`), not the
   resolved ones, and returns before any engine runs (`engine_execution.rs:332`), so only the
-  stash and the Pass-1 stamp change; add a test. Not verified: which other tests assume an
-  empty sequence for a cell-less document.
-- [ ] Behavior of a declared engine on a cell-less page, tests first (q1 evidence above:
+  stash and the Pass-1 stamp change; add a test. Audit done 2026-10-31 (grep of `quarto-core`, `quarto`,
+  `quarto-preview`, `quarto-hub-provider`): no test combines a document-declared engine with
+  no cells and expects an empty sequence. The empty-sequence tests in `resolution.rs`
+  (`test_markdown_only_empty_sequence`, `generated_language_alone_is_noop`,
+  `pass1_lifts_no_languages`, the doubled-brace display-fence test) all use empty metadata or
+  `generated-languages` only, so they stay valid. The only cell-less declared-engine tests
+  are the `.md` Q-2-40 ones (`engine_execution.rs` `md_with_engine_*`, and
+  `render_cli_e2e.rs` `md_with_engine_spec_renders_with_q_2_40_warning`); the guard reads
+  `explicitly_declared_engines` and returns before engines run, so they should be unaffected
+  (confirm by running them after the resolver change).
+- [x] Behavior of a declared engine on a cell-less page, tests first (q1 evidence above:
   hard errors for a document-level declaration are q1-compatible). Cover three cases:
   (1) R missing with `engine: knitr` in the document's front matter and no cells: a hard
   error, as in q1 (`get_engine_with_fallback` returns `Err` for a registered engine whose
@@ -226,35 +366,68 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
   `_quarto.yml` declares an engine: no engine runs and no capture is emitted. Also record
   what the Jupyter engine does for zero cells with a kernel (passthrough,
   `text_execute.rs:55-58`) and that the page still goes through serialize, reparse and
-  reconcile with an engine capture emitted (`engine_execution.rs:~590-620`).
-- [ ] `DOCUMENT_PROFILE_VERSION` (`document_profile.rs:160`, now 16): decide bump or not.
-  The stamped `DocumentProfile.engine_resolution` changes meaning for document-declared
+  reconcile with an engine capture emitted (`engine_execution.rs:~590-620`). Review run
+  results are in Progress; no test covered any of cases (1)-(3) before. Add a fourth case for
+  the accepted mixed-layer quirk (project `engine: [knitr]` plus document `engine:
+  [jupyter]`), asserting the current behavior so a later change is deliberate.
+  DONE (2026-10-31, session 3), in `engine_execution.rs` tests `cell_less_*`: case 1 hard
+  error, case 3 project declaration runs none, case 4 the merged array fails on knitr, and a
+  fifth test that a declared engine with its runtime runs once with no diagnostics.
+  **Case 2 did not behave as planned.** The "not available in this build" warning does not
+  fire: `explicitly_declared_engines` drops engines the registry lacks, so in WASM a
+  cell-less `jupyter: python3` page renders silently, as it did before this plan. The
+  earlier claim (inferred from code, not run) was wrong; the test pins the silent behavior
+  (`cell_less_declared_engine_not_in_build_is_silent`). Whether the hub should warn is open
+  for Gordon; JOL-5 must not list a hub warning as a behavior change. The case-4 test models
+  the merged array with front matter `engine: [knitr, jupyter]` (one array rooted at the
+  document's file), which is the shape the pipeline hands the stage.
+- [x] Commit the own-file probe as an integration test under
+  `crates/quarto-core/tests/integration/` (not a top-level `tests/<name>.rs`): a discovered
+  project with `_quarto.yml`, `_metadata.yml`, a format extension and a format default;
+  assert which layers root at `FileId(0)`. The throwaway probe is saved at
+  `/private/tmp/claude-502/-Users-gordon-src-q2/a76cf139-d7af-4cab-bfbc-1e4abd581f95/scratchpad/probe_own_file.rs.txt`
+  (scratch, may be gone; the cases are listed in Progress and the commit for `0e4089f7f`).
+  DONE: `tests/integration/own_file_provenance.rs`, five tests (front matter roots at
+  `FileId(0)` and resolves to `jupyter`; `_quarto.yml`, `_metadata.yml`, a format extension
+  default and a project `format:` default each do not, and a plain page gets no engine).
+- [x] Warn and fall back for a `jupyter:` map without `kernel` and for a `kernelspec:`
+  object (divergences 2 and 4), tests first. The warning gets a Q-code only if the project's
+  diagnostic conventions require one; decide when writing it. DONE: new `Q-18-4` "Jupyter Kernel
+  Not Named" (catalog entry and `docs/errors/engine/Q-18-4.qmd`; the catalog is the
+  convention for coded warnings). `unusable_jupyter_key` (kernelspec.rs) classifies the two
+  forms, `jupyter_key_warning` (text_execute.rs) builds the warning, and `execute_qmd`
+  attaches it to `ExecuteResult::warnings` after a successful run, which the stage drains.
+  Unit-tested for both forms and for no warning on valid keys. Not run end to end: the
+  warning only attaches on a successful kernel run, which needs ipykernel.
+- [x] `DOCUMENT_PROFILE_VERSION` (`document_profile.rs:160`, was 16; bumped to 17 at merge): DECIDED (Gordon,
+  2026-10-31): bump to 17 at merge time, with a changelog line in the contract and the header
+  drift fixed (see Progress). The stamped `DocumentProfile.engine_resolution` changes meaning for document-declared
   engines on cell-less pages. Read `claude-notes/designs/document-profile-contract.md` (not
   read here) for the bump rule, whose history shows bumps for semantic changes, then bump or
   record why not.
-- [ ] Update stale text that says a cell-less document resolves to an empty sequence: the
+- [x] Update stale text that says a cell-less document resolves to an empty sequence (done): the
   doc comment of `explicitly_declared_engines` (`resolution.rs:~402-408`), the comment at
   `engine_execution.rs:~315-325`, and the P2 definition in
   `claude-notes/designs/engine-resolution.md:321` (P2 becomes "the language scan is empty and
   the document's own front matter declares no engine").
-- [ ] Add `select_kernel` and call it in `execute_qmd` in place of the direct
+- [x] Add `select_kernel` and call it in `execute_qmd` in place of the direct
   `map_language_to_kernel(&executable[0].language)` call (`text_execute.rs:76`). This plan is
   written against the tree before EXR-2 Phase 5, where `execute_qmd:76` and `CodeBlock`
   exist. Either order works, as in JOL-2b's design decision on the seam: if EXR-2 Phase 5 (the `KernelRouter`
   seam) has landed, make the default router wrap `select_kernel` and replace the default
   router; if not, call `select_kernel` directly.
-- [ ] Delete `resolve_kernel` and `extract_kernel_from_metadata` (`kernelspec.rs:129`, and
+- [x] Delete `resolve_kernel` and `extract_kernel_from_metadata` (`kernelspec.rs:129`, and
   the helper below it) with their metadata-only tests. `extract_kernel_from_metadata` reads
   with `ConfigValue::as_str()`, which returns `None` for `PandocInlines`
   (`quarto-pandoc-types/src/config_value.rs:736-747`), and a bare YAML string such as
   `jupyter: python3` arrives as `PandocInlines` in merged metadata. The `engine_config` read
   in `select_kernel` must therefore use `as_plain_text`, not `as_str`; test it with merged
   metadata, not a hand-built `Scalar`.
-- [ ] Test that the missing-kernel error for an explicit name is the existing rich one:
+- [x] Test that the missing-kernel error for an explicit name is the existing rich one:
   `format_kernelspec_not_found` (`engine/jupyter/error.rs:127`) already lists the
   searched paths, the available kernels and a `JUPYTER_PATH` hint. No new message is
   needed; assert the document-level error contains the kernel name and the list.
-- [ ] Honor the documented engine-config form as a second source. The user guide shows
+- [x] Honor the documented engine-config form as a second source. The user guide shows
   `engine: [{jupyter: {kernel: python3}}]` with "the map\'s value is passed to the
   engine" (`docs/guides/authoring/engines.qmd:35-36`), and `ctx.engine_config` carries
   that map (`engine/context.rs:56-61`), but `execute_qmd` reads neither. Precedence
@@ -264,30 +437,36 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
   layer. Add
   `test_select_kernel_engine_config_kernel` and
   `test_select_kernel_jupyter_key_beats_engine_config`.
-- [ ] Check the other entry points that name kernels: the percent-script processor
-  (`content_processors/percent.rs`, not examined) and the `.ipynb` converter
-  (`content_processors/ipynb.rs`, which fences cells with the notebook kernelspec
-  language). Record in this plan whether either should synthesize a `jupyter:` value
-  or leave selection to the new function.
+- [x] Check the other entry points that name kernels: the percent-script processor
+  (`content_processors/percent.rs`) and the `.ipynb` converter
+  (`content_processors/ipynb.rs`). ANSWERED (2026-10-31, review): leave selection to
+  `select_kernel`; neither synthesizes a `jupyter:` value (see Progress). Residual, outside
+  this plan: a notebook whose kernelspec is `julia-1.11` maps by language to a kernel named
+  `julia`, which may not exist. Not a JOL-2a task.
 
 ## Phase 3: end to end
 
-- [ ] SoS manual check, recorded in this plan with the outcome: install `sos` and
+- [x] SoS manual check, recorded in this plan with the outcome (see "SoS recorded run" below): install `sos` and
   `sos-notebook` plus the ggsql kernelspec per the JOL epic research notes; render
   `~/docs/ggsql-sos/` documents with `jupyter: sos`; expect `42`, a PNG and `22` as in
   the 2026-10-17 shim experiment, without the shim kernelspec. Use the real `sos`
   kernelspec (`language: sos`), put `%use ggsql` and `%use sos` lines in the cells, and
   record the result; this is the verification that SoS covers mixed-language documents
-  (the reason JOL-3 is deferred).
-- [ ] Research item, answer recorded here: can q2 add `sos: {cell_kernel: <name>}` to
+  (the reason JOL-3 is deferred). Review note 2026-10-31: a review agent already rendered a
+  `%use sos` / `%capture` / `%use ggsql` document with the real `sos` kernelspec (6 outputs,
+  no errors); the recorded manual run with the `42`/PNG/`22` expectations is still to do.
+- [x] Research item, answer recorded here (see "cell_kernel research" below): can q2 add `sos: {cell_kernel: <name>}` to
   the execute request content (read `runtimelib` 2.0 and the execute-request code
   under `engine/jupyter/`; exact location not checked)? Plain `{ggsql}` fences on SoS need it; not verified.
   Decide from the manual check above whether to build it as a small follow-up (not a
   revived JOL-3) or to document the `%use` lines as the supported form.
-- [ ] Add the user-facing note (one paragraph, for JOL-5 to expand) that `jupyter:`
+- [x] Add the user-facing note (one paragraph, for JOL-5 to expand; text under "Note for JOL-5" below) that `jupyter:`
   now selects the kernel and that the language allowlist still applies until JOL-2b, and
   that, unlike Q1, cells in other Jupyter-owned languages are sent to that kernel rather
-  than left display-only.
+  than left display-only. Also for JOL-5: the cell-less hard error and hub warning, the
+  mixed-layer quirk, and that `{sos}` fences are not executed until JOL-2b.
+- [x] At merge: bump `DOCUMENT_PROFILE_VERSION` to 17, add the contract changelog line, and
+  amend the lane/dependency table in the execution-records epic as described in Progress.
 - Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core` (the Phase 3 manual checks are not part of the gate).
 
@@ -309,8 +488,9 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
 - **Cell-less pages with a declared engine.** For a document-declared engine, a page with no
   cells now reaches the engine stage: a missing runtime is a hard error (q1-compatible, see
   the Phase 2 task), the stamped profile changes meaning, and an engine capture is emitted.
-  Declarations from the project layer are deliberately excluded so plain pages in a project
-  do not start an engine; this differs from q2's existing behavior for pages that *do* have
+  A declaration that appears only in the project layer does not start an engine (a plain page
+  in a project starts none), but a project engine merged with a document-level one does start
+  (accepted quirk, Gordon 2026-10-31, see Progress); this differs from q2's existing behavior for pages that *do* have
   cells, where the merged-metadata declaration applies and q1's does not (not changed here).
 - **Allowlist versus explicit kernel.** Until JOL-2b, a SoS document with a `bash`
   cell does not execute that cell. Q1 does not "send everything" either: it makes code

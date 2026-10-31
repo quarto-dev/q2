@@ -11,20 +11,25 @@
 //! It parses QMD input, executes code blocks via the Jupyter daemon, and returns
 //! markdown with outputs inserted.
 
-use regex::Regex;
-
 use quarto_source_map::SourceInfo;
 
 use super::daemon::daemon;
 use super::error::JupyterError;
 use super::execute::{CellOutput, CellResult, ExecuteStatus};
+use super::kernelspec::{UnusableJupyterKey, kernel_from_ts_metadata, unusable_jupyter_key};
+use super::router::{KernelName, SingleKernelRouter, plan_units, splice_units};
 use super::session::SessionKey;
 use crate::cell_options::partition_cell_options;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::error::ExecutionError;
+use crate::engine::ts_protocol::TsMetadataValue;
+use crate::engine::units::{
+    CellUnit, EngineUnit, Unit, runs_in_legacy_executor, units_for_engine, view_for_engine,
+};
 use crate::presenter::cell::{describe_location, render_cell};
 use crate::presenter::figures::{FigureSink, FsFigureSink};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options, resolved_flag};
+use quarto_pandoc_types::ConfigValue;
 
 type JupyterResult<T> = std::result::Result<T, JupyterError>;
 
@@ -51,29 +56,45 @@ pub fn execute_qmd(
     input: &str,
     ctx: &ExecutionContext,
 ) -> std::result::Result<ExecuteResult, ExecutionError> {
-    // Parse ALL braced {lang} cells from input.
-    let all_blocks = parse_code_blocks(input);
-
-    if all_blocks.is_empty() {
-        // No braced cells at all - passthrough.
-        return Ok(ExecuteResult::new(input));
-    }
+    // The document's units, relocated into this text (or scanned from it when
+    // no stage supplied a shared list). Spans are returned and ignored until
+    // EXR-3. Every braced cell is in the list; the view marks which ones
+    // jupyter owns, and `partition_cells` classifies them.
+    let units = units_for_engine(&ctx.units, input);
+    let handled = &ctx.handled_languages;
+    let owns = |lang: &str| !handled.iter().any(|h| h.to_lowercase() == lang);
+    let view = view_for_engine(&units, &owns);
 
     // Apply the handled_languages enforcement gate:
-    //   - cells in handled_languages are ceded (dropped from the executable set)
+    //   - cells not owned by jupyter are ceded (dropped from the executable set)
     //   - cells jupyter owns but cannot execute:
     //     multi_engine=true  → loud Err(NoHandlerForLanguage)  (§10 case 4, P2-13)
     //     multi_engine=false → pass through unexecuted (display-only, P2-13)
     //   - remaining cells are executable
-    let executable = partition_cells(all_blocks, &ctx.handled_languages, ctx.multi_engine)?;
+    let executable = partition_cells(&view, ctx.multi_engine)?;
 
     if executable.is_empty() {
-        // All cells were ceded — passthrough unchanged.
+        // No cells, or all were ceded — passthrough unchanged.
         return Ok(ExecuteResult::new(input));
     }
 
     // Determine the kernel from the first *executable* (owned) cell.
-    let kernel_name = map_language_to_kernel(&executable[0].language);
+    // An explicit kernel (`jupyter:` key, then `engine_config.kernel`) wins.
+    // Today one kernel runs every unit: the default router returns it for all
+    // of them. JOL-2a/2b supply the choice behind the router; a reopened
+    // JOL-3 (several kernels) can vary it per unit.
+    let kernel_name = select_kernel(
+        &ctx.metadata,
+        ctx.engine_config.as_ref(),
+        Some(&executable[0].lang),
+    )
+    .expect("a first owned language was supplied");
+    let router = SingleKernelRouter::new(kernel_name);
+
+    // Plan first (pure): which kernel runs each unit, in document order. A
+    // router error is an `ExecutionError` and propagates as one.
+    let units: Vec<Unit> = executable.iter().cloned().map(Unit::Cell).collect();
+    let plan = plan_units(&units, &router)?;
 
     // bd-hxhnnlzs: hold a kernel scope for the duration of this engine
     // run. If no outer scope (render invocation, preview server) is
@@ -87,9 +108,64 @@ pub fn execute_qmd(
 
     // Execute via async runtime. `execute_blocks_async` takes the full
     // `ExecutionContext` (main's #412 figure-emission threads it through).
-    let result = execute_blocks_async(input, &executable, &kernel_name, ctx);
+    let result = execute_blocks_async(input, &executable, &plan, ctx);
 
-    result.map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))
+    let warning = jupyter_key_warning(&ctx.metadata);
+    result
+        .map(|mut r| {
+            r.warnings.extend(warning);
+            r
+        })
+        .map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))
+}
+
+/// The `Q-18-4` warning for a `jupyter:` value that names no kernel, if any.
+///
+/// Q1 errors on these forms; q2 warns and falls back to the next source
+/// (`engine_config.kernel`, then the first owned cell's language).
+pub(crate) fn jupyter_key_warning(
+    metadata: &std::collections::HashMap<String, TsMetadataValue>,
+) -> Option<quarto_error_reporting::DiagnosticMessage> {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+    let (problem, hint) = match unusable_jupyter_key(metadata)? {
+        UnusableJupyterKey::MapWithoutKernel => (
+            "the `jupyter:` map has no `kernel` key, so it names no kernel.",
+            "Write `jupyter: <kernel-name>` or `jupyter: {kernel: <kernel-name>}`.",
+        ),
+        UnusableJupyterKey::KernelspecObject => (
+            "the `kernelspec:` object form of `jupyter:` is not supported.",
+            "Name the kernel instead: `jupyter: <kernel-name>`.",
+        ),
+    };
+    Some(
+        DiagnosticMessageBuilder::warning("Jupyter Kernel Not Named")
+            .with_code("Q-18-4")
+            .problem(problem)
+            .add_detail("Falling back to the kernel for the language of the first executable cell.")
+            .add_hint(hint)
+            .build(),
+    )
+}
+
+/// Choose the kernel for a document.
+///
+/// Order: the `jupyter:` document key, then `engine_config.kernel`
+/// (`engine: [{jupyter: {kernel: x}}]`), then the kernel mapped from the
+/// first owned cell's language. Returns `None` only when none of the three
+/// exists; unlike `resolve_kernel`, it never defaults to Python, so a
+/// cell-less document with no key stays unresolved.
+pub(crate) fn select_kernel(
+    metadata: &std::collections::HashMap<String, TsMetadataValue>,
+    engine_config: Option<&ConfigValue>,
+    first_owned_language: Option<&str>,
+) -> Option<String> {
+    kernel_from_ts_metadata(metadata)
+        .or_else(|| {
+            engine_config
+                .and_then(|c| c.get("kernel"))
+                .and_then(|k| k.as_plain_text())
+        })
+        .or_else(|| first_owned_language.map(map_language_to_kernel))
 }
 
 /// Map a language name to a Jupyter kernel name.
@@ -106,50 +182,52 @@ fn map_language_to_kernel(language: &str) -> String {
     }
 }
 
-/// Parse ALL braced `{lang}` code blocks from markdown input.
-///
-/// Returns every fenced code block whose fence is ```` ```{lang} ```` (e.g.
-/// `{python}`, `{sql}`, `{ojs}`). Plain highlight fences (` ```r `) and
-/// raw-format fences (` ```{=html} `) are excluded by the regex — they have
-/// no word-only `{lang}` form.
-///
-/// Quarto 2 is strict: only a bare `{lang}` is accepted. The Quarto 1
-/// variant `{python echo=false}` (fence-attached options) is not
-/// supported — per-cell directives live inside the block as
-/// `#| key: value` YAML comments. Dropping fence-attached options
-/// keeps the tree-sitter grammar for qmd tractable.
-///
-/// Callers that need only executable cells should pass the result through
-/// [`partition_cells`].
+/// The cells the legacy executor runs, as `CodeBlock`s, from a unit list: bare
+/// `{lang}` openers at column 0 with a three-backtick fence. Spans, cells the
+/// legacy rule skips (indented, nested, attribute-tail, longer fence) and raw
+/// fences never appear (the scanner already excludes raw and doubled-brace).
+/// The scanner follows CommonMark for where a fence closes (a longer closer
+/// closes it) and for what an opener is (the info string is on the fence
+/// line); EXR-2 Phase 4 took both from it, fixing two executor misparses.
+pub(super) fn legacy_cells(units: &[Unit]) -> Vec<CodeBlock> {
+    units
+        .iter()
+        .filter_map(|u| match u {
+            Unit::Cell(c) if runs_in_legacy_executor(c) => Some(code_block_of(c)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn code_block_of(c: &CellUnit) -> CodeBlock {
+    CodeBlock {
+        start: c.start,
+        end: c.end,
+        code_start: c.code_start,
+        language: c.lang.clone(),
+        code: c.code.clone(),
+    }
+}
+
+/// The pre-scanner cell finder, kept only so tests can pin what it did and
+/// prove the scanner reproduces it (EXR-2 Phase 0 characterization and the
+/// Phase 4 corpus-equality test). Production goes through the scanner.
+#[cfg(test)]
 pub(super) fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
-    // Match ```{language} ... ``` blocks (no fence options allowed).
-    // `\w+` excludes `=` so raw-format fences like ` ```{=html} ` are never
-    // matched.
-    let pattern = r"(?m)^```\s*\{(\w+)\}\s*\n([\s\S]*?)^```\s*$";
-    let re = Regex::new(pattern).expect("Invalid regex pattern");
-
+    let re = regex::Regex::new(&crate::engine::patterns::executor_fence_pattern())
+        .expect("Invalid regex pattern");
     let mut blocks = Vec::new();
-
     for cap in re.captures_iter(input) {
         let full_match = cap.get(0).unwrap();
-        let language = cap.get(1).unwrap().as_str().to_string();
         let code_match = cap.get(2).unwrap();
-        let code = code_match.as_str().to_string();
-
-        // Collect ALL braced cells ungated (branch cede/claim model):
-        // `partition_cells` performs the executable/cede/loud-failure
-        // classification downstream, so the parse-level executable gate is
-        // removed. `code_start` (main #412) anchors per-cell source
-        // attribution for figure emission.
         blocks.push(CodeBlock {
             start: full_match.start(),
             end: full_match.end(),
             code_start: code_match.start(),
-            language,
-            code,
+            language: cap.get(1).unwrap().as_str().to_string(),
+            code: code_match.as_str().to_string(),
         });
     }
-
     blocks
 }
 
@@ -175,45 +253,42 @@ pub(super) fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
 /// `NoHandlerForLanguage` is a **clean refusal** and does NOT poison the
 /// engine instance. See `ExecutionError::NoHandlerForLanguage`.
 fn partition_cells(
-    blocks: Vec<CodeBlock>,
-    handled_languages: &[String],
+    view: &[EngineUnit<'_>],
     multi_engine: bool,
-) -> Result<Vec<CodeBlock>, ExecutionError> {
+) -> Result<Vec<CellUnit>, ExecutionError> {
     let mut executable = Vec::new();
 
-    for block in blocks {
-        let lang_lower = block.language.to_lowercase();
-
-        // Is this language in the leave-alone set? (Case-insensitive match.)
-        let is_ceded = handled_languages
-            .iter()
-            .any(|h| h.to_lowercase() == lang_lower);
-
-        if is_ceded {
-            // Ceded: jupyter does not execute this cell. It will remain
-            // verbatim in the output (the surrounding text passthrough in
-            // `execute_blocks_inner` handles that because ceded cells are not
-            // in the executable set, so `last_end` never advances past them
-            // and the block text is included in the `input[last_end..]` tail).
+    for engine_unit in view {
+        let Unit::Cell(cell) = engine_unit.unit else {
+            continue;
+        };
+        if !runs_in_legacy_executor(cell) {
             continue;
         }
 
-        if is_executable_language(&block.language) {
+        if !engine_unit.owned {
+            // Ceded: jupyter does not execute this cell. It will remain
+            // verbatim in the output (the splice copies the gap, and a ceded
+            // cell is not in the executable set, so its text is part of the
+            // gap).
+            continue;
+        }
+
+        if is_executable_language(&cell.lang) {
             // Jupyter owns this language and can execute it.
-            executable.push(block);
+            executable.push(cell.clone());
         } else if multi_engine {
             // Multi-engine sequence: jupyter owns this language (not in
             // handled_languages) but has no handler/kernel for it. Fail
             // loudly — §10 case 4 (P2-13).
             return Err(ExecutionError::no_handler_for_language(
                 "jupyter",
-                block.language,
+                cell.lang.clone(),
             ));
         } else {
             // Single-engine sequence: pass the cell through unexecuted.
-            // It is left verbatim just like a ceded cell — the block text
-            // falls into the `input[last_end..]` passthrough in
-            // `execute_blocks_inner`. Q1's display-only treatment (P2-13).
+            // It is left verbatim just like a ceded cell — its text falls into
+            // a copied gap. Q1's display-only treatment (P2-13).
             continue;
         }
     }
@@ -246,8 +321,8 @@ fn is_executable_language(language: &str) -> bool {
 /// Execute code blocks asynchronously and build output markdown.
 fn execute_blocks_async(
     input: &str,
-    blocks: &[CodeBlock],
-    kernel_name: &str,
+    cells: &[CellUnit],
+    plan: &[(usize, KernelName)],
     ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
     // Drive the execution on the shared engine runtime — NOT a
@@ -255,22 +330,31 @@ fn execute_blocks_async(
     // Child) are tokio resources bound to the runtime that created
     // them; a per-call runtime made every cross-call session reuse
     // fail with "Tokio context ... is being shutdown" (bd-hxhnnlzs).
-    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, blocks, kernel_name, ctx))
+    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, cells, plan, ctx))
 }
 
 /// Inner async function that does the actual execution.
 async fn execute_blocks_inner(
     input: &str,
-    blocks: &[CodeBlock],
-    kernel_name: &str,
+    cells: &[CellUnit],
+    plan: &[(usize, KernelName)],
     ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
     let daemon = daemon();
 
-    // Start or get existing kernel session
-    let key: SessionKey = daemon
-        .get_or_start_session(kernel_name, &ctx.cwd, &ctx.project_env)
-        .await?;
+    // Start or get an existing session for every kernel the plan names, once
+    // each and before any cell runs (so a start failure surfaces before the
+    // first cell, as it did with the single kernel).
+    let mut sessions: std::collections::HashMap<KernelName, SessionKey> =
+        std::collections::HashMap::new();
+    for (_, kernel) in plan {
+        if !sessions.contains_key(kernel) {
+            let key = daemon
+                .get_or_start_session(kernel.as_str(), &ctx.cwd, &ctx.project_env)
+                .await?;
+            sessions.insert(kernel.clone(), key);
+        }
+    }
 
     // Document-level defaults for cell options (bd-ohvl879u): the
     // pipeline's fully merged metadata (MetadataMergeStage runs before
@@ -281,24 +365,15 @@ async fn execute_blocks_inner(
     // untenable to share.
     let doc_scope = ctx.execute_scope.clone();
 
-    // Build output by processing blocks in order
-    let mut output = String::new();
-    let mut last_end = 0;
+    // The rendered replacement for each executed cell, spliced into the
+    // input's gaps once every cell has run.
+    let mut replacements: Vec<(std::ops::Range<usize>, String)> = Vec::new();
     // Figure emission (bd-5t6wvu7m): image outputs are written under
     // `<stem>_files/figure-html/` next to the source document.
     let mut fig = FsFigureSink::new(&ctx.source_path);
 
-    for block in blocks {
-        // Append content before this block
-        output.push_str(&input[last_end..block.start]);
-
-        // A fenced div cannot interrupt a paragraph — make sure the
-        // `::: {.cell}` opener starts its own block even when the
-        // source had no blank line before the cell.
-        if output.ends_with('\n') && !output.ends_with("\n\n") {
-            output.push('\n');
-        }
-
+    for ((_, kernel), block) in plan.iter().zip(cells) {
+        let key = &sessions[kernel];
         // Partition the cell into `#|` options + code (bd-ohvl879u).
         // `ctx.source_info` maps input offsets back to the original
         // files, so option spans and diagnostics resolve to real
@@ -308,8 +383,8 @@ async fn execute_blocks_inner(
             block.code_start,
             block.code_start + block.code.len(),
         );
-        let cell = partition_cell_options(&block.language, &block.code, body_source.clone())
-            .map_err(|e| {
+        let cell =
+            partition_cell_options(&block.lang, &block.code, body_source.clone()).map_err(|e| {
                 let at = e
                     .location()
                     .and_then(|loc| describe_location(loc, 0, ctx))
@@ -329,7 +404,7 @@ async fn execute_blocks_inner(
         // Execute the code — the partitioned code only, without the
         // option lines (Q1 strips them too, so cell magics work).
         let exec_result = daemon
-            .execute_in_session(&key, &cell.code)
+            .execute_in_session(key, &cell.code)
             .await
             .ok_or(JupyterError::NotConnected)??;
 
@@ -356,19 +431,13 @@ async fn execute_blocks_inner(
         // in the document rather than shifting when an earlier cell is
         // hidden.
         fig.begin_cell();
-        output.push_str(&render_cell(
-            &block.language,
-            &cell.code,
-            &exec_result,
-            &mut fig,
-            visibility,
+        replacements.push((
+            block.start..block.end,
+            render_cell(&block.lang, &cell.code, &exec_result, &mut fig, visibility),
         ));
-
-        last_end = block.end;
     }
 
-    // Append any remaining content after the last block
-    output.push_str(&input[last_end..]);
+    let output = splice_units(input, &replacements);
 
     // Report the `<stem>_files` dir when figures were written —
     // dir-level, mirroring knitr. `q2 render` copies it to the output
@@ -398,6 +467,115 @@ mod tests {
     use super::*;
     use crate::engine::HANDLED_LANGUAGES;
 
+    // ── select_kernel (JOL-2a) ───────────────────────────────────────────────
+
+    fn jupyter_meta(name: &str) -> std::collections::HashMap<String, TsMetadataValue> {
+        std::collections::HashMap::from([(
+            "jupyter".to_string(),
+            TsMetadataValue::String(name.to_string()),
+        )])
+    }
+
+    fn kernel_config(name: &str) -> ConfigValue {
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        let entry = ConfigMapEntry {
+            key: "kernel".to_string(),
+            key_source: SourceInfo::for_test(),
+            value: ConfigValue::new_string(name, SourceInfo::for_test()),
+        };
+        ConfigValue::new_map(vec![entry], SourceInfo::for_test())
+    }
+
+    #[test]
+    fn test_select_kernel_explicit_wins_over_first_cell_language() {
+        let got = select_kernel(&jupyter_meta("sos"), None, Some("julia"));
+        assert_eq!(got.as_deref(), Some("sos"));
+    }
+
+    #[test]
+    fn test_select_kernel_falls_back_to_map_language_to_kernel() {
+        let got = select_kernel(&Default::default(), None, Some("r"));
+        assert_eq!(got.as_deref(), Some("ir"));
+    }
+
+    #[test]
+    fn test_select_kernel_no_cells_with_key() {
+        let got = select_kernel(&jupyter_meta("python3"), None, None);
+        assert_eq!(got.as_deref(), Some("python3"));
+    }
+
+    #[test]
+    fn test_select_kernel_no_cells_no_key_is_none() {
+        assert_eq!(select_kernel(&Default::default(), None, None), None);
+    }
+
+    #[test]
+    fn test_select_kernel_engine_config_kernel() {
+        let cfg = kernel_config("sos");
+        let got = select_kernel(&Default::default(), Some(&cfg), Some("python"));
+        assert_eq!(got.as_deref(), Some("sos"));
+    }
+
+    #[test]
+    fn test_select_kernel_jupyter_key_beats_engine_config() {
+        let cfg = kernel_config("sos");
+        let got = select_kernel(&jupyter_meta("julia"), Some(&cfg), Some("python"));
+        assert_eq!(got.as_deref(), Some("julia"));
+    }
+
+    #[test]
+    fn test_jupyter_key_warning_codes_and_absence() {
+        assert!(jupyter_key_warning(&Default::default()).is_none());
+        assert!(jupyter_key_warning(&jupyter_meta("python3")).is_none());
+        let per_language = std::collections::HashMap::from([(
+            "jupyter".to_string(),
+            TsMetadataValue::Map(std::collections::HashMap::from([(
+                "python".to_string(),
+                TsMetadataValue::String("python3".to_string()),
+            )])),
+        )]);
+        let w = jupyter_key_warning(&per_language).expect("map without kernel warns");
+        assert_eq!(w.code.as_deref(), Some("Q-18-4"));
+        let spec = std::collections::HashMap::from([(
+            "jupyter".to_string(),
+            TsMetadataValue::Map(std::collections::HashMap::from([(
+                "kernelspec".to_string(),
+                TsMetadataValue::Map(Default::default()),
+            )])),
+        )]);
+        let w = jupyter_key_warning(&spec).expect("kernelspec object warns");
+        assert!(
+            w.problem.as_ref().unwrap().as_str().contains("kernelspec"),
+            "{w:?}"
+        );
+    }
+
+    /// A missing explicit kernel surfaces the existing rich
+    /// `format_kernelspec_not_found` message: the name, the searched paths,
+    /// the available kernels and the `JUPYTER_PATH` hint. The lookup fails
+    /// before any kernel starts, so this needs no ipykernel.
+    #[test]
+    fn test_missing_explicit_kernel_gives_the_rich_error() {
+        let ctx = ExecutionContext::new(
+            std::env::temp_dir(),
+            std::env::temp_dir(),
+            std::path::PathBuf::from("doc.qmd"),
+            "html",
+        )
+        .with_metadata(jupyter_meta("q2-no-such-kernel-jol2a"));
+        let err = execute_qmd("```{python}\n1 + 1\n```\n", &ctx)
+            .expect_err("an unknown kernel must fail")
+            .to_string();
+        for needle in [
+            "q2-no-such-kernel-jol2a",
+            "searched:",
+            "available kernels",
+            "JUPYTER_PATH",
+        ] {
+            assert!(err.contains(needle), "missing {needle:?} in: {err}");
+        }
+    }
+
     // ── Helper: build a CodeBlock for tests ──────────────────────────────────
 
     fn make_block(language: &str, code: &str) -> CodeBlock {
@@ -410,16 +588,43 @@ mod tests {
         }
     }
 
+    /// Partition the cells of `input` the way `execute_qmd` does: scan once,
+    /// let the engine's ownership rule mark the view, then classify.
+    fn partition_text(
+        input: &str,
+        handled: &[String],
+        multi_engine: bool,
+    ) -> Result<Vec<CellUnit>, ExecutionError> {
+        let units = crate::engine::units::scan_units(input);
+        let owns = |lang: &str| !handled.iter().any(|h| h.to_lowercase() == lang);
+        let view = view_for_engine(&units, &owns);
+        partition_cells(&view, multi_engine)
+    }
+
+    /// `partition_text` over bare `{lang}` cells built from `(language, code)`.
+    fn partition(
+        blocks: Vec<CodeBlock>,
+        handled: &[String],
+        multi_engine: bool,
+    ) -> Result<Vec<CellUnit>, ExecutionError> {
+        let text: String = blocks
+            .iter()
+            .map(|b| format!("```{{{}}}\n{}\n```\n\n", b.language, b.code))
+            .collect();
+        partition_text(&text, handled, multi_engine)
+    }
+
     // ── T14 (H1): mask's opener-widening reddens this ───────────────────────
     //
-    // `parse_code_blocks` is private, so this seam lives in this module
+    // The cell finder is private, so this seam lives in this module
     // rather than exposing it (controller ruling R5). Runs the real
     // `nested_cell_mask::mask` end to end — parse a display block containing
     // a nested `{python}` opener, mask it, serialize the masked AST back to
     // qmd — and asserts jupyter's own partitioner finds nothing to execute
     // in the result. Reverting H1 (mask stops rewriting the opener) leaves
     // the literal `{python}` opener in the masked text, which
-    // `parse_code_blocks` *would* then match — turning this RED.
+    // the scanner *would* then match — turning this RED. (Moved from the
+    // old regex finder to `scan_units` in EXR-2 Phase 4.)
     #[test]
     fn t14_masked_display_block_yields_no_jupyter_cells() {
         let qmd = "````markdown\n```{python}\nprint(\"x\")\n````\n";
@@ -439,11 +644,38 @@ mod tests {
         pampa::writers::qmd::write(&masked_doc, &mut buf).expect("serialize masked qmd fixture");
         let masked_text = String::from_utf8(buf).expect("qmd writer must emit valid utf8");
 
-        let cells = parse_code_blocks(&masked_text);
+        let cells = legacy_cells(&crate::engine::units::scan_units(&masked_text));
         assert!(
             cells.is_empty(),
             "masked text must yield 0 cells from jupyter's partitioner, got: {cells:?}"
         );
+    }
+
+    // EXR-2 Phase 2: the mask covers every non-cell display fence, so an opener
+    // shown in a language-named fence (` ````text `, ` ````r `) is masked and the
+    // executor finds no cell. Before the widening only bare and `markdown`
+    // fences were masked and a ` ````text ` opener executed.
+    #[test]
+    fn exr2_p2_masked_language_named_display_fence_yields_no_jupyter_cells() {
+        for info in ["markdown", "text", "r", "python", ""] {
+            let qmd = format!("````{info}\n```{{python}}\nprint(1)\n```\n````\n");
+            let mut output = Vec::<u8>::new();
+            let (doc, _ctx, _warnings) =
+                pampa::readers::qmd::read(qmd.as_bytes(), false, "t.qmd", &mut output, true, None)
+                    .expect("parse");
+            let mut masked = doc;
+            assert!(
+                !crate::engine::nested_cell_mask::mask(&mut masked).is_empty(),
+                "info {info:?} must be masked"
+            );
+            let mut buf = Vec::new();
+            pampa::writers::qmd::write(&masked, &mut buf).expect("write");
+            let text = String::from_utf8(buf).expect("utf8");
+            assert!(
+                legacy_cells(&crate::engine::units::scan_units(&text)).is_empty(),
+                "info {info:?}: executor must see no cell in\n{text}"
+            );
+        }
     }
 
     // ── partition_cells tests ────────────────────────────────────────────────
@@ -464,7 +696,7 @@ mod tests {
 
         let blocks = vec![make_block("sql", "SELECT 1;")];
         // multi_engine=true: |sequence| > 1 → owned-but-unrunnable → loud error.
-        let result = partition_cells(blocks, &handled, true);
+        let result = partition(blocks, &handled, true);
 
         // Must be a loud Err, not Ok.
         assert!(
@@ -500,7 +732,7 @@ mod tests {
 
         let blocks = vec![make_block("sql", "SELECT 1;")];
         // multi_engine=false: |sequence| == 1 → owned-but-unrunnable → pass through, no error.
-        let result = partition_cells(blocks, &handled, false);
+        let result = partition(blocks, &handled, false);
 
         assert!(
             result.is_ok(),
@@ -548,7 +780,7 @@ mod tests {
         let python_block = make_block("python", "x = 1");
         let sql_block = make_block("sql", "SELECT 1;");
         // multi_engine doesn't matter here (cede path, not the loud-error path).
-        let result = partition_cells(vec![python_block, sql_block], &handled, false);
+        let result = partition(vec![python_block, sql_block], &handled, false);
 
         assert!(result.is_ok(), "should not error — sql is ceded, not owned");
         let executable = result.unwrap();
@@ -556,13 +788,13 @@ mod tests {
         // Only the python cell is executable.
         assert_eq!(executable.len(), 1, "only python should be executable");
         assert_eq!(
-            executable[0].language, "python",
+            executable[0].lang, "python",
             "the executable cell must be python"
         );
 
         // sql must NOT appear in the executable set (vacuity: list is non-empty).
         assert!(
-            !executable.iter().any(|b| b.language == "sql"),
+            !executable.iter().any(|b| b.lang == "sql"),
             "sql must be ceded (not in executable set)"
         );
     }
@@ -581,7 +813,7 @@ mod tests {
 
         let ojs_block = make_block("ojs", "viewof slider = Inputs.range([0, 100])");
         // multi_engine doesn't matter here (cede path, not the loud-error path).
-        let result = partition_cells(vec![ojs_block], &handled, false);
+        let result = partition(vec![ojs_block], &handled, false);
 
         assert!(
             result.is_ok(),
@@ -600,7 +832,7 @@ mod tests {
         let handled: Vec<String> = HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect();
 
         // multi_engine doesn't matter here (cede path, not the loud-error path).
-        let result = partition_cells(
+        let result = partition(
             vec![
                 make_block("mermaid", "graph TD; A-->B"),
                 make_block("dot", "digraph G { a -> b }"),
@@ -777,6 +1009,388 @@ print("hello")
         let blocks = parse_code_blocks(input);
         // Only the first block should be detected as executable
         assert_eq!(blocks.len(), 1);
+    }
+
+    // ── EXR-2 Phase 0: characterization of `parse_code_blocks` ──────────────
+    //
+    // These pin TODAY's behavior, quirks included, so the unit scanner
+    // (Phase 2) and the caller migration (Phase 4) can reproduce or
+    // deliberately change it. Where a case differs from q1 the comment says
+    // so; the strands are listed in the EXR-2 plan's Risks section.
+
+    fn langs(input: &str) -> Vec<String> {
+        parse_code_blocks(input)
+            .into_iter()
+            .map(|b| b.language)
+            .collect()
+    }
+
+    #[test]
+    fn exr2_p0_bare_fence_offsets() {
+        let input = "```{python}\nx=1\n```\n";
+        let blocks = parse_code_blocks(input);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].language, "python");
+        assert_eq!(blocks[0].code, "x=1\n");
+        assert_eq!(blocks[0].start, 0);
+        assert_eq!(blocks[0].code_start, "```{python}\n".len());
+        // `end` stops after the closing fence's trailing whitespace; the
+        // final `\n` is whitespace the closer's `\s*` consumes.
+        assert_eq!(&input[blocks[0].end..], "");
+    }
+
+    #[test]
+    fn exr2_p0_trailing_spaces_after_opener() {
+        assert_eq!(langs("```{python}  \nx=1\n```\n"), ["python"]);
+    }
+
+    #[test]
+    fn exr2_p0_four_backtick_fence_skipped() {
+        assert!(langs("````{python}\nx=1\n````\n").is_empty());
+    }
+
+    #[test]
+    fn exr2_p0_indented_fence_skipped() {
+        assert!(langs("  ```{python}\n  x=1\n  ```\n").is_empty());
+    }
+
+    #[test]
+    fn exr2_p0_raw_format_and_attribute_forms() {
+        // Raw-format fence, class fence: never cells.
+        assert!(langs("```{=html}\n<b>x</b>\n```\n").is_empty());
+        assert!(langs("```{.python}\nx=1\n```\n").is_empty());
+        // Knitr-style options inside the braces: not matched (pampa: Q-2-36).
+        assert!(langs("```{python echo=false}\nx=1\n```\n").is_empty());
+        // Attribute tail (a space inside the braces): still not matched. q1
+        // matches it (bd-rh4cce9e).
+        assert!(langs("```{python .marimo}\nx=1\n```\n").is_empty());
+        // Dotted and hyphenated tokens: matched since EXR-2 Phase 1 (the
+        // token class is pampa's; before, `\w` excluded `.` and `-`).
+        assert_eq!(langs("```{python.marimo}\nx=1\n```\n"), ["python.marimo"]);
+        assert_eq!(langs("```{py-thon}\nx=1\n```\n"), ["py-thon"]);
+    }
+
+    #[test]
+    fn exr2_p0_language_case_and_leading_digit() {
+        // Case is preserved (q1 lowercases; bd-7gvl455a).
+        assert_eq!(langs("```{Python}\nx=1\n```\n"), ["Python"]);
+        // A leading digit is rejected, as pampa does (Q-2-36). Before EXR-2
+        // Phase 1 the executor's `\w` accepted `{1abc}`.
+        assert!(langs("```{1abc}\nx=1\n```\n").is_empty());
+        assert!(langs("```{_x}\nx=1\n```\n").is_empty());
+    }
+
+    // (a) The match end swallows blank lines after the closing fence.
+    #[test]
+    fn exr2_p0_quirk_a_end_swallows_blank_lines() {
+        let input = "```{python}\nx=1\n```\n\n\nText\n";
+        let blocks = parse_code_blocks(input);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(&input[blocks[0].end..], "\nText\n");
+    }
+
+    // (b) `\s*` between the fence and the brace spans newlines.
+    #[test]
+    fn exr2_p0_quirk_b_newline_between_fence_and_brace() {
+        let input = "```\n{python}\nx=1\n```\n";
+        let blocks = parse_code_blocks(input);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].language, "python");
+        assert_eq!(blocks[0].code, "x=1\n");
+        assert_eq!(blocks[0].start, 0);
+    }
+
+    // (c) CRLF: the `\r` is consumed as whitespace or left in the code.
+    #[test]
+    fn exr2_p0_quirk_c_crlf() {
+        let input = "```{python}\r\nx=1\r\n```\r\nText\r\n";
+        let blocks = parse_code_blocks(input);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].code, "x=1\r\n");
+        // The match ends before the `\n` that follows the closer's `\r`.
+        assert_eq!(&input[blocks[0].end..], "\nText\r\n");
+    }
+
+    // (d) The token is ASCII since EXR-2 Phase 1: `{é}` no longer runs here
+    // (pampa rejects it too). Before, the Unicode `\w` matched it.
+    #[test]
+    fn exr2_p0_quirk_d_unicode_language() {
+        assert!(langs("```{é}\nx=1\n```\n").is_empty());
+    }
+
+    // EXR-2 Phase 1 consequence of the wider token class: a `{python.marimo}`
+    // cell now reaches `partition_cells`, finds no executable language, and in
+    // a multi-engine document fails loudly (before, the executor never saw it).
+    #[test]
+    fn exr2_p1_dotted_cell_reaches_partition_and_fails_in_multi_engine() {
+        let input = "```{python.marimo}\nx=1\n```\n";
+        assert_eq!(parse_code_blocks(input).len(), 1);
+        let multi = partition_text(input, &[], true);
+        assert!(
+            matches!(multi, Err(ExecutionError::NoHandlerForLanguage { .. })),
+            "got {multi:?}"
+        );
+        let single = partition_text(input, &[], false).expect("single-engine passes through");
+        assert!(single.is_empty());
+    }
+
+    // (e) Nesting is invisible to the line-start regex; see also the writer
+    // round-trip test below.
+    #[test]
+    fn exr2_p0_quirk_e_indent_and_nesting_skipped() {
+        assert!(langs("- item\n\n  ```{python}\n  x=1\n  ```\n").is_empty());
+        assert!(langs("> ```{python}\n> x=1\n> ```\n").is_empty());
+    }
+
+    // (f) Blank lines after the opener are swallowed, shifting `code_start`.
+    #[test]
+    fn exr2_p0_quirk_f_leading_blank_lines_swallowed() {
+        let input = "```{python}\n\n\nx=1\n```\n";
+        let blocks = parse_code_blocks(input);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].code, "x=1\n");
+        assert_eq!(blocks[0].code_start, "```{python}\n\n\n".len());
+    }
+
+    // (g) An unterminated cell runs to the next bare closer and swallows the
+    // next cell's opener.
+    #[test]
+    fn exr2_p0_quirk_g_unterminated_swallows_next_opener() {
+        let input = "```{python}\nx=1\n```{r}\ny=2\n```\n";
+        let blocks = parse_code_blocks(input);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].language, "python");
+        assert_eq!(blocks[0].code, "x=1\n```{r}\ny=2\n");
+    }
+
+    // (h) The closer is exactly three backticks plus whitespace.
+    #[test]
+    fn exr2_p0_quirk_h_closer_shape() {
+        assert!(langs("```{python}\nx=1\n```  trailing\n").is_empty());
+        assert!(langs("```{python}\nx=1\n````\n").is_empty());
+        assert_eq!(langs("```{python}\nx=1\n```   \n"), ["python"]);
+    }
+
+    // (i) A column-0 opener inside an unbraced, longer fence executes; only
+    // the nested-cell mask prevents it (T14 covers the masked case).
+    #[test]
+    fn exr2_p0_quirk_i_opener_inside_longer_fence_runs_unmasked() {
+        let input = "````markdown\n```{python}\nx=1\n```\n````\n";
+        assert_eq!(langs(input), ["python"]);
+    }
+
+    // (j) A space between the backticks and the brace is accepted.
+    #[test]
+    fn exr2_p0_quirk_j_space_before_brace() {
+        assert_eq!(langs("``` {python}\nx=1\n```\n"), ["python"]);
+    }
+
+    // The writer indents list-nested fences and prefixes blockquote cells with
+    // `> ` (so the executor skips them); div-nested cells are not indented (so
+    // it runs them). This is the root of bd-9j6z311f.
+    #[test]
+    fn exr2_p0_writer_roundtrip_nesting() {
+        fn roundtrip(qmd: &str) -> String {
+            let mut sink = Vec::<u8>::new();
+            let (doc, _ctx, _warnings) =
+                pampa::readers::qmd::read(qmd.as_bytes(), false, "t.qmd", &mut sink, true, None)
+                    .expect("parse fixture");
+            let mut buf = Vec::new();
+            pampa::writers::qmd::write(&doc, &mut buf).expect("write fixture");
+            String::from_utf8(buf).expect("utf8")
+        }
+
+        let list = roundtrip("- item\n\n  ```{python}\n  x=1\n  ```\n");
+        assert!(
+            list.contains("  ```{python}"),
+            "writer must indent list-nested fences; got:\n{list}"
+        );
+        assert!(parse_code_blocks(&list).is_empty(), "got:\n{list}");
+
+        let quote = roundtrip("> ```{python}\n> x=1\n> ```\n");
+        assert!(
+            quote.contains("> ```{python}"),
+            "writer must prefix blockquote cells; got:\n{quote}"
+        );
+        assert!(parse_code_blocks(&quote).is_empty(), "got:\n{quote}");
+
+        let div = roundtrip("::: {.callout-note}\n```{python}\nx=1\n```\n:::\n");
+        assert!(
+            div.contains("\n```{python}") || div.starts_with("```{python}"),
+            "div-nested fences must not be indented; got:\n{div}"
+        );
+        assert_eq!(parse_code_blocks(&div).len(), 1, "got:\n{div}");
+    }
+
+    // ── EXR-2 Phase 2: the unit scanner agrees with the legacy executor ─────
+
+    /// Cells the scanner marks `runs_in_legacy_executor` must match
+    /// `parse_code_blocks` byte for byte, quirks included, so Phase 4 can
+    /// swap the executor onto the scanner without moving a single splice.
+    fn legacy_cells_from_scanner(input: &str) -> Vec<(usize, usize, usize, String, String)> {
+        use crate::engine::units::{Unit, runs_in_legacy_executor, scan_units};
+        scan_units(input)
+            .into_iter()
+            .filter_map(|u| match u {
+                Unit::Cell(c) if runs_in_legacy_executor(&c) => {
+                    Some((c.start, c.end, c.code_start, c.lang, c.code))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn legacy_cells_from_executor(input: &str) -> Vec<(usize, usize, usize, String, String)> {
+        parse_code_blocks(input)
+            .into_iter()
+            .map(|b| (b.start, b.end, b.code_start, b.language, b.code))
+            .collect()
+    }
+
+    #[test]
+    fn exr2_p2_scanner_matches_the_executor_on_the_pinned_inputs() {
+        let corpus = [
+            "```{python}\nx=1\n```\n",
+            "```{python}  \nx=1\n```\n",
+            "``` {python}\nx=1\n```\n",
+            "```{python.marimo}\nx=1\n```\n",
+            "```{py-thon}\nx=1\n```\n",
+            "```{Python}\nx=1\n```\n",
+            // (a) blank lines after the closer are swallowed
+            "```{python}\nx=1\n```\n\n\nText\n",
+            // (c) CRLF
+            "```{python}\r\nx=1\r\n```\r\nText\r\n",
+            // (f) blank lines after the opener are swallowed
+            "```{python}\n\n\nx=1\n```\n",
+            // (g) an unterminated first cell swallows the next opener
+            "```{python}\nx=1\n```{r}\ny=2\n```\n",
+            // (h) closer shape
+            "```{python}\nx=1\n```   \n",
+            "```{python}\nx=1\n```  trailing\n",
+            // two cells and prose
+            "---\ntitle: t\n---\n\nText.\n\n```{python}\nx=1\n```\n\nMore.\n\n```{r}\ny=2\n```\n",
+            // empty body
+            "```{python}\n```\n",
+            // not cells for either
+            "````{python}\nx=1\n````\n",
+            "  ```{python}\n  x=1\n  ```\n",
+            "```{=html}\nx\n```\n",
+            "```{python .marimo}\nx=1\n```\n",
+            "```{1abc}\nx=1\n```\n",
+        ];
+        for input in corpus {
+            assert_eq!(
+                legacy_cells_from_scanner(input),
+                legacy_cells_from_executor(input),
+                "scanner and executor disagree on {input:?}"
+            );
+        }
+    }
+
+    // The one place the scanner still differs from the old cell finder on a
+    // column-0 three-backtick cell, and it is not reachable in the pipeline for
+    // a code block: (i) a column-0 opener inside a longer unbraced fence. The
+    // old finder runs it unless the mask rewrote it; the scanner treats it as
+    // the longer fence's content. (Quirks (b) and (h) were the other two; Phase
+    // 4 fixed them in the executor, see the `exr2_p4_quirk_*` tests.)
+    #[test]
+    fn exr2_p2_known_divergences_from_the_executor() {
+        let i = "````markdown\n```{python}\nx=1\n```\n````\n";
+        assert_eq!(legacy_cells_from_executor(i).len(), 1);
+        assert!(legacy_cells_from_scanner(i).is_empty());
+    }
+
+    // ── EXR-2 Phase 4: quirks (b) and (h) are fixed, not emulated ───────────
+    // (epic decision 26, amended by Gordon 2026-10-31). Asserted through the
+    // executor's own classification (`partition_text`: scan, view, partition),
+    // and against the old cell finder to show what changed.
+
+    // (b) A closing fence followed by a `{python}` line is not a cell. The old
+    // regex let `\s*` span the newline and started a cell at the closer.
+    #[test]
+    fn exr2_p4_quirk_b_closer_then_brace_line_is_not_a_cell() {
+        let input = "```text\nhello\n```\n{python}\nx = 1\n```\n";
+        assert_eq!(
+            parse_code_blocks(input).len(),
+            1,
+            "the old finder misread the closer as an opener"
+        );
+        let run = partition_text(input, &[], false).unwrap();
+        assert!(run.is_empty(), "no cell runs: {run:?}");
+        // And the plain form the Phase 0 pin used.
+        assert!(
+            partition_text("```\n{python}\nx=1\n```\n", &[], false)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    // (h) A four-backtick line closes a three-backtick cell (CommonMark: a
+    // closing fence is at least as long as the opener).
+    #[test]
+    fn exr2_p4_quirk_h_longer_closer_closes_the_cell() {
+        let input = "```{python}\nx=1\n````\n\nText\n";
+        assert!(
+            parse_code_blocks(input).is_empty(),
+            "the old finder needed exactly three"
+        );
+        let run = partition_text(input, &[], false).unwrap();
+        assert_eq!(run.len(), 1, "{run:?}");
+        assert_eq!(run[0].lang, "python");
+        assert_eq!(run[0].code, "x=1\n");
+        // The trailing-text closer is still not a closer for either.
+        assert!(
+            partition_text("```{python}\nx=1\n```  trailing\n", &[], false)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    // The Phase 3 corpus: the cells the scanner hands the executor equal what
+    // the old finder found, except where the old finder was wrong or
+    // unreachable. Each exception is named with its reason.
+    #[test]
+    fn exr2_p4_scanner_filtered_by_the_legacy_rule_equals_the_old_finder_on_the_corpus() {
+        const EXCEPTIONS: &[(&str, &str)] = &[(
+            "cell_inside_display_fence",
+            "quirk (i): the old finder runs an opener shown inside a longer fence; \
+                 the mask hides it in the pipeline, the scanner never claims it",
+        )];
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/units");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "qmd") {
+                continue;
+            }
+            let name = path.file_stem().unwrap().to_string_lossy().to_string();
+            let text = std::fs::read_to_string(&path).unwrap();
+            if let Some((_, why)) = EXCEPTIONS.iter().find(|(n, _)| *n == name) {
+                assert_ne!(
+                    legacy_cells_from_scanner(&text),
+                    legacy_cells_from_executor(&text),
+                    "{name} is listed as an exception ({why}) but now agrees: drop it"
+                );
+                continue;
+            }
+            assert_eq!(
+                legacy_cells_from_scanner(&text),
+                legacy_cells_from_executor(&text),
+                "{name}: scanner and old finder disagree"
+            );
+            checked += 1;
+        }
+        assert!(checked >= 20, "corpus went missing: {checked}");
+    }
+
+    // `partition_cells` cedes case-insensitively: a `{Python}` cell with
+    // handled = ["python"] is ceded (today's tests never pin this).
+    #[test]
+    fn exr2_p0_partition_cedes_case_insensitively() {
+        let handled = vec!["python".to_string()];
+        let result = partition(vec![make_block("Python", "x = 1")], &handled, false)
+            .expect("ceded cells are not an error");
+        assert!(result.is_empty(), "{{Python}} must be ceded by \"python\"");
     }
 
     #[test]

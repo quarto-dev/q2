@@ -1,5 +1,5 @@
 {
-  "code": "Q-2-35",
+  "code": "Q-2-59",
   "title": "Indented code blocks are not supported",
   "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
   "notes": [],

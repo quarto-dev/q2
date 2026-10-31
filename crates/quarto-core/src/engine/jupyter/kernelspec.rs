@@ -14,10 +14,10 @@
 
 use std::path::PathBuf;
 
-use quarto_pandoc_types::ConfigValue;
 use runtimelib::KernelspecDir;
 
 use super::error::{JupyterError, Result};
+use crate::engine::ts_protocol::TsMetadataValue;
 
 /// Information about a resolved Jupyter kernel.
 #[derive(Debug, Clone)]
@@ -106,72 +106,55 @@ pub async fn find_kernelspec_for_language(language: &str) -> Result<ResolvedKern
         })
 }
 
-/// Resolve the kernel to use for a document.
+/// Read the document-wide kernel name from the lowered document metadata
+/// (`ExecutionContext::metadata`).
 ///
-/// Resolution order:
-/// 1. Explicit kernel name in metadata (`jupyter: python3` or `jupyter.kernel: python3`)
-/// 2. First kernel matching the primary language of executable code blocks
-///
-/// # Arguments
-///
-/// * `metadata` - Document metadata (YAML frontmatter)
-/// * `primary_language` - The primary language detected from code blocks (optional)
-///
-/// # Returns
-///
-/// The resolved kernel, or an error if none could be determined.
-///
-/// # Note
-///
-/// Entry point for kernel resolution. Will be used when Jupyter engine integration
-/// is complete. Has unit tests in this module.
-#[allow(dead_code)]
-pub async fn resolve_kernel(
-    metadata: &ConfigValue,
-    primary_language: Option<&str>,
-) -> Result<ResolvedKernel> {
-    // 1. Check for explicit kernel in metadata
-    if let Some(kernel_name) = extract_kernel_from_metadata(metadata) {
-        return find_kernelspec(&kernel_name).await;
+/// Supports `jupyter: python3` and `jupyter: {kernel: python3}`. A map
+/// without a `kernel` key (the per-language form, reserved for JOL-2b)
+/// and any non-string value give `None`.
+pub fn kernel_from_ts_metadata(
+    metadata: &std::collections::HashMap<String, TsMetadataValue>,
+) -> Option<String> {
+    match metadata.get("jupyter")? {
+        TsMetadataValue::String(s) => Some(s.clone()),
+        TsMetadataValue::Map(m) => match m.get("kernel") {
+            Some(TsMetadataValue::String(s)) => Some(s.clone()),
+            _ => None,
+        },
+        _ => None,
     }
-
-    // 2. Try to find kernel for the primary language
-    if let Some(language) = primary_language {
-        return find_kernelspec_for_language(language).await;
-    }
-
-    // 3. Default to Python
-    find_kernelspec_for_language("python").await
 }
 
-/// Extract kernel name from document metadata.
+/// A `jupyter:` value that names no kernel q2 can use.
 ///
-/// Supports these formats:
-/// ```yaml
-/// jupyter: python3
-/// ```
-/// or:
-/// ```yaml
-/// jupyter:
-///   kernel: python3
-/// ```
-#[allow(dead_code)]
-fn extract_kernel_from_metadata(metadata: &ConfigValue) -> Option<String> {
-    let jupyter = metadata.get("jupyter")?;
+/// Q1 rejects both forms with "Invalid Jupyter kernelspec"; q2 warns
+/// (`Q-18-4`) and falls back to the next kernel source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnusableJupyterKey {
+    /// A map with no string `kernel` key (for example the per-language map).
+    MapWithoutKernel,
+    /// Q1's `jupyter: {kernelspec: {...}}` object form, which q2 does not read.
+    KernelspecObject,
+}
 
-    // Simple string format: `jupyter: python3`
-    if let Some(s) = jupyter.as_str() {
-        return Some(s.to_string());
+/// Detect a `jupyter:` map that [`kernel_from_ts_metadata`] cannot use.
+///
+/// Returns `None` when the key is absent, a string, a map with a string
+/// `kernel`, or a non-map scalar.
+pub fn unusable_jupyter_key(
+    metadata: &std::collections::HashMap<String, TsMetadataValue>,
+) -> Option<UnusableJupyterKey> {
+    let TsMetadataValue::Map(m) = metadata.get("jupyter")? else {
+        return None;
+    };
+    if matches!(m.get("kernel"), Some(TsMetadataValue::String(_))) {
+        return None;
     }
-
-    // Map format: `jupyter: { kernel: python3 }`
-    if let Some(kernel) = jupyter.get("kernel")
-        && let Some(s) = kernel.as_str()
-    {
-        return Some(s.to_string());
+    if m.contains_key("kernelspec") {
+        Some(UnusableJupyterKey::KernelspecObject)
+    } else {
+        Some(UnusableJupyterKey::MapWithoutKernel)
     }
-
-    None
 }
 
 /// Check if a language is typically executed via Jupyter.
@@ -185,48 +168,93 @@ pub fn is_jupyter_language(language: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_pandoc_types::config_value::ConfigMapEntry;
-    use quarto_source_map::SourceInfo;
 
-    fn string_config(s: &str) -> ConfigValue {
-        ConfigValue::new_string(s, SourceInfo::for_test())
-    }
-
-    fn map_config(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-        let map_entries: Vec<ConfigMapEntry> = entries
-            .into_iter()
-            .map(|(key, value)| ConfigMapEntry {
-                key: key.to_string(),
-                key_source: SourceInfo::for_test(),
-                value,
-            })
-            .collect();
-        ConfigValue::new_map(map_entries, SourceInfo::for_test())
+    fn ts_meta(v: TsMetadataValue) -> std::collections::HashMap<String, TsMetadataValue> {
+        std::collections::HashMap::from([("jupyter".to_string(), v)])
     }
 
     #[test]
-    fn test_extract_kernel_simple_string() {
-        let meta = map_config(vec![("jupyter", string_config("python3"))]);
+    fn test_kernel_from_ts_metadata_scalar() {
+        let m = ts_meta(TsMetadataValue::String("python3".into()));
+        assert_eq!(kernel_from_ts_metadata(&m), Some("python3".to_string()));
+    }
+
+    #[test]
+    fn test_kernel_from_ts_metadata_kernel_key() {
+        let m = ts_meta(TsMetadataValue::Map(std::collections::HashMap::from([(
+            "kernel".to_string(),
+            TsMetadataValue::String("julia-1.9".into()),
+        )])));
+        assert_eq!(kernel_from_ts_metadata(&m), Some("julia-1.9".to_string()));
+    }
+
+    #[test]
+    fn test_kernel_from_ts_metadata_absent() {
+        assert_eq!(kernel_from_ts_metadata(&Default::default()), None);
+    }
+
+    #[test]
+    fn test_kernel_from_ts_metadata_map_without_kernel_key() {
+        let m = ts_meta(TsMetadataValue::Map(std::collections::HashMap::from([(
+            "python".to_string(),
+            TsMetadataValue::String("x".into()),
+        )])));
+        assert_eq!(kernel_from_ts_metadata(&m), None);
+    }
+
+    #[test]
+    fn test_unusable_jupyter_key_forms() {
+        use std::collections::HashMap;
+        let map = |pairs: Vec<(&str, TsMetadataValue)>| {
+            ts_meta(TsMetadataValue::Map(
+                pairs
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                    .collect::<HashMap<_, _>>(),
+            ))
+        };
+        let s = |x: &str| TsMetadataValue::String(x.to_string());
+        assert_eq!(unusable_jupyter_key(&Default::default()), None);
+        assert_eq!(unusable_jupyter_key(&ts_meta(s("python3"))), None);
         assert_eq!(
-            extract_kernel_from_metadata(&meta),
-            Some("python3".to_string())
+            unusable_jupyter_key(&map(vec![("kernel", s("python3"))])),
+            None
+        );
+        assert_eq!(
+            unusable_jupyter_key(&map(vec![("python", s("python3"))])),
+            Some(UnusableJupyterKey::MapWithoutKernel)
+        );
+        assert_eq!(
+            unusable_jupyter_key(&map(vec![(
+                "kernelspec",
+                TsMetadataValue::Map(HashMap::new())
+            )])),
+            Some(UnusableJupyterKey::KernelspecObject)
+        );
+        // A usable `kernel` wins even when a kernelspec object is also present.
+        assert_eq!(
+            unusable_jupyter_key(&map(vec![
+                ("kernel", s("python3")),
+                ("kernelspec", TsMetadataValue::Map(HashMap::new())),
+            ])),
+            None
         );
     }
 
     #[test]
-    fn test_extract_kernel_nested_map() {
-        let jupyter_config = map_config(vec![("kernel", string_config("julia-1.9"))]);
-        let meta = map_config(vec![("jupyter", jupyter_config)]);
+    fn test_kernel_from_ts_metadata_non_string() {
         assert_eq!(
-            extract_kernel_from_metadata(&meta),
-            Some("julia-1.9".to_string())
+            kernel_from_ts_metadata(&ts_meta(TsMetadataValue::Number(3.0))),
+            None
         );
-    }
-
-    #[test]
-    fn test_extract_kernel_not_present() {
-        let meta = map_config(vec![("title", string_config("My Document"))]);
-        assert_eq!(extract_kernel_from_metadata(&meta), None);
+        assert_eq!(
+            kernel_from_ts_metadata(&ts_meta(TsMetadataValue::Bool(true))),
+            None
+        );
+        assert_eq!(
+            kernel_from_ts_metadata(&ts_meta(TsMetadataValue::Null)),
+            None
+        );
     }
 
     #[test]

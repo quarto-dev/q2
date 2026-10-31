@@ -7,8 +7,9 @@ status: draft
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md) (EXR-6).
 **Depends on:** [EXR-5](2026-10-28-exr-05-jupyter-records-shadow.md) (a verified
-`present(record) == live` baseline), [EXR-1](2026-10-28-exr-01-presenter-extraction.md),
-and [EXR-4](2026-10-28-exr-04-record-format.md) (the record types, the builder and the
+`present(record) == live` baseline: Phase 3 of EXR-5, so all of EXR-5, not only its Phase 2 gate), [EXR-1](2026-10-28-exr-01-presenter-extraction.md),
+[EXR-1b](2026-10-28-exr-01b-replay-engine-move.md) (the replay engine at its final path, since this plan
+turns it into a thin adapter), and [EXR-4](2026-10-28-exr-04-record-format.md) (the record types, the builder and the
 reader). Both EXR-4 and EXR-5 are hard dependencies: the flip needs EXR-5\'s `record`
 field and coalescing and EXR-4\'s `RecordBuilder` and ids.
 **Blocks:** [EXR-17](2026-10-28-exr-17-legacy-removal.md). Soft prerequisite of
@@ -62,7 +63,7 @@ Verified 2026-10-28 on `feature/execution-records-epic` (main `2ee0bd966`).
   `IpynbReplayEngine` directly in `EngineExecutionStage`
   (`stage/stages/engine_execution.rs:349-440`), and the push compiles out on
   WASM because `engine::jupyter` is native-only (bd-9zmpzw3w; EXR-1 moves the
-  presenter and the replay engine out of that gate).
+  presenter and EXR-1b the replay engine out of that gate).
 - **`ReplayEngine` replays an `ExecuteResult`.** `crates/quarto-core/src/engine/replay.rs`
   compares the QMD handed to `execute()` byte for byte with `engine_capture.input_qmd`,
   hard-fails on any difference, and otherwise returns the recorded `ExecuteResult`

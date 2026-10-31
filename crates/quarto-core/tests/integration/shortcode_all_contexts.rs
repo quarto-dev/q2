@@ -26,7 +26,7 @@
 //! building the AST directly): `TableBody.head` rows (q2 rejects grid
 //! tables, Q-2-39), `CaptionBlock`, `BlockMetadata`, attr values on
 //! `Row` / `Cell`, and indented multi-paragraph footnote definitions
-//! (indented text is a code block in q2, Q-2-35).
+//! (indented text is a code block in q2, Q-2-59).
 
 use std::sync::Arc;
 

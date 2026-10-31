@@ -6,12 +6,20 @@ status: draft
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
-**Depends on:** the epic's decision record; EXR-2 (units and their order).
+**Depends on:** the epic's decision record; EXR-2 Phase 3 (units, their typed id slot, the scanner and its fixtures; EXR-2 Phases 4 and 5 are not needed).
 Soft: EXR-1 (it reuses the nbformat reader `stored_result_for_cell`, which EXR-1
 moves; the record type does not otherwise need the presenter).
-**Blocks:** EXR-5, EXR-7, EXR-11, EXR-13, EXR-16. Per the dependency table in the epic, it also blocks EXR-6, EXR-8, EXR-9, EXR-12, EXR-14, EXR-15.
+**Blocks:** EXR-5 and EXR-7 (from Phase 4), EXR-11 and EXR-13a (from Phase 5), EXR-16 (from Phase 5). Per the dependency table in the epic, it also blocks EXR-6, EXR-8, EXR-9, EXR-12, EXR-13b, EXR-14, EXR-15.
 **Lane:** B (`workspace-5`); run it under the epic\'s "Running the plans in four lanes" section.
 **Estimated sessions:** 3-4 (hash vectors and the size measurement are the long poles).
+
+**Merge gates (2026-10-31, Gordon).** Merge into the integration branch at the end of Phase 4
+(types, hashes, ids, builder, writer) with `status: in-progress`: EXR-5 and EXR-7 need Phases 0
+to 4. Merge again at the end of Phase 5 (reader, `place`, Positron import): the reader half of
+EXR-13, EXR-14, EXR-16, 9C and 11C need it. Phase 6 (the freeze checklist) gates nothing and
+comes last, with `status: complete`. Start when EXR-2 Phase 3 is ticked on the integration
+branch. Phase 0 still comes first in order; its first task (the label-line hash mechanism)
+is on EXR-5\'s path, and the size measurement may slip behind Phase 1 if it blocks.
 
 > **For implementers:** TDD. This plan is a library plus one trait method
 > (`ExecutionEngine::hash_definition`, with its Jupyter and knitr overrides) and the id
@@ -203,8 +211,7 @@ copy (it is an md5 of the whole LF-normalized input file,
   document order, owned or not (EXR-2 returns every braced cell, and each engine\'s view
   marks the ones it owns; raw `{=format}` blocks are excluded, as in Positron\'s
   `RAW_START_REGEX`). The span counter runs over the spans the scanner claims (epic
-  decision 41: prose, unbraced fences and the document\'s own front matter; never braced
-  fences or HTML comments), in document order, so a span in the document\'s own front
+  decision 41: prose and the document\'s own front matter; never any fence or HTML comment), in document order, so a span in the document\'s own front
   matter, which comes first, takes the lowest numbers, while a span that arrives through
   project or `_metadata.yml` metadata is not claimed and takes none. A front-matter span
   is recorded like any other span, with `quarto_location: metadata`, and is never

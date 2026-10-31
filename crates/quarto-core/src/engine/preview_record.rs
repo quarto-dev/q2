@@ -242,7 +242,7 @@ pub async fn compute_input_qmd(
     // cache key in `cache.rs`) both want masked bytes; only
     // `write_review_file` (`quarto-hub-provider/src/execute.rs`) unmasks,
     // and it does so itself after calling this function.
-    crate::engine::nested_cell_mask::mask(&mut doc_ast.ast);
+    crate::engine::nested_cell_mask::mask_document(&mut doc_ast.ast);
 
     let mut buf = Vec::new();
     pampa::writers::qmd::write(&doc_ast.ast, &mut buf).map_err(|diagnostics| {
@@ -600,6 +600,52 @@ mod tests {
             "compute_input_qmd must yield the same (masked) bytes the engine \
              receives, even for docs with a display block"
         );
+    }
+
+    /// EXR-2 decision 11: the stage masks spans in front-matter values the
+    /// document does not own (here a `_quarto.yml` value), so
+    /// `compute_input_qmd` must too, or the staleness compare and the cache key
+    /// would see different bytes than the engine does.
+    #[tokio::test]
+    async fn compute_input_qmd_masks_foreign_front_matter_spans() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        std::fs::write(
+            dir.path().join("_quarto.yml"),
+            "project:\n  type: default\nsubtitle: \"proj `{python} 2`\"\n",
+        )
+        .unwrap();
+        let path = dir.path().join("doc.qmd");
+        std::fs::write(
+            &path,
+            "---\nengine: test-passthrough\ntitle: \"own `{python} 1`\"\n---\n\n```{test-passthrough}\nSENTINEL\n```\n",
+        )
+        .unwrap();
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let project = ProjectContext::discover(dir.path(), runtime.as_ref()).expect("discover");
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(PassthroughTestEngine));
+        let captures = record_capture(&path, &project, runtime.clone(), Some(Arc::new(registry)))
+            .await
+            .expect("record_capture");
+        let capture = captures.first().expect("capture present");
+
+        let computed = String::from_utf8(
+            compute_input_qmd(&path, &project, runtime)
+                .await
+                .expect("compute_input_qmd"),
+        )
+        .unwrap();
+
+        assert!(
+            computed.contains("`q2-nested-executable {python} 2`"),
+            "the project's span must be masked:\n{computed}"
+        );
+        assert!(
+            computed.contains("own `{python} 1`"),
+            "the document's own span must not be:\n{computed}"
+        );
+        assert_eq!(computed, capture.input_qmd);
     }
 
     #[tokio::test]

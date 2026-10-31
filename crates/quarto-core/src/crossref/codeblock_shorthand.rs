@@ -644,7 +644,7 @@ pub(crate) fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String 
 /// block-span fallback. It is unreachable from the qmd parser: a fenced
 /// block with a non-empty body always contains a newline, and qmd does
 /// not produce CommonMark 4-space indented code blocks at all (the
-/// scanner raises Q-2-35 instead —
+/// scanner raises Q-2-59 instead —
 /// `tree-sitter-qmd/tree-sitter-markdown/grammar.js:1210-1220`).
 ///
 /// Falls back to the block's span when the body is not a contiguous

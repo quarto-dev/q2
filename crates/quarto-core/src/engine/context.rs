@@ -212,6 +212,15 @@ pub struct ExecutionContext {
     /// mutates its own environment; executed code sees these values
     /// only because spawn sites apply them with `Command::env`.
     pub project_env: Vec<(String, String)>,
+
+    /// The document's execution units from the one shared scan
+    /// (`engine::units::scan_units`), run by `EngineExecutionStage` before any
+    /// engine. The list is shared: every engine receives the same one and
+    /// relocates it into the text it is given (`units::locate_units`) and
+    /// applies its own ownership rule (`units::view_for_engine`). Empty when
+    /// no stage ran (an engine driven directly), in which case the engine
+    /// scans its own text (`units::units_for_engine`).
+    pub units: Vec<crate::engine::units::Unit>,
 }
 
 impl ExecutionContext {
@@ -249,7 +258,14 @@ impl ExecutionContext {
             // document metadata (P1.1b).
             metadata: HashMap::new(),
             project_env: Vec::new(),
+            units: Vec::new(),
         }
+    }
+
+    /// Set the shared execution-unit list (see [`ExecutionContext::units`]).
+    pub fn with_units(mut self, units: Vec<crate::engine::units::Unit>) -> Self {
+        self.units = units;
+        self
     }
 
     /// Set the project environment pairs passed to engine

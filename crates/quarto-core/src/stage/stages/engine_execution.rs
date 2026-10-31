@@ -33,7 +33,8 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use std::time::Duration;
 
 use crate::engine::{
-    DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine, resolve_engines,
+    DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine,
+    resolve_engines_for_document,
 };
 use crate::format::FormatIdentifier;
 use crate::stage::{
@@ -264,11 +265,12 @@ impl PipelineStage for EngineExecutionStage {
         // exactly that engine. Registry comes from ctx.registry (threaded from
         // project.registry in Task 8; may be overridden via
         // RenderContext.engine_registry_override).
-        let resolution = resolve_engines(
+        let resolution = resolve_engines_for_document(
             &doc_ast.ast.meta,
             &doc_ast.ast,
             &ctx.registry,
             ctx.claimed_engine_name.as_deref(),
+            Some(crate::engine::DOCUMENT_OWN_FILE_ID),
         );
         ctx.engine_resolution = Some(resolution.clone());
 
@@ -314,9 +316,11 @@ impl PipelineStage for EngineExecutionStage {
         //
         // Declared, not resolved, and the distinction is load-bearing:
         // `resolve_engines` above derives its sequence from the languages
-        // actually present in the document, so a `.md` file with
-        // `engine: jupyter` but no code cells resolves to an *empty*
-        // sequence. Q-2-40 is about the spec the author wrote being
+        // actually present in the document, so a `.md` file whose engine
+        // is declared only in a project layer (or is not registered)
+        // resolves to an *empty* sequence, and even a document-declared
+        // engine with no cells resolves to it only through the own-file
+        // rule (JOL-2a). Q-2-40 is about the spec the author wrote being
         // ignored, so it reads the declared engines instead — covering
         // both `engine:` and the top-level shorthand (`jupyter: …`), which
         // this branch resolves against registry names rather than main's
@@ -504,6 +508,13 @@ impl PipelineStage for EngineExecutionStage {
         // before `to_run.into_iter()` moves the vec).
         let multi_engine = to_run.len() > 1;
 
+        // EXR-2 Phase 4: the one scan. It runs over the text the first engine
+        // receives, before any engine runs, and every engine gets the same
+        // list. An engine relocates it into its own text
+        // (`units::locate_units`), so a later engine keeps the document-wide
+        // `index`/`span_index` even after an earlier engine's cells are gone.
+        let mut shared_units: Option<Vec<crate::engine::units::Unit>> = None;
+
         for (run_index, (engine, engine_config)) in to_run.into_iter().enumerate() {
             // nested-cell-masking (spec § Approach): mask executable-fence
             // openers nested inside markdown-displaying blocks before this
@@ -515,7 +526,10 @@ impl PipelineStage for EngineExecutionStage {
             // (e.g. spliced-in preview results), so masking once before the
             // loop would leave it unprotected.
             let mut masked_ast = ast.clone();
-            crate::engine::nested_cell_mask::mask(&mut masked_ast);
+            // Also masks spans in front-matter values the document does not
+            // own (EXR-2 decision 11): only the document's own front matter
+            // is scanned for spans, the project's values stay literal.
+            crate::engine::nested_cell_mask::mask_document(&mut masked_ast);
 
             // EXR-10: the stage serializes the canonical AST (the crossref pass's
             // consumed `label:` options live on wrapper Divs) and records that as
@@ -586,6 +600,11 @@ impl PipelineStage for EngineExecutionStage {
             // P2-13: loud "owned-but-unrunnable" gate in partition_cells
             // fires only in a multi-engine sequence (|sequence| > 1).
             .with_multi_engine(multi_engine)
+            .with_units(
+                shared_units
+                    .get_or_insert_with(|| crate::engine::units::scan_units(&qmd))
+                    .clone(),
+            )
             .with_metadata(document_metadata.clone())
             .with_project_env({
                 let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
@@ -1969,6 +1988,192 @@ mod tests {
         );
     }
 
+    // ── Cell-less pages with a declared engine (JOL-2a) ─────────────────
+    //
+    // Q1 reads the engine from the document's own front matter. A page with
+    // no cells that declares one therefore reaches the engine stage; a
+    // declaration that lives only in a project layer does not.
+
+    /// Stub engine: claims nothing, counts how often it executes, and
+    /// returns its input unchanged.
+    struct CountingEngine {
+        name: &'static str,
+        available: bool,
+        runs: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl CountingEngine {
+        fn arc(
+            name: &'static str,
+            available: bool,
+        ) -> (Arc<Self>, Arc<std::sync::atomic::AtomicUsize>) {
+            let runs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let engine = Arc::new(Self {
+                name,
+                available,
+                runs: runs.clone(),
+            });
+            (engine, runs)
+        }
+    }
+
+    impl crate::engine::ExecutionEngine for CountingEngine {
+        fn name(&self) -> &str {
+            self.name
+        }
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            self.runs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(crate::engine::ExecuteResult::new(input))
+        }
+        fn is_available(&self) -> bool {
+            self.available
+        }
+        fn claims_language(
+            &self,
+            _language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            crate::engine::LanguageClaim::None
+        }
+    }
+
+    fn context_with_engines(engines: Vec<Arc<dyn crate::engine::ExecutionEngine>>) -> StageContext {
+        let mut registry = EngineRegistry::empty();
+        registry.register(Arc::new(crate::engine::MarkdownEngine::new()));
+        for e in engines {
+            registry.register(e);
+        }
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        ctx
+    }
+
+    /// Case 1: the document's own front matter declares an engine whose
+    /// runtime is missing (R absent for `engine: knitr`) and the page has no
+    /// cells. Hard error, as in Q1.
+    #[tokio::test]
+    async fn cell_less_declared_engine_with_missing_runtime_is_a_hard_error() {
+        let (engine, runs) = CountingEngine::arc("knitr", false);
+        let mut ctx = context_with_engines(vec![engine]);
+        let doc_ast = parse_qmd_to_ast(
+            b"---\nengine: knitr\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        let err = EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("a declared engine with no runtime must fail the render");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("knitr") && msg.contains("not available"),
+            "unexpected error: {msg}"
+        );
+        assert_eq!(runs.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// Case 2: the declared engine is not registered at all (Jupyter in a
+    /// WASM build). The plan expected the "not available in this build"
+    /// warning, but `explicitly_declared_engines` drops engines the registry
+    /// lacks, so the engine never reaches the stage's fallback and the page
+    /// renders silently, as it did before JOL-2a. Pinned as found; whether
+    /// the hub should warn is Gordon's call.
+    #[tokio::test]
+    async fn cell_less_declared_engine_not_in_build_is_silent() {
+        let mut ctx = context_with_engines(vec![]);
+        let doc_ast = parse_qmd_to_ast(
+            b"---\njupyter: python3\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect("an engine missing from the build does not fail the render");
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    /// Case 3: a plain page in a project whose `_quarto.yml` declares an
+    /// engine runs none (Q1 ignores a project-level declaration).
+    #[tokio::test]
+    async fn cell_less_page_with_project_declared_engine_runs_none() {
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        use quarto_source_map::{FileId, SourceInfo};
+
+        let (engine, runs) = CountingEngine::arc("knitr", false);
+        let mut ctx = context_with_engines(vec![engine]);
+        let mut doc_ast = parse_qmd_to_ast(
+            b"---\ntitle: Test\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+        // The declaration arrives from a project layer: its source roots at
+        // a hash-based file id, not the document's own `FileId(0)`.
+        let foreign = SourceInfo::original(FileId(0x1234_5678), 0, 1);
+        let mut entries = doc_ast.ast.meta.as_map_entries().unwrap().to_vec();
+        entries.push(ConfigMapEntry {
+            key: "engine".to_string(),
+            key_source: foreign.clone(),
+            value: quarto_pandoc_types::ConfigValue::new_string("knitr", foreign.clone()),
+        });
+        doc_ast.ast.meta = quarto_pandoc_types::ConfigValue::new_map(entries, foreign);
+
+        EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect("a project-level declaration must not start an engine");
+        assert_eq!(runs.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    /// Case 4, pinning an accepted quirk (Gordon, 2026-10-31): project
+    /// `engine: [knitr]` merged with document `engine: [jupyter]` yields one
+    /// array rooted at the document's file id, so the own-file rule fires
+    /// and the project's engine starts on a cell-less page. With R missing
+    /// the render fails on knitr. A later change must be deliberate.
+    #[tokio::test]
+    async fn cell_less_page_with_merged_project_and_document_engines_runs_both() {
+        let (knitr, knitr_runs) = CountingEngine::arc("knitr", false);
+        let (jupyter, _) = CountingEngine::arc("jupyter", true);
+        let mut ctx = context_with_engines(vec![knitr, jupyter]);
+        // The merged array, as the pipeline hands it to the stage.
+        let doc_ast = parse_qmd_to_ast(
+            b"---\nengine: [knitr, jupyter]\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        let err = EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("the project's knitr starts and fails without R");
+        assert!(format!("{err}").contains("knitr"), "{err}");
+        assert_eq!(knitr_runs.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// With the runtime present, a declared engine on a cell-less page runs
+    /// exactly once (the page still goes through the engine), without
+    /// diagnostics.
+    #[tokio::test]
+    async fn cell_less_declared_engine_with_runtime_runs_once() {
+        let (engine, runs) = CountingEngine::arc("jupyter", true);
+        let mut ctx = context_with_engines(vec![engine]);
+        let doc_ast = parse_qmd_to_ast(
+            b"---\njupyter: python3\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect("render succeeds");
+        assert_eq!(runs.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
     #[test]
     fn test_engine_fallback_with_unavailable_engine() {
         let stage = EngineExecutionStage::new();
@@ -2420,6 +2625,134 @@ mod tests {
             !second_input.contains("```{r}"),
             "the raw `{{r}}` opener must not survive unmasked into \
              fixture-b's input; fixture-b received:\n{second_input}"
+        );
+    }
+
+    /// EXR-2 decision 11: a span in a front-matter value whose provenance is
+    /// not the document's own (here a value stamped with another file's id,
+    /// standing in for `_quarto.yml`) reaches the engine masked, and is
+    /// restored in the output; the document's own span is not masked.
+    #[tokio::test]
+    async fn exr2_p2_engine_input_masks_only_foreign_front_matter_spans() {
+        use crate::engine::FixtureEngine;
+
+        let fixture = FixtureEngine::with_results("fixture-a", vec!["done".to_string()]);
+        let received = fixture.received_inputs();
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(fixture));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        let content = b"---\nengine: fixture-a\ntitle: \"own `{python} 1`\"\nsubtitle: \"proj `{python} 2`\"\n---\n\n```{fixture-a}\nseed\n```\n";
+        let mut doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        doc_ast
+            .ast
+            .meta
+            .get_mut("subtitle")
+            .expect("subtitle")
+            .source_info =
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(777), 0, 1);
+
+        stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+
+        let received = received.lock().unwrap();
+        let input = &received[0];
+        assert!(
+            input.contains("own `{python} 1`"),
+            "own span must stay unmasked:\n{input}"
+        );
+        assert!(
+            input.contains("proj `q2-nested-executable {python} 2`"),
+            "foreign span must be masked:\n{input}"
+        );
+    }
+
+    /// EXR-2 Phase 4: the stage scans once, before any engine runs, and gives
+    /// every engine the same shared list. The second engine's located list
+    /// keeps the document-wide cell index (the first engine's fence is gone
+    /// from its text; nothing is renumbered), and a unit's offsets are valid
+    /// in the text it received.
+    #[tokio::test]
+    async fn exr2_p4_stage_scans_once_and_second_engine_keeps_document_wide_indices() {
+        use crate::engine::FixtureEngine;
+        use crate::engine::units::{Unit, line_at};
+
+        let a = FixtureEngine::with_results("fixture-a", vec!["A OUTPUT".to_string()]);
+        let b = FixtureEngine::with_results("fixture-b", vec!["B OUTPUT".to_string()]);
+        let (a_units, b_units, b_inputs) =
+            (a.received_units(), b.received_units(), b.received_inputs());
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(a));
+        registry.register(Arc::new(b));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\nSpan `{python} 1` here.\n\n```{fixture-a}\nseed\n```\n\nMiddle.\n\n```{fixture-b}\nseed-b\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+
+        let a_calls = a_units.lock().unwrap();
+        let b_calls = b_units.lock().unwrap();
+        let b_input = b_inputs.lock().unwrap()[0].clone();
+        assert_eq!((a_calls.len(), b_calls.len()), (1, 1));
+
+        // One scan, shared: both engines were handed the identical list, and
+        // it is the document-wide scan of the first engine's text.
+        assert_eq!(a_calls[0].0, b_calls[0].0, "same shared list");
+        let cell_indices = |units: &[Unit]| -> Vec<(String, usize)> {
+            units
+                .iter()
+                .filter_map(|u| match u {
+                    Unit::Cell(c) => Some((c.lang.clone(), c.index)),
+                    Unit::Inline(_) => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            cell_indices(&a_calls[0].0),
+            [("fixture-a".to_string(), 0), ("fixture-b".to_string(), 1)]
+        );
+
+        // The second engine's located list: a's cell is gone, b keeps index 1,
+        // and the span keeps span_index 0.
+        assert_eq!(
+            cell_indices(&b_calls[0].1),
+            [("fixture-b".to_string(), 1)],
+            "b's list in the text it received: {:?}",
+            b_calls[0].1
+        );
+        let b_cell = b_calls[0]
+            .1
+            .iter()
+            .find_map(|u| match u {
+                Unit::Cell(c) => Some(c),
+                Unit::Inline(_) => None,
+            })
+            .unwrap();
+        assert_eq!(
+            &b_input[b_cell.start..b_cell.start + 3],
+            "```",
+            "offsets are valid in the text b received:\n{b_input}"
+        );
+        assert_eq!(
+            b_input.lines().nth(line_at(&b_input, b_cell.start) - 1),
+            Some("```{fixture-b}")
+        );
+        assert!(
+            b_calls[0]
+                .1
+                .iter()
+                .any(|u| matches!(u, Unit::Inline(i) if i.span_index == 0 && i.lang == "python"))
         );
     }
 

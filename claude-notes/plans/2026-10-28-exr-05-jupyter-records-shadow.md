@@ -10,7 +10,7 @@ status: draft
 presenter), [EXR-3](2026-10-28-exr-03-jupyter-iee.md) (spans in the unit loop, and the
 fake kernel these tests reuse; the `Unit` loop and the `kernel_for(unit)` seam are
 [EXR-2](2026-10-28-exr-02-unit-scanner.md)\'s), [EXR-4](2026-10-28-exr-04-record-format.md)
-(the record type and builder). Soft: [JOL-2b](2026-10-28-jol-2b-ownership-gate.md)
+(Phases 0 to 4: the record type, builder, ids and writer; Phases 5 and 6 are not needed). Soft: [JOL-2b](2026-10-28-jol-2b-ownership-gate.md)
 (per-cell kernel metadata is recorded whatever kernel is chosen).
 **Blocks:** [EXR-7](2026-10-28-exr-07-engine-wire.md) (it introduces
 `ExecuteResult.record`, `want_record` and the coalescing hook that EXR-7 sets and
@@ -18,6 +18,13 @@ calls), [EXR-6](2026-10-28-exr-06-jupyter-flip.md) (the flip),
 [EXR-13](2026-10-28-exr-13-hub-wire.md) (the hub needs something to carry). Per the dependency table in the epic, it also blocks EXR-15.
 **Lane:** A (`workspace-4`); run it under the epic\'s "Running the plans in four lanes" section.
 **Estimated sessions:** 3-4.
+
+**Merge gate (2026-10-31, Gordon).** Merge into the integration branch at the end of Phase 2
+(the `record` field and `want_record`, unit ids and author texts in the stage, coalescing, the
+"Record handoff to the capture writers" task, the file write) with `status: in-progress`, then
+continue with Phases 3 and 4 on the same branch. EXR-7\'s mapping half, the writer half of
+EXR-13, EXR-15, 9C and the Julia B2 need only Phase 2; EXR-6 needs all of this plan, because
+Phase 3 is its baseline.
 
 ## Goal
 

@@ -4,8 +4,9 @@ date: 2026-10-17
 description: 'Outline of an epic that replaces the Jupyter engine''s hard-coded language lists with resolver-assigned ownership (Plan 4d''s owned_languages), Q1-style kernelspec lookup by language, and multiple kernels per document.'
 ---
 
-**Status:** outline only. It gets further review and is then split into per-phase
-plans. Not started.
+**Status:** split into per-phase plans (JOL-1 done and merged; JOL-2a in progress on
+`exr/JOL-1`; JOL-2b, JOL-4, JOL-5 not started; JOL-3 deferred). This file is the background;
+the per-phase plans and the 2026-10-31 review notes in JOL-2a and JOL-2b win on conflicts.
 **Part of:** [the engine-execution-records epic](2026-10-28-execution-records-epic.md)
 (branch `feature/execution-records-epic`). This epic stays separately reviewable but
 **executes as part of that one**: its phases are plans in that epic's DAG
@@ -81,7 +82,9 @@ Other facts the epic builds on:
    `jupyter: {python: python3, ggsql: ggsql}` overrides per language.
 5. **Owned language with no matching kernelspec:** a loud error naming the
    language and saying how to install or pin a kernel. Not a warning, not a
-   passthrough (design §10).
+   passthrough (design §10). SUPERSEDED (2026-10-29, 2026-10-31): JOL-2b makes it a warning in
+   single-engine documents (once per document, `eval: false` exempt) and an error in
+   multi-engine ones.
 6. **Kernels are isolated sessions, with an ordering guarantee:** cells run
    strictly in document order across kernels (so a file written by one cell can
    be read by the next); nothing else is shared between kernels.

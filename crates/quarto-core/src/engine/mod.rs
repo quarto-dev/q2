@@ -55,6 +55,7 @@
 
 pub mod capture_files;
 pub mod capture_splice;
+pub mod cell_lang;
 pub mod content_processors;
 mod context;
 mod detection;
@@ -62,12 +63,14 @@ pub mod diagnostics;
 mod error;
 mod markdown;
 pub mod nested_cell_mask;
+pub(crate) mod patterns;
 pub mod preview_record;
 mod registry;
 mod replay;
 pub mod resolution;
 mod traits;
 pub mod ts_protocol;
+pub mod units;
 
 // Native-only: subprocess management + demux for TS engine extensions.
 #[cfg(not(target_arch = "wasm32"))]
@@ -169,7 +172,10 @@ pub use markdown::MarkdownEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;
 pub(crate) use resolution::explicitly_declared_engines;
-pub use resolution::{EngineResolution, ResolutionNote, resolve_engines, resolve_engines_pass1};
+pub use resolution::{
+    DOCUMENT_OWN_FILE_ID, EngineResolution, ResolutionNote, resolve_engines,
+    resolve_engines_for_document, resolve_engines_pass1, resolve_engines_pass1_for_document,
+};
 pub use traits::ExecutionEngine;
 
 pub mod execution_policy;

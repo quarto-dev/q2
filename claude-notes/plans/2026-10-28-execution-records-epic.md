@@ -224,7 +224,7 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     test vectors live in EXR-4 and spike S1 (EXR-16) runs them against Positron\'s
     own implementation. Execution options are flat cell keys. Plans: EXR-4, EXR-16.
 19. **Wire and count-mismatch contract (EXR-7).** In v1 the wire units carry `id`,
-    `kind`, `language`, `line`, `owned`, `inFence` and `inFrontMatter` (cells also carry `index`), with no byte or UTF-16
+    `kind`, `language`, `line`, `owned` and `inFrontMatter` (cells also carry `index`), with no byte or UTF-16
     offsets (engines use lines; the existing source map counts UTF-8 bytes while the
     TS side slices UTF-16). The extension documentation page waits until the
     contract has been exercised. While a record is additive, a count mismatch
@@ -234,8 +234,8 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     EXR-8, EXR-9.
 20. **Julia details (EXR-8).** QNR cell expansions in record mode produce no
     record and a diagnostic until the Julia flip, which decides how to attach
-    per-expansion options; the `inFence` flag stays, backed by a conformance corpus
-    of tricky spans. Plan: EXR-8.
+    per-expansion options; a conformance corpus of tricky spans compares QNR with the
+    scanner (there is no `inFence` flag: decision 41 never claims a span in a fence). Plan: EXR-8.
 21. **knitr inline ids (EXR-12).** Keep the leading-statement id in both
     spellings, but record through knitr\'s `evaluate.inline` hook and not through a
     wrapper on the `inline` hook, which knitr never calls for a `NULL` or invisible
@@ -275,6 +275,15 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     capitalized `{Python}` runs in q2 and not q1 (bd-7gvl455a). A fence indented four
     spaces (Q-2-35) and knitr-style options in the braces (Q-2-36) are deliberate q2
     parse errors where q1 runs the cell. Plan: EXR-2.
+    **Amended 2026-10-31 (Gordon): two executor misparses are fixed, in EXR-2 Phase 4,
+    not emulated.** The unchanged-executor rule covers cells the executor *chooses* not
+    to run (the three strands above), which are policy questions. It does not cover
+    two plain boundary bugs with no strand: a closing fence followed by a `{python}` line
+    starts a cell because `\s*` between the fence and the brace spans a newline (quirk
+    (b)), and a four-backtick line fails to close a three-backtick cell (quirk (h)). When
+    `execute_qmd` and `IpynbReplayEngine` switch to the scanner in Phase 4 they take
+    the CommonMark behavior for both, with named tests, and `runs_in_legacy_executor`
+    stops encoding them.
 27. **The record carries no presenter inputs (EXR-5, EXR-6).** The execute scope, the
     document source and the output format are pipeline context at present time, so a
     record stays format-neutral and a change to `echo` or the output format does not
@@ -349,12 +358,14 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     engine\'s `HashDefinition`.
     EXR-14\'s splice hashes the same range, with a Jupyter labeled-cell test beside the
     knitr one. Plans: EXR-4, EXR-5, EXR-14.
-37. **EXR-1 Phase 4 splits off and waits (EXR-1).** The `IpynbReplayEngine` move is a
-    trailing EXR-1 task gated on EXR-2 Phase 4, because `stored.rs` imports from the
-    native-only `text_execute.rs` what EXR-2 Phase 4 replaces with `scan_units`. A phase
-    gate, not a plan-level edge: EXR-1 Phase 3 lands before EXR-2 Phases 1, 4 and 5
-    (same hunks of `text_execute.rs` and `stored.rs`); EXR-2 Phases 0, 2 and 3 may run in
-    parallel. The dependency table is unchanged. Plans: EXR-1, EXR-2.
+37. **The replay-engine move is its own plan, EXR-1b (EXR-1, EXR-2).** The
+    `IpynbReplayEngine` move was EXR-1\'s trailing phase, gated on EXR-2 Phase 4, because
+    `stored.rs` imports from the native-only `text_execute.rs` what EXR-2 Phase 4 replaces with
+    `scan_units`. That left an edge in each direction between EXR-1 and EXR-2, so it is now
+    EXR-1b, which depends on EXR-2 (start gate: Phase 4). EXR-1 Phase 3 still lands before
+    EXR-2 Phases 1, 4 and 5 (same hunks of `text_execute.rs` and `stored.rs`); that is a phase
+    gate, not a plan-level edge, and it was met on 2026-10-31. EXR-2 Phases 0, 2 and 3 may run in
+    parallel. EXR-6 depends on EXR-1b. Plans: EXR-1, EXR-1b, EXR-2, EXR-6.
 38. **Units are scanned once, in the stage, with ids filled by an EXR-4 function
     (EXR-2, EXR-4, EXR-7).** The stage scans on the text entering the engine stage,
     before any engine runs, fills each id via the EXR-4 id function and passes the same
@@ -380,7 +391,9 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     EXR-2.
 
 41. **Where spans are claimed (EXR-2, EXR-3; Gordon, 2026-10-31).** Spans are found in
-    prose and in unbraced fences that name a language only (a bare or `markdown` fence is masked, so its spans stay displayed). A span inside a braced fence is not evaluated: q1
+    prose and in the document\'s own front matter only; a span inside any fenced code block is never
+    claimed (revised 2026-10-31; the nested-cell mask covers every non-cell code block, so a span
+    shown in a ` ```r ` or ` ```text ` fence stays displayed). A span inside a braced fence is not evaluated: q1
     does evaluate one, by accident of its notebook conversion, and q2 deliberately does not.
     A span inside an HTML comment is not evaluated (q1 does; the scanner would otherwise
     disagree with an AST walker, Risk 1). A span in the document\'s own front matter is
@@ -437,6 +450,7 @@ and JOL-4 is Plan 4d phases 4d-C/D/E; they need no new file.
 | JOL-4 | [Plan 4d-C/D/E: TS wire](2026-07-06-plan4d-owned-languages.md) | |
 | JOL-5 | [Docs and end-to-end for owned languages](2026-10-28-jol-5-docs-e2e.md) | |
 | EXR-1 | [Presenter extraction](2026-10-28-exr-01-presenter-extraction.md) | Rust; WASM-clean; golden parity |
+| EXR-1b | [Replay engine out of the native-only module](2026-10-28-exr-01b-replay-engine-move.md) | split from EXR-1; WASM stored-notebook replay; first quarto-core WASM tests |
 | EXR-2 | [Shared unit scanner](2026-10-28-exr-02-unit-scanner.md) | `Unit`, `view_for_engine`, `locate_units`, shared token and span patterns; moves `engine_cell_lang` |
 | EXR-3 | [Jupyter execution of inline expressions](2026-10-28-exr-03-jupyter-iee.md) | closes bd-u996g8g2 |
 | EXR-4 | [The record format](2026-10-28-exr-04-record-format.md) | library; freeze groundwork |
@@ -448,7 +462,7 @@ and JOL-4 is Plan 4d phases 4d-C/D/E; they need no new file.
 | EXR-10 | [knitr K0: per-cell options map](2026-10-28-exr-10-knitr-k0-options-map.md) | existing bd-n1vmlalw |
 | EXR-11 | [knitr K1: chunk records](2026-10-28-exr-11-knitr-k1-chunk-records.md) | |
 | EXR-12 | [knitr K2: inline expressions](2026-10-28-exr-12-knitr-k2-inline.md) | |
-| EXR-13 | [Hub and WASM: reader, MIME, writer](2026-10-28-exr-13-hub-wire.md) | readers before writers; the `Legacy` arm seam |
+| EXR-13 | [Hub and WASM: reader, MIME, writer](2026-10-28-exr-13-hub-wire.md) | two halves in one file: 13a (reader, MIME, classify) and 13b (writer, gate); readers before writers; the `Legacy` arm seam |
 | EXR-14 | [Preview: id-based splice](2026-10-28-exr-14-preview-splice.md) | per-unit staleness, spans, masking |
 | EXR-15 | [Hub integration](2026-10-28-exr-15-hub-integration.md) | `provide-hub`, admin, guests, bd-cp3em |
 | EXR-16 | [Positron interop](2026-10-28-exr-16-positron-interop.md) | q2-side import and fixtures; spikes S0 to S6 in the Positron fork |
@@ -469,31 +483,61 @@ but its end-to-end checks want it.
 | JOL-4 | JOL-1 | |
 | JOL-5 | JOL-2b, JOL-4, EXR-3 | |
 | EXR-1 | none | |
+| EXR-1b | EXR-1, EXR-2 (Phase 4 only) | |
 | EXR-2 | none | JOL-1 |
-| EXR-3 | EXR-2, JOL-1, JOL-2a | EXR-1 |
-| EXR-4 | EXR-2 | EXR-1 |
-| EXR-5 | EXR-1, EXR-3, EXR-4 | JOL-2b |
-| EXR-6 | EXR-1, EXR-4, EXR-5 | |
-| EXR-7 | EXR-2, EXR-4, EXR-5 | JOL-4 |
-| EXR-8 | EXR-1, EXR-2, EXR-4, EXR-5, EXR-6, EXR-7, JOL-4 | |
-| EXR-9 | EXR-4, EXR-5, EXR-7 | JOL-4 |
+| EXR-3 | EXR-2, JOL-1, JOL-2a (core only: see the note below) | EXR-1 |
+| EXR-4 | EXR-2 (Phase 3) | EXR-1 |
+| EXR-5 | EXR-1, EXR-3, EXR-4 (Phases 0 to 4) | JOL-2b |
+| EXR-6 | EXR-1, EXR-1b, EXR-4, EXR-5 | |
+| EXR-7 | Wire-types half (Phases 0, 1a, 2): EXR-2, EXR-4 (Phase 1). Mapping half (Phase 1b onward): EXR-4 (Phases 0 to 4), EXR-5 (Phase 2) | JOL-4 |
+| EXR-8 | Part A (QNR): EXR-2 (Phase 2, the span rule). Part B: EXR-1, EXR-2, EXR-4, EXR-5 (B2: Phase 2; B4: all), EXR-6, EXR-7, JOL-4 | |
+| EXR-9 | 9A and 9B: EXR-7 (wire-types half). 9C: EXR-4 (Phases 0 to 5), EXR-5 (Phase 2), EXR-7 (Phase 1b) | JOL-4 |
 | EXR-10 | none | |
-| EXR-11 | EXR-2, EXR-4, EXR-7, EXR-10 | |
+| EXR-11 | 11S, 11A, 11B: EXR-10. 11C: EXR-2, EXR-4 (Phases 0 to 5), EXR-7 (Phase 1b) | |
 | EXR-12 | EXR-2, EXR-4, EXR-11 | |
-| EXR-13 | EXR-1, EXR-4, EXR-5 | |
-| EXR-14 | EXR-1, EXR-2, EXR-4, EXR-13 | EXR-6, EXR-10, EXR-12 |
-| EXR-15 | EXR-4, EXR-5, EXR-13, EXR-14 | EXR-11 |
-| EXR-16 | EXR-2, EXR-4 | EXR-3 |
-| EXR-17 | EXR-6, EXR-8, EXR-9, EXR-11, EXR-12, EXR-13, EXR-14, EXR-15 | |
+| EXR-13a | EXR-4 (Phases 0 to 5) | EXR-1, EXR-5 |
+| EXR-13b | EXR-13a, EXR-4, EXR-5 (Phase 2) | |
+| EXR-14 | EXR-1, EXR-2, EXR-4, EXR-13a | EXR-6, EXR-10, EXR-12 |
+| EXR-15 | EXR-4, EXR-5 (Phase 2), EXR-13b, EXR-14 | EXR-11 |
+| EXR-16 | EXR-2, EXR-4 (Phases 0 to 5; the Positron spikes need nothing) | EXR-3 |
+| EXR-17 | EXR-6, EXR-8, EXR-9, EXR-11, EXR-12, EXR-13a, EXR-13b, EXR-14, EXR-15 | |
 | EXR-18 | EXR-3, EXR-6, EXR-8, EXR-9, EXR-12, JOL-5 | every other plan (docs are written as each lands) |
 
 Chains worth seeing at a glance: JOL-1 and JOL-2a lead to JOL-2b, then JOL-5 (JOL-3
 hangs off JOL-2b and EXR-2 but is deferred); EXR-2 and EXR-1 lead to EXR-3 and
-EXR-4, then EXR-5, then EXR-6 and EXR-13, then EXR-14 and EXR-15; EXR-4 and EXR-7
+EXR-4 (and EXR-1b hangs off EXR-2 and joins at EXR-6), then EXR-5, then EXR-6 and EXR-13b (EXR-13a needs only EXR-4, then EXR-14), then EXR-15; EXR-4 and EXR-7
 lead to the Julia, marimo and knitr plans, which all end at EXR-17.
 
 There are no external gates in the graph: the engine forks are ordinary work inside
 EXR-8 and EXR-9, so lane scheduling is unaffected by anyone else\'s release.
+
+Phase gates (re-cut 2026-10-31, Gordon). Most consumers need an early phase of a plan, not
+all of it, so the table names phases where that is true. A phase-qualified entry such as `EXR-4
+(Phases 0 to 4)` is met when those phases are ticked on the integration branch; the plan merges
+there at the end of that phase with `status: in-progress` and continues on the same branch
+(rule 5). Gates, with the phases that follow them:
+
+- EXR-2 merges at the end of Phase 3 (Unit, its id slot, the scanner, conformance fixtures);
+  Phases 4 and 5 follow. EXR-4 starts at this gate. EXR-5 and EXR-7\'s mapping half still
+  need EXR-2 Phase 4 through EXR-3, which depends on all of EXR-2.
+- EXR-4 merges at the end of Phase 4 (types, hashes, ids, builder, writer) and again at the
+  end of Phase 5 (reader, `place`, Positron import); Phase 6 (freeze checklist) gates nothing
+  and comes last. EXR-5 and EXR-7 need Phases 0 to 4. The reader half of EXR-13, EXR-16,
+  9C and 11C need Phase 5.
+- EXR-5 merges at the end of Phase 2 (the `record` field, `want_record`, unit ids and author
+  texts in the stage, coalescing, the record handoff to the capture writers); Phases 3 (shadow
+  equivalence) and 4 follow. EXR-7\'s mapping half, the writer half of EXR-13, EXR-15, 9C and
+  the Julia B2 need Phase 2. EXR-6 needs all of EXR-5, because Phase 3 is its baseline.
+- EXR-7 has a wire-types half (Phases 0, 1a and 2: Rust types, TypeScript mirror, wire parity)
+  and a mapping half (Phase 1b onward). The wire-types half needs only EXR-4 Phase 1; it is
+  what the marimo engine side (9A, 9B) needs. EXR-7 merges at the end of Phase 2 for that
+  gate, and the mapping half follows once EXR-5 Phase 2 has landed.
+- EXR-13 is one file with two halves. 13a (Phases A, B, C: reader, MIME, classify) lands when
+  they are ticked; 13b (Phases W1, W2, D: writer, gate, release sequence) lands when those
+  are ticked. They share one `status:` line, as JOL-1 and JOL-4 do.
+- EXR-8 Part A (QNR) has no q2 dependency beyond the span rule; EXR-9 Phases 9A and 9B and
+  EXR-11 Phases 11S, 11A and 11B can run before the gates above land. The plans say which
+  tasks wait for what.
 
 Sequencing notes:
 
@@ -543,23 +587,30 @@ into it and to edit this epic.
 
 | Lane | Worktree | Queue, in order (a plan starts when its hard dependencies have landed) |
 |---|---|---|
-| A: Jupyter spine | `workspace-4` | EXR-2, EXR-3, EXR-5, EXR-6 |
-| B: ownership and the record | `workspace-5` | JOL-1, JOL-2a, then EXR-4 the moment EXR-2 has landed (it outranks the rest of the queue), JOL-2b, JOL-4, EXR-7 (outranks what follows it once EXR-5 has landed), JOL-5 |
-| C: engines | `workspace-6` | EXR-10, EXR-16 (the Positron spikes need no dependency and fill idle time), EXR-9, EXR-11, EXR-12, EXR-8 |
-| D: readers, preview, docs | `workspace-7` | EXR-1, EXR-13, EXR-14, EXR-15, EXR-18, EXR-17 (only when its trigger holds and Gordon says go) |
+| A: Jupyter spine | `workspace-4` | EXR-2 (merge at the end of Phase 3, then Phases 4 and 5), EXR-3, EXR-5 (merge at the end of Phase 2, then Phases 3 and 4), EXR-6 |
+| B: ownership and the record | `workspace-5` | JOL-1, JOL-2a, then EXR-4 the moment EXR-2 Phase 3 has landed (it outranks the rest of the queue through Phase 5; its Phase 6 can wait), JOL-4 (moved ahead of JOL-2b by Gordon, 2026-10-31: it needs only JOL-1 and blocks EXR-8), JOL-2b, EXR-7 (its wire-types half once EXR-4 Phase 1 has landed, its mapping half once EXR-5 Phase 2 has landed; either half outranks what follows it), JOL-5 |
+| C: engines | `workspace-6` | EXR-10 (done), EXR-11 (Phases 11S, 11A and 11B now; 11C when its gates land), EXR-8 Part A (QNR, no q2 dependency), EXR-16 (the Positron spikes need no dependency and fill idle time), EXR-9 (9A and 9B once EXR-7\'s wire-types half has landed; 9C later), EXR-12, then the rest of EXR-8 |
+| D: readers, preview, docs | `workspace-7` | EXR-1, EXR-1b (when EXR-2 Phase 4 has landed; it does not block the rest of the queue), EXR-13a, EXR-14, EXR-13b, EXR-15, EXR-18, EXR-17 (only when its trigger holds and Gordon says go) |
 
 JOL-1 and JOL-4 live in `2026-07-06-plan4d-owned-languages.md` (Phases 4d-A/B and 4d-C/D/E).
 JOL-3 is deferred and is in no lane. The knitr follow-on epic (workspace-3,
 `feature/knitr-execution-records-epic`) is a separate stream, not a lane: do not touch its
 branch, and leave its sessions to rebase themselves.
 
-The critical path is EXR-2, then EXR-4, then EXR-5, then EXR-6, EXR-7 and EXR-13. Lanes C and
-D have little they can start before EXR-5 lands (EXR-10, EXR-1 and the Positron spikes are the
-early work), so expect idle lanes; an idle lane says so in its handoff and stops (rule 6).
+The critical path is EXR-2 (to Phase 3), then EXR-4 (to Phase 4), then EXR-5 (to Phase 2), then
+EXR-7\'s mapping half and EXR-13b, and EXR-6 after the rest of EXR-5. After the 2026-10-31 re-cut,
+lane C has EXR-11 (S, A, B), EXR-8 Part A and the Positron spikes to do before the gates land,
+and lane D has EXR-13a and EXR-14 once EXR-4 Phase 5 has landed; expect some idle time anyway; an idle lane says so in its handoff and stops (rule 6).
 Session counts in the plan headers are estimates, and the lanes carry roughly 12, 14, 16 and
 17 sessions of work.
 
 **Definitions.**
+- **JOL-2a exception (Gordon, 2026-10-31):** JOL-2a merges to the integration branch with
+  `status: in-progress` once its core is done (resolver rule, `select_kernel`, engine-config
+  source; all done on `exr/JOL-1`). Its unticked tail (SoS recorded run, `cell_kernel` research,
+  cell-less behavior tests, profile-version bump, committed own-file integration test) must not
+  hold EXR-3. For EXR-3 only, JOL-2a counts as landed at that merge; for everything else the
+  rule below applies.
 - A plan has **landed** when its front matter says `status: complete` on the integration
   branch. `status: draft` means not started; `status: in-progress` means the plan has begun but not
   finished: either it merged early for a phase gate, or a sibling plan sharing its file
@@ -567,7 +618,8 @@ Session counts in the plan headers are estimates, and the lanes carry roughly 12
   own phases (4d-A/B for JOL-1, 4d-C/D/E for JOL-4) are ticked on the integration branch.
 - A hard dependency is **met** when the plan it names has landed. A phase gate (for example
   decision 37: EXR-1 Phase 3 before EXR-2 Phases 1, 4 and 5; EXR-2 Phase 4 before EXR-1
-  Phase 5) is met when that phase\'s checkboxes are ticked on the integration branch. Check
+  Phase 5) is met when that phase\'s checkboxes are ticked on the integration branch. A table entry
+  with phases, such as `EXR-4 (Phases 0 to 4)`, is a phase gate of the same kind. Check
   the dependency table in this epic, not memory.
 - The lane is the worktree directory name: if `pwd` ends in `workspace-5`, you are lane B.
 
@@ -617,11 +669,32 @@ Session counts in the plan headers are estimates, and the lanes carry roughly 12
      fast-forward is the lock: if it fails because another lane merged first, rebase again,
      re-run the gates, and retry. Never force, never push, never merge into integration by
      any other means.
+   - If the merged phase is a gate that another plan\'s table row names, **notify the
+     lanes it unblocks**: find each lane\'s agent as in "Reaching other lanes" below and
+     send the plan, the phase, the merge sha and one line on what is now startable. Skip
+     your own lane. A lane you cannot find is not an error; name it in the handoff.
 6. **Stalled or finished.** If nothing in your queue is startable, or the next item needs a
    decision or another lane\'s work, stop. Do not borrow another lane\'s plan, and do not
    start one out of order. Print the handoff naming exactly what you wait on.
 7. **Print the handoff** (below) as the last thing in the session, after the merge of any
    completed plan. Do not write it to a file.
+
+**Reaching other lanes.** Messages are best-effort hints and never replace git: the integration
+branch and the plans\' checkboxes stay the only source of truth, and a lane confirms a gate
+there (rule 2) before it starts, whatever a message says. To message a lane, run `ListAgents`,
+keep the names that match `ipynb-execution-lane-<x>-<N>` for that lane letter, and send to the
+one with the highest N (busy or idle does not matter; messages queue). A session is renamed to
+bump N while it runs, so look the name up at send time and never copy it from an old handoff.
+A bare `ipynb-execution-lane-<x>` counts as N = 0, until that session is renamed. If nothing
+matches, skip the message and say so in the handoff. Uses:
+
+- **Gate notice** (rule 5): the merging lane tells the lanes its table row unblocks.
+- **Corrections:** a lane that finds an error in the table or in another plan\'s gate (for
+  example a task the gate names that sits in a later phase) messages the lane that merged
+  that gate, with the facts and `file:line`. It does not edit the table. If the error blocks
+  it, it also writes a "Decisions for Gordon" item in its handoff.
+- **Restart:** a lane idle on a gate names it in "Waiting on" (plan and phase). Whoever
+  restarts it, Gordon or a gate notice, relies on it re-checking git first.
 
 **Hot files.** These are edited by several plans, so rebases there will conflict: `text_execute.rs`
 and `stored.rs` (EXR-1, EXR-2, JOL-2b), `execute_blocks_inner` and `ExecuteOptions` (EXR-3,
@@ -641,10 +714,11 @@ Plan and phase: <PLAN> <phase>; <n> of <m> items ticked
 Branch: exr/<PLAN> at <sha>; merged to integration: yes (<sha>) | no (<why>)
 Gates run: <crate>: clippy clean, nextest <pass>/<skip>
 Next first item: <the plan\'s next unticked item, quoted>
-Waiting on: <plan or phase, and its lane> | nothing
+Waiting on: <plan and phase, its lane, and the gate to check in git> | nothing
 Decisions for Gordon: <each with lettered options and a recommendation> | none
 Surprises and hot-file notes: <conflicts resolved, facts that differed from the plan>
 Before pushing, recommend: <nextest on the direct dependents of the crates touched>
+Notified: <lanes messaged at a gate merge, and any lane not found> | none
 ```
 
 ## Risks
@@ -733,7 +807,8 @@ Unverified facts that gate work (21):
 6. Whether `ExecutionContext` supplies the scope and target format to
    `ReplayEngine`; that no progress callback reads partial text (EXR-6).
 7. Whether the current cell\'s options reach the splice presenter (EXR-14); whether
-   nothing needs the replay-engine move earlier than EXR-2 Phase 4 (EXR-1); whether
+   nothing needs the replay-engine move earlier than EXR-2 Phase 4 (EXR-1b; checked
+   2026-10-31: EXR-13 and EXR-14 use only the presenter, EXR-6 needs EXR-1b); whether
    the TS scanners in `quarto-api` (`breakQuartoMd`) need to join the scanner
    corpus (reviewer-reported; EXR-2).
 8. Whether threading `handledLanguages` into span evaluation needs more than a

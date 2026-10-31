@@ -105,6 +105,6 @@ Each fixture except `corrupt-docx` (which has no `pandoc.json`) has an `expected
 - **Regenerate** after an intended change: `Q2_UPDATE_IMPORT_EXPECTED=1 cargo nextest run -p
   quarto-core -E 'binary(integration) & test(import_finish)'`, then review the diff.
 - **`writer-bugs-docx` does not re-read.** Its definition list has a two-paragraph definition, which
-  the qmd writer indents four spaces and the reader rejects (Q-2-35). That is the definition-list
+  the qmd writer indents four spaces and the reader rejects (Q-2-59). That is the definition-list
   limit of the epic's I18 correction, left out of P2; `import_read.rs` pins it
   (`KNOWN_UNREREADABLE`) so a writer fix surfaces there.

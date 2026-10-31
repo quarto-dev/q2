@@ -6,7 +6,7 @@ status: draft  # not started
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
-**Depends on:** [EXR-13](2026-10-28-exr-13-hub-wire.md) (payload reaches the pipeline),
+**Depends on:** [EXR-13a](2026-10-28-exr-13-hub-wire.md) (the reader half: payload reaches the pipeline; not the writer half),
 [EXR-2](2026-10-28-exr-02-unit-scanner.md) (unit identity),
 [EXR-4](2026-10-28-exr-04-record-format.md) (hashes, the record type, and `RecordBuilder`
 / `EngineRecord`, which the fixtures use),

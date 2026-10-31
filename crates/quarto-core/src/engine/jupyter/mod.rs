@@ -43,6 +43,7 @@ mod execute;
 mod kernelspec;
 #[cfg(test)]
 mod presenter_goldens;
+pub mod router;
 mod session;
 mod stored;
 mod text_execute;

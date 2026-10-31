@@ -9,7 +9,7 @@ status: draft
 **Depends on:** [EXR-4](2026-10-28-exr-04-record-format.md) (the notebook shape, the
 reader, `RecordBuilder` and the id function), [EXR-2](2026-10-28-exr-02-unit-scanner.md)
 (units and `locate_units`), and [EXR-5](2026-10-28-exr-05-jupyter-records-shadow.md)
-(hard: it introduces `ExecuteResult.record`, `ExecutionContext.want_record` and the
+(hard, for the mapping half only (Phase 1b onward), and only its Phase 2: it introduces `ExecuteResult.record`, `ExecutionContext.want_record` and the
 author texts, fills the unit ids in the stage, and owns the coalescing this plan feeds).
 Soft:
 [JOL-4](2026-07-06-plan4d-owned-languages.md) (Plan 4d-C/D/E: `ownedLanguages`
@@ -18,6 +18,14 @@ field, so the two are not one wire revision, see decisions.
 **Blocks:** [EXR-8](2026-10-28-exr-08-julia.md), [EXR-9](2026-10-28-exr-09-marimo.md). Per the dependency table in the epic, it also blocks EXR-11.
 **Lane:** B (`workspace-5`); run it under the epic\'s "Running the plans in four lanes" section.
 **Estimated sessions:** 3.
+
+**Two halves (2026-10-31, Gordon).** The wire-types half is Phases 0, 1a and 2 (Rust wire types,
+TypeScript mirror, wire parity). It needs only EXR-4 Phase 1 (`HashDefinition`, the notebook
+shape) and EXR-2, and it starts then. The mapping half is Phase 1b onward (`ExecutionContext`
+units, `map_execute_result`, the stage tests, the fixture-engine end to end); it needs EXR-4
+Phases 0 to 4 and EXR-5 Phase 2. Merge at the end of Phase 2 with `status: in-progress`
+(the marimo engine side, 9A and 9B, needs the wire types), then do Phase 1b when EXR-5
+Phase 2 has landed. Phase 0 tests that need the mapping stay red until Phase 1b.
 
 ## Goal
 
@@ -126,7 +134,7 @@ Verified 2026-10-28 on `feature/execution-records-epic` (main `2ee0bd966`).
   EXR-8 sets the Julia case, nested cells that QNR does not run, and EXR-9 applies the
   same rule to marimo).
 - **No offsets in v1** (decided with Gordon, 2026-10-30). A wire unit carries `id`,
-  `index` (cells only), `kind`, `language`, `line`, `owned`, `inFence` and
+  `index` (cells only), `kind`, `language`, `line`, `owned` and
   `inFrontMatter`, and no `start` or `end`. Engines work by line (QuartoNotebookRunner
   chunks carry `file` and `line`), and an offset has no safe unit: the existing source map
   counts UTF-8 bytes while the TS side slices UTF-16 strings (see the risks). An explicit
@@ -151,7 +159,7 @@ Options (core to engine), all optional:
     { "id": "3-1a2b3c4d-unlabeled", "index": 3, "kind": "cell", "language": "julia",
       "line": 12, "owned": true },
     { "id": "1-9f8e7d6c-inline", "kind": "inline", "language": "julia", "line": 20,
-      "owned": true, "inFence": false, "inFrontMatter": false }
+      "owned": true, "inFrontMatter": false }
   ]
 }
 ```
@@ -239,13 +247,15 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
   only) and goes through
   `engine_error_diagnostic` (the Q-18 seam used at `engine_execution.rs:610-614`).
 
-### Phase 1: Rust types and mapping
+### Phase 1a: Rust wire types
 
 - [ ] Add `TsUnit`, `TsRecordInfo` (with `hash_definition: Option<HashDefinition>`, the
   EXR-4 struct, versioned and optional), `units: Option<Vec<TsUnit>>` to
   `TsExecuteOptions`, and `notebook: Option<serde_json::Value>`,
   `record_info: Option<TsRecordInfo>` to `TsExecuteResult`, all `#[serde(default)]`.
   `owned_languages` is JOL-1\'s field (Plan 4d-B); use it, do not add it again.
+### Phase 1b: mapping and stage plumbing (needs EXR-5 Phase 2)
+
 - [ ] Carry `owned_languages` (JOL-1\'s field) and `units` on
   `ExecutionContext` (builder `with_units`; EXR-5 sets the units and fills the ids).
   `build_execute_options` copies the list to the wire, calling EXR-2\'s `view_for_engine`
@@ -269,7 +279,7 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
   `handled_languages` (`ts_protocol.rs:372-393`) is made once, by whichever of the
   three plans lands first; the others check it is there.
 
-### Phase 2: TypeScript host and mirror types
+### Phase 2: TypeScript host and mirror types (wire-types half; may run before Phase 1b)
 
 - [ ] Mirror the new types in `ts-packages/quarto-engine-host-node/src/types.ts`.
 - [ ] In `host.ts`, attach `units` (and `ownedLanguages`, unless JOL-4\'s Plan 4d-C has

@@ -6,7 +6,7 @@ status: draft  # not started; the Positron spikes need no one else's agreement a
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
-**Depends on:** [EXR-4](2026-10-28-exr-04-record-format.md) (schema and hashes),
+**Depends on:** [EXR-4](2026-10-28-exr-04-record-format.md) (schema and hashes; Phases 0 to 5 for the import; the spikes need nothing),
 [EXR-2](2026-10-28-exr-02-unit-scanner.md) (conformance fixtures). Soft:
 [EXR-3](2026-10-28-exr-03-jupyter-iee.md) (the IEE value rule that spike S4 compares).
 **Blocks:** nothing in the epic; it is the compatibility check on EXR-4.

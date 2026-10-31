@@ -33,7 +33,7 @@
 //! four-space-indented display block (no info string)". qmd has **no**
 //! CommonMark indented-code-block production at all — it is a deliberate,
 //! documented, blanket known limitation (`grammar.js` `_indented_code_block_error`
-//! / scanner.c's `INDENTED_CODE_BLOCK_DISALLOWED`, diagnostic Q-2-35),
+//! / scanner.c's `INDENTED_CODE_BLOCK_DISALLOWED`, diagnostic Q-2-59),
 //! verified here to fire regardless of nesting context (top-level and
 //! inside a list item both error; there is no grammar path that accepts
 //! raw 4-space-indented text as a code block). The only way to construct a
@@ -461,7 +461,7 @@ fn t7_whitespace_variant_openers_do_not_execute() {
 //
 // See this file's top-level doc comment for why this uses a bare fenced
 // block with no info string (` ``` `) rather than a literal 4-space-indented
-// block: qmd has no indented-code-block grammar production at all (Q-2-35,
+// block: qmd has no indented-code-block grammar production at all (Q-2-59,
 // a deliberate blanket known limitation, verified to fire both at document
 // top level and inside a list item — there is no context in which raw
 // indentation parses as code). Both shapes produce the identical AST target

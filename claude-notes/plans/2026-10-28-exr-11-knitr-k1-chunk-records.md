@@ -11,7 +11,7 @@ knitr phase K1).
 [EXR-10](2026-10-28-exr-10-knitr-k0-options-map.md) (canonical input and the
 engine-boundary label header edit), [EXR-2](2026-10-28-exr-02-unit-scanner.md)
 (unit ids), [EXR-7](2026-10-28-exr-07-engine-wire.md) (it defines the Rust-side
-optional unit-output field on `ExecuteResult`).
+optional unit-output field on `ExecuteResult`). Phases 11S, 11A and 11B need only EXR-10; see the phase gates below.
 **Blocks:** [EXR-12](2026-10-28-exr-12-knitr-k2-inline.md),
 [EXR-17](2026-10-28-exr-17-legacy-removal.md). It does not block
 [EXR-13](2026-10-28-exr-13-hub-wire.md) (the hub carries any record); it is a soft
@@ -19,6 +19,11 @@ prerequisite of [EXR-15](2026-10-28-exr-15-hub-integration.md), since knitr reco
 appear on the hub once this plan lands.
 **Lane:** C (`workspace-6`); run it under the epic\'s "Running the plans in four lanes" section.
 **Estimated sessions:** 3 (one is the spikes).
+
+**Phase gates (2026-10-31, Gordon).** Phases 11S (spikes), 11A (tests first; the ones that need 11C
+stay red) and 11B (the R side) need only EXR-10 and can start now. Phase 11C (the Rust side)
+needs EXR-2, EXR-4 Phases 0 to 5 (the id function, the builder, `place`) and EXR-7 Phase 1b (units on
+`ExecutionContext`). Phase 11D follows 11C.
 
 > **For implementers:** TDD, task by task; steps use `- [ ]` checkboxes. Tests
 > that need R skip when it is missing, using the helpers in

@@ -1,0 +1,9 @@
+````markdown
+```{python}
+shown = 1
+```
+````
+
+```{python}
+real = 1
+```

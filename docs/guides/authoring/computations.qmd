@@ -224,10 +224,10 @@ prose around it, so a reader can copy the whole line into their own document.
 As with cells, the wrapping fence only needs to be longer than the longest run
 of backticks inside it.
 
-The block has to be a `markdown` block, or a fence carrying no language at
-all. A fence labelled with some other language --- ```` ```r ````, say ---
-displays its text but does not stop an expression inside it from running, so
-reach for `markdown` when what you are showing is Quarto syntax.
+Any fenced code block displays its text, so the same holds for a block with no
+language, or one labelled with another language such as ```` ```r ````. Reach
+for `markdown` when what you are showing is Quarto syntax, because that is the
+label that tells readers (and highlighters) what the block contains.
 
 ::: callout-note
 ## Migrating from Quarto 1

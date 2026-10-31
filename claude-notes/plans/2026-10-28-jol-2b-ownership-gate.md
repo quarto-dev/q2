@@ -84,6 +84,41 @@ Verified in the tree on 2026-10-28 (workspace-1, `origin/main` at `2ee0bd966`) u
 
 From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigated.
 
+**Decided in the 2026-10-31 review (Gordon):**
+
+- **"Explicit kernel versus the ownership gate" (open until now).** All owned cells go to the
+  one kernel, including under `jupyter: sos` (JOL-2a divergence 1). "Runnable" therefore means
+  only that the cell\'s language is owned by Jupyter; it does not mean the language equals the
+  document kernel\'s language. A `{python}` then `{ggsql}` document with no `jupyter:` key
+  still sends ggsql to the Python kernel; that SyntaxError is accepted and the supported route
+  is a multiplexing kernel (SoS) chosen with `jupyter:`. State it in JOL-5.
+- **Aliases: deprecate, then delete.** `py`, `jl`, `rs`, `rb`, `ts`, `js` (and `python3` as a
+  fence name) are not in Q1 and not in Jupyter; they were added by Claude Code in the
+  2026-01-07 commit `2b204533e` (`ts`/`js` the same day in `701651fb5`, for the deno kernel)
+  with no recorded justification. Keep them working for one release with a deprecation warning
+  that names the canonical language, then remove. The `r` to `ir` kernel-name translation is
+  not an alias and stays until lookup by kernelspec language replaces it.
+- **Unrunnable-language warning: once per document, exempting `eval: false` cells.** One
+  diagnostic listing the owned-but-unrunnable languages with the install or pin hint, not one
+  per fence. Cells with `eval: false` are exempt in both the warning and the multi-engine
+  error. This also turns today\'s silent drop of `{sos}` fences into a warning.
+- **The Python failsafe applies only when the document has at least one owned cell.** With no
+  cells `select_kernel` still returns `None` (JOL-2a; EXR-3\'s error depends on it).
+- **Kernelspec source.** Use the augmented list (`runtimelib::list_kernelspecs_with_jupyter_paths`,
+  as the local `list_kernelspecs()` does), not the bare `runtimelib::list_kernelspecs()` that
+  `find_kernelspec_for_language` calls today; the bare one misses venv kernels, which the
+  venv-first rule needs.
+- **The per-language `jupyter:` map form is not built by any plan** (JOL-2a warns and falls back
+  for a map without `kernel`). Do not build it here unless Gordon reopens it.
+- **The "epic decision 6" citation above is wrong**: no recorded decision covers
+  case-insensitive lookup. The reason is the Ark kernelspec (`"language": "R"`); cite that.
+  Note that Q1 lowercases the language in its cell regex (`jupyter.ts:321-325`) but compares
+  case-sensitively in the kernel lookup (`kernels.ts:33`).
+- **Q-code**: still undecided whether the new diagnostic gets one; decide in Phase 1 by the
+  project\'s diagnostic conventions.
+- **Sequencing**: JOL-4 moves ahead of this plan (see the lane table in the records epic).
+  This plan and EXR-2 share `text_execute.rs`; land them in one agreed order (EXR-2 first).
+
 - Jupyter\'s claim stays a universal fallback; ownership is resolved by the existing
   resolver and carried in `ctx.owned_languages`. No kernelspec check at resolution time.
 - A cell executes iff its language is in `ctx.owned_languages`. Ceded cells and cells owned
@@ -162,9 +197,10 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
   warning and the multi-engine error: should such a cell be exempt (it never needs a
   kernel)? Not verified: no handling of the `eval` option was found in
   `partition_cells` (`text_execute.rs:177-215`), so the diagnostic may fire before
-  anything looks at it. Record the finding here; the decision is Gordon\'s.
-- [ ] Alias decision test: `py`, `jl` fences resolve to nothing (Q1 parity) unless the
-  alias table is kept; record the decision in this plan.
+  anything looks at it. DECIDED (Gordon, 2026-10-31): exempt `eval: false` cells; test it.
+- [ ] Alias decision test (decided 2026-10-31: deprecate, then delete): `py`, `jl` fences still
+  execute this release and emit a deprecation warning naming the canonical language; add the
+  removal as a dated follow-up in this plan when the release is cut.
 - [ ] Resolver-level test (mock knitr plus jupyter registry, reusing Plan 4d tests):
   `owned_languages` for jupyter equals the languages the resolver assigned it.
 - [ ] Test the policy through the seam: with EXR-2\'s `KernelRouter` in place, this

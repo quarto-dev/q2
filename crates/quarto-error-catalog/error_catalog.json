@@ -1665,6 +1665,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-58",
     "since_version": "99.9.9"
   },
+  "Q-2-59": {
+    "subsystem": "markdown",
+    "title": "Indented code blocks are not supported",
+    "message_template": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-59",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",
@@ -1957,6 +1964,13 @@
     "title": "Engine Runtime Not Found",
     "message_template": "An execution engine needs an external runtime (e.g. Julia, R, or Jupyter) that could not be found on this machine, so the render could not continue. This is a missing local dependency, not a problem in the document.",
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-3",
+    "since_version": "99.9.9"
+  },
+  "Q-18-4": {
+    "subsystem": "engine",
+    "title": "Jupyter Kernel Not Named",
+    "message_template": "The document's `jupyter:` key is a map that names no kernel (it has no `kernel` key) or uses the `kernelspec:` object form, which Quarto does not read. Quarto ignores the key and chooses the kernel from the language of the first executable cell instead.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-4",
     "since_version": "99.9.9"
   },
   "Q-19-1": {

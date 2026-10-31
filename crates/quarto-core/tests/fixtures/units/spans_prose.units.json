@@ -1,0 +1,30 @@
+[
+  {
+    "code": "1+1",
+    "kind": "span",
+    "lang": "python",
+    "line": 1,
+    "span_index": 0
+  },
+  {
+    "code": "x",
+    "kind": "span",
+    "lang": "r",
+    "line": 1,
+    "span_index": 1
+  },
+  {
+    "code": "y",
+    "kind": "span",
+    "lang": "julia",
+    "line": 1,
+    "span_index": 2
+  },
+  {
+    "code": "2",
+    "kind": "span",
+    "lang": "python",
+    "line": 3,
+    "span_index": 3
+  }
+]

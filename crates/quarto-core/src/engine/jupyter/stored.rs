@@ -33,7 +33,7 @@ use quarto_source_map::SourceInfo;
 use serde_json::Value;
 
 use super::execute::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
-use super::text_execute::{CodeBlock, parse_code_blocks};
+use super::text_execute::{CodeBlock, legacy_cells};
 use crate::cell_options::partition_cell_options;
 use crate::engine::content_processors::ORIGINAL_FILE_ID;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
@@ -118,7 +118,8 @@ fn replay_stored_outputs(
     ctx: &ExecutionContext,
     runtime: Option<&Arc<dyn SystemRuntime>>,
 ) -> Result<ExecuteResult, ExecutionError> {
-    let blocks = parse_code_blocks(input);
+    let units = crate::engine::units::units_for_engine(&ctx.units, input);
+    let blocks = legacy_cells(&units);
     if blocks.is_empty() {
         // No code-cell fences (markdown-only notebook): passthrough.
         return Ok(ExecuteResult::new(input));

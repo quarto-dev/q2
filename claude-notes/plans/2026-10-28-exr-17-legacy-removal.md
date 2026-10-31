@@ -8,7 +8,7 @@ status: draft  # blocked on the trigger below; do not start early
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
 **Depends on:** [EXR-6](2026-10-28-exr-06-jupyter-flip.md), [EXR-8](2026-10-28-exr-08-julia.md),
 [EXR-9](2026-10-28-exr-09-marimo.md), [EXR-11](2026-10-28-exr-11-knitr-k1-chunk-records.md),
-[EXR-12](2026-10-28-exr-12-knitr-k2-inline.md), [EXR-13](2026-10-28-exr-13-hub-wire.md),
+[EXR-12](2026-10-28-exr-12-knitr-k2-inline.md), [EXR-13](2026-10-28-exr-13-hub-wire.md) (both halves, 13a and 13b),
 [EXR-14](2026-10-28-exr-14-preview-splice.md), [EXR-15](2026-10-28-exr-15-hub-integration.md)
 **Blocks:** nothing
 **Lane:** D (`workspace-7`); run it under the epic\'s "Running the plans in four lanes" section.

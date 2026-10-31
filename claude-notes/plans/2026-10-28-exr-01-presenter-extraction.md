@@ -2,11 +2,12 @@
 title: 'EXR-1: extract the presenter (cell outputs to markdown) into a target-neutral module'
 date: 2026-10-28
 description: 'Moves the Jupyter output types, figure writing and cell presentation out of the native-only Jupyter module so one Rust presenter can run natively and in WASM, with golden parity tests written before anything moves.'
-status: in progress (Phases 0-4 done except the Phase 2 WASM VFS test; Phase 5 waits on EXR-2 Phase 4)
+status: complete (Phases 0-4; Phase 5 moved to EXR-1b)
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
 **Depends on:** nothing (can start immediately).
+**Split:** the former Phase 5 (replay-engine move) is [EXR-1b](2026-10-28-exr-01b-replay-engine-move.md).
 **Blocks:** EXR-5, EXR-8 (parity suite), EXR-13. Soft prerequisite of EXR-3
 (`render_inline` should be born in the new module, not moved later) and of EXR-4
 (it reuses the nbformat reader `stored_result_for_cell` that this plan moves). Per the dependency table in the epic, it also blocks EXR-6, EXR-14.
@@ -17,11 +18,12 @@ status: in progress (Phases 0-4 done except the Phase 2 WASM VFS test; Phase 5 w
 > code) comes first and its files must not change in any later phase.
 
 **Sequencing with EXR-2 (epic decision 37).** Both lanes start now, so this is a phase-order
-gate, not a plan-level edge (the epic dependency table is unchanged). Phase 3 here (the move
-of the presenter functions) lands **before** EXR-2 Phases 1, 4 and 5, because both plans edit
-the same hunks of `text_execute.rs` (`parse_code_blocks`, the imports, `execute_blocks_inner`)
-and of `stored.rs`. EXR-2 Phases 0, 2 and 3 do not collide and may run in parallel with this
-plan. The replay-engine move is the trailing Phase 5 here, gated on EXR-2 Phase 4 (see there).
+gate, not a plan-level edge (the epic dependency table has no EXR-2 to EXR-1 edge). Phase 3 here
+(the move of the presenter functions) lands **before** EXR-2 Phases 1, 4 and 5, because both plans
+edit the same hunks of `text_execute.rs` (`parse_code_blocks`, the imports, `execute_blocks_inner`)
+and of `stored.rs`. EXR-2 Phases 0, 2 and 3 do not collide and may run in parallel with this plan.
+The replay-engine move is EXR-1b, which depends on EXR-2 (Phase 4). That keeps the graph acyclic:
+EXR-1, then EXR-2, then EXR-1b. Phase 3 landed on 2026-10-31.
 
 ## Goal
 
@@ -149,8 +151,8 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
 - `visibility.rs`: `CellVisibility`, `resolve_cell_options`, `resolved_flag`.
 - `nbformat.rs`: `stored_result_for_cell` and `mime_bundle` from `stored.rs:229,300`
   (nbformat JSON to output types); EXR-4 reuses this reader.
-- `IpynbReplayEngine` moves to `engine/ipynb_replay.rs`, outside the gated module, as the
-  trailing Phase 5 after EXR-2 Phase 4.
+- `IpynbReplayEngine` moves to `engine/ipynb_replay.rs`, outside the gated module, in
+  EXR-1b (after EXR-2 Phase 4).
 
 ## Out of scope
 
@@ -158,7 +160,7 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
 - New figure behavior (naming stays `cell-<n>-output-<m>.<ext>`).
 - Presenting from records (EXR-5/EXR-6); the `.ipynb` file claim on WASM (this
   epic uses `.ipynb` as a record, not as an input format), so bd-9zmpzw3w stays
-  open for that half.
+  open for that half. The replay-engine move and WASM replay are EXR-1b.
 - Moving `engine_cell_lang` out of `engine/capture_splice.rs`: EXR-2 does it, early,
   so the legacy splice module holds only legacy code and can be deleted later (EXR-17).
 
@@ -226,14 +228,15 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
   first: a mock `SystemRuntime` records `dir_create` and `file_write` calls, and the sink
   writes every figure through it with no `std::fs` access.
 - [x] `RuntimeFigureSink` over that `SystemRuntime`, passing the mock-runtime test.
-- [ ] WASM test (style of `crates/pampa/tests/wasm_lua.rs`) that a stored notebook's
-  figures are written to the VFS, not degraded to `[Image output]`. **Moved to Phase 5.** `quarto-core` has
-  no WASM test harness yet (no `wasm_bindgen_test`, no `wasm-c-shim` dev-dependency), and the stored-notebook
-  half cannot run on WASM until the replay engine leaves the native-only module. One Phase 5 WASM test
-  covers both. Native coverage today: `presenter::figures` mock-runtime tests and
-  `stored::png_output_with_a_runtime_writes_through_it_not_the_filesystem`; `RuntimeFigureSink` compiles
-  under the WASM check. Decision: the runtime is a field on `IpynbReplayEngine` (`with_runtime`); the native
-  stage uses `IpynbReplayEngine::new()` (filesystem), and Phase 5 passes `ctx.runtime` on WASM.
+- Moved to [EXR-1b](2026-10-28-exr-01b-replay-engine-move.md) (no checkbox here): the WASM test that a
+  stored notebook\'s figures are written to the VFS, not degraded to `[Image output]`. `quarto-core`
+  has no WASM test harness yet and the stored-notebook half cannot run on WASM until the replay engine
+  leaves the native-only module, so one EXR-1b WASM test covers both. Native coverage today: the
+  `presenter::figures` mock-runtime tests and
+  `stored::png_output_with_a_runtime_writes_through_it_not_the_filesystem`; `RuntimeFigureSink`
+  compiles under the WASM check. Decision: the runtime is a field on `IpynbReplayEngine`
+  (`with_runtime`); the native stage uses `IpynbReplayEngine::new()` (filesystem), and EXR-1b passes
+  `ctx.runtime` on WASM.
 - Exit: Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core`; the WASM check passes.
 
@@ -262,30 +265,15 @@ A new target-neutral module `crates/quarto-core/src/presenter/`, a sibling of `e
 - Exit: Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core`.
 
-### Phase 5: replay engine out of the native-only module (trailing; gated on EXR-2 Phase 4)
+### Phase 5: moved to EXR-1b
 
-Do not start this phase until EXR-2 Phase 4 has landed. `stored.rs:33-36` imports
-`CodeBlock`, `parse_code_blocks`, `describe_location`, `FigureWriter` and more from the
-native-only `text_execute.rs`; EXR-2 Phase 4 replaces the scanner pieces with `scan_units`,
-so moving them first would be throwaway work. (Epic decision 37.)
+The replay-engine move (`IpynbReplayEngine` out of the native-only module) and the `quarto-core` WASM
+tests are now [EXR-1b](2026-10-28-exr-01b-replay-engine-move.md), split out on 2026-10-31 so the
+graph between EXR-1 and EXR-2 has no edge in both directions. EXR-1b starts when EXR-2 Phase 4 has
+landed.
 
-- [ ] Check, before starting, that nothing earlier needs the move. UNVERIFIED: the review
-  says EXR-13 and EXR-14 need the presenter (Phase 3), not the replay-engine move. If one of
-  them does need it, raise that with Gordon rather than moving early.
-- [ ] Test first, `replay_does_not_probe_engine_availability`: Jupyter registered but
-  unavailable, `.ipynb` input without `execute.enabled`, replay succeeds and the
-  engine's availability check is never called (confirm whether Plan 7c already has
-  this and extend it).
-- [ ] Move `IpynbReplayEngine` to `engine/ipynb_replay.rs`; remove the cfg at
-  `engine_execution.rs:429-431`.
-- [ ] The WASM check passes; add a WASM-side test, in the style
-  of `crates/pampa/tests/wasm_lua.rs`, that a stored notebook renders its outputs
-  (drive the engine directly; the `.ipynb` file claim is out of scope).
-- Exit: bd-9zmpzw3w's replay half is done; the claim half stays open in the strand.
-  Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
-  `cargo nextest run -p quarto-core`. Exit criteria for the plan: all phases green;
-  `cargo xtask verify` green; the workspace test delta reported against the live baseline
-  and accounted for.
+**Exit criteria for this plan:** Phases 0 to 4 green; `cargo xtask verify` green; the workspace test
+delta reported against the live baseline and accounted for. bd-9zmpzw3w\'s replay half closes in EXR-1b.
 
 ## Risks and open questions
 

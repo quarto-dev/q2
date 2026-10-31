@@ -7107,6 +7107,7 @@ dependencies = [
  "pdf-extract",
  "percent-encoding",
  "pollster",
+ "proptest",
  "quarto-analysis",
  "quarto-ast-reconcile",
  "quarto-brand",

@@ -61,6 +61,9 @@ fn ctx_for(notebook: &str, dir: &Path, scope: Option<ConfigValue>) -> (Execution
         "<notebook.ipynb (converted by ipynb)>".to_string(),
         Some(converted.markdown.clone()),
     );
+    // Test harness: id, path and content all come from the one notebook, exactly as
+    // `ParseDocumentStage` registers them.
+    // lint:allow(add-file-with-id) single-notebook registration mirroring production
     sc.add_file_with_id(
         ORIGINAL_FILE_ID,
         nb_path.display().to_string(),
