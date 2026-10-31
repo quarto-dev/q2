@@ -13,6 +13,7 @@ export {
     AttributionBadge,
     AttributionWrap,
     attributionStyles,
+    authorInitials,
     formatRelativeTime,
     useAttributionHover,
 } from './attribution';

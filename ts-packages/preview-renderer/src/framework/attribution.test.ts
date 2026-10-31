@@ -17,7 +17,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { formatRelativeTime } from './attribution';
+import { authorInitials, formatRelativeTime } from './attribution';
 
 // Round, easy-to-reason-about reference point: 1_800_000_000_000 ms
 // since the epoch corresponds to ~January 2027. Picking a value that
@@ -92,5 +92,30 @@ describe('formatRelativeTime', () => {
             const justAt = formatRelativeTime(1e12);
             expect(justBelow).not.toBe(justAt);
         });
+    });
+});
+
+describe('authorInitials', () => {
+    const actor = 'b4fa8892a6ed9656';
+
+    it('uses first and last initials of a multi-word name', () => {
+        expect(authorInitials('Charlie Gao', actor)).toBe('CG');
+        expect(authorInitials('  Ana  de la  Cruz ', actor)).toBe('AC');
+    });
+
+    it('uses the first two letters of a single-word name', () => {
+        expect(authorInitials('ana', actor)).toBe('AN');
+    });
+
+    it('does not split a character outside the BMP', () => {
+        expect(authorInitials('𝒜da 𝒞ole', actor)).toBe('𝒜𝒞');
+    });
+
+    it('returns null for an empty name', () => {
+        expect(authorInitials('   ', actor)).toBeNull();
+    });
+
+    it('returns null for the key-prefix fallback name of an actor with no profile', () => {
+        expect(authorInitials(actor.slice(0, 8), actor)).toBeNull();
     });
 });
