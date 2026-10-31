@@ -149,6 +149,34 @@ impl NativeRuntime {
     }
 }
 
+/// Run `command` to completion with stdout and stderr captured.
+fn run_captured(command: &mut Command, stdin: Option<&[u8]>) -> RuntimeResult<CommandOutput> {
+    let mut child = command
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    // Write stdin if provided
+    if let Some(input) = stdin
+        && let Some(mut stdin_pipe) = child.stdin.take()
+    {
+        stdin_pipe.write_all(input)?;
+    }
+
+    let output = child.wait_with_output()?;
+
+    Ok(CommandOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: output.stdout,
+        stderr: output.stderr,
+    })
+}
+
 #[async_trait]
 impl SystemRuntime for NativeRuntime {
     // ═══════════════════════════════════════════════════════════════════════
@@ -310,31 +338,20 @@ impl SystemRuntime for NativeRuntime {
         args: &[&str],
         stdin: Option<&[u8]>,
     ) -> RuntimeResult<CommandOutput> {
-        let mut child = Command::new(command)
-            .args(args)
-            .stdin(if stdin.is_some() {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+        run_captured(Command::new(command).args(args), stdin)
+    }
 
-        // Write stdin if provided
-        if let Some(input) = stdin
-            && let Some(mut stdin_pipe) = child.stdin.take()
-        {
-            stdin_pipe.write_all(input)?;
-        }
-
-        let output = child.wait_with_output()?;
-
-        Ok(CommandOutput {
-            code: output.status.code().unwrap_or(-1),
-            stdout: output.stdout,
-            stderr: output.stderr,
-        })
+    fn exec_command_with_env(
+        &self,
+        command: &str,
+        args: &[&str],
+        stdin: Option<&[u8]>,
+        env: &HashMap<String, String>,
+    ) -> RuntimeResult<CommandOutput> {
+        run_captured(
+            Command::new(command).args(args).env_clear().envs(env),
+            stdin,
+        )
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -915,6 +932,28 @@ mod tests {
 
         assert!(output.success());
         assert!(output.stdout_string().contains("hello"));
+    }
+
+    #[test]
+    fn test_exec_command_with_env_replaces_the_environment() {
+        let rt = runtime();
+        #[cfg(not(windows))]
+        let (cmd, args): (&str, &[&str]) = ("sh", &["-c", "printf %s \"$Q2_A:$HOME\""]);
+        #[cfg(windows)]
+        let (cmd, args): (&str, &[&str]) = ("cmd", &["/C", "echo", "%Q2_A%:%USERPROFILE%"]);
+
+        let mut env: HashMap<String, String> = HashMap::new();
+        env.insert("Q2_A".to_string(), "set".to_string());
+        // The child still has to be found.
+        env.insert("PATH".to_string(), std::env::var("PATH").unwrap());
+
+        let output = rt.exec_command_with_env(cmd, args, None, &env).unwrap();
+
+        assert!(output.success());
+        let out = output.stdout_string();
+        assert!(out.starts_with("set:"), "{out}");
+        #[cfg(not(windows))]
+        assert_eq!(out, "set:", "the inherited HOME should be gone");
     }
 
     #[test]

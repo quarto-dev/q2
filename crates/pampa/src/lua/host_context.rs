@@ -8,9 +8,10 @@
  * - `quarto.project` — `directory`, `offset`, `output_directory`,
  *   `profile`, with Quarto 1's shape (nil paths outside a project, the
  *   profile list always present);
- * - `os.getenv` — answered from the host's environment snapshot when it
- *   supplied one, so the stdlib's libc `getenv` never runs on a filter
- *   worker thread and `--profile` is visible as `QUARTO_PROFILE`;
+ * - `os.getenv` and `pandoc.system.environment` — answered from the host's
+ *   environment snapshot when it supplied one (see `env_overlay`), so libc
+ *   `getenv` never runs on a filter worker thread and `--profile` is visible
+ *   as `QUARTO_PROFILE`;
  * - `quarto.doc.input_file` / `quarto.doc.output_file` — the absolute
  *   paths Quarto 1 gave, and the minimal `PANDOC_STATE` (`input_files`,
  *   `output_file`) built from the same two values.
@@ -19,7 +20,7 @@
  * shortcode environments.
  */
 
-use mlua::{Lua, Result, Table, Value};
+use mlua::{Lua, Result, Table};
 
 use crate::lua_options::HostContext;
 
@@ -28,7 +29,9 @@ pub fn register_host_context(lua: &Lua, host: &HostContext) -> Result<()> {
     register_quarto_project(lua, host)?;
     register_quarto_doc_paths(lua, host)?;
     register_pandoc_state(lua, host)?;
-    install_os_getenv(lua, host)?;
+    if let Some(env) = &host.env {
+        super::env_overlay::set_base(lua, env.clone());
+    }
     Ok(())
 }
 
@@ -95,24 +98,6 @@ fn register_quarto_project(lua: &Lua, host: &HostContext) -> Result<()> {
         super::list::create_string_list_table(lua, &host.profiles)?,
     )?;
     quarto.set("project", project)?;
-    Ok(())
-}
-
-/// Replace `os.getenv` with a lookup in the host's snapshot. Without a
-/// snapshot the table is left alone: the stdlib function on native, the
-/// runtime-backed one `os_wasm` installs on WASM.
-fn install_os_getenv(lua: &Lua, host: &HostContext) -> Result<()> {
-    let Some(env) = host.env.clone() else {
-        return Ok(());
-    };
-    let os: Table = match lua.globals().get::<Value>("os")? {
-        Value::Table(t) => t,
-        _ => return Ok(()),
-    };
-    os.set(
-        "getenv",
-        lua.create_function(move |_, name: String| Ok(env.get(&name).cloned()))?,
-    )?;
     Ok(())
 }
 
@@ -255,7 +240,35 @@ mod tests {
     }
 
     #[test]
-    fn os_getenv_without_a_snapshot_is_the_stdlib() {
+    fn environment_and_with_environment_share_the_snapshot_with_os_getenv() {
+        let mut env = HashMap::new();
+        env.insert("FROM_FILE".to_string(), "yes".to_string());
+        let host = HostContext {
+            env: Some(Arc::new(env)),
+            ..Default::default()
+        };
+        let lua = lua_with(&host);
+        lua.load(
+            r#"
+            local before = pandoc.system.environment()
+            assert(before.FROM_FILE == 'yes')
+            assert(before.PATH == nil, 'the snapshot is the whole environment')
+            pandoc.system.with_environment({Q2_ENV_A = 'x'}, function()
+                assert(os.getenv('Q2_ENV_A') == 'x')
+                assert(os.getenv('FROM_FILE') == nil)
+                assert(pandoc.system.environment().FROM_FILE == nil)
+            end)
+            assert(os.getenv('FROM_FILE') == 'yes')
+            assert(os.getenv('Q2_ENV_A') == nil)
+            assert(pandoc.system.environment().FROM_FILE == 'yes')
+            "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn os_getenv_without_a_snapshot_is_the_process_environment() {
         let lua = lua_with(&HostContext::default());
         // PATH is set in every environment the test suite runs under.
         assert!(eval::<bool>(

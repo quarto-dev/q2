@@ -2,17 +2,16 @@
 title: 'pandoc.system.with_environment mutates process env across parallel renders (bd-with-environment-process-env-5folaygy)'
 date: 2026-10-31
 description: 'with_environment rewrites the real process environment under parallel renders; replace it with a per-Lua-state overlay that readers and spawn paths consult.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: active
 braid:
   strand: bd-with-environment-process-env-5folaygy
 ---
 
 **Branch:** `braid/bd-with-environment-process-env-5folaygy-pandocsystemwithenvironment-mutates-process-env`, in the main checkout, based on `origin/main` @ `d67792183`.
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
-**Ready to design.** The strand's diagnosis reproduces at HEAD; only the handling of `io.popen` / `os.execute` needs a decision before implementation.
+**Ready to implement.** The strand's diagnosis reproduces at HEAD, and the design decisions below are settled.
 
 ## Issue context
 
@@ -56,14 +55,25 @@ Facts the design relies on, each checked in the code:
 - **Phase 4 — `io.popen` / `os.execute`.** Per question 1 below.
 - **Phase 5 — Cleanup.** Delete the `unsafe` blocks and stale SAFETY comments. Add WASM coverage to `crates/pampa/tests/wasm_lua.rs`. Document the behaviour where Lua API differences are recorded. Cross-check clippy for Windows.
 
-## Open design questions for the user
+## Design decisions (settled with the user, 2026-10-31)
 
-1. **`io.popen` / `os.execute` inside the callback.** They cannot see an overlay. **Recommended: raise an error naming `pandoc.pipe` and `pandoc.system.command`**, only while an overlay is active. It fails at the filter's own line instead of running a child with the wrong environment, and there are no in-tree callers to break. The cost is that a third-party filter relying on this combination now fails. The alternatives are to document the limitation and let children silently see the real environment, or to wrap the command in `/usr/bin/env -i ...` on Unix, which keeps real file handles but exposes values in `ps`, is fragile to quote, and has no Windows equivalent.
-2. **`pandoc.system.environment` outside a callback.** **Recommended: read the snapshot, the same as `os.getenv`**, so the two always agree. This is a small behaviour change: it starts showing `_environment` values and the forced `QUARTO_PROFILE`. The alternative is to keep it live outside the callback, which leaves the second bug half-fixed.
-3. **`pandoc.system.xdg` inside the callback.** The native runtime reads `XDG_*` from the process environment, so an overlay would not affect it. **Recommended: leave it, and document it.** Honouring the overlay means threading env through `xdg_dir`, for a combination nothing is known to use.
+1. **`io.popen` / `os.execute` inside the callback raise an error** naming `pandoc.pipe` and `pandoc.system.command`, only while an overlay is active. This is a deliberate limitation compared to Pandoc, and the price of making parallel renders safe.
+2. **`pandoc.system.environment` reads the snapshot outside a callback**, the same as `os.getenv`, so it now shows `_environment` values and the forced `QUARTO_PROFILE`.
+3. **`pandoc.system.xdg` ignores the overlay, and that is documented.** It only reads, and no Lua API writes XDG state. The audit for mutating analogs found two other process-global mutators, filed separately: `with_working_directory` (bd-9hzg79zn) and stock `os.setlocale`.
 
 ## Risks / tradeoffs (draft)
 
 - **Program lookup with a replaced `PATH`.** With an explicit env, a table without `PATH` changes how `Command` resolves a bare program name, and Unix and Windows differ. This is correct under replacement semantics, but tests must not assume a bare `sh` resolves, and it needs a Windows run.
 - **WASM.** `os_wasm.rs` changes trigger the `wasm_lua.rs` rule. Those tests run in Linux CI; `dev-docs/wasm.md` has the local command for macOS.
 - **Runtime trait.** A default error method avoids touching the many mocks, but a new real runtime must remember to override it.
+
+## Implementation status (2026-10-31)
+
+Phases 0 to 5 are done. `cargo xtask verify --skip-hub-build` and the 10 WASM tests in `crates/pampa/tests/wasm_lua.rs` pass, and `repro.sh` shows all three symptoms gone.
+
+Still needing a Windows run, because `cargo clippy --target x86_64-pc-windows-msvc` cannot cross-check `pampa` or `quarto-system-runtime` from macOS (the `aws-lc-sys` and `tree-sitter` build scripts compile C):
+
+- `cargo clippy -p pampa -p quarto-system-runtime --all-targets -- -D warnings`
+- the new `with_environment` and `exec_command_with_env` tests, since `env_clear` on Windows also removes `SystemRoot`.
+
+Overlay lookups match names exactly, so on Windows `os.getenv("path")` inside the callback does not find a `PATH` key, unlike the case-insensitive process environment.

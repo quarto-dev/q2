@@ -266,6 +266,16 @@ impl SystemRuntime for OverlayRuntime {
         self.inner.exec_command(command, args, stdin)
     }
 
+    fn exec_command_with_env(
+        &self,
+        command: &str,
+        args: &[&str],
+        stdin: Option<&[u8]>,
+        env: &HashMap<String, String>,
+    ) -> RuntimeResult<CommandOutput> {
+        self.inner.exec_command_with_env(command, args, stdin, env)
+    }
+
     fn env_get(&self, name: &str) -> RuntimeResult<Option<String>> {
         self.inner.env_get(name)
     }

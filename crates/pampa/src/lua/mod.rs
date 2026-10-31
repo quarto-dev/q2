@@ -13,6 +13,7 @@ mod constructors;
 mod diagnostics;
 mod dialect;
 mod dofile_wasm;
+mod env_overlay;
 mod filter;
 mod host_context;
 mod io_wasm;

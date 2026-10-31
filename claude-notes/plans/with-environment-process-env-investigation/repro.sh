@@ -47,8 +47,9 @@ mkdir single && cd single
 cat > probe.lua <<'LUA'
 function Pandoc(doc)
   pandoc.system.with_environment({ Q2_PROBE = "set", PATH = os.getenv("PATH") }, function()
-    local p = io.popen('printf %s "$Q2_PROBE"')
-    local child = p:read("a"); p:close()
+    local ok, p = pcall(io.popen, 'printf %s "$Q2_PROBE"')
+    local child = "raises"
+    if ok then child = p:read("a"); p:close() end
     local _, piped = pcall(pandoc.pipe, "sh", { "-c", 'printf %s "$Q2_PROBE"' }, "")
     io.stderr:write(("PROBE os.getenv=%s environment=%s popen=%s pipe=%s os.getenv(HOME)=%s\n"):format(
       tostring(os.getenv("Q2_PROBE")), tostring(pandoc.system.environment().Q2_PROBE),
@@ -58,7 +59,7 @@ function Pandoc(doc)
 end
 LUA
 printf -- '---\ntitle: p\nfilters: [probe.lua]\n---\n\np\n' > p.qmd
-echo "== case 2: readers inside the callback (expect all 'set', HOME nil, once fixed)"
+echo "== case 2: readers inside the callback (expect set, popen=raises, HOME nil, once fixed)"
 "$q2" render p.qmd 2>&1 | grep PROBE || echo "no PROBE line"
 
 # Case 3: a bad value aborts part-way and leaves the process environment altered.

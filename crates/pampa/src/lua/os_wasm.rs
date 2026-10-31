@@ -40,8 +40,9 @@ pub fn register_wasm_os(lua: &Lua, runtime: Arc<dyn SystemRuntime>) -> Result<()
     )?;
 
     // os.getenv(name) — the runtime's view of the environment (nothing, on
-    // wasm32-unknown-unknown). The host's environment snapshot replaces
-    // this when one is supplied (`host_context::register_host_context`).
+    // wasm32-unknown-unknown). `env_overlay::install` replaces this once
+    // pandoc.system is registered, adding the host's snapshot and
+    // with_environment.
     let rt = runtime.clone();
     os.set(
         "getenv",
