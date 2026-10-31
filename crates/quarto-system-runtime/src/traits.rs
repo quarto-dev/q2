@@ -438,6 +438,24 @@ pub trait SystemRuntime: Send + Sync {
         stdin: Option<&[u8]>,
     ) -> RuntimeResult<CommandOutput>;
 
+    /// [`Self::exec_command`] with `env` as the child's whole environment,
+    /// instead of an inherited one.
+    ///
+    /// Default: `NotSupported`, not `exec_command`, because silently dropping
+    /// `env` would run the child with the wrong environment. A runtime that
+    /// forwards `exec_command` to an inner runtime must forward this too.
+    fn exec_command_with_env(
+        &self,
+        _command: &str,
+        _args: &[&str],
+        _stdin: Option<&[u8]>,
+        _env: &HashMap<String, String>,
+    ) -> RuntimeResult<CommandOutput> {
+        Err(RuntimeError::NotSupported(
+            "running a command with an explicit environment".to_string(),
+        ))
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // ENVIRONMENT
     // ═══════════════════════════════════════════════════════════════════════

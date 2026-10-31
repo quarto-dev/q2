@@ -460,6 +460,20 @@ shortcode in the render sees the same values. The `{{< env NAME >}}`
 shortcode reads the same snapshot, so it and a filter's `os.getenv` can
 never disagree.
 
+`pandoc.system.environment()` returns the same snapshot.
+
+`pandoc.system.with_environment(env, callback)` replaces that environment for
+the callback, as in Pandoc, but only for this filter. Documents can render in
+parallel, so the real process environment never changes. Inside the callback:
+
+- `os.getenv` and `pandoc.system.environment` see only the table you passed.
+- Programs started with `pandoc.pipe` and `pandoc.system.command` get exactly
+  that table as their environment, so include `PATH` if you need it.
+- `io.popen` and `os.execute` raise an error, because their programs would get
+  the real environment. This differs from Pandoc. Use `pandoc.pipe` or
+  `pandoc.system.command` instead.
+- `pandoc.system.xdg` still reads the real `XDG_*` variables.
+
 ## Checking versions
 
 `quarto.version` is the version of Quarto you are running, as a pandoc
