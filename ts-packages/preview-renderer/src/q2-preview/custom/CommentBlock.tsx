@@ -14,9 +14,9 @@
  *  - Compact bubble ('show' mode): first comment preview + "+n more";
  *    a comment-less block shows a "+" add affordance on hover.
  *  - Expanded bubble (global 'expand' mode, or any bubble clicked
- *    open): every comment as its own row with author dot (when the
- *    Authors overlay provides attribution), a ✓ resolve button, and an
- *    inline add-comment input at the bottom.
+ *    open): every comment as its own row with author dot and initials
+ *    (when the Authors overlay provides attribution), a ✓ resolve button,
+ *    and an inline add-comment input at the bottom.
  *  - 'hide' mode strips comments from the text but renders no chrome.
  *
  * Comment text renders RICH (bd-y66gbfs4): the span's inlines go
@@ -48,7 +48,7 @@
  */
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { AttributionLookupContext, Node as AstNode, RegistryContext } from '../../framework';
+import { AttributionLookupContext, authorInitials, Node as AstNode, RegistryContext } from '../../framework';
 import type {
     BlockNode,
     DivBlock,
@@ -1516,6 +1516,7 @@ export const CommentWrapper = ({
                             <>
                                 {comments.map((c, i) => {
                                     const author = commentAuthor(c);
+                                    const initials = author && authorInitials(author.name, author.actor);
                                     return (
                                         <div key={i} style={{
                                             display: 'flex',
@@ -1538,6 +1539,20 @@ export const CommentWrapper = ({
                                                         marginTop: '3px',
                                                     }}
                                                 />
+                                            )}
+                                            {author && initials && (
+                                                <span
+                                                    data-q2-comment-author-initials
+                                                    title={author.name}
+                                                    style={{
+                                                        fontSize: '0.65rem',
+                                                        fontWeight: 600,
+                                                        lineHeight: 1.4,
+                                                        flexShrink: 0,
+                                                    }}
+                                                >
+                                                    {initials}
+                                                </span>
                                             )}
                                             <span style={{
                                                 flex: 1,
