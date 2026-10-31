@@ -21,6 +21,45 @@ use crate::engine::{DEFAULT_EXECUTE_TIMEOUT, HANDLED_LANGUAGES};
 use crate::stage::PandocIncludes;
 use crate::stage::cancellation::Cancellation;
 
+/// One crossref-consumed cell option, keyed by the cell's wrapper Div id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CellOption {
+    /// The `id` of the wrapper Div the crossref pass produced for this cell.
+    pub div_id: String,
+    /// The `label:` value the pass consumed from the cell's option lines.
+    pub label: String,
+}
+
+/// The per-cell options the crossref pass consumed, in document order.
+///
+/// The execution stage records the canonical serialized document, in which
+/// these options have been lifted onto wrapper Divs. Engines that need them
+/// back in the cell text (knitr's label-based output naming) re-add them from
+/// this map at the engine boundary; engines that do not need them ignore it.
+/// An empty map means nothing was consumed (or the pass never ran), and
+/// re-insertion is then a no-op.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CellOptionsMap {
+    entries: Vec<CellOption>,
+}
+
+impl CellOptionsMap {
+    /// Build a map from entries already in document order.
+    pub fn new(entries: Vec<CellOption>) -> Self {
+        Self { entries }
+    }
+
+    /// The entries, in document order.
+    pub fn entries(&self) -> &[CellOption] {
+        &self.entries
+    }
+
+    /// True when no option was consumed.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
 /// Context provided to execution engines.
 ///
 /// This contains all the information an engine needs to execute code cells
@@ -110,6 +149,11 @@ pub struct ExecutionContext {
     /// engines on the wire (Plan 4d) and read by the Jupyter engine (JOL-2b).
     pub owned_languages: Vec<String>,
 
+    /// Cell options the crossref pass consumed, keyed by wrapper Div id.
+    ///
+    /// Defaults to empty. Only knitr consumes it today (EXR-10).
+    pub cell_options: CellOptionsMap,
+
     /// Cancellation token for graceful shutdown.
     ///
     /// Engines that support cancellation (TS engines) poll `cancellation.is_cancelled()`
@@ -196,6 +240,7 @@ impl ExecutionContext {
             // overrides this via `with_handled_languages` using the resolver.
             handled_languages: HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect(),
             owned_languages: Vec::new(),
+            cell_options: CellOptionsMap::default(),
             cancellation: Cancellation::new(),
             execute_timeout: Some(DEFAULT_EXECUTE_TIMEOUT),
             // Default false; EngineExecutionStage sets true when |sequence| > 1.
@@ -258,6 +303,12 @@ impl ExecutionContext {
     /// Computed by `EngineResolution::owned_languages_for(engine_name)`.
     pub fn with_owned_languages(mut self, languages: Vec<String>) -> Self {
         self.owned_languages = languages;
+        self
+    }
+
+    /// Set the cell options the crossref pass consumed.
+    pub fn with_cell_options(mut self, cell_options: CellOptionsMap) -> Self {
+        self.cell_options = cell_options;
         self
     }
 

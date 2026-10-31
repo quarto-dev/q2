@@ -30,6 +30,7 @@
 
 pub mod error_parser;
 pub mod format;
+pub mod label_reinsert;
 pub mod preprocess;
 pub mod subprocess;
 pub mod types;
@@ -175,6 +176,13 @@ impl ExecutionEngine for KnitrEngine {
         } else {
             input.to_string()
         };
+
+        // Step 2b (EXR-10): the stage hands over canonical text, with the
+        // crossref-consumed `label:` options lifted onto wrapper Divs. Put each
+        // chunk-header line back so knitr's label-based output naming
+        // (`fig-cars-1.svg`) sees the label. knitr never reads `source_info`,
+        // so the shifted offsets are harmless.
+        let preprocessed = label_reinsert::reinsert_labels(&preprocessed, &ctx.cell_options);
 
         // Step 3: Build format configuration
         let format_config = build_format_config(ctx);

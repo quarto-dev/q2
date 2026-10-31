@@ -517,21 +517,16 @@ impl PipelineStage for EngineExecutionStage {
             let mut masked_ast = ast.clone();
             crate::engine::nested_cell_mask::mask(&mut masked_ast);
 
-            // bd-2lxj10z0 (plan §D1/§D2): re-inject a crossref-consumed
-            // `label:` option into the text handed to knitr, so knitr's
-            // own label-based output naming (`fig-cars-1.svg`) sees the
-            // label again. Additive on this per-engine clone only — `ast`
-            // itself (what `reconcile` below compares against) and the
-            // wrapping Div's `id` are untouched; the Div still needs the
-            // label independently for crossref numbering. Scoped to
-            // knitr: Jupyter has no label-based naming to restore, and
-            // this must not risk changing its behavior (plan §D1).
-            if engine.name() == "knitr" {
-                crate::crossref::label_reinject::inject(
-                    &mut masked_ast,
-                    ctx.ref_type_registry.as_ref(),
-                );
-            }
+            // EXR-10: the stage serializes the canonical AST (the crossref pass's
+            // consumed `label:` options live on wrapper Divs) and records that as
+            // the capture's `input_qmd`, so the recorded input means the same for
+            // every engine and matches `compute_input_qmd`. The consumed options go
+            // to the engine as a map; knitr re-adds the chunk-header lines at its
+            // own boundary (bd-2lxj10z0's label-based output naming).
+            let cell_options = crate::crossref::label_reinject::collect(
+                &masked_ast,
+                ctx.ref_type_registry.as_ref(),
+            );
 
             // Serialize the masked AST to QMD for this engine. Every engine
             // goes through this one call, so knitr, q2's jupyter text
@@ -585,6 +580,7 @@ impl PipelineStage for EngineExecutionStage {
             .with_source_info(qmd_source_info, source_context_arc.clone())
             .with_handled_languages(handled_languages)
             .with_owned_languages(owned_languages)
+            .with_cell_options(cell_options)
             .with_cancellation(ctx.cancellation.clone())
             .with_execute_timeout(execute_timeout)
             // P2-13: loud "owned-but-unrunnable" gate in partition_cells

@@ -97,6 +97,7 @@ pub mod ipynb_stored_replay;
 pub mod julia_engine_e2e;
 pub mod jupyter_integration;
 pub mod jupyter_kernel_cleanup;
+pub mod knitr_canonical_input;
 pub mod knitr_display_fence;
 pub mod knitr_html_dependency;
 pub mod knitr_inline_expressions;

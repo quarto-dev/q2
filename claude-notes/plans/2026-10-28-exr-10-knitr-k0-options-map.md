@@ -2,7 +2,7 @@
 title: 'EXR-10: knitr K0, the per-cell options map and canonical recorded input'
 date: 2026-10-28
 description: 'Moves knitr label re-injection from the shared engine stage to the engine boundary, passing consumed cell options as a map on the execution context so the recorded input is canonical and staleness checks stop false-positiving.'
-status: draft
+status: complete
 braid:
   strand: bd-n1vmlalw
   priority: P2
@@ -106,81 +106,116 @@ From the strand and the epic; do not re-litigate:
 
 ## Phase 10-0: baseline
 
-- [ ] Before any change, record the live baseline: the count of labeled cells and
+- [x] Before any change, record the live baseline: the count of labeled cells and
   wrapper Divs that `for_each_wrapped_cell` finds over the knitr fixtures and the
   `label_reinject.rs` corpus, and the pass and skip counts of
   `cargo nextest run -p quarto-core` on the unchanged tree. Phase 10C compares against
   these figures (global rule: never copy an old figure).
 
+  **Recorded 2026-10-31 (workspace-6, `d977a35dc`, pandoc 3.13, R and knitr present):**
+  `cargo nextest run -p quarto-core --no-fail-fast`: 6507 run, 6506 passed, 1 failed,
+  32 skipped. The one failure is `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package`
+  (vendored `reset.css` differs from this worktree\'s `node_modules/reveal.js`; unrelated,
+  expected to remain). With pandoc 3.11 the same tree showed 248 failures, 247 of them the
+  `L`-tier pandoc 3.12 floor, so run this plan with pandoc 3.12 or newer. Wrapper Divs the
+  walk visits in the `label_reinject.rs` unit corpus (7 docs): 4 (one `fig-cars` Div and
+  one cell each; the other three docs are unclassified or have a `None` registry). Crossref-prefixed
+  `#| label:` lines in the knitr integration sources: 3 in `knitr_label_reinject.rs`, 4 in
+  `capture_splice_knitr_label.rs`, 0 in `knitr_display_fence.rs`, `knitr_inline_expressions.rs`
+  and `knitr_html_dependency.rs`. (Counted by grep and by hand over the corpus, not by the walk itself.)
+
 ## Phase 10A: tests first
 
-- [ ] **Locator stub (first).** Add the signature the nesting corpus targets, as a stub
+- [x] **Locator stub (first).** Add the signature the nesting corpus targets, as a stub
   that panics with `unimplemented!()` so the corpus test fails for the right reason:
   `locate_cell_by_div_id(text: &str, id: &str) -> Option<CellSpan>`, where `CellSpan`
   holds the byte range of the wrapper Div and of its code fence. Phase 10B implements
   it and uses it for the re-insertion. It serves crossref-labeled cells only: an
   unlabeled chunk has no wrapper Div, so EXR-11 inserts unit ids by the unit\'s `line`
   instead.
-- [ ] **Nesting corpus (gating).** `wrapper_div_id_survives_serialization_in_every_nesting`:
+- [x] **Nesting corpus (gating).** `wrapper_div_id_survives_serialization_in_every_nesting`:
   a wrapped labeled cell at top level, inside a bullet list, inside an ordered list,
   inside a blockquote, inside a fenced div, and in nested combinations (start from the
   `desugar_blocks` and `for_each_wrapped_cell` corpus). For each, serialize the canonical
   AST and assert `locate_cell_by_div_id` finds exactly the wrapper Div id and its code
   fence. If any case fails, switch to the scanner-ordinal fallback in the Risks section
   before Phase 10B.
-- [ ] `fresh_labeled_knitr_capture_is_not_stale` (integration, no R needed): with
+- [x] `fresh_labeled_knitr_capture_is_not_stale` (integration, no R needed): with
   a knitr-named fake engine, a document containing `#| label: fig-x` and
   `#| fig-cap: ...`, record a capture and assert
   `compute_input_qmd(...) == capture.input_qmd`. RED today (the strand\'s repro).
-- [ ] `canonical_input_has_no_reinjected_label`: stage-level, the recorded
+- [x] `canonical_input_has_no_reinjected_label`: stage-level, the recorded
   `input_qmd` contains no `#| label:` line the author did not write.
-- [ ] `cell_options_map_carries_consumed_labels`: for a document with two labeled
+- [x] `cell_options_map_carries_consumed_labels`: for a document with two labeled
   cells in different containers, the map on `ExecutionContext` has exactly the
   two entries keyed by wrapper Div id, in document order.
-- [ ] `reinsert_matches_inject_on_the_existing_corpus` (unit): reuse every
+- [x] `reinsert_matches_inject_on_the_existing_corpus` (unit): reuse every
   `inject` test input from `label_reinject.rs`; the new engine-boundary
   re-insertion over the *canonical* text plus the map yields byte-identical
   text to the old `inject` path.
-- [ ] `reinsert_is_a_noop_without_map_entries`: an empty map returns the input
+- [x] `reinsert_is_a_noop_without_map_entries`: an empty map returns the input
   unchanged, including unlabeled and hand-written `label:` cells.
-- [ ] Real R, gated on `knitr_render_available()`: the three existing tests in
+- [x] Real R, gated on `knitr_render_available()`: the three existing tests in
   `knitr_label_reinject.rs` stay green unchanged
   (`labelled_figure_uses_label_derived_filename`,
   `label_option_is_not_echoed_in_rendered_source`,
   `labelled_cached_chunk_uses_label_derived_cache_key`).
-- [ ] `capture_splice_knitr_label.rs` stays green, plus a new case: a capture
+- [x] `capture_splice_knitr_label.rs` stays green, plus a new case: a capture
   recorded after this plan (no injected line) splices with `strip` a no-op, and an
   old-style capture (line present) still splices.
-- [ ] `labeled_jupyter_doc_is_not_stale_after_record`: written now, marked as the
+- [x] `labeled_jupyter_doc_is_not_stale_after_record`: written now, marked as the
   enabling test for bd-6sb1z0i4 (with the gate removed in the test setup only, a
   labeled Jupyter document records a capture that is not stale).
 
+> **10A notes (2026-10-31).** The stage-level tests live in
+> `tests/integration/knitr_canonical_input.rs`; the locator, `reinsert_labels` and the
+> nesting and equivalence tests live in `engine/knitr/label_reinsert.rs`. `CellOptionsMap`
+> and `with_cell_options` are already real (trivial), `label_reinject::collect` and
+> `reinsert_labels` are `unimplemented!()` stubs. RED today: the three
+> `knitr_canonical_input` tests and the unit corpus. The Jupyter test passes already (the
+> gate only affects knitr), as an enabling test it stays green. The existing
+> `labeled_figure_cell_splices` asserts as a premise that the recorded input carries the
+> injected line; that premise flips in 10B and the assertion must change then. The two
+> "stays green" items below (real R, `capture_splice_knitr_label.rs`) are ticked in 10C;
+> the new capture-splice case (`canonical_capture_without_injected_line_splices`) is
+> written and passes.
+
 ## Phase 10B: implementation
 
-- [ ] Add `CellOptionsMap` (an ordered list of `{div_id, label}` entries) to
+- [x] Add `CellOptionsMap` (an ordered list of `{div_id, label}` entries) to
   `engine/context.rs` with a `with_cell_options` builder and a rustdoc contract.
-- [ ] Add `label_reinject::collect(doc, registry) -> CellOptionsMap` using the
+- [x] Add `label_reinject::collect(doc, registry) -> CellOptionsMap` using the
   existing `for_each_wrapped_cell` walk (no behavior change to `inject`/`strip`).
-- [ ] In `engine_execution.rs`: build the map from `masked_ast` before
+- [x] In `engine_execution.rs`: build the map from `masked_ast` before
   serialization, delete the `engine.name() == "knitr"` injection block, pass the
   map via `ExecutionContext`.
-- [ ] In `engine/knitr/mod.rs` `execute`: after the inline-expression step,
+- [x] In `engine/knitr/mod.rs` `execute`: after the inline-expression step,
   re-insert chunk-header lines for map entries (implement `locate_cell_by_div_id`
   from 10A: locate the wrapper Div by its
   exact id, then its code fence, then prepend the `#| label:` line in the cell\'s
   comment syntax). Make it a pure function so the equivalence test above runs
   without R.
-- [ ] Keep `inject` only if still needed by tests or tools; otherwise remove it
+- [x] Keep `inject` only if still needed by tests or tools; otherwise remove it
   in this plan and keep `strip`.
+
+> **10B notes (2026-10-31).** `locate_cell_by_div_id` handles top level, bullet and ordered
+> lists (including a list item whose first line is the Div), blockquotes and fenced divs, in
+> combinations; the nesting corpus passed, so the scanner-ordinal fallback is not needed.
+> `reinsert_labels` mirrors `inject`\'s `has_label_option` guard and keeps a per-id cursor so a
+> reused Div id labels each Div in turn. `inject` is kept: it is now only the reference
+> oracle for `reinsert_matches_inject_on_the_existing_corpus` (no production caller), so
+> EXR-17 or bd-6sb1z0i4 may delete it with that test. `collect` yields one entry per wrapper
+> Div (the desugar wraps exactly one cell). The existing `labeled_figure_cell_splices` premise
+> was flipped to assert the recorded input has no `#| label:` line.
 
 ## Phase 10C: verification
 
-- [ ] Real-R run of the knitr integration tests that exist today
+- [x] Real-R run of the knitr integration tests that exist today
   (`knitr_label_reinject`, `capture_splice_knitr_label`, `knitr_display_fence`,
   `knitr_inline_expressions`), with R present.
-- [ ] `cargo clippy -p quarto-core --all-targets -- -D warnings` and
+- [x] `cargo clippy -p quarto-core --all-targets -- -D warnings` and
   `cargo nextest run -p quarto-core`.
-- [ ] Record the pass and skip counts, and the cell and wrapper-Div counts, against the
+- [x] Record the pass and skip counts, and the cell and wrapper-Div counts, against the
   Phase 10-0 baseline in the commit message.
 
 ## Exit criteria

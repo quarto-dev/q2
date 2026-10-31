@@ -90,8 +90,8 @@ async fn run(doc: &str) -> (String, String) {
 async fn labeled_figure_cell_splices() {
     let (input_qmd, ast) = run("---\nengine: knitr\n---\n\n```{r}\n#| label: fig-two-sines\n#| fig-cap: Two sines\nplot(1)\n```\n").await;
     assert!(
-        input_qmd.contains("#| label: fig-two-sines"),
-        "premise: the recorded input carries the re-injected label line"
+        !input_qmd.contains("#| label:"),
+        "premise (EXR-10): the recorded input is canonical, with no re-injected label line"
     );
     assert!(ast.contains("OUT_MARKER"), "labeled cell did not splice");
     assert!(ast.contains("sines"), "figure caption must survive");
@@ -113,6 +113,46 @@ async fn labeled_figure_splices_for_any_engine_name() {
     let capture = quarto_trace::EngineCapture {
         engine_name: "someengine".into(),
         input_qmd: "::: {#fig-two-sines}\n\n```{r}\n#| label: fig-two-sines\nplot(1)\n```\n\nTwo sines\n\n:::\n".into(),
+        result: serde_json::json!({
+            "markdown": "::: {#fig-two-sines}\n\n::: {.cell}\n```{.r .cell-code}\nplot(1)\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nOUT_MARKER\n```\n:::\n:::\n\nTwo sines\n\n:::\n"
+        }),
+        files: Vec::new(),
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("doc.qmd");
+    std::fs::write(&path, doc).unwrap();
+    let path = path.canonicalize().unwrap();
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
+    let doc_info = DocumentInfo::from_path(&path);
+    let format = Format::html();
+    let bins = BinaryDependencies::new();
+    let mut ctx = RenderContext::new(&project, &doc_info, &format, &bins);
+    let out = render_qmd_to_preview_ast(
+        doc.as_bytes(),
+        &path.display().to_string(),
+        &mut ctx,
+        runtime,
+        Some(Arc::new(EngineRegistry::new())),
+        vec![capture],
+    )
+    .await
+    .unwrap();
+    assert!(
+        out.ast_json.contains("OUT_MARKER"),
+        "labeled cell did not splice"
+    );
+}
+
+/// EXR-10: a capture recorded after the canonical-input change carries no
+/// injected line, so `strip` is a no-op and the cell still splices. The
+/// previous test covers the old-style capture (line present).
+#[tokio::test]
+async fn canonical_capture_without_injected_line_splices() {
+    let doc = "---\nengine: knitr\n---\n\n```{r}\n#| label: fig-two-sines\n#| fig-cap: Two sines\nplot(1)\n```\n";
+    let capture = quarto_trace::EngineCapture {
+        engine_name: "someengine".into(),
+        input_qmd: "::: {#fig-two-sines}\n\n```{r}\nplot(1)\n```\n\nTwo sines\n\n:::\n".into(),
         result: serde_json::json!({
             "markdown": "::: {#fig-two-sines}\n\n::: {.cell}\n```{.r .cell-code}\nplot(1)\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nOUT_MARKER\n```\n:::\n:::\n\nTwo sines\n\n:::\n"
         }),
