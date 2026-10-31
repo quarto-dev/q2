@@ -81,9 +81,10 @@ Verified in code on 2026-10-28 unless marked.
   returns `''` before any hook runs, and with `cache: 3` it returns `cache$output(hash)`
   without calling the hook, so the hook never sees those chunks. That is spike S4\'s
   starting evidence.
-- **Not verified:** whether `htmltools::extractPreserveChunks` works on a single
-  string with stable per-content placeholder ids (decides spike S3); how `child=`
-  documents invoke the chunk hook, and how far the cache-hit cases above reach (spike S4).
+- **Checked by S3 (2026-10-31):** `htmltools::extractPreserveChunks` works on a single
+  string, but its placeholder ids are random, not per-content (see S3\'s decision).
+- **Not verified:** how `child=` documents invoke the chunk hook, and how far the
+  cache-hit cases above reach (spike S4).
 
 ## Design decisions (from the epic; do not re-litigate)
 
@@ -138,60 +139,136 @@ Verified in code on 2026-10-28 unless marked.
 
 ## Phase 11S: spikes first (each ends in a written decision in this plan)
 
-- [ ] **S1, id round trip.** In a throwaway R script and then a Rust test: give a
+- [x] **S1, id round trip.** In a throwaway R script and then a Rust test: give a
   chunk an extra `#|` option and print `names(options)` from a test chunk hook.
   Decide the option name (proposal: `quarto-unit-id`) and confirm it is returned
   verbatim and added to `other_opts` so it is not emitted as a div attribute.
-- [ ] **S2, files per chunk.** Compare (a) a before/after listing diff of the
+  **Decision (2026-10-31):** the option name is `quarto-unit-id`. knitr returns it verbatim
+  in `names(options)` (plain knitr 1.50 spike, and through q2\'s pipeline). Without an
+  `other_opts` entry the hook emits it as `data-quarto-unit-id="..."` on the cell div (seen
+  in the red run of `knitr_chunk_id_is_not_emitted_as_an_attribute`). It is now in `other_opts`.
+- [x] **S2, files per chunk.** Compare (a) a before/after listing diff of the
   figures directory around each chunk, (b) parsing file references from the chunk
   markdown, (c) knitr\'s own plot counter and `fig.path`. Pick one; record the
   failure modes (`fig.show: hold`, multiple devices, `results: asis`).
-- [ ] **S3, preserve.** Check whether `htmltools::extractPreserveChunks` applied
+  **Decision (2026-10-31): (a), the before/after listing diff of the figure directory.**
+  Spike on knitr 1.50 with a chunk hook that lists `fig.path`\'s directory each call:
+  - (a) is exact for every case tried: one figure; `fig.show: hold` with two plots
+    (`b-1`, `b-2`); `results: asis` (`c-1`); two devices (`dev: [png, pdf]` gives both
+    `d-1.png` and `d-1.pdf`); no plots (empty); `fig.keep: none` (empty, nothing written).
+  - (b) parsing the markdown is wrong in two ways: it sees only the first device\'s file
+    (`d-1.png`, missing `d-1.pdf`), and a loose pattern runs into adjacent text for
+    `results: asis`. It also cannot see files a chunk writes without referencing them.
+  - (c) `fig.num` is only a count (`b` gives 2, `e` and `f` give 0); rebuilding names needs
+    the device list and extensions, and repeats what (a) reads directly.
+  - Failure modes of (a), to document in the code: a chunk that writes other files into the
+    figure directory is credited with them (acceptable, they belong to it); a cache hit never
+    calls the hook, so those chunks get no files (S4 decides how those chunks are recorded);
+    the listing must be taken at hook exit and kept for the next chunk, and paths are
+    reported relative to the document directory.
+
+- [x] **S3, preserve.** Check whether `htmltools::extractPreserveChunks` applied
   to one chunk string yields a placeholder map that can be unioned across chunks
   and equals the whole-document extraction. If yes, record placeholders per chunk
   and keep the map at notebook level; if no, record raw markers and apply
   extraction in Rust (only possible for HTML preserve; document the gap).
-- [ ] **S4, odd chunks.** Start from the cache evidence in Background
+  **Decision (2026-10-31): neither branch as written. Record the raw, un-extracted chunk
+  markdown, and keep the whole-document extraction and its `preserve` map at notebook level.**
+  Spike with htmltools 0.5.8.1 on a document of four chunks (one with two markers, one
+  plain, one repeating another\'s content) plus a marker in prose outside any chunk:
+  - The values agree: per-chunk extraction yields the same set of preserved strings as
+    the whole-document run, and duplicates stay distinct entries.
+  - The ids do not agree, and the premise "stable per-content ids" (Background, line 85) is
+    wrong. `extractPreserveChunks` draws each id from `withPrivateSeed(sample(...))`, so ids
+    differ between calls and between runs. A per-chunk map therefore cannot equal the
+    whole-document map by name, and a shadow test that placed per-chunk extracted markdown
+    would differ from the live output by random ids.
+  - The prose marker is only seen by the whole-document pass, so per-chunk extraction
+    could never be the complete map anyway.
+  - Raw markers in the chunk markdown avoid all of this: placing the chunks in document
+    order and running the one whole-document extraction (what the live path does after
+    knitting) gives the live result, and `knitr_shadow_equality` stays byte-exact on the
+    pre-extraction text. The cost is that the record is only complete once extraction has
+    run on the placed document; Rust never applies it in this plan. Under q2\'s `patch.R`,
+    `htmlPreserve` already emits raw `{=html}` fences, so marker-form preserve arises only
+    from explicit `html_preserve` markers or other packages that write them; RTF
+    (`knitr::extract_raw_output`) is likewise left to the whole-document pass.
+  - Consequence for 11B and `knitr_record_has_notebook_level_meta`: no per-chunk
+    `preserve` field; notebook-level `preserve` stays exactly as the live path builds it.
+
+- [x] **S4, odd chunks.** Start from the cache evidence in Background
   (`block.R:94-101`: a cache hit on an `include: false` chunk and `cache: 3` return
   before the chunk hook). Observe the hook for `cache: true`, `eval: false`,
   `include: false`, `engine: bash`, and `child=`. Decide: record all knitr-owned
   chunks (including `eval: false` and `include: false` with empty markdown) and
   record only the outermost chunk for `child=`.
+  **Decision (2026-10-31):** record every chunk whose hook fires and that carries a unit id,
+  and nothing else; for cases where the hook does not fire the record is simply short, and
+  the existing count-mismatch diagnostic covers it. Spike on knitr 1.50, two passes over a
+  document with a plain chunk, `eval: false`, `include: false`, `cache: true`, `cache: 3`,
+  `cache: true` with `include: false`, a `bash` chunk, and a `child=` chunk with one inner chunk:
+  - The hook fires for plain, `eval: false`, `include: false` and `engine: bash` chunks, on
+    both passes. `eval: false` gets a unit (its markdown is the code block only).
+  - `include: false`: the hook still receives non-empty markdown, but knitr discards it after
+    the hook (`block.R:425`, `if (options$include) output else indent-or-empty`). The
+    recorded markdown must apply the same rule (empty, or the `indent` string), or placing
+    the record would resurrect hidden output and break shadow equality.
+  - Cache hits: on the second pass the three cached chunks never reach the hook (the
+    `cache: true` ones, and the `include: false` one returns `''` early, `block.R:94-101`).
+    So a cached chunk gets no unit and no files (S2). `cache: true` means level 3 in the
+    resolved options. Recovering the stored text (`cache$output(hash)`) is possible but is
+    out of scope here; the plan relies on the count assertion instead.
+  - `child=`: the hook does not fire for the `child=` chunk itself, only for the child\'s own
+    chunks (label `child-inner`), which carry no id from the parent document\'s scanner. The
+    earlier idea "record only the outermost chunk" cannot be done from the hook. Documents with
+    `child=` chunks therefore end up with fewer units than the scanner, and take the
+    count-mismatch path. Child-document support is a follow-up outside this plan.
 
 ## Phase 11A: tests first
 
 - [ ] `knitr_chunk_records_one_per_owned_chunk` (real R): three chunks, one with
   `eval: false`, one with `include: false`; three units in document order; ids
   match the stage\'s shared unit list.
-- [ ] `knitr_chunk_id_is_not_emitted_as_an_attribute` (real R): the rendered HTML
+  R level done (`chunk_records_one_per_chunk_with_an_id_in_order`). Open: the stage-level half, ids matching the shared unit list, needs 11C id insertion.
+- [x] `knitr_chunk_id_is_not_emitted_as_an_attribute` (real R): the rendered HTML
   has no trace of the id option.
-- [ ] `knitr_shadow_equality` (real R): placing the recorded chunk markdown into
+- [x] `knitr_shadow_equality` (real R): placing the recorded chunk markdown into
   the document reproduces `result.markdown` byte for byte on the fixtures from
   `knitr_label_reinject.rs`, `knitr_display_fence.rs`, and a labeled-figure
   document.
+  Done as `chunk_records_shadow_equality` (R level, three fixtures echoing the named files, a test-local `place`). knitr puts one extra newline after each chunk, so the prose segment after a record starts with it; the record itself is exact.
 - [ ] `knitr_unit_hash_covers_all_options` (no R): changing `echo` in the brace
   options or in a `#|` line changes the unit\'s execution hash; changing prose
   does not.
+  Open: needs `hash_definition` (EXR-4 Phase 5), which is not in this branch.
 - [ ] `knitr_record_files_per_chunk` (real R): a two-figure document attributes
   each file to its chunk; bytes arrive through the existing
   `collect_capture_files` path.
-- [ ] `knitr_record_has_notebook_level_meta` (real R, an htmlwidget fixture such
+  R level done (`chunk_records_attribute_figure_files_to_their_chunk`). Open: bytes via `collect_capture_files`, needs the 11C adapter.
+- [x] `knitr_record_has_notebook_level_meta` (real R, an htmlwidget fixture such
   as the one in `knitr_html_dependency.rs`): `preserve`, `needs_postprocess` and
   dependencies are at notebook level and unchanged.
-- [ ] Round-trip serde tests (no R): `KnitrExecuteResult` with and without the new
+  Done as `chunk_records_leave_notebook_level_meta_unchanged` (an htmlDependency fixture; `post_process`, `preserve`, `engine_dependencies` and `markdown` equal a run without the id).
+- [x] Round-trip serde tests (no R): `KnitrExecuteResult` with and without the new
   `chunks` field.
-- [ ] Skip behavior: every R test starts with `if skip("<name>") { return; }`.
+- [x] Skip behavior: every R test starts with `if skip("<name>") { return; }`.
 
 ## Phase 11B: R side
 
-- [ ] Add `quarto-unit-id` (final name from S1) to `other_opts` in `hooks.R`.
-- [ ] In `knit_hooks$chunk`, after the early returns and the final wrapping,
+- [x] Add `quarto-unit-id` (final name from S1) to `other_opts` in `hooks.R`.
+- [x] In `knit_hooks$chunk`, after the early returns and the final wrapping,
   append `{id, markdown, options_digest, files}` to a record list held in the
   hooks closure; return it from `execute.R` as `chunks` next to `markdown`. The
   markdown returned to knitr is unchanged.
-- [ ] Digest function over resolved options, stable across runs (sorted, id and
+- [x] Digest function over resolved options, stable across runs (sorted, id and
   code removed).
-- [ ] Files per chunk per the S2 decision.
+- [x] Files per chunk per the S2 decision.
+  Refinement found while implementing: the before-listing is taken in an options hook on
+  `quarto-unit-id` (it runs before the chunk executes and before the cache check), not at
+  the previous chunk's exit, so files written between chunks are never credited to a chunk.
+  The digest is taken in the same hook, before execution mutates options. Both are in
+  `hooks.R` (`quarto_chunk_records`); the R-side tests are in
+  `crates/quarto-core/src/engine/knitr/chunk_record_tests.rs`.
 
 ## Phase 11C: Rust side
 

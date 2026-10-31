@@ -32,9 +32,65 @@ eng2lang <- function(x) {
 }
 
 
+# EXR-11: per-chunk records. A chunk that carries a `quarto-unit-id` option is
+# recorded as {id, markdown, options_digest, files} next to the unchanged
+# document markdown. The store lives at top level so execute.R can read it
+# after rendering.
+quarto_chunk_records <- new.env()
+quarto_chunk_records$records <- list()
+
+# Options that change between runs or carry the code rather than the
+# configuration; they stay out of the digest.
+chunk_digest_skip <- c(
+  "quarto-unit-id", "code", "yaml.code", "original.code", "params.src",
+  "original.params.src", "hash", "fig.num", "fig.cur"
+)
+
+# Stable digest of the resolved chunk options: sorted by name, volatile
+# entries removed, functions and environments reduced to a tag.
+chunk_options_digest <- function(options) {
+  normalize <- function(v) {
+    if (is.function(v) || is.environment(v)) {
+      "<opaque>"
+    } else if (is.list(v)) {
+      lapply(v, normalize)
+    } else {
+      v
+    }
+  }
+  keep <- setdiff(names(options), chunk_digest_skip)
+  keep <- keep[order(keep)]
+  knitr:::digest(lapply(options[keep], normalize))
+}
+
+# Files under the chunk's figure directory, as knitr would address them
+# (relative to the knit working directory unless base.dir is set).
+chunk_figure_files <- function(options) {
+  fig_dir <- dirname(paste0(options[["fig.path"]], "x"))
+  base <- knitr::opts_knit$get("base.dir")
+  dir <- if (is.null(base)) fig_dir else file.path(base, fig_dir)
+  if (!dir.exists(dir)) {
+    return(character())
+  }
+  file.path(fig_dir, list.files(dir, recursive = TRUE))
+}
+
 knitr_hooks <- function(format, resourceDir, handledLanguages) {
   knit_hooks <- list()
   opts_hooks <- list()
+  quarto_chunk_records$records <- list()
+  chunk_pending <- list()
+
+  # Snapshot taken before each recorded chunk runs. Options hooks run before
+  # the chunk executes and before the cache check.
+  opts_hooks[["quarto-unit-id"]] <- function(options) {
+    chunk_pending[[options[["quarto-unit-id"]]]] <<- list(
+      digest = chunk_options_digest(options),
+      files_before = chunk_figure_files(options)
+    )
+    options
+  }
+
 
   # options in yaml (save last yaml.code for source hook)
   lastYamlCode <- NULL
@@ -202,7 +258,7 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
   }
 
   # entire chunk
-  knit_hooks$chunk <- delegating_hook("chunk", function(x, options) {
+  chunk_hook <- delegating_hook("chunk", function(x, options) {
     # Do nothing more for some specific chunk content -----
 
     # Quarto language handler
@@ -367,7 +423,8 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
       "fenced.echo", "chunk.echo", "lang", "out.width.px", "out.height.px",
       "indent", "class.source", "class.output", "class.message",
       "class.warning", "class.error", "attr.source", "attr.output",
-      "attr.message", "attr.warning", "attr.error", "connection", "hash"
+      "attr.message", "attr.warning", "attr.error", "connection", "hash",
+      "quarto-unit-id"
     )
     known_opts <- c(
       knitr_default_opts,
@@ -487,6 +544,30 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
       )
     }
   })
+  knit_hooks$chunk <- function(x, options) {
+    out <- chunk_hook(x, options)
+    id <- options[["quarto-unit-id"]]
+    pending <- if (is.null(id)) NULL else chunk_pending[[id]]
+    if (!is.null(pending)) {
+      chunk_pending[[id]] <<- NULL
+      # knitr drops a hook's output for include: false (block.R), keeping only
+      # the indent; the record must hold what lands in the document
+      markdown <- if (isTRUE(options[["include"]])) {
+        out
+      } else {
+        options[["indent"]] %||% ""
+      }
+      files <- setdiff(chunk_figure_files(options), pending$files_before)
+      quarto_chunk_records$records[[length(quarto_chunk_records$records) + 1]] <-
+        list(
+          id = id,
+          markdown = markdown,
+          optionsDigest = pending$digest,
+          files = I(sort(files))
+        )
+    }
+    out
+  }
   knit_hooks$source <- function(x, options) {
     # How knitr handles the prompt option for R chunks
     x <- knitr:::hilight_source(x, "markdown", options)

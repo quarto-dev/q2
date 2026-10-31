@@ -266,7 +266,8 @@ execute <- function(
     includes = includes,
     engineDependencies = engineDependencies,
     preserve = preserve,
-    postProcess = postProcess
+    postProcess = postProcess,
+    chunks = I(unname(quarto_chunk_records$records))
   )
 }
 

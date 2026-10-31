@@ -649,7 +649,7 @@ between the fences).
   unchanged in this epic; the divergence list records each difference with its
   strand: list-nested cells (bd-9j6z311f, q1 runs them), attribute-tail cells
   (bd-rh4cce9e), capitalized `{Python}` (bd-7gvl455a, q2 runs it, q1 does not). A
-  fence indented four spaces (Q-2-35) and knitr-style options in the braces (Q-2-36)
+  fence indented four spaces (Q-2-58) and knitr-style options in the braces (Q-2-36)
   are deliberate q2 parse errors. Phase 0 still pins the current behavior; the writer
   indents list-nested fences (verified by running `pampa -t qmd`), which explains
   bd-9j6z311f.

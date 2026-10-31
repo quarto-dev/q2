@@ -134,6 +134,32 @@ pub struct KnitrExecuteResult {
     /// Whether post-processing is needed
     #[serde(default)]
     pub post_process: bool,
+
+    /// One record per chunk that carried a `quarto-unit-id` option, in
+    /// execution order (EXR-11). Absent from results that predate it.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub chunks: Vec<KnitrChunkRecord>,
+}
+
+/// A knitr chunk recorded by the chunk hook (EXR-11).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnitrChunkRecord {
+    /// The unit id the chunk carried in its `quarto-unit-id` option.
+    pub id: String,
+
+    /// The chunk's finished markdown: what lands in the document (empty, or
+    /// the indent, for `include: false`).
+    pub markdown: String,
+
+    /// Stable digest of the resolved chunk options.
+    pub options_digest: String,
+
+    /// Files the chunk wrote under its figure directory, as knitr addresses
+    /// them (relative to the knit working directory unless `base.dir` is set).
+    #[serde(default)]
+    pub files: Vec<String>,
 }
 
 /// Include files from knitr execution.
@@ -335,6 +361,43 @@ mod tests {
 
         // lib_dir is None, should not appear
         assert!(!json.contains("\"libDir\""));
+    }
+
+    #[test]
+    fn execute_result_without_chunks_field_has_no_chunks() {
+        let json = r##"{"engine": "knitr", "markdown": "x"}"##;
+        let result: KnitrExecuteResult = serde_json::from_str(json).unwrap();
+        assert!(result.chunks.is_empty());
+    }
+
+    #[test]
+    fn execute_result_with_chunks_field_deserializes_records() {
+        let json = r##"{
+            "engine": "knitr",
+            "markdown": "x",
+            "chunks": [
+                {"id": "a1", "markdown": "m1", "optionsDigest": "d1", "files": ["f/a-1.png"]},
+                {"id": "a2", "markdown": "", "optionsDigest": "d2"}
+            ]
+        }"##;
+        let result: KnitrExecuteResult = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.chunks,
+            vec![
+                KnitrChunkRecord {
+                    id: "a1".into(),
+                    markdown: "m1".into(),
+                    options_digest: "d1".into(),
+                    files: vec!["f/a-1.png".into()],
+                },
+                KnitrChunkRecord {
+                    id: "a2".into(),
+                    markdown: String::new(),
+                    options_digest: "d2".into(),
+                    files: vec![],
+                },
+            ]
+        );
     }
 
     #[test]

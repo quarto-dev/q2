@@ -54,6 +54,9 @@ pub use subprocess::{
 };
 pub use types::{KnitrExecuteParams, KnitrExecuteResult, KnitrIncludes};
 
+#[cfg(test)]
+mod chunk_record_tests;
+
 // ============================================================================
 // Embedded R Scripts
 // ============================================================================
