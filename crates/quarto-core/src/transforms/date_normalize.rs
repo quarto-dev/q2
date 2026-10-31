@@ -5,17 +5,20 @@
  * Transform that resolves, parses, and formats date metadata.
  */
 
-//! Date normalization transform (bd-gx9cic8z P4, bd-13f821l5).
+//! Date normalization (bd-gx9cic8z P4, bd-13f821l5). Runs inside
+//! `ShortcodeResolveTransform`, before its metadata walk, so that
+//! `{{< meta date >}}` sees the formatted value.
 //!
 //! The Rust counterpart of Quarto 1's pre-Pandoc date rewrite
 //! (`src/command/render/pandoc.ts:1186-1197`) plus
 //! `documentTitleMetadata`'s forced `long`: for each of `date` and
 //! `date-modified`,
 //!
-//! 1. resolve the `today` / `now` / `last-modified` keywords
-//!    (`today`/`now` via `SystemRuntime::unix_timestamp` — UTC, a
-//!    documented deviation from Q1's local time; `last-modified` via
-//!    the runtime's VFS-aware file mtime);
+//! 1. resolve the `today` / `now` / `last-modified` keywords in the
+//!    machine's local timezone, like Q1 (`SystemRuntime::
+//!    local_utc_offset_seconds`; WASM stays in UTC). `today`/`now` use
+//!    `SystemRuntime::unix_timestamp`, `last-modified` the runtime's
+//!    VFS-aware file mtime;
 //! 2. parse the value ([`crate::dates::parse_date`]; on failure, a
 //!    render diagnostic names the accepted forms and the raw string
 //!    is left untouched — Q1 can silently emit `Invalid Date`);
@@ -39,135 +42,104 @@
 //!
 //! Design: `claude-notes/plans/2026-07-17-date-formatting-design.md`.
 
-use std::sync::Arc;
-
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::ConfigValue;
-use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::SystemRuntime;
 use time::OffsetDateTime;
 
-use crate::Result;
-use crate::dates::{ACCEPTED_DATE_FORMS, DateStyle, ParsedDate, parse_date};
+use crate::dates::{
+    ACCEPTED_DATE_FORMS, DateStyle, iso_timestamp, local_now, parse_date, start_of_day, to_local,
+};
 use crate::render::RenderContext;
-use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::TitleBlockStyle;
 
 /// The two document metadata fields this transform normalizes.
 const DATE_FIELDS: [&str; 2] = ["date", "date-modified"];
 
-/// Transform that resolves date keywords and formats date metadata.
-pub struct DateNormalizeTransform {
-    runtime: Arc<dyn SystemRuntime>,
-}
+/// Metadata keys [`normalize_dates`] reads. The shortcode transform resolves
+/// these first, so a date may itself be written with a shortcode.
+pub(crate) const DATE_INPUT_KEYS: [&str; 4] =
+    ["date", "date-modified", "date-format", "title-block-style"];
 
-impl DateNormalizeTransform {
-    /// Create a new date normalization transform.
-    pub fn new(runtime: Arc<dyn SystemRuntime>) -> Self {
-        Self { runtime }
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl AstTransform for DateNormalizeTransform {
-    fn name(&self) -> &str {
-        "date-normalize"
+/// Resolve date keywords and format date metadata in place.
+pub fn normalize_dates(
+    meta: &mut ConfigValue,
+    ctx: &mut RenderContext,
+    runtime: &dyn SystemRuntime,
+) {
+    if !meta.is_map() {
+        return;
     }
 
-    fn phase(&self) -> TransformPhase {
-        TransformPhase::Normalization
-    }
+    let default_style = default_style(&*meta, ctx);
+    let doc_style = meta
+        .get("date-format")
+        .and_then(|v| v.as_plain_text())
+        .map(|s| DateStyle::parse(&s));
 
-    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        if !ast.meta.is_map() {
-            return Ok(());
+    for field in DATE_FIELDS {
+        let Some(raw) = read_date_field(&*meta, field) else {
+            continue;
+        };
+
+        // Keyword resolution (today / now / last-modified).
+        let resolved = match raw.value.as_str() {
+            "today" => local_now(runtime).map(|dt| iso_timestamp(start_of_day(dt))),
+            "now" => local_now(runtime).map(iso_timestamp),
+            "last-modified" => input_mtime(ctx, runtime),
+            _ => Some(raw.value.clone()),
+        };
+        let Some(resolved) = resolved else {
+            ctx.diagnostics.push(DiagnosticMessage::warning(format!(
+                "could not resolve `{field}: {}` (keyword resolution failed); \
+                 leaving the value as-is",
+                raw.value
+            )));
+            continue;
+        };
+
+        let Some(parsed) = parse_date(&resolved) else {
+            ctx.diagnostics.push(DiagnosticMessage::warning(format!(
+                "could not parse `{field}: {resolved}` as a date; accepted forms are \
+                 {ACCEPTED_DATE_FORMS}. Leaving the value as-is."
+            )));
+            continue;
+        };
+
+        // ISO machine form (explicit value wins).
+        let meta_key = format!("{field}-meta");
+        if meta.get(&meta_key).is_none() {
+            meta.insert_path(
+                &[meta_key.as_str()],
+                ConfigValue::new_string(parsed.iso_string(), gen_si()),
+            );
         }
 
-        let default_style = default_style(&ast.meta, ctx);
-        let doc_style = ast
-            .meta
-            .get("date-format")
-            .and_then(|v| v.as_plain_text())
-            .map(|s| DateStyle::parse(&s));
-
-        for field in DATE_FIELDS {
-            let Some(raw) = read_date_field(&ast.meta, field) else {
-                continue;
-            };
-
-            // Keyword resolution (today / now / last-modified).
-            let resolved = match raw.value.as_str() {
-                "today" => self.now_utc().map(|dt| iso_timestamp(dt.date().midnight())),
-                "now" => self
-                    .now_utc()
-                    .map(|dt| iso_timestamp(time::PrimitiveDateTime::new(dt.date(), dt.time()))),
-                "last-modified" => self.input_mtime(ctx),
-                _ => Some(raw.value.clone()),
-            };
-            let Some(resolved) = resolved else {
-                ctx.diagnostics.push(DiagnosticMessage::warning(format!(
-                    "could not resolve `{field}: {}` (keyword resolution failed); \
-                     leaving the value as-is",
-                    raw.value
-                )));
-                continue;
-            };
-
-            let Some(parsed) = parse_date(&resolved) else {
-                ctx.diagnostics.push(DiagnosticMessage::warning(format!(
-                    "could not parse `{field}: {resolved}` as a date; accepted forms are \
-                     {ACCEPTED_DATE_FORMS}. Leaving the value as-is."
-                )));
-                continue;
-            };
-
-            // ISO machine form (explicit value wins).
-            let meta_key = format!("{field}-meta");
-            if ast.meta.get(&meta_key).is_none() {
-                ast.meta.insert_path(
-                    &[meta_key.as_str()],
-                    ConfigValue::new_string(parsed.iso_string(), gen_si()),
-                );
-            }
-
-            // Human form: field format > date-format > default.
-            let style = raw
-                .field_format
-                .as_deref()
-                .map(DateStyle::parse)
-                .or_else(|| doc_style.clone())
-                .unwrap_or_else(|| default_style.clone());
-            let (formatted, warnings) = crate::dates::format_date(&parsed, &style);
-            for w in warnings {
-                ctx.diagnostics.push(DiagnosticMessage::warning(w));
-            }
-            ast.meta
-                .insert_path(&[field], ConfigValue::new_string(formatted, gen_si()));
+        // Human form: field format > date-format > default.
+        let style = raw
+            .field_format
+            .as_deref()
+            .map(DateStyle::parse)
+            .or_else(|| doc_style.clone())
+            .unwrap_or_else(|| default_style.clone());
+        let (formatted, warnings) = crate::dates::format_date(&parsed, &style);
+        for w in warnings {
+            ctx.diagnostics.push(DiagnosticMessage::warning(w));
         }
-
-        Ok(())
+        meta.insert_path(&[field], ConfigValue::new_string(formatted, gen_si()));
     }
 }
 
-impl DateNormalizeTransform {
-    /// The current instant, UTC, via the runtime clock (WASM-safe).
-    fn now_utc(&self) -> Option<OffsetDateTime> {
-        let ts = self.runtime.unix_timestamp().ok()?;
-        OffsetDateTime::from_unix_timestamp(ts as i64).ok()
-    }
-
-    /// The input file's modification time as an ISO timestamp
-    /// (VFS-aware; the `listing_item_info::mtime_iso` pattern).
-    fn input_mtime(&self, ctx: &RenderContext) -> Option<String> {
-        let metadata = self.runtime.path_metadata(&ctx.document.input).ok()?;
-        let modified = metadata.modified?;
-        let dt = OffsetDateTime::from(modified);
-        Some(iso_timestamp(time::PrimitiveDateTime::new(
-            dt.date(),
-            dt.time(),
-        )))
-    }
+/// The input file's modification time as a local ISO timestamp
+/// (VFS-aware; the `listing_item_info::mtime_iso` pattern).
+fn input_mtime(ctx: &RenderContext, runtime: &dyn SystemRuntime) -> Option<String> {
+    let metadata = runtime.path_metadata(&ctx.document.input).ok()?;
+    let modified = metadata.modified?;
+    Some(iso_timestamp(to_local(
+        OffsetDateTime::from(modified),
+        runtime,
+    )))
 }
 
 /// A raw date field value: the scalar string, or Q1's
@@ -208,18 +180,6 @@ fn default_style(meta: &ConfigValue, ctx: &RenderContext) -> DateStyle {
     } else {
         DateStyle::Iso
     }
-}
-
-/// Render a `PrimitiveDateTime` as the ISO timestamp shape the
-/// keyword resolution materializes (Q1 materializes keywords as
-/// timestamps, then formats).
-fn iso_timestamp(dt: time::PrimitiveDateTime) -> String {
-    let parsed = ParsedDate {
-        datetime: dt,
-        offset: Some(time::UtcOffset::UTC),
-        has_time: true,
-    };
-    parsed.iso_string()
 }
 
 fn gen_si() -> SourceInfo {
@@ -271,20 +231,15 @@ mod tests {
 
     /// Run the transform over `meta` for the given format string;
     /// returns (meta, diagnostics).
-    fn run(meta: ConfigValue, format: &str) -> (ConfigValue, Vec<String>) {
+    fn run(mut meta: ConfigValue, format: &str) -> (ConfigValue, Vec<String>) {
         let project = project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::from_format_string(format).unwrap();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
-        let mut ast = Pandoc {
-            meta,
-            ..Default::default()
-        };
-        let transform = DateNormalizeTransform::new(Arc::new(NativeRuntime::new()));
-        pollster::block_on(transform.transform(&mut ast, &mut ctx)).unwrap();
+        normalize_dates(&mut meta, &mut ctx, &NativeRuntime::new());
         let diags = ctx.diagnostics.iter().map(|d| format!("{d:?}")).collect();
-        (ast.meta, diags)
+        (meta, diags)
     }
 
     fn text(meta: &ConfigValue, key: &str) -> Option<String> {
@@ -387,14 +342,10 @@ mod tests {
         let format = Format::html();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
-        let mut ast = Pandoc {
-            meta: map(vec![("date", s("last-modified"))]),
-            ..Default::default()
-        };
-        let transform = DateNormalizeTransform::new(Arc::new(NativeRuntime::new()));
-        pollster::block_on(transform.transform(&mut ast, &mut ctx)).unwrap();
+        let mut meta = map(vec![("date", s("last-modified"))]);
+        normalize_dates(&mut meta, &mut ctx, &NativeRuntime::new());
         assert!(ctx.diagnostics.is_empty());
-        let formatted = ast.meta.get("date").unwrap().as_plain_text().unwrap();
+        let formatted = meta.get("date").unwrap().as_plain_text().unwrap();
         assert!(formatted.contains(", 2"), "unexpected: {formatted}");
     }
 }

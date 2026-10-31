@@ -25,9 +25,7 @@ In addition, you may provide date keywords, which produce a dynamic date:
 | `now`           | The current date and time.                                             |
 | `last-modified` | The last modified date and time of the input file containing the date. |
 
-::: callout-note
-Keyword dates currently resolve in UTC. (Quarto 1 resolves them in the machine's local timezone; local-timezone support is planned alongside localization.)
-:::
+Keyword dates resolve in the timezone of the machine doing the render, so a document built in different places can show different dates. On Linux and macOS, set the `TZ` environment variable to fix the timezone, for example `TZ=UTC`. In Quarto Hub and the browser-based preview, keyword dates resolve in UTC.
 
 ## Date Formatting
 

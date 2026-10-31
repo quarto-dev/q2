@@ -239,7 +239,7 @@ matter; both only touch meta). For each of `date`, `date-modified`:
 | 3 | Full day.js token set incl. week-of-year, named tz | Documented subset; deferred tokens warn | `time` has no tz db / week-year machinery; no real-world usage in Q1's own templates |
 | 4 | `dcterms.date` gets the human-formatted string | `date-meta` stays ISO | Machine slots stay machine-readable (P3 precedent) |
 | 5 | Silent `Invalid Date` on unparseable input (some paths) | Render diagnostic, raw string preserved | Q2 diagnostics culture |
-| 6 | `today`/`now` resolve in the machine's local timezone | UTC (via `SystemRuntime::unix_timestamp`, WASM-safe) | Deterministic across native/WASM; local-tz support joins the localization/timezone design |
+| 6 | `today`/`now` resolve in the machine's local timezone | Same on native since bd-meta-date-local-time-bj4w929l (originally UTC); WASM stays UTC | A build date should be the date where the build happens; WASM has no build machine |
 
 ## Open questions for Carlos
 

@@ -1278,6 +1278,24 @@ impl AstTransform for ShortcodeResolveTransform {
             None
         };
 
+        // Normalize dates before anything can read them, so `{{< meta date >}}`
+        // sees the formatted value (Q1's pre-Pandoc rewrite). The date inputs
+        // resolve first so a date may itself be written with a shortcode.
+        if let Some(runtime) = self.runtime.as_ref() {
+            let authored = ast.meta.clone();
+            for key in crate::transforms::date_normalize::DATE_INPUT_KEYS {
+                if let Some(value) = ast.meta.get_path_mut(&[key]) {
+                    resolve_config_value(value, self, &authored, &mut diagnostics, &mut lua_engine)
+                        .await;
+                }
+            }
+            crate::transforms::date_normalize::normalize_dates(
+                &mut ast.meta,
+                ctx,
+                runtime.as_ref(),
+            );
+        }
+
         // Resolve shortcodes in metadata values first (Q1 parity: the
         // filter traversal walks `doc.meta` — jog.lua:173 — so shortcodes
         // resolve in ALL metadata values, not a blessed set). Handler
