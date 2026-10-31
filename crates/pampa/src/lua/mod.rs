@@ -25,6 +25,7 @@ pub mod mediabag;
 mod metadata;
 mod nodes;
 mod os_exit;
+mod os_setlocale;
 mod os_wasm;
 mod pandoc_doc;
 mod path;

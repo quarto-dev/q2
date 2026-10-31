@@ -194,6 +194,8 @@ pub fn create_filter_environment_with(
     // os.exit fails the document, not the process (GH #941). On native this
     // replaces the stdlib's libc exit; on WASM it extends the synthetic os.
     super::os_exit::install_os_exit(&lua)?;
+    // os.setlocale never changes the process-global locale (bd-1fuxtxkd).
+    super::os_setlocale::install_os_setlocale(&lua)?;
 
     // Create mediabag for storing media items
     // In the future, this could be pre-populated from the document or passed in

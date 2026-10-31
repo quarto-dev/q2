@@ -123,6 +123,8 @@ impl LuaShortcodeEngine {
         // os.exit raises instead of exiting the process (GH #941); a
         // handler that calls it fails like one that calls error().
         super::os_exit::install_os_exit(&lua).map_err(LuaShortcodeError::LuaError)?;
+        // os.setlocale never changes the process-global locale (bd-1fuxtxkd).
+        super::os_setlocale::install_os_setlocale(&lua).map_err(LuaShortcodeError::LuaError)?;
 
         let mediabag = create_shared_mediabag();
         register_pandoc_namespace(&lua, runtime.clone(), mediabag)
