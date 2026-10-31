@@ -22,11 +22,28 @@
  */
 
 use mlua::{Function, Lua, MultiValue, Result, Table, Value};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::runtime::{SystemRuntime, XdgDirKind};
+use super::env_overlay::{self, OverlayGuard, all_vars};
+use super::runtime::{CommandOutput, RuntimeResult, SystemRuntime, XdgDirKind};
+
+/// Run a child under the state's `with_environment` table if one is active.
+/// Otherwise the child inherits the process environment.
+fn spawn(
+    lua: &Lua,
+    runtime: &dyn SystemRuntime,
+    command: &str,
+    args: &[&str],
+    stdin: Option<&[u8]>,
+) -> RuntimeResult<CommandOutput> {
+    match env_overlay::active_overlay(lua) {
+        Some(env) => runtime.exec_command_with_env(command, args, stdin, &env),
+        None => runtime.exec_command(command, args, stdin),
+    }
+}
 
 /// Register the pandoc.system module.
 ///
@@ -76,7 +93,7 @@ pub fn register_pandoc_system(
     system.set(
         "command",
         lua.create_function(
-            move |_,
+            move |lua,
                   (cmd, args, input, _opts): (
                 String,
                 Vec<String>,
@@ -86,7 +103,7 @@ pub fn register_pandoc_system(
                 let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
                 let input_bytes = input.map(|s| s.into_bytes());
 
-                match rt.exec_command(&cmd, &args_refs, input_bytes.as_deref()) {
+                match spawn(lua, rt.as_ref(), &cmd, &args_refs, input_bytes.as_deref()) {
                     Ok(output) => {
                         // Pandoc returns:
                         // - false if exit code is 0 (success)
@@ -115,8 +132,7 @@ pub fn register_pandoc_system(
                 let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
                 let input_bytes = input.map(|s| s.as_bytes().to_vec());
 
-                let output = rt
-                    .exec_command(&cmd, &args_refs, input_bytes.as_deref())
+                let output = spawn(lua, rt.as_ref(), &cmd, &args_refs, input_bytes.as_deref())
                     .map_err(|e| mlua::Error::runtime(format!("pandoc.pipe: {cmd}: {e}")))?;
                 if output.code != 0 {
                     return Err(mlua::Error::runtime(format!(
@@ -271,9 +287,7 @@ pub fn register_pandoc_system(
     system.set(
         "environment",
         lua.create_function(move |lua, ()| {
-            let env = rt
-                .env_all()
-                .map_err(|e| mlua::Error::runtime(e.to_string()))?;
+            let env = all_vars(lua, rt.as_ref())?;
 
             let table = lua.create_table()?;
             for (k, v) in env {
@@ -283,67 +297,18 @@ pub fn register_pandoc_system(
         })?,
     )?;
 
-    // with_environment(environment, callback) - run with custom environment
-    // Note: This is tricky to implement correctly because environment changes
-    // are process-global. For now, we'll implement a simple version that
-    // temporarily sets/unsets variables.
-    //
-    // SAFETY: Environment variable manipulation is inherently unsafe in Rust 2024
-    // edition due to potential race conditions in multi-threaded programs.
-    // Lua filters are typically run single-threaded, but users should be aware
-    // that this function modifies process-global state.
-    let rt = runtime.clone();
+    // with_environment(environment, callback) - run with custom environment.
+    // The table replaces this Lua state's environment for the callback; the
+    // process environment is never touched (see env_overlay). The whole table
+    // is read first, so a bad value raises before anything takes effect.
     system.set(
         "with_environment",
-        lua.create_function(move |_lua, (env_table, callback): (Table, Function)| {
-            // Save current environment
-            let current_env = rt
-                .env_all()
-                .map_err(|e| mlua::Error::runtime(e.to_string()))?;
-
-            // Set new environment
-            // Note: In a sandboxed runtime, this may be restricted
-            for pair in env_table.pairs::<String, String>() {
-                let (key, value) = pair?;
-                // SAFETY: We're in a single-threaded Lua context
-                unsafe {
-                    std::env::set_var(&key, &value);
-                }
-            }
-
-            // Clear variables not in new environment
-            for key in current_env.keys() {
-                if env_table.get::<Value>(key.clone())?.is_nil() {
-                    // SAFETY: We're in a single-threaded Lua context
-                    unsafe {
-                        std::env::remove_var(key);
-                    }
-                }
-            }
-
-            // Execute callback
-            let result = callback.call::<MultiValue>(());
-
-            // Restore original environment
-            for (key, value) in &current_env {
-                // SAFETY: We're in a single-threaded Lua context
-                unsafe {
-                    std::env::set_var(key, value);
-                }
-            }
-
-            // Remove variables that weren't in original
-            for pair in env_table.pairs::<String, String>() {
-                let (key, _) = pair?;
-                if !current_env.contains_key(&key) {
-                    // SAFETY: We're in a single-threaded Lua context
-                    unsafe {
-                        std::env::remove_var(&key);
-                    }
-                }
-            }
-
-            result
+        lua.create_function(|lua, (env_table, callback): (Table, Function)| {
+            let env = env_table
+                .pairs::<String, String>()
+                .collect::<Result<HashMap<_, _>>>()?;
+            let _overlay = OverlayGuard::push(lua, env);
+            callback.call::<MultiValue>(())
         })?,
     )?;
 
@@ -470,6 +435,8 @@ pub fn register_pandoc_system(
     )?;
 
     // Set the system table in pandoc namespace
+    env_overlay::install(lua, runtime.clone())?;
+
     pandoc.set("system", system)?;
 
     Ok(())
@@ -917,29 +884,209 @@ mod tests {
         assert_eq!(std::env::current_dir().unwrap(), original_cwd);
     }
 
+    // A child that prints $Q2_ENV_CHILD, as Lua argument lists. The table it
+    // runs under must keep PATH, since the overlay replaces the environment.
+    #[cfg(not(windows))]
+    const PRINT_VAR_PROGRAM: &str = "'sh', {'-c', 'printf %s \"$Q2_ENV_CHILD\"'}";
+    #[cfg(windows)]
+    const PRINT_VAR_PROGRAM: &str = "'cmd', {'/C', 'echo', '%Q2_ENV_CHILD%'}";
+
+    /// `real_env(name)`: the process environment, which no Lua reader consults
+    /// once the host supplies a snapshot.
+    fn register_real_env(lua: &Lua) {
+        let real_env = lua
+            .create_function(|_, name: String| Ok(std::env::var(name).ok()))
+            .unwrap();
+        lua.globals().set("real_env", real_env).unwrap();
+    }
+
     #[test]
     fn test_with_environment() {
         let (lua, _) = create_test_lua();
+        register_real_env(&lua);
 
-        // Test that with_environment can set and read environment variables
-        let result: String = lua
+        lua.load(
+            r#"
+            local ran = false
+            pandoc.system.with_environment({Q2_ENV_A = 'test_value'}, function()
+                ran = true
+                assert(pandoc.system.environment().Q2_ENV_A == 'test_value')
+                assert(os.getenv('Q2_ENV_A') == 'test_value')
+                -- The table replaces the environment; it does not extend it.
+                assert(pandoc.system.environment().PATH == nil)
+                assert(os.getenv('PATH') == nil)
+                -- And none of that reached the process.
+                assert(real_env('Q2_ENV_A') == nil)
+                assert(real_env('PATH') ~= nil)
+            end)
+            assert(ran)
+            assert(pandoc.system.environment().Q2_ENV_A == nil)
+            assert(os.getenv('Q2_ENV_A') == nil)
+            assert(os.getenv('PATH') ~= nil)
+            "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_with_environment_returns_callback_values_and_nests() {
+        let (lua, _) = create_test_lua();
+
+        lua.load(
+            r#"
+            local a, b = pandoc.system.with_environment({Q2_ENV_A = 'outer'}, function()
+                pandoc.system.with_environment({Q2_ENV_B = 'inner'}, function()
+                    assert(os.getenv('Q2_ENV_A') == nil)
+                    assert(os.getenv('Q2_ENV_B') == 'inner')
+                end)
+                assert(os.getenv('Q2_ENV_A') == 'outer')
+                assert(os.getenv('Q2_ENV_B') == nil)
+                return 1, 2
+            end)
+            assert(a == 1 and b == 2)
+            "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_with_environment_is_invisible_to_another_lua_state() {
+        // The two states meet inside the callback, as two documents do when
+        // their filters overlap on rayon workers.
+        let inside = Arc::new(std::sync::Barrier::new(2));
+        let done = Arc::new(std::sync::Barrier::new(2));
+
+        let (inside2, done2) = (inside.clone(), done.clone());
+        let setter = std::thread::spawn(move || {
+            let (lua, _) = create_test_lua();
+            let meet = lua
+                .create_function(move |_, ()| {
+                    inside2.wait();
+                    done2.wait();
+                    Ok(())
+                })
+                .unwrap();
+            lua.globals().set("meet", meet).unwrap();
+            lua.load("pandoc.system.with_environment({Q2_ENV_LEAK = 'x'}, meet)")
+                .exec()
+                .unwrap();
+        });
+
+        inside.wait();
+        let (lua, _) = create_test_lua();
+        let observed = lua
             .load(
                 r#"
-                local result
-                pandoc.system.with_environment({MY_TEST_VAR = 'test_value'}, function()
-                    local env = pandoc.system.environment()
-                    result = env.MY_TEST_VAR
-                end)
-                return result
-            "#,
+                local env = pandoc.system.environment()
+                return env.Q2_ENV_LEAK == nil and next(env) ~= nil
+                    and os.getenv('Q2_ENV_LEAK') == nil and os.getenv('PATH') ~= nil
+                "#,
             )
+            .eval::<bool>();
+        done.wait();
+        setter.join().unwrap();
+
+        assert!(observed.unwrap());
+    }
+
+    #[test]
+    fn test_with_environment_reaches_children_through_supported_spawns() {
+        let (lua, _) = create_test_lua();
+
+        let (command, pipe, outside): (String, String, String) = lua
+            .load(format!(
+                r#"
+                local env = pandoc.system.environment()
+                env.Q2_ENV_CHILD = 'from-overlay'
+                local command, pipe
+                pandoc.system.with_environment(env, function()
+                    local _, out = pandoc.system.command({PRINT_VAR_PROGRAM})
+                    command = out
+                    pipe = pandoc.pipe({PRINT_VAR_PROGRAM}, '')
+                end)
+                local _, outside = pandoc.system.command({PRINT_VAR_PROGRAM})
+                return command, pipe, outside
+                "#
+            ))
             .eval()
             .unwrap();
 
-        assert_eq!(result, "test_value");
+        assert!(command.contains("from-overlay"), "{command}");
+        assert!(pipe.contains("from-overlay"), "{pipe}");
+        assert!(!outside.contains("from-overlay"), "{outside}");
+    }
 
-        // After with_environment, the variable should be removed
-        assert!(std::env::var("MY_TEST_VAR").is_err());
+    #[test]
+    fn test_stock_spawns_raise_inside_with_environment_only() {
+        let (lua, _) = create_test_lua();
+
+        lua.load(
+            r#"
+            -- A reference saved before the call is covered too.
+            local saved_popen = io.popen
+            for name, spawn in pairs({
+                popen = function() return saved_popen('echo hello') end,
+                execute = function() return os.execute('echo hello') end,
+            }) do
+                pandoc.system.with_environment({}, function()
+                    local ok, err = pcall(spawn)
+                    assert(not ok, name .. ' should raise')
+                    assert(tostring(err):find('pandoc.pipe', 1, true), tostring(err))
+                end)
+            end
+            local p = io.popen('echo hello')
+            assert(p:read('a'):find('hello'))
+            p:close()
+            "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_with_environment_restores_after_callback_error() {
+        let (lua, _) = create_test_lua();
+
+        lua.load(
+            r#"
+            local ok, err = pcall(pandoc.system.with_environment, {Q2_ENV_A = 'x'}, function()
+                error('boom')
+            end)
+            assert(not ok and tostring(err):find('boom'))
+            assert(os.getenv('Q2_ENV_A') == nil)
+            assert(os.getenv('PATH') ~= nil)
+            assert(pandoc.system.environment().Q2_ENV_A == nil)
+            "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_with_environment_bad_value_raises_without_running_or_leaking() {
+        let (lua, _) = create_test_lua();
+        register_real_env(&lua);
+
+        lua.load(
+            r#"
+            -- Table order is unspecified, so surround the bad value.
+            local t = {Q2_ENV_BAD = true}
+            for i = 1, 40 do t['Q2_ENV_GOOD_' .. i] = 'x' end
+            local ran = false
+            local ok = pcall(pandoc.system.with_environment, t, function() ran = true end)
+            assert(not ok, 'a non-string value should raise')
+            assert(not ran, 'the callback should not run')
+            assert(os.getenv('PATH') ~= nil)
+            for i = 1, 40 do
+                assert(os.getenv('Q2_ENV_GOOD_' .. i) == nil)
+                assert(real_env('Q2_ENV_GOOD_' .. i) == nil)
+            end
+            "#,
+        )
+        .exec()
+        .unwrap();
     }
 
     #[test]

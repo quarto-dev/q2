@@ -580,10 +580,20 @@ function Para(el)
     assert(type(os.time) == "function", "os.time should be a function")
     assert(type(os.clock) == "function", "os.clock should be a function")
     assert(type(os.difftime) == "function", "os.difftime should be a function")
-    -- os.getenv is runtime-backed (nothing in the browser) and is what
-    -- the host's environment snapshot replaces (GH #939).
+    -- os.getenv is runtime-backed (nothing in the browser) unless the host
+    -- supplies an environment snapshot (GH #939).
     assert(type(os.getenv) == "function", "os.getenv should be a function")
     assert(os.getenv("QUARTO_PROFILE") == nil, "no environment in the browser")
+    -- with_environment is a per-state overlay, so it works without a process
+    -- environment; os.getenv and pandoc.system.environment both read it.
+    local seen, listed
+    pandoc.system.with_environment({ Q2_WASM = "x" }, function()
+        seen = os.getenv("Q2_WASM")
+        listed = pandoc.system.environment().Q2_WASM
+    end)
+    assert(seen == "x", "os.getenv should see the overlay")
+    assert(listed == "x", "pandoc.system.environment should see the overlay")
+    assert(os.getenv("Q2_WASM") == nil, "the overlay should end with the callback")
     -- os.exit is the document-failing replacement, not absent (GH #941).
     assert(type(os.exit) == "function", "os.exit should be a function")
     assert(pcall(os.exit, 1) == false, "os.exit should raise, not return")
