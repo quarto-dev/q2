@@ -389,6 +389,20 @@ pub struct TsExecuteOptions {
     /// fired (q2 plan4c FINDING #4, fixed 2026-07-02 upstream in
     /// `quarto-marimo`).
     pub handled_languages: Vec<String>,
+    /// The **positive** owned-language set for this engine — every language
+    /// present in this render that q2's resolution assigned to it
+    /// (`ownedLanguages` on the wire). The positive projection of the ownership
+    /// map, disjoint from [`Self::handled_languages`] over present languages: an
+    /// engine may read `ownedLanguages.includes("L")` directly to select the
+    /// cells it owns, instead of inferring them as the complement of the
+    /// leave-alone set (which conflates "owned by me" with "owned by nobody").
+    /// **Informational, not enforcement** — `handled_languages` remains the
+    /// execute-time gate. Lists only Pass-1-resolved languages, so a language
+    /// that appears only in a *generated* cell is owned by nobody and is absent
+    /// here (a ratified pass-through, design §6.1 — not a re-resolution feature).
+    /// `#[serde(default)]` so an absent key deserializes as `[]`. Added by Plan 4d.
+    #[serde(default)]
+    pub owned_languages: Vec<String>,
     pub params: Option<HashMap<String, TsMetadataValue>>,
     pub source_map: Vec<TsSourceMapEntry>,
     /// Whether to resolve dependencies inline (`true`, Q1 default) or defer them
@@ -515,6 +529,7 @@ mod tests {
             lib_dir: "/project/doc_files".to_string(),
             quiet: false,
             handled_languages: vec![],
+            owned_languages: vec![],
             params: None,
             source_map: vec![],
             dependencies: true,
@@ -1227,6 +1242,7 @@ mod tests {
         assert_eq!(j["tempDir"], "/tmp");
         assert_eq!(j["libDir"], "/project/doc_files");
         assert_eq!(j["handledLanguages"], json!([]));
+        assert_eq!(j["ownedLanguages"], json!([]));
         assert_eq!(j["sourceMap"], json!([]));
         // format is a nested object
         assert!(j["format"].is_object());
@@ -1484,6 +1500,7 @@ mod tests {
             "libDir": "/project/doc_files",
             "quiet": false,
             "handledLanguages": [],
+            "ownedLanguages": [],
             "params": null,
             "sourceMap": []
         });

@@ -530,6 +530,13 @@ section, picks its own work, merges back to the integration branch, and ends by 
 handoff to the console. Nothing about progress lives in files outside the plans: the state
 is git (branches, commits) plus each plan\'s checkboxes and `status:` line.
 
+> **A plan is not finished until it has merged to the integration branch.** When the last
+> item of a plan is ticked and its gates pass, the next action is rule 5 (rebase, re-run the
+> gates, `merge --ff-only` into workspace-1), before the handoff and before starting the
+> next plan. Merge earlier than that only when another plan\'s phase gate needs it (rule 5).
+> A handoff that says `merged to integration: no` for a completed plan is a bug in the
+> session, not a status.
+
 **Integration:** branch `feature/execution-records-epic`, checked out in
 `/Users/gordon/src/q2/.worktrees/workspace-1`. Nobody works in that worktree except to merge
 into it and to edit this epic.
@@ -554,8 +561,9 @@ Session counts in the plan headers are estimates, and the lanes carry roughly 12
 
 **Definitions.**
 - A plan has **landed** when its front matter says `status: complete` on the integration
-  branch. `status: draft` means not started; `status: in-progress` means at least one phase
-  has merged. JOL-1 and JOL-4 share one file and one `status:` line, so each lands when its
+  branch. `status: draft` means not started; `status: in-progress` means the plan has begun but not
+  finished: either it merged early for a phase gate, or a sibling plan sharing its file
+  is still open. JOL-1 and JOL-4 share one file and one `status:` line, so each lands when its
   own phases (4d-A/B for JOL-1, 4d-C/D/E for JOL-4) are ticked on the integration branch.
 - A hard dependency is **met** when the plan it names has landed. A phase gate (for example
   decision 37: EXR-1 Phase 3 before EXR-2 Phases 1, 4 and 5; EXR-2 Phase 4 before EXR-1
@@ -585,9 +593,20 @@ Session counts in the plan headers are estimates, and the lanes carry roughly 12
    marked UNVERIFIED, replace the marker with the verified fact and its `file:line` in the
    same commit. If an item needs a decision that is not already settled in this epic, do
    not decide it: write it in the handoff, skip that item, and continue with the rest.
-5. **Merge back at every phase boundary** (a plan\'s phase headings are the boundaries; a
-   plan with no phases merges when its checklist is done). Integration must stay green.
-   - Set the plan\'s `status:` to `in-progress` at the first merge and `complete` at the last.
+5. **Merge back when the plan is complete, or sooner when a dependency needs it.** This is
+   the step that makes the work visible to the other lanes; do not skip it and do not defer
+   it to the next session. Merge when:
+   - **the plan\'s checklist is fully ticked** (the normal case; a plan\'s phases do not
+     each merge), or
+   - **another plan is waiting on a phase of this one**: the dependency table or a phase
+     gate (for example decision 37: EXR-1 Phase 3 before EXR-2 Phases 1, 4 and 5; EXR-2
+     Phase 4 before EXR-1 Phase 5) names a phase of your plan as the condition. Merge at the
+     end of that phase, then continue on the same branch (rebase first, rule 3).
+
+   Integration must stay green.
+   - Set the plan\'s `status:` to `complete` in the merging commit when the plan is done, or
+     to `in-progress` when you merge early for a phase gate or a sibling plan in the same
+     file (JOL-1, JOL-4) is still open.
    - Render every plan file you edited: `q2 render --strict <files>` (the 32 Q-12-13 errors
      are unrelated; none may name your files).
    - `git rebase feature/execution-records-epic`, then re-run clippy and nextest for the
@@ -601,7 +620,8 @@ Session counts in the plan headers are estimates, and the lanes carry roughly 12
 6. **Stalled or finished.** If nothing in your queue is startable, or the next item needs a
    decision or another lane\'s work, stop. Do not borrow another lane\'s plan, and do not
    start one out of order. Print the handoff naming exactly what you wait on.
-7. **Print the handoff** (below) as the last thing in the session. Do not write it to a file.
+7. **Print the handoff** (below) as the last thing in the session, after the merge of any
+   completed plan. Do not write it to a file.
 
 **Hot files.** These are edited by several plans, so rebases there will conflict: `text_execute.rs`
 and `stored.rs` (EXR-1, EXR-2, JOL-2b), `execute_blocks_inner` and `ExecuteOptions` (EXR-3,

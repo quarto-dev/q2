@@ -1,6 +1,7 @@
 ---
 title: 'Plan 4d: `owned_languages` — a positive engine-ownership wire field'
 date: 2026-07-06
+status: in-progress
 description: 'Adds a positive `owned_languages` field to the engine-execute wire, so TypeScript engines can ask directly which languages q2 assigned to them instead of inferring this from the leave-alone `handled_languages` set.'
 ---
 
@@ -154,7 +155,7 @@ the Rust field keeps every deserialize path (round-trip tests) tolerant of its a
 - `EngineResolution::owned_languages_for(&self, engine: &str) -> Vec<String>`
 - `ExecutionContext.owned_languages: Vec<String>` + `ExecutionContext::with_owned_languages(self, Vec<String>) -> Self`
 
-- [ ] **Step 1: Write the failing test** — append to the `tests` module in `resolution.rs` (mirrors `test_handled_languages_for`\'s setup at `:1549`):
+- [x] **Step 1: Write the failing test** — append to the `tests` module in `resolution.rs` (mirrors `test_handled_languages_for`\'s setup at `:1549`):
 
 ```rust
 /// `owned_languages_for` returns { lang present in doc : owned by this engine }.
@@ -193,12 +194,12 @@ fn test_owned_languages_for() {
 }
 ```
 
-- [ ] **Step 2: Run it, verify it fails**
+- [x] **Step 2: Run it, verify it fails**
 
 Run: `cargo nextest run -p quarto-core owned_languages_for`
 Expected: FAIL — `no method named owned_languages_for`.
 
-- [ ] **Step 3: Implement `owned_languages_for`** — add to `impl EngineResolution` in `resolution.rs`, directly after `handled_languages_for` (`:324-335`):
+- [x] **Step 3: Implement `owned_languages_for`** — add to `impl EngineResolution` in `resolution.rs`, directly after `handled_languages_for` (`:324-335`):
 
 ```rust
 /// Compute the **positive ownership set** for `engine`: every language present
@@ -224,12 +225,12 @@ pub fn owned_languages_for(&self, engine: &str) -> Vec<String> {
 }
 ```
 
-- [ ] **Step 4: Run it, verify it passes**
+- [x] **Step 4: Run it, verify it passes**
 
 Run: `cargo nextest run -p quarto-core owned_languages_for`
 Expected: PASS.
 
-- [ ] **Step 5: Add the `ExecutionContext` carrier** — in `context.rs`, add the field immediately after `handled_languages` (`:104`):
+- [x] **Step 5: Add the `ExecutionContext` carrier** — in `context.rs`, add the field immediately after `handled_languages` (`:104`):
 
 ```rust
     /// Languages present in this render that q2 assigned to **this** engine
@@ -255,7 +256,7 @@ Ensure the `Default`/constructor that initializes `handled_languages` (the
     }
 ```
 
-- [ ] **Step 6: Wire it in `EngineExecutionStage`** — in `engine_execution.rs`, beside the existing `handled_languages` computation (`:552`) and its `.with_handled_languages(...)` (`:582`):
+- [x] **Step 6: Wire it in `EngineExecutionStage`** — in `engine_execution.rs`, beside the existing `handled_languages` computation (`:552`) and its `.with_handled_languages(...)` (`:582`):
 
 ```rust
             let handled_languages = resolution.handled_languages_for(engine.name());
@@ -269,7 +270,7 @@ and chain the builder call next to `.with_handled_languages(handled_languages)`:
             .with_owned_languages(owned_languages)
 ```
 
-- [ ] **Step 7: Build, commit**
+- [x] **Step 7: Build, commit**
 
 Run: `cargo build -p quarto-core`
 Expected: clean.
@@ -292,18 +293,18 @@ git commit -m "feat(engine): compute positive owned_languages set beside handled
 **Interfaces produced:**
 - `TsExecuteOptions.owned_languages: Vec<String>` (wire key `ownedLanguages`)
 
-- [ ] **Step 1: Extend the camel-case wire test** — in `ts_protocol.rs`, `test_ts_execute_options_camel_case` (`:1223`) currently asserts `j["handledLanguages"] == json!([])`. Add, right below it:
+- [x] **Step 1: Extend the camel-case wire test** — in `ts_protocol.rs`, `test_ts_execute_options_camel_case` (`:1223`) currently asserts `j["handledLanguages"] == json!([])`. Add, right below it:
 
 ```rust
         assert_eq!(j["ownedLanguages"], json!([]));
 ```
 
-- [ ] **Step 2: Run it, verify it fails**
+- [x] **Step 2: Run it, verify it fails**
 
 Run: `cargo nextest run -p quarto-core test_ts_execute_options_camel_case`
 Expected: FAIL — `ownedLanguages` is `Null` (field absent).
 
-- [ ] **Step 3: Add the wire field** — in `TsExecuteOptions` (`ts_protocol.rs:361`), immediately after `handled_languages` (`:391`):
+- [x] **Step 3: Add the wire field** — in `TsExecuteOptions` (`ts_protocol.rs:361`), immediately after `handled_languages` (`:391`):
 
 ```rust
     /// The **positive** owned-language set for this engine — every language
@@ -322,7 +323,7 @@ Expected: FAIL — `ownedLanguages` is `Null` (field absent).
     pub owned_languages: Vec<String>,
 ```
 
-- [ ] **Step 4: Fix the two construction sites** — the test builder `make_execute_options` (`ts_protocol.rs:517`, beside `handled_languages: vec![]`):
+- [x] **Step 4: Fix the two construction sites** — the test builder `make_execute_options` (`ts_protocol.rs:517`, beside `handled_languages: vec![]`):
 
 ```rust
             handled_languages: vec![],
@@ -336,14 +337,14 @@ and the production builder in `ts_engine.rs` (`:560`, beside `handled_languages:
             owned_languages: ctx.owned_languages.clone(),
 ```
 
-- [ ] **Step 5: Update the other wire fixture** — `test_fc2_execute_options_dependencies_default_true` (`ts_protocol.rs:1468`) builds a JSON blob with `"handledLanguages": []` (`:1486`). Add `"ownedLanguages": []` beside it so the round-trip stays exact. (With `#[serde(default)]`, omitting it also works — but keep the pinned shape explicit.)
+- [x] **Step 5: Update the other wire fixture** — `test_fc2_execute_options_dependencies_default_true` (`ts_protocol.rs:1468`) builds a JSON blob with `"handledLanguages": []` (`:1486`). Add `"ownedLanguages": []` beside it so the round-trip stays exact. (With `#[serde(default)]`, omitting it also works — but keep the pinned shape explicit.)
 
-- [ ] **Step 6: Run the wire tests, verify they pass**
+- [x] **Step 6: Run the wire tests, verify they pass**
 
 Run: `cargo nextest run -p quarto-core ts_protocol`
 Expected: PASS (all).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add crates/quarto-core/src/engine/ts_protocol.rs crates/quarto-core/src/engine/ts_engine.rs

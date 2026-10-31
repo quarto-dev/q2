@@ -103,6 +103,13 @@ pub struct ExecutionContext {
     /// same leave-alone set as before this field existed.
     pub handled_languages: Vec<String>,
 
+    /// Languages present in this render that q2 assigned to **this** engine
+    /// (the positive complement of `handled_languages`). Populated by
+    /// `EngineExecutionStage` via `EngineResolution::owned_languages_for`.
+    /// Defaults to empty (direct-construction tests do not set it). Carried to TS
+    /// engines on the wire (Plan 4d) and read by the Jupyter engine (JOL-2b).
+    pub owned_languages: Vec<String>,
+
     /// Cancellation token for graceful shutdown.
     ///
     /// Engines that support cancellation (TS engines) poll `cancellation.is_cancelled()`
@@ -188,6 +195,7 @@ impl ExecutionContext {
             // Default: leave ojs/mermaid/dot alone. EngineExecutionStage
             // overrides this via `with_handled_languages` using the resolver.
             handled_languages: HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect(),
+            owned_languages: Vec::new(),
             cancellation: Cancellation::new(),
             execute_timeout: Some(DEFAULT_EXECUTE_TIMEOUT),
             // Default false; EngineExecutionStage sets true when |sequence| > 1.
@@ -242,6 +250,14 @@ impl ExecutionContext {
     /// `HANDLED_LANGUAGES ∪ { lang : ownership[lang] != this_engine }`.
     pub fn with_handled_languages(mut self, languages: Vec<String>) -> Self {
         self.handled_languages = languages;
+        self
+    }
+
+    /// Set the positive owned-language set for this engine.
+    ///
+    /// Computed by `EngineResolution::owned_languages_for(engine_name)`.
+    pub fn with_owned_languages(mut self, languages: Vec<String>) -> Self {
+        self.owned_languages = languages;
         self
     }
 

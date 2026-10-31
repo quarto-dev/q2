@@ -553,6 +553,7 @@ impl PipelineStage for EngineExecutionStage {
             // Per-engine leave-alone set: HANDLED_LANGUAGES ∪ languages owned
             // by other engines in the sequence (design doc §5).
             let handled_languages = resolution.handled_languages_for(engine.name());
+            let owned_languages = resolution.owned_languages_for(engine.name());
             let exec_context = ExecutionContext::new(
                 temp_dir,
                 ctx.project.dir.clone(),
@@ -583,6 +584,7 @@ impl PipelineStage for EngineExecutionStage {
             ))
             .with_source_info(qmd_source_info, source_context_arc.clone())
             .with_handled_languages(handled_languages)
+            .with_owned_languages(owned_languages)
             .with_cancellation(ctx.cancellation.clone())
             .with_execute_timeout(execute_timeout)
             // P2-13: loud "owned-but-unrunnable" gate in partition_cells

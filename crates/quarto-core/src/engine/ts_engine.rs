@@ -558,6 +558,7 @@ impl TsEngine {
             lib_dir,
             quiet: ctx.quiet,
             handled_languages: ctx.handled_languages.clone(),
+            owned_languages: ctx.owned_languages.clone(),
             params: None,
             source_map,
             // v1/Julia always resolves dependencies inline; deferred consumer

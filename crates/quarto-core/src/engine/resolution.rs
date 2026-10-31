@@ -333,6 +333,28 @@ impl EngineResolution {
 
         result.into_iter().collect()
     }
+
+    /// Compute the **positive ownership set** for `engine`: every language present
+    /// in this render that q2 assigned to `engine`.
+    ///
+    /// ```text
+    /// { lang : ownership[lang] == engine }
+    /// ```
+    ///
+    /// The exact complement of [`handled_languages_for`] restricted to present
+    /// languages, and **sorted** for deterministic output. Unlike the leave-alone
+    /// set, an engine's own name *is* the membership test — engines can read this
+    /// directly instead of inferring the complement. It is carried to TS engines
+    /// for engine-author convenience (Plan 4d) and read by the Jupyter engine (JOL-2b).
+    pub fn owned_languages_for(&self, engine: &str) -> Vec<String> {
+        let mut result: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (lang, owner) in &self.ownership {
+            if owner.as_str() == engine {
+                result.insert(lang.clone());
+            }
+        }
+        result.into_iter().collect()
+    }
 }
 
 // ── Core resolver ─────────────────────────────────────────────────────────────
@@ -1585,6 +1607,44 @@ mod tests {
         assert!(jupyter_handled.contains(&"r".to_string()));
         assert!(!jupyter_handled.contains(&"python".to_string()));
         assert!(!jupyter_handled.contains(&"sql".to_string()));
+    }
+
+    /// `owned_languages_for` returns { lang present in doc : owned by this engine }.
+    #[test]
+    fn test_owned_languages_for() {
+        let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![
+            engine_cell("r"),
+            engine_cell("python"),
+            engine_cell("sql"),
+        ]);
+        // Explicit [knitr, jupyter]: r→knitr (T1), python→jupyter (T2), sql→jupyter (T2).
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![string_config("knitr"), string_config("jupyter")]),
+        )]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        // Positive set: only this engine's owned, present languages.
+        assert_eq!(res.owned_languages_for("knitr"), vec!["r".to_string()]);
+        assert_eq!(
+            res.owned_languages_for("jupyter"),
+            vec!["python".to_string(), "sql".to_string()]
+        );
+        // HANDLED_LANGUAGES base is NOT in the owned set (it is not "owned" by anyone).
+        assert!(
+            !res.owned_languages_for("knitr")
+                .contains(&"ojs".to_string())
+        );
+        // Complement invariant: for present languages, owned ∩ handled == ∅.
+        let knitr_handled = res.handled_languages_for("knitr");
+        for l in res.owned_languages_for("knitr") {
+            assert!(
+                !knitr_handled.contains(&l),
+                "owned and handled must be disjoint: {l}"
+            );
+        }
     }
 
     /// Container recursion: cells nested in Divs and BulletLists are found.
