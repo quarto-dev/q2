@@ -136,7 +136,7 @@ fn resolve_dep_path(lua: &Lua, path: &str) -> Result<PathBuf> {
     }
     let script_dir = current_script_dir(lua)?;
     if script_dir.is_empty() {
-        return Ok(PathBuf::from(path));
+        return Ok(super::process_view::resolve_path(lua, path));
     }
     Ok(PathBuf::from(&script_dir).join(path))
 }

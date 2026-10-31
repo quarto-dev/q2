@@ -180,6 +180,15 @@ pub struct PathMetadata {
     pub readonly: bool,
 }
 
+/// What [`SystemRuntime::exec_command_with_options`] sets on the child.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CommandOptions<'a> {
+    /// The child's whole environment. `None` inherits the process environment.
+    pub env: Option<&'a HashMap<String, String>>,
+    /// The child's working directory. `None` inherits the process directory.
+    pub cwd: Option<&'a Path>,
+}
+
 /// Output from a command execution
 #[derive(Debug, Clone)]
 pub struct CommandOutput {
@@ -438,21 +447,21 @@ pub trait SystemRuntime: Send + Sync {
         stdin: Option<&[u8]>,
     ) -> RuntimeResult<CommandOutput>;
 
-    /// [`Self::exec_command`] with `env` as the child's whole environment,
-    /// instead of an inherited one.
+    /// [`Self::exec_command`] with the child's environment or working directory
+    /// set explicitly, instead of inherited.
     ///
     /// Default: `NotSupported`, not `exec_command`, because silently dropping
-    /// `env` would run the child with the wrong environment. A runtime that
+    /// the options would run the child in the wrong context. A runtime that
     /// forwards `exec_command` to an inner runtime must forward this too.
-    fn exec_command_with_env(
+    fn exec_command_with_options(
         &self,
         _command: &str,
         _args: &[&str],
         _stdin: Option<&[u8]>,
-        _env: &HashMap<String, String>,
+        _options: &CommandOptions<'_>,
     ) -> RuntimeResult<CommandOutput> {
         Err(RuntimeError::NotSupported(
-            "running a command with an explicit environment".to_string(),
+            "running a command with an explicit environment or working directory".to_string(),
         ))
     }
 

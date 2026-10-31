@@ -27,11 +27,13 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::env_overlay::{self, OverlayGuard, all_vars};
-use super::runtime::{CommandOutput, RuntimeResult, SystemRuntime, XdgDirKind};
+use super::process_view::{self, OverlayGuard, all_vars, resolve_path};
+use super::runtime::{CommandOptions, CommandOutput, RuntimeResult, SystemRuntime, XdgDirKind};
 
-/// Run a child under the state's `with_environment` table if one is active.
-/// Otherwise the child inherits the process environment.
+/// Run a child in the state's `with_environment` and `with_working_directory`
+/// context, inheriting from the process whatever neither sets. A relative
+/// program path is resolved here because `Command` treats one differently per
+/// platform when it also sets a directory; a bare name still searches `PATH`.
 fn spawn(
     lua: &Lua,
     runtime: &dyn SystemRuntime,
@@ -39,10 +41,21 @@ fn spawn(
     args: &[&str],
     stdin: Option<&[u8]>,
 ) -> RuntimeResult<CommandOutput> {
-    match env_overlay::active_overlay(lua) {
-        Some(env) => runtime.exec_command_with_env(command, args, stdin, &env),
-        None => runtime.exec_command(command, args, stdin),
+    let env = process_view::active_env(lua);
+    let cwd = process_view::active_cwd(lua);
+    if env.is_none() && cwd.is_none() {
+        return runtime.exec_command(command, args, stdin);
     }
+    let program = if Path::new(command).components().count() > 1 {
+        resolve_path(lua, command).to_string_lossy().to_string()
+    } else {
+        command.to_string()
+    };
+    let options = CommandOptions {
+        env: env.as_ref(),
+        cwd: cwd.as_deref(),
+    };
+    runtime.exec_command_with_options(&program, args, stdin, &options)
 }
 
 /// Register the pandoc.system module.
@@ -154,8 +167,8 @@ pub fn register_pandoc_system(
     let rt = runtime.clone();
     system.set(
         "read_file",
-        lua.create_function(move |_, filepath: String| {
-            rt.file_read_string(Path::new(&filepath))
+        lua.create_function(move |lua, filepath: String| {
+            rt.file_read_string(&resolve_path(lua, &filepath))
                 .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
     )?;
@@ -164,8 +177,8 @@ pub fn register_pandoc_system(
     let rt = runtime.clone();
     system.set(
         "write_file",
-        lua.create_function(move |_, (filepath, contents): (String, String)| {
-            rt.file_write(Path::new(&filepath), contents.as_bytes())
+        lua.create_function(move |lua, (filepath, contents): (String, String)| {
+            rt.file_write(&resolve_path(lua, &filepath), contents.as_bytes())
                 .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
     )?;
@@ -174,8 +187,8 @@ pub fn register_pandoc_system(
     let rt = runtime.clone();
     system.set(
         "copy",
-        lua.create_function(move |_, (source, target): (String, String)| {
-            rt.file_copy(Path::new(&source), Path::new(&target))
+        lua.create_function(move |lua, (source, target): (String, String)| {
+            rt.file_copy(&resolve_path(lua, &source), &resolve_path(lua, &target))
                 .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
     )?;
@@ -184,8 +197,8 @@ pub fn register_pandoc_system(
     let rt = runtime.clone();
     system.set(
         "rename",
-        lua.create_function(move |_, (old, new): (String, String)| {
-            rt.path_rename(Path::new(&old), Path::new(&new))
+        lua.create_function(move |lua, (old, new): (String, String)| {
+            rt.path_rename(&resolve_path(lua, &old), &resolve_path(lua, &new))
                 .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
     )?;
@@ -194,8 +207,8 @@ pub fn register_pandoc_system(
     let rt = runtime.clone();
     system.set(
         "remove",
-        lua.create_function(move |_, filename: String| {
-            rt.file_remove(Path::new(&filename))
+        lua.create_function(move |lua, filename: String| {
+            rt.file_remove(&resolve_path(lua, &filename))
                 .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
     )?;
@@ -206,7 +219,7 @@ pub fn register_pandoc_system(
         "times",
         lua.create_function(move |lua, filepath: String| {
             let metadata = rt
-                .path_metadata(Path::new(&filepath))
+                .path_metadata(&resolve_path(lua, &filepath))
                 .map_err(|e| mlua::Error::runtime(e.to_string()))?;
 
             // Convert times to ISO 8601 format tables
@@ -226,8 +239,9 @@ pub fn register_pandoc_system(
     let rt = runtime.clone();
     system.set(
         "get_working_directory",
-        lua.create_function(move |_, ()| {
-            rt.cwd()
+        lua.create_function(move |lua, ()| {
+            process_view::active_cwd(lua)
+                .map_or_else(|| rt.cwd(), Ok)
                 .map(|p| p.to_string_lossy().to_string())
                 .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
@@ -240,7 +254,7 @@ pub fn register_pandoc_system(
         lua.create_function(move |lua, directory: Option<String>| {
             let dir = directory.unwrap_or_else(|| ".".to_string());
             let entries = rt
-                .dir_list(Path::new(&dir))
+                .dir_list(&resolve_path(lua, &dir))
                 .map_err(|e| mlua::Error::runtime(e.to_string()))?;
 
             let table = lua.create_table()?;
@@ -260,20 +274,22 @@ pub fn register_pandoc_system(
     let rt = runtime.clone();
     system.set(
         "make_directory",
-        lua.create_function(move |_, (dirname, create_parent): (String, Option<bool>)| {
-            let recursive = create_parent.unwrap_or(false);
-            rt.dir_create(Path::new(&dirname), recursive)
-                .map_err(|e| mlua::Error::runtime(e.to_string()))
-        })?,
+        lua.create_function(
+            move |lua, (dirname, create_parent): (String, Option<bool>)| {
+                let recursive = create_parent.unwrap_or(false);
+                rt.dir_create(&resolve_path(lua, &dirname), recursive)
+                    .map_err(|e| mlua::Error::runtime(e.to_string()))
+            },
+        )?,
     )?;
 
     // remove_directory(dirname, recursive?) - remove directory
     let rt = runtime.clone();
     system.set(
         "remove_directory",
-        lua.create_function(move |_, (dirname, recursive): (String, Option<bool>)| {
+        lua.create_function(move |lua, (dirname, recursive): (String, Option<bool>)| {
             let recursive = recursive.unwrap_or(false);
-            rt.dir_remove(Path::new(&dirname), recursive)
+            rt.dir_remove(&resolve_path(lua, &dirname), recursive)
                 .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
     )?;
@@ -299,7 +315,7 @@ pub fn register_pandoc_system(
 
     // with_environment(environment, callback) - run with custom environment.
     // The table replaces this Lua state's environment for the callback; the
-    // process environment is never touched (see env_overlay). The whole table
+    // process environment is never touched (see process_view). The whole table
     // is read first, so a bad value raises before anything takes effect.
     system.set(
         "with_environment",
@@ -307,7 +323,7 @@ pub fn register_pandoc_system(
             let env = env_table
                 .pairs::<String, String>()
                 .collect::<Result<HashMap<_, _>>>()?;
-            let _overlay = OverlayGuard::push(lua, env);
+            let _overlay = OverlayGuard::env(lua, env);
             callback.call::<MultiValue>(())
         })?,
     )?;
@@ -348,29 +364,27 @@ pub fn register_pandoc_system(
         })?,
     )?;
 
-    // with_working_directory(directory, callback) - change working directory temporarily
+    // with_working_directory(directory, callback) - run with this Lua state's
+    // working directory changed. The process directory is never touched (see
+    // process_view). A relative directory is against the current one.
+    let rt = runtime.clone();
     system.set(
         "with_working_directory",
-        lua.create_function(|_, (directory, callback): (String, Function)| {
-            // Save current directory
-            let original = std::env::current_dir().map_err(|e| {
-                mlua::Error::runtime(format!("Failed to get current directory: {}", e))
-            })?;
-
-            // Change to new directory
-            std::env::set_current_dir(&directory)
-                .map_err(|e| mlua::Error::runtime(format!("Failed to change directory: {}", e)))?;
-
-            // Execute callback
-            let result = callback.call::<MultiValue>(());
-
-            // Restore original directory (even on error)
-            if let Err(e) = std::env::set_current_dir(&original) {
-                // Log error but don't fail - the callback result is more important
-                eprintln!("Warning: Failed to restore working directory: {}", e);
+        lua.create_function(move |lua, (directory, callback): (String, Function)| {
+            let target = resolve_path(lua, &directory);
+            let is_dir = rt
+                .is_dir(&target)
+                .map_err(|e| mlua::Error::runtime(e.to_string()))?;
+            if !is_dir {
+                return Err(mlua::Error::runtime(format!(
+                    "Failed to change directory: {directory} is not a directory"
+                )));
             }
-
-            result
+            let absolute = rt
+                .canonicalize(&target)
+                .map_err(|e| mlua::Error::runtime(format!("Failed to change directory: {e}")))?;
+            let _overlay = OverlayGuard::cwd(lua, absolute);
+            callback.call::<MultiValue>(())
         })?,
     )?;
 
@@ -435,7 +449,7 @@ pub fn register_pandoc_system(
     )?;
 
     // Set the system table in pandoc namespace
-    env_overlay::install(lua, runtime.clone())?;
+    process_view::install(lua, runtime.clone())?;
 
     pandoc.set("system", system)?;
 
@@ -858,30 +872,259 @@ mod tests {
         assert!(acc_time.get::<i64>("year").unwrap() >= 2020);
     }
 
+    /// A fresh directory holding `sub/marker.txt`, and its path to quote in Lua.
+    fn scratch_with_marker() -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        std::fs::write(dir.path().join("sub").join("marker.txt"), "marker").unwrap();
+        let quoted = to_forward_slashes(dir.path());
+        (dir, quoted)
+    }
+
+    /// `real_cwd()`: the process directory, which Lua code no longer reads.
+    fn register_real_cwd(lua: &Lua) {
+        let real_cwd = lua
+            .create_function(|_, ()| Ok(std::env::current_dir().unwrap().display().to_string()))
+            .unwrap();
+        lua.globals().set("real_cwd", real_cwd).unwrap();
+    }
+
     #[test]
     fn test_with_working_directory() {
+        let (lua, _) = create_test_lua();
+        register_real_cwd(&lua);
+        let (dir, base) = scratch_with_marker();
+        let name = dir
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        lua.load(format!(
+            r#"
+            local before, process = pandoc.system.get_working_directory(), real_cwd()
+            local a, b = pandoc.system.with_working_directory('{base}', function()
+                assert(pandoc.system.get_working_directory():find('{name}', 1, true))
+                assert(real_cwd() == process, 'the process directory should not move')
+                -- A relative directory is against the current one.
+                pandoc.system.with_working_directory('sub', function()
+                    assert(pandoc.system.read_file('marker.txt') == 'marker')
+                end)
+                return 1, 2
+            end)
+            assert(a == 1 and b == 2)
+            assert(pandoc.system.get_working_directory() == before)
+            "#
+        ))
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_with_working_directory_is_invisible_to_another_lua_state() {
+        let inside = Arc::new(std::sync::Barrier::new(2));
+        let done = Arc::new(std::sync::Barrier::new(2));
+        let (dir, base) = scratch_with_marker();
+
+        let (inside2, done2) = (inside.clone(), done.clone());
+        let setter = std::thread::spawn(move || {
+            let (lua, _) = create_test_lua();
+            let meet = lua
+                .create_function(move |_, ()| {
+                    inside2.wait();
+                    done2.wait();
+                    Ok(())
+                })
+                .unwrap();
+            lua.globals().set("meet", meet).unwrap();
+            lua.load(format!(
+                "pandoc.system.with_working_directory('{base}', meet)"
+            ))
+            .exec()
+            .unwrap();
+        });
+
+        inside.wait();
+        let before = std::env::current_dir().unwrap();
+        let (lua, _) = create_test_lua();
+        let seen: String = lua
+            .load("return pandoc.system.get_working_directory()")
+            .eval()
+            .unwrap();
+        let process_during = std::env::current_dir().unwrap();
+        done.wait();
+        setter.join().unwrap();
+
+        assert_eq!(process_during, before);
+        assert_eq!(seen, before.to_string_lossy());
+        drop(dir);
+    }
+
+    #[test]
+    fn test_with_working_directory_covers_lua_path_apis() {
         let (lua, runtime) = create_test_lua();
+        let pandoc: Table = lua.globals().get("pandoc").unwrap();
+        crate::lua::path::register_pandoc_path(&lua, &pandoc, runtime.clone()).unwrap();
+        crate::lua::mediabag::register_pandoc_mediabag(
+            &lua,
+            &pandoc,
+            runtime,
+            crate::lua::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+        let (_dir, base) = scratch_with_marker();
 
-        let temp = runtime.temp_dir("system_test").unwrap();
-        let temp_str = to_forward_slashes(temp.path());
+        lua.load(format!(
+            r#"
+            pandoc.system.with_working_directory('{base}/sub', function()
+                -- pandoc.system and pandoc.path
+                assert(pandoc.system.read_file('marker.txt') == 'marker')
+                pandoc.system.write_file('written.txt', 'w')
+                assert(pandoc.path.exists('written.txt'))
+                pandoc.system.copy('written.txt', 'copied.txt')
+                pandoc.system.rename('copied.txt', 'renamed.txt')
+                assert(pandoc.system.times('renamed.txt'))
+                pandoc.system.remove('renamed.txt')
+                pandoc.system.make_directory('made')
+                assert(pandoc.path.exists('made', 'directory'))
+                pandoc.system.remove_directory('made')
+                local names = {{}}
+                for _, n in ipairs(pandoc.system.list_directory('.')) do names[n] = true end
+                assert(names['marker.txt'])
+                names = {{}}
+                for _, n in ipairs(pandoc.system.list_directory()) do names[n] = true end
+                assert(names['marker.txt'])
 
-        // Save current directory for comparison
-        let original_cwd = std::env::current_dir().unwrap();
+                -- pandoc.mediabag
+                local mime, contents = pandoc.mediabag.fetch('marker.txt')
+                assert(contents == 'marker')
+                pandoc.mediabag.write('bag')
+                assert(pandoc.path.exists('bag/marker.txt'))
+                -- stock io
+                local f = assert(io.open('marker.txt'))
+                assert(f:read('a') == 'marker'); f:close()
+                for line in io.lines('marker.txt') do assert(line == 'marker') end
+                local out = assert(io.open('stock.lua', 'w'))
+                out:write('return 42'); out:close()
+                io.input('marker.txt')
+                assert(io.read('a') == 'marker')
+                io.close(io.input())
+                io.input(io.stdin)
+                -- stock loaders
+                assert(dofile('stock.lua') == 42)
+                assert(loadfile('stock.lua')() == 42)
+                -- stock os
+                assert(os.rename('stock.lua', 'moved.lua'))
+                assert(os.remove('moved.lua'))
+            end)
+            -- Outside the callback, the same relative names are not found.
+            assert(io.open('marker.txt') == nil)
+            assert(not pandoc.path.exists('marker.txt'))
+            "#
+        ))
+        .exec()
+        .unwrap();
+    }
 
-        // with_working_directory should change directory, run callback, then restore
-        let result: String = lua
+    #[test]
+    fn test_with_working_directory_reaches_children_through_supported_spawns() {
+        let (lua, _) = create_test_lua();
+        let (dir, base) = scratch_with_marker();
+        let name = dir
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        #[cfg(not(windows))]
+        let program = "'pwd', {}";
+        #[cfg(windows)]
+        let program = "'cmd', {'/C', 'cd'}";
+
+        let (command, pipe): (String, String) = lua
             .load(format!(
-                "return pandoc.system.with_working_directory('{}', function() return pandoc.system.get_working_directory() end)",
-                temp_str
+                r#"
+                return pandoc.system.with_working_directory('{base}', function()
+                    local _, out = pandoc.system.command({program})
+                    return out, pandoc.pipe({program}, '')
+                end)
+                "#
             ))
             .eval()
             .unwrap();
 
-        // Result should be the temp directory
-        assert!(result.contains("system_test") || temp.path().to_string_lossy().contains(&result));
+        assert!(command.contains(&name), "{command}");
+        assert!(pipe.contains(&name), "{pipe}");
+    }
 
-        // After the call, we should be back in the original directory
-        assert_eq!(std::env::current_dir().unwrap(), original_cwd);
+    #[test]
+    fn test_stock_spawns_raise_inside_with_working_directory_only() {
+        let (lua, _) = create_test_lua();
+        let (_dir, base) = scratch_with_marker();
+
+        lua.load(format!(
+            r#"
+            local saved_popen = io.popen
+            for name, spawn in pairs({{
+                popen = function() return saved_popen('echo hello') end,
+                execute = function() return os.execute('echo hello') end,
+            }}) do
+                pandoc.system.with_working_directory('{base}', function()
+                    local ok, err = pcall(spawn)
+                    assert(not ok, name .. ' should raise')
+                    assert(tostring(err):find('with_working_directory', 1, true), tostring(err))
+                end)
+            end
+            local p = io.popen('echo hello')
+            assert(p:read('a'):find('hello'))
+            p:close()
+            "#
+        ))
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_with_working_directory_restores_after_callback_error() {
+        let (lua, _) = create_test_lua();
+        let (_dir, base) = scratch_with_marker();
+
+        lua.load(format!(
+            r#"
+            local before = pandoc.system.get_working_directory()
+            local ok, err = pcall(pandoc.system.with_working_directory, '{base}', function()
+                error('boom')
+            end)
+            assert(not ok and tostring(err):find('boom'))
+            assert(pandoc.system.get_working_directory() == before)
+            "#
+        ))
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn test_with_working_directory_rejects_a_missing_directory() {
+        let (lua, _) = create_test_lua();
+        let (_dir, base) = scratch_with_marker();
+
+        lua.load(format!(
+            r#"
+            local ran = false
+            local ok = pcall(pandoc.system.with_working_directory, '{base}/absent', function()
+                ran = true
+            end)
+            assert(not ok and not ran)
+            -- A file is not a directory either.
+            ok = pcall(pandoc.system.with_working_directory, '{base}/sub/marker.txt', function()
+                ran = true
+            end)
+            assert(not ok and not ran)
+            "#
+        ))
+        .exec()
+        .unwrap();
     }
 
     // A child that prints $Q2_ENV_CHILD, as Lua argument lists. The table it
