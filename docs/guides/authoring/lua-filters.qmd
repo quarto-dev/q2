@@ -474,6 +474,22 @@ parallel, so the real process environment never changes. Inside the callback:
   `pandoc.system.command` instead.
 - `pandoc.system.xdg` still reads the real `XDG_*` variables.
 
+### Working directory
+
+`pandoc.system.with_working_directory(dir, callback)` changes the working
+directory for the callback, but only for this filter. Documents can render in
+parallel, so the real process directory never changes. Inside the callback:
+
+- Relative paths passed to Quarto's Lua APIs, `pandoc.system`, `pandoc.path.exists`,
+  `pandoc.mediabag`, `io.open`, `io.lines`, `io.input`, `io.output`, `os.remove`,
+  `os.rename`, `loadfile` and `dofile` resolve against `dir`.
+- Programs started with `pandoc.pipe` and `pandoc.system.command` start in `dir`.
+- `io.popen` and `os.execute` raise an error, because their programs would start
+  in the real directory. This differs from Pandoc. Use `pandoc.pipe` or
+  `pandoc.system.command` instead.
+- A relative entry in `package.path` still resolves against the real directory
+  when `require` searches it. Modules beside your filter are not affected.
+
 ## Checking versions
 
 `quarto.version` is the version of Quarto you are running, as a pandoc

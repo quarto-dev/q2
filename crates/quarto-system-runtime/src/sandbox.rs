@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::traits::{
-    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
-    XdgDirKind,
+    CommandOptions, CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult,
+    SystemRuntime, TempDir, XdgDirKind,
 };
 
 /// A path pattern that can match files/directories.
@@ -317,14 +317,15 @@ impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
         self.inner.exec_command(command, args, stdin)
     }
 
-    fn exec_command_with_env(
+    fn exec_command_with_options(
         &self,
         command: &str,
         args: &[&str],
         stdin: Option<&[u8]>,
-        env: &HashMap<String, String>,
+        options: &CommandOptions<'_>,
     ) -> RuntimeResult<CommandOutput> {
-        self.inner.exec_command_with_env(command, args, stdin, env)
+        self.inner
+            .exec_command_with_options(command, args, stdin, options)
     }
 
     fn env_get(&self, name: &str) -> RuntimeResult<Option<String>> {

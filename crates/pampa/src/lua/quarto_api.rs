@@ -515,7 +515,7 @@ fn resolve_include_path(
         current_script_dir(lua)?
     };
     Ok(if base.is_empty() {
-        PathBuf::from(file)
+        super::process_view::resolve_path(lua, file)
     } else {
         Path::new(&base).join(file)
     })

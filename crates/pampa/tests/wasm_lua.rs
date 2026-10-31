@@ -594,6 +594,12 @@ function Para(el)
     assert(seen == "x", "os.getenv should see the overlay")
     assert(listed == "x", "pandoc.system.environment should see the overlay")
     assert(os.getenv("Q2_WASM") == nil, "the overlay should end with the callback")
+    -- with_working_directory is per-state too, and io.open follows it.
+    pandoc.system.with_working_directory("/project", function()
+        assert(pandoc.system.get_working_directory() == "/project", "cwd should move")
+        local f = assert(io.open("check_os.lua"), "io.open should resolve against it")
+        f:close()
+    end)
     -- os.exit is the document-failing replacement, not absent (GH #941).
     assert(type(os.exit) == "function", "os.exit should be a function")
     assert(pcall(os.exit, 1) == false, "os.exit should raise, not return")

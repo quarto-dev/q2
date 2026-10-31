@@ -9,7 +9,7 @@
  *   `profile`, with Quarto 1's shape (nil paths outside a project, the
  *   profile list always present);
  * - `os.getenv` and `pandoc.system.environment` — answered from the host's
- *   environment snapshot when it supplied one (see `env_overlay`), so libc
+ *   environment snapshot when it supplied one (see `process_view`), so libc
  *   `getenv` never runs on a filter worker thread and `--profile` is visible
  *   as `QUARTO_PROFILE`;
  * - `quarto.doc.input_file` / `quarto.doc.output_file` — the absolute
@@ -30,7 +30,7 @@ pub fn register_host_context(lua: &Lua, host: &HostContext) -> Result<()> {
     register_quarto_doc_paths(lua, host)?;
     register_pandoc_state(lua, host)?;
     if let Some(env) = &host.env {
-        super::env_overlay::set_base(lua, env.clone());
+        super::process_view::set_env_base(lua, env.clone());
     }
     Ok(())
 }
