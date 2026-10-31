@@ -158,4 +158,53 @@ mod tests {
         let v = CellVisibility::resolve(resolved("output: false\nwarning: true").as_ref());
         assert!(!v.warning, "output: false must also silence warnings");
     }
+
+    /// EXR-4 Phase 0 audit: Jupyter's presenter reads only `include`,
+    /// `echo`, `output` and `warning` for visibility (`error` is read
+    /// separately by the executor, `engine/jupyter/text_execute.rs`, and
+    /// the stored-replay path, `stored.rs`). Every other option, including
+    /// `eval`, `execute-dir` and `params`, leaves visibility untouched, so
+    /// the Jupyter hash declaration's closed presentation list is the
+    /// visibility set plus display-only options, and `execute-dir`,
+    /// `params` and `fig-width` over-invalidate Jupyter harmlessly.
+    #[test]
+    fn exr4_audit_jupyter_visibility_ignores_every_other_key() {
+        let ignored = [
+            "eval: false",
+            "error: true",
+            "execute-dir: project",
+            "params: {a: 1}",
+            "fig-width: 3",
+            "fig-height: 3",
+            "fig-asp: 0.5",
+            "fig-dpi: 50",
+            "fig-format: jpeg",
+            "df-print: paged",
+            "enabled: false",
+            "debug: true",
+            "cache: true",
+            "freeze: true",
+            "label: fig-x",
+            "fig-cap: A caption",
+        ];
+        for yaml in ignored {
+            assert_eq!(
+                CellVisibility::resolve(resolved(yaml).as_ref()),
+                CellVisibility::VISIBLE,
+                "`{yaml}` must not change Jupyter visibility"
+            );
+        }
+        for yaml in [
+            "include: false",
+            "echo: false",
+            "output: false",
+            "warning: false",
+        ] {
+            assert_ne!(
+                CellVisibility::resolve(resolved(yaml).as_ref()),
+                CellVisibility::VISIBLE,
+                "`{yaml}` is one of the four keys Jupyter reads"
+            );
+        }
+    }
 }

@@ -250,12 +250,35 @@ Small tasks, tests first. The unit-executor seam is introduced here, in 0a (EXR-
 - [ ] Unit ids and author texts in the stage (tests first:
   `stage_fills_unit_ids_before_any_engine_runs`, `labeled_cell_id_uses_author_text`,
   `author_texts_has_one_entry_per_unit`): right after the stage\'s one scan (EXR-2 Phase 4
-  puts the list, ids still empty, on `ExecutionContext.units`), obtain each unit\'s author
-  text from the original text range (or the pre-sugaring AST; the mechanism is EXR-4\'s
-  first task), build EXR-4\'s `AuthorTexts`, call EXR-4\'s `fill_ids(units, &author_texts)`,
+  puts the list, ids still empty, on `ExecutionContext.units`), build EXR-4\'s `AuthorTexts`
+  with `author_texts(&units, &snapshot)`, call EXR-4\'s `fill_ids(units, &author_texts)`,
   and put both on the context for the builder (epic decision 36). The ids are filled
   whenever the stage scans, whether or not a record is wanted, because the wire (EXR-7)
   carries them; the author texts are built only when a record is wanted.
+  **The snapshot is this plan\'s work** (decided with Gordon, 2026-10-31; EXR-4 Phase 0 chose
+  the mechanism and ships the pure part). Neither the original source range nor the
+  serializer\'s source map can recover the author text: `body_source_for` returns the whole
+  block once sugaring strips a line from between two kept options, and mapping a unit\'s
+  offsets back through `write_with_source_info` lands inside the wrong line (EXR-4 plan,
+  Phase 0, first item, has the probe and its numbers). So `pre_engine_sugaring`
+  (`stage/stages/pre_engine_sugaring.rs`, which calls `desugar_blocks` at about line 142)
+  records, **before the pass rewrites anything**, one EXR-4 `SugaredBlock { author_text,
+  sugared_text }` for **every braced executable block, in document order, including the
+  blocks the pass leaves alone** (there the two texts are equal), and keeps the list on the
+  stage context. Recording only rewritten blocks is wrong: an untouched cell whose text
+  equals a rewritten cell\'s stripped text would take that cell\'s entry. Tests first:
+  `snapshot_lists_untouched_blocks_too`, `snapshot_has_the_authors_raw_lines_for_a_sugared_cell`
+  (a labeled `fig-` cell with a mid-options `fig-cap` line), and the three tests above. Open
+  checks that EXR-4 could not settle without the stage: a sugared cell inside a container, and
+  that a second engine iteration reuses the one snapshot (the stage scans once). A
+  non-crossref label stays in both texts. EXR-4 ships `SugaredBlock` and `author_texts`
+  (`record/author_text.rs`) at the end of its Phase 4 merge.
+- [ ] Source-of-inputs tests (moved from EXR-4 Phase 2, 2026-10-31; tests first): the
+  document and unit hashes are built from the stage\'s pre-engine units and merged metadata, so
+  a code edit inside an included file changes them and a prose-only edit does not, and two
+  byte-different spellings of the same metadata (key order, quoting) hash alike. EXR-4 already
+  tests the primitives (`hash_unit`, `hash_document`) on given inputs; this item tests that the
+  stage feeds them the right inputs.
 - [ ] Inside the engine loop, next to the capture event at line 638, emit each
   engine\'s uncoalesced record as its own aux event (a per-engine kind constant beside
   `ENGINE_CAPTURE_KIND`), after that engine\'s capture event and with the same

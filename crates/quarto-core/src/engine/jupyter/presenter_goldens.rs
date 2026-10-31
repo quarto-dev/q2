@@ -35,10 +35,10 @@ use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
 use quarto_source_map::{SourceContext, SourceInfo};
 
 use super::execute::{CellOutput, CellResult, ExecuteStatus};
-use super::stored::IpynbReplayEngine;
 use crate::engine::content_processors::ORIGINAL_FILE_ID;
 use crate::engine::content_processors::ipynb::convert_notebook;
 use crate::engine::context::ExecutionContext;
+use crate::engine::ipynb_replay::IpynbReplayEngine;
 use crate::engine::traits::ExecutionEngine;
 use crate::presenter::cell::render_cell;
 use crate::presenter::figures::{FigureSink, FsFigureSink};

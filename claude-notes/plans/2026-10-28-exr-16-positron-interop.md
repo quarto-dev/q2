@@ -274,7 +274,7 @@ parser contain no span handling).
 ## Positron spikes
 
 Each spike answers one question about whether an idea is viable and ends in a short
-findings note with a go or no-go. All of them are **not started**.
+findings note with a go or no-go. All are **not started** except S1, whose Positron side ran on 2026-10-31 (findings: `claude-notes/research/2026-10-31-exr-16-s1-conformance-findings.md`; the q2 comparison waits on the fixture generator and EXR-4 Phase 5).
 
 ### Ground rules
 

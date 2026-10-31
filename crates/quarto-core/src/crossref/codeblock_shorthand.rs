@@ -1968,4 +1968,56 @@ mod tests {
              `python` inside the `{{python}}` info string at 4..10"
         );
     }
+
+    /// EXR-4 Phase 0 (epic decision 36). After crossref sugaring strips a
+    /// `fig-cap` line from the middle of a cell's options, the stripped
+    /// `CodeBlock` keeps the original `source_info` but its text is no
+    /// longer a contiguous run of the file, so `body_source_for` on it
+    /// falls back to the **whole block** (fence lines included). The span
+    /// of a sugared block therefore cannot locate the author's text, which
+    /// is why the engine-execution stage must take the author text from the
+    /// unsugared source (see the EXR-4 plan, Phase 0).
+    #[test]
+    fn body_source_for_falls_back_to_whole_block_after_mid_body_strip() {
+        let text = "```{python}\n#| label: fig-plot\n#| fig-width: 7\n#| fig-cap: A caption\n#| fig-height: 5\nx = 1\n```\n";
+        let (mut ast, ast_context, _diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let sources = &ast_context.source_context;
+        let Block::CodeBlock(original) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock");
+        };
+        let original_body = body_source_for(original, sources);
+        let original_len = original_body.length();
+        assert!(
+            original_len < text.len(),
+            "precondition: before sugaring the body span is inside the fences"
+        );
+
+        let reg = RefTypeRegistry::builtin();
+        desugar_blocks(&mut ast.blocks, &reg, sources, &mut Vec::new());
+        let Block::Div(div) = &ast.blocks[0] else {
+            panic!("expected the float Div, got {:?}", ast.blocks[0]);
+        };
+        let Block::CodeBlock(stripped) = &div.content[0] else {
+            panic!("expected the stripped CodeBlock");
+        };
+        assert_eq!(
+            stripped.text, "#| fig-width: 7\n#| fig-height: 5\nx = 1",
+            "precondition: the fig-cap line is stripped from between two kept options"
+        );
+        let after = body_source_for(stripped, sources);
+        assert_eq!(
+            after.length(),
+            stripped.source_info.length(),
+            "stripped text is not contiguous in the file, so the span is the whole block"
+        );
+        assert!(after.length() > original_len);
+    }
 }

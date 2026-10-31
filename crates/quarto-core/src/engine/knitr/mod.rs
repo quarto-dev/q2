@@ -257,6 +257,14 @@ impl ExecutionEngine for KnitrEngine {
         true
     }
 
+    /// knitr bakes presentation into its rendered markdown, so every chunk option and every
+    /// `execute:` key counts: empty exclusion lists (EXR-4 hash declaration).
+    fn hash_definition(&self) -> crate::record::HashDefinition {
+        let mut def = crate::record::HashDefinition::conservative("knitr");
+        def.document_keys = vec!["knitr".to_string()];
+        def
+    }
+
     /// Deliberate q2 design choice: knitr claims `r` as Primary(1), and additionally
     /// claims the `Interop` set — languages knitr can execute in-session via
     /// `knit_engines` (reticulate for python, eng_sql for sql, shell engines for
@@ -435,6 +443,89 @@ fn convert_includes(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    // === EXR-4: hash declarations ===
+
+    fn opts(v: serde_json::Value) -> std::collections::BTreeMap<String, serde_json::Value> {
+        v.as_object().unwrap().clone().into_iter().collect()
+    }
+
+    fn unit_hash(def: &crate::record::HashDefinition, options: serde_json::Value) -> String {
+        use crate::record::{UnitHashInput, UnitKind, hash_unit};
+        let options = opts(options);
+        hash_unit(
+            def,
+            &UnitHashInput {
+                kind: UnitKind::Cell,
+                lang: "python",
+                code: "x = 1",
+                options: &options,
+                profile: None,
+            },
+        )
+        .unwrap()
+    }
+
+    fn doc_hash(def: &crate::record::HashDefinition, metadata: serde_json::Value) -> String {
+        use crate::record::{UnitHashRef, hash_document};
+        hash_document(
+            def,
+            &opts(metadata),
+            &[UnitHashRef {
+                hash: "u",
+                profile: None,
+            }],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn knitr_declares_empty_exclusion_lists_and_the_knitr_key() {
+        let def = KnitrEngine { rscript_path: None }.hash_definition();
+        assert_eq!(def.id, "knitr");
+        assert_eq!(def.granularity, crate::record::Granularity::Unit);
+        assert!(def.presentation_cell_options.is_empty());
+        assert!(def.presentation_execute_keys.is_empty());
+        assert_eq!(def.document_keys, ["knitr"]);
+        assert!(def.profiles.is_empty());
+    }
+
+    #[test]
+    fn toggling_execute_echo_moves_the_knitr_document_hash_and_not_the_jupyter_one() {
+        let knitr = KnitrEngine { rscript_path: None }.hash_definition();
+        let jupyter = crate::engine::jupyter::JupyterEngine::new().hash_definition();
+        let md = |echo: bool| serde_json::json!({"knitr": {"x": 1}, "jupyter": "python3", "execute": {"echo": echo}});
+        assert_ne!(doc_hash(&knitr, md(true)), doc_hash(&knitr, md(false)));
+        assert_eq!(doc_hash(&jupyter, md(true)), doc_hash(&jupyter, md(false)));
+        assert_ne!(doc_hash(&knitr, md(true)), doc_hash(&jupyter, md(true)));
+    }
+
+    #[test]
+    fn a_chunk_option_change_moves_the_knitr_unit_hash() {
+        let def = KnitrEngine { rscript_path: None }.hash_definition();
+        let base = unit_hash(&def, serde_json::json!({"fig-width": 7}));
+        assert_ne!(base, unit_hash(&def, serde_json::json!({"fig-width": 8})));
+        assert_ne!(
+            base,
+            unit_hash(&def, serde_json::json!({"fig-width": 7, "echo": false}))
+        );
+    }
+
+    /// Toggling the `record` opt-in (epic decision 24) never changes a hash.
+    #[test]
+    fn knitr_hash_ignores_the_record_key() {
+        let def = KnitrEngine { rscript_path: None }.hash_definition();
+        let md =
+            |record: serde_json::Value| serde_json::json!({"knitr": {"x": 1}, "record": record});
+        assert_eq!(
+            doc_hash(&def, md(serde_json::json!(true))),
+            doc_hash(&def, md(serde_json::json!(false)))
+        );
+        assert_eq!(
+            doc_hash(&def, md(serde_json::json!(true))),
+            doc_hash(&def, serde_json::json!({"knitr": {"x": 1}}))
+        );
+    }
 
     #[test]
     fn test_knitr_engine_name() {

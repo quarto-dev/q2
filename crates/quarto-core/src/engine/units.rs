@@ -471,6 +471,49 @@ pub fn scan_units(input: &str) -> Vec<Unit> {
     units
 }
 
+/// A parsed code block from the input markdown.
+#[derive(Debug)]
+pub(crate) struct CodeBlock {
+    /// Start byte offset in the input.
+    pub(crate) start: usize,
+    /// End byte offset in the input (exclusive).
+    pub(crate) end: usize,
+    /// Start byte offset of the code content (the capture between the
+    /// fences) in the input — anchors per-cell source attribution.
+    pub(crate) code_start: usize,
+    /// The language/engine specifier (e.g., "python", "julia").
+    pub(crate) language: String,
+    /// The code content.
+    pub(crate) code: String,
+}
+
+/// The cells the legacy executor runs, as `CodeBlock`s, from a unit list: bare
+/// `{lang}` openers at column 0 with a three-backtick fence. Spans, cells the
+/// legacy rule skips (indented, nested, attribute-tail, longer fence) and raw
+/// fences never appear (the scanner already excludes raw and doubled-brace).
+/// The scanner follows CommonMark for where a fence closes (a longer closer
+/// closes it) and for what an opener is (the info string is on the fence
+/// line); EXR-2 Phase 4 took both from it, fixing two executor misparses.
+pub(crate) fn legacy_cells(units: &[Unit]) -> Vec<CodeBlock> {
+    units
+        .iter()
+        .filter_map(|u| match u {
+            Unit::Cell(c) if runs_in_legacy_executor(c) => Some(code_block_of(c)),
+            _ => None,
+        })
+        .collect()
+}
+
+pub(crate) fn code_block_of(c: &CellUnit) -> CodeBlock {
+    CodeBlock {
+        start: c.start,
+        end: c.end,
+        code_start: c.code_start,
+        language: c.lang.clone(),
+        code: c.code.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

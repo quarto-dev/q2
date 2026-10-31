@@ -30,6 +30,7 @@
 //! | markdown | ✓ | ✓ |
 //! | knitr | ✓ | ✗ |
 //! | jupyter | ✓ | ✗ |
+//! | ipynb stored-output replay | ✓ | ✓ |
 //!
 //! In WASM builds, requesting an unavailable engine will result in a
 //! warning and fallback to the markdown engine.
@@ -61,6 +62,7 @@ mod context;
 mod detection;
 pub mod diagnostics;
 mod error;
+mod ipynb_replay;
 mod markdown;
 pub mod nested_cell_mask;
 pub(crate) mod patterns;
@@ -168,6 +170,7 @@ pub use detection::{
 pub use error::ExecutionError;
 #[cfg(not(target_arch = "wasm32"))]
 pub use fixture::FixtureEngine;
+pub use ipynb_replay::IpynbReplayEngine;
 pub use markdown::MarkdownEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;

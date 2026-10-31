@@ -105,6 +105,20 @@ pub trait ExecutionEngine: Send + Sync {
         false
     }
 
+    /// The engine's execution-input hash declaration, as data (epic decision 35; EXR-4).
+    ///
+    /// Core owns the hashing algorithm and names no engine: each engine declares which cell
+    /// options and `execute:` keys are display-only (and so excluded from its hashes) and
+    /// which extra top-level metadata keys count. The default is conservative: empty
+    /// exclusion lists and no extra keys, so everything counts. That over-invalidates and
+    /// never shows stale output. Override only to declare a closed list of display-only keys.
+    ///
+    /// Default: [`HashDefinition::conservative`] with this engine's name, version 1, unit
+    /// granularity.
+    fn hash_definition(&self) -> crate::record::HashDefinition {
+        crate::record::HashDefinition::conservative(self.name())
+    }
+
     /// Pure prediction of intermediate file paths derived from the input path.
     ///
     /// This is **not** post-execution introspection and **not** a cleanup list.
@@ -397,6 +411,45 @@ mod tests {
     fn test_engine_trait_name() {
         let engine = test_engine("test", true);
         assert_eq!(engine.name(), "test");
+    }
+
+    /// EXR-4: an engine that overrides nothing hashes everything.
+    #[test]
+    fn default_hash_definition_is_conservative_and_counts_everything() {
+        use crate::record::UnitKind;
+        use crate::record::{Granularity, UnitHashInput, hash_unit};
+        let def = test_engine("mock", true).hash_definition();
+        assert_eq!(def.id, "mock");
+        assert_eq!(def.version, 1);
+        assert_eq!(def.granularity, Granularity::Unit);
+        assert!(def.presentation_cell_options.is_empty());
+        assert!(def.presentation_execute_keys.is_empty());
+        assert!(def.document_keys.is_empty() && def.profiles.is_empty());
+        let with = serde_json::json!({"echo": false})
+            .as_object()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .collect();
+        let without = Default::default();
+        let h = |options| {
+            hash_unit(
+                &def,
+                &UnitHashInput {
+                    kind: UnitKind::Cell,
+                    lang: "python",
+                    code: "x",
+                    options,
+                    profile: None,
+                },
+            )
+            .unwrap()
+        };
+        assert_ne!(
+            h(&with),
+            h(&without),
+            "an echo change moves the hash of an engine that declares nothing"
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@
 title: 'EXR-1b: move the stored-notebook replay engine out of the native-only module'
 date: 2026-10-31
 description: 'The trailing half of EXR-1, split out so the presenter extraction could finish: moves IpynbReplayEngine out of engine/jupyter so stored notebooks render their outputs on WASM, and adds the first quarto-core WASM tests.'
-status: draft
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
@@ -52,32 +52,40 @@ on every target.
 
 ### Phase 1: move the replay engine
 
-- [ ] Start gate: EXR-2 Phase 4 has landed on the integration branch; rebase onto it. Re-read
+- [x] Start gate: EXR-2 Phase 4 has landed on the integration branch; rebase onto it. Re-read
   `stored.rs`, whose imports EXR-2 Phase 4 changed.
 - [x] Check that nothing earlier needs the move: EXR-13 and EXR-14 do not (checked 2026-10-31).
   Re-check if either plan changed since.
-- [ ] Test first, `replay_does_not_probe_engine_availability`: Jupyter registered but unavailable,
+- [x] Test first, `replay_does_not_probe_engine_availability`: Jupyter registered but unavailable,
   `.ipynb` input without `execute.enabled`, replay succeeds and the engine\'s availability check is never
   called (confirm whether Plan 7c already has this and extend it).
-- [ ] Move `IpynbReplayEngine` (and what it needs from `stored.rs`) to `engine/ipynb_replay.rs`,
+- [x] Move `IpynbReplayEngine` (and what it needs from `stored.rs`) to `engine/ipynb_replay.rs`,
   outside the gated module; keep `engine::jupyter::IpynbReplayEngine` compiling for existing imports
   or update them.
-- [ ] Remove the cfg at the stage push. The WASM branch builds the engine with
+- [x] Remove the cfg at the stage push. The WASM branch builds the engine with
   `IpynbReplayEngine::with_runtime(ctx.runtime.clone())`; the native branch keeps `new()`.
-- [ ] The WASM check passes (recipe in EXR-1\'s Background section).
+- [x] The WASM check passes (recipe in EXR-1\'s Background section).
+- Phase 1 landed 2026-10-31. Notes: the test already held on native (the probe test is a regression guard; it passes before and after). `CodeBlock`, `legacy_cells` and `code_block_of` moved from `text_execute.rs` to `engine/units.rs` so the engine no longer imports the native-only module; the engine is re-exported as `engine::IpynbReplayEngine` and still as `engine::jupyter::IpynbReplayEngine`. Gate: clippy clean, nextest 6630/6630 (6629 + the new test), goldens unchanged, WASM check passes.
 - Exit: goldens-unchanged check passes. Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings`
   plus `cargo nextest run -p quarto-core`.
 
 ### Phase 2: WASM tests
 
-- [ ] Add the first `quarto-core` WASM test target in the style of `crates/pampa/tests/wasm_lua.rs`
+- [x] Add the first `quarto-core` WASM test target in the style of `crates/pampa/tests/wasm_lua.rs`
   (integration-test layout rule: one `integration` binary per crate, unless the WASM target cannot share
   it; decide and state why).
-- [ ] WASM test: a stored notebook renders its outputs (drive the engine directly; the `.ipynb` file
+- [x] WASM test: a stored notebook renders its outputs (drive the engine directly; the `.ipynb` file
   claim on WASM is out of scope).
-- [ ] WASM test (moved from EXR-1 Phase 2): a stored notebook\'s figures are written to the VFS through
+- [x] WASM test (moved from EXR-1 Phase 2): a stored notebook\'s figures are written to the VFS through
   `WasmRuntime`, not degraded to `[Image output]`.
-- [ ] CI runs the new target, or the PR says why not.
+- [x] CI runs the new target, or the PR says why not.
+- Phase 2 notes: the target is `crates/quarto-core/tests/wasm_replay.rs`, a top-level file, not a module of
+  `tests/integration/`, because that binary needs native-only dev-dependencies (tokio, tempfile, socket2, ...) and
+  cannot build for wasm32 (same reason as pampa's `wasm_lua.rs`; it compiles to an empty binary on native).
+  quarto-core's `[dev-dependencies]` moved wholesale into a `cfg(not(wasm32))` table, with `wasm-bindgen-test` and
+  `wasm-c-shim` under `cfg(wasm32)`. The harness took under a session. CI step added to the WASM job in
+  `test-suite.yml`. Both tests pass locally on wasm32 (macOS).
+- Closed 2026-10-31: `cargo xtask verify --skip-hub-build --skip-hub-tests` green; `cargo nextest run --workspace` 17605/17605 passed (200 skipped) before the final rebases, and `-p quarto-core` 6742/6742 before the last rebase (onto EXR-4 Phase 5); on the merged tip clippy, 890 targeted tests (`ipynb`, `engine::`, `engine_execution`), the WASM tests and the goldens check were re-run green. No workspace baseline run exists on the integration tip, so the delta is accounted per crate: quarto-core +1 native test (`replay_does_not_probe_engine_availability`); the two WASM tests run only on wasm32. A rebase onto EXR-2 Phase 5 merged textually but broke the build (`text_execute.rs` imports), fixed in the Phase 1 commit.
 - Exit: Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core`; the WASM tests pass in a Linux or macOS run. Plan exit criteria:
   all phases green; `cargo xtask verify` green; the workspace test delta reported against the live

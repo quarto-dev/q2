@@ -33,22 +33,6 @@ use quarto_pandoc_types::ConfigValue;
 
 type JupyterResult<T> = std::result::Result<T, JupyterError>;
 
-/// A parsed code block from the input markdown.
-#[derive(Debug)]
-pub(super) struct CodeBlock {
-    /// Start byte offset in the input.
-    pub(super) start: usize,
-    /// End byte offset in the input (exclusive).
-    pub(super) end: usize,
-    /// Start byte offset of the code content (the capture between the
-    /// fences) in the input — anchors per-cell source attribution.
-    pub(super) code_start: usize,
-    /// The language/engine specifier (e.g., "python", "julia").
-    pub(super) language: String,
-    /// The code content.
-    pub(super) code: String,
-}
-
 /// Execute code blocks in QMD input and return markdown with outputs.
 ///
 /// This is the main entry point for text-based Jupyter execution.
@@ -182,32 +166,8 @@ fn map_language_to_kernel(language: &str) -> String {
     }
 }
 
-/// The cells the legacy executor runs, as `CodeBlock`s, from a unit list: bare
-/// `{lang}` openers at column 0 with a three-backtick fence. Spans, cells the
-/// legacy rule skips (indented, nested, attribute-tail, longer fence) and raw
-/// fences never appear (the scanner already excludes raw and doubled-brace).
-/// The scanner follows CommonMark for where a fence closes (a longer closer
-/// closes it) and for what an opener is (the info string is on the fence
-/// line); EXR-2 Phase 4 took both from it, fixing two executor misparses.
-pub(super) fn legacy_cells(units: &[Unit]) -> Vec<CodeBlock> {
-    units
-        .iter()
-        .filter_map(|u| match u {
-            Unit::Cell(c) if runs_in_legacy_executor(c) => Some(code_block_of(c)),
-            _ => None,
-        })
-        .collect()
-}
-
-fn code_block_of(c: &CellUnit) -> CodeBlock {
-    CodeBlock {
-        start: c.start,
-        end: c.end,
-        code_start: c.code_start,
-        language: c.lang.clone(),
-        code: c.code.clone(),
-    }
-}
+#[cfg(test)]
+use crate::engine::units::CodeBlock;
 
 /// The pre-scanner cell finder, kept only so tests can pin what it did and
 /// prove the scanner reproduces it (EXR-2 Phase 0 characterization and the
@@ -466,6 +426,7 @@ fn first_cell_error(result: &CellResult) -> Option<(String, String)> {
 mod tests {
     use super::*;
     use crate::engine::HANDLED_LANGUAGES;
+    use crate::engine::units::legacy_cells;
 
     // ── select_kernel (JOL-2a) ───────────────────────────────────────────────
 

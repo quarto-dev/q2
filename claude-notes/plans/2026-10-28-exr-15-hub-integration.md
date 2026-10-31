@@ -188,7 +188,9 @@ scan, classify and collect.
 - [ ] Overlay provenance test: the record produced under `-M` carries the overlay's
   execution-relevant keys as informational provenance (post-merge difference on the
   allowlist), a non-execution key (for example a title) is absent from it, and the bytes
-  do not depend on how the flag was spelled; provenance never changes staleness.
+  do not depend on how the flag was spelled; provenance never changes staleness. Also (moved
+  from EXR-4): `quarto_overlay` is absent from a record produced with no overlay, and changing
+  its contents changes no hash (unit, document or `quarto_execution_hash`).
 - [ ] Masking test: a document with a display block containing a cell and a span
   records no phantom units, and the unit list a viewer computes from the masked
   pre-engine AST equals the recorded one (shares EXR-14's conformance fixtures).

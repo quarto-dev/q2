@@ -1,5 +1,5 @@
 /*
- * engine/jupyter/stored.rs
+ * engine/ipynb_replay.rs
  * Copyright (c) 2026 Posit, PBC
  *
  * Plan 7c Phase 3: stored-output replay for `.ipynb` documents.
@@ -32,16 +32,17 @@ use quarto_system_runtime::SystemRuntime;
 use quarto_source_map::SourceInfo;
 use serde_json::Value;
 
-use super::execute::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
-use super::text_execute::{CodeBlock, legacy_cells};
 use crate::cell_options::partition_cell_options;
 use crate::engine::content_processors::ORIGINAL_FILE_ID;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::error::ExecutionError;
 use crate::engine::traits::ExecutionEngine;
+use crate::engine::units::{CodeBlock, legacy_cells};
 use crate::presenter::cell::{describe_location, render_cell};
 use crate::presenter::figures::{FigureSink, FsFigureSink, RuntimeFigureSink};
-use crate::presenter::output::extract_text_content;
+use crate::presenter::output::{
+    CellOutput, CellResult, ExecuteStatus, MimeBundle, extract_text_content,
+};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
 
 /// Renders `.ipynb` documents' stored outputs (Plan 7c Phase 3, option B).

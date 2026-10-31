@@ -2,7 +2,7 @@
 title: 'EXR-4: the engine execution record format (nbformat 4.5 with quarto_ metadata)'
 date: 2026-10-28
 description: 'A target-neutral library that defines, writes, reads, coalesces and hashes engine execution records as ipynb files, with Positron-compatible matching keys and the freeze groundwork, and no change to any pipeline.'
-status: draft
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
@@ -112,12 +112,12 @@ without `execution_count` **fails**, so the builder must always emit it. Decisio
 is correct.
 
 **Which keys engines read** (verified by a reviewer; Phase 0 records it as facts with
-tests). Jupyter (Rust) reads only `error` (`engine/jupyter/text_execute.rs:326`) and the
+tests). Jupyter (Rust) reads only `error` (`engine/jupyter/text_execute.rs:392`; the stored-replay path reads it at `stored.rs:199`) and the
 visibility keys `include`, `echo`, `output`, `warning` from `ctx.execute_scope`
-(`:457-466`); it reads no `eval`, `execute-dir` or `params`. knitr reads `fig-width`,
+(`presenter/visibility.rs`, `CellVisibility::resolve`, called at `text_execute.rs:393`; EXR-1 moved it there); it reads no `eval`, `execute-dir` or `params`. knitr reads `fig-width`,
 `fig-height`, `fig-asp`, `fig-dpi`, `fig-format`, `df-print`, `eval`, `warning`,
 `error`, `include`, `enabled`, `debug`, `echo`, `output` and `cache`
-(`engine/knitr/format.rs:343-385`) plus `ctx.format` (`engine/knitr/mod.rs:318`). The TS
+(`engine/knitr/format.rs:343-385`) plus `ctx.format` (`engine/knitr/mod.rs:326`). The TS
 engines (Julia, marimo, extensions) were not audited (UNVERIFIED; EXR-8 and EXR-9 own
 their declarations). `execute-dir` and `params` over-invalidate harmlessly, because no
 Rust engine reads them from metadata, and `fig-width` and `fig-height` over-invalidate
@@ -333,6 +333,11 @@ knitr and marimo units store one `display_data` output with mime
 `text/x-quarto-markdown` (finished markdown) and metadata `quarto_format` (the
 output format it was produced for). Image data inline as base64 strings.
 
+Figures: image bytes are stored inline as base64 strings in the outputs, so a record is one
+self-contained file. `quarto_files_ref` is reserved for a future sidecar: the reader parses and
+ignores it and the writer never emits it. Moving figures out of the file would be a schema change
+(a `quarto_record_version` bump), not an extension.
+
 Serialization: struct-ordered fields, `BTreeMap` for maps, one-space indent with
 sorted keys and a trailing newline (the nbformat writer convention), LF endings,
 no `last_updated`.
@@ -459,7 +464,7 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
 
 ### Phase 0: design checks and spikes
 
-- [ ] FIRST: design the label-line hash mechanism (epic decision 36). Read
+- [x] FIRST: design the label-line hash mechanism (epic decision 36). Read
   `crossref/codeblock_shorthand.rs:182-237` and `:669-697`: confirm or refute that
   `body_source_for` falls back to the whole block after a mid-body strip (a test with a
   `fig-cap` line in the middle of the body). Choose where the stage obtains the author's
@@ -468,24 +473,71 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
   fixed in the design decisions, so this task only chooses how the stage fills it). Tests first: a labeled
   `fig-` cell with a `fig-cap` line gives the author-text hash of the raw lines, and a
   non-crossref label stays in the text.
-- [ ] Record the audit of which metadata keys engines read as facts with tests: Jupyter
-  reads only `error` (`text_execute.rs:326`) and the visibility keys `include`, `echo`,
-  `output`, `warning` from `ctx.execute_scope` (`:457-466`), and no `eval`, `execute-dir`
+  **Findings (verified 2026-10-31).**
+  (1) The `body_source_for` fallback is real for the sugared block, not inside the sugaring
+  pass: `try_desugar_code_block` calls it on the unstripped block (`:142`), but the stripped
+  block keeps the original `source_info` and its text is no longer contiguous once a line is
+  removed from between two kept options, so the span becomes the whole block. Stripping only
+  leading lines leaves a contiguous tail and the span stays correct. Pinned by
+  `body_source_for_falls_back_to_whole_block_after_mid_body_strip`.
+  (2) The serializer's source map cannot recover the author text. The stage scans
+  `serialize_ast_to_qmd` output of the already-sugared AST (`pre_engine_sugaring` runs first),
+  and mapping a unit's offsets back through the returned `SourceInfo` gave offsets that are
+  not the block's (serialized 24, 36 and 78 mapped to original 25, 37 and 79 while the block
+  starts at 7, inside the label line). The map tracks the wrapper, not positions inside
+  rewritten text, so neither the original range nor the source map is a mechanism.
+  **Chosen mechanism: a pre-sugaring snapshot.** `pre_engine_sugaring` records, before
+  `desugar_blocks` rewrites a block, the pair (author text, sugared text) for every block the
+  pass rewrites, in document order, on the stage context. The engine stage fills `AuthorTexts`
+  by walking the scanned units with a monotonic cursor over that list: a cell unit takes the
+  next recorded author text whose sugared text equals the unit's code (container prefixes
+  removed); a unit with no match is untouched by sugaring, so its author text is its scanned
+  text, as the design decisions state. The cursor makes duplicate identical cells align by
+  order. Open check for the implementation task: a sugared cell inside a container, and a
+  second engine iteration that re-serializes (the stage scans once, so the snapshot is
+  consumed once).
+  **Scope (Gordon, 2026-10-31): EXR-5 owns the pipeline change; EXR-4 owns the pure part.**
+  `pre_engine_sugaring` (EXR-5) records one `SugaredBlock { author_text, sugared_text }` for
+  **every** braced executable block, in document order, not only the rewritten ones: if the
+  snapshot listed only rewritten blocks, an untouched cell whose text equals a rewritten cell's
+  stripped text would take that cell's entry. EXR-4 ships `SugaredBlock` and
+  `author_texts(units, snapshot) -> AuthorTexts` (`record/author_text.rs`), pure and tested against
+  the real sugaring pass. EXR-5 must call it and must record untouched blocks too.
+  Done (2026-10-31): the mechanism, its tests (`record/author_text.rs`: a sugared cell hashes the
+  author's raw lines with label and caption included, checked against the real sugaring pass; a
+  non-crossref label stays in the text; identical untouched and sugared cells align by order) and the
+  Phase 2 label tests (with `exec_hash.rs`: moving the label line changes the content hash and not the
+  exec hash). The contract is also written into EXR-5's plan, Phase 2, "Unit ids and author texts in
+  the stage".
+- [x] Record the audit of which metadata keys engines read as facts with tests: Jupyter
+  reads only `error` (`text_execute.rs:392`) and the visibility keys `include`, `echo`,
+  `output`, `warning` from `ctx.execute_scope` (`presenter/visibility.rs`, `CellVisibility::resolve`, called at `text_execute.rs:393`), and no `eval`, `execute-dir`
   or `params`; knitr reads `fig-width`, `fig-height`, `fig-asp`, `fig-dpi`, `fig-format`,
   `df-print`, `eval`, `warning`, `error`, `include`, `enabled`, `debug`, `echo`,
-  `output`, `cache` (`knitr/format.rs:343-385`) plus `ctx.format` (`knitr/mod.rs:318`).
+  `output`, `cache` (`knitr/format.rs:343-385`) plus `ctx.format` (`knitr/mod.rs:326`).
   Compare with the declarations in the hash section and name the accepted
   over-invalidations (`execute-dir`, `params` for all engines; `fig-width` and
   `fig-height` for Jupyter). The TS engines are not audited (UNVERIFIED): leave that as a
   task in EXR-8 and EXR-9.
-- [ ] Tests first, then a script, for the nbformat validator facts (Python
+  Done (2026-10-31; the line references above were refreshed, they had drifted after EXR-1 moved
+  the visibility code). Pinned by `exr4_audit_jupyter_visibility_ignores_every_other_key`
+  (`presenter/visibility.rs`: the four visibility keys move `CellVisibility`, sixteen others do not)
+  and `exr4_audit_knitr_reads_exactly_these_execute_keys` (`knitr/format.rs`: the fifteen keys
+  change the config, seven others do not). `error` for Jupyter is read at `text_execute.rs:392`
+  and has no kernel-free test here; its behavior (cell and document level) is covered by
+  `tests/integration/engine_error_policy.rs`.
+- [x] Tests first, then a script, for the nbformat validator facts (Python
   `nbformat.validate`, nbformat 5.11.1): a minor-5 cell with `id` validates; without `id`
   it validates with `MissingIDFieldWarning`; a minor-4 notebook with `id` fails; a
   64-character id is valid and 65 fails; `4390f67858f3f1c7-2` is valid; duplicate ids
   validate with `DuplicateCellId` and get renamed; `text/x-quarto-markdown` and extra
   `quarto_*` metadata validate; an `execute_result` without `execution_count` fails.
   Check in a sample record that passes with no warning.
-- [ ] Positron test vectors: check in the `quarto_content_hash` vectors (SHA-1 over
+  Done (2026-10-31): `uv run scripts/exr-record/nbformat_facts.py` (a PEP 723 script, so `uv`
+  builds its own cached environment; no project venv) checks every fact above plus the sample
+  `crates/quarto-core/tests/fixtures/records/sample.ipynb`; with file arguments it validates
+  them and fails on any error or warning (the Phase 4 golden gate).
+- [x] Positron test vectors: check in the `quarto_content_hash` vectors (SHA-1 over
   UTF-8, first 16 hex characters, computed with node `crypto`): `x <- 1` gives
   `4390f67858f3f1c7`; `café` gives `f424452a9673918c`; `😀` gives `9c533688a979a858`;
   `#| label: fig-é\nx <- 'é😀'` gives `774a7e618b133ed6` (all four recomputed and
@@ -495,87 +547,175 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
   hashes the same as its LF twin, because Positron splits on `\r?\n` and rejoins with `\n`
   (`quartoParser.ts:113,173`). Running the same vectors against Positron's own
   `StringSHA1` is spike S1 in EXR-16, and the two results must agree.
-- [ ] bd-sr73 size measurement: record a real Jupyter document (one matplotlib
+  Done (2026-10-31): `crates/quarto-core/tests/fixtures/records/content-hash-vectors.json` holds eight
+  vectors (the four above, empty cell, lone surrogate stored as U+FFFD because a Rust string cannot
+  hold one, CRLF, trailing newline); `node scripts/exr-record/content_hash_vectors.mjs` recomputes and
+  verifies them (`--write` regenerates). They come from node `crypto`, not from Positron's own
+  `StringSHA1`; Phase 2's Rust `content_hash` reads this fixture.
+- [x] bd-sr73 size measurement: record a real Jupyter document (one matplotlib
   figure, one small table); report gzipped size of today's capture versus an ipynb with
   inline base64; write the table into this plan. Decision thresholds: stay inline below
   the 10 MB warning for the fixture; else Phase 5 designs the sidecar.
-- [ ] The knitr size case cannot be recorded before EXR-11 exists: use a hand-built
+  **Result (2026-10-31): stay inline; Phase 5 needs no sidecar design.** Fixture
+  `crates/quarto-core/tests/fixtures/records/size-measurement.qmd` (one matplotlib line plot, one
+  three-row pandas table), rendered with `q2 0.36.0-nightly.20261027` and `trace: true` against a
+  throwaway `uv` environment (ipykernel, matplotlib, pandas; the render needs a `jupyter` on PATH
+  and `JUPYTER_PATH` pointing at the kernelspec). `uv run scripts/exr-record/size_measure.py DOC
+  TRACE FIGURES_DIR` rebuilds today's `EngineCapture` (the trace holds no file payloads, so the
+  `{path, contents_base64}` files are rebuilt as `collect_capture_files` emits them, from the
+  engine's own `doc_files/figure-html/` only, not the render's CSS and JS) and compares it with
+  the same cells run through a real kernel into an ipynb:
+
+  | item | bytes |
+  |---|---:|
+  | figure files in capture (raw PNG) | 21804 |
+  | figure files in capture (base64) | 29072 |
+  | capture `result.markdown` | 6150 |
+  | capture `input_qmd` | 5311 |
+  | capture JSON (array, minified) | 41452 |
+  | capture gzipped | 24511 |
+  | ipynb with inline base64 | 32097 |
+  | ipynb gzipped | 22689 |
+  | ratio ipynb.gz / capture.gz | 0.93 |
+
+  Both are about 0.2% of the 10 MB warning and a quarter of bd-sr73's 100 KB CI-fixture budget. The
+  ipynb is a lower bound for a record: the record adds source lines, hashes and the engine entry
+  (a few KB), and a PNG compresses only by its base64 overhead, so the figure count is what scales
+  the size (roughly 20 KB gzipped per figure of this kind; 10 MB is about 450 of them). Note
+  `input_qmd` is 5.3 KB for a 0.4 KB document because it carries the merged `quarto.language`
+  terms; the record does not store it.
+- [x] The knitr size case cannot be recorded before EXR-11 exists: use a hand-built
   record instead (a rendered-markdown `display_data` cell with a few figure files
   in `quarto_files`, sized like a typical knitr document), and note in the table that it
   is hand-built and is re-measured when EXR-11 lands.
+  **Result (2026-10-31, HAND-BUILT, not a knitr run; re-measure when EXR-11 lands):**
+  `uv run scripts/exr-record/size_knitr_handbuilt.py`. The shape and the sizes are my
+  assumptions of a typical knitr document: 8 chunks of rendered markdown (one
+  `text/x-quarto-markdown` `display_data` each) and 3 different matplotlib PNGs (identical copies
+  would compress unrealistically) in the notebook-level `quarto_files` map as `{data, size}`.
+
+  | item | bytes |
+  |---|---:|
+  | figure files (raw PNG, 3 figures) | 52723 |
+  | rendered markdown, 8 chunks | 3367 |
+  | hand-built record | 77710 |
+  | hand-built record gzipped | 50312 |
+  | comparable capture gzipped | 49978 |
+
+  The record is within 1% of a capture of the same content, so the knitr case also stays inline,
+  at about 50 KB gzipped, 0.5% of the 10 MB warning.
 - Exit: the gate above.
 
 ### Phase 1: types and round trip
 
-- [ ] Tests first: serde round trip of every field in the schema reference;
+- [x] Tests first: serde round trip of every field in the schema reference;
   unknown `quarto_` keys survive a read and write (forward compatibility).
-- [ ] `Record`, `RecordCell`, `EngineEntry` types in `record/`, plus `AuthorText` and
+- [x] `Record`, `RecordCell`, `EngineEntry` types in `record/`, plus `AuthorText` and
   `AuthorTexts` (design decisions), `Granularity`, and the builder\'s two types:
   `UnitResult { outputs, execution_count, kernel }` (the nbformat outputs of one unit as
   JSON values, the execution count the kernel reported, the kernel that ran it;
   `KernelExecuteResult`-shaped, so Jupyter converts from it and a TS engine fills it from
   its notebook\'s cells) and `EngineRecord { engine: EngineEntry, cells: Vec<RecordCell> }`
   (one engine\'s cells, in that engine\'s unit order, with its entry).
-- [ ] Test, then type: `HashDefinition` (fields as in the hash section) round trips through
+- [x] Test, then type: `HashDefinition` (fields as in the hash section) round trips through
   serde, including in `EngineEntry.hash_definition` and with a non-empty `profiles` map,
   and a golden JSON pins its field names (camelCase, with `Granularity` as `unit` or `document`; the file and the engine wire use the same form). A
   cell's optional `quarto_hash_rule` round trips and is absent when the unit uses the
   default profile.
+  Done (2026-10-31), `crates/quarto-core/src/record/` (`types.rs`, `hash_definition.rs`).
+  Implementation notes: `HashDefinition.profiles` is omitted from the JSON when empty and
+  defaults on read, matching EXR-7's "optional `profiles` map"; a cell's options and any
+  unknown `quarto_` keys share one flattened `extra` map (`CellMetadata::options()` filters out
+  the `quarto_` keys), because serde allows a single flatten map per struct; `quarto_engine` is
+  optional on read so a record that predates engine tags still loads (Phase 5 derives engines
+  from ownership); the engine entry's fold fields are `serde_json::Value`s and `BTreeMap`s, not
+  `ExecuteResult`\'s `HashMap`s, so the bytes stay deterministic.
 - Exit: the gate above.
 
 ### Phase 2: hashes and ids
 
-- [ ] Positron `content_hash(lines)`: all Phase 0 vectors pass, including the CRLF
+- [x] Positron `content_hash(lines)`: all Phase 0 vectors pass, including the CRLF
   normalization (split on `\r?\n`, rejoin with `\n`).
-- [ ] Id functions (tests first): `cell_id(index, hash, label)` gives
+- [x] Id functions (tests first): `cell_id(index, hash, label)` gives
   `{index}-{hash8}-{label|unlabeled}` (the label is the first `#| label:` value in the
   author text) and `span_id(n, hash)` gives `{n}-{hash8}-inline`; the typed id slot of
   EXR-2\'s `Unit` is filled by one function, `fill_ids(units, &AuthorTexts)`, which returns
   an error naming both lengths when the mapping is not the same length as the unit list
   (no partly filled slot, no guess).
-- [ ] Id tests: inserting or removing a span before a cell leaves that cell's id
+- [x] Id tests: inserting or removing a span before a cell leaves that cell's id
   unchanged; span ids count every claimed span, owned or not; a span in the document\'s
-  own front matter takes span number 1, shifts later spans by one and leaves every cell id
+  own front matter takes span number 0 (the scanner's `span_index` is 0-based; EXR-18 agrees), shifts later spans by one and leaves every cell id
   unchanged, while a span that arrives through project metadata takes no number (not
   claimed, EXR-2); the cell index counts ceded and unowned braced fences but not raw
   `{=html}` blocks; `python.marimo` and `{python .marimo}` get the same id for the same
   text (language is not in the id); `quarto_lang` keeps the full token; `{Python}` and
   `{python}` spans of the same code get the same span hash; an id filled by the stage
   equals one filled again on the same list (idempotent).
-- [ ] Hash algorithm in core (tests first): `hash_unit(def, unit)` is SHA-256 over
+  Done (2026-10-31), `record/ids.rs`: `content_hash` (SHA-1 via the `sha1` 0.11 crate that `pampa`
+  already uses, so the lockfile gains one edge and no crate), `span_content_hash`, `cell_id`, `span_id`,
+  `author_label`, `scanned_author_text` and `AuthorTexts::from_scanned` (for units sugaring did not
+  touch), and `fill_ids`. The Rust `content_hash` reproduces every node-computed Phase 0 vector.
+  Two readings of the plan to confirm: the label is the first `label:` option in the *leading run of
+  option lines* of the author text, in the language's own option-comment syntax (`%%|` for mermaid,
+  `//|` for js), not any `#| label:` line anywhere in the text, because a label after code is not an
+  option; and span numbers are the scanner's 0-based `span_index`.
+- [x] Hash algorithm in core (tests first): `hash_unit(def, unit)` is SHA-256 over
   length-prefixed, LF-normalized fields prefixed by `id` and `version`; equal inputs give
   equal hashes; changing the definition's `version` changes the hash.
-- [ ] Unit-hash exclusion tests: each field the definition counts changes the hash; an
+- [x] Unit-hash exclusion tests: each field the definition counts changes the hash; an
   option listed in `presentation_cell_options` does not; an engine that declares nothing
   hashes everything (an `echo` change moves the hash).
-- [ ] Kernel, case and encoding tests: a unit\'s hash does not change when only its
+- [x] Kernel, case and encoding tests: a unit\'s hash does not change when only its
   recorded `quarto_kernel` changes; both golden vectors of the algorithm section pass;
   `7`, `7.0` and `"7"` option values hash differently; option key order does not matter.
-- [ ] Profile tests, on a synthetic declaration (no engine in this epic declares one): a
+- [x] Profile tests, on a synthetic declaration (no engine in this epic declares one): a
   unit tagged with a profile that counts every option changes its hash on an `echo`
   edit while an untagged unit of the same engine does not; a unit naming a profile the
   stored declaration lacks is stale; the engine's document hash drops an `execute:` key
   only when every profile used in its record excludes it; recompute from the stored
   declaration with no engine loaded.
-- [ ] Document-hash tests: `engine`, `execute-dir`, `params`, each `document_keys` key
+- [x] Document-hash tests: `engine`, `execute-dir`, `params`, each `document_keys` key
   and each `execute:` key not in `presentation_execute_keys` change the hash; an excluded
   key does not; toggling `record` changes no engine's hash; unknown keys count.
-- [ ] `ExecutionEngine::hash_definition(&self) -> HashDefinition` on the trait with the
+  Done (2026-10-31) for the five items above, `record/exec_hash.rs`: `hash_unit`, `hash_document`,
+  `hash_record` (`quarto_execution_hash`), `execution_options` (the flat keys a cell records, by the same
+  function that excludes them from the hash), `partition_author_text` and `yaml_to_json` (a tagged value
+  such as `!expr 1 + 1` keeps its tag in the canonical JSON, because the tag changes its meaning),
+  `recompute_cell_hash` (a cell plus its engine's stored declaration, no engine loaded), and
+  `canonical_json`. Both golden vectors pass, and were first reproduced independently in Python. The
+  tests also pin: moving a label line changes `quarto_content_hash` and not `quarto_exec_hash`; core
+  ignores `record` even when an engine lists it in `document_keys`; the unit count and each unit hash
+  are document-hash inputs. Still open in this phase and why: the mixed-engine and self-description
+  items need the builder's `EngineEntry` (Phase 3) to be end-to-end, and the source-of-inputs, overlay
+  and execution-relevant-option items need the pipeline-side inputs; the primitives they use are
+  tested here.
+- [x] `ExecutionEngine::hash_definition(&self) -> HashDefinition` on the trait with the
   conservative default (empty lists, `granularity: Unit`, `id` the engine name, version
   1). Test that a mock engine that overrides nothing hashes everything.
-- [ ] Jupyter override in the Jupyter engine module: the closed allowlist data lives
+- [x] Jupyter override in the Jupyter engine module: the closed allowlist data lives
   there, and core has no engine-name match. Tests: toggling `execute: echo` does not
   change the Jupyter document hash; toggling `error` does; a cell with `fig-width: 7`
   and `echo: false` changes the unit hash only by `fig-width`.
-- [ ] knitr override in the knitr engine module: empty exclusion lists,
+- [x] knitr override in the knitr engine module: empty exclusion lists,
   `document_keys: ["knitr"]`. Tests: toggling `execute: echo` changes the knitr
   document hash and not the Jupyter one; a chunk option change moves the unit hash.
-- [ ] Mixed-engine document hash (tests first): each engine's document hash uses its own
+  Done (2026-10-31): the trait default is in `engine/traits.rs`; Jupyter's closed allowlist is
+  `DISPLAY_ONLY_KEYS` in `engine/jupyter/mod.rs` (the four visibility keys, the `code-*` display
+  options, captions, listing and layout keys; `error`, `eval`, `label`, `execute-dir`, `params`,
+  `fig-width` and `fig-height` are deliberately absent and a test pins that); knitr's override is
+  in `engine/knitr/mod.rs`, including `knitr_hash_ignores_the_record_key`. The allowlist contents
+  are my reading of which options only change presentation: it is the one piece of this phase a
+  reviewer should check, because a key wrongly listed there under-invalidates silently.
+- [x] Mixed-engine document hash (tests first): each engine's document hash uses its own
   definition and is stored in its `quarto_engines` entry; `quarto_execution_hash` equals the
   hash over the ordered per-engine values and changes when the engine order changes.
-- [ ] Self-description test: a record's stored declarations reproduce its
+  Done (2026-10-31), `record/coalesce.rs` tests `each_engines_document_hash_uses_its_own_definition`
+  and `engine_order_is_execution_order_and_changes_the_record_hash`.
+- [x] Self-description test: a record's stored declarations reproduce its
   `quarto_execution_hash` and its unit hashes with no engine loaded.
-- [ ] Execution-relevant option keys (tests first): a cell with `fig-width: 7` and
+  Done (2026-10-31): `a_record_reproduces_its_hashes_from_its_stored_declarations_alone`, over a
+  Jupyter plus knitr record.
+- [x] Execution-relevant option keys (tests first): a cell with `fig-width: 7` and
   `echo: false` records `fig-width` as a flat key and no `echo` key under Jupyter; the
   recorded keys equal the options that move `quarto_exec_hash`; keys are emitted sorted
   by name and the bytes are identical across runs (a shuffled option order in the source
@@ -584,14 +724,24 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
   profile excludes `echo` and `fig-cap`: the default-profile unit carries them, the
   named-profile unit does not, and each set equals the options that move that unit\'s
   hash).
-- [ ] Source-of-inputs tests: the hash is built from pre-engine units, so a code edit
-  inside an included file changes it and a prose-only edit does not; two byte-different
-  spellings of the same metadata hash alike.
-- [ ] Overlay tests: the hash with and without an overlay is equal; `quarto_overlay`
-  holds only the post-merge execution-relevant difference, is independent of how `-M`
-  was spelled, is absent without an overlay, and changing it changes no hash. Which keys
-  are execution-relevant waits on the `RenderOverlay` check (EXR-15, first task).
-- [ ] Label tests: a cell with an authored `#| label:` line hashes the same
+  Done (2026-10-31): the Jupyter-shaped cases are in `record/builder.rs`
+  (`execution_relevant_options_are_flat_keys_and_presentation_ones_are_not`,
+  `recorded_keys_equal_the_options_that_move_the_exec_hash`,
+  `option_order_in_the_source_changes_neither_keys_nor_exec_hash_and_bytes_are_stable`). Two
+  readings: a shuffled option order changes the author text, so the Positron content hash and the
+  `source` differ and only the flat keys and `quarto_exec_hash` are equal; and the named-profile case
+  is tested on the primitives in `exec_hash.rs` (`recorded_option_keys_are_the_options_that_move_each_profiles_hash`)
+  because the builder never names a profile. Byte-identical whole-record output waits on Phase 4\'s golden.
+- Moved out of this plan (2026-10-31; both need pipeline-side inputs EXR-4 does not have, and
+  the hash primitives they use are tested above):
+  - Source-of-inputs tests (the hash is built from pre-engine units: an included file\'s code
+    edit changes it, a prose-only edit does not, two byte-different spellings of the same metadata
+    hash alike) are now in EXR-5, Phase 2, next to the stage\'s unit and author-text plumbing.
+  - Overlay tests are now in EXR-15 Phase A (its first task already checks `RenderOverlay`); the
+    two clauses this plan had beyond EXR-15\'s tests, `quarto_overlay` absent without an overlay
+    and changing it changes no hash, were added there. This plan keeps only the `quarto_overlay`
+    field in the schema and the types.
+- [x] Label tests: a cell with an authored `#| label:` line hashes the same
   `quarto_content_hash` as Positron's hash over the raw lines (label line included),
   whatever position the label line has among the options, including a crossref-sugared
   `fig-` label with a `fig-cap` line (hashed from the author-text mapping, not the
@@ -601,7 +751,7 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
 
 ### Phase 3: coalescing
 
-- [ ] `RecordBuilder` (tests first; EXR-5 and EXR-7 call it, and EXR-8, EXR-9 and EXR-11
+- [x] `RecordBuilder` (tests first; EXR-5 and EXR-7 call it, and EXR-8, EXR-9 and EXR-11
   reach it through EXR-7): `RecordBuilder::new(engine_name, &HashDefinition, &[Unit],
   &AuthorTexts)`, `push(unit_index, UnitResult)` for each unit the engine ran, and
   `finish(EngineEntryInput) -> EngineRecord`, where `EngineEntryInput` holds the
@@ -615,34 +765,74 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
   `UnitResult` produced from engine-side code that differs from the unit\'s still yields
   the unit\'s source and hashes; a unit the engine did not run gets no cell; the document
   hash covers the ordered unit hashes of that engine\'s units only.
-- [ ] `coalesce(engine_records: &[EngineRecord], unit_order: &[Unit]) -> Record`:
+  Done (2026-10-31), `record/builder.rs`. Three signature points differ from the sketch above, all
+  forced by what the builder must compute: `new` returns `Result` (the unit list and `AuthorTexts` must
+  have equal length: `BuildError::LengthMismatch`); `push` returns `Result` (out-of-range index, a unit
+  pushed twice, an empty id slot meaning `fill_ids` did not run, or an invalid option block);
+  `finish` returns `Result` (it calls `hash_document`). `EngineEntryInput` gains `document_metadata`,
+  the merged top-level document metadata that `hash_document` reads; it is a hash input only and is
+  not stored (the stored `metadata` stays the engine\'s folded result). The engine\'s "units" for its
+  document hash are the units it pushed, in unit order whatever the push order, so a unit an engine
+  never ran is not an input. The builder never names a profile, so `quarto_hash_rule` is absent until
+  an engine can ask for one. The cell\'s nbformat `id` is the plain content hash here; uniqueness
+  across the record is coalesce\'s job.
+- [x] `coalesce(engine_records: &[EngineRecord], unit_order: &[Unit]) -> Record`:
   `unit_order` is the stage\'s single unit list (epic decision 38), so cells are ordered by
   that list with no renumbering and no use of source positions, each cell keeps its
   `quarto_engine`, and engines stay in execution order. Tests: two engines
   interleaved; an engine with no units; duplicate identical cells keep an
   occurrence index; a unit missing from one record is reported, not dropped.
+  Done (2026-10-31), `record/coalesce.rs`. Returns `Result<Record, CoalesceError>`. "A unit missing
+  from one record" is read as a cell whose `quarto_cell_id` is in no unit of the stage\'s list
+  (`UnknownCell`, naming the engine); a unit no engine ran is legitimate (not owned) and absent. A unit
+  recorded by two engines is `DuplicateCell`. Cells are matched to units by id, not position. The nbformat
+  `id` is the content hash with `-2`, `-3` appended to later duplicates, computed from
+  `quarto_content_hash` so coalescing a coalesced record gives the same ids. `quarto_source`,
+  `quarto_files` and `quarto_overlay` are left for the caller to set (they come from the pipeline).
 - Exit: the gate above.
 
 ### Phase 4: deterministic writer
 
-- [ ] Golden file test: a record serializes to checked-in bytes; serialize twice
+- [x] Golden file test: a record serializes to checked-in bytes; serialize twice
   equals; shuffled input maps produce identical output; no absolute paths or
   timestamps (a scan test over the bytes).
-- [ ] Every `execute_result` the writer emits carries `execution_count`, and the golden
+- [x] Every `execute_result` the writer emits carries `execution_count`, and the golden
   validates with Python `nbformat.validate` and no warning.
+  Done (2026-10-31), `record/writer.rs` and `tests/fixtures/records/golden.ipynb` (regenerate with
+  `UPDATE_GOLDEN=1 cargo nextest run -p quarto-core -E 'test(record::writer)'`, review the diff, then
+  run the tests again, since `include_str!` reads the file at compile time). `write_record(&Record) ->
+  Result<String, serde_json::Error>`: nbformat convention (one-space indent, sorted keys, LF, UTF-8
+  unescaped, one trailing newline). Keys are sorted explicitly because the workspace enables
+  `serde_json`\'s `preserve_order`, so a `Value` object would otherwise carry the order an engine built
+  it in into the bytes; a test builds the same outputs in two key orders and compares bytes. The writer
+  also normalizes: a missing `execution_count` on an `execute_result` becomes `null`, and
+  `quarto_files_ref` is never emitted. `uv run scripts/exr-record/nbformat_facts.py <golden>` reports
+  `valid=True warnings=[]`. Nothing in CI runs that script, so the validation is a manual gate for now;
+  wiring it is not in this plan.
 - Exit: the gate above.
 
 ### Phase 5: reader and Positron import
 
-- [ ] Reader validation (nbformat 4, cells array, `quarto_record_version`
+- [x] Reader validation (nbformat 4, cells array, `quarto_record_version`
   present); a record without `quarto_engine` tags derives engines from ownership.
-- [ ] `import_positron_cache(bytes)`: returns outputs keyed by content hash,
+  Done (2026-10-31), `record/reader.rs`: `read_record`/`read_record_value` return `ReadError` for
+  bad JSON, non-nbformat-4, no `cells` array, a missing or newer `quarto_record_version`, and an
+  invalid structure; `Record::engine_of`/`cells_of` fall back to `owned_languages` (exact,
+  case-insensitive match on the full language token) when a cell has no `quarto_engine` tag.
+- [x] `import_positron_cache(bytes)`: returns outputs keyed by content hash,
   marked `provenance: positron`, display-only, normalized at read (a rich output is
   accepted as `execute_result` or `display_data`; string-valued JSON mimes are parsed
   into objects), and language-gated; the normalization rules, the gate and their tests
   are specified in EXR-16. Tests with a Positron-written file (version mismatch and
   invalid structure are rejected, not deleted).
-- [ ] `place(record, units, document_text, format) -> String`, the shared helper for
+  Done (2026-10-31), `record/positron_import.rs`: `import_positron_cache(&[u8]) -> Result<PositronImport,
+  ImportError>`; `PositronImport::outputs_for(hash, occurrence, owner, lang)` applies the gate (owner is
+  `jupyter`, language is `\w+`) and the occurrence rule, and returns `DisplayOnlyOutputs`, a type with no
+  conversion to `UnitResult` or `RecordCell`. Rich outputs normalize to `display_data` (no execution
+  count), `quarto_webview_metadata` is dropped, an invalid JSON string stays a string with a notice in
+  `notices`. **Reconcile EXR-16 Phase A:** it says a wrong `quarto_cache_version` is "read but flagged";
+  this plan and the handoff say rejected, and the code rejects (`ImportError::VersionMismatch`).
+- [x] `place(record, units, document_text, format) -> String`, the shared helper for
   rendered units: for each unit whose record cell holds one `display_data` with
   `text/x-quarto-markdown`, it substitutes that stored markdown at the unit, after
   checking `quarto_format` against `format` (a mismatch leaves the unit verbatim and is
@@ -651,20 +841,45 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
   `crates/quarto-core/tests/integration/capture_splice_seam.rs:226`) places its markdown;
   a unit with no cell stays verbatim; a format mismatch is reported; a front-matter span
   (`quarto_location: metadata`) is never placed.
-- [ ] Reserved sidecar field: parse and ignore `quarto_files_ref`; writer never emits it.
+  Done (2026-10-31), `record/place.rs`: `place(&Record, &[Unit], &str, &str) -> Placed { text, notes }`. It
+  returns a `Placed` rather than a bare `String` so a format mismatch can be reported
+  (`PlaceNote::FormatMismatch`); callers use `.text`. Units match cells by `quarto_cell_id` (so an edited
+  cell, whose hash changed, stays verbatim); a stored output with no `quarto_format` counts as a mismatch;
+  a fenced cell keeps its trailing newline and its blockquote prefix and indent on continuation lines;
+  edits apply back to front. The test shapes are in the module (marimo-shaped, no cell, mismatch,
+  front matter, raw cell, several units, blockquote).
+- [x] Reserved sidecar field: parse and ignore `quarto_files_ref`; writer never emits it.
+  Done (2026-10-31): covered in `record/types.rs` and `record/writer.rs`, plus a reader-level test.
 - Exit: the gate above.
 
 ### Phase 6: freeze-readiness checklist (epic decision 1), each a test
 
-- [ ] Prose-only edit keeps `quarto_execution_hash`; a code edit changes it.
-- [ ] Mutating provenance (engine, kernel, platform, `quarto_overlay`) changes no
-  matching, staleness or reuse key.
-- [ ] Self-contained: every `ExecuteResult` fold field round trips.
-- [ ] Presenting needs no engine (proved with EXR-1's availability test on a record).
-- [ ] Rendered units carry `quarto_format`; raw units carry none.
-- [ ] Deterministic bytes (Phase 4 goldens).
-- [ ] Figure story documented: inline now, sidecar field reserved.
+All in `record/freeze_readiness.rs` (test-only), done 2026-10-31 unless noted.
+
+- [x] Prose-only edit keeps `quarto_execution_hash`; a code edit changes it. An inline
+  expression edit changes it too.
+- [x] Mutating provenance (engine, kernel, platform, `quarto_overlay`) changes no
+  matching, staleness or reuse key (record hash, document hashes, cell ids, content and unit hashes).
+- [x] Self-contained: every `ExecuteResult` fold field round trips.
+- [x] Presenting needs no engine (proved with EXR-1's availability test on a record).
+  `a_record_replays_without_probing_engine_availability` (`tests/integration/ipynb_stored_replay.rs`) writes a
+  record with `write_record` and feeds it to the same setup as `replay_does_not_probe_engine_availability`
+  (Jupyter registered, unavailable, counting checks): the stored output replays and no availability check
+  runs. **Finding for EXR-13/14:** the notebook converter takes the fence language from
+  `metadata.kernelspec.language` (Q1 behavior) and a record has none (it has per-cell `quarto_lang`), so a
+  bare record converts to empty `{}` fences and replays nothing. The test supplies the kernelspec a consumer
+  would derive from `quarto_lang`; code that presents records through this path must do the same.
+- [x] Rendered units carry `quarto_format`; raw units carry none. Tested over the golden, which has both
+  a raw (Jupyter) and a rendered (knitr) engine. Enforcing it when an engine pushes a unit belongs to
+  EXR-9 and EXR-11.
+- [x] Deterministic bytes (Phase 4 goldens), plus a build-twice check.
+- [x] Figure story documented: inline now, sidecar field reserved (module docs and the schema
+  reference above), and a test that inline image bytes round trip with no `quarto_files_ref` emitted.
 - Exit: the gate above, and the WASM build compiles the module (recipe in EXR-1).
+  Gate met (2026-10-31): clippy clean; `nextest -p quarto-core` 6771 passed, 1 failed (the known reveal.js
+  vendoring test); the recipe `cargo check --target wasm32-unknown-unknown` from
+  `crates/wasm-quarto-hub-client` exits 0, with `record` ungated in `lib.rs`. Dependents: 1408 passed, 2
+  failed (`quarto-preview` `pdfjs_serving`, environmental, fixed by `npm install`).
 
 ## Risks and open questions
 

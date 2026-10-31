@@ -1,0 +1,42 @@
+[
+ {
+  "name": "simple",
+  "input": "x <- 1",
+  "expected": "4390f67858f3f1c7"
+ },
+ {
+  "name": "accent",
+  "input": "café",
+  "expected": "f424452a9673918c"
+ },
+ {
+  "name": "astral-emoji",
+  "input": "😀",
+  "expected": "9c533688a979a858"
+ },
+ {
+  "name": "label-line-and-unicode",
+  "input": "#| label: fig-é\nx <- 'é😀'",
+  "expected": "774a7e618b133ed6"
+ },
+ {
+  "name": "empty-cell",
+  "input": "",
+  "expected": "da39a3ee5e6b4b0d"
+ },
+ {
+  "name": "lone-surrogate-is-replacement-char",
+  "input": "�",
+  "expected": "9bdb77276c1852e1"
+ },
+ {
+  "name": "crlf-equals-lf",
+  "input": "#| label: a\r\nx <- 1\r\ny <- 2",
+  "expected": "bed797056fb8e833"
+ },
+ {
+  "name": "trailing-newline-kept",
+  "input": "x <- 1\n",
+  "expected": "3d72bdede5f2706d"
+ }
+]

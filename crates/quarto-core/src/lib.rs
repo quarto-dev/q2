@@ -84,6 +84,7 @@ pub mod presenter;
 pub mod preview_out;
 pub mod project;
 pub mod project_resources;
+pub mod record;
 pub mod render;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod render_to_file;
