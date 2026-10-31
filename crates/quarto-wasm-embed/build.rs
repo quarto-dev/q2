@@ -24,7 +24,8 @@
 //! (`q2 preview`'s placeholder SPA, `q2 mcp`'s BUNDLE_NOT_BUILT) already
 //! carry the actionable messages.
 //!
-//! The selected file is zstd-compressed (level 19, multithread — the
+//! The selected file is zstd-compressed (see
+//! `quarto_build_support::embed_zstd_level`, multithread — the
 //! same treatment as quarto-preview's embed archives) and exposed via
 //! `QUARTO_WASM_EMBED_ARCHIVE`; the runtime decompresses lazily on first
 //! use so `q2 render`-class invocations pay nothing for the embed.
@@ -78,7 +79,9 @@ fn main() {
                 sha.iter().map(|b| format!("{b:02x}")).collect::<String>()
             );
             println!("cargo:rustc-env=QUARTO_WASM_EMBED_LEN={}", bytes.len());
-            let mut encoder = zstd::stream::Encoder::new(Vec::new(), 19).expect("zstd encoder");
+            let mut encoder =
+                zstd::stream::Encoder::new(Vec::new(), quarto_build_support::embed_zstd_level())
+                    .expect("zstd encoder");
             if let Ok(n) = std::thread::available_parallelism() {
                 let _ = encoder.multithread(n.get() as u32);
             }
