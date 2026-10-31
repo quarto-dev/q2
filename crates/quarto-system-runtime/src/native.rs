@@ -24,8 +24,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use crate::traits::{
-    CommandOutput, FetchPolicy, PathKind, PathMetadata, RuntimeError, RuntimeResult, SassOutput,
-    SystemRuntime, TempDir, XdgDirKind, validate_fetch_url,
+    CommandOptions, CommandOutput, FetchPolicy, PathKind, PathMetadata, RuntimeError,
+    RuntimeResult, SassOutput, SystemRuntime, TempDir, XdgDirKind, validate_fetch_url,
 };
 
 /// How long [`SystemRuntime::fetch_url`] waits for a whole request, headers
@@ -341,17 +341,22 @@ impl SystemRuntime for NativeRuntime {
         run_captured(Command::new(command).args(args), stdin)
     }
 
-    fn exec_command_with_env(
+    fn exec_command_with_options(
         &self,
         command: &str,
         args: &[&str],
         stdin: Option<&[u8]>,
-        env: &HashMap<String, String>,
+        options: &CommandOptions<'_>,
     ) -> RuntimeResult<CommandOutput> {
-        run_captured(
-            Command::new(command).args(args).env_clear().envs(env),
-            stdin,
-        )
+        let mut child = Command::new(command);
+        child.args(args);
+        if let Some(env) = options.env {
+            child.env_clear().envs(env);
+        }
+        if let Some(cwd) = options.cwd {
+            child.current_dir(cwd);
+        }
+        run_captured(&mut child, stdin)
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -935,7 +940,7 @@ mod tests {
     }
 
     #[test]
-    fn test_exec_command_with_env_replaces_the_environment() {
+    fn test_exec_command_with_options_replaces_the_environment() {
         let rt = runtime();
         #[cfg(not(windows))]
         let (cmd, args): (&str, &[&str]) = ("sh", &["-c", "printf %s \"$Q2_A:$HOME\""]);
@@ -947,13 +952,46 @@ mod tests {
         // The child still has to be found.
         env.insert("PATH".to_string(), std::env::var("PATH").unwrap());
 
-        let output = rt.exec_command_with_env(cmd, args, None, &env).unwrap();
+        let options = CommandOptions {
+            env: Some(&env),
+            cwd: None,
+        };
+        let output = rt
+            .exec_command_with_options(cmd, args, None, &options)
+            .unwrap();
 
         assert!(output.success());
         let out = output.stdout_string();
         assert!(out.starts_with("set:"), "{out}");
         #[cfg(not(windows))]
         assert_eq!(out, "set:", "the inherited HOME should be gone");
+    }
+
+    #[test]
+    fn test_exec_command_with_options_sets_the_working_directory() {
+        let rt = runtime();
+        let dir = tempfile::tempdir().unwrap();
+        let expected = dir
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        #[cfg(not(windows))]
+        let (cmd, args): (&str, &[&str]) = ("pwd", &[]);
+        #[cfg(windows)]
+        let (cmd, args): (&str, &[&str]) = ("cmd", &["/C", "cd"]);
+
+        let options = CommandOptions {
+            env: None,
+            cwd: Some(dir.path()),
+        };
+        let output = rt
+            .exec_command_with_options(cmd, args, None, &options)
+            .unwrap();
+
+        let out = output.stdout_string();
+        assert!(out.contains(&expected), "{out}");
     }
 
     #[test]

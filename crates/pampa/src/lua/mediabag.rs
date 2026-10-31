@@ -193,7 +193,7 @@ pub fn register_pandoc_mediabag(
                     }
                 } else {
                     // Try to read from local file (synchronous, no yield needed)
-                    match rt.file_read(Path::new(&source)) {
+                    match rt.file_read(&super::process_view::resolve_path(&lua, &source)) {
                         Ok(content) => {
                             let mime_type = guess_mime_type(&source);
                             mb.borrow_mut().insert(
@@ -361,8 +361,9 @@ pub fn register_pandoc_mediabag(
     let rt = runtime.clone();
     mb_table.set(
         "write",
-        lua.create_function(move |_, (dir, fp): (String, Option<String>)| {
-            let dir_path = Path::new(&dir);
+        lua.create_function(move |lua, (dir, fp): (String, Option<String>)| {
+            let dir_path = super::process_view::resolve_path(lua, &dir);
+            let dir_path = dir_path.as_path();
 
             // Ensure directory exists
             rt.dir_create(dir_path, true)

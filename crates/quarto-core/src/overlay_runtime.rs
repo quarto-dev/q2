@@ -29,8 +29,8 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use quarto_system_runtime::{
-    CacheEntryInfo, CommandOutput, FetchPolicy, PathKind, PathMetadata, RuntimeError,
-    RuntimeResult, SassOutput, SystemRuntime, TempDir, XdgDirKind,
+    CacheEntryInfo, CommandOptions, CommandOutput, FetchPolicy, PathKind, PathMetadata,
+    RuntimeError, RuntimeResult, SassOutput, SystemRuntime, TempDir, XdgDirKind,
 };
 
 /// An immutable per-render overlay: file overrides and runtime metadata.
@@ -266,14 +266,15 @@ impl SystemRuntime for OverlayRuntime {
         self.inner.exec_command(command, args, stdin)
     }
 
-    fn exec_command_with_env(
+    fn exec_command_with_options(
         &self,
         command: &str,
         args: &[&str],
         stdin: Option<&[u8]>,
-        env: &HashMap<String, String>,
+        options: &CommandOptions<'_>,
     ) -> RuntimeResult<CommandOutput> {
-        self.inner.exec_command_with_env(command, args, stdin, env)
+        self.inner
+            .exec_command_with_options(command, args, stdin, options)
     }
 
     fn env_get(&self, name: &str) -> RuntimeResult<Option<String>> {

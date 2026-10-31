@@ -293,7 +293,7 @@ pub fn register_pandoc_path(
     let rt = runtime.clone();
     path.set(
         "exists",
-        lua.create_function(move |_, (filepath, kind): (String, Option<String>)| {
+        lua.create_function(move |lua, (filepath, kind): (String, Option<String>)| {
             let path_kind = kind
                 .as_deref()
                 .and_then(|k| match k.to_lowercase().as_str() {
@@ -303,8 +303,11 @@ pub fn register_pandoc_path(
                     _ => None,
                 });
 
-            rt.path_exists(Path::new(&filepath), path_kind)
-                .map_err(|e| mlua::Error::runtime(e.to_string()))
+            rt.path_exists(
+                &super::process_view::resolve_path(lua, &filepath),
+                path_kind,
+            )
+            .map_err(|e| mlua::Error::runtime(e.to_string()))
         })?,
     )?;
 
