@@ -480,9 +480,11 @@ parallel, so the real process environment never changes. Inside the callback:
 directory for the callback, but only for this filter. Documents can render in
 parallel, so the real process directory never changes. Inside the callback:
 
-- Relative paths passed to Quarto's Lua APIs, `pandoc.system`, `pandoc.path.exists`,
+- Relative paths passed to `pandoc.system`, `pandoc.path.exists`,
   `pandoc.mediabag`, `io.open`, `io.lines`, `io.input`, `io.output`, `os.remove`,
   `os.rename`, `loadfile` and `dofile` resolve against `dir`.
+- `quarto.*` functions that resolve paths beside your filter, such as
+  `quarto.doc.add_html_dependency`, keep doing so.
 - Programs started with `pandoc.pipe` and `pandoc.system.command` start in `dir`.
 - `io.popen` and `os.execute` raise an error, because their programs would start
   in the real directory. This differs from Pandoc. Use `pandoc.pipe` or
