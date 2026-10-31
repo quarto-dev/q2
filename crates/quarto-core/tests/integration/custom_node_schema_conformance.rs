@@ -876,7 +876,7 @@ async fn observed_type_names_equal_schema_type_names() {
 
 /// Confirms design §8's Meta-block contract: the wire output's Pandoc
 /// `Meta` block carries normalized document metadata (title / date /
-/// authors) after `MetadataNormalizeTransform` / `DateNormalizeTransform`
+/// authors) after `MetadataNormalizeTransform` / `normalize_dates`
 /// / `AuthorsNormalizeTransform` run and the AST is serialized through the
 /// production JSON writer. **P7 may rely on**: normalized metadata reaches
 /// `Meta` in the wire output at all (the carriage exists), so a per-format
@@ -888,10 +888,9 @@ async fn observed_type_names_equal_schema_type_names() {
 mod meta_carriage_confirmation {
     use super::*;
     use quarto_core::transforms::{
-        AuthorsNormalizeTransform, DateNormalizeTransform, MetadataNormalizeTransform,
+        AuthorsNormalizeTransform, MetadataNormalizeTransform, normalize_dates,
     };
     use quarto_system_runtime::NativeRuntime;
-    use std::sync::Arc;
 
     /// Front matter exercising all three transforms: `title` has inline
     /// markup so `pagetitle`'s plain-text flattening is a real
@@ -902,8 +901,8 @@ mod meta_carriage_confirmation {
     const META_FIXTURE: &str = "---\ntitle: \"**Strong** Title\"\ndate: 2026-07-01\nauthor: \"Jane Doe\"\n---\n\nBody text.\n";
 
     /// Parse `qmd`, run it through the three normalize transforms in
-    /// `build_transform_pipeline`'s order (metadata-normalize ->
-    /// date-normalize -> authors-normalize), serialize with the
+    /// transforms (metadata-normalize -> date normalization ->
+    /// authors-normalize), serialize with the
     /// production streaming writer, and return the wire output's
     /// top-level `meta` object.
     async fn run_meta_carriage(qmd: &str) -> Value {
@@ -934,10 +933,7 @@ mod meta_carriage_confirmation {
             .transform(&mut ast, &mut ctx)
             .await
             .expect("metadata-normalize");
-        DateNormalizeTransform::new(Arc::new(NativeRuntime::new()))
-            .transform(&mut ast, &mut ctx)
-            .await
-            .expect("date-normalize");
+        normalize_dates(&mut ast.meta, &mut ctx, &NativeRuntime::new());
         AuthorsNormalizeTransform::new()
             .transform(&mut ast, &mut ctx)
             .await

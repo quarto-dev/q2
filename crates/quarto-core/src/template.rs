@@ -2488,7 +2488,7 @@ mod tests {
             TemplateValue::List(vec![TemplateValue::String("Jane Doe".to_string())]),
         );
         // The head's dcterms.date consumes the ISO `date-meta` derived
-        // by DateNormalizeTransform (never the possibly-formatted
+        // by normalize_dates (never the possibly-formatted
         // `date` itself — bd-13f821l5).
         ctx.insert("date-meta", TemplateValue::String("2024-01-15".to_string()));
         // Keywords arrive as a list (YAML `keywords: [rust, quarto]`);

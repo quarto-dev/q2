@@ -31,6 +31,7 @@
 //!   `YYYY-MM-DDTHH:mm:ssZ`) pass through literally with no warning,
 //!   matching day.js; only *known-but-deferred* tokens warn.
 
+use quarto_system_runtime::SystemRuntime;
 use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
@@ -390,6 +391,36 @@ fn format_tokens(date: &ParsedDate, format: &str) -> (String, Vec<String>) {
     }
 
     (out, warnings)
+}
+
+/// `instant` in the machine's local timezone, or unchanged if the runtime
+/// reports an offset `time` can't represent.
+pub fn to_local(instant: OffsetDateTime, runtime: &dyn SystemRuntime) -> OffsetDateTime {
+    time::UtcOffset::from_whole_seconds(runtime.local_utc_offset_seconds(instant.unix_timestamp()))
+        .map_or(instant, |offset| instant.to_offset(offset))
+}
+
+/// The current instant in the machine's local timezone (WASM-safe clock).
+pub fn local_now(runtime: &dyn SystemRuntime) -> Option<OffsetDateTime> {
+    let ts = runtime.unix_timestamp().ok()?;
+    let now = OffsetDateTime::from_unix_timestamp(ts as i64).ok()?;
+    Some(to_local(now, runtime))
+}
+
+/// Midnight at the start of `dt`'s calendar day, in `dt`'s offset.
+pub fn start_of_day(dt: OffsetDateTime) -> OffsetDateTime {
+    dt.date().midnight().assume_offset(dt.offset())
+}
+
+/// The ISO timestamp shape date keywords materialize as (Q1 materializes
+/// keywords as timestamps, then formats).
+pub fn iso_timestamp(dt: OffsetDateTime) -> String {
+    ParsedDate {
+        datetime: time::PrimitiveDateTime::new(dt.date(), dt.time()),
+        offset: Some(dt.offset()),
+        has_time: true,
+    }
+    .iso_string()
 }
 
 #[cfg(test)]

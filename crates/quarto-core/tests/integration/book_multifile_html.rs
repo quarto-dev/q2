@@ -659,7 +659,7 @@ fn chapter_front_matter_subtitle_date_abstract_render_on_chapter_pages() {
     );
     assert!(
         ch1.contains("<p class=\"date\">February 2, 2021</p>"),
-        "chapter front-matter date renders (normalized by DateNormalizeTransform): {ch1}"
+        "chapter front-matter date renders (normalized by normalize_dates): {ch1}"
     );
     assert!(
         ch1.contains("Chapter one abstract text"),

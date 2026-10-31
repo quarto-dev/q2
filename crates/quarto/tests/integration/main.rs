@@ -14,6 +14,7 @@ pub mod components_render;
 pub mod conditional_content_cli;
 pub mod conditional_content_pandoc_e2e;
 pub mod create;
+pub mod date_metadata_cli;
 pub mod diagnostic_render_panic_boundary;
 pub mod docs_llms_cli;
 pub mod docs_serve_cli;

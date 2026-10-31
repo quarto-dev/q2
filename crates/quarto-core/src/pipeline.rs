@@ -85,11 +85,11 @@ use crate::transforms::{
     BookCoverImageTransform, BreadcrumbsRenderTransform, CalloutResolveTransform, CalloutTransform,
     CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
     ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
-    CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform,
-    EditorialMarksOoxmlTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
-    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
-    FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform, LinkExternalTransform,
-    LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    CrossrefResolveTransform, DraftAlertTransform, EditorialMarksOoxmlTransform,
+    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesResolveTransform, FootnotesTransform, LinkExternalTransform, LinkRewriteTransform,
+    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
     MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
     PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
@@ -2335,13 +2335,6 @@ pub fn build_transform_pipeline(
     // bd-lmd-exploration-jqv2nbl4 spike 5). Before sectionize and the TOC.
     pipeline.push(Box::new(crate::transforms::HeadingIdTransform::new()));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
-    // Date normalization (bd-gx9cic8z P4): resolves today/now/
-    // last-modified, writes ISO `date-meta`/`date-modified-meta` for
-    // machine slots, and replaces `date`/`date-modified` with the
-    // formatted string (Q1's pre-Pandoc rewrite + forced `long` for
-    // the styled HTML title block). Runs before AuthorsNormalize so
-    // every downstream consumer sees formatted dates.
-    pipeline.push(Box::new(DateNormalizeTransform::new(runtime.clone())));
     // Author/label normalization (bd-gx9cic8z P1): derives `by-author`,
     // `labels`, and `rendered.has-title-block` from raw metadata for
     // the title-block template partial AND the q2-preview React title
@@ -3080,7 +3073,6 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Re-derives heading ids from expanded text; format-neutral.
     ("heading-id", Bucket::B1),
     ("metadata-normalize", Bucket::B1),
-    ("date-normalize", Bucket::B1),
     ("authors-normalize", Bucket::B1),
     // Output is a `RenderContext` sideband; it does not cross the cut, but
     // the transform itself is format-neutral and must run.
@@ -6621,7 +6613,6 @@ mod tests {
                 "shortcode-resolve",
                 "heading-id",
                 "metadata-normalize",
-                "date-normalize",
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
@@ -6719,7 +6710,6 @@ mod tests {
                 "shortcode-resolve",
                 "heading-id",
                 "metadata-normalize",
-                "date-normalize",
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
@@ -6907,7 +6897,6 @@ mod tests {
                 "shortcode-resolve",
                 "heading-id",
                 "metadata-normalize",
-                "date-normalize",
                 "authors-normalize",
                 "code-block-generate",
                 "footnotes",
@@ -7099,7 +7088,6 @@ mod tests {
                 "shortcode-resolve",
                 "heading-id",
                 "metadata-normalize",
-                "date-normalize",
                 "authors-normalize",
                 "title-banner",
                 "code-block-generate",
