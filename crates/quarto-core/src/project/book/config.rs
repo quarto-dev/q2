@@ -22,7 +22,6 @@ use quarto_pandoc_types::{AttrSourceInfo, Inlines};
 use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::SystemRuntime;
 
-use crate::dates::ParsedDate;
 use crate::project::book::render_item::{BookRenderItem, BookRenderItemKind};
 use crate::project::index::ProjectIndex;
 
@@ -479,8 +478,8 @@ pub fn apply_format_defaults(meta: &mut ConfigValue) {
 ///
 /// `inputs` are the project's input file paths, used for
 /// `last-modified` (Q1 takes the max mtime across all project inputs).
-/// Dates resolve against UTC, matching Q2's `date_normalize` transform
-/// (a documented deviation from Q1's local time).
+/// Dates resolve in the machine's local timezone, matching Q2's
+/// `date_normalize` and Q1.
 pub fn resolve_special_book_date(
     book: &mut ConfigValue,
     inputs: &[PathBuf],
@@ -489,32 +488,18 @@ pub fn resolve_special_book_date(
     let Some(date) = book.get("date").and_then(|d| d.as_plain_text()) else {
         return false;
     };
-    let iso = |dt: time::OffsetDateTime, has_time: bool| {
-        ParsedDate {
-            datetime: time::PrimitiveDateTime::new(dt.date(), dt.time()),
-            offset: Some(time::UtcOffset::UTC),
-            has_time,
-        }
-        .iso_string()
-    };
     let resolved = match date.as_str() {
-        "today" => runtime
-            .unix_timestamp()
-            .ok()
-            .and_then(|ts| time::OffsetDateTime::from_unix_timestamp(ts as i64).ok())
-            .map(|dt| iso(dt.date().midnight().assume_utc(), true)),
-        "now" => runtime
-            .unix_timestamp()
-            .ok()
-            .and_then(|ts| time::OffsetDateTime::from_unix_timestamp(ts as i64).ok())
-            .map(|dt| iso(dt, true)),
+        "today" => crate::dates::local_now(runtime)
+            .map(crate::dates::start_of_day)
+            .map(crate::dates::iso_timestamp),
+        "now" => crate::dates::local_now(runtime).map(crate::dates::iso_timestamp),
         "last-modified" => inputs
             .iter()
             .filter_map(|p| runtime.path_metadata(p).ok())
             .filter_map(|m| m.modified)
             .max()
             .map(time::OffsetDateTime::from)
-            .map(|dt| iso(dt, true)),
+            .map(|dt| crate::dates::iso_timestamp(crate::dates::to_local(dt, runtime))),
         _ => None,
     };
     match resolved {

@@ -33,6 +33,25 @@ export function formatRelativeTime(timestamp: number): string {
 }
 
 /** Floating tooltip rendered on hover, coloured to match the author. */
+/**
+ * Initials to show beside an author's color: first and last initials of a
+ * multi-word name, first two letters of a single word.
+ *
+ * Returns `null` when the name doesn't identify a person: it is empty, or
+ * it is the first 8 characters of the actor key, the fallback hub-client's
+ * `buildIdentityMap` uses for an actor with no profile.
+ */
+export function authorInitials(name: string, actor: string): string | null {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0 || name === actor.slice(0, 8)) return null;
+    const chars = parts.map((part) => Array.from(part));
+    const letters =
+        chars.length === 1
+            ? chars[0].slice(0, 2)
+            : [chars[0][0], chars[chars.length - 1][0]];
+    return letters.join('').toUpperCase();
+}
+
 export function AttributionBadge({
     record,
     style,

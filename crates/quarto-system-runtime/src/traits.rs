@@ -613,6 +613,28 @@ pub trait SystemRuntime: Send + Sync {
         Ok(secs)
     }
 
+    /// The machine's offset from UTC, in seconds, at the given Unix timestamp.
+    ///
+    /// Used to resolve the `today` / `now` / `last-modified` date keywords.
+    /// Native uses the system timezone (on Unix, `TZ` wins over
+    /// `/etc/localtime`). WASM has no build machine to ask, so it reports UTC
+    /// rather than each viewer's browser timezone.
+    fn local_utc_offset_seconds(&self, unix_timestamp: i64) -> i32 {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use chrono::{Local, Offset, TimeZone};
+            Local
+                .timestamp_opt(unix_timestamp, 0)
+                .single()
+                .map_or(0, |dt| dt.offset().fix().local_minus_utc())
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = unix_timestamp;
+            0
+        }
+    }
+
     /// Monotonic clock reading in nanoseconds from an arbitrary, runtime-chosen
     /// epoch.
     ///

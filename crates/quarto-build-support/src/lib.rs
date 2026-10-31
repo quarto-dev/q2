@@ -20,6 +20,9 @@
 //! Build scripts that rewrite an output read by `include_bytes!`
 //! should use [`write_if_changed`], so a rerun that produces identical
 //! bytes keeps the output's mtime and its dependents stay fresh.
+//!
+//! Build scripts that compress an embedded archive should use
+//! [`embed_zstd_level`].
 
 use std::path::{Component, Path, PathBuf};
 
@@ -118,6 +121,20 @@ pub fn write_if_changed(path: &Path, contents: &[u8]) -> std::io::Result<bool> {
     Ok(true)
 }
 
+/// The zstd level for an embedded archive: 19 in release-like profiles,
+/// so shipped binaries stay small, and 3 otherwise. A level-19 rerun cost
+/// about 35s per `cargo` selection after every SPA rebuild, and level 3
+/// about 4s, for a dev `q2` 2.8% larger (bd-e51t7k15).
+pub fn embed_zstd_level() -> i32 {
+    zstd_level_for(std::env::var("PROFILE").ok().as_deref())
+}
+
+/// Cargo sets `PROFILE` to `release` for `--release` and for profiles that
+/// inherit from it, and to `debug` for the rest, including `ci`.
+fn zstd_level_for(profile: Option<&str>) -> i32 {
+    if profile == Some("release") { 19 } else { 3 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +192,13 @@ mod tests {
         assert!(!file.exists());
         std::fs::write(&file, "x").unwrap();
         assert_eq!(file_watch(&file), file);
+    }
+
+    #[test]
+    fn only_release_profiles_use_the_high_zstd_level() {
+        assert_eq!(zstd_level_for(Some("release")), 19);
+        assert_eq!(zstd_level_for(Some("debug")), 3);
+        assert_eq!(zstd_level_for(None), 3);
     }
 
     #[test]

@@ -33,6 +33,9 @@ quarto-util.workspace = true
 
 # Native-only dependencies
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Local UTC offset for date keywords. Reads TZ through std::env rather than
+# libc's getenv, so it cannot race a setenv on another thread.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # For binary lookup on PATH
 which = "8.0"
 # HTTP client for fetch_url

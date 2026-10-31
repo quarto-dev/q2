@@ -333,6 +333,10 @@ impl SystemRuntime for OverlayRuntime {
         self.inner.unix_timestamp()
     }
 
+    fn local_utc_offset_seconds(&self, unix_timestamp: i64) -> i32 {
+        self.inner.local_utc_offset_seconds(unix_timestamp)
+    }
+
     fn monotonic_now_nanos(&self) -> u64 {
         self.inner.monotonic_now_nanos()
     }

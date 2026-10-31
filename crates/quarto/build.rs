@@ -136,7 +136,9 @@ fn write_archive(entries: &[(String, Vec<u8>)]) -> PathBuf {
     }
     let tar_bytes = builder.into_inner().expect("finish tar");
 
-    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 19).expect("zstd encoder");
+    let mut encoder =
+        zstd::stream::Encoder::new(Vec::new(), quarto_build_support::embed_zstd_level())
+            .expect("zstd encoder");
     if let Ok(n) = std::thread::available_parallelism() {
         let _ = encoder.multithread(n.get() as u32);
     }
