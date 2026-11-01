@@ -227,6 +227,10 @@ Made with Gordon on 2026-10-30.
     `crates/quarto-core/tests/fixtures/knitr-corpus/`. The differential run is an
     integration test under `tests/integration/` (registered in its `main.rs`, per the repo
     rule) that skips when R is absent, plus an `xtask` entry that produces the report.
+    *As built (KNR-1, 2026-11-01): the report is produced by the integration test
+    `knitr_corpus_runner::corpus_report`, which does nothing unless `KNR_REPORT=<file>` is
+    set (`KNR_SAMPLE`, `KNR_ONLY`, `KNR_R_LIBS` and `KNR_Q1` narrow or pin it); there is no
+    xtask entry.*
 17. **R-dependent tests are CI-ready, and CI stays disabled (2026-10-30).** Every test that
     needs R or a knitr version skips cleanly when the dependency is missing, is
     deterministic, and documents the R and knitr range it needs, so enabling R in CI later is
@@ -337,11 +341,11 @@ version branches at `patch.R:6`, `:152` and `:300` (`hooks.R` has none; its 1.44
 | ID | Plan | Sessions (guesses) | Notes |
 |---|---|---|---|
 | KNR-1 | [Capture spike and differential harness](2026-10-30-knr-01-capture-spike-and-harness.md) | 4-6 | detailed; spikes S1-S9; the gate for everything below |
-| KNR-2 | [knitr presenter layer](2026-10-30-knr-02-knitr-presenter-layer.md) | 5-10 | from a reading of `hooks.R` and `patch.R`; also builds the pass-through presenter; scope set by KNR-1\'s report |
+| KNR-2 | [knitr presenter layer](2026-10-30-knr-02-knitr-presenter-layer.md) | 5-10 | also builds the pass-through presenter. KNR-1\'s report ([corpus report](../research/2026-11-01-knr-01-corpus-report.md)) sets the scope: of 202 compared cases, 154 are blockers (78 from source/output interleaving) and none is identical; the estimate stands, with interleaving anchors and `text/markdown` display data the two largest pieces |
 | KNR-3 | [Record adapter, hash profiles, fallback units, cache and `child=`](2026-10-30-knr-03-record-adapter-hash-fallback.md) | 3-4 | KNR-1 S1 to S5, S8 and S9 answered its option, cache, `child=` and hook decisions; open: the format in the record (waiting on the parent) |
 | KNR-4 | [Inline expressions as recorded values](2026-10-30-knr-04-inline-typed-values.md) | 2 | replaces EXR-12\'s mechanism; mechanism answered by S1 and S9 |
 | KNR-5 | [Positron interop for knitr](2026-10-30-knr-05-positron-interop.md) | 2-3 | widens EXR-16\'s importer gate; spikes in the Positron fork |
-| KNR-6 | [The knitr flip and the consumers](2026-10-30-knr-06-flip-and-consumers.md) | 3-4 | the skeleton design is the open question (S7) |
+| KNR-6 | [The knitr flip and the consumers](2026-10-30-knr-06-flip-and-consumers.md) | 3-4 | skeleton design settled: markers (S7 verdict) |
 | KNR-7 | [Docs and end-to-end](2026-10-30-knr-07-docs-e2e.md) | 1-2 | written as the others land |
 
 Total roughly 20 to 30 sessions, which is the sum of the per-plan guesses (20 to 31), dominated
@@ -461,9 +465,7 @@ each answer is in the named `#### Sn decision` subsection of KNR-1):
   spelling and the closed presentation list (S3, S8); odd chunks and hook-override detection
   (S5); inline capture and formatting (S9).
 - **Still open:** how reticulate\'s Python engine reports output (S5: no Python environment
-  here, not run); the narrowest seam for rendering a markdown string as engine output so
-  rendered HTML can be compared (S6, read only); the S7 verdict, which needs the baseline
-  presenter; whether figures stay as knitr\'s file paths or inline base64 (bd-sr73; S2 records
+  here, not run); whether figures stay as knitr\'s file paths or inline base64 (bd-sr73; S2 records
   paths and says what changes under base64); the format in the record (KNR-3 decision 8,
   with S2\'s evidence that `df_print` and widget pieces differ by target).
 - **New from the spikes, to settle in the plans named:** `results='asis'` chunks have no

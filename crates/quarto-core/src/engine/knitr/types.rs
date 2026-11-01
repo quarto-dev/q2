@@ -87,6 +87,13 @@ pub struct KnitrExecuteParams {
 
     /// Languages handled by Quarto (pass-through, don't execute)
     pub handled_languages: Vec<String>,
+
+    /// Record each chunk's evaluate() pieces next to the markdown (KNR-1
+    /// capture; `execute.R` then returns `pieces`). Omitted from the wire
+    /// when off, so existing requests are unchanged. Turning it on also
+    /// turns knitr's cache off for the run.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub capture: bool,
 }
 
 /// Result from the knitr execute action.
@@ -144,6 +151,13 @@ pub struct KnitrExecuteResult {
     /// evaluation order (EXR-12). Absent from results that predate it.
     #[serde(default)]
     pub spans: Vec<KnitrSpanRecord>,
+
+    /// One entry per executed chunk, with knitr's pieces (source, output,
+    /// plots, ...) before `sew` turns them into markdown (KNR-1 S2). Parallel
+    /// to `chunks`, not an extension of it. Absent from results that predate it.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub pieces: Vec<KnitrCapturedChunk>,
 }
 
 /// A brace-spelling inline expression recorded by the `evaluate.inline` and `inline`
@@ -157,6 +171,74 @@ pub struct KnitrSpanRecord {
     /// The markdown knitr inserted for the span: empty for a value knitr inserts
     /// nothing for (`invisible`, a zero-length vector).
     pub markdown: String,
+}
+
+/// A chunk's captured pieces (KNR-1 S2 wire shape).
+// Read by KNR-1's mapper (integration tests) and KNR-3's adapter, not by the lib yet.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct KnitrCapturedChunk {
+    /// 1-based position in knitr's own chunk sequence. Harness-local: not a record id.
+    pub ordinal: u32,
+    pub label: String,
+    /// The code `evaluate()` received.
+    #[serde(default)]
+    pub code: String,
+    /// The resolved chunk options (KNR-1 S3).
+    #[serde(default)]
+    pub options: Value,
+    pub pieces: Vec<KnitrPiece>,
+    /// Files the chunk wrote, as knitr addresses them.
+    #[serde(default)]
+    pub files: Vec<String>,
+}
+
+/// One piece of a chunk's evaluation, tagged by `class` on the wire.
+// The fields are read by KNR-1's mapper (integration tests) and KNR-3's adapter,
+// not by the lib yet, like `KnitrExecuteResult::chunks`.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "class", rename_all = "snake_case")]
+pub enum KnitrPiece {
+    Source {
+        text: String,
+    },
+    Output {
+        text: String,
+    },
+    Message {
+        text: String,
+    },
+    Warning {
+        text: String,
+        #[serde(default)]
+        call: Option<String>,
+    },
+    Error {
+        text: String,
+        ename: String,
+        evalue: String,
+        #[serde(default)]
+        call: Option<String>,
+    },
+    Plot {
+        files: Vec<String>,
+    },
+    ImagePaths {
+        paths: Vec<String>,
+    },
+    Asis {
+        text: String,
+        mime: String,
+        #[serde(default)]
+        widget: bool,
+        #[serde(default)]
+        knit_meta: Option<String>,
+    },
+    /// Any class not listed: the whole chunk becomes a fallback unit.
+    Other {
+        classes: Vec<String>,
+    },
 }
 
 /// A knitr chunk recorded by the chunk hook (EXR-11).
@@ -366,6 +448,7 @@ mod tests {
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
+            capture: false,
         };
 
         let json = serde_json::to_string(&params).unwrap();
@@ -385,6 +468,63 @@ mod tests {
         let json = r##"{"engine": "knitr", "markdown": "x"}"##;
         let result: KnitrExecuteResult = serde_json::from_str(json).unwrap();
         assert!(result.chunks.is_empty());
+    }
+
+    #[test]
+    fn pieces_field_deserializes_with_and_without() {
+        let without = r##"{"engine": "knitr", "markdown": "x"}"##;
+        let result: KnitrExecuteResult = serde_json::from_str(without).unwrap();
+        assert!(result.pieces.is_empty());
+
+        // The S2 example from KNR-1: every piece class on the wire.
+        let with = r##"{
+            "engine": "knitr",
+            "markdown": "x",
+            "pieces": [{
+                "ordinal": 1,
+                "label": "plain",
+                "code": "x <- 1:3\nx\n",
+                "options": {},
+                "pieces": [
+                    {"class": "source", "text": "x <- 1:3\n"},
+                    {"class": "output", "text": "[1] 1 2 3\n"},
+                    {"class": "message", "text": "hi\n"},
+                    {"class": "warning", "text": "Warning in f(): boom", "call": "f()"},
+                    {"class": "error", "text": "Error in f(): boom\n", "ename": "simpleError",
+                     "evalue": "boom", "call": "f()"},
+                    {"class": "plot", "files": ["doc_files/figure-html/plain-1.png"]},
+                    {"class": "image_paths", "paths": ["made.png"]},
+                    {"class": "asis", "text": "<div>..</div>", "mime": "text/html",
+                     "widget": true, "knit_meta": "[]"},
+                    {"class": "other", "classes": ["weird"]}
+                ],
+                "files": ["doc_files/figure-html/plain-1.png"]
+            }, {"ordinal": 2, "label": "bare", "pieces": []}]
+        }"##;
+        let result: KnitrExecuteResult = serde_json::from_str(with).unwrap();
+        assert_eq!(result.pieces.len(), 2);
+        let first = &result.pieces[0];
+        assert_eq!(first.ordinal, 1);
+        assert_eq!(first.label, "plain");
+        assert_eq!(first.pieces.len(), 9);
+        assert!(matches!(&first.pieces[0], KnitrPiece::Source { text } if text == "x <- 1:3\n"));
+        assert!(matches!(
+            &first.pieces[3],
+            KnitrPiece::Warning { call: Some(c), .. } if c == "f()"
+        ));
+        assert!(matches!(
+            &first.pieces[7],
+            KnitrPiece::Asis {
+                widget: true,
+                knit_meta: Some(_),
+                ..
+            }
+        ));
+        // Optional fields default.
+        let second = &result.pieces[1];
+        assert_eq!(second.code, "");
+        assert!(second.options.is_null());
+        assert!(second.files.is_empty());
     }
 
     #[test]
@@ -644,6 +784,7 @@ mod tests {
             params: None,
             resource_dir: PathBuf::from("/resources"),
             handled_languages: vec![],
+            capture: false,
         };
 
         let request = KnitrRequest::new(

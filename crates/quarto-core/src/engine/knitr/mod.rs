@@ -33,6 +33,7 @@ mod error_lines;
 pub mod error_parser;
 pub mod format;
 pub mod label_reinsert;
+pub mod pieces_map;
 pub mod preprocess;
 mod span_records;
 pub mod subprocess;
@@ -96,6 +97,8 @@ fn remap_error_lines(
     }
 }
 
+#[cfg(test)]
+mod capture_tests;
 #[cfg(test)]
 mod chunk_record_tests;
 
@@ -269,6 +272,7 @@ impl ExecutionEngine for KnitrEngine {
             // Populated from ExecutionContext so multi-engine sequences can extend
             // this set with languages owned by other engines.
             handled_languages: ctx.handled_languages.clone(),
+            capture: false,
         };
 
         // Step 7: Build call options

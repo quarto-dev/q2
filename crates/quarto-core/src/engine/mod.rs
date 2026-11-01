@@ -101,6 +101,21 @@ pub mod jupyter;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod knitr;
 
+// KNR-1's S2 mapper and wire types, reachable from `tests/integration/` and
+// KNR-3 without widening the rest of `knitr`.
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::pieces_map::pieces_to_cell;
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::types::{KnitrCapturedChunk, KnitrPiece};
+// The R call seam for the KNR-1 corpus harness (`tests/integration/knitr_corpus_*`):
+// it drives `execute` with capture on and off, which the public `KnitrEngine` never
+// does. Gordon chose this over an in-crate harness (2026-11-01).
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::{
+    CallROptions, KNITR_RESOURCES, KnitrExecuteParams, KnitrExecuteResult, KnitrFormatConfig,
+    call_r,
+};
+
 /// Static file claims every built-in engine declares (Plan 7b Phase 5),
 /// without constructing any engine or probing the environment (unlike
 /// `JupyterEngine::new()`/`KnitrEngine::new()`, which search `PATH`). Feeds

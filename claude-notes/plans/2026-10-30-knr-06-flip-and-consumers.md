@@ -17,7 +17,8 @@ Soft: [KNR-5](2026-10-30-knr-05-positron-interop.md).
 **Estimated sessions:** 3 to 4.
 
 > **Status of this document.** Written 2026-10-30 from code reading. The hardest design
-> question (the skeleton, below) was identified but not tested; KNR-1's S7 tests it.
+> question (the skeleton, below) was tested by KNR-1's S7, whose verdict is markers (see its
+> `#### S7 verdict`).
 
 ## Goal
 
@@ -95,7 +96,7 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 
 ## Provisional: decisions this plan must make
 
-1. **Skeleton (markers) versus Rust assembly** *(S7)*. Recommendation: markers. The decision
+1. **Skeleton (markers) versus Rust assembly** *(S7, settled: markers)*. Recommendation: markers. The decision
    also fixes how inline values (KNR-4) are substituted: R-side as today, or by markers too;
    KNR-4 builds the record side and a presenter function that works either way.
 2. **Old knitr traces** (settled, epic decision 14). A trace recorded before the flip holds

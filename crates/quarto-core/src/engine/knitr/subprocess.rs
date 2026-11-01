@@ -1036,6 +1036,7 @@ source("renv/activate.R")
                     .iter()
                     .map(|s| s.to_string())
                     .collect(),
+                capture: false,
             };
 
             // Call R
@@ -1098,6 +1099,7 @@ x * 2
                 params: None,
                 resource_dir: resource_dir.to_path_buf(),
                 handled_languages: vec![],
+                capture: false,
             };
 
             let result: KnitrExecuteResult = call_r(
@@ -1156,6 +1158,7 @@ x * 2
                 params: None,
                 resource_dir: resource_dir.to_path_buf(),
                 handled_languages: vec![],
+                capture: false,
             };
 
             let result: KnitrExecuteResult = call_r(

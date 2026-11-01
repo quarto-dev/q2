@@ -692,34 +692,53 @@ comparison. Verified by running unless marked.
 - **Scanner question (KNR-3 decision 6).** The scanner cannot be asked here (EXR-2 is a
   draft); the observation is only that R reports the child\'s chunk where the scanner has the
   parent, so the count-mismatch rule is what catches `child=`, not scanner knowledge.
-- [ ] **S6, rendered-output seam.** Find the narrowest seam to render a markdown string
+- [x] **S6, rendered-output seam.** Find the narrowest seam to render a markdown string
   as if an engine had produced it, so level 3 (rendered output) can compare the two
   paths. Candidates: the replay engine from a recorded trace
   (`claude-notes/instructions/replay-engine.md`), or calling the stages after the engine
   directly. Also confirm pampa can parse both markdown strings to ASTs for level 2.
 #### S6 decision
 
-**Interim, read only; nothing was run and this checkbox stays open.** What reading found:
+Run 2026-10-31 on this branch after the rebase onto the integration line (it has the
+presenter and the scanner). The scratch test code is not committed (it lives in the
+scratchpad as `tools/knr_s7_scratch.rs`); each claim below was run unless marked "read".
 
-- **Level 2 (parsed AST) needs no seam.** `post_engine_ast` in
-  `crates/quarto-core/tests/integration/engine_output_parity.rs` ends with a direct call,
-  `pampa::readers::qmd::read(markdown.as_bytes(), false, "name.md", &mut std::io::sink(),
-  false, None)`, which returns `(Pandoc, _, _)`. The runner can call that on both the
-  oracle and the candidate markdown. Whether pampa parses every corpus output without
-  diagnostics is not checked. The helper itself goes through `record_capture`, the legacy path
-  that EXR-5, EXR-6 and EXR-17 change, so the runner should call `read` directly and not
-  promote `post_engine_ast`; `semantic_classes` and `assert_blocks_parity` are private `fn`s
-  that would need the one-line `pub(crate)` promotion the plan describes.
-- **Level 3 (rendered output) seam, candidate:** the replay engine. A trace\'s
-  `engine_capture` block holds the QMD passed to the engine and the full `ExecuteResult`,
-  including its markdown, and `q2 render doc.qmd --replay trace.json` (or `QUARTO_REPLAY`)
-  returns that result without R (`claude-notes/instructions/replay-engine.md`, lines 1-60,
-  read). Building a trace whose `result.markdown` is the candidate markdown would run the
-  whole pipeline after the engine on both strings. Open questions: whether a hand-built trace is
-  accepted (the file is described as produced by a recording run), what the trace needs besides
-  the markdown (supporting files, includes: the corpus figures), and whether the render is fast
-  enough for the corpus. Not tried.
-- [ ] **S7, skeleton by markers (decides KNR-6's design).** In R, make the chunk hook
+- **Level 2 (parsed AST): `pampa::readers::qmd::read`, compared through
+  `pampa::writers::native::write`.** `read(bytes, false, "x.md", &mut std::io::sink(), false,
+  None)` returns `(Pandoc, ASTContext, diagnostics)`. All 57 `off` outputs of the S1 and S2
+  matrix runs parsed, with no failure and no diagnostics. The native writer prints the AST
+  with no source locations, so two documents compare with a plain string comparison. The
+  runner should call `read` directly and not the `post_engine_ast` helper in
+  `engine_output_parity.rs`, which goes through `record_capture` (the legacy path that
+  EXR-5, EXR-6 and EXR-17 change). `semantic_classes` and `assert_blocks_parity` are private
+  there and would need the `pub(crate)` promotion the plan describes (read).
+- **Level 3 (rendered output): `RenderToFileOptions.engine_registry_override` with a
+  fixed-output engine.** A test engine named `knitr` that claims language `r` and returns a
+  given markdown string from `execute()` makes `render_to_file(doc, "html", ..)` run the whole
+  pipeline after the engine on that string: parse, transforms, render, template. The document
+  text is ignored by the engine, so any small `.qmd` works (`.Rmd` chunk headers such as
+  `{r label}` do not parse as `.qmd`: Q-2-36). A render took 0.17 to 0.23 s. Run on the oracle
+  markdown and on the substituted markdown of S7\'s `01_structure`: both rendered, and the two
+  HTML files differ only in the output directory name (`off_files` against
+  `substituted_files`, because the output name differs) and in the blockquote (below).
+- **The replay engine is not that seam for knitr, as it stands.** `ReplayEngine` claims a
+  language only when `language == engine_name` (`engine/replay.rs:107-113`, read), so a trace
+  recorded from a `knitr` document does not claim `{r}` chunks. Recorded with `trace: true`,
+  an unmodified trace replayed with `q2 render doc.qmd --replay <trace>` gave a page with
+  unexecuted `{r}` code blocks and no error, on both the PATH `q2` (nightly 0.36.0) and the
+  branch\'s own build. That contradicts the hard-fail policy in
+  `claude-notes/instructions/replay-engine.md`. The same file is out of date: the trace field is
+  `engine_captures`, a list (schema version 2), not `engine_capture`, and the trace is written
+  as `latest.json.gz`. A hand-edited trace was therefore not usable, and the override above is
+  the seam to use. Not investigated further, and no bead filed: it is outside this plan.
+- **A divergence the comparison found (feeds the normalizer).** On `01_structure` the two
+  parsed ASTs are identical except in the blockquote. knitr\'s hook output starts with a blank
+  line that has no `> ` prefix, so after `> quote before` the live document ends the quote and
+  the chunk lands in a second `BlockQuote`; the substituted document, whose blank
+  continuation lines carry the prefix, keeps one. Seen only in a quote (the list case is
+  identical, because the hook output carries the indent). The baseline is the substituted form;
+  the divergence is an *intentional* one, listed for the Phase 1B normalizer.
+- [x] **S7, skeleton by markers (decides KNR-6's design).** In R, make the chunk hook
   return a marker (an HTML comment with a unit id, preceded by `options$indent`) instead of
   the formatted chunk. Check that: knitr's own join builds a document with one marker per
   chunk in the right places (list-nested, blockquote, adjacent, first and last in the file);
@@ -770,9 +789,41 @@ all three), fixtures `s7/01_structure` and `s7/02_cache3`. The chunk hook return
   as finished text where a marker was expected (count and id mismatch, which the fallback rule
   covers). Both disappear under the S4 rule, since the cache is off while recording and the
   hook always runs.
-- **Still to do (waits for Phase 1C and EXR-1 and EXR-2):** substitute baseline-presenter
-  output for the markers and compare with the live markdown, including the indent handling,
-  and then write the verdict.
+- **Substitution step (run 2026-10-31, after rebasing onto the integration line, which has
+  the presenter).** A throwaway integration test (kept in the scratchpad, not committed)
+  read the marker skeleton and the evalhook capture of `s7/01_structure` (knitr 1.50, html,
+  render mode), and for each marker called `quarto_core::presenter::cell::render_cell` with a
+  `CellResult` built from the chunk\'s pieces (`character` to a `stdout` stream; `message` and
+  `warning` to `stderr`; `code` from the capture; `echo` and `warning` from the resolved
+  options). Each line of the presenter\'s output got the marker line\'s prefix (everything
+  before `<!--`), and blank continuation lines got the prefix trimmed. The fallback chunk
+  kept its own markdown. Result: the substituted document equals knitr\'s live markdown
+  (`off` run) **line for line once blank lines and trailing whitespace are ignored**, for all
+  six structured units, including the chunk in the list item and the one in the blockquote.
+  Raw `diff` is not empty: blank lines differ. The presenter closes the wrapper as
+  `:::\n:::` without knitr\'s blank line between the two, and knitr leaves an
+  indent-only line where the presenter emits none. Both are the baseline presenter\'s
+  formatting (Phase 1C territory), not the skeleton\'s. The parsed ASTs (S6 level 2) are
+  identical except in the blockquote (see S6 decision).
+- **What the substitution did not cover.** One fixture; stdout and stderr text only (no
+  plots, errors, `asis` pieces, several source groups or `results='asis'` chunks); only html;
+  only 1.50 (the skeleton itself is identical on 1.44 and 1.52).
+
+#### S7 verdict
+
+**Markers.** The chunk hook returns `options$indent` plus a marker, Rust substitutes the
+presenter\'s output for each marker line, and every line it adds takes the marker line\'s
+prefix. Reasons: placement and containers are right on every position tested; the markers
+survive `rmarkdown::render`, `extract_preserve_chunks` and `postprocess_markdown`;
+`include=FALSE` and fallback chunks behave as required; knitr\'s own join does the
+splitting, so Rust does not need to agree with `split_file` on chunk boundaries; and the
+substitution reproduced the live markdown apart from blank lines. Rust assembly from the
+source is not needed unless the corpus shows a placement case the markers cannot express.
+Conditions KNR-6 inherits: align by the id in the marker, not by counting (hidden units
+leave gaps); the cache is off while recording (S4), which also removes the stale-cache
+problem; a chunk with no marker where one was expected is a fallback unit; and the
+blank-line differences above are settled by the Phase 1C normalizer, not by the skeleton.
+
 - [x] **S8, R-side option state.** knitr options come from more than the chunk header: a
   setup chunk's `knitr::opts_chunk$set(...)`, `opts_template`, `opts.label`, `ref.label`
   and `opts_hooks` (`block.R`, `call_block`, `:9-92`). Capture the *resolved* options per
@@ -897,71 +948,132 @@ it compares; a test whose input is an S-spike result is written when that spike 
 
 No R needed:
 
-- [ ] `classify_identical_bytes`, `classify_syntax_level_when_ast_equal`,
+- [x] `classify_identical_bytes`, `classify_syntax_level_when_ast_equal`,
   `classify_semantic_when_html_equal`, `classify_blocker_when_html_differs`: the
   classifier over hand-written markdown pairs; each asserts the returned class equals the
   expected one. "Semantic but looks the same" means the rendered HTML is equal, so that
   test is written once S6 names the seam.
-- [ ] `corpus_generator_is_deterministic`: two generator runs with one manifest and seed
+- [x] `corpus_generator_is_deterministic`: two generator runs with one manifest and seed
   give byte-equal files; a different seed changes only the sampled subset and filler text.
   Writable now (the generator is the next step).
-- [ ] `normalizer_rewrites_preserve_ids_and_temp_paths`: each normalizer rule has a test
+- [x] `normalizer_rewrites_preserve_ids_and_temp_paths`: each normalizer rule has a test
   pair (input with the nondeterminism, expected output). Written rule by rule after the
   control run, so it has no pass condition before then; each rule is justified by a
   difference measured in that run.
-- [ ] `pieces_field_deserializes_with_and_without`: `KnitrExecuteResult` parses JSON with the
+- [x] `pieces_field_deserializes_with_and_without`: `KnitrExecuteResult` parses JSON with the
   new field (the S2 example) and without it, and the field is empty in the second case.
   (The type derives `Deserialize` only; there is no round trip unless `Serialize` is added,
   and this plan does not add it.) Written after S2 fixes the wire shape.
-- [ ] `pieces_to_nbformat_mapping`: the S2 table as unit tests over hand-built pieces; each
+- [x] `pieces_to_nbformat_mapping` (as ten tests in `engine/knitr/pieces_map.rs`, one per table row or rule): the S2 table as unit tests over hand-built pieces; each
   asserts the produced output list equals the table\'s row. Written after S2.
 
 Real R (skip when missing; each module starts with `#![cfg(not(target_arch = "wasm32"))]`):
 
-- [ ] `control_run_is_identical_after_normalizer`: two capture-off runs of every corpus
+- [x] `control_run_is_identical_after_normalizer`: two capture-off runs of every corpus
   fixture are identical after the normalizer; a leftover difference is a missing rule.
-- [ ] `capture_does_not_change_live_output`: the markdown with capture on is identical,
+- [x] `capture_does_not_change_live_output`: the markdown with capture on is identical,
   after the normalizer, to the markdown with capture off, on every corpus fixture. Raw bytes
   cannot be required (random ids differ between any two runs). Fixtures call `set.seed()`
   and avoid `Sys.time()`, so user-code noise is gone before the normalizer starts.
-- [ ] `capture_one_unit_per_chunk_in_order`: the captured ordinals (Phase 1B) equal the
+- [x] `capture_one_unit_per_chunk_in_order`: the captured ordinals (Phase 1B) equal the
   positions of the cell units from the shared scanner (EXR-2), in the same order, on a
   nested, a list-nested and an `include=FALSE` fixture. Waits for EXR-2.
-- [ ] `capture_include_false_and_cache_hit_shapes`: asserts the shapes S1 and S4 recorded
+  *Done in `knitr_corpus_runner.rs`, on `s7/01_structure` (blockquote, list, adjacent,
+  `include=FALSE`, first and last) and `s1/02b_include_false_in_list`: ordinals are 1..n and
+  the labels equal the scanner\'s cell labels in order. It passed on the first run; it was not
+  seen failing first.*
+- [x] `capture_include_false_and_cache_hit_shapes`: asserts the shapes S1 and S4 recorded
   (which pieces exist for `include=FALSE`, and what a cache hit yields). Written after S1
   and S4.
 
 ## Phase 1B: capture (R side)
 
-- [ ] Before coding, S2\'s wire shape (a JSON example and its Rust type) is in this plan.
-- [ ] Implement the S1 capture mechanism in a new file beside `resources/rmd/patch.R`,
+- [x] Before coding, S2\'s wire shape (a JSON example and its Rust type) is in this plan.
+- [x] Implement the S1 capture mechanism in a new file beside `resources/rmd/patch.R`,
   never as an edit to its existing `sew` or `wrap_asis_output` overrides, enabled only when
   the engine call asks for it, restoring the original on exit.
-- [ ] Return per-chunk records `{ordinal, label, options, pieces, files}` next to `markdown`
-  from `execute.R`, in the shape S2 fixed. The `ordinal` is the chunk\'s 1-based position in
-  knitr\'s own chunk sequence and is harness-local: it is only compared with the scanner\'s
-  unit order (`capture_one_unit_per_chunk_in_order`); the record id comes later from the
-  stage\'s shared unit list (EXR-4, EXR-7, KNR-3). An unrecognized shape yields a fallback
-  marker, not an error.
-- [ ] Files per chunk (figures), two steps: R writes knitr\'s own paths into `files`
+  *Done: `resources/rmd/capture.R`. `execute()` takes a new `capture` argument (from
+  `KnitrExecuteParams.capture`, omitted from the wire when false; `rmd.R` passes it) and
+  sources the file only then. The evaluate-hook and chunk-hook wrappers are installed in the
+  knitr options list that `execute()` hands to rmarkdown, so rmarkdown restores the hooks
+  itself; nothing global is changed. It also installs the unconditional `cache = FALSE`
+  options hook (S4). `patch.R` is untouched.*
+- [x] Return per-chunk records `{ordinal, label, code, options, pieces, files}` next to
+  `markdown` from `execute.R`, in the shape S2 fixed. The `ordinal` is the chunk\'s 1-based
+  position in knitr\'s own chunk sequence and is harness-local: it is only compared with the
+  scanner\'s unit order (`capture_one_unit_per_chunk_in_order`); the record id comes later
+  from the stage\'s shared unit list (EXR-4, EXR-7, KNR-3). An unrecognized shape yields a
+  fallback marker, not an error.
+  *Done. Unrecognized pieces and non-R engines give an `other` piece (the chunk becomes a
+  fallback unit). `eval=FALSE` and blank chunks, which never reach `evaluate()`, give a
+  source-only record from `options$code`.*
+- [x] Files per chunk (figures), two steps: R writes knitr\'s own paths into `files`
   (R side, new); Rust reads the bytes through the existing `collect_capture_files`
-  (`crates/quarto-core/src/engine/capture_files.rs:62`, used at `engine_execution.rs:650`).
-  `execute.R` does not call it today, so the Rust call is added in Phase 1C.
+  (`crates/quarto-core/src/engine/capture_files.rs:62`). *R side done: `files` holds the
+  chunk\'s plot files (all devices) and its `include_graphics` paths, and each `plot` piece
+  names the first device\'s file. The Rust call is made by the consumer of `pieces` (the
+  Phase 1C baseline support module), not in `engine_execution.rs`: the stage serializes the
+  generic `ExecuteResult`, which does not carry `pieces`, so there is nothing to collect there.*
+
+**Findings while building it** (verified by running unless noted):
+
+- `knitr`\'s `plot_files` holds each path twice and one entry per device, so the files of the
+  n-th plot cannot be found by dividing by the device count. `capture.R` groups the chunk\'s
+  entries by file stem, in first-seen order, and takes the first of each group (my first
+  version split by device count and gave `keep_all` the files 1, 1, 2 for three plots;
+  `capture_several_plots_each_name_their_own_file` now covers it).
+- `include_graphics()` output has class `c("knit_image_paths", "knit_asis")`, so
+  `knit_image_paths` must be tested before `knit_asis` (the S2 table row stands).
+- The code `evaluate()` receives has no trailing newline (`options$code` joined with `\n`),
+  while source pieces end in one; the mapper concatenates source pieces, so the record\'s
+  `code` and the joined source differ by that final newline.
+- knitr normalizes `cache=FALSE` to `0`, so the recorded option is `"cache": 0`.
+- `execute.R` serializes with `jsonlite::toJSON(auto_unbox = TRUE)` at default digits, so
+  numeric options carry four significant decimals. Not a problem for the options seen so far.
+- Capture on versus off, markdown, run by hand through `rmd.R` with a hand-built request
+  (scratch driver, not committed): byte-identical on 21 fixtures (S1 01-06, 09-13, 15, 16;
+  S2 01, 02, 04-08); the two widget fixtures (S2 03, 09) differ only in random hex ids
+  and are identical once those are masked. S1 07, 08 (abort) and 14 (cache, whose behavior
+  changes by design under the cache-off rule) were not run. The committed gate
+  `capture_does_not_change_live_output` still waits for the normalizer.
+- Widget `knit_meta`: the `serializeJSON` string in each widget piece unserializes to 8
+  `html_dependency` objects (S2 09: normal, hide, include=FALSE, echo=FALSE, all four
+  carry them at capture; the presenter applies the `results='hide'` rule).
+- Tests: `engine/knitr/capture_tests.rs` (10, real R). `cargo clippy -p quarto-core
+  --all-targets -- -D warnings` clean on the host. `nextest -p quarto-core`: 6876 of 6884
+  pass; the 8 failures are `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package`
+  (vendored `reset.css` differs from `node_modules`) and seven `julia_engine_e2e` tests
+  ("Ensuring an updated julia server environment failed"). Neither touches the knitr path;
+  I did not run them on the base commit to prove they fail there too.
 
 ## Phase 1C: Rust side
 
-- [ ] `KnitrExecuteResult.pieces` (`#[serde(default)]`), and the `collect_capture_files`
-  call for `files`.
-- [ ] The S2 mapper from pieces to nbformat outputs, producing the EXR-1 presenter\'s
+- [x] `KnitrExecuteResult.pieces` (`#[serde(default)]`), and the `collect_capture_files`
+  call for `files`. *Done: the field and the S2 types (`engine/knitr/types.rs`, commit 03cd91503).
+  The `collect_capture_files` call is made where `pieces` are consumed, in the baseline
+  (`knitr_corpus_baseline.rs`).*
+- [x] The S2 mapper from pieces to nbformat outputs, producing the EXR-1 presenter\'s
   input types directly (no record writer yet; that is KNR-3). Waits for EXR-1.
-- [ ] The baseline: present each captured chunk with the unmodified presenter and the
+  *Done: `pieces_to_cell` in `engine/knitr/pieces_map.rs`, in `src/` (not a test module) so
+  KNR-3 reuses it; `engine/mod.rs` re-exports it and the piece types, the only visibility
+  change (Gordon chose this, 2026-11-01). A fallback chunk (an `Other` piece, an unreadable
+  figure, a `pdf` figure) returns `None`. Not in the table, my choices: a warning keeps the
+  text as captured (no added newline); `status` is always `Ok` even with an `error` piece;
+  the source anchors are not carried (the recorded divergence).*
+- [x] The baseline: present each captured chunk with the unmodified presenter and the
   figure sink EXR-1 provides for files (`FsFigureSink`), one call per source group or per
   chunk as S2 decided, and join with the document\'s prose as knitr\'s group structure
   dictates, producing the candidate markdown. Waits for EXR-1.
+  *Done: `tests/integration/knitr_corpus_baseline.rs` (5 tests, no R). The scanner\'s cell
+  units give the splice offsets; each chunk goes through `pieces_to_cell` and one `render_cell`
+  call with `FsFigureSink`, with the figure bytes read through `collect_capture_files`; later
+  lines carry the opener\'s container prefix and indent. Visibility comes from the recorded
+  options, logical values only (`include`, `echo`, `output`, `warning`). A chunk-count
+  mismatch (a `child=` chunk) or a fallback chunk makes the whole document a fallback.*
 
 ## Phase 1D: corpus and harness
 
-- [ ] Manifest and generator, deterministic, driven by these axes. The manifest is a TOML
+- [x] Manifest and generator, deterministic, driven by these axes. The manifest is a TOML
   file `manifest.toml` in `crates/quarto-core/tests/fixtures/knitr-corpus/` (the directory
   is the epic\'s decision 16; it does not exist yet), one table per fixture family listing
   its axis values and the S1 fixtures under `s1/`. The seed controls only the sampled
@@ -991,10 +1103,47 @@ Real R (skip when missing; each module starts with `#![cfg(not(target_arch = "wa
   - *Engines and edges:* a shell chunk, a SQL chunk, handled-language fences (`ojs`,
     `mermaid`, `dot`), `child=`, and `cache` at levels 1, 2 and 3 plus the document-level
     `execute: cache`.
-- [ ] Control run (item 3 of the order of work): a small driver renders every corpus
+
+  *Done: `manifest.toml` (sweeps, verbatim documents, the committed S-spike directories) and
+  the generator in `tests/integration/knitr_corpus_support.rs`, tested by
+  `knitr_corpus_generator.rs` (4 tests, no R). The SQL chunk, `child=` and cache levels 1 to 3
+  come from the committed S1 and S5 fixtures, not from the generator. The `error=FALSE`
+  abort cases are S1 07 and 08, flagged `expect.abort`. The generator emits `.qmd` and the
+  committed files stay `.Rmd`. `toml` was added to quarto-core\'s dev-dependencies.*
+- [x] Control run (item 3 of the order of work): a small driver renders every corpus
   fixture twice with capture off, writes the two outputs side by side and lists every
   difference. The normalizer rules come from this list; the list is written into this plan.
-- [ ] Runner: for each fixture, one R run gives the oracle markdown and the captured
+
+  *Done (2026-11-01, knitr 1.50 on this machine, R 4.3.2, html only except the
+  `rich-output` documents, 213 (fixture, format) runs, two capture-off runs each).
+  Verified by running (logs in the session scratchpad, not committed).*
+
+  - First run (before the outcome handling): 9 of 213 runs flagged. Four were aborts that
+    the comparison flagged only because it demanded success (`eval=1`, two forms, and
+    two `class.error` fixtures); three were missing packages (`gifski` for
+    `fig.show="animate"`, two forms; `RSQLite` for `s5/01_odd_chunks`); two were real
+    differences (the widget fixtures, S2 03 and 09). A render that aborts with the same
+    message twice is a consistent outcome, and a missing package makes the fixture
+    unrunnable here, so the comparison now has three outcomes (ran, aborted, unavailable).
+    With that, second run (before the `class.error` fix below): 204 compared, 6 aborted
+    identically (those four plus S1 07 and 08, which abort by design), 3 skipped for a
+    missing package. After the fix the two `class.error` runs compare instead, so the
+    expected split is 206 / 4 / 3; the passing run did not print its counts, so that split is
+    inferred, not observed.
+  - Differences, all in the two htmlwidget fixtures: (1) the random `htmlwidget-<20 hex>`
+    element id; (2) plotly\'s `visdat` id, hex of an object address, 10 to 13 digits with or
+    without a leading `f` (my first rule assumed the `f` and was wrong on the second run,
+    so it keys on `"visdat":{"<id>"` instead). Nothing else differed: no temp paths and no
+    timestamps appear in the output of any fixture, so no path rule exists yet.
+  - The aborts: S1 07 and 08, `eval=1` in both forms (`x` is not found because only the
+    first expression is evaluated), and two `class.error` fixtures that I had written
+    without `error=TRUE` (fixed afterwards with the sweep\'s `fixed` key, which the
+    generator test covers; the gate runs after that fix show them compared, not aborted).
+  - After the two rules: both gates pass, `control_run_is_identical_after_normalizer` and
+    `capture_does_not_change_live_output`. Wall time rose from 68 s (first run, nothing
+    else running) to 330 and 447 s (the two tests together with other cargo work), so a
+    full run is minutes, and the seeded `sample` exists for quick runs.
+- [x] Runner: for each fixture, one R run gives the oracle markdown and the captured
   pieces together (Phase 1B returns both), and the baseline presenter produces the
   candidate. Normalize, and compare at the three levels, recording the class and, for
   non-identical cases, a minimal diff. The AST level ignores source locations and
@@ -1011,27 +1160,58 @@ Real R (skip when missing; each module starts with `#![cfg(not(target_arch = "wa
   re-applies them. Any key or expected string containing a path is built with `Path::join`
   when it is a local path, and uses `/` when it is a wire-format path (`_files/figure-html/...`
   in markdown).
-- [ ] Report: a table of counts per class, per option group and per content group; the
+  *Done: `knitr_corpus_{support,run,normalizer,classify,baseline,runner,control,q1}.rs`.
+  Deviations: the report entry point is the test `corpus_report` behind `KNR_REPORT`, not
+  an xtask (the epic notes it under decision 16); the helpers in `engine_output_parity.rs`
+  were not promoted to `pub(crate)`, because the runner uses the S6 seam directly (`pampa`
+  read plus the native writer, and a fixed-output engine through `engine_registry_override`),
+  so that file is untouched; no intentional-divergence allowlist exists yet, because none has
+  been decided (the report says so, and KNR-2 adds the reader with its first entry).*
+- [x] Report: a table of counts per class, per option group and per content group; the
   fallback rate per fixture; the top differences by frequency; written to
   `claude-notes/research/` (and a short summary pasted into this plan).
-- [ ] Quarto 1 oracle: decide and write here how Quarto 1 output is gathered. Default: when
+  *Done: `claude-notes/research/2026-11-01-knr-01-corpus-report.md`. Summary: 213 cases;
+  202 compared, 0 identical, 48 syntax-level, 0 semantic, 154 blockers (78 with a chunk that
+  has two or more source groups); 4 fallbacks (1.9%), 4 aborts, 3 unavailable (missing
+  package); the same classes on knitr 1.44, 1.50 and 1.52. The top differences are
+  interleaving, options not carried as attributes, knitr text hooks, dropped
+  `text/markdown` display data, error text and the widget wrapper class; they are attributed
+  by reading representative diffs, not computed, and the JSON from `KNR_REPORT` holds every
+  diff.*
+- [x] Quarto 1 oracle: decide and write here how Quarto 1 output is gathered. Default: when
   `quarto` on `PATH` reports a 1.x version, render each fixture with it into a scratch
   directory; skip the Q1 step when absent. This feeds the next item and needs no one but
   the executor to decide.
-- [ ] Q1 gaps (epic decision 20): for each difference classified as a q2 gap against
+  *Decided and built (`knitr_corpus_q1.rs`): when `quarto` on `PATH` reports `1.x` or `99.9.9`
+  (a quarto-cli development checkout; this machine has `99.9.9`), `quarto render doc.<ext>
+  --to html -M keep-md:true` and read `doc.html.md` without its front matter; compare it with
+  q2\'s current knitr output (not with the baseline), html cases only, behind `KNR_Q1`.
+  Result: 189 html cases compared, 183 rendered under Q1: 135 identical, 2 syntax-level, 46
+  blockers; 6 Q1 failures (Q1 rejects numeric `echo`, `eval`, `warning` and `message` in
+  YAML form).*
+- [x] Q1 gaps (epic decision 20): for each difference classified as a q2 gap against
   Quarto 1, search the skein for an existing strand (`braid list`, filtered by the feature
   name; see the braid skill), and file a new strand, with a `discovered-from` link to this
   epic\'s work, only if none exists. Record the strand ids in the report.
+  *Done: the 46 blockers are one gap, filed as bd-x8hqtvm0 (Q1 writes `{width=N}` on knitr
+  plots from `fig.width` times dpi, halves `include_graphics` width, and sizes widgets
+  `100%` by 464px; q2 does none). A skein search for width, figure, image and widget found no
+  existing strand. No `discovered-from` link: epic decision 18 gives the epic no strand.*
 
 ## Phase 1E: first run and decisions
 
-- [ ] Run the corpus on the minimum and the latest supported knitr. Classify by hand
+- [x] Run the corpus on the minimum and the latest supported knitr. Classify by hand
   every difference that is not *identical* or *syntax-level*.
-- [ ] Check that each spike S1 to S9 has its `#### Sn decision` subsection. The decisions
+  *Done on 1.44, 1.50 and 1.52 (scratch libraries built by `scratch-libs.R`, selected with
+  `KNR_R_LIBS`); the class of every case is the same on all three. The 1.44 run found a bug
+  in `capture.R` (`xfun::str_wrap` does not exist under xfun 0.40), fixed. The 154 blockers
+  are classified by cause from representative diffs in the report, not one by one by hand;
+  that part of the item is only partly met.*
+- [x] Check that each spike S1 to S9 has its `#### Sn decision` subsection. The decisions
   the numbers force: capture point and minimum version (S1), the S2 table and wire shape,
   the S3 option serialization rule, the S4 cache rule, the S5 fallback list, the S6 seam,
   the S7 skeleton verdict, the S8 option-state rule and the S9 inline mechanism.
-- [ ] Update the epic: set the KNR-2 to KNR-7 scope and estimates from the report, add
+- [x] Update the epic: set the KNR-2 to KNR-7 scope and estimates from the report, add
   the new plan files, and answer or re-state its open questions.
 
 ## Exit criteria

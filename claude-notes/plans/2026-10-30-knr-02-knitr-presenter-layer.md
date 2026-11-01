@@ -301,3 +301,18 @@ so the presenter does not filter those.
 - `external-sources/knitr/R/{block.R,output.R,hooks-md.R}` (development snapshot)
 - bd-6sb1z0i4 (label naming for Jupyter), bd-gthycd33 (the `.cell` wrapper, see
   `2026-07-01-bd-gthycd33-jupyter-cell-wrapper.md`)
+
+## From the KNR-1 report (2026-11-01)
+
+Measured against the unmodified presenter on 213 cases (`claude-notes/research/2026-11-01-knr-01-corpus-report.md`):
+202 compared, 0 identical, 48 syntax-level, 154 blockers (78 of them have a chunk with
+two or more source groups); 4 fallbacks, 4 aborts, 3 unavailable. The report\'s list of causes
+is this plan\'s starting scope: interleaving anchors, options as attributes (cell, fence
+and image), hook-equivalent text (numeric `echo`, `prompt`, `comment`, `fenced.echo`,
+`results`), `message` versus `warning`, `text/markdown` display data (dropped today), error
+text, and the widget wrapper class. The class of every case is the same on knitr 1.44, 1.50
+and 1.52, so the zero-blocker bar is checkable on one version plus a pinned minimum. The
+runner is `knitr_corpus_runner::corpus_report`; the bar is "no blocker outside an
+allowlisted intentional divergence", and the allowlist reader does not exist yet (add it
+with the first entry). A separate Quarto 1 gap, figure `{width=N}` and widget sizing, is
+bd-x8hqtvm0 and is not part of this plan.
