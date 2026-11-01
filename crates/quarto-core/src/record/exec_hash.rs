@@ -789,6 +789,69 @@ mod tests {
         assert_ne!(base, hash_document(&d, &meta(base_meta), &other).unwrap());
     }
 
+    /// The declaration the marimo engine returns as `recordInfo.hashDefinition` (EXR-9,
+    /// Phase 9A). The engine reads `eval`, `external-env` and `pyproject` from top-level
+    /// metadata, so they are `document_keys`; the bare-sql flag and the mode need no field
+    /// (see the test below).
+    fn marimo_def() -> HashDefinition {
+        let mut d = HashDefinition::conservative("marimo");
+        d.granularity = Granularity::Document;
+        d.document_keys = vec!["eval".into(), "external-env".into(), "pyproject".into()];
+        d
+    }
+
+    #[test]
+    fn marimo_declaration_counts_its_top_level_keys_and_every_owned_cell() {
+        let d = marimo_def();
+        let hash = |m: Value, units: &[&str]| {
+            let refs: Vec<UnitHashRef> = units
+                .iter()
+                .map(|h| UnitHashRef {
+                    hash: h,
+                    profile: None,
+                })
+                .collect();
+            hash_document(&d, &meta(m), &refs).unwrap()
+        };
+        let base_meta = json!({"engine": "marimo", "eval": true});
+        let base = hash(base_meta.clone(), &["c1", "c2"]);
+        // Each top-level key marimo reads moves the document hash (a key absent from the
+        // base counts once it is set).
+        assert_ne!(
+            base,
+            hash(json!({"engine": "marimo", "eval": false}), &["c1", "c2"])
+        );
+        assert_ne!(
+            base,
+            hash(
+                json!({"engine": "marimo", "eval": true, "external-env": true}),
+                &["c1", "c2"]
+            )
+        );
+        assert_ne!(
+            base,
+            hash(
+                json!({"engine": "marimo", "eval": true, "pyproject": "p.toml"}),
+                &["c1", "c2"]
+            )
+        );
+        // Marimo cells are reactive across the document: editing any one owned cell, or
+        // adding or dropping one, moves the single document hash.
+        assert_ne!(base, hash(base_meta.clone(), &["c1", "c2-edited"]));
+        assert_ne!(base, hash(base_meta.clone(), &["c1"]));
+        // A key marimo does not read does not count.
+        assert_eq!(
+            base,
+            hash(
+                json!({"engine": "marimo", "eval": true, "title": "t"}),
+                &["c1", "c2"]
+            )
+        );
+        // The bare-sql flag has no field of its own: it changes which units the engine owns
+        // (an `sql` cell joins or leaves the unit list), and the unit list is hashed.
+        assert_ne!(base, hash(base_meta, &["c1", "c2", "sql-cell"]));
+    }
+
     #[test]
     fn toggling_record_changes_no_hash_even_when_an_engine_declares_it() {
         let d = doc_def(); // lists `record` in document_keys: core ignores it

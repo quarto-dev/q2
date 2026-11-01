@@ -81,6 +81,16 @@ pub fn run_engine_stage(
     run_engine_stage_ast(input, observer, registry).map(|_| ())
 }
 
+/// As [`run_engine_stage`] for the output format `format`.
+pub fn run_engine_stage_as(
+    input: &Path,
+    format: &str,
+    observer: Arc<dyn PipelineObserver>,
+    registry: Option<Arc<EngineRegistry>>,
+) -> Result<(), PipelineError> {
+    run_engine_stage_ast_as(input, format, observer, registry).map(|_| ())
+}
+
 /// As [`run_engine_stage`], returning the document the stage produced (the executed
 /// markdown, parsed).
 pub fn run_engine_stage_ast(
@@ -88,11 +98,24 @@ pub fn run_engine_stage_ast(
     observer: Arc<dyn PipelineObserver>,
     registry: Option<Arc<EngineRegistry>>,
 ) -> Result<pampa::pandoc::Pandoc, PipelineError> {
+    run_engine_stage_ast_as(input, "html", observer, registry)
+}
+
+/// As [`run_engine_stage_ast`] for the output format `format` (`"typst"`, `"pdf"`, ...).
+/// The stages up to `engine-execution` are the same for every format (the pandoc prefix is
+/// the HTML list minus excluded stages), so only the context's format differs; that is
+/// what engines see as the target format.
+pub fn run_engine_stage_ast_as(
+    input: &Path,
+    format: &str,
+    observer: Arc<dyn PipelineObserver>,
+    registry: Option<Arc<EngineRegistry>>,
+) -> Result<pampa::pandoc::Pandoc, PipelineError> {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(input, runtime.as_ref()).expect("project discovery");
     let content = runtime.file_read(input).expect("read the input");
     let document = DocumentInfo::from_path(input);
-    let format = Format::from_format_string("html").expect("html format");
+    let format = Format::from_format_string(format).expect("a known format");
 
     let mut ctx = StageContext::new(runtime, format, project, document)?.with_observer(observer);
     if let Some(registry) = registry {

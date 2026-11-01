@@ -236,6 +236,10 @@ export interface TsRecordInfo {
   outputKind?: "raw" | "rendered";
   /** `ids`: cells carry unit ids. `positional`: cells match owned units by order. */
   alignment?: "ids" | "positional";
+  /** Whether the cells cover every unit core marked owned (`owned`, the default) or only
+   *  a subset the engine chose by its own rule (`subset`, which needs `ids` alignment).
+   *  Core checks the count only under `owned`. */
+  coverage?: "owned" | "subset";
   hashDefinition?: TsHashDefinition;
 }
 

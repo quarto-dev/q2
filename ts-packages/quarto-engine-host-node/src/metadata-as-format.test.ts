@@ -245,3 +245,34 @@ describe("T1.11 applyExecuteDefaults", () => {
     expect(fmt.execute).toEqual(full);
   });
 });
+
+// ---------------------------------------------------------------------------
+// T1.12 — pandoc.to defaults to the target format
+// Engines decide interactive vs static with `quarto.format.isHtmlCompatible`, which reads
+// `format.pandoc.to` and treats an absent value as "html". q2 sends no `pandoc.to`, so
+// without this default every non-HTML target looked like HTML to every engine.
+// Revert: remove the `pandoc.to` default in metadataAsFormat → pdf/typst read as html.
+// ---------------------------------------------------------------------------
+describe("T1.12 pandoc.to defaults to the target format", () => {
+  const info = (target: string, metadata: TsFormatInfo["metadata"] = {}): TsFormatInfo => ({
+    identifier: { "base-format": target, "target-format": target, "display-name": target },
+    metadata,
+  });
+
+  it.each(["pdf", "typst", "docx"])("sets pandoc.to for %s", (target) => {
+    expect(metadataAsFormat(info(target)).pandoc["to"]).toBe(target);
+  });
+
+  it("keeps an explicit pandoc.to", () => {
+    const fmt = metadataAsFormat(info("pdf", { pandoc: { to: "latex" } }));
+    expect(fmt.pandoc["to"]).toBe("latex");
+  });
+
+  it("leaves pandoc.to unset when the target format is empty", () => {
+    const fi: TsFormatInfo = {
+      identifier: { "base-format": "html", "target-format": "", "display-name": "" },
+      metadata: {},
+    };
+    expect(metadataAsFormat(fi).pandoc["to"]).toBeUndefined();
+  });
+});

@@ -180,6 +180,15 @@ export function metadataAsFormat(formatInfo: TsFormatInfo): Format {
   }
   format.identifier = { ...format.identifier, ...explicitNonEmpty };
 
+  // q2 sends no `pandoc.to`, but engines read it through `quarto.format.isHtmlCompatible`
+  // (and friends), which treat an absent value as "html". Default it to the target format so
+  // a pdf/typst/docx render is not mistaken for html (e.g. marimo choosing island markup).
+  // An explicit `pandoc.to` from the document wins.
+  const target = format.identifier["target-format"];
+  if (format.pandoc["to"] === undefined && typeof target === "string" && target !== "") {
+    format.pandoc["to"] = target;
+  }
+
   return format;
 }
 

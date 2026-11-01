@@ -521,6 +521,19 @@ pub enum TsAlignment {
     Positional,
 }
 
+/// Which of the units core marked owned a notebook's cells cover (EXR-9).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TsCoverage {
+    /// The notebook covers every unit the engine owns, so core checks the count.
+    #[default]
+    Owned,
+    /// The engine applies its own ownership rule (marimo's class rule), so its notebook
+    /// covers some of the owned units, named by id. Core checks each id, not the count;
+    /// the engine validates its own count. Needs `ids` alignment.
+    Subset,
+}
+
 /// Self-description of a returned notebook (EXR-7). Every field is optional on the wire.
 /// Unknown keys are ignored, so a later revision can add fields.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -535,9 +548,16 @@ pub struct TsRecordInfo {
     pub output_kind: TsOutputKind,
     #[serde(default)]
     pub alignment: TsAlignment,
+    /// Whether the cells cover every owned unit or only a subset the engine chose.
+    #[serde(default, skip_serializing_if = "is_default_coverage")]
+    pub coverage: TsCoverage,
     /// The engine's declared execution-input hash rule (epic decision 35).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash_definition: Option<HashDefinition>,
+}
+
+fn is_default_coverage(c: &TsCoverage) -> bool {
+    *c == TsCoverage::Owned
 }
 
 fn default_record_info_version() -> u32 {
@@ -1834,6 +1854,7 @@ mod tests {
                 granularity: Granularity::Unit,
                 output_kind: TsOutputKind::Rendered,
                 alignment: TsAlignment::Positional,
+                coverage: TsCoverage::Owned,
                 hash_definition: None,
             }),
             ..Default::default()
@@ -1858,6 +1879,7 @@ mod tests {
             granularity: Granularity::Document,
             output_kind: TsOutputKind::Raw,
             alignment: TsAlignment::Ids,
+            coverage: TsCoverage::Owned,
             hash_definition: Some(def.clone()),
         };
         let v = serde_json::to_value(&info).unwrap();
@@ -1874,6 +1896,22 @@ mod tests {
             bare.hash_definition_or_conservative("marimo"),
             HashDefinition::conservative("marimo")
         );
+    }
+
+    #[test]
+    fn record_info_coverage_defaults_to_owned_and_roundtrips() {
+        let bare: TsRecordInfo = serde_json::from_str("{}").unwrap();
+        assert_eq!(bare.coverage, TsCoverage::Owned);
+        assert!(
+            serde_json::to_value(&bare)
+                .unwrap()
+                .get("coverage")
+                .is_none(),
+            "the default is omitted from the wire"
+        );
+        let subset: TsRecordInfo = serde_json::from_str(r#"{"coverage":"subset"}"#).unwrap();
+        assert_eq!(subset.coverage, TsCoverage::Subset);
+        assert_eq!(serde_json::to_value(&subset).unwrap()["coverage"], "subset");
     }
 
     #[test]
@@ -1957,6 +1995,9 @@ mod tests {
             granularity: Granularity::Unit,
             output_kind: TsOutputKind::Raw,
             alignment: TsAlignment::Ids,
+            // Not the default, which is skipped on the wire: the fixture instance sets every
+            // optional field, so a rename of `coverage` changes the fixture.
+            coverage: TsCoverage::Subset,
             hash_definition: Some(hash_def),
         };
         // `TsUnit` has skipped optionals; the fixture instance is the unit with all of them.

@@ -132,6 +132,7 @@ const TS_RECORD_INFO_KEYS = [
   "granularity",
   "outputKind",
   "alignment",
+  "coverage",
   "hashDefinition",
 ] as const satisfies readonly (keyof TsRecordInfo)[];
 type _ExhaustiveTsRecordInfo =

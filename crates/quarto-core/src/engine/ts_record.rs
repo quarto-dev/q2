@@ -31,7 +31,7 @@ use serde_json::Value;
 
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::diagnostics::{EngineRecordProblem, engine_record_diagnostic};
-use crate::engine::ts_protocol::{TsAlignment, TsRecordInfo, TsUnit, TsUnitKind};
+use crate::engine::ts_protocol::{TsAlignment, TsCoverage, TsRecordInfo, TsUnit, TsUnitKind};
 use crate::engine::units::{Unit, line_at, locate_units, view_for_engine};
 use crate::record::{BuildError, EngineEntryInput, RecordBuilder, UnitResult};
 
@@ -186,7 +186,9 @@ fn build_record(
             let expected = owned.iter().flatten().count();
             let annotated: Vec<&NotebookCell> =
                 cells.iter().filter(|c| c.unit_id.is_some()).collect();
-            if annotated.len() != expected {
+            // A `subset` engine applies its own ownership rule, so the count is its to
+            // validate; each id is still checked below.
+            if info.coverage == TsCoverage::Owned && annotated.len() != expected {
                 return Err(EngineRecordProblem::CountMismatch {
                     expected,
                     found: annotated.len(),
@@ -204,6 +206,11 @@ fn build_record(
                 }
                 pairs.push((index, cell.result.clone()));
             }
+        }
+        TsAlignment::Positional if info.coverage == TsCoverage::Subset => {
+            return Err(EngineRecordProblem::Malformed {
+                detail: "`coverage: subset` needs `alignment: ids`".to_string(),
+            });
         }
         TsAlignment::Positional => {
             let code: Vec<&NotebookCell> = cells.iter().filter(|c| c.is_code).collect();
@@ -511,6 +518,7 @@ z = 3
             granularity: Granularity::Document,
             output_kind: Default::default(),
             alignment: TsAlignment::Ids,
+            coverage: Default::default(),
             hash_definition: Some(def.clone()),
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
@@ -529,6 +537,7 @@ z = 3
             granularity: Granularity::Unit,
             output_kind: Default::default(),
             alignment: TsAlignment::Positional,
+            coverage: Default::default(),
             hash_definition: None,
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
@@ -566,6 +575,70 @@ z = 3
         assert!(ctx.units.len() > expected);
     }
 
+    /// What the marimo engine returns as `recordInfo` (EXR-9 Phase 9A): `ids` alignment, the
+    /// default `owned` coverage, and the document-granularity declaration.
+    fn marimo_info() -> TsRecordInfo {
+        let mut def = HashDefinition::conservative("marimo");
+        def.granularity = Granularity::Document;
+        def.document_keys = vec!["eval".into(), "external-env".into(), "pyproject".into()];
+        TsRecordInfo {
+            version: 1,
+            granularity: Granularity::Document,
+            output_kind: Default::default(),
+            alignment: TsAlignment::Ids,
+            coverage: Default::default(),
+            hash_definition: Some(def),
+        }
+    }
+
+    fn run_marimo(
+        ctx: &ExecutionContext,
+        nb: Option<Value>,
+        info: Option<TsRecordInfo>,
+    ) -> ExecuteResult {
+        let mut result = ExecuteResult::default();
+        attach_record("marimo", DOC, ctx, false, nb, info, &mut result);
+        result
+    }
+
+    #[test]
+    fn marimo_declaration_is_stored_with_the_engine_entry() {
+        let ctx = ctx_for(DOC, &["python"], true);
+        let cells: Vec<Value> = owned_python_ids(&ctx)
+            .iter()
+            .map(|id| cell(Some(id), "o\n", None))
+            .collect();
+        let result = run_marimo(&ctx, Some(notebook(cells)), Some(marimo_info()));
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let record = result.record.expect("a record");
+        assert_eq!(record.engine.name, "marimo");
+        assert_eq!(
+            record.engine.hash_definition,
+            marimo_info().hash_definition.unwrap()
+        );
+    }
+
+    #[test]
+    fn marimo_count_mismatch_skips_the_record_with_a_diagnostic() {
+        // Default coverage (`owned`): under `subset` a dropped cell is invisible to core, so
+        // this is the case the join can catch.
+        let ctx = ctx_for(DOC, &["python"], true);
+        let ids = owned_python_ids(&ctx);
+        let expected = ids.len();
+        assert!(expected > 1);
+        let cells = vec![cell(Some(&ids[0]), "o\n", None)];
+        let result = run_marimo(&ctx, Some(notebook(cells)), Some(marimo_info()));
+        assert!(result.record.is_none(), "the record is dropped");
+        // A warning, not an error: the render carries on with the engine's markdown.
+        assert_eq!(result.warnings.len(), 1);
+        let d = &result.warnings[0];
+        assert_eq!(d.kind, quarto_error_reporting::DiagnosticKind::Warning);
+        let text = d.to_text(None);
+        assert!(text.contains("marimo"), "{text}");
+        assert!(text.contains(&format!("{expected} units")), "{text}");
+        assert!(text.contains("returned 1 annotated"), "{text}");
+    }
+
     #[test]
     fn unknown_and_duplicate_ids_drop_the_record_with_a_diagnostic() {
         let ctx = ctx_for(DOC, &["python"], true);
@@ -585,6 +658,83 @@ z = 3
         let result = run(&ctx, Some(notebook(cells)), None);
         assert!(result.record.is_none());
         assert!(result.warnings[0].to_text(None).contains("more than once"));
+    }
+
+    fn subset_info() -> TsRecordInfo {
+        let mut info = default_record_info();
+        info.coverage = TsCoverage::Subset;
+        info
+    }
+
+    #[test]
+    fn subset_coverage_accepts_fewer_cells_than_the_language_level_owned_count() {
+        // The engine's own rule (marimo's class rule) runs only some of the units core's
+        // language view marks owned; the cells it names are the ones it ran.
+        let ctx = ctx_for(DOC, &["python"], true);
+        let ids = owned_python_ids(&ctx);
+        assert!(ids.len() > 1);
+        let cells = vec![cell(Some(&ids[1]), "o\n", None)];
+        let result = run(&ctx, Some(notebook(cells)), Some(subset_info()));
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let record = result.record.expect("a record");
+        assert_eq!(record.cells.len(), 1);
+        assert_eq!(record.cells[0].metadata.quarto_cell_id, ids[1]);
+
+        // The same notebook without the declaration keeps the strict count.
+        let cells = vec![cell(Some(&ids[1]), "o\n", None)];
+        let strict = run(&ctx, Some(notebook(cells)), None);
+        assert!(strict.record.is_none());
+    }
+
+    #[test]
+    fn subset_coverage_still_rejects_unknown_ceded_and_duplicate_ids() {
+        let ctx = ctx_for(DOC, &["python"], true);
+        let ids = owned_python_ids(&ctx);
+        let ceded = ctx
+            .units
+            .iter()
+            .find(|u| matches!(u, Unit::Cell(_)) && u.lang() == "r")
+            .map(|u| unit_id(u).unwrap().to_string())
+            .unwrap();
+
+        for (bad, needle) in [
+            ("99-deadbeef-unlabeled".to_string(), "99-deadbeef-unlabeled"),
+            (ceded.clone(), ceded.as_str()),
+        ] {
+            let cells = vec![
+                cell(Some(&ids[0]), "o\n", None),
+                cell(Some(&bad), "o\n", None),
+            ];
+            let result = run(&ctx, Some(notebook(cells)), Some(subset_info()));
+            assert!(result.record.is_none(), "{bad}");
+            assert!(result.warnings[0].to_text(None).contains(needle), "{bad}");
+        }
+
+        let cells = vec![
+            cell(Some(&ids[0]), "o\n", None),
+            cell(Some(&ids[0]), "o\n", None),
+        ];
+        let result = run(&ctx, Some(notebook(cells)), Some(subset_info()));
+        assert!(result.record.is_none());
+        assert!(result.warnings[0].to_text(None).contains("more than once"));
+    }
+
+    #[test]
+    fn subset_coverage_needs_ids_alignment() {
+        let ctx = ctx_for(DOC, &["python"], true);
+        let mut info = subset_info();
+        info.alignment = TsAlignment::Positional;
+        let result = run(
+            &ctx,
+            Some(notebook(vec![cell(None, "o\n", None)])),
+            Some(info),
+        );
+        assert!(result.record.is_none());
+        assert!(
+            result.warnings[0].to_text(None).contains("ids"),
+            "{:?}",
+            result.warnings[0].to_text(None)
+        );
     }
 
     #[test]

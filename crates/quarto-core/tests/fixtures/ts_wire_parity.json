@@ -64,6 +64,7 @@
     "preserve": {},
     "recordInfo": {
       "alignment": "ids",
+      "coverage": "subset",
       "granularity": "unit",
       "hashDefinition": {
         "documentKeys": [],
@@ -102,6 +103,7 @@
   },
   "TsRecordInfo": {
     "alignment": "ids",
+    "coverage": "subset",
     "granularity": "unit",
     "hashDefinition": {
       "documentKeys": [],
