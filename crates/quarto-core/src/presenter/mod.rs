@@ -14,6 +14,7 @@
 //! all call the same functions on every target.
 
 pub mod cell;
+pub mod document;
 pub mod figures;
 pub mod inline;
 pub mod output;

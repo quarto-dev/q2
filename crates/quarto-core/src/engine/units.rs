@@ -471,7 +471,10 @@ pub fn scan_units(input: &str) -> Vec<Unit> {
     units
 }
 
-/// A parsed code block from the input markdown.
+/// A parsed code block from the input markdown. Test-only since EXR-6 Phase 3:
+/// the stored-notebook replay was its last production user, and the legacy
+/// executor tests still pin what it did.
+#[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct CodeBlock {
     /// Start byte offset in the input.
@@ -494,6 +497,7 @@ pub(crate) struct CodeBlock {
 /// The scanner follows CommonMark for where a fence closes (a longer closer
 /// closes it) and for what an opener is (the info string is on the fence
 /// line); EXR-2 Phase 4 took both from it, fixing two executor misparses.
+#[cfg(test)]
 pub(crate) fn legacy_cells(units: &[Unit]) -> Vec<CodeBlock> {
     units
         .iter()
@@ -504,6 +508,7 @@ pub(crate) fn legacy_cells(units: &[Unit]) -> Vec<CodeBlock> {
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn code_block_of(c: &CellUnit) -> CodeBlock {
     CodeBlock {
         start: c.start,

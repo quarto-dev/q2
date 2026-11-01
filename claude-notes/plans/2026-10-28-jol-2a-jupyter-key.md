@@ -2,7 +2,7 @@
 title: 'JOL-2a: the Jupyter engine honors the `jupyter:` key'
 date: 2026-10-28
 description: 'Wires the dead `resolve_kernel` metadata-first order into the text execution path so `jupyter: <kernel>` selects the kernel for the whole document, which makes multiplexing kernels such as SoS usable and gives span-only documents a kernel.'
-status: in-progress
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md), as JOL-2a, the first
@@ -285,10 +285,11 @@ From the epic and the JOL epic (decision 4); not to be re-litigated here.
   - `test_select_kernel_falls_back_to_map_language_to_kernel`
   - `test_select_kernel_no_cells_with_key`
   - `test_select_kernel_no_cells_no_key_is_none`
-- [ ] Integration test, `#[ignore = "requires ipykernel"]` in the style of
+- [x] Integration test, `#[ignore = "requires ipykernel"]` in the style of
   `crates/quarto-core/tests/integration/jupyter_integration.rs`: a document with
   `jupyter: python3` and a first cell in a different allowlisted language still starts
   `python3` (assert on the `SessionKey` the daemon reports).
+  *Done (JOL-5, 2026-11-01):* `owned_e2e_tests::test_jupyter_key_python3_beats_first_cell_language_real_ipykernel` in `text_execute.rs` (beside the fake-kernel tests, since `execute_qmd` is crate-private). It runs a `{julia}`-fenced cell with `jupyter: python3` and asserts it ran on Python 3; passed against a real ipykernel (clean `uv` env, 10.7 s including the build).
 - [x] `jupyter: no-such-kernel` fails with an error that names the kernel. Done as an
   ordinary unit test, not an ignored integration test: the lookup fails before any kernel
   starts, so it needs no ipykernel (`test_missing_explicit_kernel_gives_the_rich_error`; it

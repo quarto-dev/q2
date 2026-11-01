@@ -15,16 +15,15 @@ use quarto_source_map::SourceInfo;
 
 use super::daemon::daemon;
 use super::error::JupyterError;
-use super::execute::{CellOutput, CellResult, ExecuteOpts, ExecuteStatus};
+use super::execute::ExecuteOpts;
 use super::inline::{
-    InlineOutcome, classify_inline_result, escape_yaml_double, front_matter_key_at, span_is_owned,
-    unescape_yaml_double, wrap_inline_code,
+    InlineOutcome, classify_inline_result, span_is_owned, unescape_yaml_double, wrap_inline_code,
 };
 use super::kernel_select::{
     KernelSpecSummary, choose_kernel, deprecated_alias, explicit_kernel, lookup_language,
 };
 use super::kernelspec::{UnusableJupyterKey, list_kernelspecs, unusable_jupyter_key};
-use super::router::{KernelName, SingleKernelRouter, SpliceKind, plan_units, splice_mixed};
+use super::router::{KernelName, SingleKernelRouter, plan_units};
 use super::session::SessionKey;
 use crate::cell_options::partition_cell_options;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
@@ -38,11 +37,15 @@ use crate::engine::units::{
     CellUnit, EngineUnit, InlineUnit, Unit, runs_in_legacy_executor, units_for_engine,
     view_for_engine,
 };
-use crate::presenter::cell::{describe_location, render_cell};
-use crate::presenter::figures::{FigureSink, FsFigureSink};
-use crate::presenter::inline::{InlineTarget, render_inline};
-use crate::presenter::visibility::{CellVisibility, resolve_cell_options, resolved_flag};
-use crate::record::{EngineEntryInput, HashDefinition, RecordBuilder, UnitResult};
+use crate::presenter::cell::describe_location;
+use crate::presenter::document::{PresentError, PresentNote, present_document};
+use crate::presenter::figures::FsFigureSink;
+use crate::presenter::inline::InlineTarget;
+use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus};
+use crate::presenter::visibility::{resolve_cell_options, resolved_flag};
+use crate::record::{
+    AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, fill_ids,
+};
 
 type JupyterResult<T> = std::result::Result<T, JupyterError>;
 
@@ -273,17 +276,18 @@ fn push_unit_result(
         return Ok(());
     };
     builder
-        .push(
-            index,
-            UnitResult {
-                outputs: result.nbformat_outputs(),
-                execution_count: result.execution_count.map(u64::from),
-                kernel: Some(kernel.to_string()),
-            },
-        )
-        .map_err(|e| JupyterError::RecordFailed {
-            message: e.to_string(),
-        })
+        .push(index, unit_result(result, kernel))
+        .map_err(record_failed)
+}
+
+/// A unit's kernel result as the record keeps it: raw nbformat outputs, the count the
+/// kernel reported and the kernel that ran it.
+fn unit_result(result: &CellResult, kernel: &str) -> UnitResult {
+    UnitResult {
+        outputs: result.nbformat_outputs(),
+        execution_count: result.execution_count.map(u64::from),
+        kernel: Some(kernel.to_string()),
+    }
 }
 
 /// Divergence 6's error: spans to evaluate and no way to pick a kernel.
@@ -492,6 +496,12 @@ fn execute_blocks_async(
 }
 
 /// Inner async function that does the actual execution.
+///
+/// EXR-6 (the flip): the kernel results of every unit go into a record, and the
+/// markdown is `present_document` over that record and the input, so the live path
+/// and a replayed record present through the one driver. Execution semantics stay
+/// here: the `error:` abort policy for cells, and a span that raised or produced no
+/// value, fail the render before anything is presented.
 async fn execute_blocks_inner(
     input: &str,
     units: &[Unit],
@@ -501,10 +511,10 @@ async fn execute_blocks_inner(
 ) -> JupyterResult<ExecuteResult> {
     let daemon = daemon();
 
-    // EXR-5: the execution record, accumulated beside the markdown only when the
-    // stage asked for one. It consumes the stage's unit list and author texts
-    // (epic decisions 36 and 38); a run driven with no stage in front of it has
-    // neither, and a record cannot be built from a local scan.
+    // EXR-5: the exported execution record, built over the stage's unit list and
+    // author texts (epic decisions 36 and 38) only when the stage asked for one; a
+    // run driven with no stage in front of it has neither, and a record cannot be
+    // built from a local scan.
     let mut record = if ctx.want_record {
         if ctx.units.is_empty() {
             return Err(JupyterError::RecordFailed {
@@ -514,15 +524,23 @@ async fn execute_blocks_inner(
             });
         }
         Some(
-            RecordBuilder::new(JUPYTER, hash_definition, &ctx.units, &ctx.author_texts).map_err(
-                |e| JupyterError::RecordFailed {
-                    message: e.to_string(),
-                },
-            )?,
+            RecordBuilder::new(JUPYTER, hash_definition, &ctx.units, &ctx.author_texts)
+                .map_err(record_failed)?,
         )
     } else {
         None
     };
+
+    // EXR-6: what this run presents from. Every executed unit goes in, including one
+    // an earlier engine's output introduced (it has no stage index, so the exported
+    // record above cannot carry it). Its ids are local to this run, filled from the
+    // units' scanned text, and `present_document` matches on them.
+    let mut presented_units = units.to_vec();
+    let presented_texts = AuthorTexts::from_scanned(&presented_units);
+    fill_ids(&mut presented_units, &presented_texts).map_err(record_failed)?;
+    let mut presentation =
+        RecordBuilder::new(JUPYTER, hash_definition, &presented_units, &presented_texts)
+            .map_err(record_failed)?;
 
     // Start or get an existing session for every kernel the plan names, once
     // each and before any cell runs (so a start failure surfaces before the
@@ -547,10 +565,6 @@ async fn execute_blocks_inner(
     // untenable to share.
     let doc_scope = ctx.execute_scope.clone();
 
-    // The rendered replacement for each executed cell, spliced into the
-    // input's gaps once every cell has run.
-    let mut replacements: Vec<(std::ops::Range<usize>, String, SpliceKind)> = Vec::new();
-    let mut warnings: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
     // Each kernel's language, to wrap a span for it (a `None` value on Python).
     let mut languages: std::collections::HashMap<KernelName, String> =
         std::collections::HashMap::new();
@@ -561,106 +575,108 @@ async fn execute_blocks_inner(
             .ok_or(JupyterError::NotConnected)?;
         languages.insert(kernel.clone(), language);
     }
-    // Figure emission (bd-5t6wvu7m): image outputs are written under
-    // `<stem>_files/figure-html/` next to the source document.
-    let mut fig = FsFigureSink::new(&ctx.source_path);
 
-    for ((_, kernel), unit) in plan.iter().zip(units) {
+    for (position, ((_, kernel), unit)) in plan.iter().zip(units).enumerate() {
         let key = &sessions[kernel];
-        let block = match unit {
-            Unit::Cell(block) => block,
+        let result = match unit {
             Unit::Inline(span) => {
                 let result = run_span(&daemon, key, &languages[kernel], span).await?;
-                // The raw bundle is what the record keeps (the mime choice below
-                // depends on the output format); the live text is unchanged.
-                if let Some(builder) = record.as_mut() {
-                    push_unit_result(builder, &ctx.units, unit, &result, kernel.as_str())?;
+                span_fatal(&result, span, ctx)?;
+                result
+            }
+            Unit::Cell(block) => {
+                // Partition the cell into `#|` options + code (bd-ohvl879u):
+                // the kernel runs the code alone (Q1 strips the option lines
+                // too, so cell magics work), and the `error:` policy reads the
+                // options. `ctx.source_info` maps input offsets back to the
+                // original files, so diagnostics resolve to real source
+                // positions.
+                let body_source = SourceInfo::substring(
+                    ctx.source_info.clone(),
+                    block.code_start,
+                    block.code_start + block.code.len(),
+                );
+                let cell = partition_cell_options(&block.lang, &block.code, body_source.clone())
+                    .map_err(|e| {
+                        let at = e
+                            .location()
+                            .and_then(|loc| describe_location(loc, 0, ctx))
+                            .or_else(|| describe_location(&body_source, 0, ctx))
+                            .map(|l| format!(" at {l}"))
+                            .unwrap_or_default();
+                        JupyterError::InvalidCellOptions {
+                            message: format!("cell options are not valid YAML{at}: {e}"),
+                        }
+                    })?;
+                let resolved = resolve_cell_options(doc_scope.as_ref(), cell.options);
+                // Q1's default `execute: error: false` — a raising cell aborts
+                // unless something opts in.
+                let allow_errors = resolved_flag(resolved.as_ref(), "error", false);
+
+                let exec_result = daemon
+                    .execute_in_session(key, &cell.code)
+                    .await
+                    .ok_or(JupyterError::NotConnected)??;
+
+                // Error policy (bd-ohvl879u, knitr/Q1 parity): a raising cell
+                // aborts the render unless the cell or the document allows
+                // errors in output.
+                if !allow_errors && let Some((ename, evalue)) = first_cell_error(&exec_result) {
+                    let at = describe_location(&body_source, 0, ctx)
+                        .map(|l| format!(" at {l}"))
+                        .unwrap_or_default();
+                    return Err(JupyterError::CellExecutionFailed {
+                        message: format!(
+                            "code cell{at} raised {ename}: {evalue}\n\
+                             Use `#| error: true` on the cell (or `execute: error: true` in the \
+                             document metadata) to show the error in the output instead."
+                        ),
+                    });
                 }
-                if let Some(text) = span_text(&result, span, input, ctx, &mut warnings)? {
-                    replacements.push((span.start..span.end, text, SpliceKind::Inline));
-                }
-                continue;
+                exec_result
             }
         };
-        // Partition the cell into `#|` options + code (bd-ohvl879u).
-        // `ctx.source_info` maps input offsets back to the original
-        // files, so option spans and diagnostics resolve to real
-        // source positions.
-        let body_source = SourceInfo::substring(
-            ctx.source_info.clone(),
-            block.code_start,
-            block.code_start + block.code.len(),
-        );
-        let cell =
-            partition_cell_options(&block.lang, &block.code, body_source.clone()).map_err(|e| {
-                let at = e
-                    .location()
-                    .and_then(|loc| describe_location(loc, 0, ctx))
-                    .or_else(|| describe_location(&body_source, 0, ctx))
-                    .map(|l| format!(" at {l}"))
-                    .unwrap_or_default();
-                JupyterError::InvalidCellOptions {
-                    message: format!("cell options are not valid YAML{at}: {e}"),
-                }
-            })?;
-        let resolved = resolve_cell_options(doc_scope.as_ref(), cell.options);
-        // Q1's default `execute: error: false` — a raising cell aborts
-        // unless something opts in.
-        let allow_errors = resolved_flag(resolved.as_ref(), "error", false);
-        let visibility = CellVisibility::resolve(resolved.as_ref());
 
-        // Execute the code — the partitioned code only, without the
-        // option lines (Q1 strips them too, so cell magics work).
-        let exec_result = daemon
-            .execute_in_session(key, &cell.code)
-            .await
-            .ok_or(JupyterError::NotConnected)??;
-
-        // Error policy (bd-ohvl879u, knitr/Q1 parity): a raising cell
-        // aborts the render unless the cell or the document allows
-        // errors in output.
-        if !allow_errors && let Some((ename, evalue)) = first_cell_error(&exec_result) {
-            let at = describe_location(&body_source, 0, ctx)
-                .map(|l| format!(" at {l}"))
-                .unwrap_or_default();
-            return Err(JupyterError::CellExecutionFailed {
-                message: format!(
-                    "code cell{at} raised {ename}: {evalue}\n\
-                     Use `#| error: true` on the cell (or `execute: error: true` in the \
-                     document metadata) to show the error in the output instead."
-                ),
-            });
-        }
-
-        // The record keeps every executed cell, hidden ones included, with its
-        // raw outputs; visibility is resolved again at present time.
+        // Both records keep every executed unit, hidden ones included, with its raw
+        // outputs; visibility is resolved at present time.
         if let Some(builder) = record.as_mut() {
-            push_unit_result(builder, &ctx.units, unit, &exec_result, kernel.as_str())?;
+            push_unit_result(builder, &ctx.units, unit, &result, kernel.as_str())?;
         }
-
-        // Emit the visible parts of the cell — echoed (option-stripped)
-        // source plus outputs — in the Quarto-canonical `::: {.cell}`
-        // shape. `begin_cell` runs for every *executed* cell, visible
-        // or not, so figure file names stay keyed to a cell's position
-        // in the document rather than shifting when an earlier cell is
-        // hidden.
-        fig.begin_cell();
-        replacements.push((
-            block.start..block.end,
-            render_cell(&block.lang, &cell.code, &exec_result, &mut fig, visibility),
-            SpliceKind::Block,
-        ));
+        presentation
+            .push(position, unit_result(&result, kernel.as_str()))
+            .map_err(record_failed)?;
     }
 
-    let output = splice_mixed(input, &replacements);
+    // Present: the units' visible parts in the Quarto-canonical `::: {.cell}` shape,
+    // spans' values in place, figures written under `<stem>_files/figure-html/` next
+    // to the source document (bd-5t6wvu7m).
+    let cells = presentation
+        .finish(EngineEntryInput::default())
+        .map_err(record_failed)?
+        .cells;
+    let mut fig = FsFigureSink::new(&ctx.source_path);
+    let presented = present_document(
+        &cells,
+        input,
+        &presented_units,
+        doc_scope.as_ref(),
+        InlineTarget::from_format(&ctx.format),
+        &mut fig,
+    )
+    .map_err(|e| present_error(e, &presented_units, ctx))?;
 
     // Report the `<stem>_files` dir when figures were written —
     // dir-level, mirroring knitr. `q2 render` copies it to the output
     // dir (bd-o8pr) and the preview capture embeds it (bd-qbhp2cvv).
-    let mut result = ExecuteResult::new(output);
-    result.warnings.extend(warnings);
-    if fig.wrote_any() {
-        result = result.with_supporting_files(vec![fig.files_dir()]);
+    let mut result = ExecuteResult::new(presented.markdown);
+    result.warnings.extend(
+        presented
+            .notes
+            .iter()
+            .map(|note| note_diagnostic(note, &presented_units, ctx)),
+    );
+    if !presented.files_written.is_empty() {
+        result = result.with_supporting_files(presented.files_written);
     }
     if let Some(builder) = record {
         // One kernel runs every unit today (JOL-3, deferred, could vary it per
@@ -668,13 +684,19 @@ async fn execute_blocks_inner(
         let kernel = plan
             .first()
             .map(|(_, k)| (k.as_str(), languages[k].as_str()));
-        result.record = Some(builder.finish(entry_input(ctx, kernel)).map_err(|e| {
-            JupyterError::RecordFailed {
-                message: e.to_string(),
-            }
-        })?);
+        result.record = Some(
+            builder
+                .finish(entry_input(ctx, kernel))
+                .map_err(record_failed)?,
+        );
     }
     Ok(result)
+}
+
+fn record_failed(e: impl std::fmt::Display) -> JupyterError {
+    JupyterError::RecordFailed {
+        message: e.to_string(),
+    }
 }
 
 /// Run one inline expression on the kernel and return its raw result.
@@ -702,62 +724,81 @@ async fn run_span(
         .ok_or(JupyterError::NotConnected)?
 }
 
-/// The text that replaces a span given its raw result, or `None` to leave the span as
-/// written (an empty value, or no usable result with a warning pushed).
-///
-/// Errors are fatal: the kernel raised, the expression produced no value, or a front
-/// matter value cannot be written back (design decision 2, divergences 1, 6 and 10).
-fn span_text(
-    result: &CellResult,
+/// Fail the render for a span that raised or produced no value (design decision 2,
+/// divergences 1 and 6). What a span with a value presents to, or that it is left in
+/// place with a warning, is `present_document`'s to decide.
+fn span_fatal(result: &CellResult, span: &InlineUnit, ctx: &ExecutionContext) -> JupyterResult<()> {
+    let problem = match classify_inline_result(result) {
+        InlineOutcome::Raised { ename, evalue } => InlineSpanProblem::Raised { ename, evalue },
+        InlineOutcome::Silent => InlineSpanProblem::NoValue,
+        InlineOutcome::Value(_) | InlineOutcome::NoTextValue => return Ok(()),
+    };
+    Err(span_error(&problem, span, ctx))
+}
+
+/// The diagnostic for a span problem, located at the span's expression.
+fn span_diagnostic(
+    problem: &InlineSpanProblem,
     span: &InlineUnit,
-    input: &str,
     ctx: &ExecutionContext,
-    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
-) -> JupyterResult<Option<String>> {
+) -> quarto_error_reporting::DiagnosticMessage {
     let expr_source = SourceInfo::substring(
         ctx.source_info.clone(),
         span.code_start,
         span.code_start + span.code.len(),
     );
     let location = describe_location(&expr_source, 0, ctx);
-    let diagnostic = |problem: &InlineSpanProblem| {
-        inline_span_diagnostic(problem, &span.lang, &span.code, location.as_deref())
-    };
-    let fatal = |problem: &InlineSpanProblem| JupyterError::CellExecutionFailed {
-        message: diagnostic(problem).to_text(None),
-    };
+    inline_span_diagnostic(problem, &span.lang, &span.code, location.as_deref())
+}
 
-    let text = match classify_inline_result(result) {
-        InlineOutcome::Raised { ename, evalue } => {
-            return Err(fatal(&InlineSpanProblem::Raised { ename, evalue }));
+fn span_error(
+    problem: &InlineSpanProblem,
+    span: &InlineUnit,
+    ctx: &ExecutionContext,
+) -> JupyterError {
+    JupyterError::CellExecutionFailed {
+        message: span_diagnostic(problem, span, ctx).to_text(None),
+    }
+}
+
+/// A presenter note as the engine's warning: a span whose value has no usable text
+/// stays in the document (`Q-18-10`, as before the flip).
+fn note_diagnostic(
+    note: &PresentNote,
+    units: &[Unit],
+    ctx: &ExecutionContext,
+) -> quarto_error_reporting::DiagnosticMessage {
+    match note {
+        PresentNote::InlineNoUsableValue { unit } => match units.get(*unit) {
+            Some(Unit::Inline(span)) => {
+                span_diagnostic(&InlineSpanProblem::NoUsableResult, span, ctx)
+            }
+            _ => inline_span_diagnostic(&InlineSpanProblem::NoUsableResult, "?", "?", None),
+        },
+    }
+}
+
+/// A presenter error as the engine's: a front matter value that cannot be written
+/// back is the span's fatal diagnostic (divergence 10); invalid cell options cannot
+/// reach here (the loop above rejects them before the cell runs) but map anyway.
+fn present_error(err: PresentError, units: &[Unit], ctx: &ExecutionContext) -> JupyterError {
+    match err {
+        PresentError::FrontMatterValue { unit, key, reason } => match units.get(unit) {
+            Some(Unit::Inline(span)) => span_error(
+                &InlineSpanProblem::FrontMatterValue { key, reason },
+                span,
+                ctx,
+            ),
+            _ => JupyterError::CellExecutionFailed {
+                message: format!(
+                    "the front matter value `{key}` cannot hold the inline result: {reason}"
+                ),
+            },
+        },
+        PresentError::InvalidCellOptions { message, .. } => {
+            JupyterError::InvalidCellOptions { message }
         }
-        InlineOutcome::Silent => return Err(fatal(&InlineSpanProblem::NoValue)),
-        InlineOutcome::NoTextValue => None,
-        InlineOutcome::Value(bundle) => {
-            render_inline(&bundle, InlineTarget::from_format(&ctx.format))
-        }
-    };
-    let Some(text) = text else {
-        warnings.push(diagnostic(&InlineSpanProblem::NoUsableResult));
-        return Ok(None);
-    };
-    // Q1 leaves the span source in place for an empty value (divergence 7).
-    if text.is_empty() {
-        return Ok(None);
     }
-    if !span.in_front_matter {
-        return Ok(Some(text));
-    }
-    if text.contains(['\n', '\r']) {
-        let key = front_matter_key_at(input, span.start).unwrap_or_else(|| "?".to_string());
-        return Err(fatal(&InlineSpanProblem::FrontMatterValue {
-            key,
-            reason: "the value contains a newline, which a double-quoted YAML string would \
-                     fold to a space"
-                .to_string(),
-        }));
-    }
-    Ok(Some(escape_yaml_double(&text)))
 }
 
 /// The first error a cell produced, from its outputs or its status.
@@ -2014,6 +2055,8 @@ mod record_tests {
     use super::*;
     use crate::engine::jupyter::fake_kernel::{FakeKernel, FakeKernelHome, FakeOutput, Script};
     use crate::engine::units::{UnitId, scan_units};
+    use crate::presenter::cell::render_cell;
+    use crate::presenter::visibility::CellVisibility;
     use crate::record::{
         AuthorText, AuthorTexts, EngineRecord, UnitKind, content_hash, fill_ids, span_content_hash,
     };
@@ -2437,5 +2480,262 @@ mod record_tests {
         let record = execute_qmd(text, &ctx).unwrap().record.unwrap();
         assert_eq!(record.cells.len(), 1);
         assert_eq!(record.cells[0].metadata.quarto_kind, UnitKind::Inline);
+    }
+
+    /// EXR-6 Phase 3: a notebook replayed from its stored outputs and the same cells
+    /// executed live (the fake kernel answering with those outputs) present through
+    /// one driver and produce identical markdown.
+    #[test]
+    fn ipynb_replay_and_live_share_one_presenter() {
+        use crate::engine::content_processors::ORIGINAL_FILE_ID;
+        use crate::engine::content_processors::ipynb::convert_notebook;
+        use crate::engine::ipynb_replay::IpynbReplayEngine;
+        use crate::engine::traits::ExecutionEngine;
+        use quarto_source_map::SourceContext;
+        use std::sync::Arc;
+
+        const NB: &str = r##"{"cells":[{"cell_type":"markdown","metadata":{},"source":["# Shared\n\nProse before.\n"]},{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["hello\n"]}],"source":["print('hello')\n"]},{"cell_type":"markdown","metadata":{},"source":["Between.\n"]},{"cell_type":"code","execution_count":2,"metadata":{},"outputs":[{"output_type":"execute_result","execution_count":2,"data":{"text/plain":["42"]},"metadata":{}}],"source":["#| echo: false\n6 * 7\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"##;
+
+        let dir = tempfile::tempdir().unwrap();
+        let nb_path = dir.path().join("notebook.ipynb");
+        let converted = convert_notebook(&nb_path, NB).unwrap();
+        let markdown = converted.markdown.clone();
+
+        // Replay: the production-shaped context (what `ParseDocumentStage` registers).
+        let mut sc = SourceContext::new();
+        sc.add_file(
+            "<notebook.ipynb (converted by ipynb)>".to_string(),
+            Some(markdown.clone()),
+        );
+        // lint:allow(add-file-with-id) single-notebook registration mirroring production
+        sc.add_file_with_id(
+            ORIGINAL_FILE_ID,
+            nb_path.display().to_string(),
+            Some(NB.to_string()),
+        );
+        for cell_file in &converted.files {
+            sc.add_file(cell_file.label.clone(), Some(cell_file.text.clone()));
+        }
+        let replay_ctx = ExecutionContext::new(
+            dir.path().to_path_buf(),
+            dir.path().to_path_buf(),
+            nb_path.clone(),
+            "html",
+        )
+        .with_source_info(converted.source_info, Arc::new(sc));
+        let replayed = IpynbReplayEngine::new()
+            .execute(&markdown, &replay_ctx)
+            .unwrap()
+            .markdown;
+
+        // Live: the fake kernel answers each cell with the notebook's stored outputs.
+        let script = Script::from([
+            (cell("print('hello')"), stdout("hello\n")),
+            (cell("6 * 7"), vec![FakeOutput::plain_result("42")]),
+        ]);
+        let (_home, mut live_ctx) = with_kernel(&markdown, &script);
+        live_ctx.source_path = nb_path;
+        let live = execute_qmd(&markdown, &live_ctx).unwrap().markdown;
+
+        assert_eq!(live, replayed);
+        assert!(live.contains("hello"), "{live}");
+        assert!(live.contains("42"), "{live}");
+        assert!(
+            !live.contains("6 * 7"),
+            "echo: false hides the source:\n{live}"
+        );
+    }
+
+    /// EXR-6 Phase 3b: a trace recorded from a live run (the fake kernel) replays
+    /// through the presenter to the live markdown, for the same target format, and the
+    /// record the replay returns is the recorded one byte for byte.
+    #[test]
+    fn replay_jupyter_trace_presents_same_markdown_as_live() {
+        use crate::engine::replay::ReplayEngine;
+        use crate::engine::traits::ExecutionEngine;
+        use crate::record::coalesce;
+        use quarto_trace::EngineCapture;
+
+        let text = "Before.\n\n```{python}\na\n```\n\nValue `{python} e` after.\n\n```{python}\n#| echo: false\nb\n```\n";
+        let script = Script::from([
+            (cell("a"), stdout("A\n")),
+            (py("e"), vec![FakeOutput::plain_result("E")]),
+            (cell("b"), stdout("B\n")),
+        ]);
+        let (_keep, ctx) = staged(text, &script);
+        let live = execute_qmd(text, &ctx).unwrap();
+        let engine_record = live.record.clone().unwrap();
+        // What the stage emits for the trace: the one-engine record notebook.
+        let record = coalesce(std::slice::from_ref(&engine_record), &ctx.units).unwrap();
+        let capture = EngineCapture {
+            engine_name: "jupyter".into(),
+            input_qmd: text.into(),
+            result: serde_json::to_value(&live).unwrap(),
+            files: Vec::new(),
+            record: Some(serde_json::to_value(&record).unwrap()),
+        };
+
+        let replayed = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        assert_eq!(replayed.markdown, live.markdown);
+        assert!(
+            replayed.markdown.contains("Value E after."),
+            "{}",
+            replayed.markdown
+        );
+        assert!(
+            !replayed.markdown.contains("\nb\n"),
+            "{}",
+            replayed.markdown
+        );
+        // `replay_engine_returns_byte_identical_record`, on a real run.
+        let record_back = replayed.record.expect("the record travels on the result");
+        assert_eq!(record_back.cells, engine_record.cells);
+        assert_eq!(
+            serde_json::to_value(&record_back.engine).unwrap(),
+            serde_json::to_value(&engine_record.engine).unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
+mod owned_e2e_tests {
+    //! JOL-5 Phase 3: kernel selection and language ownership, end to end through
+    //! `execute_qmd`, the real daemon and the fake kernel (`fake_kernel.rs`). No
+    //! `ipykernel`, no external install. The languages are made up (`alpha`, `beta`,
+    //! `zzz`), which is itself the point of `test_owned_language_executes_without_allowlist`:
+    //! no q2 source names them.
+
+    use super::span_tests::{ctx_for, jupyter_meta};
+    use super::*;
+    use crate::engine::diagnostics::engine_error_diagnostic;
+    use crate::engine::jupyter::fake_kernel::{FakeKernelHome, FakeOutput, Script, answering_as};
+
+    /// The code a kernel receives for a cell body: the closing newline is kept.
+    fn body(code: &str) -> String {
+        format!("{code}\n")
+    }
+
+    #[test]
+    fn test_jupyter_key_selects_kernel() {
+        let text = "```{alpha}\nwho\n```\n";
+        let home = FakeKernelHome::new();
+        home.install("fake-a", "alpha", &answering_as("fake-a", &["who\n"]));
+        home.install("fake-b", "beta", &answering_as("fake-b", &["who\n"]));
+        // Each kernelspec answers with its own name, so the output says who ran it.
+        let ctx = ctx_for(text)
+            .with_metadata(jupyter_meta("fake-b"))
+            .with_owned_languages(vec!["alpha".to_string()])
+            .with_project_env(home.env_all());
+        let out = execute_qmd(text, &ctx).unwrap().markdown;
+        assert!(out.contains("fake-b"), "{out}");
+        assert!(!out.contains("fake-a"), "{out}");
+    }
+
+    #[test]
+    fn test_jupyter_key_owns_span_in_kernel_language() {
+        let text = "---\ntitle: t\njupyter: fake-b\n---\n\nValue `{beta} who`.\n";
+        let home = FakeKernelHome::new();
+        let script = Script::from([("who".to_string(), vec![FakeOutput::plain_result("fake-b")])]);
+        let b = home.install("fake-b", "beta", &script);
+        // No cell and no owned set: the key alone makes the span run, on `fake-b`.
+        let ctx = ctx_for(text)
+            .with_metadata(jupyter_meta("fake-b"))
+            .with_project_env(b.env);
+        let out = execute_qmd(text, &ctx).unwrap().markdown;
+        assert!(out.contains("Value fake-b."), "{out}");
+    }
+
+    #[test]
+    fn test_owned_language_executes_without_allowlist() {
+        let text = "```{zzz}\nhello\n```\n";
+        let home = FakeKernelHome::new();
+        let script = Script::from([(
+            body("hello"),
+            vec![FakeOutput::Stdout("zzz says hello\n".to_string())],
+        )]);
+        let k = home.install("fake-zzz", "zzz", &script);
+        // No `jupyter:` key: the kernel is found by the cell's language.
+        let ctx = ctx_for(text)
+            .with_owned_languages(vec!["zzz".to_string()])
+            .with_project_env(k.env);
+        let r = execute_qmd(text, &ctx).unwrap();
+        assert!(r.markdown.contains("zzz says hello"), "{}", r.markdown);
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    }
+
+    #[test]
+    fn test_owned_by_nobody_passes_through() {
+        // `engine: knitr` leaves jupyter's owned set empty. A kernel exists, but nothing
+        // may start it.
+        let text = "---\nengine: knitr\n---\n\n```{zzz}\nhello\n```\n";
+        let home = FakeKernelHome::new();
+        let k = home.install("fake-zzz", "zzz", &Script::new());
+        let ctx = ctx_for(text).with_project_env(k.env);
+        let r = execute_qmd(text, &ctx).unwrap();
+        assert_eq!(r.markdown, text);
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    }
+
+    #[test]
+    fn test_missing_kernel_single_engine_warns() {
+        let text = "```{zzz}\nhello\n```\n";
+        let _home = FakeKernelHome::new(); // empty JUPYTER_PATH: no kernelspec for `zzz`
+        let ctx = ctx_for(text).with_owned_languages(vec!["zzz".to_string()]);
+        let r = execute_qmd(text, &ctx).expect("a single-engine document still renders");
+        assert_eq!(r.markdown, text, "the cell stays unexecuted");
+        assert_eq!(r.warnings.len(), 1, "{:?}", r.warnings);
+        assert_eq!(r.warnings[0].code.as_deref(), Some("Q-18-5"));
+        let msg = r.warnings[0].to_text(None);
+        assert!(msg.contains("`zzz`"), "{msg}");
+        assert!(msg.contains("jupyter kernelspec list"), "{msg}");
+    }
+
+    #[test]
+    fn test_missing_kernel_multi_engine_errors() {
+        let text = "```{zzz}\nhello\n```\n";
+        let _home = FakeKernelHome::new();
+        let mut ctx = ctx_for(text).with_owned_languages(vec!["zzz".to_string()]);
+        ctx.multi_engine = true;
+        let err = execute_qmd(text, &ctx).expect_err("a multi-engine document fails");
+        assert!(
+            matches!(err, ExecutionError::NoHandlerForLanguage { .. }),
+            "refused before any kernel starts, got {err:?}"
+        );
+        let msg = engine_error_diagnostic(&err).to_text(None);
+        assert!(msg.contains("`zzz`"), "{msg}");
+        assert!(msg.contains("jupyter kernelspec list"), "{msg}");
+    }
+
+    /// JOL-2a's real-kernel check: `jupyter: python3` sends a cell written in another
+    /// language to the Python kernel, and does not look at the cell's language.
+    /// Needs `ipykernel` and a `python3` kernelspec, so it is ignored by default:
+    /// `cargo nextest run -p quarto-core --run-ignored only -E 'test(real_ipykernel)'`.
+    #[test]
+    #[ignore = "requires ipykernel"]
+    fn test_jupyter_key_python3_beats_first_cell_language_real_ipykernel() {
+        let text = "```{julia}\nimport sys\nprint('ran on python', sys.version_info.major)\n```\n";
+        let ctx = ctx_for(text)
+            .with_metadata(jupyter_meta("python3"))
+            .with_owned_languages(vec!["julia".to_string()]);
+        let r = execute_qmd(text, &ctx).expect("the python3 kernel runs the julia-fenced cell");
+        assert!(r.markdown.contains("ran on python 3"), "{}", r.markdown);
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    }
+
+    #[test]
+    fn test_ceded_language_not_executed() {
+        let text = "```{alpha}\nwho\n```\n\n```{zzz}\nhello\n```\n";
+        let home = FakeKernelHome::new();
+        let a = home.install("fake-a", "alpha", &answering_as("fake-a", &["who\n"]));
+        // `zzz` belongs to another engine: not in jupyter's owned set.
+        let ctx = ctx_for(text)
+            .with_owned_languages(vec!["alpha".to_string()])
+            .with_project_env(a.env);
+        let out = execute_qmd(text, &ctx).unwrap().markdown;
+        assert!(out.contains("fake-a"), "the owned cell ran: {out}");
+        assert!(
+            out.contains("```{zzz}\nhello\n```"),
+            "the ceded cell is verbatim: {out}"
+        );
     }
 }

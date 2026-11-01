@@ -690,10 +690,22 @@ export async function runHost(
             // Q1's ExecuteOptions has no `signal` field — Q1 engines ignore unknown
             // extra properties; q2-native engines read options.signal. Cast via
             // Object.assign + unknown to satisfy the Q1 type without widening it.
+            //
+            // q2-only fields beyond Q1's types, all optional and read by cast
+            // (the vendored `@quarto/types` stays a parity copy of Q1):
+            //   options: `signal` (cooperative cancel) and `units` (EXR-7; the
+            //     document's execution units with this engine's `owned` flags; see
+            //     `TsUnit` in types.ts).
+            //   result:  `htmlDependencies` and, EXR-7, `notebook` and `recordInfo`
+            //     (an nbformat execution record and its self-description, including
+            //     the engine's `hashDefinition`; see `TsRecordInfo`).
             const executeOptionsWithSignal = Object.assign(
               {},
               executeOptions,
-              { signal: controller.signal },
+              {
+                signal: controller.signal,
+                ...(opts.units !== undefined ? { units: opts.units } : {}),
+              },
             ) as unknown as ExecuteOptions;
             const result: ExecuteResult = await instance.execute(executeOptionsWithSignal);
 
@@ -717,6 +729,12 @@ export async function runHost(
               }),
             );
 
+            // EXR-7 q2-only result fields, read by cast like `htmlDependencies`.
+            const recordFields = result as unknown as {
+              notebook?: unknown;
+              recordInfo?: TsExecuteResult["recordInfo"];
+            };
+
             const tsResult: TsExecuteResult = {
               markdown: result.markdown,
               // Named revert: drop `supporting` forward → its assertion RED.
@@ -739,6 +757,12 @@ export async function runHost(
                     engineDependencies:
                       result.engineDependencies as TsExecuteResult["engineDependencies"],
                   }
+                : {}),
+              ...(recordFields.notebook !== undefined && recordFields.notebook !== null
+                ? { notebook: recordFields.notebook }
+                : {}),
+              ...(recordFields.recordInfo !== undefined && recordFields.recordInfo !== null
+                ? { recordInfo: recordFields.recordInfo }
                 : {}),
               // NOTE: result.engine is DROPPED — known from routing; not on the wire.
             };

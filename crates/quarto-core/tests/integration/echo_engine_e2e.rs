@@ -1291,3 +1291,116 @@ impl ProjectType for IndexCapture {
         Ok(())
     }
 }
+
+// ── EXR-7: the engine's notebook becomes the document's execution record ──────
+//
+// The echo engine (front matter `echo-record: true`) returns a notebook with one
+// cell per unit it owns, naming each through `metadata.quarto_cell_id`, plus a
+// `recordInfo.hashDefinition`. `execute: {record: true}` makes core write the
+// coalesced record beside the project. The cells must carry the stage's ids and
+// `quarto_engine: echo`, the engine's outputs and kernel, and NOT the engine's
+// own `source` text; the declared hash definition must reach the entry.
+
+fn record_doc(extra_front_matter: &str) -> String {
+    format!(
+        "---\ntitle: Record\nengine: echo\necho-record: true\n{extra_front_matter}execute:\n  record: true\n---\n\n\
+         ```{{echo}}\nfirst\n```\n\n```{{python}}\nprint('ceded')\n```\n\n\
+         ```{{echo}}\nsecond\n```\n"
+    )
+}
+
+fn record_path(tmp: &TempDir) -> PathBuf {
+    tmp.path()
+        .join(".quarto")
+        .join("execution-records")
+        .join("rec.ipynb")
+}
+
+#[test]
+fn exr7_engine_notebook_becomes_the_coalesced_record() {
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — exr7_engine_notebook_becomes_the_coalesced_record");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("rec.qmd");
+    write_file(&input, &record_doc(""));
+
+    let html = render_html(&input);
+    assert!(html.contains("ECHO_EXECUTED"), "{}", body_excerpt(&html));
+
+    let text = std::fs::read_to_string(record_path(&tmp)).expect("the record file was written");
+    let record = quarto_core::record::read_record(&text).expect("a readable record");
+    let echo_cells: Vec<_> = record
+        .cells
+        .iter()
+        .filter(|c| c.metadata.quarto_engine.as_deref() == Some("echo"))
+        .collect();
+    assert_eq!(echo_cells.len(), 2, "two owned echo cells: {text}");
+    for c in &echo_cells {
+        assert_eq!(c.metadata.quarto_lang, "echo");
+        assert_eq!(c.metadata.quarto_kernel.as_deref(), Some("echo-kernel"));
+        assert_eq!(c.outputs.len(), 1);
+        let source = c.source.concat();
+        assert!(
+            !source.contains("engine-side"),
+            "core ignores the engine's source: {source}"
+        );
+    }
+    assert!(echo_cells[0].source.concat().contains("first"));
+    assert!(echo_cells[1].source.concat().contains("second"));
+    // The ceded python cell is not the echo engine's to record.
+    assert!(
+        !record
+            .cells
+            .iter()
+            .any(|c| c.metadata.quarto_lang == "python"
+                && c.metadata.quarto_engine.as_deref() == Some("echo")),
+        "{text}"
+    );
+    let entry = record
+        .metadata
+        .quarto_engines
+        .iter()
+        .find(|e| e.name == "echo")
+        .expect("an echo engine entry");
+    assert_eq!(entry.hash_definition.id, "echo");
+    assert_eq!(
+        entry.hash_definition.presentation_cell_options,
+        vec!["echo".to_string()]
+    );
+}
+
+#[test]
+fn exr7_unit_count_mismatch_drops_the_record_but_the_render_succeeds() {
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — exr7_unit_count_mismatch_drops_the_record");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine"]);
+    let input = tmp.path().join("rec.qmd");
+    write_file(&input, &record_doc("echo-record-mismatch: true\n"));
+
+    let options = RenderToFileOptions::default();
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&input, "html", &options, runtime).expect("the render succeeds");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    assert!(html.contains("ECHO_EXECUTED"), "{}", body_excerpt(&html));
+
+    // No echo cells reach a record (the file may still exist for other engines).
+    if let Ok(text) = std::fs::read_to_string(record_path(&tmp)) {
+        assert!(!text.contains("\"quarto_engine\": \"echo\""), "{text}");
+    }
+    let warnings: Vec<String> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .map(|d| d.to_text(None))
+        .collect();
+    assert!(
+        warnings.iter().any(|w| w.contains("echo")
+            && w.contains("2 units")
+            && w.contains("returned 1 annotated")),
+        "a warning naming the engine and both counts: {warnings:?}"
+    );
+}

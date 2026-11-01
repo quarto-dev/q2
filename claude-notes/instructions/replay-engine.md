@@ -7,6 +7,24 @@ trace file pinned to a single document).
 
 It is a debugging / QA tool — not a substitute for the real engines.
 
+Two replay paths (EXR-6, 2026-11-01):
+
+- **Markdown engines** (knitr, marimo, any engine that returns markdown):
+  the captured `ExecuteResult` is returned verbatim, byte-identical to
+  what the recording saw.
+- **Jupyter**: the capture carries the engine's execution record on
+  `engine_capture.record` (EXR-5), and replay *re-presents* it: the
+  record comes back byte for byte on `ExecuteResult.record`, and the
+  markdown is `present_document(record, input_qmd, units, execute
+  scope, target format)` computed now. So replayed Jupyter markdown
+  follows the current presenter and the render's target format (one
+  trace replayed to `html` and to `docx` differs where the presenter's
+  mime choice differs), and a presenter bug that lived at recording
+  time no longer reproduces from the trace. The engine-produced record
+  is what stays fixed. A Jupyter capture with no `engine_capture.record`
+  was recorded before EXR-5 and fails with a "re-record this trace"
+  error; there is no fallback to its stored markdown.
+
 ## When to use it
 
 - **Regression tests** for engine-emitted features (resources, filters,
@@ -41,6 +59,11 @@ trace's top-level `engine_capture` block carries the engine name, the
 verbatim QMD that was passed to `engine.execute()`, and the full
 `ExecuteResult` (markdown, supporting files, includes, filters,
 post-process flag).
+
+For a Jupyter run the capture also carries `record`, the engine's
+execution record (a one-engine record notebook), which is what replay
+presents from. The trace observer always asks the stage for records,
+so every trace recorded since EXR-5 has it.
 
 The markdown engine is a no-op passthrough — `engine_capture` is
 absent for documents that did not run a real engine. That is correct
@@ -84,6 +107,12 @@ they know.
 
 If the document genuinely changed since the trace was recorded,
 re-record the trace.
+
+A Jupyter capture without a record (recorded before EXR-5 landed)
+fails the same way, with a message that says to re-record. A record
+whose cell ids a fresh scan of `input_qmd` cannot reproduce (a sugared
+cell, whose id came from the stage's author text) still presents: the
+presenter falls back to the cell's content hash.
 
 ## Source-info caveat
 
@@ -140,6 +169,7 @@ cost in exchange for byte-faithful reproduction.
 
 - `crates/quarto-trace/src/lib.rs` — `EngineCapture`, `TraceDocument.engine_capture`
 - `crates/quarto-core/src/engine/replay.rs` — `ReplayEngine`
+- `crates/quarto-core/src/presenter/document.rs` — `present_document`, what a Jupyter replay runs
 - `crates/quarto-core/src/engine/registry.rs` — `EngineRegistry::with_replay`
 - `crates/quarto-core/src/stage/stages/engine_execution.rs` — `ENGINE_CAPTURE_KIND` and the recording emit
 - `crates/quarto-core/src/stage/trace.rs` — `JsonTraceObserver::on_auxiliary_data` routing

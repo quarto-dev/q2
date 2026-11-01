@@ -31,7 +31,16 @@
 //! process-global; nextest runs each test in its own process, which is what makes
 //! that safe (the same precedent as `extension/mod.rs`).
 //!
-//! JOL-5 extends this (a second kernel name, file writes); EXR-5 reuses it.
+//! **JOL-5 additions.** (1) The kernel's name and language come from its kernelspec,
+//! and each kernelspec carries its own script in the environment its session is
+//! started with, so one test executable backs several kernelspecs that answer the
+//! same code differently ([`answering_as`] builds a script that names the kernel
+//! that ran the code, which is how the end-to-end tests observe kernel selection).
+//! (2) [`FakeKernelHome::jupyter_path`] names the directory `JUPYTER_PATH` holds.
+//! The `write <file>` request (a cross-kernel file handoff) is *not* built: only a
+//! reopened JOL-3 (several kernels per document) needs it. The availability probe's
+//! stub `jupyter` is not built either: the end-to-end tests call `execute_qmd`
+//! directly, which bypasses the probe. EXR-5 reuses all of this.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -46,6 +55,12 @@ use serde::{Deserialize, Serialize};
 /// Environment variable that turns the test executable into a kernel; its value is a
 /// JSON-encoded [`Script`].
 pub(crate) const SCRIPT_ENV: &str = "QUARTO_FAKE_KERNEL_SCRIPT";
+
+/// Like [`SCRIPT_ENV`], but its value is a JSON object `{kernel name: Script}`: the
+/// kernel reads its own name from the connection file the session wrote
+/// (`kernel_name`) and follows that script. Lets one environment serve several
+/// kernelspecs that answer the same code differently (JOL-5).
+pub(crate) const SCRIPTS_ENV: &str = "QUARTO_FAKE_KERNEL_SCRIPTS";
 
 /// The libtest name of the entry test the kernelspec argv runs.
 const ENTRY_TEST: &str = "engine::jupyter::fake_kernel::tests::fake_kernel_process_entry";
@@ -66,6 +81,15 @@ pub(crate) enum FakeOutput {
 /// Code (exact match) to the outputs the kernel sends for it. Code not in the script
 /// is echoed back as stdout, by `TestKernel`'s default.
 pub(crate) type Script = BTreeMap<String, Vec<FakeOutput>>;
+
+/// A script in which each of `codes` prints `name` on stdout, so a test can tell which
+/// kernelspec ran a piece of code.
+pub(crate) fn answering_as(name: &str, codes: &[&str]) -> Script {
+    codes
+        .iter()
+        .map(|c| (c.to_string(), vec![FakeOutput::Stdout(format!("{name}\n"))]))
+        .collect()
+}
 
 impl FakeOutput {
     /// `execute_result` with a single `text/plain` value.
@@ -115,6 +139,7 @@ fn config_from_script(script: Script) -> TestKernelConfig {
 /// A temp directory holding fake kernelspecs, found through `JUPYTER_PATH`.
 pub(crate) struct FakeKernelHome {
     dir: tempfile::TempDir,
+    scripts: std::cell::RefCell<BTreeMap<String, Script>>,
 }
 
 /// An installed fake kernel: its kernelspec name and the environment to pass to
@@ -134,7 +159,10 @@ impl FakeKernelHome {
         // SAFETY: tests run one per process under nextest; no other thread reads the
         // environment concurrently at this point in the test.
         unsafe { std::env::set_var("JUPYTER_PATH", dir.path()) };
-        Self { dir }
+        Self {
+            dir,
+            scripts: Default::default(),
+        }
     }
 
     /// Install a kernelspec `name` for `language` whose kernel follows `script`.
@@ -148,6 +176,9 @@ impl FakeKernelHome {
             "language": language,
         });
         std::fs::write(spec_dir.join("kernel.json"), spec.to_string()).expect("kernel.json");
+        self.scripts
+            .borrow_mut()
+            .insert(name.to_string(), script.clone());
         FakeKernel {
             name: name.to_string(),
             env: vec![(
@@ -157,19 +188,41 @@ impl FakeKernelHome {
         }
     }
 
-    #[allow(dead_code)] // for JOL-5's tests that inspect the directory
-    pub(crate) fn path(&self) -> &Path {
+    /// The environment that makes *every* kernelspec installed so far follow its own
+    /// script, whichever of them the session starts.
+    pub(crate) fn env_all(&self) -> Vec<(String, String)> {
+        vec![(
+            SCRIPTS_ENV.to_string(),
+            serde_json::to_string(&*self.scripts.borrow()).expect("scripts json"),
+        )]
+    }
+
+    /// The value `JUPYTER_PATH` was set to: the directory holding `kernels/<name>/`.
+    pub(crate) fn jupyter_path(&self) -> &Path {
         self.dir.path()
     }
 }
 
 /// Run the fake kernel on the connection file named by the last command-line argument
 /// until the process is killed.
-fn run_kernel_process(script_json: &str) {
-    let script: Script = serde_json::from_str(script_json).expect("script json");
+fn run_kernel_process(script_json: Option<String>, scripts_json: Option<String>) {
     let connection_file = std::env::args()
         .next_back()
         .expect("connection file argument");
+    let script: Script = match (script_json, scripts_json) {
+        (Some(json), _) => serde_json::from_str(&json).expect("script json"),
+        (None, Some(json)) => {
+            let mut all: BTreeMap<String, Script> =
+                serde_json::from_str(&json).expect("scripts json");
+            let connection: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(&connection_file).expect("connection file"),
+            )
+            .expect("connection json");
+            let name = connection["kernel_name"].as_str().expect("kernel_name");
+            all.remove(name).expect("a script for this kernel")
+        }
+        (None, None) => return,
+    };
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -192,9 +245,10 @@ mod tests {
     /// returns (the kernel runs until killed); otherwise it passes immediately.
     #[test]
     fn fake_kernel_process_entry() {
-        if let Ok(script_json) = std::env::var(SCRIPT_ENV) {
-            run_kernel_process(&script_json);
-        }
+        run_kernel_process(
+            std::env::var(SCRIPT_ENV).ok(),
+            std::env::var(SCRIPTS_ENV).ok(),
+        );
     }
 
     fn echo_script() -> Script {
@@ -216,6 +270,39 @@ mod tests {
                 }],
             ),
         ])
+    }
+
+    #[tokio::test]
+    async fn test_fake_kernel_two_names_one_binary() {
+        let home = FakeKernelHome::new();
+        let a = home.install("fake-a", "alpha", &answering_as("fake-a", &["who"]));
+        let b = home.install("fake-b", "beta", &answering_as("fake-b", &["who"]));
+        assert!(
+            home.jupyter_path()
+                .join("kernels/fake-b/kernel.json")
+                .is_file()
+        );
+        let cwd = std::env::current_dir().unwrap();
+        let daemon = JupyterDaemon::new();
+
+        let mut said = Vec::new();
+        for kernel in [&a, &b] {
+            let key = daemon
+                .get_or_start_session(&kernel.name, &cwd, &home.env_all())
+                .await
+                .expect("each fake kernelspec starts");
+            let r = daemon
+                .execute_in_session(&key, "who")
+                .await
+                .unwrap()
+                .unwrap();
+            said.push(match r.outputs.as_slice() {
+                [CellOutput::Stream { text, .. }] => text.clone(),
+                other => panic!("unexpected outputs {other:?}"),
+            });
+        }
+        assert_eq!(said, ["fake-a\n", "fake-b\n"]);
+        daemon.shutdown_all().await.unwrap();
     }
 
     #[tokio::test]

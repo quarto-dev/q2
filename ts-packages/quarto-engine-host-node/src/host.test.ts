@@ -23,7 +23,7 @@ import type {
 } from "@quarto/types";
 import type { PlatformHost } from "@quarto/api/platform";
 import { interop, fallback } from "@quarto/api";
-import type { HtmlDependency, TsExecuteResult, TsPandocIncludes } from "./types.js";
+import type { HtmlDependency, TsExecuteOptions, TsExecuteResult, TsPandocIncludes } from "./types.js";
 
 // ===========================================================================
 // Test helpers
@@ -3475,5 +3475,125 @@ describe("ownedLanguages passthrough (Plan 4d-C)", () => {
     const seen = await executeAndCapture(["synth", "r"], ["python"]);
     expect(seen.owned).toEqual(["synth", "r"]);
     expect(seen.handled).toEqual(["python"]);
+  });
+});
+
+// ===========================================================================
+// EXR-7 — units, notebook and recordInfo cross the host
+// ===========================================================================
+
+describe("execution-record wire fields (EXR-7)", () => {
+  type Unit = NonNullable<TsExecuteOptions["units"]>[number];
+
+  async function run(opts: {
+    units?: Unit[];
+    result: Record<string, unknown>;
+  }) {
+    const seen: { units?: unknown; hasUnitsKey?: boolean } = {};
+    const instance: ExecutionEngineInstance = {
+      name: "recEngine",
+      canFreeze: false,
+      markdownForFile: async (f: string) => ({ value: f, map: () => undefined }),
+      target: async () => undefined,
+      partitionedMarkdown: async () => { throw new Error("n/a"); },
+      execute: async (options) => {
+        const o = options as unknown as Record<string, unknown>;
+        seen.hasUnitsKey = "units" in o;
+        seen.units = o.units;
+        return {
+          markdown: "# ok",
+          supporting: [],
+          filters: [],
+          ...opts.result,
+        } as unknown as Awaited<ReturnType<ExecutionEngineInstance["execute"]>>;
+      },
+      dependencies: async () => ({ includes: {} }),
+      postprocess: async () => {},
+    };
+    const discovery: ExecutionEngineDiscovery = {
+      name: "recEngine",
+      defaultExt: ".qmd",
+      defaultYaml: () => [],
+      defaultContent: () => [],
+      validExtensions: () => [".qmd"],
+      claimsFile: () => false,
+      claimsLanguage: () => false,
+      canFreeze: false,
+      generatesFigures: false,
+      launch: () => instance,
+    };
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/e/rec.ts" } },
+        { id: 2, msg: { type: "launchEngine", engine: "recEngine", project: { isSingleFile: true } } },
+        {
+          id: 3,
+          msg: {
+            type: "execute",
+            engine: "recEngine",
+            options: {
+              input: "# content",
+              sourcePath: "/proj/doc.qmd",
+              format: {
+                identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" },
+                metadata: {},
+              },
+              tempDir: "/tmp",
+              cwd: "/proj",
+              libDir: "/proj/libs",
+              quiet: false,
+              handledLanguages: [],
+              ownedLanguages: ["julia"],
+              dependencies: true,
+              sourceMap: [],
+              ...(opts.units !== undefined ? { units: opts.units } : {}),
+            },
+          },
+        },
+      ],
+      { loadEngineModule: async (_p: string) => discovery },
+    );
+    const msg = responses.find((r) => r.id === 3)?.msg;
+    expect(msg?.type).toBe("executeResult");
+    const result = (msg as unknown as { result: TsExecuteResult }).result;
+    return { seen, result };
+  }
+
+  const units: Unit[] = [
+    { id: "0-1a2b3c4d-unlabeled", index: 0, kind: "cell", language: "julia", line: 3, owned: true },
+    { id: "0-9f8e7d6c-inline", kind: "inline", language: "julia", line: 9, owned: false, inFrontMatter: true },
+  ];
+
+  it("host_forwards_units_and_owned_languages_to_engine_options", async () => {
+    // Named revert: drop the `units` spread in host.ts → seen.units undefined → RED.
+    const { seen } = await run({ units, result: {} });
+    expect(seen.units).toEqual(units);
+  });
+
+  it("new_engine_on_core_that_sends_no_units_still_runs", async () => {
+    const { seen, result } = await run({ result: {} });
+    expect(seen.hasUnitsKey).toBe(false);
+    expect(result.markdown).toBe("# ok");
+  });
+
+  it("host_forwards_notebook_and_record_info_from_engine_result", async () => {
+    // Named revert: drop the notebook/recordInfo spreads in host.ts → keys absent → RED.
+    const notebook = { nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [] };
+    const recordInfo = {
+      version: 1,
+      granularity: "unit",
+      outputKind: "raw",
+      alignment: "ids",
+      hashDefinition: { id: "julia", version: 1, granularity: "document", documentKeys: [] },
+    };
+    const { result } = await run({ result: { notebook, recordInfo } });
+    expect(result.notebook).toEqual(notebook);
+    expect(result.recordInfo).toEqual(recordInfo);
+  });
+
+  it("old_engine_result_has_no_notebook_or_record_info_keys", async () => {
+    const { result } = await run({ result: {} });
+    expect("notebook" in result).toBe(false);
+    expect("recordInfo" in result).toBe(false);
   });
 });

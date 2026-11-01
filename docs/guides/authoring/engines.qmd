@@ -21,6 +21,9 @@ question in mind. When you are picking participants, reach for `engine:`.
 When you are adjusting the behavior of a participant that resolution might
 pick on its own, reach for `engines:`.
 
+For running languages other than Python on Jupyter (ggsql, for example), see
+[Running other languages with Jupyter kernels](jupyter-kernels.qmd).
+
 ## `engine:` — naming the engines at play
 
 A document's `engine:` key declares its **execution sequence**: the engines

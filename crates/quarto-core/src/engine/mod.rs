@@ -82,6 +82,10 @@ pub mod ts_process;
 #[cfg(not(target_arch = "wasm32"))]
 mod ts_engine;
 
+// EXR-7: the TS wire's unit list and notebook-to-record mapping.
+#[cfg(not(target_arch = "wasm32"))]
+mod ts_record;
+
 // File-backed test engine for exercising multi-engine sequencing
 // (bd-5yff4). Native-only test utility; never registered in the default
 // registry. See `fixture.rs` module docs.

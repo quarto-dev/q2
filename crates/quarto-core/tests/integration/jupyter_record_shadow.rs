@@ -4,37 +4,34 @@
  *
  * EXR-5 Phase 3: the shadow equivalence harness. For every fixture in
  * `tests/fixtures/jupyter-record-shadow/`, the Jupyter engine runs against a real
- * kernel with a record wanted, and `present(record)` (the EXR-1 presenter, driven by
- * the same units and the same `execute_scope` the engine used) must equal the live
- * markdown byte for byte, written figure file names and the `supporting_files`
- * directory included. A negative control perturbs one output and asserts the
- * comparator fails, so the harness cannot pass vacuously.
+ * kernel with a record wanted, and presenting the record it emitted (the production
+ * driver, `present_document`, over the engine's input with a fresh scan of its units
+ * and the same `execute_scope` the engine used) must equal the live markdown byte for
+ * byte, written figure file names and the `supporting_files` directory included. A
+ * negative control perturbs one output and asserts the comparator fails, so the
+ * harness cannot pass vacuously.
  *
- * The comparator is test-only: nothing in production presents from the record
- * until EXR-6 (the flip), which takes this harness as its baseline.
+ * Before EXR-6 the comparator was a test-only driver and this harness was the flip's
+ * baseline; since the flip (EXR-6 Phase 4) it drives the production presenter, so it
+ * checks that what the engine records is what it presents.
  */
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use tempfile::TempDir;
 
-use quarto_core::cell_options::partition_cell_options;
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::jupyter::router::{SpliceKind, splice_mixed};
-use quarto_core::engine::jupyter::{CellResult, MimeBundle, list_kernelspecs};
-use quarto_core::engine::units::{Unit, scan_units};
+use quarto_core::engine::jupyter::list_kernelspecs;
+use quarto_core::engine::units::scan_units;
 use quarto_core::format::FormatIdentifier;
-use quarto_core::presenter::cell::render_cell;
-use quarto_core::presenter::figures::{FigureSink, FsFigureSink};
-use quarto_core::presenter::inline::{InlineTarget, render_inline};
-use quarto_core::presenter::visibility::{CellVisibility, resolve_cell_options};
-use quarto_core::record::{Record, UnitKind, write_record};
+use quarto_core::presenter::document::present_document;
+use quarto_core::presenter::figures::FsFigureSink;
+use quarto_core::presenter::inline::InlineTarget;
+use quarto_core::record::{AuthorTexts, Record, fill_ids, write_record};
 use quarto_core::stage::stages::{ENGINE_CAPTURE_KIND, merge_execute_scope};
-use quarto_source_map::{By, SourceInfo};
 
 use crate::engine_stage_driver::{AuxRecorder, run_engine_stage};
 
@@ -114,26 +111,6 @@ fn live_run(fixture_path: &Path) -> LiveRun {
     }
 }
 
-/// The document-wide counter in a record cell's id (`{n}-{hash8}-{label}`).
-fn id_index(cell: &quarto_core::record::RecordCell) -> Option<usize> {
-    cell.metadata
-        .quarto_cell_id
-        .split('-')
-        .next()
-        .and_then(|n| n.parse().ok())
-}
-
-/// The record cell for `unit`, by kind and document-wide counter (the rule the engine
-/// uses to map a run unit to its stage index).
-fn cell_for<'a>(record: &'a Record, unit: &Unit) -> Option<&'a quarto_core::record::RecordCell> {
-    record.cells.iter().find(|c| match unit {
-        Unit::Cell(u) => c.metadata.quarto_kind == UnitKind::Cell && id_index(c) == Some(u.index),
-        Unit::Inline(u) => {
-            c.metadata.quarto_kind == UnitKind::Inline && id_index(c) == Some(u.span_index)
-        }
-    })
-}
-
 /// The document's `execute:` scope as the engine stage merges it for `html`.
 fn execute_scope(input_qmd: &str) -> Option<quarto_pandoc_types::ConfigValue> {
     let (ast, _, _) = pampa::readers::qmd::read(
@@ -148,59 +125,32 @@ fn execute_scope(input_qmd: &str) -> Option<quarto_pandoc_types::ConfigValue> {
     merge_execute_scope(FormatIdentifier::Html, ast.meta.get("execute").cloned())
 }
 
-/// Present `record` over `input_qmd` the way the live loop presents kernel results:
-/// the same units (relocated by counter), the same resolved visibility, the same
-/// `render_cell` and `render_inline`, figures written beside `doc_path`.
+/// Present `record` over `input_qmd` with the production driver: a fresh scan of the
+/// input with ids filled from the scanned text (the fixtures have no sugared cell, so
+/// these are the stage's ids), the same resolved scope, figures written beside
+/// `doc_path`. Returns the markdown and the `<stem>_files` directory name when a
+/// figure was written.
 fn present(record: &Record, input_qmd: &str, doc_path: &Path) -> (String, Option<String>) {
     let scope = execute_scope(input_qmd);
+    let mut units = scan_units(input_qmd);
+    let texts = AuthorTexts::from_scanned(&units);
+    fill_ids(&mut units, &texts).expect("the mapping is total");
     let mut fig = FsFigureSink::new(doc_path);
-    let mut replacements: Vec<(Range<usize>, String, SpliceKind)> = Vec::new();
-    for unit in scan_units(input_qmd) {
-        let Some(cell) = cell_for(record, &unit) else {
-            continue; // ceded, unowned, or left literal: not executed
-        };
-        let result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
-        match &unit {
-            Unit::Cell(u) => {
-                let parsed =
-                    partition_cell_options(&u.lang, &u.code, SourceInfo::generated(By::unknown()))
-                        .expect("cell options parse");
-                let resolved = resolve_cell_options(scope.as_ref(), parsed.options);
-                let visibility = CellVisibility::resolve(resolved.as_ref());
-                fig.begin_cell();
-                let text = render_cell(&u.lang, &parsed.code, &result, &mut fig, visibility);
-                replacements.push((u.start..u.end, text, SpliceKind::Block));
-            }
-            Unit::Inline(u) => {
-                assert!(!u.in_front_matter, "no fixture has a front matter span");
-                let bundle: Option<MimeBundle> = cell.outputs.iter().find_map(|o| {
-                    matches!(
-                        o["output_type"].as_str(),
-                        Some("execute_result" | "display_data")
-                    )
-                    .then(|| {
-                        o["data"]
-                            .as_object()
-                            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-                            .unwrap_or_default()
-                    })
-                });
-                if let Some(text) = bundle
-                    .and_then(|b| render_inline(&b, InlineTarget::from_format("html")))
-                    .filter(|t| !t.is_empty())
-                {
-                    replacements.push((u.start..u.end, text, SpliceKind::Inline));
-                }
-            }
-        }
-    }
-    let files_dir = fig.wrote_any().then(|| {
-        fig.files_dir()
-            .file_name()
+    let presented = present_document(
+        &record.cells,
+        input_qmd,
+        &units,
+        scope.as_ref(),
+        InlineTarget::from_format("html"),
+        &mut fig,
+    )
+    .expect("the record presents");
+    let files_dir = presented.files_written.first().map(|dir| {
+        dir.file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default()
     });
-    (splice_mixed(input_qmd, &replacements), files_dir)
+    (presented.markdown, files_dir)
 }
 
 /// Every file under `dir`, relative, with its bytes, sorted.

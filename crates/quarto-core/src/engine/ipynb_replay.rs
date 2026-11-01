@@ -6,8 +6,9 @@
  */
 
 //! Stored-output replay: render an `.ipynb`'s code cells and their
-//! *stored* nbformat outputs through the same rendering machinery the
-//! live jupyter engine uses — no kernel, no jupyter binary, no
+//! *stored* nbformat outputs through the same presenter the live jupyter
+//! engine uses (a record of the stored outputs, presented by
+//! `present_document`; EXR-6) — no kernel, no jupyter binary, no
 //! availability probe.
 //!
 //! A stored notebook's outputs ARE its document content (Q1 parity):
@@ -37,11 +38,14 @@ use crate::engine::content_processors::ORIGINAL_FILE_ID;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::error::ExecutionError;
 use crate::engine::traits::ExecutionEngine;
-use crate::engine::units::{CodeBlock, legacy_cells};
-use crate::presenter::cell::{describe_location, render_cell};
+use crate::engine::units::{Unit, runs_in_legacy_executor};
+use crate::presenter::cell::describe_location;
+use crate::presenter::document::present_document;
 use crate::presenter::figures::{FigureSink, FsFigureSink, RuntimeFigureSink};
-use crate::presenter::output::CellResult;
-use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
+use crate::presenter::inline::InlineTarget;
+use crate::record::{
+    AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, fill_ids,
+};
 
 /// Renders `.ipynb` documents' stored outputs (Plan 7c Phase 3, option B).
 ///
@@ -112,14 +116,20 @@ impl ExecutionEngine for IpynbReplayEngine {
 /// cell's stored nbformat outputs. Fences mapping into markdown cells —
 /// literal ```{lang} examples in prose — pass through verbatim, as do
 /// unmapped fences.
+///
+/// EXR-6 Phase 3: the stored outputs become a record (one cell per replayed
+/// fence, ids from the cell source) and `present_document` presents it, the
+/// same driver the live Jupyter engine presents its record with.
 fn replay_stored_outputs(
     input: &str,
     ctx: &ExecutionContext,
     runtime: Option<&Arc<dyn SystemRuntime>>,
 ) -> Result<ExecuteResult, ExecutionError> {
-    let units = crate::engine::units::units_for_engine(&ctx.units, input);
-    let blocks = legacy_cells(&units);
-    if blocks.is_empty() {
+    let mut units = crate::engine::units::units_for_engine(&ctx.units, input);
+    if !units
+        .iter()
+        .any(|u| matches!(u, Unit::Cell(c) if runs_in_legacy_executor(c)))
+    {
         // No code-cell fences (markdown-only notebook): passthrough.
         return Ok(ExecuteResult::new(input));
     }
@@ -150,82 +160,103 @@ fn replay_stored_outputs(
             ExecutionError::execution_failed("ipynb", "stored notebook has no `cells` array")
         })?;
 
-    // Document-level defaults for cell options: the same merged
-    // `execute:` scope a live engine execution receives.
-    let doc_scope = ctx.execute_scope.clone();
+    // The record: ids from each unit's own text (content-hash ids, a local scan;
+    // nothing here needs the stage's author texts), one cell per fence that maps
+    // into a notebook code cell.
+    let texts = AuthorTexts::from_scanned(&units);
+    fill_ids(&mut units, &texts).map_err(record_error)?;
+    let definition = HashDefinition::conservative(IPYNB);
+    let mut builder =
+        RecordBuilder::new(IPYNB, &definition, &units, &texts).map_err(record_error)?;
 
-    let mut output = String::new();
-    let mut last_end = 0;
-    let mut fig: Box<dyn FigureSink> = match runtime {
-        Some(runtime) => Box::new(RuntimeFigureSink::new(runtime.clone(), &ctx.source_path)),
-        None => Box::new(FsFigureSink::new(&ctx.source_path)),
-    };
-
-    for block in blocks {
-        let Some(cell_index) = owning_code_cell_index(&block, ctx, cells) else {
+    for (index, unit) in units.iter().enumerate() {
+        let Unit::Cell(block) = unit else {
+            continue;
+        };
+        if !runs_in_legacy_executor(block) {
+            continue;
+        }
+        let Some(cell_index) = owning_code_cell_index(block.code_start, ctx, cells) else {
             // A literal fence in a markdown cell, a redacted empty cell,
             // or an offset that doesn't map — all stay verbatim.
             continue;
         };
 
-        // Append content before this block, keeping the `::: {.cell}`
-        // opener in its own block (same splice discipline as the live path).
-        output.push_str(&input[last_end..block.start]);
-        if output.ends_with('\n') && !output.ends_with("\n\n") {
-            output.push('\n');
-        }
-
-        // Partition `#|` options + code with the same source-tracked
-        // machinery the live path uses (option spans resolve into the
-        // owning cell's virtual file).
+        // Check the `#|` options with the same source-tracked machinery
+        // the live path uses, so a bad option line is reported at the
+        // owning cell's position (option spans resolve into its virtual
+        // file). The presenter partitions again when it renders.
         let body_source = SourceInfo::substring(
             ctx.source_info.clone(),
             block.code_start,
             block.code_start + block.code.len(),
         );
-        let cell = partition_cell_options(&block.language, &block.code, body_source.clone())
-            .map_err(|e| {
-                let at = e
-                    .location()
-                    .and_then(|loc| describe_location(loc, 0, ctx))
-                    .or_else(|| describe_location(&body_source, 0, ctx))
-                    .map(|l| format!(" at {l}"))
-                    .unwrap_or_default();
-                ExecutionError::execution_failed(
-                    "ipynb",
-                    format!("cell options are not valid YAML{at}: {e}"),
-                )
-            })?;
-        let resolved = resolve_cell_options(doc_scope.as_ref(), cell.options);
-        let visibility = CellVisibility::resolve(resolved.as_ref());
+        partition_cell_options(&block.lang, &block.code, body_source.clone()).map_err(|e| {
+            let at = e
+                .location()
+                .and_then(|loc| describe_location(loc, 0, ctx))
+                .or_else(|| describe_location(&body_source, 0, ctx))
+                .map(|l| format!(" at {l}"))
+                .unwrap_or_default();
+            ExecutionError::execution_failed(
+                "ipynb",
+                format!("cell options are not valid YAML{at}: {e}"),
+            )
+        })?;
 
         // Stored error outputs are content — rendered as `-error` divs
         // subject to output visibility. The live path's `error: false`
         // abort policy is execution semantics and does not apply to
         // output that already happened.
-        let exec_result = stored_result_for_cell(&cells[cell_index]);
-
-        // `begin_cell` for every replayed cell, visible or not, so
-        // figure names stay keyed to document position (live-path parity).
-        fig.begin_cell();
-        output.push_str(&render_cell(
-            &block.language,
-            &cell.code,
-            &exec_result,
-            fig.as_mut(),
-            visibility,
-        ));
-
-        last_end = block.end;
+        let stored = &cells[cell_index];
+        builder
+            .push(
+                index,
+                UnitResult {
+                    outputs: stored
+                        .get("outputs")
+                        .and_then(|v| v.as_array())
+                        .cloned()
+                        .unwrap_or_default(),
+                    execution_count: stored.get("execution_count").and_then(|v| v.as_u64()),
+                    kernel: None,
+                },
+            )
+            .map_err(record_error)?;
     }
+    let record_cells = builder
+        .finish(EngineEntryInput::default())
+        .map_err(record_error)?
+        .cells;
 
-    output.push_str(&input[last_end..]);
+    let mut fig: Box<dyn FigureSink> = match runtime {
+        Some(runtime) => Box::new(RuntimeFigureSink::new(runtime.clone(), &ctx.source_path)),
+        None => Box::new(FsFigureSink::new(&ctx.source_path)),
+    };
+    // Document-level defaults for cell options: the same merged
+    // `execute:` scope a live engine execution receives.
+    let presented = present_document(
+        &record_cells,
+        input,
+        &units,
+        ctx.execute_scope.as_ref(),
+        InlineTarget::from_format(&ctx.format),
+        fig.as_mut(),
+    )
+    .map_err(|e| ExecutionError::execution_failed(IPYNB, e.to_string()))?;
 
-    let mut result = ExecuteResult::new(output);
-    if fig.wrote_any() {
-        result = result.with_supporting_files(vec![fig.files_dir()]);
+    let mut result = ExecuteResult::new(presented.markdown);
+    if !presented.files_written.is_empty() {
+        result = result.with_supporting_files(presented.files_written);
     }
     Ok(result)
+}
+
+/// The engine name the replay's record carries.
+const IPYNB: &str = "ipynb";
+
+fn record_error(e: impl std::fmt::Display) -> ExecutionError {
+    ExecutionError::execution_failed(IPYNB, format!("stored outputs record: {e}"))
 }
 
 /// Which notebook cell owns this fence's code content, if it is a *code*
@@ -234,31 +265,16 @@ fn replay_stored_outputs(
 /// `ORIGINAL_FILE_ID + 1 + i` (converter-constructed; see the converter's
 /// Concat pieces and ParseDocumentStage's registration).
 fn owning_code_cell_index(
-    block: &CodeBlock,
+    code_start: usize,
     ctx: &ExecutionContext,
     cells: &[Value],
 ) -> Option<usize> {
     let mapped = ctx
         .source_info
-        .map_offset(block.code_start, &ctx.source_context)?;
+        .map_offset(code_start, &ctx.source_context)?;
     let index = mapped.file_id.0.checked_sub(ORIGINAL_FILE_ID.0 + 1)?;
     let cell = cells.get(index)?;
     (cell.get("cell_type").and_then(|t| t.as_str()) == Some("code")).then_some(index)
-}
-
-/// Convert one notebook code cell's stored nbformat outputs into the
-/// kernel result shape [`render_cell`] consumes
-/// ([`CellResult::from_nbformat`]; the conversion is shared with the
-/// execution record, EXR-5).
-fn stored_result_for_cell(cell: &Value) -> CellResult {
-    let outputs = cell
-        .get("outputs")
-        .and_then(|v| v.as_array())
-        .map_or(&[][..], Vec::as_slice);
-    CellResult::from_nbformat(
-        outputs,
-        cell.get("execution_count").and_then(|v| v.as_u64()),
-    )
 }
 
 #[cfg(test)]

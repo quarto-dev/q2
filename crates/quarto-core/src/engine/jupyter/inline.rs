@@ -26,10 +26,9 @@
 //! `user_expressions` was considered and not used: Ark does not implement it and
 //! Positron's supervisor hard-codes `{}`.
 
-use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
-
-/// The text mime types a span's value can use.
-const TEXT_MIMES: [&str; 4] = ["text/plain", "text/html", "text/latex", "text/markdown"];
+// The value-side helpers live in the presenter (EXR-6 Phase 1) and are re-exported
+// here for the execution side and its tests.
+pub(crate) use crate::presenter::inline::{InlineOutcome, classify_inline_result};
 
 /// The code to send for a span `expr` on a kernel whose language is `language`.
 pub(crate) fn wrap_inline_code(language: &str, expr: &str) -> String {
@@ -73,26 +72,6 @@ pub(crate) fn unescape_yaml_double(s: &str) -> String {
     out
 }
 
-/// Escape `s` for the inside of a YAML double-quoted scalar. A newline is not handled:
-/// the caller rejects it first (it would fold to a space).
-pub(crate) fn escape_yaml_double(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-/// The front matter key on the line holding byte `offset` of `text` (`title` for
-/// `title: "a `{python} x`"`), or `None` when the line has no `key:` prefix.
-pub(crate) fn front_matter_key_at(text: &str, offset: usize) -> Option<String> {
-    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
-    let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
-    let line = &text[line_start..line_end];
-    let (key, _) = line.split_once(':')?;
-    let key = key
-        .trim()
-        .trim_start_matches("- ")
-        .trim_matches(['"', '\'']);
-    (!key.is_empty()).then(|| key.to_string())
-}
-
 /// Whether the jupyter engine runs a span in `lang`: the language is in the engine's
 /// owned set (the stage computed it from the document), or it is the language of the
 /// kernel the document selects (so a span-only document with `jupyter: python3` owns its
@@ -106,64 +85,11 @@ pub(crate) fn span_is_owned(
         || kernel_language.is_some_and(|k| k.eq_ignore_ascii_case(lang))
 }
 
-/// What a span's execution amounted to.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum InlineOutcome {
-    /// The last text-bearing `execute_result` or `display_data`.
-    Value(MimeBundle),
-    /// The kernel raised.
-    Raised { ename: String, evalue: String },
-    /// The kernel finished without any output: a statement, or a value that prints
-    /// nothing (see the module docs).
-    Silent,
-    /// Outputs arrived, but none carried a text mime type (for example only an image).
-    NoTextValue,
-}
-
-fn has_text_mime(bundle: &MimeBundle) -> bool {
-    TEXT_MIMES.iter().any(|m| bundle.contains_key(*m))
-}
-
-/// Read a span's value from its execution result (design decision 2): the last output
-/// that carries a text mime type, whether `execute_result` or `display_data`. Streams
-/// and other displays are dropped; an error wins over everything.
-pub(crate) fn classify_inline_result(result: &CellResult) -> InlineOutcome {
-    for output in &result.outputs {
-        if let CellOutput::Error { ename, evalue, .. } = output {
-            return InlineOutcome::Raised {
-                ename: ename.clone(),
-                evalue: evalue.clone(),
-            };
-        }
-    }
-    if let ExecuteStatus::Error { ename, evalue, .. } = &result.status {
-        return InlineOutcome::Raised {
-            ename: ename.clone(),
-            evalue: evalue.clone(),
-        };
-    }
-
-    let mut value = None;
-    for output in &result.outputs {
-        match output {
-            CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. }
-                if has_text_mime(data) =>
-            {
-                value = Some(data);
-            }
-            other => tracing::debug!(output = ?other, "inline expression: dropping output"),
-        }
-    }
-    match value {
-        Some(bundle) => InlineOutcome::Value(bundle.clone()),
-        None if result.outputs.is_empty() => InlineOutcome::Silent,
-        None => InlineOutcome::NoTextValue,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::presenter::inline::{escape_yaml_double, front_matter_key_at};
+    use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
 
     #[test]
     fn yaml_unescape_reverses_the_writer_escapes() {

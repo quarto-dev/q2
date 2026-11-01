@@ -20,9 +20,8 @@ use tokio::time::timeout;
 use super::error::{JupyterError, Result};
 use super::session::KernelSession;
 use crate::engine::DEFAULT_EXECUTE_TIMEOUT;
-// Re-exported so existing `jupyter::execute::*` paths keep compiling; the types
-// themselves are target-neutral and live in the presenter.
-pub use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
+// The kernel result types are target-neutral and live in the presenter (EXR-1).
+use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
 
 /// Flags of an `execute_request` that the engine chooses per call.
 ///

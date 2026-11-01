@@ -491,6 +491,15 @@ neither set, which is exactly how such a cell reads as "not mine, pass through
 unexecuted." `owned_languages` does **not** re-resolve or execute injected
 languages; §6.1's ratified pass-through is unchanged.
 
+*Amended by JOL-2b (2026-10-31).* "Informational" holds for knitr and the TS engines
+(`handled_languages` stays their gate). It no longer holds for **Jupyter**: the Jupyter
+engine reads `ctx.owned_languages` as its execution gate, replacing the old language
+allowlist, so any language the resolver assigns to Jupyter runs if a kernel exists for
+it (`text_execute.rs`, `plan_document`). An owned language with no kernel is reported
+as `Q-18-5` (an error in a multi-engine document, a warning otherwise). The end-to-end
+tests are `owned_e2e_tests` in `text_execute.rs` (JOL-5); the user-facing description is
+`docs/guides/authoring/jupyter-kernels.qmd`.
+
 - **knitr** already enforces: `execute.R` does `knit_engines$set(lang = <re-emit
   verbatim>)` for each `handled_languages` entry, which **replaces** knitr's
   default engine for that language — so adding `python` to knitr's set makes it

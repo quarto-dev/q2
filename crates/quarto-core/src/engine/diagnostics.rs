@@ -89,6 +89,59 @@ pub fn engine_error_diagnostic(err: &ExecutionError) -> DiagnosticMessage {
     }
 }
 
+/// Why an engine's returned notebook could not become an execution record (EXR-7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EngineRecordProblem {
+    /// The notebook is not a readable nbformat-4 notebook.
+    Malformed { detail: String },
+    /// The notebook has a different number of annotated units than the engine owns.
+    /// Both counts are over the engine's own units only.
+    CountMismatch { expected: usize, found: usize },
+    /// A cell names a unit id the engine does not own (or that the document lacks).
+    UnknownUnitId { id: String },
+    /// Two cells name the same unit id.
+    DuplicateUnitId { id: String },
+    /// The record builder rejected the result.
+    Build { detail: String },
+}
+
+/// The diagnostic for a notebook an engine returned that cannot be turned into a record.
+///
+/// A warning, not an error: while the record is additive (before an engine flips to core
+/// presentation) the render itself is unaffected and only the record is dropped. `--strict`
+/// promotes it. Whether a problem may fail the render after an engine flips is decided in
+/// that engine's flip task. Not coded yet: `Q-18-5` to `Q-18-9` are claimed elsewhere.
+pub fn engine_record_diagnostic(engine: &str, problem: &EngineRecordProblem) -> DiagnosticMessage {
+    let what = match problem {
+        EngineRecordProblem::Malformed { detail } => {
+            format!("the notebook it returned is not readable: {detail}")
+        }
+        EngineRecordProblem::CountMismatch { expected, found } => format!(
+            "it returned {found} annotated units, but it owns {expected} units in this \
+             document"
+        ),
+        EngineRecordProblem::UnknownUnitId { id } => format!(
+            "the notebook names unit `{id}`, which is not one of the units it owns in this \
+             document"
+        ),
+        EngineRecordProblem::DuplicateUnitId { id } => {
+            format!("the notebook names unit `{id}` more than once")
+        }
+        EngineRecordProblem::Build { detail } => {
+            format!("the record could not be built from its result: {detail}")
+        }
+    };
+    DiagnosticMessageBuilder::warning("Engine Execution Record Dropped")
+        .problem(format!("the `{engine}` engine ran, but {what}."))
+        .add_detail("The render is unaffected; only this engine's execution record was left out.")
+        .add_hint(format!(
+            "This is a bug in the `{engine}` engine's integration, not a problem in your \
+             document. Please report it at {ISSUES_URL}. Use `--strict` to make this stop \
+             the render."
+        ))
+        .build()
+}
+
 /// `Q-18-5`: the engine owns these languages but no installed kernel runs
 /// them. One diagnostic per document, listing every language. An error in a
 /// multi-engine document (`as_error`), where an `engine:` list means the

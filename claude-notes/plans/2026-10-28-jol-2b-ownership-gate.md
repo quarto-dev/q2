@@ -264,8 +264,9 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
 
 ## Phase 3: verification
 
-- [ ] `{ggsql}`, `{bash}` and a fixture-language document execute (manual with the ggsql
+- [x] `{ggsql}`, `{bash}` and a fixture-language document execute (manual with the ggsql
   kernel; automated with the fake kernel built in EXR-3 and extended by JOL-5, once available).
+  *Done (JOL-5, 2026-11-01):* a plain `{ggsql}` document renders its plot with the real ggsql kernel (manual); the fixture language `zzz` executes with no q2 source change in `owned_e2e_tests::test_owned_language_executes_without_allowlist` (fake kernel). No `{bash}` run was made; a made-up language covers the same path.
 - [x] Cross-engine parity suite (`tests/integration/engine_output_parity.rs`) still green.
 - [x] Resolution is one-shot and feeds freeze cache keys (design section 6): confirm moving
   the gate from allowlist to ownership changes no key for existing documents. The
@@ -330,7 +331,6 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
   on the old base did not recur on the new pin.
 - Rebase fix: `DocumentPlan.kernel` keeps an explicit kernel when no cell runs (EXR-3 evaluates
   spans on it); a derived kernel needs a runnable cell.
-- Open: the manual `{ggsql}`/`{bash}`/fixture run (needs the fake kernel from EXR-3/JOL-5);
-  `cargo xtask verify`; the dated follow-up to delete the alias table when the release is cut;
+- Open: `cargo xtask verify`; the dated follow-up to delete the alias table when the release is cut;
   `eval: false` is ignored by the executor for runnable cells (outside this plan).
 - Decided (Gordon, 2026-10-31): Q-18-5 does not fire under an explicit `jupyter:` kernel.

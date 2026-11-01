@@ -2,7 +2,7 @@
 title: 'EXR-7: engine wire and API evolution for execution records'
 date: 2026-10-28
 description: 'Adds optional, versioned fields to the TypeScript engine wire (the shared unit list in the execute options, a notebook, its self-description and the engine hash definition in the execute result), reconciled with the owned-languages field that JOL-1 adds, without touching the vendored Quarto types or publishing anything.'
-status: draft
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md) (EXR-7).
@@ -202,6 +202,28 @@ optional and its `granularity` is EXR-4\'s `Granularity` (the same two values); 
 values are illustrative, EXR-8 and EXR-9 supply the real ones. `outputKind` describes the
 outputs only: it plays no part in the hash rule, which the declaration carries.
 
+### Notebook reading and diagnostics (decided while implementing Phase 1b)
+
+- **The engine's notebook is not a core record.** It is a plain nbformat-4 notebook with
+  no `quarto_record_version`, no hashes and no `quarto_` cell metadata beyond what the
+  engine echoes, so `record::read_record_value` (which validates core's own record
+  format) would reject every real engine notebook. Core reads it leniently in
+  `engine/ts_record.rs`: `nbformat` 4, a `cells` array, and each cell well formed. A cell
+  names its unit with `metadata.quarto_cell_id` (the wire `id`); its kernel is
+  `metadata.quarto_kernel`, else the notebook's `metadata.kernelspec.name`.
+  `RecordBuilder` supplies source, ids, hashes and location from the stage's unit.
+- **Alignment counts.** `ids`: annotated cells (those with `quarto_cell_id`) against the
+  engine's owned, stage-numbered units. `positional`: code cells against all the engine's
+  owned units in order (a unit an earlier engine's output introduced has no id: it takes
+  its place in the order but is never recorded).
+- **Problems are warnings, not errors.** A mismatch, an unknown or duplicate id, or a
+  malformed notebook drops the record and adds an uncoded warning
+  (`diagnostics::engine_record_diagnostic`, beside `engine_error_diagnostic`) to
+  `ExecuteResult::warnings`, which the stage drains. Routing it through
+  `engine_error_diagnostic` itself would fail the render, which this plan rules out while
+  the record is additive. `--strict` promotes the warning.
+- **`can_freeze`** in the record entry is the engine's launch-time `can_freeze`.
+
 ## Out of scope
 
 - The Julia and marimo engine changes themselves (EXR-8, EXR-9).
@@ -213,7 +235,7 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
 
 ### Phase 0: failing tests
 
-- [ ] Rust wire round trips in `ts_protocol.rs` tests:
+- [x] Rust wire round trips in `ts_protocol.rs` tests:
   `execute_options_without_units_deserialize` (old JSON accepted),
   `execute_options_with_units_roundtrip` (and the serialized unit has no `start` or
   `end` key), `execute_result_without_notebook_deserializes`,
@@ -221,27 +243,27 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
   `record_info_hash_definition_roundtrips_camel_case` (and a result without
   `hashDefinition` deserializes to the conservative default),
   `unknown_record_info_fields_are_ignored`.
-- [ ] Extend `render_wire_parity_fixture` with `TsUnit`, `TsRecordInfo` and the new
+- [x] Extend `render_wire_parity_fixture` with `TsUnit`, `TsRecordInfo` and the new
   option and result fields; the TS-side parity test (the consumer of
   `ts_wire_parity.json` in `ts-packages/quarto-engine-host-node`) fails until the
   mirror types exist. Confirm first which Rust and TS tests read the fixture.
-- [ ] Host tests (`quarto-engine-host-node`, with the existing `quarto-api.test.ts`
+- [x] Host tests (`quarto-engine-host-node`, with the existing `quarto-api.test.ts`
   style): `host_forwards_units_and_owned_languages_to_engine_options` and
   `host_forwards_notebook_and_record_info_from_engine_result` using a fixture
   engine that echoes the options it received.
-- [ ] Compatibility tests: `old_engine_result_maps_to_no_record` (a result without
+- [x] Compatibility tests: `old_engine_result_maps_to_no_record` (a result without
   `notebook`), `new_engine_on_core_that_sends_no_units_still_runs`.
-- [ ] Shared-unit-list test (epic decision 38),
+- [x] Shared-unit-list test (epic decision 38),
   `second_engine_units_keep_original_ids_and_locate_lines_in_its_text`:
   a two-engine document where engine 1\'s fences are reconciled away before engine 2
   runs; engine 2\'s wire units carry the original `id` and `index`, `owned` from engine 2\'s
   own view, and each `line` points at the unit in the text engine 2 received (through
   `locate_units`).
-- [ ] Front-matter and index tests: `wire_cell_units_carry_index_and_span_units_do_not`;
+- [x] Front-matter and index tests: `wire_cell_units_carry_index_and_span_units_do_not`;
   `front_matter_span_unit_carries_in_front_matter_true` (and a body span omits the key);
   `stage_handled_languages_reach_the_wire_unchanged` (a `handled_languages` the stage
   computed, including the language of a span no engine owns, is the wire value).
-- [ ] Alignment test: `unit_count_mismatch_is_an_engine_diagnostic` asserting the
+- [x] Alignment test: `unit_count_mismatch_is_an_engine_diagnostic` asserting the
   record is dropped, the render is not failed, and the
   message names the engine and both counts (counted over that engine\'s owned units
   only) and goes through
@@ -249,14 +271,14 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
 
 ### Phase 1a: Rust wire types
 
-- [ ] Add `TsUnit`, `TsRecordInfo` (with `hash_definition: Option<HashDefinition>`, the
+- [x] Add `TsUnit`, `TsRecordInfo` (with `hash_definition: Option<HashDefinition>`, the
   EXR-4 struct, versioned and optional), `units: Option<Vec<TsUnit>>` to
   `TsExecuteOptions`, and `notebook: Option<serde_json::Value>`,
   `record_info: Option<TsRecordInfo>` to `TsExecuteResult`, all `#[serde(default)]`.
   `owned_languages` is JOL-1\'s field (Plan 4d-B); use it, do not add it again.
 ### Phase 1b: mapping and stage plumbing (needs EXR-5 Phase 2)
 
-- [ ] Carry `owned_languages` (JOL-1\'s field) and `units` on
+- [x] Carry `owned_languages` (JOL-1\'s field) and `units` on
   `ExecutionContext` (builder `with_units`; EXR-5 sets the units and fills the ids).
   `build_execute_options` copies the list to the wire, calling EXR-2\'s `view_for_engine`
   with `ctx.owned_languages` for `owned`, re-locating `line` with `locate_units`, keeping
@@ -265,7 +287,7 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
   `stage_units_reach_every_engine_with_filled_ids` (the ids were filled by EXR-5\'s stage
   task; this plan verifies and does not call the id function). `build_execute_options` copies the list to the wire, re-locating `line` in the
   text that engine receives and keeping `id`, `index` and `owned` from the original.
-- [ ] In `map_execute_result`, validate the notebook with EXR-4\'s reader and check the
+- [x] In `map_execute_result`, validate the notebook (leniently, in `ts_record.rs`; see "Notebook reading and diagnostics" for why not EXR-4's reader) and check the
   count contract for the engine\'s owned units. Build the engine\'s `EngineRecord` with
   EXR-4\'s `RecordBuilder`: fill each `UnitResult` from the notebook cell for that unit
   (matched by id when `alignment` is `ids`, by order over the engine\'s owned units when it
@@ -275,14 +297,14 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
   into the builder (EXR-4 stores it in `quarto_engines[].hash_definition`) and set
   `ExecuteResult.record` (the field EXR-5 introduces). A malformed notebook is a loud
   engine diagnostic, never silently dropped.
-- [ ] Reconcile with JOL-1 and JOL-4: the `owned_languages` doc comment correction on
+- [x] Reconcile with JOL-1 and JOL-4: the `owned_languages` doc comment correction on
   `handled_languages` (`ts_protocol.rs:372-393`) is made once, by whichever of the
   three plans lands first; the others check it is there.
 
 ### Phase 2: TypeScript host and mirror types (wire-types half; may run before Phase 1b)
 
-- [ ] Mirror the new types in `ts-packages/quarto-engine-host-node/src/types.ts`.
-- [ ] In `host.ts`, attach `units` (and `ownedLanguages`, unless JOL-4\'s Plan 4d-C has
+- [x] Mirror the new types in `ts-packages/quarto-engine-host-node/src/types.ts`.
+- [x] In `host.ts`, attach `units` (and `ownedLanguages`, unless JOL-4\'s Plan 4d-C has
   already threaded it) to the options object with
   the same cast technique as `signal` (692), and map `notebook` and `recordInfo`
   (including `hashDefinition`)
@@ -290,27 +312,35 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
   `quarto-types` package is not edited; add a short note beside the `signal`
   precedent listing all q2-only fields, with a doc comment on each field (this is the
   v1 documentation; no extension page).
-- [ ] Wire parity tests green on both sides; regenerate the fixture once, review
+- [x] Wire parity tests green on both sides; regenerate the fixture once, review
   the diff by hand.
 
 ### Phase 3: hermetic end-to-end with a fixture engine
 
-- [ ] Extend the echo or behave fixture engine
+- [x] Extend the echo or behave fixture engine
   (`crates/quarto-core/tests/integration/echo_engine_e2e.rs`) to return a small
   notebook with annotated units and a `hashDefinition`, and assert that the coalesced record contains its
   cells with `quarto_engine` set (EXR-5 coalescing). No Julia required.
-- [ ] A mismatched-count fixture yields no record and the Phase 0 diagnostic, and the
+- [x] A mismatched-count fixture yields no record and the Phase 0 diagnostic, and the
   render still succeeds.
+
+Phase 3 notes: the fixture's record branch is gated by front-matter keys (`echo-record: true`,
+`echo-record-mismatch: true`), not a body sentinel, because the engine receives the re-serialized
+document and the writer escapes the underscores in a body sentinel. Phase 3 also found that the committed
+Node host bundle (`ts-packages/quarto-engine-host-node/dist/engine-host-node.mjs`, embedded by
+`ts_process.rs`) predated the Phase 2 `host.ts` changes, so no real engine received `units` or returned a
+`notebook`. It is regenerated with `cargo xtask build-engine-host-bundle`; re-run that after any change to
+the host sources.
 
 ### Phase 4: documentation and verification
 
-- [ ] Add the new fields to the internal design note
+- [x] Add the new fields to the internal design note
   `claude-notes/designs/engine-api-surface.md` as q2-only extensions (the user-facing
   extension page is deferred), and amend its statement that `keep-ipynb` was omitted deliberately
   only if the epic changes that (it does not).
-- [ ] `cargo clippy -p quarto-core --all-targets -- -D warnings`;
+- [x] `cargo clippy -p quarto-core --all-targets -- -D warnings`;
   `cargo nextest run -p quarto-core`; the host package tests; wire fixture check.
-- [ ] Render this plan with `q2 render --strict` before any push.
+- [x] Render this plan with `q2 render --strict` before any push.
 
 ## Exit criteria
 
@@ -327,8 +357,12 @@ outputs only: it plays no part in the hash rule, which the declaration carries.
   JavaScript string, which is UTF-16 (`ts-packages/quarto-engine-host-node/src/mapped-source.ts:72-100`).
   I found no conversion and no non-ASCII test in `quarto-engine-host-node`. Wire units
   therefore carry `line` and no offsets.
-- **Open question: does the existing source map misalign on non-ASCII input?** By
-  reading it probably does. It was not run, and it is an existing issue outside this
+- **Open question: does the existing source map misalign on non-ASCII input?** Probed
+  2026-11-01 (a throwaway vitest, not kept): a map built with UTF-8 byte lengths over
+  `"é é\nabc\nxyz\n"` and a file whose offsets are UTF-16 indexes mis-maps the `xyz` line
+  through `rehydrateMappedString`, so the misalignment is real when entry lengths are bytes.
+  The probe mixed its own offset units, so it shows the mechanism, not the size of the
+  effect in production. It was not run end to end, and it is an existing issue outside this
   epic. Check it with a non-ASCII fixture while the host tests are open (Phase 2), and
   record the result here; fixing it, if confirmed, is separate work.
 - **Masking.** Units must be computed after nested-cell masking, once, on the text

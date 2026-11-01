@@ -54,7 +54,9 @@ mod text_execute;
 pub use crate::engine::ipynb_replay::IpynbReplayEngine;
 pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
 pub use error::{JupyterError, Result};
-pub use execute::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
+// The kernel result types live in the presenter (EXR-1); this public path stays for
+// the session API's callers.
+pub use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
 pub use kernelspec::{ResolvedKernel, find_kernelspec, list_kernelspecs};
 pub use session::{KernelInfo, KernelSession, SessionKey};
 

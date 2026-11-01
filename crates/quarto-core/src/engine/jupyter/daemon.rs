@@ -286,7 +286,7 @@ impl JupyterDaemon {
         &self,
         key: &SessionKey,
         code: &str,
-    ) -> Option<Result<super::execute::CellResult>> {
+    ) -> Option<Result<crate::presenter::output::CellResult>> {
         self.execute_in_session_with(key, code, super::execute::ExecuteOpts::default())
             .await
     }
@@ -297,7 +297,7 @@ impl JupyterDaemon {
         key: &SessionKey,
         code: &str,
         opts: super::execute::ExecuteOpts,
-    ) -> Option<Result<super::execute::CellResult>> {
+    ) -> Option<Result<crate::presenter::output::CellResult>> {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(key) {
             Some(session.execute_with(code, opts).await)
