@@ -32,6 +32,7 @@ use serde_json::Value;
 use crate::cell_options::partition_cell_options;
 use crate::engine::units::Unit;
 use crate::presenter::cell::render_cell;
+use crate::presenter::expansion::{render_expanded_unit, split_expansions};
 use crate::presenter::figures::{FigureSink, RuntimeFigureSink};
 use crate::presenter::inline::{InlineTarget, render_inline};
 use crate::presenter::output::{CellOutput, CellResult};
@@ -306,6 +307,19 @@ fn present_cell(
     let partitioned = partition_cell_options(lang, author_text, body_source).ok()?;
     let resolved = resolve_cell_options(doc_scope, partitioned.options);
     let visibility = CellVisibility::resolve(resolved.as_ref());
+    if let Some(expansions) = split_expansions(&cell.outputs) {
+        // An expanded cell: the author's cell, then one cell per expansion, each with its
+        // own options.
+        return render_expanded_unit(
+            lang,
+            &partitioned.code,
+            visibility,
+            &expansions,
+            doc_scope,
+            fig,
+        )
+        .ok();
+    }
     let result = stored_result_for_cell(&serde_json::to_value(cell).ok()?);
     Some(render_cell(
         lang,

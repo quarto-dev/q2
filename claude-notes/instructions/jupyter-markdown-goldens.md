@@ -41,3 +41,14 @@ commit during the bless); the command above, run today, would regenerate them fr
 post-flip presenter, which is only acceptable because the two are proven equal.
 
 See the fixtures directory's `README.md` for what each file is.
+
+## Intended exceptions (open, recorded 2026-11-02)
+
+Lane A (EXR-2) asked where a note belongs when a golden or a CI check has an *intended*
+exception (a place where the presenter output is meant to differ from a golden, such as a
+span the shared scanner claims differently from the old engine path). EXR-2 is done, so its
+plan is not the place, and no answer was given. Until the epic picks one, record each
+intended exception here, with the golden it affects and the plan that decided it, and keep
+the rule above: a golden changes only by the one command, and only by a decision written
+down. The question itself (where the CI script should carry such a note) is still open; its
+text is in lane A\'s EXR-2 message, which this note summarizes and does not replace.

@@ -15,6 +15,7 @@
 
 pub mod cell;
 pub mod document;
+pub mod expansion;
 pub mod figures;
 pub mod inline;
 pub mod output;

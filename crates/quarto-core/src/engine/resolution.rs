@@ -335,6 +335,30 @@ impl EngineResolution {
         result.into_iter().collect()
     }
 
+    /// Add the languages of inline spans no engine owns to a leave-alone set (EXR-8 B1b).
+    ///
+    /// `base` comes from [`handled_languages_for`], which runs before the stage's scan. A span
+    /// whose language is absent from `ownership` belongs to nobody, so an engine that would
+    /// otherwise evaluate every span (QuartoNotebookRunner) must cede it and leave it literal.
+    /// Spans another engine owns are already in `base`; cells are never added (epic decision
+    /// 42 covers spans only). The result is sorted and deduplicated.
+    pub fn with_unowned_span_languages(
+        &self,
+        base: Vec<String>,
+        units: &[crate::engine::units::Unit],
+    ) -> Vec<String> {
+        let mut result: std::collections::BTreeSet<String> = base.into_iter().collect();
+        for unit in units {
+            if let crate::engine::units::Unit::Inline(span) = unit {
+                let lang = span.lang.to_ascii_lowercase();
+                if !self.ownership.contains_key(&lang) {
+                    result.insert(lang);
+                }
+            }
+        }
+        result.into_iter().collect()
+    }
+
     /// Compute the **positive ownership set** for `engine`: every language present
     /// in this render that q2 assigned to `engine`.
     ///
@@ -1695,6 +1719,52 @@ mod tests {
         assert!(jupyter_handled.contains(&"r".to_string()));
         assert!(!jupyter_handled.contains(&"python".to_string()));
         assert!(!jupyter_handled.contains(&"sql".to_string()));
+    }
+
+    fn res_owning(pairs: &[(&str, &str)]) -> EngineResolution {
+        let mut ownership = LinkedHashMap::new();
+        for (l, o) in pairs {
+            ownership.insert(l.to_string(), o.to_string());
+        }
+        EngineResolution {
+            sequence: vec![],
+            ownership,
+            notes: vec![],
+        }
+    }
+
+    /// EXR-8 B1b: a span in a language no engine owns is added to the set, so QNR cedes it.
+    #[test]
+    fn unowned_span_language_is_added_to_handled_languages() {
+        let res = res_owning(&[("julia", "julia")]);
+        let units = crate::engine::units::scan_units(
+            "```{julia}\n1\n```\n\nSee `{klingon} qapla` and `{julia} 1`.\n",
+        );
+        let base = res.handled_languages_for("julia");
+        let out = res.with_unowned_span_languages(base.clone(), &units);
+        assert!(out.contains(&"klingon".to_string()));
+        assert!(!out.contains(&"julia".to_string()));
+        // sorted and deduplicated, a superset of the base
+        let mut sorted = out.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(out, sorted);
+        assert!(base.iter().all(|l| out.contains(l)));
+    }
+
+    /// EXR-8 B1b: a span another engine owns is already handled; an unowned CELL is not added.
+    #[test]
+    fn owned_span_language_is_not_added() {
+        let res = res_owning(&[("julia", "julia"), ("python", "jupyter")]);
+        let units = crate::engine::units::scan_units(
+            "```{klingon}\nx\n```\n\nA `{python} 1` and `{julia} 2`.\n",
+        );
+        let base = res.handled_languages_for("julia");
+        let out = res.with_unowned_span_languages(base.clone(), &units);
+        assert_eq!(
+            out, base,
+            "python is owned by jupyter (already in base); a cell is never added"
+        );
     }
 
     /// `owned_languages_for` returns { lang present in doc : owned by this engine }.

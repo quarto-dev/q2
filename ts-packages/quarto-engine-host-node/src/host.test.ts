@@ -3487,9 +3487,10 @@ describe("execution-record wire fields (EXR-7)", () => {
 
   async function run(opts: {
     units?: Unit[];
+    presentedBy?: "core";
     result: Record<string, unknown>;
   }) {
-    const seen: { units?: unknown; hasUnitsKey?: boolean } = {};
+    const seen: { units?: unknown; hasUnitsKey?: boolean; presentedBy?: unknown; hasPresentedByKey?: boolean } = {};
     const instance: ExecutionEngineInstance = {
       name: "recEngine",
       canFreeze: false,
@@ -3500,6 +3501,8 @@ describe("execution-record wire fields (EXR-7)", () => {
         const o = options as unknown as Record<string, unknown>;
         seen.hasUnitsKey = "units" in o;
         seen.units = o.units;
+        seen.hasPresentedByKey = "presentedBy" in o;
+        seen.presentedBy = o.presentedBy;
         return {
           markdown: "# ok",
           supporting: [],
@@ -3547,6 +3550,7 @@ describe("execution-record wire fields (EXR-7)", () => {
               dependencies: true,
               sourceMap: [],
               ...(opts.units !== undefined ? { units: opts.units } : {}),
+              ...(opts.presentedBy !== undefined ? { presentedBy: opts.presentedBy } : {}),
             },
           },
         },
@@ -3563,6 +3567,14 @@ describe("execution-record wire fields (EXR-7)", () => {
     { id: "0-1a2b3c4d-unlabeled", index: 0, kind: "cell", language: "julia", line: 3, owned: true },
     { id: "0-9f8e7d6c-inline", kind: "inline", language: "julia", line: 9, owned: false, inFrontMatter: true },
   ];
+
+  it("host_forwards_presented_by_to_engine_options_only_when_core_sends_it", async () => {
+    // Named revert: drop the `presentedBy` spread in host.ts -> seen.presentedBy undefined -> RED.
+    const withIt = await run({ units, presentedBy: "core", result: {} });
+    expect(withIt.seen.presentedBy).toBe("core");
+    const without = await run({ units, result: {} });
+    expect(without.seen.hasPresentedByKey).toBe(false);
+  });
 
   it("host_forwards_units_and_owned_languages_to_engine_options", async () => {
     // Named revert: drop the `units` spread in host.ts → seen.units undefined → RED.

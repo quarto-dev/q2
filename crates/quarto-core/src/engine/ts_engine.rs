@@ -567,6 +567,8 @@ impl TsEngine {
             // EXR-7: the stage's one shared unit list, relocated into `input`
             // (`None` when the context carries no units).
             units: crate::engine::ts_record::wire_units(input, ctx),
+            // Set by `execute` for an engine core presents for (`core_presents`).
+            presented_by: None,
         }
     }
 
@@ -1055,7 +1057,13 @@ impl ExecutionEngine for TsEngine {
     ) -> Result<ExecuteResult, ExecutionError> {
         self.ensure_launched(&ctx.cancellation)?;
 
-        let options = Self::build_execute_options(input, ctx);
+        let mut options = Self::build_execute_options(input, ctx);
+        // EXR-8 B4: for Julia, core presents the output from the record and the engine
+        // returns only its notebook. An older engine ignores this and presents anyway.
+        let core_presents = crate::engine::ts_record::core_presents(&self.wire_name(), ctx);
+        if core_presents {
+            options.presented_by = Some(crate::engine::ts_protocol::TsPresentedBy::Core);
+        }
         let msg = ToEngine::Execute {
             engine: self.wire_name(),
             options,
@@ -1124,6 +1132,14 @@ impl ExecutionEngine for TsEngine {
                     record_info,
                     &mut mapped,
                 );
+                if core_presents {
+                    crate::engine::ts_record::present_from_record(
+                        &engine,
+                        input,
+                        ctx,
+                        &mut mapped,
+                    )?;
+                }
                 Ok(mapped)
             }
             other => Err(ExecutionError::other(format!(

@@ -193,6 +193,9 @@ export interface TsExecuteOptions {
   /** q2-only (EXR-7), absent from an older core: the document's execution units, one
    *  shared scan, each carrying this engine's `owned` flag. */
   units?: TsUnit[];
+  /** q2-only (EXR-8 B4), absent from an older core: `"core"` means core presents the
+   *  output from the record, so the engine returns its notebook and no markdown. */
+  presentedBy?: "core";
 }
 
 /** One execution unit on the wire (q2-only, EXR-7). No byte or UTF-16 offsets in v1:

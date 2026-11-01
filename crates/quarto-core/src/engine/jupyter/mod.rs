@@ -50,6 +50,7 @@ mod presenter_goldens;
 pub mod router;
 mod session;
 mod text_execute;
+pub(crate) use text_execute::note_diagnostic;
 
 pub use crate::engine::ipynb_replay::IpynbReplayEngine;
 pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};

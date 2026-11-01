@@ -584,7 +584,22 @@ impl PipelineStage for EngineExecutionStage {
             let temp_dir = ctx.temp_dir()?.to_path_buf();
             // Per-engine leave-alone set: HANDLED_LANGUAGES ∪ languages owned
             // by other engines in the sequence (design doc §5).
-            let handled_languages = resolution.handled_languages_for(engine.name());
+            // EXR-5: the one scan also fills every unit's id from the author
+            // text (epic decisions 36 and 38). Ids are filled whether or not a
+            // record is wanted, since the wire (EXR-7) carries them. It runs
+            // here, before the leave-alone set, because EXR-8 B1b adds the
+            // languages of spans no engine owns to that set.
+            let units_for_engine = shared_units
+                .get_or_insert_with(|| {
+                    let (units, texts) = scan_and_fill_ids(&qmd, &ctx.sugared_blocks);
+                    shared_author_texts = Some(texts);
+                    units
+                })
+                .clone();
+            let handled_languages = resolution.with_unowned_span_languages(
+                resolution.handled_languages_for(engine.name()),
+                &units_for_engine,
+            );
             let owned_languages = resolution.owned_languages_for(engine.name());
             let exec_context = ExecutionContext::new(
                 temp_dir,
@@ -623,19 +638,7 @@ impl PipelineStage for EngineExecutionStage {
             // P2-13: loud "owned-but-unrunnable" gate in plan_document
             // fires only in a multi-engine sequence (|sequence| > 1).
             .with_multi_engine(multi_engine)
-            .with_units(
-                shared_units
-                    .get_or_insert_with(|| {
-                        // EXR-5: the one scan also fills every unit's id from
-                        // the author text (epic decisions 36 and 38). Ids are
-                        // filled whether or not a record is wanted, since the
-                        // wire (EXR-7) carries them.
-                        let (units, texts) = scan_and_fill_ids(&qmd, &ctx.sugared_blocks);
-                        shared_author_texts = Some(texts);
-                        units
-                    })
-                    .clone(),
-            )
+            .with_units(units_for_engine)
             .with_author_texts(shared_author_texts.clone().unwrap_or_default())
             .with_want_record(want_record)
             .with_metadata(document_metadata.clone())

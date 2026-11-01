@@ -763,7 +763,7 @@ fn span_error(
 
 /// A presenter note as the engine's warning: a span whose value has no usable text
 /// stays in the document (`Q-18-10`, as before the flip).
-fn note_diagnostic(
+pub(crate) fn note_diagnostic(
     note: &PresentNote,
     units: &[Unit],
     ctx: &ExecutionContext,

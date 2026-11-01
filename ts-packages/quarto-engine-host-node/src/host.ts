@@ -705,6 +705,9 @@ export async function runHost(
               {
                 signal: controller.signal,
                 ...(opts.units !== undefined ? { units: opts.units } : {}),
+                ...(opts.presentedBy !== undefined
+                  ? { presentedBy: opts.presentedBy }
+                  : {}),
               },
             ) as unknown as ExecuteOptions;
             const result: ExecuteResult = await instance.execute(executeOptionsWithSignal);

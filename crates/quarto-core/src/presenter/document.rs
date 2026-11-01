@@ -27,6 +27,7 @@ use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::{By, SourceInfo};
 
 use super::cell::render_cell;
+use super::expansion::{render_expanded_unit, split_expansions};
 use super::figures::FigureSink;
 use super::inline::{
     InlineOutcome, InlineTarget, classify_inline_result, escape_yaml_double, front_matter_key_at,
@@ -112,7 +113,20 @@ pub fn present_document(
                 let visibility = CellVisibility::resolve(resolved.as_ref());
                 // Every presented cell, visible or not, keeps its figure number.
                 fig.begin_cell();
-                let text = render_cell(&u.lang, &parsed.code, &result, fig, visibility);
+                let text = match split_expansions(&cell.outputs) {
+                    // An expanded cell is one unit presented as one cell per expansion,
+                    // each with its own options.
+                    Some(expansions) => render_expanded_unit(
+                        &u.lang,
+                        &parsed.code,
+                        visibility,
+                        &expansions,
+                        scope,
+                        fig,
+                    )
+                    .map_err(|message| PresentError::InvalidCellOptions { unit: ui, message })?,
+                    None => render_cell(&u.lang, &parsed.code, &result, fig, visibility),
+                };
                 out.push_str(&document_text[last_end..u.start]);
                 if out.ends_with('\n') && !out.ends_with("\n\n") {
                     out.push('\n');
@@ -351,6 +365,53 @@ mod tests {
             "::: {{.cell}}\n\n```{{.python .cell-code}}\n{code}\n```\n\n\
              ::: {{.cell-output .cell-output-stdout}}\n\n```\n{text}\n```\n\n:::\n\n:::\n"
         )
+    }
+
+    // ── expanded cells ──────────────────────────────────────────────────
+
+    #[test]
+    fn an_expanded_unit_presents_one_cell_per_expansion_with_its_own_options() {
+        let text = "```{python}\nexpand()\n```\n";
+        let outputs = vec![
+            json!({"output_type": "display_data", "data": {}, "metadata": {},
+                   "quarto_expansion": {"index": 1, "source": "#| echo: false\na()"}}),
+            json!({"output_type": "stream", "name": "stdout", "text": "A",
+                   "quarto_expansion": {"index": 1}}),
+            json!({"output_type": "display_data", "data": {}, "metadata": {},
+                   "quarto_expansion": {"index": 2, "source": "b()"}}),
+            json!({"output_type": "stream", "name": "stdout", "text": "B",
+                   "quarto_expansion": {"index": 2}}),
+        ];
+        let (out, _dir) = present(text, &[(0, outputs)], None);
+        // The unit's own source is a cell of its own (echoed under the usual rules, as
+        // the engine's own markdown does), then one cell per expansion.
+        assert_eq!(
+            out.markdown.matches("::: {.cell}").count(),
+            3,
+            "{}",
+            out.markdown
+        );
+        assert!(!out.markdown.contains("a()"), "{}", out.markdown);
+        assert!(out.markdown.contains("b()"), "{}", out.markdown);
+        let own = out
+            .markdown
+            .find("expand()")
+            .expect("the unit's source is echoed");
+        assert!(own < out.markdown.find("b()").unwrap(), "{}", out.markdown);
+    }
+
+    #[test]
+    fn an_expanded_units_own_echo_false_hides_its_source() {
+        let text = "```{python}\n#| echo: false\nexpand()\n```\n";
+        let outputs = vec![
+            json!({"output_type": "display_data", "data": {}, "metadata": {},
+                   "quarto_expansion": {"index": 1, "source": "b()"}}),
+            json!({"output_type": "stream", "name": "stdout", "text": "B",
+                   "quarto_expansion": {"index": 1}}),
+        ];
+        let (out, _dir) = present(text, &[(0, outputs)], None);
+        assert!(!out.markdown.contains("expand()"), "{}", out.markdown);
+        assert!(out.markdown.contains("b()"), "{}", out.markdown);
     }
 
     // ── gaps and adjacent cells ─────────────────────────────────────────

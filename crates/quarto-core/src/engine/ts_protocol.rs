@@ -417,6 +417,19 @@ pub struct TsExecuteOptions {
     /// `ExecuteOptions`; the host attaches it beside `signal` (see `host.ts`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub units: Option<Vec<TsUnit>>,
+    /// q2-only (EXR-8 B4): who presents the engine's output. `Some(Core)` tells the
+    /// engine to skip its own markdown presenter and return the notebook only, since
+    /// core's presenter produces the markdown. Absent means the engine presents, as
+    /// before. Defined here, not by EXR-7; nothing sets it until the Julia flip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presented_by: Option<TsPresentedBy>,
+}
+
+/// Who presents an engine's output (`presentedBy` on the wire).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum TsPresentedBy {
+    Core,
 }
 
 /// Whether a wire unit is a braced cell or an inline span.
@@ -660,6 +673,7 @@ mod tests {
             source_map: vec![],
             dependencies: true,
             units: None,
+            presented_by: None,
         }
     }
 
@@ -1804,6 +1818,23 @@ mod tests {
         v.as_object_mut().unwrap().remove("units");
         let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
         assert_eq!(back.units, None);
+    }
+
+    #[test]
+    fn presented_by_is_absent_by_default_and_roundtrips_as_core() {
+        let v = serde_json::to_value(make_execute_options()).unwrap();
+        assert!(v.get("presentedBy").is_none());
+        let mut opts = make_execute_options();
+        opts.presented_by = Some(TsPresentedBy::Core);
+        let v = serde_json::to_value(&opts).unwrap();
+        assert_eq!(v["presentedBy"], "core");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back, opts);
+        // An older core's options, without the key, still deserialize.
+        let mut v = serde_json::to_value(make_execute_options()).unwrap();
+        v.as_object_mut().unwrap().remove("presentedBy");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back.presented_by, None);
     }
 
     #[test]

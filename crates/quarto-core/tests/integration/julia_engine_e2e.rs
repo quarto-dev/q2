@@ -1403,3 +1403,177 @@ fn j7_failed_run_does_not_leak_worker() {
 
     shared_sentinel.assert_untouched();
 }
+
+// ── J8: the record row (EXR-8 B5) ─────────────────────────────────────────────
+//
+// `execute: {record: true}` makes core ask for an execution record, which flips Julia
+// to core presentation (`presentedBy: "core"`, EXR-8 B4). j1 to j7 never ask for a
+// record, so they never exercise that path; this row does.
+const RECORD_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n  record: true\n---\n\n\
+Inline `{julia} 40 + 2` here, and a foreign `{r} 3` span.\n\n\
+```{julia}\nusing QuartoNotebookWorker\nstruct Pair2\n    cells::Any\nend\nQuartoNotebookWorker.expand(p::Pair2) = p.cells\n```\n\n\
+```{julia}\nPair2([Cell(() -> \"expanded-one\"), Cell(() -> \"expanded-two\")])\n```\n\n\
+```{julia}\n1 + 1\n```\n";
+
+#[test]
+fn j8_record_row_core_presents_the_output() {
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j8_record_row_core_presents_the_output");
+        return;
+    }
+    if !julia_available() {
+        eprintln!("SKIP: julia not on PATH — j8_record_row_core_presents_the_output");
+        return;
+    }
+    let tmp = setup_julia_project();
+    let input = tmp.path().join("rec.qmd");
+    write_file(&input, RECORD_DOC);
+
+    let html = render_html(&input);
+    if let Ok(dump) = std::env::var("J8_DUMP_HTML") {
+        std::fs::write(dump, &html).unwrap();
+    }
+
+    let text = std::fs::read_to_string(
+        tmp.path()
+            .join(".quarto")
+            .join("execution-records")
+            .join("rec.ipynb"),
+    )
+    .expect("the record file was written");
+    let record = quarto_core::record::read_record(&text).expect("a readable record");
+
+    // Unit count and ids: the inline span first (no leading front-matter cell), then
+    // the three cells. The foreign `{r}` span is not Julia's, so it has no unit.
+    let ids: Vec<&str> = record
+        .cells
+        .iter()
+        .map(|c| c.metadata.quarto_cell_id.as_str())
+        .collect();
+    assert_eq!(
+        ids.len(),
+        4,
+        "one inline span and three cells, no front-matter cell: {ids:?}"
+    );
+    assert!(
+        ids[0].starts_with("0-") && ids[0].ends_with("-inline"),
+        "{ids:?}"
+    );
+    assert!(ids[1].starts_with("0-"), "{ids:?}");
+    assert!(ids[2].starts_with("1-"), "{ids:?}");
+    assert!(ids[3].starts_with("2-"), "{ids:?}");
+    assert!(
+        record
+            .cells
+            .iter()
+            .all(|c| c.metadata.quarto_lang == "julia"
+                && c.metadata.quarto_engine.as_deref() == Some("julia")),
+        "{text}"
+    );
+
+    // The expand cell carries two tagged expansions on its one unit.
+    let expanded = &record.cells[2];
+    let tagged = expanded
+        .outputs
+        .iter()
+        .filter(|o| o.get("quarto_expansion").is_some())
+        .count();
+    assert_eq!(
+        tagged, 4,
+        "marker + output for each of two expansions: {text}"
+    );
+
+    // Presented HTML: the span's value, the foreign span untouched, both expansions
+    // and the plain cell's result.
+    assert!(html.contains("Inline 42 here"), "{}", body_excerpt(&html));
+    assert!(
+        html.contains("<code>{r} 3</code>"),
+        "{}",
+        body_excerpt(&html)
+    );
+    assert!(html.contains("expanded-one"), "{}", body_excerpt(&html));
+    assert!(html.contains("expanded-two"), "{}", body_excerpt(&html));
+    assert!(html.contains("<code>2</code>"), "{}", body_excerpt(&html));
+
+    // Core presented it, not the engine's `toMarkdown`: the engine's markdown puts
+    // `data-execution_count` on every cell div, and core's presenter does not (measured
+    // against the same run with `core_presents` forced false).
+    assert!(
+        !html.contains("data-execution_count"),
+        "the engine presented instead of core: {}",
+        body_excerpt(&html)
+    );
+    // The expand cell's own source is shown, as the engine's markdown shows it; its
+    // expansions are hidden by the `#| echo: false` QNR writes on them.
+    assert!(
+        html.contains("hl-function-call\">Pair2<"),
+        "the expand cell's source is listed: {}",
+        body_excerpt(&html)
+    );
+}
+
+// ── J9: units QNR does not run (EXR-8 B5b) ────────────────────────────────────
+//
+// The scanner claims a span with a tab after the language token and a `{julia}` cell in
+// a blockquote; QNR runs neither (its marker is a literal space, and it runs only
+// top-level cells). Aligned by position, not by count, the record still has the units QNR
+// ran, and core presents the other two as their source.
+const UNRUN_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n  record: true\n---\n\n\
+Tab `{julia}\t1 + 1` and run `{julia} 40 + 2`.\n\n\
+> ```{julia}\n> println(\"nested-\" * \"output\")\n> ```\n\n\
+```{julia}\nprintln(\"plain-\" * \"output\")\n```\n";
+
+#[test]
+fn j9_units_qnr_does_not_run_stay_as_source_and_the_rest_are_recorded() {
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j9_units_qnr_does_not_run_stay_as_source");
+        return;
+    }
+    if !julia_available() {
+        eprintln!("SKIP: julia not on PATH — j9_units_qnr_does_not_run_stay_as_source");
+        return;
+    }
+    let tmp = setup_julia_project();
+    let input = tmp.path().join("unrun.qmd");
+    write_file(&input, UNRUN_DOC);
+
+    let html = render_html(&input);
+    let record_path = tmp
+        .path()
+        .join(".quarto")
+        .join("execution-records")
+        .join("unrun.ipynb");
+    eprintln!("record: {}", record_path.display());
+    let text = std::fs::read_to_string(&record_path).expect("the record file was written");
+    let record = quarto_core::record::read_record(&text).expect("a readable record");
+
+    // Four units in the document, two run: the `40 + 2` span and the top-level cell.
+    let sources: Vec<String> = record.cells.iter().map(|c| c.source.concat()).collect();
+    assert_eq!(
+        sources,
+        vec![
+            "40 + 2".to_string(),
+            "println(\"plain-\" * \"output\")".to_string()
+        ],
+        "{text}"
+    );
+
+    // The run units are presented, the others are left as their source.
+    assert!(html.contains("run 42."), "{}", body_excerpt(&html));
+    assert!(html.contains("plain-output"), "{}", body_excerpt(&html));
+    assert!(
+        html.contains("<code>{julia}\t1 + 1</code>"),
+        "the tab span is left as written: {}",
+        body_excerpt(&html)
+    );
+    assert!(
+        html.contains("<blockquote>") && html.contains("nested-"),
+        "the nested cell's source stays: {}",
+        body_excerpt(&html)
+    );
+    assert!(
+        !html.contains("nested-output"),
+        "the nested cell was not run: {}",
+        body_excerpt(&html)
+    );
+}
