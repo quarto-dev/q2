@@ -1,0 +1,11 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+#| include: false
+print("nothing at all")
+```
+
+Still here.

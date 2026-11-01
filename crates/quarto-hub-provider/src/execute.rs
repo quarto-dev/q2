@@ -38,9 +38,12 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
+use quarto_core::engine::preview_record::{
+    CaptureRun, SourceInputs, compute_input_qmd, compute_source_inputs, record_capture_run,
+};
 use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::project::ProjectContext;
+use quarto_core::record::{overlay_difference, rehash_record};
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::EngineCapture;
@@ -329,30 +332,30 @@ impl Provider {
 
         // Decision #4: always a fresh run (uncached record_capture) — code may
         // have side effects and we don't prove it side-effect-free.
-        let mut captures =
-            record_capture(&abs_path, &project, runtime.clone(), self.registry.clone())
+        let mut run =
+            record_capture_run(&abs_path, &project, runtime.clone(), self.registry.clone())
                 .await
                 .map_err(|e| format!("engine pipeline failed: {e}"))?;
-        if captures.is_empty() {
+        if run.captures.is_empty() {
             return Err("engine produced no capture (no code cells?)".to_string());
         }
-        if self.overlay.is_some() {
+        if let Some(overlay) = &self.overlay {
             // F8-D9 / 8.3c: the staleness key (the first capture's `input_qmd`)
             // describes the *source*, not this provider's execution settings.
             // Recorded under a `-M`, it would embed the overlay's metadata and
             // differ from the viewer's overlay-free recompute, marking every
             // capture stale. Store the overlay-free bytes; execution and the
-            // outputs above still saw the overlay.
+            // outputs above still saw the overlay. The execution record's
+            // document hashes are recomputed the same way (EXR-5).
             let source_project = ProjectContext::discover(&abs_path, plain.as_ref())
                 .map_err(|e| format!("project discovery failed: {e}"))?;
-            let source_qmd = compute_input_qmd(&abs_path, &source_project, plain)
+            let source = compute_source_inputs(&abs_path, &source_project, plain)
                 .await
-                .map_err(|e| format!("computing the source input_qmd failed: {e}"))?;
-            captures[0].input_qmd = String::from_utf8(source_qmd)
-                .map_err(|e| format!("source input_qmd is not UTF-8: {e}"))?;
+                .map_err(|e| format!("computing the source inputs failed: {e}"))?;
+            run = overlay_free_run(run, &source, overlay)?;
         }
 
-        let new_doc_id = write_capture_doc(&self.repo, rel_path, &captures)
+        let new_doc_id = write_capture_doc(&self.repo, rel_path, &run)
             .await
             .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
@@ -486,15 +489,47 @@ fn is_safe_relative(rel_path: &str) -> bool {
         && path.components().any(|c| matches!(c, Component::Normal(_)))
 }
 
+/// Make a capture run executed under a `-M` overlay describe the source (EXR-5;
+/// F8-D9): the first capture's `input_qmd` becomes the overlay-free bytes, and
+/// the record's unit hashes, document hashes and `quarto_execution_hash` become
+/// the overlay-free ones, with the overlay's execution-relevant keys noted in
+/// `quarto_overlay`. The outputs are untouched: they were produced under the
+/// overlay, which is the point of `-M`.
+pub fn overlay_free_run(
+    mut run: CaptureRun,
+    source: &SourceInputs,
+    overlay: &RenderOverlay,
+) -> Result<CaptureRun, String> {
+    if let Some(first) = run.captures.first_mut() {
+        first.input_qmd = String::from_utf8(source.input_qmd.clone())
+            .map_err(|e| format!("source input_qmd is not UTF-8: {e}"))?;
+    }
+    if let Some(record) = run.record.as_mut() {
+        rehash_record(record, &source.metadata)
+            .map_err(|e| format!("recomputing the record's overlay-free hashes failed: {e}"))?;
+        let noted = overlay
+            .metadata
+            .as_ref()
+            .map(|m| overlay_difference(m, record))
+            .unwrap_or_default();
+        record.metadata.quarto_overlay = (!noted.is_empty()).then_some(noted);
+    }
+    Ok(run)
+}
+
 /// Gzip the captures to JSON and store them as a capture binary automerge doc.
 /// Mirror of `quarto-preview`'s `write_capture_doc` (kept in sync via the
 /// shared [`CAPTURE_MIME_TYPE`] and the shared wire-format helper
 /// `gzip_captures` — serialize + gzip + 10MB size warning, bd-qbhp2cvv).
+/// Takes the whole run (EXR-5): the record travels with the captures, and
+/// EXR-13 decides how the hub document carries it; until then only the
+/// captures are stored.
 async fn write_capture_doc(
     repo: &Repo,
     rel_path: &str,
-    captures: &[EngineCapture],
+    run: &CaptureRun,
 ) -> Result<String, ProviderError> {
+    let captures: &[EngineCapture] = &run.captures;
     let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
         .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
     let meta = quarto_hub::resource::CaptureDocMeta {

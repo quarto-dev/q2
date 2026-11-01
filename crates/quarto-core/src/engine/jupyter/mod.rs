@@ -43,6 +43,7 @@ mod execute;
 #[cfg(test)]
 mod fake_kernel;
 mod inline;
+mod kernel_select;
 mod kernelspec;
 #[cfg(test)]
 mod presenter_goldens;
@@ -54,7 +55,7 @@ pub use crate::engine::ipynb_replay::IpynbReplayEngine;
 pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
 pub use error::{JupyterError, Result};
 pub use execute::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
-pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
+pub use kernelspec::{ResolvedKernel, find_kernelspec, list_kernelspecs};
 pub use session::{KernelInfo, KernelSession, SessionKey};
 
 use std::collections::HashMap;
@@ -279,6 +280,18 @@ const DISPLAY_ONLY_KEYS: &[&str] = &[
     "layout-valign",
 ];
 
+/// The Jupyter engine's hash declaration (`ExecutionEngine::hash_definition`): the
+/// display-only cell options and `execute:` keys above are excluded from its hashes,
+/// and the `jupyter:` document key counts. A free function so the text executor can
+/// take it without an engine instance (`text_execute::execute_qmd`).
+pub(crate) fn jupyter_hash_definition() -> crate::record::HashDefinition {
+    let mut def = crate::record::HashDefinition::conservative("jupyter");
+    def.presentation_cell_options = DISPLAY_ONLY_KEYS.iter().map(|k| k.to_string()).collect();
+    def.presentation_execute_keys = def.presentation_cell_options.clone();
+    def.document_keys = vec!["jupyter".to_string()];
+    def
+}
+
 impl ExecutionEngine for JupyterEngine {
     fn name(&self) -> &str {
         "jupyter"
@@ -295,7 +308,7 @@ impl ExecutionEngine for JupyterEngine {
         }
 
         // Execute code blocks via the Jupyter daemon
-        text_execute::execute_qmd(input, ctx)
+        text_execute::execute_qmd_with(input, ctx, &self.hash_definition())
     }
 
     fn can_freeze(&self) -> bool {
@@ -303,11 +316,7 @@ impl ExecutionEngine for JupyterEngine {
     }
 
     fn hash_definition(&self) -> crate::record::HashDefinition {
-        let mut def = crate::record::HashDefinition::conservative("jupyter");
-        def.presentation_cell_options = DISPLAY_ONLY_KEYS.iter().map(|k| k.to_string()).collect();
-        def.presentation_execute_keys = def.presentation_cell_options.clone();
-        def.document_keys = vec!["jupyter".to_string()];
-        def
+        jupyter_hash_definition()
     }
 
     /// Deliberate q2 design choice: jupyter is the universal fallback kernel.

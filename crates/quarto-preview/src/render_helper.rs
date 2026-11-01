@@ -368,7 +368,7 @@ pub async fn resolve_captures(ctx: &SharedContext, rel_path: &str) -> Vec<Engine
         return Vec::new();
     };
     match crate::capture_driver::read_capture_from_doc(ctx, &entry.capture_doc_id).await {
-        Ok(captures) => captures,
+        Ok(payload) => payload.into_captures(),
         Err(e) => {
             tracing::debug!(path = rel_path, error = %e, "capture doc unreadable; rendering unexecuted");
             Vec::new()
@@ -380,10 +380,10 @@ pub async fn resolve_captures(ctx: &SharedContext, rel_path: &str) -> Vec<Engine
 pub async fn resolve_all_captures(ctx: &SharedContext) -> HashMap<String, Vec<EngineCapture>> {
     let mut all = HashMap::new();
     for (key, entry) in ctx.index().get_all_captures() {
-        if let Ok(captures) =
+        if let Ok(payload) =
             crate::capture_driver::read_capture_from_doc(ctx, &entry.capture_doc_id).await
         {
-            all.insert(key, captures);
+            all.insert(key, payload.into_captures());
         }
     }
     all

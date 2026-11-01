@@ -150,6 +150,14 @@ pub struct HtmlRenderConfig {
     /// pre-bd-uy4uygha behavior for every existing caller (`q2 render` runs the
     /// real engine natively instead).
     pub captures: Vec<quarto_trace::EngineCapture>,
+
+    /// A server-recorded engine execution record (EXR-13), carried beside
+    /// [`captures`](Self::captures). **At most one of the two is set**:
+    /// [`with_record`](Self::with_record) clears `captures` and
+    /// [`with_captures`](Self::with_captures) clears the record, so attach either
+    /// through those builders rather than by struct literal. Nothing presents a
+    /// record yet (EXR-14), so a render that carries one shows code cells as source.
+    pub record: Option<std::sync::Arc<crate::record::Record>>,
 }
 
 impl HtmlRenderConfig {
@@ -160,7 +168,21 @@ impl HtmlRenderConfig {
             engine_registry: None,
             execution_policy: crate::engine::ExecutionPolicy::default(),
             captures: Vec::new(),
+            record: None,
         }
+    }
+
+    /// The carried engine execution record, if any (never set with `captures`).
+    pub fn record(&self) -> Option<&std::sync::Arc<crate::record::Record>> {
+        self.record.as_ref()
+    }
+
+    /// Attach a server-recorded engine execution record (EXR-13), clearing any
+    /// legacy captures: a render carries one kind of payload, never both.
+    pub fn with_record(mut self, record: std::sync::Arc<crate::record::Record>) -> Self {
+        self.captures = Vec::new();
+        self.record = Some(record);
+        self
     }
 
     /// Attach an engine registry override (bd-45yw replay activation).
@@ -176,6 +198,7 @@ impl HtmlRenderConfig {
     /// (bd-uy4uygha). See the [`captures`](Self::captures) field.
     pub fn with_captures(mut self, captures: Vec<quarto_trace::EngineCapture>) -> Self {
         self.captures = captures;
+        self.record = None;
         self
     }
 }
@@ -3377,6 +3400,7 @@ mod tests {
             result: serde_json::json!({
                 "markdown": "::: {.cell}\n```{.markerlang .cell-code}\n1 + 1\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nSPLICEMARKER_ZX9\n```\n:::\n:::\n"
             }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -3442,6 +3466,7 @@ mod tests {
             result: serde_json::json!({
                 "markdown": "::: {.cell}\n![](test_files/figure-html/fig.png)\n:::\n"
             }),
+            record: None,
             files: vec![CaptureFile {
                 path: "test_files/figure-html/fig.png".into(),
                 contents_base64: base64::engine::general_purpose::STANDARD.encode(b"FAKE-PNG"),
@@ -4410,6 +4435,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -4465,6 +4491,7 @@ mod tests {
             engine_name: "replay-only-engine".into(),
             input_qmd: String::new(),
             result: serde_json::json!({ "markdown": "" }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -7458,6 +7485,7 @@ mod tests {
             engine_name: "knitr".to_string(),
             input_qmd: String::new(),
             result: serde_json::Value::Null,
+            record: None,
             files: Vec::new(),
         };
         let stages = build_pandoc_prefix_stages(vec![capture]);
@@ -7481,6 +7509,7 @@ mod tests {
             input_qmd: String::new(),
             result: serde_json::Value::Null,
             files: Vec::new(),
+            record: None,
         }
     }
 
@@ -7925,5 +7954,69 @@ mod tests {
             .iter()
             .filter_map(|d| d.code.clone())
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod record_carrier_tests {
+    use super::*;
+    use crate::engine::units::scan_units;
+    use crate::record::{
+        AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, coalesce,
+        fill_ids,
+    };
+    use std::sync::Arc;
+
+    fn a_record() -> Arc<crate::record::Record> {
+        let mut units = scan_units("# T\n\n```{python}\nprint(1)\n```\n");
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        let def = HashDefinition::conservative("jupyter");
+        let mut b = RecordBuilder::new("jupyter", &def, &units, &texts).unwrap();
+        b.push(
+            0,
+            UnitResult {
+                outputs: vec![],
+                execution_count: Some(1),
+                kernel: Some("python3".into()),
+            },
+        )
+        .unwrap();
+        let entry = b
+            .finish(EngineEntryInput {
+                owned_languages: vec!["python".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        Arc::new(coalesce(&[entry], &units).unwrap())
+    }
+
+    fn a_capture() -> quarto_trace::EngineCapture {
+        serde_json::from_str(r#"{"engine_name":"r","input_qmd":"","result":null,"files":[]}"#)
+            .unwrap()
+    }
+
+    #[test]
+    fn a_default_config_carries_neither() {
+        let c = HtmlRenderConfig::default();
+        assert!(c.captures.is_empty());
+        assert!(c.record().is_none());
+    }
+
+    #[test]
+    fn at_most_one_of_captures_and_record_is_set() {
+        let with_both_orders = [
+            HtmlRenderConfig::default()
+                .with_captures(vec![a_capture()])
+                .with_record(a_record()),
+            HtmlRenderConfig::default()
+                .with_record(a_record())
+                .with_captures(vec![a_capture()]),
+        ];
+        // Whichever is attached last wins; the other is cleared.
+        assert!(with_both_orders[0].captures.is_empty());
+        assert!(with_both_orders[0].record().is_some());
+        assert_eq!(with_both_orders[1].captures.len(), 1);
+        assert!(with_both_orders[1].record().is_none());
     }
 }

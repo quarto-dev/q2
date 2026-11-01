@@ -85,6 +85,7 @@ fn r_capture(figure: Option<&CaptureFile>) -> EngineCapture {
         input_qmd: DOC.to_string(),
         result: serde_json::json!({ "markdown": markdown }),
         files: figure.cloned().into_iter().collect(),
+        record: None,
     }
 }
 
@@ -160,6 +161,7 @@ fn a_captured_styled_table_is_css_inlined_for_typst() {
         engine_name: "r".to_string(),
         input_qmd: "---\ntitle: T\n---\n\n```{r}\nSRC_R\n```\n".to_string(),
         result: serde_json::json!({ "markdown": markdown }),
+        record: None,
         files: Vec::new(),
     };
     let qmd = "---\ntitle: T\n---\n\n```{r}\nSRC_R\n```\n";

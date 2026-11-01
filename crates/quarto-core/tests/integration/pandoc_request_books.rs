@@ -1052,6 +1052,7 @@ fn capture_for(qmd: &str, cell: &str, out: &str, files: Vec<CaptureFile>) -> Eng
         input_qmd: qmd.to_string(),
         result: serde_json::json!({ "markdown": qmd.replace(&src, &result) }),
         files,
+        record: None,
     }
 }
 

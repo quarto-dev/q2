@@ -593,6 +593,7 @@ fn capture(input: &str) -> EngineCapture {
             path: "plot.png".to_string(),
             contents_base64: base64::engine::general_purpose::STANDARD.encode(b"png"),
         }],
+        record: None,
     }
 }
 

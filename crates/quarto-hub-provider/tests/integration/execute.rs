@@ -384,3 +384,134 @@ async fn a_dash_m_reaches_execution_but_not_the_staleness_key() {
     );
     assert!(captures[0].input_qmd.contains("1 + 1"));
 }
+
+// ── EXR-5: the execution record under a `-M` overlay ────────────────────────
+
+/// An engine that records every unit the stage listed, as the Jupyter engine
+/// does (EXR-4's `RecordBuilder` over the stage's units and author texts).
+struct RecordingEngine;
+
+impl ExecutionEngine for RecordingEngine {
+    fn name(&self) -> &str {
+        "test-recording"
+    }
+    fn execute(
+        &self,
+        input: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        use quarto_core::record::{EngineEntryInput, RecordBuilder, UnitResult};
+        let mut result = ExecuteResult::passthrough(input);
+        if ctx.want_record {
+            let def = self.hash_definition();
+            let err = |e: &dyn std::fmt::Display| {
+                ExecutionError::execution_failed("test-recording", e.to_string())
+            };
+            let mut builder = RecordBuilder::new(self.name(), &def, &ctx.units, &ctx.author_texts)
+                .map_err(|e| err(&e))?;
+            for index in 0..ctx.units.len() {
+                builder
+                    .push(index, UnitResult::default())
+                    .map_err(|e| err(&e))?;
+            }
+            result.record = Some(
+                builder
+                    .finish(EngineEntryInput {
+                        document_metadata: ctx.document_metadata_json(),
+                        ..Default::default()
+                    })
+                    .map_err(|e| err(&e))?,
+            );
+        }
+        Ok(result)
+    }
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == "test-recording" {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
+    }
+}
+
+/// A `-M` reaches execution, but the stored record's hashes describe the source:
+/// after `overlay_free_run` they equal an overlay-free run's, and `quarto_overlay`
+/// notes the overlay's execution-relevant keys.
+#[test]
+fn provide_hub_with_overlay_stores_overlay_free_record_hashes() {
+    use quarto_core::engine::preview_record::{compute_source_inputs, record_capture_run};
+    use quarto_core::project::ProjectContext;
+    use quarto_hub_provider::overlay_free_run;
+    use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let input = tmp.path().join("doc.qmd");
+    std::fs::write(
+        &input,
+        "---\nengine: test-recording\n---\n\n```{test-recording}\n1 + 1\n```\n",
+    )
+    .unwrap();
+    let registry = {
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(RecordingEngine));
+        Some(Arc::new(registry))
+    };
+    let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&[
+        "params:{n: 2}".to_string(),
+        "subtitle:ZZOVERLAYSUB".to_string(),
+    ])
+    .unwrap()
+    .expect("an overlay");
+
+    let plain: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let overlaid = overlay.apply(plain.clone());
+
+    let source_project = ProjectContext::discover(&input, plain.as_ref()).unwrap();
+    let overlaid_project = ProjectContext::discover(&input, overlaid.as_ref()).unwrap();
+
+    let plain_run = pollster::block_on(record_capture_run(
+        &input,
+        &source_project,
+        plain.clone(),
+        registry.clone(),
+    ))
+    .unwrap();
+    let overlaid_run = pollster::block_on(record_capture_run(
+        &input,
+        &overlaid_project,
+        overlaid,
+        registry,
+    ))
+    .unwrap();
+    let plain_record = plain_run.record.as_ref().expect("plain record");
+    let overlaid_record = overlaid_run.record.as_ref().expect("overlaid record");
+    assert_ne!(
+        plain_record.metadata.quarto_execution_hash, overlaid_record.metadata.quarto_execution_hash,
+        "the -M params key reaches the document hash"
+    );
+    assert!(overlaid_run.captures[0].input_qmd.contains("ZZOVERLAYSUB"));
+
+    let source = pollster::block_on(compute_source_inputs(&input, &source_project, plain)).unwrap();
+    let stored = overlay_free_run(overlaid_run, &source, &overlay).unwrap();
+
+    assert!(!stored.captures[0].input_qmd.contains("ZZOVERLAYSUB"));
+    let record = stored.record.expect("record kept");
+    assert_eq!(
+        record.metadata.quarto_execution_hash,
+        plain_record.metadata.quarto_execution_hash
+    );
+    assert_eq!(
+        record.metadata.quarto_engines[0].document_hash,
+        plain_record.metadata.quarto_engines[0].document_hash
+    );
+    assert_eq!(
+        record.cells, plain_record.cells,
+        "unit hashes are the same either way"
+    );
+    let noted = record
+        .metadata
+        .quarto_overlay
+        .expect("the overlay is noted");
+    assert_eq!(noted.get("params"), Some(&serde_json::json!({ "n": 2 })));
+    assert!(!noted.contains_key("subtitle"), "{noted:?}");
+}

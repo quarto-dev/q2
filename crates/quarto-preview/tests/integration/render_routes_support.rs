@@ -185,6 +185,7 @@ pub fn capture_of(doc: &str, output: &str, plot: Option<&str>) -> EngineCapture 
             })
             .into_iter()
             .collect(),
+        record: None,
     }
 }
 

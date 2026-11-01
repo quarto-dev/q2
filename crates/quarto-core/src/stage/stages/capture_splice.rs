@@ -350,6 +350,7 @@ mod tests {
                 },
             }),
             files: Vec::new(),
+            record: None,
         }
     }
 
@@ -403,6 +404,7 @@ mod tests {
             engine_name: "marimo".to_string(),
             input_qmd: String::new(),
             result: serde_json::json!({ "markdown": "" }),
+            record: None,
             files: Vec::new(),
         };
         fold_capture_includes_into_meta(&mut meta, &cap_no_includes);

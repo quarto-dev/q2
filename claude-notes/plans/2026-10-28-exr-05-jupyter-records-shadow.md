@@ -2,7 +2,7 @@
 title: 'EXR-5: Jupyter emits execution records (shadow mode)'
 date: 2026-10-28
 description: 'Makes the Jupyter engine build an in-memory engine execution record next to its unchanged live markdown path, coalesces records at the end of the engine stage, and proves present(record) equals the live markdown on fixtures before anything depends on the record.'
-status: draft
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md) (EXR-5).
@@ -154,198 +154,264 @@ Verified 2026-10-28 on `feature/execution-records-epic` (main `2ee0bd966`).
 Small tasks, tests first. The unit-executor seam is introduced here, in 0a (EXR-2\'s
 `plan_units` precedes it, and this seam later refactors the same loop).
 
+Done 2026-10-31. So the tests compile while they are red, Phase 0 also added the inert
+surface they call, with no behavior behind it until Phases 1 and 2: `ExecuteResult.record`
+(`serde(skip)`), `ExecutionContext.want_record` and `.author_texts`,
+`PipelineObserver::wants_execution_record` (default `false`), the aux kinds
+`ENGINE_CAPTURE_RECORD_KIND` and `ENGINE_RECORD_KIND`, the trace-only `EngineCapture.record`
+(`quarto-trace`, with every struct literal in the workspace updated), and
+`text_execute::execute_qmd_with(input, ctx, &HashDefinition)`, which the engine calls with
+its `hash_definition()` (`jupyter_hash_definition()` is now a free function).
+
 **0a. The unit-executor seam**
 
-- [ ] Test first: `execute_blocks_with_injected_executor_matches_daemon_shape` (a stub
-  returns a stdout stream; the markdown equals the existing `render_cell` output). Red.
-- [ ] Introduce the seam in `text_execute.rs` (a trait or closure taking a code string and
-  returning `KernelExecuteResult`), defaulting to the daemon, so tests can inject canned
-  results. The test goes green; the live markdown tests are unchanged.
+- [x] Test first: `execute_blocks_through_the_fake_kernel_match_render_cell_shape` (the
+  kernel returns a stdout stream; the markdown equals the existing `render_cell` output).
+  Green at once, because the seam already existed (next item).
+- [x] The seam is EXR-3\'s fake kernel (`engine/jupyter/fake_kernel.rs`, 2026-10-31): canned
+  results travel through the real daemon and session, so no injected closure was added and
+  the loop under test is the production loop. The record tests live in `text_execute.rs`
+  (`record_tests`), beside EXR-3\'s `span_tests`, whose context helpers they share. Script
+  keys for a cell carry the newline before the closing fence (`cell("x = 1")`), since the
+  scanner\'s cell code keeps it.
 
-**0b. Builder call sites** (written against the injected executor; red until Phase 1)
+**0b. Builder call sites** (written against the fake kernel; red until Phase 1)
 
-- [ ] `record_has_one_cell_per_executed_unit_in_document_order`
-- [ ] `record_cell_ids_are_content_hashes_including_option_lines` (fixture from EXR-4\'s
-  Positron conformance set)
-- [ ] `record_ids_come_from_the_stage_units` (the builder uses `ExecutionContext.units`
+- [x] `record_has_one_cell_per_executed_unit_in_document_order`
+- [x] `record_cell_ids_are_content_hashes_including_option_lines` (the
+  `label-line-and-unicode` vector from EXR-4\'s
+  `tests/fixtures/records/content-hash-vectors.json`)
+- [x] `record_ids_come_from_the_stage_units` (the builder uses `ExecutionContext.units`
   as given, ids included, and does no scan of its own; the test supplies filled ids, the
   stage test in Phase 2 proves the stage fills them; epic decision 38)
-- [ ] `record_content_hash_uses_author_text_for_labeled_cell` (a `fig-` label plus
+- [x] `record_content_hash_uses_author_text_for_labeled_cell` (a `fig-` label plus
   `fig-cap`: the stored `quarto_content_hash` is of the author\'s text including those
   lines, supplied by the stage\'s mapping; epic decision 36)
-- [ ] `record_engine_entry_carries_full_hash_definition` (a stub engine that declares a
-  custom `HashDefinition`: the entry stores the whole declaration, and the builder has no
+- [x] `record_engine_entry_carries_full_hash_definition` (a custom `HashDefinition` passed
+  to `execute_qmd_with`: the entry stores the whole declaration, and the builder has no
   engine-name branch; epic decision 35)
-- [ ] `record_keeps_hidden_cells` (`include: false`, `echo: false`, `output: false`)
-- [ ] `record_outputs_are_verbatim` (stream, `execute_result`, `display_data` with image
+- [x] `record_keeps_hidden_cells` (`include: false`, `echo: false`, `output: false`)
+- [x] `record_outputs_are_verbatim` (stream, `execute_result`, `display_data` with image
   plus text, error; `execute_result` versus `display_data` preserved)
-- [ ] `record_notes_kernel_per_cell` (kernel name and language on each cell)
-- [ ] `ceded_and_unowned_fences_are_not_record_cells`
-- [ ] `inline_units_are_recorded_as_one_line_cells` (from EXR-3; span ids are
+- [x] `record_notes_kernel_per_cell` (kernel name and language on each cell)
+- [x] `ceded_and_unowned_fences_are_not_record_cells`
+- [x] `inline_units_are_recorded_as_one_line_cells` (from EXR-3; span ids are
   `{n}-{hash8}-inline` with the document-wide counter)
+- [x] Added: `no_record_is_built_when_not_wanted` (engine level: `want_record: false`
+  yields `record: None`; green at once) and `a_span_only_document_records_its_span`.
 
-**0c. Gating**
+**0c. Gating** (stage level, in `tests/integration/engine_record_stage.rs`, driven by a
+stub engine that builds its record from `ExecutionContext.units` and `author_texts` with
+EXR-4\'s `RecordBuilder` exactly as the Jupyter engine will; the shared pipeline driver is
+`tests/integration/engine_stage_driver.rs`, a public twin of `record_capture`\'s private
+collector that takes any observer)
 
-- [ ] `no_record_is_built_when_observer_does_not_want_one` (a counting hook proves zero
-  builder calls for a default observer)
-- [ ] `legacy_capture_payload_is_byte_identical_with_and_without_record` (the `result`
-  JSON of the `EngineCapture` aux event does not change)
+- [x] `no_record_is_built_when_observer_does_not_want_one` (the stub\'s builder counter
+  proves zero builder calls for a default observer; green at once)
+- [x] `legacy_capture_payload_is_byte_identical_with_and_without_record` (the `result`
+  JSON of the `EngineCapture` aux event does not change; red until Phase 2)
 
 **0d. Trace (D2)**
 
-- [ ] `trace_engine_capture_carries_per_engine_record_when_tracing` (a `trace: true`
-  render of a Jupyter fixture with a stubbed executor stores that engine\'s record in
-  `engine_capture.record`)
-- [ ] `trace_record_pairs_by_run_index_not_last_pushed` (two engines; the record of
-  run 0 lands on run 0\'s entry even when the events are interleaved; a name mismatch is
-  dropped with a warning)
-- [ ] `trace_without_record_field_still_parses` (a committed pre-change trace
-  deserializes)
-- [ ] `preview_and_hub_capture_bytes_unchanged_when_trace_field_exists` (the recorders
-  never set the field)
+- [x] `trace_engine_capture_carries_per_engine_record_when_tracing` (a `JsonTraceObserver`
+  run over a stub-engine fixture stores that engine\'s record, as a one-engine record
+  notebook, in `engine_capture.record`; red until Phase 2). Added:
+  `trace_pairs_each_engines_record_with_its_own_capture` (two engines, end to end).
+- [x] `trace_record_pairs_by_run_index_not_last_pushed` (unit test in `stage/trace.rs`:
+  the record of run 0 lands on run 0\'s entry even when the events are interleaved; a name
+  mismatch and an unknown run index are dropped; red until Phase 2)
+- [x] `trace_without_record_field_still_parses` (`crates/quarto-trace/tests/roundtrip.rs`;
+  green at once, a guard)
+- [x] `preview_and_hub_capture_bytes_unchanged_when_trace_field_exists` (same file; the
+  recorders never set the field; green at once, a guard)
 
-**0e. Side data and coalescing**
+**0e. Side data and coalescing** (red until Phase 2)
 
-- [ ] `engine_stage_folds_result_side_data_into_notebook_metadata` using the echo and
-  behave fixture engines (`crates/quarto-core/tests/integration/echo_engine_e2e.rs`,
-  `behave_engine_e2e.rs`) for includes, filters, preserve, `needs_postprocess`.
-- [ ] `two_engines_coalesce_in_source_order_with_quarto_engine` and
+- [x] `engine_stage_folds_result_side_data_into_notebook_metadata` for includes, filters,
+  preserve and `needs_postprocess`. The echo and behave fixture engines the plan named are
+  TS engines that return no record until EXR-7 carries it over the wire, so the stub engine
+  of 0c stands in (it sets the side data on its `ExecuteResult` and leaves the entry input
+  empty, which is what the stage must fold); EXR-7 can point the test at the fixtures.
+- [x] `two_engines_coalesce_in_source_order_with_quarto_engine` and
   `coalescing_is_deterministic` (two runs, identical bytes, EXR-4 serializer).
 
 **0f. Shadow harness skeleton**
 
-- [ ] `jupyter_record_shadow.rs` (integration test), initially red, with fixtures: stdout;
-  plain-text result; HTML; PNG plus text (figure file names asserted); error with
-  `error: true`; `echo: false`; `output: false`; `include: false`; `warning: false` with
-  stderr; several cells where an early cell is hidden and a later one plots;
-  markdown-only document; a ceded `{ojs}` block. Real-kernel variants are gated like
-  `jupyter_integration.rs` (skip with a note when ipykernel is missing).
-- Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
+- [x] `jupyter_record_shadow.rs` (integration test), one red test per fixture under
+  `tests/fixtures/jupyter-record-shadow/` (README there): stdout; plain-text result; HTML;
+  PNG plus text (figure file names asserted); error with `error: true`; `echo: false`;
+  `output: false`; `include: false`; `warning: false` with stderr; several cells where an
+  early cell is hidden and a later one plots; markdown-only document; a ceded `{ojs}`
+  block. Every case is gated like `jupyter_inline_expressions.rs` (skip with a note when
+  no Python kernelspec is found); the comparator is Phase 3\'s.
+- [x] Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core` (only the new tests listed above may be red).
 
 ### Phase 1: record accumulation in the Jupyter engine
 
-- [ ] Accumulate a record cell per executed unit inside `execute_blocks_inner`
-  without touching the string building: the `KernelExecuteResult` is converted to
-  nbformat output JSON (lossless `MimeBundle`; multiline text kept as the kernel
-  sent it) and appended through EXR-4\'s `RecordBuilder` as a `UnitResult`. The builder\'s
-  inputs are the stage\'s unit list (`ExecutionContext.units`), the author-text mapping
-  (`ExecutionContext.author_texts`, a field beside `units`, set by the stage) and the
-  engine\'s `hash_definition()`.
-- [ ] Add `record: Option<EngineRecord>` to `ExecuteResult` with `#[serde(skip)]`
-  and `ExecutionContext.want_record: bool` (builder `with_want_record`).
-- [ ] Phase 0 unit tests green; the live markdown tests
+Done 2026-10-31.
+
+- [x] Accumulate a record cell per executed unit inside `execute_blocks_inner`
+  without touching the string building: the `CellResult` is converted to nbformat
+  output JSON (`CellOutput::to_nbformat` and `CellResult::nbformat_outputs` in
+  `presenter/output.rs`: the raw `MimeBundle`, stream text as the kernel sent it,
+  `metadata` always an object; the inverse is `ipynb_replay`\'s `stored_result_for_cell`)
+  and appended through EXR-4\'s `RecordBuilder` as a `UnitResult` (`push_unit_result`).
+  The builder\'s inputs are the stage\'s unit list (`ExecutionContext.units`), the
+  author-text mapping (`ExecutionContext.author_texts`) and the engine\'s
+  `hash_definition()`, threaded from `execute_qmd_with`. A run unit maps to its stage
+  index by the document-wide counter `locate_units` preserves (`index`, `span_index`);
+  a unit an earlier engine\'s output introduced has no stage index and is not recorded,
+  since `coalesce` could not place it. Spans: `evaluate_span` is now `run_span` (the raw
+  result, recorded) plus `span_text` (the live replacement, unchanged). The entry
+  carries `kernelspec: {name, language}` as provenance, `can_freeze: true`, the owned
+  languages and the merged `ctx.metadata` as the document-hash input; side data is left
+  for the stage to fold (Phase 2). A run that executes nothing returns an empty record
+  when one is wanted; a run with `want_record` and no stage units fails with
+  `JupyterError::RecordFailed` rather than record from a local scan.
+- [x] `record: Option<EngineRecord>` on `ExecuteResult` with `#[serde(skip)]` and
+  `ExecutionContext.want_record: bool` (builder `with_want_record`), both added in Phase 0.
+- [x] Phase 0 unit tests green; the live markdown tests
   (`jupyter_integration.rs`, `ipynb_stored_replay.rs`, `engine_output_parity.rs`)
   unchanged and green.
-- Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
+- [x] Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
   `cargo nextest run -p quarto-core`.
 
 ### Phase 2: stage plumbing and coalescing
 
-- [ ] Add `PipelineObserver::wants_execution_record` (default `false`; the preview
-  recorder and the trace observer return `true`), and set `want_record` from it in
-  `EngineExecutionStage` next to `with_handled_languages` (about line 582). The stage
-  also sets it when the merged metadata has `execute: {record: true}`; test that a
-  plain render with the key builds a record and one without it does not.
-- [ ] Unit ids and author texts in the stage (tests first:
-  `stage_fills_unit_ids_before_any_engine_runs`, `labeled_cell_id_uses_author_text`,
-  `author_texts_has_one_entry_per_unit`): right after the stage\'s one scan (EXR-2 Phase 4
-  puts the list, ids still empty, on `ExecutionContext.units`), build EXR-4\'s `AuthorTexts`
-  with `author_texts(&units, &snapshot)`, call EXR-4\'s `fill_ids(units, &author_texts)`,
-  and put both on the context for the builder (epic decision 36). The ids are filled
-  whenever the stage scans, whether or not a record is wanted, because the wire (EXR-7)
-  carries them; the author texts are built only when a record is wanted.
-  **The snapshot is this plan\'s work** (decided with Gordon, 2026-10-31; EXR-4 Phase 0 chose
-  the mechanism and ships the pure part). Neither the original source range nor the
-  serializer\'s source map can recover the author text: `body_source_for` returns the whole
-  block once sugaring strips a line from between two kept options, and mapping a unit\'s
-  offsets back through `write_with_source_info` lands inside the wrong line (EXR-4 plan,
-  Phase 0, first item, has the probe and its numbers). So `pre_engine_sugaring`
-  (`stage/stages/pre_engine_sugaring.rs`, which calls `desugar_blocks` at about line 142)
-  records, **before the pass rewrites anything**, one EXR-4 `SugaredBlock { author_text,
-  sugared_text }` for **every braced executable block, in document order, including the
-  blocks the pass leaves alone** (there the two texts are equal), and keeps the list on the
-  stage context. Recording only rewritten blocks is wrong: an untouched cell whose text
-  equals a rewritten cell\'s stripped text would take that cell\'s entry. Tests first:
-  `snapshot_lists_untouched_blocks_too`, `snapshot_has_the_authors_raw_lines_for_a_sugared_cell`
-  (a labeled `fig-` cell with a mid-options `fig-cap` line), and the three tests above. Open
-  checks that EXR-4 could not settle without the stage: a sugared cell inside a container, and
-  that a second engine iteration reuses the one snapshot (the stage scans once). A
-  non-crossref label stays in both texts. EXR-4 ships `SugaredBlock` and `author_texts`
-  (`record/author_text.rs`) at the end of its Phase 4 merge.
-- [ ] Source-of-inputs tests (moved from EXR-4 Phase 2, 2026-10-31; tests first): the
-  document and unit hashes are built from the stage\'s pre-engine units and merged metadata, so
-  a code edit inside an included file changes them and a prose-only edit does not, and two
-  byte-different spellings of the same metadata (key order, quoting) hash alike. EXR-4 already
-  tests the primitives (`hash_unit`, `hash_document`) on given inputs; this item tests that the
-  stage feeds them the right inputs.
-- [ ] Inside the engine loop, next to the capture event at line 638, emit each
-  engine\'s uncoalesced record as its own aux event (a per-engine kind constant beside
-  `ENGINE_CAPTURE_KIND`), after that engine\'s capture event and with the same
-  `run_index`. The trace observer stores it on that engine\'s `engine_capture` entry in the
-  new optional trace-only field `engine_capture.record` (add `record: Option<...>` to
-  `EngineCapture` in `crates/quarto-trace/src/lib.rs`, `serde(default,
-  skip_serializing_if = "Option::is_none")`), pairing by `run_index` as described above;
-  the preview and hub recorders ignore the event.
-- [ ] After the engine loop, coalesce the per-engine records with EXR-4\'s
-  `coalesce(engine_records, unit_order)`, where `unit_order` is the stage\'s single unit
-  list (no source-position sort, no renumbering), fold side data, and emit the result with
-  a new aux kind `ENGINE_RECORD_KIND` (`"EngineRecord"`) next to `ENGINE_CAPTURE_KIND`
-  (line 52). Observers that do not know a kind ignore it (see the comment at 636).
-- [ ] **Record handoff to the capture writers** (tests first; EXR-13 and EXR-15 cite this
-  task by name). Today nothing consumes `ENGINE_RECORD_KIND`: `CaptureCollector` returns
-  early for every kind but `ENGINE_CAPTURE_KIND` (`engine/preview_record.rs:70-73`), and
-  `record_capture` returns `Vec<EngineCapture>` (`:139`). Add the crate-visible type
-  `CaptureRun { captures: Vec<EngineCapture>, record: Option<Record> }` and a function
-  `record_capture_run(...) -> Result<CaptureRun, PipelineError>`; make `record_capture` a
-  thin wrapper that returns `.captures`, so its many test callers
-  (`capture_splice_seam.rs:139`, `engine_output_parity.rs:66` and others) do not change.
-  `CaptureCollector` also collects the `ENGINE_RECORD_KIND` payload (one coalesced record
-  per run) into `CaptureRun.record`; the preview recorder returns `true` from
-  `wants_execution_record`, so a record is built. The capture writers take a
-  `CaptureRun`: the preview writer, the hub guest writer and `provide-hub`
-  (`quarto-hub-provider/src/execute.rs:332`; the exact writer list is EXR-13\'s, which cites
-  this type). The `-M` path (`execute.rs:346-352`) overwrites `captures[0].input_qmd` with
-  overlay-free bytes; the record equivalent is that the record\'s unit hashes, document
-  hashes and `quarto_execution_hash` are the overlay-free ones, with the overlay\'s
-  execution-relevant difference in `quarto_overlay` (EXR-4). Decide first whether the
-  stage can compute both hash sets in the one run or whether the provider recomputes them
-  from the `source_project` it already discovers at `execute.rs:346` (UNVERIFIED which is
-  cheaper). Tests: `capture_run_carries_the_record`,
+Done 2026-10-31. Stage-level tests live in `tests/integration/engine_record_stage.rs`
+(stub engines through `engine_stage_driver.rs`); the snapshot tests in
+`stage/stages/pre_engine_sugaring.rs`; the trace pairing test in `stage/trace.rs`; the
+overlay tests in `record/overlay.rs` and `quarto-hub-provider/tests/integration/execute.rs`.
+
+- [x] `PipelineObserver::wants_execution_record` (default `false`; the preview recorder
+  `CaptureCollector` and `JsonTraceObserver` return `true`); `EngineExecutionStage` sets
+  `want_record` from it next to `with_handled_languages`, or when the merged metadata has
+  `execute: {record: true}` (tests `execute_record_true_builds_a_record_for_a_plain_observer`
+  and `no_record_is_built_when_observer_does_not_want_one`).
+- [x] Unit ids and author texts in the stage (tests `stage_fills_unit_ids_before_any_engine_runs`,
+  `labeled_cell_id_uses_author_text`, `author_texts_has_one_entry_per_unit`): right after the
+  one scan, `scan_and_fill_ids` builds EXR-4\'s `AuthorTexts` with
+  `author_texts(&units, &ctx.sugared_blocks)`, calls `fill_ids`, and puts both on the context
+  (`with_units`, `with_author_texts`). The ids are filled whether or not a record is wanted;
+  the author texts are built with them in every case, since `fill_ids` reads them (the plan\'s
+  "only when a record is wanted" was not possible), and they are attached to the context in
+  every case too, a clone of one small vector.
+  **The snapshot** is `StageContext.sugared_blocks`, filled by `pre_engine_sugaring` before
+  `desugar_blocks` runs: `executable_block_texts` walks the same containers the pass descends
+  into (block quotes, divs, lists, definition lists) and records every braced executable
+  block\'s text, in document order, untouched blocks included; the walk after the pass gives
+  the sugared texts, zipped block for block (tests `snapshot_lists_untouched_blocks_too`,
+  `snapshot_has_the_authors_raw_lines_for_a_sugared_cell`,
+  `snapshot_includes_cells_inside_containers`). The open checks are settled: a sugared cell
+  inside a container keeps its author text
+  (`sugared_cell_inside_a_container_keeps_its_author_text`), and a second engine iteration
+  reuses the one snapshot and the one scan (`second_engine_reuses_the_one_snapshot`). A
+  non-crossref label stays in both texts, so nothing special is needed for it.
+- [x] Source-of-inputs tests: `code_edit_in_an_included_file_changes_the_hashes_and_prose_does_not`
+  (an `{{< include >}}`\'d cell is a unit; its edit changes the unit and execution hashes, a
+  prose edit changes neither) and `equivalent_metadata_spellings_hash_alike` (key order and
+  quoting hash alike, a changed value does not). The stage feeds the hashes the merged
+  `ctx.metadata`, lowered by the new `ExecutionContext::document_metadata_json`, which the
+  Jupyter engine and the stub engines pass as `EngineEntryInput::document_metadata`.
+- [x] Inside the engine loop, right after the capture event, `emit_engine_record` sends each
+  engine\'s uncoalesced record (as a one-engine record notebook, so a reader needs one shape)
+  under `ENGINE_CAPTURE_RECORD_KIND` with the same `run_index` and the engine name in the
+  payload. `JsonTraceObserver` remembers which `engine_captures` slot each `run_index` filled
+  and stores the record on that slot in the new trace-only `EngineCapture.record`
+  (`crates/quarto-trace/src/lib.rs`, `serde(default, skip_serializing_if)`), checking the
+  engine name; an unknown run index or a name mismatch is a warning and the record is dropped
+  (`trace_record_pairs_by_run_index_not_last_pushed`,
+  `trace_engine_capture_carries_per_engine_record_when_tracing`,
+  `trace_pairs_each_engines_record_with_its_own_capture`). The preview and hub recorders
+  ignore the kind.
+- [x] After the loop, the stage coalesces with `coalesce(engine_records, unit_order)` over the
+  one unit list, sets `quarto_source` (project-relative, forward slashes), and emits the
+  record under `ENGINE_RECORD_KIND`. Side data is folded per engine by `fold_side_data`
+  (includes, filters, preserve, `needs_postprocess`, `html_dependencies`, `pandoc`,
+  `metadata`, `resource_files`, `warnings`) before the drains move it out of the result; no
+  engine fills these itself (`engine_stage_folds_result_side_data_into_notebook_metadata`,
+  `two_engines_coalesce_in_source_order_with_quarto_engine`, `coalescing_is_deterministic`).
+- [x] **Record handoff to the capture writers.** `preview_record::CaptureRun { captures,
+  record: Option<Record> }` and `record_capture_run(...)`; `record_capture` is a thin wrapper
+  returning `.captures`, so its callers are unchanged. `CaptureCollector` collects the
+  `ENGINE_RECORD_KIND` payload and returns `true` from `wants_execution_record`.
+  `provide-hub` (`quarto-hub-provider/src/execute.rs`) now runs `record_capture_run` and
+  `write_capture_doc` takes the `CaptureRun` (it stores the captures only until EXR-13 says
+  how the hub document carries the record); the preview cache and the hub guest writer keep
+  calling `record_capture` until EXR-13 and EXR-14 take the run. The `-M` question is
+  settled: the stage cannot compute the overlay-free hash set in the one run, because the
+  `-M` overlay is a runtime overlay (`RenderOverlay::apply`) that `MetadataMergeStage` folds
+  over the document\'s metadata before the stage sees it, and the merge is not invertible (an
+  overridden key loses its source value). The provider recomputes from the source project,
+  with no extra pipeline run: `compute_input_qmd` is now a wrapper over
+  `compute_source_inputs`, which returns the overlay-free merged metadata next to the bytes
+  (`crates/quarto-core/src/engine/preview_record.rs`), and `overlay_free_run` rehashes the
+  record with `record::rehash_record` (each entry\'s stored `hash_definition`, unit hashes
+  untouched) and notes the overlay\'s execution-relevant keys in `quarto_overlay`
+  (`record::overlay_difference`). Tests: `capture_run_carries_the_record`,
   `record_capture_wrapper_returns_the_same_captures`,
   `provide_hub_with_overlay_stores_overlay_free_record_hashes`,
-  `legacy_capture_bytes_unchanged_when_record_collected`.
-- [ ] Write the file for a plain render (epic decision 33). When the merged metadata has
-  `execute: {record: true}`, write the coalesced record to
-  `.quarto/execution-records/<doc path without extension>.ipynb` (epic decision 3;
-  project-relative, a `.quarto/` beside a standalone document) using EXR-4\'s
-  deterministic serializer. Tests: a plain render with the key writes the file at that
-  path; one without it writes nothing; rendering twice produces identical bytes; the
-  hub writers of EXR-13 are untouched.
-- [ ] Phase 0 gating, trace and coalescing tests green.
-- Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
-  `cargo nextest run -p quarto-core` (and `-p quarto-trace` for the new field).
+  `legacy_capture_bytes_unchanged_when_record_collected`, plus
+  `rehash_restores_the_overlay_free_hashes` and
+  `overlay_difference_keeps_only_execution_relevant_keys`.
+- [x] The file for a plain render (epic decision 33): with `execute: {record: true}`,
+  `write_record_file` writes the coalesced record to
+  `.quarto/execution-records/<doc path without extension>.ipynb` under the project
+  directory (a `.quarto/` beside a standalone document) through the runtime, with
+  `write_record`. Tests: `execute_record_true_writes_the_record_file` (the path, a parseable
+  record, identical bytes on a second render) and `plain_render_writes_no_record_file` (an
+  observer that wants the record does not write it; only the document\'s key does). The hub
+  writers are untouched.
+- [x] Phase 0 gating, trace and coalescing tests green.
+- [x] Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
+  `cargo nextest run -p quarto-core` (and `-p quarto-trace` for the new field, and
+  `-p quarto-hub-provider` for the overlay path).
 
 ### Phase 3: the shadow equivalence test
 
-- [ ] `present(record)` (EXR-1 presenter, driven by the same units and the same
-  `execute_scope` the engine used) equals the live markdown for every fixture,
-  including written figure file names and the `supporting_files` directory.
-  Test-only: the comparator lives in the integration test, not in production.
-- [ ] A negative control: perturb one output in the record and assert the
-  comparator fails, so the harness cannot pass vacuously.
-- [ ] Record the serialized record size for the figure fixture and for a
-  twenty-cell document in this plan (an input to bd-sr73 and to the EXR-4
-  figure decision; no decision is made here).
-- Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
-  `cargo nextest run -p quarto-core`.
+Done 2026-10-31, in `tests/integration/jupyter_record_shadow.rs`, against the real kernel
+(the Positron venv; every case skips with a message when no Python kernelspec is found).
+The image fixtures display a one-pixel PNG through `IPython.display.Image`, so ipykernel is
+the only requirement (matplotlib was not in the venv and is not needed).
+
+- [x] `present(record)` equals the live markdown for every fixture, written figure file
+  names and the `supporting_files` directory included. The comparator (test-only) drives
+  the EXR-1 presenter the way the live loop does: the units scanned from the capture\'s
+  `input_qmd`, matched to record cells by kind and document-wide counter (the engine\'s
+  own rule); the same `execute:` scope, from `merge_execute_scope` (now `pub`, re-exported
+  from `stage::stages`) over the input\'s front matter; `partition_cell_options`,
+  `resolve_cell_options` and `CellVisibility::resolve` for visibility; `render_cell` over
+  `CellResult::from_nbformat` (the stored-notebook replay\'s conversion, moved to
+  `presenter/output.rs` so the record and `ipynb_replay` share it) with an `FsFigureSink`
+  beside a second temp copy of the document; `render_inline` over the span\'s raw bundle;
+  `splice_mixed`. Figure files are compared by relative name and bytes
+  (`shadow_png_plus_text` asserts `figure-html/cell-1-output-1.png`,
+  `shadow_hidden_then_plot` asserts `cell-2-output-1.png` after a hidden first cell).
+- [x] The negative control (`shadow_negative_control_detects_a_perturbed_output`): a
+  perturbed stream text and an emptied cell list both fail the comparator.
+- [x] Serialized record sizes (`write_record`, pretty JSON), measured 2026-10-31 with
+  `shadow_record_sizes_for_the_plan`: the figure fixture (`png-plus-text`, one
+  one-pixel PNG plus its `text/plain`) is 2964 bytes for 1 cell; `twenty-cells` (twenty
+  `print` cells) is 13464 bytes for 20 cells, about 670 bytes per cell of overhead
+  (ids, hashes, the declaration). A real figure adds its base64 size on top. An input to
+  bd-sr73 and the EXR-4 figure decision; no decision is made here.
+- [x] Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
+  `cargo nextest run -p quarto-core` (shadow suite run with the kernel: 57 tests across the
+  shadow, stored-replay, replay-engine and stage files, all passed).
 
 ### Phase 4: verification
 
-- [ ] `cargo clippy -p quarto-core --all-targets -- -D warnings` and
-  `cargo nextest run -p quarto-core`; recommend (do not run unprompted) the
-  nextest run on direct dependents (`cargo tree -i quarto-core`).
-- [ ] Render this plan with `q2 render --strict` before any push.
+Done 2026-11-01.
+
+- [x] `cargo clippy --all-targets -- -D warnings` and `cargo nextest run` on `quarto-core`,
+  `quarto-trace` and `quarto-hub-provider` (the three crates the plan touched): clippy clean;
+  7013 passed, 36 skipped (the kernel-gated shadow cases skip without a kernel; with the
+  Positron venv on `PATH` they ran, 57 passed). The nextest run on the direct dependents of
+  `quarto-core` (`cargo tree -i quarto-core`) is recommended in the handoff, not run here;
+  `cargo check --all-targets` on `quarto-preview`, `quarto` and `quarto-hub-provider` passed.
+- [x] Rendered with `q2 render --strict` (only the known unrelated Q-12-13 errors; none name
+  this file).
 
 ## Exit criteria
 

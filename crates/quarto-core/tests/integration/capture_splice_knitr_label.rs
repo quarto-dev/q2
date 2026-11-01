@@ -116,6 +116,7 @@ async fn labeled_figure_splices_for_any_engine_name() {
         result: serde_json::json!({
             "markdown": "::: {#fig-two-sines}\n\n::: {.cell}\n```{.r .cell-code}\nplot(1)\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nOUT_MARKER\n```\n:::\n:::\n\nTwo sines\n\n:::\n"
         }),
+        record: None,
         files: Vec::new(),
     };
     let dir = tempfile::tempdir().unwrap();
@@ -156,6 +157,7 @@ async fn canonical_capture_without_injected_line_splices() {
         result: serde_json::json!({
             "markdown": "::: {#fig-two-sines}\n\n::: {.cell}\n```{.r .cell-code}\nplot(1)\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nOUT_MARKER\n```\n:::\n:::\n\nTwo sines\n\n:::\n"
         }),
+        record: None,
         files: Vec::new(),
     };
     let dir = tempfile::tempdir().unwrap();

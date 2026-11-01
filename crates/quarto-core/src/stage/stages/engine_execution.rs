@@ -52,6 +52,19 @@ use crate::trace_event;
 /// payload's JSON shape matches [`quarto_trace::EngineCapture`].
 pub const ENGINE_CAPTURE_KIND: &str = "EngineCapture";
 
+/// Auxiliary-data kind for one engine's **uncoalesced** execution record
+/// (EXR-5). Emitted right after that engine's `ENGINE_CAPTURE_KIND` event
+/// with the same `run_index`; the payload is `{"engine_name", "record"}`.
+/// Only the JSON trace observer stores it (on that engine's
+/// `engine_capture.record`); the preview and hub recorders ignore it.
+pub const ENGINE_CAPTURE_RECORD_KIND: &str = "EngineCaptureRecord";
+
+/// Auxiliary-data kind for the document's **coalesced** execution record
+/// (EXR-5): one event per stage run, after the engine loop, whose payload is
+/// the record notebook as JSON. Observers that do not know the kind ignore
+/// it.
+pub const ENGINE_RECORD_KIND: &str = "EngineRecord";
+
 /// Pipeline stage that executes code cells via the appropriate engine.
 ///
 /// This stage is the bridge between the AST-based pipeline and text-based
@@ -498,9 +511,25 @@ impl PipelineStage for EngineExecutionStage {
         // follow-up.
         let source_context_arc = std::sync::Arc::new(source_context.clone());
 
-        // P2-13: multi-engine flag for partition_cells (must be captured
+        // P2-13: multi-engine flag for plan_document (must be captured
         // before `to_run.into_iter()` moves the vec).
         let multi_engine = to_run.len() > 1;
+
+        // EXR-5: whether the engines build an execution record this run. The
+        // observer asks for one (the preview recorder, the hub, the trace) or
+        // the document does with `execute: {record: true}` (epic decision 24);
+        // a plain render asks for nothing and the engines allocate nothing.
+        let record_requested = ast
+            .meta
+            .get("execute")
+            .and_then(|e| e.get("record"))
+            .and_then(|r| r.as_bool())
+            .unwrap_or(false);
+        let want_record = record_requested || ctx.observer.wants_execution_record();
+        // The author texts of the one scan (built with the units, below) and
+        // the per-engine records, coalesced after the loop.
+        let mut shared_author_texts: Option<crate::record::AuthorTexts> = None;
+        let mut engine_records: Vec<crate::record::EngineRecord> = Vec::new();
 
         // EXR-2 Phase 4: the one scan. It runs over the text the first engine
         // receives, before any engine runs, and every engine gets the same
@@ -591,14 +620,24 @@ impl PipelineStage for EngineExecutionStage {
             .with_cell_options(cell_options)
             .with_cancellation(ctx.cancellation.clone())
             .with_execute_timeout(execute_timeout)
-            // P2-13: loud "owned-but-unrunnable" gate in partition_cells
+            // P2-13: loud "owned-but-unrunnable" gate in plan_document
             // fires only in a multi-engine sequence (|sequence| > 1).
             .with_multi_engine(multi_engine)
             .with_units(
                 shared_units
-                    .get_or_insert_with(|| crate::engine::units::scan_units(&qmd))
+                    .get_or_insert_with(|| {
+                        // EXR-5: the one scan also fills every unit's id from
+                        // the author text (epic decisions 36 and 38). Ids are
+                        // filled whether or not a record is wanted, since the
+                        // wire (EXR-7) carries them.
+                        let (units, texts) = scan_and_fill_ids(&qmd, &ctx.sugared_blocks);
+                        shared_author_texts = Some(texts);
+                        units
+                    })
                     .clone(),
             )
+            .with_author_texts(shared_author_texts.clone().unwrap_or_default())
+            .with_want_record(want_record)
             .with_metadata(document_metadata.clone())
             .with_project_env({
                 let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
@@ -699,6 +738,24 @@ impl PipelineStage for EngineExecutionStage {
                         e
                     );
                 }
+            }
+
+            // EXR-5: the engine's own record, with the result's side data
+            // folded into its entry and sent to the trace as its own event
+            // right after the capture, under the same `run_index`. Only the
+            // trace observer stores it (`engine_capture.record`); the preview
+            // and hub recorders ignore the kind. Taken before the drains
+            // below, which move the side data out of `result`.
+            if let Some(mut engine_record) = result.record.take() {
+                fold_side_data(&mut engine_record.engine, &result);
+                emit_engine_record(
+                    ctx,
+                    self.name(),
+                    run_index,
+                    &engine_record,
+                    shared_units.as_deref().unwrap_or(&[]),
+                );
+                engine_records.push(engine_record);
             }
 
             // Drain warnings the engine raised without failing (e.g.
@@ -864,6 +921,34 @@ impl PipelineStage for EngineExecutionStage {
                 .on_engine_data(engine.name(), run_index, &ast, &merged_context);
         }
 
+        // EXR-5: coalesce the engines' records into the document's record,
+        // ordered by the one unit list (epic decision 38), and hand it out as
+        // an aux event (the preview recorder and the hub collect it). When the
+        // document asked for it, the record is also written beside the
+        // project's `.quarto/` (epic decisions 3 and 33).
+        if want_record {
+            let unit_order = shared_units.as_deref().unwrap_or(&[]);
+            let mut record = crate::record::coalesce(&engine_records, unit_order).map_err(|e| {
+                PipelineError::stage_error(self.name(), format!("execution record: {e}"))
+            })?;
+            record.metadata.quarto_source = Some(project_relative_source(&ctx.project.dir, &path));
+            match serde_json::to_value(&record) {
+                Ok(value) => {
+                    ctx.observer
+                        .on_auxiliary_data(self.name(), 0, ENGINE_RECORD_KIND, &value);
+                }
+                Err(e) => trace_event!(
+                    ctx,
+                    EventLevel::Warn,
+                    "failed to serialize the execution record: {}",
+                    e
+                ),
+            }
+            if record_requested {
+                write_record_file(ctx, self.name(), &path, &record)?;
+            }
+        }
+
         Ok(PipelineData::DocumentAst(DocumentAst {
             path,
             ast,
@@ -874,6 +959,143 @@ impl PipelineStage for EngineExecutionStage {
             derived_listing,
         }))
     }
+}
+
+/// EXR-5: the one scan, with every unit's id filled from the author text the
+/// sugaring stage snapshotted (`StageContext::sugared_blocks`). `author_texts`
+/// is total over the units it is built from, so `fill_ids` cannot fail.
+fn scan_and_fill_ids(
+    qmd: &str,
+    snapshot: &[crate::record::SugaredBlock],
+) -> (Vec<crate::engine::units::Unit>, crate::record::AuthorTexts) {
+    let mut units = crate::engine::units::scan_units(qmd);
+    let texts = crate::record::author_texts(&units, snapshot);
+    crate::record::fill_ids(&mut units, &texts)
+        .expect("author_texts is total over the units it was built from");
+    (units, texts)
+}
+
+/// EXR-5: fold an engine's side data (everything in its `ExecuteResult` but the
+/// markdown and the supporting files) into its record entry, as notebook-level
+/// metadata. The stage does this for every engine, so no engine fills these
+/// itself.
+fn fold_side_data(entry: &mut crate::record::EngineEntry, result: &crate::engine::ExecuteResult) {
+    fn json_map(
+        map: &std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue>,
+    ) -> std::collections::BTreeMap<String, serde_json::Value> {
+        map.iter()
+            .filter_map(|(k, v)| serde_json::to_value(v).ok().map(|v| (k.clone(), v)))
+            .collect()
+    }
+    let includes = &result.includes;
+    entry.includes = if includes.header_includes.is_empty()
+        && includes.include_before.is_empty()
+        && includes.include_after.is_empty()
+    {
+        None
+    } else {
+        serde_json::to_value(includes).ok()
+    };
+    entry.filters = result.filters.clone();
+    entry.preserve = result
+        .preserve
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    entry.needs_postprocess = result.needs_postprocess;
+    entry.html_dependencies = result
+        .html_dependencies
+        .iter()
+        .filter_map(|d| serde_json::to_value(d).ok())
+        .collect();
+    entry.pandoc = result.pandoc.as_ref().map(json_map);
+    entry.metadata = result.metadata.as_ref().map(json_map);
+    entry.resource_files = result.resource_files.clone();
+    entry.warnings = result
+        .warnings
+        .iter()
+        .filter_map(|w| serde_json::to_value(w).ok())
+        .collect();
+}
+
+/// EXR-5: send one engine's uncoalesced record to the observer as a one-engine
+/// record notebook, paired with that engine's capture by `run_index` and name.
+fn emit_engine_record(
+    ctx: &StageContext,
+    stage: &str,
+    run_index: usize,
+    engine_record: &crate::record::EngineRecord,
+    unit_order: &[crate::engine::units::Unit],
+) {
+    let single = crate::record::coalesce(std::slice::from_ref(engine_record), unit_order);
+    match single
+        .map_err(|e| e.to_string())
+        .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
+    {
+        Ok(record) => ctx.observer.on_auxiliary_data(
+            stage,
+            run_index,
+            ENGINE_CAPTURE_RECORD_KIND,
+            &serde_json::json!({
+                "engine_name": engine_record.engine.name,
+                "record": record,
+            }),
+        ),
+        Err(e) => trace_event!(
+            ctx,
+            EventLevel::Warn,
+            "[{}] failed to serialize the engine's execution record: {}",
+            engine_record.engine.name,
+            e
+        ),
+    }
+}
+
+/// The document's path relative to the project directory, with forward slashes
+/// (the record's `quarto_source`; a standalone document is relative to its own
+/// directory). A path outside the project keeps its file name.
+fn project_relative_source(project_dir: &std::path::Path, path: &std::path::Path) -> String {
+    let rel = path
+        .strip_prefix(project_dir)
+        .unwrap_or_else(|_| path.file_name().map_or(path, std::path::Path::new));
+    quarto_util::to_forward_slashes(rel)
+}
+
+/// EXR-5 (epic decisions 3 and 33): write the coalesced record to
+/// `.quarto/execution-records/<doc path without extension>.ipynb`,
+/// project-relative (a `.quarto/` beside a standalone document), with the
+/// deterministic serializer, so two renders of the same inputs write the same
+/// bytes.
+fn write_record_file(
+    ctx: &StageContext,
+    stage: &str,
+    path: &std::path::Path,
+    record: &crate::record::Record,
+) -> Result<(), PipelineError> {
+    let rel = std::path::PathBuf::from(project_relative_source(&ctx.project.dir, path))
+        .with_extension("ipynb");
+    let target = ctx
+        .project
+        .dir
+        .join(".quarto")
+        .join("execution-records")
+        .join(rel);
+    let text = crate::record::write_record(record).map_err(|e| {
+        PipelineError::stage_error(stage, format!("serializing the execution record: {e}"))
+    })?;
+    if let Some(parent) = target.parent() {
+        ctx.runtime.dir_create(parent, true).map_err(|e| {
+            PipelineError::stage_error(stage, format!("creating {}: {e}", parent.display()))
+        })?;
+    }
+    ctx.runtime
+        .file_write(&target, text.as_bytes())
+        .map_err(|e| {
+            PipelineError::stage_error(
+                stage,
+                format!("writing the execution record {}: {e}", target.display()),
+            )
+        })
 }
 
 /// Derive the per-engine intermediate filename from the source path.
@@ -1087,7 +1309,7 @@ fn ts_document_metadata(
     map
 }
 
-fn merge_execute_scope(
+pub fn merge_execute_scope(
     base_format: FormatIdentifier,
     document_scope: Option<quarto_pandoc_types::ConfigValue>,
 ) -> Option<quarto_pandoc_types::ConfigValue> {
@@ -3267,6 +3489,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -3669,6 +3892,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            record: None,
             files: Vec::new(),
         };
 

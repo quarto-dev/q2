@@ -26,12 +26,13 @@
 //! "Open follow-up".
 
 use std::fmt::Write as _;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
 use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
+use quarto_core::pandoc_request::captures::{CapturePayload, parse_capture_payload};
 use quarto_core::project::ProjectContext;
 use quarto_core::stage::PipelineError;
 use quarto_system_runtime::SystemRuntime;
@@ -72,28 +73,25 @@ pub fn cache_file_path(cache_dir: &Path, key: &str) -> PathBuf {
 /// `tracing::warn!` so a corrupt cache entry doesn't take the preview
 /// server down.
 ///
-/// For robustness against a stale pre-bd-5yff4 entry (a single capture
-/// object), a failed array parse falls back to a single-object parse
-/// wrapped in a vec.
+/// The shape is decided by
+/// [`parse_capture_payload`](quarto_core::pandoc_request::captures::parse_capture_payload),
+/// which also accepts a stale pre-bd-5yff4 single-capture entry. This cache only
+/// ever holds legacy captures today: an empty or record payload is reported as
+/// unreadable (`InvalidData`), which the driver treats as a miss.
 pub fn read_cached(cache_dir: &Path, key: &str) -> std::io::Result<Option<Vec<EngineCapture>>> {
     let path = cache_file_path(cache_dir, key);
-    let file = match std::fs::File::open(&path) {
-        Ok(f) => f,
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e),
     };
-    let mut decoder = flate2::read::GzDecoder::new(file);
-    let mut json_bytes = Vec::new();
-    decoder.read_to_end(&mut json_bytes)?;
-    match serde_json::from_slice::<Vec<EngineCapture>>(&json_bytes) {
-        Ok(captures) => Ok(Some(captures)),
-        Err(array_err) => match serde_json::from_slice::<EngineCapture>(&json_bytes) {
-            Ok(single) => Ok(Some(vec![single])),
-            Err(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                array_err,
-            )),
-        },
+    let invalid = |msg: String| std::io::Error::new(std::io::ErrorKind::InvalidData, msg);
+    match parse_capture_payload(Some(&bytes), key).map_err(invalid)? {
+        CapturePayload::Legacy(captures) => Ok(Some(captures)),
+        CapturePayload::Empty => Err(invalid("cache entry is empty".to_string())),
+        CapturePayload::Record(_) => Err(invalid(
+            "cache entry holds an engine record, which this cache does not read yet".to_string(),
+        )),
     }
 }
 
@@ -216,6 +214,7 @@ mod tests {
                 "needs_postprocess": false,
             }),
             files: Vec::new(),
+            record: None,
         }
     }
 

@@ -310,7 +310,8 @@ fn active_file_captures(
     }
     let key = super::captures::sidecar_key(runtime, path);
     match captures_by_path.get(&key) {
-        Some(bytes) => super::captures::parse_capture_gz(Some(bytes))
+        Some(bytes) => super::captures::parse_capture_payload(Some(bytes), &key)
+            .map(super::captures::CapturePayload::into_captures)
             .map_err(|e| format!("Failed to parse capture: {e}")),
         None => Ok(Vec::new()),
     }

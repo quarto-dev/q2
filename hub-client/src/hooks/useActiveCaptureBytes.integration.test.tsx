@@ -42,6 +42,21 @@ describe('useActiveCaptureBytes (bd-uy4uygha)', () => {
     await waitFor(() => expect(result.current).toEqual(CAPTURE_BYTES));
   });
 
+  it('returns an engine-record doc\'s bytes unchanged (bytes are opaque; the MIME is never consulted, EXR-13)', async () => {
+    const RECORD_BYTES = new Uint8Array([0x1f, 0x8b, 8, 0, 5, 5, 5]);
+    getBinaryDocById.mockResolvedValueOnce({
+      content: RECORD_BYTES,
+      mimeType: 'application/x-engine-record+gzip',
+    });
+    const captures: Record<string, CaptureRef> = {
+      'doc.qmd': { captureDocId: 'rec-1', state: 'idle' },
+    };
+    const { result } = renderHook(() => useActiveCaptureBytes(captures, 'doc.qmd'));
+
+    await waitFor(() => expect(getBinaryDocById).toHaveBeenCalledWith('rec-1'));
+    await waitFor(() => expect(result.current).toEqual(RECORD_BYTES));
+  });
+
   it('returns undefined and does not fetch when the active path has no capture', async () => {
     const captures: Record<string, CaptureRef> = { 'other.qmd': { captureDocId: 'cap-x' } };
     const { result } = renderHook(() => useActiveCaptureBytes(captures, 'doc.qmd'));

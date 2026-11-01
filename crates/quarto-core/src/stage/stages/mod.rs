@@ -132,7 +132,10 @@ pub use compile_theme_css::{
     sass_perf_counters, theme_fingerprint,
 };
 pub use document_profile::DocumentProfileStage;
-pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
+pub use engine_execution::{
+    ENGINE_CAPTURE_KIND, ENGINE_CAPTURE_RECORD_KIND, ENGINE_RECORD_KIND, EngineExecutionStage,
+    merge_execute_scope,
+};
 pub use equation_number::{
     EQ_NUMBER_LABEL_CLASS, EQ_SIBLING_NUMBER_CLASS, EquationNumberStage, NumberEncoding,
 };

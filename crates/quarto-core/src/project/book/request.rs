@@ -79,17 +79,24 @@ pub(crate) async fn render_book_request(
                 },
                 Vec::new(),
             ),
-            Some(bytes) => match crate::pandoc_request::captures::parse_capture_gz(Some(bytes)) {
-                Ok(captures) => (PartialKind::Request { captures }, Vec::new()),
-                Err(e) => (
-                    PartialKind::Request {
-                        captures: Vec::new(),
-                    },
-                    vec![DiagnosticMessage::warning(format!(
-                        "Could not read the recorded results for {label}: {e}; its code is shown as source"
-                    ))],
-                ),
-            },
+            Some(bytes) => {
+                match crate::pandoc_request::captures::parse_capture_payload(Some(bytes), &key) {
+                    Ok(payload) => (
+                        PartialKind::Request {
+                            captures: payload.into_captures(),
+                        },
+                        Vec::new(),
+                    ),
+                    Err(e) => (
+                        PartialKind::Request {
+                            captures: Vec::new(),
+                        },
+                        vec![DiagnosticMessage::warning(format!(
+                            "Could not read the recorded results for {label}: {e}; its code is shown as source"
+                        ))],
+                    ),
+                }
+            }
         }
     };
 

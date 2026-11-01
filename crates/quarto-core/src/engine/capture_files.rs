@@ -401,6 +401,7 @@ mod tests {
             engine_name: "knitr".into(),
             input_qmd: "```{r}\n1\n```\n".into(),
             result: serde_json::json!({"markdown": "out"}),
+            record: None,
             files: vec![CaptureFile {
                 path: "f.png".into(),
                 contents_base64: BASE64.encode(b"PNG"),

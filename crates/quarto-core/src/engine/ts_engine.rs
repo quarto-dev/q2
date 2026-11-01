@@ -660,6 +660,8 @@ impl TsEngine {
             // TS engines report problems through the protocol; nothing maps
             // to `ExecuteResult::warnings` yet (bd-yd94iyq9).
             warnings: Vec::new(),
+            // EXR-7 fills this from the wire; until then TS engines build no record.
+            record: None,
         })
     }
 }

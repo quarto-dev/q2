@@ -386,6 +386,14 @@ pub struct StageContext {
     /// [`crate::render::RenderContext::unexecuted_cells`] by `run_pipeline`.
     pub unexecuted_cells: usize,
 
+    /// One entry per braced executable block, in document order, as
+    /// `PreEngineSugaringStage` saw it before rewriting anything: the author's
+    /// text and the text the engine sees (EXR-5; epic decision 36). The engine
+    /// stage aligns it with its unit scan to recover the author text crossref
+    /// sugaring strips (label and caption lines). Empty when the sugaring stage
+    /// did not run, in which case the scanned text stands in.
+    pub sugared_blocks: Vec<crate::record::SugaredBlock>,
+
     /// This chapter's harvested citation manifest (book-projects P6),
     /// set by [`crate::stage::stages::UserFiltersStage`] from the
     /// citeproc filter's output alongside its existing, unchanged
@@ -511,6 +519,7 @@ impl StageContext {
             prepare_options: None,
             pandoc_request: None,
             unexecuted_cells: 0,
+            sugared_blocks: Vec::new(),
             chapter_seed: None,
             cross_chapter_crossref_registry: None,
             citation_manifest: None,

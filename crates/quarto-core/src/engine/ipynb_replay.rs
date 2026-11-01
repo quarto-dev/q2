@@ -40,9 +40,7 @@ use crate::engine::traits::ExecutionEngine;
 use crate::engine::units::{CodeBlock, legacy_cells};
 use crate::presenter::cell::{describe_location, render_cell};
 use crate::presenter::figures::{FigureSink, FsFigureSink, RuntimeFigureSink};
-use crate::presenter::output::{
-    CellOutput, CellResult, ExecuteStatus, MimeBundle, extract_text_content,
-};
+use crate::presenter::output::CellResult;
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
 
 /// Renders `.ipynb` documents' stored outputs (Plan 7c Phase 3, option B).
@@ -249,88 +247,18 @@ fn owning_code_cell_index(
 }
 
 /// Convert one notebook code cell's stored nbformat outputs into the
-/// kernel result shape [`render_cell`] consumes. Handled `output_type`s:
-/// `stream`, `execute_result`, `display_data`, `error`; legacy
-/// pre-nbformat-4 types (`pyout`/`pyerr`) are skipped — they do not
-/// appear in any notebook produced this century. The status is always
-/// `Ok`: a stored `error` output is content to show, not a status to
-/// abort on.
+/// kernel result shape [`render_cell`] consumes
+/// ([`CellResult::from_nbformat`]; the conversion is shared with the
+/// execution record, EXR-5).
 fn stored_result_for_cell(cell: &Value) -> CellResult {
-    let execution_count = cell
-        .get("execution_count")
-        .and_then(|v| v.as_u64())
-        .and_then(|v| u32::try_from(v).ok());
-    let mut outputs = Vec::new();
-    if let Some(list) = cell.get("outputs").and_then(|v| v.as_array()) {
-        for out in list {
-            match out.get("output_type").and_then(|t| t.as_str()) {
-                Some("stream") => outputs.push(CellOutput::Stream {
-                    name: out
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("stdout")
-                        .to_string(),
-                    text: out
-                        .get("text")
-                        .map(extract_text_content)
-                        .unwrap_or_default(),
-                }),
-                Some("execute_result") => outputs.push(CellOutput::ExecuteResult {
-                    execution_count: out
-                        .get("execution_count")
-                        .and_then(|v| v.as_u64())
-                        .and_then(|v| u32::try_from(v).ok())
-                        .unwrap_or(0),
-                    data: mime_bundle(out.get("data")),
-                    metadata: out.get("metadata").cloned().unwrap_or(Value::Null),
-                }),
-                Some("display_data") => outputs.push(CellOutput::DisplayData {
-                    data: mime_bundle(out.get("data")),
-                    metadata: out.get("metadata").cloned().unwrap_or(Value::Null),
-                }),
-                Some("error") => outputs.push(CellOutput::Error {
-                    ename: out
-                        .get("ename")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Error")
-                        .to_string(),
-                    evalue: out
-                        .get("evalue")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
-                    traceback: out
-                        .get("traceback")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|s| s.as_str())
-                                .map(str::to_string)
-                                .collect()
-                        })
-                        .unwrap_or_default(),
-                }),
-                other => tracing::debug!(
-                    output_type = other.unwrap_or("<missing>"),
-                    "ipynb replay: skipping unsupported stored output"
-                ),
-            }
-        }
-    }
-    CellResult {
-        status: ExecuteStatus::Ok,
+    let outputs = cell
+        .get("outputs")
+        .and_then(|v| v.as_array())
+        .map_or(&[][..], Vec::as_slice);
+    CellResult::from_nbformat(
         outputs,
-        execution_count,
-    }
-}
-
-/// A nbformat mime bundle (`{"text/html": ...}`) as the kernel's
-/// [`MimeBundle`].
-fn mime_bundle(value: Option<&Value>) -> MimeBundle {
-    value
-        .and_then(|v| v.as_object())
-        .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-        .unwrap_or_default()
+        cell.get("execution_count").and_then(|v| v.as_u64()),
+    )
 }
 
 #[cfg(test)]

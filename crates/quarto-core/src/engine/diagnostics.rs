@@ -31,7 +31,8 @@ const ISSUES_URL: &str = "https://github.com/quarto-dev/q2/issues";
 
 /// The diagnostic for an engine failure.
 ///
-/// `MalformedResult` maps to `Q-18-1`, `RuntimeNotFound` to `Q-18-3`. Every
+/// `MalformedResult` maps to `Q-18-1`, `RuntimeNotFound` to `Q-18-3`,
+/// `NoHandlerForLanguage` to `Q-18-5`. Every
 /// other variant currently maps to an uncoded error whose title is the
 /// variant's `Display` text — exactly what the stage produced before this
 /// seam existed — so adding a mapping here is the whole job of giving a
@@ -81,8 +82,60 @@ pub fn engine_error_diagnostic(err: &ExecutionError) -> DiagnosticMessage {
                 ))
                 .build()
         }
+        ExecutionError::NoHandlerForLanguage { engine, language } => {
+            no_runnable_kernel_diagnostic(engine, std::slice::from_ref(language), true)
+        }
         other => DiagnosticMessage::error(other.to_string()),
     }
+}
+
+/// `Q-18-5`: the engine owns these languages but no installed kernel runs
+/// them. One diagnostic per document, listing every language. An error in a
+/// multi-engine document (`as_error`), where an `engine:` list means the
+/// author said who runs what; a warning otherwise, where the cells are left
+/// as written and the render continues. Both forms share the code and text.
+pub fn no_runnable_kernel_diagnostic(
+    engine: &str,
+    languages: &[String],
+    as_error: bool,
+) -> DiagnosticMessage {
+    let list = languages
+        .iter()
+        .map(|l| format!("`{l}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let builder = if as_error {
+        DiagnosticMessageBuilder::error("Owned Language Has No Runnable Kernel")
+    } else {
+        DiagnosticMessageBuilder::warning("Owned Language Has No Runnable Kernel")
+    };
+    let builder = builder.with_code("Q-18-5").problem(format!(
+        "the `{engine}` engine runs {list} cells, but no installed Jupyter kernel declares \
+         that language."
+    ));
+    let builder = if as_error {
+        builder
+    } else {
+        builder.add_detail("The cells are left as written and were not run.")
+    };
+    builder
+        .add_hint(
+            "Install a Jupyter kernel for the language (`jupyter kernelspec list` shows what \
+             is installed), name a kernel for the whole document with `jupyter: <kernel>`, \
+             or give the cell `eval: false` if it is only meant to be shown.",
+        )
+        .build()
+}
+
+/// A fence language that Quarto 2 invented and is removing. Not coded: it
+/// goes away with the alias table after one release.
+pub fn deprecated_alias_diagnostic(alias: &str, canonical: &str) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("Deprecated Language Alias")
+        .problem(format!(
+            "`{{{alias}}}` cells are accepted for now, but the alias will be removed."
+        ))
+        .add_hint(format!("Write `{{{canonical}}}` instead."))
+        .build()
 }
 
 /// `Q-18-2`: the engine named an include file (`slot` is the Pandoc-style

@@ -13,28 +13,130 @@ use quarto_system_runtime::SystemRuntime;
 
 use super::normalize_request_path_str;
 
-/// Deserialize a gzipped JSON capture sequence (empty when absent or empty).
-/// A stale single-object capture document is accepted as one capture.
-pub fn parse_capture_gz(bytes: Option<&[u8]>) -> Result<Vec<quarto_trace::EngineCapture>, String> {
+/// What a capture document's payload holds, decided from the payload itself
+/// (EXR-13). The TS layer fetches bytes without the MIME type, so the dispatch is
+/// here, in Rust, on the decompressed JSON.
+#[derive(Debug, Clone)]
+pub enum CapturePayload {
+    /// No payload (absent or zero bytes).
+    Empty,
+    /// The legacy `EngineCapture[]` shape (or a stale single capture object).
+    Legacy(Vec<quarto_trace::EngineCapture>),
+    /// A coalesced engine execution record (an nbformat notebook).
+    Record(std::sync::Arc<crate::record::Record>),
+}
+
+impl CapturePayload {
+    /// The captures the splice stage can present today. A record is not presented
+    /// until EXR-14, so it yields none and its code cells render as source.
+    pub fn into_captures(self) -> Vec<quarto_trace::EngineCapture> {
+        match self {
+            CapturePayload::Legacy(captures) => captures,
+            CapturePayload::Empty | CapturePayload::Record(_) => Vec::new(),
+        }
+    }
+}
+
+/// Whether a legacy payload still presents. A legacy payload degrades to
+/// [`CapturePayload::Empty`] (cells render as source) plus one notice when this is
+/// `true`. It is off while legacy captures still present; flipping it is the whole
+/// switch for EXR-17's "old captures degrade to no capture" window.
+pub const DEGRADE_LEGACY_CAPTURES: bool = false;
+
+/// Parse a capture document's gzipped payload, dispatching on its shape: a top-level
+/// object with an `nbformat` key is a record; an array, or an object with
+/// `engine_name`, is a legacy capture; anything else is an error naming both shapes.
+///
+/// `doc` names the document for the degrade notice only.
+pub fn parse_capture_payload(bytes: Option<&[u8]>, doc: &str) -> Result<CapturePayload, String> {
+    let (payload, notice) = parse_capture_payload_with(bytes, doc, DEGRADE_LEGACY_CAPTURES)?;
+    if let Some(notice) = notice {
+        tracing::warn!("{notice}");
+    }
+    Ok(payload)
+}
+
+/// [`parse_capture_payload`] with the degrade flag explicit; returns the notice
+/// (at most one) instead of logging it.
+fn parse_capture_payload_with(
+    bytes: Option<&[u8]>,
+    doc: &str,
+    degrade_legacy: bool,
+) -> Result<(CapturePayload, Option<String>), String> {
     use std::io::Read;
 
-    let Some(bytes) = bytes else {
-        return Ok(Vec::new());
+    let Some(bytes) = bytes.filter(|b| !b.is_empty()) else {
+        return Ok((CapturePayload::Empty, None));
     };
-    if bytes.is_empty() {
-        return Ok(Vec::new());
-    }
     let mut decoder = flate2::read::GzDecoder::new(bytes);
     let mut json = Vec::new();
     decoder
         .read_to_end(&mut json)
         .map_err(|e| format!("ungzip failed: {e}"))?;
-    match serde_json::from_slice::<Vec<quarto_trace::EngineCapture>>(&json) {
-        Ok(captures) => Ok(captures),
-        Err(array_err) => match serde_json::from_slice::<quarto_trace::EngineCapture>(&json) {
-            Ok(single) => Ok(vec![single]),
-            Err(_) => Err(format!("JSON parse failed: {array_err}")),
-        },
+    let value: serde_json::Value =
+        serde_json::from_slice(&json).map_err(|e| format!("JSON parse failed: {e}"))?;
+
+    // `get` is `None` on anything but an object, so these are object-only tests.
+    let is_record = value.get("nbformat").is_some();
+    let is_capture = value.get("engine_name").is_some();
+    if is_record && is_capture {
+        return Err(
+            "ambiguous capture payload: the object has both `nbformat` (a record) and \
+             `engine_name` (a legacy capture)"
+                .to_string(),
+        );
+    }
+    if is_record {
+        return crate::record::read_record_value(value)
+            .map(|r| (CapturePayload::Record(std::sync::Arc::new(r)), None))
+            .map_err(|e| format!("record parse failed: {e}"));
+    }
+    if value.is_array() || is_capture {
+        let captures = legacy::parse(value)?;
+        return Ok(legacy::arm(captures, doc, degrade_legacy));
+    }
+    Err(
+        "unrecognized capture payload: expected a record (an object with `nbformat`) or a \
+         legacy capture (an array, or an object with `engine_name`)"
+            .to_string(),
+    )
+}
+
+/// The `Legacy` arm: the only code that deserializes `EngineCapture` or applies its
+/// degrade policy. Removing legacy captures (EXR-17) deletes this module and the
+/// `Legacy` variant.
+mod legacy {
+    use super::CapturePayload;
+
+    /// An array of captures, or a stale single capture object.
+    pub(super) fn parse(
+        value: serde_json::Value,
+    ) -> Result<Vec<quarto_trace::EngineCapture>, String> {
+        match serde_json::from_value::<Vec<quarto_trace::EngineCapture>>(value.clone()) {
+            Ok(captures) => Ok(captures),
+            Err(array_err) => match serde_json::from_value::<quarto_trace::EngineCapture>(value) {
+                Ok(single) => Ok(vec![single]),
+                Err(_) => Err(format!("JSON parse failed: {array_err}")),
+            },
+        }
+    }
+
+    pub(super) fn arm(
+        captures: Vec<quarto_trace::EngineCapture>,
+        doc: &str,
+        degrade: bool,
+    ) -> (CapturePayload, Option<String>) {
+        if degrade {
+            (
+                CapturePayload::Empty,
+                Some(format!(
+                    "{doc}: the recorded results are in the legacy capture format, which is \
+                     no longer presented; its code is shown as source"
+                )),
+            )
+        } else {
+            (CapturePayload::Legacy(captures), None)
+        }
     }
 }
 
@@ -118,35 +220,133 @@ mod tests {
         );
     }
 
+    const ONE: &str = r#"{"engine_name":"r","input_qmd":"","result":null,"files":[]}"#;
+
+    fn record_json() -> String {
+        use crate::engine::units::scan_units;
+        use crate::record::{
+            AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, coalesce,
+            fill_ids, write_record,
+        };
+        let mut units = scan_units("# T\n\n```{python}\nprint(1)\n```\n");
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        let def = HashDefinition::conservative("jupyter");
+        let mut b = RecordBuilder::new("jupyter", &def, &units, &texts).unwrap();
+        b.push(
+            0,
+            UnitResult {
+                outputs: vec![serde_json::json!({
+                    "output_type": "stream", "name": "stdout", "text": ["1\n"]
+                })],
+                execution_count: Some(1),
+                kernel: Some("python3".into()),
+            },
+        )
+        .unwrap();
+        let entry = b
+            .finish(EngineEntryInput {
+                owned_languages: vec!["python".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        write_record(&coalesce(&[entry], &units).unwrap()).unwrap()
+    }
+
+    fn parse(bytes: Option<&[u8]>) -> Result<CapturePayload, String> {
+        parse_capture_payload(bytes, "a.qmd")
+    }
+
+    /// `hub-client`'s WASM tests read this file as their record payload, so it must
+    /// stay a record the reader accepts (and it carries the one python cell they use).
     #[test]
-    fn parse_capture_gz_is_empty_for_none_and_empty() {
-        assert!(parse_capture_gz(None).unwrap().is_empty());
-        assert!(parse_capture_gz(Some(&[])).unwrap().is_empty());
+    fn the_checked_in_record_fixture_is_a_record() {
+        let text = include_str!("../../tests/fixtures/records/basic.json");
+        let Ok(CapturePayload::Record(r)) = parse(Some(&gz(text))) else {
+            panic!("fixture must be a Record");
+        };
+        assert_eq!(r.cells.len(), 1);
+        assert_eq!(r.cells[0].metadata.quarto_lang, "python");
     }
 
     #[test]
-    fn parse_capture_gz_reads_an_array_and_a_single_object() {
-        let one = r#"{"engine_name":"r","input_qmd":"","result":null,"files":[]}"#;
-        assert_eq!(
-            parse_capture_gz(Some(&gz(&format!("[{one}]"))))
-                .unwrap()
-                .len(),
-            1
-        );
-        assert_eq!(parse_capture_gz(Some(&gz(one))).unwrap().len(), 1);
+    fn payload_is_empty_for_none_and_empty() {
+        assert!(matches!(parse(None), Ok(CapturePayload::Empty)));
+        assert!(matches!(parse(Some(&[])), Ok(CapturePayload::Empty)));
     }
 
     #[test]
-    fn parse_capture_gz_reports_corrupt_input() {
+    fn legacy_capture_payload_reads_an_array_and_a_single_object() {
+        let Ok(CapturePayload::Legacy(v)) = parse(Some(&gz(&format!("[{ONE}]")))) else {
+            panic!("array must be Legacy");
+        };
+        assert_eq!(v.len(), 1);
+        let Ok(CapturePayload::Legacy(v)) = parse(Some(&gz(ONE))) else {
+            panic!("single object must be Legacy");
+        };
+        assert_eq!(v.len(), 1);
+    }
+
+    #[test]
+    fn payload_reads_a_notebook_object_as_a_record() {
+        let Ok(CapturePayload::Record(r)) = parse(Some(&gz(&record_json()))) else {
+            panic!("notebook must be a Record");
+        };
+        assert_eq!(r.cells.len(), 1);
+    }
+
+    #[test]
+    fn payload_errors_are_distinct() {
+        let corrupt = parse(Some(b"not gzip")).unwrap_err();
+        assert!(corrupt.contains("ungzip"), "{corrupt}");
+        let not_json = parse(Some(&gz("{oops"))).unwrap_err();
+        assert!(not_json.contains("JSON parse failed"), "{not_json}");
+        let neither = parse(Some(&gz(r#"{"hello":1}"#))).unwrap_err();
         assert!(
-            parse_capture_gz(Some(b"not gzip"))
-                .unwrap_err()
-                .contains("ungzip")
+            neither.contains("nbformat") && neither.contains("engine_name"),
+            "names both shapes: {neither}"
         );
-        assert!(
-            parse_capture_gz(Some(&gz("[1,2]")))
-                .unwrap_err()
-                .contains("JSON parse failed")
-        );
+        assert_eq!(parse(Some(&gz("42"))).unwrap_err(), neither);
+        let bad_array = parse(Some(&gz("[1,2]"))).unwrap_err();
+        assert!(bad_array.contains("JSON parse failed"), "{bad_array}");
+        let bad_record = parse(Some(&gz(r#"{"nbformat":3}"#))).unwrap_err();
+        assert!(bad_record.contains("record parse failed"), "{bad_record}");
+        let all = [corrupt, not_json, neither, bad_array, bad_record];
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    #[test]
+    fn an_object_with_both_markers_is_ambiguous() {
+        let mut v: serde_json::Value = serde_json::from_str(&record_json()).unwrap();
+        v["engine_name"] = serde_json::json!("r");
+        let err = parse(Some(&gz(&v.to_string()))).unwrap_err();
+        assert!(err.contains("ambiguous"), "{err}");
+    }
+
+    #[test]
+    fn legacy_capture_degrade_flag_off_presents_as_today() {
+        let (payload, notice) =
+            parse_capture_payload_with(Some(&gz(&format!("[{ONE}]"))), "a.qmd", false).unwrap();
+        assert!(matches!(payload, CapturePayload::Legacy(ref v) if v.len() == 1));
+        assert!(notice.is_none());
+        assert!(!DEGRADE_LEGACY_CAPTURES, "default must be off");
+    }
+
+    #[test]
+    fn legacy_capture_degrade_flag_on_gives_empty_and_one_notice() {
+        let (payload, notice) =
+            parse_capture_payload_with(Some(&gz(&format!("[{ONE}]"))), "ch1.qmd", true).unwrap();
+        assert!(matches!(payload, CapturePayload::Empty));
+        let notice = notice.expect("one notice");
+        assert!(notice.contains("ch1.qmd"), "names the document: {notice}");
+        // A record is never degraded.
+        let (payload, notice) =
+            parse_capture_payload_with(Some(&gz(&record_json())), "a.qmd", true).unwrap();
+        assert!(matches!(payload, CapturePayload::Record(_)));
+        assert!(notice.is_none());
     }
 }

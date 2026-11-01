@@ -2,7 +2,7 @@
 title: 'JOL-2b: Jupyter executes the languages it owns; kernel lookup by language'
 date: 2026-10-28
 description: 'Replaces the Jupyter engine''s hard-coded language allowlist and alias table with the resolver-assigned owned set and Q1-style kernelspec lookup by language, with an error in multi-engine documents and a warning in single-engine documents when an owned language has no runnable kernel, and fills the kernel_for(unit) seam that EXR-2 defines and multi-kernel work later varies per unit.'
-status: draft
+status: in-progress
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md), as JOL-2b (the rest of
@@ -64,7 +64,7 @@ Verified in the tree on 2026-10-28 (workspace-1, `origin/main` at `2ee0bd966`) u
   fences find no kernel), against the `language` value read from `kernel.json` as written.
   q2\'s `find_kernelspec_for_language` (`kernelspec.rs:96`) compares case-insensitively,
   and it must stay that way: this machine\'s Ark kernelspec has `"language": "R"`, so a
-  literal "strict equality, no alias" would break R through Jupyter (epic decision 6). For
+  literal "strict equality, no alias" would break R through Jupyter (the Ark kernelspec, not an epic decision). For
   Python, a kernelspec whose path contains `VIRTUAL_ENV` is preferred (`kernels.ts:41-46`;
   venv-first is right); with no
   `jupyter:` key Q1 tries each language present in the document in order and then
@@ -110,14 +110,36 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
   venv-first rule needs.
 - **The per-language `jupyter:` map form is not built by any plan** (JOL-2a warns and falls back
   for a map without `kernel`). Do not build it here unless Gordon reopens it.
-- **The "epic decision 6" citation above is wrong**: no recorded decision covers
-  case-insensitive lookup. The reason is the Ark kernelspec (`"language": "R"`); cite that.
+- **Citation corrected (2026-10-31):** no recorded decision covers case-insensitive lookup.
+  The reason is the Ark kernelspec (`"language": "R"`).
   Note that Q1 lowercases the language in its cell regex (`jupyter.ts:321-325`) but compares
   case-sensitively in the kernel lookup (`kernels.ts:33`).
-- **Q-code**: still undecided whether the new diagnostic gets one; decide in Phase 1 by the
-  project\'s diagnostic conventions.
-- **Sequencing**: JOL-4 moves ahead of this plan (see the lane table in the records epic).
-  This plan and EXR-2 share `text_execute.rs`; land them in one agreed order (EXR-2 first).
+- **Q-code (approved by Gordon; settled in Phase 1, 2026-10-31): `Q-18-5`, "Owned Language Has
+  No Runnable Kernel".** The error form (multi-engine) and the warning form (single-engine)
+  share it. `ExecutionError` cannot carry a code: codes are attached in
+  `engine/diagnostics.rs`. The existing seams are `engine_error_diagnostic` (maps a variant to
+  a coded diagnostic; `NoHandlerForLanguage` currently falls through uncoded) for errors, and
+  `ExecuteResult::warnings` for warnings (how `Q-18-2` and `Q-18-4` travel). Smallest
+  consistent route: one builder in `diagnostics.rs` that takes the severity, used by
+  `engine_error_diagnostic` for `NoHandlerForLanguage` and by `execute_qmd` for the warning.
+  No new `ExecutionError` variant is needed. Register per
+  `claude-notes/instructions/error-message-system.md`: `Q-18-5` in
+  `crates/quarto-error-catalog/error_catalog.json` plus a corpus case.
+- **Reading of "runnable" with an explicit kernel (confirmed by Gordon, 2026-10-31).** Q-18-5 fires only when the document kernel is *derived*
+  (no `jupyter:` key, no `engine_config.kernel`) and an owned, executor-eligible language has
+  no kernelspec. With an explicit kernel every owned cell goes to it and nothing is checked,
+  which is the 2026-10-31 "all owned cells go to the one kernel" decision applied literally
+  (and it keeps `jupyter: sos` with `{ggsql}` from warning). Tests are written against this
+  reading; if Gordon wants the check under an explicit kernel too, only the guard changes.
+- **Direct-constructed contexts.** `ExecutionContext.owned_languages` defaults to empty, so
+  once the gate reads it, a context built without the stage executes nothing. That is
+  correct for a resolved-to-nobody document and the stage always populates it; the only
+  caller of `execute_qmd` is the engine trait method. Jupyter tests that execute must set the
+  owned set explicitly. No empty-means-everything fallback.
+- **Sequencing (checked 2026-10-31):** EXR-2 has landed on `feature/execution-records-epic`
+  (`6a82a9738`, "plan complete"), so `router.rs` (`KernelRouter`, `SingleKernelRouter`,
+  `plan_units`) exists and this plan replaces the default router's policy; `partition_cells`
+  now takes an `EngineUnit` view and the line numbers in Background are stale. JOL-4 also landed.
 
 - Jupyter\'s claim stays a universal fallback; ownership is resolved by the existing
   resolver and carried in `ctx.owned_languages`. No kernelspec check at resolution time.
@@ -169,7 +191,7 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
 
 ## Phase 1: tests first
 
-- [ ] Rewrite the `partition_cells` tests to take an owned set. Names (old name to new
+- [x] Rewrite the `partition_cells` tests to take an owned set. Names (old name to new
   meaning):
   - `test_partition_cells_owned_unrunnable_fails_loudly`: stays in meaning for
     multi-engine mode: an owned language with no runnable kernel yields the
@@ -183,27 +205,27 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
     set when knitr owns it).
   - ceded, `ojs`, `mermaid` and `dot` tests keep their meaning with `owned_languages`
     excluding them.
-- [ ] New `partition_cells` cases: `ggsql`, `bash` and a made-up language execute when
+- [x] New `partition_cells` cases: `ggsql`, `bash` and a made-up language execute when
   owned; an owned-by-nobody language (explicit `engine: knitr` plus a `julia` cell)
   passes through.
-- [ ] Pure kernel-selection tests over an injected list of kernelspecs (no process
+- [x] Pure kernel-selection tests over an injected list of kernelspecs (no process
   spawn): venv-first Python (`VIRTUAL_ENV` path match), language equality that ignores
   case (a kernelspec whose `language` is `"R"` is found for an `r` fence: the Ark
   kernelspec case; a mixed-case `"Python"` likewise), no alias match, first
   language present with a kernelspec wins, Python fallback, `jupyter:` scalar wins
   (JOL-2a), missing-kernel message text (error and warning share it) names the language
   and the install hint.
-- [ ] Check and test how a cell with `eval: false` interacts with the single-engine
+- [x] Check and test how a cell with `eval: false` interacts with the single-engine
   warning and the multi-engine error: should such a cell be exempt (it never needs a
   kernel)? Not verified: no handling of the `eval` option was found in
   `partition_cells` (`text_execute.rs:177-215`), so the diagnostic may fire before
   anything looks at it. DECIDED (Gordon, 2026-10-31): exempt `eval: false` cells; test it.
-- [ ] Alias decision test (decided 2026-10-31: deprecate, then delete): `py`, `jl` fences still
+- [x] Alias decision test (decided 2026-10-31: deprecate, then delete): `py`, `jl` fences still
   execute this release and emit a deprecation warning naming the canonical language; add the
   removal as a dated follow-up in this plan when the release is cut.
-- [ ] Resolver-level test (mock knitr plus jupyter registry, reusing Plan 4d tests):
+- [x] Resolver-level test (mock knitr plus jupyter registry, reusing Plan 4d tests):
   `owned_languages` for jupyter equals the languages the resolver assigned it.
-- [ ] Test the policy through the seam: with EXR-2\'s `KernelRouter` in place, this
+- [x] Test the policy through the seam: with EXR-2\'s `KernelRouter` in place, this
   plan\'s router returns the document kernel for every unit (the JOL-2a scalar, else the
   walk, else Python). A stub router returning two different names for two languages is
   EXR-2\'s test, not repeated here. If this plan lands before EXR-2 Phase 5, test the
@@ -211,19 +233,19 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
 
 ## Phase 2: implementation
 
-- [ ] Add `engine/jupyter/kernel_select.rs` with the lookup policy and the injected
+- [x] Add `engine/jupyter/kernel_select.rs` with the lookup policy and the injected
   kernelspec source; move `select_kernel` there. Implement EXR-2\'s `KernelRouter` with
   it (or, if EXR-2 Phase 5 has not landed, expose the pure function that the default
   router will wrap).
-- [ ] Implement lookup by kernelspec language, case-insensitive, with the venv-first rule; reuse
+- [x] Implement lookup by kernelspec language, case-insensitive, with the venv-first rule; reuse
   `runtimelib::list_kernelspecs` (data dirs only; no per-venv search of its own, so the
   venv rule matches on the kernelspec path as Q1 does).
-- [ ] Replace `is_executable_language` and the allowlist branch of `partition_cells` with
+- [x] Replace `is_executable_language` and the allowlist branch of `partition_cells` with
   `ctx.owned_languages.contains(...)`; remove `map_language_to_kernel` (or reduce it to
   the decided aliases); delete `is_jupyter_language` and its re-export
   (`mod.rs:51`) because nothing calls it, together with its test
   `test_is_jupyter_language` (`engine/jupyter/kernelspec.rs:233`).
-- [ ] New missing-kernel message carrying language and hint, in the style of the existing
+- [x] New missing-kernel message carrying language and hint, in the style of the existing
   by-name message `format_kernelspec_not_found` (`engine/jupyter/error.rs:127`: searched
   paths, available kernels, `JUPYTER_PATH` hint) plus an install hint for the language
   (extend `NoKernelForLanguage` or add an `ExecutionError` variant; keep the error a
@@ -231,10 +253,10 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
   documents raise it as an error; single-engine documents emit the same text as a
   warning diagnostic (never silent) and pass the cell through. Resolve **all** needed
   kernels before running any cell, so an error happens before side effects.
-- [ ] Route the execution loop through the kernel router (EXR-2 Phase 5). If EXR-2 has
+- [x] Route the execution loop through the kernel router (EXR-2 Phase 5). If EXR-2 has
   not landed, change `execute_blocks_inner` and `execute_blocks_async` only as far as
   the policy function needs; EXR-2 owns the loop refactor.
-- [ ] Check the other entry points that name languages: stored `.ipynb` replay (the
+- [x] Check the other entry points that name languages: stored `.ipynb` replay (the
   kernelspec language is lowercased into the fence, `content_processors/ipynb.rs`) and
   percent scripts; confirm neither bypasses `partition_cells`.
 - Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
@@ -244,8 +266,8 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
 
 - [ ] `{ggsql}`, `{bash}` and a fixture-language document execute (manual with the ggsql
   kernel; automated with the fake kernel built in EXR-3 and extended by JOL-5, once available).
-- [ ] Cross-engine parity suite (`tests/integration/engine_output_parity.rs`) still green.
-- [ ] Resolution is one-shot and feeds freeze cache keys (design section 6): confirm moving
+- [x] Cross-engine parity suite (`tests/integration/engine_output_parity.rs`) still green.
+- [x] Resolution is one-shot and feeds freeze cache keys (design section 6): confirm moving
   the gate from allowlist to ownership changes no key for existing documents. The
   records epic records ownership as provenance only.
 - Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
@@ -272,8 +294,14 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
   into cells.
 - **Resolver presence scan versus executor regex.** The resolver scans the AST and also
   sees cells in blockquotes and lists that `parse_code_blocks` never sees, so an owned
-  language can be "present" and never executed. Hypothesis from the handoff; the resolver
-  scan was not read.
+  language can be "present" and never executed. **Confirmed (read 2026-10-31):** `walk_block_for_langs`
+  (`resolution.rs:129`) recurses into blockquotes, divs, figures, lists, tables and note
+  definitions, while `partition_cells` skips every cell where `runs_in_legacy_executor` is
+  false (indent, container prefix, fence length other than 3, or an attribute tail). So
+  `owned_languages` can contain a language whose only cells never run. Consequences: (1) the
+  unrunnable diagnostic and the "at least one owned cell" Python failsafe key on the cells
+  `partition_cells` actually considers, never on `owned_languages` membership alone; (2) a
+  language present only in a blockquote must not trigger Q-18-5. Test both.
 - **Three language patterns** (`\w+` here, `[A-Za-z0-9_]+` in the nested-cell mask,
   Q1\'s `[a-zA-Z][a-zA-Z0-9_.]*`) are unified by EXR-2, not here.
 - **Several kernelspecs per language** (system Python versus venv, several Julias): Q1\'s
@@ -289,3 +317,20 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
 - Q1: `external-sources/quarto-cli/src/core/jupyter/kernels.ts`,
   `external-sources/quarto-cli/src/core/jupyter/jupyter.ts`.
 - [The JOL epic](2026-10-17-jupyter-owned-languages-epic.md), Phase 2 and Risks.
+
+## Implementation notes (2026-10-31)
+
+- Landed on `exr/JOL-2b`: `kernel_select.rs`, `plan_document` (replaces `partition_cells`),
+  `Q-18-5` (catalog, docs page, `_quarto.yml`), alias deprecation warning (uncoded; only one
+  new code was approved). The seam test is covered by `plan_document` tests: every owned cell
+  runs on the one document kernel via `SingleKernelRouter`.
+- Gate after rebasing onto `e926c00ab` (EXR-3 spans merged in `execute_qmd`; the Q-18-5 catalog
+  entry sits beside Q-18-10): clippy clean; `nextest -p quarto-core -p quarto-error-catalog`
+  6897 run, 6896 passed, 1 failed (the reveal.js vendoring baseline). The Julia j7 failure seen
+  on the old base did not recur on the new pin.
+- Rebase fix: `DocumentPlan.kernel` keeps an explicit kernel when no cell runs (EXR-3 evaluates
+  spans on it); a derived kernel needs a runnable cell.
+- Open: the manual `{ggsql}`/`{bash}`/fixture run (needs the fake kernel from EXR-3/JOL-5);
+  `cargo xtask verify`; the dated follow-up to delete the alias table when the release is cut;
+  `eval: false` is ignored by the executor for runnable cells (outside this plan).
+- Decided (Gordon, 2026-10-31): Q-18-5 does not fire under an explicit `jupyter:` kernel.

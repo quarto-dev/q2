@@ -351,6 +351,7 @@ fn a_chapters_captures_are_spliced_and_its_plot_lands_in_the_request_directory()
         engine_name: "r".to_string(),
         input_qmd: CAPTURE_CH1.to_string(),
         result: serde_json::json!({ "markdown": markdown }),
+        record: None,
         files: vec![CaptureFile {
             path: plot.to_string(),
             contents_base64: base64::engine::general_purpose::STANDARD.encode(PNG),

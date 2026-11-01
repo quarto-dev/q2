@@ -178,7 +178,7 @@ pub struct ExecutionContext {
     /// Whether this engine is running in a multi-engine sequence
     /// (`|resolution.sequence| > 1`).
     ///
-    /// Used by jupyter's `partition_cells` to gate the "owned-but-unrunnable →
+    /// Used by jupyter's `plan_document` to gate the "owned-but-unrunnable →
     /// loud error" branch (P2-13): in a multi-engine sequence, a cell jupyter
     /// owns but cannot execute (e.g. `{sql}`) raises `NoHandlerForLanguage`;
     /// in a single-engine sequence the cell is passed through unexecuted
@@ -221,6 +221,21 @@ pub struct ExecutionContext {
     /// no stage ran (an engine driven directly), in which case the engine
     /// scans its own text (`units::units_for_engine`).
     pub units: Vec<crate::engine::units::Unit>,
+
+    /// The author text and its content hash for every unit in `units`,
+    /// index-for-index (EXR-4's `AuthorTexts`). The stage builds it from the
+    /// pre-sugaring snapshot when a record is wanted; the record builder
+    /// hashes these, never the engine-visible text, because crossref sugaring
+    /// strips label and caption lines from what the engine sees (epic
+    /// decision 36). Empty when no record is wanted or no stage ran.
+    pub author_texts: crate::record::AuthorTexts,
+
+    /// Whether the engine should build an execution record as a side product
+    /// of this run (EXR-5). Set by `EngineExecutionStage` from
+    /// `PipelineObserver::wants_execution_record` or from
+    /// `execute: {record: true}` in the merged metadata; a plain render leaves
+    /// it `false` and the engine allocates nothing for the record.
+    pub want_record: bool,
 }
 
 impl ExecutionContext {
@@ -259,6 +274,30 @@ impl ExecutionContext {
             metadata: HashMap::new(),
             project_env: Vec::new(),
             units: Vec::new(),
+            author_texts: crate::record::AuthorTexts::default(),
+            want_record: false,
+        }
+    }
+
+    /// Set the author-text mapping (see [`ExecutionContext::author_texts`]).
+    pub fn with_author_texts(mut self, author_texts: crate::record::AuthorTexts) -> Self {
+        self.author_texts = author_texts;
+        self
+    }
+
+    /// Ask the engine for an execution record (see [`ExecutionContext::want_record`]).
+    pub fn with_want_record(mut self, want: bool) -> Self {
+        self.want_record = want;
+        self
+    }
+
+    /// The merged document metadata as JSON, the shape the record's document hash
+    /// reads (EXR-5; `TsMetadataValue` is untagged JSON, so the lowering is exact).
+    /// An engine passes it as `EngineEntryInput::document_metadata`.
+    pub fn document_metadata_json(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+        match serde_json::to_value(&self.metadata) {
+            Ok(serde_json::Value::Object(map)) => map.into_iter().collect(),
+            _ => std::collections::BTreeMap::new(),
         }
     }
 
@@ -345,7 +384,7 @@ impl ExecutionContext {
     /// Set whether this engine runs in a multi-engine sequence.
     ///
     /// `true` iff `|resolution.sequence| > 1`. Used by jupyter's
-    /// `partition_cells` to gate the "owned-but-unrunnable → loud error"
+    /// `plan_document` to gate the "owned-but-unrunnable → loud error"
     /// branch (P2-13).
     pub fn with_multi_engine(mut self, multi: bool) -> Self {
         self.multi_engine = multi;
@@ -463,6 +502,14 @@ pub struct ExecuteResult {
     /// pre-date this field deserializable.
     #[serde(default)]
     pub warnings: Vec<quarto_error_reporting::DiagnosticMessage>,
+
+    /// The engine's execution record for this run (EXR-5), built only when
+    /// `ExecutionContext::want_record` is set; `None` otherwise. Skipped by
+    /// serde on purpose: this struct is serialized whole into the legacy
+    /// `EngineCapture` payload, which must not grow (the trace carries the
+    /// record through its own `engine_capture.record` field instead).
+    #[serde(skip)]
+    pub record: Option<crate::record::EngineRecord>,
 }
 
 impl ExecuteResult {

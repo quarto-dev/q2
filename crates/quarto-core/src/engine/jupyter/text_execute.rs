@@ -20,12 +20,18 @@ use super::inline::{
     InlineOutcome, classify_inline_result, escape_yaml_double, front_matter_key_at, span_is_owned,
     unescape_yaml_double, wrap_inline_code,
 };
-use super::kernelspec::{UnusableJupyterKey, kernel_from_ts_metadata, unusable_jupyter_key};
+use super::kernel_select::{
+    KernelSpecSummary, choose_kernel, deprecated_alias, explicit_kernel, lookup_language,
+};
+use super::kernelspec::{UnusableJupyterKey, list_kernelspecs, unusable_jupyter_key};
 use super::router::{KernelName, SingleKernelRouter, SpliceKind, plan_units, splice_mixed};
 use super::session::SessionKey;
 use crate::cell_options::partition_cell_options;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
-use crate::engine::diagnostics::{InlineSpanProblem, inline_span_diagnostic};
+use crate::engine::diagnostics::{
+    InlineSpanProblem, deprecated_alias_diagnostic, inline_span_diagnostic,
+    no_runnable_kernel_diagnostic,
+};
 use crate::engine::error::ExecutionError;
 use crate::engine::ts_protocol::TsMetadataValue;
 use crate::engine::units::{
@@ -36,33 +42,67 @@ use crate::presenter::cell::{describe_location, render_cell};
 use crate::presenter::figures::{FigureSink, FsFigureSink};
 use crate::presenter::inline::{InlineTarget, render_inline};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options, resolved_flag};
-use quarto_pandoc_types::ConfigValue;
+use crate::record::{EngineEntryInput, HashDefinition, RecordBuilder, UnitResult};
 
 type JupyterResult<T> = std::result::Result<T, JupyterError>;
 
-/// Execute code blocks in QMD input and return markdown with outputs.
-///
-/// This is the main entry point for text-based Jupyter execution.
-pub fn execute_qmd(
+/// Execute code blocks in QMD input and return markdown with outputs, with the
+/// record (when `ctx.want_record`) hashed under the Jupyter engine's own
+/// declaration. The engine itself calls [`execute_qmd_with`] with the
+/// declaration it returns from `hash_definition()`; this form is for tests.
+#[cfg(test)]
+pub(super) fn execute_qmd(
     input: &str,
     ctx: &ExecutionContext,
 ) -> std::result::Result<ExecuteResult, ExecutionError> {
+    execute_qmd_with(input, ctx, &super::jupyter_hash_definition())
+}
+
+/// Execute code blocks in QMD input and return markdown with outputs.
+///
+/// This is the main entry point for text-based Jupyter execution. The hash
+/// declaration is the engine's (`ExecutionEngine::hash_definition()`; epic
+/// decision 35): the record stores the whole declaration and never branches
+/// on an engine name.
+pub fn execute_qmd_with(
+    input: &str,
+    ctx: &ExecutionContext,
+    hash_definition: &HashDefinition,
+) -> std::result::Result<ExecuteResult, ExecutionError> {
     // The document's units, relocated into this text (or scanned from it when
     // no stage supplied a shared list). Every braced cell and every span is in
-    // the list; the view marks which cells jupyter owns, and `partition_cells`
-    // classifies them. Spans are owned by language (EXR-3, below).
+    // the list; the view marks which cells jupyter owns. A cell is jupyter's
+    // iff its language is in `ctx.owned_languages`, the resolver's positive
+    // ownership set. Spans are owned by language (EXR-3, below).
     let units = units_for_engine(&ctx.units, input);
-    let handled = &ctx.handled_languages;
-    let owns = |lang: &str| !handled.iter().any(|h| h.to_lowercase() == lang);
+    let owned = &ctx.owned_languages;
+    let owns = |lang: &str| owned.iter().any(|o| o.eq_ignore_ascii_case(lang));
     let view = view_for_engine(&units, &owns);
 
-    // Apply the handled_languages enforcement gate:
-    //   - cells not owned by jupyter are ceded (dropped from the executable set)
-    //   - cells jupyter owns but cannot execute:
-    //     multi_engine=true  → loud Err(NoHandlerForLanguage)  (§10 case 4, P2-13)
-    //     multi_engine=false → pass through unexecuted (display-only, P2-13)
-    //   - remaining cells are executable
-    let executable = partition_cells(&view, ctx.multi_engine)?;
+    let explicit = explicit_kernel(&ctx.metadata, ctx.engine_config.as_ref());
+    // The kernelspec list is only read when there is no explicit kernel to
+    // take every owned cell.
+    let specs: Vec<KernelSpecSummary> = if explicit.is_none() && has_owned_cell(&view) {
+        super::daemon::engine_runtime()
+            .block_on(list_kernelspecs())
+            .iter()
+            .map(KernelSpecSummary::from)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let virtual_env = std::env::var("VIRTUAL_ENV").ok();
+    let doc = plan_document(
+        &view,
+        explicit,
+        &specs,
+        virtual_env.as_deref(),
+        ctx.multi_engine,
+        &|cell| cell_eval_disabled(cell, ctx),
+    )?;
+    let mut warnings = doc.warnings;
+    let executable = doc.executable;
+    let kernel_name = doc.kernel;
     let spans: Vec<InlineUnit> = units
         .iter()
         .filter_map(|u| match u {
@@ -70,22 +110,18 @@ pub fn execute_qmd(
             Unit::Cell(_) => None,
         })
         .collect();
+    // A passthrough still carries the report (the unrunnable-language and
+    // deprecated-alias warnings), and an empty record when one is wanted.
+    let passthrough = |warnings: Vec<quarto_error_reporting::DiagnosticMessage>| {
+        let mut result = empty_record_passthrough(input, ctx, hash_definition)?;
+        result.warnings.extend(warnings);
+        Ok(result)
+    };
 
     // No cells and no spans: passthrough unchanged, no kernel needed.
     if executable.is_empty() && spans.is_empty() {
-        return Ok(ExecuteResult::new(input));
+        return passthrough(warnings);
     }
-
-    // Determine the kernel from the first *executable* (owned) cell.
-    // An explicit kernel (`jupyter:` key, then `engine_config.kernel`) wins.
-    // Today one kernel runs every unit: the default router returns it for all
-    // of them. JOL-2a/2b supply the choice behind the router; a reopened
-    // JOL-3 (several kernels) can vary it per unit.
-    let kernel_name = select_kernel(
-        &ctx.metadata,
-        ctx.engine_config.as_ref(),
-        executable.first().map(|c| c.lang.as_str()),
-    );
 
     // Divergence 6: the engine runs, the document has no cell at all (so nothing names a
     // kernel), no `jupyter:` key does either, and there is a span to evaluate.
@@ -114,12 +150,14 @@ pub fn execute_qmd(
 
     if executable.is_empty() && owned_spans.is_empty() {
         // Only spans of languages nobody here owns: left literal.
-        return Ok(ExecuteResult::new(input));
+        return passthrough(warnings);
     }
     let Some(kernel_name) = kernel_name else {
         // Owned spans, but only ceded cells: still nothing names a kernel.
         return Err(no_kernel_for_spans());
     };
+    // One kernel serves every unit today: the router returns it for all of
+    // them. A reopened JOL-3 (several kernels) would vary it per unit.
     let router = SingleKernelRouter::new(kernel_name);
 
     // Plan first (pure): which kernel runs each unit, in document order. A
@@ -138,22 +176,114 @@ pub fn execute_qmd(
     // open, the kernels spawned below are shut down when this guard
     // drops — no caller of the jupyter engine can leak a kernel.
     //
-    // Placement matters: this sits *below* both early returns (the
-    // `blocks.is_empty()` one above and the all-cells-ceded one just
-    // above), so a pure passthrough never acquires a kernel scope.
+    // Placement matters: this sits *below* the early return above, so a pure
+    // passthrough never acquires a kernel scope.
     let _kernel_scope = super::daemon::kernel_scope();
 
     // Execute via async runtime. `execute_blocks_async` takes the full
     // `ExecutionContext` (main's #412 figure-emission threads it through).
-    let result = execute_blocks_async(input, &run_units, &plan, ctx);
+    let result = execute_blocks_async(input, &run_units, &plan, ctx, hash_definition);
 
-    let warning = jupyter_key_warning(&ctx.metadata);
+    warnings.extend(jupyter_key_warning(&ctx.metadata));
     result
         .map(|mut r| {
-            r.warnings.extend(warning);
+            r.warnings.extend(warnings);
             r
         })
         .map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))
+}
+
+/// The input unchanged, with an empty record when one is wanted: the record is a side
+/// product of every run (EXR-5), a run that executes nothing included.
+fn empty_record_passthrough(
+    input: &str,
+    ctx: &ExecutionContext,
+    hash_definition: &HashDefinition,
+) -> std::result::Result<ExecuteResult, ExecutionError> {
+    let mut result = ExecuteResult::new(input);
+    if ctx.want_record {
+        let builder = RecordBuilder::new(JUPYTER, hash_definition, &ctx.units, &ctx.author_texts)
+            .map_err(record_error)?;
+        result.record = Some(
+            builder
+                .finish(entry_input(ctx, None))
+                .map_err(record_error)?,
+        );
+    }
+    Ok(result)
+}
+
+/// The engine name the record carries.
+const JUPYTER: &str = "jupyter";
+
+fn record_error(e: impl std::fmt::Display) -> ExecutionError {
+    ExecutionError::execution_failed(
+        JUPYTER,
+        JupyterError::RecordFailed {
+            message: e.to_string(),
+        }
+        .to_string(),
+    )
+}
+
+/// What the Jupyter engine contributes to its record entry besides cells and hashes.
+/// Side data (includes, filters, preserve, ...) is the stage's to fold, so it is left
+/// empty here. `kernel` is the kernelspec the run used, with its language; provenance
+/// only, in no hash.
+fn entry_input(ctx: &ExecutionContext, kernel: Option<(&str, &str)>) -> EngineEntryInput {
+    let mut provenance = std::collections::BTreeMap::new();
+    if let Some((name, language)) = kernel {
+        provenance.insert(
+            "kernelspec".to_string(),
+            serde_json::json!({ "name": name, "language": language }),
+        );
+    }
+    EngineEntryInput {
+        provenance,
+        can_freeze: true,
+        owned_languages: ctx.owned_languages.clone(),
+        document_metadata: ctx.document_metadata_json(),
+        ..Default::default()
+    }
+}
+
+/// The position of `unit` in the stage's list, by the document-wide counter the
+/// scanner and `locate_units` preserve (`index` for a cell, `span_index` for a span).
+/// `None` for a unit an earlier engine's output introduced: it is in no document
+/// list, so the record (which `coalesce` orders by that list) does not carry it.
+fn stage_index(stage_units: &[Unit], unit: &Unit) -> Option<usize> {
+    stage_units.iter().position(|s| match (s, unit) {
+        (Unit::Cell(a), Unit::Cell(b)) => a.index == b.index,
+        (Unit::Inline(a), Unit::Inline(b)) => a.span_index == b.span_index,
+        _ => false,
+    })
+}
+
+/// Record one executed unit: its raw nbformat outputs, the count the kernel reported
+/// and the kernel that ran it. Nothing about the source or options comes from here;
+/// the builder takes those from the stage's unit and author text.
+fn push_unit_result(
+    builder: &mut RecordBuilder<'_>,
+    stage_units: &[Unit],
+    unit: &Unit,
+    result: &CellResult,
+    kernel: &str,
+) -> JupyterResult<()> {
+    let Some(index) = stage_index(stage_units, unit) else {
+        return Ok(());
+    };
+    builder
+        .push(
+            index,
+            UnitResult {
+                outputs: result.nbformat_outputs(),
+                execution_count: result.execution_count.map(u64::from),
+                kernel: Some(kernel.to_string()),
+            },
+        )
+        .map_err(|e| JupyterError::RecordFailed {
+            message: e.to_string(),
+        })
 }
 
 /// Divergence 6's error: spans to evaluate and no way to pick a kernel.
@@ -169,7 +299,8 @@ fn no_kernel_for_spans() -> ExecutionError {
 /// The `Q-18-4` warning for a `jupyter:` value that names no kernel, if any.
 ///
 /// Q1 errors on these forms; q2 warns and falls back to the next source
-/// (`engine_config.kernel`, then the first owned cell's language).
+/// (`engine_config.kernel`, then the kernel for the first owned language
+/// that has one).
 pub(crate) fn jupyter_key_warning(
     metadata: &std::collections::HashMap<String, TsMetadataValue>,
 ) -> Option<quarto_error_reporting::DiagnosticMessage> {
@@ -188,45 +319,12 @@ pub(crate) fn jupyter_key_warning(
         DiagnosticMessageBuilder::warning("Jupyter Kernel Not Named")
             .with_code("Q-18-4")
             .problem(problem)
-            .add_detail("Falling back to the kernel for the language of the first executable cell.")
+            .add_detail(
+                "Falling back to the kernel for the first language in the document that has one.",
+            )
             .add_hint(hint)
             .build(),
     )
-}
-
-/// Choose the kernel for a document.
-///
-/// Order: the `jupyter:` document key, then `engine_config.kernel`
-/// (`engine: [{jupyter: {kernel: x}}]`), then the kernel mapped from the
-/// first owned cell's language. Returns `None` only when none of the three
-/// exists; unlike `resolve_kernel`, it never defaults to Python, so a
-/// cell-less document with no key stays unresolved.
-pub(crate) fn select_kernel(
-    metadata: &std::collections::HashMap<String, TsMetadataValue>,
-    engine_config: Option<&ConfigValue>,
-    first_owned_language: Option<&str>,
-) -> Option<String> {
-    kernel_from_ts_metadata(metadata)
-        .or_else(|| {
-            engine_config
-                .and_then(|c| c.get("kernel"))
-                .and_then(|k| k.as_plain_text())
-        })
-        .or_else(|| first_owned_language.map(map_language_to_kernel))
-}
-
-/// Map a language name to a Jupyter kernel name.
-fn map_language_to_kernel(language: &str) -> String {
-    match language.to_lowercase().as_str() {
-        "python" | "python3" | "py" => "python3".to_string(),
-        "julia" | "jl" => "julia".to_string(),
-        "r" => "ir".to_string(),
-        "ruby" | "rb" => "ruby".to_string(),
-        "rust" | "rs" => "rust".to_string(),
-        "typescript" | "ts" => "deno".to_string(),
-        "javascript" | "js" => "deno".to_string(),
-        other => other.to_string(),
-    }
 }
 
 #[cfg(test)]
@@ -254,91 +352,121 @@ pub(super) fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
     blocks
 }
 
-/// Partition braced `{lang}` cells into cells jupyter will **execute** vs.
-/// cells it **cedes** verbatim, or return a loud failure.
+/// Owned cells the legacy executor can run, in document order.
+fn owned_cells<'a>(view: &'a [EngineUnit<'_>]) -> impl Iterator<Item = &'a CellUnit> {
+    view.iter().filter_map(|u| match u.unit {
+        Unit::Cell(cell) if u.owned && runs_in_legacy_executor(cell) => Some(cell),
+        _ => None,
+    })
+}
+
+fn has_owned_cell(view: &[EngineUnit<'_>]) -> bool {
+    owned_cells(view).next().is_some()
+}
+
+/// Whether the cell's resolved `eval` option is `false` (a cell that never
+/// needs a kernel). Unparseable options count as enabled; the executor
+/// reports them when it reaches the cell.
+fn cell_eval_disabled(cell: &CellUnit, ctx: &ExecutionContext) -> bool {
+    let body_source = SourceInfo::substring(
+        ctx.source_info.clone(),
+        cell.code_start,
+        cell.code_start + cell.code.len(),
+    );
+    let Ok(parsed) = partition_cell_options(&cell.lang, &cell.code, body_source) else {
+        return false;
+    };
+    let resolved = resolve_cell_options(ctx.execute_scope.as_ref(), parsed.options);
+    !resolved_flag(resolved.as_ref(), "eval", true)
+}
+
+/// What jupyter will do with a document's cells.
+#[derive(Debug)]
+struct DocumentPlan {
+    /// The cells to run, in document order.
+    executable: Vec<CellUnit>,
+    /// The kernel that runs them: the explicit one, else the derived one when
+    /// a cell can run; `None` otherwise.
+    kernel: Option<String>,
+    /// Warnings to attach to the result: the unrunnable-language warning and
+    /// the deprecated-alias warnings.
+    warnings: Vec<quarto_error_reporting::DiagnosticMessage>,
+}
+
+/// Decide which owned cells run, on which kernel, and what to report.
 ///
-/// Classification for each cell (by language `lang`):
-///
-/// * `lang ∈ handled_languages` → **cede**: jupyter leaves the cell verbatim
-///   (it is owned by another engine or is a cell-handler language like `ojs`).
-///   These cells are NOT returned in the `Ok` set.
-/// * `lang ∉ handled_languages` **AND** jupyter can execute it
-///   (`is_executable_language`) → **execute**: returned in `Ok`.
-/// * `lang ∉ handled_languages` **AND** jupyter *cannot* execute it:
-///   - `multi_engine=true`  (`|sequence| > 1`): jupyter **owns** this
-///     language but has no kernel — **loud failure** `Err(NoHandlerForLanguage)`
-///     (§10 case 4). The render halts with a named, actionable error.
-///   - `multi_engine=false` (`|sequence| == 1`): **pass through unexecuted**.
-///     The cell is left verbatim (like a ceded cell) so a single-kernel
-///     doc can still contain display-only cells for other languages — the
-///     Q1 `quartoMdToJupyter` display-only treatment.
+/// * A cell not owned by jupyter (ceded, or owned by nobody) is left
+///   verbatim, with no diagnostic.
+/// * An owned cell runs on the document kernel. With an explicit kernel every
+///   owned cell runs. Otherwise a cell whose language has no installed
+///   kernelspec is *unrunnable*: it is left verbatim and reported once per
+///   document (`Q-18-5`), as an `Err(NoHandlerForLanguage)` when
+///   `multi_engine` (an `engine:` list means the author said who runs what)
+///   and as a warning otherwise. Cells with `eval: false` are exempt from the
+///   report.
 ///
 /// `NoHandlerForLanguage` is a **clean refusal** and does NOT poison the
-/// engine instance. See `ExecutionError::NoHandlerForLanguage`.
-fn partition_cells(
+/// engine instance. See `ExecutionError::NoHandlerForLanguage`. The error
+/// happens before any kernel starts.
+fn plan_document(
     view: &[EngineUnit<'_>],
+    explicit: Option<String>,
+    specs: &[KernelSpecSummary],
+    virtual_env: Option<&str>,
     multi_engine: bool,
-) -> Result<Vec<CellUnit>, ExecutionError> {
+    eval_disabled: &dyn Fn(&CellUnit) -> bool,
+) -> Result<DocumentPlan, ExecutionError> {
+    let has_explicit = explicit.is_some();
+    let cells: Vec<&CellUnit> = owned_cells(view).collect();
+    let lookup: Vec<String> = cells.iter().map(|c| lookup_language(&c.lang)).collect();
+    let choice = choose_kernel(explicit, &lookup, specs, virtual_env);
+
     let mut executable = Vec::new();
-
-    for engine_unit in view {
-        let Unit::Cell(cell) = engine_unit.unit else {
-            continue;
-        };
-        if !runs_in_legacy_executor(cell) {
-            continue;
-        }
-
-        if !engine_unit.owned {
-            // Ceded: jupyter does not execute this cell. It will remain
-            // verbatim in the output (the splice copies the gap, and a ceded
-            // cell is not in the executable set, so its text is part of the
-            // gap).
-            continue;
-        }
-
-        if is_executable_language(&cell.lang) {
-            // Jupyter owns this language and can execute it.
-            executable.push(cell.clone());
-        } else if multi_engine {
-            // Multi-engine sequence: jupyter owns this language (not in
-            // handled_languages) but has no handler/kernel for it. Fail
-            // loudly — §10 case 4 (P2-13).
-            return Err(ExecutionError::no_handler_for_language(
-                "jupyter",
-                cell.lang.clone(),
-            ));
+    let mut reported: Vec<String> = Vec::new();
+    for (cell, lang) in cells.into_iter().zip(&lookup) {
+        if choice.unrunnable.contains(lang) {
+            if !eval_disabled(cell) && !reported.contains(lang) {
+                reported.push(lang.clone());
+            }
         } else {
-            // Single-engine sequence: pass the cell through unexecuted.
-            // It is left verbatim just like a ceded cell — its text falls into
-            // a copied gap. Q1's display-only treatment (P2-13).
-            continue;
+            executable.push(cell.clone());
         }
     }
 
-    Ok(executable)
-}
+    if multi_engine && let Some(first) = reported.first() {
+        return Err(ExecutionError::no_handler_for_language(
+            "jupyter",
+            first.clone(),
+        ));
+    }
 
-/// Check if a language specifier indicates executable code.
-fn is_executable_language(language: &str) -> bool {
-    matches!(
-        language.to_lowercase().as_str(),
-        "python"
-            | "python3"
-            | "py"
-            | "julia"
-            | "jl"
-            | "r"
-            | "ruby"
-            | "rb"
-            | "rust"
-            | "rs"
-            | "typescript"
-            | "ts"
-            | "javascript"
-            | "js"
-            | "ggsql"
-    )
+    let mut warnings = Vec::new();
+    if !reported.is_empty() {
+        warnings.push(no_runnable_kernel_diagnostic("jupyter", &reported, false));
+    }
+    let mut aliases: Vec<_> = Vec::new();
+    for cell in &executable {
+        if let Some(alias) = deprecated_alias(&cell.lang)
+            && !aliases.contains(&alias)
+        {
+            aliases.push(alias);
+        }
+    }
+    warnings.extend(
+        aliases
+            .into_iter()
+            .map(|a| deprecated_alias_diagnostic(a.alias, a.canonical)),
+    );
+
+    Ok(DocumentPlan {
+        // An explicit kernel stands without cells (spans can use it); a derived
+        // one needs a cell it can run.
+        kernel: choice
+            .kernel
+            .filter(|_| has_explicit || !executable.is_empty()),
+        executable,
+        warnings,
+    })
 }
 
 /// Execute code blocks asynchronously and build output markdown.
@@ -347,13 +475,20 @@ fn execute_blocks_async(
     units: &[Unit],
     plan: &[(usize, KernelName)],
     ctx: &ExecutionContext,
+    hash_definition: &HashDefinition,
 ) -> JupyterResult<ExecuteResult> {
     // Drive the execution on the shared engine runtime — NOT a
     // per-call runtime. Kernel sessions (ZeroMQ sockets, the kernel
     // Child) are tokio resources bound to the runtime that created
     // them; a per-call runtime made every cross-call session reuse
     // fail with "Tokio context ... is being shutdown" (bd-hxhnnlzs).
-    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, units, plan, ctx))
+    super::daemon::engine_runtime().block_on(execute_blocks_inner(
+        input,
+        units,
+        plan,
+        ctx,
+        hash_definition,
+    ))
 }
 
 /// Inner async function that does the actual execution.
@@ -362,8 +497,32 @@ async fn execute_blocks_inner(
     units: &[Unit],
     plan: &[(usize, KernelName)],
     ctx: &ExecutionContext,
+    hash_definition: &HashDefinition,
 ) -> JupyterResult<ExecuteResult> {
     let daemon = daemon();
+
+    // EXR-5: the execution record, accumulated beside the markdown only when the
+    // stage asked for one. It consumes the stage's unit list and author texts
+    // (epic decisions 36 and 38); a run driven with no stage in front of it has
+    // neither, and a record cannot be built from a local scan.
+    let mut record = if ctx.want_record {
+        if ctx.units.is_empty() {
+            return Err(JupyterError::RecordFailed {
+                message: "the stage's unit list is empty; a record needs \
+                          `ExecutionContext.units` with ids filled and `author_texts`"
+                    .to_string(),
+            });
+        }
+        Some(
+            RecordBuilder::new(JUPYTER, hash_definition, &ctx.units, &ctx.author_texts).map_err(
+                |e| JupyterError::RecordFailed {
+                    message: e.to_string(),
+                },
+            )?,
+        )
+    } else {
+        None
+    };
 
     // Start or get an existing session for every kernel the plan names, once
     // each and before any cell runs (so a start failure surfaces before the
@@ -411,17 +570,13 @@ async fn execute_blocks_inner(
         let block = match unit {
             Unit::Cell(block) => block,
             Unit::Inline(span) => {
-                if let Some(text) = evaluate_span(
-                    &daemon,
-                    key,
-                    &languages[kernel],
-                    span,
-                    input,
-                    ctx,
-                    &mut warnings,
-                )
-                .await?
-                {
+                let result = run_span(&daemon, key, &languages[kernel], span).await?;
+                // The raw bundle is what the record keeps (the mime choice below
+                // depends on the output format); the live text is unchanged.
+                if let Some(builder) = record.as_mut() {
+                    push_unit_result(builder, &ctx.units, unit, &result, kernel.as_str())?;
+                }
+                if let Some(text) = span_text(&result, span, input, ctx, &mut warnings)? {
                     replacements.push((span.start..span.end, text, SpliceKind::Inline));
                 }
                 continue;
@@ -477,6 +632,12 @@ async fn execute_blocks_inner(
             });
         }
 
+        // The record keeps every executed cell, hidden ones included, with its
+        // raw outputs; visibility is resolved again at present time.
+        if let Some(builder) = record.as_mut() {
+            push_unit_result(builder, &ctx.units, unit, &exec_result, kernel.as_str())?;
+        }
+
         // Emit the visible parts of the cell — echoed (option-stripped)
         // source plus outputs — in the Quarto-canonical `::: {.cell}`
         // shape. `begin_cell` runs for every *executed* cell, visible
@@ -501,18 +662,53 @@ async fn execute_blocks_inner(
     if fig.wrote_any() {
         result = result.with_supporting_files(vec![fig.files_dir()]);
     }
+    if let Some(builder) = record {
+        // One kernel runs every unit today (JOL-3, deferred, could vary it per
+        // unit; each cell already names its own).
+        let kernel = plan
+            .first()
+            .map(|(_, k)| (k.as_str(), languages[k].as_str()));
+        result.record = Some(builder.finish(entry_input(ctx, kernel)).map_err(|e| {
+            JupyterError::RecordFailed {
+                message: e.to_string(),
+            }
+        })?);
+    }
     Ok(result)
 }
 
-/// Run one inline expression and return the text that replaces the span, or `None` to
-/// leave the span as written (an empty value, or no usable result with a warning pushed).
+/// Run one inline expression on the kernel and return its raw result.
 ///
-/// Errors are fatal: the kernel raised, the expression produced no value, or a front
-/// matter value cannot be written back (design decision 2, divergences 1, 6 and 10).
-async fn evaluate_span(
+/// The writer escaped a front matter value as a YAML double-quoted string; the kernel
+/// must see the expression as the author wrote it.
+async fn run_span(
     daemon: &super::daemon::JupyterDaemon,
     key: &SessionKey,
     kernel_language: &str,
+    span: &InlineUnit,
+) -> JupyterResult<CellResult> {
+    let expr = if span.in_front_matter {
+        unescape_yaml_double(&span.code)
+    } else {
+        span.code.clone()
+    };
+    daemon
+        .execute_in_session_with(
+            key,
+            &wrap_inline_code(kernel_language, &expr),
+            ExecuteOpts::INLINE,
+        )
+        .await
+        .ok_or(JupyterError::NotConnected)?
+}
+
+/// The text that replaces a span given its raw result, or `None` to leave the span as
+/// written (an empty value, or no usable result with a warning pushed).
+///
+/// Errors are fatal: the kernel raised, the expression produced no value, or a front
+/// matter value cannot be written back (design decision 2, divergences 1, 6 and 10).
+fn span_text(
+    result: &CellResult,
     span: &InlineUnit,
     input: &str,
     ctx: &ExecutionContext,
@@ -531,23 +727,7 @@ async fn evaluate_span(
         message: diagnostic(problem).to_text(None),
     };
 
-    // The writer escaped a front matter value as a YAML double-quoted string; the
-    // kernel must see the expression as the author wrote it.
-    let expr = if span.in_front_matter {
-        unescape_yaml_double(&span.code)
-    } else {
-        span.code.clone()
-    };
-    let result = daemon
-        .execute_in_session_with(
-            key,
-            &wrap_inline_code(kernel_language, &expr),
-            ExecuteOpts::INLINE,
-        )
-        .await
-        .ok_or(JupyterError::NotConnected)??;
-
-    let text = match classify_inline_result(&result) {
+    let text = match classify_inline_result(result) {
         InlineOutcome::Raised { ename, evalue } => {
             return Err(fatal(&InlineSpanProblem::Raised { ename, evalue }));
         }
@@ -596,7 +776,6 @@ fn first_cell_error(result: &CellResult) -> Option<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::HANDLED_LANGUAGES;
     use crate::engine::units::legacy_cells;
 
     // ── select_kernel (JOL-2a) ───────────────────────────────────────────────
@@ -606,53 +785,6 @@ mod tests {
             "jupyter".to_string(),
             TsMetadataValue::String(name.to_string()),
         )])
-    }
-
-    fn kernel_config(name: &str) -> ConfigValue {
-        use quarto_pandoc_types::config_value::ConfigMapEntry;
-        let entry = ConfigMapEntry {
-            key: "kernel".to_string(),
-            key_source: SourceInfo::for_test(),
-            value: ConfigValue::new_string(name, SourceInfo::for_test()),
-        };
-        ConfigValue::new_map(vec![entry], SourceInfo::for_test())
-    }
-
-    #[test]
-    fn test_select_kernel_explicit_wins_over_first_cell_language() {
-        let got = select_kernel(&jupyter_meta("sos"), None, Some("julia"));
-        assert_eq!(got.as_deref(), Some("sos"));
-    }
-
-    #[test]
-    fn test_select_kernel_falls_back_to_map_language_to_kernel() {
-        let got = select_kernel(&Default::default(), None, Some("r"));
-        assert_eq!(got.as_deref(), Some("ir"));
-    }
-
-    #[test]
-    fn test_select_kernel_no_cells_with_key() {
-        let got = select_kernel(&jupyter_meta("python3"), None, None);
-        assert_eq!(got.as_deref(), Some("python3"));
-    }
-
-    #[test]
-    fn test_select_kernel_no_cells_no_key_is_none() {
-        assert_eq!(select_kernel(&Default::default(), None, None), None);
-    }
-
-    #[test]
-    fn test_select_kernel_engine_config_kernel() {
-        let cfg = kernel_config("sos");
-        let got = select_kernel(&Default::default(), Some(&cfg), Some("python"));
-        assert_eq!(got.as_deref(), Some("sos"));
-    }
-
-    #[test]
-    fn test_select_kernel_jupyter_key_beats_engine_config() {
-        let cfg = kernel_config("sos");
-        let got = select_kernel(&jupyter_meta("julia"), Some(&cfg), Some("python"));
-        assert_eq!(got.as_deref(), Some("julia"));
     }
 
     #[test]
@@ -694,7 +826,8 @@ mod tests {
             std::path::PathBuf::from("doc.qmd"),
             "html",
         )
-        .with_metadata(jupyter_meta("q2-no-such-kernel-jol2a"));
+        .with_metadata(jupyter_meta("q2-no-such-kernel-jol2a"))
+        .with_owned_languages(vec!["python".to_string()]);
         let err = execute_qmd("```{python}\n1 + 1\n```\n", &ctx)
             .expect_err("an unknown kernel must fail")
             .to_string();
@@ -708,42 +841,75 @@ mod tests {
         }
     }
 
-    // ── Helper: build a CodeBlock for tests ──────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
-    fn make_block(language: &str, code: &str) -> CodeBlock {
-        CodeBlock {
-            start: 0,
-            end: language.len() + code.len() + 10, // approximate, not checked by tests
-            code_start: language.len() + 5,        // approximate; not checked by tests
+    fn spec(name: &str, language: &str) -> KernelSpecSummary {
+        KernelSpecSummary {
+            name: name.to_string(),
             language: language.to_string(),
-            code: code.to_string(),
+            path: std::path::PathBuf::from(format!("/k/{name}")),
         }
     }
 
-    /// Partition the cells of `input` the way `execute_qmd` does: scan once,
-    /// let the engine's ownership rule mark the view, then classify.
-    fn partition_text(
-        input: &str,
-        handled: &[String],
-        multi_engine: bool,
-    ) -> Result<Vec<CellUnit>, ExecutionError> {
-        let units = crate::engine::units::scan_units(input);
-        let owns = |lang: &str| !handled.iter().any(|h| h.to_lowercase() == lang);
-        let view = view_for_engine(&units, &owns);
-        partition_cells(&view, multi_engine)
+    /// Kernelspecs for python, julia and R (the Ark spec declares `"R"`).
+    fn installed() -> Vec<KernelSpecSummary> {
+        vec![
+            spec("python3", "python"),
+            spec("julia-1.11", "julia"),
+            spec("ark", "R"),
+        ]
     }
 
-    /// `partition_text` over bare `{lang}` cells built from `(language, code)`.
-    fn partition(
-        blocks: Vec<CodeBlock>,
-        handled: &[String],
+    /// Plan the cells of `input` the way `execute_qmd` does: scan once, mark
+    /// the view with the owned set, then plan against the injected kernelspecs.
+    fn plan_text(
+        input: &str,
+        owned: &[&str],
         multi_engine: bool,
-    ) -> Result<Vec<CellUnit>, ExecutionError> {
-        let text: String = blocks
+        explicit: Option<&str>,
+        specs: &[KernelSpecSummary],
+        eval_disabled: &dyn Fn(&CellUnit) -> bool,
+    ) -> Result<DocumentPlan, ExecutionError> {
+        let units = crate::engine::units::scan_units(input);
+        let owns = |lang: &str| owned.iter().any(|o| o.eq_ignore_ascii_case(lang));
+        let view = view_for_engine(&units, &owns);
+        plan_document(
+            &view,
+            explicit.map(str::to_string),
+            specs,
+            None,
+            multi_engine,
+            eval_disabled,
+        )
+    }
+
+    /// `plan_text` for bare `{lang}` cells over the `installed()` kernelspecs.
+    fn plan(
+        languages: &[&str],
+        owned: &[&str],
+        multi_engine: bool,
+    ) -> Result<DocumentPlan, ExecutionError> {
+        let text: String = languages
             .iter()
-            .map(|b| format!("```{{{}}}\n{}\n```\n\n", b.language, b.code))
+            .map(|l| format!("```{{{l}}}\ncode\n```\n\n"))
             .collect();
-        partition_text(&text, handled, multi_engine)
+        plan_text(&text, owned, multi_engine, None, &installed(), &|_| false)
+    }
+
+    /// The cells that run when jupyter owns `python` (single-engine, over
+    /// the `installed()` kernelspecs).
+    fn ran(input: &str) -> Vec<CellUnit> {
+        plan_text(input, &["python"], false, None, &installed(), &|_| false)
+            .unwrap()
+            .executable
+    }
+
+    fn executed_languages(p: &DocumentPlan) -> Vec<&str> {
+        p.executable.iter().map(|c| c.lang.as_str()).collect()
+    }
+
+    fn codes(p: &DocumentPlan) -> Vec<Option<&str>> {
+        p.warnings.iter().map(|w| w.code.as_deref()).collect()
     }
 
     // ── T14 (H1): mask's opener-widening reddens this ───────────────────────
@@ -810,185 +976,226 @@ mod tests {
         }
     }
 
-    // ── partition_cells tests ────────────────────────────────────────────────
+    // ── plan_document tests ──────────────────────────────────────────────────
 
-    // -----------------------------------------------------------------------
-    // Row 4 (loud failure): {sql} cell owned by jupyter (sql ∉ handled_languages)
-    // but jupyter has no SQL kernel → Err(NoHandlerForLanguage{engine="jupyter",
-    // language="sql"}).
-    //
-    // P2-13a: the loud branch is gated on multi_engine=true (multi-engine
-    // sequence). Vacuity revert: remove the loud branch ⇒ this test goes RED.
-    // -----------------------------------------------------------------------
+    // Multi-engine: an owned language with no kernelspec is a loud, clean
+    // refusal, raised before anything runs. Vacuity revert: drop the
+    // multi-engine branch ⇒ RED.
     #[test]
-    fn test_partition_cells_owned_unrunnable_fails_loudly() {
-        // handled_languages does NOT contain "sql" → jupyter owns sql.
-        let handled: Vec<String> =
-            vec!["ojs".to_string(), "mermaid".to_string(), "dot".to_string()];
-
-        let blocks = vec![make_block("sql", "SELECT 1;")];
-        // multi_engine=true: |sequence| > 1 → owned-but-unrunnable → loud error.
-        let result = partition(blocks, &handled, true);
-
-        // Must be a loud Err, not Ok.
-        assert!(
-            result.is_err(),
-            "sql owned by jupyter but not executable in multi-engine sequence → must Err"
-        );
-        let err = result.unwrap_err();
-        // Exact variant check (not just any error).
-        assert!(
-            matches!(err, ExecutionError::NoHandlerForLanguage { .. }),
-            "error must be NoHandlerForLanguage, got: {err:?}"
-        );
-        // Both fields must be named correctly.
-        if let ExecutionError::NoHandlerForLanguage { engine, language } = err {
-            assert_eq!(engine, "jupyter", "error must name the engine");
-            assert_eq!(language, "sql", "error must name the language");
-        }
+    fn test_plan_owned_unrunnable_fails_loudly_in_multi_engine() {
+        let err = plan(&["sql"], &["sql"], true).unwrap_err();
+        let ExecutionError::NoHandlerForLanguage { engine, language } = err else {
+            panic!("expected NoHandlerForLanguage, got {err:?}");
+        };
+        assert_eq!(engine, "jupyter");
+        assert_eq!(language, "sql");
     }
 
-    // -----------------------------------------------------------------------
-    // P2-13b (NEW): single-engine sequence with owned-but-unrunnable cell
-    // passes through verbatim — no error, not in executable set.
-    //
-    // Binding: gated on multi_engine flag (NOT unconditional raise).
-    // Vacuity revert: remove the |sequence|>1 gate (always raise) ⇒ this
-    // test goes RED because single-engine now raises.
-    // -----------------------------------------------------------------------
+    // Single-engine: the cell passes through, the call succeeds, and one
+    // Q-18-5 warning names the language and carries the hint.
     #[test]
-    fn test_partition_cells_single_engine_owned_unrunnable_passthrough() {
-        // handled_languages does NOT contain "sql" → jupyter owns sql.
-        let handled: Vec<String> =
-            vec!["ojs".to_string(), "mermaid".to_string(), "dot".to_string()];
-
-        let blocks = vec![make_block("sql", "SELECT 1;")];
-        // multi_engine=false: |sequence| == 1 → owned-but-unrunnable → pass through, no error.
-        let result = partition(blocks, &handled, false);
-
-        assert!(
-            result.is_ok(),
-            "single-engine: owned-but-unrunnable must pass through unexecuted, not error; \
-             got: {:?}",
-            result.unwrap_err()
-        );
-        let executable = result.unwrap();
-        assert!(
-            executable.is_empty(),
-            "single-engine: sql must NOT be in the executable set \
-             (it passes through verbatim in the surrounding text); len={}",
-            executable.len()
-        );
+    fn test_plan_single_engine_owned_unrunnable_warns_and_passes_through() {
+        let p = plan(&["sql"], &["sql"], false).expect("single-engine must not error");
+        assert!(p.executable.is_empty(), "sql must not run");
+        assert_eq!(p.kernel, None);
+        assert_eq!(codes(&p), [Some("Q-18-5")]);
+        let text = p.warnings[0].to_text(None);
+        assert!(text.contains("`sql`"), "{text}");
+        assert!(text.contains("jupyter kernelspec list"), "{text}");
+        assert!(text.contains("jupyter: <kernel>"), "{text}");
     }
 
-    // Vacuity guard for row 4: sql is genuinely not executable (would be
-    // silently passthrough-ed before this enforcement). Without the gate,
-    // a sql cell would produce no output and the user would never know.
+    // The error and the warning share the code and the problem text.
     #[test]
-    fn test_sql_is_not_executable_language() {
-        assert!(
-            !is_executable_language("sql"),
-            "sql must NOT be in is_executable_language — \
-             if this fails, the row-4 loud-failure guard becomes vacuous \
-             (sql would execute normally and the Err path is unreachable)"
-        );
+    fn test_unrunnable_error_and_warning_share_code_and_text() {
+        use crate::engine::diagnostics::engine_error_diagnostic;
+        let err = plan(&["sql"], &["sql"], true).unwrap_err();
+        let as_error = engine_error_diagnostic(&err);
+        let warning = plan(&["sql"], &["sql"], false).unwrap().warnings.remove(0);
+        assert_eq!(as_error.code.as_deref(), Some("Q-18-5"));
+        assert_eq!(as_error.code, warning.code);
+        assert_eq!(as_error.title, warning.title);
+        assert_eq!(as_error.problem, warning.problem);
+        assert_eq!(as_error.hints, warning.hints);
     }
 
-    // -----------------------------------------------------------------------
-    // Cede (§5 enforcement): {python} cell + {sql} cell where sql IS in
-    // handled_languages (knitr owns it) → sql is ceded, NOT errored.
-    // Only python is returned in the executable set.
-    // -----------------------------------------------------------------------
+    // One warning per document, listing every unrunnable language once.
     #[test]
-    fn test_partition_cells_cede_when_in_handled_languages() {
-        // sql is in handled_languages → jupyter cedes it (knitr owns it).
-        let handled: Vec<String> = vec![
-            "ojs".to_string(),
-            "mermaid".to_string(),
-            "dot".to_string(),
-            "sql".to_string(),
-        ];
-
-        let python_block = make_block("python", "x = 1");
-        let sql_block = make_block("sql", "SELECT 1;");
-        // multi_engine doesn't matter here (cede path, not the loud-error path).
-        let result = partition(vec![python_block, sql_block], &handled, false);
-
-        assert!(result.is_ok(), "should not error — sql is ceded, not owned");
-        let executable = result.unwrap();
-
-        // Only the python cell is executable.
-        assert_eq!(executable.len(), 1, "only python should be executable");
-        assert_eq!(
-            executable[0].lang, "python",
-            "the executable cell must be python"
-        );
-
-        // sql must NOT appear in the executable set (vacuity: list is non-empty).
-        assert!(
-            !executable.iter().any(|b| b.lang == "sql"),
-            "sql must be ceded (not in executable set)"
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // Default passthrough regression: {ojs} cell with default handled_languages
-    // (ojs/mermaid/dot) → ceded, no error, not in executable set.
-    //
-    // Regression guard: ensures the HANDLED_LANGUAGES default never triggers
-    // the loud failure for cell-handler languages.
-    // -----------------------------------------------------------------------
-    #[test]
-    fn test_partition_cells_ojs_default_passthrough() {
-        // Use the real HANDLED_LANGUAGES default (ojs/mermaid/dot).
-        let handled: Vec<String> = HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect();
-
-        let ojs_block = make_block("ojs", "viewof slider = Inputs.range([0, 100])");
-        // multi_engine doesn't matter here (cede path, not the loud-error path).
-        let result = partition(vec![ojs_block], &handled, false);
-
-        assert!(
-            result.is_ok(),
-            "ojs with default handled_languages must not error"
-        );
-        let executable = result.unwrap();
-        assert!(
-            executable.is_empty(),
-            "ojs must be ceded (executable set must be empty)"
-        );
-    }
-
-    // mermaid and dot follow the same path.
-    #[test]
-    fn test_partition_cells_mermaid_dot_default_passthrough() {
-        let handled: Vec<String> = HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect();
-
-        // multi_engine doesn't matter here (cede path, not the loud-error path).
-        let result = partition(
-            vec![
-                make_block("mermaid", "graph TD; A-->B"),
-                make_block("dot", "digraph G { a -> b }"),
-            ],
-            &handled,
+    fn test_plan_reports_unrunnable_languages_once() {
+        let p = plan(
+            &["python", "sql", "sql", "sos"],
+            &["python", "sql", "sos"],
             false,
-        );
-
-        assert!(result.is_ok(), "mermaid/dot must not error");
-        assert!(result.unwrap().is_empty(), "mermaid and dot must be ceded");
+        )
+        .unwrap();
+        assert_eq!(executed_languages(&p), ["python"]);
+        assert_eq!(codes(&p), [Some("Q-18-5")]);
+        let text = p.warnings[0].to_text(None);
+        assert!(text.contains("`sql`") && text.contains("`sos`"), "{text}");
+        assert_eq!(text.matches("`sql`").count(), 1, "{text}");
     }
 
-    // -----------------------------------------------------------------------
-    // Vacuity / path-exercised check for row 4:
-    //
-    // Prove that "sql ∉ jupyter's handled_languages" is exactly what the real
-    // resolver produces for an explicit [knitr, jupyter] doc with {r}+{sql}.
-    // This pins the ownership routing that the row-4 test relies on.
+    // Not owned (ceded, or owned by nobody): untouched, no diagnostic.
+    #[test]
+    fn test_plan_not_owned_cells_pass_through_silently() {
+        let p = plan(&["python", "sql", "julia"], &["python"], true).unwrap();
+        assert_eq!(executed_languages(&p), ["python"]);
+        assert!(p.warnings.is_empty(), "{:?}", p.warnings);
+    }
+
+    // `ggsql`, `bash` and a made-up language execute when owned and a
+    // kernelspec declares them, with no q2 source change.
+    #[test]
+    fn test_plan_runs_any_owned_language_that_has_a_kernelspec() {
+        let mut specs = installed();
+        specs.extend([
+            spec("ggsql", "ggsql"),
+            spec("bash", "bash"),
+            spec("zz", "zzlang"),
+        ]);
+        let text = "```{ggsql}\nq\n```\n\n```{bash}\nls\n```\n\n```{zzlang}\nx\n```\n";
+        let p = plan_text(
+            text,
+            &["ggsql", "bash", "zzlang"],
+            true,
+            None,
+            &specs,
+            &|_| false,
+        )
+        .unwrap();
+        assert_eq!(executed_languages(&p), ["ggsql", "bash", "zzlang"]);
+        assert_eq!(p.kernel.as_deref(), Some("ggsql"));
+        assert!(p.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_plan_matches_owned_set_ignoring_case() {
+        // The Ark kernelspec declares "R"; the resolver may record `r` or `R`.
+        let p = plan(&["r"], &["R"], true).unwrap();
+        assert_eq!(executed_languages(&p), ["r"]);
+        assert_eq!(p.kernel.as_deref(), Some("ark"));
+    }
+
+    // sql owned by knitr is not in jupyter's owned set: it is left alone even
+    // though jupyter has no sql kernel.
+    #[test]
+    fn test_sql_not_owned_by_jupyter_when_knitr_owns_it() {
+        let p = plan(&["python", "sql"], &["python"], true).unwrap();
+        assert_eq!(executed_languages(&p), ["python"]);
+        assert!(p.warnings.is_empty());
+    }
+
+    // ojs, mermaid and dot are never in the owned set.
+    #[test]
+    fn test_plan_cell_handler_languages_pass_through() {
+        let p = plan(&["ojs", "mermaid", "dot"], &[], true).unwrap();
+        assert!(p.executable.is_empty());
+        assert!(p.warnings.is_empty());
+        assert_eq!(p.kernel, None);
+    }
+
+    // eval: false needs no kernel: exempt from the warning and the error.
+    #[test]
+    fn test_plan_eval_false_cell_is_exempt_from_the_report() {
+        let listing = "```{bash}\n#| eval: false\nls\n```\n";
+        let eval_off = |c: &CellUnit| c.code.contains("eval: false");
+        for multi in [false, true] {
+            let p = plan_text(listing, &["bash"], multi, None, &installed(), &eval_off)
+                .expect("an eval: false cell must not error");
+            assert!(p.executable.is_empty());
+            assert!(p.warnings.is_empty(), "multi={multi}: {:?}", p.warnings);
+        }
+        // Not exempt when eval is on: same text, no override.
+        assert!(plan_text(listing, &["bash"], true, None, &installed(), &|_| false).is_err());
+    }
+
+    // The resolver sees cells in blockquotes and lists; the executor does not.
+    // A language present only there is owned but never run, and must not
+    // trigger Q-18-5 or drive kernel selection.
+    #[test]
+    fn test_plan_owned_language_only_in_a_blockquote_is_ignored() {
+        let text = "> ```{bash}\n> ls\n> ```\n\n- item\n\n  ```{bash}\n  ls\n  ```\n";
+        let p = plan_text(text, &["bash"], true, None, &installed(), &|_| false).unwrap();
+        assert!(p.executable.is_empty());
+        assert!(p.warnings.is_empty());
+        assert_eq!(p.kernel, None);
+    }
+
+    // The explicit kernel takes every owned cell and nothing is checked
+    // against the kernelspec list (`jupyter: sos` with a `{ggsql}` cell).
+    #[test]
+    fn test_plan_explicit_kernel_runs_every_owned_cell() {
+        let p = plan_text(
+            "```{python}\nx\n```\n\n```{ggsql}\nq\n```\n",
+            &["python", "ggsql"],
+            true,
+            Some("sos"),
+            &[],
+            &|_| false,
+        )
+        .unwrap();
+        assert_eq!(executed_languages(&p), ["python", "ggsql"]);
+        assert_eq!(p.kernel.as_deref(), Some("sos"));
+        assert!(p.warnings.is_empty());
+    }
+
+    // No owned cell: an explicit kernel stands (EXR-3 evaluates spans on it);
+    // a derived one does not exist.
+    #[test]
+    fn test_plan_no_cells_keeps_only_an_explicit_kernel() {
+        let p = plan_text("just text\n", &["python"], true, Some("sos"), &[], &|_| {
+            false
+        })
+        .unwrap();
+        assert!(p.executable.is_empty());
+        assert_eq!(p.kernel.as_deref(), Some("sos"));
+        let p = plan_text(
+            "just text\n",
+            &["python"],
+            true,
+            None,
+            &installed(),
+            &|_| false,
+        )
+        .unwrap();
+        assert_eq!(p.kernel, None);
+    }
+
+    // Deprecated aliases still run this release and warn with the canonical
+    // name. Remove with the alias table (dated follow-up in the plan).
+    #[test]
+    fn test_plan_deprecated_aliases_run_and_warn() {
+        let p = plan(&["py", "jl", "py"], &["py", "jl"], false).unwrap();
+        assert_eq!(executed_languages(&p), ["py", "jl", "py"]);
+        assert_eq!(p.kernel.as_deref(), Some("python3"));
+        assert_eq!(p.warnings.len(), 2, "one per distinct alias");
+        let text: String = p.warnings.iter().map(|w| w.to_text(None)).collect();
+        assert!(
+            text.contains("{python}") && text.contains("{julia}"),
+            "{text}"
+        );
+        assert!(codes(&p).iter().all(Option::is_none));
+    }
+
+    // The kernel is the first owned language, in document order, with a
+    // kernelspec; the cells of the other languages still run on it (one
+    // kernel serves the document).
+    #[test]
+    fn test_plan_picks_first_language_with_a_kernelspec() {
+        let p = plan(&["julia", "python"], &["julia", "python"], true).unwrap();
+        assert_eq!(p.kernel.as_deref(), Some("julia-1.11"));
+        assert_eq!(executed_languages(&p), ["julia", "python"]);
+    }
+
+    // Pins the ownership routing the multi-engine failure relies on: for an
+    // explicit [knitr, jupyter] document with {r}+{sql}, the real resolver
+    // gives `sql` to jupyter and `r` to knitr, and `owned_languages_for`
+    // is exactly the set the gate reads.
     //
     // Gated cfg(not(wasm32)) because KnitrEngine and JupyterEngine are native-only.
-    // -----------------------------------------------------------------------
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn test_vacuity_sql_owned_by_jupyter_in_explicit_knitr_jupyter() {
+    fn test_resolver_owned_languages_for_jupyter_in_explicit_knitr_jupyter() {
         use std::sync::Arc;
 
         use hashlink::LinkedHashMap;
@@ -1002,12 +1209,10 @@ mod tests {
         use crate::engine::registry::EngineRegistry;
         use crate::engine::resolution::resolve_engines;
 
-        // Build a registry with real knitr + jupyter engines.
         let mut registry = EngineRegistry::empty();
         registry.register(Arc::new(KnitrEngine::new()));
         registry.register(Arc::new(JupyterEngine::new()));
 
-        // Metadata: explicit [knitr, jupyter].
         let si = SourceInfo::for_test();
         let knitr_cv = quarto_pandoc_types::ConfigValue::new_string("knitr", si.clone());
         let jupyter_cv = quarto_pandoc_types::ConfigValue::new_string("jupyter", si.clone());
@@ -1022,7 +1227,6 @@ mod tests {
             si.clone(),
         );
 
-        // AST: one {r} cell and one {sql} cell.
         let make_cell = |lang: &str| {
             Block::CodeBlock(AstCodeBlock {
                 attr: (
@@ -1042,28 +1246,18 @@ mod tests {
 
         let resolution = resolve_engines(&meta, &ast, &registry, None);
 
-        // sql must be owned by jupyter (T2 explicit Fallback > knitr's T3 Interop).
         assert_eq!(
             resolution.ownership.get("sql").map(|s| s.as_str()),
             Some("jupyter"),
             "explicit [knitr, jupyter] + {{sql}} → sql owned by jupyter via T2"
         );
-
-        // handled_languages_for("jupyter") must NOT contain "sql"
-        // (sql is jupyter's own language, not something it cedes).
-        let jupyter_handled = resolution.handled_languages_for("jupyter");
+        assert_eq!(resolution.owned_languages_for("jupyter"), ["sql"]);
+        assert_eq!(resolution.owned_languages_for("knitr"), ["r"]);
+        // The complement still holds.
         assert!(
-            !jupyter_handled.contains(&"sql".to_string()),
-            "sql must NOT be in jupyter's handled_languages — \
-             it is owned by jupyter, so jupyter should (try to) execute it, \
-             not cede it. This is precisely the condition the row-4 loud \
-             failure fires on."
-        );
-
-        // Confirm: r is in jupyter's handled_languages (r is owned by knitr).
-        assert!(
-            jupyter_handled.contains(&"r".to_string()),
-            "r (owned by knitr) must be in jupyter's handled_languages"
+            resolution
+                .handled_languages_for("jupyter")
+                .contains(&"r".to_string())
         );
     }
 
@@ -1251,19 +1445,23 @@ print("hello")
     }
 
     // EXR-2 Phase 1 consequence of the wider token class: a `{python.marimo}`
-    // cell now reaches `partition_cells`, finds no executable language, and in
-    // a multi-engine document fails loudly (before, the executor never saw it).
+    // cell reaches the view. When jupyter owns the language but no kernelspec
+    // declares it, a multi-engine document fails loudly; a single-engine one
+    // warns and passes through. Not owned, it is ignored.
     #[test]
-    fn exr2_p1_dotted_cell_reaches_partition_and_fails_in_multi_engine() {
+    fn exr2_p1_dotted_cell_reaches_the_plan() {
         let input = "```{python.marimo}\nx=1\n```\n";
         assert_eq!(parse_code_blocks(input).len(), 1);
-        let multi = partition_text(input, &[], true);
-        assert!(
-            matches!(multi, Err(ExecutionError::NoHandlerForLanguage { .. })),
-            "got {multi:?}"
-        );
-        let single = partition_text(input, &[], false).expect("single-engine passes through");
-        assert!(single.is_empty());
+        let one =
+            |owned: &[&str], multi| plan_text(input, owned, multi, None, &installed(), &|_| false);
+        assert!(matches!(
+            one(&["python.marimo"], true),
+            Err(ExecutionError::NoHandlerForLanguage { .. })
+        ));
+        let single = one(&["python.marimo"], false).expect("single-engine passes through");
+        assert!(single.executable.is_empty());
+        assert_eq!(codes(&single), [Some("Q-18-5")]);
+        assert!(one(&[], true).unwrap().warnings.is_empty());
     }
 
     // (e) Nesting is invisible to the line-start regex; see also the writer
@@ -1447,14 +1645,10 @@ print("hello")
             1,
             "the old finder misread the closer as an opener"
         );
-        let run = partition_text(input, &[], false).unwrap();
+        let run = ran(input);
         assert!(run.is_empty(), "no cell runs: {run:?}");
         // And the plain form the Phase 0 pin used.
-        assert!(
-            partition_text("```\n{python}\nx=1\n```\n", &[], false)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(ran("```\n{python}\nx=1\n```\n").is_empty());
     }
 
     // (h) A four-backtick line closes a three-backtick cell (CommonMark: a
@@ -1466,16 +1660,12 @@ print("hello")
             parse_code_blocks(input).is_empty(),
             "the old finder needed exactly three"
         );
-        let run = partition_text(input, &[], false).unwrap();
+        let run = ran(input);
         assert_eq!(run.len(), 1, "{run:?}");
         assert_eq!(run[0].lang, "python");
         assert_eq!(run[0].code, "x=1\n");
         // The trailing-text closer is still not a closer for either.
-        assert!(
-            partition_text("```{python}\nx=1\n```  trailing\n", &[], false)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(ran("```{python}\nx=1\n```  trailing\n").is_empty());
     }
 
     // The Phase 3 corpus: the cells the scanner hands the executor equal what
@@ -1515,45 +1705,14 @@ print("hello")
         assert!(checked >= 20, "corpus went missing: {checked}");
     }
 
-    // `partition_cells` cedes case-insensitively: a `{Python}` cell with
-    // handled = ["python"] is ceded (today's tests never pin this).
+    // Ownership is case-insensitive: a `{Python}` cell runs when `python` is
+    // owned and is left alone when it is not.
     #[test]
-    fn exr2_p0_partition_cedes_case_insensitively() {
-        let handled = vec!["python".to_string()];
-        let result = partition(vec![make_block("Python", "x = 1")], &handled, false)
-            .expect("ceded cells are not an error");
-        assert!(result.is_empty(), "{{Python}} must be ceded by \"python\"");
-    }
-
-    #[test]
-    fn test_map_language_to_kernel() {
-        assert_eq!(map_language_to_kernel("python"), "python3");
-        assert_eq!(map_language_to_kernel("Python"), "python3");
-        assert_eq!(map_language_to_kernel("py"), "python3");
-        assert_eq!(map_language_to_kernel("julia"), "julia");
-        assert_eq!(map_language_to_kernel("r"), "ir");
-        assert_eq!(map_language_to_kernel("rust"), "rust");
-        assert_eq!(map_language_to_kernel("typescript"), "deno");
-        assert_eq!(map_language_to_kernel("ts"), "deno");
-        assert_eq!(map_language_to_kernel("javascript"), "deno");
-        assert_eq!(map_language_to_kernel("js"), "deno");
-        assert_eq!(map_language_to_kernel("unknown"), "unknown");
-    }
-
-    #[test]
-    fn test_is_executable_language() {
-        assert!(is_executable_language("python"));
-        assert!(is_executable_language("Python"));
-        assert!(is_executable_language("julia"));
-        assert!(is_executable_language("r"));
-        assert!(is_executable_language("typescript"));
-        assert!(is_executable_language("ts"));
-        assert!(is_executable_language("javascript"));
-        assert!(is_executable_language("js"));
-        assert!(is_executable_language("ggsql"));
-        assert!(is_executable_language("GGSQL"));
-        assert!(!is_executable_language("json"));
-        assert!(!is_executable_language("markdown"));
+    fn exr2_p0_ownership_is_case_insensitive() {
+        let p = plan(&["Python"], &["python"], false).unwrap();
+        assert_eq!(executed_languages(&p), ["Python"]);
+        let p = plan(&["Python"], &["julia"], false).unwrap();
+        assert!(p.executable.is_empty());
     }
 }
 
@@ -1575,7 +1734,7 @@ mod span_tests {
         FakeOutput::Result(json!({ "text/markdown": text, "text/plain": "ignored" }))
     }
 
-    fn jupyter_meta(name: &str) -> std::collections::HashMap<String, TsMetadataValue> {
+    pub(super) fn jupyter_meta(name: &str) -> std::collections::HashMap<String, TsMetadataValue> {
         std::collections::HashMap::from([(
             "jupyter".to_string(),
             TsMetadataValue::String(name.to_string()),
@@ -1583,7 +1742,7 @@ mod span_tests {
     }
 
     /// A context whose source map holds `text` as `doc.qmd`, so locations resolve.
-    fn ctx_for(text: &str) -> ExecutionContext {
+    pub(super) fn ctx_for(text: &str) -> ExecutionContext {
         let mut sc = SourceContext::new();
         let id = sc.add_file("doc.qmd".to_string(), Some(text.to_string()));
         ExecutionContext::new(
@@ -1596,7 +1755,7 @@ mod span_tests {
     }
 
     /// A document context with a fake python kernel installed and named by `jupyter:`.
-    fn with_kernel(text: &str, script: &Script) -> (FakeKernelHome, ExecutionContext) {
+    pub(super) fn with_kernel(text: &str, script: &Script) -> (FakeKernelHome, ExecutionContext) {
         let home = FakeKernelHome::new();
         let FakeKernel { name, env } = home.install("fake-py", "python", script);
         let ctx = ctx_for(text)
@@ -1841,5 +2000,442 @@ mod span_tests {
                     <!--\nmulti `{python} 3`\n-->\n\n`    ```{python}\n";
         let ctx = ctx_for(text).with_owned_languages(vec!["python".to_string()]);
         assert_eq!(execute_qmd(text, &ctx).unwrap().markdown, text);
+    }
+}
+
+#[cfg(test)]
+mod record_tests {
+    //! EXR-5 Phase 0: the execution record the unit loop builds beside its unchanged
+    //! markdown. The kernel-free seam is EXR-3's fake kernel (`fake_kernel.rs`): canned
+    //! results travel through the real daemon and session, so these tests exercise the
+    //! same loop production runs, with no `ipykernel`.
+
+    use super::span_tests::{ctx_for, jupyter_meta, with_kernel};
+    use super::*;
+    use crate::engine::jupyter::fake_kernel::{FakeKernel, FakeKernelHome, FakeOutput, Script};
+    use crate::engine::units::{UnitId, scan_units};
+    use crate::record::{
+        AuthorText, AuthorTexts, EngineRecord, UnitKind, content_hash, fill_ids, span_content_hash,
+    };
+    use serde_json::json;
+
+    fn py(expr: &str) -> String {
+        wrap_inline_code("python", expr)
+    }
+
+    fn stdout(text: &str) -> Vec<FakeOutput> {
+        vec![FakeOutput::Stdout(text.to_string())]
+    }
+
+    /// The code the kernel receives for a cell: the option-stripped body keeps the
+    /// newline before the closing fence.
+    fn cell(code: &str) -> String {
+        format!("{code}\n")
+    }
+
+    /// What a staged context keeps alive: the fake kernel home and the directory any
+    /// figure the presenter writes lands in (never the crate directory).
+    struct Keep {
+        _home: FakeKernelHome,
+        _dir: tempfile::TempDir,
+    }
+
+    /// A context the stage would hand the engine: units scanned once, ids filled, the
+    /// author texts aligned, and a record wanted.
+    fn staged(text: &str, script: &Script) -> (Keep, ExecutionContext) {
+        let (home, mut ctx) = with_kernel(text, script);
+        let dir = tempfile::tempdir().unwrap();
+        ctx.source_path = dir.path().join("doc.qmd");
+        let mut units = scan_units(text);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        ctx.units = units;
+        ctx.author_texts = texts;
+        ctx.want_record = true;
+        (
+            Keep {
+                _home: home,
+                _dir: dir,
+            },
+            ctx,
+        )
+    }
+
+    fn run(text: &str, script: &Script) -> (ExecuteResult, EngineRecord) {
+        let (_keep, ctx) = staged(text, script);
+        let result = execute_qmd(text, &ctx).expect("execution succeeds");
+        let record = result
+            .record
+            .clone()
+            .expect("a record is built when the context wants one");
+        (result, record)
+    }
+
+    fn unit_ids(ctx: &ExecutionContext) -> Vec<String> {
+        ctx.units
+            .iter()
+            .map(|u| match u {
+                Unit::Cell(c) => c.id.clone().unwrap().0,
+                Unit::Inline(i) => i.id.clone().unwrap().0,
+            })
+            .collect()
+    }
+
+    // ── 0a: the seam ────────────────────────────────────────────────────
+
+    /// The fake kernel drives the real loop: a cell's markdown is exactly what
+    /// `render_cell` makes of the kernel's outputs.
+    #[test]
+    fn execute_blocks_through_the_fake_kernel_match_render_cell_shape() {
+        let text = "```{python}\nprint('hi')\n```\n";
+        let script = Script::from([(cell("print('hi')"), stdout("hi\n"))]);
+        let (_home, ctx) = with_kernel(text, &script);
+        let out = execute_qmd(text, &ctx).unwrap().markdown;
+
+        let result = CellResult {
+            status: ExecuteStatus::Ok,
+            outputs: vec![CellOutput::Stream {
+                name: "stdout".to_string(),
+                text: "hi\n".to_string(),
+            }],
+            execution_count: None,
+        };
+        let mut fig = FsFigureSink::new(&ctx.source_path);
+        let expected = render_cell(
+            "python",
+            "print('hi')",
+            &result,
+            &mut fig,
+            CellVisibility::resolve(None),
+        );
+        assert_eq!(out.trim_end(), expected.trim_end());
+        assert!(out.contains("hi\n"), "{out}");
+    }
+
+    // ── 0b: builder call sites ──────────────────────────────────────────
+
+    #[test]
+    fn no_record_is_built_when_not_wanted() {
+        let text = "```{python}\nx\n```\n";
+        let (_keep, mut ctx) = staged(text, &Script::new());
+        ctx.want_record = false;
+        let r = execute_qmd(text, &ctx).unwrap();
+        assert!(r.record.is_none());
+        assert!(r.markdown.contains("::: {.cell"), "{}", r.markdown);
+    }
+
+    #[test]
+    fn record_has_one_cell_per_executed_unit_in_document_order() {
+        let text = "```{python}\na\n```\n\nv `{python} e`\n\n```{python}\nb\n```\n";
+        let script = Script::from([
+            (cell("a"), stdout("A\n")),
+            (py("e"), vec![FakeOutput::plain_result("E")]),
+            (cell("b"), stdout("B\n")),
+        ]);
+        let (_keep, ctx) = staged(text, &script);
+        let record = execute_qmd(text, &ctx).unwrap().record.unwrap();
+
+        let ids: Vec<&str> = record
+            .cells
+            .iter()
+            .map(|c| c.metadata.quarto_cell_id.as_str())
+            .collect();
+        assert_eq!(ids, unit_ids(&ctx));
+        let kinds: Vec<UnitKind> = record
+            .cells
+            .iter()
+            .map(|c| c.metadata.quarto_kind)
+            .collect();
+        assert_eq!(kinds, [UnitKind::Cell, UnitKind::Inline, UnitKind::Cell]);
+        assert_eq!(record.engine.name, "jupyter");
+    }
+
+    /// Positron's hash of the lines between the fences, option lines included, checked
+    /// against EXR-4's conformance vectors.
+    #[test]
+    fn record_cell_ids_are_content_hashes_including_option_lines() {
+        let vectors: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/records/content-hash-vectors.json"
+        ))
+        .unwrap();
+        let vector = vectors
+            .iter()
+            .find(|v| v["name"] == "label-line-and-unicode")
+            .expect("the labeled vector");
+        let body = vector["input"].as_str().unwrap();
+        let expected = vector["expected"].as_str().unwrap();
+        assert_eq!(body, "#| label: fig-é\nx <- 'é😀'");
+
+        let text = format!("```{{python}}\n{body}\n```\n");
+        let (_, record) = run(&text, &Script::new());
+        let cell = &record.cells[0];
+        assert_eq!(cell.id, expected);
+        assert_eq!(cell.metadata.quarto_content_hash, expected);
+        assert_eq!(cell.metadata.quarto_label.as_deref(), Some("fig-é"));
+        assert_eq!(
+            cell.metadata.quarto_cell_id,
+            format!("0-{}-fig-é", &expected[..8])
+        );
+        // The option line is part of the hash: the code alone hashes differently.
+        assert_ne!(cell.id, content_hash("x <- 'é😀'"));
+    }
+
+    /// The builder uses the stage's ids as given and scans nothing itself (epic decision 38).
+    #[test]
+    fn record_ids_come_from_the_stage_units() {
+        let text = "```{python}\nx\n```\n\n`{python} y`\n";
+        let script = Script::from([(py("y"), vec![FakeOutput::plain_result("1")])]);
+        let (_keep, mut ctx) = staged(text, &script);
+        for (n, unit) in ctx.units.iter_mut().enumerate() {
+            let id = Some(UnitId(format!("stub-{n}")));
+            match unit {
+                Unit::Cell(c) => c.id = id,
+                Unit::Inline(i) => i.id = id,
+            }
+        }
+        let record = execute_qmd(text, &ctx).unwrap().record.unwrap();
+        let ids: Vec<&str> = record
+            .cells
+            .iter()
+            .map(|c| c.metadata.quarto_cell_id.as_str())
+            .collect();
+        assert_eq!(ids, ["stub-0", "stub-1"]);
+    }
+
+    /// Crossref sugaring strips the label and caption lines from what the engine sees;
+    /// the record hashes the author's text the stage mapped (epic decision 36).
+    #[test]
+    fn record_content_hash_uses_author_text_for_labeled_cell() {
+        // What the engine sees: the sugared text.
+        let text = "```{python}\nx = 1\n```\n";
+        // What the author wrote.
+        let author = "#| label: fig-x\n#| fig-cap: A cap\nx = 1";
+        let script = Script::from([(cell("x = 1"), vec![])]);
+        let (_home, mut ctx) = with_kernel(text, &script);
+        let mut units = scan_units(text);
+        let texts = AuthorTexts(vec![AuthorText {
+            text: author.to_string(),
+            content_hash: content_hash(author),
+        }]);
+        fill_ids(&mut units, &texts).unwrap();
+        ctx.units = units;
+        ctx.author_texts = texts;
+        ctx.want_record = true;
+
+        let result = execute_qmd(text, &ctx).unwrap();
+        let cell = &result.record.as_ref().unwrap().cells[0];
+        let hash = content_hash(author);
+        assert_eq!(cell.metadata.quarto_content_hash, hash);
+        assert_eq!(cell.metadata.quarto_label.as_deref(), Some("fig-x"));
+        assert_eq!(
+            cell.metadata.quarto_cell_id,
+            format!("0-{}-fig-x", &hash[..8])
+        );
+        assert_eq!(
+            cell.source,
+            ["#| label: fig-x\n", "#| fig-cap: A cap\n", "x = 1"]
+        );
+        // The live path is untouched: it echoes the text it was given.
+        assert!(result.markdown.contains("x = 1"), "{}", result.markdown);
+        assert!(!result.markdown.contains("fig-cap"), "{}", result.markdown);
+    }
+
+    /// The engine's whole declaration lands in the entry (epic decision 35); no engine
+    /// name is matched on the way.
+    #[test]
+    fn record_engine_entry_carries_full_hash_definition() {
+        let text = "```{python}\nx\n```\n";
+        let (_keep, ctx) = staged(text, &Script::new());
+
+        let mut custom = HashDefinition::conservative("custom-rule");
+        custom.version = 7;
+        custom.presentation_cell_options = vec!["foo".to_string()];
+        custom.document_keys = vec!["zzz".to_string()];
+        let record = execute_qmd_with(text, &ctx, &custom)
+            .unwrap()
+            .record
+            .unwrap();
+        assert_eq!(record.engine.hash_definition, custom);
+
+        let record = execute_qmd(text, &ctx).unwrap().record.unwrap();
+        assert_eq!(
+            record.engine.hash_definition,
+            crate::engine::jupyter::jupyter_hash_definition()
+        );
+    }
+
+    /// Figure names are keyed to executed-cell position, so hidden cells stay in the
+    /// record, in order, outputs included.
+    #[test]
+    fn record_keeps_hidden_cells() {
+        let text = "```{python}\n#| include: false\na\n```\n\n\
+                    ```{python}\n#| echo: false\nb\n```\n\n\
+                    ```{python}\n#| output: false\nc\n```\n";
+        let script = Script::from([
+            (cell("a"), stdout("A\n")),
+            (cell("b"), stdout("B\n")),
+            (cell("c"), stdout("C\n")),
+        ]);
+        let (result, record) = run(text, &script);
+        let texts: Vec<&str> = record
+            .cells
+            .iter()
+            .map(|c| c.outputs[0]["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(texts, ["A\n", "B\n", "C\n"]);
+        // Visibility is a presentation option, resolved from the document at present
+        // time (epic decision 6): it is in no cell's execution-relevant options.
+        assert!(
+            record
+                .cells
+                .iter()
+                .all(|c| c.metadata.options().count() == 0)
+        );
+        // The live markdown hides what it hid before.
+        assert!(!result.markdown.contains("A\n"), "{}", result.markdown);
+        assert!(result.markdown.contains("B\n"), "{}", result.markdown);
+        assert!(!result.markdown.contains("C\n"), "{}", result.markdown);
+    }
+
+    /// Outputs are nbformat-shaped and lossless: the raw mime bundle, not the text the
+    /// presenter chose for one format.
+    #[test]
+    fn record_outputs_are_verbatim() {
+        let text = "```{python}\ns\n```\n\n```{python}\nr\n```\n\n\
+                    ```{python}\nd\n```\n\n```{python}\n#| error: true\ne\n```\n";
+        let script = Script::from([
+            (cell("s"), stdout("hi\nthere\n")),
+            (
+                cell("r"),
+                vec![FakeOutput::Result(
+                    json!({ "text/plain": "'v'", "text/html": "<b>v</b>" }),
+                )],
+            ),
+            (
+                cell("d"),
+                vec![FakeOutput::Display(
+                    json!({ "image/png": "iVBORw0KGgo=", "text/plain": "<Figure>" }),
+                )],
+            ),
+            (
+                cell("e"),
+                vec![FakeOutput::Error {
+                    ename: "ValueError".to_string(),
+                    evalue: "bad".to_string(),
+                }],
+            ),
+        ]);
+        let (_, record) = run(text, &script);
+        let outputs: Vec<&Vec<serde_json::Value>> =
+            record.cells.iter().map(|c| &c.outputs).collect();
+        assert_eq!(
+            outputs[0],
+            &vec![json!({ "output_type": "stream", "name": "stdout", "text": "hi\nthere\n" })]
+        );
+        assert_eq!(
+            outputs[1],
+            &vec![json!({
+                "output_type": "execute_result",
+                "execution_count": 1,
+                "data": { "text/plain": "'v'", "text/html": "<b>v</b>" },
+                "metadata": {},
+            })]
+        );
+        assert_eq!(
+            outputs[2],
+            &vec![json!({
+                "output_type": "display_data",
+                "data": { "image/png": "iVBORw0KGgo=", "text/plain": "<Figure>" },
+                "metadata": {},
+            })]
+        );
+        assert_eq!(
+            outputs[3],
+            &vec![json!({
+                "output_type": "error",
+                "ename": "ValueError",
+                "evalue": "bad",
+                "traceback": [],
+            })]
+        );
+    }
+
+    #[test]
+    fn record_notes_kernel_per_cell() {
+        let text = "```{python}\nx\n```\n\n`{python} y`\n";
+        let script = Script::from([(py("y"), vec![FakeOutput::plain_result("1")])]);
+        let (_, record) = run(text, &script);
+        for cell in &record.cells {
+            assert_eq!(cell.metadata.quarto_kernel.as_deref(), Some("fake-py"));
+            assert_eq!(cell.metadata.quarto_lang, "python");
+        }
+        let spec = &record.engine.provenance["kernelspec"];
+        assert_eq!(spec["name"], "fake-py");
+        assert_eq!(spec["language"], "python");
+    }
+
+    /// A ceded `{ojs}` cell and a span of a language nobody owns are units, not cells.
+    #[test]
+    fn ceded_and_unowned_fences_are_not_record_cells() {
+        let text = "```{python}\nx\n```\n\n```{ojs}\nviewof a = 1\n```\n\nsee `{r} 1`\n";
+        let (_keep, ctx) = staged(text, &Script::new());
+        assert_eq!(ctx.units.len(), 3);
+        let result = execute_qmd(text, &ctx).unwrap();
+        let record = result.record.unwrap();
+        assert_eq!(record.cells.len(), 1);
+        assert_eq!(record.cells[0].metadata.quarto_cell_id, unit_ids(&ctx)[0]);
+        assert!(result.markdown.contains("```{ojs}"), "{}", result.markdown);
+        assert!(result.markdown.contains("`{r} 1`"), "{}", result.markdown);
+    }
+
+    /// A span is a one-line cell: its source is the expression as written (not the
+    /// kernel wrapper), its id is `{n}-{hash8}-inline`, and its output is the raw bundle.
+    #[test]
+    fn inline_units_are_recorded_as_one_line_cells() {
+        let text = "A `{python} 1 + 1` B\n";
+        let script = Script::from([(py("1 + 1"), vec![FakeOutput::plain_result("2")])]);
+        let (result, record) = run(text, &script);
+        assert_eq!(result.markdown, "A 2 B\n");
+
+        assert_eq!(record.cells.len(), 1);
+        let cell = &record.cells[0];
+        let hash = span_content_hash("python", "1 + 1");
+        assert_eq!(cell.metadata.quarto_kind, UnitKind::Inline);
+        assert_eq!(
+            cell.metadata.quarto_cell_id,
+            format!("0-{}-inline", &hash[..8])
+        );
+        assert_eq!(cell.metadata.quarto_content_hash, hash);
+        assert_eq!(cell.source, ["1 + 1"]);
+        assert_eq!(
+            cell.outputs,
+            vec![json!({
+                "output_type": "execute_result",
+                "execution_count": 1,
+                "data": { "text/plain": "2" },
+                "metadata": {},
+            })]
+        );
+    }
+
+    /// Owned spans with no cell at all still make a record (the kernel comes from `jupyter:`).
+    #[test]
+    fn a_span_only_document_records_its_span() {
+        let text = "`{python} a`\n";
+        let script = Script::from([(py("a"), vec![FakeOutput::plain_result("1")])]);
+        let home = FakeKernelHome::new();
+        let FakeKernel { name, env } = home.install("fake-py", "python", &script);
+        let mut units = scan_units(text);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        let ctx = ctx_for(text)
+            .with_metadata(jupyter_meta(&name))
+            .with_project_env(env)
+            .with_units(units)
+            .with_author_texts(texts)
+            .with_want_record(true);
+        let record = execute_qmd(text, &ctx).unwrap().record.unwrap();
+        assert_eq!(record.cells.len(), 1);
+        assert_eq!(record.cells[0].metadata.quarto_kind, UnitKind::Inline);
     }
 }

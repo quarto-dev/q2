@@ -1,6 +1,6 @@
 ---
 title: "Jupyter Kernel Not Named"
-description: "The document's `jupyter:` key is a map that names no kernel, or uses the `kernelspec:` object form; Quarto ignores it and picks the kernel from the first executable cell."
+description: "The document's `jupyter:` key is a map that names no kernel, or uses the `kernelspec:` object form; Quarto ignores it and picks the kernel from the first language in the document that has one."
 code: Q-18-4
 subsystem: engine
 status: stub
@@ -26,8 +26,8 @@ Quarto can use:
 
 Quarto 1 stops with "Invalid Jupyter kernelspec" for both. Quarto 2
 warns and continues: it uses `engine: [{jupyter: {kernel: ...}}]` if the
-document has it, and otherwise the kernel for the language of the first
-executable cell.
+document has it, and otherwise the kernel for the first language in the
+document that has an installed kernel.
 
 ## How to fix
 

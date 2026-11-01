@@ -146,6 +146,7 @@ fn plot_capture(plot_path: &str) -> EngineCapture {
             path: plot_path.to_string(),
             contents_base64: base64::engine::general_purpose::STANDARD.encode(PNG),
         }],
+        record: None,
     }
 }
 
@@ -275,6 +276,7 @@ fn unexecuted_cells_are_counted_under_policy_none() {
         input_qmd: input,
         result: serde_json::json!({ "markdown":
             "---\ntitle: T\n---\n\n::: {.cell}\n::: {.cell-output .cell-output-stdout}\nOUT\n:::\n:::\n\n```{python}\n2\n```\n" }),
+        record: None,
         files: Vec::new(),
     };
     assert_eq!(

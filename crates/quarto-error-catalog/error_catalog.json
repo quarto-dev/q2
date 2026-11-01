@@ -1969,8 +1969,15 @@
   "Q-18-4": {
     "subsystem": "engine",
     "title": "Jupyter Kernel Not Named",
-    "message_template": "The document's `jupyter:` key is a map that names no kernel (it has no `kernel` key) or uses the `kernelspec:` object form, which Quarto does not read. Quarto ignores the key and chooses the kernel from the language of the first executable cell instead.",
+    "message_template": "The document's `jupyter:` key is a map that names no kernel (it has no `kernel` key) or uses the `kernelspec:` object form, which Quarto does not read. Quarto ignores the key and chooses the kernel from the first language in the document that has an installed kernel instead.",
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-4",
+    "since_version": "99.9.9"
+  },
+  "Q-18-5": {
+    "subsystem": "engine",
+    "title": "Owned Language Has No Runnable Kernel",
+    "message_template": "The Jupyter engine runs this document's cells in a language, but no installed Jupyter kernel declares that language. In a document with an `engine:` list this stops the render; otherwise the cells are left as written and are not run. Install a kernel for the language, name one for the whole document with `jupyter: <kernel>`, or give a display-only cell `eval: false`.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-5",
     "since_version": "99.9.9"
   },
   "Q-18-10": {

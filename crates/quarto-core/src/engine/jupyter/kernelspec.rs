@@ -78,39 +78,11 @@ pub async fn find_kernelspec(name: &str) -> Result<ResolvedKernel> {
         .map_err(JupyterError::from)
 }
 
-/// Find the first kernelspec that supports a given language.
-///
-/// # Arguments
-///
-/// * `language` - The language name (e.g., "python", "julia", "r")
-///
-/// # Returns
-///
-/// The first matching kernel, or an error if none found.
-///
-/// # Note
-///
-/// Part of kernel resolution API. Will be used when Jupyter engine integration
-/// is complete. Has unit tests in this module.
-#[allow(dead_code)]
-pub async fn find_kernelspec_for_language(language: &str) -> Result<ResolvedKernel> {
-    let specs = runtimelib::list_kernelspecs().await;
-    let language_lower = language.to_lowercase();
-
-    specs
-        .into_iter()
-        .find(|ks| ks.kernelspec.language.to_lowercase() == language_lower)
-        .map(ResolvedKernel::from)
-        .ok_or_else(|| JupyterError::NoKernelForLanguage {
-            language: language.to_string(),
-        })
-}
-
 /// Read the document-wide kernel name from the lowered document metadata
 /// (`ExecutionContext::metadata`).
 ///
 /// Supports `jupyter: python3` and `jupyter: {kernel: python3}`. A map
-/// without a `kernel` key (the per-language form, reserved for JOL-2b)
+/// without a `kernel` key (the per-language form, which no plan builds)
 /// and any non-string value give `None`.
 pub fn kernel_from_ts_metadata(
     metadata: &std::collections::HashMap<String, TsMetadataValue>,
@@ -155,14 +127,6 @@ pub fn unusable_jupyter_key(
     } else {
         Some(UnusableJupyterKey::MapWithoutKernel)
     }
-}
-
-/// Check if a language is typically executed via Jupyter.
-pub fn is_jupyter_language(language: &str) -> bool {
-    matches!(
-        language.to_lowercase().as_str(),
-        "python" | "julia" | "r" | "scala" | "ruby" | "bash" | "sh"
-    )
 }
 
 #[cfg(test)]
@@ -255,17 +219,5 @@ mod tests {
             kernel_from_ts_metadata(&ts_meta(TsMetadataValue::Null)),
             None
         );
-    }
-
-    #[test]
-    fn test_is_jupyter_language() {
-        assert!(is_jupyter_language("python"));
-        assert!(is_jupyter_language("Python"));
-        assert!(is_jupyter_language("julia"));
-        assert!(is_jupyter_language("r"));
-        assert!(is_jupyter_language("R"));
-        assert!(is_jupyter_language("bash"));
-        assert!(!is_jupyter_language("rust"));
-        assert!(!is_jupyter_language("javascript"));
     }
 }

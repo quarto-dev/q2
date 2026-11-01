@@ -18,6 +18,7 @@ mod exec_hash;
 mod freeze_readiness;
 mod hash_definition;
 mod ids;
+mod overlay;
 mod place;
 mod positron_import;
 mod reader;
@@ -36,6 +37,7 @@ pub use ids::{
     FillIdsError, author_label, cell_id, content_hash, fill_ids, scanned_author_text,
     span_content_hash, span_id,
 };
+pub use overlay::{overlay_difference, rehash_record};
 pub use place::{PlaceNote, Placed, QUARTO_MARKDOWN_MIME, place};
 pub use positron_import::{
     DisplayOnlyOutputs, ImportError, JUPYTER_ENGINE, POSITRON_CACHE_VERSION, PositronImport,
