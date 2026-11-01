@@ -3616,6 +3616,35 @@ mod tests {
         }
     }
 
+    /// EXR-18 (epic decisions 11, 42): a span-only document (spans, no cell) with no engine
+    /// key resolves no engine, so no kernel starts and its spans stay literal.
+    #[test]
+    fn e2e_span_only_document_without_engine_key_stays_literal() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        let meta = meta_from(OWN, "title", "t");
+        let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+        assert!(res.sequence.is_empty(), "{:?}", names(&res));
+    }
+
+    /// EXR-18 (JOL-2a): `engine: jupyter` only in `_quarto.yml` (a foreign file id) does not
+    /// make a cell-less page's spans run.
+    #[test]
+    fn e2e_span_only_page_with_project_level_engine_key_stays_literal() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        for key in ["engine", "jupyter"] {
+            let value = if key == "engine" {
+                "jupyter"
+            } else {
+                "python3"
+            };
+            let meta = meta_from(FOREIGN, key, value);
+            let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+            assert!(res.sequence.is_empty(), "{key}: {:?}", names(&res));
+        }
+    }
+
     #[test]
     fn engine_markdown_without_cells_stays_empty() {
         let registry = mock_registry(vec![mock_jupyter()]);

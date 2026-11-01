@@ -104,6 +104,9 @@ typed in the host's own `types.ts`, attached or read by cast in `host.ts`, and n
 `@quarto/types` parity copy. All are optional, so an old engine on a new core (and a new engine on an old
 core) keeps working. The user-facing extension page waits until Jupyter, Julia and knitr have exercised
 the contract (bd-ixz93hjp); `keep-ipynb` stays omitted deliberately, as above.
+These fields, and `ownedLanguages` from JOL-4 (above), are **not yet published**: the
+`@quarto/types` copy that engine authors install from npm does not carry them until
+bd-ixz93hjp lands.
 
 | Direction | Field | Meaning |
 |---|---|---|

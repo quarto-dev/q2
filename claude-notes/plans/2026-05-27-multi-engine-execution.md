@@ -357,6 +357,14 @@ running the engine. So the test engine carries no freeze responsibility;
 it exists purely to make multi-engine sequencing testable without R /
 Python / Jupyter.
 
+> **Amendment (2026-11-01, EXR-18).** The paragraph above predates the
+> execution-records epic and its first claim no longer holds. Freeze is now
+> planned as a source-keyed, environment-independent consumer of the ipynb
+> **execution record**, not as a trace replay. Per-engine captures are
+> coalesced into one document record by EXR-4 and EXR-5. Trace replay stays
+> a debugging tool: it re-presents the recorded engine output through the
+> current presenter. See [the epic](2026-10-28-execution-records-epic.md).
+
 ---
 
 ## 4. Trace / replay / preview redesign

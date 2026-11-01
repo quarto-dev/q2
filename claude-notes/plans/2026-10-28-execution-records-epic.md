@@ -2,7 +2,7 @@
 title: 'Epic: engine execution records as ipynb (and execution of inline expressions)'
 date: 2026-10-28
 description: 'Replaces q2''s three execution-result caching mechanisms with one ipynb-shaped engine execution record that every engine produces and one presenter consumes, delivers execution of inline expressions for Jupyter on the way, and subsumes the Jupyter owned-languages epic.'
-status: in-progress  # JOL-1, JOL-2a, JOL-4, JOL-5 and EXR-1 to EXR-15 landed (JOL-2b in progress, JOL-3 deferred); EXR-16 to EXR-19 not started; see each plan for status
+status: in-progress  # JOL-1, JOL-2a, JOL-2b, JOL-4, JOL-5 and EXR-1 to EXR-16 and EXR-18 landed (JOL-3 deferred; EXR-17 trigger-gated); EXR-19 is a draft, not reviewed; see each plan for status
 ---
 
 **Branch:** `feature/execution-records-epic`

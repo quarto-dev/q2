@@ -2045,6 +2045,10 @@ mod span_tests {
 }
 
 #[cfg(test)]
+#[path = "text_execute_e2e.rs"]
+mod e2e_tests;
+
+#[cfg(test)]
 mod record_tests {
     //! EXR-5 Phase 0: the execution record the unit loop builds beside its unchanged
     //! markdown. The kernel-free seam is EXR-3's fake kernel (`fake_kernel.rs`): canned
@@ -2062,30 +2066,30 @@ mod record_tests {
     };
     use serde_json::json;
 
-    fn py(expr: &str) -> String {
+    pub(super) fn py(expr: &str) -> String {
         wrap_inline_code("python", expr)
     }
 
-    fn stdout(text: &str) -> Vec<FakeOutput> {
+    pub(super) fn stdout(text: &str) -> Vec<FakeOutput> {
         vec![FakeOutput::Stdout(text.to_string())]
     }
 
     /// The code the kernel receives for a cell: the option-stripped body keeps the
     /// newline before the closing fence.
-    fn cell(code: &str) -> String {
+    pub(super) fn cell(code: &str) -> String {
         format!("{code}\n")
     }
 
     /// What a staged context keeps alive: the fake kernel home and the directory any
     /// figure the presenter writes lands in (never the crate directory).
-    struct Keep {
+    pub(super) struct Keep {
         _home: FakeKernelHome,
         _dir: tempfile::TempDir,
     }
 
     /// A context the stage would hand the engine: units scanned once, ids filled, the
     /// author texts aligned, and a record wanted.
-    fn staged(text: &str, script: &Script) -> (Keep, ExecutionContext) {
+    pub(super) fn staged(text: &str, script: &Script) -> (Keep, ExecutionContext) {
         let (home, mut ctx) = with_kernel(text, script);
         let dir = tempfile::tempdir().unwrap();
         ctx.source_path = dir.path().join("doc.qmd");

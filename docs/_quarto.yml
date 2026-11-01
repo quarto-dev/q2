@@ -109,6 +109,7 @@ website:
             - guides/authoring/notebooks.qmd
             - guides/authoring/engines.qmd
             - guides/authoring/jupyter-kernels.qmd
+            - guides/authoring/execution-records.qmd
             - guides/authoring/navigation.qmd
             - guides/authoring/extensions.qmd
             - guides/authoring/components.qmd

@@ -54,6 +54,7 @@ pub mod dashboard_format;
 pub mod dashboard_goldens;
 pub mod dashboard_preview;
 pub mod dashboard_website;
+pub mod docs_examples;
 pub mod document_profile_pipeline;
 pub mod echo_engine_e2e;
 pub mod editorial_marks_ooxml;

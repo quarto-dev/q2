@@ -2,7 +2,7 @@
 title: 'JOL-2b: Jupyter executes the languages it owns; kernel lookup by language'
 date: 2026-10-28
 description: 'Replaces the Jupyter engine''s hard-coded language allowlist and alias table with the resolver-assigned owned set and Q1-style kernelspec lookup by language, with an error in multi-engine documents and a warning in single-engine documents when an owned language has no runnable kernel, and fills the kernel_for(unit) seam that EXR-2 defines and multi-kernel work later varies per unit.'
-status: in-progress
+status: complete  # landed on the integration branch; leftovers: alias-table deletion at release (dated follow-up), `eval: false` is bd-moef1ec4 (outside this plan)
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md), as JOL-2b (the rest of
@@ -331,6 +331,6 @@ From the JOL epic (decisions 1, 4, 5) and the records epic; not to be re-litigat
   on the old base did not recur on the new pin.
 - Rebase fix: `DocumentPlan.kernel` keeps an explicit kernel when no cell runs (EXR-3 evaluates
   spans on it); a derived kernel needs a runnable cell.
-- Open: `cargo xtask verify`; the dated follow-up to delete the alias table when the release is cut;
-  `eval: false` is ignored by the executor for runnable cells (outside this plan).
+- Open: the dated follow-up to delete the alias table when the release is cut (the full `cargo xtask verify` is run once for the whole epic, see EXR-18 Phase D);
+  `eval: false` is ignored by the executor for runnable cells (outside this plan; tracked as bd-moef1ec4).
 - Decided (Gordon, 2026-10-31): Q-18-5 does not fire under an explicit `jupyter:` kernel.

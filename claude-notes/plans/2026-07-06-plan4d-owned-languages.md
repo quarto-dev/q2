@@ -1,7 +1,7 @@
 ---
 title: 'Plan 4d: `owned_languages` — a positive engine-ownership wire field'
 date: 2026-07-06
-status: in-progress
+status: complete
 description: 'Adds a positive `owned_languages` field to the engine-execute wire, so TypeScript engines can ask directly which languages q2 assigned to them instead of inferring this from the leave-alone `handled_languages` set.'
 ---
 
@@ -484,7 +484,7 @@ git commit -m "test(engine): e2e-verify ownedLanguages reaches an engine + case-
   field (reddens if `owned_languages` is not carried). No q2-side capability check is added.
 - [x] The two wire fields cross-reference each other in the doc comments, and the
   overstated `handled_languages` "coincide" claim is corrected.
-- [ ] Before the push: `cargo xtask verify` is green (this touches `quarto-core` wire types
+- [ ] (moved to the epic's pre-push gate, 2026-11-01) Before the push: `cargo xtask verify` is green (this touches `quarto-core` wire types
   the WASM client depends on, so the full hub build must pass; do **not**
   `--skip-hub-build`). Recommended for Gordon: `cargo nextest run --workspace`.
 

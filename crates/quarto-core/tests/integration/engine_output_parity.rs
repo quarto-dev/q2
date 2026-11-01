@@ -439,3 +439,103 @@ fn parity_inline_span() {
         "blocks",
     );
 }
+
+/// Record-present parity (EXR-18, Jupyter): presenting the record a live run produced
+/// gives the same markdown as that live run, with no engine in the loop. The skip is
+/// the jupyter engine alone (the knitr counterpart is `knitr_inline_records`).
+#[test]
+fn parity_jupyter_record_present_equals_live() {
+    let registry = EngineRegistry::default();
+    if !registry.get("jupyter").is_some_and(|e| e.is_available()) {
+        eprintln!("Skipping test: needs jupyter installed");
+        return;
+    }
+    let content = "---\ntitle: Parity\nengine: jupyter\n---\n\n```{python}\nx = 40\nprint(\"hello\")\n```\n\nValue is `{python} x + 2`.\n\n```{python}\nx + 1\n```\n";
+    let (_tmp, path, project, runtime) = fixture(content);
+    let run = pollster::block_on(quarto_core::engine::preview_record::record_capture_run(
+        &path, &project, runtime, None,
+    ))
+    .expect("record_capture_run");
+    assert_eq!(run.captures.len(), 1);
+    let live = run.captures[0]
+        .result
+        .get("markdown")
+        .and_then(|v| v.as_str())
+        .expect("live markdown")
+        .to_string();
+    let record = run.record.expect("a record");
+
+    let mut units = quarto_core::engine::units::scan_units(content);
+    let texts = quarto_core::record::AuthorTexts::from_scanned(&units);
+    quarto_core::record::fill_ids(&mut units, &texts).expect("ids");
+    let mut fig = quarto_core::presenter::figures::FsFigureSink::new(&path);
+    let presented = quarto_core::presenter::document::present_document(
+        &record.cells,
+        content,
+        &units,
+        None,
+        quarto_core::presenter::inline::InlineTarget::from_format("q2-preview"),
+        &mut fig,
+    )
+    .expect("present")
+    .markdown;
+    assert!(presented.contains("Value is 42."), "{presented}");
+    // The live capture's front matter carries pipeline-added metadata (language strings,
+    // listing data) that presenting a bare document does not; the body is what must match.
+    let body = |md: &str| md.splitn(3, "---\n").nth(2).unwrap_or(md).to_string();
+    assert_eq!(
+        body(&presented),
+        body(&live),
+        "present-from-record must equal the live run"
+    );
+}
+
+/// Julia shape parity (EXR-18 after EXR-8): a cell with a stream, then prose with a
+/// brace span, gives the same block shape under Julia as under jupyter, and the span is
+/// evaluated (value present, no brace spelling left) in each. The skip is `node`, `julia`
+/// or jupyter missing: Julia is a TS engine (a Node host driving QuartoNotebookRunner),
+/// found through the bundled extension subtree, so the default registry does not list it
+/// and `is_available` cannot gate it. The gate matches `julia_engine_e2e.rs`; like its
+/// non-isolated rows, a first run instantiates the QuartoNotebookRunner project.
+///
+/// Deliberately not asserted: the value of a span that evaluates to an empty string. The
+/// engines differ there (Jupyter leaves the source in place), and whether Julia should
+/// match is still open (bd-30k2j00f), so this test must not pin either answer.
+#[test]
+fn parity_julia_cell_and_inline_span() {
+    let julia_on_path = std::process::Command::new("julia")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    let jupyter_ok = EngineRegistry::default()
+        .get("jupyter")
+        .is_some_and(|e| e.is_available());
+    if !quarto_core::engine::ts_process::node_available_for_tests() || !julia_on_path || !jupyter_ok
+    {
+        eprintln!("Skipping test: Julia parity needs node, julia and jupyter installed");
+        return;
+    }
+    let doc = |engine: &str, lang: &str, setup: &str| {
+        format!(
+            "---\ntitle: Parity\nengine: {engine}\n---\n\n```{{{lang}}}\n{setup}\n```\n\nValue is `{{{lang}}} x + 2`.\n"
+        )
+    };
+    let julia_src = doc("julia", "julia", "x = 40\nprintln(\"hello\")");
+    let jupyter_src = doc("jupyter", "python", "x = 40\nprint(\"hello\")");
+    for (name, src) in [("julia", &julia_src), ("jupyter", &jupyter_src)] {
+        let md = post_engine_markdown(src, name);
+        assert!(
+            md.contains("Value is 42."),
+            "{name} did not evaluate the span:\n{md}"
+        );
+        assert!(
+            !md.contains("{julia}") && !md.contains("{python}"),
+            "{name}:\n{md}"
+        );
+    }
+    let julia = post_engine_ast(&julia_src, "julia");
+    let jupyter = post_engine_ast(&jupyter_src, "jupyter");
+    // `assert_blocks_parity` names its two sides knitr and jupyter in failure messages;
+    // here the first side is Julia.
+    assert_blocks_parity(&julia.blocks, &jupyter.blocks, "blocks");
+}

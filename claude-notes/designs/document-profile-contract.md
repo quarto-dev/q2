@@ -25,7 +25,10 @@ Phase 0 introduces the type, the checkpoint, and the resumability
 contract. Phase 1 uses it to build the project-wide `ProjectIndex`.
 Phases 2–9 build on that index for sidebars, navbars, cross-document
 links, incremental rebuilds, and hub-client project nav. Eventually
-the same checkpoint substrate will back `freeze`.
+the same checkpoint substrate will back `freeze`. (As planned on 2026-11-01, freeze
+consumes the ipynb execution record, with the profile supplying its key inputs; the
+groundwork list is in [the execution-records
+epic](../plans/2026-10-28-execution-records-epic.md).)
 
 ## Pipeline position
 

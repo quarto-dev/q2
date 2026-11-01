@@ -2,7 +2,7 @@
 title: 'Epic: knitr execution records as structured ipynb (and knitr as a first-class Positron engine)'
 date: 2026-10-30
 description: 'Extends the execution-records epic to knitr: capture knitr evaluated pieces on the q2 side, store them as standard nbformat outputs, present them with the shared Rust presenter plus a knitr option layer, and make knitr records valid to present in Positron. Differential testing against knitr output decides how much further work is needed.'
-status: in-progress  # EXR-10 (K0) landed; EXR-11 (K1) under way; EXR-12 not started
+status: in-progress  # EXR-10, EXR-11 and EXR-12 (the parent epic's knitr plans) landed; see the KNR plans for the follow-on status
 ---
 
 **Branch:** `feature/knitr-execution-records-epic`, based on

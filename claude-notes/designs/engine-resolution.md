@@ -611,6 +611,14 @@ the wrong sequence. Therefore:
   engine set**, not only the input hash — installing an extension changes
   resolution while `input_qmd` still byte-matches. (Freeze is future; recorded
   here so its design accounts for it.)
+  **Amended 2026-11-01 (EXR-18):** freeze is now planned over the ipynb execution
+  record, not a trace replay (see
+  [the epic](../plans/2026-10-28-execution-records-epic.md)). The resolved engine
+  set and each engine's owned languages are stored in the record as
+  **provenance**, not used as an invalidation key: a record is keyed by source
+  and unit hashes, which hold no engine or kernel. The Jupyter engine's gate
+  (JOL-2b) also changed from a language allowlist to resolver-assigned
+  ownership, so "which engine ran a unit" now follows the ownership map.
 
 Preview (`CaptureSpliceStage`) is the same story: resolution runs at *record*
 time; the browser folds captures.
@@ -912,7 +920,9 @@ case-4. **Deliberate divergence from Q1's eager
   set) *for freeze specifically*, whenever freeze is built; the V1
   load-free-only stamp here is sufficient for the LSP, which already
   tolerates `None`, but not sufficient on its own for a freeze cache that
-  must cover every doc.
+  must cover every doc. *(2026-11-01, EXR-18: the record carries the resolved
+  engine set and owned languages as provenance, so this caveat concerns
+  which docs can be frozen at all, not how an entry is invalidated.)*
 - **Project-level claim overrides.** §3.3 above ("Claim tables from
   metadata") and `engine-and-engines-keys.md` §3: static claims as project
   config, via the `engines:` key's `claims:` entries. "Knitr does not interop
