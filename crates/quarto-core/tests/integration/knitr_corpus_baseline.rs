@@ -12,9 +12,12 @@ use serde_json::Value;
 
 use quarto_core::engine::capture_files::collect_capture_files;
 use quarto_core::engine::units::{CellUnit, Unit, scan_units};
-use quarto_core::engine::{KnitrCapturedChunk, pieces_to_cell};
-use quarto_core::presenter::cell::render_cell;
+use quarto_core::engine::{
+    KnitrCapturedChunk, expression_starts, knitr_visibility, output_kinds, pieces_to_cell_anchored,
+};
+use quarto_core::presenter::cell::{HoldMode, apply_holds, render_cell_interleaved};
 use quarto_core::presenter::figures::FsFigureSink;
+use quarto_core::presenter::options::CellOptions;
 use quarto_core::presenter::visibility::CellVisibility;
 use quarto_system_runtime::NativeRuntime;
 
@@ -24,6 +27,22 @@ pub enum Baseline {
     Candidate(String),
     /// The document cannot be presented chunk by chunk; `reason` names why.
     Fallback(String),
+}
+
+/// The chunk\'s info string as written (`r c1`), for `fenced.echo`.
+fn original_params(cell: &CellUnit) -> String {
+    format!("{} {}", cell.lang, cell.attr_tail)
+        .trim()
+        .to_string()
+}
+
+/// The leading `#|` option lines of the chunk as written, for `fenced.echo`.
+fn option_lines(cell: &CellUnit) -> String {
+    cell.code
+        .lines()
+        .take_while(|l| l.starts_with("#|"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Build the baseline for `source` (written at `doc_path`, whose directory holds the figure
@@ -57,13 +76,36 @@ pub fn baseline(source: &str, doc_path: &Path, chunks: &[KnitrCapturedChunk]) ->
                 .decode(&f.contents_base64)
                 .ok()
         };
-        let Some((code, result)) = pieces_to_cell(chunk, &read) else {
+        let Some((code, mut result, anchors)) = pieces_to_cell_anchored(chunk, &read) else {
             return Baseline::Fallback(format!("chunk {} is a fallback unit", chunk.label));
         };
-        let text = render_cell(
+        // Holds run at present time over the capture-order anchors (epic decision 21).
+        let hold = HoldMode {
+            plots: chunk.options.get("fig.show").and_then(Value::as_str) == Some("hold"),
+            text: chunk.options.get("results").and_then(Value::as_str) == Some("hold"),
+        };
+        let anchors = match anchors {
+            Some(a) if hold.plots || hold.text => {
+                let (outputs, a) = apply_holds(
+                    std::mem::take(&mut result.outputs),
+                    &a,
+                    code.lines().count(),
+                    hold,
+                );
+                result.outputs = outputs;
+                Some(a)
+            }
+            other => other,
+        };
+        let text = render_cell_interleaved(
             &cell.lang,
             &code,
             &result,
+            anchors.as_deref(),
+            &expression_starts(chunk).unwrap_or_default(),
+            &CellOptions::from_knitr(&chunk.options)
+                .with_output_kinds(output_kinds(chunk))
+                .with_original_chunk(&original_params(cell), &option_lines(cell)),
             &mut fig,
             visibility(&chunk.options),
         );
@@ -77,19 +119,9 @@ pub fn baseline(source: &str, doc_path: &Path, chunks: &[KnitrCapturedChunk]) ->
     Baseline::Candidate(out)
 }
 
-/// The presenter's visibility from a chunk's recorded options (S3). Only logical values count:
-/// a numeric `echo` or a `NA` `warning` is a recorded divergence, left to KNR-2.
+/// The presenter's visibility from a chunk's recorded options (see `knitr_visibility`).
 pub fn visibility(options: &Value) -> CellVisibility {
-    let flag = |key: &str| options.get(key).and_then(Value::as_bool);
-    if flag("include") == Some(false) {
-        return CellVisibility::HIDDEN;
-    }
-    let output = flag("output") != Some(false);
-    CellVisibility {
-        echo: flag("echo") != Some(false),
-        output,
-        warning: flag("warning") != Some(false) && output,
-    }
+    knitr_visibility(options)
 }
 
 /// The text starts where the opener's backticks were, so only the following lines carry the

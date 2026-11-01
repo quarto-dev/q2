@@ -18,6 +18,7 @@ pub mod document;
 pub mod expansion;
 pub mod figures;
 pub mod inline;
+pub mod options;
 pub mod output;
 #[cfg(test)]
 pub(crate) mod recording_runtime;

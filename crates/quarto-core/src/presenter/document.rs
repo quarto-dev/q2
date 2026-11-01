@@ -26,18 +26,22 @@ use std::path::PathBuf;
 use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::{By, SourceInfo};
 
-use super::cell::render_cell;
+use super::cell::render_cell_with;
 use super::expansion::{render_expanded_unit, split_expansions};
 use super::figures::FigureSink;
 use super::inline::{
     InlineOutcome, InlineTarget, classify_inline_result, escape_yaml_double, front_matter_key_at,
     render_inline,
 };
+use super::options::CellOptions;
 use super::output::CellResult;
 use super::visibility::{CellVisibility, resolve_cell_options};
 use crate::cell_options::partition_cell_options;
 use crate::engine::units::{InlineUnit, Unit};
-use crate::record::{RecordCell, UnitKind, content_hash, scanned_author_text, span_content_hash};
+use crate::record::{
+    RecordCell, UnitKind, content_hash, replacement, scanned_author_text, span_content_hash,
+    stored_markdown,
+};
 
 /// What presenting a document produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +74,17 @@ pub enum PresentNote {
         /// Why it could not be used.
         reason: String,
     },
+    /// A fallback unit (finished `text/x-quarto-markdown`) stored for another output
+    /// format than the one being presented (or for none): the unit stays as written,
+    /// as `record::place` does.
+    MarkdownFormatMismatch {
+        /// Index into the `units` the driver was given.
+        unit: usize,
+        /// The stored `quarto_format`, if the output recorded one.
+        stored: Option<String>,
+        /// The format being presented.
+        wanted: String,
+    },
 }
 
 /// Why a document could not be presented.
@@ -90,13 +105,15 @@ pub enum PresentError {
 
 /// Present `cells` (an engine's record cells) over `document_text`, the text the units
 /// were located in. `scope` is the document's merged `execute:` scope and `target` the
-/// output format's mime preference for inline values; figures go through `fig`.
+/// output format's mime preference for inline values; `format` is the full format name
+/// a fallback unit's stored markdown must have been produced for; figures go through `fig`.
 pub fn present_document(
     cells: &[RecordCell],
     document_text: &str,
     units: &[Unit],
     scope: Option<&ConfigValue>,
     target: InlineTarget,
+    format: &str,
     fig: &mut dyn FigureSink,
 ) -> Result<PresentResult, PresentError> {
     let matched = match_cells(units, cells);
@@ -110,6 +127,29 @@ pub fn present_document(
         let Some(cell) = matched[ui] else {
             continue;
         };
+        // A fallback unit holds finished markdown: splice it in, never present it.
+        if let Some((markdown, stored)) = stored_markdown(cell) {
+            if stored.as_deref() != Some(format) {
+                notes.push(PresentNote::MarkdownFormatMismatch {
+                    unit: ui,
+                    stored,
+                    wanted: format.to_string(),
+                });
+                continue;
+            }
+            let (start, end, text) = replacement(&units[ui], document_text, &markdown);
+            if matches!(units[ui], Unit::Cell(_)) {
+                // A fallback cell keeps its figure number, as a presented one does.
+                fig.begin_cell();
+            }
+            out.push_str(&document_text[last_end..start]);
+            if matches!(units[ui], Unit::Cell(_)) && out.ends_with('\n') && !out.ends_with("\n\n") {
+                out.push('\n');
+            }
+            out.push_str(&text);
+            last_end = end;
+            continue;
+        }
         let result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
         match &units[ui] {
             Unit::Cell(u) => {
@@ -123,19 +163,23 @@ pub fn present_document(
                 let visibility = CellVisibility::resolve(resolved.as_ref());
                 // Every presented cell, visible or not, keeps its figure number.
                 fig.begin_cell();
+                let options = CellOptions::from_config(resolved.as_ref());
                 let text = match split_expansions(&cell.outputs) {
                     // An expanded cell is one unit presented as one cell per expansion,
                     // each with its own options.
                     Some(expansions) => render_expanded_unit(
                         &u.lang,
                         &parsed.code,
+                        &options,
                         visibility,
                         &expansions,
                         scope,
                         fig,
                     )
                     .map_err(|message| PresentError::InvalidCellOptions { unit: ui, message })?,
-                    None => render_cell(&u.lang, &parsed.code, &result, fig, visibility),
+                    None => {
+                        render_cell_with(&u.lang, &parsed.code, &result, &options, fig, visibility)
+                    }
                 };
                 notes.extend(
                     fig.take_failures()
@@ -373,6 +417,7 @@ mod tests {
             &units,
             scope,
             InlineTarget::from_format("html"),
+            "html",
             &mut fig,
         )
         .unwrap();
@@ -431,6 +476,52 @@ mod tests {
         let (out, _dir) = present(text, &[(0, outputs)], None);
         assert!(!out.markdown.contains("expand()"), "{}", out.markdown);
         assert!(out.markdown.contains("b()"), "{}", out.markdown);
+    }
+
+    // ── the cell-option layer (KNR-2 Phase 2C, decision 12) ─────────────
+
+    #[test]
+    fn a_cell_option_shapes_the_jupyter_cell() {
+        let text = "```{python}
+#| class.source: k
+#| column: margin
+print(1)
+```\n";
+        let (out, _) = present(text, &[(0, stdout("1\n"))], None);
+        assert!(
+            out.markdown
+                .starts_with("::: {.cell .column-margin}\n\n```{.python .k .cell-code}\n"),
+            "{}",
+            out.markdown
+        );
+    }
+
+    /// Provisional decision 1: a Jupyter cell that sets `panel` or `layout-ncol` now gets
+    /// them on its cell div (Quarto 1 does the same for knitr), so its output changes.
+    #[test]
+    fn panel_and_layout_ncol_shape_the_jupyter_cell_div() {
+        let text = "```{python}
+#| panel: tabset
+#| layout-ncol: 2
+print(1)
+```\n";
+        let (out, _) = present(text, &[(0, stdout("1\n"))], None);
+        assert!(
+            out.markdown
+                .starts_with("::: {.cell .panel-tabset layout-ncol=\"2\"}\n\n"),
+            "{}",
+            out.markdown
+        );
+    }
+
+    #[test]
+    fn a_cell_without_layer_options_is_unchanged() {
+        let text = "```{python}
+#| echo: true
+print(1)
+```\n";
+        let (out, _) = present(text, &[(0, stdout("1\n"))], None);
+        assert_eq!(out.markdown, format!("{}", cell_md("print(1)", "1")));
     }
 
     // ── gaps and adjacent cells ─────────────────────────────────────────
@@ -574,6 +665,7 @@ mod tests {
             &units,
             None,
             InlineTarget::from_format("html"),
+            "html",
             &mut fig,
         )
         .unwrap_err();
@@ -619,6 +711,7 @@ mod tests {
             &replay_units,
             None,
             InlineTarget::from_format("html"),
+            "html",
             &mut fig,
         )
         .unwrap();
@@ -643,10 +736,99 @@ mod tests {
             &bare,
             None,
             InlineTarget::from_format("html"),
+            "html",
             &mut fig,
         )
         .unwrap();
         assert_eq!(out.markdown, cell_md("a", "A"));
+    }
+
+    // ── fallback (markdown) units (KNR-2 Phase 2F) ──────────────────────
+
+    fn markdown_unit(md: &str, format: &str) -> Vec<Value> {
+        vec![json!({
+            "output_type": "display_data",
+            "data": {"text/x-quarto-markdown": md},
+            "metadata": {"quarto_format": format}
+        })]
+    }
+
+    fn present_in(text: &str, results: &[(usize, Vec<Value>)], format: &str) -> PresentResult {
+        let (units, texts) = staged_units(text);
+        let cells = record(&units, &texts, results);
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        present_document(
+            &cells,
+            text,
+            &units,
+            None,
+            InlineTarget::from_format(format),
+            format,
+            &mut fig,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_fallback_cell_is_replaced_by_its_stored_markdown_verbatim() {
+        let text = "Before.\n\n```{r}\n1 + 1\n```\n\nAfter.\n";
+        let md = "::: {.cell}\n\n``` r\n1 + 1\n```\n\n:::\n";
+        let out = present_in(text, &[(0, markdown_unit(md, "html"))], "html");
+        assert_eq!(out.markdown, format!("Before.\n\n{md}\nAfter.\n"));
+        assert!(out.notes.is_empty());
+    }
+
+    #[test]
+    fn a_fallback_inline_unit_is_replaced_without_its_trailing_newline() {
+        let text = "Value `{r} 1 + 1` here.\n";
+        let out = present_in(text, &[(0, markdown_unit("2\n", "html"))], "html");
+        assert_eq!(out.markdown, "Value 2 here.\n");
+    }
+
+    #[test]
+    fn a_mixed_record_keeps_unit_order() {
+        let text = "```{python}\na\n```\n\n```{r}\nb\n```\n\n```{python}\nc\n```\n";
+        let out = present_in(
+            text,
+            &[
+                (0, stdout("A\n")),
+                (1, markdown_unit("FALLBACK\n", "html")),
+                (2, stdout("C\n")),
+            ],
+            "html",
+        );
+        assert_eq!(
+            out.markdown,
+            format!(
+                "{}\n{}\n{}",
+                cell_md("a", "A"),
+                "FALLBACK\n",
+                cell_md("c", "C")
+            )
+        );
+    }
+
+    #[test]
+    fn a_fallback_unit_stored_for_another_format_stays_as_written_and_is_noted() {
+        let text = "```{r}\n1\n```\n";
+        let out = present_in(text, &[(0, markdown_unit("X\n", "html"))], "typst");
+        assert_eq!(out.markdown, text);
+        assert_eq!(
+            out.notes,
+            [PresentNote::MarkdownFormatMismatch {
+                unit: 0,
+                stored: Some("html".to_string()),
+                wanted: "typst".to_string()
+            }]
+        );
+    }
+
+    #[test]
+    fn a_fallback_cell_in_a_blockquote_keeps_its_container_prefix() {
+        let text = "> ```{r}\n> 1\n> ```\n";
+        let out = present_in(text, &[(0, markdown_unit("a\n\nb\n", "html"))], "html");
+        assert_eq!(out.markdown, "> a\n>\n> b\n");
     }
 
     // ── files_written ───────────────────────────────────────────────────

@@ -104,7 +104,9 @@ pub(crate) mod knitr;
 // KNR-1's S2 mapper and wire types, reachable from `tests/integration/` and
 // KNR-3 without widening the rest of `knitr`.
 #[cfg(not(target_arch = "wasm32"))]
-pub use knitr::pieces_map::pieces_to_cell;
+pub use knitr::pieces_map::{
+    expression_starts, knitr_visibility, output_kinds, pieces_to_cell, pieces_to_cell_anchored,
+};
 #[cfg(not(target_arch = "wasm32"))]
 pub use knitr::types::{KnitrCapturedChunk, KnitrPiece};
 // The R call seam for the KNR-1 corpus harness (`tests/integration/knitr_corpus_*`):

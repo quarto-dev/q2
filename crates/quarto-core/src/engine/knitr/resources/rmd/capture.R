@@ -112,7 +112,9 @@ capture_piece <- function(p) {
   # knit_asis and knit_image_paths inherit from character, and include_graphics()
   # output is both: test knit_image_paths first, then knit_asis
   if (inherits(p, "knit_image_paths")) {
-    return(list(class = "image_paths", paths = I(as.character(p))))
+    piece <- list(class = "image_paths", paths = I(as.character(p)))
+    if (!is.null(attr(p, "dpi"))) piece$dpi <- attr(p, "dpi")
+    return(piece)
   }
   if (inherits(p, "knit_asis")) {
     text <- paste(p, collapse = "")
@@ -226,6 +228,28 @@ capture_plot_files <- function(options, slot) {
   list(all = new, first = vapply(per_plot, `[[`, "", 1L))
 }
 
+# The width `sew.knit_image_paths` gives each include_graphics() path (its
+# raster_dpi_width) when the chunk sets no out.width; NA where knitr has none.
+capture_image_widths <- function(paths, dpi, options) {
+  retina <- options$fig.retina
+  out_width <- options[["out.width"]]
+  if (is.numeric(retina)) {
+    w2 <- options$fig.width * options$dpi / retina
+    if (length(out_width) * length(w2) == 1 && is.numeric(out_width) && out_width == w2) {
+      out_width <- NULL
+    }
+  }
+  if (is.null(dpi)) dpi <- options$dpi
+  vapply(paths, function(path) {
+    if (!is.null(out_width)) return(NA_real_)
+    w <- tryCatch(
+      get("raster_dpi_width", envir = asNamespace("knitr"), inherits = FALSE)(path, dpi),
+      error = function(e) NULL
+    )
+    if (is.numeric(w) && length(w) == 1L) as.numeric(w) else NA_real_
+  }, numeric(1), USE.NAMES = FALSE)
+}
+
 capture_chunk_hook <- function(prev) {
   function(x, options) {
     out <- prev(x, options)
@@ -264,6 +288,8 @@ capture_chunk_hook <- function(prev) {
           }
         } else if (identical(p$class, "image_paths")) {
           files <<- c(files, p$paths)
+          p$widths <- I(capture_image_widths(p$paths, p$dpi, options))
+          p$dpi <- NULL
         }
         p
       })

@@ -2,20 +2,25 @@
 title: 'Epic: knitr execution records as structured ipynb (and knitr as a first-class Positron engine)'
 date: 2026-10-30
 description: 'Extends the execution-records epic to knitr: capture knitr evaluated pieces on the q2 side, store them as standard nbformat outputs, present them with the shared Rust presenter plus a knitr option layer, and make knitr records valid to present in Positron. Differential testing against knitr output decides how much further work is needed.'
-status: in-progress  # EXR-10, EXR-11 and EXR-12 (the parent epic's knitr plans) landed; see the KNR plans for the follow-on status
+status: in-progress  # parent epic complete (not yet merged to main); KNR-1 and the interlude done, KNR-2 closed; next KNR-3, then KNR-4, KNR-2b, KNR-6
 ---
 
-**Branch:** `feature/knitr-execution-records-epic`, based on
-`feature/execution-records-epic`.
+**Branch:** the work runs on `knr-2-presenter` (workspace-3), rebased on 2026-11-03 onto the
+squashed `feature/execution-records-epic` (`c5f8c7593`); the unsquashed history of the parent
+is `history/feature/execution-records-epic`. The old `feature/knitr-execution-records-epic`
+branch is superseded.
 **Extends:** [the execution-records epic](2026-10-28-execution-records-epic.md). That
-epic lands first and unchanged in scope, with knitr still on rendered markdown
-(its decision 6, reworded on 2026-10-30 to say "in this epic").
+epic is complete on its integration branch (not yet merged to main) and unchanged in scope,
+with knitr still on rendered markdown (its decision 6, reworded on 2026-10-30 to say "in
+this epic").
 **Origin:** the `knitr-execution-records` session of 2026-10-30, which included a
 DeepWiki session on knitr hooks (`extract-dw`, search
 `i-understand-knitr-supports-mu_9b46087f`) and experiments with knitr 1.50 and
 rmarkdown 2.29. **Revised 2026-10-31** after a
 [paper review](../research/2026-10-30-knitr-epic-paper-review.md) and a rebase onto the
-parent epic\'s hash profiles (`457229c47`); the branch is now based on that commit.
+parent epic\'s hash profiles. The parent was squashed on 2026-11-02 and this work was rebased
+onto it on 2026-11-03, so commit hashes the plans cite from before then (for example
+`457229c47`, `d0112a569`, `663a2f7a8`) name the unsquashed history.
 **Terminology:** as in the parent epic. A **piece** is one element of the list
 `evaluate()` returns for a chunk (source, text, message, warning, error, recorded
 plot, `knit_asis`). A **fallback unit** is a knitr unit whose output is knitr's finished
@@ -78,8 +83,8 @@ the parent\'s hash profiles (`457229c47`).
   scope (KNR-3 decision 3).
 - **Decision 3, figures** (inline base64): KNR-1 S2 and KNR-5 carry knitr file paths; the
   question is open under bd-sr73.
-- **EXR-10, EXR-11, EXR-12** (all drafts on 2026-10-31): land as written first. This epic
-  extends what they deliver. KNR-3 replaces EXR-11\'s recorder for structured chunks and KNR-6
+- **EXR-10, EXR-11, EXR-12** (all complete; they were drafts on 2026-10-31): they landed as
+  written first. This epic extends what they deliver. KNR-3 replaces EXR-11\'s recorder for structured chunks and KNR-6
   deletes that code and EXR-12\'s inline-id code once nothing uses it. The chunk hook stays
   because the finished markdown of a fallback chunk exists nowhere else; fallback chunks are
   its settled role. Whether it also carries final options for structured chunks (KNR-1 S3)
@@ -140,8 +145,8 @@ Made with Gordon on 2026-10-30.
    nothing, as in the parent epic. Single-cell execution for knitr is out of scope.
 8. **Per-chunk fallback.** Where pieces cannot be captured (`child=`, knitr cache hits,
    overridden hooks, LaTeX and not-yet-covered targets, and anything the harness shows is not
-   capturable), that chunk becomes a fallback unit with `text/x-quarto-markdown`, flagged as
-   such in its metadata. A record may mix structured and fallback units, but each unit uses
+   capturable), that chunk becomes a fallback unit with `text/x-quarto-markdown`. That mime is
+   the fallback marker (Gordon, 2026-11-02); no metadata key flags it. A record may mix structured and fallback units, but each unit uses
    exactly one mechanism, never both (parent risk 6). Fallback units are opaque to Positron
    and use the default (all-options) hash profile; structured units use the structured
    profile (decision 6). The rules per case and target are one table in KNR-3, and the chunk
@@ -214,13 +219,17 @@ Made with Gordon on 2026-10-30.
     the LaTeX epic\'s P1 plan, block "Engine output for LaTeX targets"
     (`claude-notes/plans/2026-09-23-pandoc-hybrid-latex-P1-latex-writer.md` on branch
     `explore/pandoc-hybrid-latex`); append to it whenever a plan in this epic defers LaTeX.
-14. **Old knitr traces keep replaying from markdown (D5, 2026-10-30).** After the flip, a
-    pre-flip knitr trace (finished markdown, no record) still replays through the
-    pass-through presenter, which KNR-2 builds for fallback units (decision 8); new traces
-    store a record. This differs from the parent\'s decision 9 for Jupyter (pre-flip Jupyter
-    traces fail with "re-record this trace"), because the presenter is needed for fallback
-    units anyway and keeping it breaks no existing trace or fixture. KNR-6 implements the
-    replay on top of it. The number of existing knitr traces was not counted.
+14. **Old knitr traces keep replaying from markdown (D5, 2026-10-30; mechanism corrected
+    2026-11-01 by interlude I2, confirmed by Gordon).** After the flip, a pre-flip knitr trace
+    (finished markdown, no record) still replays: `ReplayEngine` returns its stored markdown
+    verbatim, as it does today, and no presenter is involved. The pass-through presenter
+    (KNR-2 Phase 2F) is needed only for fallback units inside a record. New traces store a
+    record and replay presents it. This differs from the parent\'s decision 9 for Jupyter
+    (pre-flip Jupyter traces fail with "re-record this trace"), because keeping the verbatim
+    path breaks no existing trace or fixture. Replaying a knitr trace at all needs the `{r}`
+    claim fix (bd-js24dold, about 20 lines), which lands on its own before KNR-3; KNR-6 adds
+    the dispatch on a record and an unused-capture check. The number of existing knitr traces
+    was not counted.
 15. **Decision 21 is in the overrides list (2026-10-30).** The parent's knitr inline-id
     decision is overridden by KNR-4, because EXR-12's mechanism is replaced.
 16. **Corpus layout (2026-10-30).** Fixtures live in
@@ -238,7 +247,7 @@ Made with Gordon on 2026-10-30.
     `tests/integration/knitr_label_reinject.rs:37-64` checks only that `Rscript` runs and
     that knitr is installed; it has no version gate, so a skip on a knitr version is new code
     (KNR-1). Enabling R in CI is out of scope for this epic. Consequence: until someone does,
-    the corpus gates nothing automatically; KNR-2\'s zero-blocker bar is checked by a local
+    the corpus gates nothing automatically; KNR-2b\'s zero-blocker bar is checked by a local
     run, and its report states the pass and skip counts.
 18. **No braid strand for the epic (2026-10-30).** The epic and its plans are the tracking
     surface; plan-scope work goes in the plan checklists.
@@ -258,6 +267,87 @@ Made with Gordon on 2026-10-30.
     fix it unless the presenter itself needs the behavior. This is the out-of-plan case in
     the repo's tracking rule, so strands are right here even though the epic itself has none
     (decision 18).
+21. **Presentation facts the presenter cannot recover live in two internal cell-metadata
+    keys and one per-engine field (2026-11-01, interlude I1, signed off by Gordon; the third
+    item changed 2026-11-02).** `quarto_output_anchors` (the source lines before each output,
+    in the order the capture saw them) and `quarto_output_kinds` (parallel to `outputs`:
+    `"message"`, `"warning"` or null) are cell keys. The option names knitr knows come from
+    the knitr that ran and are stored **once per record**, as the optional `known_options` list
+    on the `quarto_engines` entry beside `hash_definition`; the presenter subtracts them from a
+    chunk\'s current options at present time, and what is left is the unknown options. An absent
+    field means no unknown-option filtering. This replaces the per-cell `quarto_unknown_options`
+    key that KNR-2 was written against (KNR-3 decision 6 says so; KNR-2 reads the new field).
+    The two cell keys start with `quarto_`, so `CellMetadata::options()` drops them from user
+    options, and `known_options` lives on the engine entry, so it never reaches that path. None
+    enters the exec hash (the hash comes from the pre-engine units). KNR-3 writes them;
+    KNR-2 reads them. The option-aware reordering that knitr does (`fig.show` and `results`
+    hold and hide, numeric `echo`, `prompt`) is done by the presenter at present time over the
+    capture-order record, never at record time, so a header-option edit shows without
+    re-running (decisions 10 and 11).
+22. **`text/markdown` display data is opt-in through a marker (2026-11-01, I1, signed off by
+    Gordon).** The adapter sets `metadata.quarto_markdown_passthrough: true` on the output
+    metadata of knitr `asis` output; the shared presenter handles `text/markdown` only then.
+    The Jupyter presenter keeps dropping it, as its goldens (`unhandled-markdown-mime`,
+    `markdown-beats-nothing-plain-wins`) require. Not a presenter parameter. **Amended
+    2026-11-01 (Gordon):** the key is engine-neutral (any engine may set it for output that is
+    document markdown to splice as-is), and flat like the other `quarto_` keys, replacing the
+    nested `quarto_knitr.asis`. The separate `quarto_knitr.raw` marker is dropped: whether the
+    output gets a `.cell-output-display` div, or goes out bare with no `.cell` wrapper, follows
+    from the current `results: asis` cell option (and knitr\'s bare rule: no label, classes,
+    attributes or caption), read by the presenter at present time (decision 21). This also
+    settles the "`results='asis'` has no `.cell` wrapper" item under "New from the spikes":
+    decision 12\'s one-wrapper rule has that one option-driven exception. How the preview
+    splice locates a bare cell is still to be written down in KNR-2.
+23. **The first allowlist of intentional divergences (2026-11-01, I1, signed off by Gordon).**
+    `structure/chunk_in_blockquote` and `s7/01_structure` (the baseline keeps blockquote
+    continuation lines quoted), `markdown-stress/empty_output` and `s1/03_eval_false` (an
+    empty `.cell` wrapper is still a box in the page). A document that overrides the `source`
+    or `output` knitr hook (`setup-state/knit_hooks_override`) becomes a fallback unit rule,
+    not an allowlist entry. KNR-2 adds the allowlist reader with these entries.
+24. **The flip keeps knitr\'s finished markdown as a retained fallback, and removing it is a
+    deferred, trigger-gated plan (2026-11-02, Gordon; review 3 decision 1, option b).** After
+    the flip, R still ships the finished markdown of every chunk next to the record. Rust
+    presents from the record when it can; when it cannot (an output it does not map, an
+    unreadable or out-of-directory figure, a missing record), it substitutes that chunk\'s
+    shipped markdown instead of leaving the marker empty. The corpus will not run clean in
+    this epic and does not cover every use of knitr, so the epic does not claim the fallback
+    is unreachable. Dropping the shipped markdown for structured chunks is
+    [KNR-8](2026-10-30-knr-08-fallback-removal.md), modeled on
+    [EXR-17](2026-10-28-exr-17-legacy-removal.md): no date, no count, an owner-decided
+    trigger. KNR-6 sets up the instrument KNR-8\'s trigger reads (a counter of Rust-side
+    fallbacks).
+25. **Figure files keep the producer\'s own path, through an engine-neutral key (2026-11-02,
+    Gordon; review 3 B5).** An output may carry `metadata.quarto_file_path`: the
+    document-relative, forward-slash path where its producer wrote (or wants) the output\'s
+    file. It replaces `metadata.quarto_knitr.file` in the capture, the adapter and the
+    reader; nothing has shipped, so this is a change on the integration branch, not a
+    migration. The shared figure sink writes the output\'s bytes at that path when it is inside
+    the document directory and does not collide with another output\'s file; otherwise it uses
+    its generated `cell-<n>-output-<m>.<ext>` name and counts the fallback. Outputs without the
+    key (Jupyter, imported Positron output) keep today\'s names. knitr therefore keeps its file
+    names, `fig.path` and `figure-<format>` directory, and the corpus normalizer\'s
+    `figure-<fmt>/<name>` rewrite is no longer hiding a divergence. `quarto_knitr.knit_meta`
+    stays engine-private; the neutral dependency manifest is WGT-2\'s. The code rename
+    (`pieces_map.rs:132` and its tests, the capture) is a KNR-3 Phase 3B item, tests first.
+26. **The flip gate accepts Identical and SyntaxLevel only (2026-11-02, Gordon; review 3
+    decision 3, option a).** A Semantic difference (different AST, same HTML) needs a signed-off
+    allowlist entry (decision 23), and so does every Blocker. Non-HTML fixture formats (typst,
+    docx, gfm) are compared at the AST level too, because the classifier\'s rendered-HTML level
+    cannot see a difference that shows only there. The comparison normalizer is limited to
+    htmlwidget ids; figures are checked by position and extension, not rewritten to a
+    placeholder. The same gate runs in KNR-3 Phase 3C and, promoted, in KNR-6 Phase 6A (one
+    harness, not two), and a frozen oracle per fixture is committed before any deletion.
+27. **Widget dependencies from a knitr record are rebuilt in Rust (2026-11-02, Gordon).** The
+    knitr adapter converts the recorded `knit_meta` into the neutral per-output dependency
+    manifest of WGT-2 when it writes the record, and the Rust presenter reads the manifest at
+    present time, so replay and hub guests need no R. The serialized R object stays as an opaque
+    engine-private field beside the manifest (`quarto_knitr.knit_meta`). This applies to
+    brace-span outputs as to chunk outputs. WGT-2 owns the manifest\'s shape; KNR-3 Phase 3B
+    writes it.
+28. **A block-level span output inside a paragraph keeps knitr\'s behavior for now (2026-11-02,
+    Gordon).** An inline htmlwidget div is inserted into the paragraph as knitr does. KNR-4 adds
+    an observation fixture (an inline plotly div); if it causes trouble in practice, promoting
+    such a span to a block is a later change, not part of this epic.
 
 ## Findings that shaped this epic
 
@@ -338,17 +428,36 @@ version branches at `patch.R:6`, `:152` and `:300` (`hooks.R` has none; its 1.44
 
 ## Plans and DAG
 
+**Status (2026-11-03).** KNR-1 and the interlude are complete. KNR-2 is closed (its remainder is
+KNR-2b). KNR-3 is next, after the replay claim fix (bd-js24dold); then KNR-4, KNR-2b and KNR-6,
+with KNR-5 in parallel after KNR-3. KNR-7 follows KNR-6; KNR-8 waits on its trigger. The parent
+epic is complete but not yet merged to main, so this work stays on top of it until it is.
+
 | ID | Plan | Sessions (guesses) | Notes |
 |---|---|---|---|
 | KNR-1 | [Capture spike and differential harness](2026-10-30-knr-01-capture-spike-and-harness.md) | 4-6 | detailed; spikes S1-S9; the gate for everything below |
-| KNR-2 | [knitr presenter layer](2026-10-30-knr-02-knitr-presenter-layer.md) | 5-10 | also builds the pass-through presenter. KNR-1\'s report ([corpus report](../research/2026-11-01-knr-01-corpus-report.md)) sets the scope: of 202 compared cases, 154 are blockers (78 from source/output interleaving) and none is identical; the estimate stands, with interleaving anchors and `text/markdown` display data the two largest pieces |
-| KNR-3 | [Record adapter, hash profiles, fallback units, cache and `child=`](2026-10-30-knr-03-record-adapter-hash-fallback.md) | 3-4 | KNR-1 S1 to S5, S8 and S9 answered its option, cache, `child=` and hook decisions; open: the format in the record (waiting on the parent) |
+| KNR-2 | [knitr presenter layer](2026-10-30-knr-02-knitr-presenter-layer.md) | 4-7 (used) | also builds the pass-through presenter. KNR-1\'s report ([corpus report](../research/2026-11-01-knr-01-corpus-report.md)) sets the scope: of 202 compared cases, 154 are blockers (78 from source/output interleaving) and none is identical; interleaving anchors and `text/markdown` display data are the two largest pieces. Interlude I1 (2026-11-01) narrowed the estimate: five prototype fixes close 97 of 154 blockers, 57 remain (48 small gaps, 2 whitespace, 4 divergence candidates, 3 other); see [the findings](../research/2026-11-01-knr-i1-presenter-gap-sizing.md) Closed 2026-11-02 for the scope that does not wait on another plan: the presenter, the fallback-unit presenter, the target router (revealjs and epub are structured) and the corpus gate with its five-entry allowlist. The corpus measures 198 accepted, 5 allowlisted, 7 blockers; all 7 wait on KNR-3 or KNR-4. The rest moved to KNR-2b. |
+| KNR-3 | [Record adapter, hash profiles, fallback units, cache and `child=`](2026-10-30-knr-03-record-adapter-hash-fallback.md) | 3-4 | KNR-1 S1 to S5, S8 and S9 answered its option, cache, `child=` and hook decisions; decision 8 (the format in the record) settled 2026-11-01: the exception is accepted |
 | KNR-4 | [Inline expressions as recorded values](2026-10-30-knr-04-inline-typed-values.md) | 2 | replaces EXR-12\'s mechanism; mechanism answered by S1 and S9 |
+| KNR-2b | [knitr presenter layer, remainder](2026-11-02-knr-02b-presenter-remainder.md) | 1-2 | split from KNR-2 on 2026-11-02; sequenced after KNR-4. The options and fences that need KNR-3\'s record fields, the hold wiring, the shared figure sink, and the corpus bar of zero blockers on the minimum and latest knitr |
 | KNR-5 | [Positron interop for knitr](2026-10-30-knr-05-positron-interop.md) | 2-3 | widens EXR-16\'s importer gate; spikes in the Positron fork |
 | KNR-6 | [The knitr flip and the consumers](2026-10-30-knr-06-flip-and-consumers.md) | 3-4 | skeleton design settled: markers (S7 verdict) |
 | KNR-7 | [Docs and end-to-end](2026-10-30-knr-07-docs-e2e.md) | 1-2 | written as the others land |
+| KNR-8 | [Fallback removal (trigger-gated)](2026-10-30-knr-08-fallback-removal.md) | 1-2, plus whatever time passes before the trigger holds | deferred by design (decision 24); not part of this epic\'s exit; mirrors EXR-17 |
 
-Total roughly 20 to 30 sessions, which is the sum of the per-plan guesses (20 to 31), dominated
+**Interlude (2026-11-01).** Between KNR-1 and KNR-2, four spikes answer the open questions of
+the later plans against complete parent code, our own harness and Positron:
+[the interlude plan](2026-11-01-knr-interlude-spikes.md) (I1 sizing the presenter gaps, I2 knitr
+replay and trace, I3 structured records through preview with real sizes and the fallback rate,
+I4 Positron and knitr records). It builds nothing for the product and writes findings into the
+plans it informs.
+
+- **I1 (2026-11-01):** the presenter gaps are sized. Five fixes close 97 of the 154 blockers and open none; KNR-2 is 4 to 7 sessions. Two gaps need a record or capture change first (message versus warning, knitr\'s known option names); `text/markdown` needs a marker or a presenter parameter, since the Jupyter goldens drop it on purpose. [Findings](../research/2026-11-01-knr-i1-presenter-gap-sizing.md).
+- **I2 (2026-11-01):** the knitr replay claim fix is about 20 lines and lands on its own before KNR-3 (bd-js24dold); an old knitr trace needs no presenter (the stored markdown is returned verbatim), a refinement of KNR-6 decision 2. Replay also needs an unused-capture check. [Findings](../research/2026-11-01-knr-i2-replay-and-trace.md).
+- **I3 (2026-11-01):** structured and mixed records splice through the real preview pipeline, but KNR-3 decision 8\'s additive edit does not suffice (the unit id changes with the text, and the content-hash pass defeats a format change); a profile-aware variant passes. Median record 2.4 KB, largest 163 KB with figures inline (inline recommended for bd-sr73); fallback 8 of 278 cells (2.9%) on a one-construct-per-document corpus. [Findings](../research/2026-11-01-knr-i3-records-through-preview.md).
+- **I4 (2026-11-01):** Positron loads and presents a q2 knitr record and consumes it on the first matching hash, rewriting it without the q2 keys; the fallback MIME is harmless (raw text). An Ark cache imports into knitr units through a one-condition gate widening and presents through the shared presenter (errors need ANSI and empty-`ename` handling). KNR-5 should wait for EXR-16 and shrinks to about one session. [Findings](../research/2026-11-01-knr-i4-positron-and-knitr-records.md).
+
+Total roughly 19 to 28 sessions, which is the sum of the per-plan guesses (it was 20 to 31 before I1 narrowed KNR-2), dominated
 by KNR-2. KNR-1 is written to be executed; KNR-2 to KNR-7 were written on 2026-10-30, before
 KNR-1 reports, from a reading of the code and revised on 2026-10-31 after the paper review,
 so each marks what is *blocked on* a KNR-1 spike and is expected to be revised once it
@@ -359,18 +468,19 @@ and what was found wrong.
 
 | Plan | Hard dependencies | Soft |
 |---|---|---|
-| KNR-1 | EXR-1 Phase 3 (the extracted presenter), EXR-2 Phase 2 (the shared unit scanner); both are drafts today | none (EXR-10, EXR-11 and EXR-12 are not needed) |
+| KNR-1 | EXR-1 Phase 3 (the extracted presenter), EXR-2 Phase 2 (the shared unit scanner); both landed | none (EXR-10, EXR-11 and EXR-12 were not needed) |
 | KNR-2 | KNR-1 (which brings EXR-1 and EXR-2) | |
 | KNR-3 | KNR-1, KNR-2 (the pass-through presenter), EXR-2, EXR-4, EXR-11, EXR-7 (EXR-11 depends on it, and it adds the record field) | |
 | KNR-4 | KNR-3, EXR-12, EXR-2, EXR-4 | EXR-3 (Jupyter inline conventions) |
+| KNR-2b | KNR-2, KNR-3 (the record fields), KNR-4 (inline capture) | |
 | KNR-5 | KNR-3, KNR-2, EXR-16 (its importer and validator are the base) | EXR-14 (to show imported output in preview) |
-| KNR-6 | KNR-2, KNR-3, KNR-4, EXR-6, EXR-14, EXR-15 | KNR-5 |
+| KNR-6 | KNR-2b (which brings KNR-2), KNR-3, KNR-4, EXR-6, EXR-14, EXR-15 | KNR-5 |
 | KNR-7 | KNR-6 | every other plan |
+| KNR-8 | KNR-6 (and the trigger in its own plan) | blocks nothing |
 
-KNR-1 runs entirely on the current (legacy markdown) path and the extracted presenter, and
-may start once EXR-1 and EXR-2 are available on the integration line (decision 1); the part
-that needs neither (spikes, generator, control run, capture) can start today. KNR-2 to KNR-7
-wait for the parent in full. KNR-5 blocks nothing hard: KNR-6 and KNR-7 take it as soft.
+KNR-1 ran entirely on the then-current (legacy markdown) path and the extracted presenter
+(decision 1). The parent is now complete, so every hard dependency on a parent plan is met.
+KNR-5 blocks nothing hard: KNR-6 and KNR-7 take it as soft.
 
 ## Risks
 
@@ -393,8 +503,9 @@ wait for the parent in full. KNR-5 blocks nothing hard: KNR-6 and KNR-7 take it 
 6. **Nondeterminism in the oracle.** Random ids, temp paths and figure directories differ
    between runs; the normalizer list is built from a control run in KNR-1, and a rule
    missing from it shows as a blocker, not as noise.
-7. **A format-neutral record against format-dependent pieces** (parent decision 27). Open,
-   waiting on the parent session\'s answer (KNR-3, decision 8); it changes KNR-3\'s design.
+7. **A format-neutral record against format-dependent pieces** (parent decision 27). Settled
+   2026-11-01 by Gordon: a knitr exception (KNR-3, decision 8). EXR-4 is complete without a
+   hash input for the format; the flat option key carries it (KNR-3, decision 8).
 
 ## Out of scope
 
@@ -415,18 +526,20 @@ All five design questions (D1 to D5) are settled: decisions 10 to 14 above.
 
 ### Other decisions needed from Gordon
 
-Open:
-1. **The format in the record (KNR-3, decision 8).** Parent decision 27 says the record is
-   format-neutral; knitr pieces differ per format. The parent session was asked on
-   2026-10-31 whether it accepts a knitr exception (the format becomes an input to the
-   structured profile\'s hash and tags the unit) and what shape that takes in EXR-4. The
-   recommendation is that exception; the alternatives are format-independent pieces only, or
-   one record per format. Waiting for the parent\'s answer.
+Open: none that block KNR-3 except the one below.
 
 Also waiting on the parent session (not on Gordon): **which hash list produces the flat cell
 keys of a structured unit** (KNR-3, decision 2). EXR-4 computes them from the engine\'s default
 exclusion list while the unit hash uses the unit\'s profile; KNR-3 applies the unit\'s own
 profile and asks the parent to confirm.
+
+Settled by Gordon on 2026-11-01:
+1. **The format in the record (KNR-3, decision 8): the exception is accepted.** The output
+   format becomes an input to the structured profile\'s hash and tags the unit. The parent
+   epic is not edited. EXR-4 is complete (2026-11-01) and
+   supplies the tag and the per-unit profile but no format input to the hash. Gordon chose
+   (2026-11-01) that structured units store the format as a flat option key the structured
+   profile counts; no EXR-4 change. Spikes on 2026-11-01 showed the parent\'s splice ignores the profile and the format, so Gordon authorized one additive edit to the parent\'s `record/matching.rs` and `splice_units` (KNR-3, decision 8); the parent plans are not edited.
 
 Settled by Gordon on 2026-10-31, each as recommended:
 2. **The document hash of a mixed record (KNR-3, decision 9): accepted.** Because the
@@ -446,7 +559,7 @@ Settled by Gordon on 2026-10-31, each as recommended:
   measurement exists. KNR-1 S2 does not wait: it records file paths and states what changes
   under base64.
 - **Whether the scanner can tell a `child=` chunk (KNR-3 decision 6):** KNR-1 S5 reads EXR-2.
-- **The spelling key for inline units (KNR-4 decision 3):** KNR-4, after S9.
+- **The spelling key for inline units:** dropped (S9 settled that the record holds knitr\'s inserted text, so no unit needs a spelling).
 - **`execution_count` (KNR-5 decision 4):** KNR-5, from KNR-1\'s S2 table and K-S1.
 - **Quarto 1 fixture gathering (KNR-1 Phase 1D):** the executor, by the default written
   there.
@@ -516,7 +629,8 @@ reading.
 3. Does the per-chunk fallback undercut the "no side channel" decision? It is the one place
    knitr markdown stays in the record; is that acceptable, and is the list of fallback
    cases (`child=`, level-3 cache hits, overridden hooks) complete?
-4. Staging: the epic assumes the parent lands first (Option A). EXR-11 and EXR-12 build a
+4. Staging *(answered 2026-10-30: Option A, and the parent did land first; the cost below was
+   paid)*: the epic assumes the parent lands first (Option A). EXR-11 and EXR-12 build a
    chunk-hook recorder and an inline-id mechanism that this epic later deletes, roughly five
    sessions of work that will be thrown away. Is that the right cost to pay for an
    independently landing parent?

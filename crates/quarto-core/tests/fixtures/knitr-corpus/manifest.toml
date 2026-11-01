@@ -521,7 +521,7 @@ hist(rnorm(20))
 [[document]]
 group = "rich-output"
 name = "kable"
-formats = ["html", "typst", "docx", "gfm"]
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub"]
 text = '''
 ```{r}
 knitr::kable(head(data.frame(a = 1:3, b = c("x", "y", "z"))))
@@ -531,7 +531,7 @@ knitr::kable(head(data.frame(a = 1:3, b = c("x", "y", "z"))))
 [[document]]
 group = "rich-output"
 name = "df_print_default"
-formats = ["html", "typst", "docx", "gfm"]
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub"]
 text = '''
 ```{r}
 data.frame(a = 1:3, b = c("x", "y", "z"))
@@ -555,7 +555,7 @@ knitr::kable(head(data.frame(a = 1:3, b = c("x", "y", "z"))))
 [[document]]
 group = "rich-output"
 name = "knit_asis"
-formats = ["html", "typst", "docx", "gfm"]
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub"]
 text = '''
 ```{r}
 knitr::asis_output("**bold from asis_output**")
@@ -565,7 +565,7 @@ knitr::asis_output("**bold from asis_output**")
 [[document]]
 group = "rich-output"
 name = "include_graphics"
-formats = ["html", "typst", "docx", "gfm"]
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub"]
 text = '''
 ```{r make_png}
 set.seed(1)

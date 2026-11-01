@@ -13,6 +13,7 @@ use serde::Serialize;
 
 use super::knitr_corpus_baseline::{Baseline, baseline};
 use super::knitr_corpus_classify::{Class, classify};
+use super::knitr_corpus_gate::{Allowlist, evaluate};
 use super::knitr_corpus_normalizer::{normalize, normalize_figure_paths};
 use super::knitr_corpus_q1::{q1_enabled, q1_markdown};
 use super::knitr_corpus_run::{Outcome, parallel, r_available, run_fixture_with_env};
@@ -197,15 +198,20 @@ pub fn first_difference(oracle: &str, candidate: &str) -> String {
         .zip(b[prefix..].iter().rev())
         .take_while(|(x, y)| x == y)
         .count();
+    // `KNR_DIFF_LINES=<n>` raises the per-side cap (default 12) to read a whole difference.
+    let cap: usize = std::env::var("KNR_DIFF_LINES")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(12);
     let show = |lines: &[&str], sign: char| -> String {
         let mid = &lines[prefix..lines.len() - suffix];
         let mut s: String = mid
             .iter()
-            .take(12)
+            .take(cap)
             .map(|l| format!("{sign}{}\n", l.chars().take(160).collect::<String>()))
             .collect();
-        if mid.len() > 12 {
-            s.push_str(&format!("{sign}... {} more lines\n", mid.len() - 12));
+        if mid.len() > cap {
+            s.push_str(&format!("{sign}... {} more lines\n", mid.len() - cap));
         }
         s
     };
@@ -260,7 +266,13 @@ fn corpus_report() {
     let env = env_from_process();
     let records = parallel(jobs.len(), |i| run_case(&jobs[i].0, &jobs[i].1, &env));
     std::fs::write(&path, serde_json::to_string_pretty(&records).unwrap()).unwrap();
-    std::fs::write(format!("{path}.summary.txt"), summarize(&records)).unwrap();
+    // The gate verdict (epic decision 26) is reported, not asserted: the cases that wait on
+    // KNR-3's `known_options` and KNR-4's inline capture are still outside the allowlist, so
+    // the assertion lands in KNR-2b, Phase 2bC.
+    let allowlist = Allowlist::load(&corpus_dir()).unwrap();
+    let gate = evaluate(&records, &allowlist);
+    let summary = format!("{}\n{}", summarize(&records), gate.render());
+    std::fs::write(format!("{path}.summary.txt"), summary).unwrap();
 }
 
 #[test]

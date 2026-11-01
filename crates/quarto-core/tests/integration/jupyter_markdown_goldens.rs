@@ -283,6 +283,7 @@ impl ExecutionEngine for StoredRecordJupyter {
             &units,
             ctx.execute_scope.as_ref(),
             InlineTarget::from_format(&ctx.format),
+            &ctx.format,
             &mut fig,
         )
         .map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))?;
@@ -484,6 +485,7 @@ fn splice_one(
         &units,
         scope,
         InlineTarget::from_format("html"),
+        "html",
         fig,
     )
     .unwrap()

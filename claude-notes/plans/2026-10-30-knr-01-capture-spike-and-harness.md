@@ -2,7 +2,7 @@
 title: 'KNR-1: knitr capture spike and differential harness'
 date: 2026-10-30
 description: 'Captures knitr evaluated pieces on the q2 side, maps them to nbformat, presents them with the unmodified shared presenter, and compares the result with knitr own markdown over a generated corpus, classifying every difference. The report decides the scope of the rest of the knitr execution-records epic.'
-status: draft
+status: complete  # 2026-11-01; report: research/2026-11-01-knr-01-corpus-report.md
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-1).
@@ -393,7 +393,7 @@ is not an output.
 | message | `stream`, `name: stderr`, `text` as R produced it | messages end in a newline, so knitr never wraps them (`msg_wrap`, 1.50 `output.R:549`) |
 | warning | `stream`, `name: stderr`, text as knitr formats it before `comment_out`: `Warning in <call>: <msg>` or `Warning: <msg>`, wrapped by `xfun::str_wrap` | wrapped at the R `width` option when the message has no newline: with `options(width = 40)` a long warning folds at 40 (fixture 05). Recording the formatted text keeps `width` out of the record; formatting happens at capture, where the state equals what `sew` sees |
 | error | `error`: `ename` the first class (`simpleError`), `evalue` the message, `traceback` one element, `as.character(condition)` (the text knitr prints, e.g. `Error in f(): boom`) | `error=TRUE` only; without it the knit aborts (S1) |
-| recordedplot | `display_data`, `image/png` (or `svg`/`pdf` by `dev`), bytes read from knitr\'s own file; `metadata.quarto_knitr.file` is that file\'s document-relative path | first device only when `dev` is a vector; the files come from the chunk\'s `plot_files` (read: `sew.recordedplot` appends them, S1) |
+| recordedplot | `display_data`, `image/png` (or `svg`/`pdf` by `dev`), bytes read from knitr\'s own file; `metadata.quarto_file_path` is that file\'s document-relative path (renamed from `quarto_knitr.file`, 2026-11-02, epic decision 25) | first device only when `dev` is a vector; the files come from the chunk\'s `plot_files` (read: `sew.recordedplot` appends them, S1) |
 | `knit_image_paths` (`include_graphics`) | one `display_data` per path, same shape | the piece carries `made.png` itself; `plot_files` does not list it |
 | `knit_asis`, text matching q2\'s HTML test | `display_data`, `text/html` | the test is `wrap_asis_output`\'s own: starts `<tag ` or `<tag>`, ends `</tag>`, and is not `<div class="kable-table">` (`patch.R:117-122`, read) |
 | `knit_asis`, anything else | `display_data`, `text/markdown` | kable and `asis_output` markdown |
@@ -424,7 +424,7 @@ the same packages are installed there.
 source then outputs, and `stream` and `error` outputs have no `metadata` field (reported, not
 re-run: nbformat 4 schema), so a position cannot ride on the outputs. Encoding: the cell
 `source` is the code `evaluate()` received, and the cell metadata holds
-`quarto.knitr.anchors`, an array parallel to `outputs` whose entry is the number of source
+`quarto_output_anchors`, an array parallel to `outputs` whose entry is the number of source
 lines that precede that output. Equal neighbors form one source group; no anchors means all
 the source first. (Unverified, because no presenter or mapper exists: `echo` numeric and
 `eval` numeric chunks and `tidy` chunks, where the code seen by `evaluate()` differs from the

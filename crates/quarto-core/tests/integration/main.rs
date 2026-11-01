@@ -116,6 +116,7 @@ pub mod knitr_chunk_records;
 pub mod knitr_corpus_baseline;
 pub mod knitr_corpus_classify;
 pub mod knitr_corpus_control;
+pub mod knitr_corpus_gate;
 pub mod knitr_corpus_generator;
 pub mod knitr_corpus_normalizer;
 pub mod knitr_corpus_q1;

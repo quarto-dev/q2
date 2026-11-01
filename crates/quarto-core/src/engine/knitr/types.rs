@@ -226,6 +226,9 @@ pub enum KnitrPiece {
     },
     ImagePaths {
         paths: Vec<String>,
+        /// The width knitr computed for each path (`raster_dpi_width`), where it did.
+        #[serde(default, deserialize_with = "numbers_or_none")]
+        widths: Vec<Option<f64>>,
     },
     Asis {
         text: String,
@@ -837,4 +840,10 @@ mod tests {
         assert!(result.preserve.is_some());
         assert!(result.post_process);
     }
+}
+
+/// R writes a missing number as the string `"NA"`; anything that is not a number is `None`.
+fn numbers_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Option<f64>>, D::Error> {
+    let values = Vec::<serde_json::Value>::deserialize(d)?;
+    Ok(values.iter().map(|v| v.as_f64()).collect())
 }

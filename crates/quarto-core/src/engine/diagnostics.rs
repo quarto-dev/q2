@@ -387,6 +387,20 @@ pub(crate) fn note_diagnostic(
             };
             image_unusable_diagnostic(mime, reason, location.as_deref())
         }
+        // Jupyter records hold no fallback units; the note exists for the knitr and marimo
+        // adapters, which report it themselves.
+        PresentNote::MarkdownFormatMismatch { stored, wanted, .. } => {
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                "Stored Markdown For Another Format",
+            )
+            .problem(format!(
+                "a stored markdown unit was produced for {} but the document renders to `{wanted}`.",
+                stored
+                    .as_deref()
+                    .map_or("no recorded format".to_string(), |s| format!("`{s}`"))
+            ))
+            .build()
+        }
     }
 }
 

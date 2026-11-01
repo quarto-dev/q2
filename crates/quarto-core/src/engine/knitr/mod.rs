@@ -37,6 +37,7 @@ pub mod pieces_map;
 pub mod preprocess;
 mod span_records;
 pub mod subprocess;
+pub mod target_route;
 pub mod types;
 
 use std::path::{Path, PathBuf};

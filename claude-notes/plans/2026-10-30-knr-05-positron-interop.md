@@ -2,7 +2,7 @@
 title: 'KNR-5: Positron interop for knitr records'
 date: 2026-10-30
 description: 'Makes a q2 knitr record valid to present in Positron and lets q2 import a Positron cache for R cells into knitr-owned units, by widening the EXR-16 importer gate, presenting imported outputs through the knitr layer, and extending the Positron fork spikes.'
-status: draft  # outline written from the parent EXR-16 and code reading; Positron-side facts mostly unverified
+status: draft  # revised 2026-11-01 after interlude I4 (K-S1 and K-S2 observed); EXR-16 is now complete; the wiring waits for KNR-3
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-5).
@@ -15,7 +15,7 @@ fork spikes S0 to S6 are the base for K-S1 and K-S2). To show imported output in
 [EXR-14](2026-10-28-exr-14-preview-splice.md) (the splice) must exist (a soft dependency:
 the importer and presenter tests do not need it).
 **Blocks:** nothing hard. KNR-6 and KNR-7 (docs) take it as soft (the epic\'s table).
-**Estimated sessions:** 2 to 3, plus spike time in Gordon\'s Positron fork. The spikes (Phase
+**Estimated sessions:** about 1 after EXR-16 lands (interlude I4 ran the spikes; was 2 to 3), plus any spike time in Gordon\'s Positron fork. The spikes (Phase
 5C) gate only the exit criteria below; the importer, presenter and validator tasks do not wait
 for them, and Gordon schedules the fork time.
 
@@ -24,6 +24,29 @@ for them, and Gordon schedules the fork time.
 > 2026-10-28 and 2026-10-30 by reading `external-sources/positron` and
 > `external-sources/ark`; nothing was run against a real Positron). Whether a dev build of
 > Positron has the Quarto feature active is not verified.
+
+## Interlude I4 findings (2026-11-01)
+
+Findings: [I4](../research/2026-11-01-knr-i4-positron-and-knitr-records.md). Recommendation:
+**wait for EXR-16 and fold the gate widening into it.**
+
+- **K-S1 (done).** A q2 knitr record loads in Positron and its outputs present; the structured
+  subset needs no change. The fallback unit\'s `text/x-quarto-markdown` loads and shows as raw
+  text, harmless, so the MIME stays. Positron consumes a hand-copied record on one matching hash
+  and rewrites it without any q2 notebook-level or cell-level key (output-level metadata
+  survives). A text/html or text/plain nbformat line array is mangled on load; q2\'s mapper emits
+  strings, so a q2 record is safe.
+- **K-S2 (done, partly).** An Ark cache imported into knitr units and presented through the
+  shared presenter: plot, text, error and a plain result all appear. The current gate refuses
+  every knitr cell; widening it is one condition, and it must also refuse fallback units (the
+  spike filled one, so that is a required test). A fallback unit is one whose recorded output
+  carries the `text/x-quarto-markdown` mime, which is the only fallback marker (epic decision
+  8). `outputs_for` cannot see that, so the caller computes it and passes a `fallback: bool`
+  that makes `outputs_for` refuse. The second figure mode already exists in the
+  shared presenter. Three presenter limits: ANSI escapes and an empty `ename` in Ark errors, the
+  message arriving on stdout (no stderr class), and image width and height metadata ignored.
+  Not observed: a data frame, a warning, `q2 render` through the binary, a browser preview.
+- **Nothing called the importer when interlude I4 ran** (grep), so Phase 5B had no call site then. EXR-16 is complete now; re-check for a call site before Phase 5B.
 
 ## Goal
 
@@ -73,8 +96,9 @@ Equal-to-what-the-other-would-produce is not required.
   they do for Jupyter cells; KNR-3 decision 3 (no scope layering) is about records that
   carry resolved options, which imported units do not. Known limit: options a setup chunk sets with `opts_chunk$set` are not
   applied to imported output; K-S2 shows an example. Images arrive as base64 and need the
-  figure sink (naming `cell-<n>-output-<m>`), so the presenter needs both figure modes: knitr
-  paths from the files map, and writes from inline data.
+  figure sink (naming `cell-<n>-output-<m>`), so the presenter needs both figure modes: outputs
+  that carry `quarto_file_path` (knitr\'s) keep that path from the files map, and writes from
+  inline data get the sink\'s generated name (epic decision 25).
 - *Hash agreement.* Positron matches on the content hash of the author's source. knitr's
   label re-injection rewrites chunk headers at the engine boundary (EXR-10); the record's
   `quarto_content_hash` must be over the author's text (parent decision 18), or a Positron
@@ -128,6 +152,11 @@ Equal-to-what-the-other-would-produce is not required.
   unit.
 - [ ] Presenter tests: imported outputs present through the knitr layer using current document
   options; image outputs write through the figure sink; unknown mimes are skipped with a notice.
+- [ ] A q2 knitr record carries `quarto_output_anchors`, `quarto_output_kinds`,
+  `quarto_output_kinds` on its cells, `known_options` on its `quarto_engines` entry, and
+  `quarto_markdown_passthrough` on `knit_asis` output (KNR-3).
+  Positron must read the record without them mattering; interlude I4 (K-S1) checks this, and
+  this item is the test of its result.
 - [ ] Round-trip: a q2 knitr record passes the nbformat validator (EXR-4 / EXR-16 Phase A) and
   the Positron-shaped checks (`nbformat`, `cells`, `metadata.quarto_cache_version: 1`, each code
   cell has `outputs`).
@@ -145,15 +174,15 @@ Equal-to-what-the-other-would-produce is not required.
 
 ### Phase 5C: Positron spikes (in Gordon's fork; follow EXR-16's ground rules)
 
-- [ ] **K-S1, Positron reads a q2 knitr record.** Extend EXR-16 S2: a record with structured
+- [x] **K-S1, Positron reads a q2 knitr record** (done in interlude I4, 2026-11-01). Extend EXR-16 S2: a record with structured
   knitr outputs (stream, `display_data` with `image/png` and `text/html`, an error) and, in the
   same file, a fallback unit with `text/x-quarto-markdown`. Copy the file by hand, never move
   it (Positron\'s cache lookup deletes a file on one matching cell hash, EXR-16 background).
   Observe what loads, what is ignored, what is deleted and what survives a Positron rewrite.
-- [ ] **K-S2, Ark output into a q2 knitr unit.** Run an R cell in Positron, take its cache
+- [x] **K-S2, Ark output into a q2 knitr unit** (done in interlude I4, except a data frame, a warning and the real binary; see the findings). Run an R cell in Positron, take its cache
   file, import into a knitr-owned unit, present through the knitr layer in `q2 render` and
   `q2 preview`. Observe plots, data frames, warnings and errors.
-- [ ] Findings notes, with vitest cases kept on the spike branches. Nothing is sent to anyone.
+- [x] Findings note and the vitest cases on the spike branches (`spike/q2-knr5-positron-knitr`, `spike/knr-i4`). Nothing was sent to anyone.
 
 ## Exit criteria
 

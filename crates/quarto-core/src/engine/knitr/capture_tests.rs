@@ -175,10 +175,29 @@ fn capture_include_graphics_is_an_image_paths_piece() {
     );
     let incl = &result.pieces[1];
     match incl.pieces.last().unwrap() {
-        KnitrPiece::ImagePaths { paths } => assert_eq!(paths, &["made.png"]),
+        KnitrPiece::ImagePaths { paths, widths } => {
+            assert_eq!(paths, &["made.png"]);
+            // knitr's `raster_dpi_width`: the PNG\'s pixel width at its own resolution
+            assert_eq!(widths, &[Some(200.0)]);
+        }
         other => panic!("{other:?}"),
     }
     assert_eq!(incl.files, ["made.png"]);
+}
+
+#[test]
+fn capture_include_graphics_with_out_width_has_no_computed_width() {
+    if !r_available("capture_include_graphics_with_out_width_has_no_computed_width") {
+        return;
+    }
+    let (result, _dir) = execute(
+        "```{r}\npng('made.png', width = 200, height = 200)\nplot(1:3)\ninvisible(dev.off())\n```\n\n```{r incl, out.width='50%'}\nknitr::include_graphics('made.png')\n```\n",
+        true,
+    );
+    match result.pieces[1].pieces.last().unwrap() {
+        KnitrPiece::ImagePaths { widths, .. } => assert_eq!(widths, &[None]),
+        other => panic!("{other:?}"),
+    }
 }
 
 #[test]

@@ -14,13 +14,73 @@
 use base64::Engine as _;
 use serde_json::{Value, json};
 
+use crate::presenter::options::OutputKind;
 use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
+use crate::presenter::visibility::CellVisibility;
 
 use super::types::{KnitrCapturedChunk, KnitrPiece};
 
 /// The fence q2's `htmlPreserve` puts around a widget's HTML (S2 table).
 const WIDGET_FENCE_OPEN: &str = "\n```{=html}\n";
 const WIDGET_FENCE_CLOSE: &str = "\n```\n";
+
+/// The line index in the chunk\'s code where each source piece (one top-level expression)
+/// starts, for knitr\'s `prompt` (KNR-2 Phase 2D). `None` when the pieces\' lines do not add up
+/// to the chunk\'s `code` (the indices would point at the wrong lines).
+pub fn expression_starts(chunk: &KnitrCapturedChunk) -> Option<Vec<usize>> {
+    let mut starts = Vec::new();
+    let mut lines = 0usize;
+    for piece in &chunk.pieces {
+        if let KnitrPiece::Source { text } = piece {
+            starts.push(lines);
+            lines += text.lines().count();
+        }
+    }
+    let total = if chunk.code.is_empty() {
+        lines
+    } else {
+        chunk.code.lines().count()
+    };
+    (total == lines).then_some(starts)
+}
+
+/// The presenter's visibility from a chunk\'s recorded options. Only `include`, `output` and
+/// logical `echo` count here. `warning` and `message` are enforced by R at capture, because
+/// they change what runs, so the presenter must not drop stderr for them (a `warning = FALSE`
+/// chunk still shows its messages); numeric `echo` is applied by the presenter itself
+/// (`CellOptions::echo_selection`), so it shows the source here.
+pub fn knitr_visibility(options: &Value) -> CellVisibility {
+    let flag = |key: &str| options.get(key).and_then(Value::as_bool);
+    if flag("include") == Some(false) {
+        return CellVisibility::HIDDEN;
+    }
+    let output = flag("output") != Some(false);
+    CellVisibility {
+        echo: flag("echo") != Some(false),
+        output,
+        warning: output,
+    }
+}
+
+/// Which of a chunk\'s outputs is a message or a warning, parallel to the outputs
+/// [`pieces_to_cell_anchored`] returns (the record\'s `quarto_output_kinds`): both become stderr
+/// streams there, so only this tells `class.message` from `class.warning`.
+pub fn output_kinds(chunk: &KnitrCapturedChunk) -> Vec<Option<OutputKind>> {
+    chunk
+        .pieces
+        .iter()
+        .flat_map(|piece| match piece {
+            KnitrPiece::Message { .. } => vec![Some(OutputKind::Message)],
+            KnitrPiece::Warning { .. } => vec![Some(OutputKind::Warning)],
+            KnitrPiece::Plot { files } => vec![None; files.len()],
+            KnitrPiece::ImagePaths { paths, .. } => vec![None; paths.len()],
+            KnitrPiece::Source { .. } | KnitrPiece::Other { .. } => vec![],
+            KnitrPiece::Output { .. } | KnitrPiece::Error { .. } | KnitrPiece::Asis { .. } => {
+                vec![None]
+            }
+        })
+        .collect()
+}
 
 /// Map a chunk to its source and presenter result.
 ///
@@ -32,23 +92,37 @@ pub fn pieces_to_cell(
     chunk: &KnitrCapturedChunk,
     read_file: &dyn Fn(&str) -> Option<Vec<u8>>,
 ) -> Option<(String, CellResult)> {
-    let mut outputs = Vec::new();
+    pieces_to_cell_anchored(chunk, read_file).map(|(code, result, _)| (code, result))
+}
+
+/// [`pieces_to_cell`] plus the interleaving anchors for `render_cell_interleaved` (KNR-2, epic
+/// decision 21): one entry per output, counting the source lines that precede it, in capture
+/// order. The anchors are `None` when the source pieces' lines do not add up to the chunk's
+/// `code` (they would point at the wrong lines). Holds, `results` and numeric `echo` are applied
+/// at present time (`apply_holds`), not here.
+pub fn pieces_to_cell_anchored(
+    chunk: &KnitrCapturedChunk,
+    read_file: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Option<(String, CellResult, Option<Vec<usize>>)> {
+    let mut outputs: Vec<CellOutput> = Vec::new();
+    let mut anchors: Vec<usize> = Vec::new();
+    let mut source_lines = 0usize;
     let mut sources = String::new();
     for piece in &chunk.pieces {
         match piece {
-            KnitrPiece::Source { text } => sources.push_str(text),
+            KnitrPiece::Source { text } => {
+                source_lines += text.lines().count();
+                sources.push_str(text);
+            }
             KnitrPiece::Output { text } => outputs.push(stream("stdout", text)),
             KnitrPiece::Message { text } | KnitrPiece::Warning { text, .. } => {
                 outputs.push(stream("stderr", text));
             }
-            KnitrPiece::Error {
-                text,
-                ename,
-                evalue,
-                ..
-            } => outputs.push(CellOutput::Error {
-                ename: ename.clone(),
-                evalue: evalue.clone(),
+            // knitr prints the whole message, so the record carries it as the traceback alone;
+            // a `name: value` header would repeat it (Q1 writes `Error: boom`).
+            KnitrPiece::Error { text, .. } => outputs.push(CellOutput::Error {
+                ename: String::new(),
+                evalue: String::new(),
                 traceback: vec![text.clone()],
             }),
             KnitrPiece::Plot { files } => {
@@ -56,9 +130,18 @@ pub fn pieces_to_cell(
                     outputs.push(image(file, read_file)?);
                 }
             }
-            KnitrPiece::ImagePaths { paths } => {
-                for path in paths {
-                    outputs.push(image(path, read_file)?);
+            KnitrPiece::ImagePaths { paths, widths } => {
+                for (i, path) in paths.iter().enumerate() {
+                    let mut out = image(path, read_file)?;
+                    // The user\'s own file: the presenter references it where it is.
+                    if let CellOutput::DisplayData { metadata, .. } = &mut out {
+                        let k = &mut metadata["quarto_knitr"];
+                        k["include_graphics"] = json!(true);
+                        if let Some(Some(w)) = widths.get(i) {
+                            k["width"] = json!(w);
+                        }
+                    }
+                    outputs.push(out);
                 }
             }
             KnitrPiece::Asis {
@@ -69,12 +152,14 @@ pub fn pieces_to_cell(
             } => outputs.push(asis(text, mime, *widget, knit_meta.as_deref())),
             KnitrPiece::Other { .. } => return None,
         }
+        anchors.resize(outputs.len(), source_lines);
     }
     let code = if chunk.code.is_empty() {
         sources
     } else {
         chunk.code.clone()
     };
+    let anchors = (code.lines().count() == source_lines).then_some(anchors);
     Some((
         code,
         CellResult {
@@ -82,6 +167,7 @@ pub fn pieces_to_cell(
             outputs,
             execution_count: None,
         },
+        anchors,
     ))
 }
 
@@ -127,9 +213,19 @@ fn asis(text: &str, mime: &str, widget: bool, knit_meta: Option<&str>) -> CellOu
     };
     let mut data = MimeBundle::new();
     data.insert(mime.to_string(), Value::String(body.to_string()));
-    let metadata = match knit_meta {
-        Some(meta) => json!({"quarto_knitr": {"knit_meta": meta}}),
-        None => json!({}),
+    // `quarto_knitr` holds what only knitr cells carry: `widget` (an htmlwidget, which
+    // `results = "hide"` keeps, unlike other `knit_asis` text) and `knit_meta`.
+    let mut knitr = serde_json::Map::new();
+    if widget {
+        knitr.insert("widget".to_string(), json!(true));
+    }
+    if let Some(meta) = knit_meta {
+        knitr.insert("knit_meta".to_string(), json!(meta));
+    }
+    let metadata = if knitr.is_empty() {
+        json!({"quarto_markdown_passthrough": true})
+    } else {
+        json!({"quarto_knitr": knitr, "quarto_markdown_passthrough": true})
     };
     CellOutput::DisplayData { data, metadata }
 }
@@ -195,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn error_has_name_value_and_the_printed_text_as_traceback() {
+    fn error_is_the_printed_text_alone_with_no_header() {
         let (_, outputs) = map(json!([
             {"class": "error", "text": "Error in f(): boom\n", "ename": "simpleError",
              "evalue": "boom", "call": "f()"},
@@ -206,8 +302,9 @@ mod tests {
                 evalue,
                 traceback,
             } => {
-                assert_eq!(ename, "simpleError");
-                assert_eq!(evalue, "boom");
+                // knitr prints the whole message; a header would repeat it (Q1: `Error: boom`).
+                assert_eq!(ename, "");
+                assert_eq!(evalue, "");
                 assert_eq!(traceback, &vec!["Error in f(): boom\n".to_string()]);
             }
             other => panic!("not an error: {other:?}"),
@@ -248,6 +345,22 @@ mod tests {
             &result.outputs[0],
             CellOutput::DisplayData { data, .. } if data.contains_key("image/png")
         ));
+    }
+
+    #[test]
+    fn image_paths_are_marked_and_carry_their_width() {
+        let c = chunk(
+            json!([{"class": "image_paths", "paths": ["a.png", "b.png"], "widths": [200.0, null]}]),
+        );
+        let read = |_: &str| Some(vec![1, 2, 3]);
+        let (_, result) = pieces_to_cell(&c, &read).unwrap();
+        let meta = |i: usize| match &result.outputs[i] {
+            CellOutput::DisplayData { metadata, .. } => metadata.clone(),
+            o => panic!("{o:?}"),
+        };
+        assert_eq!(meta(0)["quarto_knitr"]["include_graphics"], true);
+        assert_eq!(meta(0)["quarto_knitr"]["width"], 200.0);
+        assert!(meta(1)["quarto_knitr"].get("width").is_none());
     }
 
     #[test]
@@ -295,5 +408,173 @@ mod tests {
             }
             other => panic!("not display_data: {other:?}"),
         }
+    }
+
+    #[test]
+    fn only_a_widget_is_marked_as_one() {
+        let (_, outputs) = map(json!([
+            {"class": "asis", "text": "<b>w</b>", "mime": "text/html", "widget": true},
+            {"class": "asis", "text": "<b>k</b>", "mime": "text/html"},
+        ]));
+        let meta = |i: usize| match &outputs[i] {
+            CellOutput::DisplayData { metadata, .. } => metadata.clone(),
+            other => panic!("not display_data: {other:?}"),
+        };
+        assert_eq!(meta(0)["quarto_knitr"]["widget"], true);
+        assert!(meta(1).get("quarto_knitr").is_none(), "{}", meta(1));
+    }
+
+    fn anchors(pieces: Value) -> Option<Vec<usize>> {
+        pieces_to_cell_anchored(&chunk(pieces), &no_files)
+            .unwrap()
+            .2
+    }
+
+    #[test]
+    fn anchors_count_source_lines_before_each_output() {
+        let a = anchors(json!([
+            {"class": "source", "text": "a\nb\n"},
+            {"class": "output", "text": "1\n"},
+            {"class": "message", "text": "m\n"},
+            {"class": "source", "text": "c\n"},
+            {"class": "output", "text": "2\n"},
+        ]));
+        assert_eq!(a, Some(vec![2, 2, 3]));
+    }
+
+    #[test]
+    fn anchors_stay_in_capture_order_under_holds() {
+        // fig.show = "hold" and results = "hold" are applied at present time, so the
+        // mapper keeps capture order and ignores the options.
+        let mut c = chunk(json!([
+            {"class": "source", "text": "a\n"},
+            {"class": "plot", "files": ["p.png"]},
+            {"class": "source", "text": "b\n"},
+            {"class": "output", "text": "o\n"},
+        ]));
+        c.options["fig.show"] = json!("hold");
+        let (_, _, a) = pieces_to_cell_anchored(&c, &|_| Some(vec![1])).unwrap();
+        assert_eq!(a, Some(vec![1, 2]));
+    }
+
+    #[test]
+    fn anchors_are_none_when_source_lines_disagree_with_code() {
+        let mut c = chunk(json!([
+            {"class": "source", "text": "a\n"},
+            {"class": "output", "text": "o\n"},
+        ]));
+        c.code = "a\nb\n".to_string();
+        let (_, _, a) = pieces_to_cell_anchored(&c, &no_files).unwrap();
+        assert_eq!(a, None);
+    }
+
+    #[test]
+    fn expression_starts_are_the_line_of_each_source_piece() {
+        let c = chunk(json!([
+            {"class": "source", "text": "a\n"},
+            {"class": "output", "text": "1\n"},
+            {"class": "source", "text": "f(\n  1)\n"},
+            {"class": "source", "text": "z\n"},
+        ]));
+        assert_eq!(expression_starts(&c), Some(vec![0, 1, 3]));
+    }
+
+    #[test]
+    fn expression_starts_are_none_when_source_lines_disagree_with_code() {
+        let mut c = chunk(json!([{"class": "source", "text": "a\n"}]));
+        c.code = "a\nb\n".to_string();
+        assert_eq!(expression_starts(&c), None);
+    }
+
+    #[test]
+    fn anchored_wrapper_matches_pieces_to_cell() {
+        let c = chunk(json!([
+            {"class": "source", "text": "a\n"},
+            {"class": "output", "text": "o\n"},
+        ]));
+        let (code, result) = pieces_to_cell(&c, &no_files).unwrap();
+        let (code2, result2, _) = pieces_to_cell_anchored(&c, &no_files).unwrap();
+        assert_eq!(code, code2);
+        assert_eq!(result.outputs.len(), result2.outputs.len());
+    }
+
+    #[test]
+    fn asis_pieces_carry_the_markdown_passthrough_marker() {
+        let (_, outputs) = map(json!([
+            {"class": "asis", "text": "| a |\n", "mime": "text/markdown"},
+            {"class": "asis", "text": "<b>x</b>", "mime": "text/html", "knit_meta": "[1]"},
+        ]));
+        for o in &outputs {
+            match o {
+                CellOutput::DisplayData { metadata, .. } => {
+                    assert_eq!(metadata["quarto_markdown_passthrough"], json!(true));
+                    assert!(metadata.pointer("/quarto_knitr/raw").is_none());
+                }
+                other => panic!("not display_data: {other:?}"),
+            }
+        }
+    }
+
+    fn vis(options: Value) -> CellVisibility {
+        knitr_visibility(&options)
+    }
+
+    #[test]
+    fn visibility_defaults_to_everything() {
+        assert_eq!(vis(json!({})), CellVisibility::VISIBLE);
+    }
+
+    #[test]
+    fn include_false_hides_the_cell() {
+        assert_eq!(vis(json!({"include": false})), CellVisibility::HIDDEN);
+    }
+
+    #[test]
+    fn echo_false_and_output_false_are_the_presenters() {
+        let v = vis(json!({"echo": false}));
+        assert!(!v.echo && v.output && v.warning);
+        let v = vis(json!({"output": false}));
+        assert!(v.echo && !v.output && !v.warning);
+    }
+
+    #[test]
+    fn logical_warning_does_not_make_the_presenter_drop_stderr() {
+        // R filtered the warnings at capture; the messages that remain must still show.
+        assert!(vis(json!({"warning": false})).warning);
+        assert!(vis(json!({"message": false})).warning);
+        assert!(vis(json!({"warning": null})).warning); // warning = NA
+    }
+
+    #[test]
+    fn numeric_echo_shows_the_source_for_the_presenter_to_select() {
+        assert!(vis(json!({"echo": [1, 3]})).echo);
+        assert!(vis(json!({"echo": -1})).echo);
+    }
+
+    #[test]
+    fn output_kinds_run_parallel_to_the_mapped_outputs() {
+        let c = chunk(json!([
+            {"class": "source", "text": "x\n"},
+            {"class": "output", "text": "o\n"},
+            {"class": "message", "text": "m\n"},
+            {"class": "warning", "text": "Warning: w", "call": "f()"},
+            {"class": "plot", "files": ["a.png", "b.png"]},
+            {"class": "error", "text": "Error: e", "ename": "simpleError", "evalue": "e"},
+        ]));
+        let read = |_: &str| Some(vec![1u8]);
+        let (_, result) = pieces_to_cell(&c, &read).unwrap();
+        let kinds = output_kinds(&c);
+        assert_eq!(kinds.len(), result.outputs.len());
+        assert_eq!(
+            kinds,
+            [
+                None,
+                Some(OutputKind::Message),
+                Some(OutputKind::Warning),
+                None,
+                None,
+                None
+            ]
+        );
     }
 }

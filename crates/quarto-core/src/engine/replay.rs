@@ -140,6 +140,7 @@ impl ReplayEngine {
             &units,
             ctx.execute_scope.as_ref(),
             InlineTarget::from_format(&ctx.format),
+            &ctx.format,
             &mut fig,
         )
         .map_err(|e| {

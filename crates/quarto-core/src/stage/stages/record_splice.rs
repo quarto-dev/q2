@@ -31,10 +31,11 @@ use serde_json::Value;
 
 use crate::cell_options::partition_cell_options;
 use crate::engine::units::Unit;
-use crate::presenter::cell::render_cell;
+use crate::presenter::cell::render_cell_with;
 use crate::presenter::expansion::{render_expanded_unit, split_expansions};
 use crate::presenter::figures::{FigureSink, RuntimeFigureSink};
 use crate::presenter::inline::{InlineTarget, render_inline};
+use crate::presenter::options::CellOptions;
 use crate::presenter::output::{CellOutput, CellResult};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
 use crate::record::{
@@ -277,7 +278,7 @@ fn splice_units(
     (doc, report)
 }
 
-/// A record cell's stored nbformat outputs as the kernel result shape [`render_cell`] consumes.
+/// A record cell's stored nbformat outputs as the kernel result shape [`render_cell_with`] consumes.
 fn stored_result_for_cell(cell: &Value) -> CellResult {
     let outputs = cell
         .get("outputs")
@@ -307,12 +308,14 @@ fn present_cell(
     let partitioned = partition_cell_options(lang, author_text, body_source).ok()?;
     let resolved = resolve_cell_options(doc_scope, partitioned.options);
     let visibility = CellVisibility::resolve(resolved.as_ref());
+    let options = CellOptions::from_config(resolved.as_ref());
     if let Some(expansions) = split_expansions(&cell.outputs) {
         // An expanded cell: the author's cell, then one cell per expansion, each with its
         // own options.
         return render_expanded_unit(
             lang,
             &partitioned.code,
+            &options,
             visibility,
             &expansions,
             doc_scope,
@@ -321,10 +324,11 @@ fn present_cell(
         .ok();
     }
     let result = stored_result_for_cell(&serde_json::to_value(cell).ok()?);
-    Some(render_cell(
+    Some(render_cell_with(
         lang,
         &partitioned.code,
         &result,
+        &options,
         fig,
         visibility,
     ))

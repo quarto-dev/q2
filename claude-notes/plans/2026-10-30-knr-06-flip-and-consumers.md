@@ -6,7 +6,7 @@ status: draft  # outline written from code reading; the skeleton design is the o
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-6).
-**Depends on:** [KNR-2](2026-10-30-knr-02-knitr-presenter-layer.md) (zero blockers),
+**Depends on:** [KNR-2b](2026-11-02-knr-02b-presenter-remainder.md) (zero blockers; it brings [KNR-2](2026-10-30-knr-02-knitr-presenter-layer.md)),
 [KNR-3](2026-10-30-knr-03-record-adapter-hash-fallback.md),
 [KNR-4](2026-10-30-knr-04-inline-typed-values.md),
 [EXR-6](2026-10-28-exr-06-jupyter-flip.md) (the Jupyter flip, whose pattern this follows),
@@ -15,6 +15,8 @@ Soft: [KNR-5](2026-10-30-knr-05-positron-interop.md).
 **Blocks:** KNR-7. Once it lands, the knitr engine counts as migrated for item 1 of
 [EXR-17](2026-10-28-exr-17-legacy-removal.md)\'s trigger (EXR-17 has no knitr row).
 **Estimated sessions:** 3 to 4.
+**Prerequisite, not part of this plan:** the knitr replay claim fix (bd-js24dold, interlude
+I2); it lands before KNR-3, so replay tests here start from a working knitr replay.
 
 > **Status of this document.** Written 2026-10-30 from code reading. The hardest design
 > question (the skeleton, below) was tested by KNR-1's S7, whose verdict is markers (see its
@@ -24,10 +26,12 @@ Soft: [KNR-5](2026-10-30-knr-05-positron-interop.md).
 
 After this plan, the knitr engine runs R, builds a record, and returns
 `present(record, document)` as its markdown, like Jupyter after EXR-6. Replay, preview and
-hub consume structured knitr records. EXR-11\'s recorder for structured chunks and EXR-12\'s
-inline-id embedding are deleted; the chunk hook stays for fallback chunks (and for whatever KNR-1
-S3 and S7 assign it: final options, markers). Output
-on the corpus is within the classified differences.
+hub consume structured knitr records. **R keeps shipping the finished markdown of every chunk
+next to the record** (epic decision 24), so a chunk Rust cannot present still renders; the
+EXR-11 recorder and the chunk hook therefore stay as they are, and dropping that markdown for
+structured chunks is the deferred [KNR-8](2026-10-30-knr-08-fallback-removal.md). EXR-12\'s
+inline-id embedding is deleted once nothing reads it (see Phase 6C for what the spans keep).
+Output on the corpus is within the classified differences.
 
 ## Background
 
@@ -65,7 +69,7 @@ adjacent fences, chunks at file ends). Prefer the skeleton if S7 shows it works.
 **EXR-6's rules that carry over.** The flip is one reviewed commit; rollback is a revert;
 **no runtime switch**, because a switch is two mechanisms alive at once (the bd-mu9i0bct
 class). The error policy stays in the engine. Blank-line discipline lives in the presenter.
-`ReplayEngine`, `--replay` and the trace's `engine_capture` stay; replay returns the stored
+`ReplayEngine`, `--replay` and the trace's `engine_captures` stay; replay returns the stored
 record and runs the presenter again (decision 9 of the parent epic).
 
 **A rule that is relaxed for knitr.** EXR-6 says presentation reads options from the
@@ -91,18 +95,31 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 1. One flip, no runtime switch; shadow equivalence on the corpus before it (the
    [parent pattern](2026-10-28-exr-06-jupyter-flip.md)).
 2. knitr stays whole-document (decision 7); fallback units keep passing through the
-   pass-through presenter, which KNR-2 builds (Phase 2F; decision 8).
+   pass-through presenter, which KNR-2 builds (Phase 2F; decision 8). Old knitr traces do not
+   use it (see provisional decision 2).
 3. `ReplayEngine` and the trace stay (parent decision 9).
 
 ## Provisional: decisions this plan must make
 
-1. **Skeleton (markers) versus Rust assembly** *(S7, settled: markers)*. Recommendation: markers. The decision
-   also fixes how inline values (KNR-4) are substituted: R-side as today, or by markers too;
-   KNR-4 builds the record side and a presenter function that works either way.
-2. **Old knitr traces** (settled, epic decision 14). A trace recorded before the flip holds
-   markdown results; it keeps replaying through the pass-through presenter, unlike Jupyter
-   (parent decision 9), because KNR-2 Phase 2F builds that presenter for fallback units
-   anyway. Implement the replay here, on top of it.
+1. **Skeleton (markers) versus Rust assembly** *(S7, settled: markers)*. Chunks are markers.
+   Inline substitution is owned here: classic spans stay on the live R path and R substitutes
+   them (Gordon, 2026-11-02; they are not units). This phase decides, and writes down, whether
+   brace spans are substituted at present time from the record or carried by markers too.
+   KNR-4 builds the record side and calls `presenter/inline.rs`.
+2. **Old knitr traces** (settled, epic decision 14, corrected 2026-11-01 by interlude I2 and
+   confirmed by Gordon). A trace recorded before the flip holds a markdown result and no
+   record. It keeps replaying, unlike Jupyter (parent decision 9), and it does so with no
+   presenter: `ReplayEngine::execute` returns the stored markdown verbatim, as it does today.
+   The pass-through presenter (KNR-2 Phase 2F) matters only for fallback units inside a
+   record. What this plan adds is one shared presenting function (Gordon, 2026-11-02): it
+   generalizes `present_record`, which today is Jupyter-specific (`engine/replay.rs:113-157`,
+   `execute` gated on `engine_name == JUPYTER` at line 228), and both live knitr rendering and
+   replay call it. Engine differences (where options come from, the error text) are inputs,
+   not a branch on engine name. It runs when the capture has a record, and the replay of an old
+   trace keeps its test. The I2 prototype (`spike/knr-i2`) is a hint only; it predates KNR-2\'s
+   `CellOptions`. The `{r}` claim fix that makes any knitr replay work
+   (about 20 lines, `ReplayEngine::claims_language` claims what knitr claims through a shared
+   `knitr_claims` function) is bd-js24dold and lands before KNR-3, not with the flip.
 3. **Target format and execute scope at replay.** Parent decision 27 is settled: the record
    carries no presenter inputs and stays format-neutral, and replay supplies the format and
    scope again (in the trace if `ExecutionContext` does not reach replay). For knitr the
@@ -111,8 +128,25 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 4. **What happens at the first flipped release to existing records.** EXR-11-era records
    read as stale; consumers re-record on the next preview. Phase 6B checks, by one test per consumer (preview, hub, replay), that each reads a
    stale record without an error.
-5. **The corpus bar for flipping**: zero blockers (KNR-2) *and* a named list of accepted
+5. **The corpus bar for flipping**: zero blockers (KNR-2b) *and* a named list of accepted
    intentional divergences, signed off, because users will see them.
+6. **The retained fallback (settled by Gordon, 2026-11-02; epic decision 24).** Structured
+   chunks return a marker in the skeleton, and R also ships each chunk\'s finished markdown
+   in the result, keyed by unit id (EXR-11\'s `chunks[].markdown`, kept). Rust substitutes
+   each marker with the presenter\'s output, and with that chunk\'s shipped markdown when
+   the presenter cannot produce it: `pieces_to_cell` returns `None` (an `Other` piece, an
+   image that is not png, jpg or svg, an unreadable file, a file outside the document
+   directory), or there is no record at all (a count mismatch or a malformed one). The
+   render succeeds in each case. Consequences this plan writes down: a missing record is no
+   longer a marker-only document (this answers whether the render fails; it does not, it
+   falls back for the whole document); the legacy capture path that reads `result.markdown`
+   keeps working only if that field holds final text, so 6B states which it holds while the
+   record-writing gate exists; and each Rust-side fallback is counted (6B), which is the
+   evidence KNR-8\'s trigger reads. Brace spans keep the same fallback (Gordon, 2026-11-02):
+   R also ships each span\'s finished inserted text or fragment, keyed by unit id. It is a
+   fragment, not plain text, because a span can be rich (an htmlwidget or an image; KNR-4
+   decision 6), so the substitution is an inline fragment, and an unmappable span output is
+   counted like a chunk\'s. KNR-8 drops it with the chunk markdown.
 
 ## Out of scope
 
@@ -124,11 +158,17 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 ### Phase 6A: tests first
 
 - [ ] The corpus shadow test promoted to a gate: presenting the record equals the live
-  markdown (current path) modulo the signed-off divergences, on the minimum and the latest
-  supported knitr.
+  markdown (the frozen oracle KNR-3 3C committed) under epic decision 26: Identical and
+  SyntaxLevel pass, anything else needs a signed-off entry, non-HTML formats are compared at
+  the AST level, on the minimum and the latest supported knitr. It is the KNR-3 3C test
+  promoted, not a second harness.
 - [ ] `replay_knitr_record_runs_presenter`: replay returns the stored record and the
-  presenter output equals the live output; an old markdown trace still replays unchanged
-  (or fails per decision 2).
+  presenter output equals the live output; an old markdown trace still replays unchanged,
+  by returning its stored markdown with no presenter (decision 2). A scratch version of both
+  is in `spike/knr-i2` (`engine/replay.rs` tests).
+- [ ] A trace whose capture is loaded but never executed (an unclaimed language) fails the
+  render with a diagnostic naming the engine; today it renders the code unexecuted with exit
+  0 (interlude I2).
 - [ ] Consumer tests: preview splice of a knitr unit by id; per-unit staleness; hub guest
   shows the host's knitr record; hub admin inventories it.
 - [ ] A document with a setup chunk setting `opts_chunk` presents the same as before (the
@@ -139,19 +179,41 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 
 ### Phase 6B: the flip (one commit)
 
-- [ ] The R side returns the skeleton (or units, per decision 1) and the record; the Rust
-  engine presents.
-- [ ] Preview, hub and replay read structured knitr records.
+- [ ] The R side returns the skeleton (or units, per decision 1), the record, and the finished
+  markdown of every chunk (decision 6); the Rust engine presents and substitutes that markdown
+  for any chunk it cannot present. Tests first: a gif, an unreadable image, an out-of-directory
+  `include_graphics`, an `Other` piece and a count mismatch each render the chunk\'s markdown,
+  not an empty marker, and the render succeeds.
+- [ ] The shared figure sink honors `quarto_file_path` (epic decision 25). Tests first: a knitr
+  figure keeps its own name, directory and `fig.path`; a colliding path and a path outside the
+  document directory fall back to the generated name and are counted; Jupyter output keeps its
+  names. State whether knitr\'s own copies are deleted after Rust reads them, so `_files` holds
+  no duplicates.
+- [ ] A counter of Rust-side fallbacks per render, by reason (unmapped output, unreadable file,
+  no record). It is logged at debug level and written into the trace, never shown to users as a
+  warning. It is the instrument KNR-8\'s trigger reads; a test asserts it counts the cases in
+  the item above.
+- [ ] Preview, hub and replay read structured knitr records. Replay: dispatch on
+  `capture.record.is_some()` into the shared presenting function of decision 2; a test replays
+  a knitr record and equals the live output, and the existing Jupyter replay tests stay green;
+  state what `capture.result.markdown` holds after the flip (skeleton or final text). Fail when a loaded capture is
+  never executed (an unused-capture check; today an unclaimed `{r}` chunk renders unexecuted
+  with exit 0). Also: replaying a document that has `trace: true` overwrites the trace being
+  replayed at the default path (found in I2, recorded on bd-js24dold); either the replay does
+  not write a trace or the replay doc says to copy the trace aside.
 - [ ] Update this epic with the knitr outcome. The parent\'s text is not edited; tell the
   parent session what changed.
 
 ### Phase 6C: deletions (separate commits, each green)
 
-- [ ] EXR-12\'s `.QuartoInlineId` embedding and the `spans` wire field (after nothing reads
-  them), and EXR-11\'s code that records every chunk as a markdown unit (structured chunks
-  have been written by KNR-3\'s adapter since its Phase 3B). The chunk hook **stays**,
-  narrowed to fallback chunks, because the finished markdown of a fallback chunk exists
-  nowhere else.
+- [ ] EXR-12\'s `.QuartoInlineId` embedding, and the `spans` wire field once nothing reads it
+  (keep whatever the inline fallback of decision 6 still needs). EXR-11\'s code that records
+  every chunk **as a markdown unit in the record** goes, since KNR-3\'s adapter has written
+  structured units since its Phase 3B; its per-chunk markdown **on the result stays** (decision
+  6), and so does the chunk hook for every chunk. Narrowing them to fallback chunks is KNR-8.
+  List the other deletions explicitly: `engine/knitr/chunk_record_tests.rs` for the removed
+  code, `insert_unit_ids` and `SpanPlan::new` if unused, and on the R side
+  `quarto_span_records` and `quarto_flush_span_records` (`execute.R`, `hooks.R`).
 - [ ] Record in this epic that the knitr engine now migrates through the record (EXR-17
   trigger item 1); EXR-17 itself is not edited.
 - [ ] Decide, from S7\'s verdict, whether EXR-11\'s `quarto-unit-id` option hand-off for
@@ -162,6 +224,8 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 
 - The flip gate passes on the corpus; the sign-off list of divergences is committed.
 - No consumer reads the deleted code; `ReplayEngine` and the trace still work.
+- A chunk Rust cannot present still renders through the retained markdown, and the fallback
+  counter records it.
 - clippy and nextest green; counts against the live baseline; the workspace-wide run is
   recommended in the pre-push summary because `quarto-core` has dependents.
 
@@ -172,8 +236,10 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
    of subtle regressions; the corpus must include `opts_chunk$set` in setup chunks.
 3. **Users with custom hooks** see changed output; the diagnostic and the fallback are the
    mitigation.
-4. **Two mechanisms alive**: the flip must remove, not bypass, the old path for structured
-   chunks.
+4. **Two mechanisms alive** is now deliberate for the shipped chunk markdown (decision 6),
+   and bounded: it is a fallback read only when Rust cannot present a chunk, never a second
+   presentation of a chunk that did present. A test must show a presented chunk never reads
+   its shipped markdown. Removal is [KNR-8](2026-10-30-knr-08-fallback-removal.md).
 5. **Caches written before the flip** hold markdown and no markers; each such chunk is a
    fallback unit until the cache is rebuilt, which may surprise users with large caches.
 

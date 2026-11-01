@@ -13,6 +13,7 @@
 use quarto_source_map::SourceInfo;
 
 use super::figures::FigureSink;
+use super::options::{CellOptions, FenceKind, OutputKind};
 use super::output::{CellOutput, CellResult, ExecuteStatus, extract_text_content};
 use super::visibility::CellVisibility;
 use crate::engine::ExecutionContext;
@@ -102,20 +103,503 @@ pub fn render_cell(
     fig: &mut dyn FigureSink,
     visibility: CellVisibility,
 ) -> String {
+    render_cell_with(
+        language,
+        code,
+        result,
+        &CellOptions::default(),
+        fig,
+        visibility,
+    )
+}
+
+/// [`render_cell`] with the cell-option layer (KNR-2 Phase 2C): `options` adds classes,
+/// attributes and cell-div attributes. `CellOptions::default()` is exactly [`render_cell`].
+pub fn render_cell_with(
+    language: &str,
+    code: &str,
+    result: &CellResult,
+    options: &CellOptions,
+    fig: &mut dyn FigureSink,
+    visibility: CellVisibility,
+) -> String {
+    render_cell_whole(language, code, result, options, &[], fig, visibility)
+}
+
+/// [`render_cell_with`] knowing where each expression of `code` starts (`starts`: line
+/// indices, empty when unknown), which knitr's `prompt` needs.
+fn render_cell_whole(
+    language: &str,
+    code: &str,
+    result: &CellResult,
+    options: &CellOptions,
+    starts: &[usize],
+    fig: &mut dyn FigureSink,
+    visibility: CellVisibility,
+) -> String {
     let source = if visibility.echo && !code.trim().is_empty() {
-        echoed_source_fence(language, code)
+        echoed_source_fence_with(language, code, options, starts)
     } else {
         String::new()
     };
     let outputs = if visibility.output {
-        format_outputs(result, fig, visibility.warning)
+        format_outputs_with(result, fig, visibility.warning, options, &mut 0, 0)
     } else {
         String::new()
     };
     if source.is_empty() && outputs.trim().is_empty() {
         return String::new();
     }
-    format!("::: {{.cell}}\n\n{source}\n{outputs}\n:::\n")
+    let body = format!("{source}\n{outputs}");
+    let body = if options.collapse() {
+        collapse_fences(&body)
+    } else {
+        body
+    };
+    wrap_cell(options, &body)
+}
+
+/// [`render_cell`] with the source and the outputs alternating (KNR-2, epic decision 21):
+/// `anchors[i]` is the number of `code` lines that precede `result.outputs[i]`. Outputs with
+/// equal anchors form one group, the source lines between two anchors form one fence, and
+/// source after the last output gets its own fence. Without usable anchors (absent, wrong
+/// length, decreasing, past the end, or every output after all the source), or when echo or
+/// output is hidden, this is exactly [`render_cell`], so cells that never carried anchors
+/// keep their bytes.
+pub fn render_cell_interleaved(
+    language: &str,
+    code: &str,
+    result: &CellResult,
+    anchors: Option<&[usize]>,
+    starts: &[usize],
+    options: &CellOptions,
+    fig: &mut dyn FigureSink,
+    visibility: CellVisibility,
+) -> String {
+    let selected;
+    let (code, anchors, starts) = match options.echo_selection().filter(|_| !starts.is_empty()) {
+        Some(selection) => {
+            selected = select_expressions(code, starts, anchors, selection);
+            (
+                selected.0.as_str(),
+                selected.2.as_deref(),
+                selected.1.as_slice(),
+            )
+        }
+        None => (code, anchors, starts),
+    };
+    let filtered;
+    let (result, anchors, options) = match select_by_kind(result, anchors, options) {
+        Some(f) => {
+            filtered = f;
+            (&filtered.0, filtered.1.as_deref(), &filtered.2)
+        }
+        None => (result, anchors, options),
+    };
+    let total = code.lines().count();
+    let usable = anchors.filter(|a| {
+        a.len() == result.outputs.len()
+            && a.windows(2).all(|w| w[0] <= w[1])
+            && a.iter().all(|n| *n <= total)
+            && a.iter().any(|n| *n < total)
+    });
+    let Some(anchors) = usable.filter(|_| visibility.echo && visibility.output) else {
+        return render_cell_whole(language, code, result, options, starts, fig, visibility);
+    };
+    let body = interleave_group(
+        language,
+        &OutputGroup {
+            code,
+            outputs: &result.outputs,
+            anchors,
+            starts,
+        },
+        options,
+        fig,
+        visibility.warning,
+    );
+    if body.trim().is_empty() {
+        return String::new();
+    }
+    let body = if options.collapse() {
+        collapse_fences(&body)
+    } else {
+        body
+    };
+    wrap_cell(options, &body)
+}
+
+/// knitr's numeric `echo` (`filter_evaluate`): keep the source expressions `selection` names
+/// (1-based; negative numbers name the ones to leave out, zero and out-of-range numbers
+/// select nothing) and drop the rest, with every line of a dropped expression. Returns the
+/// code, the expression starts, and the anchors, all remapped to the surviving lines.
+fn select_expressions(
+    code: &str,
+    starts: &[usize],
+    anchors: Option<&[usize]>,
+    selection: &[i64],
+) -> (String, Vec<usize>, Option<Vec<usize>>) {
+    let keep = |k: i64| -> bool {
+        if selection.iter().any(|&s| s < 0) {
+            !selection.contains(&-k)
+        } else {
+            selection.contains(&k)
+        }
+    };
+    let lines: Vec<&str> = code.lines().collect();
+    // `kept_before[i]`: surviving lines among the first `i` lines.
+    let mut kept_before = vec![0usize];
+    let mut out: Vec<&str> = Vec::new();
+    let mut new_starts = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let expr = starts.iter().rposition(|&s| s <= i); // 0-based; None before the first
+        let shown = expr.is_none_or(|e| keep(e as i64 + 1));
+        if shown {
+            if expr.is_some_and(|e| starts[e] == i) {
+                new_starts.push(out.len());
+            }
+            out.push(line);
+        }
+        kept_before.push(out.len());
+    }
+    let mut text = out.join("\n");
+    if !text.is_empty() && code.ends_with('\n') {
+        text.push('\n');
+    }
+    let anchors = anchors.map(|a| {
+        a.iter()
+            .map(|&x| kept_before[x.min(lines.len())])
+            .collect::<Vec<_>>()
+    });
+    (text, new_starts, anchors)
+}
+
+/// knitr's numeric `warning` and `message` (`filter_evaluate`): keep the warnings (messages)
+/// the numbers name, counted among the cell's warnings (messages) only. Returns the filtered
+/// result, anchors and options (whose kinds follow the surviving outputs), or `None` when no
+/// numeric selection applies.
+fn select_by_kind(
+    result: &CellResult,
+    anchors: Option<&[usize]>,
+    options: &CellOptions,
+) -> Option<(CellResult, Option<Vec<usize>>, CellOptions)> {
+    let (warn, msg) = (options.warning_selection(), options.message_selection());
+    let kinds = options.output_kinds();
+    if (warn.is_none() && msg.is_none()) || kinds.len() != result.outputs.len() {
+        return None;
+    }
+    let keep = |sel: &[i64], k: i64| {
+        if sel.iter().any(|&s| s < 0) {
+            !sel.contains(&-k)
+        } else {
+            sel.contains(&k)
+        }
+    };
+    let (mut warnings, mut messages) = (0i64, 0i64);
+    let kept: Vec<bool> = kinds
+        .iter()
+        .map(|kind| match kind {
+            Some(OutputKind::Warning) => {
+                warnings += 1;
+                warn.is_none_or(|s| keep(s, warnings))
+            }
+            Some(OutputKind::Message) => {
+                messages += 1;
+                msg.is_none_or(|s| keep(s, messages))
+            }
+            None => true,
+        })
+        .collect();
+    let pick = |i: usize| kept[i];
+    let outputs = result
+        .outputs
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| pick(*i))
+        .map(|(_, o)| o.clone())
+        .collect();
+    let anchors = anchors.map(|a| {
+        a.iter()
+            .enumerate()
+            .filter(|(i, _)| pick(*i))
+            .map(|(_, n)| *n)
+            .collect()
+    });
+    let kinds = kinds
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| pick(*i))
+        .map(|(_, k)| *k)
+        .collect();
+    Some((
+        CellResult {
+            status: result.status.clone(),
+            outputs,
+            execution_count: result.execution_count,
+        },
+        anchors,
+        options.clone().with_output_kinds(kinds),
+    ))
+}
+
+/// An `include_graphics` image (the mapper marks it `metadata.quarto_knitr.include_graphics`):
+/// its own path, and the width knitr computed, when it did.
+fn included_graphic(metadata: &serde_json::Value) -> Option<(String, Option<f64>)> {
+    let k = metadata.get("quarto_knitr")?;
+    if k.get("include_graphics")?.as_bool() != Some(true) {
+        return None;
+    }
+    Some((
+        k.get("file")?.as_str()?.to_string(),
+        k.get("width").and_then(|w| w.as_f64()),
+    ))
+}
+
+fn widget_output(o: &CellOutput) -> bool {
+    matches!(o, CellOutput::DisplayData { metadata, .. }
+        if metadata["quarto_knitr"]["widget"] == true)
+}
+
+fn is_plot_output(o: &CellOutput) -> bool {
+    matches!(o, CellOutput::DisplayData { data, .. }
+        if ["image/svg+xml", "image/png", "image/jpeg"].iter().any(|m| data.contains_key(*m)))
+}
+
+/// The `.cell` div around `body`, or `body` alone when `results = "asis"` needs no div.
+fn wrap_cell(options: &CellOptions, body: &str) -> String {
+    if options.needs_cell_div() {
+        format!(
+            "::: {{{}.cell{}}}\n\n{body}\n:::\n",
+            options.cell_div_id(),
+            options.cell_div_attrs()
+        )
+    } else {
+        format!("\n{body}")
+    }
+}
+
+/// The markdown a `knit_asis` output (marked `quarto_markdown_passthrough`) is written as.
+/// Raw HTML that is a whole element (a table, not the `kable-table` div) gets the five-tick
+/// `{=html}` fence of Q1\'s `wrap_asis_output` (patch.R), longer if the HTML holds that many
+/// backticks; other text is document markdown.
+fn knit_asis_text(
+    data: &crate::presenter::output::MimeBundle,
+    output: &CellOutput,
+) -> Option<String> {
+    if !markdown_passthrough(output) {
+        return None;
+    }
+    if let Some(md) = data.get("text/markdown") {
+        return Some(extract_text_content(md));
+    }
+    let html = extract_text_content(data.get("text/html")?);
+    let trimmed = html.trim_end();
+    let word = |s: &str| {
+        s.chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+    };
+    let opens = html.strip_prefix('<').is_some_and(|r| {
+        word(r)
+            && r.trim_start_matches(|c: char| c.is_alphanumeric() || c == '_')
+                .starts_with([' ', '>'])
+    });
+    let closes =
+        trimmed.ends_with('>') && trimmed.rfind("</").is_some_and(|i| word(&trimmed[i + 2..]));
+    if opens && closes && !html.starts_with("<div class=\"kable-table\">") {
+        // A table gets Q1\'s five-tick `wrap_asis_output` fence; an htmlwidget keeps the
+        // three ticks knitr wrote (longer only when its HTML needs it).
+        let widget = matches!(output, CellOutput::DisplayData { metadata, .. }
+            if metadata["quarto_knitr"]["widget"] == true);
+        let ticks = "`".repeat(std::cmp::max(
+            if widget { 3 } else { 5 },
+            ticks_for_code(&html).len(),
+        ));
+        return Some(format!("{ticks}{{=html}}\n{html}\n{ticks}"));
+    }
+    Some(html)
+}
+
+/// Printed text in knitr\'s sense: what `results` hides or writes as is.
+fn is_printed_text(output: &CellOutput) -> bool {
+    // `knit_asis` text is a character vector to knitr, so `results` treats it as printed
+    // text; an htmlwidget (marked by the mapper) is not.
+    if markdown_passthrough(output) {
+        return !matches!(output, CellOutput::DisplayData { metadata, .. }
+            if metadata["quarto_knitr"]["widget"] == true);
+    }
+    match output {
+        CellOutput::Stream { name, .. } => name != "stderr",
+        CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => {
+            data.keys().all(|m| m == "text/plain")
+        }
+        CellOutput::Error { .. } => false,
+    }
+}
+
+/// knitr\'s collapse merge (`sub("\n```\n+```(.*?)\n", "\n", x)`): a closing fence followed
+/// only by blank lines and another code fence (not a raw `{=...}` block) is dropped with that
+/// fence\'s opening line, so the two bodies share one fence.
+fn collapse_fences(md: &str) -> String {
+    let lines: Vec<&str> = md.lines().collect();
+    let mut out: Vec<&str> = Vec::new();
+    let mut open: Option<usize> = None; // backtick count of the open fence
+    let mut i = 0;
+    while i < lines.len() {
+        let l = lines[i];
+        let ticks = l.chars().take_while(|c| *c == '`').count();
+        match open {
+            None if ticks >= 3 => {
+                open = Some(ticks);
+                out.push(l);
+            }
+            Some(n) if ticks >= n && l[ticks..].trim().is_empty() => {
+                let mut j = i + 1;
+                while j < lines.len() && lines[j].trim().is_empty() {
+                    j += 1;
+                }
+                let next_ticks = lines
+                    .get(j)
+                    .map_or(0, |n| n.chars().take_while(|c| *c == '`').count());
+                if next_ticks >= 3 && !lines[j][next_ticks..].starts_with("{=") {
+                    // Stay in the fence: swallow the closer, the blanks and the opener.
+                    open = Some(next_ticks);
+                    i = j + 1;
+                    continue;
+                }
+                open = None;
+                out.push(l);
+            }
+            _ => out.push(l),
+        }
+        i += 1;
+    }
+    let mut s = out.join("\n");
+    if md.ends_with('\n') {
+        s.push('\n');
+    }
+    s
+}
+
+/// One run of source with the outputs interleaved into it. A cell is one implicit group
+/// covering all its outputs; the interleaving works on a group so that a later producer of
+/// sub-units (knitr `child=`, `knit_child()`) can hand it a slice of a cell's outputs with
+/// anchors relative to that sub-unit's own source. `anchors` is parallel to `outputs` and
+/// must already be validated (see [`render_cell_interleaved`]).
+pub(crate) struct OutputGroup<'a> {
+    pub code: &'a str,
+    pub outputs: &'a [CellOutput],
+    pub anchors: &'a [usize],
+    /// Line indices (into `code`) where each source expression starts; empty when unknown.
+    pub starts: &'a [usize],
+}
+
+/// The body of an interleaved group: source fences and output blocks, no `.cell` wrapper.
+pub(crate) fn interleave_group(
+    language: &str,
+    group: &OutputGroup<'_>,
+    options: &CellOptions,
+    fig: &mut dyn FigureSink,
+    warning: bool,
+) -> String {
+    let (code, anchors) = (group.code, group.anchors);
+    let mut figures = 0usize; // figures written so far, across the runs
+    let lines: Vec<&str> = code.lines().collect();
+    let mut body = String::new();
+    let mut i = 0usize;
+    let mut pending_from = 0usize; // first source line not yet written to a fence
+    while i < anchors.len() {
+        let at = anchors[i];
+        let mut j = i;
+        while j < anchors.len() && anchors[j] == at {
+            j += 1;
+        }
+        let i0 = i; // index of the run\'s first output in the cell
+        let run = CellResult {
+            status: ExecuteStatus::Ok,
+            outputs: group.outputs[i..j].to_vec(),
+            execution_count: None,
+        };
+        let shown = format_outputs_with(&run, fig, warning, options, &mut figures, i0);
+        i = j;
+        // A hidden plot is still a piece in knitr, so it splits the source like a shown one.
+        let hidden_plot = options.fig_show_hide() && run.outputs.iter().any(is_plot_output);
+        if shown.trim().is_empty() && !hidden_plot {
+            // Nothing to show here: the source around it stays in one fence.
+            continue;
+        }
+        let src = lines[pending_from..at].join("\n");
+        if !src.trim().is_empty() {
+            let rel = starts_within(group.starts, pending_from, at);
+            body.push_str(&echoed_source_fence_with(language, &src, options, &rel));
+            body.push('\n');
+        }
+        pending_from = at;
+        if !shown.trim().is_empty() {
+            body.push_str(&shown);
+            body.push('\n');
+        }
+    }
+    let done = pending_from; // source lines already emitted
+    let rest = lines[done..].join("\n");
+    if !rest.trim().is_empty() {
+        let rel = starts_within(group.starts, done, lines.len());
+        body.push_str(&echoed_source_fence_with(language, &rest, options, &rel));
+        body.push('\n');
+    }
+    body
+}
+
+/// Which outputs knitr holds to the end of the chunk: `fig.show = "hold"` holds plots,
+/// `results = "hold"` holds printed text.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HoldMode {
+    pub plots: bool,
+    pub text: bool,
+}
+
+/// Apply knitr's holds at present time (epic decision 21). The record keeps capture order;
+/// this moves held outputs to the end, anchored at `total` source lines. Held printed text
+/// (stdout streams) merges into one stream and comes before held plots. Returns the
+/// reordered outputs with their anchors (kept in step).
+pub fn apply_holds(
+    outputs: Vec<CellOutput>,
+    anchors: &[usize],
+    total: usize,
+    mode: HoldMode,
+) -> (Vec<CellOutput>, Vec<usize>) {
+    let is_plot = |o: &CellOutput| {
+        matches!(o, CellOutput::DisplayData { data, .. }
+            if ["image/svg+xml", "image/png", "image/jpeg"].iter().any(|m| data.contains_key(*m)))
+    };
+    let mut kept = Vec::new();
+    let mut kept_anchors = Vec::new();
+    let mut held_text = String::new();
+    let mut held_plots = Vec::new();
+    for (o, a) in outputs.into_iter().zip(anchors.iter().copied()) {
+        match o {
+            CellOutput::Stream { ref name, ref text } if mode.text && name == "stdout" => {
+                held_text.push_str(text);
+            }
+            o if mode.plots && is_plot(&o) => held_plots.push(o),
+            o => {
+                kept.push(o);
+                kept_anchors.push(a);
+            }
+        }
+    }
+    if !held_text.is_empty() {
+        kept.push(CellOutput::Stream {
+            name: "stdout".to_string(),
+            text: held_text,
+        });
+        kept_anchors.push(total);
+    }
+    for p in held_plots {
+        kept.push(p);
+        kept_anchors.push(total);
+    }
+    (kept, kept_anchors)
 }
 
 /// Reconstruct the echoed source fence for an executed cell.
@@ -130,14 +614,61 @@ pub fn render_cell(
 /// *partitioned* code — `#|` option lines are consumed by
 /// `crate::cell_options` before execution and are not echoed
 /// (knitr/Q1 parity).
+#[cfg(test)]
 fn echoed_source_fence(language: &str, code: &str) -> String {
-    let code = code.trim_end_matches('\n');
+    echoed_source_fence_with(language, code, &CellOptions::default(), &[])
+}
+
+/// The expression starts in `[from, to)`, relative to `from`.
+fn starts_within(starts: &[usize], from: usize, to: usize) -> Vec<usize> {
+    starts
+        .iter()
+        .filter(|s| (from..to).contains(*s))
+        .map(|s| s - from)
+        .collect()
+}
+
+fn echoed_source_fence_with(
+    language: &str,
+    code: &str,
+    options: &CellOptions,
+    starts: &[usize],
+) -> String {
+    if let Some((params, yaml)) = options.fenced_echo_chunk() {
+        // `echo: fenced` (hooks.R): the chunk as written, inside a fence one tick longer.
+        let body = code.trim_matches('\n');
+        let all = if yaml.is_empty() {
+            body.to_string()
+        } else {
+            format!("{yaml}\n{body}")
+        };
+        let inner = ticks_for_code(&all);
+        let outer = format!("{inner}`");
+        return format!("{outer}{{.cell-code}}\n{inner}{{{{{params}}}}}\n{all}\n{inner}\n{outer}");
+    }
+    let code = options.prompt_source(code.trim_end_matches('\n'), starts);
+    let code = code.as_str();
     let ticks = ticks_for_code(code);
-    format!("{ticks}{{.{language} .cell-code}}\n{code}\n{ticks}")
+    let id = options.source_id_prefix();
+    let classes = options.source_classes();
+    let attrs = options.source_attrs();
+    format!("{ticks}{{{id}.{language}{classes} .cell-code{attrs}}}\n{code}\n{ticks}")
 }
 
 /// Wrap already-trimmed output text in a `::: {<classes>}` div around
 /// a plain fence, with the fence sized to the content.
+/// Whether an output carries `metadata.quarto_markdown_passthrough == true`: its
+/// `text/markdown` is document markdown to splice as is (epic decision 22, engine-neutral).
+/// Jupyter outputs never carry it, so what it gates leaves their bytes alone.
+fn markdown_passthrough(output: &CellOutput) -> bool {
+    matches!(
+        output,
+        CellOutput::DisplayData { metadata, .. }
+            if metadata.get("quarto_markdown_passthrough").and_then(|v| v.as_bool())
+                == Some(true)
+    )
+}
+
 /// The markdown a rich output presents as: `text/markdown`, or math `text/latex` when
 /// there is no `text/markdown` (Q1's `displayDataWithMarkdownMath`; math is text that
 /// starts and ends with `$`, or a `\begin{` environment).
@@ -151,9 +682,19 @@ fn markdown_output(data: &crate::presenter::output::MimeBundle) -> Option<String
     is_math.then_some(latex)
 }
 
-fn fenced_output_div(classes: &str, text: &str) -> String {
+fn fenced_output_div(
+    classes: &str,
+    text: &str,
+    fence_attrs: Option<String>,
+    options: &CellOptions,
+) -> String {
     let ticks = ticks_for_code(text);
-    format!("\n::: {{{classes}}}\n\n{ticks}\n{text}\n{ticks}\n\n:::\n")
+    let open = fence_attrs.map_or_else(|| ticks.clone(), |a| format!("{ticks}{{{a}}}"));
+    if options.collapse() || options.results_asis() {
+        // knitr\'s hook returns the bare fence under `collapse`; `collapse_fences` merges it.
+        return format!("\n{open}\n{text}\n{ticks}\n");
+    }
+    format!("\n::: {{{classes}}}\n\n{open}\n{text}\n{ticks}\n\n:::\n")
 }
 
 /// Format kernel outputs as markdown.
@@ -170,12 +711,31 @@ fn fenced_output_div(classes: &str, text: &str) -> String {
 /// `image/png` → `image/jpeg` → `text/plain` **last** (a matplotlib
 /// bundle carries an image plus a text fallback; the image must win).
 /// Jupyter-widget payloads remain unhandled (follow-up).
+#[cfg(test)]
 fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: bool) -> String {
+    format_outputs_with(
+        result,
+        fig,
+        show_warnings,
+        &CellOptions::default(),
+        &mut 0,
+        0,
+    )
+}
+
+fn format_outputs_with(
+    result: &CellResult,
+    fig: &mut dyn FigureSink,
+    show_warnings: bool,
+    options: &CellOptions,
+    figures: &mut usize,
+    first: usize,
+) -> String {
     const IMAGE_MIMES: [&str; 3] = ["image/svg+xml", "image/png", "image/jpeg"];
 
     let mut output = String::new();
 
-    for cell_output in &result.outputs {
+    for (n, cell_output) in result.outputs.iter().enumerate() {
         // `warning: false` drops stderr streams — where Python's
         // `warnings` module and most library chatter land. Q1 applies
         // exactly this filter (`isWarningOutput`: output_type
@@ -185,11 +745,48 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
         if !show_warnings && is_warning_output(cell_output) {
             continue;
         }
+        // knitr `fig.show = "hide"`: the plot stays a piece (it still splits the source) but
+        // writes nothing.
+        if options.fig_show_hide() && is_plot_output(cell_output) {
+            continue;
+        }
+        // knitr drops every character piece under `results = "hide"`, a widget included.
+        if options.results_hide() && widget_output(cell_output) {
+            continue;
+        }
+        if is_printed_text(cell_output) {
+            if options.results_hide() {
+                continue;
+            }
+            if options.results_asis() && !markdown_passthrough(cell_output) {
+                let text = match cell_output {
+                    CellOutput::Stream { text, .. } => text.clone(),
+                    CellOutput::ExecuteResult { data, .. }
+                    | CellOutput::DisplayData { data, .. } => data
+                        .get("text/plain")
+                        .map(extract_text_content)
+                        .unwrap_or_default(),
+                    CellOutput::Error { .. } => String::new(),
+                };
+                output.push_str(&format!("\n{}\n", text.trim_end()));
+                continue;
+            }
+        }
         match cell_output {
             CellOutput::Stream { name, text } => {
                 output.push_str(&fenced_output_div(
                     &format!(".cell-output .cell-output-{}", name),
-                    text.trim_end(),
+                    &options.comment_out(options.trim_output(text)),
+                    options.fence_attrs(if name != "stderr" {
+                        FenceKind::Output
+                    } else {
+                        match options.output_kind(first + n) {
+                            Some(OutputKind::Message) => FenceKind::Message,
+                            Some(OutputKind::Warning) => FenceKind::Warning,
+                            None => FenceKind::Stderr,
+                        }
+                    }),
+                    options,
                 ));
             }
             CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => {
@@ -197,7 +794,30 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
                 let image_entry = IMAGE_MIMES
                     .iter()
                     .find_map(|m| data.get(*m).map(|v| (*m, v)));
-                if let Some(html) = data.get("text/html") {
+                if let Some(asis) = knit_asis_text(data, cell_output) {
+                    // Opt-in (epic decision 22): the text is written as is, in a display
+                    // div (bare under `results = "asis"`, like Q1\'s `wrap_asis_output`).
+                    let s = asis.trim_matches('\n');
+                    if options.results_asis() {
+                        output.push_str(&format!("\n{s}\n"));
+                    } else {
+                        // An htmlwidget is wrapped by Q1\'s `add_html_caption`: the figure
+                        // label is the div\'s id and the caption follows the content.
+                        let (id, caption) = if widget_output(cell_output) {
+                            (options.figure_id(), options.figure_cap(0))
+                        } else {
+                            (String::new(), String::new())
+                        };
+                        let caption = if caption.is_empty() {
+                            String::new()
+                        } else {
+                            format!("{caption}\n")
+                        };
+                        output.push_str(&format!(
+                            "\n::: {{{id}.cell-output-display}}\n\n{s}\n{caption}\n:::\n"
+                        ));
+                    }
+                } else if let Some(html) = data.get("text/html") {
                     let s = extract_text_content(html);
                     let ticks = ticks_for_code(&s);
                     output.push_str(&format!(
@@ -209,6 +829,18 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
                     // extra class `isMarkdown` adds.
                     output.push_str(&format!(
                         "\n::: {{.cell-output .cell-output-display .cell-output-markdown}}\n\n{markdown}\n\n:::\n"
+                    ));
+                } else if let Some((path, width)) = included_graphic(match cell_output {
+                    CellOutput::DisplayData { metadata, .. } => metadata,
+                    _ => &serde_json::Value::Null,
+                }) {
+                    // knitr `include_graphics`: the user\'s own file, referenced where it
+                    // is, with the width knitr computed.
+                    let alt = options.figure_cap(*figures);
+                    *figures += 1;
+                    output.push_str(&format!(
+                        "\n::: {{.cell-output-display}}\n\n![{alt}]({path}){}\n\n:::\n",
+                        options.image_attrs_with(width),
                     ));
                 } else if let Some(rel_path) =
                     image_entry.and_then(|(mime, value)| fig.write_image(mime, value))
@@ -222,14 +854,19 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
                     // knitr. The only generic `.cell-output` consumer,
                     // the print stylesheet, also matches `img`
                     // directly.)
+                    let alt = options.figure_cap(*figures);
+                    *figures += 1;
                     output.push_str(&format!(
-                        "\n::: {{.cell-output-display}}\n\n![]({rel_path})\n\n:::\n",
+                        "\n::: {{.cell-output-display}}\n\n![{alt}]({rel_path}){}\n\n:::\n",
+                        options.image_attrs(),
                     ));
                 } else if let Some(text) = data.get("text/plain") {
                     let s = extract_text_content(text);
                     output.push_str(&fenced_output_div(
                         ".cell-output .cell-output-display",
-                        s.trim_end(),
+                        &options.comment_out(options.trim_output(&s)),
+                        options.fence_attrs(FenceKind::Output),
+                        options,
                     ));
                 } else if image_entry.is_some() {
                     // An image payload we failed to write (bad base64,
@@ -250,7 +887,9 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
             } => {
                 output.push_str(&fenced_output_div(
                     ".cell-output .cell-output-error",
-                    format_error_text(ename, evalue, traceback).trim_end(),
+                    &options.comment_out(format_error_text(ename, evalue, traceback).trim_end()),
+                    options.fence_attrs(FenceKind::Error),
+                    options,
                 ));
             }
         }
@@ -267,7 +906,9 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
         if result.outputs.is_empty() {
             output.push_str(&fenced_output_div(
                 ".cell-output .cell-output-error",
-                format_error_text(ename, evalue, traceback).trim_end(),
+                &options.comment_out(format_error_text(ename, evalue, traceback).trim_end()),
+                options.fence_attrs(FenceKind::Error),
+                options,
             ));
         }
     }
@@ -277,7 +918,14 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
 
 /// `"<ename>: <evalue>"` plus the ANSI-stripped traceback lines.
 fn format_error_text(ename: &str, evalue: &str, traceback: &[String]) -> String {
-    let mut error_text = format!("{}: {}\n", ename, evalue);
+    // An empty `ename` (Ark, knitr) has no `name:` header; the message stands alone, and an
+    // empty message leaves the traceback.
+    let evalue = strip_ansi_codes(evalue);
+    let mut error_text = match (ename.is_empty(), evalue.is_empty()) {
+        (true, true) => String::new(),
+        (true, false) => format!("{evalue}\n"),
+        (false, _) => format!("{ename}: {evalue}\n"),
+    };
     for line in traceback {
         error_text.push_str(&strip_ansi_codes(line));
         error_text.push('\n');
@@ -806,6 +1454,37 @@ mod tests {
         );
     }
 
+    fn knitr_markdown(meta: serde_json::Value) -> CellResult {
+        ok_result(vec![CellOutput::DisplayData {
+            data: [("text/markdown".to_string(), serde_json::json!("| a |\n"))]
+                .into_iter()
+                .collect(),
+            metadata: meta,
+        }])
+    }
+
+    #[test]
+    fn passthrough_markdown_is_a_display_div_not_cell_output_markdown() {
+        let result = knitr_markdown(serde_json::json!({"quarto_markdown_passthrough": true}));
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert_eq!(
+            md, "\n::: {.cell-output-display}\n\n| a |\n\n:::\n",
+            "got:\n{md}"
+        );
+    }
+
+    #[test]
+    fn only_the_flat_true_marker_opts_in() {
+        for meta in [
+            serde_json::json!({}),
+            serde_json::json!({"quarto_markdown_passthrough": false}),
+            serde_json::json!({"quarto_knitr": {"asis": true}}),
+        ] {
+            let md = format_outputs(&knitr_markdown(meta.clone()), &mut test_fig(), true);
+            assert!(md.contains(".cell-output-markdown"), "{meta}: got:\n{md}");
+        }
+    }
+
     #[test]
     fn test_markdown_execute_result_is_also_markdown() {
         let result = ok_result(vec![CellOutput::ExecuteResult {
@@ -945,5 +1624,1122 @@ mod tests {
             ),
             "::: {.cell}\n\n```{.python .cell-code}\nx = 1\n```\n\n:::\n"
         );
+    }
+}
+
+#[cfg(test)]
+mod interleave_tests {
+    //! KNR-2 Phase 2B: source and outputs alternate by anchors (epic decision 21).
+    use super::*;
+    use std::path::Path;
+
+    use crate::presenter::figures::FsFigureSink;
+
+    fn stream(text: &str) -> CellOutput {
+        CellOutput::Stream {
+            name: "stdout".to_string(),
+            text: text.to_string(),
+        }
+    }
+
+    fn png() -> CellOutput {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!("AAAA"));
+        CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }
+    }
+
+    fn result(outputs: Vec<CellOutput>) -> CellResult {
+        CellResult {
+            status: ExecuteStatus::Ok,
+            outputs,
+            execution_count: None,
+        }
+    }
+
+    fn fig() -> FsFigureSink {
+        FsFigureSink::new(Path::new("/nonexistent/doc.qmd"))
+    }
+
+    fn interleaved(code: &str, outputs: Vec<CellOutput>, anchors: Option<&[usize]>) -> String {
+        render_cell_interleaved(
+            "r",
+            code,
+            &result(outputs),
+            anchors,
+            &[],
+            &CellOptions::default(),
+            &mut fig(),
+            CellVisibility::VISIBLE,
+        )
+    }
+
+    fn plain(code: &str, outputs: Vec<CellOutput>) -> String {
+        render_cell(
+            "r",
+            code,
+            &result(outputs),
+            &mut fig(),
+            CellVisibility::VISIBLE,
+        )
+    }
+
+    fn pos(md: &str, needle: &str) -> usize {
+        md.find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} missing from:\n{md}"))
+    }
+
+    #[test]
+    fn alternates_source_and_output() {
+        let md = interleaved("a\nb\n", vec![stream("1"), stream("2")], Some(&[1, 2]));
+        let (a, o1, b, o2) = (
+            pos(&md, "\na\n"),
+            pos(&md, "\n1\n"),
+            pos(&md, "\nb\n"),
+            pos(&md, "\n2\n"),
+        );
+        assert!(a < o1 && o1 < b && b < o2, "order a,1,b,2; got:\n{md}");
+        assert_eq!(md.matches(".cell-code").count(), 2, "two fences:\n{md}");
+        assert_eq!(md.matches("::: {.cell}").count(), 1, "one wrapper:\n{md}");
+    }
+
+    #[test]
+    fn equal_anchors_form_one_group() {
+        let md = interleaved("a\nb\n", vec![stream("1"), stream("2")], Some(&[1, 1]));
+        let (a, o1, o2, b) = (
+            pos(&md, "\na\n"),
+            pos(&md, "\n1\n"),
+            pos(&md, "\n2\n"),
+            pos(&md, "\nb\n"),
+        );
+        assert!(a < o1 && o1 < o2 && o2 < b, "order a,1,2,b; got:\n{md}");
+    }
+
+    #[test]
+    fn source_after_last_output_gets_its_own_fence() {
+        let md = interleaved("a\nb\nc\n", vec![stream("1")], Some(&[1]));
+        assert_eq!(md.matches(".cell-code").count(), 2, "fences a | b,c:\n{md}");
+        assert!(
+            pos(&md, "\n1\n") < pos(&md, "\nb\nc\n"),
+            "tail after output:\n{md}"
+        );
+    }
+
+    #[test]
+    fn no_anchors_is_render_cell() {
+        let out = vec![stream("1"), stream("2")];
+        assert_eq!(
+            interleaved("a\nb\n", out.clone(), None),
+            plain("a\nb\n", out)
+        );
+    }
+
+    #[test]
+    fn all_outputs_after_all_source_is_render_cell() {
+        let out = vec![stream("1"), stream("2")];
+        assert_eq!(
+            interleaved("a\nb\n", out.clone(), Some(&[2, 2])),
+            plain("a\nb\n", out)
+        );
+    }
+
+    #[test]
+    fn unusable_anchors_fall_back_to_render_cell() {
+        let out = vec![stream("1"), stream("2")];
+        for bad in [&[1usize][..], &[2, 1][..], &[1, 9][..]] {
+            assert_eq!(
+                interleaved("a\nb\n", out.clone(), Some(bad)),
+                plain("a\nb\n", out.clone()),
+                "anchors {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn hidden_echo_or_output_does_not_interleave() {
+        let out = vec![stream("1"), stream("2")];
+        for vis in [
+            CellVisibility {
+                echo: false,
+                ..CellVisibility::VISIBLE
+            },
+            CellVisibility {
+                output: false,
+                ..CellVisibility::VISIBLE
+            },
+        ] {
+            let r = result(out.clone());
+            assert_eq!(
+                render_cell_interleaved(
+                    "r",
+                    "a\nb\n",
+                    &r,
+                    Some(&[1, 2]),
+                    &[],
+                    &CellOptions::default(),
+                    &mut fig(),
+                    vis,
+                ),
+                render_cell("r", "a\nb\n", &r, &mut fig(), vis)
+            );
+        }
+    }
+
+    // --- present-time holds (epic decision 21): the stored anchors stay in capture order.
+
+    #[test]
+    fn fig_show_hold_moves_plots_to_the_end() {
+        let (outs, anchors) = apply_holds(
+            vec![png(), stream("1"), png()],
+            &[1, 1, 2],
+            2,
+            HoldMode {
+                plots: true,
+                text: false,
+            },
+        );
+        assert!(matches!(outs[0], CellOutput::Stream { .. }));
+        assert!(matches!(outs[1], CellOutput::DisplayData { .. }));
+        assert!(matches!(outs[2], CellOutput::DisplayData { .. }));
+        assert_eq!(anchors, vec![1, 2, 2]);
+    }
+
+    #[test]
+    fn results_hold_merges_printed_text_at_the_end() {
+        let (outs, anchors) = apply_holds(
+            vec![stream("1\n"), png(), stream("2\n")],
+            &[1, 1, 2],
+            2,
+            HoldMode {
+                plots: false,
+                text: true,
+            },
+        );
+        assert_eq!(outs.len(), 2);
+        assert!(matches!(outs[0], CellOutput::DisplayData { .. }));
+        match &outs[1] {
+            CellOutput::Stream { text, .. } => assert_eq!(text, "1\n2\n"),
+            other => panic!("expected merged stream, got {other:?}"),
+        }
+        assert_eq!(anchors, vec![1, 2]);
+    }
+
+    #[test]
+    fn no_hold_changes_nothing() {
+        let (outs, anchors) =
+            apply_holds(vec![stream("1"), png()], &[1, 2], 2, HoldMode::default());
+        assert_eq!((outs.len(), anchors), (2, vec![1, 2]));
+    }
+}
+
+#[cfg(test)]
+mod option_tests {
+    use super::*;
+    use std::path::Path;
+
+    use crate::presenter::figures::FsFigureSink;
+
+    fn result(outputs: Vec<CellOutput>) -> CellResult {
+        CellResult {
+            status: ExecuteStatus::Ok,
+            outputs,
+            execution_count: Some(1),
+        }
+    }
+
+    fn stream(text: &str) -> CellOutput {
+        CellOutput::Stream {
+            name: "stdout".into(),
+            text: text.into(),
+        }
+    }
+
+    fn err(text: &str) -> CellOutput {
+        CellOutput::Stream {
+            name: "stderr".into(),
+            text: text.into(),
+        }
+    }
+
+    // === KNR-2 Phase 2C: the cell-option layer ===
+
+    fn opts(json: serde_json::Value) -> CellOptions {
+        CellOptions::from_knitr(&json)
+    }
+
+    fn render_opts(o: &CellOptions, outputs: Vec<CellOutput>) -> String {
+        let mut fig = FsFigureSink::new(Path::new("/nonexistent/doc.qmd"));
+        render_cell_with(
+            "r",
+            "x\n",
+            &result(outputs),
+            o,
+            &mut fig,
+            CellVisibility::VISIBLE,
+        )
+    }
+
+    #[test]
+    fn include_graphics_keeps_the_path_and_writes_the_width() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!("AAAA"));
+        let md = render_opts(
+            &CellOptions::default(),
+            vec![CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({"quarto_knitr": {
+                    "file": "made.png", "include_graphics": true, "width": 200.0}}),
+            }],
+        );
+        assert!(
+            md.contains("::: {.cell-output-display}\n\n![](made.png){width=200}\n\n:::"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn knitr_output_keeps_trailing_spaces_and_jupyter_does_not() {
+        let outs = vec![stream("a   \n")];
+        let knitr = render_opts(&opts(serde_json::json!({})), outs.clone());
+        assert!(knitr.contains("```\na   \n```"), "{knitr}");
+        let jupyter = render_opts(&CellOptions::default(), outs);
+        assert!(jupyter.contains("```\na\n```"), "{jupyter}");
+    }
+
+    #[test]
+    fn a_table_label_becomes_the_cell_id() {
+        let md = render_opts(&opts(serde_json::json!({"label": "tbl-demo"})), vec![]);
+        assert!(md.starts_with("::: {#tbl-demo .cell}\n"), "{md}");
+        // only tbl- labels are let through (hooks.R `is_table_label`)
+        let md = render_opts(&opts(serde_json::json!({"label": "setup"})), vec![]);
+        assert!(md.starts_with("::: {.cell}\n"), "{md}");
+    }
+
+    #[test]
+    fn options_outside_the_known_list_become_cell_attributes() {
+        let known: Vec<String> = ["echo", "label"].iter().map(|s| s.to_string()).collect();
+        let o = CellOptions::from_knitr_known(
+            &serde_json::json!({
+                "echo": true, "label": "c1", "foo.unknown": "1", "tbl-cap": "A demo",
+                "list": [1, 2], "it's": "a\'b", ".hidden": "x", "nothing": null
+            }),
+            Some(&known),
+        );
+        let md = render_opts(&o, vec![]);
+        assert!(
+            md.starts_with(
+                "::: {.cell foo.unknown='1' it's='a\\'b' list='[1,2]' tbl-cap='A demo'}\n"
+            ),
+            "{md}"
+        );
+        // (attributes come in key order: a record\'s JSON object does not keep R\'s order)
+        // an absent list filters nothing
+        let none = CellOptions::from_knitr_known(&serde_json::json!({"foo.unknown": "1"}), None);
+        assert!(render_opts(&none, vec![]).starts_with("::: {.cell}\n"));
+    }
+
+    #[test]
+    fn a_widget_raw_fence_is_three_ticks() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("text/html".to_string(), serde_json::json!("<div>w</div>"));
+        let out = CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({
+                "quarto_markdown_passthrough": true, "quarto_knitr": {"widget": true}}),
+        };
+        let md = render_opts(&opts(serde_json::json!({})), vec![out]);
+        assert!(md.contains("\n```{=html}\n<div>w</div>\n```\n"), "{md}");
+    }
+
+    #[test]
+    fn a_widget_takes_its_figure_label_and_caption() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("text/html".to_string(), serde_json::json!("<div>w</div>"));
+        let out = CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({
+                "quarto_markdown_passthrough": true, "quarto_knitr": {"widget": true}}),
+        };
+        let md = render_opts(
+            &opts(serde_json::json!({"label": "fig-w", "fig.cap": "A caption"})),
+            vec![out],
+        );
+        assert!(
+            md.contains("\n::: {#fig-w .cell-output-display}\n\n```{=html}\n<div>w</div>\n```\nA caption\n\n:::\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn results_hide_hides_a_widget() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("text/html".to_string(), serde_json::json!("<div>w</div>"));
+        let out = CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({
+                "quarto_markdown_passthrough": true, "quarto_knitr": {"widget": true}}),
+        };
+        let md = render_opts(&opts(serde_json::json!({"results": "hide"})), vec![out]);
+        assert!(!md.contains("<div>w</div>"), "{md}");
+    }
+
+    #[test]
+    fn hidden_plots_still_split_the_source() {
+        let o = opts(serde_json::json!({"fig.show": "hide"}));
+        let md = render_cell_interleaved(
+            "r",
+            "plot(1)\nplot(2)\n",
+            &result(vec![plot_output(), plot_output()]),
+            Some(&[1, 2]),
+            &[],
+            &o,
+            &mut FsFigureSink::new(Path::new("/nonexistent/doc.qmd")),
+            CellVisibility::VISIBLE,
+        );
+        assert_eq!(md.matches("```{.r .cell-code}").count(), 2, "{md}");
+        assert!(!md.contains("!["), "{md}");
+    }
+
+    fn plot_output() -> CellOutput {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!("AAAA"));
+        CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn fig_show_hide_drops_plots_and_keeps_text() {
+        let md = render_opts(
+            &opts(serde_json::json!({"fig.show": "hide"})),
+            vec![stream("1\n"), plot_output()],
+        );
+        assert!(!md.contains("!["), "{md}");
+        assert!(!md.contains("Image output"), "{md}");
+        assert!(md.contains('1'), "{md}");
+    }
+
+    #[test]
+    fn default_options_render_byte_identically() {
+        let outs = vec![stream("1\n"), err("w\n")];
+        let mut fig = FsFigureSink::new(Path::new("/nonexistent/doc.qmd"));
+        let plain = render_cell(
+            "r",
+            "x\n",
+            &result(outs.clone()),
+            &mut fig,
+            CellVisibility::VISIBLE,
+        );
+        assert_eq!(render_opts(&CellOptions::default(), outs), plain);
+    }
+
+    #[test]
+    fn source_options_reach_the_source_fence() {
+        let md = render_opts(
+            &opts(serde_json::json!({
+                "class.source": "k", "attr.source": "a=1", "code-fold": true, "lst-label": "lst-a"
+            })),
+            vec![],
+        );
+        assert!(
+            md.contains("```{#lst-a .r .k .cell-code a=1 code-fold=\"true\"}\nx\n```"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn cell_options_reach_the_cell_div() {
+        let md = render_opts(
+            &opts(serde_json::json!({"column": "margin", "keep-hidden": true})),
+            vec![],
+        );
+        assert!(
+            md.starts_with("::: {.cell .column-margin keep-hidden='true'}\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn output_fences_take_their_attributes() {
+        let md = render_opts(
+            &opts(serde_json::json!({
+                "class.output": "o", "class.error": "e", "class.warning": "w"
+            })),
+            vec![
+                stream("1\n"),
+                err("w\n"),
+                CellOutput::Error {
+                    ename: "E".into(),
+                    evalue: "v".into(),
+                    traceback: vec![],
+                },
+            ],
+        );
+        assert!(md.contains("```{.o}\n1\n```"), "{md}");
+        assert!(md.contains("```{.w}\nw\n```"), "{md}");
+        assert!(md.contains("```{.e}\nE: v\n```"), "{md}");
+    }
+
+    #[test]
+    fn interleaved_cells_use_the_options_for_every_fence() {
+        let mut fig = FsFigureSink::new(Path::new("/nonexistent/doc.qmd"));
+        let o = opts(serde_json::json!({"class.source": "k", "class.output": "o"}));
+        let md = render_cell_interleaved(
+            "r",
+            "a\nb\n",
+            &result(vec![stream("1\n")]),
+            Some(&[1]),
+            &[],
+            &o,
+            &mut fig,
+            CellVisibility::VISIBLE,
+        );
+        assert_eq!(md.matches(".r .k .cell-code").count(), 2, "{md}");
+        assert!(md.contains("```{.o}\n1\n```"), "{md}");
+    }
+    // === KNR-2 Phase 2C slice 3: figure captions and alt text ===
+
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    fn plot() -> CellOutput {
+        let mut data = std::collections::HashMap::new();
+        data.insert("image/png".to_string(), serde_json::json!(PNG));
+        CellOutput::DisplayData {
+            data,
+            metadata: Default::default(),
+        }
+    }
+
+    /// The `![alt](path){attrs}` lines of a rendered cell, with the path replaced by `P`.
+    fn images(o: &CellOptions, outputs: Vec<CellOutput>) -> Vec<String> {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        let md = render_cell_with(
+            "r",
+            "x\n",
+            &result(outputs),
+            o,
+            &mut fig,
+            CellVisibility::VISIBLE,
+        );
+        md.lines()
+            .filter(|l| l.starts_with("!["))
+            .map(|l| {
+                let (head, tail) = l.split_once("](").unwrap();
+                let (_, rest) = tail.split_once(')').unwrap();
+                format!("{head}](P){rest}")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn fig_cap_is_the_image_alt_text() {
+        let o = opts(serde_json::json!({"fig.cap": "A *marked up* caption"}));
+        assert_eq!(images(&o, vec![plot()]), ["![A *marked up* caption](P)"]);
+    }
+
+    #[test]
+    fn each_figure_takes_its_own_subcaption() {
+        let o = opts(serde_json::json!({"fig.subcap": ["first", "second"]}));
+        assert_eq!(
+            images(&o, vec![plot(), plot()]),
+            ["![first](P)", "![second](P)"]
+        );
+    }
+
+    #[test]
+    fn subcaptions_win_over_the_figure_caption_and_recycle() {
+        let o = opts(serde_json::json!({"fig.cap": "all", "fig.subcap": ["a", "b"]}));
+        assert_eq!(
+            images(&o, vec![plot(), plot(), plot()]),
+            ["![a](P)", "![b](P)", "![a](P)"]
+        );
+        let o = opts(serde_json::json!({"fig.cap": "all"}));
+        assert_eq!(images(&o, vec![plot(), plot()]), ["![all](P)", "![all](P)"]);
+    }
+
+    #[test]
+    fn fig_subcap_true_means_empty_subcaptions() {
+        let o = opts(serde_json::json!({"fig.cap": "all", "fig.subcap": true}));
+        assert_eq!(images(&o, vec![plot()]), ["![](P)"]);
+    }
+
+    #[test]
+    fn fig_alt_is_an_image_attribute_with_escaped_quotes() {
+        let o = opts(serde_json::json!({"fig.alt": "Alt text"}));
+        assert_eq!(images(&o, vec![plot()]), ["![](P){fig-alt='Alt text'}"]);
+        let o = opts(serde_json::json!({"fig.alt": "it's"}));
+        assert_eq!(images(&o, vec![plot()]), ["![](P){fig-alt='it\\'s'}"]);
+    }
+
+    #[test]
+    fn captions_count_figures_across_interleaved_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        let o = opts(serde_json::json!({"fig.subcap": ["first", "second"]}));
+        let md = render_cell_interleaved(
+            "r",
+            "a\nb\n",
+            &result(vec![plot(), plot()]),
+            Some(&[1, 2]),
+            &[],
+            &o,
+            &mut fig,
+            CellVisibility::VISIBLE,
+        );
+        assert!(md.contains("![first]("), "{md}");
+        assert!(md.contains("![second]("), "{md}");
+    }
+
+    #[test]
+    fn jupyter_figure_options_leave_images_alone() {
+        // Jupyter spells these `fig-cap` / `fig-alt` and Quarto handles them elsewhere.
+        let o = CellOptions::from_knitr(&serde_json::json!({"fig-cap": "c", "fig-alt": "a"}));
+        assert_eq!(images(&o, vec![plot()]), ["![](P)"]);
+    }
+
+    // === KNR-2 Phase 2D: knitr text hooks (prompt, comment) ===
+
+    /// Render `code` (anchors `None` unless given) with `starts` and `o`, no echo hidden.
+    fn text_cell(
+        o: &CellOptions,
+        code: &str,
+        starts: &[usize],
+        anchors: Option<&[usize]>,
+        outputs: Vec<CellOutput>,
+    ) -> String {
+        let mut fig = FsFigureSink::new(Path::new("/nonexistent/doc.qmd"));
+        render_cell_interleaved(
+            "r",
+            code,
+            &result(outputs),
+            anchors,
+            starts,
+            o,
+            &mut fig,
+            CellVisibility::VISIBLE,
+        )
+    }
+
+    /// The lines between the first fence pair of `md` that holds code (`.cell-code`).
+    fn code_lines(md: &str) -> Vec<&str> {
+        let mut lines = md.lines();
+        lines.find(|l| l.contains(".cell-code"));
+        lines.take_while(|l| !l.starts_with("```")).collect()
+    }
+
+    #[test]
+    fn prompt_marks_each_expression_start() {
+        let o = opts(serde_json::json!({"prompt": true}));
+        let md = text_cell(&o, "x <- 1:3\nf(\n  1)\ny\n", &[0, 1, 3], None, vec![]);
+        assert_eq!(
+            code_lines(&md),
+            ["> x <- 1:3", "> f(", "+   1)", "> y"],
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn prompt_without_starts_treats_the_code_as_one_expression() {
+        let o = opts(serde_json::json!({"prompt": true}));
+        let md = text_cell(&o, "a\nb\n", &[], None, vec![]);
+        assert_eq!(code_lines(&md), ["> a", "+ b"], "{md}");
+    }
+
+    #[test]
+    fn prompt_follows_the_interleaved_fences() {
+        let o = opts(serde_json::json!({"prompt": true}));
+        let md = text_cell(&o, "a\nb\n", &[0, 1], Some(&[1]), vec![stream("1\n")]);
+        assert!(md.contains("\n> a\n```"), "{md}");
+        assert!(md.contains("\n> b\n```"), "{md}");
+        assert!(!md.contains("+ b"), "{md}");
+    }
+
+    #[test]
+    fn prompt_false_or_unset_changes_nothing() {
+        let plain = text_cell(&CellOptions::default(), "a\nb\n", &[0, 1], None, vec![]);
+        let off = opts(serde_json::json!({"prompt": false}));
+        assert_eq!(text_cell(&off, "a\nb\n", &[0, 1], None, vec![]), plain);
+        assert!(!plain.contains("> a"), "{plain}");
+    }
+
+    #[test]
+    fn comment_prefixes_every_output_line() {
+        let o = opts(serde_json::json!({"comment": "#>"}));
+        let md = render_opts(&o, vec![stream("[1] 1\n\nz\n"), err("w\n")]);
+        assert!(md.contains("```\n#> [1] 1\n#> \n#> z\n```"), "{md}");
+        assert!(md.contains("```\n#> w\n```"), "{md}");
+    }
+
+    #[test]
+    fn comment_prefixes_error_text_and_plain_results() {
+        let o = opts(serde_json::json!({"comment": "##"}));
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/plain".to_string(), serde_json::json!("[1] 2"));
+        let shown = CellOutput::ExecuteResult {
+            data,
+            metadata: serde_json::json!({}),
+            execution_count: 1,
+        };
+        let failed = CellOutput::Error {
+            ename: String::new(),
+            evalue: String::new(),
+            traceback: vec!["Error: boom".into()],
+        };
+        let md = render_opts(&o, vec![shown, failed]);
+        assert!(md.contains("```\n## [1] 2\n```"), "{md}");
+        assert!(md.contains("## Error: boom"), "{md}");
+    }
+
+    #[test]
+    fn empty_comment_adds_no_prefix() {
+        let outs = vec![stream("1\n")];
+        let plain = render_opts(&CellOptions::default(), outs.clone());
+        let o = opts(serde_json::json!({"comment": ""}));
+        assert_eq!(render_opts(&o, outs), plain);
+    }
+
+    // ── collapse (KNR-2 2D): outputs merge into the source fence ──
+
+    #[test]
+    fn collapse_merges_source_and_text_outputs_into_one_fence() {
+        let o = opts(serde_json::json!({"collapse": true}));
+        let md = text_cell(
+            &o,
+            "x\nmessage(1)\n",
+            &[0, 1],
+            Some(&[1, 2]),
+            vec![stream("[1] 1\n"), err("1\n")],
+        );
+        assert!(
+            md.contains("```{.r .cell-code}\nx\n## [1] 1\nmessage(1)\n## 1\n```\n"),
+            "{md}"
+        );
+        assert!(!md.contains("cell-output"), "no output divs; {md}");
+    }
+
+    #[test]
+    fn collapse_defaults_comment_to_hashes_only_when_unset() {
+        let o = opts(serde_json::json!({"collapse": true}));
+        assert_eq!(o.comment_out("a"), "## a");
+        let o = opts(serde_json::json!({"collapse": true, "comment": "#>"}));
+        assert_eq!(o.comment_out("a"), "#> a");
+        let o = opts(serde_json::json!({"collapse": false}));
+        assert_eq!(o.comment_out("a"), "a");
+    }
+
+    #[test]
+    fn collapse_false_keeps_separate_fences() {
+        let o = opts(serde_json::json!({"collapse": false}));
+        let md = text_cell(&o, "x\n", &[0], Some(&[1]), vec![stream("1\n")]);
+        assert!(md.contains("cell-output-stdout"), "{md}");
+    }
+
+    // ── results = hide | asis (KNR-2 2D) ──
+
+    fn plain_result(text: &str) -> CellOutput {
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/plain".to_string(), serde_json::json!(text));
+        CellOutput::ExecuteResult {
+            data,
+            metadata: serde_json::json!({}),
+            execution_count: 1,
+        }
+    }
+
+    #[test]
+    fn results_hide_drops_printed_text_but_keeps_messages() {
+        let o = opts(serde_json::json!({"results": "hide"}));
+        let md = text_cell(
+            &o,
+            "x\nmessage(1)\n",
+            &[0, 1],
+            Some(&[1, 2]),
+            vec![stream("[1] 1\n"), plain_result("[1] 2"), err("1\n")],
+        );
+        assert!(!md.contains("[1] 1") && !md.contains("[1] 2"), "{md}");
+        assert!(md.contains("cell-output-stderr"), "{md}");
+    }
+
+    #[test]
+    fn results_asis_writes_text_bare_and_drops_the_wrapper() {
+        let o = opts(serde_json::json!({"results": "asis"}));
+        let md = text_cell(
+            &o,
+            "x\ncat(1)\n",
+            &[0, 1],
+            Some(&[1, 2]),
+            vec![stream("[1] 1\n"), stream("*em*\n")],
+        );
+        assert_eq!(
+            md,
+            "\n```{.r .cell-code}\nx\n```\n\n[1] 1\n\n```{.r .cell-code}\ncat(1)\n```\n\n*em*\n\n"
+        );
+    }
+
+    #[test]
+    fn results_asis_keeps_the_wrapper_when_the_cell_has_attributes() {
+        let o = opts(serde_json::json!({"results": "asis", "panel": "tabset"}));
+        let md = text_cell(&o, "x\n", &[0], Some(&[1]), vec![stream("*em*\n")]);
+        assert!(md.starts_with("::: {.cell .panel-tabset}"), "{md}");
+        assert!(md.contains("\n*em*\n"), "{md}");
+        assert!(!md.contains("cell-output-stdout"), "{md}");
+    }
+
+    #[test]
+    fn source_runs_with_no_output_between_them_share_one_fence() {
+        let o = opts(serde_json::json!({"results": "hide"}));
+        let md = text_cell(
+            &o,
+            "x\ny\nz\n",
+            &[0, 1, 2],
+            Some(&[1, 2, 3]),
+            vec![stream("1\n"), stream("2\n"), stream("3\n")],
+        );
+        assert_eq!(md.matches(".cell-code").count(), 1, "{md}");
+        assert!(md.contains("x\ny\nz\n```"), "{md}");
+    }
+
+    fn asis_output(mime: &str, text: &str) -> CellOutput {
+        let mut data = std::collections::HashMap::new();
+        data.insert(mime.to_string(), serde_json::json!(text));
+        CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({"quarto_markdown_passthrough": true}),
+        }
+    }
+
+    #[test]
+    fn knit_asis_html_is_a_display_div_with_a_five_tick_raw_fence() {
+        let o = opts(serde_json::json!({}));
+        let html = "<div class='raw'>x</div>";
+        let md = text_cell(
+            &o,
+            "f()\n",
+            &[0],
+            Some(&[1]),
+            vec![asis_output("text/html", html)],
+        );
+        assert!(
+            md.contains(&format!(
+                "::: {{.cell-output-display}}\n\n`````{{=html}}\n{html}\n`````\n\n:::"
+            )),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn knit_asis_html_under_results_asis_is_the_bare_fence() {
+        let o = opts(serde_json::json!({"results": "asis"}));
+        let html = "<div class='raw'>x</div>";
+        let md = text_cell(
+            &o,
+            "f()\n",
+            &[0],
+            Some(&[1]),
+            vec![asis_output("text/html", html)],
+        );
+        assert!(
+            md.contains(&format!("\n`````{{=html}}\n{html}\n`````\n")),
+            "{md}"
+        );
+        assert!(!md.contains("cell-output-display"), "{md}");
+    }
+
+    #[test]
+    fn knit_asis_markdown_under_results_asis_is_bare() {
+        let o = opts(serde_json::json!({"results": "asis"}));
+        let md = text_cell(
+            &o,
+            "f()\n",
+            &[0],
+            Some(&[1]),
+            vec![asis_output("text/markdown", "**b**")],
+        );
+        assert!(md.contains("\n**b**\n"), "{md}");
+        assert!(!md.contains("cell-output-display"), "{md}");
+    }
+
+    #[test]
+    fn results_hide_drops_knit_asis_text_and_widgets() {
+        let o = opts(serde_json::json!({"results": "hide"}));
+        let widget = {
+            let mut data = std::collections::HashMap::new();
+            data.insert(
+                "text/html".to_string(),
+                serde_json::json!("<div id=\"w\"></div>"),
+            );
+            CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({
+                    "quarto_markdown_passthrough": true, "quarto_knitr": {"widget": true}}),
+            }
+        };
+        let md = text_cell(
+            &o,
+            "f()\ng()\n",
+            &[0, 1],
+            Some(&[1, 2]),
+            vec![asis_output("text/markdown", "dropped"), widget],
+        );
+        assert!(!md.contains("dropped"), "{md}");
+        // knitr drops every character piece under `hide`; Q1 hides the widget too
+        // (corpus s2/09_widget_filters)
+        assert!(!md.contains("id=\"w\""), "{md}");
+    }
+
+    // ── fenced.echo (KNR-2 2D): the chunk as the user wrote it ──
+
+    #[test]
+    fn fenced_echo_shows_the_original_chunk_in_a_longer_fence() {
+        let o = opts(serde_json::json!({"fenced.echo": true}))
+            .with_original_chunk("r c1", "#| fenced.echo: true\n#| echo: fenced");
+        let md = text_cell(&o, "x <- 1\nx\n", &[0, 1], None, vec![]);
+        assert!(
+            md.contains(
+                "````{.cell-code}\n```{{r c1}}\n#| fenced.echo: true\nx <- 1\nx\n```\n````"
+            ),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn fenced_echo_without_option_lines_trims_the_code() {
+        let o = opts(serde_json::json!({"fenced.echo": true})).with_original_chunk("r", "");
+        let md = text_cell(&o, "\n\nx\n", &[2], None, vec![]);
+        assert!(
+            md.contains("````{.cell-code}\n```{{r}}\nx\n```\n````"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn fenced_echo_lengthens_the_fences_around_backticks_in_the_code() {
+        let o = opts(serde_json::json!({"fenced.echo": true})).with_original_chunk("md", "");
+        let md = text_cell(&o, "cat(\n```\n)\n", &[0], None, vec![]);
+        assert!(md.contains("`````{.cell-code}\n````{{md}}"), "{md}");
+    }
+
+    #[test]
+    fn without_the_original_chunk_fenced_echo_is_an_ordinary_fence() {
+        let o = opts(serde_json::json!({"fenced.echo": true}));
+        let md = text_cell(&o, "x\n", &[0], None, vec![]);
+        assert!(md.contains("```{.r .cell-code}"), "{md}");
+    }
+
+    fn pos(md: &str, needle: &str) -> usize {
+        md.find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} missing from:\n{md}"))
+    }
+
+    fn fig() -> FsFigureSink {
+        FsFigureSink::new(Path::new("/nonexistent/doc.qmd"))
+    }
+
+    /// Numeric `echo` (knitr `filter_evaluate`): the selected source expressions stay, the
+    /// outputs stay, and an output keeps its place relative to the surviving source.
+    fn numeric_echo(
+        echo: serde_json::Value,
+        outputs: Vec<CellOutput>,
+        anchors: &[usize],
+    ) -> String {
+        render_cell_interleaved(
+            "r",
+            "a <- 1\nb <- c(1,\n  2)\nb\n",
+            &result(outputs),
+            Some(anchors),
+            &[0, 1, 3],
+            &CellOptions::from_knitr(&serde_json::json!({"echo": echo})),
+            &mut fig(),
+            CellVisibility::VISIBLE,
+        )
+    }
+
+    #[test]
+    fn numeric_echo_keeps_only_the_selected_expressions() {
+        let md = numeric_echo(serde_json::json!([1, 3]), vec![stream("out")], &[4]);
+        assert!(md.contains("a <- 1\nb\n```"), "{md}");
+        assert!(!md.contains("b <- c(1,"), "{md}");
+        assert!(md.contains("out"), "{md}");
+    }
+
+    #[test]
+    fn numeric_echo_drops_every_line_of_a_multiline_expression() {
+        let md = numeric_echo(serde_json::json!(1), vec![stream("out")], &[3]);
+        assert!(md.contains("a <- 1\n```"), "{md}");
+        assert!(!md.contains("2)"), "{md}");
+    }
+
+    #[test]
+    fn negative_numeric_echo_excludes_the_named_expressions() {
+        let md = numeric_echo(serde_json::json!(-2), vec![stream("out")], &[4]);
+        assert!(md.contains("a <- 1\nb\n```"), "{md}");
+        assert!(!md.contains("b <- c(1,"), "{md}");
+    }
+
+    #[test]
+    fn numeric_echo_keeps_outputs_after_their_surviving_source() {
+        // The output printed after expression 2 (anchor 3 lines) lands after the source kept
+        // before it, and the unselected expression leaves no gap.
+        let md = numeric_echo(
+            serde_json::json!([1, 3]),
+            vec![stream("mid"), stream("end")],
+            &[1, 4],
+        );
+        let (a, mid, b, end) = (
+            pos(&md, "a <- 1"),
+            pos(&md, "mid"),
+            pos(&md, "\nb\n"),
+            pos(&md, "end"),
+        );
+        assert!(a < mid && mid < b && b < end, "{md}");
+        assert!(!md.contains("b <- c(1,"), "{md}");
+    }
+
+    #[test]
+    fn numeric_echo_selecting_nothing_leaves_only_outputs() {
+        let md = numeric_echo(serde_json::json!(9), vec![stream("out")], &[3]);
+        assert!(!md.contains("cell-code"), "{md}");
+        assert!(md.contains("out"), "{md}");
+    }
+
+    #[test]
+    fn error_without_a_name_has_no_header() {
+        // Ark and knitr give no `ename`: the text is the message and the traceback alone.
+        assert_eq!(format_error_text("", "boom", &[]), "boom\n");
+        assert_eq!(
+            format_error_text("", "", &["Error: boom\n".to_string()]),
+            "Error: boom\n\n"
+        );
+        assert_eq!(
+            format_error_text("", "boom", &["  at f()".to_string()]),
+            "boom\n  at f()\n"
+        );
+    }
+
+    #[test]
+    fn error_text_strips_ansi_from_the_value_too() {
+        assert_eq!(
+            format_error_text("E", "\u{1b}[31mboom\u{1b}[0m", &[]),
+            "E: boom\n"
+        );
+    }
+
+    #[test]
+    fn error_with_a_name_keeps_the_header() {
+        assert_eq!(
+            format_error_text("ValueError", "bad", &[]),
+            "ValueError: bad\n"
+        );
+    }
+
+    fn stderr(text: &str) -> CellOutput {
+        CellOutput::Stream {
+            name: "stderr".to_string(),
+            text: text.to_string(),
+        }
+    }
+
+    fn kinded() -> CellOptions {
+        use crate::presenter::options::OutputKind::{Message, Warning};
+        CellOptions::from_knitr(&serde_json::json!({
+            "class.message": "m",
+            "class.warning": "w",
+        }))
+        .with_output_kinds(vec![Some(Message), Some(Warning), None])
+    }
+
+    #[test]
+    fn class_message_and_class_warning_go_to_their_own_outputs() {
+        let md = render_cell_with(
+            "r",
+            "x",
+            &result(vec![
+                stderr("a message"),
+                stderr("Warning: w"),
+                stderr("plain"),
+            ]),
+            &kinded(),
+            &mut fig(),
+            CellVisibility::VISIBLE,
+        );
+        assert!(md.contains("```{.m}\na message"), "{md}");
+        assert!(md.contains("```{.w}\nWarning: w"), "{md}");
+        // No kind: stderr of unknown kind takes both, as for Jupyter.
+        assert!(md.contains("```{.m .w}\nplain"), "{md}");
+    }
+
+    #[test]
+    fn kinds_follow_the_outputs_across_interleaved_groups() {
+        // Outputs split into groups by their anchors: the second group\'s output is the cell\'s
+        // second output, so it is the warning.
+        let md = render_cell_interleaved(
+            "r",
+            "a\nb\n",
+            &result(vec![stderr("a message"), stderr("Warning: w")]),
+            Some(&[1, 2]),
+            &[],
+            &kinded(),
+            &mut fig(),
+            CellVisibility::VISIBLE,
+        );
+        assert!(md.contains("```{.m}\na message"), "{md}");
+        assert!(md.contains("```{.w}\nWarning: w"), "{md}");
+    }
+
+    #[test]
+    fn numeric_warning_keeps_only_the_selected_warnings_and_all_messages() {
+        use crate::presenter::options::OutputKind::{Message, Warning};
+        let options = CellOptions::from_knitr(&serde_json::json!({"warning": 1}))
+            .with_output_kinds(vec![Some(Warning), Some(Message), Some(Warning)]);
+        let md = render_cell_interleaved(
+            "r",
+            "a\nb\nc\n",
+            &result(vec![
+                stderr("Warning: one"),
+                stderr("msg"),
+                stderr("Warning: two"),
+            ]),
+            Some(&[1, 2, 3]),
+            &[],
+            &options,
+            &mut fig(),
+            CellVisibility::VISIBLE,
+        );
+        assert!(md.contains("Warning: one") && md.contains("msg"), "{md}");
+        assert!(!md.contains("Warning: two"), "{md}");
+        // The source stays in order around what remains.
+        assert!(pos(&md, "\nc\n") > pos(&md, "msg"), "{md}");
+    }
+
+    #[test]
+    fn negative_numeric_message_drops_the_named_messages() {
+        use crate::presenter::options::OutputKind::Message;
+        let options = CellOptions::from_knitr(&serde_json::json!({"message": -1}))
+            .with_output_kinds(vec![Some(Message), Some(Message)]);
+        let md = render_cell_interleaved(
+            "r",
+            "a\nb\n",
+            &result(vec![stderr("first"), stderr("second")]),
+            Some(&[1, 2]),
+            &[],
+            &options,
+            &mut fig(),
+            CellVisibility::VISIBLE,
+        );
+        assert!(!md.contains("first") && md.contains("second"), "{md}");
+    }
+
+    #[test]
+    fn logical_warning_and_message_select_nothing_in_the_presenter() {
+        use crate::presenter::options::OutputKind::Warning;
+        let options = CellOptions::from_knitr(&serde_json::json!({"warning": false}))
+            .with_output_kinds(vec![Some(Warning)]);
+        assert_eq!(options.warning_selection(), None);
     }
 }

@@ -1,0 +1,38 @@
+# KNR-2 Phase 2G: signed-off divergences between the knitr baseline presenter and knitr's own
+# finished markdown (the oracle). Read by `tests/integration/knitr_corpus_gate.rs`.
+#
+# Epic decision 26: the flip gate accepts `identical` and `syntax-level` only. A `semantic` or
+# `blocker` difference needs an entry here, and the entry is the sign-off. Fields:
+#   name     the fixture name, as in the corpus report
+#   formats  formats covered (absent: every format the fixture runs under)
+#   class    the class signed off: `semantic` or `blocker`. A case that moves to another class
+#            is flagged for re-review; a case that becomes accepted makes the entry stale.
+#   reason   one line, why the divergence is intended
+#
+# A document that overrides the `source` or `output` knitr hook (`setup-state/knit_hooks_override`)
+# is a fallback-unit rule, not an entry (epic decision 23).
+
+[[entry]]
+name = "structure/chunk_in_blockquote"
+class = "blocker"
+reason = "the baseline keeps blockquote continuation lines quoted, so blank lines inside the quote differ from knitr's (epic decision 23)"
+
+[[entry]]
+name = "s7/01_structure"
+class = "blocker"
+reason = "the baseline keeps blockquote continuation lines quoted, so blank lines inside the quote differ from knitr's (epic decision 23)"
+
+[[entry]]
+name = "markdown-stress/empty_output"
+class = "blocker"
+reason = "a chunk that prints nothing still renders its `.cell` wrapper, which is a box in the page (epic decision 23)"
+
+[[entry]]
+name = "s1/03_eval_false"
+class = "blocker"
+reason = "an empty chunk (the `blank` chunk has no code) still renders its `.cell` wrapper, which is a box in the page (epic decision 23)"
+
+[[entry]]
+name = "s8/01_setup_state"
+class = "blocker"
+reason = "same divergence as s1/03_eval_false: Quarto 1 writes an empty `.cell` div for a chunk that renders nothing (here `c_params`, eval false); its `.cell-code  code-fold` double space is cosmetic (Gordon, 2026-11-02)"

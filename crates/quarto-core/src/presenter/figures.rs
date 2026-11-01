@@ -78,7 +78,9 @@ fn decode_image_checked(
     let content = extract_text_content(value);
     // Q1 rule (`mdImageOutput`): SVG payloads that are literal `<svg` markup are written
     // as text; everything else is base64 (whitespace-stripped, padding optional).
-    let bytes: Vec<u8> = if ext == "svg" && content.trim_start().starts_with("<svg") {
+    let bytes: Vec<u8> = if ext == "svg"
+        && (content.trim_start().starts_with("<svg") || content.trim_start().starts_with("<?xml"))
+    {
         content.into_bytes()
     } else {
         use base64::Engine as _;
@@ -425,6 +427,15 @@ mod tests {
             sink.write_image("image/png", &json!(PNG)).as_deref(),
             Some("report_files/figure-html/cell-1-output-1.png")
         );
+    }
+
+    #[test]
+    fn svg_with_an_xml_prolog_is_written_as_text() {
+        // R's svg() device writes `<?xml ...?>` before `<svg`.
+        let svg = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"x\"></svg>";
+        let (ext, bytes) = decode_image("image/svg+xml", &json!(svg)).unwrap();
+        assert_eq!(ext, "svg");
+        assert_eq!(bytes, svg.as_bytes());
     }
 
     #[test]

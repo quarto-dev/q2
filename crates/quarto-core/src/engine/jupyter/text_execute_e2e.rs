@@ -70,6 +70,7 @@ fn present_from(record: &Record, text: &str, dir: &std::path::Path) -> String {
         &units,
         None,
         InlineTarget::from_format("html"),
+        "html",
         &mut fig,
     )
     .expect("presents")
