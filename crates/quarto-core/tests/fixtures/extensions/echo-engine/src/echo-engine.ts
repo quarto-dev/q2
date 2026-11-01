@@ -91,6 +91,12 @@ const echoEngine: ExecutionEngineDiscovery = {
         "FORMAT_JSON_END\n```\n"
       );
     };
+    // Plan 4d-D (JOL-4): echo the positive ownership set (`ownedLanguages`) back
+    // so the e2e can assert exactly which languages q2 assigned to THIS engine.
+    const ownedMarker = (opts: ExecuteOptions): string =>
+      "\n\n```\nOWNED_JSON_START" +
+      JSON.stringify(opts.ownedLanguages ?? null) +
+      "OWNED_JSON_END\n```\n";
     return {
       name: "echo",
       canFreeze: false,
@@ -223,7 +229,7 @@ const echoEngine: ExecutionEngineDiscovery = {
             "**ECHO_EXECUTED**\n:::\n:::",
         );
         return {
-          markdown: executed + contextMarker() + formatMarker(opts),
+          markdown: executed + contextMarker() + formatMarker(opts) + ownedMarker(opts),
           supporting: [],
           filters: [],
         };

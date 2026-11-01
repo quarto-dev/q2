@@ -511,6 +511,91 @@ fn extract_format_json(html: &str) -> serde_json::Value {
         .unwrap_or_else(|e| panic!("failed to parse echoed format JSON ({e}):\n{json}"))
 }
 
+// ── Plan 4d-D (JOL-4): `ownedLanguages` reaches the engine ────────────────────
+//
+// A `.qmd` with an `{echo}` cell and a `{behave}` cell, with both fixture
+// engines installed. echo-engine echoes `options.ownedLanguages` back via the
+// OWNED_JSON marker. The positive set is exactly `["echo"]`: `behave` is present
+// but owned by the other engine, so it must NOT appear (this is what
+// distinguishes the positive set from "every language present"; the same
+// language IS in echo's `handledLanguages`-complement, which is the ambiguity
+// the new field resolves).
+//
+// RED (named revert: drop `owned_languages` in `build_execute_options`, or
+// the `ownedLanguages` passthrough in the node host's `host.ts`): the marker
+// carries `[]`/`null` instead of `["echo"]`.
+#[test]
+fn jol4_owned_languages_reaches_engine() {
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — jol4_owned_languages_reaches_engine");
+        return;
+    }
+    let tmp = setup_project(&["echo-engine", "behave"]);
+    let input = tmp.path().join("owned.qmd");
+    write_file(
+        &input,
+        "---\ntitle: Echo Owned\n---\n\n```{echo}\nHello!\n```\n\n```{behave}\nowned by behave\n```\n",
+    );
+
+    let html = render_html(&input);
+    assert!(
+        html.contains("OWNED_JSON_START"),
+        "exercised-guard: the OWNED_JSON marker must be present; got:\n{}",
+        body_excerpt(&html)
+    );
+    let start = html.find("OWNED_JSON_START").unwrap() + "OWNED_JSON_START".len();
+    let end = start
+        + html[start..]
+            .find("OWNED_JSON_END")
+            .expect("OWNED_JSON_END marker");
+    let owned: serde_json::Value = serde_json::from_str(&html[start..end].replace("&quot;", "\""))
+        .unwrap_or_else(|e| panic!("failed to parse echoed ownedLanguages ({e})"));
+    assert_eq!(
+        owned,
+        serde_json::json!(["echo"]),
+        "ownedLanguages must be the positive set (echo), not every language present"
+    );
+}
+
+// ── Plan 4d-D Step 2b (JOL-4): owned-but-unrunnable, engine self-enforcement ──
+//
+// `owns-cant-run` statically claims `synth` (so q2 assigns it ownership) but can
+// run nothing. Its `execute()` reads `options.ownedLanguages` and throws
+// `owns "<L>" but cannot run it`. q2 does NOT police this: it forwards the
+// positive set and the engine decides, so this asserts engine behavior driven
+// by the wire field, not any q2-side capability check.
+//
+// RED (named revert: drop `owned_languages` in `build_execute_options`, or the
+// `ownedLanguages` passthrough in the node host's `host.ts`): the engine sees an
+// empty/absent set, throws nothing, and the render succeeds.
+#[test]
+fn jol4_owns_but_cannot_run_self_enforces_via_owned_languages() {
+    if !node_available_for_tests() {
+        eprintln!(
+            "SKIP: node not found — jol4_owns_but_cannot_run_self_enforces_via_owned_languages"
+        );
+        return;
+    }
+    let tmp = setup_project(&["owns-cant-run"]);
+    let input = tmp.path().join("synth.qmd");
+    write_file(
+        &input,
+        "---\ntitle: Owns Cant Run\n---\n\n```{synth}\nanything\n```\n",
+    );
+
+    let options = RenderToFileOptions::default();
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&input, "html", &options, runtime);
+
+    let err =
+        result.expect_err("an engine that owns a language it cannot run must fail the render");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("owns \"synth\" but cannot run it"),
+        "render must fail with the engine's self-enforcement error naming `synth`; got: {msg}"
+    );
+}
+
 // ── P1.1b T14: merged document metadata reaches TsFormatInfo.metadata ─────────
 //
 // A single-file `.qmd` (no `_quarto.yml`) whose frontmatter carries

@@ -222,6 +222,10 @@ fontique = { version = "0.9", default-features = false, features = ["fontconfig-
 # `tests/wasm_replay.rs` needs (the pampa `wasm_lua` precedent).
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 insta.workspace = true
+# EXR-3: `TestKernel` is the protocol half of the fake kernel the Jupyter unit-loop
+# tests drive (`engine/jupyter/fake_kernel.rs`). Features are additive with the
+# normal dependency above.
+runtimelib = { version = "2.0", features = ["tokio-runtime", "test-kernel"] }
 quarto-error-catalog = { workspace = true }
 # P7 Task 11: the shared docx/pptx semantic extractor + pandoc-goldens
 # fixture manifest, also used by `cargo xtask capture-pandoc-goldens`.

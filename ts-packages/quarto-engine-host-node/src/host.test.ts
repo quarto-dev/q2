@@ -870,7 +870,7 @@ describe("T3 — handler dispatch and id correlation", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2016,7 +2016,7 @@ describe("Execute field routing", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2100,7 +2100,7 @@ describe("Execute field routing", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2206,7 +2206,7 @@ describe("F2b deferred-deps", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: false, // deferred mode
               sourceMap: [],
             },
@@ -2252,7 +2252,7 @@ describe("F2b deferred-deps", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true, // inline mode → no engineDependencies returned
               sourceMap: [],
             },
@@ -2360,7 +2360,7 @@ describe("htmlDependencies forwarding", () => {
               cwd: "/proj",
               libDir: "/lib", // the base for relative resolution
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2422,7 +2422,7 @@ describe("htmlDependencies forwarding", () => {
               cwd: "/proj",
               libDir: "/lib",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2646,7 +2646,7 @@ describe("execute projectDir from launch context", () => {
               cwd: "/abs/proj",
               libDir: "/abs/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
               // NOTE: projectDir intentionally ABSENT from wire execute options —
@@ -2793,7 +2793,7 @@ describe("T5 — per-engine execute serialization queue", () => {
           cwd: "/proj",
           libDir: "/proj/libs",
           quiet: false,
-          handledLanguages: [],
+          handledLanguages: [], ownedLanguages: [],
           dependencies: true,
           sourceMap: [],
         },
@@ -3103,13 +3103,13 @@ describe("T6 — cooperative Cancel", () => {
       input: "# hello", sourcePath: "/proj/doc.qmd",
       format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} },
       tempDir: "/tmp", cwd: "/proj", libDir: "/lib",
-      quiet: false, handledLanguages: [], dependencies: true, sourceMap: [],
+      quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [],
     }}});
     duplex.push({ id: 200, msg: { type: "execute", engine: "t6EngineM", options: {
       input: "# hello", sourcePath: "/proj/doc.qmd",
       format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} },
       tempDir: "/tmp", cwd: "/proj", libDir: "/lib",
-      quiet: false, handledLanguages: [], dependencies: true, sourceMap: [],
+      quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [],
     }}});
 
     // Wait for M to complete and N to be blocked.
@@ -3201,7 +3201,7 @@ describe("T6 — cooperative Cancel", () => {
     duplex2.push({ id: 3, msg: { type: "launchEngine", engine: "t6EngineN2", project: { isSingleFile: true } } });
     duplex2.push({ id: 4, msg: { type: "launchEngine", engine: "t6EngineP",  project: { isSingleFile: true } } });
 
-    const opts6b = { input: "# hi", sourcePath: "/p/doc.qmd", format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} }, tempDir: "/tmp", cwd: "/p", libDir: "/p/libs", quiet: false, handledLanguages: [], dependencies: true, sourceMap: [] };
+    const opts6b = { input: "# hi", sourcePath: "/p/doc.qmd", format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} }, tempDir: "/tmp", cwd: "/p", libDir: "/p/libs", quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [] };
 
     const runPromise2 = runHost(duplex2.reader, duplex2.writer, host2, {
       loadEngineModule: async (p) => { const d = loaderMap2.get(p); if (!d) throw new Error(`unknown: ${p}`); return d; },
@@ -3349,7 +3349,7 @@ describe("T7 — poison + transparent re-launch", () => {
       input: "# hello", sourcePath: "/proj/doc.qmd",
       format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} },
       tempDir: "/tmp", cwd: "/proj", libDir: "/proj/libs",
-      quiet: false, handledLanguages: [], dependencies: true, sourceMap: [],
+      quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [],
     };
 
     // A: blocks on abort-aware deferred.
@@ -3398,5 +3398,82 @@ describe("T7 — poison + transparent re-launch", () => {
     duplex.push({ id: 9999, msg: { type: "shutdown" } });
     duplex.end();
     await runPromise;
+  });
+});
+
+// ===========================================================================
+// Plan 4d-C (JOL-4) — ownedLanguages reaches the engine's ExecuteOptions
+// ===========================================================================
+
+describe("ownedLanguages passthrough (Plan 4d-C)", () => {
+  async function executeAndCapture(owned: string[], handled: string[]) {
+    const seen: { owned?: string[]; handled?: string[] } = {};
+    const instance: ExecutionEngineInstance = {
+      name: "ownedEngine",
+      canFreeze: false,
+      markdownForFile: async (f: string) => ({ value: f, map: () => undefined }),
+      target: async () => undefined,
+      partitionedMarkdown: async () => { throw new Error("n/a"); },
+      execute: async (options) => {
+        seen.owned = options.ownedLanguages;
+        seen.handled = options.handledLanguages;
+        return { markdown: "# ok", supporting: [], filters: [] };
+      },
+      dependencies: async () => ({ includes: {} }),
+      postprocess: async () => {},
+    };
+    const discovery: ExecutionEngineDiscovery = {
+      name: "ownedEngine",
+      defaultExt: ".qmd",
+      defaultYaml: () => [],
+      defaultContent: () => [],
+      validExtensions: () => [".qmd"],
+      claimsFile: () => false,
+      claimsLanguage: () => false,
+      canFreeze: false,
+      generatesFigures: false,
+      launch: () => instance,
+    };
+    const loader = async (_p: string) => discovery;
+
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/e/owned.ts" } },
+        { id: 2, msg: { type: "launchEngine", engine: "ownedEngine", project: { isSingleFile: true } } },
+        {
+          id: 3,
+          msg: {
+            type: "execute",
+            engine: "ownedEngine",
+            options: {
+              input: "# content",
+              sourcePath: "/proj/doc.qmd",
+              format: {
+                identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" },
+                metadata: {},
+              },
+              tempDir: "/tmp",
+              cwd: "/proj",
+              libDir: "/proj/libs",
+              quiet: false,
+              handledLanguages: handled,
+              ownedLanguages: owned,
+              dependencies: true,
+              sourceMap: [],
+            },
+          },
+        },
+      ],
+      { loadEngineModule: loader },
+    );
+    expect(responses.find((r) => r.id === 3)?.msg.type).toBe("executeResult");
+    return seen;
+  }
+
+  it("forwards the positive set verbatim, independent of handledLanguages", async () => {
+    // Named revert: drop `ownedLanguages: opts.ownedLanguages` in host.ts → seen.owned undefined → RED.
+    const seen = await executeAndCapture(["synth", "r"], ["python"]);
+    expect(seen.owned).toEqual(["synth", "r"]);
+    expect(seen.handled).toEqual(["python"]);
   });
 });

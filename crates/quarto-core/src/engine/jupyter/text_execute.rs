@@ -15,19 +15,26 @@ use quarto_source_map::SourceInfo;
 
 use super::daemon::daemon;
 use super::error::JupyterError;
-use super::execute::{CellOutput, CellResult, ExecuteStatus};
+use super::execute::{CellOutput, CellResult, ExecuteOpts, ExecuteStatus};
+use super::inline::{
+    InlineOutcome, classify_inline_result, escape_yaml_double, front_matter_key_at, span_is_owned,
+    unescape_yaml_double, wrap_inline_code,
+};
 use super::kernelspec::{UnusableJupyterKey, kernel_from_ts_metadata, unusable_jupyter_key};
-use super::router::{KernelName, SingleKernelRouter, plan_units, splice_units};
+use super::router::{KernelName, SingleKernelRouter, SpliceKind, plan_units, splice_mixed};
 use super::session::SessionKey;
 use crate::cell_options::partition_cell_options;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
+use crate::engine::diagnostics::{InlineSpanProblem, inline_span_diagnostic};
 use crate::engine::error::ExecutionError;
 use crate::engine::ts_protocol::TsMetadataValue;
 use crate::engine::units::{
-    CellUnit, EngineUnit, Unit, runs_in_legacy_executor, units_for_engine, view_for_engine,
+    CellUnit, EngineUnit, InlineUnit, Unit, runs_in_legacy_executor, units_for_engine,
+    view_for_engine,
 };
 use crate::presenter::cell::{describe_location, render_cell};
 use crate::presenter::figures::{FigureSink, FsFigureSink};
+use crate::presenter::inline::{InlineTarget, render_inline};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options, resolved_flag};
 use quarto_pandoc_types::ConfigValue;
 
@@ -41,9 +48,9 @@ pub fn execute_qmd(
     ctx: &ExecutionContext,
 ) -> std::result::Result<ExecuteResult, ExecutionError> {
     // The document's units, relocated into this text (or scanned from it when
-    // no stage supplied a shared list). Spans are returned and ignored until
-    // EXR-3. Every braced cell is in the list; the view marks which ones
-    // jupyter owns, and `partition_cells` classifies them.
+    // no stage supplied a shared list). Every braced cell and every span is in
+    // the list; the view marks which cells jupyter owns, and `partition_cells`
+    // classifies them. Spans are owned by language (EXR-3, below).
     let units = units_for_engine(&ctx.units, input);
     let handled = &ctx.handled_languages;
     let owns = |lang: &str| !handled.iter().any(|h| h.to_lowercase() == lang);
@@ -56,9 +63,16 @@ pub fn execute_qmd(
     //     multi_engine=false → pass through unexecuted (display-only, P2-13)
     //   - remaining cells are executable
     let executable = partition_cells(&view, ctx.multi_engine)?;
+    let spans: Vec<InlineUnit> = units
+        .iter()
+        .filter_map(|u| match u {
+            Unit::Inline(i) => Some(i.clone()),
+            Unit::Cell(_) => None,
+        })
+        .collect();
 
-    if executable.is_empty() {
-        // No cells, or all were ceded — passthrough unchanged.
+    // No cells and no spans: passthrough unchanged, no kernel needed.
+    if executable.is_empty() && spans.is_empty() {
         return Ok(ExecuteResult::new(input));
     }
 
@@ -70,15 +84,54 @@ pub fn execute_qmd(
     let kernel_name = select_kernel(
         &ctx.metadata,
         ctx.engine_config.as_ref(),
-        Some(&executable[0].lang),
-    )
-    .expect("a first owned language was supplied");
+        executable.first().map(|c| c.lang.as_str()),
+    );
+
+    // Divergence 6: the engine runs, the document has no cell at all (so nothing names a
+    // kernel), no `jupyter:` key does either, and there is a span to evaluate.
+    let has_cells = units.iter().any(|u| matches!(u, Unit::Cell(_)));
+    if kernel_name.is_none() && !has_cells && !spans.is_empty() {
+        return Err(no_kernel_for_spans());
+    }
+
+    // A span is owned when its language is in the engine's owned set or is the
+    // language of the selected kernel (design decision 5). Reading the kernel's
+    // language is the only await before the plan; a kernel that cannot be found
+    // fails here with the same error the start would give.
+    let kernel_language = match &kernel_name {
+        Some(name) if !spans.is_empty() => Some(
+            super::daemon::engine_runtime()
+                .block_on(super::kernelspec::find_kernelspec(name))
+                .map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))?
+                .language,
+        ),
+        _ => None,
+    };
+    let owned_spans: Vec<InlineUnit> = spans
+        .into_iter()
+        .filter(|s| span_is_owned(&s.lang, &ctx.owned_languages, kernel_language.as_deref()))
+        .collect();
+
+    if executable.is_empty() && owned_spans.is_empty() {
+        // Only spans of languages nobody here owns: left literal.
+        return Ok(ExecuteResult::new(input));
+    }
+    let Some(kernel_name) = kernel_name else {
+        // Owned spans, but only ceded cells: still nothing names a kernel.
+        return Err(no_kernel_for_spans());
+    };
     let router = SingleKernelRouter::new(kernel_name);
 
     // Plan first (pure): which kernel runs each unit, in document order. A
     // router error is an `ExecutionError` and propagates as one.
-    let units: Vec<Unit> = executable.iter().cloned().map(Unit::Cell).collect();
-    let plan = plan_units(&units, &router)?;
+    let mut run_units: Vec<Unit> = executable
+        .iter()
+        .cloned()
+        .map(Unit::Cell)
+        .chain(owned_spans.into_iter().map(Unit::Inline))
+        .collect();
+    run_units.sort_by_key(Unit::start);
+    let plan = plan_units(&run_units, &router)?;
 
     // bd-hxhnnlzs: hold a kernel scope for the duration of this engine
     // run. If no outer scope (render invocation, preview server) is
@@ -92,7 +145,7 @@ pub fn execute_qmd(
 
     // Execute via async runtime. `execute_blocks_async` takes the full
     // `ExecutionContext` (main's #412 figure-emission threads it through).
-    let result = execute_blocks_async(input, &executable, &plan, ctx);
+    let result = execute_blocks_async(input, &run_units, &plan, ctx);
 
     let warning = jupyter_key_warning(&ctx.metadata);
     result
@@ -101,6 +154,16 @@ pub fn execute_qmd(
             r
         })
         .map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))
+}
+
+/// Divergence 6's error: spans to evaluate and no way to pick a kernel.
+fn no_kernel_for_spans() -> ExecutionError {
+    ExecutionError::execution_failed(
+        "jupyter",
+        "inline expressions need an executable cell or a `jupyter:` kernel: the document \
+         has `{lang} expr` spans but names no kernel. \
+         Add `jupyter: <kernel-name>` to the document's front matter.",
+    )
 }
 
 /// The `Q-18-4` warning for a `jupyter:` value that names no kernel, if any.
@@ -281,7 +344,7 @@ fn is_executable_language(language: &str) -> bool {
 /// Execute code blocks asynchronously and build output markdown.
 fn execute_blocks_async(
     input: &str,
-    cells: &[CellUnit],
+    units: &[Unit],
     plan: &[(usize, KernelName)],
     ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
@@ -290,13 +353,13 @@ fn execute_blocks_async(
     // Child) are tokio resources bound to the runtime that created
     // them; a per-call runtime made every cross-call session reuse
     // fail with "Tokio context ... is being shutdown" (bd-hxhnnlzs).
-    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, cells, plan, ctx))
+    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, units, plan, ctx))
 }
 
 /// Inner async function that does the actual execution.
 async fn execute_blocks_inner(
     input: &str,
-    cells: &[CellUnit],
+    units: &[Unit],
     plan: &[(usize, KernelName)],
     ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
@@ -327,13 +390,43 @@ async fn execute_blocks_inner(
 
     // The rendered replacement for each executed cell, spliced into the
     // input's gaps once every cell has run.
-    let mut replacements: Vec<(std::ops::Range<usize>, String)> = Vec::new();
+    let mut replacements: Vec<(std::ops::Range<usize>, String, SpliceKind)> = Vec::new();
+    let mut warnings: Vec<quarto_error_reporting::DiagnosticMessage> = Vec::new();
+    // Each kernel's language, to wrap a span for it (a `None` value on Python).
+    let mut languages: std::collections::HashMap<KernelName, String> =
+        std::collections::HashMap::new();
+    for (kernel, key) in &sessions {
+        let language = daemon
+            .with_session(key, |s| s.language().to_string())
+            .await
+            .ok_or(JupyterError::NotConnected)?;
+        languages.insert(kernel.clone(), language);
+    }
     // Figure emission (bd-5t6wvu7m): image outputs are written under
     // `<stem>_files/figure-html/` next to the source document.
     let mut fig = FsFigureSink::new(&ctx.source_path);
 
-    for ((_, kernel), block) in plan.iter().zip(cells) {
+    for ((_, kernel), unit) in plan.iter().zip(units) {
         let key = &sessions[kernel];
+        let block = match unit {
+            Unit::Cell(block) => block,
+            Unit::Inline(span) => {
+                if let Some(text) = evaluate_span(
+                    &daemon,
+                    key,
+                    &languages[kernel],
+                    span,
+                    input,
+                    ctx,
+                    &mut warnings,
+                )
+                .await?
+                {
+                    replacements.push((span.start..span.end, text, SpliceKind::Inline));
+                }
+                continue;
+            }
+        };
         // Partition the cell into `#|` options + code (bd-ohvl879u).
         // `ctx.source_info` maps input offsets back to the original
         // files, so option spans and diagnostics resolve to real
@@ -394,19 +487,97 @@ async fn execute_blocks_inner(
         replacements.push((
             block.start..block.end,
             render_cell(&block.lang, &cell.code, &exec_result, &mut fig, visibility),
+            SpliceKind::Block,
         ));
     }
 
-    let output = splice_units(input, &replacements);
+    let output = splice_mixed(input, &replacements);
 
     // Report the `<stem>_files` dir when figures were written —
     // dir-level, mirroring knitr. `q2 render` copies it to the output
     // dir (bd-o8pr) and the preview capture embeds it (bd-qbhp2cvv).
     let mut result = ExecuteResult::new(output);
+    result.warnings.extend(warnings);
     if fig.wrote_any() {
         result = result.with_supporting_files(vec![fig.files_dir()]);
     }
     Ok(result)
+}
+
+/// Run one inline expression and return the text that replaces the span, or `None` to
+/// leave the span as written (an empty value, or no usable result with a warning pushed).
+///
+/// Errors are fatal: the kernel raised, the expression produced no value, or a front
+/// matter value cannot be written back (design decision 2, divergences 1, 6 and 10).
+async fn evaluate_span(
+    daemon: &super::daemon::JupyterDaemon,
+    key: &SessionKey,
+    kernel_language: &str,
+    span: &InlineUnit,
+    input: &str,
+    ctx: &ExecutionContext,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> JupyterResult<Option<String>> {
+    let expr_source = SourceInfo::substring(
+        ctx.source_info.clone(),
+        span.code_start,
+        span.code_start + span.code.len(),
+    );
+    let location = describe_location(&expr_source, 0, ctx);
+    let diagnostic = |problem: &InlineSpanProblem| {
+        inline_span_diagnostic(problem, &span.lang, &span.code, location.as_deref())
+    };
+    let fatal = |problem: &InlineSpanProblem| JupyterError::CellExecutionFailed {
+        message: diagnostic(problem).to_text(None),
+    };
+
+    // The writer escaped a front matter value as a YAML double-quoted string; the
+    // kernel must see the expression as the author wrote it.
+    let expr = if span.in_front_matter {
+        unescape_yaml_double(&span.code)
+    } else {
+        span.code.clone()
+    };
+    let result = daemon
+        .execute_in_session_with(
+            key,
+            &wrap_inline_code(kernel_language, &expr),
+            ExecuteOpts::INLINE,
+        )
+        .await
+        .ok_or(JupyterError::NotConnected)??;
+
+    let text = match classify_inline_result(&result) {
+        InlineOutcome::Raised { ename, evalue } => {
+            return Err(fatal(&InlineSpanProblem::Raised { ename, evalue }));
+        }
+        InlineOutcome::Silent => return Err(fatal(&InlineSpanProblem::NoValue)),
+        InlineOutcome::NoTextValue => None,
+        InlineOutcome::Value(bundle) => {
+            render_inline(&bundle, InlineTarget::from_format(&ctx.format))
+        }
+    };
+    let Some(text) = text else {
+        warnings.push(diagnostic(&InlineSpanProblem::NoUsableResult));
+        return Ok(None);
+    };
+    // Q1 leaves the span source in place for an empty value (divergence 7).
+    if text.is_empty() {
+        return Ok(None);
+    }
+    if !span.in_front_matter {
+        return Ok(Some(text));
+    }
+    if text.contains(['\n', '\r']) {
+        let key = front_matter_key_at(input, span.start).unwrap_or_else(|| "?".to_string());
+        return Err(fatal(&InlineSpanProblem::FrontMatterValue {
+            key,
+            reason: "the value contains a newline, which a double-quoted YAML string would \
+                     fold to a space"
+                .to_string(),
+        }));
+    }
+    Ok(Some(escape_yaml_double(&text)))
 }
 
 /// The first error a cell produced, from its outputs or its status.
@@ -1383,5 +1554,292 @@ print("hello")
         assert!(is_executable_language("GGSQL"));
         assert!(!is_executable_language("json"));
         assert!(!is_executable_language("markdown"));
+    }
+}
+
+/// EXR-3 Phase 2: the span loop, driven by the fake kernel through the real session path
+/// (`execute_qmd` -> daemon -> `TestKernel`), plus the kernel-free passthrough cases.
+#[cfg(test)]
+mod span_tests {
+    use super::*;
+    use crate::engine::jupyter::fake_kernel::{FakeKernel, FakeKernelHome, FakeOutput, Script};
+    use quarto_source_map::SourceContext;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    fn py(expr: &str) -> String {
+        wrap_inline_code("python", expr)
+    }
+
+    fn markdown(text: &str) -> FakeOutput {
+        FakeOutput::Result(json!({ "text/markdown": text, "text/plain": "ignored" }))
+    }
+
+    fn jupyter_meta(name: &str) -> std::collections::HashMap<String, TsMetadataValue> {
+        std::collections::HashMap::from([(
+            "jupyter".to_string(),
+            TsMetadataValue::String(name.to_string()),
+        )])
+    }
+
+    /// A context whose source map holds `text` as `doc.qmd`, so locations resolve.
+    fn ctx_for(text: &str) -> ExecutionContext {
+        let mut sc = SourceContext::new();
+        let id = sc.add_file("doc.qmd".to_string(), Some(text.to_string()));
+        ExecutionContext::new(
+            std::env::temp_dir(),
+            std::env::temp_dir(),
+            std::path::PathBuf::from("doc.qmd"),
+            "html",
+        )
+        .with_source_info(SourceInfo::original(id, 0, text.len()), Arc::new(sc))
+    }
+
+    /// A document context with a fake python kernel installed and named by `jupyter:`.
+    fn with_kernel(text: &str, script: &Script) -> (FakeKernelHome, ExecutionContext) {
+        let home = FakeKernelHome::new();
+        let FakeKernel { name, env } = home.install("fake-py", "python", script);
+        let ctx = ctx_for(text)
+            .with_metadata(jupyter_meta(&name))
+            .with_owned_languages(vec!["python".to_string()])
+            .with_project_env(env);
+        (home, ctx)
+    }
+
+    fn run(
+        text: &str,
+        script: &Script,
+    ) -> (String, Vec<quarto_error_reporting::DiagnosticMessage>) {
+        let (_home, ctx) = with_kernel(text, script);
+        let r = execute_qmd(text, &ctx).expect("execution succeeds");
+        (r.markdown, r.warnings)
+    }
+
+    fn run_err(text: &str, script: &Script) -> String {
+        let (_home, ctx) = with_kernel(text, script);
+        execute_qmd(text, &ctx)
+            .expect_err("execution fails")
+            .to_string()
+    }
+
+    // ── values ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn span_value_replaces_the_span_in_prose() {
+        let script = Script::from([(py("1 + 1"), vec![FakeOutput::plain_result("2")])]);
+        let (out, warnings) = run("A `{python} 1 + 1` B\n", &script);
+        assert_eq!(out, "A 2 B\n");
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn markdown_value_is_pasted_as_is_and_quoted_text_is_escaped() {
+        let script = Script::from([
+            (py("m"), vec![markdown("**b**")]),
+            (py("s"), vec![FakeOutput::plain_result("'hello_world'")]),
+        ]);
+        let (out, _) = run("`{python} m` and `{python} s`\n", &script);
+        assert_eq!(out, "**b** and hello\\_world\n");
+    }
+
+    #[test]
+    fn a_none_value_renders_as_text() {
+        // On a python kernel the wrapper turns `None` into the string 'None'.
+        let script = Script::from([(py("n"), vec![FakeOutput::plain_result("'None'")])]);
+        let (out, _) = run("v=`{python} n`\n", &script);
+        assert_eq!(out, "v=None\n");
+    }
+
+    #[test]
+    fn empty_string_value_leaves_the_span_source() {
+        let script = Script::from([(py("e"), vec![FakeOutput::plain_result("''")])]);
+        let (out, warnings) = run("a `{python} e` b\n", &script);
+        assert_eq!(out, "a `{python} e` b\n");
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn no_usable_result_warns_and_leaves_the_span_source() {
+        let script = Script::from([(
+            py("img"),
+            vec![FakeOutput::Result(json!({ "image/png": "AAAA" }))],
+        )]);
+        let (out, warnings) = run("a `{python} img` b\n", &script);
+        assert_eq!(out, "a `{python} img` b\n");
+        assert_eq!(warnings.len(), 1);
+        let text = warnings[0].to_text(None);
+        assert!(text.contains("doc.qmd:1:"), "{text}");
+    }
+
+    #[test]
+    fn several_spans_run_in_document_order_without_block_padding() {
+        let script = Script::from([
+            (py("a"), vec![FakeOutput::plain_result("1")]),
+            (py("b"), vec![FakeOutput::plain_result("2")]),
+        ]);
+        let (out, _) = run("x `{python} a`\n`{python} b` y\n", &script);
+        assert_eq!(out, "x 1\n2 y\n");
+    }
+
+    #[test]
+    fn spans_and_cells_share_one_pass() {
+        let script = Script::from([
+            (py("a"), vec![FakeOutput::plain_result("1")]),
+            ("x = 1".to_string(), vec![]),
+        ]);
+        let (out, _) = run("```{python}\nx = 1\n```\n\nv `{python} a`\n", &script);
+        assert!(out.contains("::: {.cell"), "{out}");
+        assert!(out.ends_with("v 1\n"), "{out}");
+    }
+
+    #[test]
+    fn supplied_units_with_ids_are_used_as_they_are() {
+        use crate::engine::units::{UnitId, scan_units};
+        let text = "A `{python} 1 + 1` B\n";
+        let script = Script::from([(py("1 + 1"), vec![FakeOutput::plain_result("2")])]);
+        let (_home, mut ctx) = with_kernel(text, &script);
+        ctx.units = scan_units(text)
+            .into_iter()
+            .map(|u| match u {
+                Unit::Inline(mut i) => {
+                    i.id = Some(UnitId("stub".to_string()));
+                    Unit::Inline(i)
+                }
+                other => other,
+            })
+            .collect();
+        assert_eq!(execute_qmd(text, &ctx).unwrap().markdown, "A 2 B\n");
+    }
+
+    // ── errors and locations ─────────────────────────────────────────────
+
+    #[test]
+    fn a_raising_span_is_fatal_and_names_its_location() {
+        let script = Script::from([(
+            py("boom"),
+            vec![FakeOutput::Error {
+                ename: "NameError".to_string(),
+                evalue: "name 'boom' is not defined".to_string(),
+            }],
+        )]);
+        let err = run_err("line one\nsee `{python} boom` here\n", &script);
+        assert!(err.contains("raised NameError"), "{err}");
+        assert!(err.contains("doc.qmd:2:"), "{err}");
+    }
+
+    #[test]
+    fn a_statement_span_is_fatal() {
+        let script = Script::from([(py("x = 1"), vec![])]);
+        let err = run_err("`{python} x = 1`\n", &script);
+        assert!(err.contains("produced no value"), "{err}");
+    }
+
+    // ── front matter ─────────────────────────────────────────────────────
+
+    #[test]
+    fn front_matter_span_is_unescaped_before_it_runs() {
+        // The writer re-emits the title double-quoted: `f("a")` arrives as `f(\"a\")`.
+        let text = "---\ntitle: \"T `{python} f(\\\"a\\\")` end\"\n---\n\nbody\n";
+        let script = Script::from([(py("f(\"a\")"), vec![markdown("X")])]);
+        let (out, _) = run(text, &script);
+        assert_eq!(out, "---\ntitle: \"T X end\"\n---\n\nbody\n");
+    }
+
+    #[test]
+    fn front_matter_value_is_re_escaped_so_the_yaml_stays_valid() {
+        let text = "---\ntitle: \"T `{python} v` end\"\n---\n\nbody\n";
+        let script = Script::from([(py("v"), vec![markdown("q\"b\\s*")])]);
+        let (out, _) = run(text, &script);
+        assert_eq!(out, "---\ntitle: \"T q\\\"b\\\\s* end\"\n---\n\nbody\n");
+        let yaml: serde_yaml::Value =
+            serde_yaml::from_str(out.split("---\n").nth(1).unwrap()).expect("valid YAML");
+        assert_eq!(yaml["title"].as_str(), Some("T q\"b\\s* end"));
+    }
+
+    #[test]
+    fn front_matter_value_with_a_newline_is_fatal_and_names_key_and_location() {
+        let text = "---\ntitle: \"T `{python} v` end\"\n---\n\nbody\n";
+        let script = Script::from([(py("v"), vec![markdown("a\nb")])]);
+        let err = run_err(text, &script);
+        assert!(err.contains("front matter key `title`"), "{err}");
+        assert!(err.contains("doc.qmd:2:"), "{err}");
+    }
+
+    #[test]
+    fn a_failing_front_matter_span_names_the_line_it_is_on() {
+        let text = "---\ntitle: \"T `{python} v` end\"\n---\n\nbody\n";
+        let script = Script::from([(
+            py("v"),
+            vec![FakeOutput::Error {
+                ename: "NameError".to_string(),
+                evalue: "v".to_string(),
+            }],
+        )]);
+        let err = run_err(text, &script);
+        assert!(err.contains("doc.qmd:2:"), "{err}");
+    }
+
+    /// The mask turns a span in a value the document does not own (`_quarto.yml`,
+    /// `_metadata.yml`, a format default) into `` `q2-nested-executable {lang} expr` ``;
+    /// the engine must not see a span there. (The masking itself is covered in
+    /// `nested_cell_mask`.)
+    #[test]
+    fn quarto_yml_front_matter_span_stays_literal() {
+        let text = "---\ntitle: \"T `q2-nested-executable {python} 1+1` end\"\n---\n\nbody\n";
+        let (_home, ctx) = with_kernel(text, &Script::new());
+        let r = execute_qmd(text, &ctx).unwrap();
+        assert_eq!(r.markdown, text);
+    }
+
+    // ── ownership ────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_span_only_document_owns_the_selected_kernels_language() {
+        let text = "`{python} a` and `{r} b`\n";
+        let script = Script::from([(py("a"), vec![FakeOutput::plain_result("1")])]);
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &script);
+        // No owned set: ownership comes from the kernel named by `jupyter:`.
+        let ctx = ctx_for(text)
+            .with_metadata(jupyter_meta(&kernel.name))
+            .with_project_env(kernel.env);
+        assert_eq!(execute_qmd(text, &ctx).unwrap().markdown, "1 and `{r} b`\n");
+    }
+
+    #[test]
+    fn spans_of_an_unowned_language_are_untouched_and_start_no_kernel() {
+        let text = "x `{r} 1+1` y\n";
+        let (_home, mut ctx) = with_kernel(text, &Script::new());
+        ctx.owned_languages = Vec::new();
+        let r = execute_qmd(text, &ctx).unwrap();
+        assert_eq!(r.markdown, text);
+    }
+
+    #[test]
+    fn jupyter_engine_declared_spans_only_without_kernel_errors() {
+        let text = "---\ntitle: t\n---\n\nSee `{python} 1`.\n";
+        let ctx = ctx_for(text).with_owned_languages(vec!["python".to_string()]);
+        let err = execute_qmd(text, &ctx)
+            .expect_err("no kernel named")
+            .to_string();
+        assert!(err.contains("`jupyter:` kernel"), "{err}");
+
+        // A span of a language nobody here owns counts too: there is no kernel to ask.
+        let r_span = "---\ntitle: t\n---\n\nSee `{r} 1`.\n";
+        let ctx = ctx_for(r_span);
+        assert!(execute_qmd(r_span, &ctx).is_err());
+
+        // With zero spans there is nothing to evaluate: not an error.
+        let plain = "---\ntitle: t\n---\n\nNo spans.\n";
+        let ctx = ctx_for(plain).with_owned_languages(vec!["python".to_string()]);
+        assert_eq!(execute_qmd(plain, &ctx).unwrap().markdown, plain);
+    }
+
+    #[test]
+    fn spans_in_fences_and_comments_are_left_alone() {
+        let text = "```text\n`{python} 1`\n```\n\n<!-- `{python} 2` -->\n\n\
+                    <!--\nmulti `{python} 3`\n-->\n\n`    ```{python}\n";
+        let ctx = ctx_for(text).with_owned_languages(vec!["python".to_string()]);
+        assert_eq!(execute_qmd(text, &ctx).unwrap().markdown, text);
     }
 }

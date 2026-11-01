@@ -183,6 +183,8 @@ export interface TsExecuteOptions {
   libDir: string;
   quiet: boolean;
   handledLanguages: string[];
+  /** Positive set: languages present in this render that q2 assigned to this engine. */
+  ownedLanguages: string[];
   params?: Record<string, TsMetadataValue> | null;
   sourceMap: TsSourceMapEntry[];
   /** Whether to resolve dependencies inline (true, Q1 default) or defer them.

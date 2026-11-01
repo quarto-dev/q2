@@ -94,7 +94,7 @@ impossible/redundant, reason given).
 | `handledLanguages` | `handled_languages` | present | leave-alone set (§5); `HANDLED_LANGUAGES ∪ {lang owned by others}` |
 | `project: ProjectContext` | `project_dir` + launch `EngineProjectContext` | present | `config` + output-dir carried as values (DQ-5); the two callback members dropped (DQ-1) |
 | — | `source_map` | q2-native | provenance addition |
-| — | `owned_languages` | q2-native | positive projection of the ownership map (§5, Plan 4d) — `{lang owned by this engine}`; informational (not enforcement), so engines select owned cells directly instead of inferring the complement of `handledLanguages` |
+| — | `owned_languages` (wire `ownedLanguages`) | q2-native | positive projection of the ownership map (§5, Plan 4d) — `{lang owned by this engine}`; informational (not enforcement), so engines select owned cells directly instead of inferring the complement of `handledLanguages` |
 
 **`ExecutionTarget`** (Q1 cookie; q2 has **no `target()` step**):
 

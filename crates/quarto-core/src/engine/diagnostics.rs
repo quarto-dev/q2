@@ -113,6 +113,89 @@ pub fn unreadable_include_diagnostic(
         .build()
 }
 
+/// The code for every inline-expression diagnostic (EXR-3 Phase 1; `Q-18-5` to `Q-18-9`
+/// are claimed by other plans that have not landed, so the next free number is not the
+/// next unclaimed one).
+pub const INLINE_SPAN_CODE: &str = "Q-18-10";
+
+/// What went wrong with one inline expression (a brace-spelling span such as
+/// `` `{python} f(x)` ``).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InlineSpanProblem {
+    /// The kernel raised while evaluating the span. Fatal; `error: true` does not apply.
+    Raised { ename: String, evalue: String },
+    /// The kernel finished without a value: a statement such as `x = 1`. Fatal.
+    NoValue,
+    /// The kernel returned output, but nothing with a text mime type. A warning: the
+    /// span source stays in the document and the render succeeds.
+    NoUsableResult,
+    /// The span sits in a front matter value and its result cannot be written back into
+    /// the YAML string (a newline would fold to a space). Fatal; names the key.
+    FrontMatterValue { key: String, reason: String },
+}
+
+/// The one place the wording for an inline-expression problem lives (EXR-3
+/// implementer note): the answer to bd-30k2j00f would be a change here.
+///
+/// `language` and `expr` are the span's token and body; `location` is
+/// `file:line:column` when it resolves. [`InlineSpanProblem::NoUsableResult`] is a
+/// warning, the others are errors (the caller turns an error into a failed render).
+pub fn inline_span_diagnostic(
+    problem: &InlineSpanProblem,
+    language: &str,
+    expr: &str,
+    location: Option<&str>,
+) -> DiagnosticMessage {
+    let at = location.map(|l| format!(" at {l}")).unwrap_or_default();
+    let span = format!("`{{{language}}} {expr}`");
+    let builder = match problem {
+        InlineSpanProblem::Raised { ename, evalue } => {
+            DiagnosticMessageBuilder::error("Inline Expression Failed")
+                .with_code(INLINE_SPAN_CODE)
+                .problem(format!("inline expression{at} raised {ename}: {evalue}"))
+                .add_detail(format!("The expression was {span}."))
+                .add_hint(
+                    "Fix the expression, or move the computation into a code cell. \
+                     `error: true` does not apply to inline expressions.",
+                )
+        }
+        InlineSpanProblem::NoValue => DiagnosticMessageBuilder::error("Inline Expression Failed")
+            .with_code(INLINE_SPAN_CODE)
+            .problem(format!("inline expression{at} produced no value"))
+            .add_detail(format!(
+                "The expression was {span}. An inline expression must be a single \
+                 expression, not a statement such as an assignment."
+            ))
+            .add_hint("Move the statement into a code cell and refer to its value in the span."),
+        InlineSpanProblem::FrontMatterValue { key, reason } => {
+            DiagnosticMessageBuilder::error("Inline Expression Failed")
+                .with_code(INLINE_SPAN_CODE)
+                .problem(format!(
+                    "the inline expression in front matter key `{key}`{at} cannot be \
+                     written back into the front matter: {reason}"
+                ))
+                .add_detail(format!("The expression was {span}."))
+                .add_hint(
+                    "Make the expression return a single line of text, or move the \
+                     computation into the document body.",
+                )
+        }
+        InlineSpanProblem::NoUsableResult => {
+            DiagnosticMessageBuilder::warning("Inline Expression Left Unevaluated")
+                .with_code(INLINE_SPAN_CODE)
+                .problem(format!(
+                    "inline expression{at} produced no text value, so it was left as written"
+                ))
+                .add_detail(format!(
+                    "The expression was {span}. The kernel returned output, but none of it \
+                     had a text representation Quarto can place in the page."
+                ))
+                .add_hint("Make the expression return a string, a number, or a Markdown value.")
+        }
+    };
+    builder.build()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +305,95 @@ mod tests {
         assert!(text.contains("include-in-header"), "{text}");
         assert!(text.contains("/tmp/x/header.html"), "{text}");
         assert!(text.contains("No such file"), "{text}");
+    }
+
+    // ── inline-expression diagnostics (EXR-3, Q-18-10) ───────────────────
+
+    #[test]
+    fn inline_raised_is_a_coded_error_naming_span_and_location() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::Raised {
+                ename: "NameError".into(),
+                evalue: "name 'x' is not defined".into(),
+            },
+            "python",
+            "x + 1",
+            Some("doc.qmd:12:34"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Error);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains(
+                "inline expression at doc.qmd:12:34 raised NameError: name 'x' is not defined"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("`{python} x + 1`"), "{text}");
+    }
+
+    #[test]
+    fn inline_no_value_is_a_coded_error() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::NoValue,
+            "python",
+            "x = 1",
+            Some("d.qmd:3:1"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Error);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains("inline expression at d.qmd:3:1 produced no value"),
+            "{text}"
+        );
+        assert!(text.contains("`{python} x = 1`"), "{text}");
+    }
+
+    #[test]
+    fn inline_no_usable_result_is_a_coded_warning_that_does_not_fail_the_render() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::NoUsableResult,
+            "python",
+            "img",
+            Some("d.qmd:5:2"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Warning);
+        let text = diag.to_text(None);
+        assert!(text.contains("d.qmd:5:2"), "{text}");
+        assert!(text.contains("left as written"), "{text}");
+    }
+
+    #[test]
+    fn inline_front_matter_value_is_a_coded_error_naming_the_key() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::FrontMatterValue {
+                key: "title".into(),
+                reason: "the value contains a newline".into(),
+            },
+            "python",
+            "f()",
+            Some("d.qmd:2:8"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Error);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains("front matter key `title` at d.qmd:2:8"),
+            "{text}"
+        );
+        assert!(text.contains("the value contains a newline"), "{text}");
+    }
+
+    #[test]
+    fn inline_diagnostics_omit_the_location_when_it_does_not_resolve() {
+        let diag = inline_span_diagnostic(&InlineSpanProblem::NoValue, "r", "x <- 1", None);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains("inline expression produced no value"),
+            "{text}"
+        );
+        assert!(!text.contains(" at "), "{text}");
     }
 }

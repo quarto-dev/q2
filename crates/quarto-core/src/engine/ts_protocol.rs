@@ -371,15 +371,14 @@ pub struct TsExecuteOptions {
     /// assigned to me" set. Mirrors
     /// `EngineResolution::handled_languages_for` (`resolution.rs:292`):
     /// q2's built-in `HANDLED_LANGUAGES` ∪ every language this render
-    /// assigned to a DIFFERENT engine. A TS engine that wants to know
-    /// "did q2 assign ME ownership of language L for this render" must
-    /// infer it as the *complement* — L present in the document AND L
-    /// absent from `handled_languages` — not by looking for its own name
-    /// inside the array (it never appears there). This is sound because
-    /// q2's resolver assigns every language present in the document an
-    /// owner, or hard-fails, before `execute()` ever runs, so "L absent
-    /// from this set" and "L owned by me" coincide for any L the engine
-    /// actually has to make a decision about.
+    /// assigned to a DIFFERENT engine.
+    ///
+    /// NOTE: "absent from this set" means *owned by me OR owned by nobody* — a
+    /// present-but-unclaimed or execute-time-injected language is owned by no
+    /// engine and is absent here too (design §6.1, pass-through). To ask
+    /// unambiguously "did q2 assign me L?", read [`Self::owned_languages`] (the
+    /// positive projection), not the complement of this set. This engine's own
+    /// name never appears in this array.
     ///
     /// Got this backwards once already: the marimo TS engine's bare-`sql`
     /// Interop gate (`bareSqlOwned`) read `handled_languages.includes("sql")`

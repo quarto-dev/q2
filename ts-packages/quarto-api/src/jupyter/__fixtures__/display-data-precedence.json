@@ -1,0 +1,27 @@
+{
+  "_comment": "Shared by crates/quarto-core/src/presenter/inline.rs (display_data_mime_type) and ts-packages/quarto-api/src/jupyter/display-data-precedence.test.ts (displayDataMimeType). Each case: the flags, a mime bundle (values are irrelevant except text/html for the table rule), the expected mime type or null.",
+  "cases": [
+    {"name": "html: plain only", "flags": {"toHtml": true}, "data": {"text/plain": "x"}, "expected": "text/plain"},
+    {"name": "html: html beats markdown", "flags": {"toHtml": true}, "data": {"text/markdown": "m", "text/html": "<p>h</p>", "text/plain": "x"}, "expected": "text/html"},
+    {"name": "html: widget view beats markdown and html", "flags": {"toHtml": true}, "data": {"text/markdown": "m", "text/html": "<p>h</p>", "application/vnd.jupyter.widget-view+json": {}}, "expected": "application/vnd.jupyter.widget-view+json"},
+    {"name": "html: widget state first", "flags": {"toHtml": true}, "data": {"application/vnd.jupyter.widget-view+json": {}, "application/vnd.jupyter.widget-state+json": {}}, "expected": "application/vnd.jupyter.widget-state+json"},
+    {"name": "html: javascript beats html", "flags": {"toHtml": true}, "data": {"text/html": "<p>h</p>", "application/javascript": "1"}, "expected": "application/javascript"},
+    {"name": "html: markdown beats svg, png, jpeg", "flags": {"toHtml": true}, "data": {"image/png": "p", "image/jpeg": "j", "image/svg+xml": "s", "text/markdown": "m"}, "expected": "text/markdown"},
+    {"name": "html: svg beats png beats jpeg", "flags": {"toHtml": true}, "data": {"image/png": "p", "image/jpeg": "j", "image/svg+xml": "s"}, "expected": "image/svg+xml"},
+    {"name": "html: latex is not a candidate", "flags": {"toHtml": true}, "data": {"text/latex": "l", "text/plain": "x"}, "expected": "text/plain"},
+    {"name": "html+markdown: html cluster still first", "flags": {"toHtml": true, "toMarkdown": true}, "data": {"text/markdown": "m", "text/html": "<p>h</p>"}, "expected": "text/html"},
+    {"name": "latex: latex after images", "flags": {"toLatex": true}, "data": {"text/latex": "l", "text/plain": "x"}, "expected": "text/latex"},
+    {"name": "latex: markdown beats latex", "flags": {"toLatex": true}, "data": {"text/latex": "l", "text/markdown": "m"}, "expected": "text/markdown"},
+    {"name": "latex: pdf after latex", "flags": {"toLatex": true}, "data": {"application/pdf": "p", "text/latex": "l"}, "expected": "text/latex"},
+    {"name": "latex: html is not a candidate", "flags": {"toLatex": true}, "data": {"text/html": "<p>h</p>", "text/plain": "x"}, "expected": "text/plain"},
+    {"name": "latex: html table is added", "flags": {"toLatex": true}, "data": {"text/html": "<table><tr><td>1</td></tr></table>", "text/plain": "x"}, "expected": "text/html"},
+    {"name": "markdown: markdown first", "flags": {"toMarkdown": true}, "data": {"text/html": "<p>h</p>", "text/markdown": "m"}, "expected": "text/markdown"},
+    {"name": "markdown: html after images", "flags": {"toMarkdown": true}, "data": {"text/html": "<p>h</p>", "text/plain": "x"}, "expected": "text/html"},
+    {"name": "other: html is not a candidate", "flags": {}, "data": {"text/html": "<p>h</p>", "text/plain": "x"}, "expected": "text/plain"},
+    {"name": "other: html table is added", "flags": {}, "data": {"text/html": "<TABLE><tr><td>1</td></tr></TABLE>", "text/plain": "x"}, "expected": "text/html"},
+    {"name": "other: open table tag alone is not a table", "flags": {}, "data": {"text/html": "<table>", "text/plain": "x"}, "expected": "text/plain"},
+    {"name": "other: image beats plain", "flags": {}, "data": {"image/png": "p", "text/plain": "x"}, "expected": "image/png"},
+    {"name": "empty bundle", "flags": {"toHtml": true}, "data": {}, "expected": null},
+    {"name": "unknown mime only", "flags": {}, "data": {"application/x-foo": "f"}, "expected": null}
+  ]
+}

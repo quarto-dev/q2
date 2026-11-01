@@ -24,13 +24,54 @@ use crate::engine::DEFAULT_EXECUTE_TIMEOUT;
 // themselves are target-neutral and live in the presenter.
 pub use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
 
+/// Flags of an `execute_request` that the engine chooses per call.
+///
+/// A cell uses the default (`store_history = true`, `silent = false`). An inline
+/// expression runs with `store_history = false` and `silent = false`: `silent = true`
+/// would suppress the `execute_result` whose value the span needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExecuteOpts {
+    pub store_history: bool,
+    pub silent: bool,
+}
+
+impl Default for ExecuteOpts {
+    fn default() -> Self {
+        Self {
+            store_history: true,
+            silent: false,
+        }
+    }
+}
+
+impl ExecuteOpts {
+    /// The flags for an inline expression (EXR-3 design decision 1).
+    pub const INLINE: Self = Self {
+        store_history: false,
+        silent: false,
+    };
+}
+
+/// Build the `execute_request` for `code` with `opts`.
+pub(crate) fn build_execute_request(code: &str, opts: ExecuteOpts) -> ExecuteRequest {
+    let mut request = ExecuteRequest::new(code.to_string());
+    request.store_history = opts.store_history;
+    request.silent = opts.silent;
+    request
+}
+
 impl KernelSession {
     /// Execute code in the kernel and collect outputs.
     ///
     /// This sends an execute_request, collects outputs from iopub until
     /// the kernel returns to idle state, then returns the collected outputs.
     pub async fn execute(&mut self, code: &str) -> Result<CellResult> {
-        self.execute_with_timeout(code, DEFAULT_EXECUTE_TIMEOUT)
+        self.execute_with(code, ExecuteOpts::default()).await
+    }
+
+    /// Execute code with explicit request flags (see [`ExecuteOpts`]).
+    pub async fn execute_with(&mut self, code: &str, opts: ExecuteOpts) -> Result<CellResult> {
+        self.execute_with_opts_and_timeout(code, opts, DEFAULT_EXECUTE_TIMEOUT)
             .await
     }
 
@@ -40,11 +81,20 @@ impl KernelSession {
         code: &str,
         exec_timeout: Duration,
     ) -> Result<CellResult> {
+        self.execute_with_opts_and_timeout(code, ExecuteOpts::default(), exec_timeout)
+            .await
+    }
+
+    async fn execute_with_opts_and_timeout(
+        &mut self,
+        code: &str,
+        opts: ExecuteOpts,
+        exec_timeout: Duration,
+    ) -> Result<CellResult> {
         let _execution_count = self.next_execution_count();
 
         // Build execute request
-        let request = ExecuteRequest::new(code.to_string());
-        let message: JupyterMessage = request.into();
+        let message: JupyterMessage = build_execute_request(code, opts).into();
         let msg_id = message.header.msg_id.clone();
 
         // Send the request
@@ -142,49 +192,6 @@ impl KernelSession {
             outputs,
             execution_count,
         })
-    }
-
-    /// Evaluate expressions and return their string representations.
-    ///
-    /// This uses the `user_expressions` feature of execute_request to
-    /// evaluate multiple expressions in a single request without
-    /// affecting execution count.
-    pub async fn evaluate_expressions(
-        &mut self,
-        expressions: &[String],
-    ) -> Result<Vec<Option<String>>> {
-        if expressions.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Build user_expressions map
-        let user_expressions: std::collections::HashMap<String, String> = expressions
-            .iter()
-            .enumerate()
-            .map(|(i, expr)| (i.to_string(), expr.clone()))
-            .collect();
-
-        // Build execute request with empty code but user_expressions
-        let mut request = ExecuteRequest::new(String::new());
-        request.silent = true;
-        request.store_history = false;
-        request.user_expressions = Some(user_expressions);
-
-        let message: JupyterMessage = request.into();
-        let msg_id = message.header.msg_id.clone();
-
-        // Send the request
-        self.shell_socket
-            .send(message)
-            .await
-            .map_err(|e| JupyterError::SendError(e.to_string()))?;
-
-        // Wait for idle
-        let _ = self.collect_outputs(&msg_id).await?;
-
-        // TODO: Extract user_expressions from execute_reply
-        // For now, return empty results
-        Ok(vec![None; expressions.len()])
     }
 }
 
@@ -307,5 +314,25 @@ mod tests {
             metadata: serde_json::json!({}),
         };
         assert!(matches!(result, CellOutput::ExecuteResult { .. }));
+    }
+}
+
+#[cfg(test)]
+mod request_tests {
+    use super::*;
+
+    #[test]
+    fn default_opts_are_a_normal_cell() {
+        let r = build_execute_request("1+1", ExecuteOpts::default());
+        assert_eq!(r.code, "1+1");
+        assert!(r.store_history);
+        assert!(!r.silent);
+    }
+
+    #[test]
+    fn inline_opts_do_not_store_history_and_are_not_silent() {
+        let r = build_execute_request("x", ExecuteOpts::INLINE);
+        assert!(!r.store_history);
+        assert!(!r.silent, "silent would suppress the execute_result");
     }
 }

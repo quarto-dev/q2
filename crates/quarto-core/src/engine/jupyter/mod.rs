@@ -40,6 +40,9 @@
 mod daemon;
 mod error;
 mod execute;
+#[cfg(test)]
+mod fake_kernel;
+mod inline;
 mod kernelspec;
 #[cfg(test)]
 mod presenter_goldens;

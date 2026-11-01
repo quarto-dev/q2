@@ -61,17 +61,7 @@ fn fixture(
 /// capture_splice_engines.rs for why pollster and not #[tokio::test])
 /// and parse the capture's post-engine markdown.
 fn post_engine_ast(content: &str, engine: &str) -> Pandoc {
-    let (_tmp, path, project, runtime) = fixture(content);
-    let captures =
-        pollster::block_on(record_capture(&path, &project, runtime, None)).expect("record_capture");
-    assert_eq!(captures.len(), 1, "expected one capture for {engine}");
-    let capture = &captures[0];
-    assert_eq!(capture.engine_name, engine);
-    let result_markdown = capture
-        .result
-        .get("markdown")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let result_markdown = post_engine_markdown(content, engine);
     let (pandoc, _, _) = pampa::readers::qmd::read(
         result_markdown.as_bytes(),
         false,
@@ -82,6 +72,22 @@ fn post_engine_ast(content: &str, engine: &str) -> Pandoc {
     )
     .expect("parse post-engine markdown");
     pandoc
+}
+
+/// The capture's post-engine markdown (see [`post_engine_ast`]).
+fn post_engine_markdown(content: &str, engine: &str) -> String {
+    let (_tmp, path, project, runtime) = fixture(content);
+    let captures =
+        pollster::block_on(record_capture(&path, &project, runtime, None)).expect("record_capture");
+    assert_eq!(captures.len(), 1, "expected one capture for {engine}");
+    let capture = &captures[0];
+    assert_eq!(capture.engine_name, engine);
+    capture
+        .result
+        .get("markdown")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 /// The classes downstream consumers key on. Language classes and
@@ -387,4 +393,49 @@ fn two_cell_doc(engine: &str, lang: &str, cell1: &str, cell2: &str) -> String {
     format!(
         "---\ntitle: Parity\nengine: {engine}\n---\n\nBefore.\n\n```{{{lang}}}\n{cell1}\n```\n\nBetween.\n\n```{{{lang}}}\n{cell2}\n```\n\nAfter.\n"
     )
+}
+
+/// Inline expressions (EXR-3, requested by bd-u996g8g2): the same prose with a brace
+/// span gives the same block shape under both engines, and the span is evaluated (no
+/// brace spelling left, the value present) in each.
+#[test]
+fn parity_inline_span() {
+    if !both_engines_available() {
+        eprintln!("Skipping test: parity suite needs both knitr and jupyter installed");
+        return;
+    }
+    let doc = |engine: &str, lang: &str, setup: &str| {
+        format!(
+            "---\ntitle: Parity\nengine: {engine}\n---\n\n```{{{lang}}}\n{setup}\n```\n\nValue is `{{{lang}}} x + 2`.\n"
+        )
+    };
+    let knitr_md = post_engine_markdown(&doc("knitr", "r", "x <- 40"), "knitr");
+    let jupyter_md = post_engine_markdown(&doc("jupyter", "python", "x = 40"), "jupyter");
+    for (name, md) in [("knitr", &knitr_md), ("jupyter", &jupyter_md)] {
+        assert!(
+            md.contains("Value is 42."),
+            "{name} did not evaluate the span:\n{md}"
+        );
+        assert!(
+            !md.contains("{r}") && !md.contains("{python}"),
+            "{name}:\n{md}"
+        );
+    }
+    let parse = |md: &str| {
+        pampa::readers::qmd::read(
+            md.as_bytes(),
+            false,
+            "capture-result.md",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("parse post-engine markdown")
+        .0
+    };
+    assert_blocks_parity(
+        &parse(&knitr_md).blocks,
+        &parse(&jupyter_md).blocks,
+        "blocks",
+    );
 }

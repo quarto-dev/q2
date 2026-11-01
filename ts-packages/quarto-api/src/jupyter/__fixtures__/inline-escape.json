@@ -1,0 +1,98 @@
+[
+  {
+    "input": "2",
+    "expected": "2"
+  },
+  {
+    "input": "3.14",
+    "expected": "3.14"
+  },
+  {
+    "input": "'hello_world'",
+    "expected": "hello\\_world"
+  },
+  {
+    "input": "\"a*b\"",
+    "expected": "a\\*b"
+  },
+  {
+    "input": "'a\\b'",
+    "expected": "a\\\\\\\\b"
+  },
+  {
+    "input": "''",
+    "expected": ""
+  },
+  {
+    "input": "'",
+    "expected": ""
+  },
+  {
+    "input": "'x'y'",
+    "expected": "x'y"
+  },
+  {
+    "input": "None",
+    "expected": "None"
+  },
+  {
+    "input": "'a,b'",
+    "expected": "a\\,b"
+  },
+  {
+    "input": "'(1+2)=3!'",
+    "expected": "\\(1\\+2\\)=3\\!"
+  },
+  {
+    "input": "'#h > q'",
+    "expected": "\\#h \\> q"
+  },
+  {
+    "input": "'a`b'",
+    "expected": "a\\`b"
+  },
+  {
+    "input": "'{x}[y]'",
+    "expected": "\\{x\\}\\[y\\]"
+  },
+  {
+    "input": "'a-b.c'",
+    "expected": "a\\-b\\.c"
+  },
+  {
+    "input": "'a/b:c;d'",
+    "expected": "a/b:c;d"
+  },
+  {
+    "input": "'a~b^c|d'",
+    "expected": "a~b^c|d"
+  },
+  {
+    "input": "'a b'",
+    "expected": "a b"
+  },
+  {
+    "input": "\"it's\"",
+    "expected": "it's"
+  },
+  {
+    "input": "'<b>'",
+    "expected": "<b\\>"
+  },
+  {
+    "input": "'a&b'",
+    "expected": "a&b"
+  },
+  {
+    "input": "'$x$'",
+    "expected": "$x$"
+  },
+  {
+    "input": "'='",
+    "expected": "="
+  },
+  {
+    "input": "'\\n'",
+    "expected": "\\\\\\\\n"
+  }
+]

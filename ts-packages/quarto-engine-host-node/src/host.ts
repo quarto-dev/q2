@@ -679,6 +679,7 @@ export async function runHost(
               params: opts.params ?? undefined, // OWN field — NEVER from format.metadata
               quiet: opts.quiet,
               handledLanguages: opts.handledLanguages,
+              ownedLanguages: opts.ownedLanguages,
               dependencies: opts.dependencies,
               project: richProject,
               previewServer: false,

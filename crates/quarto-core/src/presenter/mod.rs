@@ -15,6 +15,7 @@
 
 pub mod cell;
 pub mod figures;
+pub mod inline;
 pub mod output;
 #[cfg(test)]
 pub(crate) mod recording_runtime;

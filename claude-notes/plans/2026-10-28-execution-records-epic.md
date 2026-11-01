@@ -294,8 +294,9 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     presenter\'s tests and are regenerated only by one documented command; they are
     the only record of the pre-record output format. Plan: EXR-6.
 29. **The no-usable-result warning is a registered code (EXR-3).** It is a new
-    engine-subsystem code, `Q-18-4`, with a catalog entry, a docs page
-    (`docs/errors/engine/Q-18-4.qmd`) and the same corpus and tests as the existing
+    engine-subsystem code, `Q-18-10` (amended 2026-10-31: JOL-2a took `Q-18-4`, and
+    `Q-18-5` to `Q-18-9` are claimed by other plans), with a catalog entry, a docs page
+    (`docs/errors/engine/Q-18-10.qmd`) and the same corpus and tests as the existing
     codes. Plan: EXR-3.
 30. **Positron spike branches and the demo (EXR-16).** Branches are named
     `spike/q2-<id>-<topic>` in Gordon\'s fork, and the S6 demo ships a short screen

@@ -72,6 +72,15 @@ pub fn plan_units(
         .collect()
 }
 
+/// What a replacement is, which decides the spacing around it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpliceKind {
+    /// A block (a `::: {.cell}` div): kept in its own block, see [`splice_units`].
+    Block,
+    /// Text inside a line (an inline span's value): inserted exactly as given.
+    Inline,
+}
+
 /// Replace byte ranges of `input` with rendered text, copying the gaps between
 /// them verbatim. `replacements` are in document order and do not overlap.
 ///
@@ -80,11 +89,21 @@ pub fn plan_units(
 /// added to keep the opener in its own block even when the source had no blank
 /// line before the cell.
 pub fn splice_units(input: &str, replacements: &[(Range<usize>, String)]) -> String {
+    let all: Vec<_> = replacements
+        .iter()
+        .map(|(r, t)| (r.clone(), t.clone(), SpliceKind::Block))
+        .collect();
+    splice_mixed(input, &all)
+}
+
+/// [`splice_units`] for a list that mixes cells and inline spans: only a
+/// [`SpliceKind::Block`] replacement gets the blank-line padding.
+pub fn splice_mixed(input: &str, replacements: &[(Range<usize>, String, SpliceKind)]) -> String {
     let mut output = String::with_capacity(input.len());
     let mut last_end = 0;
-    for (range, text) in replacements {
+    for (range, text, kind) in replacements {
         output.push_str(&input[last_end..range.start]);
-        if output.ends_with('\n') && !output.ends_with("\n\n") {
+        if *kind == SpliceKind::Block && output.ends_with('\n') && !output.ends_with("\n\n") {
             output.push('\n');
         }
         output.push_str(text);
@@ -189,6 +208,27 @@ mod tests {
         let start = input.find("CELL").unwrap();
         let out = splice_units(input, &[(start..start + 4, "X".to_string())]);
         assert_eq!(out, "text\n\nX\n");
+    }
+
+    #[test]
+    fn splice_mixed_pads_blocks_but_not_inline_text() {
+        let input = "x `{python} 1`\nCELL\n";
+        let span = input.find('`').unwrap();
+        let span_end = input.find("`\n").unwrap() + 1;
+        let cell = input.find("CELL").unwrap();
+        let out = splice_mixed(
+            input,
+            &[
+                (span..span_end, "1".to_string(), SpliceKind::Inline),
+                (
+                    cell..cell + 4,
+                    "::: {.cell}\n:::".to_string(),
+                    SpliceKind::Block,
+                ),
+            ],
+        );
+        // The inline value is not padded; the block after a one-newline gap is.
+        assert_eq!(out, "x 1\n\n::: {.cell}\n:::\n");
     }
 
     #[test]
