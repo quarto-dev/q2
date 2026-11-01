@@ -28,14 +28,17 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+mod adapter;
 mod chunk_records;
 mod error_lines;
 pub mod error_parser;
 pub mod format;
+pub mod hash_rule;
 pub mod label_reinsert;
 pub mod pieces_map;
 pub mod preprocess;
 mod span_records;
+pub(crate) mod structured;
 pub mod subprocess;
 pub mod target_route;
 pub mod types;
@@ -98,10 +101,16 @@ fn remap_error_lines(
     }
 }
 
+// What knitr claims is `super::knitr_claims`, defined outside this native-only module so the
+// replay engine can use it on `wasm32`.
+use super::knitr_claims;
+
 #[cfg(test)]
 mod capture_tests;
 #[cfg(test)]
 mod chunk_record_tests;
+#[cfg(test)]
+mod gating_tests;
 
 // ============================================================================
 // Embedded R Scripts
@@ -258,6 +267,11 @@ impl ExecutionEngine for KnitrEngine {
         let document_dir = ctx.source_path.parent().unwrap_or(&ctx.cwd).to_path_buf();
         let working_dir = determine_working_dir(&document_dir, ctx.project_dir.as_deref());
 
+        // Step 5b (KNR-3): ask R for pieces only on a structured route; a fallback route
+        // skips capture and says so once.
+        let capture_plan =
+            target_route::plan_capture(ctx.want_record, !ctx.units.is_empty(), &ctx.format);
+
         // Step 6: Build execute params
         let params = KnitrExecuteParams {
             input: ctx.source_path.clone(),
@@ -273,7 +287,7 @@ impl ExecutionEngine for KnitrEngine {
             // Populated from ExecutionContext so multi-engine sequences can extend
             // this set with languages owned by other engines.
             handled_languages: ctx.handled_languages.clone(),
-            capture: false,
+            capture: capture_plan.capture,
         };
 
         // Step 7: Build call options
@@ -313,6 +327,40 @@ impl ExecutionEngine for KnitrEngine {
             ..Default::default()
         };
 
+        execute_result.warnings.extend(capture_plan.diagnostic);
+        if !result.cache_disabled.is_empty() {
+            execute_result
+                .warnings
+                .push(super::diagnostics::knitr_cache_disabled_diagnostic(
+                    &result.cache_disabled,
+                ));
+        }
+        let child_labels: Vec<String> = result
+            .pieces
+            .iter()
+            .filter(|c| {
+                matches!(c.pieces.as_slice(),
+                    [types::KnitrPiece::Other { classes }] if classes.as_slice() == ["child"])
+            })
+            .map(|c| c.label.clone())
+            .collect();
+        if !child_labels.is_empty() {
+            execute_result
+                .warnings
+                .push(super::diagnostics::knitr_child_diagnostic(&child_labels));
+        }
+        if let Some((hook, label)) = result
+            .pieces
+            .iter()
+            .find_map(|c| Some((c.hook_override.as_deref()?, c.label.as_str())))
+        {
+            execute_result
+                .warnings
+                .push(super::diagnostics::knitr_hook_override_diagnostic(
+                    hook, label,
+                ));
+        }
+
         // Step 12 (EXR-11): the record, a side product that never changes the markdown.
         chunk_records::attach_records(
             ctx,
@@ -324,6 +372,20 @@ impl ExecutionEngine for KnitrEngine {
                 found: &result.spans,
                 location: &|id| span_records::span_location(ctx, engine_input, id),
             },
+            // A captured run (KNR-3) carries the pieces; `target_route::plan_capture` decided
+            // whether R was asked for them.
+            (!result.pieces.is_empty()).then_some(&adapter::Captured {
+                pieces: &result.pieces,
+                known_options: result.known_options.as_deref(),
+                // knitr resolves a path the author wrote (`include_graphics`) against its working
+                // directory, but writes the figures it draws under the document\'s own directory
+                // (they differ in a project subdirectory), so look in both.
+                read_file: &|path| {
+                    std::fs::read(working_dir.join(path))
+                        .or_else(|_| std::fs::read(document_dir.join(path)))
+                        .ok()
+                },
+            }),
             &mut execute_result,
         );
         Ok(execute_result)
@@ -333,12 +395,11 @@ impl ExecutionEngine for KnitrEngine {
         true
     }
 
-    /// knitr bakes presentation into its rendered markdown, so every chunk option and every
-    /// `execute:` key counts: empty exclusion lists (EXR-4 hash declaration).
+    /// knitr's declaration (`hash_rule`): the default profile, used by fallback units that bake
+    /// presentation into finished markdown, counts every chunk option; the `structured` profile
+    /// leaves out a closed list of presentation-only options. Every `execute:` key counts in both.
     fn hash_definition(&self) -> crate::record::HashDefinition {
-        let mut def = crate::record::HashDefinition::conservative("knitr");
-        def.document_keys = vec!["knitr".to_string()];
-        def
+        hash_rule::knitr_hash_definition()
     }
 
     /// Deliberate q2 design choice: knitr claims `r` as Primary(1), and additionally
@@ -350,15 +411,7 @@ impl ExecutionEngine for KnitrEngine {
     /// (T2 explicit Fallback > T3 Interop). See `claude-notes/designs/engine-resolution.md`
     /// §3.1 and §4.4.
     fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
-        match language {
-            "r" => LanguageClaim::Primary(1),
-            // The Interop set is knitr's `knit_engines` in-session capability
-            // (reticulate/eng_sql/shell), ceded to a dedicated engine when one is
-            // present. Pinned, not guessed: Q1 ships verified knitr support for
-            // each of these (knitr-fixup.lua for sql, reticulate for python, etc.).
-            "python" | "sql" | "bash" | "sh" => LanguageClaim::Interop(0),
-            _ => LanguageClaim::None,
-        }
+        knitr_claims(language)
     }
 
     /// Pure Rust, always static. See `test_knitr_try_claims_language_answers_statically`.
@@ -564,7 +617,10 @@ mod tests {
         assert!(def.presentation_cell_options.is_empty());
         assert!(def.presentation_execute_keys.is_empty());
         assert_eq!(def.document_keys, ["knitr"]);
-        assert!(def.profiles.is_empty());
+        // KNR-3: the default profile is still the all-options rule; fallback units use it. The
+        // `structured` profile is covered in `hash_rule`.
+        assert_eq!(def.profiles.len(), 1);
+        assert!(def.profiles.contains_key(hash_rule::STRUCTURED_PROFILE));
     }
 
     #[test]

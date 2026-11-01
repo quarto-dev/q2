@@ -521,7 +521,7 @@ fn json_text(v: &Value) -> Option<String> {
 }
 
 /// A resolved `ConfigValue` as JSON, for [`json_text`].
-fn config_to_json(v: &ConfigValue) -> Value {
+pub(crate) fn config_to_json(v: &ConfigValue) -> Value {
     if let Some(items) = v.as_array() {
         return Value::Array(items.iter().map(config_to_json).collect());
     }

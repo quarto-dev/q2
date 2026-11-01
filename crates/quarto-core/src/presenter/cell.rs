@@ -360,7 +360,7 @@ fn widget_output(o: &CellOutput) -> bool {
         if metadata["quarto_knitr"]["widget"] == true)
 }
 
-fn is_plot_output(o: &CellOutput) -> bool {
+pub(crate) fn is_plot_output(o: &CellOutput) -> bool {
     matches!(o, CellOutput::DisplayData { data, .. }
         if ["image/svg+xml", "image/png", "image/jpeg"].iter().any(|m| data.contains_key(*m)))
 }

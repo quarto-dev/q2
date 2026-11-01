@@ -192,6 +192,61 @@ pub fn no_runnable_kernel_diagnostic(
         .build()
 }
 
+/// `Q-18-12`: knitr\'s cache is off for the run that records the document. One per document,
+/// naming the chunks that asked for it. Informational: the output is the same, only slower.
+pub fn knitr_cache_disabled_diagnostic(labels: &[String]) -> DiagnosticMessage {
+    let list = labels
+        .iter()
+        .map(|l| format!("`{l}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    DiagnosticMessageBuilder::info("knitr Cache Is Off While Recording")
+        .with_code("Q-18-12")
+        .problem(format!(
+            "these chunks asked for knitr\'s cache, and it was turned off for them: {list}."
+        ))
+        .add_detail(
+            "Recording a chunk\'s output needs the chunk to run, and a cache hit skips the run, \
+             so the chunks run every time this document is executed.",
+        )
+        .build()
+}
+
+/// `Q-18-13`: the document replaced a knitr hook, so that chunk and every later one keep
+/// knitr\'s finished markdown. One per document, naming the hook and the first chunk.
+pub fn knitr_hook_override_diagnostic(hook: &str, label: &str) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::info("knitr Hook Replaced By The Document")
+        .with_code("Q-18-13")
+        .problem(format!(
+            "the chunk `{label}` replaced knitr\'s `{hook}` hook (`knitr::knit_hooks$set`)."
+        ))
+        .add_detail(
+            "Quarto cannot reproduce what a replaced hook does from the recorded pieces, so \
+             this chunk and every chunk after it keep knitr\'s finished markdown.",
+        )
+        .build()
+}
+
+/// `Q-18-14`: chunks with `child=` keep knitr\'s finished markdown. One per document, naming
+/// the chunks.
+pub fn knitr_child_diagnostic(labels: &[String]) -> DiagnosticMessage {
+    let list = labels
+        .iter()
+        .map(|l| format!("`{l}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    DiagnosticMessageBuilder::info("knitr Child Document Kept As knitr Wrote It")
+        .with_code("Q-18-14")
+        .problem(format!(
+            "these chunks include a child document with `child=`: {list}."
+        ))
+        .add_detail(
+            "The child document is run by knitr and its finished markdown is kept as one block, \
+             so its chunks are not presented from recorded pieces.",
+        )
+        .build()
+}
+
 /// A fence language that Quarto 2 invented and is removing. Not coded: it
 /// goes away with the alias table after one release.
 pub fn deprecated_alias_diagnostic(alias: &str, canonical: &str) -> DiagnosticMessage {

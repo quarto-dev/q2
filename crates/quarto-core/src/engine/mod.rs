@@ -167,6 +167,22 @@ pub enum LanguageClaim {
     None,
 }
 
+/// What knitr claims, as a pure function so a replay of a knitr trace claims the same languages.
+///
+/// It lives here, not in the native-only `knitr` module, because [`replay::ReplayEngine`] calls
+/// it and the replay path builds for `wasm32` (hub guests replay knitr records without R).
+pub(crate) fn knitr_claims(language: &str) -> LanguageClaim {
+    match language {
+        "r" => LanguageClaim::Primary(1),
+        // The Interop set is knitr's `knit_engines` in-session capability
+        // (reticulate/eng_sql/shell), ceded to a dedicated engine when one is
+        // present. Pinned, not guessed: Q1 ships verified knitr support for
+        // each of these (knitr-fixup.lua for sql, reticulate for python, etc.).
+        "python" | "sql" | "bash" | "sh" => LanguageClaim::Interop(0),
+        _ => LanguageClaim::None,
+    }
+}
+
 /// Languages that Quarto handles downstream via cell handlers (ojs, mermaid, dot).
 ///
 /// Engines must **leave these blocks unchanged** in their output — they are

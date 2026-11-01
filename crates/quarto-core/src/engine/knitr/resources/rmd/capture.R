@@ -19,6 +19,13 @@ quarto_capture <- new.env()
 quarto_capture$records <- list()
 quarto_capture$slot <- NULL
 quarto_capture$ordinal <- 0L
+quarto_capture$hooks_at_start <- NULL
+quarto_capture$hook_override <- NULL
+quarto_capture$cache_labels <- character()
+
+# The knit hooks whose replacement silently changes the markdown the presenter would not see
+# (KNR-1 S5). `chunk`, `document` and `inline` are Quarto's own.
+capture_watched_hooks <- c("source", "output", "message", "warning", "error", "plot")
 
 # Options dropped because they carry document text or state outside the unit
 # (S3); NULL-valued options are dropped too.
@@ -190,6 +197,12 @@ capture_select_plots <- function(res, options) {
 
 capture_evaluate_hook <- function(orig) {
   function(code, ...) {
+    if (is.null(quarto_capture$hooks_at_start)) {
+      quarto_capture$hooks_at_start <- lapply(
+        stats::setNames(capture_watched_hooks, capture_watched_hooks),
+        function(n) knitr::knit_hooks$get(n)
+      )
+    }
     plot_files_before <- length(knitr::opts_knit$get("plot_files"))
     res <- orig(code, ...)
     options <- knitr::opts_current$get()
@@ -250,9 +263,47 @@ capture_image_widths <- function(paths, dpi, options) {
   }, numeric(1), USE.NAMES = FALSE)
 }
 
+# Compare each watched knit hook with the one in place before the first chunk ran; the first
+# difference sticks, so that chunk and every later one is flagged (hooks are global and
+# persist). An override reverted later stays flagged.
+capture_check_hooks <- function() {
+  if (!is.null(quarto_capture$hook_override) || is.null(quarto_capture$hooks_at_start)) {
+    return(invisible())
+  }
+  for (n in capture_watched_hooks) {
+    if (!identical(knitr::knit_hooks$get(n), quarto_capture$hooks_at_start[[n]])) {
+      quarto_capture$hook_override <- n
+      break
+    }
+  }
+  invisible()
+}
+
+# A `child=` chunk has no evaluate() pieces and no chunk-hook call; hooks.R reports it here.
+# It becomes a captured record whose one piece is `other` (class "child"), which the adapter
+# turns into a fallback cell holding the child's finished markdown.
+capture_child_record <- function(options, markdown) {
+  capture_check_hooks()
+  quarto_capture$ordinal <- quarto_capture$ordinal + 1L
+  record <- list(
+    ordinal = quarto_capture$ordinal,
+    label = options$label,
+    code = "",
+    options = capture_options(options),
+    pieces = list(list(class = "other", classes = I("child"))),
+    files = I(character())
+  )
+  if (!is.null(quarto_capture$hook_override)) {
+    record$hook_override <- quarto_capture$hook_override
+  }
+  quarto_capture$records[[length(quarto_capture$records) + 1L]] <- record
+  invisible()
+}
+
 capture_chunk_hook <- function(prev) {
   function(x, options) {
     out <- prev(x, options)
+    capture_check_hooks()
     quarto_capture$ordinal <- quarto_capture$ordinal + 1L
     slot <- quarto_capture$slot
     quarto_capture$slot <- NULL
@@ -294,7 +345,7 @@ capture_chunk_hook <- function(prev) {
         p
       })
     }
-    quarto_capture$records[[length(quarto_capture$records) + 1L]] <- list(
+    record <- list(
       ordinal = quarto_capture$ordinal,
       label = options$label,
       code = code,
@@ -302,8 +353,52 @@ capture_chunk_hook <- function(prev) {
       pieces = unname(pieces),
       files = I(sort(unique(as.character(files))))
     )
+    # a NULL would serialize as `{}`: add the field only when set
+    if (!is.null(quarto_capture$hook_override)) {
+      record$hook_override <- quarto_capture$hook_override
+    }
+    quarto_capture$records[[length(quarto_capture$records) + 1L]] <- record
     out
   }
+}
+
+# The option names the chunk hook does NOT forward as cell attributes (KNR-3): the same
+# `known_opts` union hooks.R builds in its chunk hook ("forward any other unknown attributes"),
+# so the presenter forwards exactly what Quarto 1 does. Read before any chunk runs, so a setup
+# chunk's `opts_chunk$set` cannot make an unknown name known. Keep in step with hooks.R.
+capture_known_options <- function() {
+  knitr_default_opts <- unique(c(
+    tryCatch(names(knitr:::opts_chunk_attr), error = function(e) character()),
+    names(knitr::opts_chunk$get())
+  ))
+  # fmt: skip
+  quarto_knitr_opts <- c(
+    "fig.cap", "fig.subcap", "fig.scap", "fig.link", "fig.alt",
+    "fig.align", "fig.env", "fig.pos", "fig.num", "out.width"
+  )
+  # fmt: skip
+  quarto_opts <- c(
+    "label", "lst-cap", "lst-label", "classes", "panel", "column",
+    "tbl-column", "tbl-cap-location", "cap-location", "code-fold",
+    "code-summary", "code-overflow", "code-line-numbers",
+    "layout", "layout-nrow", "layout-ncol", "layout-align", "layout-valign",
+    "output", "html-table-processing",
+    "fig-column", "fig.column", "fig-cap-location", "fig.cap-location",
+    "fig-format", "fig.format", "fig-dpi", "fig.dpi",
+    "include.hidden", "source.hidden", "plot.hidden",
+    "output.hidden", "warning.hidden", "message.hidden"
+  )
+  # fmt: skip
+  other_opts <- c(
+    "eval", "yaml.code", "code", "file", "params.src", "original.params.src",
+    "original.code",
+    "fenced.echo", "chunk.echo", "lang", "out.width.px", "out.height.px",
+    "indent", "class.source", "class.output", "class.message",
+    "class.warning", "class.error", "attr.source", "attr.output",
+    "attr.message", "attr.warning", "attr.error", "connection", "hash",
+    "quarto-unit-id"
+  )
+  unique(c(knitr_default_opts, quarto_knitr_opts, quarto_opts, other_opts))
 }
 
 # Return `knitr` (the options list execute() builds) with the capture wrappers
@@ -313,6 +408,10 @@ capture_install <- function(knitr) {
   quarto_capture$records <- list()
   quarto_capture$slot <- NULL
   quarto_capture$ordinal <- 0L
+  quarto_capture$hooks_at_start <- NULL
+  quarto_capture$hook_override <- NULL
+  quarto_capture$cache_labels <- character()
+  quarto_capture$known_options <- capture_known_options()
   hooks <- knitr$knit_hooks
   evaluate <- if (is.null(hooks[["evaluate"]])) {
     knitr::knit_hooks$get("evaluate")
@@ -324,9 +423,14 @@ capture_install <- function(knitr) {
   } else {
     hooks[["chunk"]]
   }
+  quarto_child_state$on_child <- capture_child_record
   knitr$knit_hooks[["evaluate"]] <- capture_evaluate_hook(evaluate)
   knitr$knit_hooks[["chunk"]] <- capture_chunk_hook(chunk)
   knitr$opts_hooks$cache <- function(options) {
+    # knitr runs this hook for every chunk: note only the ones that asked for the cache
+    if (!is.null(options$cache) && !isFALSE(options$cache) && !identical(options$cache, 0)) {
+      quarto_capture$cache_labels <- c(quarto_capture$cache_labels, as.character(options$label))
+    }
     options$cache <- FALSE
     options
   }

@@ -18,6 +18,7 @@ pub mod document;
 pub mod expansion;
 pub mod figures;
 pub mod inline;
+pub mod knitr_inputs;
 pub mod options;
 pub mod output;
 #[cfg(test)]

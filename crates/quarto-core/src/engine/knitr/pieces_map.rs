@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 
 use crate::presenter::options::OutputKind;
 use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
+#[cfg(test)]
 use crate::presenter::visibility::CellVisibility;
 
 use super::types::{KnitrCapturedChunk, KnitrPiece};
@@ -44,23 +45,7 @@ pub fn expression_starts(chunk: &KnitrCapturedChunk) -> Option<Vec<usize>> {
     (total == lines).then_some(starts)
 }
 
-/// The presenter's visibility from a chunk\'s recorded options. Only `include`, `output` and
-/// logical `echo` count here. `warning` and `message` are enforced by R at capture, because
-/// they change what runs, so the presenter must not drop stderr for them (a `warning = FALSE`
-/// chunk still shows its messages); numeric `echo` is applied by the presenter itself
-/// (`CellOptions::echo_selection`), so it shows the source here.
-pub fn knitr_visibility(options: &Value) -> CellVisibility {
-    let flag = |key: &str| options.get(key).and_then(Value::as_bool);
-    if flag("include") == Some(false) {
-        return CellVisibility::HIDDEN;
-    }
-    let output = flag("output") != Some(false);
-    CellVisibility {
-        echo: flag("echo") != Some(false),
-        output,
-        warning: output,
-    }
-}
+pub use crate::presenter::visibility::knitr_visibility;
 
 /// Which of a chunk\'s outputs is a message or a warning, parallel to the outputs
 /// [`pieces_to_cell_anchored`] returns (the record\'s `quarto_output_kinds`): both become stderr
@@ -178,7 +163,8 @@ fn stream(name: &str, text: &str) -> CellOutput {
     }
 }
 
-/// An image piece as `display_data`; `metadata.quarto_knitr.file` keeps knitr's own path.
+/// An image piece as `display_data`; `metadata.quarto_file_path` keeps knitr's own path
+/// (epic decision 25: the engine-neutral key the figure sink writes the bytes under).
 fn image(path: &str, read_file: &dyn Fn(&str) -> Option<Vec<u8>>) -> Option<CellOutput> {
     let ext = path.rsplit('.').next()?.to_ascii_lowercase();
     let bytes = read_file(path)?;
@@ -195,7 +181,7 @@ fn image(path: &str, read_file: &dyn Fn(&str) -> Option<Vec<u8>>) -> Option<Cell
     data.insert(mime.to_string(), value);
     Some(CellOutput::DisplayData {
         data,
-        metadata: json!({"quarto_knitr": {"file": path}}),
+        metadata: json!({"quarto_file_path": path}),
     })
 }
 
@@ -324,7 +310,12 @@ mod tests {
                     json!(b64(b"bytes of d/p-1.png")),
                     "png is base64"
                 );
-                assert_eq!(metadata["quarto_knitr"]["file"], "d/p-1.png");
+                // Epic decision 25: the engine-neutral key, not a `quarto_knitr` one.
+                assert_eq!(metadata["quarto_file_path"], "d/p-1.png");
+                assert!(
+                    metadata.pointer("/quarto_knitr/file").is_none(),
+                    "{metadata}"
+                );
             }
             other => panic!("not display_data: {other:?}"),
         }

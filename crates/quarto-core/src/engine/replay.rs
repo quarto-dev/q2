@@ -116,7 +116,9 @@ impl ReplayEngine {
         ctx: &ExecutionContext,
         stored: ExecuteResult,
     ) -> Result<ExecuteResult, ExecutionError> {
-        let fail = |message: String| ExecutionError::execution_failed(JUPYTER, message);
+        let fail = |message: String| {
+            ExecutionError::execution_failed(self.capture.engine_name.clone(), message)
+        };
         let Some(record) = self.capture.record.as_ref() else {
             return Err(fail(
                 "replay: this trace's jupyter capture has no execution record \
@@ -141,6 +143,7 @@ impl ReplayEngine {
             ctx.execute_scope.as_ref(),
             InlineTarget::from_format(&ctx.format),
             &ctx.format,
+            record.metadata.quarto_engines.first(),
             &mut fig,
         )
         .map_err(|e| {
@@ -191,6 +194,9 @@ impl ExecutionEngine for ReplayEngine {
     fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
         if language == self.capture.engine_name {
             LanguageClaim::Primary(1)
+        } else if self.capture.engine_name == "knitr" {
+            // `{r}` cells: claim what the recorded engine claims.
+            super::knitr_claims(language)
         } else {
             LanguageClaim::None
         }
@@ -232,7 +238,7 @@ impl ExecutionEngine for ReplayEngine {
                     format!("malformed engine_capture.result in trace: {e}"),
                 )
             })?;
-        if self.capture.engine_name == JUPYTER {
+        if self.capture.engine_name == JUPYTER || self.capture.record.is_some() {
             self.present_record(input, ctx, stored)
         } else {
             Ok(stored)
@@ -464,6 +470,16 @@ mod tests {
         stored_markdown: &str,
         ids: Option<&[&str]>,
     ) -> EngineCapture {
+        engine_capture("jupyter", text, results, stored_markdown, ids)
+    }
+
+    fn engine_capture(
+        engine: &str,
+        text: &str,
+        results: &[(usize, Vec<Value>)],
+        stored_markdown: &str,
+        ids: Option<&[&str]>,
+    ) -> EngineCapture {
         let mut units = scan_units(text);
         let texts = AuthorTexts::from_scanned(&units);
         fill_ids(&mut units, &texts).unwrap();
@@ -475,8 +491,8 @@ mod tests {
                 }
             }
         }
-        let def = HashDefinition::conservative("jupyter");
-        let mut builder = RecordBuilder::new("jupyter", &def, &units, &texts).unwrap();
+        let def = HashDefinition::conservative(engine);
+        let mut builder = RecordBuilder::new(engine, &def, &units, &texts).unwrap();
         for (index, outputs) in results {
             builder
                 .push(
@@ -492,7 +508,7 @@ mod tests {
         let engine_record = builder.finish(EngineEntryInput::default()).unwrap();
         let record = coalesce(std::slice::from_ref(&engine_record), &units).unwrap();
         EngineCapture {
-            engine_name: "jupyter".into(),
+            engine_name: engine.into(),
             input_qmd: text.into(),
             result: json!({
                 "markdown": stored_markdown,
@@ -625,5 +641,84 @@ mod tests {
         assert!(for_docx.contains("plain"), "{for_docx}");
         assert!(!for_docx.contains("<b>rich</b>"), "{for_docx}");
         assert_ne!(for_html, for_docx);
+    }
+
+    // ── knitr traces (bd-js24dold) ──────────────────────────
+
+    #[test]
+    fn knitr_replay_claims_what_knitr_claims() {
+        let engine = ReplayEngine::new(sample_capture());
+        assert!(matches!(
+            engine.claims_language("r", None),
+            LanguageClaim::Primary(1)
+        ));
+        assert!(matches!(
+            engine.claims_language("python", None),
+            LanguageClaim::Interop(0)
+        ));
+        assert!(matches!(
+            engine.claims_language("julia", None),
+            LanguageClaim::None
+        ));
+    }
+
+    #[test]
+    fn jupyter_replay_claims_only_its_own_name() {
+        let engine = ReplayEngine::new(jupyter_capture("", &[], "", None));
+        assert!(matches!(
+            engine.claims_language("r", None),
+            LanguageClaim::None
+        ));
+    }
+
+    #[test]
+    fn old_knitr_trace_without_a_record_returns_its_stored_markdown() {
+        let capture = sample_capture();
+        let input = capture.input_qmd.clone();
+        let result = ReplayEngine::new(capture)
+            .execute(&input, &make_test_context())
+            .unwrap();
+        assert_eq!(result.markdown, "---\nengine: knitr\n---\n\nhi\n");
+    }
+
+    #[test]
+    fn knitr_trace_with_a_structured_record_replays_through_the_presenter() {
+        let text = "Before.\n\n```{r}\nsum(1:3)\n```\n";
+        let capture = engine_capture("knitr", text, &[(0, stdout("[1] 6\n"))], "STALE", None);
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        assert!(
+            result
+                .markdown
+                .contains("```{.r .cell-code}\nsum(1:3)\n```"),
+            "{}",
+            result.markdown
+        );
+        assert!(result.markdown.contains("[1] 6"), "{}", result.markdown);
+        assert!(!result.markdown.contains("STALE"));
+        assert!(result.record.is_some());
+    }
+
+    #[test]
+    fn a_structured_knitr_cell_reaches_the_shared_reader() {
+        use crate::presenter::knitr_inputs::fixture;
+        let mut capture = engine_capture(
+            "knitr",
+            fixture::SOURCE,
+            &[(0, fixture::outputs())],
+            "STALE",
+            None,
+        );
+        let mut record: crate::record::Record =
+            serde_json::from_value(capture.record.take().unwrap()).unwrap();
+        fixture::apply(&mut record.cells[0]);
+        record.metadata.quarto_engines[0].known_options =
+            Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect());
+        capture.record = Some(serde_json::to_value(&record).unwrap());
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture)
+            .execute(fixture::SOURCE, &ctx)
+            .unwrap();
+        fixture::assert_rich(&result.markdown);
     }
 }

@@ -33,11 +33,13 @@ use super::inline::{
     InlineOutcome, InlineTarget, classify_inline_result, escape_yaml_double, front_matter_key_at,
     render_inline,
 };
+use super::knitr_inputs::{original_chunk, present_knitr_cell};
 use super::options::CellOptions;
 use super::output::CellResult;
 use super::visibility::{CellVisibility, resolve_cell_options};
 use crate::cell_options::partition_cell_options;
 use crate::engine::units::{InlineUnit, Unit};
+use crate::record::EngineEntry;
 use crate::record::{
     RecordCell, UnitKind, content_hash, replacement, scanned_author_text, span_content_hash,
     stored_markdown,
@@ -107,6 +109,8 @@ pub enum PresentError {
 /// were located in. `scope` is the document's merged `execute:` scope and `target` the
 /// output format's mime preference for inline values; `format` is the full format name
 /// a fallback unit's stored markdown must have been produced for; figures go through `fig`.
+/// `engine` is the record's entry for the engine that ran (its `known_options` reach a knitr
+/// cell\'s presentation); `None` for a record with no such entry.
 pub fn present_document(
     cells: &[RecordCell],
     document_text: &str,
@@ -114,6 +118,7 @@ pub fn present_document(
     scope: Option<&ConfigValue>,
     target: InlineTarget,
     format: &str,
+    engine: Option<&EngineEntry>,
     fig: &mut dyn FigureSink,
 ) -> Result<PresentResult, PresentError> {
     let matched = match_cells(units, cells);
@@ -159,6 +164,7 @@ pub fn present_document(
                             unit: ui,
                             message: e.to_string(),
                         })?;
+                let parsed_options = parsed.options.clone();
                 let resolved = resolve_cell_options(scope, parsed.options);
                 let visibility = CellVisibility::resolve(resolved.as_ref());
                 // Every presented cell, visible or not, keeps its figure number.
@@ -178,7 +184,29 @@ pub fn present_document(
                     )
                     .map_err(|message| PresentError::InvalidCellOptions { unit: ui, message })?,
                     None => {
-                        render_cell_with(&u.lang, &parsed.code, &result, &options, fig, visibility)
+                        // A structured knitr cell is read by the shared reader; any other
+                        // cell presents as it always did.
+                        let header = resolve_cell_options(None, parsed_options);
+                        let (info, lines) = original_chunk(&u.lang, &u.attr_tail, &u.code);
+                        present_knitr_cell(
+                            &u.lang,
+                            &parsed.code,
+                            cell,
+                            engine,
+                            header.as_ref(),
+                            (&info, &lines),
+                            fig,
+                        )
+                        .unwrap_or_else(|| {
+                            render_cell_with(
+                                &u.lang,
+                                &parsed.code,
+                                &result,
+                                &options,
+                                fig,
+                                visibility,
+                            )
+                        })
                     }
                 };
                 notes.extend(
@@ -418,6 +446,7 @@ mod tests {
             scope,
             InlineTarget::from_format("html"),
             "html",
+            None,
             &mut fig,
         )
         .unwrap();
@@ -429,6 +458,72 @@ mod tests {
             "::: {{.cell}}\n\n```{{.python .cell-code}}\n{code}\n```\n\n\
              ::: {{.cell-output .cell-output-stdout}}\n\n```\n{text}\n```\n\n:::\n\n:::\n"
         )
+    }
+
+    // ── knitr cells (KNR-3 Phase 3B) ──
+
+    /// An engine entry (no cells) carrying `known_options`.
+    fn entry_with(units: &[Unit], texts: &AuthorTexts, known: Option<Vec<String>>) -> EngineEntry {
+        let def = HashDefinition::conservative("knitr");
+        RecordBuilder::new("knitr", &def, units, texts)
+            .unwrap()
+            .finish(EngineEntryInput {
+                known_options: known,
+                ..Default::default()
+            })
+            .unwrap()
+            .engine
+    }
+
+    #[test]
+    fn a_structured_knitr_cell_reaches_the_shared_reader() {
+        use crate::presenter::knitr_inputs::fixture;
+        let (units, texts) = staged_units(fixture::SOURCE);
+        let mut cells = record(&units, &texts, &[(0, fixture::outputs())]);
+        fixture::apply(&mut cells[0]);
+        let engine = entry_with(
+            &units,
+            &texts,
+            Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect()),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let out = present_document(
+            &cells,
+            fixture::SOURCE,
+            &units,
+            None,
+            InlineTarget::from_format("html"),
+            "html",
+            Some(&engine),
+            &mut fig,
+        )
+        .unwrap();
+        fixture::assert_rich(&out.markdown);
+    }
+
+    #[test]
+    fn a_cell_with_no_knitr_keys_presents_as_before_even_with_an_engine_entry() {
+        let (units, texts) = staged_units("```{python}\nprint(1)\n```\n");
+        let cells = record(&units, &texts, &[(0, stdout("1\n"))]);
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let with = |engine: Option<&EngineEntry>, fig: &mut FsFigureSink| {
+            present_document(
+                &cells,
+                "```{python}\nprint(1)\n```\n",
+                &units,
+                None,
+                InlineTarget::from_format("html"),
+                "html",
+                engine,
+                fig,
+            )
+            .unwrap()
+            .markdown
+        };
+        let entry = entry_with(&units, &texts, Some(vec![]));
+        assert_eq!(with(None, &mut fig), with(Some(&entry), &mut fig));
     }
 
     // ── expanded cells ──────────────────────────────────────────────────
@@ -666,6 +761,7 @@ print(1)
             None,
             InlineTarget::from_format("html"),
             "html",
+            None,
             &mut fig,
         )
         .unwrap_err();
@@ -712,6 +808,7 @@ print(1)
             None,
             InlineTarget::from_format("html"),
             "html",
+            None,
             &mut fig,
         )
         .unwrap();
@@ -737,6 +834,7 @@ print(1)
             None,
             InlineTarget::from_format("html"),
             "html",
+            None,
             &mut fig,
         )
         .unwrap();
@@ -765,6 +863,7 @@ print(1)
             None,
             InlineTarget::from_format(format),
             format,
+            None,
             &mut fig,
         )
         .unwrap()

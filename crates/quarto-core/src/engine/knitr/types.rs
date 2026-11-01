@@ -156,8 +156,18 @@ pub struct KnitrExecuteResult {
     /// plots, ...) before `sew` turns them into markdown (KNR-1 S2). Parallel
     /// to `chunks`, not an extension of it. Absent from results that predate it.
     #[serde(default)]
-    #[allow(dead_code)]
     pub pieces: Vec<KnitrCapturedChunk>,
+
+    /// The option names the knitr that ran knows (`names(knitr::opts_chunk$get())`, read before
+    /// any chunk runs, so a setup chunk\'s `opts_chunk$set` cannot make an unknown name known).
+    /// Present only on a captured run; becomes the record\'s `known_options` (KNR-3).
+    #[serde(default)]
+    pub known_options: Option<Vec<String>>,
+
+    /// The labels of chunks that asked for knitr\'s cache and had it forced off by the capture
+    /// (KNR-1 S4). Empty on an uncaptured run.
+    #[serde(default)]
+    pub cache_disabled: Vec<String>,
 }
 
 /// A brace-spelling inline expression recorded by the `evaluate.inline` and `inline`
@@ -191,6 +201,11 @@ pub struct KnitrCapturedChunk {
     /// Files the chunk wrote, as knitr addresses them.
     #[serde(default)]
     pub files: Vec<String>,
+    /// The first knit hook found replaced by the document (`output`, `source`, ...), kept on
+    /// every chunk from the one that replaced it on: the presenter cannot see what the
+    /// override did, so those chunks are fallback units (KNR-3, KNR-1 S5).
+    #[serde(default)]
+    pub hook_override: Option<String>,
 }
 
 /// One piece of a chunk's evaluation, tagged by `class` on the wire.

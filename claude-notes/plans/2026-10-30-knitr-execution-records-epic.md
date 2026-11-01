@@ -81,8 +81,8 @@ the parent\'s hash profiles (`457229c47`).
 - **Decision 34** (current options layered over the record\'s): given its knitr form in
   decision 11 here; for now only the chunk\'s header options are layered, not the document
   scope (KNR-3 decision 3).
-- **Decision 3, figures** (inline base64): KNR-1 S2 and KNR-5 carry knitr file paths; the
-  question is open under bd-sr73.
+- **Decision 3, figures** (inline base64): KNR-1 S2 and KNR-5 carry knitr file paths. Settled
+  (Gordon, 2026-11-01, bd-sr73): figures are inline base64.
 - **EXR-10, EXR-11, EXR-12** (all complete; they were drafts on 2026-10-31): they landed as
   written first. This epic extends what they deliver. KNR-3 replaces EXR-11\'s recorder for structured chunks and KNR-6
   deletes that code and EXR-12\'s inline-id code once nothing uses it. The chunk hook stays
@@ -304,6 +304,12 @@ Made with Gordon on 2026-10-30.
     empty `.cell` wrapper is still a box in the page). A document that overrides the `source`
     or `output` knitr hook (`setup-state/knit_hooks_override`) becomes a fallback unit rule,
     not an allowlist entry. KNR-2 adds the allowlist reader with these entries.
+    **Amended 2026-11-03 (Gordon):** `s8/01_setup_state` is signed off too, for two differences
+    from knitr\'s markdown, both judged improvements and very minor. (1) The chunk `c_params`
+    (`eval` false, `echo` false) renders nothing, and knitr writes an empty `.cell` wrapper for
+    it; the presenter writes nothing, the same divergence as `s1/03_eval_false`. (2) knitr
+    writes `.cell-code  code-fold` with two spaces and the presenter with one; HTML treats them
+    alike.
 24. **The flip keeps knitr\'s finished markdown as a retained fallback, and removing it is a
     deferred, trigger-gated plan (2026-11-02, Gordon; review 3 decision 1, option b).** After
     the flip, R still ships the finished markdown of every chunk next to the record. Rust
@@ -337,6 +343,9 @@ Made with Gordon on 2026-10-30.
     htmlwidget ids; figures are checked by position and extension, not rewritten to a
     placeholder. The same gate runs in KNR-3 Phase 3C and, promoted, in KNR-6 Phase 6A (one
     harness, not two), and a frozen oracle per fixture is committed before any deletion.
+    **Amended 2026-11-03 (Gordon):** KNR-3 Phase 3C runs the gate in report mode, and the
+    failing assertion moves to KNR-2b Phase 2bC, because `s9/01_inline` stays a blocker until
+    KNR-4. KNR-6 Phase 6A still promotes the one harness.
 27. **Widget dependencies from a knitr record are rebuilt in Rust (2026-11-02, Gordon).** The
     knitr adapter converts the recorded `knit_meta` into the neutral per-output dependency
     manifest of WGT-2 when it writes the record, and the Rust presenter reads the manifest at
@@ -344,6 +353,12 @@ Made with Gordon on 2026-10-30.
     engine-private field beside the manifest (`quarto_knitr.knit_meta`). This applies to
     brace-span outputs as to chunk outputs. WGT-2 owns the manifest\'s shape; KNR-3 Phase 3B
     writes it.
+    **Amended 2026-11-03 (Gordon):** KNR-3 does not write the manifest, because WGT-2 has not
+    written its schema. The conversion belongs to the widget epic\'s adapters item (WGT-2 lists a
+    knitr `knit_meta` adapter, and records the dependency on this epic\'s flip). Until it exists, the record keeps the opaque `quarto_knitr.knit_meta` string, and
+    KNR-6\'s flip holds back any knitr document with captured widget output (the live path keeps
+    serving it), so no widget loses its scripts and styles. The conversion is a prerequisite of
+    flipping those documents, not of the flip as a whole.
 28. **A block-level span output inside a paragraph keeps knitr\'s behavior for now (2026-11-02,
     Gordon).** An inline htmlwidget div is inserted into the paragraph as knitr does. KNR-4 adds
     an observation fixture (an inline plotly div); if it causes trouble in practice, promoting
@@ -555,9 +570,9 @@ Settled by Gordon on 2026-10-31, each as recommended:
 
 ### Markers with an owner and an unblocker
 
-- **bd-sr73 (figures: inline base64 or knitr file paths).** Gordon decides once EXR-4\'s
-  measurement exists. KNR-1 S2 does not wait: it records file paths and states what changes
-  under base64.
+- **bd-sr73 (figures: inline base64 or knitr file paths): settled.** Gordon signed off
+  inline base64 on 2026-11-01, after the I3 measurement (inline figure records are 1.31 times
+  the size of the files). KNR-1 S2 recorded file paths and stated what changes under base64.
 - **Whether the scanner can tell a `child=` chunk (KNR-3 decision 6):** KNR-1 S5 reads EXR-2.
 - **The spelling key for inline units:** dropped (S9 settled that the record holds knitr\'s inserted text, so no unit needs a spelling).
 - **`execution_count` (KNR-5 decision 4):** KNR-5, from KNR-1\'s S2 table and K-S1.
@@ -577,10 +592,12 @@ each answer is in the named `#### Sn decision` subsection of KNR-1):
   while recording); the mapping, wire shape and `knit_meta` carriage (S2); option capture,
   spelling and the closed presentation list (S3, S8); odd chunks and hook-override detection
   (S5); inline capture and formatting (S9).
-- **Still open:** how reticulate\'s Python engine reports output (S5: no Python environment
-  here, not run); whether figures stay as knitr\'s file paths or inline base64 (bd-sr73; S2 records
-  paths and says what changes under base64); the format in the record (KNR-3 decision 8,
-  with S2\'s evidence that `df_print` and widget pieces differ by target).
+- **Answered 2026-11-03 (S5, reticulate Python):** the evaluate hook is not called for a Python
+  chunk and the chunk hook holds one finished string with source and output interleaved, so the
+  verdict is fallback unit (the existing non-R rule). Recovering the pieces later is possible
+  through reticulate\'s `reticulate.engine.wrap` option; not run.
+  *Settled since:* figures are inline base64 (bd-sr73, 2026-11-01), and the format in the record
+  is an input to the structured profile\'s hash (KNR-3 decision 8, 2026-11-01).
 - **New from the spikes, to settle in the plans named:** `results='asis'` chunks have no
   `.cell` wrapper in knitr\'s markdown, against the wrapper contract (S2, KNR-2); a
   `ref.label` chunk with an empty body can go stale silently (S8, KNR-3); forcing

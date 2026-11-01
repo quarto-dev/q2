@@ -674,7 +674,7 @@ comparison. Verified by running unless marked.
 | bash chunk | not called | called | no pieces; synthesizable (code plus stdout string) |
 | SQL chunk | not called | called | no pieces; output is a finished table (`<div class="knitsql-table">` with a pipe table, outside any `cell-output` wrapper); fallback or synthesizable as `text/markdown` |
 | custom engine, `engine_output(out = LIST)` | not called | called | the list never reaches a hook, but `engine_output` is where it is assembled (`engine.R:94`, read), so wrapping it would recover the pieces; not run |
-| reticulate Python | **not run** | | no Python environment could be set up here |
+| reticulate Python (run 2026-11-03, reticulate 1.42.0, knitr 1.50, uv venv with numpy) | not called | called (`engine: python`) | no pieces reach a hook; the chunk hook holds one string with source and output interleaved (`x = 1 + 1\nprint(x)#> 2\nx#> 2`), so output cannot be split from code. Fallback now. Synthesizable later: reticulate assembles its pieces and hands them to `getOption("reticulate.engine.wrap", eng_python_wrap)`, a documented seam, so an overriding wrap could capture them (not run). The default hooks stay untouched, so the hook comparison only names the chunk hook q2 itself replaces |
 
 - **Structured, synthesizable or fallback.** Structured: R chunks only. Everything else is a
   fallback unit for now, because the finished markdown is all the chunk hook holds for it. The

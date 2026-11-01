@@ -35,4 +35,4 @@ reason = "an empty chunk (the `blank` chunk has no code) still renders its `.cel
 [[entry]]
 name = "s8/01_setup_state"
 class = "blocker"
-reason = "same divergence as s1/03_eval_false: Quarto 1 writes an empty `.cell` div for a chunk that renders nothing (here `c_params`, eval false); its `.cell-code  code-fold` double space is cosmetic (Gordon, 2026-11-02)"
+reason = "same divergence as s1/03_eval_false: knitr writes an empty `.cell` div for a chunk that renders nothing (here `c_params`, eval false) and the presenter writes none; knitr's `.cell-code  code-fold` double space becomes one space, which is cosmetic (Gordon, 2026-11-02; epic decision 23 amended 2026-11-03)"

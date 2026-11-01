@@ -546,6 +546,7 @@ pub(super) fn present_from_record(
         ctx.execute_scope.as_ref(),
         InlineTarget::from_format(&ctx.format),
         &ctx.format,
+        Some(&record.engine),
         &mut fig,
     )
     .map_err(|e| {

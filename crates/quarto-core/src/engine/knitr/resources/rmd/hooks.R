@@ -39,6 +39,11 @@ eng2lang <- function(x) {
 quarto_chunk_records <- new.env()
 quarto_chunk_records$records <- list()
 
+# Set by capture.R on a captured run: called with (options, markdown) for each `child=` chunk
+# (see `install_child_wrapper` in `knitr_hooks`).
+quarto_child_state <- new.env()
+quarto_child_state$on_child <- NULL
+
 # Options that change between runs or carry the code rather than the
 # configuration; they stay out of the digest.
 chunk_digest_skip <- c(
@@ -165,7 +170,58 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
       digest = chunk_options_digest(options),
       files_before = chunk_figure_files(options)
     )
+    if (!is.null(options$child)) {
+      install_child_wrapper()
+    }
     options
+  }
+
+  # knitr calls no hook for a chunk with `child=`: `call_block` returns the child document's
+  # markdown straight into the output (block.R). To give that chunk a record, wrap
+  # `knitr::knit_child` for the calls `call_block` makes (they pass the chunk's options, with
+  # `child` still set). Installed only when such a chunk with a unit id is about to run, so
+  # other documents never see it. The wrapper returns what knit_child returned, unchanged.
+  # Several children of one chunk are joined with "\n", as `call_block` does.
+  child_installed <- FALSE
+  install_child_wrapper <- function() {
+    if (child_installed) {
+      return(invisible())
+    }
+    child_installed <<- TRUE
+    orig <- knitr::knit_child
+    wrapped <- function(..., options = NULL, envir = knitr::knit_global()) {
+      id <- if (is.list(options) && !is.null(options$child)) {
+        options[["quarto-unit-id"]]
+      }
+      # knit_child copies the parent's options into `opts_chunk`, so without this the child's
+      # own chunks would be recorded under the parent's id.
+      if (!is.null(id)) {
+        options[["quarto-unit-id"]] <- NULL
+      }
+      res <- orig(..., options = options, envir = envir)
+      options[["quarto-unit-id"]] <- id
+      pending <- if (is.null(id)) NULL else chunk_pending[[id]]
+      if (!is.null(pending)) {
+        recs <- quarto_chunk_records$records
+        at <- which(vapply(recs, function(r) identical(r$id, id), NA))
+        if (length(at)) {
+          quarto_chunk_records$records[[at[[1]]]]$markdown <-
+            paste(recs[[at[[1]]]]$markdown, res, sep = "\n")
+        } else {
+          quarto_chunk_records$records[[length(recs) + 1]] <- list(
+            id = id,
+            markdown = res,
+            optionsDigest = pending$digest,
+            files = I(character())
+          )
+          if (is.function(quarto_child_state$on_child)) {
+            quarto_child_state$on_child(options, res)
+          }
+        }
+      }
+      res
+    }
+    utils::assignInNamespace("knit_child", wrapped, ns = "knitr")
   }
 
 

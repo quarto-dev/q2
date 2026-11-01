@@ -2,7 +2,7 @@
 title: 'KNR-3: knitr record adapter, hash profiles, fallback units, cache and child handling'
 date: 2026-10-30
 description: 'Turns KNR-1 captured pieces into EXR-4 record units for knitr: cells and outputs, the structured hash profile beside the default one, notebook-level engine results, per-chunk fallback units, and the policies for knitr cache hits, child documents and user-overridden hooks.'
-status: draft  # outline written from code reading; blocked items named
+status: in progress  # re-scoped 2026-11-03 after the epic rebase; Step 0 (bd-js24dold) landed
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-3).
@@ -21,16 +21,228 @@ Cite KNR-1\'s decisions by their headings: `#### S1 decision` through `#### S9 d
 **Blocks:** KNR-4, KNR-5, KNR-6.
 **Estimated sessions:** 3 to 4 (a guess made before KNR-1 reports; the two internal keys
 below are about half a session of it, an estimate from interlude I1).
-**Prerequisite, not part of this plan:** the knitr replay claim fix (bd-js24dold, about 20
-lines), so that a knitr trace replays at all; it lands before this plan starts.
+**Prerequisite, not part of this plan (landed 2026-11-03, `5c6885686`):** the knitr replay
+claim fix (bd-js24dold), so that a knitr trace replays at all. `ReplayEngine::claims_language`
+claims what knitr claims when the recorded engine is knitr (the shared `knitr_claims`), and
+`execute` presents from the record whenever the capture has one; four replay tests.
 
-> **Status of this document.** Written 2026-10-30 from code reading, before KNR-1 runs, and
-> revised on 2026-10-31 after the paper review
-> ([research note](../research/2026-10-30-knitr-epic-paper-review.md)) and the parent
-> epic's hash profiles. Items marked *blocked on* cannot be settled without a
-> KNR-1 spike; items marked *open* need a decision before this plan runs. Decision 8 (the format in the record) was settled on 2026-11-01: the knitr exception is
-> accepted. One question still waits on the parent session: the second item of decision 2
-> (which hash list produces the flat cell keys), plus the shape EXR-4 gives the exception.
+> **Status of this document.** Written 2026-10-30 from code reading, before KNR-1 ran;
+> revised 2026-10-31 after the paper review
+> ([research note](../research/2026-10-30-knitr-epic-paper-review.md)); **re-scoped 2026-11-03**
+> after the parent epic was squashed and this branch rebased onto it (see "Re-scope,
+> 2026-11-03" below, which overrides any older text it contradicts). Decision 8 (the format
+> in the record) was settled on 2026-11-01. Decision 2 is settled (below). Nothing waits on the
+> parent session.
+
+## Re-scope, 2026-11-03
+
+Read against the KNR-1 corpus report, interludes I1 to I4, epic decisions 21 to 28, and the code
+at `989db3fe2` (the epic squashed as `c5f8c7593`). What changed, and what that does to this plan:
+
+1. **Decision 2 is settled.** EXR-4 is complete. `exec_hash::execution_options(def, profile,
+   options)` takes the profile, so a unit's flat cell keys are its options minus **its own
+   profile's** exclusions, and `RecordBuilder::push` hard-codes `profile: None`
+   (`record/builder.rs:157`). The adapter therefore overwrites `quarto_hash_rule`, the exec
+   hash and the flat keys after `push`, with `execution_options(def, Some("structured"), ..)`,
+   and recomputes the document hash (the spike of decision 8 did exactly this). No parent
+   change beyond decision 8's `matching.rs` edit.
+2. **The resolved-options field is named `quarto_resolved_options` (Gordon, 2026-11-03).** A cell
+   metadata key holding the KNR-1 S3 object, in knitr spelling, with `unserializable` listing the
+   dropped names. The `quarto_` prefix keeps it out of `CellMetadata::options()`, the flat keys and
+   the hash. It is written for structured units only. The chunk\'s current header options layer
+   over it (epic decision 11); the document scope does not (decision 3).
+3. **Nothing on the product path reads the knitr record keys yet (found 2026-11-03).**
+   `present_document`, `record_splice::present_cell` and `ReplayEngine::present_record` all build
+   options with `CellOptions::from_config`; `with_output_kinds`, `from_knitr_known`,
+   `with_original_chunk`, the anchors, the holds and `knitr_visibility` are called only by the
+   corpus baseline test (`knitr_corpus_baseline.rs`). KNR-2 says it "reads" the keys and KNR-2b
+   Phase 2bA assumes a reading path, so it was unowned. **Gordon decided (2026-11-03) that KNR-3
+   Phase 3B owns it:** one shared reader, `knitr_cell_inputs(cell, engine_entry)`, used by all
+   three presenter paths, with `known_options` reaching it through a new optional field on
+   `EngineEntry` and a new parameter on `present_document`. The Phase 3C shadow test must present
+   from a written record, so it needs this anyway; KNR-2b 2bA then only validates it.
+4. **The epic added a second live presenter path and expanded cells.** `present_document`,
+   `record_splice::present_cell` and the replay path all call `CellOptions::from_config` and
+   `render_expanded_unit(&CellOptions)`. Anything that changes how a cell is presented is applied
+   in all of them, through the shared reader of item 3, not three copies.
+5. **The join key between pieces and chunk records already exists.** `capture.R` stores the
+   resolved options per chunk, and they include `quarto-unit-id` (it is not in
+   `capture_option_skip`), so a captured chunk joins to its unit by that id. Pieces exist for
+   every chunk knitr evaluates, including chunks without an id (children, generated chunks); only
+   id-bearing chunks become units. `KnitrExecuteParams.capture` is hard-coded `false` in
+   `engine/knitr/mod.rs`; this plan sets it from the route and `want_record`.
+6. **`target_route` has its consumer here.** Wiring `route_for_target` removes its
+   `cfg_attr(not(test), expect(dead_code))`; the build fails until the attribute is deleted.
+7. **Diagnostic codes.** `docs/errors/engine/` holds Q-18-1 to Q-18-5 and Q-18-10; Q-18-6 to
+   Q-18-9 are claimed by other plans (`2026-09-18-pandoc-hybrid-P5-implementation.md`,
+   `2026-09-18-knitr-includes-and-engine-result-diagnostics.md`). This plan takes **Q-18-11 and up**,
+   re-checking the catalog at each allocation; each code gets its docs page and sidebar entry in the
+   same commit. The handoff\'s "Q-18-1 to Q-18-4" was out of date.
+8. **Corpus re-measured 2026-11-03 (report r16, 221 cases):** 198 accepted, 5 allowlisted, 11
+   not compared, 7 unexpected, the same as r15. The run executes (59 s) and does not skip, so the
+   epic\'s R test gating (`c5f8c7593`) did not hide it. The seven: four `options/foo.unknown/*`
+   and the `tbl-cap` attribute of `s2/01_kable` (this plan, through `known_options`),
+   `setup-state/knit_hooks_override` (this plan, the hook-override fallback rule), `s9/01_inline`
+   (KNR-4).
+9. **Phase 3C runs the gate in report mode (Gordon, 2026-11-03).** This deviates from the wording
+   of epic decision 26, which says the same gate runs in KNR-3 Phase 3C. `s9/01_inline` is a
+   blocker until KNR-4, so the failing assertion moves to KNR-2b Phase 2bC. The deviation is
+   recorded in the epic\'s decision log with this plan.
+
+Still open, none blocking this plan: the `wasm32` build check of the presenter commits, a KNR-2b
+item that now also covers `record_splice.rs` and `expansion.rs`. (The `s8/01_setup_state`
+allowlist entry is signed off, in the epic\'s decision 23, 2026-11-03.)
+
+## Progress and slice order (2026-11-03)
+
+Landed on `knr-2-presenter`, each gated (quarto-core nextest, only the known revealjs failure; the
+Julia `j1_minimal_julia_render` flaked once under load with "Incorrect HMAC digest" and passed alone):
+`5c6885686` Step 0, `fcd359b8a` this re-scope, `28474d2ec` `quarto_file_path`, `0a127e8b0` the
+declaration, `8d3857d7b` profile-aware matching and `knitr::structured` (`mark_structured`,
+`rehash_document`).
+
+Remaining, in this order, each tests first (slices 1 and 2 are done, see their notes below; the `knit_meta` manifest of slice 2 waits on WGT-2\'s schema):
+
+1. `EngineEntry.known_options` (optional field, round trip, absent means no filtering) and the
+   shared reader `knitr_cell_inputs`, wired into the three presenter paths (Phase 3B, reader item).
+2. The adapter from captured chunks to record units (join by `quarto-unit-id`, `quarto_output_*`,
+   `quarto_resolved_options`, original chunk, `knitr_visibility`, passthrough, `knit_meta`
+   manifest), calling `mark_structured`; then delete the two staged `expect(dead_code)` lines
+   (`hash_rule::OUTPUT_FORMAT_OPTION` is already shared; `structured.rs` has a module-level one).
+3. Capture gating from `route_for_target`; the fallback unit, the three policies and their
+   Q-18-11-and-up codes. *Done (2026-11-03, slice 3; see "Slice 3 notes").*
+4. Phase 3C shadow from a written record, in report mode.
+
+### Slice 1 notes (2026-11-03)
+
+The reader is `presenter::knitr_inputs::present_knitr_cell`; `present_document`,
+`record_splice::present_cell` and `ReplayEngine::present_record` call it (the last through
+`present_document`, which gained an `engine: Option<&EngineEntry>` parameter). It returns `None`
+for a cell with no `quarto_resolved_options`, so every other cell presents as before.
+`EngineEntry.known_options` and `EngineEntryInput.known_options` are optional (round-trip test;
+`quarto_record_version` stays 1).
+
+Decisions made while building it, for the adapter (slice 2) to follow:
+
+- **A fourth internal cell key, `quarto_expression_starts`**: an array of line indices, one per
+  source expression, for `prompt`. The three keys above cannot carry it, and the presenter cannot
+  recover it from the outputs. The adapter writes it from `expression_starts(chunk)` and omits it
+  when the source pieces\' lines do not add up to the code, like the anchors.
+- **`quarto_resolved_options` is the chunk hook\'s options object as is.** The reader drops an
+  `unserializable` key from it (the names R could not serialize are bookkeeping, not options).
+- **Header layering rewrites a dashed key to its dotted name when `known_options` lists that
+  name** (`class-source` to `class.source`, per KNR-1 S3), instead of copying R\'s table. Without
+  a `known_options` list no key is rewritten.
+- **Holds are applied by the reader** over the capture-order anchors, and the kinds follow the
+  reordered outputs (held outputs are never messages or warnings).
+- `knitr_visibility` moved to `presenter::visibility` (the presenter is not `wasm32`-gated;
+  `engine::knitr` is) and `engine::knitr::pieces_map` re-exports it.
+- The splice stage looks the engine entry up by the cell\'s `quarto_engine`, else the only entry.
+- Tests: reader unit tests (one per input) in `knitr_inputs.rs`, and one shared rich fixture
+  (`knitr_inputs::fixture`) driven through all three paths so they cannot drift. The Jupyter
+  goldens are unchanged. Not covered: `fenced.echo`\'s original chunk through the three paths (the
+  reader test covers it).
+
+### Slice 2 notes (2026-11-03)
+
+The adapter is `engine/knitr/adapter.rs` (`build_structured`), reached from `chunk_records::attach_records`
+when the run carries `pieces`. Nothing asks R for pieces yet (`capture` is still false), so slice 3
+turns it on. It joins chunks to units by `quarto-unit-id`, writes the four reader keys, calls
+`mark_structured` and `rehash_document`, and builds fallback cells from the chunk hook's markdown for
+a chunk the mapper refuses. The EXR-11 recorder still builds every chunk when there are no pieces.
+Both staged `expect(dead_code)` attributes are gone.
+
+- **`known_options` is the union hooks.R builds, not `names(opts_chunk$get())` alone.** The names the
+  chunk hook does not forward as attributes are knitr's own plus three Quarto groups
+  (`quarto_knitr_opts`, `quarto_opts`, `other_opts`; `class.source` and `attr.*` are in the last). The
+  capture computes the same union (`capture_known_options` in `capture.R`, a copy kept in step with
+  `hooks.R`) before any chunk runs, and ships it as `knownOptions`. A test names one option from each group.
+- **Deferred: the `knit_meta` manifest (epic decision 27) and the record-level `include=FALSE`
+  dependencies.** WGT-2 owns the manifest's shape and its plan is still a draft with the schema
+  unwritten ("Neutral per-output manifest in the record (schema in EXR-4)" is open there). The adapter
+  keeps the opaque `quarto_knitr.knit_meta` string the mapper already writes. Writing the manifest
+  needs that schema first; it is left unchecked below.
+- **Settled 2026-11-03 (Gordon): the manifest is not KNR-3\'s.** The widget epic (WGT-2\'s
+  adapters item, which now records this) owns the conversion; KNR-6 holds the flip for knitr documents with captured widget output until it
+  lands (epic decision 27, amended). To check in slice 3, before anything relies on that hold:
+  whether a fallback unit (finished markdown) keeps its widget\'s dependencies, since its text
+  carries no `knit_meta`.
+- **Open at the call site:** `read_file` for figures reads under the knit working directory
+  (`working_dir`), where knitr addresses them; slice 3's end-to-end render checks this, since
+  the corpus baseline reads under the document directory.
+
+### Slice 3 notes (2026-11-03)
+
+Capture gating, the fallback units and the three policies. Each was written test first and seen
+failing on its assertion.
+
+- **Gating.** `target_route::plan_capture(want_record, has_units, format)` decides; `execute` sets
+  `KnitrExecuteParams.capture` from it and pushes the one-per-document target note on a fallback
+  route. Nothing is captured and nothing is said when no record is wanted. The `expect(dead_code)`
+  on `target_route.rs` is gone. A fallback unit is what the EXR-11 recorder already wrote (finished
+  markdown, default profile, no `quarto_hash_rule`).
+- **Three coded notes, all `info`:** `Q-18-11` (knitr\'s cache was off for chunks that asked for it),
+  `Q-18-12` (a knit hook was replaced; names the hook and the first chunk), `Q-18-13` (a `child=`
+  chunk). Each has its catalog entry, docs page and sidebar entry in this commit. The target note
+  stays uncoded, as before.
+- **Cache.** `capture.R` records the labels of chunks whose `cache` option was truthy before the
+  forcing hook turned it off (`cacheDisabled` on the result). knitr runs that option hook for every
+  chunk, so the check is on the value.
+- **Hook override.** The first chunk\'s `evaluate` call snapshots six hooks (`source`, `output`,
+  `message`, `warning`, `error`, `plot`); the chunk hook compares them with `identical`, and the
+  first difference sticks (`hook_override` on that chunk and every later one). **Scope beyond the
+  handoff:** the handoff named `source` and `output`; I watched all six, since a replaced `message`
+  or `plot` hook silently changes the live markdown the same way. The adapter makes a flagged chunk a
+  fallback cell even when its pieces would map. An override that is reverted later stays flagged.
+- **`child=`: Gordon chose a real fallback unit (2026-11-03).** knitr calls no hook for the parent
+  chunk (`call_block` returns the child\'s markdown straight into the output). `hooks.R` now wraps
+  `knitr::knit_child` with `assignInNamespace` (precedent: `patch.R`), installed only when a
+  `child=` chunk that carries a unit id is about to run. For those calls it writes the chunk record
+  (finished markdown, joined with a newline across several children as knitr does) and, on a captured
+  run, a captured record whose one piece is `other` with class `child`, which the existing adapter
+  turns into a fallback cell. **A finding that explains the earlier "labels disagree" oddity:**
+  `knit_child` copies the parent chunk\'s options into `opts_chunk`, so the child\'s own chunks
+  inherited the parent\'s `quarto-unit-id` and recorded themselves under it. The wrapper strips the id
+  for the duration of the child. The wrapper returns what `knit_child` returned, and a test pins that
+  the markdown is unchanged. In a real qmd the chunk is written with `#| child: path` (the header
+  form is a parse error).
+- **Upstream idea (not proposed yet).** A `child` knit hook, called with the child\'s markdown and the
+  parent\'s options, defaulting to identity, would replace the wrapper: about three lines in
+  `R/block.R` (`call_block`, `out = one_string(unlist(cmds))`). The id inheritance would then be
+  handled by skipping chunks while `knitr::opts_knit$get("child")` is true. For a future tree of
+  child units, knitr already exposes the current child file: `knitr::current_input()` (basename, or
+  the full path with `dir = TRUE`, which needs `output.dir`) is correct at every depth and restored
+  after each child (run on a parent, child and grandchild). The tree itself (scanner following
+  includes, the presenter reading the child\'s prose, matching across files) is our work, not
+  knitr\'s.
+- **Widget dependencies (the check the handoff asked for first).** Run with a real
+  `htmlwidgets` widget on `html` and `pdf`: the widget\'s JS and CSS come only through the live
+  result\'s `header_includes`; the record entry has `includes: null` and no `html_dependencies` in
+  both the structured and the fallback path, and a fallback unit holds only the widget\'s div and
+  JSON. So a fallback unit does not keep its dependencies, but neither does any knitr record, and
+  the KNR-6 hold on documents with widgets stands for both.
+- **`read_file` base directory (the end-to-end check).** `q2 render` of a project with the document in
+  `sub/`: knitr\'s working directory is the project directory, but it writes figures under the
+  document\'s directory (`sub/doc_files/figure-html/`), so reading only under the working directory
+  made a plain plot chunk a fallback cell. `read_file` now tries the working directory first (right
+  for an author\'s `include_graphics` path) and then the document directory. Test:
+  `a_figure_in_a_project_subdirectory_is_found_and_stays_structured`. **Separate, existing
+  behavior, not changed:** a relative `child:` path resolves against that same working directory (the
+  project root), so `child: kid.Rmd` beside `sub/doc.qmd` fails; the older `q2` build fails the same
+  way. Whether Quarto 1 resolves it relative to the document is not checked here.
+- **End-to-end run (inspected).** Invocation: `cargo run --bin q2 -- render <scratch>/proj/sub/doc.qmd`
+  with `execute: {record: true}`, a plain chunk, a plot, a `#| child: sub/kid.Rmd` chunk, a chunk that
+  replaces the `output` hook, and one after it. The record at `.quarto/execution-records/sub/doc.ipynb`
+  has cells: plain `STRUCTURED` (stream), plot `STRUCTURED` (`image/png`), child `FALLBACK`, override
+  `FALLBACK`, after `FALLBACK` (each `text/x-quarto-markdown`); the render printed `Info [Q-18-13]` and
+  `Info [Q-18-12]`. I read the cells with `jq`; the cache note was exercised by a test, not this run.
+- **Existing tests changed, and why.** Four EXR-11 integration tests (`knitr_chunk_records`: one per
+  owned chunk, files per chunk, stage shadow equality; `knitr_inline_records`: id embedding does not
+  change output) asserted the one-markdown-block-per-chunk shape through `record::place`, which has no
+  caller outside tests. On `html` those chunks are now structured cells, so the tests are pinned to
+  `pdf`, a fallback target, where that shape still holds; a new test
+  (`knitr_html_records_are_structured_cells`) pins the structured shape through the same stage. Equality
+  for structured cells is the presenter path, which is slice 4\'s corpus gate.
 
 ## Goal
 
@@ -165,7 +377,7 @@ what the presenter cannot recover from `outputs`, each starting with `quarto_` s
    and 9): every `execute:` key counts. S3 produces the real list and decides one
    spelling for names (knitr\'s `fig.width` or Quarto\'s `fig-width`, which EXR-4 uses for
    flat keys); this plan states it.
-2. **Where resolved options live** *(S3 and S8 answered 2026-10-31: the chunk hook records them, in knitr\'s spelling, with the serialization rule and the closed list in KNR-1 S3; the field name is still to be chosen here)*. EXR-4 computes the flat cell
+2. **Where resolved options live** *(settled 2026-11-03, see "Re-scope" items 1 and 2: flat keys follow the unit\'s own profile; the resolved options are `quarto_resolved_options`. Older text follows. S3 and S8 answered 2026-10-31: the chunk hook records them, in knitr\'s spelling, with the serialization rule and the closed list in KNR-1 S3; the field name is still to be chosen here)*. EXR-4 computes the flat cell
    keys as the cell\'s options minus the exclusion list, so they never disagree with the
    hash; EXR-4 does not say which list applies when a unit names a profile. This plan
    applies the unit\'s own profile (*open*, a second question for the parent session, listed in
@@ -307,6 +519,7 @@ what the presenter cannot recover from `outputs`, each starting with `quarto_` s
 | Plain R chunk, HTML, Typst or docx target | structured | the capture adapter (this plan) | `structured` | none |
 | `eval=FALSE`, or blank code | structured, source only | the capture adapter, from the document | `structured` | none |
 | `child=` chunk | fallback | the chunk hook | default | one per chunk |
+| Non-R engine chunk (bash, SQL, reticulate Python, custom engines) | fallback (accepted; reticulate Python verified 2026-11-03: no evaluate-hook call, finished markdown only) | the chunk hook | default | none today (accepted rate, reported) |
 | Level-3 cache hit | fallback | the chunk hook | default | one per chunk |
 | Level-1 or 2 hit with knitr\'s cache left on | fallback (expected decision (a) removes this row) | the chunk hook | default | one per chunk |
 | Overridden `knit_hooks` | fallback | the chunk hook | default | names the hook |
@@ -331,44 +544,52 @@ code once nothing reads it, and keeps the chunk hook (see KNR-6).
 - The presenter (KNR-2), inline units (KNR-4), Positron (KNR-5), the flip (KNR-6).
 - Changing the hub transport or MIME (EXR-13 carries any record).
 
-## Phases (provisional)
+## Phases
+
+### Step 0: prerequisite
+
+- [x] bd-js24dold, the knitr replay claim fix (`5c6885686`; quarto-core nextest 7451 of 7452, the
+  known revealjs failure; strand closed).
 
 ### Phase 3A: tests first
 
-- [ ] Key tests, each failing first (epic decision 21): `quarto_output_anchors` equals the
+- [x] Key tests, each failing first (epic decision 21): `quarto_output_anchors` equals the
   capture order for a chunk with interleaved source and output, and is **not** reordered for
   `fig.show = "hold"` or `results = "hold"`; it is omitted when the source pieces\' lines do
   not add up to the code; `quarto_output_kinds` marks a message and a warning apart;
   the record\'s `known_options` contains `echo` and not `foo.unknown`, on knitr 1.44 and the
   latest; the two cell keys are dropped by `CellMetadata::options()`, `known_options` is a
   field on the engine entry, and none changes the exec hash.
-- [ ] `knit_asis` output carries `quarto_markdown_passthrough: true`, and nothing else does;
+- [x] `knit_asis` output carries `quarto_markdown_passthrough: true`, and nothing else does;
   no `raw` marker is written for `results = "asis"`.
-- [ ] Hash tests with vectors: a structured chunk with a presentation-only option changed
+- [x] Hash tests with vectors: a structured chunk with a presentation-only option changed
   has the same `quarto_exec_hash`, and one with an execution-relevant option changed
   (including `include`, `warning`, `message`, `fig.keep`) has a different one; the same
   edit to a fallback unit changes its hash; prose changes never reach either.
   `quarto_content_hash` matches Positron\'s SHA-1 vectors (EXR-4, EXR-16 S1).
-- [ ] Splice-key tests for the parent edit (decision 8, as corrected by I3), in the parent\'s
+- [x] Splice-key tests for the parent edit (decision 8, as corrected by I3), in the parent\'s
   `record_splice.rs` tests, each failing before the edit: a structured record built for
   `typst` and rendered as html reports Stale; the same record rendered as `typst` reports
   Fresh; a presentation-only edit (`echo`) on a structured unit reports Fresh and splices with
   the current echo; an execution-relevant edit reports Stale; a unit whose id has no cell
   keeps today\'s key; the existing Jupyter and marimo-shaped tests pass unchanged. The spike
   numbers in decision 8 are the expected red state.
-- [ ] The `UnitKey.alt_exec_hashes` field, the two `match_units` changes and the call in
+  *Done (2026-11-03): 7 tests in `record_splice.rs`, built on `knitr::structured`; 3 were red before the edit (another format, presentation edit, cell inserted above), the rest pin the unchanged cases.*
+- [x] The `UnitKey.alt_exec_hashes` field, the two `match_units` changes and the call in
   `splice_units` (the I3 prototype, `9a0ff2d23` on `spike/knr-i3`), small enough to read in one
   view; add a test that pass 2 skips a cell naming a profile; report the diff to Gordon before
   the commit.
-- [ ] The adapter sets `quarto_hash_rule`, the exec hash and the flat keys (including
+  *Done (2026-11-03): ported from the I3 prototype to the current `matching.rs` (it gained `attr_tail` since), with 4 matching tests including pass 2 skipping a profiled cell. `OUTPUT_FORMAT_OPTION` is defined in `record::matching` and re-exported by `knitr::hash_rule`. **Diff for Gordon\'s review before any push:** `git show` of the KNR-3 `matching.rs` commit (about 70 lines in `matching.rs`, 2 in `record_splice.rs`).*
+- [x] The adapter sets `quarto_hash_rule`, the exec hash and the flat keys (including
   `quarto-output-format`) after `RecordBuilder::push` and recomputes the document hash with
   `hash_document` and each cell\'s `UnitHashRef.profile`; a test writes and reads a mixed
   record and recomputes every hash (the spike\'s shape).
-- [ ] Declaration tests: the knitr declaration keeps the id `knitr` with a bumped version;
+- [x] Declaration tests: the knitr declaration keeps the id `knitr` with a bumped version;
   the `structured` profile is stored; a unit tagged with a missing profile reads as stale;
   every `execute:` key counts in the document hash of any knitr record, mixed or not
   (decisions 3 and 9), and an edit to a fallback chunk\'s presentation option changes that
   unit\'s hash.
+  *Done (2026-11-03, `hash_rule.rs`; the missing-profile read was already EXR-4 behavior).*
 - [ ] Version test: an EXR-11-era record reads as stale and still
   presents through the pass-through presenter. The fixture is a record written by EXR-11\'s
   recorder, so this test needs EXR-11 merged; until then, hand-build one from EXR-11\'s
@@ -383,48 +604,80 @@ code once nothing reads it, and keeps the chunk hook (see KNR-6).
   27), tested against the four-widget fixture of KNR-1 S2 (normal, `results='hide'`,
   `include=FALSE`, `echo=FALSE`) so the rebuilt set equals the live one.
 - [ ] Every produced record passes EXR-4\'s nbformat validator.
-- [ ] Alignment: unit count and order equal the shared unit list; a mismatch yields no
+- [x] Alignment: unit count and order equal the shared unit list; a mismatch yields no
   record and a diagnostic, and the render succeeds.
-- [ ] Table-driven fallback tests: one case per row of the table above yields exactly the
+- [x] Table-driven fallback tests: one case per row of the table above yields exactly the
   unit kind, recorder, profile and diagnostic the table states; no unit has both structured
   outputs and a `text/x-quarto-markdown` output.
-- [ ] A deserialize test for the wire field added in KNR-1 (`KnitrExecuteResult` derives
+- [x] A deserialize test for the wire field added in KNR-1 (`KnitrExecuteResult` derives
   `Deserialize` only; add `Serialize` only if a later step needs it).
+  *Reconciled 2026-11-03 against the tree: `capture_tests.rs` (anchors, holds, kinds, `known_options` without `foo.unknown`) and `pieces_map`/adapter tests; the knitr 1.44 versus latest comparison was not run.*
+  *Reconciled 2026-11-03 against the tree: `asis_pieces_carry_the_markdown_passthrough_marker`.*
+  *Reconciled 2026-11-03 against the tree: `hash_rule.rs`, `a_presentation_only_option_does_not_move_a_structured_hash`, `content_hash_matches_every_phase_0_vector`.*
+  *Reconciled 2026-11-03 against the tree: adapter tests `the_document_hash_follows_the_structured_cells` and the rehash round trip.*
+  *Reconciled 2026-11-03 against the tree: `fill_ids_names_both_lengths_and_fills_nothing_on_a_mismatch`, `a_unit_with_no_captured_chunk_is_a_count_mismatch`.*
+  *Reconciled 2026-11-03 against the tree: `execute_result_with_chunks_field_deserializes_records` and the `cacheDisabled`/`hook_override` defaults.*
+  *Reconciled 2026-11-03: open. No test builds an EXR-11-era record; the version-mismatch rejection is covered by the reader only.*
+  *Reconciled 2026-11-03: open. Only the corpus generator (`generate_sweep`) exists, not the assert-hash-or-output-changes test.*
+  *Reconciled 2026-11-03: stream, error, display_data and flat option keys are covered; the neutral `knit_meta` manifest and the four-widget test are open, waiting on WGT-2\'s schema (slice 2 note).*
+  *Reconciled 2026-11-03: open as a dedicated test. The reader rejects invalid structure and every read-back in slices 3 and 4 goes through it, but nothing runs EXR-4\'s validator over each produced record.*
 
 ### Phase 3B: implementation
 
-- [ ] Rename `metadata.quarto_knitr.file` to `quarto_file_path` (epic decision 25): `pieces_map.rs` (the
-  writer at `:132` and the assertion at `:252`), the capture, and any fixture that reads the old
+- [x] Rename `metadata.quarto_knitr.file` to `quarto_file_path` (epic decision 25): `pieces_map.rs` (the
+  writer in `image()` and the assertion in its tests), the capture, and any fixture that reads the old
   key. Tests first: an image output carries `quarto_file_path` and no `quarto_knitr` `file`.
+  *Done (2026-11-03, `28474d2ec`).*
+- [x] **The shared record-to-presenter reader (re-scope item 3).** *Done (2026-11-03, slice 1; see "Slice 1 notes" under the progress section).* `knitr_cell_inputs(cell,
+  engine_entry)` turns a knitr record cell into the presenter inputs: `quarto_output_kinds`,
+  `quarto_output_anchors`, `quarto_resolved_options` layered under the chunk\'s current header
+  options, the original info string and `#|` lines, `expression_starts` for `prompt`, the
+  holds, `knitr_visibility`, and `known_options` from the entry. Wire it into `present_document`,
+  `record_splice::present_cell` and `ReplayEngine::present_record`; add an optional
+  `known_options` field to `EngineEntry` (absent means no filtering; `quarto_record_version`
+  stays 1) and the parameter `present_document` needs to receive it. Tests first, one per
+  input, each driven through all three paths over a hand-built record; Jupyter goldens stay
+  identical, and a cell with none of the knitr keys presents as before.
+- [x] Consume `target_route`: call `route_for_target(&ctx.format)` in `KnitrEngine::execute`, set
+  `KnitrExecuteParams.capture` from it and `want_record`, surface `fallback_diagnostic` once per
+  document, and delete the `cfg_attr(not(test), expect(dead_code))` on the module.
+- [x] Join captured chunks to units by `options["quarto-unit-id"]`; a captured chunk without an
+  id is ignored, and a unit with no captured chunk is a count mismatch (decision 4).
 
-- [ ] `capture.R` computes the known option names once per record (from the knitr that ran);
+- [x] `capture.R` computes the known option names once per record (from the knitr that ran);
   the adapter writes `known_options` on the engine entry, the two cell keys, and
   `quarto_markdown_passthrough` on `knit_asis` output (epic decision 22); KNR-2\'s
   message-versus-warning and unknown-option items (10 corpus cases) depend on this item.
-- [ ] The knitr declaration (same id, bumped version, the `structured`
+- [x] The knitr declaration (same id, bumped version, the `structured`
   profile), supplied through `ExecutionEngine::hash_definition` in the knitr module.
-- [ ] The adapter from captured pieces to record units, using KNR-1\'s mapper, replacing
+  *Done (2026-11-03, `0a127e8b0`; version 2).*
+- [x] The adapter from captured pieces to record units, using KNR-1\'s mapper, replacing
   EXR-11\'s recorder for structured chunks.
-- [ ] The fallback unit (its `text/x-quarto-markdown` mime is the marker; no key), built by the chunk hook from the engine\'s finished
+- [x] The fallback unit (its `text/x-quarto-markdown` mime is the marker; no key), built by the chunk hook from the engine\'s finished
   markdown for that chunk only; the capture mechanism must leave the hook running for these
   chunks (S1 confirms).
-- [ ] The chosen cache, `child=` and user-hook policies, each with a diagnostic code
-  allocated from the engine range (`docs/errors/engine/` holds Q-18-1 to Q-18-3; take the
-  next free numbers and add a catalog page for each, as the existing ones do).
-- [ ] Both recorders write behind the same `ExecuteResult` record field (added by EXR-7;
+- [x] The chosen cache, `child=` and user-hook policies, each with a diagnostic code
+  allocated from the engine range (`docs/errors/engine/` holds Q-18-1 to Q-18-5 and Q-18-10, and
+  Q-18-6 to Q-18-9 are claimed elsewhere; take Q-18-11 and up, re-checking the catalog, with a docs
+  page and a sidebar entry in the same commit as each code).
+- [x] Both recorders write behind the same `ExecuteResult` record field (added by EXR-7;
   `engine::context::ExecuteResult` has none today), additive: the live path
   and its markdown are unchanged until KNR-6, and until then the record is shadow output
   read only by tests and the shadow comparison.
+  *Reconciled 2026-11-03 against the tree: `ExecuteResult.record` exists in `engine::context`; the structured adapter and the fallback cells write through it.*
 
 ### Phase 3C: shadow
 
-- [ ] A shadow test: with the record built, presenting it through KNR-2\'s layer equals the
+- [ ] A shadow test, **run in report mode** (Gordon, 2026-11-03; the assertion moves to KNR-2b
+  Phase 2bC): with the record built and **written then read back**, presenting it through the
+  product path (`present_document` and the reader above), not the runner\'s direct path, equals the
   live markdown on the corpus (this runs as KNR-2 lands; the harness is KNR-1\'s). The accepted
   classes are Identical and SyntaxLevel only; Semantic and Blocker need a signed-off allowlist
   entry; non-HTML formats are compared at the AST level; the normalizer is limited to widget
   ids and figures are checked by position and extension (epic decision 26). Freeze the live
   markdown per fixture as the oracle (committed; the snapshot-reporting rule of AGENTS.md
   applies: count, summary, surprises, file list).
+  *Slice 4, in progress (2026-11-03).*
 
 ## Exit criteria
 

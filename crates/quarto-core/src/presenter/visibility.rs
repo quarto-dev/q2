@@ -99,6 +99,24 @@ impl CellVisibility {
     }
 }
 
+/// The presenter's visibility from a knitr chunk's recorded options. Only `include`, `output` and
+/// logical `echo` count here. `warning` and `message` are enforced by R at capture, because
+/// they change what runs, so the presenter must not drop stderr for them (a `warning = FALSE`
+/// chunk still shows its messages); numeric `echo` is applied by the presenter itself
+/// (`CellOptions::echo_selection`), so it shows the source here.
+pub fn knitr_visibility(options: &serde_json::Value) -> CellVisibility {
+    let flag = |key: &str| options.get(key).and_then(serde_json::Value::as_bool);
+    if flag("include") == Some(false) {
+        return CellVisibility::HIDDEN;
+    }
+    let output = flag("output") != Some(false);
+    CellVisibility {
+        echo: flag("echo") != Some(false),
+        output,
+        warning: output,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

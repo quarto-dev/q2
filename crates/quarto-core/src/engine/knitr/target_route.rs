@@ -6,14 +6,6 @@
 //! epic decision 13). The structured set is what the KNR-1 corpus covers: HTML (and its
 //! revealjs and epub variants), Typst, docx and gfm. Adding a target is one entry in [`STRUCTURED_TARGETS`], plus corpus cases.
 
-// Staged API: its one consumer is KNR-3's capture call, which decides skip-versus-capture per
-// document. `expect` (not `allow`) so the build fails, and this line gets deleted, once that
-// call exists. Tests exercise everything, hence the `not(test)`.
-#![cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by KNR-3's capture call, not yet wired")
-)]
-
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 
 /// Format identifiers (extensions such as `+smart` ignored) presented from structured units.
@@ -71,6 +63,37 @@ pub fn fallback_diagnostic(reason: FallbackReason, format: &str) -> DiagnosticMe
         .build()
 }
 
+/// What `KnitrEngine::execute` does about capture for one run.
+#[derive(Debug)]
+pub struct CapturePlan {
+    /// Ask R for each chunk's pieces (`KnitrExecuteParams.capture`).
+    pub capture: bool,
+    /// Said once per document when the target routes to fallback and a record is wanted.
+    pub diagnostic: Option<DiagnosticMessage>,
+}
+
+/// Decide capture for a run. Pieces are asked for only when a record is wanted, the document
+/// has units, and the target is structured; a fallback target skips capture and carries the
+/// one-per-document diagnostic. With no record wanted nothing is captured and nothing is said.
+pub fn plan_capture(want_record: bool, has_units: bool, format: &str) -> CapturePlan {
+    if !want_record || !has_units {
+        return CapturePlan {
+            capture: false,
+            diagnostic: None,
+        };
+    }
+    match route_for_target(format) {
+        TargetRoute::Structured => CapturePlan {
+            capture: true,
+            diagnostic: None,
+        },
+        TargetRoute::Fallback(reason) => CapturePlan {
+            capture: false,
+            diagnostic: Some(fallback_diagnostic(reason, format)),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,6 +134,18 @@ mod tests {
                 "{f}"
             );
         }
+    }
+
+    #[test]
+    fn capture_needs_a_record_units_and_a_structured_target() {
+        let plan = plan_capture(true, true, "html");
+        assert!(plan.capture && plan.diagnostic.is_none());
+        for (want, units) in [(false, true), (true, false), (false, false)] {
+            let plan = plan_capture(want, units, "pdf");
+            assert!(!plan.capture && plan.diagnostic.is_none(), "{want} {units}");
+        }
+        let plan = plan_capture(true, true, "pdf");
+        assert!(!plan.capture && plan.diagnostic.is_some());
     }
 
     #[test]

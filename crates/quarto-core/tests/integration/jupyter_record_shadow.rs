@@ -143,6 +143,7 @@ fn present(record: &Record, input_qmd: &str, doc_path: &Path) -> (String, Option
         scope.as_ref(),
         InlineTarget::from_format("html"),
         "html",
+        None,
         &mut fig,
     )
     .expect("the record presents");

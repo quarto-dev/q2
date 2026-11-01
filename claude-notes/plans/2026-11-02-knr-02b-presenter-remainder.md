@@ -136,9 +136,17 @@ fixture and a test that fails first.
   waits for KNR-4, because `s9/01_inline` is a blocker until inline capture lands.
 - [ ] Run the corpus on the minimum and the latest supported knitr (epic decision 17: a local
   run) and report the pass and skip counts and the R and knitr versions.
-- [ ] Check the presenter changes of KNR-2 and this plan build for `wasm32` and add no
-  dependency on the engine (EXR-1\'s availability check). Not yet verified for KNR-2\'s
-  commits.
+- [x] Check the presenter changes of KNR-2 and this plan build for `wasm32` and add no
+  dependency on the engine (EXR-1\'s availability check). *Done (2026-11-03): `cargo check
+  --target wasm32-unknown-unknown` of `crates/wasm-quarto-hub-client`, run from that directory with
+  `CC_wasm32_unknown_unknown` set to Homebrew LLVM clang and the crate\'s `wasm-sysroot` headers (as
+  `hub-client/scripts/build-wasm.js` does), now passes. It first failed with E0433 in
+  `engine/replay.rs`: `ReplayEngine` called `knitr::knitr_claims` in the native-only `knitr`
+  module (commit `5c6885686`, bd-js24dold, not on `main`). The pure function moved to
+  `engine/mod.rs`. No presenter, record, engine or stage file draws a wasm warning. The
+  presenter\'s imports from `engine` are `ExecutionContext` (`cell.rs`) and `units` (`document.rs`),
+  both built on wasm32. Only the type-check ran, not the release build, `wasm-bindgen` or
+  `wasm-opt`.*
 
 ## Exit criteria
 
